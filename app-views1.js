@@ -129,7 +129,7 @@ function renderArea(id){
 function fmtDate(ts){var d=new Date(ts);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 var editingId=null,editingEvent=null;
 /* nav state + render (hoisted) */
-var tab="today",currentArea=null,currentPerson=null;
+var tab="today",openDetail=null,currentArea=null,currentPerson=null;
 function navKind(){return currentArea?"area":"tab";}
 function render(){renderNav();var v=el("view");
  if(navKind()==="area"&&currentArea)v.innerHTML=renderArea(currentArea);
