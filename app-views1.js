@@ -1,8 +1,14 @@
 "use strict";
 /* ============ views: today + people ============ */
 function renderTabs(){var btns=document.querySelectorAll("#tabs button");btns.forEach(function(b){b.classList.toggle("active",b.getAttribute("data-tab")===tab);});}
-function render(){renderTabs();var v=el("view");
- if(tab==="today")v.innerHTML=renderToday();
+function renderNav(){
+ var an=el("areaNav");if(an)an.innerHTML=AREA_IDS.map(function(id){return '<button data-areanav="'+id+'" class="'+(navKind()==="area"&&currentArea===id?"active":"")+'">'+S.areas[id].name+'</button>';}).join("");
+ var un=el("utilNav");if(un)un.innerHTML=[["today","Today"],["people","People"],["prayer","Prayer"],["echo","Echo"],["offload","Offload"],["settings","Settings"],["sync","Sync"]].map(function(p){return '<button data-utilnav="'+p[0]+'" class="'+(tab===p[0]&&navKind()!=="area"?"active":"")+'">'+p[1]+'</button>';}).join("");
+}
+function navKind(){return currentArea?"area":"tab";}
+function render(){renderNav();var v=el("view");
+ if(navKind()==="area"&&currentArea)v.innerHTML=renderArea(currentArea);
+ else if(tab==="today")v.innerHTML=renderToday();
  else if(tab==="people")v.innerHTML=renderPeople();
  else if(tab==="prayer")v.innerHTML=renderPrayer();
  else if(tab==="echo")v.innerHTML=renderEcho();
@@ -39,16 +45,6 @@ function renderToday(){
   var goals=areaGoals(id);
   var meta=goals.length?goals.length+" goal"+(goals.length>1?"s":""):"no goals yet - set them in Settings";
   out+='<div class="card metercard" data-area="'+id+'"><div class="top"><h3>'+S.areas[id].name+'</h3><div><span class="score '+c+'">'+v+'</span><span class="trend '+t.cls+'">'+t.arrow+'</span></div></div>'+meterBar(v,c)+'<div class="meta"><span class="statusword '+c+'">'+scoreLabel(v)+'</span> \u00B7 '+meta+'</div>'+chips+'</div>';
-  if(openDetail===id){
-   out+='<div class="card detail open" id="detail-'+id+'"><h3>'+S.areas[id].name+' - details</h3><div style="display:flex;gap:8px;margin:6px 0 2px"><button class="btn mini" data-quicklog="'+id+'">+ Log anything</button><button class="btn mini ghost" data-closedetail="'+id+'">Close</button></div><div class="cols"><div><div class="subhead">Goals</div>';
-   if(goals.length){goals.forEach(function(g){out+=goalRow(g);});}else out+='<div class="empty">No goals yet - set them in Settings.</div>';
-   out+='<div class="subhead" style="margin-top:14px">Recent activity</div>';
-   var evs=eventsFor(id,true).sort(function(a,b){return b.ts-a.ts;}).slice(0,5);
-   if(evs.length){evs.forEach(function(e){out+='<div class="logline"><span class="when">'+when(e.ts)+'</span><span class="kind">'+(KINDS[e.kind]?KINDS[e.kind].label:e.kind)+(e.personId?" - "+esc(personName(e.personId)):"")+'</span><span class="txt">'+esc(e.note||"")+'</span></div>';});}else out+='<div class="empty">Nothing logged yet.</div>';
-   out+='</div><div><div class="subhead">Tasks</div><ul class="tasks">';
-   S.tasks.filter(function(t){return t.areaId===id;}).forEach(function(t){out+='<li class="'+(t.done?"done":"")+'"><input type="checkbox" class="cb" data-task="'+t.id+'"'+(t.done?" checked":"")+'><span class="txt">'+esc(t.text)+'</span><button class="del" data-taskdel="'+t.id+'">\u00D7</button></li>';});
-   out+='</ul><div class="addrow"><input placeholder="Add a task..." data-tasknew="'+id+'"><button class="btn mini" data-taskadd="'+id+'">Add</button></div></div></div></div>';
-  }
  });
  out+='</div>';return out;}
 function nextDateLine(pid){var kds=S.keyDates.filter(function(k){return k.personId===pid;});if(!kds.length)return "";var best=null;kds.forEach(function(k){var d=daysUntil(k);if(best===null||d<best.d)best={k:k,d:d};});if(!best)return "";return '<div class="pf-next">'+esc(best.k.label)+' \u00B7 '+(best.d===0?"TODAY":"in "+best.d+" days")+'</div>';}
@@ -91,3 +87,43 @@ function personProfile(pid){
  out+='</ul><div class="addrow"><input id="personFUNew" placeholder="Follow up on..."><button class="btn mini" data-fuadd="'+pid+'">Add</button></div>';
  out+='</div></div></div>';
  return out;}
+
+/* ============ area subpages ============ */
+function renderArea(id){
+ var v=areaScore(id),c=scoreClass(v);
+ var goals=areaGoals(id);
+ var kids=S.people.filter(function(p){return p.area===id;});
+ var out='<div class="sectiontitle" style="margin-top:2px"><h2>'+S.areas[id].name+'</h2><span class="hint">'+scoreLabel(v)+'</span></div>';
+ out+='<div class="card" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:17px;font-weight:500">Health meter</h3><span class="score '+c+'">'+v+'</span></div>'+meterBar(v,c);
+ if(kids.length)out+='<div class="people-row">'+kids.map(personChip).join("")+'</div>';
+ out+='</div>';
+ out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Goals</div>';
+ if(goals.length){goals.forEach(function(g){out+=goalRow(g);});}else out+='<div class="empty">No goals yet - add them in Settings.</div>';
+ out+='</div>';
+ out+='<div class="card" style="margin-bottom:14px" id="logformcard"><div class="subhead">'+(editingId?"Edit entry":"Log an activity")+'</div>'+
+ '<div class="addrow" style="margin-top:0"><input type="date" id="logDate" value="'+(editingEvent?fmtDate(editingEvent.ts):fmtDate(Date.now()))+'"><select id="logPersonSel"><option value="">- person (optional) -</option>'+S.people.filter(function(p){return p.area===id;}).map(function(p){return '<option value="'+p.id+'"'+((editingEvent&&editingEvent.personId===p.id)?" selected":"")+'>'+esc(p.name)+'</option>';}).join("")+'</select><select id="logTypeSel">'+Object.keys(ETYPES).map(function(t){return '<option value="'+t+'"'+((editingEvent?editingEvent.type:"inperson")===t?" selected":"")+'>'+ETYPES[t].label+'</option>';}).join("")+'</select></div>'+
+ '<div class="addrow"><input id="logTitle" placeholder="What did you do?" value="'+(editingEvent?esc(editingEvent.title||""):"")+'"></div>'+
+ '<div class="addrow"><textarea id="logTalk" placeholder="What did you talk about?">'+(editingEvent?esc(editingEvent.note||""):"")+'</textarea></div>'+
+ '<div style="display:flex;gap:8px"><button class="btn" id="logSubmit">'+(editingId?"Update":"Log it")+'</button>'+(editingId?'<button class="btn ghost" id="logCancel">Cancel</button>':'')+'</div></div>';
+ out+='<div class="card"><div class="subhead">History</div>';
+ var evs=eventsFor(id,true).sort(function(a,b){return b.ts-a.ts;});
+ if(evs.length){evs.slice(0,30).forEach(function(e){
+  out+='<div class="entry"><div class="entry-main"><div class="entry-head"><span class="entry-date">'+new Date(e.ts).toLocaleDateString()+'</span><span class="badge">'+typeLabel(e)+'</span>'+(e.personId?'<span class="gr-person">'+esc(personName(e.personId))+'</span>':'')+'</div>'+(e.title?'<div class="entry-title">'+esc(e.title)+'</div>':'')+(e.note?'<div class="entry-note">'+esc(e.note)+'</div>':'')+'</div><div class="entry-actions"><button class="iconbtn" data-eedit="'+e.id+'" title="edit">\u270E</button><button class="iconbtn" data-edel="'+e.id+'" title="delete">\uD83D\uDDD1</button></div></div>';
+ });}else out+='<div class="empty">Nothing logged yet.</div>';
+ out+='</div>';
+ return out;}
+function fmtDate(ts){var d=new Date(ts);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+var editingId=null,editingEvent=null;
+/* nav state + render (hoisted) */
+var tab="today",currentArea=null,currentPerson=null;
+function navKind(){return currentArea?"area":"tab";}
+function render(){renderNav();var v=el("view");
+ if(navKind()==="area"&&currentArea)v.innerHTML=renderArea(currentArea);
+ else if(tab==="today")v.innerHTML=renderToday();
+ else if(tab==="people")v.innerHTML=renderPeople();
+ else if(tab==="prayer")v.innerHTML=renderPrayer();
+ else if(tab==="echo")v.innerHTML=renderEcho();
+ else if(tab==="offload")v.innerHTML=renderOffload();
+ else if(tab==="settings")v.innerHTML=renderSettings();
+ else if(tab==="sync")v.innerHTML=renderSync();
+ if(typeof bind==="function")bind();}
