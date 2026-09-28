@@ -2,6 +2,10 @@
 /* ============ Tend core: state, goals, meter engine v2 ============ */
 var LS_STATE="tend:state",LS_SYNC="tend:sync";
 var KINDS={coffee:{label:"Coffee / one-on-one",w:8},meal:{label:"Meal together",w:7},date:{label:"Date / night out",w:9},call:{label:"Call / FaceTime",w:4},text:{label:"Text / note",w:2},quality:{label:"Quality time",w:7},workout:{label:"Workout",w:5},outdoors:{label:"Walk / outdoors",w:4},prayer:{label:"Prayer",w:4},scripture:{label:"Scripture",w:3},rest:{label:"Rest / sabbath",w:5},actservice:{label:"Act of service",w:6},note:{label:"Note / journal",w:2}};
+var ETYPES={inperson:{label:"In person",w:8},video:{label:"Video call",w:6},call:{label:"Phone call",w:5},text:{label:"Text / message",w:2},note:{label:"Note",w:2}};
+var KIND2TYPE={coffee:"inperson",meal:"inperson",date:"inperson",quality:"inperson",call:"call",text:"text",workout:"inperson",outdoors:"inperson",prayer:"note",scripture:"note",rest:"note",actservice:"inperson",note:"note"};
+function typeLabel(e){return e.type&&ETYPES[e.type]?ETYPES[e.type].label:(KINDS[e.kind]?KINDS[e.kind].label:e.kind);}
+function typeWeight(e){return e.type&&ETYPES[e.type]?ETYPES[e.type].w:(KINDS[e.kind]?KINDS[e.kind].w:3);}
 var CADENCES={daily:{label:"Daily",days:1},weekly:{label:"Weekly",days:7},monthly:{label:"Monthly",days:30},annual:{label:"Annually",days:365},custom:{label:"Custom",days:2}};
 var DEFAULT_SETTINGS={greenAt:80,yellowAt:50,baseline:50};
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
@@ -56,7 +60,7 @@ function defaultChecklists(){return[
 ];}
 function defaultState(){return{version:2,
  people:[{id:"amy",name:"Amy",relation:"wife",area:"marriage"},{id:"hannah",name:"Hannah",relation:"daughter",area:"parenting"},{id:"jacob",name:"Jake",relation:"son",area:"parenting"},{id:"leah",name:"Leah",relation:"daughter",area:"parenting"},{id:"lucas",name:"Lucas",relation:"son-in-law",area:"parenting"},{id:"addi",name:"Addi",relation:"future daughter-in-law",area:"parenting"}],
- events:[],tasks:[],goals:defaultGoals(),followups:[],prayers:[],ideas:[],echoes:[{id:uid(),title:"Photographers - Jake & Addi's wedding",note:"Contacts to reach out to. Tap a status badge to cycle: to contact / contacted / met / booked / passed.",items:[]}],keyDates:defaultKeyDates(),checklists:defaultChecklists(),settings:JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
+ events:[],tasks:[],goals:defaultGoals(),followups:[],prayers:[],ideas:[],echoes:[{id:uid(),title:"Photographers - Jake & Addi's wedding",note:"Contacts to reach out to. Status: to contact / contacted / met / booked / passed.",items:[]}],keyDates:defaultKeyDates(),checklists:defaultChecklists(),settings:JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
  areas:{faith:{name:"Faith"},marriage:{name:"Marriage"},parenting:{name:"Parenting"},health:{name:"Health"},fitness:{name:"Fitness"},finances:{name:"Finances"},friendships:{name:"Friendships"}}};}
 function load(){try{var s=localStorage.getItem(LS_STATE);if(!s)return defaultState();var st=JSON.parse(s);st.version=2;
  if(!st.areas.finances)st.areas.finances={name:"Finances"};
@@ -72,6 +76,8 @@ function load(){try{var s=localStorage.getItem(LS_STATE);if(!s)return defaultSta
  if(st.teachings&&st.teachings.length&&!st.ideas.length){st.teachings.forEach(function(t){st.ideas.push({id:uid(),text:t.topic+(t.notes?" - "+t.notes:""),ts:Date.now(),done:false,converted:null});});}
  return st;}catch(e){return defaultState();}}
 var S=load();
+function migrateEvents(){S.events.forEach(function(e){if(!e.type)e.type=KIND2TYPE[e.kind]||"note";if(!e.title&&e.kind&&KINDS[e.kind])e.title=KINDS[e.kind].label;});}
+migrateEvents();
 var saveTimer=null,pushTimer=null;
 function save(){localStorage.setItem(LS_STATE,JSON.stringify(S));clearTimeout(saveTimer);saveTimer=setTimeout(function(){flash("Saved");},150);if(window.SYNCcfg&&SYNCcfg.auto&&SYNCcfg.token&&typeof schedulePush==="function")schedulePush();}
 function flash(msg){var f=document.getElementById("flash");f.textContent=msg||"Saved";f.classList.add("show");clearTimeout(flash._t);flash._t=setTimeout(function(){f.classList.remove("show");},1200);}
@@ -91,7 +97,7 @@ function goalScore(g){
  if(d<3*iv)return Math.round(80-30*((d-iv)/(2*iv)));
  return Math.round(Math.max(20,50-30*((d-3*iv)/iv)));
 }
-function rawScore(evs,base){base=(base===undefined)?settings().baseline:base;if(!evs.length)return base;var bonus=0,last=0;evs.forEach(function(e){var d=daysSince(e.ts);if(d>90)return;bonus+=(e.weight||3)*clamp(1-d/45,0,1);if(d>last)last=d;});return clamp(Math.round(settings().baseline-1.4*clamp(last,0,30)+bonus),0,100);}
+function rawScore(evs,base){base=(base===undefined)?settings().baseline:base;if(!evs.length)return base;var bonus=0,last=0;evs.forEach(function(e){var d=daysSince(e.ts);if(d>90)return;bonus+=(e.weight||typeWeight(e))*clamp(1-d/45,0,1);if(d>last)last=d;});return clamp(Math.round(settings().baseline-1.4*clamp(last,0,30)+bonus),0,100);}
 function eventsFor(areaId,personId){return S.events.filter(function(e){return e.areaId===areaId&&(personId?e.personId===personId:!e.personId);});}
 function areaGoals(id){return S.goals.filter(function(g){return g.area===id;});}
 function personGoals(pid){return S.goals.filter(function(g){return g.personId===pid;});}
@@ -105,8 +111,9 @@ function trend(id){var g=areaGoals(id);var any=g.some(function(gg){var e=lastGoa
 function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function personName(id){var p=S.people.find(function(x){return x.id===id;});return p?p.name:"";}
 function when(ts){var d=daysSince(ts);if(d===0)return "today";if(d===1)return "yesterday";if(d<7)return d+" days ago";if(d<30)return Math.floor(d/7)+" wk ago";return Math.floor(d/30)+" mo ago";}
+function fmtDate(ts){var d=new Date(ts);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 var AREA_IDS=["faith","marriage","parenting","health","fitness","finances","friendships"];
-var tab="today",openDetail=null,currentPerson=null;
+var tab="today",currentArea=null,currentPerson=null;
 function el(id){return document.getElementById(id);}
 function meterBar(v,cls){return '<div class="bar"><i class="'+cls+'" style="width:'+v+'%"></i></div>';}
 function personChip(k){var ps=personScore(k);var c=scoreClass(ps);return '<span class="submeter" data-person="'+k.id+'" title="'+scoreLabel(ps)+'"><span class="sm-dot '+c+'"></span><span class="sm-name">'+esc(k.name)+'</span><span class="sm-bar"><i class="'+c+'" style="width:'+ps+'%"></i></span><span class="sm-num">'+ps+'</span></span>';}
