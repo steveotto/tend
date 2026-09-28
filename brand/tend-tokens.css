@@ -1,0 +1,15 @@
+:root {
+  --tend-canvas: #F7F9F7;
+  --tend-surface: #FFFFFF;
+  --tend-ink: #202723;
+  --tend-secondary: #5E6B63;
+  --tend-forest: #246B52;
+  --tend-mint: #67C5A3;
+  --tend-mist: #E5F2EB;
+  --tend-line: #DCE4DE;
+  --tend-font-ui: 'Inter', system-ui, sans-serif;
+  --tend-font-editorial: 'Newsreader', Georgia, serif;
+  --tend-radius-card: 20px;
+  --tend-radius-control: 12px;
+  --tend-space-unit: 8px;
+}
