@@ -11,9 +11,8 @@ function downloadICS(title){var d=new Date();d.setDate(d.getDate()+1);d.setHours
 function saveEncNote(pid,ta){var p=S.people.find(function(x){return x.id===pid;});if(p){p.encouragementNote=ta.value;save();var h=document.querySelector('[data-enchint="'+pid+'"]');if(h){h.classList.add("show");setTimeout(function(){h.classList.remove("show");},900);}}}
 function bind(){
  var v=el("view");
- document.querySelectorAll("#tabs button").forEach(function(b){b.onclick=function(){tab=b.getAttribute("data-tab");openDetail=null;currentPerson=null;render();};});
- v.querySelectorAll("[data-areanav]").forEach(function(b){b.onclick=function(){currentArea=b.getAttribute("data-areanav");openDetail=null;editingId=null;editingEvent=null;render();window.scrollTo(0,0);};});
- v.querySelectorAll("[data-utilnav]").forEach(function(b){b.onclick=function(){tab=b.getAttribute("data-utilnav");currentArea=null;openDetail=null;editingId=null;editingEvent=null;render();window.scrollTo(0,0);};});
+ document.querySelectorAll("[data-areanav]").forEach(function(b){b.onclick=function(){currentArea=b.getAttribute("data-areanav");openDetail=null;editingId=null;editingEvent=null;render();window.scrollTo(0,0);};});
+ document.querySelectorAll("[data-utilnav]").forEach(function(b){b.onclick=function(){tab=b.getAttribute("data-utilnav");currentArea=null;openDetail=null;editingId=null;editingEvent=null;render();window.scrollTo(0,0);};});
  v.querySelectorAll("[data-person]").forEach(function(ch){ch.onclick=function(e){e.stopPropagation();openPersonTab(ch.getAttribute("data-person"));};});
  v.querySelectorAll("[data-openperson]").forEach(function(c){c.onclick=function(){openPersonTab(c.getAttribute("data-openperson"));};});
  v.querySelectorAll("[data-closeperson]").forEach(function(b){b.onclick=function(){currentPerson=null;render();};});
