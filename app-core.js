@@ -58,8 +58,9 @@ function defaultChecklists(){return[
   {id:uid(),text:"Coordinate who brings what",done:false}
  ]}
 ];}
+function defaultRhythms(){return[{id:uid(),text:"Pray together",category:"prayer",freq:"daily",tod:"early",dur:"15 min"},{id:uid(),text:"Afternoon walk around the block",category:"connection",freq:"daily",tod:"afternoon",dur:"30 min"},{id:uid(),text:"Date night",category:"connection",freq:"custom",customType:"weekly",customDow:5,tod:"evening",dur:"2 hrs"},{id:uid(),text:"Overnight getaway",category:"connection",freq:"quarterly",tod:"anytime",dur:"Weekend"}];}
 function defaultState(){return{version:2,
- people:[{id:"amy",name:"Amy",relation:"wife",area:"marriage"},{id:"hannah",name:"Hannah",relation:"daughter",area:"parenting"},{id:"jacob",name:"Jake",relation:"son",area:"parenting"},{id:"leah",name:"Leah",relation:"daughter",area:"parenting"},{id:"lucas",name:"Lucas",relation:"son-in-law",area:"parenting"},{id:"addi",name:"Addi",relation:"future daughter-in-law",area:"parenting"}],
+ people:[{id:"amy",name:"Amy",relation:"wife",area:"marriage",rhythms:defaultRhythms()},{id:"hannah",name:"Hannah",relation:"daughter",area:"parenting"},{id:"jacob",name:"Jake",relation:"son",area:"parenting"},{id:"leah",name:"Leah",relation:"daughter",area:"parenting"},{id:"lucas",name:"Lucas",relation:"son-in-law",area:"parenting"},{id:"addi",name:"Addi",relation:"future daughter-in-law",area:"parenting"}],
  events:[],tasks:[],goals:defaultGoals(),followups:[],prayers:[],ideas:[],echoes:[{id:uid(),title:"Photographers - Jake & Addi's wedding",note:"Contacts to reach out to. Status: to contact / contacted / met / booked / passed.",items:[]}],keyDates:defaultKeyDates(),checklists:defaultChecklists(),settings:JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
  calendars:[{id:"cal-home",name:"Home",url:"https://p106-caldav.icloud.com/published/2/MjcyMTgwNTc5MjcyMTgwNfAweM4Mnge_B7jsSIKiQGrhnfAemrtl8LYeoKtz2A0MTFihcXWvdiyB4fotJ9jrIRWeawSqJWitMgtfFaZ1XRxvE-3phMRdiHY_izguI0iXG6szeG4SjHgOO6Uvy8Rgbw",color:"#4C9AFF"}],
  areas:{faith:{name:"Faith"},marriage:{name:"Marriage"},parenting:{name:"Parenting"},health:{name:"Health & Fitness"},finances:{name:"Finances"},friendships:{name:"Friendships"}}};}
@@ -68,6 +69,7 @@ if(st.areas&&st.areas.fitness){st.areas.health={name:"Health & Fitness"};delete 
  if(!st.areas.finances)st.areas.finances={name:"Finances"};
  var wantPeople=[{id:"amy",name:"Amy",relation:"wife"},{id:"hannah",name:"Hannah",relation:"daughter"},{id:"jacob",name:"Jake",relation:"son"},{id:"leah",name:"Leah",relation:"daughter"},{id:"lucas",name:"Lucas",relation:"son-in-law"},{id:"addi",name:"Addi",relation:"future daughter-in-law"}];
  wantPeople.forEach(function(p){var ex=st.people&&st.people.find(function(x){return x.id===p.id;});if(ex){if(p.id==="jacob")ex.name="Jake";ex.area=ex.area||"parenting";}else{st.people.push({id:p.id,name:p.name,relation:p.relation,area:p.id==="amy"?"marriage":"parenting"});}});
+ var _am=st.people.find(function(x){return x.id==="amy";});if(_am&&!_am.rhythms)_am.rhythms=defaultRhythms();
  st.goals=st.goals&&st.goals.length?st.goals:defaultGoals();
  st.keyDates=st.keyDates&&st.keyDates.length?st.keyDates:defaultKeyDates();
  st.checklists=st.checklists&&st.checklists.length?st.checklists:defaultChecklists();
@@ -109,7 +111,29 @@ function personConnInfo(p){var last=null;S.events.forEach(function(e){if(e.perso
 function personPrayerInfo(p){var last=null;S.events.forEach(function(e){if(e.personId===p.id&&(e.kind==="prayer"||e.type==="prayer")&&(!last||e.ts>last.ts))last=e;});return {last:last,days:last?daysSince(last.ts):999};}
 function connScoreFromDays(d,cad){var r=d/cad,v;if(r<=0.33)v=100;else if(r<=1)v=100-30*(r-0.33)/0.67;else if(r<=2)v=70-30*(r-1);else if(r<3)v=40-30*(r-2);else v=10;return Math.round(clamp(v,10,100));}
 function prayerScoreFromDays(d){return Math.round(clamp(100-10*d,30,100));}
-function personScore(p){var ci=personConnInfo(p),pi=personPrayerInfo(p);return Math.round(0.7*connScoreFromDays(ci.days,personCadenceDays(p))+0.3*prayerScoreFromDays(pi.days));}
+/* ============ rhythms: recurring care commitments ============ */
+var FREQS={daily:{label:"Daily",days:1},twicewk:{label:"2x a week",days:3.5},weekly:{label:"Weekly",days:7},biweekly:{label:"Every 2 weeks",days:14},monthly:{label:"Monthly",days:30},quarterly:{label:"Quarterly",days:91},yearly:{label:"Yearly",days:365}};
+var DURATIONS=["15 min","30 min","1 hr","2 hrs","Half day","Full day","Overnight","Weekend","2 days"];
+var DOW=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+var ORDINALS=["1st","2nd","3rd","4th"];
+function rhythmPeriod(r){if(r.freq==="custom")return r.customType==="monthly"?30:7;return FREQS[r.freq]?FREQS[r.freq].days:7;}
+function rhythmFreqLabel(r){if(r.freq==="custom"){if(r.customType==="monthly")return ORDINALS[(r.customOrd||1)-1]+" "+DOW[r.customDow||0]+" of the month";return DOW[r.customDow||0]+"s";}return FREQS[r.freq]?FREQS[r.freq].label:"Weekly";}
+function personRhythms(p,cat){return ((p&&p.rhythms)||[]).filter(function(r){return !cat||(r.category||"connection")===cat;});}
+function rhythmLast(r){var best=null;S.events.forEach(function(e){if(e.rhythmId===r.id&&(!best||e.ts>best.ts))best=e;});return best;}
+function rhythmDaysSince(r){var l=rhythmLast(r);return l?daysSince(l.ts):999;}
+function rhythmScore(r){var d=rhythmDaysSince(r);if(d===999)return 45;var missed=Math.floor(d/rhythmPeriod(r));return Math.max(10,100-10*missed);}
+function rhythmDueTxt(r){var d=rhythmDaysSince(r);if(d===999)return "not started yet";var per=rhythmPeriod(r);if(d===0)return "done today";var miss=Math.floor(d/per);if(miss<1)return "due in "+Math.ceil(per-d)+"d";if(miss===1)return "due now";return "overdue - "+miss+" periods";}
+function personTouchInfo(p){var last=null;S.events.forEach(function(e){if(e.personId===p.id&&e.kind!=="prayer"&&e.type!=="prayer"&&(!last||e.ts>last.ts))last=e;});return {last:last,days:last?daysSince(last.ts):999};}
+function touchScoreFromDays(d){return Math.max(10,100-10*d);}
+function touchSuggestion(p){var ideas={qt:["Plan a 30-minute walk together","Coffee and conversation, phones down","Do an errand side by side"],wa:["Text one specific encouragement","Speak an affirmation out loud","Write a short note of thanks"],as:["Do one of their chores, unasked","Bring their favorite drink home","Fix something on their list"],gf:["Pick up a small favorite treat","Order the book they mentioned","Send flowers for no reason"],pt:["A long, unhurried hug","Sit close this evening","Take a walk hand in hand"]};var arr=(p&&p.loveLanguage&&ideas[p.loveLanguage])||["Send a thoughtful text","A quick call on the commute","A handwritten note"];return arr[Math.floor(Date.now()/864e5)%arr.length];}
+function personScore(p){
+ var crs=personRhythms(p,"connection"),prs=personRhythms(p,"prayer");
+ var ti=personTouchInfo(p),ts=touchScoreFromDays(ti.days);
+ var conn=crs.length?avg(crs.map(rhythmScore)):connScoreFromDays(ti.days,personCadenceDays(p));
+ var ps=prs.length?avg(prs.map(rhythmScore)):prayerScoreFromDays(personPrayerInfo(p).days);
+ if(!crs.length&&!prs.length)return Math.round(0.7*conn+0.3*ps);
+ return Math.round(clamp(0.4*conn+0.3*ts+0.3*ps,0,100));
+}
 function nextOccurrence(kd){var t=new Date();var d=new Date(t.getFullYear(),kd.month-1,kd.day);if(d<t)d=new Date(t.getFullYear()+1,kd.month-1,kd.day);return d;}
 function daysUntil(kd){return Math.ceil((nextOccurrence(kd)-new Date())/86400000);}
 function trend(id){var g=areaGoals(id);var any=g.some(function(gg){var e=lastGoalEvent(gg);return e&&(Date.now()-e.ts)<7*86400000;});return any?{cls:"up",arrow:"\u25B2"}:{cls:"flat",arrow:"\u25AC"};}
