@@ -123,7 +123,7 @@ function renderPeople(){
   var sc=personScore(p),c=scoreClass(sc);
   var ci=personConnInfo(p);
   var prayers=S.prayers.filter(function(x){return x.personId===p.id&&!x.answered;}).length;
-  out+='<div class="card person-card" data-openperson="'+p.id+'" style="cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:10px;min-width:0">'+personAvatar(p,42)+'<h3 style="margin:0">'+esc(p.name)+'</h3></div><span class="score '+c+'">'+sc+'</span></div>'+meterBar(sc,c)+'<div class="meta">'+esc(p.relation||"")+' \u00B7 '+(ci.last?("connected "+when(ci.last.ts)):"no connections yet")+(prayers?" \u00B7 "+prayers+" prayer"+(prayers>1?"s":""):"")+'</div>'+nextDateLine(p.id)+sparkChip(p)+'</div>';
+  out+='<div class="card person-card" data-openperson="'+p.id+'" style="cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:10px;min-width:0">'+personAvatar(p,42)+'<h3 style="margin:0">'+esc(p.name)+'</h3></div><span class="score '+c+'">'+sc+'</span></div>'+meterBar(sc,c)+'<div class="meta">'+esc(p.relation||"")+' \u00B7 '+(ci.last?("connected "+when(ci.last.ts)):"no connections yet")+(prayers?" \u00B7 "+prayers+" prayer"+(prayers>1?"s":""):"")+'</div>'+nextDateLine(p.id)+personDateLines(p)+'</div>';
  });
  out+='</div>';
  return out;}
@@ -185,9 +185,10 @@ function personProfile(pid){
  var first=esc(p.name.split(" ")[0]);
  var bd=bdayInfo(p.birthday);
  var out='<div class="card detail open" id="personPanel"><div class="head"><div style="display:flex;align-items:center;gap:12px">'+personAvatar(p,52)+'<div><h3>'+esc(p.name)+' <span class="rel">'+esc(p.relation||"")+'</span></div></div></div><div><span class="score '+c+'">'+sc+'</span><button class="btn mini ghost" style="margin-left:10px" data-closeperson="1">Close</button></div></div>';
- out+='<div class="chips">';
+ out+=meterBar(sc,c);out+='<div class="chips">';
  out+=ll?'<span class="chip">\u2665 '+esc(LL_LANGUAGES[ll])+'</span>':'<span class="chip info">no love language set</span>';
  out+=bd?'<span class="chip'+(bd.days<=14?" warn":" info")+'">\uD83C\uDF82 Birthday: '+esc(bd.label)+'</span>':'<span class="chip info">no birthday set</span>';
+ if(p.anniversary){var an2=annivInfo(p.anniversary);if(an2)out+='<span class="chip info">\u2665 Anniversary: '+esc(an2.label)+'</span>';}
  out+='</div>';
  if(crs.length||prs.length){
   var rm=crs.length?avg(crs.map(rhythmScore)):null,rmCls=rm===null?"":scoreClass(rm);
@@ -227,9 +228,11 @@ function personProfile(pid){
  var edEv=editingConn?(S.events.find(function(z){return z.id===editingConn;})||{}):null;
  out+='<div class="card" style="margin-bottom:22px"><div class="subhead">Ripples with '+first+(pTouch.days===0?" \u00B7 one today \u2713":"")+'<span class="hint" style="margin-left:8px;text-transform:none;letter-spacing:0;font-weight:400">small moments of care - they add up</span></div>';
  if(pTouch.days!==0)out+='<div class="touchsugg">\uD83D\uDCAC Suggestion: '+esc(touchSuggestion(p))+'</div>';
- out+='<div class="qlog"><input type="date" id="momentDate" value="'+(editingConn?fmtDate(edEv.ts||Date.now()):fmtDate(Date.now()))+'"><input type="time" id="momentTime" value="'+(editingConn?fmtHM(edEv.ts||Date.now()):nowHM())+'"></div>';
- out+='<div class="addrow" style="margin-top:8px"><input id="momentNote" value="'+esc(edEv?(edEv.note||""):"")+'" placeholder="What happened? Paste the text, the moment, anything..."></div>';
- out+='<div class="qlog" style="margin-top:8px">'+["coffee","meal","call","text","quality","prayer"].map(function(k){return '<button data-plog="'+k+'">'+KINDS[k].label.split(" /")[0].split(" ")[0]+'</button>';}).join("")+'<button data-plogother="1" class="other">Other...</button></div>';
+ out+='<div class="qlog"><select id="plogType" style="border:1px solid var(--line);border-radius:10px;padding:9px 11px;font-size:14px;background:var(--canvas)">'+["coffee","meal","call","text","quality","prayer"].map(function(k){return '<option value="'+k+'">'+KINDS[k].label+'</option>';}).join("")+'<option value="other">Other...</option></select><input type="date" id="momentDate" value="'+(editingConn?fmtDate(edEv.ts||Date.now()):fmtDate(Date.now()))+'"><input type="time" id="momentTime" '+(edEv&&edEv.allDay?"disabled":"")+' value="'+(editingConn?fmtHM(edEv.ts||Date.now()):nowHM())+'"><label style="display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;color:var(--ink-soft)"><input type="checkbox" id="momentAllDay" class="cb" '+(edEv&&edEv.allDay?"checked":"")+'> All Day</label></div>';
+ out+='<div class="qlog" id="plogOtherRow" style="display:none"><input id="plogOther" placeholder="What kind of moment? (e.g. Golf, Movie)" style="flex:1;border:1px solid var(--line);border-radius:10px;padding:10px 12px"></div>';
+ out+='<div class="addrow" style="margin-top:8px"><input id="momentTitle" value="'+esc(edEv&&edEv.title&&edEv.title.indexOf("Time with")!==0?edEv.title:"")+'" placeholder="Title - e.g. Encouraging Message"></div>';
+ out+='<div class="addrow" style="align-items:flex-start"><textarea id="momentNote" placeholder="Notes - what you want to remember..." style="min-height:70px;flex:1;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--canvas);font-size:15px">'+esc(edEv?(edEv.note||""):"")+'</textarea></div>';
+ out+='<div style="display:flex;gap:8px;margin-top:2px"><button class="btn" data-psubmit="'+pid+'">'+(editingConn?"Update":"Log it")+'</button>'+(editingConn?'<button class="btn ghost" data-peditcancel="1">Cancel</button>':'')+'</div>';
  out+='<div class="subhead" style="margin-top:18px">History</div>';
  if(evs.length){evs.slice(0,8).forEach(function(e){out+=rippleLine(e);});
   if(evs.length>8)out+='<details style="margin-top:8px"><summary style="cursor:pointer;font-size:13px;color:var(--ink-faint)">Show older ('+(evs.length-8)+' more)</summary><div style="margin-top:6px">'+evs.slice(8).map(rippleLine).join("")+'</div></details>';
@@ -260,8 +263,8 @@ function personProfile(pid){
  out+='<option value="__custom"'+(p.relation&&relIn<0?" selected":"")+'>Custom...</option></select>';
  if(p.relation&&relIn<0)out+='<div class="addrow"><input data-pfield="relation" data-pid="'+pid+'" value="'+esc(p.relation)+'" placeholder="Type the custom relationship"></div>';
  out+='</div>';
- out+='<div class="grid2"><div class="field"><label>Birthday</label><input type="date" data-pfield="birthday" data-pid="'+pid+'" value="'+esc(p.birthday||"")+'"></div>';
- out+='<div class="field"><label>Connection cadence</label><select data-pfield="connectCadence" data-pid="'+pid+'">'+[["daily","daily"],["weekly","weekly"],["biweekly","every 2 weeks"],["monthly","monthly"]].map(function(o){return '<option value="'+o[0]+'"'+((p.connectCadence||"weekly")===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("")+'</select></div></div>';
+ out+='<div class="grid2"><div class="field"><label>Birthday</label><input type="date" data-pfield="birthday" data-pid="'+pid+'" value="'+esc(p.birthday||"")+'"></div><div class="field"><label>Anniversary</label><input type="date" data-pfield="anniversary" data-pid="'+pid+'" value="'+esc(p.anniversary||"")+'"></div></div>';
+ out+='<div class="field"><label>Connection cadence</label><select data-pfield="connectCadence" data-pid="'+pid+'">'+[["daily","daily"],["weekly","weekly"],["biweekly","every 2 weeks"],["monthly","monthly"]].map(function(o){return '<option value="'+o[0]+'"'+((p.connectCadence||"weekly")===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("")+'</select></div>';
  out+='<div class="field"><label>Love language</label><select data-pfield="loveLanguage" data-pid="'+pid+'"><option value="">- not set -</option>'+Object.keys(LL_LANGUAGES).map(function(k){return '<option value="'+k+'"'+(ll===k?" selected":"")+'>'+LL_LANGUAGES[k]+'</option>';}).join("")+'</select></div>';
  out+='<div class="field"><label>Photo</label><div style="display:flex;align-items:center;gap:12px">'+personAvatar(p,56)+'<input type="file" accept="image/*" data-pphoto="'+pid+'" style="flex:1;font-size:13px">'+(p.photo?'<button class="btn mini danger" data-pphorm="'+pid+'">Remove</button>':'')+'</div><div class="hint" style="font-size:11px;color:var(--ink-faint)">Crops to a circle for their card.</div></div>';
  out+='</div></details>';
@@ -279,7 +282,7 @@ function renderChecklists(){
  return out;}
 /* ============ rhythm done prompt + ripples ============ */
 function rhyDoneBtn(key){if(rhyDoneDraft&&rhyDoneDraft.key===key){return '<span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><input type="date" data-rhydate="'+key+'" value="'+rhyDoneDraft.date+'" style="max-width:145px"><input type="time" data-rhytime="'+key+'" value="'+rhyDoneDraft.time+'" style="max-width:105px"><button class="btn mini" data-rhyconfirm="'+key+'">Log it</button><button class="btn mini ghost" data-rhycancel2="1">Cancel</button></span>';}return '<button class="btn mini" data-rhydone="'+key+'">Done</button>';}
-function rippleLine(e){var t=(e.title&&e.title.indexOf("Time with")!==0)?e.title:"";return '<div class="logline"><span class="when">'+when(e.ts)+(daysSince(e.ts)===0?" "+fmtHM(e.ts):"")+'</span><div class="gr-main" style="flex:1"><span class="kind">'+esc(typeLabel(e))+'</span>'+(t?' <span class="txt">'+esc(t)+'</span>':'')+(e.note?'<div class="gr-meta">'+esc(e.note)+'</div>':'')+'</div><span class="entry-actions"><button class="iconbtn" data-evedit="'+e.id+'" title="edit">\u270E</button><button class="iconbtn" data-evdel="'+e.id+'" title="delete">\uD83D\uDDD1</button></span></div>';}
+function rippleLine(e){var t=(e.title&&e.title.indexOf("Time with")!==0)?e.title:"";var pill=e.rhythmId?' <span class="pill rhy">\u21BB Rhythm</span>':((e.origin==="spark"||e.note==="Spark landed")?' <span class="pill spk">\u2726 Spark</span>':'');return '<div class="logline"><span class="when">'+when(e.ts)+(daysSince(e.ts)===0&&!e.allDay?" "+fmtHM(e.ts):"")+'</span><div class="gr-main" style="flex:1"><span class="kind">'+esc(typeLabel(e))+'</span>'+pill+(t?' <span class="txt">'+esc(t)+'</span>':'')+(e.note&&e.note!=="Spark landed"?'<div class="gr-meta">'+esc(e.note)+'</div>':'')+'</div><span class="entry-actions"><button class="iconbtn" data-evedit="'+e.id+'" title="edit">\u270E</button><button class="iconbtn" data-evdel="'+e.id+'" title="delete">\uD83D\uDDD1</button></span></div>';}
 /* ============ free moment + spark chip ============ */
 function sparkChip(p){var s=openSparks(p)[0];if(!s)return "";return '<div class="pf-next" style="color:#8A6D1F">\u2726 '+esc(s.text)+' \u00B7 '+esc(sparkDueTxt(s))+'</div>';}
 function freeMomentHTML(){
@@ -335,4 +338,3 @@ var editRhythmId=null;
 var rhythmDraft=null;
 var rhyDoneDraft=null;
 var tab="today",openDetail=null,currentArea=null,currentPerson=null;
-
