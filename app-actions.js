@@ -1,1 +1,1 @@
-PLACEHOLDER - will be replaced in next call
+use strict placeholder
