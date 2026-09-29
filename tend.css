@@ -87,7 +87,7 @@ nav.tabs button.active{background:var(--card);color:var(--forest);box-shadow:0 1
 .detail h3{font-size:20px;font-weight:500;margin-bottom:4px}
 .detail .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}
 @media(max-width:720px){.detail .cols{grid-template-columns:1fr}}
-.subhead{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-faint);font-weight:700;margin-bottom:8px}
+.subhead{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-faint);font-weight:700;margin-bottom:10px}
 ul.tasks{list-style:none;display:flex;flex-direction:column;gap:6px}
 ul.tasks li{display:flex;align-items:flex-start;gap:9px}
 ul.tasks li.done .txt{color:var(--ink-faint);text-decoration:line-through}
@@ -117,8 +117,8 @@ ul.tasks li.done .txt{color:var(--ink-faint);text-decoration:line-through}
 .sectiontitle{display:flex;align-items:baseline;gap:12px;margin:26px 0 12px}
 .sectiontitle h2{font-size:22px;font-weight:500}
 .sectiontitle .hint{font-size:12.5px;color:var(--ink-faint);font-style:italic;font-family:var(--serif)}
-.notewrap textarea{width:100%;min-height:64px;border:1px solid var(--line);border-radius:12px;background:var(--canvas);padding:9px 12px;resize:vertical}
-.notewrap textarea:focus{outline:none;border-color:var(--mint)}
+.notewrap textarea{width:100%;min-height:88px;border:1px solid var(--line);border-radius:12px;background:var(--canvas);padding:12px 14px;font-size:15.5px;line-height:1.55;resize:vertical}
+.notewrap textarea:focus{outline:none;border-color:var(--mint);box-shadow:0 0 0 3px rgba(63,198,143,.14)}
 .notewrap{position:relative}
 .notewrap .savehint{position:absolute;right:10px;bottom:8px;font-size:10.5px;color:var(--mint);opacity:0;transition:opacity .2s}
 .notewrap .savehint.show{opacity:1}
@@ -128,11 +128,15 @@ ul.tasks li.done .txt{color:var(--ink-faint);text-decoration:line-through}
 .preq .ptext{flex:1}
 .preq.answered .ptext{color:var(--ink-faint);text-decoration:line-through}
 .badge{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-radius:6px;padding:2px 7px;background:var(--mist);color:var(--forest)}
-.card .field{margin-bottom:16px}
-.card .field label{display:block;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:6px}
+.card .field{margin-bottom:18px}
+.card .field label{display:block;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:7px}
 .card .field input{width:100%;border:1px solid var(--line);border-radius:12px;padding:11px 13px;background:var(--canvas)}
-.card .field input:focus{outline:none;border-color:var(--mint)}
+.card .field input:focus{outline:none;border-color:var(--mint);box-shadow:0 0 0 3px rgba(63,198,143,.14)}
 .card .field input::placeholder{color:var(--ink-faint)}
+.card .field select{width:100%;border:1px solid var(--line);border-radius:12px;padding:11px 13px;background:var(--canvas);cursor:pointer}
+.card .field textarea{width:100%;min-height:120px;border:1px solid var(--line);border-radius:12px;background:var(--canvas);padding:12px 14px;font-size:15.5px;line-height:1.55;resize:vertical}
+.card .field textarea:focus{outline:none;border-color:var(--mint);box-shadow:0 0 0 3px rgba(63,198,143,.14)}
+.card .field textarea::placeholder{color:var(--ink-faint)}
 .card .btn-row{display:flex;gap:8px;flex-wrap:wrap}
 .modal{position:fixed;inset:0;background:rgba(32,39,35,.45);display:none;align-items:center;justify-content:center;z-index:100;padding:20px}
 .modal.open{display:flex}
@@ -259,3 +263,8 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .now-badge{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--forest);border-radius:6px;padding:3px 8px;flex:none}
 .next-badge{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--forest);background:transparent;border:1px solid var(--mint);border-radius:6px;padding:2px 7px;flex:none}
 .cal-calname{font-size:11px;color:var(--ink-faint);font-weight:600;white-space:nowrap;flex:none}
+
+/* profile breathing room + prayer profile styling */
+#personPanel{margin-top:24px}
+.detail.open{margin-bottom:8px}
+.card .subhead{letter-spacing:.16em}
