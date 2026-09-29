@@ -65,6 +65,16 @@ function bind(){
  v.querySelectorAll("[data-clitem]").forEach(function(cb){cb.onchange=function(){var parts=cb.getAttribute("data-clitem").split("|");var cl=S.checklists.find(function(c){return c.id===parts[0];});if(!cl)return;var it=cl.items.find(function(i){return i.id===parts[1];});if(it){it.done=cb.checked;save();render();}};});
  v.querySelectorAll("[data-cldel]").forEach(function(b){b.onclick=function(){var parts=b.getAttribute("data-cldel").split("|");var cl=S.checklists.find(function(c){return c.id===parts[0];});if(!cl)return;cl.items=cl.items.filter(function(i){return i.id!==parts[1];});save();render();};});
  v.querySelectorAll("[data-cladd]").forEach(function(b){b.onclick=function(){var cid=b.getAttribute("data-cladd");var cl=S.checklists.find(function(c){return c.id===cid;});var inp=document.querySelector('[data-clnew="'+cid+'"]');if(cl&&inp.value.trim()){cl.items.push({id:uid(),text:inp.value.trim(),done:false});save();render();}};});
+ /* dashboard plan + area menu */
+ document.querySelectorAll("[data-areago]").forEach(function(b){b.onclick=function(){currentArea=b.getAttribute("data-areago");openDetail=null;editingId=null;editingEvent=null;render();window.scrollTo(0,0);};});
+ v.querySelectorAll("[data-plandone]").forEach(function(b){b.onclick=function(){
+  var log={};try{log=JSON.parse(decodeURIComponent(b.getAttribute("data-plandone")));}catch(e){return;}
+  var tid=b.getAttribute("data-taskid");
+  if(tid){var t=S.tasks.find(function(x){return x.id===tid;});if(t)t.done=true;}
+  logEvent(log.area||"faith",null,log.type||"note",log.title||"","",Date.now(),log.goalId||null);
+  flash("Done. On to the next.");};});
+ var icsb=el("icsSave");
+ if(icsb)icsb.onclick=function(){settings().icsUrl=el("icsUrl").value.trim();localStorage.removeItem("tend:cal");save();if(window.TEND_LOAD_CALENDAR)TEND_LOAD_CALENDAR();render();flash("Calendar link saved");};
  /* area log form */
  var ls=el("logSubmit");
  if(ls){ls.onclick=function(){
@@ -82,6 +92,7 @@ function bind(){
  if(sy){sy.onclick=function(){SYNCcfg.owner=el("syncOwner").value.trim();SYNCcfg.repo=el("syncRepo").value.trim();SYNCcfg.token=el("syncToken").value.trim();localStorage.setItem(LS_SYNC,JSON.stringify(SYNCcfg));updateSyncDot();flash("Sync settings saved");render();};
   el("syncPull").onclick=function(){pullNow(true);};el("syncPush").onclick=function(){pushNow();};
   el("syncExport").onclick=function(){var blob=new Blob([JSON.stringify(S,null,2)],{type:"application/json"});var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="tend-backup-"+new Date().toISOString().slice(0,10)+".json";a.click();};}
+ if(tab==="today"&&navKind()!=="area"&&window.TEND_LOAD_CALENDAR)TEND_LOAD_CALENDAR();
  var io=el("introOk");if(io)io.onclick=function(){try{localStorage.setItem("tend:introSeen","1");}catch(e){}render();};
  if(!window._tendDelegated){window._tendDelegated=true;document.addEventListener("click",function(e){var b=e.target.closest("[data-dosugg]");if(b){var parts=b.getAttribute("data-dosugg").split("|");logEvent(parts[1],parts[2]||null,parts[3],parts[0]);flash("Logged. Well tended.");}});}
 }
