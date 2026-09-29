@@ -117,6 +117,12 @@ function loadCalendars(){
  });
 }
 function fmtT(ms){var d=new Date(ms);var h=d.getHours(),m=d.getMinutes(),ap=h<12?"am":"pm";h=h%12||12;return h+(m?":"+String(m).padStart(2,"0"):"")+ap;}
+function fmtD(ms){var d=new Date(ms);return d.toLocaleDateString(undefined,{month:"short",day:"numeric"});}
+function rangeTxt(e,t0,t1){
+ var startsToday=e.s>=t0&&e.s<t1,multi=(e.e-e.s)>86400000;
+ if(e.allDay){if(startsToday&&!multi)return "All day";return "All day \u00b7 "+fmtD(e.s)+(multi?" \u2013 "+fmtD(e.e):"");}
+ if(startsToday&&!multi)return fmtT(e.s)+" \u2013 "+fmtT(e.e);
+ return fmtD(e.s)+" "+fmtT(e.s)+" \u2013 "+(multi?fmtD(e.e)+" ":"")+fmtT(e.e);}
 function renderCalStrip(evs,errs){
  var strip=el("calStrip");if(!strip)return;
  var out="";
@@ -131,7 +137,7 @@ function renderCalStrip(evs,errs){
    var badge="";
    if(cls.indexOf("now")>=0)badge='<span class="now-badge">Now</span>';
    else if(cls.indexOf("next")>=0)badge='<span class="next-badge">in '+Math.max(1,Math.round((e.s-now)/60000))+' min</span>';
-   return '<div class="calitem '+cls+'"><span class="cal-bar" style="background:'+(e.color||"#4C9AFF")+'"></span><div class="cal-main"><div class="cal-title">'+esc(e.t||"(untitled)")+'</div><div class="cal-range">'+(e.allDay?"All day":fmtT(e.s)+" \u2013 "+fmtT(e.e))+'</div></div>'+badge+'<span class="cal-calname">'+esc(e.cal||"")+'</span></div>';
+   return '<div class="calitem '+cls+'"><span class="cal-bar" style="background:'+(e.color||"#4C9AFF")+'"></span><div class="cal-main"><div class="cal-title">'+esc(e.t||"(untitled)")+'</div><div class="cal-range">'+rangeTxt(e,t0,t1)+'</div></div>'+badge+'<span class="cal-calname">'+esc(e.cal||"")+'</span></div>';
   }
   allDay.forEach(function(e){out+=item(e,"");});
   timed.forEach(function(e){
