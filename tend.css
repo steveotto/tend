@@ -220,3 +220,29 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .momentrow .hint{font-size:11px;color:var(--ink-faint)}
 .logline .entry-actions{margin-left:auto;display:flex;gap:2px}
 .goalrow.edit select{max-width:110px}
+
+/* person profile per mockup */
+.head{display:flex;justify-content:space-between;align-items:baseline}
+.head .rel{font-size:13px;color:var(--ink-faint);font-weight:400}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--mist);color:var(--forest);border-radius:99px;padding:6px 14px;font-size:12.5px;font-weight:600}
+.chip.warn{background:#FFF6E0;color:#9A6B00}
+.chip.info{background:#EDF2F0;color:var(--ink-soft)}
+.pmeters{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+@media(max-width:720px){.pmeters{grid-template-columns:1fr}}
+.pmeter{background:var(--canvas);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.pm-lab{display:flex;justify-content:space-between;font-size:13px;font-weight:600}
+.pm-val.green{color:#12B76A}.pm-val.yellow{color:#C77E00}.pm-val.red{color:#FF5A45}
+.pm-note{font-size:11.5px;color:var(--ink-faint);margin-top:6px}
+.nudge{display:flex;gap:10px;align-items:flex-start;background:var(--mist);border:1px solid #CBEADD;border-radius:14px;padding:12px 16px;font-size:13.5px;margin-top:12px}
+.nudge b{color:var(--forest)}
+.qlog{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.qlog input[type=date]{border:1px solid var(--line);border-radius:10px;padding:9px 11px;font-size:14px;background:var(--canvas)}
+.qlog button{border:1px solid var(--line);background:var(--canvas);border-radius:99px;padding:9px 15px;font-size:14px;font-weight:600;color:var(--ink-soft)}
+.qlog button:hover{border-color:var(--forest);color:var(--forest)}
+.qlog button.other{color:var(--forest);border-style:dashed}
+.savehint{font-size:10.5px;color:var(--mint);opacity:0;transition:opacity .2s}
+.savehint.show{opacity:1}
+.calsync{font-size:11px;color:var(--ink-faint);margin-top:8px;font-style:italic;font-family:var(--serif)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:720px){.grid2{grid-template-columns:1fr}}
