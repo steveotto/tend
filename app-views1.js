@@ -78,7 +78,7 @@ function planHTML(){
    var payload=encodeURIComponent(JSON.stringify(it.log));
    return '<div class="planitem"><div class="pi-main"><div class="pi-label">'+esc(it.label)+'</div><div class="pi-sub">'+esc(it.sub)+'</div></div><button class="btn mini" data-plandone="'+payload+'" data-taskid="'+(it.taskId||"")+'">Done</button></div>';
   }).join(""):'<div class="empty">Nothing queued - all tended.</div>';
-  if(cur){out+='<div class="card planblock current"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:17px;font-weight:600">'+b.name+'</h3><span class="hint">'+b.range+'</span></div>'+body+'</div>';
+  if(cur){out+='<div class="card planblock current"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:17px;font-weight:600">'+b.name+'</h3><span class="hint">'+b.range+'</span></div>'+body+'</div>';}
   else{out+='<details class="card planblock"><summary style="cursor:pointer;font-weight:600;font-size:15px">'+b.name+' <span style="font-weight:400;color:var(--ink-faint);font-size:12.5px">'+b.range+' \u00B7 '+items.length+' item'+(items.length===1?"":"s")+'</span></summary><div style="margin-top:8px">'+body+'</div></details>';}
  });
  return out;}
