@@ -9,6 +9,7 @@ window.submitLog=function(){logEvent(el("logArea").value,el("logPerson").value||
 function openPersonTab(pid){tab="people";currentPerson=pid;openDetail=null;render();}
 function downloadICS(title){var d=new Date();d.setDate(d.getDate()+1);d.setHours(7,0,0,0);function st(dt){return dt.getUTCFullYear()+String(dt.getUTCMonth()+1).padStart(2,"0")+String(dt.getUTCDate()).padStart(2,"0")+"T"+String(dt.getUTCHours()).padStart(2,"0")+String(dt.getUTCMinutes()).padStart(2,"0")+"00Z";}var end=new Date(d.getTime()+15*60000);var ics=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Tend//EN","BEGIN:VEVENT","UID:"+uid()+"@tend","DTSTAMP:"+st(new Date()),"DTSTART:"+st(d),"DTEND:"+st(end),"SUMMARY:"+title.replace(/[,;]/g,""),"DESCRIPTION:From Tend","END:VEVENT","END:VCALENDAR"].join("\r\n");var blob=new Blob([ics],{type:"text/calendar"});var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="tend-reminder.ics";a.click();flash("Reminder file downloaded");}
 function saveEncNote(pid,ta){var p=S.people.find(function(x){return x.id===pid;});if(p){p.encouragementNote=ta.value;save();var h=document.querySelector('[data-enchint="'+pid+'"]');if(h){h.classList.add("show");setTimeout(function(){h.classList.remove("show");},900);}}}
+function savePersonNote(pid,field,ta){var p=S.people.find(function(x){return x.id===pid;});if(p){p[field]=ta.value;save();var h=document.getElementById("prayerSaveHint");if(h){h.classList.add("show");clearTimeout(savePersonNote._t);savePersonNote._t=setTimeout(function(){h.classList.remove("show");},900);}}}
 
 function bind(){
  if(window._tendDelegated)return;
@@ -88,9 +89,12 @@ function bind(){
   else if(t.matches("[data-gdays]")){var g=S.goals.find(function(z){return z.id===t.getAttribute("data-gdays");});if(g){g.days=+t.value||2;save();}}
   else if(t.matches("[data-gperson]")){var g=S.goals.find(function(z){return z.id===t.getAttribute("data-gperson");});if(g){g.personId=t.value||null;save();}}
   else if(t.matches("[data-gtod]")){var g=S.goals.find(function(z){return z.id===t.getAttribute("data-gtod");});if(g){g.tod=t.value;save();render();}}
+  else if(t.matches("[data-pfield]")){var pf=t.getAttribute("data-pfield");var pp=S.people.find(function(x){return x.id===t.getAttribute("data-pid");});if(pp){pp[pf]=t.value;save();render();flash("Saved");}}
  });
  document.addEventListener("input",function(e){
   var t=e.target;
   if(t.matches("[data-encnote]"))saveEncNote(t.getAttribute("data-encnote"),t);
+  else if(t.matches("[data-phpray]"))savePersonNote(t.getAttribute("data-pid"),"howToPray",t);
+  else if(t.matches("[data-pfocus]"))savePersonNote(t.getAttribute("data-pid"),"prayerFocus",t);
  });
 }
