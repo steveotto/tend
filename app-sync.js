@@ -1,5 +1,5 @@
 "use strict";
-/* ============ GitHub sync + init ============ */
+/* ============ GitHub sync ============ */
 var SYNCcfg=(function(){try{return JSON.parse(localStorage.getItem(LS_SYNC))||{auto:true};}catch(e){return {auto:true};}})();
 window.SYNCcfg=SYNCcfg;
 function ghHeaders(){return {"Authorization":"Bearer "+SYNCcfg.token,"Accept":"application/vnd.github+json"};}
@@ -34,5 +34,6 @@ function pullNow(explicit){
 el("headDate").textContent=(function(){var d=new Date();var m=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];return d.getDate()+" "+m[d.getMonth()]+" "+d.getFullYear();})();
 updateSyncDot();
 if(SYNCcfg.token)pullNow(false);
-render();
+function bootTend(){if(typeof render==="function"){render();}else{setTimeout(bootTend,400);}}
+bootTend();
 window.addEventListener("focus",function(){if(SYNCcfg.token)pullNow(false);});
