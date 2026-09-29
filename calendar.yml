@@ -1,0 +1,36 @@
+name: Sync calendar feed
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # every 30 min (scheduled runs can be delayed a few minutes)
+  workflow_dispatch:          # manual "Run workflow" button
+  push:
+    branches: [main]
+    paths-ignore:
+      - "events.json"
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+  - uses: actions/setup-node@v4
+    with:
+      node-version: 20
+
+  - name: Fetch and parse iCloud feed
+    env:
+      ICAL_URL: ${{ secrets.ICAL_URL }}   # add in repo Settings > Secrets and variables > Actions
+      CAL_NAME: Home
+    run: |
+      npm install node-ical --no-save --no-audit --no-fund
+      node build-calendar.mjs
+
+  - name: Commit events.json
+    uses: stefanzweifel/git-auto-commit-action@v5
+    with:
+      commit_message: "chore: refresh calendar events.json [skip ci]"
