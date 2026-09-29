@@ -1,0 +1,363 @@
+{
+  "synced": "2026-09-29T17:58:08.518Z",
+  "source": "iCloud published feed",
+  "events": [
+    {
+      "t": "Canada",
+      "s": "2026-08-27T00:00:00.000Z",
+      "e": "2026-08-31T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Cancel Global Work",
+      "s": "2026-08-31T00:00:00.000Z",
+      "e": "2026-09-01T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Meeting with Alexander Gartley",
+      "s": "2026-09-02T16:00:00.000Z",
+      "e": "2026-09-02T17:00:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "Cancel zenfy",
+      "s": "2026-09-03T00:00:00.000Z",
+      "e": "2026-09-04T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Northstar Orientation 2-4",
+      "s": "2026-09-03T00:00:00.000Z",
+      "e": "2026-09-04T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "PLN",
+      "s": "2026-09-05T16:30:00.000Z",
+      "e": "2026-09-05T17:30:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "Amy- Dr.Chris",
+      "s": "2026-09-09T19:00:00.000Z",
+      "e": "2026-09-09T20:00:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "Worship in the Pines",
+      "s": "2026-09-11T00:00:00.000Z",
+      "e": "2026-09-13T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Cancel Plugins for WP",
+      "s": "2026-09-16T00:00:00.000Z",
+      "e": "2026-09-17T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Meet with Pastor Mark",
+      "s": "2026-09-16T12:30:00.000Z",
+      "e": "2026-09-16T13:30:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "Infusion",
+      "s": "2026-09-17T18:45:00.000Z",
+      "e": "2026-09-17T19:45:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "Ryan’s birthday party",
+      "s": "2026-09-18T00:00:00.000Z",
+      "e": "2026-09-19T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Drop off Lexus",
+      "s": "2026-09-18T13:00:00.000Z",
+      "e": "2026-09-18T14:00:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "Mattke fall party",
+      "s": "2026-09-20T00:00:00.000Z",
+      "e": "2026-09-21T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Canada-Zach Bryan",
+      "s": "2026-09-22T00:00:00.000Z",
+      "e": "2026-09-24T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Gartley’s",
+      "s": "2026-09-25T21:30:00.000Z",
+      "e": "2026-09-26T01:30:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "Amy-highlights",
+      "s": "2026-09-26T12:00:00.000Z",
+      "e": "2026-09-26T13:00:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "Leah’s birthday party",
+      "s": "2026-09-27T00:00:00.000Z",
+      "e": "2026-09-28T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Lunch with Josh",
+      "s": "2026-09-29T15:30:00.000Z",
+      "e": "2026-09-29T16:30:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "Amy- Infusion",
+      "s": "2026-09-29T19:15:00.000Z",
+      "e": "2026-09-29T20:15:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "Pay school taxes",
+      "s": "2026-09-30T00:00:00.000Z",
+      "e": "2026-10-01T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Amy & Hannah Special Event",
+      "s": "2026-10-03T16:00:00.000Z",
+      "e": "2026-10-03T20:00:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "Vision Tour",
+      "s": "2026-10-06T00:00:00.000Z",
+      "e": "2026-10-07T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Meet with Jocelyn Mesiti",
+      "s": "2026-10-07T13:30:00.000Z",
+      "e": "2026-10-07T14:30:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "NO SCHOOL",
+      "s": "2026-10-12T00:00:00.000Z",
+      "e": "2026-10-13T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "D&D",
+      "s": "2026-10-12T00:00:00.000Z",
+      "e": "2026-10-13T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Pastor Mark Petris",
+      "s": "2026-10-13T12:30:00.000Z",
+      "e": "2026-10-13T13:30:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "Nashville",
+      "s": "2026-10-17T00:00:00.000Z",
+      "e": "2026-10-21T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Amy physical",
+      "s": "2026-10-28T13:00:00.000Z",
+      "e": "2026-10-28T14:00:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "Steve Dentist",
+      "s": "2026-11-04T13:00:00.000Z",
+      "e": "2026-11-04T14:00:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "NO SCHOOL",
+      "s": "2026-11-11T00:00:00.000Z",
+      "e": "2026-11-12T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "NO SCHOOL",
+      "s": "2026-11-13T00:00:00.000Z",
+      "e": "2026-11-14T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Cancel Peacock Annual Subscription (amyotto@me.com)",
+      "s": "2026-11-14T00:00:00.000Z",
+      "e": "2026-11-15T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "NO SCHOOL",
+      "s": "2026-11-25T00:00:00.000Z",
+      "e": "2026-11-26T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Book overnighter for NYE (with Leah)",
+      "s": "2026-12-01T00:00:00.000Z",
+      "e": "2026-12-02T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Sleep Study Consult",
+      "s": "2026-12-16T14:45:00.000Z",
+      "e": "2026-12-16T15:45:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "Cancel Starz Subscription (renews in 30th)",
+      "s": "2026-12-19T00:00:00.000Z",
+      "e": "2026-12-20T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Leah- dentist",
+      "s": "2026-12-29T20:50:00.000Z",
+      "e": "2026-12-29T21:50:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "Amy- Dr. Harvey",
+      "s": "2026-12-31T14:00:00.000Z",
+      "e": "2026-12-31T15:00:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "NO SCHOOL",
+      "s": "2027-01-18T00:00:00.000Z",
+      "e": "2027-01-19T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Amy- cleaning",
+      "s": "2027-02-04T20:00:00.000Z",
+      "e": "2027-02-04T21:00:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "NCA Musical",
+      "s": "2027-02-05T00:00:00.000Z",
+      "e": "2027-02-06T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "NCA Musical",
+      "s": "2027-02-05T00:00:00.000Z",
+      "e": "2027-02-06T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "NCA Musical",
+      "s": "2027-02-06T00:00:00.000Z",
+      "e": "2027-02-07T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "NO SCHOOL",
+      "s": "2027-02-15T00:00:00.000Z",
+      "e": "2027-02-20T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Wedding",
+      "s": "2027-03-13T00:00:00.000Z",
+      "e": "2027-03-14T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "NO SCHOOL",
+      "s": "2027-03-22T00:00:00.000Z",
+      "e": "2027-03-27T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "EASTER",
+      "s": "2027-03-28T00:00:00.000Z",
+      "e": "2027-03-29T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "NY Reception",
+      "s": "2027-04-03T00:00:00.000Z",
+      "e": "2027-04-04T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "NO SCHOOL",
+      "s": "2027-04-09T00:00:00.000Z",
+      "e": "2027-04-10T00:00:00.000Z",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "Amy- cleaning",
+      "s": "2027-08-05T19:00:00.000Z",
+      "e": "2027-08-05T20:00:00.000Z",
+      "allDay": false,
+      "cal": "Home"
+    }
+  ]
+}
