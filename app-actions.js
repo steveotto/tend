@@ -1,6 +1,6 @@
 "use strict";
 /* ============ actions & bindings ============ */
-function logEvent(areaId,personId,type,title,note,whenTs,goalId){S.events.push({id:uid(),ts:(whenTs||Date.now()),areaId:areaId,personId:personId||null,type:type||"inperson",kind:type||"inperson",title:title||"",note:note||"",goalId:goalId||null,weight:(ETYPES[type]?ETYPES[type].w:3)});save();render();}
+function logEvent(areaId,personId,type,title,note,whenTs,goalId,rhythmId){S.events.push({id:uid(),ts:(whenTs||Date.now()),areaId:areaId,personId:personId||null,type:type||"inperson",kind:type||"inperson",title:title||"",note:note||"",goalId:goalId||null,rhythmId:rhythmId||null,weight:(ETYPES[type]?ETYPES[type].w:3)});save();render();}
 function deleteEvent(id){S.events=S.events.filter(function(e){return e.id!==id;});save();render();flash("Entry deleted");}
 function updateEvent(id,patch){var e=S.events.find(function(x){return x.id===id;});if(e){Object.keys(patch).forEach(function(k){e[k]=patch[k];});e.weight=(ETYPES[e.type]?ETYPES[e.type].w:3);save();render();flash("Entry updated");}}
 window.openModal=function(){var sel=el("logArea"),selp=el("logPerson"),selk=el("logKind");sel.innerHTML=AREA_IDS.map(function(a){return '<option value="'+a+'">'+S.areas[a].name+'</option>';}).join("");selp.innerHTML='<option value="">- no specific person -</option>'+S.people.map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+'</option>';}).join("");selk.innerHTML=Object.keys(KINDS).map(function(k){return '<option value="'+k+'">'+KINDS[k].label+'</option>';}).join("");el("logNote").value="";el("logModal").classList.add("open");};
@@ -20,8 +20,12 @@ function bind(){
   if(b=t.closest("[data-utilnav]")){tab=b.getAttribute("data-utilnav");currentArea=null;openDetail=null;editingId=null;editingEvent=null;render();window.scrollTo(0,0);return;}
   if(b=t.closest("[data-areago]")){currentArea=b.getAttribute("data-areago");openDetail=null;editingId=null;editingEvent=null;render();window.scrollTo(0,0);return;}
   if(b=t.closest("[data-openperson]")){openPersonTab(b.getAttribute("data-openperson"));return;}
-  if(b=t.closest("[data-closeperson]")){currentPerson=null;editingConn=null;render();return;}
+  if(b=t.closest("[data-closeperson]")){currentPerson=null;editingConn=null;editRhythmId=null;render();return;}
   if(b=t.closest("[data-goaldone]")){var g=S.goals.find(function(x){return x.id===b.getAttribute("data-goaldone");});if(g){var ty={scripture:"note",prayer:"note",date:"inperson",quality:"inperson",workout:"inperson",outdoors:"inperson"}[g.kind]||"inperson";logEvent(g.area,g.personId,ty,g.text,"",Date.now(),g.id);flash("Logged - keep tending");}return;}
+  if(b=t.closest("[data-rhydone]")){var rd=b.getAttribute("data-rhydone").split("|");var rp=S.people.find(function(x){return x.id===rd[0];});var rr=rp&&(rp.rhythms||[]).find(function(x){return x.id===rd[1];});if(rr){logEvent(rp.area,rp.id,(rr.category==="prayer"?"prayer":"quality"),rr.text,"",Date.now(),null,rr.id);flash("Rhythm tended \u2713");}return;}
+  if(b=t.closest("[data-rhyedit]")){editRhythmId=(editRhythmId===b.getAttribute("data-rhyedit"))?null:b.getAttribute("data-rhyedit");render();return;}
+  if(b=t.closest("[data-rhyadd]")){var ra=b.getAttribute("data-rhyadd");var rp2=S.people.find(function(x){return x.id===ra;});if(rp2){rp2.rhythms=rp2.rhythms||[];var nr={id:uid(),text:"",category:"connection",freq:"weekly",tod:"anytime",dur:""};rp2.rhythms.push(nr);editRhythmId=nr.id;save();render();}return;}
+  if(b=t.closest("[data-rhydel]")){var rl=b.getAttribute("data-rhydel").split("|");var rp3=S.people.find(function(x){return x.id===rl[0];});if(rp3){rp3.rhythms=(rp3.rhythms||[]).filter(function(x){return x.id!==rl[1];});editRhythmId=null;save();render();flash("Rhythm removed");}return;}
   if(b=t.closest("[data-plandone]")){var log={};try{log=JSON.parse(decodeURIComponent(b.getAttribute("data-plandone")));}catch(err){return;}var tid=b.getAttribute("data-taskid");if(tid){var tk=S.tasks.find(function(x){return x.id===tid;});if(tk)tk.done=true;}logEvent(log.area||"faith",null,log.type||"note",log.title||"","",Date.now(),log.goalId||null);flash("Done. On to the next.");return;}
   if(b=t.closest("[data-upitem]")){var kd=S.keyDates.find(function(k){return k.id===b.getAttribute("data-upitem");});var cl=S.checklists.find(function(c){return c.linkId===kd.id;});if(cl)showChecklist(cl.id);return;}
   if(b=t.closest("[data-eedit]")){var id=b.getAttribute("data-eedit");editingEvent=S.events.find(function(x){return x.id===id;});if(editingEvent){editingId=id;render();window.scrollTo(0,document.body.scrollHeight);}return;}
@@ -90,6 +94,7 @@ function bind(){
   else if(t.matches("[data-gperson]")){var g=S.goals.find(function(z){return z.id===t.getAttribute("data-gperson");});if(g){g.personId=t.value||null;save();}}
   else if(t.matches("[data-gtod]")){var g=S.goals.find(function(z){return z.id===t.getAttribute("data-gtod");});if(g){g.tod=t.value;save();render();}}
   else if(t.matches("[data-pfield]")){var pf=t.getAttribute("data-pfield");var pp=S.people.find(function(x){return x.id===t.getAttribute("data-pid");});if(pp){pp[pf]=t.value;save();render();flash("Saved");}}
+  else if(t.matches("[data-rfield]")){var rf=t.getAttribute("data-rfield").split("|");var rp4=S.people.find(function(x){return x.id===rf[0];});var rr4=rp4&&(rp4.rhythms||[]).find(function(x){return x.id===rf[1];});if(rr4){var fld=rf[2];rr4[fld]=(fld==="customDow"||fld==="customOrd")?(+t.value||0):t.value;save();render();}}
  });
  document.addEventListener("input",function(e){
   var t=e.target;
