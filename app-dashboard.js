@@ -11,7 +11,7 @@ function renderSettings(){
  '<button class="btn" id="setSave">Save meter settings</button></div>';
  /* calendars */
  out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Calendars</div>'+
- '<div class="hint" style="margin-bottom:10px">On icloud.com: Calendar &gt; share icon next to a calendar &gt; "Public Calendar" &gt; copy link. Paste it here (webcal:// or https://). Each calendar gets a name and color on the dashboard.</div>';
+ '<div class="hint" style="margin-bottom:10px">On icloud.com: Calendar &gt; share icon next to a calendar &gt; "Public Calendar" &gt; copy link. Paste it here (webcal:// or https://). Each calendar gets a name and color on the dashboard. The GitHub Action refreshes these every 30 minutes; browser fallback only if the build feed is missing.</div>';
  (S.calendars||[]).forEach(function(ca){
   out+='<div class="calrow" data-calrow="'+ca.id+'">'+
   '<input class="cal-color" type="color" data-calcolor="'+ca.id+'" value="'+(ca.color||"#4C9AFF")+'">'+
@@ -30,6 +30,7 @@ function renderSettings(){
    out+='<div class="goalrow edit"><input class="goaltext" data-gtext="'+g.id+'" value="'+esc(g.text)+'">'+
    '<select data-gcad="'+g.id+'">'+["daily","weekly","monthly","custom"].map(function(c){return '<option value="'+c+'"'+(g.cadence===c?" selected":"")+'>'+c+'</option>';}).join("")+'</select>'+
    (g.cadence==="custom"?'<input type="number" data-gdays="'+g.id+'" value="'+(g.days||2)+'" style="width:56px">':'')+
+   '<select data-gtod="'+g.id+'" title="Time of day">'+Object.keys(TODS).map(function(t){return '<option value="'+t+'"'+((g.tod||"anytime")===t?" selected":"")+'>'+TODS[t]+'</option>';}).join("")+'</select>'+
    '<select data-gperson="'+g.id+'"><option value="">- no person -</option>'+S.people.map(function(p){return '<option value="'+p.id+'"'+(g.personId===p.id?" selected":"")+'>'+esc(p.name)+'</option>';}).join("")+'</select>'+
    '<button class="del" data-gdel="'+g.id+'">\u00D7</button></div>';
   });
@@ -88,32 +89,44 @@ function loadCalendars(){
  if(!cals.length){window._calLoading=false;if(strip)strip.innerHTML='<div class="empty">No calendars connected - add one in Settings.</div>';return;}
  if(window._calLoading)return;window._calLoading=true;
  var cached=null;try{cached=JSON.parse(localStorage.getItem("tend:cal2")||"null");}catch(e){}
- if(cached&&Date.now()-cached.at<1800000&&cached.n===cals.length){window._calLoading=false;renderCalStrip(cached.events);return;}
+ if(cached&&Date.now()-cached.at<900000&&cached.n===cals.length){window._calLoading=false;renderCalStrip(cached.events);return;}
  if(strip)strip.innerHTML='<div class="empty">Loading calendars...</div>';
- var jobs=cals.map(function(ca){
-  return fetchICS(calUrl(ca.url)).then(function(t){
-   var evs=parseICS(t).map(function(e){return {t:e.title,s:e.start.getTime(),e:(e.end?e.end.getTime():e.start.getTime()+3600000),cal:ca.name,color:ca.color||"#4C9AFF"};});
-   return evs;
-  }).catch(function(){return {err:ca.name};});
- });
- Promise.all(jobs).then(function(res){
-  var errs=[],evs=[];
-  res.forEach(function(r){if(r&&r.err){errs.push(r.err);return;}evs=evs.concat(r);});
-  evs.sort(function(a,b){return a.s-b.s;});
-  window._calLoading=false;
-  if(errs.length&&cals.length===errs.length){renderCalStrip([],errs);return;}
-  if(!errs.length)localStorage.setItem("tend:cal2",JSON.stringify({at:Date.now(),events:evs,n:cals.length}));
-  renderCalStrip(evs,errs);
+ function toEv(x){var m=null;cals.forEach(function(c2){if(x.cal&&c2.name===x.cal)m=c2;});if(!m)m=cals[0];return {t:x.t,s:Date.parse(x.s),e:Date.parse(x.e||x.s),cal:x.cal||m.name,color:m.color||"#4C9AFF",allDay:x.allDay};}
+ /* first choice: events.json built by the GitHub Action (no proxies, always fresh server-side) */
+ fetch("events.json?t="+Date.now()).then(function(r){if(!r.ok)throw new Error("nofeed");return r.json();}).then(function(data){
+  if(!data||!data.events||!data.events.length)throw new Error("empty");
+  window._calLoading=false;window._calSync=data.synced;
+  var evs=data.events.map(toEv);evs.sort(function(a,b){return a.s-b.s;});
+  localStorage.setItem("tend:cal2",JSON.stringify({at:Date.now(),events:evs,n:cals.length}));
+  renderCalStrip(evs);
+ }).catch(function(){
+  /* fallback: public CORS proxies, browser-side (only if the build feed is missing) */
+  var jobs=cals.map(function(ca){
+   return fetchICS(calUrl(ca.url)).then(function(t){
+    var evs=parseICS(t).map(function(e){return {t:e.title,s:e.start.getTime(),e:(e.end?e.end.getTime():e.start.getTime()+3600000),cal:ca.name,color:ca.color||"#4C9AFF"};});
+    return evs;
+   }).catch(function(){return {err:ca.name};});
+  });
+  Promise.all(jobs).then(function(res){
+   var errs=[],evs=[];
+   res.forEach(function(r){if(r&&r.err){errs.push(r.err);return;}evs=evs.concat(r);});
+   evs.sort(function(a,b){return a.s-b.s;});
+   window._calLoading=false;
+   if(errs.length&&cals.length===errs.length){renderCalStrip([],errs);return;}
+   if(!errs.length)localStorage.setItem("tend:cal2",JSON.stringify({at:Date.now(),events:evs,n:cals.length}));
+   renderCalStrip(evs,errs);
+  });
  });
 }
 function renderCalStrip(evs,errs){
  var strip=el("calStrip");if(!strip)return;
  var out="";
  if(errs&&errs.length)out+='<div class="empty">Could not load: '+esc(errs.join(", "))+' (calendar proxies may be down - try again)</div><button class="btn mini ghost" data-calretry="1" style="margin-top:6px">Retry</button>';
- if(!evs||!evs.length){if(!out)out='<div class="empty">Nothing on the calendar today - wide open.</div>';strip.innerHTML=out;return;}
+ if(!evs||!evs.length){if(!out)out='<div class="empty">Nothing on the calendar today - wide open.</div>';if(window._calSync){var sa=Date.now()-Date.parse(window._calSync);out+='<div class="calsync">Synced '+when(Date.parse(window._calSync))+(sa>7200000?" - may be out of date":"")+'</div>';}strip.innerHTML=out;return;}
  strip.innerHTML=out+evs.map(function(e){
   var d=new Date(e.s);var hm=d.getHours()%12||12;var ap=d.getHours()<12?"am":"pm";var mm=d.getMinutes()?(":"+String(d.getMinutes()).padStart(2,"0")):"";
   return '<div class="calitem"><span class="cal-dot" style="background:'+(e.color||"#4C9AFF")+'"></span><span class="cal-time">'+hm+mm+ap+'</span><span class="cal-title">'+esc(e.t||"(untitled)")+'</span><span class="cal-calname">'+esc(e.cal||"")+'</span></div>';
- }).join("");}
+ }).join("");
+ if(window._calSync){var sa=Date.now()-Date.parse(window._calSync);strip.innerHTML+='<div class="calsync">Synced '+when(Date.parse(window._calSync))+(sa>7200000?" - may be out of date":"")+'</div>';}}
 window.TEND_LOAD_CALENDAR=loadCalendars;
-setTimeout(function(){if(el("calStrip"))loadCalendars();},600);
+setTimeout(function(){if(el("calStrip")&&typeof loadCalendars==="function")loadCalendars();},600);
