@@ -141,18 +141,18 @@ function personProfile(pid){
  out+='<div class="nudge"><span>\uD83D\uDCA1</span><span>'+nud.join(" ")+'</span></div>';
  out+='</div>';
  /* left: goals + log + history */
- out+='<div class="card" style="margin-bottom:14px">';
+ out+='<div class="card" style="margin-bottom:22px">';
  out+='<div class="subhead">Goals</div>';
  if(goals.length){goals.forEach(function(g){out+=goalRow(g);});}else out+='<div class="empty">No goals for '+esc(p.name)+' yet - add them in Settings.</div>';
- out+='<div class="subhead" style="margin-top:16px">'+(editingConn?"Editing connection - pick a type below":"Log a moment")+'</div>';
+ out+='<div class="subhead" style="margin-top:18px">'+(editingConn?"Editing connection - pick a type below":"Log a moment")+'</div>';
  out+='<div class="qlog"><input type="date" id="momentDate" value="'+(editingConn?fmtDate((S.events.find(function(z){return z.id===editingConn;})||{}).ts||Date.now()):fmtDate(Date.now()))+'">'+["coffee","meal","call","text","quality","prayer"].map(function(k){return '<button data-plog="'+k+'">'+KINDS[k].label.split(" /")[0].split(" ")[0]+'</button>';}).join("")+'<button data-plogother="1" class="other">Other...</button></div>';
- out+='<div class="subhead" style="margin-top:16px">Connection history</div>';
+ out+='<div class="subhead" style="margin-top:18px">Connection history</div>';
  if(evs.length){evs.forEach(function(e){
   out+='<div class="logline"><span class="when">'+when(e.ts)+'</span><span class="kind">'+esc(typeLabel(e))+'</span><span class="txt">'+esc((e.title&&e.title.indexOf("Time with")!==0)?e.title:"")+'</span><span class="entry-actions"><button class="iconbtn" data-evedit="'+e.id+'" title="edit">\u270E</button><button class="iconbtn" data-evdel="'+e.id+'" title="delete">\uD83D\uDDD1</button></span></div>';
  });}else out+='<div class="empty">No history yet.</div>';
  out+='</div>';
  /* right: prayer profile */
- out+='<div class="card" style="margin-bottom:14px"><div class="subhead">'+first+"&#39;s prayer profile"+'<span class="savehint" id="prayerSaveHint" style="margin-left:8px;position:static">saved</span></div>';
+ out+='<div class="card" style="margin-bottom:22px"><div class="subhead">'+first+"&#39;s prayer profile"+'<span class="savehint" id="prayerSaveHint" style="margin-left:8px;position:static">saved</span></div>';
  out+='<div class="field"><label>"How can I be praying for you?" (their words)</label><textarea data-phpray="1" data-pid="'+pid+'" placeholder="Ask them this - log their answer here">'+esc(p.howToPray||"")+'</textarea></div>';
  out+='<div class="field"><label>My prayer focus for '+first+'</label><textarea data-pfocus="1" data-pid="'+pid+'" placeholder="Your private prayer for them">'+esc(p.prayerFocus||"")+'</textarea></div>';
  out+='<div class="grid2"><div class="field"><label>Birthday</label><input type="date" data-pfield="birthday" data-pid="'+pid+'" value="'+esc(p.birthday||"")+'"></div>';
@@ -162,11 +162,11 @@ function personProfile(pid){
  /* right: prayers + encouragement + key dates + followups */
  out+='<div class="card"><div class="subhead">Prayers for '+first+'</div>';
  if(prayers.length){prayers.forEach(function(x){out+='<div class="preq'+(x.answered?" answered":"")+'"><div class="ptext">'+esc(x.text)+(x.answered?'<div style="font-size:11px;color:var(--forest)">answered '+x.answeredDate+'</div>':"")+'</div></div>';});}else out+='<div class="empty">None yet - add one in Prayer with their name.</div>';
- out+='<div class="subhead" style="margin-top:16px">Potential encouragement</div><div class="notewrap"><textarea data-encnote="'+pid+'" placeholder="Ideas: a verse that fits their season, a gift idea, a specific word...">'+esc((p.encouragementNote||""))+'</textarea><span class="savehint" data-enchint="'+pid+'">saved</span></div>';
- out+='<div class="subhead" style="margin-top:16px">Key dates</div>';
+ out+='<div class="subhead" style="margin-top:18px">Potential encouragement</div><div class="notewrap"><textarea data-encnote="'+pid+'" placeholder="Ideas: a verse that fits their season, a gift idea, a specific word...">'+esc((p.encouragementNote||""))+'</textarea><span class="savehint" data-enchint="'+pid+'">saved</span></div>';
+ out+='<div class="subhead" style="margin-top:18px">Key dates</div>';
  if(kds.length){kds.forEach(function(k){out+='<div class="logline"><span class="kind">'+esc(k.label)+'</span><span class="txt">'+(daysUntil(k)===0?"today":"in "+daysUntil(k)+" days")+'</span><span class="entry-actions"><button class="iconbtn" data-kddel="'+k.id+'" title="delete">\uD83D\uDDD1</button></span></div>';});}else out+='<div class="empty">None yet.</div>';
  out+='<div class="addrow"><input placeholder="Add key date (label)" data-kdlabel="'+pid+'"><button class="btn mini" data-kdadd="'+pid+'">Add</button></div>';
- out+='<div class="subhead" style="margin-top:16px">Follow up on</div><ul class="tasks">';
+ out+='<div class="subhead" style="margin-top:18px">Follow up on</div><ul class="tasks">';
  S.followups.filter(function(f){return f.personId===pid&&!f.done;}).forEach(function(f){out+='<li><input type="checkbox" class="cb" data-fudone="'+f.id+'"><span class="txt">'+esc(f.text)+'</span></li>';});
  out+='</ul><div class="addrow"><input id="personFUNew" placeholder="Follow up on..."><button class="btn mini" data-fuadd="'+pid+'">Add</button></div>';
  out+='</div></div>';
