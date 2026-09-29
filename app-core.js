@@ -61,8 +61,10 @@ function defaultChecklists(){return[
 function defaultState(){return{version:2,
  people:[{id:"amy",name:"Amy",relation:"wife",area:"marriage"},{id:"hannah",name:"Hannah",relation:"daughter",area:"parenting"},{id:"jacob",name:"Jake",relation:"son",area:"parenting"},{id:"leah",name:"Leah",relation:"daughter",area:"parenting"},{id:"lucas",name:"Lucas",relation:"son-in-law",area:"parenting"},{id:"addi",name:"Addi",relation:"future daughter-in-law",area:"parenting"}],
  events:[],tasks:[],goals:defaultGoals(),followups:[],prayers:[],ideas:[],echoes:[{id:uid(),title:"Photographers - Jake & Addi's wedding",note:"Contacts to reach out to. Status: to contact / contacted / met / booked / passed.",items:[]}],keyDates:defaultKeyDates(),checklists:defaultChecklists(),settings:JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
+ calendars:[{id:"cal-home",name:"Home",url:"https://p106-caldav.icloud.com/published/2/MjcyMTgwNTc5MjcyMTgwNfAweM4Mnge_B7jsSIKiQGrhnfAemrtl8LYeoKtz2A0MTFihcXWvdiyB4fotJ9jrIRWeawSqJWitMgtfFaZ1XRxvE-3phMRdiHY_izguI0iXG6szeG4SjHgOO6Uvy8Rgbw",color:"#4C9AFF"}],
  areas:{faith:{name:"Faith"},marriage:{name:"Marriage"},parenting:{name:"Parenting"},health:{name:"Health & Fitness"},finances:{name:"Finances"},friendships:{name:"Friendships"}}};}
 function load(){try{var s=localStorage.getItem(LS_STATE);if(!s)return defaultState();var st=JSON.parse(s);st.version=2;
+if(!st.calendars||!st.calendars.length){if(st.settings&&st.settings.icsUrl){st.calendars=[{id:uid(),name:"Calendar",url:st.settings.icsUrl,color:"#4C9AFF"}];}else{st.calendars=defaultState().calendars;}}
 if(st.areas&&st.areas.fitness){st.areas.health={name:"Health & Fitness"};delete st.areas.fitness;(st.events||[]).forEach(function(x){if(x.areaId==="fitness")x.areaId="health";});(st.tasks||[]).forEach(function(x){if(x.areaId==="fitness")x.areaId="health";});(st.goals||[]).forEach(function(g){if(g.area==="fitness")g.area="health";});}
  if(!st.areas.finances)st.areas.finances={name:"Finances"};
  var wantPeople=[{id:"amy",name:"Amy",relation:"wife"},{id:"hannah",name:"Hannah",relation:"daughter"},{id:"jacob",name:"Jake",relation:"son"},{id:"leah",name:"Leah",relation:"daughter"},{id:"lucas",name:"Lucas",relation:"son-in-law"},{id:"addi",name:"Addi",relation:"future daughter-in-law"}];
@@ -107,11 +109,17 @@ function nextOccurrence(kd){var t=new Date();var d=new Date(t.getFullYear(),kd.m
 function daysUntil(kd){return Math.ceil((nextOccurrence(kd)-new Date())/86400000);}
 function trend(id){var g=areaGoals(id);var any=g.some(function(gg){var e=lastGoalEvent(gg);return e&&(Date.now()-e.ts)<7*86400000;});return any?{cls:"up",arrow:"\u25B2"}:{cls:"flat",arrow:"\u25AC"};}
 /* ============ helpers ============ */
-function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;");}
 function personName(id){var p=S.people.find(function(x){return x.id===id;});return p?p.name:"";}
 function when(ts){var d=daysSince(ts);if(d===0)return "today";if(d===1)return "yesterday";if(d<7)return d+" days ago";if(d<30)return Math.floor(d/7)+" wk ago";return Math.floor(d/30)+" mo ago";}
 var AREA_IDS=["faith","marriage","parenting","health","finances","friendships"];
-var AREA_ICONS={faith:"\u271D\uFE0F",marriage:"\uD83D\uDC8D",parenting:"\uD83C\uDFE1",health:"\uD83D\uDCAA",finances:"\uD83D\uDCB0",friendships:"\uD83E\uDD1D"};
+var AREA_ICONS={
+ faith:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16M7 9h10"/></svg>',
+ marriage:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.6-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.4-7 10-7 10z"/></svg>',
+ parenting:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7v9h-6v-6h-4v6H4z"/></svg>',
+ health:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2-5 4 10 2-5h6"/></svg>',
+ finances:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 7.5v9M14.8 9.6c-.6-.8-1.6-1.1-2.8-1.1-1.6 0-2.7.7-2.7 1.9 0 2.5 5.6 1.3 5.6 3.8 0 1.2-1.2 1.9-2.9 1.9-1.3 0-2.4-.4-3-1.2"/></svg>',
+ friendships:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9.5" r="2.4"/><path d="M16.2 15.6a4.6 4.6 0 0 1 4.3 3.9"/></svg>'};
 var tab="today",openDetail=null,currentPerson=null;
 function el(id){return document.getElementById(id);}
 function meterBar(v,cls){return '<div class="bar"><i class="'+cls+'" style="width:'+v+'%"></i></div>';}
