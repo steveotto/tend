@@ -59,17 +59,20 @@ function defaultChecklists(){return[
  ]}
 ];}
 function defaultRhythms(){return[{id:uid(),text:"Pray together",category:"prayer",freq:"daily",tod:"early",dur:"15 min"},{id:uid(),text:"Afternoon walk around the block",category:"connection",freq:"daily",tod:"afternoon",dur:"30 min"},{id:uid(),text:"Date night",category:"connection",freq:"custom",customType:"weekly",customDow:5,tod:"evening",dur:"2 hrs"},{id:uid(),text:"Overnight getaway",category:"connection",freq:"quarterly",tod:"anytime",dur:"Weekend"}];}
+function defaultSparks(){return[{id:uid(),text:"Watch the movie Jake mentioned",by:todayStr(),tod:"evening",done:false}];}
+function todayStr(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 function defaultState(){return{version:2,
- people:[{id:"amy",name:"Amy",relation:"Spouse",area:"marriage",rhythms:defaultRhythms()},{id:"hannah",name:"Hannah",relation:"Daughter",area:"parenting"},{id:"jacob",name:"Jake",relation:"Son",area:"parenting"},{id:"leah",name:"Leah",relation:"Daughter",area:"parenting"},{id:"lucas",name:"Lucas",relation:"Bonus son",area:"parenting"},{id:"addi",name:"Addi",relation:"Bonus daughter",area:"parenting"}],
+ people:[{id:"amy",name:"Amy",relation:"Spouse",area:"marriage",rhythms:defaultRhythms()},{id:"hannah",name:"Hannah",relation:"Daughter",area:"parenting"},{id:"jacob",name:"Jake",relation:"Son",area:"parenting",sparks:defaultSparks()},{id:"leah",name:"Leah",relation:"Daughter",area:"parenting"},{id:"lucas",name:"Lucas",relation:"Bonus son",area:"parenting"},{id:"addi",name:"Addi",relation:"Bonus daughter",area:"parenting"}],
  events:[],tasks:[],goals:defaultGoals(),followups:[],prayers:[],ideas:[],echoes:[{id:uid(),title:"Photographers - Jake & Addi's wedding",note:"Contacts to reach out to. Status: to contact / contacted / met / booked / passed.",items:[]}],keyDates:defaultKeyDates(),checklists:defaultChecklists(),settings:JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
  calendars:[{id:"cal-home",name:"Home",url:"https://p106-caldav.icloud.com/published/2/MjcyMTgwNTc5MjcyMTgwNfAweM4Mnge_B7jsSIKiQGrhnfAemrtl8LYeoKtz2A0MTFihcXWvdiyB4fotJ9jrIRWeawSqJWitMgtfFaZ1XRxvE-3phMRdiHY_izguI0iXG6szeG4SjHgOO6Uvy8Rgbw",color:"#4C9AFF"}],
  areas:{faith:{name:"Faith"},marriage:{name:"Marriage"},parenting:{name:"Parenting"},health:{name:"Health & Fitness"},finances:{name:"Finances"},friendships:{name:"Friendships"}}};}
 function load(){try{var s=localStorage.getItem(LS_STATE);if(!s)return defaultState();var st=ensureShape(JSON.parse(s));st.version=2;
 if(st.areas&&st.areas.fitness){st.areas.health={name:"Health & Fitness"};delete st.areas.fitness;(st.events||[]).forEach(function(x){if(x.areaId==="fitness")x.areaId="health";});(st.tasks||[]).forEach(function(x){if(x.areaId==="fitness")x.areaId="health";});(st.goals||[]).forEach(function(g){if(g.area==="fitness")g.area="health";});}
  if(!st.areas.finances)st.areas.finances={name:"Finances"};
- var wantPeople=[{id:"amy",name:"Amy",relation:"Spouse"},{id:"hannah",name:"Hannah",relation:"Daughter"},{id:"jacob",name:"Jake",relation:"Son"},{id:"leah",name:"Leah",relation:"Daughter"},{id:"lucas",name:"Lucas",relation:"Bonus son"},{id:"addi",name:"Addi",relation:"Bonus daughter"}];
+ var wantPeople=[{id:"amy",name:"Amy",relation:"wife"},{id:"hannah",name:"Hannah",relation:"daughter"},{id:"jacob",name:"Jake",relation:"son"},{id:"leah",name:"Leah",relation:"daughter"},{id:"lucas",name:"Lucas",relation:"son-in-law"},{id:"addi",name:"Addi",relation:"future daughter-in-law"}];
  wantPeople.forEach(function(p){var ex=st.people&&st.people.find(function(x){return x.id===p.id;});if(ex){if(p.id==="jacob")ex.name="Jake";ex.area=ex.area||"parenting";}else{st.people.push({id:p.id,name:p.name,relation:p.relation,area:p.id==="amy"?"marriage":"parenting"});}});
  var _am=st.people.find(function(x){return x.id==="amy";});if(_am&&!_am.rhythms)_am.rhythms=defaultRhythms();
+var _jk=st.people.find(function(x){return x.id==="jacob";});if(_jk&&!(_jk.sparks&&_jk.sparks.length))_jk.sparks=defaultSparks();
  st.goals=st.goals&&st.goals.length?st.goals:defaultGoals();
  st.keyDates=st.keyDates&&st.keyDates.length?st.keyDates:defaultKeyDates();
  st.checklists=st.checklists&&st.checklists.length?st.checklists:defaultChecklists();
@@ -127,6 +130,10 @@ function rhythmLast(r){var best=null;S.events.forEach(function(e){if(e.rhythmId=
 function rhythmDaysSince(r){var l=rhythmLast(r);return l?daysSince(l.ts):999;}
 function rhythmScore(r){var d=rhythmDaysSince(r);if(d===999)return 45;var missed=Math.floor(d/rhythmPeriod(r));return Math.max(10,100-10*missed);}
 function rhythmDueTxt(r){var d=rhythmDaysSince(r);if(d===999)return "not started yet";var per=rhythmPeriod(r);if(d===0)return "done today";var miss=Math.floor(d/per);if(miss<1)return "due in "+Math.ceil(per-d)+"d";if(miss===1)return "due now";return "overdue - "+miss+" periods";}
+function sparkDays(s){if(!s.by)return 999;var t=new Date();t.setHours(12,0,0,0);return Math.round((new Date(s.by+"T12:00:00")-t)/86400000);}
+function sparkDueTxt(s){if(!s.by)return "someday";var d=sparkDays(s);if(d<0)return (-d)+"d overdue";if(d===0)return "today";if(d===1)return "tomorrow";return "in "+d+"d";}
+function sparkLive(s){if(s.done)return false;if(!s.by)return true;return sparkDays(s)<=0;}
+function openSparks(p){return ((p&&p.sparks)||[]).filter(function(s){return !s.done;}).sort(function(a,b){return (a.by||"9999")<(b.by||"9999")?-1:1;});}
 function personTouchInfo(p){var last=null;S.events.forEach(function(e){if(e.personId===p.id&&e.kind!=="prayer"&&e.type!=="prayer"&&(!last||e.ts>last.ts))last=e;});return {last:last,days:last?daysSince(last.ts):999};}
 function touchScoreFromDays(d){return Math.max(10,100-10*d);}
 function touchSuggestion(p){var ideas={qt:["Plan a 30-minute walk together","Coffee and conversation, phones down","Do an errand side by side"],wa:["Text one specific encouragement","Speak an affirmation out loud","Write a short note of thanks"],as:["Do one of their chores, unasked","Bring their favorite drink home","Fix something on their list"],gf:["Pick up a small favorite treat","Order the book they mentioned","Send flowers for no reason"],pt:["A long, unhurried hug","Sit close this evening","Take a walk hand in hand"]};var arr=(p&&p.loveLanguage&&ideas[p.loveLanguage])||["Send a thoughtful text","A quick call on the commute","A handwritten note"];return arr[Math.floor(Date.now()/864e5)%arr.length];}
@@ -157,3 +164,4 @@ var tab="today",openDetail=null,currentPerson=null;
 function el(id){return document.getElementById(id);}
 function meterBar(v,cls){return '<div class="bar"><i class="'+cls+'" style="width:'+v+'%"></i></div>';}
 function personChip(k){var ps=personScore(k);var c=scoreClass(ps);return '<span class="submeter" data-person="'+k.id+'" title="'+scoreLabel(ps)+'"><span class="sm-dot '+c+'"></span><span class="sm-name">'+esc(k.name)+'</span><span class="sm-bar"><i class="'+c+'" style="width:'+ps+'%"></i></span><span class="sm-num">'+ps+'</span></span>';}
+
