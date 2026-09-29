@@ -1,7 +1,7 @@
 "use strict";
 /* ============ settings (with sync) + iCloud calendar ============ */
 function renderSettings(){
- var out='<div class="sectiontitle" style="margin-top:6px"><h2>Settings</h2><span class="hint">meters, calendar, goals, sync</span></div>';
+ var out='<div class="sectiontitle" style="margin-top:6px"><h2>Settings</h2><span class="hint">meters, calendars, goals, sync</span></div>';
  /* meters */
  var s=settings();
  out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Meters</div>'+
@@ -9,10 +9,18 @@ function renderSettings(){
  '<div class="setrow"><label>Yellow starts at</label><input type="number" id="setYellow" value="'+s.yellowAt+'"></div>'+
  '<div class="setrow"><label>Baseline (empty areas)</label><input type="number" id="setBase" value="'+s.baseline+'"></div>'+
  '<button class="btn" id="setSave">Save meter settings</button></div>';
- /* calendar */
- out+='<div class="card" style="margin-bottom:14px"><div class="subhead">iCloud calendar</div>'+
- '<div class="hint" style="margin-bottom:8px">On icloud.com: Calendar &gt; click the calendar\'s share icon &gt; turn on "Public Calendar" &gt; copy the link. Paste it here (starts with webcal:// or https://).</div>'+
- '<div class="addrow"><input id="icsUrl" placeholder="webcal://icloud.com/..." value="'+esc(settings().icsUrl||"")+'"><button class="btn" id="icsSave">Save</button></div></div>';
+ /* calendars */
+ out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Calendars</div>'+
+ '<div class="hint" style="margin-bottom:10px">On icloud.com: Calendar &gt; share icon next to a calendar &gt; "Public Calendar" &gt; copy link. Paste it here (webcal:// or https://). Each calendar gets a name and color on the dashboard.</div>';
+ S.calendars.forEach(function(ca){
+  out+='<div class="calrow" data-calrow="'+ca.id+'">'+
+  '<input class="cal-color" type="color" data-calcolor="'+ca.id+'" value="'+(ca.color||"#4C9AFF")+'">'+
+  '<input class="cal-name" placeholder="Name" data-calname="'+ca.id+'" value="'+esc(ca.name||"")+'">'+
+  '<input class="cal-url" placeholder="webcal://icloud.com/..." data-calurl="'+ca.id+'" value="'+esc(ca.url||"")+'">'+
+  '<button class="del" data-caldel="'+ca.id+'" title="remove">\u00D7</button></div>';
+ });
+ if(!S.calendars.length)out+='<div class="empty">No calendars yet - add one below.</div>';
+ out+='<div style="display:flex;gap:8px;margin-top:10px"><button class="btn ghost" id="calAdd">+ Add calendar</button><button class="btn" id="calSaveAll">Save &amp; refresh</button></div></div>';
  /* goals */
  out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Goals</div>';
  AREA_IDS.forEach(function(id){
@@ -61,23 +69,41 @@ function parseICSDate(v){
  var d=m[6]?new Date(Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6])):new Date(+m[1],+m[2]-1,+m[3]);
  if(m[6]&&v.indexOf("Z")<0){/* floating time: treat as local */d=new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]);}
  return d;}
-function loadCalendar(){
- var u=(settings().icsUrl||"").trim();
- if(!u)return;
- if(u.indexOf("webcal://")===0)u="https://"+u.slice(10);
- var strip=el("calStrip");
- try{var cached=JSON.parse(localStorage.getItem("tend:cal")||"null");if(cached&&Date.now()-cached.at<1800000){renderCalStrip(cached.events);return;}}catch(e){}
- fetch("https://api.allorigins.win/raw?url="+encodeURIComponent(u)).then(function(r){return r.text();}).then(function(t){
-  var evs=parseICS(t).map(function(e){return {t:e.title,s:e.start.getTime(),e:(e.end?e.end.getTime():e.start.getTime()+3600000)};});
-  localStorage.setItem("tend:cal",JSON.stringify({at:Date.now(),events:evs}));
-  renderCalStrip(evs);
- }).catch(function(){if(strip)strip.innerHTML='<div class="empty">Could not load calendar right now.</div>';});
+function calUrl(u){u=(u||"").trim();if(u.indexOf("webcal://")===0)u="https://"+u.slice(10);return u;}
+function fetchICS(u){
+ var p1="https://api.allorigins.win/raw?url="+encodeURIComponent(u);
+ var p2="https://api.codetabs.com/v1/proxy?quest="+encodeURIComponent(u);
+ function tryUrl(pu){return fetch(pu).then(function(r){if(!r.ok)throw new Error(r.status);return r.text();});}
+ return tryUrl(p1).catch(function(){return tryUrl(p2);});
 }
-function renderCalStrip(evs){
+function loadCalendars(){
+ var strip=el("calStrip");
+ var cals=S.calendars.filter(function(c){return calUrl(c.url);});
+ if(!cals.length){if(strip)strip.innerHTML='<div class="empty">No calendars connected - add one in Settings.</div>';return;}
+ var cached=null;try{cached=JSON.parse(localStorage.getItem("tend:cal2")||"null");}catch(e){}
+ if(cached&&Date.now()-cached.at<1800000&&cached.n===cals.length){renderCalStrip(cached.events);return;}
+ if(strip)strip.innerHTML='<div class="empty">Loading calendars...</div>';
+ var jobs=cals.map(function(ca){
+  return fetchICS(calUrl(ca.url)).then(function(t){
+   var evs=parseICS(t).map(function(e){return {t:e.title,s:e.start.getTime(),e:(e.end?e.end.getTime():e.start.getTime()+3600000),cal:ca.name,color:ca.color||"#4C9AFF"};});
+   return evs;
+  }).catch(function(){return {err:ca.name};});
+ });
+ Promise.all(jobs).then(function(res){
+  var errs=[],evs=[];
+  res.forEach(function(r){if(r&&r.err){errs.push(r.err);return;}evs=evs.concat(r);});
+  evs.sort(function(a,b){return a.s-b.s;});
+  localStorage.setItem("tend:cal2",JSON.stringify({at:Date.now(),events:evs,n:cals.length}));
+  renderCalStrip(evs,errs);
+ });
+}
+function renderCalStrip(evs,errs){
  var strip=el("calStrip");if(!strip)return;
- if(!evs||!evs.length){strip.innerHTML='<div class="empty">Nothing on the calendar today - wide open.</div>';return;}
- strip.innerHTML=evs.map(function(e){
-  var d=new Date(e.s);var hm=d.getHours()%12||12;var ap=d.getHours()<12?"am":"pm";
-  return '<div class="calitem"><span class="cal-time">'+hm+String(d.getMinutes()).padStart(2,"0").replace("00","")+(d.getMinutes()?":":"")+ap+'</span><span class="cal-title">'+esc(e.t||"(untitled)")+'</span></div>';
+ var out="";
+ if(errs&&errs.length)out+='<div class="empty">Could not load: '+esc(errs.join(", "))+' - check the link in Settings.</div>';
+ if(!evs||!evs.length){if(!out)out='<div class="empty">Nothing on the calendar today - wide open.</div>';strip.innerHTML=out;return;}
+ strip.innerHTML=out+evs.map(function(e){
+  var d=new Date(e.s);var hm=d.getHours()%12||12;var ap=d.getHours()<12?"am":"pm";var mm=d.getMinutes()?(":"+String(d.getMinutes()).padStart(2,"0")):"";
+  return '<div class="calitem"><span class="cal-dot" style="background:'+(e.color||"#4C9AFF")+'"></span><span class="cal-time">'+hm+mm+ap+'</span><span class="cal-title">'+esc(e.t||"(untitled)")+'</span><span class="cal-calname">'+esc(e.cal||"")+'</span></div>';
  }).join("");}
-window.TEND_LOAD_CALENDAR=loadCalendar;
+window.TEND_LOAD_CALENDAR=loadCalendars;
