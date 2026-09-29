@@ -13,6 +13,12 @@ if (!url) {
   process.exit(0); // don't break the deploy; site keeps last good events.json
 }
 
+// All-day events have no timezone. Writing them as UTC midnight makes them
+// drift into the previous evening for anyone west of UTC (e.g. EDT).
+// We emit floating local-midnight strings ("2026-09-30T00:00:00") instead:
+// every browser parses those as ITS OWN midnight, so "Sep 30" stays Sep 30.
+const dPart = (d) => d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
+
 try {
   const feed = await ical.async.fromURL(url, { maxRetries: 2 });
   const text = typeof feed === "string" ? feed : null;
@@ -28,21 +34,35 @@ try {
     if (!v || v.type !== "VEVENT" || !v.start) continue;
     if ((v.status || "").toUpperCase() === "CANCELLED") continue;
 
-    const s = new Date(v.start).getTime();
-    const e = new Date(v.end || v.start).getTime();
-    if (isNaN(s)) continue;
+    const isAllDay = v.datetype === "date";
+    let sMs, eMs, sIso, eIso;
+    if (isAllDay) {
+      const a = v.start;
+      const b = v.end || v.start;
+      sIso = dPart(a) + "T00:00:00";
+      eIso = dPart(b) + "T00:00:00";   // iCal DTEND for all-day is exclusive
+      sMs = Date.parse(sIso);
+      eMs = Date.parse(eIso);
+    } else {
+      sMs = new Date(v.start).getTime();
+      eMs = new Date(v.end || v.start).getTime();
+      if (isNaN(sMs)) continue;
+      sIso = new Date(sMs).toISOString();
+      eIso = new Date(eMs).toISOString();
+    }
+    if (isNaN(sMs) || isNaN(eMs)) continue;
 
-    const key = (v.uid || "") + "|" + s; // dedupe master + expanded occurrences
+    const key = (v.uid || "") + "|" + sIso; // dedupe master + expanded occurrences
     if (seen.has(key)) continue;
     seen.add(key);
 
-    if (e < now - 30 * 864e5 || s > horizon) continue; // keep recent past for "earlier today"
+    if (eMs < now - 30 * 864e5 || sMs > horizon) continue; // keep recent past for "earlier today"
 
     events.push({
       t: v.summary || "(untitled)",
-      s: new Date(s).toISOString(),
-      e: new Date(e).toISOString(),
-      allDay: v.datetype === "date",
+      s: sIso,
+      e: eIso,
+      allDay: isAllDay,
       cal: calName,
     });
   }
