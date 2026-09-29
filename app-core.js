@@ -61,6 +61,8 @@ function defaultChecklists(){return[
 function defaultRhythms(){return[{id:uid(),text:"Pray together",category:"prayer",freq:"daily",tod:"early",dur:"15 min"},{id:uid(),text:"Afternoon walk around the block",category:"connection",freq:"daily",tod:"afternoon",dur:"30 min"},{id:uid(),text:"Date night",category:"connection",freq:"custom",customType:"weekly",customDow:5,tod:"evening",dur:"2 hrs"},{id:uid(),text:"Overnight getaway",category:"connection",freq:"quarterly",tod:"anytime",dur:"Weekend"}];}
 function defaultSparks(){return[{id:uid(),text:"Watch the movie Jake mentioned",by:todayStr(),tod:"evening",done:false}];}
 function todayStr(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function nowHM(){var d=new Date();return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");}
+function fmtHM(ts){var d=new Date(ts);var h=d.getHours(),m=String(d.getMinutes()).padStart(2,"0");var ap=h>=12?"pm":"am";h=h%12||12;return h+":"+m+ap;}
 function defaultState(){return{version:2,
  people:[{id:"amy",name:"Amy",relation:"Spouse",area:"marriage",rhythms:defaultRhythms()},{id:"hannah",name:"Hannah",relation:"Daughter",area:"parenting"},{id:"jacob",name:"Jake",relation:"Son",area:"parenting",sparks:defaultSparks()},{id:"leah",name:"Leah",relation:"Daughter",area:"parenting"},{id:"lucas",name:"Lucas",relation:"Bonus son",area:"parenting"},{id:"addi",name:"Addi",relation:"Bonus daughter",area:"parenting"}],
  events:[],tasks:[],goals:defaultGoals(),followups:[],prayers:[],ideas:[],echoes:[{id:uid(),title:"Photographers - Jake & Addi's wedding",note:"Contacts to reach out to. Status: to contact / contacted / met / booked / passed.",items:[]}],keyDates:defaultKeyDates(),checklists:defaultChecklists(),settings:JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
@@ -128,8 +130,8 @@ function rhythmFreqLabel(r){if(r.freq==="custom"){if(r.customType==="monthly")re
 function personRhythms(p,cat){return ((p&&p.rhythms)||[]).filter(function(r){return !cat||(r.category||"connection")===cat;});}
 function rhythmLast(r){var best=null;S.events.forEach(function(e){if(e.rhythmId===r.id&&(!best||e.ts>best.ts))best=e;});return best;}
 function rhythmDaysSince(r){var l=rhythmLast(r);return l?daysSince(l.ts):999;}
-function rhythmScore(r){var d=rhythmDaysSince(r);if(d===999)return 45;var missed=Math.floor(d/rhythmPeriod(r));return Math.max(10,100-10*missed);}
-function rhythmDueTxt(r){var d=rhythmDaysSince(r);if(d===999)return "not started yet";var per=rhythmPeriod(r);if(d===0)return "done today";var miss=Math.floor(d/per);if(miss<1)return "due in "+Math.ceil(per-d)+"d";if(miss===1)return "due now";return "overdue - "+miss+" periods";}
+function rhythmScore(r){var d=rhythmDaysSince(r);if(d===999)return 0;var per=rhythmPeriod(r);if(d<per)return 100;return Math.max(0,100-10*(d-per+1));}
+function rhythmDueTxt(r){var d=rhythmDaysSince(r);if(d===999)return "never logged";var per=rhythmPeriod(r);if(d===0)return "done today";var miss=Math.floor(d/per);if(miss<1)return "due in "+Math.ceil(per-d)+"d";if(miss===1)return "due now";return "overdue - "+miss+" periods";}
 function sparkDays(s){if(!s.by)return 999;var t=new Date();t.setHours(12,0,0,0);return Math.round((new Date(s.by+"T12:00:00")-t)/86400000);}
 function sparkDueTxt(s){if(!s.by)return "someday";var d=sparkDays(s);if(d<0)return (-d)+"d overdue";if(d===0)return "today";if(d===1)return "tomorrow";return "in "+d+"d";}
 function sparkLive(s){if(s.done)return false;if(!s.by)return true;return sparkDays(s)<=0;}
