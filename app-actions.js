@@ -1,5 +1,5 @@
 "use strict";
-/* ============ actions & bindings (event delegation) ============ */
+/* ============ actions & bindings ============ */
 function logEvent(areaId,personId,type,title,note,whenTs,goalId){S.events.push({id:uid(),ts:(whenTs||Date.now()),areaId:areaId,personId:personId||null,type:type||"inperson",kind:type||"inperson",title:title||"",note:note||"",goalId:goalId||null,weight:(ETYPES[type]?ETYPES[type].w:3)});save();render();}
 function deleteEvent(id){S.events=S.events.filter(function(e){return e.id!==id;});save();render();flash("Entry deleted");}
 function updateEvent(id,patch){var e=S.events.find(function(x){return x.id===id;});if(e){Object.keys(patch).forEach(function(k){e[k]=patch[k];});e.weight=(ETYPES[e.type]?ETYPES[e.type].w:3);save();render();flash("Entry updated");}}
@@ -9,6 +9,9 @@ window.submitLog=function(){logEvent(el("logArea").value,el("logPerson").value||
 function openPersonTab(pid){tab="people";currentPerson=pid;openDetail=null;render();}
 function downloadICS(title){var d=new Date();d.setDate(d.getDate()+1);d.setHours(7,0,0,0);function st(dt){return dt.getUTCFullYear()+String(dt.getUTCMonth()+1).padStart(2,"0")+String(dt.getUTCDate()).padStart(2,"0")+"T"+String(dt.getUTCHours()).padStart(2,"0")+String(dt.getUTCMinutes()).padStart(2,"0")+"00Z";}var end=new Date(d.getTime()+15*60000);var ics=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Tend//EN","BEGIN:VEVENT","UID:"+uid()+"@tend","DTSTAMP:"+st(new Date()),"DTSTART:"+st(d),"DTEND:"+st(end),"SUMMARY:"+title.replace(/[,;]/g,""),"DESCRIPTION:From Tend","END:VEVENT","END:VCALENDAR"].join("\r\n");var blob=new Blob([ics],{type:"text/calendar"});var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="tend-reminder.ics";a.click();flash("Reminder file downloaded");}
 function saveEncNote(pid,ta){var p=S.people.find(function(x){return x.id===pid;});if(p){p.encouragementNote=ta.value;save();var h=document.querySelector('[data-enchint="'+pid+'"]');if(h){h.classList.add("show");setTimeout(function(){h.classList.remove("show");},900);}}}
+function showChecklist(clId){tab="today";currentArea=null;render();var d=document.getElementById("cl-"+clId);if(d){d.open=true;d.scrollIntoView({behavior:"smooth",block:"center"});}}
+function findEchoItem(id){var hit=null;S.echoes.forEach(function(b){(b.items||[]).forEach(function(i){if(i.id===id)hit=i;});});return hit;}
+
 function bind(){
  if(window._tendDelegated)return;
  window._tendDelegated=true;
@@ -48,7 +51,9 @@ function bind(){
   if(b=t.closest("#logSubmit")){var dv=el("logDate").value;var ts=dv?new Date(dv+"T12:00:00").getTime():Date.now();var title=el("logTitle").value.trim();var talk=el("logTalk").value.trim();var person=el("logPersonSel").value||null;var type=el("logTypeSel").value;if(editingId){updateEvent(editingId,{ts:ts,personId:person,type:type,title:title,note:talk});editingId=null;editingEvent=null;}else{logEvent(currentArea,person,type,title,talk,ts,null);}return;}
   if(b=t.closest("#logCancel")){editingId=null;editingEvent=null;render();return;}
   if(b=t.closest("#setSave")){S.settings.greenAt=clamp(+el("setGreen").value||80,50,100);S.settings.yellowAt=clamp(+el("setYellow").value||50,10,80);S.settings.baseline=clamp(+el("setBase").value||50,0,100);save();render();flash("Thresholds saved");return;}
-  if(b=t.closest("#icsSave")){settings().icsUrl=el("icsUrl").value.trim();localStorage.removeItem("tend:cal");save();if(window.TEND_LOAD_CALENDAR)TEND_LOAD_CALENDAR();render();flash("Calendar link saved");return;}
+  if(b=t.closest("#calAdd")){S.calendars.push({id:uid(),name:"New calendar",url:"",color:"#4C9AFF"});save();render();return;}
+  if(b=t.closest("#calSaveAll")){document.querySelectorAll("[data-calrow]").forEach(function(row){var id=row.getAttribute("data-calrow");var c=S.calendars.find(function(x){return x.id===id;});if(!c)return;c.name=row.querySelector("[data-calname]").value;c.url=row.querySelector("[data-calurl]").value.trim();c.color=row.querySelector("[data-calcolor]").value;});save();localStorage.removeItem("tend:cal2");if(window.TEND_LOAD_CALENDAR)TEND_LOAD_CALENDAR();render();flash("Calendars saved");return;}
+  if(b=t.closest("[data-caldel]")){S.calendars=S.calendars.filter(function(x){return x.id!==b.getAttribute("data-caldel");});save();localStorage.removeItem("tend:cal2");render();return;}
   if(b=t.closest("#syncSave")){SYNCcfg.owner=el("syncOwner").value.trim();SYNCcfg.repo=el("syncRepo").value.trim();SYNCcfg.token=el("syncToken").value.trim();localStorage.setItem(LS_SYNC,JSON.stringify(SYNCcfg));updateSyncDot();flash("Sync settings saved");render();return;}
   if(b=t.closest("#syncPull")){pullNow(true);return;}
   if(b=t.closest("#syncPush")){pushNow();return;}
@@ -75,5 +80,3 @@ function bind(){
   if(t.matches("[data-encnote]"))saveEncNote(t.getAttribute("data-encnote"),t);
  });
 }
-function showChecklist(clId){tab="today";currentArea=null;render();var d=document.getElementById("cl-"+clId);if(d){d.open=true;d.scrollIntoView({behavior:"smooth",block:"center"});}}
-function findEchoItem(id){var hit=null;S.echoes.forEach(function(b){(b.items||[]).forEach(function(i){if(i.id===id)hit=i;});});return hit;}
