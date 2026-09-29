@@ -151,8 +151,6 @@ ul.tasks li.done .txt{color:var(--ink-faint);text-decoration:line-through}
 .empty{font-size:13px;color:var(--ink-faint);font-style:italic;font-family:var(--serif)}
 ::selection{background:rgba(103,197,163,.3)}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
-
-/* persistent top navigation */
 .sticky-nav{position:sticky;top:0;z-index:50;background:var(--canvas);margin:0 -22px;padding:8px 14px 10px;border-bottom:1px solid var(--line)}
 .areanav{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none}
 .areanav::-webkit-scrollbar{display:none}
@@ -178,8 +176,6 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
   .sticky-nav{position:fixed;left:0;right:0;top:0;box-shadow:0 4px 20px rgba(32,39,35,.12)}
   .wrap{padding-top:calc(96px + env(safe-area-inset-top))}
 }
-
-/* dashboard */
 .overall-card{margin-bottom:14px}
 .ov-score{font-family:var(--serif);font-size:56px;font-weight:600;line-height:1}
 .menu-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:16px}
@@ -200,32 +196,22 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .cal-time{font-weight:700;font-size:12.5px;color:var(--forest);white-space:nowrap;font-variant-numeric:tabular-nums;min-width:64px}
 .cal-title{font-size:14.5px}
 @media(max-width:720px){.wrap{padding-top:calc(104px + env(safe-area-inset-top))}}
-
-/* gradient overall meter */
 .bar-ov{position:relative;height:16px;border-radius:99px;background:linear-gradient(90deg,#FF5A45 0%,#FFC133 48%,#12B76A 100%);margin:14px 0 26px;box-shadow:inset 0 1px 3px rgba(0,0,0,.15)}
 .ov-marker{position:absolute;top:calc(100% + 3px);left:50%;width:0;height:0;transform:translateX(-50%);border-left:11px solid transparent;border-right:11px solid transparent;border-bottom:14px solid var(--ink);filter:drop-shadow(0 1px 2px rgba(0,0,0,.3));transition:left .6s ease;z-index:2}
-
-/* mint minimal nav icons */
 .nav-ic svg{width:19px;height:19px;display:block}
 .areanav button.active .nav-ic svg{stroke:#fff}
 .menu-grid .sm-dot{width:10px;height:10px}
-/* calendar rows in settings */
 .calrow{display:grid;grid-template-columns:44px 150px 1fr 30px;gap:8px;align-items:center;margin-bottom:8px}
 .calrow input{border:1px solid var(--line);border-radius:10px;padding:9px 11px;min-height:42px;background:var(--canvas);font-size:14px}
 .calrow input.cal-color{padding:4px;height:42px;cursor:pointer}
 .calrow .del{font-size:18px}
-/* color-coded calendar events */
 .cal-dot{width:10px;height:10px;border-radius:3px;flex:none;align-self:center}
 .cal-calname{margin-left:auto;font-size:11px;color:var(--ink-faint);font-weight:600;white-space:nowrap}
-
-/* moment logging */
 .momentrow{display:flex;align-items:center;gap:10px;margin:6px 0 4px}
 .momentrow input[type=date]{border:1px solid var(--line);border-radius:10px;padding:8px 11px;background:var(--canvas);font-size:14px}
 .momentrow .hint{font-size:11px;color:var(--ink-faint)}
 .logline .entry-actions{margin-left:auto;display:flex;gap:2px}
 .goalrow.edit select{max-width:110px}
-
-/* person profile per mockup */
 .head{display:flex;justify-content:space-between;align-items:baseline}
 .head .rel{font-size:13px;color:var(--ink-faint);font-weight:400}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
@@ -250,8 +236,6 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .calsync{font-size:11px;color:var(--ink-faint);margin-top:8px;font-style:italic;font-family:var(--serif)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:720px){.grid2{grid-template-columns:1fr}}
-
-/* Fantastical-style calendar strip */
 .calitem{display:flex;gap:12px;padding:10px 12px;border-bottom:1px dashed var(--line);align-items:center;border-radius:10px}
 .calitem:last-child{border-bottom:none}
 .cal-bar{width:4px;border-radius:2px;flex:none;align-self:stretch}
@@ -263,8 +247,17 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .now-badge{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--forest);border-radius:6px;padding:3px 8px;flex:none}
 .next-badge{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--forest);background:transparent;border:1px solid var(--mint);border-radius:6px;padding:2px 7px;flex:none}
 .cal-calname{font-size:11px;color:var(--ink-faint);font-weight:600;white-space:nowrap;flex:none}
-
-/* profile breathing room + prayer profile styling */
 #personPanel{margin-top:24px}
 .detail.open{margin-bottom:8px}
 .card .subhead{letter-spacing:.16em}
+
+/* rhythms + touch points */
+.pmeters.three{grid-template-columns:1fr 1fr 1fr}
+@media(max-width:860px){.pmeters.three{grid-template-columns:1fr}}
+.rhyrow{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px dashed var(--line)}
+.rhyrow:last-of-type{border-bottom:none}
+.rhyrow .btn.mini{min-height:38px;padding:7px 14px}
+.rhyedit{background:var(--canvas);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:4px 0 8px}
+.rhyedit .addrow{margin-top:8px}
+.rhyedit select,.rhyedit input{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fff;font-size:13.5px}
+.touchsugg{background:var(--mist);border-radius:10px;padding:9px 13px;font-size:13.5px;color:var(--ink);margin:4px 0 2px}
