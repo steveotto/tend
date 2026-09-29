@@ -17,10 +17,10 @@ function bind(){
  document.addEventListener("click",function(e){
   var t=e.target,b;
   if(b=t.closest("[data-areanav]")){currentArea=b.getAttribute("data-areanav");openDetail=null;editingId=null;editingEvent=null;render();window.scrollTo(0,0);return;}
-  if(b=t.closest("[data-utilnav]")){tab=b.getAttribute("data-utilnav");currentArea=null;openDetail=null;editingId=null;editingEvent=null;currentPerson=null;editingConn=null;editRhythmId=null;rhythmDraft=null;render();window.scrollTo(0,0);return;}
+  if(b=t.closest("[data-utilnav]")){tab=b.getAttribute("data-utilnav");currentArea=null;openDetail=null;editingId=null;editingEvent=null;currentPerson=null;editingConn=null;editRhythmId=null;rhythmDraft=null;rhyDoneDraft=null;render();window.scrollTo(0,0);return;}
   if(b=t.closest("[data-areago]")){currentArea=b.getAttribute("data-areago");openDetail=null;editingId=null;editingEvent=null;render();window.scrollTo(0,0);return;}
   if(b=t.closest("[data-openperson]")){openPersonTab(b.getAttribute("data-openperson"));return;}
-  if(b=t.closest("[data-closeperson]")){currentPerson=null;editingConn=null;editRhythmId=null;rhythmDraft=null;render();return;}
+  if(b=t.closest("[data-closeperson]")){currentPerson=null;editingConn=null;editRhythmId=null;rhythmDraft=null;rhyDoneDraft=null;render();return;}
   if(b=t.closest("[data-rhycancel]")){rhythmDraft=null;render();return;}
   if(b=t.closest("[data-rhyadd]")){var ra=b.getAttribute("data-rhyadd");
    if(rhythmDraft&&rhythmDraft.pid===ra&&rhythmDraft.text&&rhythmDraft.text.trim()){
@@ -32,11 +32,13 @@ function bind(){
    }else if(rhythmDraft&&rhythmDraft.pid===ra){flash("Give the rhythm a name first");}
    else{rhythmDraft={pid:ra,text:"",category:"connection",freq:"weekly",tod:"anytime",durUnit:"min",durVal:0};render();}
    return;}
-  if(b=t.closest("[data-sparkdo]")){var spd=b.getAttribute("data-sparkdo").split("|");var spp=S.people.find(function(x){return x.id===spd[0];});var ss=spp&&(spp.sparks||[]).find(function(x){return x.id===spd[1];});if(ss){ss.done=true;ss.doneTs=Date.now();logEvent(spp.area,spp.id,"quality",ss.text,"Spark landed",Date.now(),null,null);flash("Spark landed - touch point logged");}return;}
+  if(b=t.closest("[data-sparkdo]")){var spd=b.getAttribute("data-sparkdo").split("|");var spp=S.people.find(function(x){return x.id===spd[0];});var ss=spp&&(spp.sparks||[]).find(function(x){return x.id===spd[1];});if(ss){ss.done=true;ss.doneTs=Date.now();logEvent(spp.area,spp.id,"quality",ss.text,"Spark landed",Date.now(),null,null);flash("Spark landed - ripple logged");}return;}
   if(b=t.closest("[data-spdel]")){var sdd=b.getAttribute("data-spdel").split("|");var sdp=S.people.find(function(x){return x.id===sdd[0];});if(sdp){sdp.sparks=(sdp.sparks||[]).filter(function(x){return x.id!==sdd[1];});save();render();}return;}
   if(b=t.closest("[data-spadd]")){var sra=b.getAttribute("data-spadd");var srp=S.people.find(function(x){return x.id===sra;});var sri=document.querySelector('[data-spnewtext="'+sra+'"]');var srd=document.querySelector('[data-spnewdate="'+sra+'"]');if(srp&&sri&&sri.value.trim()){srp.sparks=srp.sparks||[];srp.sparks.push({id:uid(),text:sri.value.trim(),by:(srd&&srd.value)?srd.value:null,tod:"anytime",done:false});save();render();flash("Spark added");}return;}
   if(b=t.closest("[data-goaldone]")){var g=S.goals.find(function(x){return x.id===b.getAttribute("data-goaldone");});if(g){var ty={scripture:"note",prayer:"note",date:"inperson",quality:"inperson",workout:"inperson",outdoors:"inperson"}[g.kind]||"inperson";logEvent(g.area,g.personId,ty,g.text,"",Date.now(),g.id);flash("Logged - keep tending");}return;}
-  if(b=t.closest("[data-rhydone]")){var rd=b.getAttribute("data-rhydone").split("|");var rp=S.people.find(function(x){return x.id===rd[0];});var rr=rp&&(rp.rhythms||[]).find(function(x){return x.id===rd[1];});if(rr){logEvent(rp.area,rp.id,(rr.category==="prayer"?"prayer":"quality"),rr.text,"",Date.now(),null,rr.id);flash("Rhythm tended \u2713");}return;}
+  if(b=t.closest("[data-rhydone]")){rhyDoneDraft={key:b.getAttribute("data-rhydone"),date:todayStr(),time:nowHM()};render();return;}
+  if(b=t.closest("[data-rhyconfirm]")){var rck=b.getAttribute("data-rhyconfirm").split("|");var rcp=S.people.find(function(x){return x.id===rck[0];});var rcr=rcp&&(rcp.rhythms||[]).find(function(x){return x.id===rck[1];});var rcd=document.querySelector('[data-rhydate="'+b.getAttribute("data-rhyconfirm")+'"]');var rct=document.querySelector('[data-rhytime="'+b.getAttribute("data-rhyconfirm")+'"]');if(rcp&&rcr&&rcd&&rcd.value){var rts=rcd.value+"T"+((rct&&rct.value)?rct.value:"12:00")+":00";logEvent(rcp.area,rcp.id,(rcr.category==="prayer"?"prayer":"quality"),rcr.text,"",new Date(rts).getTime(),null,rcr.id);rhyDoneDraft=null;flash("Rhythm tended \u2713");}return;}
+  if(b=t.closest("[data-rhycancel2]")){rhyDoneDraft=null;render();return;}
   if(b=t.closest("[data-rhyedit]")){editRhythmId=(editRhythmId===b.getAttribute("data-rhyedit"))?null:b.getAttribute("data-rhyedit");render();return;}
   if(b=t.closest("[data-rhydel]")){var rl=b.getAttribute("data-rhydel").split("|");var rp3=S.people.find(function(x){return x.id===rl[0];});if(rp3){rp3.rhythms=(rp3.rhythms||[]).filter(function(x){return x.id!==rl[1];});editRhythmId=null;save();render();flash("Rhythm removed");}return;}
   if(b=t.closest("[data-plandone]")){var log={};try{log=JSON.parse(decodeURIComponent(b.getAttribute("data-plandone")));}catch(err){return;}var tid=b.getAttribute("data-taskid");if(tid){var tk=S.tasks.find(function(x){return x.id===tid;});if(tk)tk.done=true;}logEvent(log.area||"faith",null,log.type||"note",log.title||"","",Date.now(),log.goalId||null);flash("Done. On to the next.");return;}
@@ -63,15 +65,15 @@ function bind(){
   if(b=t.closest("[data-gdel]")){S.goals=S.goals.filter(function(g){return g.id!==b.getAttribute("data-gdel");});save();render();return;}
   if(b=t.closest("[data-gadd]")){var gid=b.getAttribute("data-gadd");var inp=document.querySelector('[data-gnewtext="'+gid+'"]');if(inp&&inp.value.trim()){S.goals.push({id:uid(),area:gid,text:inp.value.trim(),cadence:"daily",personId:null});save();render();}return;}
   if(b=t.closest("[data-plog]")){var p=S.people.find(function(x){return x.id===currentPerson;});
-   if(p){var dv=el("momentDate")?el("momentDate").value:"";var ts=dv?new Date(dv+"T12:00:00").getTime():Date.now();var k=b.getAttribute("data-plog");
-    if(editingConn){updateEvent(editingConn,{kind:k,type:k,ts:ts,title:"Time with "+p.name});editingConn=null;}
-    else logEvent(p.area,currentPerson,k,"Time with "+p.name,"",ts);}
+   if(p){var dv=el("momentDate")?el("momentDate").value:"";var tv=el("momentTime")?el("momentTime").value:"";var nv=el("momentNote")?el("momentNote").value.trim():"";var tsN=new Date((dv||todayStr())+"T"+(tv||"12:00")+":00").getTime();var k=b.getAttribute("data-plog");
+    if(editingConn){updateEvent(editingConn,{kind:k,type:k,ts:tsN,note:nv,title:"Time with "+p.name});editingConn=null;}
+    else{logEvent(p.area,currentPerson,k,"Time with "+p.name,nv,tsN);flash("Ripple logged \u2713");}}
    return;}
   if(b=t.closest("[data-plogother]")){var p2=S.people.find(function(x){return x.id===currentPerson;});
    if(p2){var custom=prompt("What kind of moment? (e.g. Golf, Movie, Project together)");if(!custom)return;
-    var dv2=el("momentDate")?el("momentDate").value:"";var ts2=dv2?new Date(dv2+"T12:00:00").getTime():Date.now();
-    if(editingConn){updateEvent(editingConn,{kind:custom,type:"",ts:ts2,title:"Time with "+p2.name});editingConn=null;}
-    else logEvent(p2.area,currentPerson,custom,"Time with "+p2.name,"",ts2);}
+    var dv2=el("momentDate")?el("momentDate").value:"";var tv2=el("momentTime")?el("momentTime").value:"";var nv2=el("momentNote")?el("momentNote").value.trim():"";var ts2N=new Date((dv2||todayStr())+"T"+(tv2||"12:00")+":00").getTime();
+    if(editingConn){updateEvent(editingConn,{kind:custom,type:"",ts:ts2N,note:nv2,title:"Time with "+p2.name});editingConn=null;}
+    else{logEvent(p2.area,currentPerson,custom,"Time with "+p2.name,nv2,ts2N);flash("Ripple logged \u2713");}}
    return;}
   if(b=t.closest("[data-evedit]")){var ev=S.events.find(function(z){return z.id===b.getAttribute("data-evedit");});
    if(ev){editingConn=ev.id;var md=el("momentDate");if(md)md.value=fmtDate(ev.ts);render();flash("Pick a moment type (or Other...) to update it");}return;}
