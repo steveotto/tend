@@ -113,7 +113,11 @@ function connScoreFromDays(d,cad){var r=d/cad,v;if(r<=0.33)v=100;else if(r<=1)v=
 function prayerScoreFromDays(d){return Math.round(clamp(100-10*d,30,100));}
 /* ============ rhythms: recurring care commitments ============ */
 var FREQS={daily:{label:"Daily",days:1},twicewk:{label:"2x a week",days:3.5},weekly:{label:"Weekly",days:7},biweekly:{label:"Every 2 weeks",days:14},monthly:{label:"Monthly",days:30},quarterly:{label:"Quarterly",days:91},yearly:{label:"Yearly",days:365}};
-var DURATIONS=["15 min","30 min","1 hr","2 hrs","Half day","Full day","Overnight","Weekend","2 days"];
+var DUR_UNITS={min:{label:"Minutes",max:120},hrs:{label:"Hours",max:24},days:{label:"Days",max:14}};
+var DUR_LEGACY={"15 min":[15,"min"],"30 min":[30,"min"],"1 hr":[1,"hrs"],"2 hrs":[2,"hrs"],"Half day":[4,"hrs"],"Full day":[1,"days"],"Overnight":[1,"days"],"Weekend":[2,"days"],"2 days":[2,"days"]};
+function durUnitOf(r){if(r.durUnit&&DUR_UNITS[r.durUnit])return r.durUnit;var m=DUR_LEGACY[r.dur];return m?m[1]:"min";}
+function durValOf(r){if(r.durVal)return r.durVal;var m=DUR_LEGACY[r.dur];return m?m[0]:0;}
+function rhythmDurLabel(r){if(!r)return"";var v=+r.durVal||0,u=r.durUnit;if(!v){var m=DUR_LEGACY[r.dur];if(m){v=m[0];u=m[1];}else return r.dur||"";}if(u==="min")return v+" min";if(u==="hrs")return v+(v===1?" hr":" hrs");return v+(v===1?" day":" days");}
 var DOW=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 var ORDINALS=["1st","2nd","3rd","4th"];
 function rhythmPeriod(r){if(r.freq==="custom")return r.customType==="monthly"?30:7;return FREQS[r.freq]?FREQS[r.freq].days:7;}
@@ -145,7 +149,7 @@ var AREA_IDS=["faith","marriage","parenting","health","finances","friendships"];
 var AREA_ICONS={
  faith:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16M7 9h10"/></svg>',
  marriage:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.6-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.4-7 10-7 10z"/></svg>',
- parenting:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7v9h-6v-6h-4v6H4z"/></svg>',
+ parenting:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7v9h-6v-6H4z"/></svg>',
  health:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2-5 4 10 2-5h6"/></svg>',
  finances:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 7.5v9M14.8 9.6c-.6-.8-1.6-1.1-2.8-1.1-1.6 0-2.7.7-2.7 1.9 0 2.5 5.6 1.3 5.6 3.8 0 1.2-1.2 1.9-2.9 1.9-1.3 0-2.4-.4-3-1.2"/></svg>',
  friendships:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9.5" r="2.4"/><path d="M16.2 15.6a4.6 4.6 0 0 1 4.3 3.9"/></svg>'};
