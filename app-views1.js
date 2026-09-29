@@ -131,12 +131,14 @@ function rhythmRow(p,r){
    out+='<select data-rfield="'+idf+'|customDow">'+DOW.map(function(d,i){return '<option value="'+i+'"'+((r.customDow||0)===i?" selected":"")+'>'+d+'</option>';}).join("")+'</select></div>';
   }
   out+='<div class="addrow"><select data-rfield="'+idf+'|tod">'+Object.keys(TODS).map(function(k){return '<option value="'+k+'"'+((r.tod||"anytime")===k?" selected":"")+'>'+TODS[k]+'</option>';}).join("")+'</select>';
-  out+='<select data-rfield="'+idf+'|dur"><option value="">- duration -</option>'+DURATIONS.map(function(d){return '<option'+(r.dur===d?" selected":"")+'>'+d+'</option>';}).join("")+'</select>';
+  var du=durUnitOf(r),dv=durValOf(r);
+  out+='<select data-rfield="'+idf+'|durUnit">'+Object.keys(DUR_UNITS).map(function(u){return '<option value="'+u+'"'+(du===u?" selected":"")+'>'+DUR_UNITS[u].label+'</option>';}).join("")+'</select>';
+  out+='<select data-rfield="'+idf+'|durVal"><option value="0">- # -</option>'+Array.apply(null,{length:DUR_UNITS[du].max}).map(function(_,i){var n=i+1;return '<option value="'+n+'"'+(dv===n?" selected":"")+'>'+n+'</option>';}).join("")+'</select>';
   out+='<button class="btn mini danger" data-rhydel="'+idf+'">Delete</button></div>';
   out+='<div class="hint" style="font-size:11px;color:var(--ink-faint);margin:4px 0 8px">Saves as you change it. Click the pencil again to collapse.</div></div>';
   return out;
  }
- return '<div class="rhyrow"><span class="sm-dot '+c+'"></span><div class="gr-main"><b>'+esc(r.text||"(unnamed rhythm)")+'</b>'+(r.category==="prayer"?' <span class="gr-person">prayer</span>':'')+'<div class="gr-meta">'+esc(rhythmFreqLabel(r))+(r.tod&&r.tod!=="anytime"?" \u00B7 "+TODS[r.tod]:"")+(r.dur?" \u00B7 "+esc(r.dur):"")+' \u00B7 '+esc(rhythmDueTxt(r))+'</div></div><button class="btn mini" data-rhydone="'+p.id+'|'+r.id+'">Done</button><button class="iconbtn" data-rhyedit="'+r.id+'" title="edit">\u270E</button></div>';
+ return '<div class="rhyrow"><span class="sm-dot '+c+'"></span><div class="gr-main"><b>'+esc(r.text||"(unnamed rhythm)")+'</b>'+(r.category==="prayer"?' <span class="gr-person">prayer</span>':'')+'<div class="gr-meta">'+esc(rhythmFreqLabel(r))+(r.tod&&r.tod!=="anytime"?" \u00B7 "+TODS[r.tod]:"")+(rhythmDurLabel(r)?" \u00B7 "+esc(rhythmDurLabel(r)):"")+' \u00B7 '+esc(rhythmDueTxt(r))+'</div></div><button class="btn mini" data-rhydone="'+p.id+'|'+r.id+'">Done</button><button class="iconbtn" data-rhyedit="'+r.id+'" title="edit">\u270E</button></div>';
 }
 function personProfile(pid){
  var p=S.people.find(function(x){return x.id===pid;});if(!p)return "";
