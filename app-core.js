@@ -63,19 +63,17 @@ function defaultState(){return{version:2,
  events:[],tasks:[],goals:defaultGoals(),followups:[],prayers:[],ideas:[],echoes:[{id:uid(),title:"Photographers - Jake & Addi's wedding",note:"Contacts to reach out to. Status: to contact / contacted / met / booked / passed.",items:[]}],keyDates:defaultKeyDates(),checklists:defaultChecklists(),settings:JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
  calendars:[{id:"cal-home",name:"Home",url:"https://p106-caldav.icloud.com/published/2/MjcyMTgwNTc5MjcyMTgwNfAweM4Mnge_B7jsSIKiQGrhnfAemrtl8LYeoKtz2A0MTFihcXWvdiyB4fotJ9jrIRWeawSqJWitMgtfFaZ1XRxvE-3phMRdiHY_izguI0iXG6szeG4SjHgOO6Uvy8Rgbw",color:"#4C9AFF"}],
  areas:{faith:{name:"Faith"},marriage:{name:"Marriage"},parenting:{name:"Parenting"},health:{name:"Health & Fitness"},finances:{name:"Finances"},friendships:{name:"Friendships"}}};}
-function load(){try{var s=localStorage.getItem(LS_STATE);if(!s)return defaultState();var st=JSON.parse(s);st.version=2;
-if(!st.calendars||!st.calendars.length){if(st.settings&&st.settings.icsUrl){st.calendars=[{id:uid(),name:"Calendar",url:st.settings.icsUrl,color:"#4C9AFF"}];}else{st.calendars=defaultState().calendars;}}
+function load(){try{var s=localStorage.getItem(LS_STATE);if(!s)return defaultState();var st=ensureShape(JSON.parse(s));st.version=2;
 if(st.areas&&st.areas.fitness){st.areas.health={name:"Health & Fitness"};delete st.areas.fitness;(st.events||[]).forEach(function(x){if(x.areaId==="fitness")x.areaId="health";});(st.tasks||[]).forEach(function(x){if(x.areaId==="fitness")x.areaId="health";});(st.goals||[]).forEach(function(g){if(g.area==="fitness")g.area="health";});}
  if(!st.areas.finances)st.areas.finances={name:"Finances"};
  var wantPeople=[{id:"amy",name:"Amy",relation:"wife"},{id:"hannah",name:"Hannah",relation:"daughter"},{id:"jacob",name:"Jake",relation:"son"},{id:"leah",name:"Leah",relation:"daughter"},{id:"lucas",name:"Lucas",relation:"son-in-law"},{id:"addi",name:"Addi",relation:"future daughter-in-law"}];
- wantPeople.forEach(function(p){var ex=st.people&&st.people.find(function(x){return x.id===p.id;});if(ex){if(p.id==="jacob")ex.name="Jake";ex.area=ex.area||"parenting";}else{st.people=st.people||[];st.people.push({id:p.id,name:p.name,relation:p.relation,area:p.id==="amy"?"marriage":"parenting"});}});
+ wantPeople.forEach(function(p){var ex=st.people&&st.people.find(function(x){return x.id===p.id;});if(ex){if(p.id==="jacob")ex.name="Jake";ex.area=ex.area||"parenting";}else{st.people.push({id:p.id,name:p.name,relation:p.relation,area:p.id==="amy"?"marriage":"parenting"});}});
  st.goals=st.goals&&st.goals.length?st.goals:defaultGoals();
  st.keyDates=st.keyDates&&st.keyDates.length?st.keyDates:defaultKeyDates();
  st.checklists=st.checklists&&st.checklists.length?st.checklists:defaultChecklists();
- st.settings=st.settings||JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
  st.ideas=st.ideas||[];st.echoes=st.echoes&&st.echoes.length?st.echoes:defaultState().echoes;
- ["events","tasks","followups","prayers"].forEach(function(k){st[k]=st[k]||[];});
  return st;}catch(e){return defaultState();}}
+function ensureShape(st){st=st||{};["events","tasks","goals","followups","prayers","ideas","echoes","keyDates","checklists"].forEach(function(k){if(!Array.isArray(st[k]))st[k]=[];});if(!Array.isArray(st.calendars)||!st.calendars.length)st.calendars=defaultState().calendars;if(!st.people||!st.people.length)st.people=defaultState().people;if(!st.areas)st.areas=defaultState().areas;if(!st.settings)st.settings=JSON.parse(JSON.stringify(DEFAULT_SETTINGS));return st;}
 var S=load();
 var saveTimer=null,pushTimer=null;
 function save(){localStorage.setItem(LS_STATE,JSON.stringify(S));clearTimeout(saveTimer);saveTimer=setTimeout(function(){flash("Saved");},150);if(window.SYNCcfg&&SYNCcfg.auto&&SYNCcfg.token&&typeof schedulePush==="function")schedulePush();}

@@ -27,7 +27,7 @@ function pullNow(explicit){
   if(!r.ok)throw new Error("pull failed ("+r.status+")");return r.json();
  }).then(function(j){
   if(!j)return;var remote=JSON.parse(decodeURIComponent(escape(atob(j.content))));
-  if(remote.events&&remote.events.length>=S.events.length){S=remote;localStorage.setItem(LS_STATE,JSON.stringify(S));}
+  if(remote.events&&remote.events.length>=S.events.length){S=ensureShape(remote);localStorage.setItem(LS_STATE,JSON.stringify(S));}
   SYNCcfg.lastSync=Date.now();localStorage.setItem(LS_SYNC,JSON.stringify(SYNCcfg));updateSyncDot();flash("Pulled from GitHub");render();
  }).catch(function(e){console.error(e);updateSyncErr();if(explicit)flash(e.message);});}
 /* init */
