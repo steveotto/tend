@@ -31,6 +31,7 @@ function renderToday(){
  out+='<div class="card overall-card"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:18px;font-weight:500">Overall health</h3><span class="ov-score '+oc+'">'+ov+'</span></div><div class="bar-ov"><i class="ov-marker" style="left:'+ov+'%"></i></div>'+'<div class="meta" style="margin-top:6px"><span class="statusword '+oc+'">'+scoreLabel(ov)+'</span> \u00B7 averaged across 6 areas</div>'+areaMenuHTML()+'</div>';
  out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Today on your calendar</div><div id="calStrip"><div class="empty">'+((S.calendars||[]).length?"Loading calendars...":"No calendars connected - add one in Settings.")+'</div></div></div>';
  out+=planHTML();
+ out+=freeMomentHTML();
  out+=upcomingHTML();
  out+=renderChecklists();
  return out;}
@@ -50,7 +51,7 @@ function goalItem(g){var iv=goalInterval(g),d=goalLastDone(g);
  return {label:g.text,sub:(d===null?"not yet logged":(d===0?"done today":d+"d ago \u00B7 every "+iv+"d")),log:{area:g.area,type:goalType(g),title:g.text,goalId:g.id}};}
 function genItem(label,sub,area,type,title){return {label:label,sub:sub,log:{area:area,type:type,title:title||label}};}
 function taskItem(t){return {label:t.text,sub:"task \u00B7 "+(S.areas[t.areaId]?S.areas[t.areaId].name:""),log:{area:t.areaId,type:"note",title:"Task: "+t.text},taskId:t.id};}
-function planCandidates(bid){
+function planCandidates(bid,curBid){
  var out=[],seen={};
  function push(it){if(it&&it.label&&!seen[it.label]){seen[it.label]=1;out.push(it);}}
  function pg(g){if(g&&goalLastDone(g)!==0)push(goalItem(g));}
@@ -74,15 +75,22 @@ function planCandidates(bid){
   if(rhythmDaysSince(r)===0)return;
   push({rhythm:pp.id+"|"+r.id,label:r.text+" - "+pp.name,sub:rhythmFreqLabel(r)+" rhythm \u00B7 "+rhythmDueTxt(r)});
  });});
+ S.people.forEach(function(pp){openSparks(pp).forEach(function(s){
+  if(!sparkLive(s))return;
+  if(s.tod&&s.tod!=="anytime"){if(s.tod!==bid)return;}
+  else if(!curBid||bid!==curBid)return;
+  push({spark:pp.id+"|"+s.id,label:s.text+" - "+pp.name,sub:"spark \u00B7 "+sparkDueTxt(s)});
+ });});
  return out.slice(0,5);}
 function planHTML(){
  var blocks=planBlocksDef();
  var out='<div class="sectiontitle"><h2>Today</h2><span class="hint">the right thing at the right time</span></div>';
+ var curId=(blocks.filter(function(x){return x.cur;})[0]||{}).id;
  blocks.forEach(function(b){
-  var items=planCandidates(b.id);
+  var items=planCandidates(b.id,b.id===curId);
   var cur=b.cur;
   var body=items.length?items.map(function(it){
-   var btn=it.rhythm?'<button class="btn mini" data-rhydone="'+it.rhythm+'">Done</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>';
+   var btn=it.rhythm?'<button class="btn mini" data-rhydone="'+it.rhythm+'">Done</button>':(it.spark?'<button class="btn mini" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>');
    return '<div class="planitem"><div class="pi-main"><div class="pi-label">'+esc(it.label)+'</div><div class="pi-sub">'+esc(it.sub)+'</div></div>'+btn+'</div>';
   }).join(""):'<div class="empty">Nothing queued - all tended.</div>';
   if(cur){out+='<div class="card planblock current"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:17px;font-weight:600">'+b.name+'</h3><span class="hint">'+b.range+'</span></div>'+body+'</div>';}
@@ -106,15 +114,16 @@ function goalRow(g){
  return '<div class="goalrow"><span class="sm-dot '+c+'"></span><div class="gr-main"><b>'+esc(g.text)+'</b>'+(g.personId?' <span class="gr-person">'+esc(personName(g.personId))+'</span>':'')+'<div class="gr-meta">'+statusTxt+'</div></div><button class="btn mini" data-goaldone="'+g.id+'">Done</button></div>';}
 function nextDateLine(pid){var kds=S.keyDates.filter(function(k){return k.personId===pid;});if(!kds.length)return "";var best=null;kds.forEach(function(k){var d=daysUntil(k);if(best===null||d<best.d)best={k:k,d:d};});if(!best)return "";return '<div class="pf-next">'+esc(best.k.label)+' \u00B7 '+(best.d===0?"TODAY":"in "+best.d+" days")+'</div>';}
 function renderPeople(){
- var out='<div class="sectiontitle" style="margin-top:6px"><h2>People</h2><span class="hint">connection, prayer, love languages</span></div><div class="grid">';
+ var HINT='rhythms, sparks, prayers - tending the people you love';
+ if(currentPerson)return '<div class="sectiontitle" style="margin-top:6px"><h2>People</h2><span class="hint">'+HINT+'</span></div>'+personProfile(currentPerson);
+ var out='<div class="sectiontitle" style="margin-top:6px"><h2>People</h2><span class="hint">'+HINT+'</span></div><div class="grid">';
  S.people.forEach(function(p){
   var sc=personScore(p),c=scoreClass(sc);
   var ci=personConnInfo(p);
   var prayers=S.prayers.filter(function(x){return x.personId===p.id&&!x.answered;}).length;
-  out+='<div class="card person-card" data-openperson="'+p.id+'" style="cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3>'+esc(p.name)+'</h3><span class="score '+c+'">'+sc+'</span></div>'+meterBar(sc,c)+'<div class="meta">'+esc(p.relation||"")+' \u00B7 '+(ci.last?("connected "+when(ci.last.ts)):"no connections yet")+(prayers?" \u00B7 "+prayers+" prayer"+(prayers>1?"s":""):"")+'</div>'+nextDateLine(p.id)+'</div>';
+  out+='<div class="card person-card" data-openperson="'+p.id+'" style="cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3>'+esc(p.name)+'</h3><span class="score '+c+'">'+sc+'</span></div>'+meterBar(sc,c)+'<div class="meta">'+esc(p.relation||"")+' \u00B7 '+(ci.last?("connected "+when(ci.last.ts)):"no connections yet")+(prayers?" \u00B7 "+prayers+" prayer"+(prayers>1?"s":""):"")+'</div>'+nextDateLine(p.id)+sparkChip(p)+'</div>';
  });
  out+='</div>';
- if(currentPerson){out+=personProfile(currentPerson);}
  return out;}
 /* ============ person profile: rhythms + touch points ============ */
 function rhythmRow(p,r){
@@ -200,6 +209,13 @@ function personProfile(pid){
  if(dO)out+=draftRow(p);
  out+='<div style="margin-top:10px"><button class="btn mini ghost" data-rhyadd="'+pid+'">'+(dO&&rhythmDraft.text&&rhythmDraft.text.trim()?"Save Rhythm":"+ Add rhythm")+'</button>'+(dO?'<button class="btn mini ghost" data-rhycancel="1" style="margin-left:8px">Cancel</button>':"")+'</div>';
  out+='</div>';
+ /* sparks: no-pressure ideas */
+ var sps=openSparks(p);
+ out+='<div class="card" style="margin-bottom:22px"><div class="subhead">Sparks with '+first+'<span class="hint" style="margin-left:8px;text-transform:none;letter-spacing:0;font-weight:400">no-pressure ideas - doing one logs a touch point</span></div>';
+ if(sps.length){sps.forEach(function(s){out+='<div class="rhyrow"><span class="sm-dot" style="background:none;color:#B8912F;font-size:15px">\u2726</span><div class="gr-main"><b>'+esc(s.text)+'</b><div class="gr-meta">'+esc(sparkDueTxt(s))+(s.by?" \u00B7 "+esc(s.by):"")+'</div></div><button class="btn mini" data-sparkdo="'+pid+'|'+s.id+'">Do it</button><button class="iconbtn" data-spdel="'+pid+'|'+s.id+'" title="remove">\u00D7</button></div>';});}
+ else out+='<div class="empty">No sparks yet - the fun, no-pressure "we should do this sometime" list.</div>';
+ out+='<div class="addrow"><input placeholder="Idea - a movie, a talk, a trip..." data-spnewtext="'+pid+'"><input type="date" data-spnewdate="'+pid+'" style="max-width:150px"><button class="btn mini" data-spadd="'+pid+'">Add</button></div>';
+ out+='</div>';
  /* touch points */
  out+='<div class="card" style="margin-bottom:22px"><div class="subhead">Touch points'+(pTouch.days===0?" \u00B7 done today \u2713":"")+'</div>';
  if(pTouch.days!==0)out+='<div class="touchsugg">\uD83D\uDCAC Suggestion: '+esc(touchSuggestion(p))+'</div>';
@@ -250,6 +266,20 @@ function renderChecklists(){
   out+='</ul><div class="addrow"><input placeholder="Add item..." data-clnew="'+cl.id+'"><button class="btn mini" data-cladd="'+cl.id+'">Add</button></div></details>';
  });
  return out;}
+/* ============ free moment + spark chip ============ */
+function sparkChip(p){var s=openSparks(p)[0];if(!s)return "";return '<div class="pf-next" style="color:#8A6D1F">\u2726 '+esc(s.text)+' \u00B7 '+esc(sparkDueTxt(s))+'</div>';}
+function freeMomentHTML(){
+ var cands=[];
+ S.people.forEach(function(p){(p.rhythms||[]).forEach(function(r){var d=rhythmDaysSince(r);if(d!==999&&d>=rhythmPeriod(r))cands.push({pri:10+d,label:r.text+" - "+p.name,sub:"rhythm \u00B7 "+rhythmDueTxt(r),act:' data-rhydone="'+p.id+'|'+r.id+'"',btn:"Done"});});});
+ S.people.forEach(function(p){openSparks(p).forEach(function(s){if(sparkLive(s))cands.push({pri:15,label:s.text,sub:"spark with "+p.name+" \u00B7 "+sparkDueTxt(s),act:' data-sparkdo="'+p.id+'|'+s.id+'"',btn:"Do it"});});});
+ S.goals.forEach(function(g){var d=goalLastDone(g);if(d!==0)cands.push({pri:(100-goalScore(g))/12,label:g.text,sub:"goal \u00B7 "+(d===null?"never logged":d+"d ago"),act:' data-goaldone="'+g.id+'"',btn:"Done"});});
+ var lo=S.people.map(function(p){return {p:p,s:personScore(p)};}).sort(function(a,b){return a.s-b.s;})[0];
+ if(lo&&lo.s<80)cands.push({pri:(100-lo.s)/10,label:"Reach out to "+lo.p.name,sub:(lo.p.relation||"")+" \u00B7 meter "+lo.s+" - lowest",act:' data-openperson="'+lo.p.id+'"',btn:"Open"});
+ cands.sort(function(a,b){return b.pri-a.pri;});
+ if(!cands.length)return "";
+ var out='<div class="sectiontitle"><h2>Free moment?</h2><span class="hint">the top of the stack, right now</span></div><div class="card">';
+ cands.slice(0,4).forEach(function(c){out+='<div class="planitem"><div class="pi-main"><div class="pi-label">'+esc(c.label)+'</div><div class="pi-sub">'+esc(c.sub)+'</div></div><button class="btn mini"'+c.act+'>'+c.btn+'</button></div>';});
+ return out+'</div>';}
 /* ============ area subpages ============ */
 function renderArea(id){
  var v=areaScore(id),c=scoreClass(v);
