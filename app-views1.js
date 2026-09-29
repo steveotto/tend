@@ -81,7 +81,7 @@ function planCandidates(bid,curBid){
   var sblk=sparkBlock(s);
   if(sblk){if(sblk!==bid)return;}
   else{if(!curBid||bid!==curBid)return;}
-  push({spark:pp.id+"|"+s.id,label:s.text+" - "+pp.name,sub:"spark \u00B7 "+(s.time?fmtHM12(s.time)+" \u00B7 ":"")+sparkDueTxt(s)});
+  push({spark:pp.id+"|"+s.id,label:s.text+" - "+pp.name,sub:"spark \u00B7 "+(s.time?fmtHM12(s.time)+" \u00B7 " :"")+sparkDueTxt(s)});
  });});
  return out.slice(0,5);}
 function planHTML(){
@@ -123,7 +123,7 @@ function renderPeople(){
   var sc=personScore(p),c=scoreClass(sc);
   var ci=personConnInfo(p);
   var prayers=S.prayers.filter(function(x){return x.personId===p.id&&!x.answered;}).length;
-  out+='<div class="card person-card" data-openperson="'+p.id+'" style="cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:10px;min-width:0">'+personAvatar(p,42)+'<h3 style="margin:0">'+esc(p.name)+'</h3></div><span class="score '+c+'">'+sc+'</span></div>'+meterBar(sc,c)+'<div class="meta">'+esc(p.relation||"")+' \u00B7 '+(ci.last?("connected "+when(ci.last.ts)):"no connections yet")+(prayers?" \u00B7 "+prayers+" prayer"+(prayers>1?"s":""):"")+'</div>'+nextDateLine(p.id)+personDateLines(p)+'</div>';
+  out+='<div class="card person-card" data-openperson="'+p.id+'" style="cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:10px;min-width:0">'+personAvatar(p,42)+'<h3 style="margin:0">'+esc(p.name)+'</h3></div><span class="score '+c+'">'+sc+'</span></div>'+meterBar(sc,c)+'<div class="meta">'+esc(p.relation||"")+" \u00B7 "+(ci.last?("connected "+when(ci.last.ts)):"no connections yet")+(prayers?" \u00B7 "+prayers+" prayer"+(prayers>1?"s":""):"")+'</div>'+nextDateLine(p.id)+personDateLines(p)+'</div>';
  });
  out+='</div>';
  return out;}
@@ -184,7 +184,7 @@ function personProfile(pid){
  var ll=p.loveLanguage||"";
  var first=esc(p.name.split(" ")[0]);
  var bd=bdayInfo(p.birthday);
- var out='<div class="card detail open" id="personPanel"><div class="head"><div style="display:flex;align-items:center;gap:12px">'+personAvatar(p,52)+'<div><h3>'+esc(p.name)+' <span class="rel">'+esc(p.relation||"")+'</span></div></div></div><div><span class="score '+c+'">'+sc+'</span><button class="btn mini ghost" style="margin-left:10px" data-closeperson="1">Close</button></div></div>';
+ var out='<div class="card detail open" id="personPanel"><div class="head"><div style="display:flex;align-items:center;gap:12px">'+personAvatar(p,52)+'<div><h3>'+esc(p.name)+' <span class="rel">'+esc(p.relation||"")+'</span></h3></div></div><div style="display:flex;align-items:center;gap:10px"><span class="score '+c+'">'+sc+'</span><button class="btn mini ghost" data-closeperson="1">Close</button></div></div>';
  out+=meterBar(sc,c);out+='<div class="chips">';
  out+=ll?'<span class="chip">\u2665 '+esc(LL_LANGUAGES[ll])+'</span>':'<span class="chip info">no love language set</span>';
  out+=bd?'<span class="chip'+(bd.days<=14?" warn":" info")+'">\uD83C\uDF82 Birthday: '+esc(bd.label)+'</span>':'<span class="chip info">no birthday set</span>';
@@ -256,7 +256,7 @@ function personProfile(pid){
  out+='</div>';
  /* person settings: one-time fields, collapsed */
  var relIn=REL_OPTIONS.indexOf(p.relation);
- out+='<details class="card" style="margin-bottom:22px"><summary style="cursor:pointer;font-weight:600;font-size:15px">Person settings <span style="font-weight:400;color:var(--ink-faint);font-size:12.5px">relationship \u00B7 birthday \u00B7 cadence \u00B7 love language</span></summary><div style="margin-top:14px">';
+ out+='<details class="card" style="margin-bottom:22px" id="psettings"'+(window._psOpen?" open":"")+'><summary style="cursor:pointer;font-weight:600;font-size:15px">Person settings <span style="font-weight:400;color:var(--ink-faint);font-size:12.5px">relationship \u00B7 birthday \u00B7 cadence \u00B7 love language</span></summary><div style="margin-top:14px">';
  out+='<div class="field"><label>Relationship</label><select data-pfield="relation" data-pid="'+pid+'"><option value="">- not set -</option>';
  if(p.relation&&relIn<0)out+='<option value="'+esc(p.relation)+'" selected>'+esc(p.relation)+' (custom)</option>';
  out+=REL_OPTIONS.map(function(o){return '<option value="'+o+'"'+(relIn>=0&&REL_OPTIONS[relIn]===o?" selected":"")+'>'+o+'</option>';}).join("");
