@@ -246,3 +246,16 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .calsync{font-size:11px;color:var(--ink-faint);margin-top:8px;font-style:italic;font-family:var(--serif)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:720px){.grid2{grid-template-columns:1fr}}
+
+/* Fantastical-style calendar strip */
+.calitem{display:flex;gap:12px;padding:10px 12px;border-bottom:1px dashed var(--line);align-items:center;border-radius:10px}
+.calitem:last-child{border-bottom:none}
+.cal-bar{width:4px;border-radius:2px;flex:none;align-self:stretch}
+.cal-main{flex:1;min-width:0}
+.cal-title{font-size:15px;font-weight:600;color:var(--ink)}
+.cal-range{font-size:11.5px;color:var(--ink-faint);margin-top:1px;font-variant-numeric:tabular-nums}
+.calitem.past{opacity:.45}
+.calitem.now{background:var(--mist);box-shadow:inset 3px 0 0 var(--forest)}
+.now-badge{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--forest);border-radius:6px;padding:3px 8px;flex:none}
+.next-badge{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--forest);background:transparent;border:1px solid var(--mint);border-radius:6px;padding:2px 7px;flex:none}
+.cal-calname{font-size:11px;color:var(--ink-faint);font-weight:600;white-space:nowrap;flex:none}
