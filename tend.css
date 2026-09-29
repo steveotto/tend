@@ -27,7 +27,7 @@ nav.tabs{display:flex;gap:4px;margin:16px 0 22px;background:var(--mist);padding:
 nav.tabs button{border:none;background:transparent;padding:11px 16px;border-radius:12px;font-size:14.5px;font-weight:600;color:var(--ink-soft);transition:all .15s;white-space:nowrap}
 nav.tabs button.active{background:var(--card);color:var(--forest);box-shadow:0 1px 3px rgba(32,39,35,.1)}
 @media(max-width:720px){
-  nav.tabs{position:fixed;left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom));margin:0;z-index:40;justify-content:space-between;overflow-x:auto;box-shadow:0 4px 20px rgba(32,39,35,.18)}
+  nav.tabs{position:static;left:auto;right:auto;bottom:auto;margin:2px 0 0;z-index:auto;justify-content:flex-start;overflow-x:auto;box-shadow:none}
   nav.tabs button{flex:none;padding:10px 9px;font-size:11.5px}
 }
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
@@ -145,7 +145,7 @@ ul.tasks li.done .txt{color:var(--ink-faint);text-decoration:line-through}
 .modal .row{display:flex;gap:10px;margin-bottom:12px}
 .modal select,.modal input{flex:1;border:1px solid var(--line);border-radius:12px;padding:9px 11px;background:var(--canvas)}
 .modal textarea{width:100%;border:1px solid var(--line);border-radius:12px;padding:9px 11px;background:var(--canvas);min-height:60px;margin-bottom:12px;resize:vertical}
-.flash{position:fixed;bottom:calc(84px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(16px);opacity:0;background:var(--ink);color:var(--canvas);font-size:12px;letter-spacing:.06em;padding:8px 18px;border-radius:999px;transition:all .3s;z-index:60;pointer-events:none}
+.flash{position:fixed;bottom:calc(18px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(16px);opacity:0;background:var(--ink);color:var(--canvas);font-size:12px;letter-spacing:.06em;padding:8px 18px;border-radius:999px;transition:all .3s;z-index:60;pointer-events:none}
 .flash.show{opacity:1;transform:translateX(-50%) translateY(0)}
 @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 .empty{font-size:13px;color:var(--ink-faint);font-style:italic;font-family:var(--serif)}
@@ -195,7 +195,7 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .calitem:last-child{border-bottom:none}
 .cal-time{font-weight:700;font-size:12.5px;color:var(--forest);white-space:nowrap;font-variant-numeric:tabular-nums;min-width:64px}
 .cal-title{font-size:14.5px}
-@media(max-width:720px){.wrap{padding-top:calc(104px + env(safe-area-inset-top))}}
+@media(max-width:720px){.wrap{padding-top:calc(140px + env(safe-area-inset-top))}}
 .bar-ov{position:relative;height:16px;border-radius:99px;background:linear-gradient(90deg,#FF5A45 0%,#FFC133 48%,#12B76A 100%);margin:14px 0 26px;box-shadow:inset 0 1px 3px rgba(0,0,0,.15)}
 .ov-marker{position:absolute;top:calc(100% + 3px);left:50%;width:0;height:0;transform:translateX(-50%);border-left:11px solid transparent;border-right:11px solid transparent;border-bottom:14px solid var(--ink);filter:drop-shadow(0 1px 2px rgba(0,0,0,.3));transition:left .6s ease;z-index:2}
 .nav-ic svg{width:19px;height:19px;display:block}
@@ -261,3 +261,10 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .rhyedit .addrow{margin-top:8px}
 .rhyedit select,.rhyedit input{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fff;font-size:13.5px}
 .touchsugg{background:var(--mist);border-radius:10px;padding:9px 13px;font-size:13.5px;color:var(--ink);margin:4px 0 2px}
+
+
+/* ============ avatars + spark buttons ============ */
+.avatar{border-radius:50%;object-fit:cover;flex:none;border:2px solid var(--mist);display:block;background:var(--card)}
+.avatar.init{display:inline-grid;place-items:center;background:var(--mist);color:var(--forest);font-weight:700}
+.sparkbtn{background:#B8912F;border-color:#B8912F}
+.sparkbtn:hover{background:#8A6D1F}
