@@ -1,7 +1,7 @@
 "use strict";
 /* ============ settings (with sync) + iCloud calendar ============ */
 function renderSettings(){
- var out='<div class="sectiontitle" style="margin-top:6px"><h2>Settings</h2><span class="hint">meters, calendars, goals, sync</span></div>';
+ var out='<div class="sectiontitle" style="margin-top:6px"><h2>Settings</h2><span class="hint">meters, calendar, goals, sync</span></div>';
  /* meters */
  var s=settings();
  out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Meters</div>'+
@@ -12,14 +12,14 @@ function renderSettings(){
  /* calendars */
  out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Calendars</div>'+
  '<div class="hint" style="margin-bottom:10px">On icloud.com: Calendar &gt; share icon next to a calendar &gt; "Public Calendar" &gt; copy link. Paste it here (webcal:// or https://). Each calendar gets a name and color on the dashboard.</div>';
- S.calendars.forEach(function(ca){
+ (S.calendars||[]).forEach(function(ca){
   out+='<div class="calrow" data-calrow="'+ca.id+'">'+
   '<input class="cal-color" type="color" data-calcolor="'+ca.id+'" value="'+(ca.color||"#4C9AFF")+'">'+
   '<input class="cal-name" placeholder="Name" data-calname="'+ca.id+'" value="'+esc(ca.name||"")+'">'+
   '<input class="cal-url" placeholder="webcal://icloud.com/..." data-calurl="'+ca.id+'" value="'+esc(ca.url||"")+'">'+
   '<button class="del" data-caldel="'+ca.id+'" title="remove">\u00D7</button></div>';
  });
- if(!S.calendars.length)out+='<div class="empty">No calendars yet - add one below.</div>';
+ if(!(S.calendars||[]).length)out+='<div class="empty">No calendars yet - add one below.</div>';
  out+='<div style="display:flex;gap:8px;margin-top:10px"><button class="btn ghost" id="calAdd">+ Add calendar</button><button class="btn" id="calSaveAll">Save &amp; refresh</button></div></div>';
  /* goals */
  out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Goals</div>';
@@ -67,7 +67,7 @@ function parseICSDate(v){
  var m=v.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2}))?(?:Z)?$/);
  if(!m)return null;
  var d=m[6]?new Date(Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6])):new Date(+m[1],+m[2]-1,+m[3]);
- if(m[6]&&v.indexOf("Z")<0){/* floating time: treat as local */d=new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]);}
+ if(m[6]&&v.indexOf("Z")<0){d=new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]);}
  return d;}
 function calUrl(u){u=(u||"").trim();if(u.indexOf("webcal://")===0)u="https://"+u.slice(10);return u;}
 function fetchICS(u){
@@ -78,7 +78,7 @@ function fetchICS(u){
 }
 function loadCalendars(){
  var strip=el("calStrip");
- var cals=S.calendars.filter(function(c){return calUrl(c.url);});
+ var cals=(S.calendars||[]).filter(function(c){return calUrl(c.url);});
  if(!cals.length){if(strip)strip.innerHTML='<div class="empty">No calendars connected - add one in Settings.</div>';return;}
  var cached=null;try{cached=JSON.parse(localStorage.getItem("tend:cal2")||"null");}catch(e){}
  if(cached&&Date.now()-cached.at<1800000&&cached.n===cals.length){renderCalStrip(cached.events);return;}
