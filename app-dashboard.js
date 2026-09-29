@@ -11,7 +11,7 @@ function renderSettings(){
  '<button class="btn" id="setSave">Save meter settings</button></div>';
  /* calendars */
  out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Calendars</div>'+
- '<div class="hint" style="margin-bottom:10px">On icloud.com: Calendar &gt; share icon next to a calendar &gt; "Public Calendar" &gt; copy link. Paste it here (webcal:// or https://). Each calendar gets a name and color on the dashboard. The GitHub Action refreshes these every 30 minutes; browser fallback only if the build feed is missing.</div>';
+ '<div class="hint" style="margin-bottom:10px">On icloud.com: Calendar &gt; share icon next to a calendar &gt; "Public Calendar" &gt; copy link. Paste it here (webcal:// or https://). Each calendar gets a name and color on the dashboard.</div>';
  (S.calendars||[]).forEach(function(ca){
   out+='<div class="calrow" data-calrow="'+ca.id+'">'+
   '<input class="cal-color" type="color" data-calcolor="'+ca.id+'" value="'+(ca.color||"#4C9AFF")+'">'+
@@ -19,7 +19,7 @@ function renderSettings(){
   '<input class="cal-url" placeholder="webcal://icloud.com/..." data-calurl="'+ca.id+'" value="'+esc(ca.url||"")+'">'+
   '<button class="del" data-caldel="'+ca.id+'" title="remove">\u00D7</button></div>';
  });
- if(!(S.calendars||[]).length)out+='<div class="empty">No calendars yet - add one below.</div>';
+ if(!S.calendars.length)out+='<div class="empty">No calendars yet - add one below.</div>';
  out+='<div style="display:flex;gap:8px;margin-top:10px"><button class="btn ghost" id="calAdd">+ Add calendar</button><button class="btn" id="calSaveAll">Save &amp; refresh</button></div></div>';
  /* goals */
  out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Goals</div>';
@@ -40,10 +40,10 @@ function renderSettings(){
  /* sync */
  var st=window.SYNCcfg||{};
  out+='<div class="card"><div class="subhead">Sync (GitHub)</div>'+
- '<div class="field"><label>Owner</label><input id="syncOwner" value="'+esc(st.owner||"")+'" placeholder="steveotto"></div>'+
- '<div class="field"><label>Repo</label><input id="syncRepo" value="'+esc(st.repo||"")+'" placeholder="tend-data"></div>'+
+ '<div class="field"><label>Owner</label><input id="syncOwner" value="'+esc(st.owner||"")+'"></div>'+
+ '<div class="field"><label>Repo</label><input id="syncRepo" value="'+esc(st.repo||"")+'"></div>'+
  '<div class="field"><label>Personal access token</label><input id="syncToken" type="password" placeholder="paste a fine-grained token scoped to tend-data" value="'+esc(st.token||"")+'"></div>'+
- '<div class="btn-row"><button class="btn" id="syncSave">Save</button><button class="btn ghost" id="syncPull">Pull now</button><button class="btn ghost" id="syncPush">Push now</button><button class="btn ghost" id="syncExport">Export backup</button></div></div>';
+ '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="syncSave">Save</button><button class="btn ghost" id="syncPull">Pull now</button><button class="btn ghost" id="syncPush">Push now</button><button class="btn ghost" id="syncExport">Export backup</button></div></div>';
  return out;}
 /* ============ calendar ============ */
 function parseICS(txt){
@@ -68,7 +68,7 @@ function parseICSDate(v){
  var m=v.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2}))?(?:Z)?$/);
  if(!m)return null;
  var d=m[6]?new Date(Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6])):new Date(+m[1],+m[2]-1,+m[3]);
- if(m[6]&&v.indexOf("Z")<0){d=new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]);}
+ if(m[6]&&v.indexOf("Z")<0){/* floating time: treat as local */d=new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]);}
  return d;}
 function calUrl(u){u=(u||"").trim();if(u.indexOf("webcal://")===0)u="https://"+u.slice(10);return u;}
 function fetchICS(u){
@@ -92,7 +92,6 @@ function loadCalendars(){
  if(cached&&Date.now()-cached.at<900000&&cached.n===cals.length){window._calLoading=false;renderCalStrip(cached.events);return;}
  if(strip)strip.innerHTML='<div class="empty">Loading calendars...</div>';
  function toEv(x){var m=null;cals.forEach(function(c2){if(x.cal&&c2.name===x.cal)m=c2;});if(!m)m=cals[0];return {t:x.t,s:Date.parse(x.s),e:Date.parse(x.e||x.s),cal:x.cal||m.name,color:m.color||"#4C9AFF",allDay:x.allDay};}
- /* first choice: events.json built by the GitHub Action (no proxies, always fresh server-side) */
  fetch("events.json?t="+Date.now()).then(function(r){if(!r.ok)throw new Error("nofeed");return r.json();}).then(function(data){
   if(!data||!data.events||!data.events.length)throw new Error("empty");
   window._calLoading=false;window._calSync=data.synced;
@@ -100,7 +99,6 @@ function loadCalendars(){
   localStorage.setItem("tend:cal2",JSON.stringify({at:Date.now(),events:evs,n:cals.length}));
   renderCalStrip(evs);
  }).catch(function(){
-  /* fallback: public CORS proxies, browser-side (only if the build feed is missing) */
   var jobs=cals.map(function(ca){
    return fetchICS(calUrl(ca.url)).then(function(t){
     var evs=parseICS(t).map(function(e){return {t:e.title,s:e.start.getTime(),e:(e.end?e.end.getTime():e.start.getTime()+3600000),cal:ca.name,color:ca.color||"#4C9AFF"};});
@@ -118,15 +116,30 @@ function loadCalendars(){
   });
  });
 }
+function fmtT(ms){var d=new Date(ms);var h=d.getHours(),m=d.getMinutes(),ap=h<12?"am":"pm";h=h%12||12;return h+(m?":"+String(m).padStart(2,"0"):"")+ap;}
 function renderCalStrip(evs,errs){
  var strip=el("calStrip");if(!strip)return;
  var out="";
  if(errs&&errs.length)out+='<div class="empty">Could not load: '+esc(errs.join(", "))+' (calendar proxies may be down - try again)</div><button class="btn mini ghost" data-calretry="1" style="margin-top:6px">Retry</button>';
- if(!evs||!evs.length){if(!out)out='<div class="empty">Nothing on the calendar today - wide open.</div>';if(window._calSync){var sa=Date.now()-Date.parse(window._calSync);out+='<div class="calsync">Synced '+when(Date.parse(window._calSync))+(sa>7200000?" - may be out of date":"")+'</div>';}strip.innerHTML=out;return;}
- strip.innerHTML=out+evs.map(function(e){
-  var d=new Date(e.s);var hm=d.getHours()%12||12;var ap=d.getHours()<12?"am":"pm";var mm=d.getMinutes()?(":"+String(d.getMinutes()).padStart(2,"0")):"";
-  return '<div class="calitem"><span class="cal-dot" style="background:'+(e.color||"#4C9AFF")+'"></span><span class="cal-time">'+hm+mm+ap+'</span><span class="cal-title">'+esc(e.t||"(untitled)")+'</span><span class="cal-calname">'+esc(e.cal||"")+'</span></div>';
- }).join("");
- if(window._calSync){var sa=Date.now()-Date.parse(window._calSync);strip.innerHTML+='<div class="calsync">Synced '+when(Date.parse(window._calSync))+(sa>7200000?" - may be out of date":"")+'</div>';}}
+ var t0=new Date();t0.setHours(0,0,0,0);var t1=t0.getTime()+86400000;var now=Date.now();
+ var tod=(evs||[]).filter(function(e){return e.s<t1&&e.e>t0;}).sort(function(a,b){return a.s-b.s;});
+ if(!tod.length){out+='<div class="empty">Nothing else on the calendar today - wide open.</div>';}
+ else{
+  var allDay=tod.filter(function(e){return e.allDay;}),timed=tod.filter(function(e){return !e.allDay;});
+  var nextShown=false;
+  function item(e,cls){
+   var badge="";
+   if(cls.indexOf("now")>=0)badge='<span class="now-badge">Now</span>';
+   else if(cls.indexOf("next")>=0)badge='<span class="next-badge">in '+Math.max(1,Math.round((e.s-now)/60000))+' min</span>';
+   return '<div class="calitem '+cls+'"><span class="cal-bar" style="background:'+(e.color||"#4C9AFF")+'"></span><div class="cal-main"><div class="cal-title">'+esc(e.t||"(untitled)")+'</div><div class="cal-range">'+(e.allDay?"All day":fmtT(e.s)+" \u2013 "+fmtT(e.e))+'</div></div>'+badge+'<span class="cal-calname">'+esc(e.cal||"")+'</span></div>';
+  }
+  allDay.forEach(function(e){out+=item(e,"");});
+  timed.forEach(function(e){
+   var cls=e.e<=now?"past":(now>=e.s?"now":(!nextShown?(nextShown=true,"next"):""));
+   out+=item(e,cls);
+  });
+ }
+ if(window._calSync){var sa=now-Date.parse(window._calSync);out+='<div class="calsync">Synced '+when(Date.parse(window._calSync))+(sa>7200000?" - may be out of date":"")+'</div>';}
+ strip.innerHTML=out;}
 window.TEND_LOAD_CALENDAR=loadCalendars;
 setTimeout(function(){if(el("calStrip")&&typeof loadCalendars==="function")loadCalendars();},600);
