@@ -94,7 +94,7 @@ function bind(){
   else if(t.matches("[data-gperson]")){var g=S.goals.find(function(z){return z.id===t.getAttribute("data-gperson");});if(g){g.personId=t.value||null;save();}}
   else if(t.matches("[data-gtod]")){var g=S.goals.find(function(z){return z.id===t.getAttribute("data-gtod");});if(g){g.tod=t.value;save();render();}}
   else if(t.matches("[data-pfield]")){var pf=t.getAttribute("data-pfield");var pp=S.people.find(function(x){return x.id===t.getAttribute("data-pid");});if(pp){pp[pf]=t.value;save();render();flash("Saved");}}
-  else if(t.matches("[data-rfield]")){var rf=t.getAttribute("data-rfield").split("|");var rp4=S.people.find(function(x){return x.id===rf[0];});var rr4=rp4&&(rp4.rhythms||[]).find(function(x){return x.id===rf[1];});if(rr4){var fld=rf[2];rr4[fld]=(fld==="customDow"||fld==="customOrd")?(+t.value||0):t.value;save();render();}}
+  else if(t.matches("[data-rfield]")){var rf=t.getAttribute("data-rfield").split("|");var rp4=S.people.find(function(x){return x.id===rf[0];});var rr4=rp4&&(rp4.rhythms||[]).find(function(x){return x.id===rf[1];});if(rr4){var fld=rf[2];if(fld==="customDow"||fld==="customOrd"||fld==="durVal")rr4[fld]=+t.value||0;else rr4[fld]=t.value;if(fld==="durUnit"){var mx=DUR_UNITS[rr4.durUnit]?DUR_UNITS[rr4.durUnit].max:120;if(!(rr4.durVal>=1&&rr4.durVal<=mx))rr4.durVal=0;}save();render();}}
  });
  document.addEventListener("input",function(e){
   var t=e.target;
