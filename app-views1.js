@@ -14,7 +14,7 @@ function render(){renderNav();var v=el("view");
  else if(tab==="offload")v.innerHTML=renderOffload();
  else if(tab==="settings")v.innerHTML=renderSettings();
  if(typeof bind==="function")bind();
- if(tab==="today"&&!currentArea&&el("calStrip"))loadCalendars();}
+ if(tab==="today"&&!currentArea&&el("calStrip")&&typeof loadCalendars==="function")loadCalendars();}
 /* ============ overall meter ============ */
 function overallScore(){return avg(AREA_IDS.map(areaScore))||50;}
 function areaMenuHTML(){
@@ -101,47 +101,75 @@ function goalRow(g){
  return '<div class="goalrow"><span class="sm-dot '+c+'"></span><div class="gr-main"><b>'+esc(g.text)+'</b>'+(g.personId?' <span class="gr-person">'+esc(personName(g.personId))+'</span>':'')+'<div class="gr-meta">'+statusTxt+'</div></div><button class="btn mini" data-goaldone="'+g.id+'">Done</button></div>';}
 function nextDateLine(pid){var kds=S.keyDates.filter(function(k){return k.personId===pid;});if(!kds.length)return "";var best=null;kds.forEach(function(k){var d=daysUntil(k);if(best===null||d<best.d)best={k:k,d:d};});if(!best)return "";return '<div class="pf-next">'+esc(best.k.label)+' \u00B7 '+(best.d===0?"TODAY":"in "+best.d+" days")+'</div>';}
 function renderPeople(){
- var out='<div class="sectiontitle" style="margin-top:6px"><h2>People</h2><span class="hint">key dates, prayers, connections, encouragement</span></div><div class="grid">';
+ var out='<div class="sectiontitle" style="margin-top:6px"><h2>People</h2><span class="hint">connection, prayer, love languages</span></div><div class="grid">';
  S.people.forEach(function(p){
   var sc=personScore(p),c=scoreClass(sc);
-  var lastConn=S.events.filter(function(e){return e.personId===p.id;}).sort(function(a,b){return b.ts-a.ts;})[0];
+  var ci=personConnInfo(p);
   var prayers=S.prayers.filter(function(x){return x.personId===p.id&&!x.answered;}).length;
-  out+='<div class="card person-card" data-openperson="'+p.id+'" style="cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3>'+esc(p.name)+'</h3><span class="score '+c+'">'+sc+'</span></div>'+meterBar(sc,c)+'<div class="meta">'+esc(p.relation||"")+' \u00B7 '+(lastConn?"last connection "+when(lastConn.ts):"no connections yet")+(prayers?" \u00B7 "+prayers+" prayer"+(prayers>1?"s":""):"")+'</div>'+nextDateLine(p.id)+'</div>';
+  out+='<div class="card person-card" data-openperson="'+p.id+'" style="cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3>'+esc(p.name)+'</h3><span class="score '+c+'">'+sc+'</span></div>'+meterBar(sc,c)+'<div class="meta">'+esc(p.relation||"")+' \u00B7 '+(ci.last?("connected "+when(ci.last.ts)):"no connections yet")+(prayers?" \u00B7 "+prayers+" prayer"+(prayers>1?"s":""):"")+'</div>'+nextDateLine(p.id)+'</div>';
  });
  out+='</div>';
  if(currentPerson){out+=personProfile(currentPerson);}
  return out;}
+/* ============ person profile (mockup v2) ============ */
 function personProfile(pid){
  var p=S.people.find(function(x){return x.id===pid;});if(!p)return "";
  var sc=personScore(p),c=scoreClass(sc);
+ var cInfo=personConnInfo(p),pInfo=personPrayerInfo(p);
+ var cad=personCadenceDays(p),cadLabel=personCadenceLabel(p);
+ var cScore=connScoreFromDays(cInfo.days,cad),pScore=prayerScoreFromDays(pInfo.days);
+ var cCls=scoreClass(cScore),pCls=scoreClass(pScore);
  var evs=S.events.filter(function(e){return e.personId===pid;}).sort(function(a,b){return b.ts-a.ts;}).slice(0,12);
  var prayers=S.prayers.filter(function(x){return x.personId===pid;});
  var goals=personGoals(pid);
  var kds=S.keyDates.filter(function(k){return k.personId===pid;});
- var enc=p.encouragements||[];
- var out='<div class="card detail open" id="personPanel"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3>'+esc(p.name)+' <span style="font-size:13px;color:var(--ink-faint)">'+esc(p.relation||"")+'</span></h3><div><span class="score '+c+'">'+sc+'</span><button class="btn mini ghost" style="margin-left:10px" data-closeperson="1">Close</button></div></div>'+meterBar(sc,c);
- out+='<div class="cols"><div>';
+ var ll=p.loveLanguage||"";
+ var first=esc(p.name.split(" ")[0]);
+ var bd=bdayInfo(p.birthday);
+ var out='<div class="card detail open" id="personPanel"><div class="head"><div><h3>'+esc(p.name)+' <span class="rel">'+esc(p.relation||"")+'</span></h3></div><div><span class="score '+c+'">'+sc+'</span><button class="btn mini ghost" style="margin-left:10px" data-closeperson="1">Close</button></div></div>';
+ out+='<div class="chips">';
+ out+=ll?'<span class="chip">\u2665 '+esc(LL_LANGUAGES[ll])+'</span>':'<span class="chip info">no love language set</span>';
+ out+=bd?'<span class="chip'+(bd.days<=14?" warn":" info")+'">\uD83C\uDF82 Birthday: '+esc(bd.label)+'</span>':'<span class="chip info">no birthday set</span>';
+ out+='<span class="chip info">Connect: '+esc(cadLabel)+'</span></div>';
+ out+='<div class="pmeters"><div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val '+cCls+'">'+cScore+'</span></div><div class="bar"><i class="'+cCls+'" style="width:'+cScore+'%"></i></div><div class="pm-note">'+(cInfo.last?("last: "+when(cInfo.last.ts)):"no connections yet")+'</div></div>';
+ out+='<div class="pmeter"><div class="pm-lab"><span>Prayer</span><span class="pm-val '+pCls+'">'+pScore+'</span></div><div class="bar"><i class="'+pCls+'" style="width:'+pScore+'%"></i></div><div class="pm-note">'+(pInfo.last?("last: "+when(pInfo.last.ts)):"no prayers logged")+'</div></div></div>';
+ var nud=[];
+ if(bd&&bd.days<=14)nud.push('<b>Birthday '+esc(bd.label)+' is in '+bd.days+' day'+(bd.days===1?"":"s")+' - plan something.</b>');
+ if(cInfo.days>=cad)nud.push('<b>Overdue for connection</b> - it has been '+(cInfo.days>900?"a long time":cInfo.days+" days")+'.');
+ if(ll)nud.push('<b>'+esc(LL_LANGUAGES[ll])+' is '+first+"&#39;s love language:</b> "+LL_NUDGES[ll]);
+ else nud.push('Set a love language below and Tend will tailor suggestions.');
+ out+='<div class="nudge"><span>\uD83D\uDCA1</span><span>'+nud.join(" ")+'</span></div>';
+ out+='</div>';
+ /* left: goals + log + history */
+ out+='<div class="card" style="margin-bottom:14px">';
  out+='<div class="subhead">Goals</div>';
- if(goals.length){goals.forEach(function(g){out+=goalRow(g);});}else out+='<div class="empty">No goals for '+esc(p.name)+' yet.</div>';
- out+='<div class="subhead" style="margin-top:14px">'+(editingConn?"Editing connection - pick a type below":"Log a moment")+'</div>';
- out+='<div class="momentrow"><input type="date" id="momentDate" value="'+fmtDate(Date.now())+'"><span class="hint">date logged</span></div>';
- out+='<div class="quicklog">'+["coffee","meal","call","text","quality","prayer"].map(function(k){return '<button data-plog="'+k+'">'+KINDS[k].label.split(" /")[0].split(" ")[0]+'</button>';}).join("")+'<button data-plogother="1">Other...</button></div>';
- out+='<div class="subhead" style="margin-top:14px">Connection history</div>';
+ if(goals.length){goals.forEach(function(g){out+=goalRow(g);});}else out+='<div class="empty">No goals for '+esc(p.name)+' yet - add them in Settings.</div>';
+ out+='<div class="subhead" style="margin-top:16px">'+(editingConn?"Editing connection - pick a type below":"Log a moment")+'</div>';
+ out+='<div class="qlog"><input type="date" id="momentDate" value="'+(editingConn?fmtDate((S.events.find(function(z){return z.id===editingConn;})||{}).ts||Date.now()):fmtDate(Date.now()))+'">'+["coffee","meal","call","text","quality","prayer"].map(function(k){return '<button data-plog="'+k+'">'+KINDS[k].label.split(" /")[0].split(" ")[0]+'</button>';}).join("")+'<button data-plogother="1" class="other">Other...</button></div>';
+ out+='<div class="subhead" style="margin-top:16px">Connection history</div>';
  if(evs.length){evs.forEach(function(e){
   out+='<div class="logline"><span class="when">'+when(e.ts)+'</span><span class="kind">'+esc(typeLabel(e))+'</span><span class="txt">'+esc((e.title&&e.title.indexOf("Time with")!==0)?e.title:"")+'</span><span class="entry-actions"><button class="iconbtn" data-evedit="'+e.id+'" title="edit">\u270E</button><button class="iconbtn" data-evdel="'+e.id+'" title="delete">\uD83D\uDDD1</button></span></div>';
  });}else out+='<div class="empty">No history yet.</div>';
- out+='</div><div>';
- out+='<div class="subhead">Prayers for '+esc(p.name)+'</div>';
+ out+='</div>';
+ /* right: prayer profile */
+ out+='<div class="card" style="margin-bottom:14px"><div class="subhead">'+first+"&#39;s prayer profile"+'<span class="savehint" id="prayerSaveHint" style="margin-left:8px;position:static">saved</span></div>';
+ out+='<div class="field"><label>"How can I be praying for you?" (their words)</label><textarea data-phpray="1" data-pid="'+pid+'" placeholder="Ask them this - log their answer here">'+esc(p.howToPray||"")+'</textarea></div>';
+ out+='<div class="field"><label>My prayer focus for '+first+'</label><textarea data-pfocus="1" data-pid="'+pid+'" placeholder="Your private prayer for them">'+esc(p.prayerFocus||"")+'</textarea></div>';
+ out+='<div class="grid2"><div class="field"><label>Birthday</label><input type="date" data-pfield="birthday" data-pid="'+pid+'" value="'+esc(p.birthday||"")+'"></div>';
+ out+='<div class="field"><label>Connection cadence</label><select data-pfield="connectCadence" data-pid="'+pid+'">'+[["daily","daily"],["weekly","weekly"],["biweekly","every 2 weeks"],["monthly","monthly"]].map(function(o){return '<option value="'+o[0]+'"'+((p.connectCadence||"weekly")===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("")+'</select></div></div>';
+ out+='<div class="field"><label>Love language</label><select data-pfield="loveLanguage" data-pid="'+pid+'"><option value="">- not set -</option>'+Object.keys(LL_LANGUAGES).map(function(k){return '<option value="'+k+'"'+(ll===k?" selected":"")+'>'+LL_LANGUAGES[k]+'</option>';}).join("")+'</select></div>';
+ out+='</div>';
+ /* right: prayers + encouragement + key dates + followups */
+ out+='<div class="card"><div class="subhead">Prayers for '+first+'</div>';
  if(prayers.length){prayers.forEach(function(x){out+='<div class="preq'+(x.answered?" answered":"")+'"><div class="ptext">'+esc(x.text)+(x.answered?'<div style="font-size:11px;color:var(--forest)">answered '+x.answeredDate+'</div>':"")+'</div></div>';});}else out+='<div class="empty">None yet - add one in Prayer with their name.</div>';
- out+='<div class="subhead" style="margin-top:14px">Potential encouragement</div><div class="notewrap"><textarea data-encnote="'+pid+'" placeholder="Ideas: a verse that fits their season, a gift idea, a specific word...">'+esc((p.encouragementNote||""))+'</textarea><span class="savehint" data-enchint="'+pid+'">saved</span></div>';
- if(enc.length){enc.forEach(function(t){out+='<div class="logline"><span class="txt">'+esc(t)+'</span></div>';});}
- out+='<div class="subhead" style="margin-top:14px">Key dates</div>';
+ out+='<div class="subhead" style="margin-top:16px">Potential encouragement</div><div class="notewrap"><textarea data-encnote="'+pid+'" placeholder="Ideas: a verse that fits their season, a gift idea, a specific word...">'+esc((p.encouragementNote||""))+'</textarea><span class="savehint" data-enchint="'+pid+'">saved</span></div>';
+ out+='<div class="subhead" style="margin-top:16px">Key dates</div>';
  if(kds.length){kds.forEach(function(k){out+='<div class="logline"><span class="kind">'+esc(k.label)+'</span><span class="txt">'+(daysUntil(k)===0?"today":"in "+daysUntil(k)+" days")+'</span><span class="entry-actions"><button class="iconbtn" data-kddel="'+k.id+'" title="delete">\uD83D\uDDD1</button></span></div>';});}else out+='<div class="empty">None yet.</div>';
  out+='<div class="addrow"><input placeholder="Add key date (label)" data-kdlabel="'+pid+'"><button class="btn mini" data-kdadd="'+pid+'">Add</button></div>';
- out+='<div class="subhead" style="margin-top:14px">Follow up on</div><ul class="tasks">';
+ out+='<div class="subhead" style="margin-top:16px">Follow up on</div><ul class="tasks">';
  S.followups.filter(function(f){return f.personId===pid&&!f.done;}).forEach(function(f){out+='<li><input type="checkbox" class="cb" data-fudone="'+f.id+'"><span class="txt">'+esc(f.text)+'</span></li>';});
  out+='</ul><div class="addrow"><input id="personFUNew" placeholder="Follow up on..."><button class="btn mini" data-fuadd="'+pid+'">Add</button></div>';
- out+='</div></div></div>';
+ out+='</div></div>';
  return out;}
 function renderChecklists(){
  if(!S.checklists||!S.checklists.length)return "";
@@ -184,5 +212,8 @@ function fmtDate(ts){var d=new Date(ts);return d.getFullYear()+"-"+String(d.getM
 var editingId=null,editingEvent=null;
 /* nav state */
 var TODS={anytime:"Anytime",early:"Early morning",morning:"Midday",lunch:"Lunch",afternoon:"Afternoon",commute:"Way home",evening:"Evening",bedtime:"Bedtime"};
+var LL_LANGUAGES={qt:"Quality Time",wa:"Words of Affirmation",as:"Acts of Service",gf:"Gifts",pt:"Physical Touch"};
+var LL_NUDGES={qt:"time together - a walk, an errand, a shared meal - speaks louder than a text.",wa:"a specific, spoken affirmation lands deeper than any gift. Send the text. Make the call.",as:"doing a chore or errand for them preaches louder than words.",gf:"small, thoughtful gifts say 'I was thinking of you' - keep a running list.",pt:"presence in person - a hug, a hand on the shoulder - matters most."};
+function bdayInfo(b){if(!b)return null;var parts=String(b).split("-");if(parts.length<3)return null;var m=+parts[1],d=+parts[2];if(!m||!d)return null;var t=new Date();var today=new Date(t.getFullYear(),t.getMonth(),t.getDate());var next=new Date(t.getFullYear(),m-1,d);if(next<today)next=new Date(t.getFullYear()+1,m-1,d);var du=Math.round((next-today)/86400000);var mos=["January","February","March","April","May","June","July","August","September","October","November","December"];return {label:mos[m-1]+" "+d,days:du};}
 var editingConn=null;
 var tab="today",openDetail=null,currentArea=null,currentPerson=null;
