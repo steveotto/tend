@@ -158,7 +158,7 @@ var AREA_IDS=["faith","marriage","parenting","health","finances","friendships"];
 var AREA_ICONS={
  faith:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16M7 9h10"/></svg>',
  marriage:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.6-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.4-7 10-7 10z"/></svg>',
- parenting:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7v9h-6v-6H4z"/></svg>',
+ parenting:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7v9h-6v-6h-4v6H4z"/></svg>',
  health:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2-5 4 10 2-5h6"/></svg>',
  finances:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 7.5v9M14.8 9.6c-.6-.8-1.6-1.1-2.8-1.1-1.6 0-2.7.7-2.7 1.9 0 2.5 5.6 1.3 5.6 3.8 0 1.2-1.2 1.9-2.9 1.9-1.3 0-2.4-.4-3-1.2"/></svg>',
  friendships:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9.5" r="2.4"/><path d="M16.2 15.6a4.6 4.6 0 0 1 4.3 3.9"/></svg>'};
@@ -167,3 +167,8 @@ function el(id){return document.getElementById(id);}
 function meterBar(v,cls){return '<div class="bar"><i class="'+cls+'" style="width:'+v+'%"></i></div>';}
 function personChip(k){var ps=personScore(k);var c=scoreClass(ps);return '<span class="submeter" data-person="'+k.id+'" title="'+scoreLabel(ps)+'"><span class="sm-dot '+c+'"></span><span class="sm-name">'+esc(k.name)+'</span><span class="sm-bar"><i class="'+c+'" style="width:'+ps+'%"></i></span><span class="sm-num">'+ps+'</span></span>';}
 
+
+function personAvatar(p,sz){if(p&&p.photo)return '<img class="avatar" src="'+p.photo+'" style="width:'+sz+'px;height:'+sz+'px" alt="">';var ini=((p&&p.name)||"?").split(" ").map(function(w){return w.charAt(0);}).join("").slice(0,2).toUpperCase();return '<span class="avatar init" style="width:'+sz+'px;height:'+sz+'px;font-size:'+Math.round(sz*.38)+'px">'+esc(ini)+'</span>';}
+function fmtHM12(hm){var parts=String(hm||"").split(":");if(parts.length<2)return "";var h=+parts[0],m=+parts[1];if(isNaN(h)||isNaN(m))return "";var ap=h>=12?"pm":"am";h=h%12||12;return h+":"+String(m).padStart(2,"0")+ap;}
+function sparkBlock(s){if(s.tod&&s.tod!=="anytime")return s.tod;if(s.time){var h=+String(s.time).split(":")[0];if(!isNaN(h)){if(h>=5&&h<9)return "early";if(h<11)return "morning";if(h<13)return "lunch";if(h<16)return "afternoon";if(h<18)return "commute";if(h<21)return "evening";return "bedtime";}}return null;}
+function findSparkById(sid){var f=null;S.people.forEach(function(x){((x.sparks)||[]).forEach(function(s2){if(s2.id===sid)f=s2;});});return f;}
