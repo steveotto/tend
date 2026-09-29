@@ -102,7 +102,14 @@ function areaGoals(id){return S.goals.filter(function(g){return g.area===id;});}
 function personGoals(pid){return S.goals.filter(function(g){return g.personId===pid;});}
 function avg(arr){if(!arr.length)return null;return Math.round(arr.reduce(function(a,b){return a+b;},0)/arr.length);}
 function areaScore(id){var g=areaGoals(id).map(goalScore);return avg(g)!==null?avg(g):rawScore(eventsFor(id));}
-function personScore(p){var g=personGoals(p.id).map(goalScore);if(g.length)return avg(g);return rawScore(eventsFor(p.area,p.id));}
+/* ============ person score: connection-first ============ */
+function personCadenceDays(p){var cc=p.connectCadence||"weekly";if(cc==="daily")return 1;if(cc==="weekly")return 7;if(cc==="biweekly")return 14;if(cc==="monthly")return 30;return p.cadenceDays||30;}
+function personCadenceLabel(p){var cc=p.connectCadence||"weekly";return {daily:"daily",weekly:"weekly",biweekly:"every 2 weeks",monthly:"monthly"}[cc]||("every "+(p.cadenceDays||30)+" days");}
+function personConnInfo(p){var last=null;S.events.forEach(function(e){if(e.personId===p.id&&e.kind!=="prayer"&&e.type!=="prayer"&&(!last||e.ts>last.ts))last=e;});return {last:last,days:last?daysSince(last.ts):999};}
+function personPrayerInfo(p){var last=null;S.events.forEach(function(e){if(e.personId===p.id&&(e.kind==="prayer"||e.type==="prayer")&&(!last||e.ts>last.ts))last=e;});return {last:last,days:last?daysSince(last.ts):999};}
+function connScoreFromDays(d,cad){var r=d/cad,v;if(r<=0.33)v=100;else if(r<=1)v=100-30*(r-0.33)/0.67;else if(r<=2)v=70-30*(r-1);else if(r<3)v=40-30*(r-2);else v=10;return Math.round(clamp(v,10,100));}
+function prayerScoreFromDays(d){return Math.round(clamp(100-10*d,30,100));}
+function personScore(p){var ci=personConnInfo(p),pi=personPrayerInfo(p);return Math.round(0.7*connScoreFromDays(ci.days,personCadenceDays(p))+0.3*prayerScoreFromDays(pi.days));}
 function nextOccurrence(kd){var t=new Date();var d=new Date(t.getFullYear(),kd.month-1,kd.day);if(d<t)d=new Date(t.getFullYear()+1,kd.month-1,kd.day);return d;}
 function daysUntil(kd){return Math.ceil((nextOccurrence(kd)-new Date())/86400000);}
 function trend(id){var g=areaGoals(id);var any=g.some(function(gg){var e=lastGoalEvent(gg);return e&&(Date.now()-e.ts)<7*86400000;});return any?{cls:"up",arrow:"\u25B2"}:{cls:"flat",arrow:"\u25AC"};}
