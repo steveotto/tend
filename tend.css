@@ -197,8 +197,8 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 @media(max-width:720px){.wrap{padding-top:calc(104px + env(safe-area-inset-top))}}
 
 /* gradient overall meter */
-.bar-ov{position:relative;height:16px;border-radius:99px;background:linear-gradient(90deg,#FF5A45 0%,#FFC133 48%,#12B76A 100%);margin:14px 0 10px;box-shadow:inset 0 1px 3px rgba(0,0,0,.15)}
-.ov-marker{position:absolute;top:50%;left:50%;width:26px;height:26px;transform:translate(-50%,-50%);background:#fff;border:3px solid var(--ink);border-radius:50%;box-shadow:0 1px 6px rgba(0,0,0,.35);transition:left .6s ease;z-index:2}
+.bar-ov{position:relative;height:16px;border-radius:99px;background:linear-gradient(90deg,#FF5A45 0%,#FFC133 48%,#12B76A 100%);margin:14px 0 26px;box-shadow:inset 0 1px 3px rgba(0,0,0,.15)}
+.ov-marker{position:absolute;top:calc(100% + 3px);left:50%;width:0;height:0;transform:translateX(-50%);border-left:11px solid transparent;border-right:11px solid transparent;border-bottom:14px solid var(--ink);filter:drop-shadow(0 1px 2px rgba(0,0,0,.3));transition:left .6s ease;z-index:2}
 
 /* mint minimal nav icons */
 .nav-ic svg{width:19px;height:19px;display:block}
