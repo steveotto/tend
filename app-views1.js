@@ -13,7 +13,8 @@ function render(){renderNav();var v=el("view");
  else if(tab==="echo")v.innerHTML=renderEcho();
  else if(tab==="offload")v.innerHTML=renderOffload();
  else if(tab==="settings")v.innerHTML=renderSettings();
- if(typeof bind==="function")bind();}
+ if(typeof bind==="function")bind();
+ if(tab==="today"&&!currentArea&&el("calStrip"))loadCalendars();}
 /* ============ overall meter ============ */
 function overallScore(){return avg(AREA_IDS.map(areaScore))||50;}
 function areaMenuHTML(){
@@ -27,7 +28,7 @@ function renderToday(){
  var greet=h<12?"Good morning":(h<17?"Good afternoon":"Good evening");
  var ov=overallScore(),oc=scoreClass(ov);
  var out='<div class="sectiontitle" style="margin-top:6px"><h2>'+greet+', Steve</h2><span class="hint">'+days[d.getDay()]+", "+mos[d.getMonth()]+" "+d.getDate()+'</span></div>';
- out+='<div class="card overall-card"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:18px;font-weight:500">Overall health</h3><span class="ov-score '+oc+'">'+ov+'</span></div><div class="bar-ov"><i class="ov-marker" style="left:'+ov+'%"></i></div>'+'<div class="meta" style="margin-top:6px"><span class="statusword '+oc+'">'+scoreLabel(ov)+'</span> \u00B7 averaged across 6 areas</div>'+areaMenuHTML()+'</div>';
+ out+='<div class="card overall-card"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:18px;font-weight:500">Overall health</h3><span class="ov-score '+oc+'">'+ov+'</span></div><div class="bar-ov"><i class="ov-marker" style="left:'+ov+'%"></i></div>'+'<div class="meta" style="margin-top:6px"><span class="statusword '+oc+'">'+scoreLabel(ov)+'</span> \u00B7 averaged across "+AREA_IDS.length+" areas</div>'+areaMenuHTML()+'</div>';
  out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Today on your calendar</div><div id="calStrip"><div class="empty">'+((S.calendars||[]).length?"Loading calendars...":"No calendars connected - add one in Settings.")+'</div></div></div>';
  out+=planHTML();
  out+=upcomingHTML();
