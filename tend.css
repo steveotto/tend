@@ -213,3 +213,10 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 /* color-coded calendar events */
 .cal-dot{width:10px;height:10px;border-radius:3px;flex:none;align-self:center}
 .cal-calname{margin-left:auto;font-size:11px;color:var(--ink-faint);font-weight:600;white-space:nowrap}
+
+/* moment logging */
+.momentrow{display:flex;align-items:center;gap:10px;margin:6px 0 4px}
+.momentrow input[type=date]{border:1px solid var(--line);border-radius:10px;padding:8px 11px;background:var(--canvas);font-size:14px}
+.momentrow .hint{font-size:11px;color:var(--ink-faint)}
+.logline .entry-actions{margin-left:auto;display:flex;gap:2px}
+.goalrow.edit select{max-width:110px}
