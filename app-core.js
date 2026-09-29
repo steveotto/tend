@@ -18,9 +18,9 @@ function defaultGoals(){return[
  {id:"g-d-leah",area:"parenting",text:"One-on-one date with Leah",cadence:"monthly",personId:"leah",kind:"date"},
  {id:"g-d-lucas",area:"parenting",text:"Connect with Lucas",cadence:"monthly",personId:"lucas",kind:"quality"},
  {id:"g-d-addi",area:"parenting",text:"Connect with Addi",cadence:"monthly",personId:"addi",kind:"quality"},
- {id:"g-walk",area:"fitness",text:"Evening walk with Amy",cadence:"daily",personId:"amy",kind:"outdoors"},
- {id:"g-strength",area:"fitness",text:"30 min strength training",cadence:"custom",days:2,kind:"workout"},
- {id:"g-core",area:"fitness",text:"Daily core: plank 3 min, ab wheel, decline sit-ups",cadence:"daily",kind:"workout"},
+ {id:"g-walk",area:"health",text:"Evening walk with Amy",cadence:"daily",personId:"amy",kind:"outdoors"},
+ {id:"g-strength",area:"health",text:"30 min strength training",cadence:"custom",days:2,kind:"workout"},
+ {id:"g-core",area:"health",text:"Daily core: plank 3 min, ab wheel, decline sit-ups",cadence:"daily",kind:"workout"},
  {id:"g-wedding",area:"parenting",text:"Wedding prep with Jake",cadence:"weekly",personId:"jacob",kind:"quality"}
 ];}
 function defaultKeyDates(){return[
@@ -61,8 +61,9 @@ function defaultChecklists(){return[
 function defaultState(){return{version:2,
  people:[{id:"amy",name:"Amy",relation:"wife",area:"marriage"},{id:"hannah",name:"Hannah",relation:"daughter",area:"parenting"},{id:"jacob",name:"Jake",relation:"son",area:"parenting"},{id:"leah",name:"Leah",relation:"daughter",area:"parenting"},{id:"lucas",name:"Lucas",relation:"son-in-law",area:"parenting"},{id:"addi",name:"Addi",relation:"future daughter-in-law",area:"parenting"}],
  events:[],tasks:[],goals:defaultGoals(),followups:[],prayers:[],ideas:[],echoes:[{id:uid(),title:"Photographers - Jake & Addi's wedding",note:"Contacts to reach out to. Status: to contact / contacted / met / booked / passed.",items:[]}],keyDates:defaultKeyDates(),checklists:defaultChecklists(),settings:JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
- areas:{faith:{name:"Faith"},marriage:{name:"Marriage"},parenting:{name:"Parenting"},health:{name:"Health"},fitness:{name:"Fitness"},finances:{name:"Finances"},friendships:{name:"Friendships"}}};}
+ areas:{faith:{name:"Faith"},marriage:{name:"Marriage"},parenting:{name:"Parenting"},health:{name:"Health & Fitness"},finances:{name:"Finances"},friendships:{name:"Friendships"}}};}
 function load(){try{var s=localStorage.getItem(LS_STATE);if(!s)return defaultState();var st=JSON.parse(s);st.version=2;
+if(st.areas&&st.areas.fitness){st.areas.health={name:"Health & Fitness"};delete st.areas.fitness;(st.events||[]).forEach(function(x){if(x.areaId==="fitness")x.areaId="health";});(st.tasks||[]).forEach(function(x){if(x.areaId==="fitness")x.areaId="health";});(st.goals||[]).forEach(function(g){if(g.area==="fitness")g.area="health";});}
  if(!st.areas.finances)st.areas.finances={name:"Finances"};
  var wantPeople=[{id:"amy",name:"Amy",relation:"wife"},{id:"hannah",name:"Hannah",relation:"daughter"},{id:"jacob",name:"Jake",relation:"son"},{id:"leah",name:"Leah",relation:"daughter"},{id:"lucas",name:"Lucas",relation:"son-in-law"},{id:"addi",name:"Addi",relation:"future daughter-in-law"}];
  wantPeople.forEach(function(p){var ex=st.people&&st.people.find(function(x){return x.id===p.id;});if(ex){if(p.id==="jacob")ex.name="Jake";ex.area=ex.area||"parenting";}else{st.people=st.people||[];st.people.push({id:p.id,name:p.name,relation:p.relation,area:p.id==="amy"?"marriage":"parenting"});}});
@@ -70,14 +71,10 @@ function load(){try{var s=localStorage.getItem(LS_STATE);if(!s)return defaultSta
  st.keyDates=st.keyDates&&st.keyDates.length?st.keyDates:defaultKeyDates();
  st.checklists=st.checklists&&st.checklists.length?st.checklists:defaultChecklists();
  st.settings=st.settings||JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
- st.ideas=st.ideas||[];
- st.echoes=st.echoes&&st.echoes.length?st.echoes:defaultState().echoes;
- ["events","tasks","followups","prayers","teachings"].forEach(function(k){st[k]=st[k]||[];});
- if(st.teachings&&st.teachings.length&&!st.ideas.length){st.teachings.forEach(function(t){st.ideas.push({id:uid(),text:t.topic+(t.notes?" - "+t.notes:""),ts:Date.now(),done:false,converted:null});});}
+ st.ideas=st.ideas||[];st.echoes=st.echoes&&st.echoes.length?st.echoes:defaultState().echoes;
+ ["events","tasks","followups","prayers"].forEach(function(k){st[k]=st[k]||[];});
  return st;}catch(e){return defaultState();}}
 var S=load();
-function migrateEvents(){S.events.forEach(function(e){if(!e.type)e.type=KIND2TYPE[e.kind]||"note";if(!e.title&&e.kind&&KINDS[e.kind])e.title=KINDS[e.kind].label;});}
-migrateEvents();
 var saveTimer=null,pushTimer=null;
 function save(){localStorage.setItem(LS_STATE,JSON.stringify(S));clearTimeout(saveTimer);saveTimer=setTimeout(function(){flash("Saved");},150);if(window.SYNCcfg&&SYNCcfg.auto&&SYNCcfg.token&&typeof schedulePush==="function")schedulePush();}
 function flash(msg){var f=document.getElementById("flash");f.textContent=msg||"Saved";f.classList.add("show");clearTimeout(flash._t);flash._t=setTimeout(function(){f.classList.remove("show");},1200);}
@@ -98,6 +95,8 @@ function goalScore(g){
  return Math.round(Math.max(20,50-30*((d-3*iv)/iv)));
 }
 function rawScore(evs,base){base=(base===undefined)?settings().baseline:base;if(!evs.length)return base;var bonus=0,last=0;evs.forEach(function(e){var d=daysSince(e.ts);if(d>90)return;bonus+=(e.weight||typeWeight(e))*clamp(1-d/45,0,1);if(d>last)last=d;});return clamp(Math.round(settings().baseline-1.4*clamp(last,0,30)+bonus),0,100);}
+function migrateEvents(){S.events.forEach(function(e){if(!e.type)e.type=KIND2TYPE[e.kind]||"note";if(!e.title&&e.kind&&KINDS[e.kind])e.title=KINDS[e.kind].label;});}
+migrateEvents();
 function eventsFor(areaId,personId){return S.events.filter(function(e){return e.areaId===areaId&&(personId?e.personId===personId:!e.personId);});}
 function areaGoals(id){return S.goals.filter(function(g){return g.area===id;});}
 function personGoals(pid){return S.goals.filter(function(g){return g.personId===pid;});}
@@ -111,9 +110,9 @@ function trend(id){var g=areaGoals(id);var any=g.some(function(gg){var e=lastGoa
 function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function personName(id){var p=S.people.find(function(x){return x.id===id;});return p?p.name:"";}
 function when(ts){var d=daysSince(ts);if(d===0)return "today";if(d===1)return "yesterday";if(d<7)return d+" days ago";if(d<30)return Math.floor(d/7)+" wk ago";return Math.floor(d/30)+" mo ago";}
-function fmtDate(ts){var d=new Date(ts);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
-var AREA_IDS=["faith","marriage","parenting","health","fitness","finances","friendships"];
-var tab="today",currentArea=null,currentPerson=null;
+var AREA_IDS=["faith","marriage","parenting","health","finances","friendships"];
+var AREA_ICONS={faith:"\u271D\uFE0F",marriage:"\uD83D\uDC8D",parenting:"\uD83C\uDFE1",health:"\uD83D\uDCAA",finances:"\uD83D\uDCB0",friendships:"\uD83E\uDD1D"};
+var tab="today",openDetail=null,currentPerson=null;
 function el(id){return document.getElementById(id);}
 function meterBar(v,cls){return '<div class="bar"><i class="'+cls+'" style="width:'+v+'%"></i></div>';}
 function personChip(k){var ps=personScore(k);var c=scoreClass(ps);return '<span class="submeter" data-person="'+k.id+'" title="'+scoreLabel(ps)+'"><span class="sm-dot '+c+'"></span><span class="sm-name">'+esc(k.name)+'</span><span class="sm-bar"><i class="'+c+'" style="width:'+ps+'%"></i></span><span class="sm-num">'+ps+'</span></span>';}
