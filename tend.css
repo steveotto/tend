@@ -397,3 +397,26 @@ details.moor .moor-body{padding:2px 18px 14px}
 .person-settings-box{max-width:720px;width:min(720px,94vw);max-height:85vh;overflow-y:auto}
 .settings-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .settings-head h3{font-size:18px;margin-bottom:0}
+
+.today-ripple{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+.today-ripple>span{flex:1;min-width:160px;font-size:13px;color:var(--ink-soft)}
+.ripple-dialog{position:fixed;inset:0;margin:auto;width:min(640px,94vw);max-height:85vh;overflow:auto;border:1px solid var(--line);border-radius:20px;padding:24px;background:var(--card);color:var(--ink);box-shadow:0 16px 80px #17251e40;z-index:100}
+.ripple-dialog::backdrop{background:#17251e66}
+.profile-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:24px 0 12px}
+.profile-tabs button{display:flex;align-items:center;gap:8px;min-height:44px;padding:8px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink-soft)}
+.profile-tabs button[aria-selected="true"]{background:var(--mist);border-color:var(--forest);color:var(--forest-deep)}
+.tab-count{display:grid;place-items:center;min-width:22px;height:22px;border-radius:99px;padding:0 5px;background:var(--forest);color:white;font-size:11px;font-weight:600}
+.profile-tab-panel[hidden]{display:none}
+.moment-row{display:grid;grid-template-columns:110px 110px minmax(0,1fr) auto;align-items:start}
+.moment-row .kind{white-space:normal;overflow-wrap:anywhere}
+.moment-row .when{white-space:normal}
+@media(max-width:600px){.moment-row{grid-template-columns:78px 80px minmax(0,1fr);gap:8px}.moment-row .entry-actions{grid-column:3;justify-self:end}.profile-tabs{gap:4px}.profile-tabs button{padding:8px}}
+
+.collection-icon{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.today-ripple .ripple-nudge{flex:1;margin:0;align-items:center;min-width:220px}
+.ripple-nudge>span:nth-child(2){flex:1}
+.ripple-nudge .iconbtn{flex:none;min-width:36px;min-height:36px;color:var(--forest-deep)}
+.notes-checklist+.notes-checklist{margin-top:24px;padding-top:24px;border-top:1px solid var(--line)}
+.notes-history{margin-top:12px}.notes-history summary{cursor:pointer;font-size:13px;color:var(--ink-soft);padding:10px 0}
+.person-prayer-add{padding-bottom:24px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+.person-prayer-add .field{display:block;margin-bottom:12px}.person-prayer-add input,.person-prayer-add textarea{display:block;width:100%;margin-top:6px}
