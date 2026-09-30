@@ -1,5 +1,6 @@
 
 
+
 "use strict";
 /* ============ actions & bindings ============ */
 function logEvent(areaId,personId,type,title,note,whenTs,goalId,rhythmId,extra){var _ev={id:uid(),ts:(whenTs||Date.now()),areaId:areaId,personId:personId||null,type:type||"inperson",kind:type||"inperson",title:title||"",note:note||"",goalId:goalId||null,rhythmId:rhythmId||null,weight:(ETYPES[type]?ETYPES[type].w:3)};if(extra)for(var _k in extra)_ev[_k]=extra[_k];S.events.push(_ev);save();render();}
@@ -132,7 +133,9 @@ function bind(){
   if(b=t.closest("#syncPull")){pullNow(true);return;}
   if(b=t.closest("#syncPush")){pushNow();return;}
   if(b=t.closest("#syncExport")){var blob=new Blob([JSON.stringify(S,null,2)],{type:"application/json"});var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="tend-backup-"+new Date().toISOString().slice(0,10)+".json";a.click();return;}
-  if(b=t.closest("#prayerAdd")){var nt=el("prayerNew");if(nt&&nt.value.trim()){S.prayers.push({id:uid(),category:el("prayerCat").value,personId:el("prayerPerson").value||null,text:nt.value.trim(),details:el("prayerDetails").value.trim(),added:new Date().toISOString().slice(0,10),answered:false,prayed:0});save();render();}return;}
+  if(b=t.closest("#prayerFormOpen")){prayerFormOpen=true;render();return;}
+  if(b=t.closest("#prayerFormCancel")){prayerFormOpen=false;render();return;}
+  if(b=t.closest("#prayerAdd")){var nt=el("prayerNew");if(nt&&nt.value.trim()){S.prayers.push({id:uid(),category:el("prayerCat").value,personId:el("prayerPerson").value||null,text:nt.value.trim(),details:el("prayerDetails").value.trim(),added:new Date().toISOString().slice(0,10),answered:false,prayed:0});prayerFormOpen=false;save();render();flash("Prayer added");}else flash("Give the prayer a title first");return;}
   if(b=t.closest("#echoAdd")){var nt=el("echoNew");if(nt&&nt.value.trim()){S.echoes.push({id:uid(),title:nt.value.trim(),note:"",items:[]});save();render();}return;}
   if(b=t.closest("#ideaAdd")){var nt=el("ideaNew");if(nt&&nt.value.trim()){S.ideas.push({id:uid(),text:nt.value.trim(),ts:Date.now(),done:false,converted:null});save();render();}return;}
   if(b=t.closest("#introOk")){try{localStorage.setItem("tend:introSeen","1");}catch(err){}render();return;}
@@ -183,3 +186,5 @@ function bind(){
 
 /* one-time migration: legacy howToPray textarea -> prayernote checklist item (v20260930u) */
 (function(){var ch=false;S.people.forEach(function(p){var t=String(p.howToPray||"").trim();if(t&&!p.prayerNotesMigrated&&!S.followups.some(function(f){return f.personId===p.id&&(f.kind||"followup")==="prayernote";})) {p.prayerNotesMigrated=true;S.followups.push({id:uid(),personId:p.id,kind:"prayernote",text:t,done:false,ts:Date.now()});p.howToPray="";ch=true;}});if(ch)save();})();
+
+
