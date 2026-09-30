@@ -1,14 +1,7 @@
 {
-  "synced": "2026-09-29T21:54:29.805Z",
+  "synced": "2026-09-30T00:51:53.307Z",
   "source": "iCloud published feed",
   "events": [
-    {
-      "t": "Canada",
-      "s": "2026-08-27T00:00:00",
-      "e": "2026-08-31T00:00:00",
-      "allDay": true,
-      "cal": "Home"
-    },
     {
       "t": "Cancel Global Work",
       "s": "2026-08-31T00:00:00",
