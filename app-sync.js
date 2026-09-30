@@ -2,6 +2,7 @@
 /* ============ GitHub sync ============ */
 var SYNCcfg=(function(){try{return JSON.parse(localStorage.getItem(LS_SYNC))||{auto:true};}catch(e){return {auto:true};}})();
 window.SYNCcfg=SYNCcfg;
+var TEND_VERSION="v20260930p";window.TEND_VERSION=TEND_VERSION; /* bump this with every code deploy - shown in Settings */
 window._tendDirty=false; /* local changes not yet pushed - auto-pull must not clobber them */
 function ghHeaders(){return {"Authorization":"Bearer "+SYNCcfg.token,"Accept":"application/vnd.github+json"};}
 function updateSyncDot(){var dot=el("syncDot"),lbl=el("syncLabel");if(!SYNCcfg.token){dot.className="syncdot";lbl.textContent="local only";}else{dot.className="syncdot on";lbl.textContent="synced";}}
@@ -49,8 +50,14 @@ function forcePullNow(){
   render();
  }).catch(function(e){console.error(e);updateSyncErr();flash(e.message);});}
 window.forcePullNow=forcePullNow;
-/* inject the Force pull button next to Pull/Push in the Sync settings */
-setInterval(function(){var pb=document.getElementById("syncPull");if(pb&&!document.getElementById("syncForcePull")){var fb=document.createElement("button");fb.className="btn ghost";fb.id="syncForcePull";fb.type="button";fb.title="Replace ALL local data with the cloud copy - use when the cloud is the truth";fb.textContent="Force pull (cloud wins)";pb.parentNode.insertBefore(fb,pb.nextSibling);}},500);
+/* inject the Force pull button + version/status line into the Sync settings */
+setInterval(function(){var pb=document.getElementById("syncPull");if(!pb)return;
+ if(!document.getElementById("syncForcePull")){var fb=document.createElement("button");fb.className="btn ghost";fb.id="syncForcePull";fb.type="button";fb.title="Replace ALL local data with the cloud copy - use when the cloud is the truth";fb.textContent="Force pull (cloud wins)";pb.parentNode.insertBefore(fb,pb.nextSibling);}
+ var line=document.getElementById("syncVersionLine");
+ if(!line){line=document.createElement("div");line.id="syncVersionLine";line.style.cssText="font-size:12.5px;color:var(--ink-faint);margin:8px 0 2px;line-height:1.6";pb.parentNode.insertBefore(line,pb);}
+ var ls=SYNCcfg.lastSync?new Date(SYNCcfg.lastSync).toLocaleTimeString():"never";
+ line.innerHTML="<b style='color:var(--ink)'>Code: "+TEND_VERSION+"</b> &middot; data last synced: "+ls+(window._tendDirty?" &middot; <span style='color:#B3402E;font-weight:700'>unpushed local changes</span>":" &middot; <span style='color:var(--forest);font-weight:700'>all changes pushed</span>");
+},500);
 document.addEventListener("click",function(e){var t=e.target;if(t&&t.closest&&t.closest("#syncForcePull")){forcePullNow();}});
 /* init */
 el("headDate").textContent=(function(){var d=new Date();var m=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];return d.getDate()+" "+m[d.getMonth()]+" "+d.getFullYear();})();
