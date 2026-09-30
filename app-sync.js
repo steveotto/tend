@@ -1,8 +1,9 @@
+
 "use strict";
 /* ============ GitHub sync ============ */
 var SYNCcfg=(function(){try{return JSON.parse(localStorage.getItem(LS_SYNC))||{auto:true};}catch(e){return {auto:true};}})();
 window.SYNCcfg=SYNCcfg;
-var TEND_VERSION="v20260930p";window.TEND_VERSION=TEND_VERSION; /* bump this with every code deploy - shown in Settings */
+var TEND_VERSION="v20260930q";window.TEND_VERSION=TEND_VERSION; /* bump this with every code deploy - shown in Settings */
 window._tendDirty=false; /* local changes not yet pushed - auto-pull must not clobber them */
 function ghHeaders(){return {"Authorization":"Bearer "+SYNCcfg.token,"Accept":"application/vnd.github+json"};}
 function updateSyncDot(){var dot=el("syncDot"),lbl=el("syncLabel");if(!SYNCcfg.token){dot.className="syncdot";lbl.textContent="local only";}else{dot.className="syncdot on";lbl.textContent="synced";}}
@@ -66,3 +67,4 @@ if(SYNCcfg.token)pullNow(false);
 function bootTend(){if(typeof render==="function"){render();}else{setTimeout(bootTend,400);}}
 bootTend();
 window.addEventListener("focus",function(){if(SYNCcfg.token)pullNow(false);});
+
