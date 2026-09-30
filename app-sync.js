@@ -28,10 +28,30 @@ function pullNow(explicit){
   if(!r.ok)throw new Error("pull failed ("+r.status+")");return r.json();
  }).then(function(j){
   if(!j)return;var remote=JSON.parse(decodeURIComponent(escape(atob(j.content))));
-  if(window._tendDirty){if(explicit)flash("Local changes not pushed yet - pull skipped to protect them");return;}
+  if(window._tendDirty){if(explicit)flash("Local changes not pushed - pull skipped. Push first, or use Force pull if cloud wins.");return;}
   if(remote.events&&remote.events.length>=S.events.length){S=ensureShape(remote);localStorage.setItem(LS_STATE,JSON.stringify(S));}
+  else if(explicit){flash("Cloud is older/smaller than local - kept local. Use Force pull (cloud wins) to overwrite.");return;}
   SYNCcfg.lastSync=Date.now();localStorage.setItem(LS_SYNC,JSON.stringify(SYNCcfg));updateSyncDot();flash("Pulled from GitHub");render();
  }).catch(function(e){console.error(e);updateSyncErr();if(explicit)flash(e.message);});}
+/* force pull: cloud is the truth - replace local no matter what */
+function forcePullNow(){
+ if(!SYNCcfg.token||!SYNCcfg.owner||!SYNCcfg.repo){flash("Configure sync first");return;}
+ if(!confirm("Replace ALL data on this device with the cloud copy? This overwrites local changes."))return;
+ var url="https://api.github.com/repos/"+SYNCcfg.owner+"/"+SYNCcfg.repo+"/contents/state.json";
+ fetch(url,{headers:ghHeaders()}).then(function(r){
+  if(!r.ok)throw new Error("pull failed ("+r.status+")");return r.json();
+ }).then(function(j){
+  var remote=JSON.parse(decodeURIComponent(escape(atob(j.content))));
+  S=ensureShape(remote);localStorage.setItem(LS_STATE,JSON.stringify(S));
+  window._tendDirty=false;
+  SYNCcfg.lastSync=Date.now();localStorage.setItem(LS_SYNC,JSON.stringify(SYNCcfg));updateSyncDot();
+  flash("Cloud wins - local data replaced");
+  render();
+ }).catch(function(e){console.error(e);updateSyncErr();flash(e.message);});}
+window.forcePullNow=forcePullNow;
+/* inject the Force pull button next to Pull/Push in the Sync settings */
+setInterval(function(){var pb=document.getElementById("syncPull");if(pb&&!document.getElementById("syncForcePull")){var fb=document.createElement("button");fb.className="btn ghost";fb.id="syncForcePull";fb.type="button";fb.title="Replace ALL local data with the cloud copy - use when the cloud is the truth";fb.textContent="Force pull (cloud wins)";pb.parentNode.insertBefore(fb,pb.nextSibling);}},500);
+document.addEventListener("click",function(e){var t=e.target;if(t&&t.closest&&t.closest("#syncForcePull")){forcePullNow();}});
 /* init */
 el("headDate").textContent=(function(){var d=new Date();var m=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];return d.getDate()+" "+m[d.getMonth()]+" "+d.getFullYear();})();
 updateSyncDot();
