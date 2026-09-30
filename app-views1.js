@@ -193,7 +193,6 @@ function draftRow(p){
 function actDoneAdd(pid,id){window._actDone[pid]=window._actDone[pid]||[];if(window._actDone[pid].indexOf(id)<0)window._actDone[pid].push(id);}
 function prayedThisWeek(pid){var d=new Date(),sod=new Date(d.getFullYear(),d.getMonth(),d.getDate()-d.getDay()),n=0;S.events.forEach(function(e){if(e.personId===pid&&(e.kind==="prayer"||e.type==="prayer")&&e.ts>=sod.getTime())n++;});return n;}
 function actQueueHTML(p){
- var pTouch=personTouchInfo(p);
  var first=esc(p.name.split(" ")[0]);
  var doneSess=window._actDone[p.id]||[];
  /* rhythm queue: most overdue first, max 2 visible; session-tended rhythms pad the empty slots */
@@ -233,8 +232,12 @@ function actQueueHTML(p){
  var out='<div class="card act" style="margin-bottom:14px"><div class="qhead"><div class="subhead" style="margin:0">Today with '+first+'</div><span><span class="qpill'+(waiting?"":" clear")+'">'+(waiting?waiting+" in queue":"all tended \u2713")+'</span> <span class="hint">tend one, the next steps up</span></span></div>';
  if(rows.length)out+=rows.join("");
  else out+='<div class="empty" style="margin-top:8px">Nothing waiting - maybe log a ripple below.</div>';
- if(pTouch.days!==0)out+='<div class="sugg">\uD83D\uDCAC Daily ripple: '+esc(touchSuggestion(p))+'</div>';
  out+='</div>';
+ /* one coaching nudge, at the bottom of the queue */
+ var llq=p.loveLanguage||"",bdq=bdayInfo(p.birthday),nudq=[];
+ if(bdq&&bdq.days<=14)nudq.push('<b>Birthday '+esc(bdq.label)+' is in '+bdq.days+' day'+(bdq.days===1?"":"s")+' - plan something.</b>');
+ if(llq)nudq.push('<b>'+esc(LL_LANGUAGES[llq])+' is '+first+"&#39;s love language:</b> "+LL_NUDGES[llq]);
+ if(nudq.length)out+='<div class="nudge"><span aria-hidden="true">\uD83D\uDCA1</span><ul class="nudge-list">'+nudq.map(function(item){return "<li>"+item+"</li>";}).join("")+'</ul></div>';
  return out;}
 function personProfile(pid){
  var p=S.people.find(function(x){return x.id===pid;});if(!p)return "";
@@ -266,17 +269,12 @@ function personProfile(pid){
   out+='<div class="pmeters"><div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val '+cCls+'">'+cScore+'</span></div><div class="bar"><i class="'+cCls+'" style="width:'+cScore+'%"></i></div><div class="pm-note">'+(cInfo.last?("last: "+when(cInfo.last.ts)):"no connections yet")+'</div></div>';
   out+='<div class="pmeter"><div class="pm-lab"><span>Prayer</span><span class="pm-val '+pCls+'">'+pScore+'</span></div><div class="bar"><i class="'+pCls+'" style="width:'+pScore+'%"></i></div><div class="pm-note">'+(pInfo.last?("last: "+when(pInfo.last.ts)):"no prayers logged")+'</div></div></div>';
  }
- var nud=[];
- if(bd&&bd.days<=14)nud.push('<b>Birthday '+esc(bd.label)+' is in '+bd.days+' day'+(bd.days===1?"":"s")+' - plan something.</b>');
- if(ll)nud.push('<b>'+esc(LL_LANGUAGES[ll])+' is '+first+"&#39;s love language:</b> "+LL_NUDGES[ll]);
- if(nud.length)out+='<div class="nudge"><span aria-hidden="true">\uD83D\uDCA1</span><ul class="nudge-list">'+nud.map(function(item){return "<li>"+item+"</li>";}).join("")+'</ul></div>';
  out+='</div>';
  /* today: the action queue */
  out+=actQueueHTML(p);
  /* ripples: quick log */
  var edEv=editingConn?(S.events.find(function(z){return z.id===editingConn;})||{}):null;
  out+='<div class="card" style="margin-bottom:22px"><div class="subhead">Log a ripple with '+first+'<span class="hint" style="margin-left:8px;text-transform:none;letter-spacing:0;font-weight:400">small moments of care - they add up</span></div>';
- if(pTouch.days!==0)out+='<div class="touchsugg">\uD83D\uDCAC Suggestion: '+esc(touchSuggestion(p))+'</div>';
  var rippleKind=edEv?(edEv.kind||edEv.type):"text";
  if(edEv&&!RIPPLE_TYPES[rippleKind])rippleKind="other";
  var rippleTime=edEv?new Date(edEv.ts||Date.now()):new Date();
