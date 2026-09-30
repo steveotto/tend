@@ -46,7 +46,7 @@ function bind(){
    }else if(rhythmDraft&&rhythmDraft.pid===ra){flash("Give the rhythm a name first");}
    else{rhythmDraft={pid:ra,text:"",category:"connection",freq:"weekly",tod:"anytime",durUnit:"min",durVal:0};render();}
    return;}
-  if(b=t.closest("[data-sparkdo]")){var spd=b.getAttribute("data-sparkdo").split("|");var spp=S.people.find(function(x){return x.id===spd[0];});var ss=spp&&(spp.sparks||[]).find(function(x){return x.id===spd[1];});if(ss){ss.done=true;ss.doneTs=Date.now();actDoneAdd(spp.id,ss.id);logEvent(spp.area,spp.id,"quality",ss.text,"Spark landed",Date.now(),null,null,{origin:"spark"});flash("Spark landed - ripple logged");}return;}
+  if(b=t.closest("[data-sparkdo]")){var spd=b.getAttribute("data-sparkdo").split("|");var spp=S.people.find(function(x){return x.id===spd[0];});var ss=spp&&(spp.sparks||[]).find(function(x){return x.id===spd[1];});if(ss){ss.done=true;ss.doneTs=Date.now();actDoneAdd(spp.id,ss.id);logEvent(spp.area,spp.id,"quality",ss.text,"Spark landed",Date.now(),null,null,{origin:"spark"});flash("Spark landed - connection logged");}return;}
   if(b=t.closest("[data-sedit]")){var sei=b.getAttribute("data-sedit");editSparkId=(editSparkId===sei)?null:sei;render();return;}
   if(b=t.closest("[data-scleardate]")){var scs=findSparkById(editSparkId);if(scs){scs.by=null;scs.time=null;save();render();flash("Date removed - waits in Free moment");}return;}
   if(b=t.closest("[data-pphorm]")){var prp=S.people.find(function(x){return x.id===b.getAttribute("data-pphorm");});if(prp){prp.photo=null;save();render();flash("Photo removed");}return;}
@@ -58,8 +58,8 @@ function bind(){
     var pTtl=el("momentTitle")?el("momentTitle").value.trim():"";var pNt=el("momentNote")?el("momentNote").value.trim():"";
     var pTitle=pTtl||("Time with "+psp.name);
     window._rippleModalOpen=false;var editingRipple=editingConn;editingConn=null;
-    if(editingRipple){updateEvent(editingRipple,{kind:pk,type:(ETYPES[pk]?pk:""),ts:pTs,title:pTitle,note:pNt,allDay:pAll,rippleLabel:rippleLabel});editingConn=null;flash("Ripple updated \u2713");}
-    else{logEvent(psp.area,psp.id,pk,pTitle,pNt,pTs,null,null,{allDay:pAll,rippleLabel:rippleLabel});flash("Ripple logged \u2713");}}
+    if(editingRipple){updateEvent(editingRipple,{kind:pk,type:(ETYPES[pk]?pk:""),ts:pTs,title:pTitle,note:pNt,allDay:pAll,rippleLabel:rippleLabel});editingConn=null;flash("Connection updated \u2713");}
+    else{logEvent(psp.area,psp.id,pk,pTitle,pNt,pTs,null,null,{allDay:pAll,rippleLabel:rippleLabel});flash("Connection logged \u2713");}}
    return;}
   if(b=t.closest("[data-peditcancel]")){window._rippleModalOpen=false;editingConn=null;render();return;}
   if(b=t.closest("[data-spdel]")){var sdd=b.getAttribute("data-spdel").split("|");var sdp=S.people.find(function(x){return x.id===sdd[0];});if(sdp){sdp.sparks=(sdp.sparks||[]).filter(function(x){return x.id!==sdd[1];});save();render();}return;}
@@ -108,14 +108,14 @@ function bind(){
    if(p){var dv=el("momentDate")?el("momentDate").value:"";var tv=el("momentTime")?el("momentTime").value:"";var nv=el("momentNote")?el("momentNote").value.trim():"";var tsN=new Date((dv||todayStr())+"T"+(tv||"12:00")+":00").getTime();var k=b.getAttribute("data-plog");
     window._rippleModalOpen=false;var editingRipple=editingConn;editingConn=null;
     if(editingRipple){updateEvent(editingRipple,{kind:k,type:k,ts:tsN,note:nv,title:"Time with "+p.name});editingConn=null;}
-    else{logEvent(p.area,currentPerson,k,"Time with "+p.name,nv,tsN);flash("Ripple logged \u2713");}}
+    else{logEvent(p.area,currentPerson,k,"Time with "+p.name,nv,tsN);flash("Connection logged \u2713");}}
    return;}
   if(b=t.closest("[data-plogother]")){var p2=S.people.find(function(x){return x.id===currentPerson;});
    if(p2){var custom=prompt("What kind of moment? (e.g. Golf, Movie, Project together)");if(!custom)return;
     var dv2=el("momentDate")?el("momentDate").value:"";var tv2=el("momentTime")?el("momentTime").value:"";var nv2=el("momentNote")?el("momentNote").value.trim():"";var ts2N=new Date((dv2||todayStr())+"T"+(tv2||"12:00")+":00").getTime();
     window._rippleModalOpen=false;var editingRipple=editingConn;editingConn=null;
     if(editingRipple){updateEvent(editingRipple,{kind:custom,type:"",ts:ts2N,note:nv2,title:"Time with "+p2.name});editingConn=null;}
-    else{logEvent(p2.area,currentPerson,custom,"Time with "+p2.name,nv2,ts2N);flash("Ripple logged \u2713");}}
+    else{logEvent(p2.area,currentPerson,custom,"Time with "+p2.name,nv2,ts2N);flash("Connection logged \u2713");}}
    return;}
   if(b=t.closest("[data-evedit]")){var ev=S.events.find(function(z){return z.id===b.getAttribute("data-evedit");});
    if(ev){editingConn=ev.id;window._rippleModalOpen=true;render();var dialog=el("rippleDialog");if(dialog){dialog.removeAttribute("open");dialog.showModal();}flash("Editing - update the form and hit Update");}return;}
@@ -186,5 +186,4 @@ function bind(){
 
 /* one-time migration: legacy howToPray textarea -> prayernote checklist item (v20260930u) */
 (function(){var ch=false;S.people.forEach(function(p){var t=String(p.howToPray||"").trim();if(t&&!p.prayerNotesMigrated&&!S.followups.some(function(f){return f.personId===p.id&&(f.kind||"followup")==="prayernote";})) {p.prayerNotesMigrated=true;S.followups.push({id:uid(),personId:p.id,kind:"prayernote",text:t,done:false,ts:Date.now()});p.howToPray="";ch=true;}});if(ch)save();})();
-
 

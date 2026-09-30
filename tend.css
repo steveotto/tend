@@ -187,7 +187,7 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .menu-area .ma-score{margin-left:auto;font-size:15px;font-variant-numeric:tabular-nums}
 .ma-score.green{color:#12B76A}.ma-score.yellow{color:#C77E00}.ma-score.red{color:#F04531}
 .planblock{margin-bottom:12px;padding:18px 20px}
-.planblock.current{border-color:var(--mint);box-shadow:0 0 0 3px rgba(103,197,163,.15)}
+.planblock.current{border-color:var(--mint);box-shadow:0 0 0 3px rgba(63,198,143,.15)}
 .planitem{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px dashed var(--line)}
 .planitem:last-child{border-bottom:none}
 .pi-main{flex:1;min-width:0}
@@ -398,7 +398,7 @@ details.moor summary .moor-cnt{margin-left:auto;font-size:11px;color:var(--ink-f
 details.moor summary .chev{color:var(--ink-faint);font-size:11px;transition:transform .2s}
 details.moor[open] summary .chev{transform:rotate(90deg)}
 details.moor .moor-body{padding:2px 18px 14px}
-.person-settings-box{max-width:720px;width:min(720px,94vw);max-height:85vh;overflow-y:auto}
+.person-settings-box{max-width:860px;width:min(860px,94vw);max-height:85vh;overflow-y:auto}
 .settings-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .settings-head h3{font-size:18px;margin-bottom:0}
 
