@@ -1,3 +1,4 @@
+
 :root{
   --tend-canvas:#FBFCFB; --tend-surface:#FFFFFF; --tend-ink:#17251E; --tend-secondary:#51605A;
   --tend-forest:#1E9C68; --tend-mint:#3FC68F; --tend-mist:#E3F6ED; --tend-line:#DEE8E1;
@@ -368,3 +369,31 @@ button.prayed-pill:hover{border-color:var(--forest);background:var(--mist)}
 .planblock.current{border:2px solid var(--forest)}
 .upcoming-rhythms{margin-top:16px}
 @media(max-width:520px){.plan-range{display:block;margin-left:20px}.plan-pills{margin-left:0;display:flex;margin-top:4px}}
+
+
+/* ---- v20260930q: person profile action queue + settings modal ---- */
+.profile-head-actions{display:flex;gap:8px}
+.pbtn{width:36px;height:36px;border:1px solid var(--line);border-radius:10px;background:#fff;display:grid;place-items:center;font-size:15px;color:var(--ink-soft);transition:all .15s;padding:0}
+.pbtn:hover{border-color:var(--mint);color:var(--ink)}
+.card.act{border:1.5px solid var(--mint);box-shadow:0 0 0 3px rgba(63,198,143,.12)}
+.qhead{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.qpill{font-size:10.5px;font-weight:700;color:#8A6D1F;background:#F7EED3;border-radius:99px;padding:2px 9px;letter-spacing:.03em;white-space:nowrap}
+.qpill.clear{background:var(--mist);color:var(--forest-deep)}
+.actrow{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px dashed var(--line);animation:rise .45s ease both}
+.actrow:last-of-type{border-bottom:none}
+.actrow .pi-label{font-size:15px}
+.actrow.done{opacity:.45}
+.actrow.done .pi-label{text-decoration:line-through;text-decoration-color:var(--mint)}
+.act-ic{width:8px;height:8px;border-radius:50%;flex:none}
+.praycount{font-size:11px;color:#5B7BA6;font-weight:600;white-space:nowrap}
+.sugg{background:var(--mist);border-radius:10px;padding:8px 12px;font-size:12.5px;margin-top:12px}
+details.moor{border:1px solid var(--line);border-radius:14px;padding:0;margin-bottom:10px;background:#fff}
+details.moor summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:9px;padding:13px 16px;font-weight:600;font-size:14px}
+details.moor summary::-webkit-details-marker{display:none}
+details.moor summary .moor-cnt{margin-left:auto;font-size:11px;color:var(--ink-faint);font-weight:600;text-align:right}
+details.moor summary .chev{color:var(--ink-faint);font-size:11px;transition:transform .2s}
+details.moor[open] summary .chev{transform:rotate(90deg)}
+details.moor .moor-body{padding:2px 18px 14px}
+.person-settings-box{max-width:480px;max-height:85vh;overflow-y:auto}
+.settings-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.settings-head h3{font-size:18px;margin-bottom:0}
