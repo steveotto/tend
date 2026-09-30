@@ -1,7 +1,9 @@
+
 "use strict";
 /* ============ views: prayer, echo, offload, settings, sync ============ */
 var PRAYER_CATS=["Family","Marriage","Kids","Friends","Work & Ministry","Church & Pastors","World & Others"];
 var editingPrayerId=null;
+var prayerFormOpen=false;
 function prayerDate(value){if(!value)return "";var d=new Date(value+"T12:00:00");return isNaN(d.getTime())?value:String(d.getDate()).padStart(2,"0")+" "+["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"][d.getMonth()]+" "+d.getFullYear();}
 function prayerRow(p){
  var person=S.people.find(function(person){return person.id===p.personId;});
@@ -27,7 +29,9 @@ function prayerList(items){
 }
 function renderPrayer(){
  var out='<div class="sectiontitle" style="margin-top:6px"><h2>Prayer</h2><span class="hint">carry these people before God</span></div>';
- out+='<div class="card" style="margin-bottom:14px"><div class="addrow" style="margin:0"><select id="prayerCat">'+PRAYER_CATS.map(function(c){return '<option>'+c+'</option>';}).join("")+'</select><select id="prayerPerson"><option value="">- person (optional) -</option>'+S.people.map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+'</option>';}).join("")+'</select></div><label class="field prayer-new-field">Title<input id="prayerNew" placeholder="Prayer title"></label><label class="field prayer-new-field">Details<textarea id="prayerDetails" placeholder="Details (optional)"></textarea></label><button class="btn" id="prayerAdd">Add prayer</button></div>';
+ out+='<div class="card" style="margin-bottom:14px">'+(prayerFormOpen?
+ '<div class="addrow" style="margin:0"><select id="prayerCat">'+PRAYER_CATS.map(function(c){return '<option>'+c+'</option>';}).join("")+'</select><select id="prayerPerson"><option value="">- person (optional) -</option>'+S.people.map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+'</option>';}).join("")+'</select></div><label class="field prayer-new-field">Title<input id="prayerNew" placeholder="Prayer title"></label><label class="field prayer-new-field">Details<textarea id="prayerDetails" placeholder="Details (optional)"></textarea></label><div style="display:flex;gap:8px"><button class="btn" id="prayerAdd">Save prayer</button><button class="btn ghost" id="prayerFormCancel">Cancel</button></div>'
+ :'<button class="btn" id="prayerFormOpen">+ Add prayer</button>')+'</div>';
  PRAYER_CATS.forEach(function(cat){var items=S.prayers.filter(function(p){return p.category===cat;});if(items.length)out+='<div class="card prayer-cat"><div class="subhead">'+esc(cat)+'</div>'+prayerList(items)+'</div>';});
  if(!S.prayers.length)out+='<div class="empty">Prayers tagged with a person also show up on their profile.</div>';
  return out;
@@ -90,3 +94,4 @@ function renderSync(){
  out+='<div class="field"><label>Fine-grained token (Contents: read & write, tend-data only)</label><input id="syncToken" type="password" value="'+esc(c.token||"")+'" placeholder="github_pat_..."></div>';
  out+='<div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" id="syncSave">Save settings</button><button class="btn ghost" id="syncPull">Pull now</button><button class="btn ghost" id="syncPush">Push now</button><button class="btn danger" id="syncExport">Download backup</button></div></div></div>';
  return out;}
+
