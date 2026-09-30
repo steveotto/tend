@@ -1,3 +1,4 @@
+
 "use strict";
 /* ============ views: dashboard, area pages, people ============ */
 function renderNav(){
@@ -188,6 +189,53 @@ function draftRow(p){
  out+='<select data-rfield="'+idf+'|durVal"><option value="0">- # -</option>'+Array.apply(null,{length:DUR_UNITS[du].max}).map(function(_,i){var n=i+1;return '<option value="'+n+'"'+(dv===n?" selected":"")+'>'+n+'</option>';}).join("")+'</select></div>';
  out+='<div class="hint" style="font-size:11px;color:var(--ink-faint);margin:4px 0 2px">Name it, then hit Save Rhythm below.</div></div>';
  return out;}
+/* ---- action queue (Today with {name}) ---- */
+function actDoneAdd(pid,id){window._actDone[pid]=window._actDone[pid]||[];if(window._actDone[pid].indexOf(id)<0)window._actDone[pid].push(id);}
+function prayedThisWeek(pid){var d=new Date(),sod=new Date(d.getFullYear(),d.getMonth(),d.getDate()-d.getDay()),n=0;S.events.forEach(function(e){if(e.personId===pid&&(e.kind==="prayer"||e.type==="prayer")&&e.ts>=sod.getTime())n++;});return n;}
+function actQueueHTML(p){
+ var pTouch=personTouchInfo(p);
+ var first=esc(p.name.split(" ")[0]);
+ var doneSess=window._actDone[p.id]||[];
+ /* rhythm queue: most overdue first, max 2 visible; session-tended rhythms pad the empty slots */
+ var allR=(p.rhythms||[]).filter(function(r){return (r.category||"connection")!=="prayer";});
+ var waitR=allR.filter(function(r){return rhythmScore(r)<100&&doneSess.indexOf(r.id)<0;}).sort(function(a,b){return rhythmScore(a)-rhythmScore(b);});
+ var visR=waitR.slice(0,2);
+ var padR=[];
+ if(visR.length<2)doneSess.slice().reverse().forEach(function(id){if(padR.length<2-visR.length){var rr=allR.find(function(r){return r.id===id;});if(rr)padR.push(rr);}});
+ /* spark queue: max 2 visible */
+ var allS=openSparks(p);
+ var waitS=allS.filter(function(s){return doneSess.indexOf(s.id)<0;});
+ var visS=waitS.slice(0,2);
+ var padS=[];
+ if(visS.length<2)doneSess.slice().reverse().forEach(function(id){if(padS.length<2-visS.length){var ss2=allS.find(function(s){return s.id===id;});if(ss2)padS.push(ss2);}});
+ /* prayer queue: active prayers first, then the static prayer focus; one visible */
+ var allP=S.prayers.filter(function(x){return x.personId===p.id&&!x.answered&&!x.archived;});
+ var waitP=allP.filter(function(x){return doneSess.indexOf(x.id)<0;});
+ var visP=waitP.slice(0,1);
+ var hasFocus=p.prayerFocus&&p.prayerFocus.trim();
+ var focusOpen=hasFocus&&doneSess.indexOf("focus")<0;
+ if(!visP.length&&focusOpen)visP=[{id:"focus",focus:true,text:p.prayerFocus}];
+ var padP=[];
+ if(!visP.length)doneSess.slice().reverse().forEach(function(id){if(!padP.length){var pp2=(id==="focus")?{id:"focus",focus:true,text:p.prayerFocus}:allP.find(function(x){return x.id===id;});if(pp2)padP.push(pp2);}});
+ var waiting=waitR.length+waitS.length+waitP.length+(focusOpen&&!visP.length?0:0);
+ var rows=[];
+ function rhyRowQ(r,dim){
+  var rl=rhythmLast(r);
+  var sub=esc(rhythmFreqLabel(r))+(rhythmDueTxt(r)?" \u00B7 "+esc(rhythmDueTxt(r)):"")+(rl&&rhythmDaysSince(r)!==0?" \u00B7 last tended "+when(rl.ts):"");
+  return '<div class="actrow'+(dim?" done":"")+'"><span class="act-ic" style="background:'+personHealthColor(rhythmScore(r))+'"></span><div class="pi-main"><div class="pi-label">'+esc(r.text||"(unnamed rhythm)")+'</div><div class="pi-sub">'+sub+'</div></div>'+(dim?'<span class="praycount">Tended \u2713</span>':rhyDoneBtn(p.id+"|"+r.id))+'</div>';
+ }
+ visR.forEach(function(r){rows.push(rhyRowQ(r,false));});
+ padR.forEach(function(r){rows.push(rhyRowQ(r,true));});
+ visS.forEach(function(s){rows.push('<div class="actrow"><span class="act-ic" style="background:#B8912F"></span><div class="pi-main"><div class="pi-label"><span style="color:#B8912F">\u2726 </span>'+esc(s.text)+'</div><div class="pi-sub">'+esc(sparkDueTxt(s))+(s.time?" \u00B7 "+esc(fmtHM12(s.time)):"")+'</div></div><button class="btn mini sparkbtn" data-sparkdo="'+p.id+'|'+s.id+'">Do it</button></div>');});
+ padS.forEach(function(s){rows.push('<div class="actrow done"><span class="act-ic" style="background:#B8912F"></span><div class="pi-main"><div class="pi-label"><span style="color:#B8912F">\u2726 </span>'+esc(s.text)+'</div><div class="pi-sub">'+esc(sparkDueTxt(s))+'</div></div><span class="praycount">Done \u2713</span></div>');});
+ visP.forEach(function(x){rows.push('<div class="actrow"><span class="act-ic" style="background:#5B7BA6"></span><div class="pi-main"><div class="pi-label">'+(x.focus?'Prayer focus: ':'')+esc(x.text)+'</div><div class="pi-sub">'+(x.focus?"from your prayer profile":"active prayer")+'</div></div><span class="praycount">prayed '+prayedThisWeek(p.id)+'&times; this week</span><button class="btn mini ghost" data-prayquick="'+p.id+'" data-prayref="'+(x.focus?"focus":x.id)+'">Pray</button></div>');});
+ padP.forEach(function(x){rows.push('<div class="actrow done"><span class="act-ic" style="background:#5B7BA6"></span><div class="pi-main"><div class="pi-label">'+(x.focus?'Prayer focus: ':'')+esc(x.text)+'</div><div class="pi-sub">prayed today</div></div><span class="praycount">Prayed \u2713</span></div>');});
+ var out='<div class="card act" style="margin-bottom:14px"><div class="qhead"><div class="subhead" style="margin:0">Today with '+first+'</div><span><span class="qpill'+(waiting?"":" clear")+'">'+(waiting?waiting+" in queue":"all tended \u2713")+'</span> <span class="hint">tend one, the next steps up</span></span></div>';
+ if(rows.length)out+=rows.join("");
+ else out+='<div class="empty" style="margin-top:8px">Nothing waiting - maybe log a ripple below.</div>';
+ if(pTouch.days!==0)out+='<div class="sugg">\uD83D\uDCAC Daily ripple: '+esc(touchSuggestion(p))+'</div>';
+ out+='</div>';
+ return out;}
 function personProfile(pid){
  var p=S.people.find(function(x){return x.id===pid;});if(!p)return "";
  var sc=personScore(p),c=scoreClass(sc);
@@ -202,7 +250,8 @@ function personProfile(pid){
  var ll=p.loveLanguage||"";
  var first=esc(p.name.split(" ")[0]);
  var bd=bdayInfo(p.birthday);
- var out='<div class="card detail open person-profile" id="personPanel"><div class="person-profile-head"><div class="person-identity">'+personAvatar(p,52)+'<div><h3>'+esc(p.name)+'</h3><div class="rel">'+esc(p.relation||"")+'</div></div></div><button class="btn ghost" data-closeperson="1">Close</button></div>';
+ /* head card: identity + health dashboard */
+ var out='<div class="card detail open person-profile" id="personPanel"><div class="person-profile-head"><div class="person-identity">'+personAvatar(p,52)+'<div><h3>'+esc(p.name)+'</h3><div class="rel">'+esc(p.relation||"")+'</div></div></div><div class="profile-head-actions"><button class="pbtn" data-psettings="1" title="Person settings">\u2699</button><button class="pbtn" data-closeperson="1" title="Close">\u2715</button></div></div>';
  out+='<div class="person-health-heading"><div><h4>Tending health</h4><p>The rhythms and moments that keep you connected.</p></div><span class="person-profile-score">'+sc+'<small>/ 100</small></span></div>'+personHealthMeter(sc,p.name)+'<div class="person-health-status statusword '+c+'">'+scoreLabel(sc)+'</div><div class="chips">';
  out+=ll?'<span class="chip">\u2665 '+esc(LL_LANGUAGES[ll])+'</span>':'<span class="chip info">no love language set</span>';
  out+=bd?'<span class="chip'+(bd.days<=14?" warn":" info")+'">\uD83C\uDF82 Birthday: '+esc(bd.label)+'</span>':'<span class="chip info">no birthday set</span>';
@@ -219,22 +268,14 @@ function personProfile(pid){
  }
  var nud=[];
  if(bd&&bd.days<=14)nud.push('<b>Birthday '+esc(bd.label)+' is in '+bd.days+' day'+(bd.days===1?"":"s")+' - plan something.</b>');
- if(pTouch.days>=1)nud.push('<b>Daily ripple:</b> '+esc(touchSuggestion(p)));
- (p.rhythms||[]).forEach(function(r){var d=rhythmDaysSince(r),period=rhythmPeriod(r);if(d!==999&&d>=period)nud.push('<b>'+esc(r.text)+':</b> '+(d===period?"Due today.":"Last tended "+d+" day"+(d===1?"":"s")+" ago."));});
  if(ll)nud.push('<b>'+esc(LL_LANGUAGES[ll])+' is '+first+"&#39;s love language:</b> "+LL_NUDGES[ll]);
  if(nud.length)out+='<div class="nudge"><span aria-hidden="true">\uD83D\uDCA1</span><ul class="nudge-list">'+nud.map(function(item){return "<li>"+item+"</li>";}).join("")+'</ul></div>';
  out+='</div>';
- /* rhythms */
- out+='<div class="card" style="margin-bottom:22px"><div class="subhead">Rhythms with '+first+'<span class="hint" style="margin-left:8px;text-transform:none;letter-spacing:0;font-weight:400">recurring commitments - they surface on your dashboard</span></div>';
- if((p.rhythms||[]).length){p.rhythms.forEach(function(r){out+=rhythmRow(p,r);});}
- else out+='<div class="empty">No rhythms yet - add the recurring things that keep this relationship tended.</div>';
- var dO=rhythmDraft&&rhythmDraft.pid===pid;
- if(dO)out+=draftRow(p);
- out+='<div style="margin-top:10px"><button class="btn mini ghost" data-rhyadd="'+pid+'">'+(dO&&rhythmDraft.text&&rhythmDraft.text.trim()?"Save Rhythm":"+ Add rhythm")+'</button>'+(dO?'<button class="btn mini ghost" data-rhycancel="1" style="margin-left:8px">Cancel</button>':"")+'</div>';
- out+='</div>';
- /* ripples */
+ /* today: the action queue */
+ out+=actQueueHTML(p);
+ /* ripples: quick log */
  var edEv=editingConn?(S.events.find(function(z){return z.id===editingConn;})||{}):null;
- out+='<div class="card" style="margin-bottom:22px"><div class="subhead">Ripples with '+first+(pTouch.days===0?" \u00B7 one today \u2713":"")+'<span class="hint" style="margin-left:8px;text-transform:none;letter-spacing:0;font-weight:400">small moments of care - they add up</span></div>';
+ out+='<div class="card" style="margin-bottom:22px"><div class="subhead">Log a ripple with '+first+'<span class="hint" style="margin-left:8px;text-transform:none;letter-spacing:0;font-weight:400">small moments of care - they add up</span></div>';
  if(pTouch.days!==0)out+='<div class="touchsugg">\uD83D\uDCAC Suggestion: '+esc(touchSuggestion(p))+'</div>';
  var rippleKind=edEv?(edEv.kind||edEv.type):"text";
  if(edEv&&!RIPPLE_TYPES[rippleKind])rippleKind="other";
@@ -246,16 +287,6 @@ function personProfile(pid){
  out+='<div class="addrow" style="align-items:flex-start"><textarea id="momentNote" placeholder="Notes - what you want to remember..." style="min-height:70px;flex:1;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--canvas);font-size:15px">'+esc(edEv?(edEv.note||""):"")+'</textarea></div>';
  out+='<div style="display:flex;gap:8px;margin-top:2px"><button class="btn" data-psubmit="'+pid+'">'+(editingConn?"Update":"Log it")+'</button>'+(editingConn?'<button class="btn ghost" data-peditcancel="1">Cancel</button>':'')+'</div>';
  out+='</div>';
- /* sparks: no-pressure ideas */
- var sps=openSparks(p);
- out+='<div class="card" style="margin-bottom:22px"><div class="subhead">Sparks with '+first+'<span class="hint" style="margin-left:8px;text-transform:none;letter-spacing:0;font-weight:400">no-pressure ideas - doing one logs a ripple</span></div>';
- if(sps.length){sps.forEach(function(s){
-  out+='<div class="rhyrow"><span class="sm-dot" style="background:none;color:#B8912F;font-size:15px">\u2726</span><div class="gr-main"><b>'+esc(s.text)+'</b><div class="gr-meta">'+esc(sparkDueTxt(s))+(s.time?" \u00B7 "+esc(fmtHM12(s.time)):"")+(s.by?" \u00B7 "+esc(s.by):"")+'</div></div><button class="btn mini" data-sparkdo="'+pid+'|'+s.id+'">Do it</button><button class="iconbtn" data-sedit="'+s.id+'" title="edit">\u270E</button><button class="iconbtn" data-spdel="'+pid+'|'+s.id+'" title="remove">\u00D7</button></div>';
-  if(editSparkId===s.id){out+='<div class="rhyedit"><div class="addrow" style="margin-top:2px"><input data-sfield="text" value="'+esc(s.text)+'" placeholder="Spark text"></div><div class="addrow"><input type="date" data-sfield="by" value="'+esc(s.by||"")+'" style="max-width:150px"><input type="time" data-sfield="time" value="'+esc(s.time||"")+'" style="max-width:110px"><button class="btn mini ghost" data-scleardate="1">No date</button></div><div class="hint" style="font-size:11px;color:var(--ink-faint);margin:4px 0 2px">With a date it lands on the dashboard; without one it waits in Free moment. Edits save as you go - click the pencil again to collapse.</div></div>';}
- });}
- else out+='<div class="empty">No sparks yet - the fun, no-pressure "we should do this sometime" list.</div>';
- out+='<div class="addrow"><input placeholder="Idea - a movie, a talk, a trip..." data-spnewtext="'+pid+'"><input type="date" data-spnewdate="'+pid+'" style="max-width:150px"><input type="time" data-spnewtime="'+pid+'" style="max-width:110px"><button class="btn mini" data-spadd="'+pid+'">Add</button></div>';
- out+='</div>';
  /* recent moments: shared history for rhythms, ripples, and sparks */
  out+='<div class="card" style="margin-bottom:22px"><div class="subhead">Recent moments<span class="hint" style="margin-left:8px;text-transform:none;letter-spacing:0;font-weight:400">the care you have shared</span></div>';
  if(evs.length){
@@ -263,40 +294,56 @@ function personProfile(pid){
   if(evs.length>5)out+='<details class="recent-moments-more"><summary>Show all ('+evs.length+' moments)</summary><div>'+evs.slice(5).map(rippleLine).join("")+'</div></details>';
  }else out+='<div class="empty">No moments logged yet.</div>';
  out+='</div>';
- out+='<div class="card" style="margin-bottom:22px"><div class="subhead">Prayer for '+first+'</div>'+prayerList(prayers);
-
+ /* everything else, collapsed by default */
+ out+='<div class="subhead" style="margin:18px 0 8px">Everything else - open only when you need it</div>';
+ out+='<details class="moor"><summary><span class="chev">\u25B6</span> Rhythms with '+first+'<span class="moor-cnt">'+((p.rhythms||[]).length||"none")+' &middot; manage, add, edit</span></summary><div class="moor-body">';
+ if((p.rhythms||[]).length){p.rhythms.forEach(function(r){out+=rhythmRow(p,r);});}
+ else out+='<div class="empty">No rhythms yet - add the recurring things that keep this relationship tended.</div>';
+ var dO=rhythmDraft&&rhythmDraft.pid===pid;
+ if(dO)out+=draftRow(p);
+ out+='<div style="margin-top:10px"><button class="btn mini ghost" data-rhyadd="'+pid+'">'+(dO&&rhythmDraft.text&&rhythmDraft.text.trim()?"Save Rhythm":"+ Add rhythm")+'</button>'+(dO?'<button class="btn mini ghost" data-rhycancel="1" style="margin-left:8px">Cancel</button>':"")+'</div>';
+ out+='</div></details>';
+ out+='<details class="moor"><summary><span class="chev">\u25B6</span> Sparks with '+first+'<span class="moor-cnt">'+(openSparks(p).length||"none")+' &middot; no-pressure ideas</span></summary><div class="moor-body">';
+ var sps=openSparks(p);
+ if(sps.length){sps.forEach(function(s){
+  out+='<div class="rhyrow"><span class="sm-dot" style="background:none;color:#B8912F;font-size:15px">\u2726</span><div class="gr-main"><b>'+esc(s.text)+'</b><div class="gr-meta">'+esc(sparkDueTxt(s))+(s.time?" \u00B7 "+esc(fmtHM12(s.time)):"")+(s.by?" \u00B7 "+esc(s.by):"")+'</div></div><button class="btn mini" data-sparkdo="'+pid+'|'+s.id+'">Do it</button><button class="iconbtn" data-sedit="'+s.id+'" title="edit">\u270E</button><button class="iconbtn" data-spdel="'+pid+'|'+s.id+'" title="remove">\u00D7</button></div>';
+  if(editSparkId===s.id){out+='<div class="rhyedit"><div class="addrow" style="margin-top:2px"><input data-sfield="text" value="'+esc(s.text)+'" placeholder="Spark text"></div><div class="addrow"><input type="date" data-sfield="by" value="'+esc(s.by||"")+'" style="max-width:150px"><input type="time" data-sfield="time" value="'+esc(s.time||"")+'" style="max-width:110px"><button class="btn mini ghost" data-scleardate="1">No date</button></div><div class="hint" style="font-size:11px;color:var(--ink-faint);margin:4px 0 2px">With a date it lands on the dashboard; without one it waits in Free moment. Edits save as you go - click the pencil again to collapse.</div></div>';}
+ });}
+ else out+='<div class="empty">No sparks yet - the fun, no-pressure "we should do this sometime" list.</div>';
+ out+='<div class="addrow"><input placeholder="Idea - a movie, a talk, a trip..." data-spnewtext="'+pid+'"><input type="date" data-spnewdate="'+pid+'" style="max-width:150px"><input type="time" data-spnewtime="'+pid+'" style="max-width:110px"><button class="btn mini" data-spadd="'+pid+'">Add</button></div>';
+ out+='</div></details>';
+ out+='<details class="moor"><summary><span class="chev">\u25B6</span> Prayer for '+first+'<span class="moor-cnt">'+(prayers.filter(function(x){return !x.answered&&!x.archived;}).length||"none")+' active &middot; notes + archive</span></summary><div class="moor-body">'+prayerList(prayers);
  out+='<details class="prayer-notes"><summary>Prayer notes</summary><div class="subhead">'+first+"&#39;s prayer context"+'<span class="savehint" id="prayerSaveHint" style="margin-left:8px;position:static">saved</span></div>';
  out+='<div class="field"><label>"How can I be praying for you?" (their words)</label><textarea data-phpray="1" data-pid="'+pid+'" placeholder="Ask them this - log their answer here">'+esc(p.howToPray||"")+'</textarea></div>';
  out+='<div class="field"><label>My prayer focus for '+first+'</label><textarea data-pfocus="1" data-pid="'+pid+'" placeholder="Your private prayer for them">'+esc(p.prayerFocus||"")+'</textarea></div>';
- out+='</details>';
- out+='</div>';
- out+='<div class="card" style="margin-bottom:22px">';
- out+='<div class="subhead" style="margin-top:18px">Potential encouragement</div><div class="notewrap"><textarea data-encnote="'+pid+'" placeholder="Ideas: a verse that fits their season, a gift idea, a specific word...">'+esc((p.encouragementNote||""))+'</textarea><span class="savehint" data-enchint="'+pid+'">saved</span></div>';
+ out+='</details></div></details>';
+ out+='<details class="moor"><summary><span class="chev">\u25B6</span> Notes on '+first+'<span class="moor-cnt">'+(S.followups.filter(function(f){return f.personId===pid&&!f.done;}).length||"0")+' follow-ups &middot; encouragement</span></summary><div class="moor-body">';
+ out+='<div class="subhead" style="margin-top:8px">Potential encouragement</div><div class="notewrap"><textarea data-encnote="'+pid+'" placeholder="Ideas: a verse that fits their season, a gift idea, a specific word...">'+esc((p.encouragementNote||""))+'</textarea><span class="savehint" data-enchint="'+pid+'">saved</span></div>';
  out+='<div class="subhead" style="margin-top:18px">Follow up on</div><ul class="tasks">';
  S.followups.filter(function(f){return f.personId===pid&&!f.done;}).forEach(function(f){
   if(editingFollowupId===f.id)out+='<li><input id="followupEditText" aria-label="Follow-up" value="'+esc(f.text)+'"><button class="btn mini" data-fusave="'+f.id+'">Save</button><button class="btn mini ghost" data-fucancel="1">Cancel</button></li>';
   else out+='<li><input type="checkbox" class="cb" data-fudone="'+f.id+'"><span class="txt">'+esc(f.text)+'</span><button class="btn mini ghost" data-fuedit="'+f.id+'">Edit</button></li>';
  });
  out+='</ul><div class="addrow"><input id="personFUNew" placeholder="Follow up on..."><button class="btn mini" data-fuadd="'+pid+'">Add</button></div>';
- out+='</div>';
- /* person settings: one-time fields, collapsed */
- var relIn=REL_OPTIONS.indexOf(p.relation);
- out+='<details class="card" style="margin-bottom:22px"><summary style="cursor:pointer;font-weight:600;font-size:15px">Person settings <span style="font-weight:400;color:var(--ink-faint);font-size:12.5px">relationship \u00B7 birthday \u00B7 cadence \u00B7 love language</span></summary><div style="margin-top:14px">';
- out+='<div class="field"><label>Relationship</label><select data-pfield="relation" data-pid="'+pid+'"><option value="">- not set -</option>';
- if(p.relation&&relIn<0)out+='<option value="'+esc(p.relation)+'" selected>'+esc(p.relation)+' (custom)</option>';
- out+=REL_OPTIONS.map(function(o){return '<option value="'+o+'"'+(relIn>=0&&REL_OPTIONS[relIn]===o?" selected":"")+'>'+o+'</option>';}).join("");
- out+='<option value="__custom"'+(p.relation&&relIn<0?" selected":"")+'>Custom...</option></select>';
- if(p.relation&&relIn<0)out+='<div class="addrow"><input data-pfield="relation" data-pid="'+pid+'" value="'+esc(p.relation)+'" placeholder="Type the custom relationship"></div>';
- out+='</div>';
- out+='<div class="grid2"><div class="field"><label>Birthday</label><input type="date" data-pfield="birthday" data-pid="'+pid+'" value="'+esc(p.birthday||"")+'"></div><div class="field"><label>Anniversary</label><input type="date" data-pfield="anniversary" data-pid="'+pid+'" value="'+esc(p.anniversary||"")+'"></div></div>';
- out+='<div class="subhead" style="margin-top:18px">Key dates</div>';
- if(kds.length){kds.forEach(function(k){out+='<div class="logline"><span class="kind">'+esc(k.label)+'</span><span class="txt">'+(daysUntil(k)===0?"today":"in "+daysUntil(k)+" days")+'</span><span class="entry-actions"><button class="iconbtn" data-kddel="'+k.id+'" title="delete">\uD83D\uDDD1</button></span></div>';});}else out+='<div class="empty">None yet.</div>';
- out+='<div class="addrow"><input placeholder="Add key date (label)" data-kdlabel="'+pid+'"><button class="btn mini" data-kdadd="'+pid+'">Add</button></div>';
- out+='<div class="field connection-cadence-field"><label for="personConnectionCadence">Default connection cadence</label><select id="personConnectionCadence" aria-describedby="connectionCadenceHelp" data-pfield="connectCadence" data-pid="'+pid+'">'+[["daily","daily"],["weekly","weekly"],["biweekly","every 2 weeks"],["monthly","monthly"]].map(function(o){return '<option value="'+o[0]+'"'+((p.connectCadence||"weekly")===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("")+'</select><p id="connectionCadenceHelp" class="settings-help">Used for the health meter when no connection rhythms are set up. Each connection rhythm follows its own frequency.</p></div>';
- out+='<div class="field"><label>Love language</label><select data-pfield="loveLanguage" data-pid="'+pid+'"><option value="">- not set -</option>'+Object.keys(LL_LANGUAGES).map(function(k){return '<option value="'+k+'"'+(ll===k?" selected":"")+'>'+LL_LANGUAGES[k]+'</option>';}).join("")+'</select></div>';
- out+='<div class="field"><label>Photo</label><div style="display:flex;align-items:center;gap:12px">'+personAvatar(p,56)+'<input type="file" accept="image/*" data-pphoto="'+pid+'" style="flex:1;font-size:13px">'+(p.photo?'<button class="btn mini danger" data-pphorm="'+pid+'">Remove</button>':'')+'</div><div class="hint" style="font-size:11px;color:var(--ink-faint)">Crops to a circle for their card.</div></div>';
  out+='</div></details>';
- out+='</div></div>';
+ /* person settings: gear in the header opens this modal */
+ var relIn=REL_OPTIONS.indexOf(p.relation);
+ var m='<div class="modal'+(window._psModalOpen?" open":"")+'" id="personSettingsModal"><div class="box person-settings-box"><div class="settings-head"><h3>Person settings - '+esc(p.name)+'</h3><button class="iconbtn" data-psettingsclose="1" title="Done">\u2715</button></div>';
+ m+='<div class="field"><label>Relationship</label><select data-pfield="relation" data-pid="'+pid+'"><option value="">- not set -</option>';
+ if(p.relation&&relIn<0)m+='<option value="'+esc(p.relation)+'" selected>'+esc(p.relation)+' (custom)</option>';
+ m+=REL_OPTIONS.map(function(o){return '<option value="'+o+'"'+(relIn>=0&&REL_OPTIONS[relIn]===o?" selected":"")+'>'+o+'</option>';}).join("");
+ m+='<option value="__custom"'+(p.relation&&relIn<0?" selected":"")+'>Custom...</option></select>';
+ if(p.relation&&relIn<0)m+='<div class="addrow"><input data-pfield="relation" data-pid="'+pid+'" value="'+esc(p.relation)+'" placeholder="Type the custom relationship"></div>';
+ m+='</div>';
+ m+='<div class="grid2"><div class="field"><label>Birthday</label><input type="date" data-pfield="birthday" data-pid="'+pid+'" value="'+esc(p.birthday||"")+'"></div><div class="field"><label>Anniversary</label><input type="date" data-pfield="anniversary" data-pid="'+pid+'" value="'+esc(p.anniversary||"")+'"></div></div>';
+ m+='<div class="subhead" style="margin-top:6px">Key dates</div>';
+ if(kds.length){kds.forEach(function(k){m+='<div class="logline"><span class="kind">'+esc(k.label)+'</span><span class="txt">'+(daysUntil(k)===0?"today":"in "+daysUntil(k)+" days")+'</span><span class="entry-actions"><button class="iconbtn" data-kddel="'+k.id+'" title="delete">\uD83D\uDDD1</button></span></div>';});}else m+='<div class="empty">None yet.</div>';
+ m+='<div class="addrow"><input placeholder="Add key date (label)" data-kdlabel="'+pid+'"><button class="btn mini" data-kdadd="'+pid+'">Add</button></div>';
+ m+='<div class="field connection-cadence-field" style="margin-top:14px"><label for="personConnectionCadence">Default connection cadence</label><select id="personConnectionCadence" aria-describedby="connectionCadenceHelp" data-pfield="connectCadence" data-pid="'+pid+'">'+[["daily","daily"],["weekly","weekly"],["biweekly","every 2 weeks"],["monthly","monthly"]].map(function(o){return '<option value="'+o[0]+'"'+((p.connectCadence||"weekly")===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("")+'</select><p id="connectionCadenceHelp" class="settings-help">Used for the health meter when no connection rhythms are set up. Each connection rhythm follows its own frequency.</p></div>';
+ m+='<div class="field"><label>Love language</label><select data-pfield="loveLanguage" data-pid="'+pid+'"><option value="">- not set -</option>'+Object.keys(LL_LANGUAGES).map(function(k){return '<option value="'+k+'"'+(ll===k?" selected":"")+'>'+LL_LANGUAGES[k]+'</option>';}).join("")+'</select></div>';
+ m+='<div class="field"><label>Photo</label><div style="display:flex;align-items:center;gap:12px">'+personAvatar(p,56)+'<input type="file" accept="image/*" data-pphoto="'+pid+'" style="flex:1;font-size:13px">'+(p.photo?'<button class="btn mini danger" data-pphorm="'+pid+'">Remove</button>':'')+'</div><div class="hint" style="font-size:11px;color:var(--ink-faint)">Crops to a circle for their card.</div></div>';
+ m+='</div></div>';
+ out+=m;
  return out;}
 function renderChecklists(){
  if(!S.checklists||!S.checklists.length)return "";
@@ -366,3 +413,5 @@ var editRhythmId=null, rhythmEditDraft=null;
 var rhythmDraft=null;
 var rhyDoneDraft=null;
 var tab="today",openDetail=null,currentArea=null,currentPerson=null;
+window._actDone={};window._psModalOpen=false;
+
