@@ -1,14 +1,7 @@
 {
-  "synced": "2026-09-29T20:15:04.029Z",
+  "synced": "2026-09-30T12:49:46.332Z",
   "source": "iCloud published feed",
   "events": [
-    {
-      "t": "Canada",
-      "s": "2026-08-27T00:00:00",
-      "e": "2026-08-31T00:00:00",
-      "allDay": true,
-      "cal": "Home"
-    },
     {
       "t": "Cancel Global Work",
       "s": "2026-08-31T00:00:00",
@@ -168,6 +161,13 @@
       "s": "2026-10-07T13:30:00.000Z",
       "e": "2026-10-07T14:30:00.000Z",
       "allDay": false,
+      "cal": "Home"
+    },
+    {
+      "t": "Bristol Fall Festival",
+      "s": "2026-10-10T00:00:00",
+      "e": "2026-10-11T00:00:00",
+      "allDay": true,
       "cal": "Home"
     },
     {
