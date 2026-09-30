@@ -1,4 +1,5 @@
 
+
 "use strict";
 /* ============ views: dashboard, area pages, people ============ */
 function renderNav(){
@@ -207,7 +208,7 @@ function notesChecklist(p,kind,title){
  var items=S.followups.filter(function(f){return f.personId===p.id&&(f.kind||"followup")===kind;});
  function row(f){if(editingFollowupId===f.id)return '<li><input id="followupEditText" aria-label="Edit item" value="'+esc(f.text)+'"><button class="btn mini" data-fusave="'+f.id+'">Save</button><button class="btn mini ghost" data-fucancel="1">Cancel</button><button class="btn mini danger" data-fudel="'+f.id+'">Delete</button></li>';return '<li><input type="checkbox" class="cb" aria-label="'+esc((f.done?'Reopen: ':'Complete: ')+f.text)+'" data-fudone="'+f.id+'"'+(f.done?' checked':'')+'><span class="txt">'+esc(f.text)+'</span><button class="btn mini ghost" data-fuedit="'+f.id+'">Edit</button></li>';}
  var done=items.filter(function(f){return f.done;});
- return '<div class="notes-checklist"><div class="subhead">'+title+'</div><ul class="tasks">'+items.filter(function(f){return !f.done;}).map(row).join('')+'</ul><div class="addrow"><input id="noteNew-'+kind+'" aria-label="'+title+'" placeholder="'+(kind==='encouragement'?'A verse, kind word, or thoughtful idea…':(kind==='prayernote'?'&quot;How can I be praying for you?&quot; - their words':'Follow up on…'))+'"><button class="btn mini" data-noteadd="'+p.id+'" data-notekind="'+kind+'">Add</button></div><details class="notes-history"'+(done.some(function(f){return f.id===editingFollowupId;})?' open':'')+'"><summary>Show history ('+done.length+')</summary>'+(done.length?'<ul class="tasks">'+done.map(row).join('')+'</ul>':'<div class="empty">No completed items yet.</div>')+'</details></div>';
+ return '<div class="notes-checklist"><div class="subhead">'+title+'</div><ul class="tasks">'+items.filter(function(f){return !f.done;}).map(row).join('')+'</ul><div class="addrow"><input id="noteNew-'+kind+'" aria-label="'+title+'" placeholder="'+(kind==='encouragement'?'A verse, kind word, or thoughtful idea…':(kind==='prayernote'?'&quot;How can I be praying for you?&quot; - their words':'Follow up on…'))+'"><button class="btn mini" data-noteadd="'+p.id+'" data-notekind="'+kind+'">Add</button></div><details class="notes-history"'+(done.some(function(f){return f.id===editingFollowupId;})?' open':'')+'><summary>Show history ('+done.length+')</summary>'+(done.length?'<ul class="tasks">'+done.map(row).join('')+'</ul>':'<div class="empty">No completed items yet.</div>')+'</details></div>';
 }
 function profilePanelStart(key){return '<section class="card profile-tab-panel" id="profile-panel-'+key+'" role="tabpanel" aria-labelledby="profile-tab-'+key+'"'+(activeProfileTab===key?'':' hidden')+'>';}
 var activeProfileTab="rhythms";
@@ -238,13 +239,13 @@ function actQueueHTML(p){
  function rhyRowQ(r,dim){
   var rl=rhythmLast(r);
   var sub=esc(rhythmFreqLabel(r))+(rhythmDueTxt(r)?" \u00B7 "+esc(rhythmDueTxt(r)):"")+(rl&&rhythmDaysSince(r)!==0?" \u00B7 last tended "+when(rl.ts):"");
-  return '<div class="actrow'+(dim?" done":"")+'"><span class="act-ic" style="background:'+personHealthColor(rhythmScore(r))+'"></span><div class="pi-main"><div class="pi-label">'+esc(r.text||"(unnamed rhythm)")+'</div><div class="pi-sub">'+sub+'</div></div>'+(dim?'<span class="praycount">Tended \u2713</span>':rhyDoneBtn(p.id+"|"+r.id))+'</div>';
+  return '<div class="actrow'+(dim?" done":"")+'"><span class="act-ic" style="background:'+personHealthColor(rhythmScore(r))+'"></span><div class="pi-main"><div class="pi-label">'+esc(r.text||"(unnamed rhythm)")+' <span class="pill rhy">'+collectionIcon("rhythms")+' Rhythm</span></div><div class="pi-sub">'+sub+'</div></div>'+(dim?'<span class="praycount">Tended \u2713</span>':rhyDoneBtn(p.id+"|"+r.id))+'</div>';
  }
  visR.forEach(function(r){rows.push(rhyRowQ(r,false));});
  padR.forEach(function(r){rows.push(rhyRowQ(r,true));});
- visS.forEach(function(s){rows.push('<div class="actrow"><span class="act-ic" style="background:#B8912F"></span><div class="pi-main"><div class="pi-label"><span style="color:#B8912F">\u2726 </span>'+esc(s.text)+'</div><div class="pi-sub">'+esc(sparkDueTxt(s))+(s.time?" \u00B7 "+esc(fmtHM12(s.time)):"")+'</div></div><button class="btn mini sparkbtn" data-sparkdo="'+p.id+'|'+s.id+'">Do it</button></div>');});
+ visS.forEach(function(s){rows.push('<div class="actrow"><span class="act-ic" style="background:#B8912F"></span><div class="pi-main"><div class="pi-label">'+esc(s.text)+' <span class="pill spk">'+collectionIcon("sparks")+' Spark</span></div><div class="pi-sub">'+esc(sparkDueTxt(s))+(s.time?" \u00B7 "+esc(fmtHM12(s.time)):"")+'</div></div><button class="btn mini sparkbtn" data-sparkdo="'+p.id+'|'+s.id+'">Do it</button></div>');});
  padS.forEach(function(s){rows.push('<div class="actrow done"><span class="act-ic" style="background:#B8912F"></span><div class="pi-main"><div class="pi-label"><span style="color:#B8912F">\u2726 </span>'+esc(s.text)+'</div><div class="pi-sub">'+esc(sparkDueTxt(s))+'</div></div><span class="praycount">Done \u2713</span></div>');});
- visP.forEach(function(x){rows.push('<div class="actrow"><span class="act-ic" style="background:#5B7BA6"></span><div class="pi-main"><div class="pi-label">'+(x.focus?'Prayer focus: ':'')+esc(x.text)+'</div><div class="pi-sub">'+(x.focus?"from your prayer profile":"active prayer")+'</div></div><span class="praycount">prayed '+(x.prayed||0)+'&times; total</span><button class="btn mini ghost" data-prayquick="'+p.id+'" data-prayref="'+(x.focus?"focus":x.id)+'">Pray</button></div>');});
+ visP.forEach(function(x){rows.push('<div class="actrow"><span class="act-ic" style="background:#5B7BA6"></span><div class="pi-main"><div class="pi-label">'+(x.focus?'Prayer focus: ':'')+esc(x.text)+' <span class="pill pry">'+collectionIcon("prayer")+' Prayer</span></div><div class="pi-sub">'+(x.focus?"from your prayer profile":"active prayer")+'</div></div><span class="praycount">prayed '+(x.prayed||0)+'&times; total</span><button class="btn mini ghost" data-prayquick="'+p.id+'" data-prayref="'+(x.focus?"focus":x.id)+'">Pray</button></div>');});
  padP.forEach(function(x){rows.push('<div class="actrow done"><span class="act-ic" style="background:#5B7BA6"></span><div class="pi-main"><div class="pi-label">'+(x.focus?'Prayer focus: ':'')+esc(x.text)+'</div><div class="pi-sub">prayed today</div></div><span class="praycount">Prayed \u2713</span></div>');});
  var out='<div class="card act" style="margin-bottom:14px"><div class="qhead"><div class="subhead" style="margin:0">Today with '+first+'</div><span><span class="qpill'+(waiting?"":" clear")+'">'+(waiting?waiting+" in queue":"all tended \u2713")+'</span> <span class="hint">tend one, the next steps up</span></span></div>';
  if(rows.length)out+=rows.join("");
@@ -331,9 +332,8 @@ function personProfile(pid){
  out+='<div class="addrow"><input placeholder="Idea - a movie, a talk, a trip..." data-spnewtext="'+pid+'"><input type="date" data-spnewdate="'+pid+'" style="max-width:150px"><input type="time" data-spnewtime="'+pid+'" style="max-width:110px"><button class="btn mini" data-spadd="'+pid+'">Add</button></div>';
  out+='</section>';
  out+=profilePanelStart("prayer")+'<div class="person-prayer-add"><label class="field">Title<input id="personPrayerTitle" placeholder="Prayer title"></label><label class="field">Details<textarea id="personPrayerDetails" placeholder="Details (optional)"></textarea></label><button class="btn" data-personprayeradd="'+pid+'">Add prayer</button></div>'+prayerList(prayers);
- out+='<details class="prayer-notes"><summary>Prayer notes</summary><div class="subhead">'+first+"&#39;s prayer context"+'<span class="savehint" id="prayerSaveHint" style="margin-left:8px;position:static">saved</span></div>';
- out+=notesChecklist(p,"prayernote","What they asked me to pray for");
- out+='<div class="field" style="margin-top:14px"><label>My prayer focus for '+first+' <span class="savehint" id="prayerSaveHint" style="margin-left:8px;position:static">saved</span></label><textarea data-pfocus="1" data-pid="'+pid+'" placeholder="Your private prayer for them - shown in the Today queue">'+esc(p.prayerFocus||"")+'</textarea></div>';
+ out+='<details class="prayer-notes"><summary>Prayer notes</summary>';
+ out+=notesChecklist(p,"prayernote",first+"&#39;s prayer context - what they asked me to pray for");
  out+='</details></section>';
  out+=profilePanelStart("notes");
  out+=notesChecklist(p,"encouragement","Potential encouragement")+notesChecklist(p,"followup","Follow up on");
@@ -369,7 +369,7 @@ function renderChecklists(){
  return out;}
 /* ============ rhythm done prompt + ripples ============ */
 function rhyDoneBtn(key){if(rhyDoneDraft&&rhyDoneDraft.key===key){return '<span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><input type="date" data-rhydate="'+key+'" value="'+rhyDoneDraft.date+'" style="max-width:145px"><input type="time" data-rhytime="'+key+'" value="'+rhyDoneDraft.time+'" style="max-width:105px"><button class="btn mini" data-rhyconfirm="'+key+'">Save</button><button class="btn mini ghost" data-rhycancel2="1">Cancel</button></span>';}return '<button class="btn mini" data-rhydone="'+key+'" title="Record a moment of care">Tend</button>';}
-function rippleLine(e){var t=(e.title&&e.title.indexOf("Time with")!==0)?e.title:"";var pill=e.rhythmId?' <span class="pill rhy">\u21BB Rhythm</span>':((e.origin==="spark"||e.note==="Spark landed")?' <span class="pill spk">\u2726 Spark</span>':'');return '<div class="logline moment-row"><span class="when">'+when(e.ts)+(daysSince(e.ts)===0&&!e.allDay?" "+fmtHM(e.ts):"")+'</span><span class="kind">'+esc(typeLabel(e))+'</span><div class="gr-main">'+pill+(t?' <span class="txt">'+esc(t)+'</span>':'')+(e.note&&e.note!=="Spark landed"?'<div class="gr-meta">'+esc(e.note)+'</div>':'')+'</div><span class="entry-actions"><button class="iconbtn" data-evedit="'+e.id+'" title="edit">\u270E</button><button class="iconbtn" data-evdel="'+e.id+'" title="delete">\uD83D\uDDD1</button></span></div>';}
+function rippleLine(e){var t=(e.title&&e.title.indexOf("Time with")!==0)?e.title:"";var pill=e.rhythmId?' <span class="pill rhy">'+collectionIcon("rhythms")+' Rhythm</span>':((e.origin==="spark"||e.note==="Spark landed")?' <span class="pill spk">'+collectionIcon("sparks")+' Spark</span>':((e.kind==="prayer"||e.type==="prayer")?' <span class="pill pry">'+collectionIcon("prayer")+' Prayer</span>':((e.kind==="note"||e.type==="note")?' <span class="pill nte">'+collectionIcon("notes")+' Note</span>':'')));return '<div class="logline moment-row"><span class="when">'+when(e.ts)+(daysSince(e.ts)===0&&!e.allDay?" "+fmtHM(e.ts):"")+'</span><span class="kind">'+esc(typeLabel(e))+'</span><div class="gr-main">'+pill+(t?' <span class="txt">'+esc(t)+'</span>':'')+(e.note&&e.note!=="Spark landed"?'<div class="gr-meta">'+esc(e.note)+'</div>':'')+'</div><span class="entry-actions"><button class="iconbtn" data-evedit="'+e.id+'" title="edit">\u270E</button><button class="iconbtn" data-evdel="'+e.id+'" title="delete">\uD83D\uDDD1</button></span></div>';}
 /* ============ free moment + spark chip ============ */
 function sparkChip(p){var s=openSparks(p)[0];if(!s)return "";return '<div class="pf-next" style="color:#8A6D1F">\u2726 '+esc(s.text)+' · '+esc(sparkDueTxt(s))+'</div>';}
 function freeMomentHTML(){
@@ -426,4 +426,5 @@ var rhythmDraft=null;
 var rhyDoneDraft=null;
 var tab="today",openDetail=null,currentArea=null,currentPerson=null;
 window._actDone={};window._psModalOpen=false;
+
 
