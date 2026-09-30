@@ -39,13 +39,13 @@ function renderToday(){
 /* ============ time-aware routine plan ============ */
 function dayBlockAt(date){var m=date.getHours()*60+date.getMinutes();return m<330||m>=1290?"bedtime":m<540?"early":m<690?"morning":m<810?"lunch":m<990?"afternoon":m<1080?"commute":"evening";}
 function planBlocksDef(){var current=dayBlockAt(new Date());return [
- {id:"early",name:"Early morning",range:"5:30 – 9:00am"},
- {id:"morning",name:"Midday focus",range:"9:00 – 11:30am"},
- {id:"lunch",name:"Lunch",range:"11:30am – 1:30pm"},
- {id:"afternoon",name:"Afternoon",range:"1:30 – 4:30pm"},
- {id:"commute",name:"Way home",range:"4:30 – 6:00pm"},
- {id:"evening",name:"Evening",range:"6:00 – 9:30pm"},
- {id:"bedtime",name:"Bedtime",range:"9:30pm – 5:30am"}
+ {id:"early",name:"Early morning",range:"5:30 - 9:00am"},
+ {id:"morning",name:"Midday focus",range:"9:00 - 11:30am"},
+ {id:"lunch",name:"Lunch",range:"11:30am - 1:30pm"},
+ {id:"afternoon",name:"Afternoon",range:"1:30 - 4:30pm"},
+ {id:"commute",name:"Way home",range:"4:30 - 6:00pm"},
+ {id:"evening",name:"Evening",range:"6:00 - 9:30pm"},
+ {id:"bedtime",name:"Bedtime",range:"9:30pm - 5:30am"}
  ].map(function(b){b.cur=b.id===current;return b;});}
 function rhythmScheduledToday(r,date){
  date=date||new Date();if(r.freq==="quarterly"||r.freq==="yearly")return false;
@@ -119,7 +119,7 @@ function goalRow(g){
  var iv=goalInterval(g);
  var statusTxt=d===null?"never logged":(d===0?"done today":(d+"d ago \u00B7 every "+iv+"d"));
  return '<div class="goalrow"><span class="sm-dot '+c+'"></span><div class="gr-main"><b>'+esc(g.text)+'</b>'+(g.personId?' <span class="gr-person">'+esc(personName(g.personId))+'</span>':'')+'<div class="gr-meta">'+statusTxt+'</div></div><button class="btn mini" data-goaldone="'+g.id+'">Done</button></div>';}
-function nextDateLine(pid){var kds=S.keyDates.filter(function(k){return k.personId===pid;});if(!kds.length)return "";var best=null;kds.forEach(function(k){var d=daysUntil(k);if(best===null||d<best.d)best={k:k,d:d};});if(!best)return "";return '<div class="pf-next">'+esc(best.k.label)+' \u00B7 '+(best.d===0?"TODAY":"in "+best.d+" days")+'</div>';}
+function nextDateLine(pid){var kds=S.keyDates.filter(function(k){return k.personId===pid;});if(!kds.length)return "";var best=null;kds.forEach(function(k){var d=daysUntil(k);if(best===null||d<best.d)best={k:k,d:d};});if(!best)return "";return '<div class="pf-next">'+esc(best.k.label)+' · '+(best.d===0?"TODAY":"in "+best.d+" days")+'</div>';}
 function personHealthColor(score){
  // Match the dashboard gradient stops: coral at 0, amber at 48, green at 100.
  var value=Math.max(0,Math.min(100,score));
@@ -139,7 +139,7 @@ function renderPeople(){
   var sc=personScore(p),c=scoreClass(sc);
   var ci=personConnInfo(p);
   var prayers=S.prayers.filter(function(x){return x.personId===p.id&&!x.answered&&!x.archived;}).length;
-  out+='<div class="card person-card" data-openperson="'+p.id+'" style="cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:10px;min-width:0">'+personAvatar(p,42)+'<h3 style="margin:0">'+esc(p.name)+'</h3></div><span class="person-card-score">'+sc+'</span></div>'+personHealthMeter(sc,p.name,true)+'<div class="person-health-status statusword '+c+'">'+scoreLabel(sc)+'</div><div class="meta">'+esc(p.relation||"")+' \u00B7 '+(ci.last?("connected "+when(ci.last.ts)):"no connections yet")+(prayers?" \u00B7 "+prayers+" prayer"+(prayers>1?"s":""):"")+'</div>'+nextDateLine(p.id)+personDateLines(p)+'</div>';
+  out+='<div class="card person-card" data-openperson="'+p.id+'" style="cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:10px;min-width:0">'+personAvatar(p,42)+'<h3 style="margin:0">'+esc(p.name)+'</h3></div><span class="person-card-score">'+sc+'</span></div>'+personHealthMeter(sc,p.name,true)+'<div class="person-health-status statusword '+c+'">'+scoreLabel(sc)+'</div><div class="meta">'+esc(p.relation||"")+' · '+(ci.last?("connected "+when(ci.last.ts)):"no connections yet")+(prayers?" · "+prayers+" prayer"+(prayers>1?"s":""):"")+'</div>'+nextDateLine(p.id)+personDateLines(p)+'</div>';
  });
  out+='</div>';
  return out;}
@@ -205,9 +205,9 @@ function rippleIdea(p){
 function collectionIcon(key){var paths={rhythms:'<path d="M20 7a8 8 0 0 0-14-2L3 8m0-5v5h5 M4 17a8 8 0 0 0 14 2l3-3m0 5v-5h-5"/>',sparks:'<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/>',prayer:'<path d="M12 20S3 14 3 8a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 6-9 12-9 12Z"/>',notes:'<path d="M14 3H5v18h14V8Z M14 3v5h5 M8 12h8 M8 16h6"/>'};return '<svg class="collection-icon" viewBox="0 0 24 24" aria-hidden="true">'+paths[key]+'</svg>';}
 function notesChecklist(p,kind,title){
  var items=S.followups.filter(function(f){return f.personId===p.id&&(f.kind||"followup")===kind;});
- function row(f){if(editingFollowupId===f.id)return '<li><input id="followupEditText" aria-label="Edit item" value="'+esc(f.text)+'"><button class="btn mini" data-fusave="'+f.id+'">Save</button><button class="btn mini ghost" data-fucancel="1">Cancel</button></li>';return '<li><input type="checkbox" class="cb" aria-label="'+esc((f.done?'Reopen: ':'Complete: ')+f.text)+'" data-fudone="'+f.id+'"'+(f.done?' checked':'')+'><span class="txt">'+esc(f.text)+'</span><button class="btn mini ghost" data-fuedit="'+f.id+'">Edit</button></li>';}
+ function row(f){if(editingFollowupId===f.id)return '<li><input id="followupEditText" aria-label="Edit item" value="'+esc(f.text)+'"><button class="btn mini" data-fusave="'+f.id+'">Save</button><button class="btn mini ghost" data-fucancel="1">Cancel</button><button class="btn mini danger" data-fudel="'+f.id+'">Delete</button></li>';return '<li><input type="checkbox" class="cb" aria-label="'+esc((f.done?'Reopen: ':'Complete: ')+f.text)+'" data-fudone="'+f.id+'"'+(f.done?' checked':'')+'><span class="txt">'+esc(f.text)+'</span><button class="btn mini ghost" data-fuedit="'+f.id+'">Edit</button></li>';}
  var done=items.filter(function(f){return f.done;});
- return '<div class="notes-checklist"><div class="subhead">'+title+'</div><ul class="tasks">'+items.filter(function(f){return !f.done;}).map(row).join('')+'</ul><div class="addrow"><input id="noteNew-'+kind+'" aria-label="'+title+'" placeholder="'+(kind==='encouragement'?'A verse, kind word, or thoughtful idea…':'Follow up on…')+'"><button class="btn mini" data-noteadd="'+p.id+'" data-notekind="'+kind+'">Add</button></div><details class="notes-history"'+(done.some(function(f){return f.id===editingFollowupId;})?' open':'')+'><summary>Show history ('+done.length+')</summary>'+(done.length?'<ul class="tasks">'+done.map(row).join('')+'</ul>':'<div class="empty">No completed items yet.</div>')+'</details></div>';
+ return '<div class="notes-checklist"><div class="subhead">'+title+'</div><ul class="tasks">'+items.filter(function(f){return !f.done;}).map(row).join('')+'</ul><div class="addrow"><input id="noteNew-'+kind+'" aria-label="'+title+'" placeholder="'+(kind==='encouragement'?'A verse, kind word, or thoughtful idea…':(kind==='prayernote'?'&quot;How can I be praying for you?&quot; - their words':'Follow up on…'))+'"><button class="btn mini" data-noteadd="'+p.id+'" data-notekind="'+kind+'">Add</button></div><details class="notes-history"'+(done.some(function(f){return f.id===editingFollowupId;})?' open':'')+'"><summary>Show history ('+done.length+')</summary>'+(done.length?'<ul class="tasks">'+done.map(row).join('')+'</ul>':'<div class="empty">No completed items yet.</div>')+'</details></div>';
 }
 function profilePanelStart(key){return '<section class="card profile-tab-panel" id="profile-panel-'+key+'" role="tabpanel" aria-labelledby="profile-tab-'+key+'"'+(activeProfileTab===key?'':' hidden')+'>';}
 var activeProfileTab="rhythms";
@@ -332,8 +332,8 @@ function personProfile(pid){
  out+='</section>';
  out+=profilePanelStart("prayer")+'<div class="person-prayer-add"><label class="field">Title<input id="personPrayerTitle" placeholder="Prayer title"></label><label class="field">Details<textarea id="personPrayerDetails" placeholder="Details (optional)"></textarea></label><button class="btn" data-personprayeradd="'+pid+'">Add prayer</button></div>'+prayerList(prayers);
  out+='<details class="prayer-notes"><summary>Prayer notes</summary><div class="subhead">'+first+"&#39;s prayer context"+'<span class="savehint" id="prayerSaveHint" style="margin-left:8px;position:static">saved</span></div>';
- out+='<div class="field"><label>"How can I be praying for you?" (their words)</label><textarea data-phpray="1" data-pid="'+pid+'" placeholder="Ask them this - log their answer here">'+esc(p.howToPray||"")+'</textarea></div>';
- out+='<div class="field"><label>My prayer focus for '+first+'</label><textarea data-pfocus="1" data-pid="'+pid+'" placeholder="Your private prayer for them">'+esc(p.prayerFocus||"")+'</textarea></div>';
+ out+=notesChecklist(p,"prayernote","What they asked me to pray for");
+ out+='<div class="field" style="margin-top:14px"><label>My prayer focus for '+first+' <span class="savehint" id="prayerSaveHint" style="margin-left:8px;position:static">saved</span></label><textarea data-pfocus="1" data-pid="'+pid+'" placeholder="Your private prayer for them - shown in the Today queue">'+esc(p.prayerFocus||"")+'</textarea></div>';
  out+='</details></section>';
  out+=profilePanelStart("notes");
  out+=notesChecklist(p,"encouragement","Potential encouragement")+notesChecklist(p,"followup","Follow up on");
@@ -371,14 +371,14 @@ function renderChecklists(){
 function rhyDoneBtn(key){if(rhyDoneDraft&&rhyDoneDraft.key===key){return '<span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><input type="date" data-rhydate="'+key+'" value="'+rhyDoneDraft.date+'" style="max-width:145px"><input type="time" data-rhytime="'+key+'" value="'+rhyDoneDraft.time+'" style="max-width:105px"><button class="btn mini" data-rhyconfirm="'+key+'">Save</button><button class="btn mini ghost" data-rhycancel2="1">Cancel</button></span>';}return '<button class="btn mini" data-rhydone="'+key+'" title="Record a moment of care">Tend</button>';}
 function rippleLine(e){var t=(e.title&&e.title.indexOf("Time with")!==0)?e.title:"";var pill=e.rhythmId?' <span class="pill rhy">\u21BB Rhythm</span>':((e.origin==="spark"||e.note==="Spark landed")?' <span class="pill spk">\u2726 Spark</span>':'');return '<div class="logline moment-row"><span class="when">'+when(e.ts)+(daysSince(e.ts)===0&&!e.allDay?" "+fmtHM(e.ts):"")+'</span><span class="kind">'+esc(typeLabel(e))+'</span><div class="gr-main">'+pill+(t?' <span class="txt">'+esc(t)+'</span>':'')+(e.note&&e.note!=="Spark landed"?'<div class="gr-meta">'+esc(e.note)+'</div>':'')+'</div><span class="entry-actions"><button class="iconbtn" data-evedit="'+e.id+'" title="edit">\u270E</button><button class="iconbtn" data-evdel="'+e.id+'" title="delete">\uD83D\uDDD1</button></span></div>';}
 /* ============ free moment + spark chip ============ */
-function sparkChip(p){var s=openSparks(p)[0];if(!s)return "";return '<div class="pf-next" style="color:#8A6D1F">\u2726 '+esc(s.text)+' \u00B7 '+esc(sparkDueTxt(s))+'</div>';}
+function sparkChip(p){var s=openSparks(p)[0];if(!s)return "";return '<div class="pf-next" style="color:#8A6D1F">\u2726 '+esc(s.text)+' · '+esc(sparkDueTxt(s))+'</div>';}
 function freeMomentHTML(){
  var cands=[];
  S.people.forEach(function(p){(p.rhythms||[]).forEach(function(r){var d=rhythmDaysSince(r);if((r.tod||"anytime")==="anytime"&&rhythmScheduledToday(r))cands.push({pri:10+(d===999?0:d),rkey:p.id+"|"+r.id,personId:p.id,label:r.text,sub:"rhythm \u00B7 "+rhythmDueTxt(r)});});});
  S.people.forEach(function(p){openSparks(p).forEach(function(s){if(sparkLive(s)&&!s.by)cands.push({pri:15,sparky:1,personId:p.id,label:s.text,sub:"No deadline yet",act:' data-openperson="'+p.id+'"',btn:"Open"});});});
  S.goals.forEach(function(g){var d=goalLastDone(g);if(!goalHasRhythm(g)&&(g.tod||"anytime")==="anytime"&&d!==0&&(d===null||d>=goalInterval(g)))cands.push({pri:(100-goalScore(g))/12,personId:g.personId,goalId:g.id,area:g.area,label:g.text,sub:"goal \u00B7 "+(d===null?"never logged":d+"d ago"),act:' data-goaldone="'+g.id+'"',btn:"Done"});});
  var lo=S.people.map(function(p){return {p:p,s:personScore(p)};}).sort(function(a,b){return a.s-b.s;})[0];
- if(lo&&lo.s<80)cands.push({pri:(100-lo.s)/10,label:"Reach out to "+lo.p.name,sub:(lo.p.relation||"")+" \u00B7 meter "+lo.s+" - lowest",act:' data-openperson="'+lo.p.id+'"',btn:"Open"});
+ if(lo&&lo.s<80)cands.push({pri:(100-lo.s)/10,label:"Reach out to "+lo.p.name,sub:(lo.p.relation||"")+" · meter "+lo.s+" - lowest",act:' data-openperson="'+lo.p.id+'"',btn:"Open"});
  cands.sort(function(a,b){return b.pri-a.pri;});
  if(!cands.length)return "";
  var out='<div class="sectiontitle"><h2>Free moment?</h2><span class="hint">the top of the stack, right now</span></div><div class="card">';
