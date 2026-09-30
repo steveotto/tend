@@ -394,6 +394,6 @@ details.moor summary .moor-cnt{margin-left:auto;font-size:11px;color:var(--ink-f
 details.moor summary .chev{color:var(--ink-faint);font-size:11px;transition:transform .2s}
 details.moor[open] summary .chev{transform:rotate(90deg)}
 details.moor .moor-body{padding:2px 18px 14px}
-.person-settings-box{max-width:480px;max-height:85vh;overflow-y:auto}
+.person-settings-box{max-width:720px;width:min(720px,94vw);max-height:85vh;overflow-y:auto}
 .settings-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .settings-head h3{font-size:18px;margin-bottom:0}
