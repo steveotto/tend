@@ -84,23 +84,23 @@ function planCandidates(bid,curBid){
  });
  return out;
 }
-var planOpenState={};
+var planOpenState={};var planViewState=null;
+function planBlockCard(b,curId,isCur){
+ var items=planCandidates(b.id,curId);
+ var body=items.length?items.map(function(it){
+  var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>');
+  return '<div class="planitem"><div class="pi-main"><div class="pi-label">'+(it.spark?'<span style="color:#B8912F">\u2726 </span>':'')+esc(it.label)+'<span class="plan-pills">'+planPills(it)+'</span></div><div class="pi-sub">'+esc(it.sub)+'</div></div>'+btn+'</div>';
+ }).join(""):'<div class="empty">Nothing queued - all tended.</div>';
+ return '<details id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock'+(isCur?' current':'')+'" open><summary><span>'+b.name+(isCur?' <span class="plan-now">Now</span>':'')+'</span><span class="plan-range">'+b.range+' \u00b7 '+items.length+' item'+(items.length===1?'':'s')+'</span></summary><div style="margin-top:8px">'+body+'</div></details>';
+}
 function planHTML(){
  var blocks=planBlocksDef();
  var out='<div class="sectiontitle"><h2>Today</h2><span class="hint">the right thing at the right time</span></div>';
  var curId=(blocks.filter(function(x){return x.cur;})[0]||{}).id;
- out+='<nav class="day-jumps" aria-label="Time of day">'+blocks.map(function(b){return '<button class="btn mini ghost'+(b.cur?' active':'')+'" data-plan-jump="'+b.id+'">'+b.name+(b.cur?' \u00b7 Now':'')+'</button>';}).join('')+'</nav>';
- blocks.forEach(function(b){
-  var items=planCandidates(b.id,curId);
-  var cur=b.cur;
-  var body=items.length?items.map(function(it){
-   var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>');
-   return '<div class="planitem"><div class="pi-main"><div class="pi-label">'+(it.spark?'<span style="color:#B8912F">\u2726 </span>':'')+esc(it.label)+'<span class="plan-pills">'+planPills(it)+'</span></div><div class="pi-sub">'+esc(it.sub)+'</div></div>'+btn+'</div>';
-  }).join(""):'<div class="empty">Nothing queued - all tended.</div>';
-  var open=cur||planOpenState[b.id]!==false;
-  out+='<details id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock'+(cur?' current':'')+'"'+(open?' open':'')+'><summary><span>'+b.name+(cur?' <span class="plan-now">Now</span>':'')+'</span><span class="plan-range">'+b.range+' \u00b7 '+items.length+' item'+(items.length===1?'':'s')+'</span></summary><div style="margin-top:8px">'+body+'</div></details>';
-
- });
+ out+=planBlockCard(blocks.filter(function(x){return x.cur;})[0],curId,true);
+ out+='<nav class="day-jumps" aria-label="Other time blocks">'+blocks.filter(function(b){return b.id!==curId;}).map(function(b){return '<button class="btn mini ghost'+(planViewState===b.id?' active':'')+'" data-planview="'+b.id+'">'+b.name+(planViewState===b.id?' \u00b7 Hide':'')+'</button>';}).join('')+'</nav>';
+ var sel=blocks.filter(function(b){return b.id===planViewState&&b.id!==curId;})[0];
+ if(sel)out+=planBlockCard(sel,curId,false);
  return out;}
 function upcomingHTML(){
  var up=S.keyDates.map(function(kd){return {kd:kd,d:daysUntil(kd)};}).filter(function(x){return x.d<=60;}).sort(function(a,b){return a.d-b.d;});
