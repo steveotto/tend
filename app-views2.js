@@ -1,18 +1,37 @@
 "use strict";
 /* ============ views: prayer, echo, offload, settings, sync ============ */
 var PRAYER_CATS=["Family","Marriage","Kids","Friends","Work & Ministry","Church & Pastors","World & Others"];
+var editingPrayerId=null;
+function prayerDate(value){if(!value)return "";var d=new Date(value+"T12:00:00");return isNaN(d.getTime())?value:String(d.getDate()).padStart(2,"0")+" "+["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"][d.getMonth()]+" "+d.getFullYear();}
+function prayerRow(p){
+ var person=S.people.find(function(person){return person.id===p.personId;});
+ var count='Prayed for '+(p.prayed||0)+' '+((p.prayed||0)===1?'time':'times');
+ var out='<article class="prayer-item">';
+ if(editingPrayerId===p.id){
+  out+='<label class="field">Title<input id="prayerEditText" value="'+esc(p.text)+'"></label><label class="field">Details<textarea id="prayerEditDetails" placeholder="What would you like to pray for?">'+esc(p.details||"")+'</textarea></label><div class="addrow"><select id="prayerEditCat" aria-label="Category">'+PRAYER_CATS.map(function(c){return '<option'+(p.category===c?' selected':'')+'>'+esc(c)+'</option>';}).join('')+'</select><select id="prayerEditPerson" aria-label="Person"><option value="">No person</option>'+S.people.map(function(person){return '<option value="'+person.id+'"'+(p.personId===person.id?' selected':'')+'>'+esc(person.name)+'</option>';}).join('')+'</select></div><div class="prayer-actions"><button class="btn mini" data-prayersave="'+p.id+'">Save</button><button class="btn mini ghost" data-prayercancel="1">Cancel</button></div>';
+ }else{
+  out+='<div class="prayer-heading"><h3 class="prayer-title">'+esc(p.text)+'</h3>'+(person?'<span class="prayer-person">'+personAvatar(person,24)+esc(person.name)+'</span>':'')+(!p.answered&&!p.archived?'<button class="prayed-pill" data-pray="'+p.id+'" title="Record a prayer" aria-label="'+esc(count)+'. Record a prayer">'+count+'</button>':'<span class="prayed-pill">'+count+'</span>')+'</div>'+(p.details?'<p class="prayer-details">'+esc(p.details)+'</p>':'')+'<div class="prayer-footer"><div class="prayer-date">Added '+esc(prayerDate(p.added))+(p.lastPrayed?' · Last prayed '+esc(prayerDate(p.lastPrayed)):'')+(p.answered?' · Answered '+esc(prayerDate(p.answeredDate)):'')+(p.archived?' · Archived '+esc(prayerDate(p.archivedDate)):'')+'</div>';
+  out+='<span class="prayer-tools"><button class="prayer-icon" data-prayeredit="'+p.id+'" title="Edit prayer" aria-label="Edit prayer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 5 5-12 12-6 1 1-6Z M14 5l5 5"/></svg></button>';
+  if(!p.answered&&!p.archived)out+='<button class="prayer-icon" data-prayerics="'+p.id+'" title="Download calendar reminder for tomorrow at 7 AM" aria-label="Download calendar reminder"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 21H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5 M6 2v4 M16 2v4 M2 9h18 M17 12v9 m-4-4 4 4 4-4"/></svg></button>';
+  out+='</span><div class="prayer-actions prayer-status-actions">';
+  if(!p.answered&&!p.archived)out+='<button class="btn mini ghost" data-prayerans="'+p.id+'">Answered</button><button class="btn mini ghost" data-prayerarchive="'+p.id+'">Archive</button>';
+  else out+='<button class="btn mini ghost" data-prayerunans="'+p.id+'">Reopen</button>';
+  out+='</div></div>';
+ }
+ return out+'</article>';
+}
+function prayerList(items){
+ var active=items.filter(function(p){return !p.answered&&!p.archived;});
+ var out=active.length?active.map(prayerRow).join(''):'<div class="empty">No active prayer requests.</div>';
+ [['answered','Answered'],['archived','Archived']].forEach(function(group){var past=items.filter(function(p){return p[group[0]];});if(past.length)out+='<details class="prayer-past"'+(past.some(function(p){return p.id===editingPrayerId;})?' open':'')+'><summary>'+group[1]+' ('+past.length+')</summary>'+past.map(prayerRow).join('')+'</details>';});return out;
+}
 function renderPrayer(){
  var out='<div class="sectiontitle" style="margin-top:6px"><h2>Prayer</h2><span class="hint">carry these people before God</span></div>';
- out+='<div class="card" style="margin-bottom:14px"><div class="addrow" style="margin:0"><select id="prayerCat">'+PRAYER_CATS.map(function(c){return '<option>'+c+'</option>';}).join("")+'</select><select id="prayerPerson"><option value="">- person (optional) -</option>'+S.people.map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+'</option>';}).join("")+'</select></div><div class="addrow"><input id="prayerNew" placeholder="New prayer request..."><button class="btn" id="prayerAdd">Add</button></div></div>';
- PRAYER_CATS.forEach(function(cat){
-  var items=S.prayers.filter(function(p){return p.category===cat&&!p.answered;});var ans=S.prayers.filter(function(p){return p.category===cat&&p.answered;});
-  if(!items.length&&!ans.length)return;
-  out+='<div class="card prayer-cat"><div class="subhead">'+cat+'</div>';
-  items.forEach(function(p){out+='<div class="preq"><input type="checkbox" class="cb" data-praymark="'+p.id+'" title="mark prayed"><div class="ptext">'+esc(p.text)+(p.personId?' <span class="badge">'+esc(personName(p.personId))+'</span>':'')+'<div style="font-size:11px;color:var(--ink-faint);margin-top:2px">added '+p.added+' \u00B7 prayed '+(p.prayed||0)+'x</div></div><button class="btn mini ghost" data-prayerics="'+p.id+'">remind</button><button class="del" data-prayerans="'+p.id+'" title="mark answered">\u2713</button><button class="del" data-prayerdel="'+p.id+'">\u00D7</button></div>';});
-  if(ans.length){out+='<div class="subhead" style="margin-top:12px;color:var(--forest)">Answered \u2713</div>';ans.forEach(function(p){out+='<div class="preq answered"><div class="ptext">'+esc(p.text)+(p.personId?' <span class="badge">'+esc(personName(p.personId))+'</span>':'')+'<div style="font-size:11px;color:var(--forest)">answered '+p.answeredDate+'</div></div><button class="del" data-prayerunans="'+p.id+'" title="restore">\u21BA</button></div>';});}
-  out+='</div>';});
- if(!S.prayers.length)out+='<div class="empty" style="text-align:center;padding:30px 0">No requests yet. Prayers tagged with a person also show up on their profile.</div>';
- return out;}
+ out+='<div class="card" style="margin-bottom:14px"><div class="addrow" style="margin:0"><select id="prayerCat">'+PRAYER_CATS.map(function(c){return '<option>'+c+'</option>';}).join("")+'</select><select id="prayerPerson"><option value="">- person (optional) -</option>'+S.people.map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+'</option>';}).join("")+'</select></div><label class="field prayer-new-field">Title<input id="prayerNew" placeholder="Prayer title"></label><label class="field prayer-new-field">Details<textarea id="prayerDetails" placeholder="Details (optional)"></textarea></label><button class="btn" id="prayerAdd">Add prayer</button></div>';
+ PRAYER_CATS.forEach(function(cat){var items=S.prayers.filter(function(p){return p.category===cat;});if(items.length)out+='<div class="card prayer-cat"><div class="subhead">'+esc(cat)+'</div>'+prayerList(items)+'</div>';});
+ if(!S.prayers.length)out+='<div class="empty">Prayers tagged with a person also show up on their profile.</div>';
+ return out;
+}
 function renderEcho(){
  var out='<div class="sectiontitle" style="margin-top:6px"><h2>Echoblocks</h2><span class="hint">outreach blocks that echo back - calls, notes, intros</span></div>';
  out+='<div class="addrow"><input id="echoNew" placeholder="New block: Photographers, Pastors, Old friends..."><button class="btn" id="echoAdd">Add block</button></div><div style="margin-top:14px" class="grid">';

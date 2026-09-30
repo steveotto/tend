@@ -36,85 +36,100 @@ function renderToday(){
  out+=renderChecklists();
  return out;}
 /* ============ time-aware routine plan ============ */
-function planBlocksDef(){var h=new Date().getHours();
- return [
-  {id:"early",name:"Early morning",range:"5:30 - 9:00am",cur:(h>=5&&h<9)},
-  {id:"morning",name:"Midday focus",range:"9:00 - 11:30am",cur:(h>=9&&h<11)},
-  {id:"lunch",name:"Lunch",range:"11:30am - 1:30pm",cur:(h>=11&&h<13)},
-  {id:"afternoon",name:"Afternoon",range:"1:30 - 4:30pm",cur:(h>=13&&h<16)},
-  {id:"commute",name:"Way home",range:"4:30 - 6:00pm",cur:(h>=16&&h<18)},
-  {id:"evening",name:"Evening",range:"6:00 - 9:30pm",cur:(h>=18&&h<21)},
-  {id:"bedtime",name:"Bedtime",range:"9:30pm - 5:30am",cur:(h>=21||h<5)}
- ];}
+function dayBlockAt(date){var m=date.getHours()*60+date.getMinutes();return m<330||m>=1290?"bedtime":m<540?"early":m<690?"morning":m<810?"lunch":m<990?"afternoon":m<1080?"commute":"evening";}
+function planBlocksDef(){var current=dayBlockAt(new Date());return [
+ {id:"early",name:"Early morning",range:"5:30 – 9:00am"},
+ {id:"morning",name:"Midday focus",range:"9:00 – 11:30am"},
+ {id:"lunch",name:"Lunch",range:"11:30am – 1:30pm"},
+ {id:"afternoon",name:"Afternoon",range:"1:30 – 4:30pm"},
+ {id:"commute",name:"Way home",range:"4:30 – 6:00pm"},
+ {id:"evening",name:"Evening",range:"6:00 – 9:30pm"},
+ {id:"bedtime",name:"Bedtime",range:"9:30pm – 5:30am"}
+ ].map(function(b){b.cur=b.id===current;return b;});}
+function rhythmScheduledToday(r,date){
+ date=date||new Date();if(r.freq==="quarterly"||r.freq==="yearly")return false;
+ if(rhythmDaysSince(r)===0)return false;
+ if(r.freq==="custom")return date.getDay()===(r.customDow||0)&&(r.customType!=="monthly"||Math.ceil(date.getDate()/7)===(r.customOrd||1));
+ return r.freq==="daily"||rhythmDaysSince(r)>=rhythmPeriod(r);
+}
+function goalHasRhythm(g){
+ var person=S.people.find(function(p){return p.id===g.personId;});
+ if(!person&&g.id==="g-walk")person=S.people.find(function(p){return p.id==="amy";});
+ if(!person)return false;
+ function normalized(text){return String(text||"").toLowerCase().replace(person.name.toLowerCase(),"").replace(/\bwith\b/g,"").replace(/[^a-z0-9]/g,"");}
+ return (person.rhythms||[]).some(function(r){return normalized(g.text)===normalized(r.text)||(g.id==="g-date-amy"&&/date night/i.test(r.text))||(g.id==="g-pray-amy"&&/pray together/i.test(r.text))||(g.id==="g-walk"&&/walk/i.test(r.text));});
+}
+function planPills(it){var person=S.people.find(function(p){return p.id===it.personId;});var label=it.rhythm||it.rkey?"Rhythm":it.spark||it.sparky?"Spark":it.taskId?"Task":it.goalId?"Goal":"Suggestion";var area=it.area||(it.log&&it.log.area);return (person?'<span class="prayer-person">'+personAvatar(person,24)+esc(person.name)+'</span>':'')+'<span class="plan-kind">'+label+'</span>'+(!person&&area&&S.areas[area]?'<span class="plan-kind">'+esc(S.areas[area].name)+'</span>':'');}
 function goalType(g){return {scripture:"note",prayer:"note",workout:"inperson",outdoors:"inperson",date:"inperson",quality:"inperson"}[g.kind]||"inperson";}
 function goalItem(g){var iv=goalInterval(g),d=goalLastDone(g);
  return {label:g.text,sub:(d===null?"not yet logged":(d===0?"done today":d+"d ago \u00B7 every "+iv+"d")),log:{area:g.area,type:goalType(g),title:g.text,goalId:g.id}};}
 function genItem(label,sub,area,type,title){return {label:label,sub:sub,log:{area:area,type:type,title:title||label}};}
 function taskItem(t){return {label:t.text,sub:"task \u00B7 "+(S.areas[t.areaId]?S.areas[t.areaId].name:""),log:{area:t.areaId,type:"note",title:"Task: "+t.text},taskId:t.id};}
 function planCandidates(bid,curBid){
- var out=[],seen={};
- function push(it){if(it&&it.label&&!seen[it.label]){seen[it.label]=1;out.push(it);}}
- function pg(g){if(g&&goalLastDone(g)!==0)push(goalItem(g));}
- function gid(id){return S.goals.find(function(g){return g.id===id;});}
- function tasks(areas){S.tasks.filter(function(t){return !t.done&&(!areas||!areas.length||areas.indexOf(t.areaId)>=0);}).slice(0,4).forEach(function(t){push(taskItem(t));});}
- function lowestGoals(n,exceptKinds){S.goals.filter(function(g){return exceptKinds.indexOf(g.kind)<0&&goalLastDone(g)!==0;}).sort(function(a,b){return goalScore(a)-goalScore(b);}).slice(0,n).forEach(pg);}
- S.goals.filter(function(g){return (g.tod||"anytime")===bid&&g.tod!=="anytime"&&goalLastDone(g)!==0;}).forEach(pg);
- if(bid==="early"){pg(gid("g-bible"));push(genItem("Devotional prayer time","slow start, before the day begins","faith","note","Devotional prayer"));pg(gid("g-core"));pg(gid("g-strength"));}
- else if(bid==="morning"){tasks([]);lowestGoals(2,["scripture","prayer","workout"]);}
- else if(bid==="lunch"){tasks(["finances","health"]);tasks([]);}
- else if(bid==="afternoon"){lowestGoals(3,["scripture","prayer"]);tasks([]);}
- else if(bid==="commute"){
-  if(!S.events.some(function(e){return e.areaId==="friendships"&&daysSince(e.ts)===0;}))push(genItem("Text or call one friend","keep friendships green","friendships","text","Reached out to a friend"));
-  var fp=S.people.filter(function(p){return p.area==="parenting";}).sort(function(a,b){return personScore(a)-personScore(b);})[0];
-  if(fp&&personScore(fp)<80)push({label:"Connect with "+fp.name,sub:"lowest family meter \u00B7 reach out",log:{area:fp.area,type:"text",title:"Connected with "+fp.name}});
- }
- else if(bid==="evening"){pg(gid("g-walk"));pg(gid("g-date-amy"));pg(gid("g-wedding"));tasks(["marriage","parenting"]);tasks([]);}
- else if(bid==="bedtime"){pg(gid("g-pray-amy"));push(genItem("Plan tomorrow - pick your top 3","two minutes, huge payoff","faith","note","Planned tomorrow"));}
- S.people.forEach(function(pp){(pp.rhythms||[]).forEach(function(r){
-  if((r.tod||"anytime")!==bid)return;
-  if(rhythmDaysSince(r)===0)return;
-  push({rhythm:pp.id+"|"+r.id,label:r.text+" - "+pp.name,sub:rhythmFreqLabel(r)+" rhythm \u00B7 "+rhythmDueTxt(r)});
- });});
- S.people.forEach(function(pp){openSparks(pp).forEach(function(s){
-  if(!sparkLive(s))return;
-  if(!s.by)return;
-  var sblk=sparkBlock(s);
-  if(sblk){if(sblk!==bid)return;}
-  else{if(!curBid||bid!==curBid)return;}
-  push({spark:pp.id+"|"+s.id,label:s.text+" - "+pp.name,sub:"spark \u00B7 "+(s.time?fmtHM12(s.time)+" \u00B7 ":"")+sparkDueTxt(s)});
- });});
- return out.slice(0,5);}
+ var out=[];
+ S.goals.forEach(function(g){
+  if(goalHasRhythm(g)||goalLastDone(g)===0)return;
+  var elapsed=goalLastDone(g);if(elapsed!==null&&elapsed<goalInterval(g))return;
+  var defaults={"g-bible":"early","g-core":"early","g-strength":"early","g-walk":"evening","g-date-amy":"evening","g-wedding":"evening","g-pray-amy":"bedtime"};
+  var block=g.tod&&g.tod!=="anytime"?g.tod:defaults[g.id];
+  if(block!==bid)return;
+  var item=goalItem(g);item.personId=g.personId;item.goalId=g.id;item.area=g.area;item.log.personId=g.personId;out.push(item);
+ });
+ S.tasks.forEach(function(t){if(!t.done&&((t.tod&&t.tod!=="anytime")?t.tod===bid:bid===curBid))out.push(taskItem(t));});
+ S.people.forEach(function(person){
+  (person.rhythms||[]).forEach(function(r){if((r.tod||"anytime")===bid&&rhythmScheduledToday(r))out.push({rhythm:person.id+"|"+r.id,personId:person.id,label:r.text,sub:rhythmFreqLabel(r)+" · "+rhythmDueTxt(r)});});
+  openSparks(person).forEach(function(spark){if(!spark.by||!sparkLive(spark))return;if((sparkBlock(spark)||curBid)!==bid)return;out.push({spark:person.id+"|"+spark.id,personId:person.id,label:spark.text,sub:(spark.time?fmtHM12(spark.time)+" · ":"")+sparkDueTxt(spark)});});
+ });
+ return out;
+}
+var planOpenState={};
 function planHTML(){
  var blocks=planBlocksDef();
  var out='<div class="sectiontitle"><h2>Today</h2><span class="hint">the right thing at the right time</span></div>';
  var curId=(blocks.filter(function(x){return x.cur;})[0]||{}).id;
+ out+='<nav class="day-jumps" aria-label="Time of day">'+blocks.map(function(b){return '<button class="btn mini ghost'+(b.cur?' active':'')+'" data-plan-jump="'+b.id+'">'+b.name+(b.cur?' · Now':'')+'</button>';}).join('')+'</nav>';
  blocks.forEach(function(b){
-  var items=planCandidates(b.id,b.id===curId);
+  var items=planCandidates(b.id,curId);
   var cur=b.cur;
   var body=items.length?items.map(function(it){
    var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>');
-   return '<div class="planitem"><div class="pi-main"><div class="pi-label">'+(it.spark?'<span style="color:#B8912F">\u2726 </span>':'')+esc(it.label)+'</div><div class="pi-sub">'+esc(it.sub)+'</div></div>'+btn+'</div>';
+   return '<div class="planitem"><div class="pi-main"><div class="pi-label">'+(it.spark?'<span style="color:#B8912F">\u2726 </span>':'')+esc(it.label)+'<span class="plan-pills">'+planPills(it)+'</span></div><div class="pi-sub">'+esc(it.sub)+'</div></div>'+btn+'</div>';
   }).join(""):'<div class="empty">Nothing queued - all tended.</div>';
-  if(cur){out+='<div class="card planblock current"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:17px;font-weight:600">'+b.name+'</h3><span class="hint">'+b.range+'</span></div>'+body+'</div>';}
-  else{out+='<details class="card planblock"><summary style="cursor:pointer;font-weight:600;font-size:15px">'+b.name+' <span style="font-weight:400;color:var(--ink-faint);font-size:12.5px">'+b.range+' \u00B7 '+items.length+' item'+(items.length===1?"":"s")+'</span></summary><div style="margin-top:8px">'+body+'</div></details>';}
+  var open=cur||planOpenState[b.id]!==false;
+  out+='<details id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock'+(cur?' current':'')+'"'+(open?' open':'')+'><summary><span>'+b.name+(cur?' <span class="plan-now">Now</span>':'')+'</span><span class="plan-range">'+b.range+' · '+items.length+' item'+(items.length===1?'':'s')+'</span></summary><div style="margin-top:8px">'+body+'</div></details>';
+
  });
  return out;}
 function upcomingHTML(){
  var up=S.keyDates.map(function(kd){return {kd:kd,d:daysUntil(kd)};}).filter(function(x){return x.d<=60;}).sort(function(a,b){return a.d-b.d;});
- if(!up.length)return "";
+ var longRhythms=[];S.people.forEach(function(p){(p.rhythms||[]).forEach(function(r){if(r.freq!=="quarterly"&&r.freq!=="yearly")return;var days=rhythmDaysSince(r),left=rhythmPeriod(r)-days;if(days===999||left<=60)longRhythms.push({person:p,rhythm:r,left:days===999?null:left});});});
+ if(!up.length&&!longRhythms.length)return "";
  var out='<div class="sectiontitle"><h2>Coming up</h2><span class="hint">next 60 days</span></div><div class="uprow">';
  up.forEach(function(x){
   var cls=x.d<=7?"soon":(x.d<=21?"mid":"far");
   var link=S.checklists.find(function(c){return c.linkId===x.kd.id;});
   out+='<div class="upitem" data-upitem="'+x.kd.id+'"'+(link?' data-hascl="1"':'')+'><span class="updays '+cls+'">'+(x.d===0?"today":"in "+x.d+"d")+'</span><span class="uplabel">'+esc(x.kd.label)+'</span>'+(link?'<span class="upcl">checklist \u2192</span>':'')+'</div>';
  });
- return out+'</div>';}
+ out+='</div>';
+ if(longRhythms.length)out+='<div class="card upcoming-rhythms">'+longRhythms.sort(function(a,b){return (a.left===null?0:a.left)-(b.left===null?0:b.left);}).map(function(x){return '<div class="planitem"><div class="pi-main"><div class="pi-label">'+esc(x.rhythm.text)+'<span class="plan-pills">'+planPills({rhythm:true,personId:x.person.id})+'</span></div><div class="pi-sub">'+esc(rhythmFreqLabel(x.rhythm))+' · '+(x.left===null?'Choose a date to plan this':x.left<0?'Ready to tend · last tended '+rhythmDaysSince(x.rhythm)+' days ago':x.left===0?'Due today':'Due in '+Math.ceil(x.left)+' days')+'</div></div><button class="btn mini ghost" data-openperson="'+x.person.id+'">Open</button></div>';}).join('')+'</div>';
+ return out;}
 function goalRow(g){
  var d=goalLastDone(g),sc=goalScore(g),c=scoreClass(sc);
  var iv=goalInterval(g);
  var statusTxt=d===null?"never logged":(d===0?"done today":(d+"d ago \u00B7 every "+iv+"d"));
  return '<div class="goalrow"><span class="sm-dot '+c+'"></span><div class="gr-main"><b>'+esc(g.text)+'</b>'+(g.personId?' <span class="gr-person">'+esc(personName(g.personId))+'</span>':'')+'<div class="gr-meta">'+statusTxt+'</div></div><button class="btn mini" data-goaldone="'+g.id+'">Done</button></div>';}
 function nextDateLine(pid){var kds=S.keyDates.filter(function(k){return k.personId===pid;});if(!kds.length)return "";var best=null;kds.forEach(function(k){var d=daysUntil(k);if(best===null||d<best.d)best={k:k,d:d};});if(!best)return "";return '<div class="pf-next">'+esc(best.k.label)+' \u00B7 '+(best.d===0?"TODAY":"in "+best.d+" days")+'</div>';}
+function personHealthColor(score){
+ // Match the dashboard gradient stops: coral at 0, amber at 48, green at 100.
+ var value=Math.max(0,Math.min(100,score));
+ var start=value<=48?[255,90,69]:[255,193,51];
+ var end=value<=48?[255,193,51]:[18,183,106];
+ var fraction=value<=48?value/48:(value-48)/52;
+ return "rgb("+start.map(function(channel,i){return Math.round(channel+(end[i]-channel)*fraction);}).join(",")+")";
+}
+function personHealthMeter(score,name,solid){
+ return '<div class="bar-ov person-health-bar"'+(solid?' style="background:'+personHealthColor(score)+'"':'')+' role="meter" aria-label="'+esc(name)+' tending health" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+score+'" aria-valuetext="'+score+' out of 100: '+esc(scoreLabel(score))+'">'+(solid?'':'<i class="ov-marker" style="left:clamp(10px, '+score+'%, calc(100% - 10px))" aria-hidden="true"></i>')+'</div>';
+}
 function renderPeople(){
  var HINT='rhythms, sparks, prayers - tending the people you love';
  if(currentPerson)return '<div class="sectiontitle" style="margin-top:6px"><h2>People</h2><span class="hint">'+HINT+'</span></div>'+personProfile(currentPerson);
@@ -122,8 +137,8 @@ function renderPeople(){
  S.people.forEach(function(p){
   var sc=personScore(p),c=scoreClass(sc);
   var ci=personConnInfo(p);
-  var prayers=S.prayers.filter(function(x){return x.personId===p.id&&!x.answered;}).length;
-  out+='<div class="card person-card" data-openperson="'+p.id+'" style="cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:10px;min-width:0">'+personAvatar(p,42)+'<h3 style="margin:0">'+esc(p.name)+'</h3></div><span class="score '+c+'">'+sc+'</span></div>'+meterBar(sc,c)+'<div class="meta">'+esc(p.relation||"")+' \u00B7 '+(ci.last?("connected "+when(ci.last.ts)):"no connections yet")+(prayers?" \u00B7 "+prayers+" prayer"+(prayers>1?"s":""):"")+'</div>'+nextDateLine(p.id)+personDateLines(p)+'</div>';
+  var prayers=S.prayers.filter(function(x){return x.personId===p.id&&!x.answered&&!x.archived;}).length;
+  out+='<div class="card person-card" data-openperson="'+p.id+'" style="cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:10px;min-width:0">'+personAvatar(p,42)+'<h3 style="margin:0">'+esc(p.name)+'</h3></div><span class="person-card-score">'+sc+'</span></div>'+personHealthMeter(sc,p.name,true)+'<div class="person-health-status statusword '+c+'">'+scoreLabel(sc)+'</div><div class="meta">'+esc(p.relation||"")+' \u00B7 '+(ci.last?("connected "+when(ci.last.ts)):"no connections yet")+(prayers?" \u00B7 "+prayers+" prayer"+(prayers>1?"s":""):"")+'</div>'+nextDateLine(p.id)+personDateLines(p)+'</div>';
  });
  out+='</div>';
  return out;}
@@ -131,6 +146,8 @@ function renderPeople(){
 function rhythmRow(p,r){
  var sc=rhythmScore(r),c=scoreClass(sc);
  if(editRhythmId===r.id){
+  if(!rhythmEditDraft||rhythmEditDraft.id!==r.id)rhythmEditDraft=JSON.parse(JSON.stringify(r));
+  r=rhythmEditDraft;
   var idf=p.id+"|"+r.id;
   var out='<div class="rhyedit">';
   out+='<div class="addrow" style="margin-top:2px"><input data-rfield="'+idf+'|text" value="'+esc(r.text)+'" placeholder="What is the rhythm?"></div>';
@@ -145,13 +162,14 @@ function rhythmRow(p,r){
   var du=durUnitOf(r),dv=durValOf(r);
   out+='<select data-rfield="'+idf+'|durUnit">'+Object.keys(DUR_UNITS).map(function(u){return '<option value="'+u+'"'+(du===u?" selected":"")+'>'+DUR_UNITS[u].label+'</option>';}).join("")+'</select>';
   out+='<select data-rfield="'+idf+'|durVal"><option value="0">- # -</option>'+Array.apply(null,{length:DUR_UNITS[du].max}).map(function(_,i){var n=i+1;return '<option value="'+n+'"'+(dv===n?" selected":"")+'>'+n+'</option>';}).join("")+'</select>';
-  out+='<button class="btn mini danger" data-rhydel="'+idf+'">Delete</button></div>';
-  out+='<div class="hint" style="font-size:11px;color:var(--ink-faint);margin:4px 0 8px">Saves as you change it. Click the pencil again to collapse.</div></div>';
+  out+='</div><div class="addrow"><button class="btn mini" data-rhyeditsave="'+idf+'">Save</button><button class="btn mini ghost" data-rhyeditcancel="1">Cancel</button><button class="btn mini danger" style="margin-left:auto" data-rhydel="'+idf+'">Delete</button></div>';
+  out+='<div class="hint" style="font-size:11px;color:var(--ink-faint);margin:4px 0 8px">Changes are saved when you select Save.</div></div>';
   return out;
  }
- var rl=rhythmLast(r),lastTxt=rl?("last "+when(rl.ts)):"never logged";
- if(rhyDoneDraft&&rhyDoneDraft.key===p.id+"|"+r.id){return '<div class="rhyrow"><span class="sm-dot '+c+'"></span><div class="gr-main"><b>'+esc(r.text||"(unnamed rhythm)")+'</b><div class="gr-meta">'+esc(rhythmFreqLabel(r))+" \u00B7 "+esc(lastTxt)+" \u00B7 "+esc(rhythmDueTxt(r))+'</div></div>'+rhyDoneBtn(p.id+"|"+r.id)+'</div><div class="hint" style="font-size:11px;color:var(--ink-faint);margin:0 0 8px 26px">When did it actually happen? That date drives the meter.</div>';}
- return '<div class="rhyrow"><span class="sm-dot '+c+'"></span><div class="gr-main"><b>'+esc(r.text||"(unnamed rhythm)")+'</b>'+(r.category==="prayer"?' <span class="gr-person">prayer</span>':'')+'<div class="gr-meta">'+esc(rhythmFreqLabel(r))+(r.tod&&r.tod!=="anytime"?" \u00B7 "+TODS[r.tod]:"")+(rhythmDurLabel(r)?" \u00B7 "+esc(rhythmDurLabel(r)):"")+" \u00B7 "+esc(lastTxt)+" \u00B7 "+esc(rhythmDueTxt(r))+'</div></div><button class="btn mini" data-rhydone="'+p.id+'|'+r.id+'">Done</button><button class="iconbtn" data-rhyedit="'+r.id+'" title="edit">\u270E</button></div>';
+ var rl=rhythmLast(r),lastTxt=rl?("last tended "+when(rl.ts)):"not yet tended";
+ var timingTxt=lastTxt+(rl&&rhythmDaysSince(r)!==0?" \u00B7 "+rhythmDueTxt(r):"");
+ if(rhyDoneDraft&&rhyDoneDraft.key===p.id+"|"+r.id){return '<div class="rhyrow"><span class="rhythm-health" title="Rhythm health"><span class="sm-dot '+c+'" aria-hidden="true"></span><span>'+sc+'%</span></span><div class="gr-main"><b>'+esc(r.text||"(unnamed rhythm)")+'</b><div class="gr-meta">'+esc(rhythmFreqLabel(r))+" \u00B7 "+esc(timingTxt)+'</div></div>'+rhyDoneBtn(p.id+"|"+r.id)+'</div><div class="hint" style="font-size:11px;color:var(--ink-faint);margin:0 0 8px 26px">When did it actually happen? That date drives the meter.</div>';}
+ return '<div class="rhyrow"><span class="rhythm-health" title="Rhythm health"><span class="sm-dot '+c+'" aria-hidden="true"></span><span>'+sc+'%</span></span><div class="gr-main"><b>'+esc(r.text||"(unnamed rhythm)")+'</b>'+(r.category==="prayer"?' <span class="gr-person">prayer</span>':'')+'<div class="gr-meta">'+esc(rhythmFreqLabel(r))+(r.tod&&r.tod!=="anytime"?" \u00B7 "+TODS[r.tod]:"")+(rhythmDurLabel(r)?" \u00B7 "+esc(rhythmDurLabel(r)):"")+" \u00B7 "+esc(timingTxt)+'</div></div><button class="btn mini" data-rhydone="'+p.id+'|'+r.id+'" title="Record a moment of care">Tend</button><button class="iconbtn" data-rhyedit="'+r.id+'" title="edit">\u270E</button></div>';
 }
 function draftRow(p){
  var r=rhythmDraft,idf=p.id+"|draft";
@@ -178,14 +196,14 @@ function personProfile(pid){
  var cInfo=personConnInfo(p),pInfo=personPrayerInfo(p);
  var cScore=connScoreFromDays(cInfo.days,personCadenceDays(p)),cCls=scoreClass(cScore);
  var pScore=prs.length?avg(prs.map(rhythmScore)):prayerScoreFromDays(pInfo.days),pCls=scoreClass(pScore);
- var evs=S.events.filter(function(e){return e.personId===pid;}).sort(function(a,b){return b.ts-a.ts;}).slice(0,12);
+ var evs=S.events.filter(function(e){return e.personId===pid;}).sort(function(a,b){return b.ts-a.ts;});
  var prayers=S.prayers.filter(function(x){return x.personId===pid;});
  var kds=S.keyDates.filter(function(k){return k.personId===pid;});
  var ll=p.loveLanguage||"";
  var first=esc(p.name.split(" ")[0]);
  var bd=bdayInfo(p.birthday);
- var out='<div class="card detail open" id="personPanel"><div class="head"><div style="display:flex;align-items:center;gap:12px">'+personAvatar(p,52)+'<div><h3>'+esc(p.name)+' <span class="rel">'+esc(p.relation||"")+'</span></div></div></div><div><span class="score '+c+'">'+sc+'</span><button class="btn mini ghost" style="margin-left:10px" data-closeperson="1">Close</button></div></div>';
- out+=meterBar(sc,c);out+='<div class="chips">';
+ var out='<div class="card detail open person-profile" id="personPanel"><div class="person-profile-head"><div class="person-identity">'+personAvatar(p,52)+'<div><h3>'+esc(p.name)+'</h3><div class="rel">'+esc(p.relation||"")+'</div></div></div><button class="btn ghost" data-closeperson="1">Close</button></div>';
+ out+='<div class="person-health-heading"><div><h4>Tending health</h4><p>The rhythms and moments that keep you connected.</p></div><span class="person-profile-score">'+sc+'<small>/ 100</small></span></div>'+personHealthMeter(sc,p.name)+'<div class="person-health-status statusword '+c+'">'+scoreLabel(sc)+'</div><div class="chips">';
  out+=ll?'<span class="chip">\u2665 '+esc(LL_LANGUAGES[ll])+'</span>':'<span class="chip info">no love language set</span>';
  out+=bd?'<span class="chip'+(bd.days<=14?" warn":" info")+'">\uD83C\uDF82 Birthday: '+esc(bd.label)+'</span>':'<span class="chip info">no birthday set</span>';
  if(p.anniversary){var an2=annivInfo(p.anniversary);if(an2)out+='<span class="chip info">\u2665 Anniversary: '+esc(an2.label)+'</span>';}
@@ -202,9 +220,9 @@ function personProfile(pid){
  var nud=[];
  if(bd&&bd.days<=14)nud.push('<b>Birthday '+esc(bd.label)+' is in '+bd.days+' day'+(bd.days===1?"":"s")+' - plan something.</b>');
  if(pTouch.days>=1)nud.push('<b>Daily ripple:</b> '+esc(touchSuggestion(p)));
- (p.rhythms||[]).forEach(function(r){var d=rhythmDaysSince(r);if(d!==999&&d>=rhythmPeriod(r))nud.push('<b>'+esc(r.text)+'</b> - '+esc(rhythmDueTxt(r)));});
+ (p.rhythms||[]).forEach(function(r){var d=rhythmDaysSince(r),period=rhythmPeriod(r);if(d!==999&&d>=period)nud.push('<b>'+esc(r.text)+':</b> '+(d===period?"Due today.":"Last tended "+d+" day"+(d===1?"":"s")+" ago."));});
  if(ll)nud.push('<b>'+esc(LL_LANGUAGES[ll])+' is '+first+"&#39;s love language:</b> "+LL_NUDGES[ll]);
- out+='<div class="nudge"><span>\uD83D\uDCA1</span><span>'+nud.join(" ")+'</span></div>';
+ if(nud.length)out+='<div class="nudge"><span aria-hidden="true">\uD83D\uDCA1</span><ul class="nudge-list">'+nud.map(function(item){return "<li>"+item+"</li>";}).join("")+'</ul></div>';
  out+='</div>';
  /* rhythms */
  out+='<div class="card" style="margin-bottom:22px"><div class="subhead">Rhythms with '+first+'<span class="hint" style="margin-left:8px;text-transform:none;letter-spacing:0;font-weight:400">recurring commitments - they surface on your dashboard</span></div>';
@@ -213,6 +231,20 @@ function personProfile(pid){
  var dO=rhythmDraft&&rhythmDraft.pid===pid;
  if(dO)out+=draftRow(p);
  out+='<div style="margin-top:10px"><button class="btn mini ghost" data-rhyadd="'+pid+'">'+(dO&&rhythmDraft.text&&rhythmDraft.text.trim()?"Save Rhythm":"+ Add rhythm")+'</button>'+(dO?'<button class="btn mini ghost" data-rhycancel="1" style="margin-left:8px">Cancel</button>':"")+'</div>';
+ out+='</div>';
+ /* ripples */
+ var edEv=editingConn?(S.events.find(function(z){return z.id===editingConn;})||{}):null;
+ out+='<div class="card" style="margin-bottom:22px"><div class="subhead">Ripples with '+first+(pTouch.days===0?" \u00B7 one today \u2713":"")+'<span class="hint" style="margin-left:8px;text-transform:none;letter-spacing:0;font-weight:400">small moments of care - they add up</span></div>';
+ if(pTouch.days!==0)out+='<div class="touchsugg">\uD83D\uDCAC Suggestion: '+esc(touchSuggestion(p))+'</div>';
+ var rippleKind=edEv?(edEv.kind||edEv.type):"text";
+ if(edEv&&!RIPPLE_TYPES[rippleKind])rippleKind="other";
+ var rippleTime=edEv?new Date(edEv.ts||Date.now()):new Date();
+ var rippleTimeValue=String(rippleTime.getHours()).padStart(2,"0")+":"+String(rippleTime.getMinutes()).padStart(2,"0");
+ out+='<div class="ripple-fields"><label class="ripple-field">Type<select id="plogType">'+Object.keys(RIPPLE_TYPES).map(function(k){return '<option value="'+k+'"'+(rippleKind===k?' selected':'')+'>'+RIPPLE_TYPES[k]+'</option>';}).join("")+'</select></label><label class="ripple-field">Date<input type="date" id="momentDate" value="'+(edEv?fmtDate(edEv.ts||Date.now()):fmtDate(Date.now()))+'"></label><label class="ripple-field">Time<input type="time" id="momentTime" '+(edEv&&edEv.allDay?"disabled":"")+' value="'+rippleTimeValue+'"></label><label class="ripple-all-day"><input type="checkbox" id="momentAllDay" class="cb" '+(edEv&&edEv.allDay?"checked":"")+'> All Day</label></div>';
+ out+='<div class="qlog" id="plogOtherRow" style="display:'+(rippleKind==="other"?'flex':'none')+'"><input id="plogOther" aria-label="Other ripple type" value="'+esc(rippleKind==="other"&&edEv?(edEv.rippleLabel||edEv.kind||""):"")+'" placeholder="What kind of moment?" class="ripple-other"></div>';
+ out+='<div class="addrow" style="margin-top:8px"><input id="momentTitle" value="'+esc(edEv&&edEv.title&&edEv.title.indexOf("Time with")!==0?edEv.title:"")+'" placeholder="Title - e.g. Encouraging Message"></div>';
+ out+='<div class="addrow" style="align-items:flex-start"><textarea id="momentNote" placeholder="Notes - what you want to remember..." style="min-height:70px;flex:1;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--canvas);font-size:15px">'+esc(edEv?(edEv.note||""):"")+'</textarea></div>';
+ out+='<div style="display:flex;gap:8px;margin-top:2px"><button class="btn" data-psubmit="'+pid+'">'+(editingConn?"Update":"Log it")+'</button>'+(editingConn?'<button class="btn ghost" data-peditcancel="1">Cancel</button>':'')+'</div>';
  out+='</div>';
  /* sparks: no-pressure ideas */
  var sps=openSparks(p);
@@ -224,34 +256,27 @@ function personProfile(pid){
  else out+='<div class="empty">No sparks yet - the fun, no-pressure "we should do this sometime" list.</div>';
  out+='<div class="addrow"><input placeholder="Idea - a movie, a talk, a trip..." data-spnewtext="'+pid+'"><input type="date" data-spnewdate="'+pid+'" style="max-width:150px"><input type="time" data-spnewtime="'+pid+'" style="max-width:110px"><button class="btn mini" data-spadd="'+pid+'">Add</button></div>';
  out+='</div>';
- /* ripples */
- var edEv=editingConn?(S.events.find(function(z){return z.id===editingConn;})||{}):null;
- out+='<div class="card" style="margin-bottom:22px"><div class="subhead">Ripples with '+first+(pTouch.days===0?" \u00B7 one today \u2713":"")+'<span class="hint" style="margin-left:8px;text-transform:none;letter-spacing:0;font-weight:400">small moments of care - they add up</span></div>';
- if(pTouch.days!==0)out+='<div class="touchsugg">\uD83D\uDCAC Suggestion: '+esc(touchSuggestion(p))+'</div>';
- out+='<div class="qlog"><select id="plogType" style="border:1px solid var(--line);border-radius:10px;padding:9px 11px;font-size:14px;background:var(--canvas)">'+["coffee","meal","call","text","quality","prayer"].map(function(k){return '<option value="'+k+'">'+KINDS[k].label+'</option>';}).join("")+'<option value="other">Other...</option></select><input type="date" id="momentDate" value="'+(editingConn?fmtDate(edEv.ts||Date.now()):fmtDate(Date.now()))+'"><input type="time" id="momentTime" '+(edEv&&edEv.allDay?"disabled":"")+' value="'+(editingConn?fmtHM(edEv.ts||Date.now()):nowHM())+'"><label style="display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;color:var(--ink-soft)"><input type="checkbox" id="momentAllDay" class="cb" '+(edEv&&edEv.allDay?"checked":"")+'> All Day</label></div>';
- out+='<div class="qlog" id="plogOtherRow" style="display:none"><input id="plogOther" placeholder="What kind of moment? (e.g. Golf, Movie)" style="flex:1;border:1px solid var(--line);border-radius:10px;padding:10px 12px"></div>';
- out+='<div class="addrow" style="margin-top:8px"><input id="momentTitle" value="'+esc(edEv&&edEv.title&&edEv.title.indexOf("Time with")!==0?edEv.title:"")+'" placeholder="Title - e.g. Encouraging Message"></div>';
- out+='<div class="addrow" style="align-items:flex-start"><textarea id="momentNote" placeholder="Notes - what you want to remember..." style="min-height:70px;flex:1;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--canvas);font-size:15px">'+esc(edEv?(edEv.note||""):"")+'</textarea></div>';
- out+='<div style="display:flex;gap:8px;margin-top:2px"><button class="btn" data-psubmit="'+pid+'">'+(editingConn?"Update":"Log it")+'</button>'+(editingConn?'<button class="btn ghost" data-peditcancel="1">Cancel</button>':'')+'</div>';
- out+='<div class="subhead" style="margin-top:18px">History</div>';
- if(evs.length){evs.slice(0,8).forEach(function(e){out+=rippleLine(e);});
-  if(evs.length>8)out+='<details style="margin-top:8px"><summary style="cursor:pointer;font-size:13px;color:var(--ink-faint)">Show older ('+(evs.length-8)+' more)</summary><div style="margin-top:6px">'+evs.slice(8).map(rippleLine).join("")+'</div></details>';
- }else out+='<div class="empty">No history yet.</div>';
+ /* recent moments: shared history for rhythms, ripples, and sparks */
+ out+='<div class="card" style="margin-bottom:22px"><div class="subhead">Recent moments<span class="hint" style="margin-left:8px;text-transform:none;letter-spacing:0;font-weight:400">the care you have shared</span></div>';
+ if(evs.length){
+  out+=evs.slice(0,5).map(rippleLine).join("");
+  if(evs.length>5)out+='<details class="recent-moments-more"><summary>Show all ('+evs.length+' moments)</summary><div>'+evs.slice(5).map(rippleLine).join("")+'</div></details>';
+ }else out+='<div class="empty">No moments logged yet.</div>';
  out+='</div>';
- /* prayer profile */
- out+='<div class="card" style="margin-bottom:22px"><div class="subhead">'+first+"&#39;s prayer profile"+'<span class="savehint" id="prayerSaveHint" style="margin-left:8px;position:static">saved</span></div>';
+ out+='<div class="card" style="margin-bottom:22px"><div class="subhead">Prayer for '+first+'</div>'+prayerList(prayers);
+
+ out+='<details class="prayer-notes"><summary>Prayer notes</summary><div class="subhead">'+first+"&#39;s prayer context"+'<span class="savehint" id="prayerSaveHint" style="margin-left:8px;position:static">saved</span></div>';
  out+='<div class="field"><label>"How can I be praying for you?" (their words)</label><textarea data-phpray="1" data-pid="'+pid+'" placeholder="Ask them this - log their answer here">'+esc(p.howToPray||"")+'</textarea></div>';
  out+='<div class="field"><label>My prayer focus for '+first+'</label><textarea data-pfocus="1" data-pid="'+pid+'" placeholder="Your private prayer for them">'+esc(p.prayerFocus||"")+'</textarea></div>';
+ out+='</details>';
  out+='</div>';
- /* prayers + encouragement + key dates + followups */
- out+='<div class="card"><div class="subhead">Prayers for '+first+'</div>';
- if(prayers.length){prayers.forEach(function(x){out+='<div class="preq'+(x.answered?" answered":"")+'"><div class="ptext">'+esc(x.text)+(x.answered?'<div style="font-size:11px;color:var(--forest)">answered '+x.answeredDate+'</div>':"")+'</div></div>';});}else out+='<div class="empty">None yet - add one in Prayer with their name.</div>';
+ out+='<div class="card" style="margin-bottom:22px">';
  out+='<div class="subhead" style="margin-top:18px">Potential encouragement</div><div class="notewrap"><textarea data-encnote="'+pid+'" placeholder="Ideas: a verse that fits their season, a gift idea, a specific word...">'+esc((p.encouragementNote||""))+'</textarea><span class="savehint" data-enchint="'+pid+'">saved</span></div>';
- out+='<div class="subhead" style="margin-top:18px">Key dates</div>';
- if(kds.length){kds.forEach(function(k){out+='<div class="logline"><span class="kind">'+esc(k.label)+'</span><span class="txt">'+(daysUntil(k)===0?"today":"in "+daysUntil(k)+" days")+'</span><span class="entry-actions"><button class="iconbtn" data-kddel="'+k.id+'" title="delete">\uD83D\uDDD1</button></span></div>';});}else out+='<div class="empty">None yet.</div>';
- out+='<div class="addrow"><input placeholder="Add key date (label)" data-kdlabel="'+pid+'"><button class="btn mini" data-kdadd="'+pid+'">Add</button></div>';
  out+='<div class="subhead" style="margin-top:18px">Follow up on</div><ul class="tasks">';
- S.followups.filter(function(f){return f.personId===pid&&!f.done;}).forEach(function(f){out+='<li><input type="checkbox" class="cb" data-fudone="'+f.id+'"><span class="txt">'+esc(f.text)+'</span></li>';});
+ S.followups.filter(function(f){return f.personId===pid&&!f.done;}).forEach(function(f){
+  if(editingFollowupId===f.id)out+='<li><input id="followupEditText" aria-label="Follow-up" value="'+esc(f.text)+'"><button class="btn mini" data-fusave="'+f.id+'">Save</button><button class="btn mini ghost" data-fucancel="1">Cancel</button></li>';
+  else out+='<li><input type="checkbox" class="cb" data-fudone="'+f.id+'"><span class="txt">'+esc(f.text)+'</span><button class="btn mini ghost" data-fuedit="'+f.id+'">Edit</button></li>';
+ });
  out+='</ul><div class="addrow"><input id="personFUNew" placeholder="Follow up on..."><button class="btn mini" data-fuadd="'+pid+'">Add</button></div>';
  out+='</div>';
  /* person settings: one-time fields, collapsed */
@@ -264,7 +289,10 @@ function personProfile(pid){
  if(p.relation&&relIn<0)out+='<div class="addrow"><input data-pfield="relation" data-pid="'+pid+'" value="'+esc(p.relation)+'" placeholder="Type the custom relationship"></div>';
  out+='</div>';
  out+='<div class="grid2"><div class="field"><label>Birthday</label><input type="date" data-pfield="birthday" data-pid="'+pid+'" value="'+esc(p.birthday||"")+'"></div><div class="field"><label>Anniversary</label><input type="date" data-pfield="anniversary" data-pid="'+pid+'" value="'+esc(p.anniversary||"")+'"></div></div>';
- out+='<div class="field"><label>Connection cadence</label><select data-pfield="connectCadence" data-pid="'+pid+'">'+[["daily","daily"],["weekly","weekly"],["biweekly","every 2 weeks"],["monthly","monthly"]].map(function(o){return '<option value="'+o[0]+'"'+((p.connectCadence||"weekly")===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("")+'</select></div>';
+ out+='<div class="subhead" style="margin-top:18px">Key dates</div>';
+ if(kds.length){kds.forEach(function(k){out+='<div class="logline"><span class="kind">'+esc(k.label)+'</span><span class="txt">'+(daysUntil(k)===0?"today":"in "+daysUntil(k)+" days")+'</span><span class="entry-actions"><button class="iconbtn" data-kddel="'+k.id+'" title="delete">\uD83D\uDDD1</button></span></div>';});}else out+='<div class="empty">None yet.</div>';
+ out+='<div class="addrow"><input placeholder="Add key date (label)" data-kdlabel="'+pid+'"><button class="btn mini" data-kdadd="'+pid+'">Add</button></div>';
+ out+='<div class="field connection-cadence-field"><label for="personConnectionCadence">Default connection cadence</label><select id="personConnectionCadence" aria-describedby="connectionCadenceHelp" data-pfield="connectCadence" data-pid="'+pid+'">'+[["daily","daily"],["weekly","weekly"],["biweekly","every 2 weeks"],["monthly","monthly"]].map(function(o){return '<option value="'+o[0]+'"'+((p.connectCadence||"weekly")===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("")+'</select><p id="connectionCadenceHelp" class="settings-help">Used for the health meter when no connection rhythms are set up. Each connection rhythm follows its own frequency.</p></div>';
  out+='<div class="field"><label>Love language</label><select data-pfield="loveLanguage" data-pid="'+pid+'"><option value="">- not set -</option>'+Object.keys(LL_LANGUAGES).map(function(k){return '<option value="'+k+'"'+(ll===k?" selected":"")+'>'+LL_LANGUAGES[k]+'</option>';}).join("")+'</select></div>';
  out+='<div class="field"><label>Photo</label><div style="display:flex;align-items:center;gap:12px">'+personAvatar(p,56)+'<input type="file" accept="image/*" data-pphoto="'+pid+'" style="flex:1;font-size:13px">'+(p.photo?'<button class="btn mini danger" data-pphorm="'+pid+'">Remove</button>':'')+'</div><div class="hint" style="font-size:11px;color:var(--ink-faint)">Crops to a circle for their card.</div></div>';
  out+='</div></details>';
@@ -281,21 +309,21 @@ function renderChecklists(){
  });
  return out;}
 /* ============ rhythm done prompt + ripples ============ */
-function rhyDoneBtn(key){if(rhyDoneDraft&&rhyDoneDraft.key===key){return '<span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><input type="date" data-rhydate="'+key+'" value="'+rhyDoneDraft.date+'" style="max-width:145px"><input type="time" data-rhytime="'+key+'" value="'+rhyDoneDraft.time+'" style="max-width:105px"><button class="btn mini" data-rhyconfirm="'+key+'">Log it</button><button class="btn mini ghost" data-rhycancel2="1">Cancel</button></span>';}return '<button class="btn mini" data-rhydone="'+key+'">Done</button>';}
+function rhyDoneBtn(key){if(rhyDoneDraft&&rhyDoneDraft.key===key){return '<span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><input type="date" data-rhydate="'+key+'" value="'+rhyDoneDraft.date+'" style="max-width:145px"><input type="time" data-rhytime="'+key+'" value="'+rhyDoneDraft.time+'" style="max-width:105px"><button class="btn mini" data-rhyconfirm="'+key+'">Save</button><button class="btn mini ghost" data-rhycancel2="1">Cancel</button></span>';}return '<button class="btn mini" data-rhydone="'+key+'" title="Record a moment of care">Tend</button>';}
 function rippleLine(e){var t=(e.title&&e.title.indexOf("Time with")!==0)?e.title:"";var pill=e.rhythmId?' <span class="pill rhy">\u21BB Rhythm</span>':((e.origin==="spark"||e.note==="Spark landed")?' <span class="pill spk">\u2726 Spark</span>':'');return '<div class="logline"><span class="when">'+when(e.ts)+(daysSince(e.ts)===0&&!e.allDay?" "+fmtHM(e.ts):"")+'</span><div class="gr-main" style="flex:1"><span class="kind">'+esc(typeLabel(e))+'</span>'+pill+(t?' <span class="txt">'+esc(t)+'</span>':'')+(e.note&&e.note!=="Spark landed"?'<div class="gr-meta">'+esc(e.note)+'</div>':'')+'</div><span class="entry-actions"><button class="iconbtn" data-evedit="'+e.id+'" title="edit">\u270E</button><button class="iconbtn" data-evdel="'+e.id+'" title="delete">\uD83D\uDDD1</button></span></div>';}
 /* ============ free moment + spark chip ============ */
 function sparkChip(p){var s=openSparks(p)[0];if(!s)return "";return '<div class="pf-next" style="color:#8A6D1F">\u2726 '+esc(s.text)+' \u00B7 '+esc(sparkDueTxt(s))+'</div>';}
 function freeMomentHTML(){
  var cands=[];
- S.people.forEach(function(p){(p.rhythms||[]).forEach(function(r){var d=rhythmDaysSince(r);if(d!==999&&d>=rhythmPeriod(r))cands.push({pri:10+d,rkey:p.id+"|"+r.id,label:r.text+" - "+p.name,sub:"rhythm \u00B7 "+rhythmDueTxt(r)});});});
- S.people.forEach(function(p){openSparks(p).forEach(function(s){if(sparkLive(s)&&!s.by)cands.push({pri:15,sparky:1,label:"Work on spark: "+s.text,sub:"for "+p.name+" \u00B7 no deadline yet",act:' data-openperson="'+p.id+'"',btn:"Open"});});});
- S.goals.forEach(function(g){var d=goalLastDone(g);if(d!==0)cands.push({pri:(100-goalScore(g))/12,label:g.text,sub:"goal \u00B7 "+(d===null?"never logged":d+"d ago"),act:' data-goaldone="'+g.id+'"',btn:"Done"});});
+ S.people.forEach(function(p){(p.rhythms||[]).forEach(function(r){var d=rhythmDaysSince(r);if((r.tod||"anytime")==="anytime"&&rhythmScheduledToday(r))cands.push({pri:10+(d===999?0:d),rkey:p.id+"|"+r.id,personId:p.id,label:r.text,sub:"rhythm \u00B7 "+rhythmDueTxt(r)});});});
+ S.people.forEach(function(p){openSparks(p).forEach(function(s){if(sparkLive(s)&&!s.by)cands.push({pri:15,sparky:1,personId:p.id,label:s.text,sub:"No deadline yet",act:' data-openperson="'+p.id+'"',btn:"Open"});});});
+ S.goals.forEach(function(g){var d=goalLastDone(g);if(!goalHasRhythm(g)&&(g.tod||"anytime")==="anytime"&&d!==0&&(d===null||d>=goalInterval(g)))cands.push({pri:(100-goalScore(g))/12,personId:g.personId,goalId:g.id,area:g.area,label:g.text,sub:"goal \u00B7 "+(d===null?"never logged":d+"d ago"),act:' data-goaldone="'+g.id+'"',btn:"Done"});});
  var lo=S.people.map(function(p){return {p:p,s:personScore(p)};}).sort(function(a,b){return a.s-b.s;})[0];
  if(lo&&lo.s<80)cands.push({pri:(100-lo.s)/10,label:"Reach out to "+lo.p.name,sub:(lo.p.relation||"")+" \u00B7 meter "+lo.s+" - lowest",act:' data-openperson="'+lo.p.id+'"',btn:"Open"});
  cands.sort(function(a,b){return b.pri-a.pri;});
  if(!cands.length)return "";
  var out='<div class="sectiontitle"><h2>Free moment?</h2><span class="hint">the top of the stack, right now</span></div><div class="card">';
- cands.slice(0,4).forEach(function(c){var bb=c.rkey?rhyDoneBtn(c.rkey):'<button class="btn mini'+(c.sparky?" sparkbtn":"")+'"'+c.act+'>'+c.btn+'</button>';out+='<div class="planitem"><div class="pi-main"><div class="pi-label">'+(c.sparky?'<span style="color:#B8912F">\u2726 </span>':'')+esc(c.label)+'</div><div class="pi-sub">'+esc(c.sub)+'</div></div>'+bb+'</div>';});
+ cands.slice(0,4).forEach(function(c){var bb=c.rkey?rhyDoneBtn(c.rkey):'<button class="btn mini'+(c.sparky?" sparkbtn":"")+'"'+c.act+'>'+c.btn+'</button>';out+='<div class="planitem"><div class="pi-main"><div class="pi-label">'+(c.sparky?'<span style="color:#B8912F">\u2726 </span>':'')+esc(c.label)+'<span class="plan-pills">'+planPills(c)+'</span></div><div class="pi-sub">'+esc(c.sub)+'</div></div>'+bb+'</div>';});
  return out+'</div>';}
 /* ============ area subpages ============ */
 function renderArea(id){
@@ -332,9 +360,9 @@ var LL_LANGUAGES={qt:"Quality Time",wa:"Words of Affirmation",as:"Acts of Servic
 var REL_OPTIONS=["Spouse","Son","Daughter","Bonus son","Bonus daughter","Son-in-law","Daughter-in-law","Father","Mother","Brother","Sister","Friend","Mentor","Coworker"];
 var LL_NUDGES={qt:"time together - a walk, an errand, a shared meal - speaks louder than a text.",wa:"a specific, spoken affirmation lands deeper than any gift. Send the text. Make the call.",as:"doing a chore or errand for them preaches louder than words.",gf:"small, thoughtful gifts say 'I was thinking of you' - keep a running list.",pt:"presence in person - a hug, a hand on the shoulder - matters most."};
 function bdayInfo(b){if(!b)return null;var parts=String(b).split("-");if(parts.length<3)return null;var m=+parts[1],d=+parts[2];if(!m||!d)return null;var t=new Date();var today=new Date(t.getFullYear(),t.getMonth(),t.getDate());var next=new Date(t.getFullYear(),m-1,d);if(next<today)next=new Date(t.getFullYear()+1,m-1,d);var du=Math.round((next-today)/86400000);var mos=["January","February","March","April","May","June","July","August","September","October","November","December"];return {label:mos[m-1]+" "+d,days:du};}
-var editingConn=null;
+var editingConn=null,editingFollowupId=null;
 var editSparkId=null;
-var editRhythmId=null;
+var editRhythmId=null, rhythmEditDraft=null;
 var rhythmDraft=null;
 var rhyDoneDraft=null;
 var tab="today",openDetail=null,currentArea=null,currentPerson=null;

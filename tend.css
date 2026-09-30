@@ -273,3 +273,98 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .pill{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;border-radius:99px;padding:2px 9px;vertical-align:1px;margin-left:2px}
 .pill.rhy{background:var(--mist);color:var(--forest)}
 .pill.spk{background:#F7EED3;color:#8A6D1F}
+
+/* People share the dashboard's health scale; profile details stay in one card. */
+.person-card-score{font-size:32px;font-weight:600;line-height:1;color:var(--ink);font-variant-numeric:tabular-nums}
+.person-card h3{overflow-wrap:anywhere}
+.person-card .person-health-bar{height:8px;margin:20px 0 12px;box-shadow:none}
+.person-health-bar .ov-marker{border-left-width:8px;border-right-width:8px;border-bottom-width:10px;filter:none}
+.person-health-status{font-size:13px;font-weight:600;margin-bottom:8px}
+.person-card .meta{font-size:13px;color:var(--ink-soft)}
+.person-profile-head{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.person-identity{display:flex;align-items:center;gap:16px;min-width:0}
+.person-identity>div{min-width:0}
+.person-identity h3{overflow-wrap:anywhere}
+.person-identity .rel{font-size:14px;color:var(--ink-soft)}
+.person-profile-head .btn{flex-shrink:0}
+.person-health-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:24px;padding-top:24px;border-top:1px solid var(--line)}
+.person-health-heading h4{font-size:18px;font-weight:500;margin:0}
+.person-health-heading p{font-size:13px;color:var(--ink-soft);margin:8px 0 0}
+.person-profile-score{font-size:48px;line-height:1;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.person-profile-score small{font-size:13px;font-weight:400;color:var(--ink-soft);margin-left:8px}
+.person-profile .person-health-bar{margin:24px 0;height:14px}
+.person-profile .chips{margin-top:16px}
+.person-profile .pmeters{margin-top:24px}
+@media(max-width:480px){
+ .person-health-heading{align-items:flex-start}
+ .person-health-heading p{max-width:190px;line-height:1.5}
+ .person-profile-score{font-size:36px}
+ .person-profile-score small{display:block;text-align:right;margin-top:8px}
+}
+
+.rhythm-health{display:inline-flex;align-items:center;gap:6px;min-width:52px;flex-shrink:0;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink-soft);white-space:nowrap}
+
+.ripple-fields{display:flex;align-items:flex-end;flex-wrap:wrap;gap:12px;margin:16px 0}
+.ripple-field{display:flex;flex-direction:column;gap:6px;flex:1 1 160px;min-width:0;font-size:12px;font-weight:500;color:var(--ink-soft)}
+.ripple-field input,.ripple-field select,.ripple-other{width:100%;min-width:0;min-height:46px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background-color:var(--canvas);font-family:var(--sans);font-size:15px;font-weight:400;line-height:1.5;color:var(--ink)}
+.ripple-field select{appearance:none;padding-right:36px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2351605A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+.ripple-field input::-webkit-datetime-edit{font-family:var(--sans);padding:0}
+.ripple-field input:disabled{opacity:.5}
+.ripple-field input:focus-visible,.ripple-field select:focus-visible,.ripple-other:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+.ripple-all-day{display:flex;align-items:center;gap:8px;min-height:46px;font-size:14px;white-space:nowrap}
+
+.recent-moments-more{margin-top:8px}
+.recent-moments-more summary{cursor:pointer;color:var(--forest);font-size:14px;font-weight:500;padding:12px 0;min-height:44px}
+.recent-moments-more summary:focus-visible{outline:2px solid var(--forest);outline-offset:2px;border-radius:4px}
+
+.nudge-list{list-style:none;margin:0;padding:0;min-width:0;display:grid;gap:8px}
+.nudge-list li{overflow-wrap:anywhere;line-height:1.5}
+
+.prayer-item{padding:16px 0;border-bottom:1px solid var(--line)}
+.prayer-item:last-child{border-bottom:0}
+.prayer-meta,.prayer-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.prayed-pill{display:inline-flex;border-radius:99px;background:var(--mist);color:var(--forest-deep);padding:6px 12px;font-size:13px;font-weight:600}
+.prayer-text{margin:12px 0 8px;overflow-wrap:anywhere}
+.prayer-date{font-size:12px;color:var(--ink-soft);margin-bottom:12px}
+.prayer-past,.prayer-notes{margin-top:16px}
+.prayer-past summary,.prayer-notes summary{cursor:pointer;padding:12px 0;font-weight:500;color:var(--ink-soft)}
+.prayer-item textarea{width:100%;min-height:88px;margin-top:8px}
+
+.prayer-heading{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.prayer-heading .prayer-title{font-size:20px;font-weight:600;margin:0;overflow-wrap:anywhere}
+.prayer-person{display:inline-flex;align-items:center;gap:6px;background:var(--mist);border-radius:99px;padding:4px 10px 4px 4px;font-size:12px;font-weight:500;white-space:nowrap}
+.prayer-details{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink-soft);font-size:14px;margin:0 0 12px}
+.prayer-count{margin-bottom:12px}
+button.prayed-pill{border:1px solid transparent;min-height:44px;cursor:pointer}
+button.prayed-pill:hover{border-color:var(--forest);background:var(--mist)}
+.prayer-tools{display:inline-flex;gap:4px;margin-left:auto}
+.prayer-icon{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border:0;border-radius:12px;background:transparent;color:var(--ink-soft)}
+.prayer-icon:hover{background:var(--mist);color:var(--forest-deep)}
+.prayer-icon svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.prayer-icon:focus-visible,button.prayed-pill:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+.prayer-new-field{margin-top:16px}
+
+/* Compact prayer rows with aligned count and secondary actions. */
+.prayer-item .prayer-heading{gap:10px;margin-bottom:4px}
+.prayer-item .prayed-pill{align-items:center;justify-content:center;line-height:1.2;vertical-align:middle}
+.prayer-footer{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.prayer-footer .prayer-date{margin:0}
+.prayer-footer .prayer-tools{margin-left:0;gap:0}
+.prayer-status-actions{margin-left:auto}
+.prayer-item .prayer-details{margin:8px 0}
+@media(max-width:520px){.prayer-footer{gap:4px 8px}.prayer-status-actions{flex-wrap:wrap}}
+
+.connection-cadence-field{margin-top:24px;margin-bottom:24px}
+.settings-help{margin-top:8px;font-size:13px;line-height:1.5;color:var(--ink-soft)}
+
+.day-jumps{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.day-jumps .active,.plan-now{background:var(--mist);color:var(--forest-deep)}
+.plan-now,.plan-kind{display:inline-flex;border-radius:99px;padding:3px 8px;font-size:11px;font-weight:500;background:var(--mist);color:var(--ink-soft)}
+.plan-now{margin-left:8px}
+.plan-pills{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;margin-left:8px;vertical-align:middle}
+.planblock{scroll-margin-top:160px}
+.planblock summary{cursor:pointer;font-size:16px;font-weight:600;min-height:44px;padding:8px 0}
+.plan-range{font-size:12px;font-weight:400;color:var(--ink-soft);margin-left:12px}
+.planblock.current{border:2px solid var(--forest)}
+.upcoming-rhythms{margin-top:16px}
+@media(max-width:520px){.plan-range{display:block;margin-left:20px}.plan-pills{margin-left:0;display:flex;margin-top:4px}}
