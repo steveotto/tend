@@ -187,7 +187,7 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .menu-area .ma-score{margin-left:auto;font-size:15px;font-variant-numeric:tabular-nums}
 .ma-score.green{color:#12B76A}.ma-score.yellow{color:#C77E00}.ma-score.red{color:#F04531}
 .planblock{margin-bottom:12px;padding:18px 20px}
-.planblock.current{border-color:var(--mint);box-shadow:0 0 0 3px rgba(63,198,143,.15)}
+.planblock.current{border-color:var(--mint);box-shadow:0 0 0 3px rgba(103,197,163,.15)}
 .planitem{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px dashed var(--line)}
 .planitem:last-child{border-bottom:none}
 .pi-main{flex:1;min-width:0}
@@ -414,6 +414,8 @@ details.moor .moor-body{padding:2px 18px 14px}
 .moment-row{display:grid;grid-template-columns:110px 110px minmax(0,1fr) auto;align-items:start}
 .moment-row .kind{white-space:normal;overflow-wrap:anywhere}
 .moment-row .when{white-space:normal}
+.moment-row .gr-meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.actrow .pi-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media(max-width:600px){.moment-row{grid-template-columns:78px 80px minmax(0,1fr);gap:8px}.moment-row .entry-actions{grid-column:3;justify-self:end}.profile-tabs{gap:4px}.profile-tabs button{padding:8px}}
 
 .collection-icon{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
