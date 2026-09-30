@@ -4,7 +4,7 @@
 /* ============ GitHub sync ============ */
 var SYNCcfg=(function(){try{return JSON.parse(localStorage.getItem(LS_SYNC))||{auto:true};}catch(e){return {auto:true};}})();
 window.SYNCcfg=SYNCcfg;
-var TEND_VERSION="v20260930x";window.TEND_VERSION=TEND_VERSION; /* bump this with every code deploy - shown in Settings */
+var TEND_VERSION="v20260930y";window.TEND_VERSION=TEND_VERSION; /* bump this with every code deploy - shown in Settings */
 window._tendDirty=false; /* local changes not yet pushed - auto-pull must not clobber them */
 function ghHeaders(){return {"Authorization":"Bearer "+SYNCcfg.token,"Accept":"application/vnd.github+json"};}
 function updateSyncDot(){var dot=el("syncDot"),lbl=el("syncLabel");if(!SYNCcfg.token){dot.className="syncdot";lbl.textContent="local only";}else{dot.className="syncdot on";lbl.textContent="synced";}}
