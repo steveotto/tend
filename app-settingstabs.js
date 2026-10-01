@@ -15,7 +15,7 @@ function renderSettings(){
  '<button class="btn" id="setSave">Save meter settings</button></div>';
  out+='</section>'+settingsPanel('calendars');
  /* calendars */
- out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Calendars</div>'+
+ out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Calendars</div>'+ 
  '<div class="hint" style="margin-bottom:10px">On icloud.com: Calendar &gt; share icon next to a calendar &gt; "Public Calendar" &gt; copy link. Paste it here (webcal:// or https://). Each calendar gets a name and color on the dashboard.</div>';
  (S.calendars||[]).forEach(function(ca){
   out+='<div class="calrow" data-calrow="'+ca.id+'">'+
@@ -44,12 +44,18 @@ function renderSettings(){
  });
  out+='</div>';
  out+='</section>'+settingsPanel('sync');
- /* sync */
+ /* sync - Reload latest featured (most used), then data actions, then config */
  var st=window.SYNCcfg||{};
- out+='<div class="card"><div class="subhead">Sync (GitHub)</div>'+
- '<div class="field"><label>Owner</label><input id="syncOwner" value="'+esc(st.owner||"")+'"></div>'+
- '<div class="field"><label>Repo</label><input id="syncRepo" value="'+esc(st.repo||"")+'"></div>'+
- '<div class="field"><label>Personal access token</label><input id="syncToken" type="password" placeholder="paste a fine-grained token scoped to tend-data" value="'+esc(st.token||"")+'"></div>'+
- '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="syncSave">Save</button><button class="btn ghost" id="syncPull">Pull now</button><button class="btn ghost" id="syncPush">Push now</button><button class="btn ghost" id="syncExport">Export backup</button></div></div>';
+ out+='<div class="card"><div class="subhead">Sync (GitHub)</div>'+ 
+ '<div class="field"><label>Owner</label><input id="syncOwner" value="'+esc(st.owner||"")+'"></div>'+ 
+ '<div class="field"><label>Repo</label><input id="syncRepo" value="'+esc(st.repo||"")+'"></div>'+ 
+ '<div class="field"><label>Personal access token</label><input id="syncToken" type="password" placeholder="paste a fine-grained token scoped to tend-data" value="'+esc(st.token||"")+'"></div>'+ 
+ '<div class="sync-featured" style="display:flex;align-items:center;gap:12px;margin:14px 0 4px;flex-wrap:wrap">'+ 
+ '<button class="btn" id="syncReloadLatest" type="button" title="Fetch the newest version of Tend from the server and reload this page" style="background:var(--forest);color:#fff;font-weight:600;padding:11px 22px;font-size:14.5px;border-radius:10px;box-shadow:0 2px 8px rgba(27,67,50,.25)">&#10227; Reload latest</button>'+ 
+ '<span class="hint" style="flex:1;min-width:180px">grabs the newest version of Tend &amp; reloads - your data stays put</span></div>'+ 
+ '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn" id="syncPush">Push now</button><button class="btn ghost" id="syncPull">Pull now</button><button class="btn ghost" id="syncForcePull" type="button" title="Replace ALL local data with the cloud copy - use when the cloud is the truth">Force pull (cloud wins)</button></div>'+ 
+ '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn ghost" id="syncSave">Save</button><button class="btn ghost" id="syncExport">Export backup</button></div>'+ 
+ '<div id="syncVersionLine" style="font-size:12.5px;color:var(--ink-faint);margin:10px 0 2px;line-height:1.6"></div>'+ 
+ '</div>';
  out+='</section>';
  return out;}
