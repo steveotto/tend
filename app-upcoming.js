@@ -55,7 +55,7 @@ window.kdSettingsV2=function(){
  var covered={};
  S.keyDates.forEach(function(k){kdPeopleIds(k).forEach(function(id){covered[id+"|"+k.month+"|"+k.day]=true;});});
  var derived=[];
- S.people.forEach(function(p){[['birthday','Birthday'],['anniversary','Anniversary']].forEach(function(pair){var v=String(p[pair[0]]||'').split('-');if(v.length===3&&!covered[p.id+"|"+(+v[1])+"|"+(+v[2])])derived.push({p:p,kind:pair[1],month:+v[1],day:+v[2]});});});
+ S.people.forEach(function(p){[['birthday','Birthday'],['anniversary','Anniversary']].forEach(function(pair){var v=String(p[pair[0]]||'').split('-');if(v.length===3&&!covered[p.id+"|"+(+v[1])+"|"+(+v[2])]&&p[pair[0]])derived.push({p:p,kind:pair[1],month:+v[1],day:+v[2]});});});
  derived.sort(function(a,b){return a.month-b.month||a.day-b.day||a.kind.localeCompare(b.kind);});
  if(derived.length){
   out+='<div class="kd-derived-head">From profiles \u00b7 read-only</div>';
@@ -167,6 +167,7 @@ var KD_STYLE=".kd-people{display:flex;flex-wrap:wrap;gap:4px 12px;margin:6px 0}.
  ".kd-pill-ro{opacity:.85}.kd-pill-ro:hover{border-color:var(--line)}"+
  ".kd-derived-head{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);padding:14px 0 2px}"+
  ".pm-av{display:inline-flex;align-items:center;flex:none}.pm-av .avatar{margin:0}"+
+  ".ll-quiz{font-size:12.5px;font-weight:500;color:var(--forest);margin-left:10px;text-decoration:none;border-bottom:1px dashed rgba(47,94,66,.5);white-space:nowrap}"+
  "@media (max-width:820px){.kd-grid{grid-template-columns:1fr 1fr}.kd-grid-head{display:none}.kd-date{width:auto}}";
 (function(){var s=document.createElement("style");s.textContent=KD_STYLE;document.head.appendChild(s);})();
 nextDateLine=function(pid){var kds=S.keyDates.filter(function(k){return kdPeopleIds(k).indexOf(pid)>=0&&daysUntil(k)>=0;});if(!kds.length)return "";var best=null;kds.forEach(function(k){var d=daysUntil(k);if(best===null||d<best.d)best={k:k,d:d};});if(!best)return "";return '<div class="pf-next">'+esc(best.k.label)+' \u00B7 '+(best.d===0?"TODAY":"in "+best.d+" days")+'</div>';};
@@ -178,6 +179,7 @@ nextDateLine=function(pid){var kds=S.keyDates.filter(function(k){return kdPeople
   var html;
   try{html=_pp(pid);}finally{S.keyDates=_kbd;}
   html=html.split('<small>/ 100</small>').join('');
+  html=html.replace(/(<select data-pfield="loveLanguage"[\s\S]*?<\/select>)/,'$1 <a class="ll-quiz" href="https://5lovelanguages.com/quizzes/love-language" target="_blank" rel="noopener">Take the quiz</a>');
   var p=S.people.find(function(q){return q.id===pid;});if(!p)return html;
   var mark='Key dates</div>';
   var start=html.indexOf(mark);if(start<0)return html;
@@ -338,3 +340,4 @@ function renderArea(id){
  });}else out+='<div class="empty">Nothing logged yet.</div>';
  out+='</div>';
  return out;}
+
