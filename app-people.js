@@ -233,8 +233,8 @@ function prayerRowHTML(pr,pid){
  '<b>'+esc(pr.text)+'</b> <span class="pc-chip pray">Prayed '+(times===1?"once":times+" times")+'</span>'+
  (pr.details?'<div style="font-size:12.5px;color:var(--ink-soft);margin-top:3px">'+esc(pr.details)+'</div>':'')+
  '<div class="pp-opts">'+
- '<select data-prfreq="'+pr.id+'" aria-label="Prayer frequency">'+Object.keys(FREQS).map(function(k){return '<option value="'+k+'"'+((pr.freq||"none")===k?" selected":")+'>'+FREQS[k].label+'</option>';}).join("")+'<option value="none"'+(pr.freq?"":" selected")+'>- frequency -</option></select>'+
- '<select data-prtod="'+pr.id+'" aria-label="Prayer time of day">'+Object.keys(TODS).map(function(k){return '<option value="'+k+'"'+((pr.tod||"anytime")===k?" selected":")+'>'+esc(TODS[k])+'</option>';}).join("")+'</select>'+
+ '<select data-prfreq="'+pr.id+'" aria-label="Prayer frequency">'+Object.keys(FREQS).map(function(k){return '<option value="'+k+'"'+((pr.freq||"none")===k?" selected":"")+'>'+FREQS[k].label+'</option>';}).join("")+'<option value="none"'+(pr.freq?"":" selected")+'>- frequency -</option></select>'+
+ '<select data-prtod="'+pr.id+'" aria-label="Prayer time of day">'+Object.keys(TODS).map(function(k){return '<option value="'+k+'"'+((pr.tod||"anytime")===k?" selected":"")+'>'+esc(TODS[k])+'</option>';}).join("")+'</select>'+
  ((pr.freq&&pr.freq!=="none")?'<span class="hint">'+esc(rhythmFreqLabel(pr))+'</span>':'')+
  '</div></div>'+
  '<div class="pp-btns">'+
