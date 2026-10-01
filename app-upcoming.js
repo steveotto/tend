@@ -38,7 +38,7 @@ window.kdSettingsV2=function(){
   +'<input class="kd-in kd-year" id="kdNewYear" type="number" min="1900" max="2100" placeholder="\u2014" aria-label="Year (optional)">'
   +'<span class="kd-next" id="kdNewNext">'+kdNextTxt({month:1,day:1})+'</span>'
   +'<span class="kd-people-cell" id="kdNewPeopleCell">'+kdPillsHTML("new",sel)+kdPickHTML("new",sel)+'</span>'
-  +'<span></span></div>';
+  +'<button class="btn mini" id="kdAddInline" disabled>Add</button></div>';
  S.keyDates.forEach(function(k){
   var who=kdPeopleIds(k);
   out+='<div class="kd-grid">'
@@ -69,7 +69,20 @@ window.kdSettingsV2=function(){
   });
   out+='<p class="settings-help" style="margin-top:10px">Profile birthdays and anniversaries are managed on each person\'s profile - they show up in Coming up automatically.</p>';
  }
- out+='<button class="btn" id="kdAddGlobal" style="margin-top:12px">Add key date</button>';
+ var tev=(window.TEND_EVENTS||[]).map(function(ev){var v=String(ev.date||'').split('-');return v.length===3?{ev:ev,y:+v[0],m:+v[1],d:+v[2]}:null;}).filter(Boolean).filter(function(x){var t0=new Date();t0.setHours(0,0,0,0);return new Date(x.y,x.m-1,x.d)>=t0;}).sort(function(a,b){return a.y-b.y||a.m-b.m||a.d-b.d;});
+ if(tev.length){
+  out+='<div class="kd-derived-head">From calendar \u00b7 read-only</div>';
+  tev.forEach(function(x){
+   out+='<div class="kd-grid kd-derived">'
+    +'<span class="kd-ro">'+esc(x.ev.title||'Tend event')+'</span>'
+    +'<span class="kd-date"><span class="kd-ro-date">'+MOS_FULL[x.m-1]+' '+x.d+'</span></span>'
+    +'<span class="kd-ro-year">\u2014</span>'
+    +'<span class="kd-next">'+kdNextTxt({month:x.m,day:x.d,year:x.y})+'</span>'
+    +'<span class="kd-people-cell"></span>'
+    +'<span></span></div>';
+  });
+  out+='<p class="settings-help" style="margin-top:10px">Calendar events tagged "Tend" in their notes (synced by Littlebird) show up in Coming up automatically.</p>';
+ }
  out+='</div>';
  return out;
 };
@@ -96,6 +109,9 @@ window.kdSettingsV2=function(){
   ".updays{margin-left:auto;flex:none;align-self:center}";
  document.head.appendChild(style);
 })();
+/* tend-tagged calendar events (tend-events.json, fed by Littlebird) */
+window.TEND_EVENTS=[];
+try{fetch("tend-events.json?bust="+Date.now()).then(function(r){return r.ok?r.json():null;}).then(function(j){if(j&&Array.isArray(j.events)&&j.events.length){window.TEND_EVENTS=j.events;if(typeof render==="function")render();}}).catch(function(){});}catch(e){}
 var MOS_SHORT=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 var DOW_SHORT=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 function upcomingDates(now){
@@ -113,6 +129,7 @@ function upcomingDates(now){
  S.keyDates.forEach(function(k){var who=kdPeopleIds(k).map(function(id){var p=S.people.find(function(q){return q.id===id;});return p?p.name:null;}).filter(Boolean);add((who.length?who.join(' + ')+' \u00b7 ':'')+k.label,+k.month,+k.day,' data-upitem="'+esc(k.id)+'"',kdHasYear(k)?+k.year:null);});
  var HOLS=(typeof majorHolidays!=="undefined"&&majorHolidays)?majorHolidays:[];
  HOLS.forEach(function(h){if(typeof holidayEnabled==="function"&&!holidayEnabled(h.id))return;[today.getFullYear(),today.getFullYear()+1].forEach(function(y){var date=h.date(y),days=Math.round((date-today)/86400000);if(days>=0&&days<=30)rows.push({label:h.name,days:days,date:date,attrs:''});});});
+ (window.TEND_EVENTS||[]).forEach(function(ev){var v=String(ev.date||'').split('-');if(v.length!==3)return;var date=new Date(+v[0],+v[1]-1,+v[2]);var days=Math.round((date-today)/86400000);if(days>=0&&days<=30)rows.push({label:ev.title||'Tend event',days:days,date:date,attrs:''});});
  return rows.sort(function(a,b){return a.days-b.days||a.label.localeCompare(b.label);});
 }
 function calIconHTML(date){
@@ -130,7 +147,7 @@ function renderChecklists(){return "";}
 
 /* ============ key dates: tab, modal wiring, handlers ============ */
 var KD_STYLE=".kd-people{display:flex;flex-wrap:wrap;gap:4px 12px;margin:6px 0}.kd-person{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--ink-soft);font-weight:400}.kd-person input{margin:0}"+
- ".kd-grid{display:grid;grid-template-columns:minmax(150px,1.3fr) 180px 88px minmax(105px,.8fr) minmax(160px,1.2fr) 26px;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}"+
+ ".kd-grid{display:grid;grid-template-columns:minmax(150px,1.3fr) 180px 88px minmax(105px,.8fr) minmax(160px,1.2fr) 60px;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}"+
  ".kd-grid-head{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);border-bottom:0;padding:0 0 2px}"+
  ".kd-in{width:100%;height:42px;padding:0 12px;border-radius:10px;border:1px solid var(--line);font:inherit;font-size:14.5px;background:#FDFDFE;color:var(--ink);box-sizing:border-box}"+
  ".kd-in:focus{outline:none;border-color:var(--forest)}"+
@@ -154,7 +171,10 @@ nextDateLine=function(pid){var kds=S.keyDates.filter(function(k){return kdPeople
 (function(){
  var _pp=personProfile;
  personProfile=function(pid){
-  var html=_pp(pid);
+  var _kbd=S.keyDates;
+  S.keyDates=_kbd.slice().sort(function(a,b){return (+a.year||9999)-(+b.year||9999)||a.month-b.month||a.day-b.day;});
+  var html;
+  try{html=_pp(pid);}finally{S.keyDates=_kbd;}
   var p=S.people.find(function(q){return q.id===pid;});if(!p)return html;
   var mark='Key dates</div>';
   var start=html.indexOf(mark);if(start<0)return html;
@@ -178,7 +198,7 @@ document.addEventListener("click",function(e){
  var t=e.target;if(!t||!t.closest)return;var b;
  if(window._kdOpenPick&&!t.closest(".kd-pick")){window._kdOpenPick=null;document.querySelectorAll(".kd-pick-menu").forEach(function(m){m.classList.add("hidden");});}
  if(b=t.closest(".kd-pick-btn")){e.preventDefault();var root=b.closest(".kd-pick");var kid=root.getAttribute("data-kdpickroot");var menu=root.querySelector(".kd-pick-menu");var opening=menu.classList.contains("hidden");document.querySelectorAll(".kd-pick-menu").forEach(function(m){m.classList.add("hidden");});menu.classList.toggle("hidden",!opening);window._kdOpenPick=opening?kid:null;return;}
- if(b=t.closest("#kdAddGlobal")){e.stopImmediatePropagation();e.preventDefault();
+ if(b=t.closest("#kdAddInline")){e.stopImmediatePropagation();e.preventDefault();
   var ginp=document.getElementById("kdNewLabel");
   if(ginp&&ginp.value.trim()){
    var gp=(window._kdNewPeople||[]).slice();
@@ -219,6 +239,8 @@ document.addEventListener("change",function(e){
  if(t.matches("[data-kdday]")){var kd5=S.keyDates.find(function(k){return k.id===t.getAttribute("data-kdday");});if(kd5){kd5.day=Math.min(31,Math.max(1,+t.value||1));save();render();}return;}
 });
 
+document.addEventListener("input",function(e){var t=e.target;if(t&&t.id==="kdNewLabel"){var b2=document.getElementById("kdAddInline");if(b2)b2.disabled=!t.value.trim();}});
+document.addEventListener("keydown",function(e){var t=e.target;if(t&&t.id==="kdNewLabel"&&e.key==="Enter"){var b2=document.getElementById("kdAddInline");if(b2&&!b2.disabled)b2.click();}});
 /* ============ love language icons ============ */
 var LL_ICONS={
  wa:{t:"Words of affirmation",svg:'<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#34A853" d="M12 3C6.9 3 3 6.4 3 10.6c0 2.3 1.2 4.3 3.1 5.7-.1.9-.6 2.3-1.8 3.7 2.2-.3 3.9-1.1 5-1.9.9.2 1.8.3 2.7.3 5.1 0 9-3.4 9-7.8S17.1 3 12 3z"/><path d="M8 9h8M8 12.5h5.5" stroke="#fff" stroke-width="1.7" stroke-linecap="round" fill="none"/></svg>'},
