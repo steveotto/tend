@@ -1,14 +1,7 @@
 {
-  "synced": "2026-09-30T13:55:51.097Z",
+  "synced": "2026-10-01T00:48:04.975Z",
   "source": "iCloud published feed",
   "events": [
-    {
-      "t": "Cancel Global Work",
-      "s": "2026-08-31T00:00:00",
-      "e": "2026-09-01T00:00:00",
-      "allDay": true,
-      "cal": "Home"
-    },
     {
       "t": "Meeting with Alexander Gartley",
       "s": "2026-09-02T16:00:00.000Z",
@@ -244,6 +237,13 @@
       "t": "Book overnighter for NYE (with Leah)",
       "s": "2026-12-01T00:00:00",
       "e": "2026-12-02T00:00:00",
+      "allDay": true,
+      "cal": "Home"
+    },
+    {
+      "t": "CompassCare Christmas Party",
+      "s": "2026-12-11T00:00:00",
+      "e": "2026-12-12T00:00:00",
       "allDay": true,
       "cal": "Home"
     },
