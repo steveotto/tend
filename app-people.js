@@ -1,1 +1,1 @@
-<FULL app-people.js>
+<FULL app-people.js content>
