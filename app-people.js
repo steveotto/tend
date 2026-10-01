@@ -20,10 +20,17 @@ var css=document.createElement("style");css.textContent=[
 ".pc-chip.rel-marriage{background:rgba(184,145,47,.13);color:#8A6D1F}",
 ".pc-chip.rel-parenting{background:rgba(76,124,168,.13);color:#38648C}",
 ".pc-chip.rel-friendships{background:rgba(193,102,62,.13);color:#9C4F2C}",
-".pc-chip.conn{background:#F2F4F1;font-weight:500}",
-".pc-chip.pray{background:rgba(31,156,104,.1);color:#1F5C40}",
 ".pc-flabel{display:block;font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-faint);margin:10px 0 4px}",
 ".pc-flabel span{text-transform:none;letter-spacing:0;font-weight:400}",
+".metercard .people-row{gap:10px}",
+".submeter{padding:8px 14px 8px 9px}",
+".sm-ava{width:30px;height:30px;border-radius:50%;object-fit:cover;flex:none;box-shadow:0 0 0 2px rgba(255,255,255,.9),0 1px 3px rgba(32,39,35,.15)}",
+".sm-ava-txt{display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#DFE9E2,#C9DAD0);font-size:13px;font-weight:700;color:var(--ink-soft)}",
+".submeter .sm-num{font-size:13px}.submeter .sm-num.green{color:#0F9A55}.submeter .sm-num.yellow{color:#C98F0E}.submeter .sm-num.red{color:#E8442E}",
+".pc-chip.conn{background:#FFFFFF;border:1px solid var(--line);box-shadow:0 1px 2px rgba(32,39,35,.05);font-weight:500;font-size:11px;padding:3px 10px;color:var(--ink-soft)}",
+".pc-chip.pray{background:rgba(31,156,104,.09);border:1px solid rgba(31,156,104,.18);font-weight:600;font-size:11px;padding:3px 10px}",
+".pc-bday{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:500;color:var(--ink-soft);background:#F6F4EC;border:1px solid rgba(184,145,47,.22);border-radius:999px;padding:3px 11px;margin:7px 0 3px;white-space:nowrap}",
+".pc-bday b{font-weight:600;color:var(--ink)}",
 "#apPhoto+label{display:inline-flex;align-items:center}"
 ].join("");document.head.appendChild(css);
 
@@ -50,16 +57,23 @@ function relOptionsHTML(){
 function pfilters(){try{return JSON.parse(localStorage.getItem("tend:pfilters"))||{marriage:true,parenting:true,friendships:true};}catch(e){return {marriage:true,parenting:true,friendships:true};}}
 function setPF(f){try{localStorage.setItem("tend:pfilters",JSON.stringify(f));}catch(e){}}
 
-/* ---------- card date lines: birthday + anniversary ONLY ---------- */
+/* ---------- card date line: birthday ONLY, one line (date + age + countdown) ---------- */
 function cardDateLines(p){
- var lines=[];
- (S.keyDates||[]).forEach(function(k){
-  if(k.personId!==p.id||!/birth|anniv/i.test(k.label||""))return;
-  var d=daysUntil(k);if(d<0)return;
-  lines.push({d:d,html:'<div class="pf-next">'+esc(k.label)+' \u00B7 '+(d===0?"TODAY":"in "+d+" days")+'</div>'});
- });
- lines.sort(function(a,b){return a.d-b.d;});
- return lines.map(function(l){return l.html;}).join("")+personDateLines(p);
+ var mos=["January","February","March","April","May","June","July","August","September","October","November","December"];
+ var kd=null;(S.keyDates||[]).forEach(function(k){if(k.personId===p.id&&/birth/i.test(k.label||""))kd=k;});
+ var label=null,days=null,age=null;
+ var b=p.birthday?bdayInfo(p.birthday):null;
+ if(b){label=b.label;days=b.days;
+  var parts=String(p.birthday).split("-"),y=+parts[0],mm=+parts[1],dd=+parts[2];
+  if(y&&y>1900&&mm&&dd){var n=new Date();age=n.getFullYear()-y;
+   if(n.getMonth()+1<mm||(n.getMonth()+1===mm&&n.getDate()<dd))age--;}}
+ else if(kd&&kd.month&&kd.day){var t=new Date();
+  var today=new Date(t.getFullYear(),t.getMonth(),t.getDate());
+  var next=new Date(t.getFullYear(),kd.month-1,kd.day);
+  if(next<today)next=new Date(t.getFullYear()+1,kd.month-1,kd.day);
+  days=Math.round((next-today)/86400000);label=mos[kd.month-1]+" "+kd.day;}
+ if(label===null||days===null||days<0)return "";
+ return '<div class="pc-bday">\uD83C\uDF82 Birthday \u00B7 <b>'+esc(label)+'</b>'+(age!==null?' \u00B7 turns '+age:'')+' \u00B7 '+(days===0?"today":"in "+days+"d")+'</div>';
 }
 
 /* ---------- add-person modal ---------- */
@@ -73,10 +87,10 @@ function addPersonModalHTML(){
  '<label class="btn ghost" for="apPhoto" style="cursor:pointer;margin:0">Choose photo</label>'+
  '<input id="apPhoto" type="file" accept="image/*" style="display:none">'+
  '<button class="del" id="apPhotoClear" type="button" title="remove photo" style="display:none">\u00D7</button></div>'+
- '<div class="pc-flabel">Relationship</div><select id="apRelation" style="width:100%;box-sizing:border-box">'+relOptionsHTML()+'</select>'+ 
- '<div class="pc-flabel">Birthday <span>- optional</span></div><input id="apBirthday" type="date" style="width:100%;box-sizing:border-box">'+ 
- '<div class="pc-flabel">Anniversary <span>- optional</span></div><input id="apAnniversary" type="date" style="width:100%;box-sizing:border-box">'+ 
- '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">'+ 
+ '<div class="pc-flabel">Relationship</div><select id="apRelation" style="width:100%;box-sizing:border-box">'+relOptionsHTML()+'</select>'+
+ '<div class="pc-flabel">Birthday <span>- optional</span></div><input id="apBirthday" type="date" style="width:100%;box-sizing:border-box">'+
+ '<div class="pc-flabel">Anniversary <span>- optional</span></div><input id="apAnniversary" type="date" style="width:100%;box-sizing:border-box">'+
+ '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">'+
  '<button class="btn ghost" data-apclose type="button">Cancel</button>'+
  '<button class="btn" id="apCreate" type="button">Create person</button></div>'+
  '</div></div>';
@@ -137,11 +151,10 @@ window.renderPeople=renderPeople=function(){
   var ci=personConnInfo(p);
   var prayers=S.prayers.filter(function(x){return x.personId===p.id&&!x.answered&&!x.archived;}).length;
   out+='<div class="card person-card pc-'+cat+'" data-openperson="'+p.id+'" style="cursor:pointer">'+
-  '<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:10px;min-width:0">'+personAvatar(p,42)+'<h3 style="margin:0">'+esc(p.name)+'</h3></div><span class="person-card-score">'+sc+'</span></div>'+ 
+  '<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:10px;min-width:0">'+personAvatar(p,42)+'<h3 style="margin:0">'+esc(p.name)+'</h3></div><span class="person-card-score">'+sc+'</span></div>'+
   personHealthMeter(sc,p.name,true)+
-  '<div class="person-health-status statusword '+c+'">'+scoreLabel(sc)+'</div>'+ 
-  '<div class="pc-meta">'+ 
-  '<span class="pc-chip rel-'+cat+'">'+esc(p.relation||CAT_LABEL[cat])+'</span>'+ 
+  '<div class="person-health-status statusword '+c+'">'+scoreLabel(sc)+'</div>'+
+  '<div class="pc-meta">'+
   (ci.last?'<span class="pc-chip conn">connected '+when(ci.last.ts)+'</span>':'<span class="pc-chip conn" style="opacity:.7">no connections yet</span>')+
   (prayers?'<span class="pc-chip pray">\u2022 '+prayers+' prayer'+(prayers>1?"s":"")+'</span>':'')+
   '</div>'+cardDateLines(p)+'</div>';
@@ -150,6 +163,14 @@ window.renderPeople=renderPeople=function(){
  if(!shown)out+='<div class="empty">No people shown - toggle a category back on, or add someone new.</div>';
  out+=addPersonModalHTML();
  return out;
+};
+
+/* ---------- health-meter person badges: avatar + name + color-coded score ---------- */
+window.personChip=function(k){
+ var ps=personScore(k),c=scoreClass(ps);
+ var ava=k.photo?'<img class="sm-ava" src="'+k.photo+'" alt="">':'<span class="sm-ava sm-ava-txt">'+esc((k.name||"?").charAt(0).toUpperCase())+'</span>';
+ return '<span class="submeter" data-person="'+k.id+'" title="'+scoreLabel(ps)+'">'+ava+
+ '<span class="sm-name">'+esc(k.name)+'</span><span class="sm-num '+c+'">'+ps+'</span></span>';
 };
 
 /* ---------- handlers ---------- */
