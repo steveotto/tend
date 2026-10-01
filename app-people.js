@@ -25,7 +25,8 @@ var css=document.createElement("style");css.textContent=[
 ".pc-flabel{display:block;font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-faint);margin:10px 0 4px}",
 ".pc-flabel span{text-transform:none;letter-spacing:0;font-weight:400}",
 ".metercard .people-row{gap:10px}",
-".submeter{padding:8px 14px 8px 9px}",
+".submeter{padding:8px 14px 8px 9px;cursor:pointer;transition:background .15s}",
+".submeter[data-person]:hover{background:rgba(32,39,35,.05)}",
 ".sm-ava{width:30px;height:30px;border-radius:50%;object-fit:cover;flex:none;box-shadow:0 0 0 2px rgba(255,255,255,.9),0 1px 3px rgba(32,39,35,.15)}",
 ".sm-ava-txt{display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#DFE9E2,#C9DAD0);font-size:13px;font-weight:700;color:var(--ink-soft)}",
 ".submeter .sm-num{font-size:13px}.submeter .sm-num.green{color:#0F9A55}.submeter .sm-num.yellow{color:#C98F0E}.submeter .sm-num.red{color:#E8442E}",
@@ -208,7 +209,7 @@ window.renderSettings=renderSettings=function(){
  var html=_renderSettings.apply(this,arguments);
  var c=catColors();
  var btn='<button role="tab" id="settings-tab-peoplecolors" aria-controls="settings-panel-peoplecolors" aria-selected="'+((typeof settingsTab!=="undefined"&&settingsTab==="peoplecolors"))+'" data-settingstab="peoplecolors">People</button>';
- html=html.replace(/(data-settingstab="sync"[^>]*>Sync<\/button>)/,"$1"+btn);
+ html=html.replace(/(<button role="tab" id="settings-tab-sync")/,btn+"$1");
  var panel='<section class="settings-panel" id="settings-panel-peoplecolors" role="tabpanel" aria-labelledby="settings-tab-peoplecolors"'+((typeof settingsTab!=="undefined"&&settingsTab==="peoplecolors")?"":" hidden")+'>'+
  '<div class="card" style="margin-bottom:14px"><div class="subhead">People category colors</div>'+
  '<p class="settings-help">Tints the accent bar on People cards, the filter dots, and the avatar rings on health-meter badges.</p>'+
