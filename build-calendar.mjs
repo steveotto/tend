@@ -19,6 +19,9 @@ if (!url) {
 // every browser parses those as ITS OWN midnight, so "Sep 30" stays Sep 30.
 const dPart = (d) => d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
 
+// Local calendar date (YYYY-MM-DD) for timed events, using the family's home TZ.
+const localDate = (ms) => new Intl.DateTimeFormat("en-CA", { timeZone: process.env.TZ_NAME || "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(ms));
+
 try {
   const feed = await ical.async.fromURL(url, { maxRetries: 2 });
   const text = typeof feed === "string" ? feed : null;
@@ -64,12 +67,21 @@ try {
       e: eIso,
       allDay: isAllDay,
       cal: calName,
+      notes: typeof v.description === "string" ? v.description : (v.description ? String(v.description) : ""),
     });
   }
 
   events.sort((a, b) => a.s.localeCompare(b.s));
   fs.writeFileSync("events.json", JSON.stringify({ synced: new Date().toISOString(), source: "iCloud published feed", events }, null, 2));
   console.log(`Wrote events.json: ${events.length} events, synced ${new Date().toISOString()}`);
+
+  // Tend-tagged events (the word "tend" as its own word in the NOTES) feed the
+  // Coming up section and the Key dates "From calendar" read-only list.
+  const tend = events
+    .filter((e) => /\btend\b/i.test(e.notes || ""))
+    .map((e) => ({ title: e.t, date: e.allDay ? e.s.slice(0, 10) : localDate(e.s), cal: e.cal }));
+  fs.writeFileSync("tend-events.json", JSON.stringify({ synced: new Date().toISOString(), source: "iCloud published feed", events: tend }, null, 2));
+  console.log(`Wrote tend-events.json: ${tend.length} tend-tagged events`);
 } catch (err) {
   console.error("Calendar fetch failed:", err.message);
   console.error("Keeping the last good events.json (site will show it as possibly out of date).");
