@@ -1,7 +1,7 @@
 "use strict";
 /* ============ chip navigation: person chips on area tabs open the profile ============ */
 (function(){
-var css=document.createElement("style");css.textContent=".submeter[data-person]{cursor:pointer}.submeter[data-person]:hover{background:rgba(32,39,35,.05)}";document.head.appendChild(css);
+var css=document.createElement("style");css.textContent=".person-card{padding-top:34px}.submeter[data-person]{cursor:pointer}.submeter[data-person]:hover{background:rgba(32,39,35,.05)}";document.head.appendChild(css);
 document.addEventListener("click",function(e){
  var t=e.target;if(!t||!t.closest)return;
  var sm=t.closest(".submeter[data-person]");
