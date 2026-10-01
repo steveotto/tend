@@ -1,1 +1,1 @@
-<FULL app-people.js AS ASSEMBLED>
+<FULL app-people.js>
