@@ -166,6 +166,7 @@ var KD_STYLE=".kd-people{display:flex;flex-wrap:wrap;gap:4px 12px;margin:6px 0}.
  ".kd-ro-date{font-size:14.5px;font-weight:500;color:var(--ink);white-space:nowrap}.kd-ro-year{text-align:left;color:var(--ink-faint)}"+
  ".kd-pill-ro{opacity:.85}.kd-pill-ro:hover{border-color:var(--line)}"+
  ".kd-derived-head{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);padding:14px 0 2px}"+
+ ".pm-av{display:inline-flex;align-items:center;flex:none}.pm-av .avatar{margin:0}"+
  "@media (max-width:820px){.kd-grid{grid-template-columns:1fr 1fr}.kd-grid-head{display:none}.kd-date{width:auto}}";
 (function(){var s=document.createElement("style");s.textContent=KD_STYLE;document.head.appendChild(s);})();
 nextDateLine=function(pid){var kds=S.keyDates.filter(function(k){return kdPeopleIds(k).indexOf(pid)>=0&&daysUntil(k)>=0;});if(!kds.length)return "";var best=null;kds.forEach(function(k){var d=daysUntil(k);if(best===null||d<best.d)best={k:k,d:d};});if(!best)return "";return '<div class="pf-next">'+esc(best.k.label)+' \u00B7 '+(best.d===0?"TODAY":"in "+best.d+" days")+'</div>';};
@@ -176,6 +177,7 @@ nextDateLine=function(pid){var kds=S.keyDates.filter(function(k){return kdPeople
   S.keyDates=_kbd.slice().sort(function(a,b){return (+a.year||9999)-(+b.year||9999)||a.month-b.month||a.day-b.day;});
   var html;
   try{html=_pp(pid);}finally{S.keyDates=_kbd;}
+  html=html.split('<small>/ 100</small>').join('');
   var p=S.people.find(function(q){return q.id===pid;});if(!p)return html;
   var mark='Key dates</div>';
   var start=html.indexOf(mark);if(start<0)return html;
@@ -308,3 +310,31 @@ window.llIconHTML=function(p){
  var _pp2=personProfile;
  personProfile=function(pid){return inject(_pp2(pid));};
 })();
+
+/* ============ renderArea override: ov-style meter + clickable person mini-cards ============ */
+function renderArea(id){
+ var v=areaScore(id),c=scoreClass(v);
+ var goals=areaGoals(id);
+ var kids=S.people.filter(function(p){return p.area===id;});
+ var out='<div class="sectiontitle" style="margin-top:2px"><h2>'+S.areas[id].name+'</h2><span class="hint">'+scoreLabel(v)+'</span></div>';
+ out+='<div class="card" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:18px;font-weight:500">Health meter</h3><span class="ov-score '+c+'">'+v+'</span></div><div class="bar-ov"><i class="ov-marker" style="left:'+v+'%"></i></div><div class="meta" style="margin-top:6px"><span class="statusword '+c+'">'+scoreLabel(v)+'</span></div>';
+ if(kids.length)out+='<div class="menu-grid" style="margin-top:14px">'+kids.map(function(p2){var ps=personScore(p2),pc=scoreClass(ps);return '<button class="menu-area" data-openperson="'+p2.id+'"><span class="pm-av">'+personAvatar(p2,22)+'</span><span class="ma-name">'+esc(p2.name)+'</span><span class="ma-score '+pc+'">'+ps+'</span></button>';}).join("")+'</div>';
+ out+='</div>';
+ out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Goals</div>';
+ if(goals.length){goals.forEach(function(g){out+=goalRow(g);});}else out+='<div class="empty">No goals yet - add them in Settings.</div>';
+ out+='</div>';
+ out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Tasks</div><ul class="tasks">';
+ S.tasks.filter(function(t){return t.areaId===id;}).forEach(function(t){out+='<li class="'+(t.done?"done":"")+'"><input type="checkbox" class="cb" data-task="'+t.id+'"'+(t.done?" checked":"")+'><span class="txt">'+esc(t.text)+'</span><button class="del" data-taskdel="'+t.id+'">\u00D7</button></li>';});
+ out+='</ul><div class="addrow"><input placeholder="Add a task..." data-tasknew="'+id+'"><button class="btn mini" data-taskadd="'+id+'">Add</button></div></div>';
+ out+='<div class="card" style="margin-bottom:14px" id="logformcard"><div class="subhead">'+(editingId?"Edit entry":"Log an activity")+'</div>'+
+ '<div class="addrow" style="margin-top:0"><input type="date" id="logDate" value="'+(editingEvent?fmtDate(editingEvent.ts):fmtDate(Date.now()))+'"><select id="logPersonSel"><option value="">- person (optional) -</option>'+S.people.filter(function(p){return p.area===id;}).map(function(p){return '<option value="'+p.id+'"'+((editingEvent&&editingEvent.personId===p.id)?" selected":"")+'>'+esc(p.name)+'</option>';}).join("")+'</select><select id="logTypeSel">'+Object.keys(ETYPES).map(function(t){return '<option value="'+t+'"'+((editingEvent?editingEvent.type:"inperson")===t?" selected":"")+'>'+ETYPES[t].label+'</option>';}).join("")+'</select></div>'+ 
+ '<div class="addrow"><input id="logTitle" placeholder="What did you do?" value="'+(editingEvent?esc(editingEvent.title||""):"")+'"></div>'+
+ '<div class="addrow"><textarea id="logTalk" placeholder="What did you talk about?">'+(editingEvent?esc(editingEvent.note||""):"")+'</textarea></div>'+
+ '<div style="display:flex;gap:8px"><button class="btn" id="logSubmit">'+(editingId?"Update":"Log it")+'</button>'+(editingId?'<button class="btn ghost" id="logCancel">Cancel</button>':'')+'</div></div>';
+ out+='<div class="card"><div class="subhead">History</div>';
+ var evs=eventsFor(id,true).sort(function(a,b){return b.ts-a.ts;});
+ if(evs.length){evs.slice(0,30).forEach(function(e){
+  out+='<div class="entry"><div class="entry-main"><div class="entry-head"><span class="entry-date">'+new Date(e.ts).toLocaleDateString()+'</span><span class="badge">'+typeLabel(e)+'</span>'+(e.personId?'<span class="gr-person">'+esc(personName(e.personId))+'</span>':'')+'</div>'+(e.title?'<div class="entry-title">'+esc(e.title)+'</div>':'')+(e.note?'<div class="entry-note">'+esc(e.note)+'</div>':'')+'</div><div class="entry-actions"><button class="iconbtn" data-eedit="'+e.id+'" title="edit">\u270E</button><button class="iconbtn" data-edel="'+e.id+'" title="delete">\uD83D\uDDD1</button></div></div>';
+ });}else out+='<div class="empty">Nothing logged yet.</div>';
+ out+='</div>';
+ return out;}
