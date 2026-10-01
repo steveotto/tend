@@ -13,7 +13,7 @@ var css=document.createElement("style");css.textContent=[
 ".pc-toggle.on .pc-dot{background:var(--pc-c,#1F9C68)}",
 ".pc-toggle[data-pfilter='marriage']{--pc-c:#B8912F}.pc-toggle[data-pfilter='parenting']{--pc-c:#4C7CA8}.pc-toggle[data-pfilter='friendships']{--pc-c:#C1663E}",
 ".person-card{position:relative;overflow:hidden}",
-".person-card::before{content:'';position:absolute;top:0;left:0;right:0;height:6px;background:var(--pc-accent,transparent)}",
+".person-card::before{content:'';position:absolute;top:0;left:0;right:0;height:20px;background:var(--pc-accent,transparent);pointer-events:none}",
 ".person-card.pc-marriage{--pc-accent:#B8912F}.person-card.pc-parenting{--pc-accent:#4C7CA8}.person-card.pc-friendships{--pc-accent:#C1663E}",
 ".pc-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:9px 0 3px}",
 ".pc-chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;letter-spacing:.01em;padding:3px 11px;border-radius:999px;background:#F2F4F1;color:var(--ink-soft);white-space:nowrap}",
@@ -33,7 +33,7 @@ var css=document.createElement("style");css.textContent=[
 ".pc-chip.pray{background:rgba(31,156,104,.09);border:1px solid rgba(31,156,104,.18);font-weight:600;font-size:11px;padding:3px 10px}",
 ".pc-bday{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:500;color:var(--ink-soft);background:#F6F4EC;border:1px solid rgba(184,145,47,.22);border-radius:999px;padding:3px 11px;margin:7px 0 3px;white-space:nowrap}",
 ".pc-bday b{font-weight:600;color:var(--ink)}",
-"#apPhoto+label{display:inline-flex;align-items:center}",
+"#apPhoto+label{display:inline-flex;align-items:center}",".cat-color-row{display:flex;align-items:center;gap:10px;margin:12px 0;font-size:13.5px;font-weight:500;color:var(--ink)}",".cat-color-row input[type=color]{width:28px;height:28px;border-radius:50%;border:none;padding:0;background:none;cursor:pointer;box-shadow:0 0 0 1px rgba(32,39,35,.12),0 1px 3px rgba(32,39,35,.15)}",".cat-color-row input[type=color]::-webkit-color-swatch-wrapper{padding:0}",".cat-color-row input[type=color]::-webkit-color-swatch{border:none;border-radius:50%}",
 ".pp-row{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}",
 ".pp-btns{display:flex;gap:6px;align-items:flex-start;flex:none}",
 ".pp-opts{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:7px}",
@@ -85,7 +85,7 @@ function cardDateLines(p){
   if(next<today)next=new Date(t.getFullYear()+1,kd.month-1,kd.day);
   days=Math.round((next-today)/86400000);label=mos[kd.month-1]+" "+kd.day;}
  if(label===null||days===null||days<0)return "";
- return '<div class="pc-bday">\uD83C\uDF82 '+(age!==null?'<b>'+age+'</b> \u00B7 ':'')+'<b>'+esc(label)+'</b> ('+(days===0?"today!":days+" days away")+')</div>';
+ return '<div class="pc-bday">\uD83C\uDF82 '+(age!==null?'<b>'+age+'</b> \u00B7 ':'')+'<b>'+esc(label)+'</b> ('+(days===0?"today!":"in "+days+" days")+')</div>';
 }
 
 /* ---------- add-person modal ---------- */
@@ -213,7 +213,7 @@ window.renderSettings=renderSettings=function(){
  '<div class="card" style="margin-bottom:14px"><div class="subhead">People category colors</div>'+
  '<p class="settings-help">Tints the accent bar on People cards, the filter dots, and the avatar rings on health-meter badges.</p>'+
  [["marriage","Marriage"],["parenting","Parenting"],["friendships","Friendships"]].map(function(x){
-  return '<div class="setrow"><label>'+x[1]+'</label><input type="color" data-catcolor="'+x[0]+'" value="'+c[x[0]]+'"></div>';
+  return '<label class="cat-color-row"><input type="color" data-catcolor="'+x[0]+'" value="'+c[x[0]]+'" title="'+x[1]+' color"><span>'+x[1]+'</span></label>';
  }).join("")+
  '<button class="btn ghost" id="catColorReset" type="button">Reset to defaults</button></div></section>';
  return html+panel;
