@@ -2,7 +2,7 @@
 /* ============ GitHub sync ============ */
 var SYNCcfg=(function(){try{return JSON.parse(localStorage.getItem(LS_SYNC))||{auto:true};}catch(e){return {auto:true};}})();
 window.SYNCcfg=SYNCcfg;
-var TEND_VERSION="v20261002a";window.TEND_VERSION=TEND_VERSION; /* bump this with every code deploy - shown in Settings */
+var TEND_VERSION="v20261002b";window.TEND_VERSION=TEND_VERSION; /* bump this with every code deploy - shown in Settings */
 window._tendDirty=false; /* local changes not yet pushed - auto-pull must not clobber them */
 function ghHeaders(){return {"Authorization":"Bearer "+SYNCcfg.token,"Accept":"application/vnd.github+json"};}
 function updateSyncDot(){var dot=el("syncDot"),lbl=el("syncLabel");if(!SYNCcfg.token){dot.className="syncdot";lbl.textContent="local only";}else{dot.className="syncdot on";lbl.textContent="synced";}}
@@ -52,7 +52,7 @@ function forcePullNow(){
 window.forcePullNow=forcePullNow;
 /* inject the Force pull button + version/status line into the Sync settings */
 setInterval(function(){var pb=document.getElementById("syncPull");if(!pb)return;
- if(!document.getElementById("syncForcePull")){var fb=document.createElement("button");fb.className="btn ghost";fb.id="syncForcePull";fb.type="button";fb.title="Replace ALL local data with the cloud copy - use when the cloud is the truth";fb.textContent="Force pull (cloud wins)";pb.parentNode.insertBefore(fb,pb.nextSibling);}
+ if(!document.getElementById("syncForcePull")){var fb=document.createElement("button");fb.className="btn ghost";fb.id="syncForcePull";fb.type="button";fb.title="Replace ALL data with the cloud copy - use when the cloud is the truth";fb.textContent="Force pull (cloud wins)";pb.parentNode.insertBefore(fb,pb.nextSibling);}
  var line=document.getElementById("syncVersionLine");
  if(!line){line=document.createElement("div");line.id="syncVersionLine";line.style.cssText="font-size:12.5px;color:var(--ink-faint);margin:8px 0 2px;line-height:1.6";pb.parentNode.insertBefore(line,pb);}
  var rb=document.getElementById("syncReloadLatest");
