@@ -9,10 +9,10 @@ window.kdHasYear=function(k){return !!(k&&k.year!==undefined&&k.year!==null&&k.y
 nextOccurrence=function(kd){var t=new Date();if(kdHasYear(kd))return new Date(+kd.year,(+kd.month||1)-1,+kd.day||1);var d=new Date(t.getFullYear(),(+kd.month||1)-1,+kd.day||1);if(d<t)d=new Date(t.getFullYear()+1,(+kd.month||1)-1,+kd.day||1);return d;};
 daysUntil=function(kd){var t=new Date();t.setHours(0,0,0,0);return Math.round((nextOccurrence(kd)-t)/86400000);};
 window.kdPeopleSorted=function(){return S.people.slice().sort(function(a,b){var ab=String(a.birthday||"9999-99-99"),bb=String(b.birthday||"9999-99-99");return ab<bb?-1:ab>bb?1:0;});};
-window.kdNextTxt=function(k){var d=daysUntil(k),dt=nextOccurrence(k);var base=MOS_SHORT[dt.getMonth()]+" "+dt.getDate()+(kdHasYear(k)?", "+dt.getFullYear():"");if(d<0)return base+" \u00b7 passed";if(d===0)return base+" \u00b7 today";return base+" \u00b7 in "+d+"d";};
+window.kdNextTxt=function(k){var d=daysUntil(k),dt=nextOccurrence(k);var base=MOS_SHORT[dt.getMonth()]+" "+dt.getDate()+(kdHasYear(k)?", "+dt.getFullYear()":");if(d<0)return base+" \u00b7 passed";if(d===0)return base+" \u00b7 today";return base+" \u00b7 in "+d+"d";};
 window.kdPillsHTML=function(kid,selectedIds){
  return kdPeopleSorted().filter(function(p){return selectedIds.indexOf(p.id)>=0;}).map(function(p){
-  return '<span class="kd-pill">'+personAvatar(p,18)+'<span class="kd-pill-name">'+esc(p.name)+'</span>'+llIconHTML(p)+'<button type="button" class="kd-pill-x" data-kdpillx="'+kid+'|'+p.id+'" title="Remove '+esc(p.name)+'">\u00D7</button></span>';
+  return '<span class="kd-pill">'+personAvatar(p,18)+'<span class="kd-pill-name">'+esc(p.name)+'</span><button type="button" class="kd-pill-x" data-kdpillx="'+kid+'|'+p.id+'" title="Remove '+esc(p.name)+'">\u00D7</button></span>';
  }).join('');
 };
 window.kdPickHTML=function(kid,selectedIds){
@@ -50,6 +50,24 @@ window.kdSettingsV2=function(){
    +'<button class="del" data-kddel="'+k.id+'" title="remove">\u00D7</button></div>';
  });
  if(!S.keyDates.length)out+='<div class="empty">No key dates yet - add one above, or from a person\'s profile.</div>';
+ /* profile-derived dates (birthday / anniversary on the person record) shown read-only */
+ var covered={};
+ S.keyDates.forEach(function(k){kdPeopleIds(k).forEach(function(id){covered[id+"|"+k.month+"|"+k.day]=true;});});
+ var derived=[];
+ S.people.forEach(function(p){[['birthday','Birthday'],['anniversary','Anniversary']].forEach(function(pair){var v=String(p[pair[0]]||'').split('-');if(v.length===3&&!covered[p.id+"|"+(+v[1])+"|"+(+v[2])])derived.push({p:p,kind:pair[1],month:+v[1],day:+v[2]});});});
+ if(derived.length){
+  out+='<div class="kd-derived-head">From profiles \u00b7 read-only</div>';
+  derived.forEach(function(d){
+   out+='<div class="kd-grid kd-derived">'
+    +'<span class="kd-ro">'+esc(d.p.name+' \u00b7 '+d.kind)+'</span>'
+    +'<span class="kd-ro-date">'+MOS_FULL[d.month-1]+' '+d.day+'</span>'
+    +'<span class="kd-ro-year">\u2014</span>'
+    +'<span class="kd-next">'+kdNextTxt({month:d.month,day:d.day})+'</span>'
+    +'<span class="kd-people-cell"><span class="kd-pill kd-pill-ro" title="From '+esc(d.p.name)+'\'s profile">'+personAvatar(d.p,18)+'<span class="kd-pill-name">'+esc(d.p.name)+'</span></span></span>'
+    +'<span></span></div>';
+  });
+  out+='<p class="settings-help" style="margin-top:10px">Profile birthdays and anniversaries are managed on each person\'s profile - they show up in Coming up automatically.</p>';
+ }
  out+='<button class="btn" id="kdAddGlobal" style="margin-top:12px">Add key date</button>';
  out+='</div>';
  return out;
@@ -113,7 +131,7 @@ function renderChecklists(){return "";}
 var KD_STYLE=".kd-people{display:flex;flex-wrap:wrap;gap:4px 12px;margin:6px 0}.kd-person{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--ink-soft);font-weight:400}.kd-person input{margin:0}"+
  ".kd-grid{display:grid;grid-template-columns:minmax(150px,1.3fr) auto 64px minmax(105px,.8fr) minmax(160px,1.2fr) 26px;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}"+
  ".kd-grid-head{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);border-bottom:0;padding:0 0 2px}"+
- ".kd-in{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);font:inherit;font-size:14.5px;background:#FDFDFE;color:var(--ink);box-sizing:border-box}"+
+ ".kd-in{width:100%;height:42px;padding:0 12px;border-radius:10px;border:1px solid var(--line);font:inherit;font-size:14.5px;background:#FDFDFE;color:var(--ink);box-sizing:border-box}"+
  ".kd-in:focus{outline:none;border-color:var(--forest)}"+
  ".kd-date{display:flex;gap:8px;align-items:center}.kd-month{width:auto}.kd-day{width:64px}"+
  ".kd-next{font-size:12px;color:var(--ink-faint);white-space:nowrap}"+
@@ -125,6 +143,9 @@ var KD_STYLE=".kd-people{display:flex;flex-wrap:wrap;gap:4px 12px;margin:6px 0}.
  ".kd-pick-menu.hidden{display:none}"+
  ".kd-opt{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:8px;cursor:pointer;font-size:13.5px;font-weight:400}.kd-opt:hover{background:#F3F6F4}.kd-opt input{margin:0;flex:none}.kd-opt-name{flex:1}"+
  ".kd-opt .ll-ic{margin-left:auto;margin-right:0}"+
+ ".kd-derived{background:#FAFBFA}.kd-derived .kd-ro{font-weight:500;color:var(--ink-soft)}.kd-ro-date{font-size:13.5px;color:var(--ink-soft);white-space:nowrap}.kd-ro-year{text-align:center;color:var(--ink-faint)}"+
+ ".kd-pill-ro{opacity:.85}.kd-pill-ro:hover{border-color:var(--line)}"+
+ ".kd-derived-head{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);padding:14px 0 2px}"+
  "@media (max-width:820px){.kd-grid{grid-template-columns:1fr 1fr}.kd-grid-head{display:none}}";
 (function(){var s=document.createElement("style");s.textContent=KD_STYLE;document.head.appendChild(s);})();
 nextDateLine=function(pid){var kds=S.keyDates.filter(function(k){return kdPeopleIds(k).indexOf(pid)>=0&&daysUntil(k)>=0;});if(!kds.length)return "";var best=null;kds.forEach(function(k){var d=daysUntil(k);if(best===null||d<best.d)best={k:k,d:d};});if(!best)return "";return '<div class="pf-next">'+esc(best.k.label)+' \u00B7 '+(best.d===0?"TODAY":"in "+best.d+" days")+'</div>';};
