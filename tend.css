@@ -495,6 +495,10 @@ nav.tabs .focus-nav-spark{display:inline-grid;place-items:center;background:#fff
 [data-schedule-day][hidden]{display:none!important}
 .schedule-day-field{display:flex;align-items:center;gap:10px;margin:8px 0;color:var(--ink-soft);font-size:13px}
 .schedule-day-field select{max-width:220px}
+.rhythm-schedule-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:9px}
+.rhythm-schedule-grid select{width:100%;min-width:0}
+@media(max-width:650px){.rhythm-schedule-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:400px){.rhythm-schedule-grid{grid-template-columns:1fr}}
 .careplan-filterbar{display:flex;align-items:center;gap:12px;margin:0 0 16px;padding:12px 15px;border:1px solid var(--line);border-radius:15px;background:var(--card)}
 .careplan-filter-label{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);flex:none}
 .careplan-filter-list{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-width:0}
