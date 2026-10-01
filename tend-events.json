@@ -1,1 +1,36 @@
-{"synced":"2026-10-01T09:26:00-04:00","events":[]}
+{
+  "synced": "2026-10-01T13:48:32.958Z",
+  "source": "iCloud published feed",
+  "events": [
+    {
+      "title": "Take Jake to Airport",
+      "date": "2026-10-01",
+      "cal": "Home"
+    },
+    {
+      "title": "Bristol Fall Festival",
+      "date": "2026-10-10",
+      "cal": "Home"
+    },
+    {
+      "title": "Nashville",
+      "date": "2026-10-17",
+      "cal": "Home"
+    },
+    {
+      "title": "Cancel Peacock Annual Subscription (amyotto@me.com)",
+      "date": "2026-11-14",
+      "cal": "Home"
+    },
+    {
+      "title": "NO SCHOOL",
+      "date": "2026-11-25",
+      "cal": "Home"
+    },
+    {
+      "title": "Cancel Starz Subscription (renews in 30th)",
+      "date": "2026-12-19",
+      "cal": "Home"
+    }
+  ]
+}
