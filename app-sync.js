@@ -2,12 +2,13 @@
 /* ============ GitHub sync ============ */
 var SYNCcfg=(function(){try{return JSON.parse(localStorage.getItem(LS_SYNC))||{auto:true};}catch(e){return {auto:true};}})();
 window.SYNCcfg=SYNCcfg;
-var TEND_VERSION="v20261002c";window.TEND_VERSION=TEND_VERSION; /* bump this with every code deploy - shown in Settings */
+var TEND_VERSION="v20261002x";window.TEND_VERSION=TEND_VERSION; /* bump this with every code deploy - shown in Settings */
 window._tendDirty=false; /* local changes not yet pushed - auto-pull must not clobber them */
 function ghHeaders(){return {"Authorization":"Bearer "+SYNCcfg.token,"Accept":"application/vnd.github+json"};}
 function updateSyncDot(){var dot=el("syncDot"),lbl=el("syncLabel");if(!SYNCcfg.token){dot.className="syncdot";lbl.textContent="local only";}else{dot.className="syncdot on";lbl.textContent="synced";}}
 function updateSyncErr(){var dot=el("syncDot");dot.className="syncdot err";el("syncLabel").textContent="sync error";}
 function schedulePush(){clearTimeout(pushTimer);pushTimer=setTimeout(pushNow,4000);}
+function addPersonDraftOpen(){var modal=document.getElementById("addPersonModal");return !!(modal&&modal.classList.contains("open"));}
 function pushNow(){
  if(!SYNCcfg.token||!SYNCcfg.owner||!SYNCcfg.repo){flash("Configure sync first");return;}
  var url="https://api.github.com/repos/"+SYNCcfg.owner+"/"+SYNCcfg.repo+"/contents/state.json";
@@ -22,12 +23,14 @@ function pushNow(){
   SYNCcfg.lastSync=Date.now();window._tendDirty=false;localStorage.setItem(LS_SYNC,JSON.stringify(SYNCcfg));updateSyncDot();flash("Synced to GitHub");if(tab==="sync")render();
  }).catch(function(e){console.error(e);updateSyncErr();flash(e.message);});}
 function pullNow(explicit){
+ if(!explicit&&addPersonDraftOpen())return;
  if(!SYNCcfg.token||!SYNCcfg.owner||!SYNCcfg.repo){if(explicit)flash("Configure sync first");return;}
  var url="https://api.github.com/repos/"+SYNCcfg.owner+"/"+SYNCcfg.repo+"/contents/state.json";
  fetch(url,{headers:ghHeaders()}).then(function(r){
   if(r.status===404){if(explicit)flash("No data in repo yet - push first");return null;}
   if(!r.ok)throw new Error("pull failed ("+r.status+")");return r.json();
  }).then(function(j){
+  if(!explicit&&addPersonDraftOpen())return;
   if(!j)return;var remote=JSON.parse(decodeURIComponent(escape(atob(j.content))));
   if(window._tendDirty){if(explicit)flash("Local changes not pushed - pull skipped. Push first, or use Force pull if cloud wins.");return;}
   if(remote.events&&remote.events.length>=S.events.length){S=ensureShape(remote);localStorage.setItem(LS_STATE,JSON.stringify(S));}

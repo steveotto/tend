@@ -131,7 +131,7 @@ function upcomingDates(now){
  var HOLS=(typeof majorHolidays!=="undefined"&&majorHolidays)?majorHolidays:[];
  HOLS.forEach(function(h){if(typeof holidayEnabled==="function"&&!holidayEnabled(h.id))return;[today.getFullYear(),today.getFullYear()+1].forEach(function(y){var date=h.date(y),days=Math.round((date-today)/86400000);if(days>=0&&days<=30)rows.push({label:h.name,days:days,date:date,attrs:''});});});
  (window.TEND_EVENTS||[]).forEach(function(ev){var v=String(ev.date||'').split('-');if(v.length!==3)return;var date=new Date(+v[0],+v[1]-1,+v[2]);var days=Math.round((date-today)/86400000);if(days>=0&&days<=30)rows.push({label:ev.title||'Tend event',days:days,date:date,attrs:''});});
- return rows.sort(function(a,b){return a.days-b.days||a.label.localeCompare(b.label);});
+ return rows.filter(function(row){return row.days>0;}).sort(function(a,b){return a.days-b.days||a.label.localeCompare(b.label);});
 }
 function calIconHTML(date){
  return '<span class="cal-ic" aria-hidden="true"><span class="cal-ic-top">'+MOS_SHORT[date.getMonth()].toUpperCase()+'</span><span class="cal-ic-day">'+date.getDate()+'</span></span>';
@@ -322,9 +322,7 @@ function renderArea(id){
  out+='<div class="card" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:18px;font-weight:500">Health meter</h3><span class="ov-score '+c+'">'+v+'</span></div><div class="bar-ov"><i class="ov-marker" style="left:'+v+'%"></i></div><div class="meta" style="margin-top:6px"><span class="statusword '+c+'">'+scoreLabel(v)+'</span></div>';
  if(kids.length)out+='<div class="menu-grid" style="margin-top:14px">'+kids.map(function(p2){var ps=personScore(p2),pc=scoreClass(ps);return '<button class="menu-area" data-openperson="'+p2.id+'"><span class="pm-av">'+personAvatar(p2,22)+'</span><span class="ma-name">'+esc(p2.name)+'</span><span class="ma-score '+pc+'">'+ps+'</span></button>';}).join("")+'</div>';
  out+='</div>';
- out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Goals</div>';
- if(goals.length){goals.forEach(function(g){out+=goalRow(g);});}else out+='<div class="empty">No goals yet - add them in Settings.</div>';
- out+='</div>';
+ out+=areaGoalsHTML(id);
  out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Tasks</div><ul class="tasks">';
  S.tasks.filter(function(t){return t.areaId===id;}).forEach(function(t){out+='<li class="'+(t.done?"done":"")+'"><input type="checkbox" class="cb" data-task="'+t.id+'"'+(t.done?" checked":"")+'><span class="txt">'+esc(t.text)+'</span><button class="del" data-taskdel="'+t.id+'">\u00D7</button></li>';});
  out+='</ul><div class="addrow"><input placeholder="Add a task..." data-tasknew="'+id+'"><button class="btn mini" data-taskadd="'+id+'">Add</button></div></div>';
@@ -333,11 +331,5 @@ function renderArea(id){
  '<div class="addrow"><input id="logTitle" placeholder="What did you do?" value="'+(editingEvent?esc(editingEvent.title||""):"")+'"></div>'+
  '<div class="addrow"><textarea id="logTalk" placeholder="What did you talk about?">'+(editingEvent?esc(editingEvent.note||""):"")+'</textarea></div>'+
  '<div style="display:flex;gap:8px"><button class="btn" id="logSubmit">'+(editingId?"Update":"Log it")+'</button>'+(editingId?'<button class="btn ghost" id="logCancel">Cancel</button>':'')+'</div></div>';
- out+='<div class="card"><div class="subhead">History</div>';
- var evs=eventsFor(id,true).sort(function(a,b){return b.ts-a.ts;});
- if(evs.length){evs.slice(0,30).forEach(function(e){
-  out+='<div class="entry"><div class="entry-main"><div class="entry-head"><span class="entry-date">'+new Date(e.ts).toLocaleDateString()+'</span><span class="badge">'+typeLabel(e)+'</span>'+(e.personId?'<span class="gr-person">'+esc(personName(e.personId))+'</span>':'')+'</div>'+(e.title?'<div class="entry-title">'+esc(e.title)+'</div>':'')+(e.note?'<div class="entry-note">'+esc(e.note)+'</div>':'')+'</div><div class="entry-actions"><button class="iconbtn" data-eedit="'+e.id+'" title="edit">\u270E</button><button class="iconbtn" data-edel="'+e.id+'" title="delete">\uD83D\uDDD1</button></div></div>';
- });}else out+='<div class="empty">Nothing logged yet.</div>';
- out+='</div>';
+ out+=areaHistoryHTML(id);
  return out;}
-

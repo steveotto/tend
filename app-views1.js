@@ -4,7 +4,7 @@
 /* ============ views: dashboard, area pages, people ============ */
 function renderNav(){
  var an=el("areaNav");if(an)an.innerHTML=AREA_IDS.map(function(id){return '<button data-areanav="'+id+'" class="'+(navKind()==="area"&&currentArea===id?"active":"")+'"><span class="nav-ic">'+(AREA_ICONS[id]||"")+'</span><span>'+S.areas[id].name+'</span></button>';}).join("");
- var un=el("utilNav");if(un)un.innerHTML=[["today","Dashboard"],["people","People"],["prayer","Prayer"],["offload","Offload"],["settings","Settings"]].map(function(p){return '<button data-utilnav="'+p[0]+'" class="'+(tab===p[0]&&navKind()!=="area"?"active":"")+'">'+p[1]+'</button>';}).join("");
+ var un=el("utilNav");if(un)un.innerHTML=(typeof focusNavButtonHTML==="function"?focusNavButtonHTML():'')+[["today","Dashboard"],["people","People"],["prayer","Prayer"],["careplan","Care Plan"],["offload","Offload"],["settings","Settings"]].map(function(p){return '<button data-utilnav="'+p[0]+'" class="'+(tab===p[0]&&navKind()!=="area"?"active":"")+'">'+p[1]+'</button>';}).join("");
 }
 function navKind(){return currentArea?"area":"tab";}
 function render(){renderNav();var v=el("view");
@@ -12,6 +12,7 @@ function render(){renderNav();var v=el("view");
  else if(tab==="today")v.innerHTML=renderToday();
  else if(tab==="people")v.innerHTML=renderPeople();
  else if(tab==="prayer")v.innerHTML=renderPrayer();
+ else if(tab==="careplan")v.innerHTML=renderCarePlan();
  else if(tab==="echo")v.innerHTML=renderEcho();
  else if(tab==="offload")v.innerHTML=renderOffload();
  else if(tab==="settings")v.innerHTML=renderSettings();
@@ -60,10 +61,10 @@ function dayTimeLabel(time){var parts=time.split(":"),hour=+parts[0];return (hou
 function planBlocksDef(){var blocks=dayBlocks(),current=dayBlockAt(new Date());return blocks.map(function(b,i){return {id:b.id,name:b.name,range:dayTimeLabel(b.start)+" – "+dayTimeLabel(blocks[(i+1)%blocks.length].start),cur:b.id===current};});}
 function dayBlockSettingsHTML(){return '<div class="card" style="margin-bottom:14px"><div class="subhead">Daily time sections</div><p class="settings-help">Rename your sections and choose when each starts. Each ends when the next begins; the last continues overnight. These settings apply throughout Tend.</p><div class="day-settings-grid"><span>Name</span><span>Starts</span><span>Ends</span>'+dayBlocks().map(function(b,i,blocks){return '<input aria-label="Section '+(i+1)+' name" data-block-name="'+b.id+'" value="'+esc(b.name)+'"><input type="time" aria-label="Section '+(i+1)+' start time" data-block-start="'+b.id+'" value="'+b.start+'"><span data-block-end="'+b.id+'">'+dayTimeLabel(blocks[(i+1)%blocks.length].start)+(i===blocks.length-1?' (next day)':'')+'</span>';}).join('')+'</div><p id="dayBlocksError" role="alert" class="day-settings-error"></p><button class="btn" id="saveDayBlocks">Save time sections</button></div>';}
 function rhythmScheduledToday(r,date){
- date=date||new Date();if(r.freq==="quarterly"||r.freq==="yearly")return false;
+ date=date||new Date();if((r.freq==="quarterly"||r.freq==="yearly")&&!scheduleDayLabel(r))return false;
  if(rhythmDaysSince(r)===0)return false;
  if(r.freq==="custom")return date.getDay()===(r.customDow||0)&&(r.customType!=="monthly"||Math.ceil(date.getDate()/7)===(r.customOrd||1));
- return r.freq==="daily"||rhythmDaysSince(r)>=rhythmPeriod(r);
+ return scheduleDayMatches(r,date)&&(r.freq==="daily"||rhythmDaysSince(r)>=rhythmPeriod(r));
 }
 function goalHasRhythm(g){
  var person=S.people.find(function(p){return p.id===g.personId;});
@@ -81,7 +82,7 @@ function taskItem(t){return {label:t.text,sub:"task \u00B7 "+(S.areas[t.areaId]?
 function dashboardRhythmEligible(r){
  var days=rhythmDaysSince(r),period=rhythmPeriod(r);if(days===0)return false;
  if(r.freq==="custom"){var date=new Date();return date.getDay()===(r.customDow||0)&&(r.customType!=="monthly"||Math.ceil(date.getDate()/7)===(r.customOrd||1));}
- return days>=Math.max(1,period-(period<=14?1:0));
+ return scheduleDayMatches(r)&&days>=Math.max(1,period-(period<=14?1:0));
 }
 function prioritizePlanItems(items){
  var ranked=items.slice().sort(function(a,b){
@@ -97,7 +98,7 @@ function prioritizePlanItems(items){
 function planCandidates(bid,curBid){
  var out=[];
  S.goals.forEach(function(g){
-  if(goalHasRhythm(g)||goalLastDone(g)===0)return;
+  if(g.completed||goalHasRhythm(g)||goalLastDone(g)===0||!scheduleDayMatches(g))return;
   var elapsed=goalLastDone(g);if(elapsed!==null&&elapsed<goalInterval(g))return;
   var defaults={"g-bible":"early","g-core":"early","g-strength":"early","g-walk":"evening","g-date-amy":"evening","g-wedding":"evening","g-pray-amy":"bedtime"};
   var block=g.tod&&g.tod!=="anytime"?g.tod:defaults[g.id];
@@ -126,6 +127,7 @@ function planHTML(){
  var blocks=planBlocksDef();
  var out='<div class="sectiontitle"><h2>Today</h2><span class="hint">Three next steps · scheduled first, one per person</span></div>';
  var curId=(blocks.filter(function(x){return x.cur;})[0]||{}).id;
+ if(planCandidates('allday',curId).length)out+=planBlockCard({id:'allday',name:'All day',range:'Any time today'},curId,false);
  out+=planBlockCard(blocks.filter(function(x){return x.cur;})[0],curId,true);
  out+='<nav class="day-jumps" aria-label="Other time blocks">'+blocks.filter(function(b){return b.id!==curId;}).map(function(b){return '<button class="btn mini ghost'+(planViewState===b.id?' active':'')+'" data-planview="'+b.id+'">'+b.name+(planViewState===b.id?' \u00b7 Hide':'')+'</button>';}).join('')+'</nav>';
  var sel=blocks.filter(function(b){return b.id===planViewState&&b.id!==curId;})[0];
@@ -162,7 +164,8 @@ function personHealthColor(score){
  return "rgb("+start.map(function(channel,i){return Math.round(channel+(end[i]-channel)*fraction);}).join(",")+")";
 }
 function personHealthMeter(score,name,solid){
- return '<div class="bar-ov person-health-bar"'+(solid?' style="background:'+personHealthColor(score)+'"':'')+' role="meter" aria-label="'+esc(name)+' tending health" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+score+'" aria-valuetext="'+score+' out of 100: '+esc(scoreLabel(score))+'">'+(solid?'':'<i class="ov-marker" style="left:clamp(10px, '+score+'%, calc(100% - 10px))" aria-hidden="true"></i>')+'</div>';
+ var value=Math.max(0,Math.min(100,Number(score)||0));
+ return '<div class="bar-ov person-health-bar'+(solid?' solid':'')+'" role="meter" aria-label="'+esc(name)+' tending health" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+value+'" aria-valuetext="'+value+' out of 100: '+esc(scoreLabel(value))+'">'+(solid?'<span class="person-health-fill" style="width:'+value+'%;background:'+personHealthColor(value)+'" aria-hidden="true"></span>':'<i class="ov-marker" style="left:clamp(10px, '+value+'%, calc(100% - 10px))" aria-hidden="true"></i>')+'</div>';
 }
 function renderPeople(){
  var HINT='rhythms, sparks, prayers - tending the people you love';
@@ -192,6 +195,7 @@ function rhythmRow(p,r){
   out+='<div class="addrow" style="margin-top:2px"><input data-rfield="'+idf+'|text" value="'+esc(r.text)+'" placeholder="What is the rhythm?"></div>';
   out+='<div class="addrow"><select data-rfield="'+idf+'|category"><option value="connection"'+((r.category||"connection")==="connection"?" selected":"")+'>Connection</option><option value="prayer"'+(r.category==="prayer"?" selected":"")+'>Prayer</option></select>';
   out+='<select data-rfield="'+idf+'|freq">'+Object.keys(FREQS).map(function(k){return '<option value="'+k+'"'+(r.freq===k?" selected":"")+'>'+FREQS[k].label+'</option>';}).join("")+'<option value="custom"'+(r.freq==="custom"?" selected":"")+'>Custom...</option></select></div>';
+  if(scheduleHasWeekday(r.freq))out+='<label class="schedule-day-field">Day of week<select data-rfield="'+idf+'|scheduleDow">'+scheduleDayOptions(r.scheduleDow)+'</select></label>';
   if(r.freq==="custom"){
    out+='<div class="addrow"><select data-rfield="'+idf+'|customType"><option value="weekly"'+((r.customType||"weekly")==="weekly"?" selected":"")+'>Every week on</option><option value="monthly"'+(r.customType==="monthly"?" selected":"")+'>Monthly on the</option></select>';
    if(r.customType==="monthly")out+='<select data-rfield="'+idf+'|customOrd">'+ORDINALS.map(function(o,i){return '<option value="'+(i+1)+'"'+((r.customOrd||1)===(i+1)?" selected":"")+'>'+o+'</option>';}).join("")+'</select>';
@@ -208,7 +212,7 @@ function rhythmRow(p,r){
  var rl=rhythmLast(r),lastTxt=rl?("last tended "+when(rl.ts)):"not yet tended";
  var timingTxt=lastTxt+(rl&&rhythmDaysSince(r)!==0?" \u00B7 "+rhythmDueTxt(r):"");
  if(rhyDoneDraft&&rhyDoneDraft.key===p.id+"|"+r.id){return '<div class="rhyrow"><span class="rhythm-health" title="Rhythm health"><span class="sm-dot '+c+'" aria-hidden="true"></span><span>'+sc+'%</span></span><div class="gr-main"><b>'+esc(r.text||"(unnamed rhythm)")+'</b><div class="gr-meta">'+esc(rhythmFreqLabel(r))+" \u00B7 "+esc(timingTxt)+'</div></div>'+rhyDoneBtn(p.id+"|"+r.id)+'</div><div class="hint" style="font-size:11px;color:var(--ink-faint);margin:0 0 8px 26px">When did it actually happen? That date drives the meter.</div>';}
- return '<div class="rhyrow"><span class="rhythm-health" title="Rhythm health"><span class="sm-dot '+c+'" aria-hidden="true"></span><span>'+sc+'%</span></span><div class="gr-main"><b>'+esc(r.text||"(unnamed rhythm)")+'</b>'+(r.category==="prayer"?' <span class="gr-person">prayer</span>':'')+'<div class="gr-meta">'+esc(rhythmFreqLabel(r))+(r.tod&&r.tod!=="anytime"?" \u00B7 "+esc(TODS[r.tod]):"")+(rhythmDurLabel(r)?" \u00B7 "+esc(rhythmDurLabel(r)):"")+" \u00B7 "+esc(timingTxt)+'</div></div><button class="btn mini" data-rhydone="'+p.id+'|'+r.id+'" title="Record a moment of care">Tend</button><button class="iconbtn rhythm-history-trigger" data-rhyhistory="'+p.id+'|'+r.id+'" title="View rhythm history" aria-label="View history for '+esc(r.text)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button class="iconbtn" data-rhyedit="'+r.id+'" title="edit">\u270E</button></div>';
+ return '<div class="rhyrow"><span class="rhythm-health" title="Rhythm health"><span class="sm-dot '+c+'" aria-hidden="true"></span><span>'+sc+'%</span></span><div class="gr-main"><b>'+esc(r.text||"(unnamed rhythm)")+'</b>'+(r.category==="prayer"?' <span class="gr-person">prayer</span>':'')+'<div class="gr-meta">'+esc(rhythmFreqLabel(r))+(scheduleDayLabel(r)?" \u00B7 "+esc(scheduleDayLabel(r)):"")+(r.tod&&r.tod!=="anytime"?" \u00B7 "+esc(TODS[r.tod]):"")+(rhythmDurLabel(r)?" \u00B7 "+esc(rhythmDurLabel(r)):"")+" \u00B7 "+esc(timingTxt)+'</div></div><button class="btn mini" data-rhydone="'+p.id+'|'+r.id+'" title="Record a moment of care">Tend</button><button class="iconbtn rhythm-history-trigger" data-rhyhistory="'+p.id+'|'+r.id+'" title="View rhythm history" aria-label="View history for '+esc(r.text)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button class="iconbtn" data-rhyedit="'+r.id+'" title="edit">\u270E</button></div>';
 }
 function draftRow(p){
  var r=rhythmDraft,idf=p.id+"|draft";
@@ -216,6 +220,7 @@ function draftRow(p){
  out+='<div class="addrow" style="margin-top:2px"><input data-rfield="'+idf+'|text" value="'+esc(r.text||"")+'" placeholder="What is the rhythm?"></div>';
  out+='<div class="addrow"><select data-rfield="'+idf+'|category"><option value="connection"'+((r.category||"connection")==="connection"?" selected":"")+'>Connection</option><option value="prayer"'+(r.category==="prayer"?" selected":"")+'>Prayer</option></select>';
  out+='<select data-rfield="'+idf+'|freq">'+Object.keys(FREQS).map(function(k){return '<option value="'+k+'"'+(r.freq===k?" selected":"")+'>'+FREQS[k].label+'</option>';}).join("")+'<option value="custom"'+(r.freq==="custom"?" selected":"")+'>Custom...</option></select></div>';
+ if(scheduleHasWeekday(r.freq))out+='<label class="schedule-day-field">Day of week<select data-rfield="'+idf+'|scheduleDow">'+scheduleDayOptions(r.scheduleDow)+'</select></label>';
  if(r.freq==="custom"){
   out+='<div class="addrow"><select data-rfield="'+idf+'|customType"><option value="weekly"'+((r.customType||"weekly")==="weekly"?" selected":"")+'>Every week on</option><option value="monthly"'+(r.customType==="monthly"?" selected":"")+'>Monthly on the</option></select>';
   if(r.customType==="monthly")out+='<select data-rfield="'+idf+'|customOrd">'+ORDINALS.map(function(o,i){return '<option value="'+(i+1)+'"'+((r.customOrd||1)===(i+1)?" selected":"")+'>'+o+'</option>';}).join("")+'</select>';
@@ -231,7 +236,7 @@ function draftRow(p){
 function actDoneAdd(pid,id){window._actDone[pid]=window._actDone[pid]||[];if(window._actDone[pid].indexOf(id)<0)window._actDone[pid].push(id);}
 function prayedThisWeek(pid){var d=new Date(),sod=new Date(d.getFullYear(),d.getMonth(),d.getDate()-d.getDay()),n=0;S.events.forEach(function(e){if(e.personId===pid&&(e.kind==="prayer"||e.type==="prayer")&&e.ts>=sod.getTime())n++;});return n;}
 var profileTabs={},rippleIdeaOffsets={};
-function todayRhythmEligible(r){var days=rhythmDaysSince(r);if(days===999)return true;if(days===0)return false;var period=rhythmPeriod(r);var window=Math.min(Math.ceil(period/2),7);return days>=Math.max(1,period-window);}
+function todayRhythmEligible(r){if(!scheduleDayMatches(r))return false;var days=rhythmDaysSince(r);if(days===999)return true;if(days===0)return false;var period=rhythmPeriod(r);var window=Math.min(Math.ceil(period/2),7);return days>=Math.max(1,period-window);}
 function rippleIdea(p){
  var common=["Send a thoughtful text","Make a quick call","Write a handwritten note","Ask how their day really went","Share a happy memory","Follow up on something they mentioned","Offer encouragement before a big day","Send a photo that made you think of them","Ask what would help this week","Thank them for something specific"];
  var byLanguage={qt:["Take a phone-free walk","Share coffee and conversation","Cook a meal together","Ask about the best part of their week","Listen to a favorite song together","Run an errand side by side","Plan a quiet lunch","Spend ten minutes catching up","Look through old photos together","Try something new together"],wa:["Text a specific encouragement","Write a short thank-you note","Say what you admire about them","Celebrate a recent effort","Leave an encouraging voice message","Recall something they handled well","Tell them why you value them","Write a note for a difficult day","Thank them for a small kindness","Ask about a win and celebrate it"],as:["Take a chore off their list","Offer to run an errand","Bring them a meal","Help prepare for tomorrow","Tidy a shared space","Offer a ride","Fix a small annoyance","Help with a task they have postponed","Bring their favorite drink","Ask what practical help they need"],gf:["Bring their favorite snack","Pick a small flower bouquet","Share a book they might love","Print a favorite photo","Bring a little treat from your day","Give a handwritten card","Make a small homemade gift","Replace something they have worn out","Choose something for their hobby","Leave a thoughtful surprise"],pt:["Offer a warm hug","Hold hands on a walk","Sit close while talking","Offer a shoulder rub","Greet them with affection","Share a quiet moment together","Offer a reassuring hand","Ask what kind of affection feels good","Pause for a goodbye hug","Cuddle while watching something together"]};
@@ -368,7 +373,8 @@ function personProfile(pid){
  else out+='<div class="empty">No sparks yet - the fun, no-pressure "we should do this sometime" list.</div>';
  out+='<div class="addrow"><input placeholder="Idea - a movie, a talk, a trip..." data-spnewtext="'+pid+'"><input type="date" data-spnewdate="'+pid+'" style="max-width:150px"><input type="time" data-spnewtime="'+pid+'" style="max-width:110px"><button class="btn mini" data-spadd="'+pid+'">Add</button></div>';
  out+='</section>';
- out+=profilePanelStart("prayer")+'<div class="person-prayer-add"><label class="field">Title<input id="personPrayerTitle" placeholder="Prayer title"></label><label class="field">Details<textarea id="personPrayerDetails" placeholder="Details (optional)"></textarea></label><button class="btn" data-personprayeradd="'+pid+'">Add prayer</button></div>'+prayerList(prayers);
+ var addingPrayer=window._personPrayerDraftFor===pid;
+ out+=profilePanelStart("prayer")+'<div class="person-prayer-add">'+(addingPrayer?'<div class="person-prayer-fields"><label class="field">Title<input id="personPrayerTitle" placeholder="Prayer title"></label><label class="field">Details<textarea id="personPrayerDetails" placeholder="Details (optional)"></textarea></label><div class="person-prayer-schedule"><label>Frequency<select id="personPrayerFreq" aria-label="Prayer frequency"><option value="none">No schedule</option>'+Object.keys(FREQS).map(function(k){return '<option value="'+k+'">'+FREQS[k].label+'</option>';}).join("")+'</select></label><label>Time<select id="personPrayerTod" aria-label="Prayer time of day">'+Object.keys(TODS).map(function(k){return '<option value="'+k+'">'+esc(TODS[k])+'</option>';}).join("")+'</select></label><label data-schedule-day hidden>Day of week<select id="personPrayerDow">'+scheduleDayOptions(null)+'</select></label></div></div>':'')+'<div class="person-prayer-form-actions"><button class="btn" '+(addingPrayer?'data-personprayeradd':'data-personprayeropen')+'="'+pid+'">'+(addingPrayer?'Save prayer':'+ Add prayer')+'</button>'+(addingPrayer?'<button class="btn ghost" data-personprayercancel="1">Cancel</button>':'')+'</div></div>'+prayerList(prayers);
  out+='<details class="prayer-notes"><summary>Prayer notes</summary>';
  out+=notesChecklist(p,"prayernote",first+"&#39;s prayer context - what they asked me to pray for");
  out+='</details></section>';
@@ -413,7 +419,7 @@ function freeMomentHTML(){
  var cands=[];
  S.people.forEach(function(p){(p.rhythms||[]).forEach(function(r){var d=rhythmDaysSince(r);if((r.tod||"anytime")==="anytime"&&rhythmScheduledToday(r))cands.push({pri:10+(d===999?0:d),rkey:p.id+"|"+r.id,personId:p.id,label:r.text,sub:"rhythm \u00B7 "+rhythmDueTxt(r)});});});
  S.people.forEach(function(p){openSparks(p).forEach(function(s){if(sparkLive(s)&&!s.by)cands.push({pri:15,sparky:1,personId:p.id,label:s.text,sub:"No deadline yet",act:' data-openperson="'+p.id+'"',btn:"Open"});});});
- S.goals.forEach(function(g){var d=goalLastDone(g);if(!goalHasRhythm(g)&&(g.tod||"anytime")==="anytime"&&d!==0&&(d===null||d>=goalInterval(g)))cands.push({pri:(100-goalScore(g))/12,personId:g.personId,goalId:g.id,area:g.area,label:g.text,sub:"goal \u00B7 "+(d===null?"never logged":d+"d ago"),act:' data-goaldone="'+g.id+'"',btn:"Done"});});
+ S.goals.forEach(function(g){var d=goalLastDone(g);if(!g.completed&&!goalHasRhythm(g)&&(g.tod||"anytime")==="anytime"&&d!==0&&(d===null||d>=goalInterval(g)))cands.push({pri:(100-goalScore(g))/12,personId:g.personId,goalId:g.id,area:g.area,label:g.text,sub:"goal \u00B7 "+(d===null?"never logged":d+"d ago"),act:' data-goaldone="'+g.id+'"',btn:"Done"});});
  var lo=S.people.map(function(p){return {p:p,s:personScore(p)};}).sort(function(a,b){return a.s-b.s;})[0];
  if(lo&&lo.s<80)cands.push({pri:(100-lo.s)/10,label:"Reach out to "+lo.p.name,sub:(lo.p.relation||"")+" \u00b7 meter "+lo.s+" - lowest",act:' data-openperson="'+lo.p.id+'"',btn:"Open"});
  cands.sort(function(a,b){return b.pri-a.pri;});
@@ -436,8 +442,10 @@ function renderArea(id){
  out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Tasks</div><ul class="tasks">';
  S.tasks.filter(function(t){return t.areaId===id;}).forEach(function(t){out+='<li class="'+(t.done?"done":"")+'"><input type="checkbox" class="cb" data-task="'+t.id+'"'+(t.done?" checked":"")+'><span class="txt">'+esc(t.text)+'</span><button class="del" data-taskdel="'+t.id+'">\u00D7</button></li>';});
  out+='</ul><div class="addrow"><input placeholder="Add a task..." data-tasknew="'+id+'"><button class="btn mini" data-taskadd="'+id+'">Add</button></div></div>';
+ var areaActivityType=editingEvent?(editingEvent.type||editingEvent.kind||"quality"):"quality";
+ if(areaActivityType==="inperson")areaActivityType="quality";
  out+='<div class="card" style="margin-bottom:14px" id="logformcard"><div class="subhead">'+(editingId?"Edit entry":"Log an activity")+'</div>'+
- '<div class="addrow" style="margin-top:0"><input type="date" id="logDate" value="'+(editingEvent?fmtDate(editingEvent.ts):fmtDate(Date.now()))+'"><select id="logPersonSel"><option value="">- person (optional) -</option>'+S.people.filter(function(p){return p.area===id;}).map(function(p){return '<option value="'+p.id+'"'+((editingEvent&&editingEvent.personId===p.id)?" selected":"")+'>'+esc(p.name)+'</option>';}).join("")+'</select><select id="logTypeSel">'+Object.keys(ETYPES).map(function(t){return '<option value="'+t+'"'+((editingEvent?editingEvent.type:"inperson")===t?" selected":"")+'>'+ETYPES[t].label+'</option>';}).join("")+'</select></div>'+
+ '<div class="addrow" style="margin-top:0"><input type="date" id="logDate" value="'+(editingEvent?fmtDate(editingEvent.ts):fmtDate(Date.now()))+'"><select id="logPersonSel"><option value="">- person (optional) -</option>'+S.people.filter(function(p){return p.area===id;}).map(function(p){return '<option value="'+p.id+'"'+((editingEvent&&editingEvent.personId===p.id)?" selected":"")+'>'+esc(p.name)+'</option>';}).join("")+'</select><select id="logTypeSel">'+Object.keys(RIPPLE_TYPES).map(function(t){return '<option value="'+t+'"'+(areaActivityType===t?" selected":"")+'>'+RIPPLE_TYPES[t]+'</option>';}).join("")+(RIPPLE_TYPES[areaActivityType]?'':'<option value="'+esc(areaActivityType)+'" selected>'+esc(typeLabel(editingEvent))+'</option>')+'</select></div>'+
  '<div class="addrow"><input id="logTitle" placeholder="What did you do?" value="'+(editingEvent?esc(editingEvent.title||""):"")+'"></div>'+
  '<div class="addrow"><textarea id="logTalk" placeholder="What did you talk about?">'+(editingEvent?esc(editingEvent.note||""):"")+'</textarea></div>'+
  '<div style="display:flex;gap:8px"><button class="btn" id="logSubmit">'+(editingId?"Update":"Log it")+'</button>'+(editingId?'<button class="btn ghost" id="logCancel">Cancel</button>':'')+'</div></div>';
@@ -451,7 +459,7 @@ function renderArea(id){
 function fmtDate(ts){var d=new Date(ts);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 var editingId=null,editingEvent=null;
 /* nav state */
-var TODS={anytime:"Anytime"};
+var TODS={anytime:"Anytime",allday:"All day"};
 DEFAULT_DAY_BLOCKS.forEach(function(block){Object.defineProperty(TODS,block.id,{enumerable:true,get:function(){return dayBlocks().find(function(b){return b.id===block.id;}).name;}});});
 var LL_LANGUAGES={qt:"Quality Time",wa:"Words of Affirmation",as:"Acts of Service",gf:"Gifts",pt:"Physical Touch"};
 var REL_OPTIONS=["Spouse","Son","Daughter","Bonus son","Bonus daughter","Son-in-law","Daughter-in-law","Father","Mother","Brother","Sister","Friend","Mentor","Coworker"];
@@ -464,5 +472,3 @@ var rhythmDraft=null;
 var rhyDoneDraft=null;
 var tab="today",openDetail=null,currentArea=null,currentPerson=null;
 window._actDone={};window._psModalOpen=false;
-
-

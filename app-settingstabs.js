@@ -3,9 +3,10 @@
    app-views2.js keeps the Calendars card inside the General panel and renders the
    Sync card after ALL panels (always visible). This override gives each its own tab. */
 function renderSettings(){
- var out='<div class="sectiontitle" style="margin-top:6px"><h2>Settings</h2><span class="hint">meters, calendar, goals, sync</span></div>';
- out+='<div class="profile-tabs" role="tablist" aria-label="Settings">'+[['general','General'],['times','Daily time sections'],['dates','Key dates'],['holidays','Major holidays'],['calendars','Calendars'],['goals','Goals'],['sync','Sync']].map(function(t){return '<button role="tab" id="settings-tab-'+t[0]+'" aria-controls="settings-panel-'+t[0]+'" aria-selected="'+(settingsTab===t[0])+'" data-settingstab="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div>';
- out+=settingsPanel('times')+dayBlockSettingsHTML()+'</section>'+settingsPanel('dates')+keyDatesSettingsHTML()+'</section>'+settingsPanel('holidays')+holidaySettingsHTML()+'</section>'+settingsPanel('general');
+ if(settingsTab==='goals')settingsTab='general';
+ var out='<div class="sectiontitle" style="margin-top:6px"><h2>Settings</h2><span class="hint">meters, calendar, sync</span></div>';
+ out+='<div class="profile-tabs" role="tablist" aria-label="Settings">'+[['general','General'],['times','Daily time sections'],['focus','Focus'],['dates','Key dates'],['holidays','Major holidays'],['calendars','Calendars'],['sync','Sync']].map(function(t){return '<button role="tab" id="settings-tab-'+t[0]+'" aria-controls="settings-panel-'+t[0]+'" aria-selected="'+(settingsTab===t[0])+'" data-settingstab="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div>';
+ out+=settingsPanel('times')+dayBlockSettingsHTML()+'</section>'+settingsPanel('focus')+focusSettingsHTML()+'</section>'+settingsPanel('dates')+keyDatesSettingsHTML()+'</section>'+settingsPanel('holidays')+holidaySettingsHTML()+'</section>'+settingsPanel('general');
  /* meters */
  var s=settings();
  out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Meters</div>'+
@@ -26,23 +27,6 @@ function renderSettings(){
  });
  if(!S.calendars.length)out+='<div class="empty">No calendars yet - add one below.</div>';
  out+='<div style="display:flex;gap:8px;margin-top:10px"><button class="btn ghost" id="calAdd">+ Add calendar</button><button class="btn" id="calSaveAll">Save &amp; refresh</button></div></div>';
- out+='</section>'+settingsPanel('goals');
- /* goals */
- out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Goals</div>';
- AREA_IDS.forEach(function(id){
-  var gs=S.goals.filter(function(g){return g.area===id;});
-  out+='<div style="margin-bottom:12px"><b style="font-size:14px">'+S.areas[id].name+'</b>';
-  gs.forEach(function(g){
-   out+='<div class="goalrow edit"><input class="goaltext" data-gtext="'+g.id+'" value="'+esc(g.text)+'">'+
-   '<select data-gcad="'+g.id+'">'+["daily","weekly","monthly","custom"].map(function(c){return '<option value="'+c+'"'+(g.cadence===c?" selected":"")+'>'+c+'</option>';}).join("")+'</select>'+
-   (g.cadence==="custom"?'<input type="number" data-gdays="'+g.id+'" value="'+(g.days||2)+'" style="width:56px">':'')+
-   '<select data-gtod="'+g.id+'" title="Time of day">'+Object.keys(TODS).map(function(t){return '<option value="'+t+'"'+((g.tod||"anytime")===t?" selected":"")+'>'+esc(TODS[t])+'</option>';}).join("")+'</select>'+
-   '<select data-gperson="'+g.id+'"><option value="">- no person -</option>'+S.people.map(function(p){return '<option value="'+p.id+'"'+(g.personId===p.id?" selected":"")+'>'+esc(p.name)+'</option>';}).join("")+'</select>'+
-   '<button class="del" data-gdel="'+g.id+'">\u00D7</button></div>';
-  });
-  out+='<div class="addrow"><input placeholder="New goal for '+S.areas[id].name+'..." data-gnewtext="'+id+'"><button class="btn mini" data-gadd="'+id+'">Add</button></div></div>';
- });
- out+='</div>';
  out+='</section>'+settingsPanel('sync');
  /* sync - Reload latest featured (most used), then data actions, then config */
  var st=window.SYNCcfg||{};

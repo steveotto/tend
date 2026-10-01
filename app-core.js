@@ -2,10 +2,10 @@
 /* ============ Tend core: state, goals, meter engine v2 ============ */
 var LS_STATE="tend:state",LS_SYNC="tend:sync";
 var KINDS={coffee:{label:"Coffee / one-on-one",w:8},meal:{label:"Meal together",w:7},date:{label:"Date / night out",w:9},call:{label:"Call / FaceTime",w:4},text:{label:"Text / note",w:2},quality:{label:"Quality time",w:7},workout:{label:"Workout",w:5},outdoors:{label:"Walk / outdoors",w:4},prayer:{label:"Prayer",w:4},scripture:{label:"Scripture",w:3},rest:{label:"Rest / sabbath",w:5},actservice:{label:"Act of service",w:6},note:{label:"Note / journal",w:2}};
-var ETYPES={inperson:{label:"In person",w:8},video:{label:"Video call",w:6},call:{label:"Phone call",w:5},text:{label:"Text / message",w:2},note:{label:"Note",w:2}};
+var ETYPES={inperson:{label:"In Person",w:8},text:{label:"Text",w:2},call:{label:"Call",w:5},video:{label:"Facetime",w:6},prayer:{label:"Prayer",w:3},quality:{label:"In Person",w:8},note:{label:"Handwritten Note",w:2},gift:{label:"Gift",w:5},other:{label:"Other",w:3}};
 var KIND2TYPE={coffee:"inperson",meal:"inperson",date:"inperson",quality:"inperson",call:"call",text:"text",workout:"inperson",outdoors:"inperson",prayer:"note",scripture:"note",rest:"note",actservice:"inperson",note:"note"};
-var RIPPLE_TYPES={text:"Text",call:"Call",video:"Facetime",prayer:"Prayer",quality:"One-on-One",note:"Handwritten Note",gift:"Gift",other:"Other"};
-function typeLabel(e){if(e.rippleLabel)return e.rippleLabel;return e.type&&ETYPES[e.type]?ETYPES[e.type].label:(KINDS[e.kind]?KINDS[e.kind].label:e.kind);}
+var RIPPLE_TYPES={text:"Text",call:"Call",video:"Facetime",prayer:"Prayer",quality:"In Person",note:"Handwritten Note",gift:"Gift",other:"Other"};
+function typeLabel(e){if(e.rippleLabel)return e.rippleLabel==="One-on-One"?"In Person":e.rippleLabel;return e.type&&ETYPES[e.type]?ETYPES[e.type].label:(KINDS[e.kind]?KINDS[e.kind].label:e.kind);}
 function typeWeight(e){return e.type&&ETYPES[e.type]?ETYPES[e.type].w:(KINDS[e.kind]?KINDS[e.kind].w:3);}
 var CADENCES={daily:{label:"Daily",days:1},weekly:{label:"Weekly",days:7},monthly:{label:"Monthly",days:30},annual:{label:"Annually",days:365},custom:{label:"Custom",days:2}};
 var DEFAULT_SETTINGS={greenAt:80,yellowAt:50,baseline:50};
@@ -92,7 +92,7 @@ function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
 function settings(){return S.settings||DEFAULT_SETTINGS;}
 function scoreClass(v){var s=settings();return v>=s.greenAt?"green":(v>=s.yellowAt?"yellow":"red");}
 function scoreLabel(v){var s=settings();if(v>=s.greenAt)return "Healthy";if(v>=s.yellowAt)return "Slipping - tend it soon";return "Needs attention now";}
-function goalInterval(g){return g.cadence==="custom"?(g.days||2):(CADENCES[g.cadence]?CADENCES[g.cadence].days:7);}
+function goalInterval(g){return !g.cadence?Infinity:g.cadence==="custom"?(g.days||2):(CADENCES[g.cadence]?CADENCES[g.cadence].days:(FREQS[g.cadence]?FREQS[g.cadence].days:7));}
 function lastGoalEvent(g){var best=null;S.events.forEach(function(e){if(e.goalId===g.id&&(!best||e.ts>best.ts))best=e;});return best;}
 function goalLastDone(g){var e=lastGoalEvent(g);if(e)return Math.floor((Date.now()-e.ts)/86400000);return null;}
 function goalScore(g){
@@ -105,15 +105,16 @@ function goalScore(g){
 function rawScore(evs,base){base=(base===undefined)?settings().baseline:base;if(!evs.length)return base;var bonus=0,last=0;evs.forEach(function(e){var d=daysSince(e.ts);if(d>90)return;bonus+=(e.weight||typeWeight(e))*clamp(1-d/45,0,1);if(d>last)last=d;});return clamp(Math.round(settings().baseline-1.4*clamp(last,0,30)+bonus),0,100);}
 function migrateEvents(){S.events.forEach(function(e){if(!e.type)e.type=KIND2TYPE[e.kind]||"note";if(!e.title&&e.kind&&KINDS[e.kind])e.title=KINDS[e.kind].label;});}
 migrateEvents();
-function eventsFor(areaId,personId){return S.events.filter(function(e){return e.areaId===areaId&&(personId?e.personId===personId:!e.personId);});}
-function areaGoals(id){return S.goals.filter(function(g){return g.area===id;});}
+function eventHasPerson(e,pid){return e.personId===pid||(Array.isArray(e.personIds)&&e.personIds.indexOf(pid)!==-1);}
+function eventsFor(areaId,personId){return S.events.filter(function(e){return e.areaId===areaId&&(personId?eventHasPerson(e,personId):!e.personId&&!e.personIds);});}
+function areaGoals(id){return S.goals.filter(function(g){return g.area===id&&!g.completed;});}
 function personGoals(pid){return S.goals.filter(function(g){return g.personId===pid;});}
 function avg(arr){if(!arr.length)return null;return Math.round(arr.reduce(function(a,b){return a+b;},0)/arr.length);}
 function areaScore(id){var g=areaGoals(id).map(goalScore);return avg(g)!==null?avg(g):rawScore(eventsFor(id));}
 /* ============ person score: connection-first ============ */
 function personCadenceDays(p){var cc=p.connectCadence||"weekly";if(cc==="daily")return 1;if(cc==="weekly")return 7;if(cc==="biweekly")return 14;if(cc==="monthly")return 30;return p.cadenceDays||30;}
 function personCadenceLabel(p){var cc=p.connectCadence||"weekly";return {daily:"daily",weekly:"weekly",biweekly:"every 2 weeks",monthly:"monthly"}[cc]||("every "+(p.cadenceDays||30)+" days");}
-function personConnInfo(p){var last=null;S.events.forEach(function(e){if(e.personId===p.id&&e.kind!=="prayer"&&e.type!=="prayer"&&(!last||e.ts>last.ts))last=e;});return {last:last,days:last?daysSince(last.ts):999};}
+function personConnInfo(p){var last=null;S.events.forEach(function(e){if(eventHasPerson(e,p.id)&&e.kind!=="prayer"&&e.type!=="prayer"&&(!last||e.ts>last.ts))last=e;});return {last:last,days:last?daysSince(last.ts):999};}
 function personPrayerInfo(p){var last=null;S.events.forEach(function(e){if(e.personId===p.id&&(e.kind==="prayer"||e.type==="prayer")&&(!last||e.ts>last.ts))last=e;});return {last:last,days:last?daysSince(last.ts):999};}
 function connScoreFromDays(d,cad){var r=d/cad,v;if(r<=0.33)v=100;else if(r<=1)v=100-30*(r-0.33)/0.67;else if(r<=2)v=70-30*(r-1);else if(r<3)v=40-30*(r-2);else v=10;return Math.round(clamp(v,10,100));}
 function prayerScoreFromDays(d){return Math.round(clamp(100-10*d,30,100));}
@@ -125,6 +126,10 @@ function durUnitOf(r){if(r.durUnit&&DUR_UNITS[r.durUnit])return r.durUnit;var m=
 function durValOf(r){if(r.durVal)return r.durVal;var m=DUR_LEGACY[r.dur];return m?m[0]:0;}
 function rhythmDurLabel(r){if(!r)return"";var v=+r.durVal||0,u=r.durUnit;if(!v){var m=DUR_LEGACY[r.dur];if(m){v=m[0];u=m[1];}else return r.dur||"";}if(u==="min")return v+" min";if(u==="hrs")return v+(v===1?" hr":" hrs");return v+(v===1?" day":" days");}
 var DOW=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+function scheduleHasWeekday(freq){return ["weekly","biweekly","monthly","quarterly","yearly","annual"].indexOf(freq)!==-1;}
+function scheduleDayLabel(item){var freq=item.freq||item.cadence;return scheduleHasWeekday(freq)&&item.scheduleDow!==null&&item.scheduleDow!==undefined&&DOW[+item.scheduleDow]?DOW[+item.scheduleDow]:"";}
+function scheduleDayMatches(item,date){var day=scheduleDayLabel(item);return !day||day===DOW[(date||new Date()).getDay()];}
+function scheduleDayOptions(selected){return '<option value="">Any day</option>'+DOW.map(function(day,i){return '<option value="'+i+'"'+(selected!==null&&selected!==undefined&&String(selected)===String(i)?' selected':'')+'>'+day+'</option>';}).join('');}
 var ORDINALS=["1st","2nd","3rd","4th"];
 function rhythmPeriod(r){if(r.freq==="custom")return r.customType==="monthly"?30:7;return FREQS[r.freq]?FREQS[r.freq].days:7;}
 function rhythmFreqLabel(r){if(r.freq==="custom"){if(r.customType==="monthly")return ORDINALS[(r.customOrd||1)-1]+" "+DOW[r.customDow||0]+" of the month";return DOW[r.customDow||0]+"s";}return FREQS[r.freq]?FREQS[r.freq].label:"Weekly";}
@@ -137,7 +142,7 @@ function sparkDays(s){if(!s.by)return 999;var t=new Date();t.setHours(12,0,0,0);
 function sparkDueTxt(s){if(!s.by)return "someday";var d=sparkDays(s);if(d<0)return (-d)+"d overdue";if(d===0)return "today";if(d===1)return "tomorrow";return "in "+d+"d";}
 function sparkLive(s){if(s.done)return false;if(!s.by)return true;return sparkDays(s)<=0;}
 function openSparks(p){return ((p&&p.sparks)||[]).filter(function(s){return !s.done;}).sort(function(a,b){return (a.by||"9999")<(b.by||"9999")?-1:1;});}
-function personTouchInfo(p){var last=null;S.events.forEach(function(e){if(e.personId===p.id&&e.kind!=="prayer"&&e.type!=="prayer"&&(!last||e.ts>last.ts))last=e;});return {last:last,days:last?daysSince(last.ts):999};}
+function personTouchInfo(p){var last=null;S.events.forEach(function(e){if(eventHasPerson(e,p.id)&&e.kind!=="prayer"&&e.type!=="prayer"&&(!last||e.ts>last.ts))last=e;});return {last:last,days:last?daysSince(last.ts):999};}
 function touchScoreFromDays(d){return Math.max(10,100-10*d);}
 function touchSuggestion(p){var ideas={qt:["Plan a 30-minute walk together","Coffee and conversation, phones down","Do an errand side by side"],wa:["Text one specific encouragement","Speak an affirmation out loud","Write a short note of thanks"],as:["Do one of their chores, unasked","Bring their favorite drink home","Fix something on their list"],gf:["Pick up a small favorite treat","Order the book they mentioned","Send flowers for no reason"],pt:["A long, unhurried hug","Sit close this evening","Take a walk hand in hand"]};var arr=(p&&p.loveLanguage&&ideas[p.loveLanguage])||["Send a thoughtful text","A quick call on the commute","A handwritten note"];return arr[Math.floor(Date.now()/864e5)%arr.length];}
 function personScore(p){

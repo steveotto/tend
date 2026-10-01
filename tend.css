@@ -279,6 +279,8 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .person-card-score{font-size:32px;font-weight:600;line-height:1;color:var(--ink);font-variant-numeric:tabular-nums}
 .person-card h3{overflow-wrap:anywhere}
 .person-card .person-health-bar{height:8px;margin:20px 0 12px;box-shadow:none}
+.person-card .person-health-bar.solid{background:#E9EFEB;overflow:hidden}
+.person-health-fill{display:block;height:100%;border-radius:inherit}
 .person-health-bar .ov-marker{border-left-width:8px;border-right-width:8px;border-bottom-width:10px;filter:none}
 .person-health-status{font-size:13px;font-weight:600;margin-bottom:8px}
 .person-card .meta{font-size:13px;color:var(--ink-soft)}
@@ -426,8 +428,16 @@ details.moor .moor-body{padding:2px 18px 14px}
 .ripple-nudge .iconbtn{flex:none;min-width:36px;min-height:36px;color:var(--forest-deep)}
 .notes-checklist+.notes-checklist{margin-top:24px;padding-top:24px;border-top:1px solid var(--line)}
 .notes-history{margin-top:12px}.notes-history summary{cursor:pointer;font-size:13px;color:var(--ink-soft);padding:10px 0}
-.person-prayer-add{padding-bottom:24px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+.person-prayer-add{padding-bottom:18px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+.person-prayer-fields{padding:18px;margin-bottom:12px;border:1px solid var(--line);border-radius:14px;background:var(--canvas)}
 .person-prayer-add .field{display:block;margin-bottom:12px}.person-prayer-add input,.person-prayer-add textarea{display:block;width:100%;margin-top:6px}
+.person-prayer-add textarea{min-height:90px}
+.person-prayer-schedule{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}
+.person-prayer-schedule label{display:grid;gap:6px;font-size:12px;font-weight:600;color:var(--ink-soft)}
+.person-prayer-schedule select{min-height:42px;min-width:0;width:100%;padding:8px 30px 8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.person-prayer-form-actions{display:flex;gap:8px;flex-wrap:wrap}
+.prayer-schedule-summary{margin-top:8px;font-size:12px;color:var(--ink-faint)}
+@media(max-width:520px){.person-prayer-schedule{grid-template-columns:1fr}}
 
 .notes-checklist .tasks li{flex-wrap:wrap}.notes-checklist #followupEditText{flex:1 1 220px;min-width:0}
 
@@ -456,3 +466,40 @@ details.moor .moor-body{padding:2px 18px 14px}
 .person-rhythm-link{border:1px solid transparent;cursor:pointer}.person-rhythm-link:hover{border-color:var(--forest)}.person-rhythm-link:focus-visible{outline:2px solid var(--forest);outline-offset:2px}.profile-tabs [role="tab"]{scroll-margin-top:160px}
 
 .holiday-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.holiday-options label{display:flex;align-items:center;gap:10px;padding:10px;background:var(--mist);border-radius:10px}.holiday-options input{width:18px;height:18px;accent-color:var(--forest)}
+/* Area goals and compact history */
+.area-goals-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.area-goals-heading .subhead{margin:0}
+.area-goal-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 0;border-top:1px dashed var(--line)}
+.area-goal-copy{min-width:0}.area-goal-copy strong{font-size:15px}.area-goal-copy p{margin:5px 0;color:var(--ink-soft);font-size:13px}.area-goal-meta{color:var(--ink-soft);font-size:12px;margin-top:5px}
+.area-goal-row-actions,.area-goal-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex-shrink:0}
+.area-goal-form{border:1px solid var(--line);background:var(--mist);border-radius:14px;padding:16px;margin:12px 0;display:grid;gap:12px}
+.area-goal-form>label,.area-goal-fields label{display:grid;gap:6px;font-size:12px;color:var(--ink-soft)}
+.area-goal-form input:not([type=checkbox]),.area-goal-form textarea,.area-goal-form select{width:100%;min-width:0;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--canvas);color:var(--ink);font:inherit}
+.area-goal-form textarea{min-height:70px}.area-goal-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.area-goal-people{border:0;padding:0;display:flex;gap:8px;flex-wrap:wrap}.area-goal-people legend{font-size:12px;color:var(--ink-soft);margin-bottom:8px}.area-goal-people label{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:99px;padding:5px 9px;background:var(--canvas);cursor:pointer}.area-goal-people label span{display:inline-flex;align-items:center;gap:5px;font-size:12px}.area-goal-delete{color:#c14b3c}.area-history-more{margin-top:8px}.area-history-more summary{cursor:pointer;color:var(--green);font-size:13px;font-weight:600;padding:10px 0}.submeter[data-openperson]{font:inherit;border:1px solid var(--line);text-align:left}
+@media(max-width:620px){.area-goal-fields{grid-template-columns:1fr}.area-goal-row{align-items:flex-start;flex-direction:column}.area-goal-row-actions{width:100%}}
+
+.area-goal-titleline{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.area-goal-titleline strong{margin-right:2px}.area-goal-person{cursor:pointer;border:0;font:inherit}.area-goal-person:hover{filter:brightness(.96)}
+
+.area-goal-row-actions [data-areagoalchart] svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+/* Focus briefing */
+.focus-settings-options{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}.focus-settings-options label{display:inline-flex;gap:7px;align-items:center;border:1px solid var(--line);border-radius:99px;padding:8px 12px;background:var(--canvas)}
+.focus-dialog{width:min(520px,94vw);max-height:min(85vh,820px);overflow:auto;margin:auto;border:1px solid var(--line);border-radius:24px;padding:26px;background:var(--canvas);color:var(--ink);box-shadow:0 22px 70px #10251d45}.focus-dialog::backdrop{background:#10251d9c}.focus-head{display:flex;justify-content:space-between;gap:16px}.focus-eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--forest);font-weight:700}.focus-head h2{font-family:Georgia,serif;font-size:30px;margin:4px 0}.focus-head p{color:var(--ink-soft);font-size:13px;margin:0 0 14px}.focus-group{margin-top:15px}.focus-group-head{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:8px;gap:12px}.focus-group-head h3{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-soft);margin:0}.focus-group-head span{font-size:11px;color:var(--ink-faint)}.focus-item{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--line)}.focus-item[data-focusperson]{cursor:pointer}.focus-item[data-focusperson]:hover{background:var(--mist)}.focus-time{width:67px;flex:none;font-size:12px;font-weight:700;color:var(--forest)}.focus-item-main{flex:1;min-width:0}.focus-item-main strong{font-size:14px;display:block}.focus-item-main small{font-size:12px;color:var(--ink-soft);display:block;margin-top:3px}.focus-kind{font-size:11px;padding:5px 8px;border-radius:99px;background:var(--mist);white-space:nowrap}.focus-kind.marriage{background:#f6eede;color:#80601e}.focus-kind.faith{background:#e8edf8;color:#476291}.focus-kind.fitness{background:#e5f4ed;color:#197b51}.focus-kind.parenting{background:#e8f1f8;color:#3b6e94}.focus-kind.friendships{background:#fbede7;color:#9a5938}.focus-kind.calendar{background:var(--mist);color:var(--ink-soft)}.focus-person{display:flex;width:100%;align-items:center;gap:11px;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--line);padding:12px 0;color:var(--ink)}.focus-person:hover{background:var(--mist)}.focus-avatar{flex:none}.focus-person-main{flex:1}.focus-person-main strong{display:block;font-size:14px}.focus-person-main small{font-size:12px;color:var(--ink-soft)}.focus-score{font-weight:700;font-size:17px}.focus-score.red{color:#e8442e}.focus-score.yellow{color:#c98f0e}.focus-empty{padding:15px 0;color:var(--ink-soft);font-size:13px}.focus-footer{font-size:11px;color:var(--ink-faint);margin-top:18px;text-align:center}@media(max-width:520px){.sectiontitle{flex-wrap:wrap}.focus-dialog{padding:18px}.focus-time{width:58px}.focus-kind{font-size:10px}}
+/* Focus stays available in the main navigation */
+nav.tabs button.focus-nav-button{display:inline-flex;align-items:center;gap:7px;flex:none;background:linear-gradient(130deg,#1a7657,#179d69);color:#fff;border:1px solid #16875d;border-bottom:1px solid #16875d;border-radius:11px;padding:8px 15px;margin-right:7px;box-shadow:0 2px 9px #1c7b5533;font-weight:700}
+nav.tabs button.focus-nav-button:hover{background:linear-gradient(130deg,#145b45,#128959);color:#fff;transform:translateY(-1px)}
+nav.tabs .focus-nav-spark{display:inline-grid;place-items:center;background:#ffffff33;border-radius:50%;width:21px;height:21px;color:#e2ffc5;font-size:14px}
+@media(max-width:640px){nav.tabs button.focus-nav-button{padding:8px 11px;margin-right:4px}}
+/* Care Plan: all commitments grouped by time section */
+.careplan-heading{align-items:baseline}.careplan-section{margin-bottom:14px;padding:22px 24px}.careplan-section-head{display:flex;justify-content:space-between;gap:12px;align-items:baseline;border-bottom:1px solid var(--line);padding-bottom:10px}.careplan-section-head h3{font-size:18px;font-weight:600}.careplan-section-head span{font-size:12px;color:var(--ink-faint)}.careplan-row{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px dashed var(--line)}.careplan-row:last-child{border-bottom:0}.careplan-kind{font-size:11px;font-weight:700;border-radius:99px;padding:5px 9px;flex:none;min-width:66px;text-align:center}.careplan-kind-rhythm{background:#e5f3ec;color:#137a4e}.careplan-kind-prayer{background:#e9edf8;color:#4b6693}.careplan-kind-goal{background:#f8eee1;color:#93652c}.careplan-main{flex:1;min-width:0}.careplan-title{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.careplan-title strong{font-size:14px}.careplan-person{border:0;font:inherit;cursor:pointer}.careplan-meta,.careplan-details{color:var(--ink-soft);font-size:12px;margin-top:4px}.careplan-details{white-space:nowrap;text-overflow:ellipsis;overflow:hidden;max-width:650px}.careplan-edit-trigger{flex:none}.careplan-edit{background:var(--mist);border:1px solid var(--line);border-radius:14px;padding:15px;margin:12px 0;display:grid;gap:10px}.careplan-edit-head{display:flex;align-items:center;gap:9px}.careplan-edit-head strong{font-size:14px}.careplan-field{display:grid;gap:4px;font-size:12px;color:var(--ink-soft)}.careplan-field input,.careplan-field select,.careplan-field textarea{width:100%;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--canvas);color:var(--ink);font:inherit}.careplan-field textarea{min-height:65px}.careplan-edit-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.careplan-custom{display:flex;gap:9px;flex-wrap:wrap}.careplan-custom .careplan-field{min-width:120px;flex:1}.careplan-custom[hidden]{display:none}.careplan-people{border:0;display:flex;gap:8px;flex-wrap:wrap}.careplan-people legend{font-size:12px;color:var(--ink-soft);margin-bottom:5px}.careplan-people label{display:inline-flex;gap:5px;align-items:center;font-size:12px}.careplan-actions{display:flex;gap:7px}.careplan-delete{margin-left:auto;color:#c14b3c}@media(max-width:650px){.careplan-edit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.careplan-section{padding:17px}.careplan-row{align-items:flex-start}.careplan-kind{min-width:0}.careplan-details{white-space:normal}}@media(max-width:400px){.careplan-edit-grid{grid-template-columns:1fr}.careplan-row{flex-wrap:wrap}.careplan-main{flex-basis:70%}}
+[data-schedule-day][hidden]{display:none!important}
+.schedule-day-field{display:flex;align-items:center;gap:10px;margin:8px 0;color:var(--ink-soft);font-size:13px}
+.schedule-day-field select{max-width:220px}
+.careplan-filterbar{display:flex;align-items:center;gap:12px;margin:0 0 16px;padding:12px 15px;border:1px solid var(--line);border-radius:15px;background:var(--card)}
+.careplan-filter-label{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);flex:none}
+.careplan-filter-list{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-width:0}
+.careplan-filter{display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 5px;border:1px solid var(--line);border-radius:999px;background:var(--canvas);color:var(--ink-soft);font:inherit;font-size:12px;cursor:pointer;opacity:.5;transition:opacity .15s,border-color .15s,background .15s}
+.careplan-filter.is-active{opacity:1;border-color:#a5d9bf;background:#eaf7f0;color:var(--ink)}
+.careplan-filter:hover,.careplan-filter:focus-visible{opacity:1;border-color:var(--green)}
+.careplan-filter-reset{margin-left:auto;border:0;background:none;color:var(--green);font:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+@media(max-width:650px){.careplan-filterbar{align-items:flex-start;flex-wrap:wrap}.careplan-filter-list{order:2;width:100%}.careplan-filter-reset{margin-left:auto}}

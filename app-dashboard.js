@@ -165,6 +165,7 @@ function rangeTxt(e,t0,t1){
  if(startsToday&&!multi)return fmtT(e.s)+" \u2013 "+fmtT(e.e);
  return fmtD(e.s)+" "+fmtT(e.s)+" \u2013 "+(multi?fmtD(e.e)+" ":"")+fmtT(e.e);}
 function renderCalStrip(evs,errs){
+ window._tendCalendarEvents=evs||[];
  var strip=el("calStrip");if(!strip)return;
  var out="";
  if(errs&&errs.length)out+='<div class="empty">Could not load: '+esc(errs.join(", "))+' (calendar proxies may be down - try again)</div><button class="btn mini ghost" data-calretry="1" style="margin-top:6px">Retry</button>';
