@@ -2,7 +2,8 @@
 /* ============ key-date helpers (multi-person) ============ */
 window.kdPeopleIds=function(k){if(!k)return[];var a=Array.isArray(k.personIds)?k.personIds.filter(Boolean):[];if(k.personId&&a.indexOf(k.personId)<0)a.push(k.personId);return a;};
 window.kdPeopleChkHTML=function(k,lockedPid){return '<div class="kd-people">'+S.people.map(function(np){var on=kdPeopleIds(k).indexOf(np.id)>=0;return '<label class="kd-person"><input type="checkbox" data-kdperson="'+k.id+'|'+np.id+'"'+(on?' checked':'')+(np.id===lockedPid?' disabled':'')+'> '+esc(np.name)+'</label>';}).join('')+'</div>';};
-window.kdLogLineHTML=function(k){var dd=daysUntil(k),txt=dd<0?"passed":(dd===0?"today":"in "+dd+" days");return '<div class="logline"><span class="kind">'+esc(k.label)+'</span><span class="txt">'+txt+'</span><span class="entry-actions"><button class="iconbtn" data-kddel="'+k.id+'" title="delete">\uD83D\uDDD1</button></span></div>';};
+window.kdDateTxt=function(k){var occ=nextOccurrence(k);return MOS_SHORT[occ.getMonth()]+' '+occ.getDate()+(kdHasYear(k)?', '+occ.getFullYear():'');};
+window.kdLogLineHTML=function(k){var dd=daysUntil(k),txt=dd<0?"passed":(dd===0?"today":"in "+dd+" days");return '<div class="logline"><span class="kind">'+esc(k.label)+'</span><span class="txt">'+kdDateTxt(k)+' &middot; '+txt+'</span><span class="entry-actions"><button class="iconbtn" data-kddel="'+k.id+'" title="delete">\uD83D\uDDD1</button></span></div>';};
 (S.keyDates||[]).forEach(function(k){if(!Array.isArray(k.personIds))k.personIds=k.personId?[k.personId]:[];});
 /* ============ key dates v2: optional year + people dropdown picker ============ */
 window.kdHasYear=function(k){return !!(k&&k.year!==undefined&&k.year!==null&&k.year!==""&&!isNaN(+k.year));};
@@ -109,7 +110,7 @@ window.kdSettingsV2=function(){
   ".updays{margin-left:auto;flex:none;align-self:center}";
  document.head.appendChild(style);
 })();
-/* tend-tagged calendar events (tend-events.json, fed by Littlebird) */
+/* tend-tagged calendar events (tend-events.json, fed by the GitHub Action) */
 window.TEND_EVENTS=[];
 try{fetch("tend-events.json?bust="+Date.now()).then(function(r){return r.ok?r.json():null;}).then(function(j){if(j&&Array.isArray(j.events)&&j.events.length){window.TEND_EVENTS=j.events;if(typeof render==="function")render();}}).catch(function(){});}catch(e){}
 var MOS_SHORT=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -182,7 +183,7 @@ nextDateLine=function(pid){var kds=S.keyDates.filter(function(k){return kdPeople
   var sec=html.slice(start,end);
   var kds=S.keyDates.filter(function(k){return kdPeopleIds(k).indexOf(pid)>=0;});
   var have={};
-  sec=sec.replace(/data-kddel="([^"]+)" title="delete">[^<]*<\/button><\/span><\/div>/g,function(all,id){have[id]=true;var k=S.keyDates.find(function(x){return x.id===id;});return all+(k?kdPeopleChkHTML(k,pid):"");});
+  sec=sec.replace(/<div class="logline"><span class="kind">([\s\S]*?)<\/span><span class="txt">([\s\S]*?)<\/span><span class="entry-actions"><button class="iconbtn" data-kddel="([^"]+)" title="delete">[\s\S]*?<\/button><\/span><\/div>/g,function(all,kindTxt,txtTxt,id){have[id]=true;var k=S.keyDates.find(function(x){return x.id===id;});if(!k)return all;var rebuilt='<div class="logline"><span class="kind">'+esc(k.label)+'</span><span class="txt">'+kdDateTxt(k)+' &middot; '+txtTxt+'</span><span class="entry-actions"><button class="iconbtn" data-kddel="'+id+'" title="delete">\uD83D\uDDD1</button></span></div>';return rebuilt+(k?kdPeopleChkHTML(k,pid):"");});
   var missing=kds.filter(function(k){return !have[k.id];});
   if(missing.length){
    sec=sec.replace('<div class="empty">None yet.</div>','');
@@ -241,6 +242,38 @@ document.addEventListener("change",function(e){
 
 document.addEventListener("input",function(e){var t=e.target;if(t&&t.id==="kdNewLabel"){var b2=document.getElementById("kdAddInline");if(b2)b2.disabled=!t.value.trim();}});
 document.addEventListener("keydown",function(e){var t=e.target;if(t&&t.id==="kdNewLabel"&&e.key==="Enter"){var b2=document.getElementById("kdAddInline");if(b2&&!b2.disabled)b2.click();}});
+/* ============ calendar: Refresh from iCloud now ============ */
+setInterval(function(){var sb=document.getElementById("calSaveAll");if(!sb)return;if(!document.getElementById("calRefreshNow")){var rb=document.createElement("button");rb.id="calRefreshNow";rb.className="btn ghost";rb.type="button";rb.title="Trigger the iCloud calendar sync now, then refresh the dashboard when fresh events land";rb.textContent="Refresh from iCloud now";sb.parentNode.insertBefore(rb,sb.nextSibling);}},500);
+window._calPollBefore=null;
+window.refreshCalendarNow=function(){
+ var tk=(window.SYNCcfg&&SYNCcfg.token)||"";
+ if(!tk){flash("Save your GitHub token in the Sync tab first");return;}
+ var host=location.hostname.split(".")[0];
+ var parts=location.pathname.split("/").filter(Boolean);
+ var owner=host,repo=parts[0]||"tend";
+ var H={"Authorization":"Bearer "+tk,"Accept":"application/vnd.github+json"};
+ var api="https://api.github.com/repos/"+owner+"/"+repo;
+ fetch("events.json?t="+Date.now()).then(function(r){return r.ok?r.json():null;}).then(function(j){window._calPollBefore=j&&j.synced?j.synced:null;}).catch(function(){});
+ fetch(api+"/actions/workflows/calendar.yml/dispatches",{method:"POST",headers:H,body:JSON.stringify({ref:"main"})}).then(function(r){
+  if(r.status===204){flash("Sync triggered - watching for fresh events...");return null;}
+  return fetch(api+"/contents/.calendar-trigger?ref=main",{headers:H}).then(function(g){return g.status===200?g.json():null;}).then(function(j){var b={message:"trigger calendar sync",content:btoa("trigger "+Date.now()),branch:"main"};if(j&&j.sha)b.sha=j.sha;return fetch(api+"/contents/.calendar-trigger",{method:"PUT",headers:H,body:JSON.stringify(b)});}).then(function(r2){flash(r2.ok?"Sync triggered via commit - watching for fresh events...":"Could not trigger ("+r2.status+") - token may not cover this repo");});
+ }).catch(function(){flash("Trigger failed - network error");});
+ var tries=0;
+ var iv=setInterval(function(){
+  tries++;
+  fetch("events.json?t="+Date.now()+"&r="+Math.random()).then(function(r){return r.ok?r.json():null;}).then(function(j){
+   if(j&&j.synced&&j.synced!==window._calPollBefore){
+    clearInterval(iv);
+    try{localStorage.removeItem("tend:cal2");}catch(e){}
+    window._calLoading=false;
+    if(typeof loadCalendars==="function")loadCalendars();
+    flash("Calendar refreshed");
+   }
+  }).catch(function(){});
+  if(tries>=24)clearInterval(iv);
+ },7500);
+};
+document.addEventListener("click",function(e){var t=e.target;if(t&&t.closest&&t.closest("#calRefreshNow")){e.preventDefault();window.refreshCalendarNow();}});
 /* ============ love language icons ============ */
 var LL_ICONS={
  wa:{t:"Words of affirmation",svg:'<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#34A853" d="M12 3C6.9 3 3 6.4 3 10.6c0 2.3 1.2 4.3 3.1 5.7-.1.9-.6 2.3-1.8 3.7 2.2-.3 3.9-1.1 5-1.9.9.2 1.8.3 2.7.3 5.1 0 9-3.4 9-7.8S17.1 3 12 3z"/><path d="M8 9h8M8 12.5h5.5" stroke="#fff" stroke-width="1.7" stroke-linecap="round" fill="none"/></svg>'},
