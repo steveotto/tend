@@ -1,1 +1,1 @@
-<app-sync.js with v20261001y>
+<app-sync.js v20261001y>
