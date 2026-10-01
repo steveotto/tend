@@ -130,7 +130,7 @@ function renderChecklists(){return "";}
 
 /* ============ key dates: tab, modal wiring, handlers ============ */
 var KD_STYLE=".kd-people{display:flex;flex-wrap:wrap;gap:4px 12px;margin:6px 0}.kd-person{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--ink-soft);font-weight:400}.kd-person input{margin:0}"+
- ".kd-grid{display:grid;grid-template-columns:minmax(150px,1.3fr) 180px 64px minmax(105px,.8fr) minmax(160px,1.2fr) 26px;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}"+
+ ".kd-grid{display:grid;grid-template-columns:minmax(150px,1.3fr) 180px 88px minmax(105px,.8fr) minmax(160px,1.2fr) 26px;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}"+
  ".kd-grid-head{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);border-bottom:0;padding:0 0 2px}"+
  ".kd-in{width:100%;height:42px;padding:0 12px;border-radius:10px;border:1px solid var(--line);font:inherit;font-size:14.5px;background:#FDFDFE;color:var(--ink);box-sizing:border-box}"+
  ".kd-in:focus{outline:none;border-color:var(--forest)}"+
