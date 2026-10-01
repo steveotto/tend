@@ -1,0 +1,30 @@
+"use strict";
+function rhythmHistoryData(person,rhythm,now){
+ now=now||new Date();
+ var unit=rhythm.freq==='yearly'?'year':rhythm.freq==='quarterly'?'quarter':rhythm.freq==='daily'?'day':rhythm.freq==='biweekly'?'fortnight':rhythm.freq==='monthly'||(rhythm.freq==='custom'&&rhythm.customType==='monthly')?'month':'week';
+ var minimum=unit==='day'?30:unit==='week'?24:unit==='fortnight'?12:unit==='month'?6:unit==='quarter'?4:2;
+ function floor(date){var d=new Date(date.getFullYear(),date.getMonth(),date.getDate());if(unit==='week')d.setDate(d.getDate()-(d.getDay()+6)%7);if(unit==='fortnight'){var anchor=Date.UTC(1970,0,5),days=Math.floor((Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())-anchor)/864e5);d.setDate(d.getDate()-((days%14)+14)%14);}if(unit==='month')d=new Date(d.getFullYear(),d.getMonth(),1);if(unit==='quarter')d=new Date(d.getFullYear(),Math.floor(d.getMonth()/3)*3,1);if(unit==='year')d=new Date(d.getFullYear(),0,1);return d;}
+ function step(d,n){var result=new Date(d);if(unit==='day'||unit==='week'||unit==='fortnight')result.setDate(result.getDate()+n*(unit==='fortnight'?14:unit==='week'?7:1));else result.setMonth(result.getMonth()+n*(unit==='month'?1:unit==='quarter'?3:12));return result;}
+ var events=S.events.filter(function(e){return e.personId===person.id&&e.rhythmId===rhythm.id&&Number.isFinite(e.ts)&&e.ts<=now.getTime();}).sort(function(a,b){return a.ts-b.ts;});
+ var end=floor(now),start=step(end,1-minimum);
+ if(events.length&&floor(new Date(events[0].ts))<start)start=floor(new Date(events[0].ts));
+ var bins=[],index=0;
+ for(var date=new Date(start);date<=end;date=step(date,1)){
+  var next=step(date,1),count=0;
+  while(index<events.length&&events[index].ts<next.getTime()){if(events[index].ts>=date.getTime())count++;index++;}
+  var target=rhythm.freq==='twicewk'?2:1,status=count===0?'empty':count>=target?'met':'partial';
+  var label=unit==='month'?date.toLocaleDateString('en-US',{month:'short',year:'numeric'}):unit==='year'?String(date.getFullYear()):unit==='quarter'?'Q'+(Math.floor(date.getMonth()/3)+1)+' '+date.getFullYear():date.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  bins.push({label:(unit==='week'?'Week of ':unit==='fortnight'?'2 weeks from ':'')+label,count:count,target:target,status:status,current:date.getTime()===end.getTime()});
+ }
+ return {unit:unit,bins:bins,total:events.length};
+}
+function openRhythmHistory(key){
+ var ids=key.split('|'),person=S.people.find(function(p){return p.id===ids[0];}),rhythm=person&&(person.rhythms||[]).find(function(r){return r.id===ids[1];});if(!rhythm)return;
+ var previous=document.getElementById('rhythmHistoryDialog');if(previous)previous.remove();
+ var data=rhythmHistoryData(person,rhythm),max=Math.max.apply(null,[1].concat(data.bins.map(function(b){return b.count;})));
+ var colors={met:'#1E9C68',partial:'#D9A514',empty:'var(--line)'},statusLabels={met:'Cadence met',partial:'Partial progress',empty:'No logged moments'};
+ var dialog=document.createElement('dialog');dialog.id='rhythmHistoryDialog';dialog.className='rhythm-history-dialog';dialog.setAttribute('aria-labelledby','rhythmHistoryTitle');
+ dialog.innerHTML='<div class="history-heading"><div><span class="history-eyebrow">'+esc(person.name)+' · '+esc(rhythmFreqLabel(rhythm))+'</span><h2 id="rhythmHistoryTitle">'+esc(rhythm.text)+'</h2></div><button class="iconbtn" data-historyclose="1" aria-label="Close history">✕</button></div><div class="history-stat"><strong>'+data.total+'</strong> moments tended <span>across '+data.bins.length+' '+data.unit+'s</span></div><p class="settings-help">Each bar shows logged moments per '+data.unit+'. The current '+data.unit+' is still in progress. Colors use the currently selected cadence, with a target of '+(rhythm.freq==='twicewk'?2:1)+' per '+data.unit+'. Scroll to explore older history.</p><div class="history-legend"><span><i style="background:#1E9C68"></i>Cadence met</span><span><i style="background:#D9A514"></i>Partial progress</span><span><i style="background:var(--line)"></i>No logged moments</span></div>'+(data.total?'':'<div class="history-empty">Your story starts with the first Tend. Logged moments will appear here.</div>')+'<div class="history-scroll" tabindex="0" aria-label="Rhythm history chart, scroll horizontally"><div class="history-bars">'+data.bins.map(function(b,i){return '<button class="history-column" aria-label="'+esc(b.label)+': '+b.count+' logged moments, '+statusLabels[b.status]+(b.current?', in progress':'')+'" title="'+esc(b.label)+': '+b.count+' / '+b.target+' — '+statusLabels[b.status]+'" data-historybin="'+i+'"><span class="history-count">'+b.count+'</span><span class="history-track"><span class="history-fill" style="height:'+(b.count?Math.max(4,100*b.count/max):2)+'%;background:'+colors[b.status]+'"></span></span><span class="history-label">'+esc(b.label)+(b.current?' •':'')+'</span></button>';}).join('')+'</div></div><p class="history-selection" aria-live="polite">Select a bar to see its period and count. Empty bars mean no recorded moments.</p>';
+ dialog.addEventListener('click',function(e){if(e.target.closest('[data-historyclose]'))dialog.close();var b=e.target.closest('[data-historybin]');if(b){var bin=data.bins[+b.dataset.historybin];dialog.querySelector('.history-selection').textContent=bin.label+' — '+bin.count+' logged moment'+(bin.count===1?'':'s')+' · '+statusLabels[bin.status]+' · target '+bin.target+(bin.current?' (in progress)':'');}});
+ dialog.addEventListener('close',function(){dialog.remove();});document.body.appendChild(dialog);dialog.showModal();var scroll=dialog.querySelector('.history-scroll');scroll.scrollLeft=scroll.scrollWidth;
+}

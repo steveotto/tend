@@ -21,6 +21,8 @@ function bind(){
  document.addEventListener("cancel",function(e){if(e.target.id==="rippleDialog"){window._rippleModalOpen=false;editingConn=null;}},true);
  document.addEventListener("click",function(e){
   var t=e.target,b;
+  if(b=t.closest('[data-settingstab]')){settingsTab=b.getAttribute('data-settingstab');document.querySelectorAll('[data-settingstab]').forEach(function(x){x.setAttribute('aria-selected',String(x.getAttribute('data-settingstab')===settingsTab));});document.querySelectorAll('.settings-panel').forEach(function(x){x.hidden=x.id!=='settings-panel-'+settingsTab;});return;}
+  if(b=t.closest("[data-rhyhistory]")){openRhythmHistory(b.getAttribute("data-rhyhistory"));return;}
   if(b=t.closest("[data-noteadd]")){var kind=b.getAttribute("data-notekind");var input=el("noteNew-"+kind);if(input&&input.value.trim()){S.followups.push({id:uid(),personId:b.getAttribute("data-noteadd"),kind:kind,text:input.value.trim(),done:false});save();render();}return;}
   if(b=t.closest("[data-personprayeradd]")){var person=S.people.find(function(p){return p.id===b.getAttribute("data-personprayeradd");});var title=el("personPrayerTitle").value.trim();if(person&&title){var categories={marriage:"Marriage",parenting:"Kids",friendships:"Friends"};S.prayers.push({id:uid(),personId:person.id,category:categories[person.area]||"Family",text:title,details:el("personPrayerDetails").value.trim(),added:todayStr(),answered:false,archived:false,prayed:0});save();render();flash("Prayer added");}else flash("Add a prayer title");return;}
   if(b=t.closest("[data-profiletab]")){var selected=b.getAttribute("data-profiletab");profileTabs[currentPerson]=selected;document.querySelectorAll('[data-profiletab]').forEach(function(button){button.setAttribute('aria-selected',String(button.getAttribute('data-profiletab')===selected));});document.querySelectorAll('.profile-tab-panel').forEach(function(panel){panel.hidden=panel.id!=="profile-panel-"+selected;});return;}
@@ -30,6 +32,7 @@ function bind(){
   if(b=t.closest("[data-areanav]")){currentArea=b.getAttribute("data-areanav");openDetail=null;editingId=null;editingEvent=null;render();window.scrollTo(0,0);return;}
   if(b=t.closest("[data-utilnav]")){tab=b.getAttribute("data-utilnav");window._psModalOpen=false;currentArea=null;openDetail=null;editingId=null;editingEvent=null;currentPerson=null;editingConn=null;editRhythmId=null;rhythmEditDraft=null;editSparkId=null;rhythmDraft=null;rhyDoneDraft=null;render();window.scrollTo(0,0);return;}
   if(b=t.closest("[data-areago]")){currentArea=b.getAttribute("data-areago");openDetail=null;editingId=null;editingEvent=null;render();window.scrollTo(0,0);return;}
+  if(b=t.closest("[data-personrhythms]")){var pid=b.getAttribute("data-personrhythms");profileTabs[pid]="rhythms";currentArea=null;openPersonTab(pid);var target=el("profile-tab-rhythms");if(target){target.focus({preventScroll:true});target.scrollIntoView({behavior:"smooth",block:"start"});}return;}
   if(b=t.closest("[data-openperson]")){openPersonTab(b.getAttribute("data-openperson"));return;}
   if(b=t.closest("[data-closeperson]")){currentPerson=null;window._psModalOpen=false;editingConn=null;editRhythmId=null;rhythmEditDraft=null;editSparkId=null;rhythmDraft=null;rhyDoneDraft=null;render();return;}
   if(b=t.closest("[data-psettings]")){window._psModalOpen=true;render();return;}
@@ -124,6 +127,7 @@ function bind(){
   if(b=t.closest("[data-kdadd]")){var pid=b.getAttribute("data-kdadd");var inp=document.querySelector('[data-kdlabel="'+pid+'"]');if(inp&&inp.value.trim()){S.keyDates.push({id:uid(),personId:pid,label:inp.value.trim(),month:1,day:1});save();render();flash("Added - tell Littlebird the date to set it precisely");}return;}
   if(b=t.closest("#logSubmit")){var dv=el("logDate").value;var ts=dv?new Date(dv+"T12:00:00").getTime():Date.now();var title=el("logTitle").value.trim();var talk=el("logTalk").value.trim();var person=el("logPersonSel").value||null;var type=el("logTypeSel").value;if(editingId){updateEvent(editingId,{ts:ts,personId:person,type:type,title:title,note:talk});editingId=null;editingEvent=null;}else{logEvent(currentArea,person,type,title,talk,ts,null);}return;}
   if(b=t.closest("#logCancel")){editingId=null;editingEvent=null;render();return;}
+  if(b=t.closest("#saveDayBlocks")){var blocks=DEFAULT_DAY_BLOCKS.map(function(block){return {id:block.id,name:document.querySelector('[data-block-name="'+block.id+'"]').value.trim(),start:document.querySelector('[data-block-start="'+block.id+'"]').value};});var error=validateDayBlocks(blocks);if(error){el("dayBlocksError").textContent=error;return;}S.settings=S.settings||{};S.settings.dayBlocks=blocks;save();render();flash("Time sections saved");return;}
   if(b=t.closest("#setSave")){S.settings.greenAt=clamp(+el("setGreen").value||80,50,100);S.settings.yellowAt=clamp(+el("setYellow").value||50,10,80);S.settings.baseline=clamp(+el("setBase").value||50,0,100);save();render();flash("Thresholds saved");return;}
   if(b=t.closest("[data-calretry]")){localStorage.removeItem("tend:cal2");window._calLoading=false;loadCalendars();return;}
   if(b=t.closest("#calAdd")){S.calendars.push({id:uid(),name:"New calendar",url:"",color:"#4C9AFF"});save();render();return;}
@@ -143,6 +147,7 @@ function bind(){
  });
  document.addEventListener("change",function(e){
   var t=e.target;
+  if(t.matches('[data-holiday]')){S.settings=S.settings||{};S.settings.holidays=S.settings.holidays||{};S.settings.holidays[t.getAttribute('data-holiday')]=t.checked;save();return;}
   if(t.id==="plogType"){var por=el("plogOtherRow");if(por)por.style.display=(t.value==="other")?"flex":"none";return;}
   if(t.id==="momentAllDay"){var pmt=el("momentTime");if(pmt){pmt.disabled=t.checked;if(t.checked)pmt.value="";}return;}
   if(t.matches("[data-task]")){var x=S.tasks.find(function(z){return z.id===t.getAttribute("data-task");});if(x){x.done=t.checked;save();render();}}
@@ -173,6 +178,8 @@ function bind(){
  });
  document.addEventListener("input",function(e){
   var t=e.target;
+  if(t.matches("[data-block-start]")){var index=DEFAULT_DAY_BLOCKS.findIndex(function(b){return b.id===t.getAttribute("data-block-start");});var previous=(index+6)%7;var end=document.querySelector('[data-block-end="'+DEFAULT_DAY_BLOCKS[previous].id+'"]');if(end)end.textContent=Number.isFinite(dayTimeMinutes(t.value))?dayTimeLabel(t.value)+(previous===6?' (next day)':''):'—';return;}
+
   if(t.matches("[data-encnote]"))saveEncNote(t.getAttribute("data-encnote"),t);
   else if(t.matches("[data-phpray]"))savePersonNote(t.getAttribute("data-pid"),"howToPray",t);
   else if(t.matches("[data-pfocus]"))savePersonNote(t.getAttribute("data-pid"),"prayerFocus",t);

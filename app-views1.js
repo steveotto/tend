@@ -4,7 +4,7 @@
 /* ============ views: dashboard, area pages, people ============ */
 function renderNav(){
  var an=el("areaNav");if(an)an.innerHTML=AREA_IDS.map(function(id){return '<button data-areanav="'+id+'" class="'+(navKind()==="area"&&currentArea===id?"active":"")+'"><span class="nav-ic">'+(AREA_ICONS[id]||"")+'</span><span>'+S.areas[id].name+'</span></button>';}).join("");
- var un=el("utilNav");if(un)un.innerHTML=[["today","Dashboard"],["people","People"],["prayer","Prayer"],["echo","Echo"],["offload","Offload"],["settings","Settings"]].map(function(p){return '<button data-utilnav="'+p[0]+'" class="'+(tab===p[0]&&navKind()!=="area"?"active":"")+'">'+p[1]+'</button>';}).join("");
+ var un=el("utilNav");if(un)un.innerHTML=[["today","Dashboard"],["people","People"],["prayer","Prayer"],["offload","Offload"],["settings","Settings"]].map(function(p){return '<button data-utilnav="'+p[0]+'" class="'+(tab===p[0]&&navKind()!=="area"?"active":"")+'">'+p[1]+'</button>';}).join("");
 }
 function navKind(){return currentArea?"area":"tab";}
 function render(){renderNav();var v=el("view");
@@ -38,16 +38,27 @@ function renderToday(){
  out+=renderChecklists();
  return out;}
 /* ============ time-aware routine plan ============ */
-function dayBlockAt(date){var m=date.getHours()*60+date.getMinutes();return m<330||m>=1290?"bedtime":m<540?"early":m<690?"morning":m<810?"lunch":m<990?"afternoon":m<1080?"commute":"evening";}
-function planBlocksDef(){var current=dayBlockAt(new Date());return [
- {id:"early",name:"Early morning",range:"5:30 - 9:00am"},
- {id:"morning",name:"Midday focus",range:"9:00 - 11:30am"},
- {id:"lunch",name:"Lunch",range:"11:30am - 1:30pm"},
- {id:"afternoon",name:"Afternoon",range:"1:30 - 4:30pm"},
- {id:"commute",name:"Way home",range:"4:30 - 6:00pm"},
- {id:"evening",name:"Evening",range:"6:00 - 9:30pm"},
- {id:"bedtime",name:"Bedtime",range:"9:30pm - 5:30am"}
- ].map(function(b){b.cur=b.id===current;return b;});}
+var DEFAULT_DAY_BLOCKS=[
+ {id:"early",name:"Early morning",start:"05:30"},{id:"morning",name:"Midday focus",start:"09:00"},
+ {id:"lunch",name:"Lunch",start:"11:30"},{id:"afternoon",name:"Afternoon",start:"13:30"},
+ {id:"commute",name:"Way home",start:"16:30"},{id:"evening",name:"Evening",start:"18:00"},
+ {id:"bedtime",name:"Bedtime",start:"21:30"}];
+function dayTimeMinutes(time){if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(time||""))return NaN;var parts=time.split(":");return +parts[0]*60+(+parts[1]);}
+function validateDayBlocks(blocks){
+ if(!Array.isArray(blocks)||blocks.length!==7)return "Keep all seven time sections.";
+ for(var i=0;i<blocks.length;i++){
+  if(blocks[i].id!==DEFAULT_DAY_BLOCKS[i].id||!String(blocks[i].name||"").trim())return "Give every section a name.";
+  var minutes=dayTimeMinutes(blocks[i].start);
+  if(!Number.isFinite(minutes))return "Enter a valid start time for every section.";
+  if(i&&minutes<=dayTimeMinutes(blocks[i-1].start))return "Start times must move forward through the day. The last section continues overnight.";
+ }
+ return "";
+}
+function dayBlocks(){var saved=S.settings&&S.settings.dayBlocks;return !validateDayBlocks(saved)?saved:DEFAULT_DAY_BLOCKS;}
+function dayBlockAt(date){var minute=date.getHours()*60+date.getMinutes(),blocks=dayBlocks(),id=blocks[blocks.length-1].id;blocks.forEach(function(b){if(minute>=dayTimeMinutes(b.start))id=b.id;});return id;}
+function dayTimeLabel(time){var parts=time.split(":"),hour=+parts[0];return (hour%12||12)+":"+parts[1]+(hour<12?"am":"pm");}
+function planBlocksDef(){var blocks=dayBlocks(),current=dayBlockAt(new Date());return blocks.map(function(b,i){return {id:b.id,name:b.name,range:dayTimeLabel(b.start)+" – "+dayTimeLabel(blocks[(i+1)%blocks.length].start),cur:b.id===current};});}
+function dayBlockSettingsHTML(){return '<div class="card" style="margin-bottom:14px"><div class="subhead">Daily time sections</div><p class="settings-help">Rename your sections and choose when each starts. Each ends when the next begins; the last continues overnight. These settings apply throughout Tend.</p><div class="day-settings-grid"><span>Name</span><span>Starts</span><span>Ends</span>'+dayBlocks().map(function(b,i,blocks){return '<input aria-label="Section '+(i+1)+' name" data-block-name="'+b.id+'" value="'+esc(b.name)+'"><input type="time" aria-label="Section '+(i+1)+' start time" data-block-start="'+b.id+'" value="'+b.start+'"><span data-block-end="'+b.id+'">'+dayTimeLabel(blocks[(i+1)%blocks.length].start)+(i===blocks.length-1?' (next day)':'')+'</span>';}).join('')+'</div><p id="dayBlocksError" role="alert" class="day-settings-error"></p><button class="btn" id="saveDayBlocks">Save time sections</button></div>';}
 function rhythmScheduledToday(r,date){
  date=date||new Date();if(r.freq==="quarterly"||r.freq==="yearly")return false;
  if(rhythmDaysSince(r)===0)return false;
@@ -61,12 +72,28 @@ function goalHasRhythm(g){
  function normalized(text){return String(text||"").toLowerCase().replace(person.name.toLowerCase(),"").replace(/\bwith\b/g,"").replace(/[^a-z0-9]/g,"");}
  return (person.rhythms||[]).some(function(r){return normalized(g.text)===normalized(r.text)||(g.id==="g-date-amy"&&/date night/i.test(r.text))||(g.id==="g-pray-amy"&&/pray together/i.test(r.text))||(g.id==="g-walk"&&/walk/i.test(r.text));});
 }
-function planPills(it){var person=S.people.find(function(p){return p.id===it.personId;});var label=it.rhythm||it.rkey?"Rhythm":it.spark||it.sparky?"Spark":it.taskId?"Task":it.goalId?"Goal":"Suggestion";var area=it.area||(it.log&&it.log.area);return (person?'<span class="prayer-person">'+personAvatar(person,24)+esc(person.name)+'</span>':'')+'<span class="plan-kind">'+label+'</span>'+(!person&&area&&S.areas[area]?'<span class="plan-kind">'+esc(S.areas[area].name)+'</span>':'');}
+function planPills(it){var person=S.people.find(function(p){return p.id===it.personId;});var label=it.rhythm||it.rkey?"Rhythm":it.spark||it.sparky?"Spark":it.taskId?"Task":it.goalId?"Goal":"Suggestion";var area=it.area||(it.log&&it.log.area);return (person?((it.rhythm||it.rkey)?'<button class="prayer-person person-rhythm-link" data-personrhythms="'+person.id+'" aria-label="Open '+esc(person.name)+' rhythms">'+personAvatar(person,24)+esc(person.name)+'</button>':'<span class="prayer-person">'+personAvatar(person,24)+esc(person.name)+'</span>'):'')+'<span class="plan-kind">'+label+'</span>'+(!person&&area&&S.areas[area]?'<span class="plan-kind">'+esc(S.areas[area].name)+'</span>':'');}
 function goalType(g){return {scripture:"note",prayer:"note",workout:"inperson",outdoors:"inperson",date:"inperson",quality:"inperson"}[g.kind]||"inperson";}
 function goalItem(g){var iv=goalInterval(g),d=goalLastDone(g);
  return {label:g.text,sub:(d===null?"not yet logged":(d===0?"done today":d+"d ago \u00B7 every "+iv+"d")),log:{area:g.area,type:goalType(g),title:g.text,goalId:g.id}};}
 function genItem(label,sub,area,type,title){return {label:label,sub:sub,log:{area:area,type:type,title:title||label}};}
 function taskItem(t){return {label:t.text,sub:"task \u00B7 "+(S.areas[t.areaId]?S.areas[t.areaId].name:""),log:{area:t.areaId,type:"note",title:"Task: "+t.text},taskId:t.id};}
+function dashboardRhythmEligible(r){
+ var days=rhythmDaysSince(r),period=rhythmPeriod(r);if(days===0)return false;
+ if(r.freq==="custom"){var date=new Date();return date.getDay()===(r.customDow||0)&&(r.customType!=="monthly"||Math.ceil(date.getDate()/7)===(r.customOrd||1));}
+ return days>=Math.max(1,period-(period<=14?1:0));
+}
+function prioritizePlanItems(items){
+ var ranked=items.slice().sort(function(a,b){
+  return Number(!!b.scheduled)-Number(!!a.scheduled)||Number(!!b.calendarDay)-Number(!!a.calendarDay)||Number(!!b.rhythm)-Number(!!a.rhythm)||(a.period||Infinity)-(b.period||Infinity)||(b.waitDays||0)-(a.waitDays||0);
+ });
+ var visible=[],more=[],people={};
+ ranked.forEach(function(it){
+  if(visible.length<3&&(!it.personId||!people[it.personId])){visible.push(it);if(it.personId)people[it.personId]=true;}
+  else more.push(it);
+ });
+ return {visible:visible,more:more};
+}
 function planCandidates(bid,curBid){
  var out=[];
  S.goals.forEach(function(g){
@@ -79,7 +106,7 @@ function planCandidates(bid,curBid){
  });
  S.tasks.forEach(function(t){if(!t.done&&((t.tod&&t.tod!=="anytime")?t.tod===bid:bid===curBid))out.push(taskItem(t));});
  S.people.forEach(function(person){
-  (person.rhythms||[]).forEach(function(r){var blk=(r.tod&&r.tod!=="anytime")?r.tod:curBid;if(blk!==bid||!todayRhythmEligible(r))return;out.push({rhythm:person.id+"|"+r.id,personId:person.id,label:r.text,sub:rhythmFreqLabel(r)+" \u00b7 "+rhythmDueTxt(r)});});
+  (person.rhythms||[]).forEach(function(r){var blk=(r.tod&&r.tod!=="anytime")?r.tod:curBid;if(blk!==bid||!dashboardRhythmEligible(r))return;out.push({scheduled:!!r.tod&&r.tod!=="anytime",calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),rhythm:person.id+"|"+r.id,personId:person.id,label:r.text,sub:rhythmFreqLabel(r)+" \u00b7 "+rhythmDueTxt(r)});});
   openSparks(person).forEach(function(spark){if(!spark.by||!sparkLive(spark))return;if((sparkBlock(spark)||curBid)!==bid)return;out.push({spark:person.id+"|"+spark.id,personId:person.id,label:spark.text,sub:(spark.time?fmtHM12(spark.time)+" \u00b7 ":"")+sparkDueTxt(spark)});});
  });
  return out;
@@ -87,34 +114,39 @@ function planCandidates(bid,curBid){
 var planOpenState={};var planViewState=null;
 function planBlockCard(b,curId,isCur){
  var items=planCandidates(b.id,curId);
- var body=items.length?items.map(function(it){
+ var queue=prioritizePlanItems(items);
+ function itemHTML(it){
   var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>');
   return '<div class="planitem"><div class="pi-main"><div class="pi-label">'+(it.spark?'<span style="color:#B8912F">\u2726 </span>':'')+esc(it.label)+'<span class="plan-pills">'+planPills(it)+'</span></div><div class="pi-sub">'+esc(it.sub)+'</div></div>'+btn+'</div>';
- }).join(""):'<div class="empty">Nothing queued - all tended.</div>';
- return '<details id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock'+(isCur?' current':'')+'" open><summary><span>'+b.name+(isCur?' <span class="plan-now">Now</span>':'')+'</span><span class="plan-range">'+b.range+' \u00b7 '+items.length+' item'+(items.length===1?'':'s')+'</span></summary><div style="margin-top:8px">'+body+'</div></details>';
+ }
+ var body=queue.visible.length?queue.visible.map(itemHTML).join(""):'<div class="empty">Nothing queued - all tended.</div>';
+ return '<details id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock'+(isCur?' current':'')+'" open><summary><span>'+b.name+(isCur?' <span class="plan-now">Now</span>':'')+'</span><span class="plan-range">'+b.range+' \u00b7 '+queue.visible.length+' item'+(queue.visible.length===1?'':'s')+'</span></summary><div style="margin-top:8px">'+body+'</div></details>';
 }
 function planHTML(){
  var blocks=planBlocksDef();
- var out='<div class="sectiontitle"><h2>Today</h2><span class="hint">the right thing at the right time</span></div>';
+ var out='<div class="sectiontitle"><h2>Today</h2><span class="hint">Three next steps · scheduled first, one per person</span></div>';
  var curId=(blocks.filter(function(x){return x.cur;})[0]||{}).id;
  out+=planBlockCard(blocks.filter(function(x){return x.cur;})[0],curId,true);
  out+='<nav class="day-jumps" aria-label="Other time blocks">'+blocks.filter(function(b){return b.id!==curId;}).map(function(b){return '<button class="btn mini ghost'+(planViewState===b.id?' active':'')+'" data-planview="'+b.id+'">'+b.name+(planViewState===b.id?' \u00b7 Hide':'')+'</button>';}).join('')+'</nav>';
  var sel=blocks.filter(function(b){return b.id===planViewState&&b.id!==curId;})[0];
  if(sel)out+=planBlockCard(sel,curId,false);
  return out;}
+function upcomingDates(now){
+ var today=new Date(now||Date.now());today.setHours(0,0,0,0);var rows=[];
+ function add(label,month,day,attrs){
+  if(!(month>=1&&month<=12&&day>=1&&day<=31))return;
+  var date=new Date(today.getFullYear(),month-1,day);if(date<today)date=new Date(today.getFullYear()+1,month-1,day);
+  var days=Math.round((date-today)/86400000);if(days<=30)rows.push({label:label,days:days,attrs:attrs||""});
+ }
+ S.people.forEach(function(p){[['birthday','Birthday'],['anniversary','Anniversary']].forEach(function(pair){var v=String(p[pair[0]]||'').split('-');if(v.length===3)add(p.name+' · '+pair[1],+v[1],+v[2],' data-openperson="'+esc(p.id)+'"');});});
+ S.keyDates.forEach(function(k){var person=S.people.find(function(p){return p.id===k.personId;});add((person?person.name+' · ':'')+k.label,+k.month,+k.day,' data-upitem="'+esc(k.id)+'"');});
+ majorHolidays.forEach(function(h){if(!holidayEnabled(h.id))return;[today.getFullYear(),today.getFullYear()+1].forEach(function(y){var date=h.date(y),days=Math.round((date-today)/86400000);if(days>=0&&days<=30)rows.push({label:h.name,days:days,attrs:''});});});
+ return rows.sort(function(a,b){return a.days-b.days||a.label.localeCompare(b.label);});
+}
 function upcomingHTML(){
- var up=S.keyDates.map(function(kd){return {kd:kd,d:daysUntil(kd)};}).filter(function(x){return x.d<=60;}).sort(function(a,b){return a.d-b.d;});
- var longRhythms=[];S.people.forEach(function(p){(p.rhythms||[]).forEach(function(r){if(r.freq!=="quarterly"&&r.freq!=="yearly")return;var days=rhythmDaysSince(r),left=rhythmPeriod(r)-days;if(days===999||left<=60)longRhythms.push({person:p,rhythm:r,left:days===999?null:left});});});
- if(!up.length&&!longRhythms.length)return "";
- var out='<div class="sectiontitle"><h2>Coming up</h2><span class="hint">next 60 days</span></div><div class="uprow">';
- up.forEach(function(x){
-  var cls=x.d<=7?"soon":(x.d<=21?"mid":"far");
-  var link=S.checklists.find(function(c){return c.linkId===x.kd.id;});
-  out+='<div class="upitem" data-upitem="'+x.kd.id+'"'+(link?' data-hascl="1"':'')+'><span class="updays '+cls+'">'+(x.d===0?"today":"in "+x.d+"d")+'</span><span class="uplabel">'+esc(x.kd.label)+'</span>'+(link?'<span class="upcl">checklist \u2192</span>':'')+'</div>';
- });
- out+='</div>';
- if(longRhythms.length)out+='<div class="card upcoming-rhythms">'+longRhythms.sort(function(a,b){return (a.left===null?0:a.left)-(b.left===null?0:b.left);}).map(function(x){return '<div class="planitem"><div class="pi-main"><div class="pi-label">'+esc(x.rhythm.text)+'<span class="plan-pills">'+planPills({rhythm:true,personId:x.person.id})+'</span></div><div class="pi-sub">'+esc(rhythmFreqLabel(x.rhythm))+' \u00b7 '+(x.left===null?'Choose a date to plan this':x.left<0?'Ready to tend \u00b7 last tended '+rhythmDaysSince(x.rhythm)+' days ago':x.left===0?'Due today':'Due in '+Math.ceil(x.left)+' days')+'</div></div><button class="btn mini ghost" data-openperson="'+x.person.id+'">Open</button></div>';}).join('')+'</div>';
- return out;}
+ var rows=upcomingDates();
+ return '<div class="sectiontitle"><h2>Coming up</h2><span class="hint">next 30 days</span></div><div class="uprow">'+(rows.length?rows.map(function(x){return '<div class="upitem"'+x.attrs+'><span class="updays '+(x.days<=7?'soon':x.days<=21?'mid':'far')+'">'+(x.days===0?'today':'in '+x.days+'d')+'</span><span class="uplabel">'+esc(x.label)+'</span></div>';}).join(''):'<div class="empty">No personal dates or selected holidays in the next 30 days.</div>')+'</div>';
+}
 function goalRow(g){
  var d=goalLastDone(g),sc=goalScore(g),c=scoreClass(sc);
  var iv=goalInterval(g);
@@ -145,6 +177,11 @@ function renderPeople(){
  out+='</div>';
  return out;}
 /* ============ person profile: rhythms + touch points ============ */
+function sortedPersonRhythms(person){
+ var order=dayBlocks().map(function(block){return block.id;});
+ function timeRank(r){var index=order.indexOf(r.tod);return index<0?order.length:index;}
+ return (person.rhythms||[]).slice().sort(function(a,b){return rhythmPeriod(a)-rhythmPeriod(b)||timeRank(a)-timeRank(b);});
+}
 function rhythmRow(p,r){
  var sc=rhythmScore(r),c=scoreClass(sc);
  if(editRhythmId===r.id){
@@ -160,7 +197,7 @@ function rhythmRow(p,r){
    if(r.customType==="monthly")out+='<select data-rfield="'+idf+'|customOrd">'+ORDINALS.map(function(o,i){return '<option value="'+(i+1)+'"'+((r.customOrd||1)===(i+1)?" selected":"")+'>'+o+'</option>';}).join("")+'</select>';
    out+='<select data-rfield="'+idf+'|customDow">'+DOW.map(function(d,i){return '<option value="'+i+'"'+((r.customDow||0)===i?" selected":"")+'>'+d+'</option>';}).join("")+'</select></div>';
   }
-  out+='<div class="addrow"><select data-rfield="'+idf+'|tod">'+Object.keys(TODS).map(function(k){return '<option value="'+k+'"'+((r.tod||"anytime")===k?" selected":"")+'>'+TODS[k]+'</option>';}).join("")+'</select>';
+  out+='<div class="addrow"><select data-rfield="'+idf+'|tod">'+Object.keys(TODS).map(function(k){return '<option value="'+k+'"'+((r.tod||"anytime")===k?" selected":"")+'>'+esc(TODS[k])+'</option>';}).join("")+'</select>';
   var du=durUnitOf(r),dv=durValOf(r);
   out+='<select data-rfield="'+idf+'|durUnit">'+Object.keys(DUR_UNITS).map(function(u){return '<option value="'+u+'"'+(du===u?" selected":"")+'>'+DUR_UNITS[u].label+'</option>';}).join("")+'</select>';
   out+='<select data-rfield="'+idf+'|durVal"><option value="0">- # -</option>'+Array.apply(null,{length:DUR_UNITS[du].max}).map(function(_,i){var n=i+1;return '<option value="'+n+'"'+(dv===n?" selected":"")+'>'+n+'</option>';}).join("")+'</select>';
@@ -171,7 +208,7 @@ function rhythmRow(p,r){
  var rl=rhythmLast(r),lastTxt=rl?("last tended "+when(rl.ts)):"not yet tended";
  var timingTxt=lastTxt+(rl&&rhythmDaysSince(r)!==0?" \u00B7 "+rhythmDueTxt(r):"");
  if(rhyDoneDraft&&rhyDoneDraft.key===p.id+"|"+r.id){return '<div class="rhyrow"><span class="rhythm-health" title="Rhythm health"><span class="sm-dot '+c+'" aria-hidden="true"></span><span>'+sc+'%</span></span><div class="gr-main"><b>'+esc(r.text||"(unnamed rhythm)")+'</b><div class="gr-meta">'+esc(rhythmFreqLabel(r))+" \u00B7 "+esc(timingTxt)+'</div></div>'+rhyDoneBtn(p.id+"|"+r.id)+'</div><div class="hint" style="font-size:11px;color:var(--ink-faint);margin:0 0 8px 26px">When did it actually happen? That date drives the meter.</div>';}
- return '<div class="rhyrow"><span class="rhythm-health" title="Rhythm health"><span class="sm-dot '+c+'" aria-hidden="true"></span><span>'+sc+'%</span></span><div class="gr-main"><b>'+esc(r.text||"(unnamed rhythm)")+'</b>'+(r.category==="prayer"?' <span class="gr-person">prayer</span>':'')+'<div class="gr-meta">'+esc(rhythmFreqLabel(r))+(r.tod&&r.tod!=="anytime"?" \u00B7 "+TODS[r.tod]:"")+(rhythmDurLabel(r)?" \u00B7 "+esc(rhythmDurLabel(r)):"")+" \u00B7 "+esc(timingTxt)+'</div></div><button class="btn mini" data-rhydone="'+p.id+'|'+r.id+'" title="Record a moment of care">Tend</button><button class="iconbtn" data-rhyedit="'+r.id+'" title="edit">\u270E</button></div>';
+ return '<div class="rhyrow"><span class="rhythm-health" title="Rhythm health"><span class="sm-dot '+c+'" aria-hidden="true"></span><span>'+sc+'%</span></span><div class="gr-main"><b>'+esc(r.text||"(unnamed rhythm)")+'</b>'+(r.category==="prayer"?' <span class="gr-person">prayer</span>':'')+'<div class="gr-meta">'+esc(rhythmFreqLabel(r))+(r.tod&&r.tod!=="anytime"?" \u00B7 "+esc(TODS[r.tod]):"")+(rhythmDurLabel(r)?" \u00B7 "+esc(rhythmDurLabel(r)):"")+" \u00B7 "+esc(timingTxt)+'</div></div><button class="btn mini" data-rhydone="'+p.id+'|'+r.id+'" title="Record a moment of care">Tend</button><button class="iconbtn rhythm-history-trigger" data-rhyhistory="'+p.id+'|'+r.id+'" title="View rhythm history" aria-label="View history for '+esc(r.text)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button class="iconbtn" data-rhyedit="'+r.id+'" title="edit">\u270E</button></div>';
 }
 function draftRow(p){
  var r=rhythmDraft,idf=p.id+"|draft";
@@ -184,7 +221,7 @@ function draftRow(p){
   if(r.customType==="monthly")out+='<select data-rfield="'+idf+'|customOrd">'+ORDINALS.map(function(o,i){return '<option value="'+(i+1)+'"'+((r.customOrd||1)===(i+1)?" selected":"")+'>'+o+'</option>';}).join("")+'</select>';
   out+='<select data-rfield="'+idf+'|customDow">'+DOW.map(function(d,i){return '<option value="'+i+'"'+((r.customDow||0)===i?" selected":"")+'>'+d+'</option>';}).join("")+'</select></div>';
  }
- out+='<div class="addrow"><select data-rfield="'+idf+'|tod">'+Object.keys(TODS).map(function(k){return '<option value="'+k+'"'+((r.tod||"anytime")===k?" selected":"")+'>'+TODS[k]+'</option>';}).join("")+'</select>';
+ out+='<div class="addrow"><select data-rfield="'+idf+'|tod">'+Object.keys(TODS).map(function(k){return '<option value="'+k+'"'+((r.tod||"anytime")===k?" selected":"")+'>'+esc(TODS[k])+'</option>';}).join("")+'</select>';
  var du=durUnitOf(r),dv=durValOf(r);
  out+='<select data-rfield="'+idf+'|durUnit">'+Object.keys(DUR_UNITS).map(function(u){return '<option value="'+u+'"'+(du===u?" selected":"")+'>'+DUR_UNITS[u].label+'</option>';}).join("")+'</select>';
  out+='<select data-rfield="'+idf+'|durVal"><option value="0">- # -</option>'+Array.apply(null,{length:DUR_UNITS[du].max}).map(function(_,i){var n=i+1;return '<option value="'+n+'"'+(dv===n?" selected":"")+'>'+n+'</option>';}).join("")+'</select></div>';
@@ -316,7 +353,7 @@ function personProfile(pid){
  var counts={rhythms:(p.rhythms||[]).length,sparks:openSparks(p).length,prayer:prayers.filter(function(x){return !x.answered&&!x.archived;}).length,notes:S.followups.filter(function(f){return f.personId===pid&&!f.done;}).length};
  out+='<div class="profile-tabs" role="tablist" aria-label="Person collections">'+[["rhythms","Rhythms"],["sparks","Sparks"],["prayer","Prayer"],["notes","Notes"]].map(function(item){return '<button role="tab" id="profile-tab-'+item[0]+'" aria-controls="profile-panel-'+item[0]+'" aria-selected="'+(activeProfileTab===item[0])+'" data-profiletab="'+item[0]+'">'+collectionIcon(item[0])+item[1]+' <span class="tab-count">'+counts[item[0]]+'</span></button>';}).join('')+'</div>';
  out+=profilePanelStart("rhythms");
- if((p.rhythms||[]).length){p.rhythms.forEach(function(r){out+=rhythmRow(p,r);});}
+ if((p.rhythms||[]).length){sortedPersonRhythms(p).forEach(function(r){out+=rhythmRow(p,r);});}
  else out+='<div class="empty">No rhythms yet - add the recurring things that keep this relationship tended.</div>';
  var dO=rhythmDraft&&rhythmDraft.pid===pid;
  if(dO)out+=draftRow(p);
@@ -353,7 +390,7 @@ function personProfile(pid){
  m+='<div class="addrow"><input placeholder="Add key date (label)" data-kdlabel="'+pid+'"><button class="btn mini" data-kdadd="'+pid+'">Add</button></div>';
  m+='<div class="field connection-cadence-field" style="margin-top:14px"><label for="personConnectionCadence">Default connection cadence</label><select id="personConnectionCadence" aria-describedby="connectionCadenceHelp" data-pfield="connectCadence" data-pid="'+pid+'">'+[["daily","daily"],["weekly","weekly"],["biweekly","every 2 weeks"],["monthly","monthly"]].map(function(o){return '<option value="'+o[0]+'"'+((p.connectCadence||"weekly")===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("")+'</select><p id="connectionCadenceHelp" class="settings-help">Used for the health meter when no connection rhythms are set up. Each connection rhythm follows its own frequency.</p></div>';
  m+='<div class="field"><label>Love language</label><select data-pfield="loveLanguage" data-pid="'+pid+'"><option value="">- not set -</option>'+Object.keys(LL_LANGUAGES).map(function(k){return '<option value="'+k+'"'+(ll===k?" selected":"")+'>'+LL_LANGUAGES[k]+'</option>';}).join("")+'</select></div>';
- m+='<div class="field"><label>Photo</label><div style="display:flex;align-items:center;gap:12px">'+personAvatar(p,56)+'<input type="file" accept="image/*" data-pphoto="'+pid+'" style="flex:1;font-size:13px">'+(p.photo?'<button class="btn mini danger" data-pphorm="'+pid+'">Remove</button>':'')+'</div><div class="hint" style="font-size:11px;color:var(--ink-faint)">Crops to a circle for their card.</div></div>';
+ m+='<div class="field"><label>Photo</label><div class="person-photo-controls">'+personAvatar(p,56)+'<input type="file" accept="image/*" data-pphoto="'+pid+'">'+(p.photo?'<button class="btn mini danger" data-pphorm="'+pid+'">Remove</button>':'')+'</div><div class="hint" style="font-size:11px;color:var(--ink-faint)">Crops to a circle for their card.</div></div>';
  m+='</div></div>';
  out+=m;
  return out;}
@@ -414,7 +451,8 @@ function renderArea(id){
 function fmtDate(ts){var d=new Date(ts);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 var editingId=null,editingEvent=null;
 /* nav state */
-var TODS={anytime:"Anytime",early:"Early morning",morning:"Midday",lunch:"Lunch",afternoon:"Afternoon",commute:"Way home",evening:"Evening",bedtime:"Bedtime"};
+var TODS={anytime:"Anytime"};
+DEFAULT_DAY_BLOCKS.forEach(function(block){Object.defineProperty(TODS,block.id,{enumerable:true,get:function(){return dayBlocks().find(function(b){return b.id===block.id;}).name;}});});
 var LL_LANGUAGES={qt:"Quality Time",wa:"Words of Affirmation",as:"Acts of Service",gf:"Gifts",pt:"Physical Touch"};
 var REL_OPTIONS=["Spouse","Son","Daughter","Bonus son","Bonus daughter","Son-in-law","Daughter-in-law","Father","Mother","Brother","Sister","Friend","Mentor","Coworker"];
 var LL_NUDGES={qt:"time together - a walk, an errand, a shared meal - speaks louder than a text.",wa:"a specific, spoken affirmation lands deeper than any gift. Send the text. Make the call.",as:"doing a chore or errand for them preaches louder than words.",gf:"small, thoughtful gifts say 'I was thinking of you' - keep a running list.",pt:"presence in person - a hug, a hand on the shoulder - matters most."};

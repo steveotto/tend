@@ -1,7 +1,34 @@
 "use strict";
 /* ============ settings (with sync) + iCloud calendar ============ */
+var settingsTab='general';
+function holidayFixed(month,day){return function(y){return new Date(y,month-1,day);};}
+function holidayWeekday(month,weekday,n){return function(y){var d=new Date(y,month-1,1);return new Date(y,month-1,1+(weekday-d.getDay()+7)%7+7*(n-1));};}
+var majorHolidays=[
+ {id:'new-year',name:"New Year's Day",date:holidayFixed(1,1)},
+ {id:'mlk',name:'Martin Luther King Jr. Day',date:holidayWeekday(1,1,3)},
+ {id:'valentine',name:"Valentine’s Day",date:holidayFixed(2,14)},
+ {id:'presidents',name:"Presidents’ Day",date:holidayWeekday(2,1,3)},
+ {id:'easter',name:'Easter',date:function(y){var a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),n=h+l-7*m+114;return new Date(y,Math.floor(n/31)-1,n%31+1);}},
+ {id:'mothers',name:"Mother’s Day",date:holidayWeekday(5,0,2)},
+ {id:'memorial',name:'Memorial Day',date:function(y){var d=new Date(y,4,31);d.setDate(31-(d.getDay()+6)%7);return d;}},
+ {id:'juneteenth',name:'Juneteenth',date:holidayFixed(6,19)},
+ {id:'fathers',name:"Father’s Day",date:holidayWeekday(6,0,3)},
+ {id:'independence',name:'Independence Day',date:holidayFixed(7,4)},
+ {id:'labor',name:'Labor Day',date:holidayWeekday(9,1,1)},
+ {id:'indigenous',name:'Indigenous Peoples’ Day / Columbus Day',date:holidayWeekday(10,1,2)},
+ {id:'halloween',name:'Halloween',date:holidayFixed(10,31)},
+ {id:'veterans',name:'Veterans Day',date:holidayFixed(11,11)},
+ {id:'thanksgiving',name:'Thanksgiving',date:holidayWeekday(11,4,4)},
+ {id:'christmas',name:'Christmas',date:holidayFixed(12,25)},
+ {id:'new-year-eve',name:"New Year’s Eve",date:holidayFixed(12,31)}
+];
+function holidayEnabled(id){return !!(S.settings&&S.settings.holidays&&S.settings.holidays[id]);}
+function holidaySettingsHTML(){return '<div class="card"><div class="subhead">Major holidays</div><p class="settings-help">Choose which U.S. holidays and occasions appear in Coming up, starting 30 days ahead. Uses the actual date, rather than an observed day off. Changes save automatically.</p><div class="holiday-options">'+majorHolidays.map(function(h){return '<label><input type="checkbox" data-holiday="'+h.id+'"'+(holidayEnabled(h.id)?' checked':'')+'><span>'+esc(h.name)+'</span></label>';}).join('')+'</div></div>';}
+function settingsPanel(key){return '<section class="profile-tab-panel settings-panel" id="settings-panel-'+key+'" role="tabpanel" aria-labelledby="settings-tab-'+key+'"'+(settingsTab===key?'':' hidden')+'>';}
 function renderSettings(){
  var out='<div class="sectiontitle" style="margin-top:6px"><h2>Settings</h2><span class="hint">meters, calendar, goals, sync</span></div>';
+ out+='<div class="profile-tabs" role="tablist" aria-label="Settings">'+[['general','General'],['times','Daily time sections'],['holidays','Major holidays'],['goals','Goals']].map(function(t){return '<button role="tab" id="settings-tab-'+t[0]+'" aria-controls="settings-panel-'+t[0]+'" aria-selected="'+(settingsTab===t[0])+'" data-settingstab="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div>';
+ out+=settingsPanel('times')+dayBlockSettingsHTML()+'</section>'+settingsPanel('holidays')+holidaySettingsHTML()+'</section>'+settingsPanel('general');
  /* meters */
  var s=settings();
  out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Meters</div>'+
@@ -21,6 +48,7 @@ function renderSettings(){
  });
  if(!S.calendars.length)out+='<div class="empty">No calendars yet - add one below.</div>';
  out+='<div style="display:flex;gap:8px;margin-top:10px"><button class="btn ghost" id="calAdd">+ Add calendar</button><button class="btn" id="calSaveAll">Save &amp; refresh</button></div></div>';
+ out+='</section>'+settingsPanel('goals');
  /* goals */
  out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Goals</div>';
  AREA_IDS.forEach(function(id){
@@ -30,13 +58,14 @@ function renderSettings(){
    out+='<div class="goalrow edit"><input class="goaltext" data-gtext="'+g.id+'" value="'+esc(g.text)+'">'+
    '<select data-gcad="'+g.id+'">'+["daily","weekly","monthly","custom"].map(function(c){return '<option value="'+c+'"'+(g.cadence===c?" selected":"")+'>'+c+'</option>';}).join("")+'</select>'+
    (g.cadence==="custom"?'<input type="number" data-gdays="'+g.id+'" value="'+(g.days||2)+'" style="width:56px">':'')+
-   '<select data-gtod="'+g.id+'" title="Time of day">'+Object.keys(TODS).map(function(t){return '<option value="'+t+'"'+((g.tod||"anytime")===t?" selected":"")+'>'+TODS[t]+'</option>';}).join("")+'</select>'+
+   '<select data-gtod="'+g.id+'" title="Time of day">'+Object.keys(TODS).map(function(t){return '<option value="'+t+'"'+((g.tod||"anytime")===t?" selected":"")+'>'+esc(TODS[t])+'</option>';}).join("")+'</select>'+
    '<select data-gperson="'+g.id+'"><option value="">- no person -</option>'+S.people.map(function(p){return '<option value="'+p.id+'"'+(g.personId===p.id?" selected":"")+'>'+esc(p.name)+'</option>';}).join("")+'</select>'+
    '<button class="del" data-gdel="'+g.id+'">\u00D7</button></div>';
   });
   out+='<div class="addrow"><input placeholder="New goal for '+S.areas[id].name+'..." data-gnewtext="'+id+'"><button class="btn mini" data-gadd="'+id+'">Add</button></div></div>';
  });
  out+='</div>';
+ out+='</section>';
  /* sync */
  var st=window.SYNCcfg||{};
  out+='<div class="card"><div class="subhead">Sync (GitHub)</div>'+
