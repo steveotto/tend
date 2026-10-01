@@ -92,7 +92,8 @@ function upcomingDates(now){
  }
  S.people.forEach(function(p){[['birthday','Birthday'],['anniversary','Anniversary']].forEach(function(pair){var v=String(p[pair[0]]||'').split('-');if(v.length===3&&!covered[p.id+"|"+(+v[1])+"|"+(+v[2])])add(p.name+' \u00b7 '+pair[1],+v[1],+v[2],' data-openperson="'+esc(p.id)+'"');});});
  S.keyDates.forEach(function(k){var who=kdPeopleIds(k).map(function(id){var p=S.people.find(function(q){return q.id===id;});return p?p.name:null;}).filter(Boolean);add((who.length?who.join(' + ')+' \u00b7 ':'')+k.label,+k.month,+k.day,' data-upitem="'+esc(k.id)+'"',kdHasYear(k)?+k.year:null);});
- majorHolidays.forEach(function(h){if(!holidayEnabled(h.id))return;[today.getFullYear(),today.getFullYear()+1].forEach(function(y){var date=h.date(y),days=Math.round((date-today)/86400000);if(days>=0&&days<=30)rows.push({label:h.name,days:days,date:date,attrs:''});});});
+ var HOLS=(typeof majorHolidays!=="undefined"&&majorHolidays)?majorHolidays:[];
+ HOLS.forEach(function(h){if(typeof holidayEnabled==="function"&&!holidayEnabled(h.id))return;[today.getFullYear(),today.getFullYear()+1].forEach(function(y){var date=h.date(y),days=Math.round((date-today)/86400000);if(days>=0&&days<=30)rows.push({label:h.name,days:days,date:date,attrs:''});});});
  return rows.sort(function(a,b){return a.days-b.days||a.label.localeCompare(b.label);});
 }
 function calIconHTML(date){

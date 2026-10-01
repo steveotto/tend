@@ -2,7 +2,7 @@
 /* ============ GitHub sync ============ */
 var SYNCcfg=(function(){try{return JSON.parse(localStorage.getItem(LS_SYNC))||{auto:true};}catch(e){return {auto:true};}})();
 window.SYNCcfg=SYNCcfg;
-var TEND_VERSION="v20261001g";window.TEND_VERSION=TEND_VERSION; /* bump this with every code deploy - shown in Settings */
+var TEND_VERSION="v20261001h";window.TEND_VERSION=TEND_VERSION; /* bump this with every code deploy - shown in Settings */
 window._tendDirty=false; /* local changes not yet pushed - auto-pull must not clobber them */
 function ghHeaders(){return {"Authorization":"Bearer "+SYNCcfg.token,"Accept":"application/vnd.github+json"};}
 function updateSyncDot(){var dot=el("syncDot"),lbl=el("syncLabel");if(!SYNCcfg.token){dot.className="syncdot";lbl.textContent="local only";}else{dot.className="syncdot on";lbl.textContent="synced";}}
@@ -79,6 +79,6 @@ document.addEventListener("click",function(e){var t=e.target;if(t&&t.closest&&t.
 el("headDate").textContent=(function(){var d=new Date();var m=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];return d.getDate()+" "+m[d.getMonth()]+" "+d.getFullYear();})();
 updateSyncDot();
 if(SYNCcfg.token)pullNow(false);
-function bootTend(){if(typeof render==="function"){render();}else{setTimeout(bootTend,400);}}
+function bootTend(){if(typeof render==="function"){if(document.readyState==="complete"){render();}else{window.addEventListener("load",function(){render();});}}else{setTimeout(bootTend,400);}}
 bootTend();
 window.addEventListener("focus",function(){if(SYNCcfg.token)pullNow(false);});
