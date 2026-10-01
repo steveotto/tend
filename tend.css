@@ -420,3 +420,5 @@ details.moor .moor-body{padding:2px 18px 14px}
 .notes-history{margin-top:12px}.notes-history summary{cursor:pointer;font-size:13px;color:var(--ink-soft);padding:10px 0}
 .person-prayer-add{padding-bottom:24px;margin-bottom:8px;border-bottom:1px solid var(--line)}
 .person-prayer-add .field{display:block;margin-bottom:12px}.person-prayer-add input,.person-prayer-add textarea{display:block;width:100%;margin-top:6px}
+
+.notes-checklist .tasks li{flex-wrap:wrap}.notes-checklist #followupEditText{flex:1 1 220px;min-width:0}

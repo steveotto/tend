@@ -205,9 +205,9 @@ function rippleIdea(p){
 function collectionIcon(key){var paths={rhythms:'<path d="M20 7a8 8 0 0 0-14-2L3 8m0-5v5h5 M4 17a8 8 0 0 0 14 2l3-3m0 5v-5h-5"/>',sparks:'<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/>',prayer:'<path d="M12 20S3 14 3 8a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 6-9 12-9 12Z"/>',notes:'<path d="M14 3H5v18h14V8Z M14 3v5h5 M8 12h8 M8 16h6"/>'};return '<svg class="collection-icon" viewBox="0 0 24 24" aria-hidden="true">'+paths[key]+'</svg>';}
 function notesChecklist(p,kind,title){
  var items=S.followups.filter(function(f){return f.personId===p.id&&(f.kind||"followup")===kind;});
- function row(f){if(editingFollowupId===f.id)return '<li><input id="followupEditText" aria-label="Edit item" value="'+esc(f.text)+'"><button class="btn mini" data-fusave="'+f.id+'">Save</button><button class="btn mini ghost" data-fucancel="1">Cancel</button></li>';return '<li><input type="checkbox" class="cb" aria-label="'+esc((f.done?'Reopen: ':'Complete: ')+f.text)+'" data-fudone="'+f.id+'"'+(f.done?' checked':'')+'><span class="txt">'+esc(f.text)+'</span><button class="btn mini ghost" data-fuedit="'+f.id+'">Edit</button></li>';}
+ function row(f){if(editingFollowupId===f.id)return '<li><input id="followupEditText" aria-label="Edit item" value="'+esc(f.text)+'"><button class="btn mini" data-fusave="'+f.id+'">Save</button><button class="btn mini ghost" data-fucancel="1">Cancel</button><button class="btn mini danger" data-notedelete="'+f.id+'">Delete</button></li>';return '<li><input type="checkbox" class="cb" aria-label="'+esc((f.done?'Reopen: ':'Complete: ')+f.text)+'" data-fudone="'+f.id+'"'+(f.done?' checked':'')+'><span class="txt">'+esc(f.text)+'</span><button class="btn mini ghost" data-fuedit="'+f.id+'">Edit</button></li>';}
  var done=items.filter(function(f){return f.done;});
- return '<div class="notes-checklist"><div class="subhead">'+title+'</div><ul class="tasks">'+items.filter(function(f){return !f.done;}).map(row).join('')+'</ul><div class="addrow"><input id="noteNew-'+kind+'" aria-label="'+title+'" placeholder="'+(kind==='encouragement'?'A verse, kind word, or thoughtful idea…':'Follow up on…')+'"><button class="btn mini" data-noteadd="'+p.id+'" data-notekind="'+kind+'">Add</button></div><details class="notes-history"'+(done.some(function(f){return f.id===editingFollowupId;})?' open':'')+'><summary>Show history ('+done.length+')</summary>'+(done.length?'<ul class="tasks">'+done.map(row).join('')+'</ul>':'<div class="empty">No completed items yet.</div>')+'</details></div>';
+ return '<div class="notes-checklist"><div class="subhead">'+title+'</div><ul class="tasks">'+items.filter(function(f){return !f.done;}).map(row).join('')+'</ul><div class="addrow"><input id="noteNew-'+kind+'" aria-label="'+title+'" placeholder="'+(kind==='encouragement'?'A verse, kind word, or thoughtful idea…':kind==='followup'?'Follow up on…':'Add a prayer note…')+'"><button class="btn mini" data-noteadd="'+p.id+'" data-notekind="'+kind+'">Add</button></div><details class="notes-history"'+(done.some(function(f){return f.id===editingFollowupId;})?' open':'')+'><summary>Show history ('+done.length+')</summary>'+(done.length?'<ul class="tasks">'+done.map(row).join('')+'</ul>':'<div class="empty">No completed items yet.</div>')+'</details></div>';
 }
 function profilePanelStart(key){return '<section class="card profile-tab-panel" id="profile-panel-'+key+'" role="tabpanel" aria-labelledby="profile-tab-'+key+'"'+(activeProfileTab===key?'':' hidden')+'>';}
 var activeProfileTab="rhythms";
@@ -229,7 +229,7 @@ function actQueueHTML(p){
  var allP=S.prayers.filter(function(x){return x.personId===p.id&&!x.answered&&!x.archived;});
  var waitP=allP.filter(function(x){return x.lastPrayed!==todayStr();}).sort(function(a,b){return (a.lastPrayed||"").localeCompare(b.lastPrayed||"")||(a.added||"").localeCompare(b.added||"");});
  var visP=waitP.slice(0,2);
- var hasFocus=p.prayerFocus&&p.prayerFocus.trim();
+ var hasFocus=!p.prayerNotesChecklistMigrated&&p.prayerFocus&&p.prayerFocus.trim();
  var focusOpen=hasFocus&&!allP.length&&doneSess.indexOf("focus")<0&&!S.events.some(function(e){return e.personId===p.id&&e.title==="Prayer focus"&&daysSince(e.ts)===0;});
  if(!visP.length&&focusOpen)visP=[{id:"focus",focus:true,text:p.prayerFocus}];
  var padP=[];
@@ -312,7 +312,7 @@ function personProfile(pid){
  }else out+='<div class="empty">No moments logged yet.</div>';
  out+='</div>';
  activeProfileTab=profileTabs[pid]||"rhythms";
- var counts={rhythms:(p.rhythms||[]).length,sparks:openSparks(p).length,prayer:prayers.filter(function(x){return !x.answered&&!x.archived;}).length,notes:S.followups.filter(function(f){return f.personId===pid&&!f.done;}).length};
+ var counts={rhythms:(p.rhythms||[]).length,sparks:openSparks(p).length,prayer:prayers.filter(function(x){return !x.answered&&!x.archived;}).length,notes:S.followups.filter(function(f){return f.personId===pid&&!f.done&&(!f.kind||f.kind==="followup"||f.kind==="encouragement");}).length};
  out+='<div class="profile-tabs" role="tablist" aria-label="Person collections">'+[["rhythms","Rhythms"],["sparks","Sparks"],["prayer","Prayer"],["notes","Notes"]].map(function(item){return '<button role="tab" id="profile-tab-'+item[0]+'" aria-controls="profile-panel-'+item[0]+'" aria-selected="'+(activeProfileTab===item[0])+'" data-profiletab="'+item[0]+'">'+collectionIcon(item[0])+item[1]+' <span class="tab-count">'+counts[item[0]]+'</span></button>';}).join('')+'</div>';
  out+=profilePanelStart("rhythms");
  if((p.rhythms||[]).length){p.rhythms.forEach(function(r){out+=rhythmRow(p,r);});}
@@ -331,10 +331,8 @@ function personProfile(pid){
  out+='<div class="addrow"><input placeholder="Idea - a movie, a talk, a trip..." data-spnewtext="'+pid+'"><input type="date" data-spnewdate="'+pid+'" style="max-width:150px"><input type="time" data-spnewtime="'+pid+'" style="max-width:110px"><button class="btn mini" data-spadd="'+pid+'">Add</button></div>';
  out+='</section>';
  out+=profilePanelStart("prayer")+'<div class="person-prayer-add"><label class="field">Title<input id="personPrayerTitle" placeholder="Prayer title"></label><label class="field">Details<textarea id="personPrayerDetails" placeholder="Details (optional)"></textarea></label><button class="btn" data-personprayeradd="'+pid+'">Add prayer</button></div>'+prayerList(prayers);
- out+='<details class="prayer-notes"><summary>Prayer notes</summary><div class="subhead">'+first+"&#39;s prayer context"+'<span class="savehint" id="prayerSaveHint" style="margin-left:8px;position:static">saved</span></div>';
- out+='<div class="field"><label>"How can I be praying for you?" (their words)</label><textarea data-phpray="1" data-pid="'+pid+'" placeholder="Ask them this - log their answer here">'+esc(p.howToPray||"")+'</textarea></div>';
- out+='<div class="field"><label>My prayer focus for '+first+'</label><textarea data-pfocus="1" data-pid="'+pid+'" placeholder="Your private prayer for them">'+esc(p.prayerFocus||"")+'</textarea></div>';
- out+='</details></section>';
+ out+='<div class="prayer-notes">'+notesChecklist(p,"prayer-request-note","Their prayer notes")+notesChecklist(p,"prayer-focus-note","My prayer thoughts")+'</div></section>';
+
  out+=profilePanelStart("notes");
  out+=notesChecklist(p,"encouragement","Potential encouragement")+notesChecklist(p,"followup","Follow up on");
  out+='</section>';
