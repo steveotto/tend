@@ -9,7 +9,7 @@ window.kdHasYear=function(k){return !!(k&&k.year!==undefined&&k.year!==null&&k.y
 nextOccurrence=function(kd){var t=new Date();if(kdHasYear(kd))return new Date(+kd.year,(+kd.month||1)-1,+kd.day||1);var d=new Date(t.getFullYear(),(+kd.month||1)-1,+kd.day||1);if(d<t)d=new Date(t.getFullYear()+1,(+kd.month||1)-1,+kd.day||1);return d;};
 daysUntil=function(kd){var t=new Date();t.setHours(0,0,0,0);return Math.round((nextOccurrence(kd)-t)/86400000);};
 window.kdPeopleSorted=function(){return S.people.slice().sort(function(a,b){var ab=String(a.birthday||"9999-99-99"),bb=String(b.birthday||"9999-99-99");return ab<bb?-1:ab>bb?1:0;});};
-window.kdNextTxt=function(k){var d=daysUntil(k),dt=nextOccurrence(k);var base=MOS_SHORT[dt.getMonth()]+" "+dt.getDate()+(kdHasYear(k)?", "+dt.getFullYear()":");if(d<0)return base+" \u00b7 passed";if(d===0)return base+" \u00b7 today";return base+" \u00b7 in "+d+"d";};
+window.kdNextTxt=function(k){var d=daysUntil(k),dt=nextOccurrence(k);var base=MOS_SHORT[dt.getMonth()]+" "+dt.getDate()+(kdHasYear(k)?", "+dt.getFullYear():"");if(d<0)return base+" \u00b7 passed";if(d===0)return base+" \u00b7 today";return base+" \u00b7 in "+d+"d";};
 window.kdPillsHTML=function(kid,selectedIds){
  return kdPeopleSorted().filter(function(p){return selectedIds.indexOf(p.id)>=0;}).map(function(p){
   return '<span class="kd-pill">'+personAvatar(p,18)+'<span class="kd-pill-name">'+esc(p.name)+'</span><button type="button" class="kd-pill-x" data-kdpillx="'+kid+'|'+p.id+'" title="Remove '+esc(p.name)+'">\u00D7</button></span>';
