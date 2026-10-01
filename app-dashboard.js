@@ -6,29 +6,41 @@ function holidayWeekday(month,weekday,n){return function(y){var d=new Date(y,mon
 var majorHolidays=[
  {id:'new-year',name:"New Year's Day",date:holidayFixed(1,1)},
  {id:'mlk',name:'Martin Luther King Jr. Day',date:holidayWeekday(1,1,3)},
- {id:'valentine',name:"Valentine’s Day",date:holidayFixed(2,14)},
- {id:'presidents',name:"Presidents’ Day",date:holidayWeekday(2,1,3)},
+ {id:'valentine',name:"Valentine\u2019s Day",date:holidayFixed(2,14)},
+ {id:'presidents',name:"Presidents\u2019 Day",date:holidayWeekday(2,1,3)},
  {id:'easter',name:'Easter',date:function(y){var a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),n=h+l-7*m+114;return new Date(y,Math.floor(n/31)-1,n%31+1);}},
- {id:'mothers',name:"Mother’s Day",date:holidayWeekday(5,0,2)},
+ {id:'mothers',name:"Mother\u2019s Day",date:holidayWeekday(5,0,2)},
  {id:'memorial',name:'Memorial Day',date:function(y){var d=new Date(y,4,31);d.setDate(31-(d.getDay()+6)%7);return d;}},
  {id:'juneteenth',name:'Juneteenth',date:holidayFixed(6,19)},
- {id:'fathers',name:"Father’s Day",date:holidayWeekday(6,0,3)},
+ {id:'fathers',name:"Father\u2019s Day",date:holidayWeekday(6,0,3)},
  {id:'independence',name:'Independence Day',date:holidayFixed(7,4)},
  {id:'labor',name:'Labor Day',date:holidayWeekday(9,1,1)},
- {id:'indigenous',name:'Indigenous Peoples’ Day / Columbus Day',date:holidayWeekday(10,1,2)},
+ {id:'indigenous',name:'Indigenous Peoples\u2019 Day / Columbus Day',date:holidayWeekday(10,1,2)},
  {id:'halloween',name:'Halloween',date:holidayFixed(10,31)},
  {id:'veterans',name:'Veterans Day',date:holidayFixed(11,11)},
  {id:'thanksgiving',name:'Thanksgiving',date:holidayWeekday(11,4,4)},
  {id:'christmas',name:'Christmas',date:holidayFixed(12,25)},
- {id:'new-year-eve',name:"New Year’s Eve",date:holidayFixed(12,31)}
+ {id:'new-year-eve',name:"New Year\u2019s Eve",date:holidayFixed(12,31)}
 ];
 function holidayEnabled(id){return !!(S.settings&&S.settings.holidays&&S.settings.holidays[id]);}
 function holidaySettingsHTML(){return '<div class="card"><div class="subhead">Major holidays</div><p class="settings-help">Choose which U.S. holidays and occasions appear in Coming up, starting 30 days ahead. Uses the actual date, rather than an observed day off. Changes save automatically.</p><div class="holiday-options">'+majorHolidays.map(function(h){return '<label><input type="checkbox" data-holiday="'+h.id+'"'+(holidayEnabled(h.id)?' checked':'')+'><span>'+esc(h.name)+'</span></label>';}).join('')+'</div></div>';}
+function keyDatesSettingsHTML(){
+ var out='<div class="card"><div class="subhead">Key dates</div><p class="settings-help">Milestones worth planning for - in Coming up 30 days ahead. Optionally associate people (choose as many as apply); an associated date also appears on each person\'s profile, and one added from a person\'s profile links to them automatically. Changes save automatically.</p>';
+ out+='<div class="addrow"><input id="kdNewLabel" placeholder="New key date (label)"><select id="kdNewMonth">'+[1,2,3,4,5,6,7,8,9,10,11,12].map(function(m2){return '<option value="'+m2+'">'+["January","February","March","April","May","June","July","August","September","October","November","December"][m2-1]+'</option>';}).join('')+'</select><input id="kdNewDay" type="number" min="1" max="31" value="1" style="width:56px" aria-label="Day"><button class="btn mini" id="kdAddGlobal">Add</button></div>';
+ if(S.people.length)out+='<div class="kd-people">'+S.people.map(function(np){return '<label class="kd-person"><input type="checkbox" data-kdnewglobal="'+np.id+'"> '+esc(np.name)+'</label>';}).join('')+'</div>';
+ out+='<div style="margin-top:10px">';
+ S.keyDates.forEach(function(k){
+  var who=kdPeopleIds(k);
+  out+='<div class="kd-row"><div class="kd-when"><input class="kd-text" data-kdtext="'+k.id+'" value="'+esc(k.label)+'" placeholder="Label"><div class="kd-md"><select data-kdmonth="'+k.id+'" aria-label="Month">'+[1,2,3,4,5,6,7,8,9,10,11,12].map(function(m2){return '<option value="'+m2+'"'+(k.month===m2?' selected':'')+'>'+["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][m2-1]+'</option>';}).join('')+'</select><input type="number" min="1" max="31" data-kdday="'+k.id+'" value="'+(k.day||1)+'" aria-label="Day"></div></div>'+(S.people.length?'<div class="kd-people">'+S.people.map(function(np){return '<label class="kd-person"><input type="checkbox" data-kdperson="'+k.id+'|'+np.id+'"'+(who.indexOf(np.id)>=0?' checked':'')+'> '+esc(np.name)+'</label>';}).join('')+'</div>':'')+'<button class="del" data-kddel="'+k.id+'" title="remove">\u00D7</button></div>';
+ });
+ if(!S.keyDates.length)out+='<div class="empty">No key dates yet - add one above, or from a person\'s profile.</div>';
+ out+='</div></div>';
+ return out;}
 function settingsPanel(key){return '<section class="profile-tab-panel settings-panel" id="settings-panel-'+key+'" role="tabpanel" aria-labelledby="settings-tab-'+key+'"'+(settingsTab===key?'':' hidden')+'>';}
 function renderSettings(){
  var out='<div class="sectiontitle" style="margin-top:6px"><h2>Settings</h2><span class="hint">meters, calendar, goals, sync</span></div>';
- out+='<div class="profile-tabs" role="tablist" aria-label="Settings">'+[['general','General'],['times','Daily time sections'],['holidays','Major holidays'],['goals','Goals']].map(function(t){return '<button role="tab" id="settings-tab-'+t[0]+'" aria-controls="settings-panel-'+t[0]+'" aria-selected="'+(settingsTab===t[0])+'" data-settingstab="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div>';
- out+=settingsPanel('times')+dayBlockSettingsHTML()+'</section>'+settingsPanel('holidays')+holidaySettingsHTML()+'</section>'+settingsPanel('general');
+ out+='<div class="profile-tabs" role="tablist" aria-label="Settings">'+[['general','General'],['times','Daily time sections'],['dates','Key dates'],['holidays','Major holidays'],['goals','Goals']].map(function(t){return '<button role="tab" id="settings-tab-'+t[0]+'" aria-controls="settings-panel-'+t[0]+'" aria-selected="'+(settingsTab===t[0])+'" data-settingstab="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div>';
+ out+=settingsPanel('times')+dayBlockSettingsHTML()+'</section>'+settingsPanel('dates')+keyDatesSettingsHTML()+'</section>'+settingsPanel('holidays')+holidaySettingsHTML()+'</section>'+settingsPanel('general');
  /* meters */
  var s=settings();
  out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Meters</div>'+
