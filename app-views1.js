@@ -1,4 +1,5 @@
 
+
 "use strict";
 /* ============ views: dashboard, area pages, people ============ */
 function renderNav(){
@@ -39,13 +40,13 @@ function renderToday(){
 /* ============ time-aware routine plan ============ */
 function dayBlockAt(date){var m=date.getHours()*60+date.getMinutes();return m<330||m>=1290?"bedtime":m<540?"early":m<690?"morning":m<810?"lunch":m<990?"afternoon":m<1080?"commute":"evening";}
 function planBlocksDef(){var current=dayBlockAt(new Date());return [
- {id:"early",name:"Early morning",range:"5:30 – 9:00am"},
- {id:"morning",name:"Midday focus",range:"9:00 – 11:30am"},
- {id:"lunch",name:"Lunch",range:"11:30am – 1:30pm"},
- {id:"afternoon",name:"Afternoon",range:"1:30 – 4:30pm"},
- {id:"commute",name:"Way home",range:"4:30 – 6:00pm"},
- {id:"evening",name:"Evening",range:"6:00 – 9:30pm"},
- {id:"bedtime",name:"Bedtime",range:"9:30pm – 5:30am"}
+ {id:"early",name:"Early morning",range:"5:30 - 9:00am"},
+ {id:"morning",name:"Midday focus",range:"9:00 - 11:30am"},
+ {id:"lunch",name:"Lunch",range:"11:30am - 1:30pm"},
+ {id:"afternoon",name:"Afternoon",range:"1:30 - 4:30pm"},
+ {id:"commute",name:"Way home",range:"4:30 - 6:00pm"},
+ {id:"evening",name:"Evening",range:"6:00 - 9:30pm"},
+ {id:"bedtime",name:"Bedtime",range:"9:30pm - 5:30am"}
  ].map(function(b){b.cur=b.id===current;return b;});}
 function rhythmScheduledToday(r,date){
  date=date||new Date();if(r.freq==="quarterly"||r.freq==="yearly")return false;
@@ -78,28 +79,28 @@ function planCandidates(bid,curBid){
  });
  S.tasks.forEach(function(t){if(!t.done&&((t.tod&&t.tod!=="anytime")?t.tod===bid:bid===curBid))out.push(taskItem(t));});
  S.people.forEach(function(person){
-  (person.rhythms||[]).forEach(function(r){if((r.tod||"anytime")===bid&&rhythmScheduledToday(r))out.push({rhythm:person.id+"|"+r.id,personId:person.id,label:r.text,sub:rhythmFreqLabel(r)+" · "+rhythmDueTxt(r)});});
-  openSparks(person).forEach(function(spark){if(!spark.by||!sparkLive(spark))return;if((sparkBlock(spark)||curBid)!==bid)return;out.push({spark:person.id+"|"+spark.id,personId:person.id,label:spark.text,sub:(spark.time?fmtHM12(spark.time)+" · ":"")+sparkDueTxt(spark)});});
+  (person.rhythms||[]).forEach(function(r){var blk=(r.tod&&r.tod!=="anytime")?r.tod:curBid;if(blk!==bid||!todayRhythmEligible(r))return;out.push({rhythm:person.id+"|"+r.id,personId:person.id,label:r.text,sub:rhythmFreqLabel(r)+" \u00b7 "+rhythmDueTxt(r)});});
+  openSparks(person).forEach(function(spark){if(!spark.by||!sparkLive(spark))return;if((sparkBlock(spark)||curBid)!==bid)return;out.push({spark:person.id+"|"+spark.id,personId:person.id,label:spark.text,sub:(spark.time?fmtHM12(spark.time)+" \u00b7 ":"")+sparkDueTxt(spark)});});
  });
  return out;
 }
-var planOpenState={};
+var planOpenState={};var planViewState=null;
+function planBlockCard(b,curId,isCur){
+ var items=planCandidates(b.id,curId);
+ var body=items.length?items.map(function(it){
+  var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>');
+  return '<div class="planitem"><div class="pi-main"><div class="pi-label">'+(it.spark?'<span style="color:#B8912F">\u2726 </span>':'')+esc(it.label)+'<span class="plan-pills">'+planPills(it)+'</span></div><div class="pi-sub">'+esc(it.sub)+'</div></div>'+btn+'</div>';
+ }).join(""):'<div class="empty">Nothing queued - all tended.</div>';
+ return '<details id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock'+(isCur?' current':'')+'" open><summary><span>'+b.name+(isCur?' <span class="plan-now">Now</span>':'')+'</span><span class="plan-range">'+b.range+' \u00b7 '+items.length+' item'+(items.length===1?'':'s')+'</span></summary><div style="margin-top:8px">'+body+'</div></details>';
+}
 function planHTML(){
  var blocks=planBlocksDef();
  var out='<div class="sectiontitle"><h2>Today</h2><span class="hint">the right thing at the right time</span></div>';
  var curId=(blocks.filter(function(x){return x.cur;})[0]||{}).id;
- out+='<nav class="day-jumps" aria-label="Time of day">'+blocks.map(function(b){return '<button class="btn mini ghost'+(b.cur?' active':'')+'" data-plan-jump="'+b.id+'">'+b.name+(b.cur?' · Now':'')+'</button>';}).join('')+'</nav>';
- blocks.forEach(function(b){
-  var items=planCandidates(b.id,curId);
-  var cur=b.cur;
-  var body=items.length?items.map(function(it){
-   var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>');
-   return '<div class="planitem"><div class="pi-main"><div class="pi-label">'+(it.spark?'<span style="color:#B8912F">\u2726 </span>':'')+esc(it.label)+'<span class="plan-pills">'+planPills(it)+'</span></div><div class="pi-sub">'+esc(it.sub)+'</div></div>'+btn+'</div>';
-  }).join(""):'<div class="empty">Nothing queued - all tended.</div>';
-  var open=cur||planOpenState[b.id]!==false;
-  out+='<details id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock'+(cur?' current':'')+'"'+(open?' open':'')+'><summary><span>'+b.name+(cur?' <span class="plan-now">Now</span>':'')+'</span><span class="plan-range">'+b.range+' · '+items.length+' item'+(items.length===1?'':'s')+'</span></summary><div style="margin-top:8px">'+body+'</div></details>';
-
- });
+ out+=planBlockCard(blocks.filter(function(x){return x.cur;})[0],curId,true);
+ out+='<nav class="day-jumps" aria-label="Other time blocks">'+blocks.filter(function(b){return b.id!==curId;}).map(function(b){return '<button class="btn mini ghost'+(planViewState===b.id?' active':'')+'" data-planview="'+b.id+'">'+b.name+(planViewState===b.id?' \u00b7 Hide':'')+'</button>';}).join('')+'</nav>';
+ var sel=blocks.filter(function(b){return b.id===planViewState&&b.id!==curId;})[0];
+ if(sel)out+=planBlockCard(sel,curId,false);
  return out;}
 function upcomingHTML(){
  var up=S.keyDates.map(function(kd){return {kd:kd,d:daysUntil(kd)};}).filter(function(x){return x.d<=60;}).sort(function(a,b){return a.d-b.d;});
@@ -112,14 +113,14 @@ function upcomingHTML(){
   out+='<div class="upitem" data-upitem="'+x.kd.id+'"'+(link?' data-hascl="1"':'')+'><span class="updays '+cls+'">'+(x.d===0?"today":"in "+x.d+"d")+'</span><span class="uplabel">'+esc(x.kd.label)+'</span>'+(link?'<span class="upcl">checklist \u2192</span>':'')+'</div>';
  });
  out+='</div>';
- if(longRhythms.length)out+='<div class="card upcoming-rhythms">'+longRhythms.sort(function(a,b){return (a.left===null?0:a.left)-(b.left===null?0:b.left);}).map(function(x){return '<div class="planitem"><div class="pi-main"><div class="pi-label">'+esc(x.rhythm.text)+'<span class="plan-pills">'+planPills({rhythm:true,personId:x.person.id})+'</span></div><div class="pi-sub">'+esc(rhythmFreqLabel(x.rhythm))+' · '+(x.left===null?'Choose a date to plan this':x.left<0?'Ready to tend · last tended '+rhythmDaysSince(x.rhythm)+' days ago':x.left===0?'Due today':'Due in '+Math.ceil(x.left)+' days')+'</div></div><button class="btn mini ghost" data-openperson="'+x.person.id+'">Open</button></div>';}).join('')+'</div>';
+ if(longRhythms.length)out+='<div class="card upcoming-rhythms">'+longRhythms.sort(function(a,b){return (a.left===null?0:a.left)-(b.left===null?0:b.left);}).map(function(x){return '<div class="planitem"><div class="pi-main"><div class="pi-label">'+esc(x.rhythm.text)+'<span class="plan-pills">'+planPills({rhythm:true,personId:x.person.id})+'</span></div><div class="pi-sub">'+esc(rhythmFreqLabel(x.rhythm))+' \u00b7 '+(x.left===null?'Choose a date to plan this':x.left<0?'Ready to tend \u00b7 last tended '+rhythmDaysSince(x.rhythm)+' days ago':x.left===0?'Due today':'Due in '+Math.ceil(x.left)+' days')+'</div></div><button class="btn mini ghost" data-openperson="'+x.person.id+'">Open</button></div>';}).join('')+'</div>';
  return out;}
 function goalRow(g){
  var d=goalLastDone(g),sc=goalScore(g),c=scoreClass(sc);
  var iv=goalInterval(g);
  var statusTxt=d===null?"never logged":(d===0?"done today":(d+"d ago \u00B7 every "+iv+"d"));
  return '<div class="goalrow"><span class="sm-dot '+c+'"></span><div class="gr-main"><b>'+esc(g.text)+'</b>'+(g.personId?' <span class="gr-person">'+esc(personName(g.personId))+'</span>':'')+'<div class="gr-meta">'+statusTxt+'</div></div><button class="btn mini" data-goaldone="'+g.id+'">Done</button></div>';}
-function nextDateLine(pid){var kds=S.keyDates.filter(function(k){return k.personId===pid;});if(!kds.length)return "";var best=null;kds.forEach(function(k){var d=daysUntil(k);if(best===null||d<best.d)best={k:k,d:d};});if(!best)return "";return '<div class="pf-next">'+esc(best.k.label)+' \u00B7 '+(best.d===0?"TODAY":"in "+best.d+" days")+'</div>';}
+function nextDateLine(pid){var kds=S.keyDates.filter(function(k){return k.personId===pid;});if(!kds.length)return "";var best=null;kds.forEach(function(k){var d=daysUntil(k);if(best===null||d<best.d)best={k:k,d:d};});if(!best)return "";return '<div class="pf-next">'+esc(best.k.label)+' \u00b7 '+(best.d===0?"TODAY":"in "+best.d+" days")+'</div>';}
 function personHealthColor(score){
  // Match the dashboard gradient stops: coral at 0, amber at 48, green at 100.
  var value=Math.max(0,Math.min(100,score));
@@ -139,7 +140,7 @@ function renderPeople(){
   var sc=personScore(p),c=scoreClass(sc);
   var ci=personConnInfo(p);
   var prayers=S.prayers.filter(function(x){return x.personId===p.id&&!x.answered&&!x.archived;}).length;
-  out+='<div class="card person-card" data-openperson="'+p.id+'" style="cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:10px;min-width:0">'+personAvatar(p,42)+'<h3 style="margin:0">'+esc(p.name)+'</h3></div><span class="person-card-score">'+sc+'</span></div>'+personHealthMeter(sc,p.name,true)+'<div class="person-health-status statusword '+c+'">'+scoreLabel(sc)+'</div><div class="meta">'+esc(p.relation||"")+' \u00B7 '+(ci.last?("connected "+when(ci.last.ts)):"no connections yet")+(prayers?" \u00B7 "+prayers+" prayer"+(prayers>1?"s":""):"")+'</div>'+nextDateLine(p.id)+personDateLines(p)+'</div>';
+  out+='<div class="card person-card" data-openperson="'+p.id+'" style="cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:10px;min-width:0">'+personAvatar(p,42)+'<h3 style="margin:0">'+esc(p.name)+'</h3></div><span class="person-card-score">'+sc+'</span></div>'+personHealthMeter(sc,p.name,true)+'<div class="person-health-status statusword '+c+'">'+scoreLabel(sc)+'</div><div class="meta">'+esc(p.relation||"")+' \u00b7 '+(ci.last?("connected "+when(ci.last.ts)):"no connections yet")+(prayers?" \u00b7 "+prayers+" prayer"+(prayers>1?"s":""):"")+'</div>'+nextDateLine(p.id)+personDateLines(p)+'</div>';
  });
  out+='</div>';
  return out;}
@@ -193,21 +194,21 @@ function draftRow(p){
 function actDoneAdd(pid,id){window._actDone[pid]=window._actDone[pid]||[];if(window._actDone[pid].indexOf(id)<0)window._actDone[pid].push(id);}
 function prayedThisWeek(pid){var d=new Date(),sod=new Date(d.getFullYear(),d.getMonth(),d.getDate()-d.getDay()),n=0;S.events.forEach(function(e){if(e.personId===pid&&(e.kind==="prayer"||e.type==="prayer")&&e.ts>=sod.getTime())n++;});return n;}
 var profileTabs={},rippleIdeaOffsets={};
-function todayRhythmEligible(r){var days=rhythmDaysSince(r);if(days===0)return false;var period=rhythmPeriod(r);if(period>7)return false;if(r.freq==="custom")return new Date().getDay()===(r.customDow||0);return period===1||days>=period-1;}
+function todayRhythmEligible(r){var days=rhythmDaysSince(r);if(days===999)return true;if(days===0)return false;var period=rhythmPeriod(r);var window=Math.min(Math.ceil(period/2),7);return days>=Math.max(1,period-window);}
 function rippleIdea(p){
  var common=["Send a thoughtful text","Make a quick call","Write a handwritten note","Ask how their day really went","Share a happy memory","Follow up on something they mentioned","Offer encouragement before a big day","Send a photo that made you think of them","Ask what would help this week","Thank them for something specific"];
  var byLanguage={qt:["Take a phone-free walk","Share coffee and conversation","Cook a meal together","Ask about the best part of their week","Listen to a favorite song together","Run an errand side by side","Plan a quiet lunch","Spend ten minutes catching up","Look through old photos together","Try something new together"],wa:["Text a specific encouragement","Write a short thank-you note","Say what you admire about them","Celebrate a recent effort","Leave an encouraging voice message","Recall something they handled well","Tell them why you value them","Write a note for a difficult day","Thank them for a small kindness","Ask about a win and celebrate it"],as:["Take a chore off their list","Offer to run an errand","Bring them a meal","Help prepare for tomorrow","Tidy a shared space","Offer a ride","Fix a small annoyance","Help with a task they have postponed","Bring their favorite drink","Ask what practical help they need"],gf:["Bring their favorite snack","Pick a small flower bouquet","Share a book they might love","Print a favorite photo","Bring a little treat from your day","Give a handwritten card","Make a small homemade gift","Replace something they have worn out","Choose something for their hobby","Leave a thoughtful surprise"],pt:["Offer a warm hug","Hold hands on a walk","Sit close while talking","Offer a shoulder rub","Greet them with affection","Share a quiet moment together","Offer a reassuring hand","Ask what kind of affection feels good","Pause for a goodbye hug","Cuddle while watching something together"]};
  var ideas=(byLanguage[p.loveLanguage]||common).slice();
  var last=S.events.filter(function(e){return e.personId===p.id&&e.kind!=="prayer";}).sort(function(a,b){return b.ts-a.ts;})[0];
- if(last&&last.title&&last.title.indexOf("Time with")!==0)ideas[9]='Follow up on “'+last.title+'”';
+ if(last&&last.title&&last.title.indexOf("Time with")!==0)ideas[9]='Follow up on \u201c'+last.title+'\u201d';
  return ideas[(Math.floor(Date.now()/864e5)+(rippleIdeaOffsets[p.id]||0))%ideas.length];
 }
 function collectionIcon(key){var paths={rhythms:'<path d="M20 7a8 8 0 0 0-14-2L3 8m0-5v5h5 M4 17a8 8 0 0 0 14 2l3-3m0 5v-5h-5"/>',sparks:'<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/>',prayer:'<path d="M12 20S3 14 3 8a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 6-9 12-9 12Z"/>',notes:'<path d="M14 3H5v18h14V8Z M14 3v5h5 M8 12h8 M8 16h6"/>'};return '<svg class="collection-icon" viewBox="0 0 24 24" aria-hidden="true">'+paths[key]+'</svg>';}
 function notesChecklist(p,kind,title){
  var items=S.followups.filter(function(f){return f.personId===p.id&&(f.kind||"followup")===kind;});
- function row(f){if(editingFollowupId===f.id)return '<li><input id="followupEditText" aria-label="Edit item" value="'+esc(f.text)+'"><button class="btn mini" data-fusave="'+f.id+'">Save</button><button class="btn mini ghost" data-fucancel="1">Cancel</button></li>';return '<li><input type="checkbox" class="cb" aria-label="'+esc((f.done?'Reopen: ':'Complete: ')+f.text)+'" data-fudone="'+f.id+'"'+(f.done?' checked':'')+'><span class="txt">'+esc(f.text)+'</span><button class="btn mini ghost" data-fuedit="'+f.id+'">Edit</button></li>';}
+ function row(f){if(editingFollowupId===f.id)return '<li><input id="followupEditText" aria-label="Edit item" value="'+esc(f.text)+'"><button class="btn mini" data-fusave="'+f.id+'">Save</button><button class="btn mini ghost" data-fucancel="1">Cancel</button><button class="btn mini danger" data-fudel="'+f.id+'">Delete</button></li>';return '<li><input type="checkbox" class="cb" aria-label="'+esc((f.done?'Reopen: ':'Complete: ')+f.text)+'" data-fudone="'+f.id+'"'+(f.done?' checked':'')+'><span class="txt">'+esc(f.text)+'</span><button class="btn mini ghost" data-fuedit="'+f.id+'">Edit</button></li>';}
  var done=items.filter(function(f){return f.done;});
- return '<div class="notes-checklist"><div class="subhead">'+title+'</div><ul class="tasks">'+items.filter(function(f){return !f.done;}).map(row).join('')+'</ul><div class="addrow"><input id="noteNew-'+kind+'" aria-label="'+title+'" placeholder="'+(kind==='encouragement'?'A verse, kind word, or thoughtful idea…':'Follow up on…')+'"><button class="btn mini" data-noteadd="'+p.id+'" data-notekind="'+kind+'">Add</button></div><details class="notes-history"'+(done.some(function(f){return f.id===editingFollowupId;})?' open':'')+'><summary>Show history ('+done.length+')</summary>'+(done.length?'<ul class="tasks">'+done.map(row).join('')+'</ul>':'<div class="empty">No completed items yet.</div>')+'</details></div>';
+ return '<div class="notes-checklist"><div class="subhead">'+title+'</div><ul class="tasks">'+items.filter(function(f){return !f.done;}).map(row).join('')+'</ul><div class="addrow"><input id="noteNew-'+kind+'" aria-label="'+title+'" placeholder="'+(kind==='encouragement'?'A verse, kind word, or thoughtful idea\u2026':(kind==='prayernote'?'&quot;How can I be praying for you?&quot; - their words':'Follow up on\u2026'))+'"><button class="btn mini" data-noteadd="'+p.id+'" data-notekind="'+kind+'">Add</button></div><details class="notes-history"'+(done.some(function(f){return f.id===editingFollowupId;})?' open':'')+'><summary>Show history ('+done.length+')</summary>'+(done.length?'<ul class="tasks">'+done.map(row).join('')+'</ul>':'<div class="empty">No completed items yet.</div>')+'</details></div>';
 }
 function profilePanelStart(key){return '<section class="card profile-tab-panel" id="profile-panel-'+key+'" role="tabpanel" aria-labelledby="profile-tab-'+key+'"'+(activeProfileTab===key?'':' hidden')+'>';}
 var activeProfileTab="rhythms";
@@ -238,18 +239,18 @@ function actQueueHTML(p){
  function rhyRowQ(r,dim){
   var rl=rhythmLast(r);
   var sub=esc(rhythmFreqLabel(r))+(rhythmDueTxt(r)?" \u00B7 "+esc(rhythmDueTxt(r)):"")+(rl&&rhythmDaysSince(r)!==0?" \u00B7 last tended "+when(rl.ts):"");
-  return '<div class="actrow'+(dim?" done":"")+'"><span class="act-ic" style="background:'+personHealthColor(rhythmScore(r))+'"></span><div class="pi-main"><div class="pi-label">'+esc(r.text||"(unnamed rhythm)")+'</div><div class="pi-sub">'+sub+'</div></div>'+(dim?'<span class="praycount">Tended \u2713</span>':rhyDoneBtn(p.id+"|"+r.id))+'</div>';
+  return '<div class="actrow'+(dim?" done":"")+'"><span class="act-ic" style="background:'+personHealthColor(rhythmScore(r))+'"></span><div class="pi-main"><div class="pi-label">'+esc(r.text||"(unnamed rhythm)")+' <span class="pill rhy">'+collectionIcon("rhythms")+' Rhythm</span></div><div class="pi-sub">'+sub+'</div></div>'+(dim?'<span class="praycount">Tended \u2713</span>':rhyDoneBtn(p.id+"|"+r.id))+'</div>';
  }
  visR.forEach(function(r){rows.push(rhyRowQ(r,false));});
  padR.forEach(function(r){rows.push(rhyRowQ(r,true));});
- visS.forEach(function(s){rows.push('<div class="actrow"><span class="act-ic" style="background:#B8912F"></span><div class="pi-main"><div class="pi-label"><span style="color:#B8912F">\u2726 </span>'+esc(s.text)+'</div><div class="pi-sub">'+esc(sparkDueTxt(s))+(s.time?" \u00B7 "+esc(fmtHM12(s.time)):"")+'</div></div><button class="btn mini sparkbtn" data-sparkdo="'+p.id+'|'+s.id+'">Do it</button></div>');});
+ visS.forEach(function(s){rows.push('<div class="actrow"><span class="act-ic" style="background:#B8912F"></span><div class="pi-main"><div class="pi-label">'+esc(s.text)+' <span class="pill spk">'+collectionIcon("sparks")+' Spark</span></div><div class="pi-sub">'+esc(sparkDueTxt(s))+(s.time?" \u00B7 "+esc(fmtHM12(s.time)):"")+'</div></div><button class="btn mini sparkbtn" data-sparkdo="'+p.id+'|'+s.id+'">Do it</button></div>');});
  padS.forEach(function(s){rows.push('<div class="actrow done"><span class="act-ic" style="background:#B8912F"></span><div class="pi-main"><div class="pi-label"><span style="color:#B8912F">\u2726 </span>'+esc(s.text)+'</div><div class="pi-sub">'+esc(sparkDueTxt(s))+'</div></div><span class="praycount">Done \u2713</span></div>');});
- visP.forEach(function(x){rows.push('<div class="actrow"><span class="act-ic" style="background:#5B7BA6"></span><div class="pi-main"><div class="pi-label">'+(x.focus?'Prayer focus: ':'')+esc(x.text)+'</div><div class="pi-sub">'+(x.focus?"from your prayer profile":"active prayer")+'</div></div><span class="praycount">prayed '+(x.prayed||0)+'&times; total</span><button class="btn mini ghost" data-prayquick="'+p.id+'" data-prayref="'+(x.focus?"focus":x.id)+'">Pray</button></div>');});
+ visP.forEach(function(x){rows.push('<div class="actrow"><span class="act-ic" style="background:#5B7BA6"></span><div class="pi-main"><div class="pi-label">'+(x.focus?'Prayer focus: ':'')+esc(x.text)+' <span class="pill pry">'+collectionIcon("prayer")+' Prayer</span></div><div class="pi-sub">'+(x.focus?"from your prayer profile":(x.details?esc(x.details):"active prayer"))+'</div></div><span class="praycount">prayed '+(x.prayed||0)+'&times; total</span><button class="btn mini ghost" data-prayquick="'+p.id+'" data-prayref="'+(x.focus?"focus":x.id)+'">Pray</button></div>');});
  padP.forEach(function(x){rows.push('<div class="actrow done"><span class="act-ic" style="background:#5B7BA6"></span><div class="pi-main"><div class="pi-label">'+(x.focus?'Prayer focus: ':'')+esc(x.text)+'</div><div class="pi-sub">prayed today</div></div><span class="praycount">Prayed \u2713</span></div>');});
  var out='<div class="card act" style="margin-bottom:14px"><div class="qhead"><div class="subhead" style="margin:0">Today with '+first+'</div><span><span class="qpill'+(waiting?"":" clear")+'">'+(waiting?waiting+" in queue":"all tended \u2713")+'</span> <span class="hint">tend one, the next steps up</span></span></div>';
  if(rows.length)out+=rows.join("");
- else out+='<div class="empty" style="margin-top:8px">Nothing waiting - maybe log a ripple below.</div>';
- out+='<div class="today-ripple"><button class="btn mini" data-rippleopen="1">Log a ripple</button><div class="nudge ripple-nudge"><span aria-hidden="true">&#128161;</span><span><b>'+esc(LL_LANGUAGES[p.loveLanguage]||"A moment of care")+':</b> <span id="rippleIdea">'+esc(rippleIdea(p))+'</span></span><button class="iconbtn" data-rippleidea="'+p.id+'" aria-label="Show another ripple idea" title="Another idea">&#8635;</button></div></div></div>';
+ else out+='<div class="empty" style="margin-top:8px">Nothing waiting - maybe log a connection below.</div>';
+ out+='<div class="today-ripple"><button class="btn mini" data-rippleopen="1">Log a connection</button><div class="nudge ripple-nudge"><span aria-hidden="true">&#128161;</span><span><b>'+esc(LL_LANGUAGES[p.loveLanguage]||"A moment of care")+':</b> <span id="rippleIdea">'+esc(rippleIdea(p))+'</span></span><button class="iconbtn" data-rippleidea="'+p.id+'" aria-label="Show another ripple idea" title="Another idea">&#8635;</button></div></div></div>';
  /* one coaching nudge, at the bottom of the queue */
  var llq=p.loveLanguage||"",bdq=bdayInfo(p.birthday),nudq=[];
  if(bdq&&bdq.days<=14)nudq.push('<b>Birthday '+esc(bdq.label)+' is in '+bdq.days+' day'+(bdq.days===1?"":"s")+' - plan something.</b>');
@@ -280,7 +281,7 @@ function personProfile(pid){
  if(crs.length||prs.length){
   var rm=crs.length?avg(crs.map(rhythmScore)):null,rmCls=rm===null?"":scoreClass(rm);
   out+='<div class="pmeters three"><div class="pmeter"><div class="pm-lab"><span>Rhythms</span><span class="pm-val '+rmCls+'">'+(rm===null?"-":rm)+'</span></div><div class="bar"><i class="'+rmCls+'" style="width:'+(rm||0)+'%"></i></div><div class="pm-note">'+(crs.length?crs.length+" connection rhythms":"none yet")+'</div></div>';
-  out+='<div class="pmeter"><div class="pm-lab"><span>Ripples</span><span class="pm-val '+tCls+'">'+tScore+'</span></div><div class="bar"><i class="'+tCls+'" style="width:'+tScore+'%"></i></div><div class="pm-note">'+(pTouch.last?("last: "+when(pTouch.last.ts)):"no ripples yet")+'</div></div>';
+  out+='<div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val '+tCls+'">'+tScore+'</span></div><div class="bar"><i class="'+tCls+'" style="width:'+tScore+'%"></i></div><div class="pm-note">'+(pTouch.last?("last: "+when(pTouch.last.ts)):"no connections yet")+'</div></div>';
   out+='<div class="pmeter"><div class="pm-lab"><span>Prayer</span><span class="pm-val '+pCls+'">'+pScore+'</span></div><div class="bar"><i class="'+pCls+'" style="width:'+pScore+'%"></i></div><div class="pm-note">'+(pInfo.last?("last: "+when(pInfo.last.ts)):"no prayers logged")+'</div></div></div>';
  }else{
   out+='<div class="pmeters"><div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val '+cCls+'">'+cScore+'</span></div><div class="bar"><i class="'+cCls+'" style="width:'+cScore+'%"></i></div><div class="pm-note">'+(cInfo.last?("last: "+when(cInfo.last.ts)):"no connections yet")+'</div></div>';
@@ -292,7 +293,7 @@ function personProfile(pid){
  /* ripples: modal */
  if(window._rippleModalOpen||editingConn){
  var edEv=editingConn?(S.events.find(function(z){return z.id===editingConn;})||{}):null;
- out+='<dialog open class="ripple-dialog" id="rippleDialog" aria-label="Log a ripple"><div class="box"><div class="subhead">Log a ripple with '+first+'<span class="hint" style="margin-left:8px;text-transform:none;letter-spacing:0;font-weight:400">small moments of care - they add up</span></div>';
+ out+='<dialog open class="ripple-dialog" id="rippleDialog" aria-label="Log a connection"><div class="box"><div class="subhead">Log a connection with '+first+'<span class="hint" style="margin-left:8px;text-transform:none;letter-spacing:0;font-weight:400">small moments of care - they add up</span></div>';
  var rippleKind=edEv?(edEv.kind||edEv.type):"text";
  if(edEv&&!RIPPLE_TYPES[rippleKind])rippleKind="other";
  var rippleTime=edEv?new Date(edEv.ts||Date.now()):new Date();
@@ -331,9 +332,8 @@ function personProfile(pid){
  out+='<div class="addrow"><input placeholder="Idea - a movie, a talk, a trip..." data-spnewtext="'+pid+'"><input type="date" data-spnewdate="'+pid+'" style="max-width:150px"><input type="time" data-spnewtime="'+pid+'" style="max-width:110px"><button class="btn mini" data-spadd="'+pid+'">Add</button></div>';
  out+='</section>';
  out+=profilePanelStart("prayer")+'<div class="person-prayer-add"><label class="field">Title<input id="personPrayerTitle" placeholder="Prayer title"></label><label class="field">Details<textarea id="personPrayerDetails" placeholder="Details (optional)"></textarea></label><button class="btn" data-personprayeradd="'+pid+'">Add prayer</button></div>'+prayerList(prayers);
- out+='<details class="prayer-notes"><summary>Prayer notes</summary><div class="subhead">'+first+"&#39;s prayer context"+'<span class="savehint" id="prayerSaveHint" style="margin-left:8px;position:static">saved</span></div>';
- out+='<div class="field"><label>"How can I be praying for you?" (their words)</label><textarea data-phpray="1" data-pid="'+pid+'" placeholder="Ask them this - log their answer here">'+esc(p.howToPray||"")+'</textarea></div>';
- out+='<div class="field"><label>My prayer focus for '+first+'</label><textarea data-pfocus="1" data-pid="'+pid+'" placeholder="Your private prayer for them">'+esc(p.prayerFocus||"")+'</textarea></div>';
+ out+='<details class="prayer-notes"><summary>Prayer notes</summary>';
+ out+=notesChecklist(p,"prayernote",first+"&#39;s prayer context - what they asked me to pray for");
  out+='</details></section>';
  out+=profilePanelStart("notes");
  out+=notesChecklist(p,"encouragement","Potential encouragement")+notesChecklist(p,"followup","Follow up on");
@@ -369,16 +369,16 @@ function renderChecklists(){
  return out;}
 /* ============ rhythm done prompt + ripples ============ */
 function rhyDoneBtn(key){if(rhyDoneDraft&&rhyDoneDraft.key===key){return '<span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><input type="date" data-rhydate="'+key+'" value="'+rhyDoneDraft.date+'" style="max-width:145px"><input type="time" data-rhytime="'+key+'" value="'+rhyDoneDraft.time+'" style="max-width:105px"><button class="btn mini" data-rhyconfirm="'+key+'">Save</button><button class="btn mini ghost" data-rhycancel2="1">Cancel</button></span>';}return '<button class="btn mini" data-rhydone="'+key+'" title="Record a moment of care">Tend</button>';}
-function rippleLine(e){var t=(e.title&&e.title.indexOf("Time with")!==0)?e.title:"";var pill=e.rhythmId?' <span class="pill rhy">\u21BB Rhythm</span>':((e.origin==="spark"||e.note==="Spark landed")?' <span class="pill spk">\u2726 Spark</span>':'');return '<div class="logline moment-row"><span class="when">'+when(e.ts)+(daysSince(e.ts)===0&&!e.allDay?" "+fmtHM(e.ts):"")+'</span><span class="kind">'+esc(typeLabel(e))+'</span><div class="gr-main">'+pill+(t?' <span class="txt">'+esc(t)+'</span>':'')+(e.note&&e.note!=="Spark landed"?'<div class="gr-meta">'+esc(e.note)+'</div>':'')+'</div><span class="entry-actions"><button class="iconbtn" data-evedit="'+e.id+'" title="edit">\u270E</button><button class="iconbtn" data-evdel="'+e.id+'" title="delete">\uD83D\uDDD1</button></span></div>';}
+function rippleLine(e){var t=(e.title&&e.title.indexOf("Time with")!==0)?e.title.replace(/^Prayer: /,""):"";var pill=e.rhythmId?' <span class="pill rhy">'+collectionIcon("rhythms")+' Rhythm</span>':((e.origin==="spark"||e.note==="Spark landed")?' <span class="pill spk">'+collectionIcon("sparks")+' Spark</span>':((e.kind==="prayer"||e.type==="prayer")?' <span class="pill pry">'+collectionIcon("prayer")+' Prayer</span>':((e.kind==="note"||e.type==="note")?' <span class="pill nte">'+collectionIcon("notes")+' Note</span>':'')));return '<div class="logline moment-row"><span class="when">'+when(e.ts)+(daysSince(e.ts)===0&&!e.allDay?" "+fmtHM(e.ts):"")+'</span><span class="kind">'+esc(typeLabel(e))+'</span><div class="gr-main">'+pill+(t?' <span class="txt">'+esc(t)+'</span>':'')+(e.note&&e.note!=="Spark landed"?'<div class="gr-meta">'+esc(e.note)+'</div>':'')+'</div><span class="entry-actions"><button class="iconbtn" data-evedit="'+e.id+'" title="edit">\u270E</button><button class="iconbtn" data-evdel="'+e.id+'" title="delete">\uD83D\uDDD1</button></span></div>';}
 /* ============ free moment + spark chip ============ */
-function sparkChip(p){var s=openSparks(p)[0];if(!s)return "";return '<div class="pf-next" style="color:#8A6D1F">\u2726 '+esc(s.text)+' \u00B7 '+esc(sparkDueTxt(s))+'</div>';}
+function sparkChip(p){var s=openSparks(p)[0];if(!s)return "";return '<div class="pf-next" style="color:#8A6D1F">\u2726 '+esc(s.text)+' \u00b7 '+esc(sparkDueTxt(s))+'</div>';}
 function freeMomentHTML(){
  var cands=[];
  S.people.forEach(function(p){(p.rhythms||[]).forEach(function(r){var d=rhythmDaysSince(r);if((r.tod||"anytime")==="anytime"&&rhythmScheduledToday(r))cands.push({pri:10+(d===999?0:d),rkey:p.id+"|"+r.id,personId:p.id,label:r.text,sub:"rhythm \u00B7 "+rhythmDueTxt(r)});});});
  S.people.forEach(function(p){openSparks(p).forEach(function(s){if(sparkLive(s)&&!s.by)cands.push({pri:15,sparky:1,personId:p.id,label:s.text,sub:"No deadline yet",act:' data-openperson="'+p.id+'"',btn:"Open"});});});
  S.goals.forEach(function(g){var d=goalLastDone(g);if(!goalHasRhythm(g)&&(g.tod||"anytime")==="anytime"&&d!==0&&(d===null||d>=goalInterval(g)))cands.push({pri:(100-goalScore(g))/12,personId:g.personId,goalId:g.id,area:g.area,label:g.text,sub:"goal \u00B7 "+(d===null?"never logged":d+"d ago"),act:' data-goaldone="'+g.id+'"',btn:"Done"});});
  var lo=S.people.map(function(p){return {p:p,s:personScore(p)};}).sort(function(a,b){return a.s-b.s;})[0];
- if(lo&&lo.s<80)cands.push({pri:(100-lo.s)/10,label:"Reach out to "+lo.p.name,sub:(lo.p.relation||"")+" \u00B7 meter "+lo.s+" - lowest",act:' data-openperson="'+lo.p.id+'"',btn:"Open"});
+ if(lo&&lo.s<80)cands.push({pri:(100-lo.s)/10,label:"Reach out to "+lo.p.name,sub:(lo.p.relation||"")+" \u00b7 meter "+lo.s+" - lowest",act:' data-openperson="'+lo.p.id+'"',btn:"Open"});
  cands.sort(function(a,b){return b.pri-a.pri;});
  if(!cands.length)return "";
  var out='<div class="sectiontitle"><h2>Free moment?</h2><span class="hint">the top of the stack, right now</span></div><div class="card">';
@@ -426,4 +426,5 @@ var rhythmDraft=null;
 var rhyDoneDraft=null;
 var tab="today",openDetail=null,currentArea=null,currentPerson=null;
 window._actDone={};window._psModalOpen=false;
+
 
