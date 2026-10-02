@@ -23,7 +23,7 @@
    if(row.querySelector(".q-health"))return;
    if(!row.querySelector(".pill.rhy")&&!row.querySelector("[data-rhydone]"))return;
    var btn=row.querySelector("[data-rhydone]");
-   var r=btn?rhythmByKey(btn.getAttribute("data-rhydone"))|null;
+   var r=btn?rhythmByKey(btn.getAttribute("data-rhydone")):null;
    if(!r){
     var lab=row.querySelector(".pi-label");
     var txt=lab?lab.childNodes[0].textContent.trim():"";
