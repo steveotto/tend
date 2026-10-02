@@ -162,7 +162,7 @@ document.addEventListener("click",function(e){
 });
 /* ---- occurrence-based overrides (legacy fallback inside recNormRule) ---- */
 window.todayRhythmEligible=function(r){try{var rule=recNormRule(r);return recOccursOn(rule,todayStr())&&rhythmDaysSince(r)!==0;}catch(err){return window.__origTre?window.__origTre(r):true;}};
-window.scheduleDayMatches=function(item,date){try{var d=date||new Date();var ds=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0')+"-"+String(d.getDate()).padStart(2,"0");return recOccursOn(recNormRule(item),ds);}catch(err){return window.__origSdm?window.__origSdm(item,date):true;}};
+window.scheduleDayMatches=function(item,date){try{var d=date||new Date();var ds=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");return recOccursOn(recNormRule(item),ds);}catch(err){return window.__origSdm?window.__origSdm(item,date):true;}};
 window.__recShort=function(rule){
  var DOWS=DOW;
  if(rule.freq==="daily")return "";
