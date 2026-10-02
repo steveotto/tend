@@ -1,47 +1,18 @@
 "use strict";
-/* app-todaychip.js - appends a rhythm-health chip (color-coded rounded-square
-   dot + %) to the END of every rhythm row in the "Today with ..." action queue
-   on person profiles. Overlay: does not modify app-views1.js. Safe to delete. */
+/* app-todaychip.js - renders the rhythm-health chip (color-coded rounded-square
+   dot + %) at the END of every rhythm row in the "Today with ..." queue on
+   person profiles. Works by overriding the rhyRowQ renderer after
+   app-views1.js loads, so the chip is part of the row HTML itself.
+   Overlay: safe to delete. */
 (function(){
- var CSS=".actrow .rhythm-health.q-health{min-width:0;margin-left:2px}\n"+
-         ".actrow .q-health .sm-dot{border-radius:3px;width:10px;height:10px}";
- var chipHTML=function(sc,c){return '<span class="rhythm-health q-health" title="Rhythm health"><span class="sm-dot '+c+'" aria-hidden="true"></span><span>'+sc+'%</span></span>';};
- function rhythmByKey(key){
-  var parts=String(key).split("|");
-  var p=S.people.find(function(x){return x.id===parts[0];});
-  if(!p)return null;
-  return (p.rhythms||[]).find(function(r){return r.id===parts[1];})||null;
- }
- function rhythmByText(pid,text){
-  var p=S.people.find(function(x){return x.id===pid;});
-  if(!p||!text)return null;
-  return (p.rhythms||[]).find(function(r){return String(r.text||"(unnamed rhythm)")===text;})||null;
- }
- function decorate(){
-  if(!S||!S.people)return;
-  document.querySelectorAll(".actrow").forEach(function(row){
-   if(row.querySelector(".q-health"))return;
-   if(!row.querySelector(".pill.rhy")&&!row.querySelector("[data-rhydone]"))return;
-   var btn=row.querySelector("[data-rhydone]");
-   var r=btn?rhythmByKey(btn.getAttribute("data-rhydone")):null;
-   if(!r){
-    var lab=row.querySelector(".pi-label");
-    var txt=lab?lab.childNodes[0].textContent.trim():"";
-    r=rhythmByText(currentPerson||"",txt);
-   }
-   if(!r)return;
-   var sc=rhythmScore(r),c=scoreClass(sc);
-   row.insertAdjacentHTML("beforeend",chipHTML(sc,c));
-  });
- }
- var st=document.createElement("style");
- st.textContent=CSS;
- document.head.appendChild(st);
- var mo=new MutationObserver(function(){decorate();});
- function arm(){
-  var v=document.getElementById("view");
-  if(v)mo.observe(v,{childList:true,subtree:true});
-  decorate();
- }
- if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",arm);else arm();
+ var ORIG=window.rhyRowQ;
+ window.rhyRowQ=function(r,dim){
+  var p=S.people.find(function(x){return x.id===currentPerson;});
+  if(!p)return ORIG?ORIG.apply(this,arguments):"";
+  var rl=rhythmLast(r);
+  var sub=esc(rhythmFreqLabel(r))+(rhythmDueTxt(r)?" \u00B7 "+esc(rhythmDueTxt(r)):"")+(rl&&rhythmDaysSince(r)!==0?" \u00B7 last tended "+when(rl.ts):"");
+  var sc=rhythmScore(r);
+  var chip='<span class="rhythm-health" title="Rhythm health" style="display:inline-flex;align-items:center;gap:5px;flex-shrink:0;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap"><span style="width:10px;height:10px;border-radius:3px;flex:none;background:'+personHealthColor(sc)+'"></span><span>'+sc+'%</span></span>';
+  return '<div class="actrow'+(dim?" done":"")+'"><span class="act-ic" style="background:'+personHealthColor(rhythmScore(r))+'"></span><div class="pi-main"><div class="pi-label">'+esc(r.text||"(unnamed rhythm)")+' <span class="pill rhy">'+collectionIcon("rhythms")+' Rhythm</span></div><div class="pi-sub">'+sub+'</div></div>'+(dim?'<span class="praycount">Tended \u2713</span>':rhyDoneBtn(p.id+"|"+r.id))+chip+'</div>';
+ };
 })();
