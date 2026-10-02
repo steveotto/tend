@@ -2,7 +2,7 @@
 /* ============ GitHub sync ============ */
 var SYNCcfg=(function(){try{return JSON.parse(localStorage.getItem(LS_SYNC))||{auto:true};}catch(e){return {auto:true};}})();
 window.SYNCcfg=SYNCcfg;
-var TEND_VERSION="v20261003k";window.TEND_VERSION=TEND_VERSION;
+var TEND_VERSION="v20261003l";window.TEND_VERSION=TEND_VERSION;
 window._tendDirty=false;
 function ghHeaders(){return {"Authorization":"Bearer "+SYNCcfg.token,"Accept":"application/vnd.github+json"};}
 function updateSyncDot(){var dot=el("syncDot"),lbl=el("syncLabel");if(!SYNCcfg.token){dot.className="syncdot";lbl.textContent="local only";}else{dot.className="syncdot on";lbl.textContent="synced";}}
@@ -50,7 +50,7 @@ function forcePullNow(){
   SYNCcfg.lastSync=Date.now();localStorage.setItem(LS_SYNC,JSON.stringify(SYNCcfg));updateSyncDot();
   flash("Cloud wins - local data replaced");
   render();
- }).catch(function(e){console.error(e);updateSyncErr();if(explicit)flash(e.message);});}
+ }).catch(function(e){console.error(e);updateSyncErr();flash(e.message);});}
 window.forcePullNow=forcePullNow;
 setInterval(function(){var pb=document.getElementById("syncPull");if(!pb)return;
  if(!document.getElementById("syncForcePull")){var fb=document.createElement("button");fb.className="btn ghost";fb.id="syncForcePull";fb.type="button";fb.title="Replace ALL data with the cloud copy - use when the cloud is the truth";fb.textContent="Force pull (cloud wins)";pb.parentNode.insertBefore(fb,pb.nextSibling);}
@@ -64,13 +64,15 @@ setInterval(function(){var pb=document.getElementById("syncPull");if(!pb)return;
 document.addEventListener("click",function(e){var t=e.target;if(t&&t.closest&&t.closest("#syncForcePull")){forcePullNow();}});
 function forceRefreshApp(){
  var bust=Date.now();
+ flash("Fetching the latest version from the server...");
  fetch("index.html?bust="+bust,{cache:"reload"}).then(function(r){return r.text();}).then(function(txt){
-  var m=txt.match(/app-sync\.js\?v=([0-9A-Za-z]+)/);
-  var latest=m?m[1]:"";
-  var cur=TEND_VERSION.replace(/^v/,"");
-  if(latest&&latest!==cur){flash("Update found ("+latest+") - reloading...");setTimeout(function(){location.replace(location.pathname+"?fresh="+bust);},700);}
-  else if(latest){flash("Already on the latest ("+TEND_VERSION+")");}
-  else{flash("Could not read version - forcing reload");setTimeout(function(){location.replace(location.pathname+"?fresh="+bust);},700);}
+  var urls=[],re=/(?:src|href)="([^"]+\.(?:js|css)\?[^"]+)"/g,m;
+  while((m=re.exec(txt))!==null){if(urls.indexOf(m[1])<0)urls.push(m[1]);}
+  flash("Refreshing "+urls.length+" files straight from the server...");
+  return Promise.all(urls.map(function(u){return fetch(u,{cache:"reload"}).catch(function(){});}));
+ }).then(function(){
+  flash("Latest code loaded - refreshing page...");
+  setTimeout(function(){location.replace(location.pathname+"?fresh="+bust);},600);
  }).catch(function(){location.replace(location.pathname+"?fresh="+bust);});
 }
 window.forceRefreshApp=forceRefreshApp;
