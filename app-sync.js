@@ -2,7 +2,7 @@
 /* ============ GitHub sync ============ */
 var SYNCcfg=(function(){try{return JSON.parse(localStorage.getItem(LS_SYNC))||{auto:true};}catch(e){return {auto:true};}})();
 window.SYNCcfg=SYNCcfg;
-var TEND_VERSION="v20261003p";window.TEND_VERSION=TEND_VERSION;
+var TEND_VERSION="v20261003q";window.TEND_VERSION=TEND_VERSION;
 window._tendDirty=false;
 function ghHeaders(){return {"Authorization":"Bearer "+SYNCcfg.token,"Accept":"application/vnd.github+json"};}
 function updateSyncDot(){var dot=el("syncDot"),lbl=el("syncLabel");if(!SYNCcfg.token){dot.className="syncdot";lbl.textContent="local only";}else{dot.className="syncdot on";lbl.textContent="synced";}}
@@ -69,7 +69,7 @@ function forceRefreshApp(){
   var urls=[],re=/(?:src|href)="([^"]+\.(?:js|css)\?[^"]+)"/g,m;
   while((m=re.exec(txt))!==null){if(urls.indexOf(m[1])<0)urls.push(m[1]);}
   flash("Refreshing "+urls.length+" files straight from the server...");
-  return Promise.all(urls.map(function(u){return fetch(u,{cache:"reload"}).catch(function(){});}));
+  return Promise.all(urls.map(function(u){return fetch(u,{cache:"reload"}).catch(function(){}));}));
  }).then(function(){
   flash("Latest code loaded - refreshing page...");
   setTimeout(function(){location.replace(location.pathname+"?fresh="+bust);},600);
