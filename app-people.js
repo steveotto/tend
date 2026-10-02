@@ -73,16 +73,19 @@ var MARRIAGE_WORDS=["spouse","wife","husband","partner"];
 var FAMILY_WORDS=["son","daughter","father","dad","mother","mom","brother","sister","in-law","in law","grandchild","grandson","granddaughter","nephew","niece","bonus","family"];
 function relCategory(rel){
  var r=(rel||"").toLowerCase();
+ if(r==="family")return "friendships"; /* exact "Family" = extended family -> Friendships */
  for(var i=0;i<MARRIAGE_WORDS.length;i++){if(r.indexOf(MARRIAGE_WORDS[i])>=0)return "marriage";}
  for(var j=0;j<FAMILY_WORDS.length;j++){if(r.indexOf(FAMILY_WORDS[j])>=0)return "parenting";}
  return "friendships";
 }
 function personCategory(p){return relCategory(p.relation)||"friendships";}
-function relOptionsHTML(){
- var fam=["Spouse","Son","Daughter","Bonus son","Bonus daughter","Father","Mother","Brother","Sister","Son-in-law","Daughter-in-law","Grandchild","Nephew","Niece","In-law"];
- var fr=["Friend","Close friend","Mentor","Mentee","Coworker","Neighbor","Small group friend","Accountability partner","Pastor","Other"];
- return '<optgroup label="Family">'+fam.map(function(r){return '<option value="'+r+'">'+r+'</option>';}).join("")+'</optgroup>'+
- '<optgroup label="Friends & others">'+fr.map(function(r){return '<option value="'+r+'">'+r+'</option>';}).join("")+'</optgroup>';
+var REL_FAM=["Spouse","Son","Daughter","Bonus son","Bonus daughter","Father","Mother","Brother","Sister","Son-in-law","Daughter-in-law","Grandchild","Nephew","Niece","In-law"];
+var REL_FR=["Family","Friend","Close friend","Mentor","Mentee","Coworker","Neighbor","Small group friend","Accountability partner","Pastor","Other"];
+function relOptionsHTML(sel){
+ var fam=REL_FAM,fr=REL_FR;
+ function opt(r){return '<option value="'+r+'"'+(r===sel?" selected":"")+'>'+r+'</option>';}
+ return '<optgroup label="Family">'+fam.map(opt).join("")+'</optgroup>'+
+ '<optgroup label="Friends & others">'+fr.map(opt).join("")+'</optgroup>';
 }
 
 /* ---------- filter toggles (per device) ---------- */
@@ -344,4 +347,19 @@ document.addEventListener("change",function(e){
  var v;
  if(v=t.getAttribute("data-catcolor")){if(!S.settings)S.settings={};S.settings.peopleCat=S.settings.peopleCat||{};S.settings.peopleCat[v]=t.value;save();applyCatColors();return;}
 });
+/* ---- shared grouped dropdown builder (add-person AND person settings use this) ---- */
+window.relOptionsHTML=relOptionsHTML;
+window.REL_GROUPS={"Family":REL_FAM,"Friends & others":REL_FR};
+/* ---- keep stored p.area in sync with the live relation category ---- */
+window.syncPersonAreas=function(){
+ var n=0;
+ S.people.forEach(function(p){
+  var want=CAT_AREA[personCategory(p)];
+  if(p.area!==want){p.area=want;n++;}
+ });
+ return n;
+};
+window.syncPersonAreas();
+var _tendSave=save;
+window.save=function(){window.syncPersonAreas();return _tendSave.apply(this,arguments);};
 })();
