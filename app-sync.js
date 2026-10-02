@@ -2,7 +2,7 @@
 /* ============ GitHub sync ============ */
 var SYNCcfg=(function(){try{return JSON.parse(localStorage.getItem(LS_SYNC))||{auto:true};}catch(e){return {auto:true};}})();
 window.SYNCcfg=SYNCcfg;
-var TEND_VERSION="v20261003g";window.TEND_VERSION=TEND_VERSION;
+var TEND_VERSION="v20261003h";window.TEND_VERSION=TEND_VERSION;
 window._tendDirty=false;
 function ghHeaders(){return {"Authorization":"Bearer "+SYNCcfg.token,"Accept":"application/vnd.github+json"};}
 function updateSyncDot(){var dot=el("syncDot"),lbl=el("syncLabel");if(!SYNCcfg.token){dot.className="syncdot";lbl.textContent="local only";}else{dot.className="syncdot on";lbl.textContent="synced";}}
@@ -65,7 +65,7 @@ document.addEventListener("click",function(e){var t=e.target;if(t&&t.closest&&t.
 function forceRefreshApp(){
  var bust=Date.now();
  fetch("index.html?bust="+bust,{cache:"reload"}).then(function(r){return r.text();}).then(function(txt){
-  var m=txt.match(/app-sync\\.js\\?v=([0-9A-Za-z]+)/);
+  var m=txt.match(/app-sync\.js\?v=([0-9A-Za-z]+)/);
   var latest=m?m[1]:"";
   var cur=TEND_VERSION.replace(/^v/,"");
   if(latest&&latest!==cur){flash("Update found ("+latest+") - reloading...");setTimeout(function(){location.replace(location.pathname+"?fresh="+bust);},700);}

@@ -2,77 +2,43 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Tend</title>
-<meta name="theme-color" content="#FBFCFB">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Tend">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="tend.css?v=20261003f">
-<script>window.onerror=function(msg,src,line){var f=document.getElementById("flash");if(f){f.textContent="ERR: "+msg+" ("+(src||"").split("/").pop()+":"+line+")";f.classList.add("show");f.style.background="#B3402E";}};</script>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>">
+<link rel="stylesheet" href="tend.css?v=20261003h">
 </head>
 <body>
-<div class="wrap">
-  <div class="apphead">
-    <div class="brand">
-      <img data-tend-logo alt="tend" style="height:42px;width:auto;display:block">
-      <div>
-        <div class="sub" id="headDate"></div>
-        <div class="sub" style="letter-spacing:.02em;text-transform:none;font-weight:500;color:var(--ink-soft);font-size:11.5px">Structure beats good intentions</div>
-      </div>
-    </div>
-    <div class="syncdot" id="syncDot"><i></i><span id="syncLabel">local only</span></div>
-  </div>
-  <div class="sticky-nav">
-    <nav class="areanav" id="areaNav"></nav>
-    <nav class="tabs" id="utilNav"></nav>
-  </div>
-  <div id="view"></div>
+<div id="app">
+ <header class="topbar">
+  <div class="brand"><span class="brandmark">T</span><span class="brandname">Tend</span></div>
+  <div class="headwrap"><div id="headDate" class="headdate"></div><div id="headTitle" class="headtitle">Relationships</div></div>
+  <nav class="tabbar" role="tablist">
+   <button role="tab" aria-selected="true" data-tab="dashboard" id="tabbtn-dashboard">Dashboard</button>
+   <button role="tab" aria-selected="false" data-tab="people" id="tabbtn-people">People</button>
+   <button role="tab" aria-selected="false" data-tab="goals" id="tabbtn-goals">Goals</button>
+   <button role="tab" aria-selected="false" data-tab="history" id="tabbtn-history">History</button>
+   <button role="tab" aria-selected="false" data-tab="sync" id="tabbtn-sync">Sync</button>
+  </nav>
+ </header>
+ <main id="view" tabindex="-1"></main>
 </div>
-<div class="modal" id="logModal">
-  <div class="box">
-    <h3>Log a moment</h3>
-    <div class="row">
-      <select id="logArea"></select>
-      <select id="logPerson"></select>
-    </div>
-    <div class="row"><select id="logKind"></select></div>
-    <textarea id="logNote" placeholder="What happened? (optional)"></textarea>
-    <div style="display:flex;gap:10px;justify-content:flex-end">
-      <button class="btn ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn" onclick="submitLog()">Save</button>
-    </div>
-  </div>
-</div>
-<div class="flash" id="flash">Saved</div>
-<script src="logo-data.js?v=20261003f"></script>
-<script src="app-core.js?v=20261003f"></script>
-<script src="app-views1.js?v=20261003f"></script>
-<script src="app-views2.js?v=20261003f"></script>
-<script src="app-upcoming.js?v=20261003f"></script>
-<script src="app-rhythmsched.js?v=20261003f"></script>
-<script src="rhythm-history.js?v=20261003f"></script>
-<script src="app-actions.js?v=20261003f"></script>
-<script src="app-sync.js?v=20261003f"></script>
-<script src="app-dashboard.js?v=20261003f"></script>
-<script src="app-settingstabs.js?v=20261003f"></script>
-<script src="app-people.js?v=20261003f"></script>
-<script src="app-relations.js?v=20261003f"></script>
-<script src="app-chipnav.js?v=20261003f"></script>
-<script src="app-goals.js?v=20261003f"></script>
-<script src="app-focus.js?v=20261003f"></script>
-<script src="app-careplan.js?v=20261003f"></script>
-<script src="app-planpills.js?v=20261003f"></script>
-<script src="app-lastdone.js?v=20261003f"></script>
-<script src="app-typelabels.js?v=20261003f"></script>
-<script src="app-personlinks.js?v=20261003f"></script>
-<script src="app-profilecounts.js?v=20261003f"></script>
+<script src="app-core.js?v=20261003h"></script>
+<script src="app-views1.js?v=20261003h"></script>
+<script src="app-views2.js?v=20261003h"></script>
+<script src="app-people.js?v=20261003h"></script>
+<script src="app-relations.js?v=20261003h"></script>
+<script src="app-goals.js?v=20261003h"></script>
+<script src="app-dashboard.js?v=20261003h"></script>
+<script src="app-chipnav.js?v=20261003h"></script>
+<script src="app-planpills.js?v=20261003h"></script>
+<script src="app-lastdone.js?v=20261003h"></script>
+<script src="app-typelabels.js?v=20261003h"></script>
+<script src="app-profilecounts.js?v=20261003h"></script>
+<script src="app-sync.js?v=20261003h"></script>
 </body>
 </html>
