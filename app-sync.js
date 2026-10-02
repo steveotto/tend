@@ -2,7 +2,7 @@
 /* ============ GitHub sync ============ */
 var SYNCcfg=(function(){try{return JSON.parse(localStorage.getItem(LS_SYNC))||{auto:true};}catch(e){return {auto:true};}})();
 window.SYNCcfg=SYNCcfg;
-var TEND_VERSION="v20261003j";window.TEND_VERSION=TEND_VERSION;
+var TEND_VERSION="v20261003k";window.TEND_VERSION=TEND_VERSION;
 window._tendDirty=false;
 function ghHeaders(){return {"Authorization":"Bearer "+SYNCcfg.token,"Accept":"application/vnd.github+json"};}
 function updateSyncDot(){var dot=el("syncDot"),lbl=el("syncLabel");if(!SYNCcfg.token){dot.className="syncdot";lbl.textContent="local only";}else{dot.className="syncdot on";lbl.textContent="synced";}}
@@ -50,7 +50,7 @@ function forcePullNow(){
   SYNCcfg.lastSync=Date.now();localStorage.setItem(LS_SYNC,JSON.stringify(SYNCcfg));updateSyncDot();
   flash("Cloud wins - local data replaced");
   render();
- }).catch(function(e){console.error(e);updateSyncErr();flash(e.message);});}
+ }).catch(function(e){console.error(e);updateSyncErr();if(explicit)flash(e.message);});}
 window.forcePullNow=forcePullNow;
 setInterval(function(){var pb=document.getElementById("syncPull");if(!pb)return;
  if(!document.getElementById("syncForcePull")){var fb=document.createElement("button");fb.className="btn ghost";fb.id="syncForcePull";fb.type="button";fb.title="Replace ALL data with the cloud copy - use when the cloud is the truth";fb.textContent="Force pull (cloud wins)";pb.parentNode.insertBefore(fb,pb.nextSibling);}
