@@ -111,7 +111,7 @@ function recEnsureRule(d){
 /* ---- editor HTML (replaces personRhythmScheduleHTML everywhere it is used) ---- */
 window.personRhythmScheduleHTML=function(r,idf){
  var d=recDraftFor(idf);
- if(!d)return "";
+ if(!d)return (window.__origPrsh||function(){return "";})(r,idf);
  var rule=recEnsureRule(d),f=rule.freq;
  var DOWL=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
  function sel(id,arr,cur){return arr.map(function(o){return '<option value="'+o[0]+'"'+(String(cur)===String(o[0])?" selected":"")+'>'+o[1]+'</option>';}).join("");}
@@ -174,3 +174,28 @@ window.__recShort=function(rule){
  return "";};
 window.scheduleDayLabel=function(item){try{var rule=recNormRule(item);return window.__recShort(rule);}catch(err){return window.__origSdl?window.__origSdl(item):"";}};
 window.rhythmFreqLabel=function(r){try{var rule=recNormRule(r);var m={daily:"Daily",weekly:"Weekly",monthly:"Monthly",quarterly:"Quarterly",yearly:"Yearly"};return m[rule.freq]||("Every "+Math.max(1,rule.every||1)+" "+(rule.unit||"days"));}catch(err){return window.__origRfl?window.__origRfl(r):"";}};
+/* ---- health scoring: -10% per missed occurrence, today is never penalized ---- */
+window.rhythmScore=function(r){
+ try{
+  var rule=recNormRule(r);
+  var last=rhythmLast(r);
+  function mid(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate());}
+  var fromD;
+  if(last)fromD=new Date(last.ts);
+  else if(rule.start)fromD=recParse(rule.start);
+  else if(r&&r.added)fromD=new Date(r.added);
+  else return 0;
+  var cur=mid(fromD);cur.setDate(cur.getDate()+1);
+  var t=mid(new Date());
+  var missed=0;
+  while(cur<t&&missed<10){
+   var ds=cur.getFullYear()+"-"+String(cur.getMonth()+1).padStart(2,"0")+"-"+String(cur.getDate()).padStart(2,"0");
+   if(recOccursOn(rule,ds))missed++;
+   cur.setDate(cur.getDate()+1);
+  }
+  return Math.max(0,100-10*missed);
+ }catch(err){
+  var d=rhythmDaysSince(r);if(d===999)return 0;var per=rhythmPeriod(r);
+  if(d<per)return 100;return Math.max(0,100-10*(d-per+1));
+ }
+};
