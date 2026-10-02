@@ -2,8 +2,8 @@
 /* ============ GitHub sync ============ */
 var SYNCcfg=(function(){try{return JSON.parse(localStorage.getItem(LS_SYNC))||{auto:true};}catch(e){return {auto:true};}})();
 window.SYNCcfg=SYNCcfg;
-var TEND_VERSION="v20261003a";window.TEND_VERSION=TEND_VERSION; /* bump this with every code deploy - shown in Settings */
-window._tendDirty=false; /* local changes not yet pushed - auto-pull must not clobber them */
+var TEND_VERSION="v20261003b";window.TEND_VERSION=TEND_VERSION;
+window._tendDirty=false;
 function ghHeaders(){return {"Authorization":"Bearer "+SYNCcfg.token,"Accept":"application/vnd.github+json"};}
 function updateSyncDot(){var dot=el("syncDot"),lbl=el("syncLabel");if(!SYNCcfg.token){dot.className="syncdot";lbl.textContent="local only";}else{dot.className="syncdot on";lbl.textContent="synced";}}
 function updateSyncErr(){var dot=el("syncDot");dot.className="syncdot err";el("syncLabel").textContent="sync error";}
@@ -37,7 +37,6 @@ function pullNow(explicit){
   else if(explicit){flash("Cloud is older/smaller than local - kept local. Use Force pull (cloud wins) to overwrite.");return;}
   SYNCcfg.lastSync=Date.now();localStorage.setItem(LS_SYNC,JSON.stringify(SYNCcfg));updateSyncDot();flash("Pulled from GitHub");render();
  }).catch(function(e){console.error(e);updateSyncErr();if(explicit)flash(e.message);});}
-/* force pull: cloud is the truth - replace local no matter what */
 function forcePullNow(){
  if(!SYNCcfg.token||!SYNCcfg.owner||!SYNCcfg.repo){flash("Configure sync first");return;}
  if(!confirm("Replace ALL data on this device with the cloud copy? This overwrites local changes."))return;
@@ -53,7 +52,6 @@ function forcePullNow(){
   render();
  }).catch(function(e){console.error(e);updateSyncErr();flash(e.message);});}
 window.forcePullNow=forcePullNow;
-/* inject the Force pull button + version/status line into the Sync settings */
 setInterval(function(){var pb=document.getElementById("syncPull");if(!pb)return;
  if(!document.getElementById("syncForcePull")){var fb=document.createElement("button");fb.className="btn ghost";fb.id="syncForcePull";fb.type="button";fb.title="Replace ALL data with the cloud copy - use when the cloud is the truth";fb.textContent="Force pull (cloud wins)";pb.parentNode.insertBefore(fb,pb.nextSibling);}
  var line=document.getElementById("syncVersionLine");
@@ -64,9 +62,6 @@ setInterval(function(){var pb=document.getElementById("syncPull");if(!pb)return;
  line.innerHTML="<b style='color:var(--ink)'>Code: "+TEND_VERSION+"</b> &middot; data last synced: "+ls+(window._tendDirty?" &middot; <span style='color:#B3402E;font-weight:700'>unpushed local changes</span>":" &middot; <span style='color:var(--forest);font-weight:700'>all changes pushed</span>");
 },500);
 document.addEventListener("click",function(e){var t=e.target;if(t&&t.closest&&t.closest("#syncForcePull")){forcePullNow();}});
-/* force-refresh: pull the newest index.html (updates the HTTP cache entry),
-   compare its version to the running one, and reload via a unique URL so no
-   stale cached copy (Safari!) can be served. */
 function forceRefreshApp(){
  var bust=Date.now();
  fetch("index.html?bust="+bust,{cache:"reload"}).then(function(r){return r.text();}).then(function(txt){
@@ -80,7 +75,6 @@ function forceRefreshApp(){
 }
 window.forceRefreshApp=forceRefreshApp;
 document.addEventListener("click",function(e){var t=e.target;if(t&&t.closest&&t.closest("#syncReloadLatest")){e.preventDefault();forceRefreshApp();}});
-/* init */
 el("headDate").textContent=(function(){var d=new Date();var m=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];return d.getDate()+" "+m[d.getMonth()]+" "+d.getFullYear();})();
 updateSyncDot();
 if(SYNCcfg.token)pullNow(false);

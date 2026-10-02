@@ -7,7 +7,8 @@ window.planPills=function(it){
  var ids=[];
  if(it.goalId&&typeof goalPeople==="function"){
   var g=S.goals.find(function(x){return x.id===it.goalId;});
-  if(g)ids=goalPeople(g).map(function(p){return p.id;});
+  /* goalPeople returns id STRINGS; tolerate person objects too */
+  if(g)ids=goalPeople(g).map(function(x){return (typeof x==="string")?x:(x&&x.id);}).filter(Boolean);
  }
  if(!ids.length&&it.personId)ids=[it.personId];
  var pills=ids.map(function(id){
