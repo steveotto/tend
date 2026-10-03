@@ -47,7 +47,7 @@
   var out="",u=r.freq==="custom"?(r.unit||"weeks"):r.freq,grp="rmode-"+String(r.id||"draft").replace(/[^a-z0-9]/gi,"-");
   if(u==="weekly"||u==="weeks")out+='<div class="addrow"><span class="rlabel">On</span>'+rDowPills(r,A)+'</div>';
   if(u==="monthly"||u==="months"||u==="quarterly"){
-   if(u==="quarterly"){var qm=+r.qmonth||(((new Date().getMonth())%3)+1);out+='<div class="addrow"><span class="rlabel">In</span><select '+A("qmonth")+'>'+[[1,"Jan • Apr • Jul • Oct"],[2,"Feb • May • Aug • Nov"],[3,"Mar • Jun • Sep • Dec"]].map(function(q){return '<option value="'+q[0]+'"'+(qm===q[0]?' selected':'')+'>'+q[1]+'</option>';}).join('')+'</select></div>';}
+   if(u==="quarterly"){var qm=+r.qmonth||(((new Date().getMonth())%3)+1);out+='<div class="addrow"><span class="rlabel">In</span><select '+A("qmonth")+'>'+[[1,"Jan \u2022 Apr \u2022 Jul \u2022 Oct"],[2,"Feb \u2022 May \u2022 Aug \u2022 Nov"],[3,"Mar \u2022 Jun \u2022 Sep \u2022 Dec"]].map(function(q){return '<option value="'+q[0]+'"'+(qm===q[0]?' selected':'')+'>'+q[1]+'</option>';}).join('')+'</select></div>';}
    out+='<div class="addrow"><label class="rmode"><input type="radio" name="'+grp+'" '+A("monthlyMode")+' value="onDay"'+(r.monthlyMode!=="onThe"?' checked':'')+'> On day</label>'+rDaySelect(r,A,"dayOfMonth",r.monthlyMode==="onThe",28)+'</div>';
    out+='<div class="addrow"><label class="rmode"><input type="radio" name="'+grp+'" '+A("monthlyMode")+' value="onThe"'+(r.monthlyMode==="onThe"?' checked':'')+'> On the</label>'+rOrdSelect(r,A,null,r.monthlyMode!=="onThe")+'</div>';
   }
@@ -56,8 +56,8 @@
    out+='<div class="addrow"><label class="rmode"><input type="radio" name="'+grp+'" '+A("monthlyMode")+' value="onThe"'+(r.monthlyMode==="onThe"?' checked':'')+'> On the</label>'+rOrdSelect(r,A,null,r.monthlyMode!=="onThe")+'<span class="rsep">of</span>'+rMonthSelect(r,A,"monthThe",r.monthlyMode!=="onThe")+'</div>';
   }
   if(r.freq==="custom")out+='<div class="addrow"><span class="rlabel">Repeat every</span><input type="number" min="1" max="365" '+A("every")+' value="'+(+r.every||1)+'"><select '+A("unit")+'>'+["days","weeks","months","years"].map(function(x){return '<option value="'+x+'"'+((r.unit||"weeks")===x?' selected':'')+'>'+x+'</option>';}).join('')+'</select></div>'
-  +'<div class="addrow"><label class="rlabel">Starting on</label><input type="date" '+A("start")+' value="'+esc(r.start||"")+'"></div>';
-  out+='<div class="addrow"><label class="rlabel">Until (optional)</label><input type="date" '+A("until")+' value="'+esc(r.until||"")+'"></div>';
+  +'<div class="addrow rhy-daterow"><label class="rlabel">Starting on</label><input type="date" '+A("start")+' value="'+esc(r.start||"")+'"><label class="rlabel">Until</label><input type="date" '+A("until")+' value="'+esc(r.until||"")+'" title="Optional end date"></div>';
+  else out+='<div class="addrow"><label class="rlabel">Until (optional)</label><input type="date" '+A("until")+' value="'+esc(r.until||"")+'"></div>';
   return out;
  }
  /* ---- profile editor: same recurrence UI as the care plan editor ---- */
@@ -72,7 +72,8 @@
   var st=document.createElement("style");
   st.textContent=".rhythm-schedule-grid select,.careplan-edit-grid select,.rhy-recur .addrow select,.rhy-recur .addrow input{min-height:48px!important;height:48px;padding:10px 14px;font-size:16px!important;line-height:1.4}"
   +".rhy-recur .addrow select,.rhy-recur .addrow input[type=number]{flex:0 0 auto;width:auto;min-width:84px}"
-  +".rhy-recur .addrow input[type=date]{flex:1 1 160px;min-width:0}"
+  +".rhy-recur .addrow input[type=date]{flex:0 0 auto;width:160px}"
+  +".rhy-recur .rhy-daterow{flex-wrap:wrap;gap:10px}"
   +".rhy-recur select:disabled,.rhy-recur input:disabled{opacity:.45;cursor:not-allowed;background:var(--mist)}";
   document.head.appendChild(st);
  }catch(err){}
@@ -143,7 +144,7 @@
   if(i<0)return html;
   var tagRe=/<\/?div\b[^>]*>/g;tagRe.lastIndex=i;
   var depth=0,m2,end=-1;
-  while((m2=tagRe.exec(html))){if(m2[0].charAt(1)==="/"){depth--;}else{depth++;}if(depth===0){end=m2.index+m2[0].length;break;}}
+  while((m2=tagRe.exec(html))){if(m2[0].charAt(1)==="/'){depth--;}else{depth++;}if(depth===0){end=m2.index+m2[0].length;break;}}
   if(end<0)return html;
   return html.slice(0,i)+pills+html.slice(end);
  };
@@ -214,4 +215,3 @@
   }
  },true);
 })();
-
