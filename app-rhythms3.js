@@ -39,24 +39,40 @@
  migrateAllRhythms();
  /* ---- recurrence editor builders (mirror of rhythms2) ---- */
  function rDowPills(r,A){var sel=r.weekdays||[];return '<span class="dow-pills">'+DOW.map(function(d,i){return '<label class="dow-pill"><input type="checkbox" '+A("weekdays")+' value="'+i+'"'+(sel.indexOf(i)>=0?' checked':'')+'><span>'+d.charAt(0)+'</span></label>';}).join('')+'</span>';}
- function rDaySelect(r,A,fld,dis){var cur=r[fld]?+r[fld]:null,o='<select '+A(fld)+(dis?' disabled':'')+'>';for(var i=1;i<=31;i++)o+='<option value="'+i+'"'+(cur===i?' selected':'')+'>'+i+'</option>';return o+'</select>';}
+ function rDaySelect(r,A,fld,dis,maxDay){var mx=maxDay||31,cur=r[fld]?+r[fld]:null,o='<select '+A(fld)+(dis?' disabled':'')+'>';for(var i=1;i<=mx;i++)o+='<option value="'+i+'"'+(cur===i?' selected':'')+'>'+i+'</option>';return o+'</select>';}
  function rOrdSelect(r,A,fld,dis){var d=dis?' disabled':'';return '<select '+A(fld||"ord")+d+'>'+R_ORDS.map(function(o,i){return '<option value="'+(i+1)+'"'+((+r.ord||1)===i+1?' selected':'')+'>'+o+'</option>';}).join('')+'</select><select '+A("ordWeekday")+d+'>'+DOW.map(function(d,i){return '<option value="'+i+'"'+((+r.ordWeekday||0)===i?' selected':'')+'>'+d+'</option>';}).join('')+'</select>';}
  function rMonthSelect(r,A,fld,dis){return '<select '+A(fld||"month")+(dis?' disabled':'')+'>'+R_MOS.map(function(m,i){return '<option value="'+(i+1)+'"'+((+r.month||1)===i+1?' selected':'')+'>'+m+'</option>';}).join('')+'</select>';}
  function rhythmRecurrenceHTML(r,A){
   var out="",u=r.freq==="custom"?(r.unit||"weeks"):r.freq,grp="rmode-"+String(r.id||"draft").replace(/[^a-z0-9]/gi,"-");
   if(u==="weekly"||u==="weeks")out+='<div class="addrow"><span class="rlabel">On</span>'+rDowPills(r,A)+'</div>';
   if(u==="monthly"||u==="months"||u==="quarterly"){
-   out+='<div class="addrow"><label class="rmode"><input type="radio" name="'+grp+'" '+A("monthlyMode")+' value="onDay"'+(r.monthlyMode!=="onThe"?' checked':'')+'> On day</label>'+rDaySelect(r,A,"dayOfMonth",r.monthlyMode==="onThe")+'</div>';
+   out+='<div class="addrow"><label class="rmode"><input type="radio" name="'+grp+'" '+A("monthlyMode")+' value="onDay"'+(r.monthlyMode!=="onThe"?' checked':'')+'> On day</label>'+rDaySelect(r,A,"dayOfMonth",r.monthlyMode==="onThe",28)+'</div>';
    out+='<div class="addrow"><label class="rmode"><input type="radio" name="'+grp+'" '+A("monthlyMode")+' value="onThe"'+(r.monthlyMode==="onThe"?' checked':'')+'> On the</label>'+rOrdSelect(r,A,null,r.monthlyMode!=="onThe")+'</div>';
   }
   if(u==="yearly"||u==="years"){
-   out+='<div class="addrow"><label class="rmode"><input type="radio" name="'+grp+'" '+A("monthlyMode")+' value="onDay"'+(r.monthlyMode!=="onThe"?' checked':'')+'> On</label>'+rMonthSelect(r,A,"month",r.monthlyMode==="onThe")+rDaySelect(r,A,"monthDay",r.monthlyMode==="onThe")+'</div>';
+   out+='<div class="addrow"><label class="rmode"><input type="radio" name="'+grp+'" '+A("monthlyMode")+' value="onDay"'+(r.monthlyMode!=="onThe"?' checked':'')+'> On</label>'+rMonthSelect(r,A,"month",r.monthlyMode==="onThe")+rDaySelect(r,A,"monthDay",r.monthlyMode==="onThe",31)+'</div>';
    out+='<div class="addrow"><label class="rmode"><input type="radio" name="'+grp+'" '+A("monthlyMode")+' value="onThe"'+(r.monthlyMode==="onThe"?' checked':'')+'> On the</label>'+rOrdSelect(r,A,null,r.monthlyMode!=="onThe")+'<span class="rsep">of</span>'+rMonthSelect(r,A,"monthThe",r.monthlyMode!=="onThe")+'</div>';
   }
   if(r.freq==="custom")out+='<div class="addrow"><span class="rlabel">Repeat every</span><input type="number" min="1" max="365" '+A("every")+' value="'+(+r.every||1)+'"><select '+A("unit")+'>'+["days","weeks","months","years"].map(function(x){return '<option value="'+x+'"'+((r.unit||"weeks")===x?' selected':'')+'>'+x+'</option>';}).join('')+'</select></div>';
   out+='<div class="addrow"><label class="rlabel">Until (optional)</label><input type="date" '+A("until")+' value="'+esc(r.until||"")+'"></div>';
   return out;
  }
+ /* ---- profile editor: same recurrence UI as the care plan editor ---- */
+ var _prshBase=window.personRhythmScheduleHTML;
+ window.personRhythmScheduleHTML=function(r,idf){
+  var A=function(f){return 'data-rfield="'+idf+'|'+f+'"';};
+  return '<div class="rhythm-schedule-grid"><label class="careplan-field">Frequency<select '+A("freq")+'>'+Object.keys(RHYTHM_FREQS).map(function(k){return '<option value="'+k+'"'+(r.freq===k?' selected':'')+'>'+RHYTHM_FREQS[k].label+'</option>';}).join('')+'</select></label><label class="careplan-field">Time of day<select '+A("tod")+'>'+Object.keys(TODS).map(function(k){return '<option value="'+k+'"'+((r.tod||"anytime")===k?' selected':'')+'>'+esc(TODS[k])+'</option>';}).join('')+'</select></label></div>'
+  +'<div class="rhy-recur">'+rhythmRecurrenceHTML(r,A)+'</div>';
+ };
+ /* ---- style: heights, widths, disabled look ---- */
+ try{
+  var st=document.createElement("style");
+  st.textContent=".rhythm-schedule-grid select,.careplan-edit-grid select{min-height:44px}"
+  +".rhy-recur .addrow select,.rhy-recur .addrow input[type=number]{flex:0 0 auto;width:auto;min-width:84px}"
+  +".rhy-recur .addrow input[type=date]{flex:1 1 160px;min-width:0}"
+  +".rhy-recur select:disabled,.rhy-recur input:disabled{opacity:.45;cursor:not-allowed;background:var(--mist)}";
+  document.head.appendChild(st);
+ }catch(err){}
  /* ---- care plan edit form + save (revives rhythms2's dead overrides) ---- */
  window.carePlanEditHTML=function(item,key){
   var r=item.record,kind=item.kind;
@@ -123,12 +139,16 @@
   if(i<0)return html;
   var tagRe=/<\/?div\b[^>]*>/g;tagRe.lastIndex=i;
   var depth=0,m2,end=-1;
-  while((m2=tagRe.exec(html))){if(m2[0].charAt(1)==="/",false){}if(m2[0].charAt(1)==="/"){depth--;}else{depth++;}if(depth===0){end=m2.index+m2[0].length;break;}}
+  while((m2=tagRe.exec(html))){if(m2[0].charAt(1)==="/"){depth--;}else{depth++;}if(depth===0){end=m2.index+m2[0].length;break;}}
   if(end<0)return html;
   return html.slice(0,i)+pills+html.slice(end);
  };
  document.addEventListener("change",function(e){
   var t=e.target;
+  if(t&&t.matches&&t.matches('[data-cpf="weekdays"]')&&t.checked){
+   var fm=t.closest("[data-cpform]");
+   if(fm)Array.prototype.slice.call(fm.querySelectorAll('[data-cpf="weekdays"]')).forEach(function(x){if(x!==t)x.checked=false;});
+  }
   if(!t||!t.matches||!t.matches('[data-cpf="monthlyMode"]'))return;
   var form=t.closest("[data-cpform]");if(!form)return;
   var found=carePlanFind(form.getAttribute("data-cpform"));
@@ -144,7 +164,7 @@
   if(!rr)return;
   var fld=rf[2];
   if(fld==="text"){rr.text=t.value;e.stopImmediatePropagation();return;}
-  if(fld==="weekdays"){var wd=rr.weekdays||[],v=+t.value,i2=wd.indexOf(v);if(t.checked){if(i2<0)wd.push(v);}else if(i2>=0)wd.splice(i2,1);rr.weekdays=wd;render();e.stopImmediatePropagation();return;}
+  if(fld==="weekdays"){var v=+t.value;rr.weekdays=t.checked?[v]:[];render();e.stopImmediatePropagation();return;}
   if(fld==="freq"){
    rr.freq=t.value;
    if(t.value==="monthly"||t.value==="quarterly"){rr.monthlyMode=rr.monthlyMode||"onDay";rr.dayOfMonth=rr.dayOfMonth||new Date().getDate();}
