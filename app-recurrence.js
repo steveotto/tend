@@ -16,14 +16,21 @@ function recNormRule(r){
  if(!rule){
   rule={freq:(r&&r.freq)||"weekly",start:(r&&r.start)||(r&&r.added)||null,end:null};
   var f=rule.freq;
-  if(f==="weekly"){rule.days=[(r&&r.scheduleDow!=null)?+r.scheduleDow:1];}
-  else if(f==="custom"){var ct=(r&&r.customType)||"weekly";if(ct==="weekly"){rule.freq="weekly";rule.days=[(r&&r.customDow!=null)?+r.customDow:1];}
+  if(f==="weekly"){rule.days=(Array.isArray(r.weekdays)&&r.weekdays.length)?r.weekdays.slice():[(r&&r.scheduleDow!=null)?+r.scheduleDow:1];}
+  else if(f==="custom"){
+   if(r.customType===undefined&&r.customDow===undefined&&r.customOrd===undefined&&(r.every||r.unit)){
+    rule.every=Math.max(1,+r.every||1);rule.unit=r.unit||"days";
+    if(rule.unit==="weeks"){rule.days=(Array.isArray(r.weekdays)&&r.weekdays.length)?r.weekdays.slice():[new Date().getDay()];}
+    else if(rule.unit==="months"||rule.unit==="years"){rule.mode=(r.monthlyMode==="onThe")?"weekday":"date";rule.dom=(r.dom==="last"||r.dom)?r.dom:(+r.dayOfMonth||1);rule.weeks=[+r.ord||1];rule.dow=+r.ordWeekday||0;if(rule.unit==="years")rule.month=r.month?(+r.month-1):0;}
+   }
+   else{var ct=(r&&r.customType)||"weekly";if(ct==="weekly"){rule.freq="weekly";rule.days=[(r&&r.customDow!=null)?+r.customDow:1];}
    else if(ct==="monthly"){rule.freq="monthly";rule.mode="weekday";rule.weeks=[(r&&r.customOrd)||1];rule.dow=(r&&r.customDow)!=null?+r.customDow:5;}
-   else{rule.freq="monthly";rule.mode="date";rule.dom=15;}}
-  else if(f==="monthly"){rule.mode="date";rule.dom=1;}
-  else if(f==="quarterly"){rule.mode="date";rule.dom=1;rule.month=0;}
-  else if(f==="yearly"){rule.mode="date";rule.dom=1;rule.month=0;}
+   else{rule.freq="monthly";rule.mode="date";rule.dom=15;}}}
+  else if(f==="monthly"){rule.mode=(r.monthlyMode==="onThe")?"weekday":"date";rule.dom=(r.dom==="last"||r.dom)?r.dom:(+r.dayOfMonth||1);rule.weeks=[+r.ord||1];rule.dow=+r.ordWeekday||0;}
+  else if(f==="quarterly"){rule.mode=(r.monthlyMode==="onThe")?"weekday":"date";rule.dom=(r.dom==="last"||r.dom)?r.dom:(+r.dayOfMonth||1);rule.weeks=[+r.ord||1];rule.dow=+r.ordWeekday||0;rule.month=r.qmonth?(+r.qmonth-1):0;}
+  else if(f==="yearly"){rule.mode=(r.monthlyMode==="onThe")?"weekday":"date";rule.dom=(r.dom==="last"||r.dom)?r.dom:(+r.monthDay||1);rule.weeks=[+r.ord||1];rule.dow=+r.ordWeekday||0;rule.month=r.month?(+r.month-1):0;}
  }
+ if(!rule.end&&r.until)rule.end=r.until;
  if(!rule.days)rule.days=[1];
  if(rule.freq==="weekly"&&!rule.days.length)rule.days=[1];
  return rule;
@@ -199,3 +206,4 @@ window.rhythmScore=function(r){
   if(d<per)return 100;return Math.max(0,100-10*(d-per+1));
  }
 };
+

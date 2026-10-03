@@ -12,7 +12,7 @@
  var RHYTHM_FREQS={daily:{label:"Daily"},weekly:{label:"Weekly"},monthly:{label:"Monthly"},quarterly:{label:"Quarterly"},yearly:{label:"Yearly"},custom:{label:"Custom"}};
  var R_MOS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
  var R_ORDS=["1st","2nd","3rd","4th","last"];
- var RHYTHM_FIELD_LIST=["weekdays","monthlyMode","dayOfMonth","ord","ordWeekday","month","monthDay","qmonth","every","unit","until"];
+ var RHYTHM_FIELD_LIST=["weekdays","monthlyMode","dayOfMonth","ord","ordWeekday","month","monthDay","qmonth","every","unit","until","start"];
  /* ---- migration (mirror of rhythms2, re-applied lazily) ---- */
  function ensureRhythm(r){
   if(!r)return r;
@@ -55,7 +55,8 @@
    out+='<div class="addrow"><label class="rmode"><input type="radio" name="'+grp+'" '+A("monthlyMode")+' value="onDay"'+(r.monthlyMode!=="onThe"?' checked':'')+'> On</label>'+rMonthSelect(r,A,"month",r.monthlyMode==="onThe")+rDaySelect(r,A,"monthDay",r.monthlyMode==="onThe",31)+'</div>';
    out+='<div class="addrow"><label class="rmode"><input type="radio" name="'+grp+'" '+A("monthlyMode")+' value="onThe"'+(r.monthlyMode==="onThe"?' checked':'')+'> On the</label>'+rOrdSelect(r,A,null,r.monthlyMode!=="onThe")+'<span class="rsep">of</span>'+rMonthSelect(r,A,"monthThe",r.monthlyMode!=="onThe")+'</div>';
   }
-  if(r.freq==="custom")out+='<div class="addrow"><span class="rlabel">Repeat every</span><input type="number" min="1" max="365" '+A("every")+' value="'+(+r.every||1)+'"><select '+A("unit")+'>'+["days","weeks","months","years"].map(function(x){return '<option value="'+x+'"'+((r.unit||"weeks")===x?' selected':'')+'>'+x+'</option>';}).join('')+'</select></div>';
+  if(r.freq==="custom")out+='<div class="addrow"><span class="rlabel">Repeat every</span><input type="number" min="1" max="365" '+A("every")+' value="'+(+r.every||1)+'"><select '+A("unit")+'>'+["days","weeks","months","years"].map(function(x){return '<option value="'+x+'"'+((r.unit||"weeks")===x?' selected':'')+'>'+x+'</option>';}).join('')+'</select></div>'
+  +'<div class="addrow"><label class="rlabel">Starting on</label><input type="date" '+A("start")+' value="'+esc(r.start||"")+'"></div>';
   out+='<div class="addrow"><label class="rlabel">Until (optional)</label><input type="date" '+A("until")+' value="'+esc(r.until||"")+'"></div>';
   return out;
  }
@@ -69,7 +70,7 @@
  /* ---- style: heights, widths, disabled look ---- */
  try{
   var st=document.createElement("style");
-  st.textContent=".rhythm-schedule-grid select,.careplan-edit-grid select{min-height:44px!important;padding:10px 12px}"
+  st.textContent=".rhythm-schedule-grid select,.careplan-edit-grid select,.rhy-recur .addrow select,.rhy-recur .addrow input{min-height:48px!important;height:48px;padding:10px 14px;font-size:16px!important;line-height:1.4}"
   +".rhy-recur .addrow select,.rhy-recur .addrow input[type=number]{flex:0 0 auto;width:auto;min-width:84px}"
   +".rhy-recur .addrow input[type=date]{flex:1 1 160px;min-width:0}"
   +".rhy-recur select:disabled,.rhy-recur input:disabled{opacity:.45;cursor:not-allowed;background:var(--mist)}";
@@ -109,6 +110,7 @@
    ['dayOfMonth','monthDay','qmonth'].forEach(function(k){var f2=field(k);if(f2&&f2.value!=='')r[k]=+f2.value||1;});
    var uf=field('unit');if(uf)r.unit=uf.value;
    var un=field('until');r.until=un&&un.value?un.value:null;
+   var sf=field('start');if(sf)r.start=sf.value?sf.value:null;
    ensureRhythm(r);
    var newPerson=S.people.find(function(p){return p.id===field('person').value;});
    if(newPerson&&newPerson!==found.person){found.person.rhythms=found.person.rhythms.filter(function(x){return x!==r;});newPerson.rhythms=newPerson.rhythms||[];newPerson.rhythms.push(r);}
@@ -171,7 +173,7 @@
    rr.freq=t.value;
    if(t.value==="monthly"||t.value==="quarterly"){rr.monthlyMode=rr.monthlyMode||"onDay";rr.dayOfMonth=rr.dayOfMonth||new Date().getDate();if(t.value==="quarterly"&&!rr.qmonth)rr.qmonth=((new Date().getMonth())%3)+1;}
    if(t.value==="yearly"){rr.monthlyMode=rr.monthlyMode||"onDay";rr.month=rr.month||(new Date().getMonth()+1);rr.monthDay=rr.monthDay||new Date().getDate();}
-   if(t.value==="custom"){rr.every=rr.every||1;rr.unit=rr.unit||"weeks";if(!rr.weekdays)rr.weekdays=[];}
+   if(t.value==="custom"){rr.every=rr.every||1;rr.unit=rr.unit||"weeks";if(!rr.weekdays)rr.weekdays=[];if(!rr.start)rr.start=(function(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");})();}
    if(t.value==="weekly"&&(!Array.isArray(rr.weekdays)||rr.weekdays.length!==1))rr.weekdays=[new Date().getDay()];
    render();e.stopImmediatePropagation();return;
   }
@@ -212,3 +214,4 @@
   }
  },true);
 })();
+
