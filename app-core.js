@@ -1,1 +1,1 @@
-test
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}function defaultFaithRhythms(){return[{id:uid(),text:"Scripture reading",category:"faith",group:"Scripture",freq:"daily",tod:"early"}]}function test(){return true;}
