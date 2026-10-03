@@ -148,7 +148,13 @@ function eventsFor(areaId,personId){return S.events.filter(function(e){return e.
 function areaGoals(id){return S.goals.filter(function(g){return g.area===id&&!g.completed;});}
 function personGoals(pid){return S.goals.filter(function(g){return g.personId===pid;});}
 function avg(arr){arr=arr.filter(function(v){return Number.isFinite(v);});if(!arr.length)return null;return Math.round(arr.reduce(function(a,b){return a+b;},0)/arr.length);}
-function areaScore(id){var cr=S.rhythms.filter(function(r){return r.category===id&&!r.disabled;});if(cr.length>0)return avg(cr.map(rhythmScore));var g=areaGoals(id).map(goalScore);return avg(g)!==null?avg(g):rawScore(eventsFor(id));}
+function areaScore(id){
+ var rhythms=S.rhythms.filter(function(r){return r.category===id&&!r.disabled;});
+ var rhythmAverage=avg(rhythms.map(rhythmScore));
+ if(rhythmAverage!==null)return rhythmAverage;
+ var goalAverage=avg(areaGoals(id).map(goalScore));
+ return goalAverage!==null?goalAverage:rawScore(eventsFor(id));
+}
 /* ============ person score: connection-first ============ */
 function personCadenceDays(p){var cc=p.connectCadence||"weekly";if(cc==="daily")return 1;if(cc==="weekly")return 7;if(cc==="biweekly")return 14;if(cc==="monthly")return 30;return p.cadenceDays||30;}
 function personCadenceLabel(p){var cc=p.connectCadence||"weekly";return {daily:"daily",weekly:"weekly",biweekly:"every 2 weeks",monthly:"monthly"}[cc]||("every "+(p.cadenceDays||30)+" days");}
