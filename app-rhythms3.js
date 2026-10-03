@@ -12,7 +12,7 @@
  var RHYTHM_FREQS={daily:{label:"Daily"},weekly:{label:"Weekly"},monthly:{label:"Monthly"},quarterly:{label:"Quarterly"},yearly:{label:"Yearly"},custom:{label:"Custom"}};
  var R_MOS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
  var R_ORDS=["1st","2nd","3rd","4th","last"];
- var RHYTHM_FIELD_LIST=["weekdays","monthlyMode","dayOfMonth","ord","ordWeekday","month","monthDay","every","unit","until"];
+ var RHYTHM_FIELD_LIST=["weekdays","monthlyMode","dayOfMonth","ord","ordWeekday","month","monthDay","qmonth","every","unit","until"];
  /* ---- migration (mirror of rhythms2, re-applied lazily) ---- */
  function ensureRhythm(r){
   if(!r)return r;
@@ -25,8 +25,9 @@
   if(r.freq==="weekly"&&!Array.isArray(r.weekdays))r.weekdays=(r.scheduleDow===null||r.scheduleDow===undefined||r.scheduleDow==="")?[]:[+r.scheduleDow];
   if((r.freq==="monthly"||r.freq==="quarterly")&&r.monthlyMode===undefined){r.monthlyMode="onDay";r.dayOfMonth=r.dayOfMonth||null;}
   if(r.freq==="yearly"&&r.month===undefined){r.monthlyMode=r.monthlyMode||"onDay";r.month=r.month||null;r.monthDay=r.monthDay||null;}
+  if(r.freq==="quarterly"&&!r.qmonth)r.qmonth=((new Date().getMonth())%3)+1;
   if(r.freq==="custom"&&!r.unit)r.unit="weeks";
-  ["customType","customDow","customOrd","scheduleDow","category","dur","durVal","durUnit"].forEach(function(k){delete r[k];});
+  ["customType","customDow","customOrd","scheduleDow","category","dur","durVal","durUnit","rule"].forEach(function(k){delete r[k];});
   return r;
  }
  function migrateAllRhythms(){
@@ -46,6 +47,7 @@
   var out="",u=r.freq==="custom"?(r.unit||"weeks"):r.freq,grp="rmode-"+String(r.id||"draft").replace(/[^a-z0-9]/gi,"-");
   if(u==="weekly"||u==="weeks")out+='<div class="addrow"><span class="rlabel">On</span>'+rDowPills(r,A)+'</div>';
   if(u==="monthly"||u==="months"||u==="quarterly"){
+   if(u==="quarterly"){var qm=+r.qmonth||(((new Date().getMonth())%3)+1);out+='<div class="addrow"><span class="rlabel">In</span><select '+A("qmonth")+'>'+[[1,"Jan/Apr/Jul/Oct"],[2,"Feb/May/Aug/Nov"],[3,"Mar/Jun/Sep/Dec"]].map(function(q){return '<option value="'+q[0]+'"'+(qm===q[0]?' selected':'')+'>'+q[1]+'</option>';}).join('')+'</select></div>';}
    out+='<div class="addrow"><label class="rmode"><input type="radio" name="'+grp+'" '+A("monthlyMode")+' value="onDay"'+(r.monthlyMode!=="onThe"?' checked':'')+'> On day</label>'+rDaySelect(r,A,"dayOfMonth",r.monthlyMode==="onThe",28)+'</div>';
    out+='<div class="addrow"><label class="rmode"><input type="radio" name="'+grp+'" '+A("monthlyMode")+' value="onThe"'+(r.monthlyMode==="onThe"?' checked':'')+'> On the</label>'+rOrdSelect(r,A,null,r.monthlyMode!=="onThe")+'</div>';
   }
@@ -104,7 +106,7 @@
    r.weekdays=Array.prototype.slice.call(form.querySelectorAll('[data-cpf="weekdays"]:checked')).map(function(x){return +x.value;});
    var mm=form.querySelector('[data-cpf="monthlyMode"]:checked');if(mm)r.monthlyMode=mm.value;
    ['ord','ordWeekday','month','monthThe','every'].forEach(function(k){var f2=field(k);{var dst=k==="monthThe"?"month":k;r[dst]=+f2.value||1;}});
-   ['dayOfMonth','monthDay'].forEach(function(k){var f2=field(k);if(f2&&f2.value!=='')r[k]=+f2.value||1;});
+   ['dayOfMonth','monthDay','qmonth'].forEach(function(k){var f2=field(k);if(f2&&f2.value!=='')r[k]=+f2.value||1;});
    var uf=field('unit');if(uf)r.unit=uf.value;
    var un=field('until');r.until=un&&un.value?un.value:null;
    ensureRhythm(r);
@@ -167,14 +169,14 @@
   if(fld==="weekdays"){var v=+t.value;rr.weekdays=t.checked?[v]:[];render();e.stopImmediatePropagation();return;}
   if(fld==="freq"){
    rr.freq=t.value;
-   if(t.value==="monthly"||t.value==="quarterly"){rr.monthlyMode=rr.monthlyMode||"onDay";rr.dayOfMonth=rr.dayOfMonth||new Date().getDate();}
+   if(t.value==="monthly"||t.value==="quarterly"){rr.monthlyMode=rr.monthlyMode||"onDay";rr.dayOfMonth=rr.dayOfMonth||new Date().getDate();if(t.value==="quarterly"&&!rr.qmonth)rr.qmonth=((new Date().getMonth())%3)+1;}
    if(t.value==="yearly"){rr.monthlyMode=rr.monthlyMode||"onDay";rr.month=rr.month||(new Date().getMonth()+1);rr.monthDay=rr.monthDay||new Date().getDate();}
    if(t.value==="custom"){rr.every=rr.every||1;rr.unit=rr.unit||"weeks";if(!rr.weekdays)rr.weekdays=[];}
    if(t.value==="weekly"&&(!Array.isArray(rr.weekdays)||rr.weekdays.length!==1))rr.weekdays=[new Date().getDay()];
    render();e.stopImmediatePropagation();return;
   }
   if(fld==="unit"){rr.unit=t.value;if(t.value==="weeks"&&(!Array.isArray(rr.weekdays)||!rr.weekdays.length))rr.weekdays=[new Date().getDay()];render();e.stopImmediatePropagation();return;}
-  if(fld==="every"||fld==="dayOfMonth"||fld==="ord"||fld==="ordWeekday"||fld==="month"||fld==="monthThe"||fld==="monthDay"){var dst=fld==="monthThe"?"month":fld;rr[dst]=+t.value||1;render();e.stopImmediatePropagation();return;}
+  if(fld==="every"||fld==="dayOfMonth"||fld==="ord"||fld==="ordWeekday"||fld==="month"||fld==="monthThe"||fld==="monthDay"||fld==="qmonth"){var dst=fld==="monthThe"?"month":fld;rr[dst]=+t.value||1;render();e.stopImmediatePropagation();return;}
   rr[fld]=t.value;render();e.stopImmediatePropagation();
  },true);
  document.addEventListener("click",function(e){
