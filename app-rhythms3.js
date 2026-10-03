@@ -144,7 +144,7 @@
   if(i<0)return html;
   var tagRe=/<\/?div\b[^>]*>/g;tagRe.lastIndex=i;
   var depth=0,m2,end=-1;
-  while((m2=tagRe.exec(html))){if(m2[0].charAt(1)==="/'){depth--;}else{depth++;}if(depth===0){end=m2.index+m2[0].length;break;}}
+  while((m2=tagRe.exec(html))){if(m2[0].charAt(1)===String.fromCharCode(47)){depth--;}else{depth++;}if(depth===0){end=m2.index+m2[0].length;break;}}
   if(end<0)return html;
   return html.slice(0,i)+pills+html.slice(end);
  };
