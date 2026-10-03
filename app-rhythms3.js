@@ -67,7 +67,7 @@
  /* ---- style: heights, widths, disabled look ---- */
  try{
   var st=document.createElement("style");
-  st.textContent=".rhythm-schedule-grid select,.careplan-edit-grid select{min-height:44px}"
+  st.textContent=".rhythm-schedule-grid select,.careplan-edit-grid select{min-height:44px!important;padding:10px 12px}"
   +".rhy-recur .addrow select,.rhy-recur .addrow input[type=number]{flex:0 0 auto;width:auto;min-width:84px}"
   +".rhy-recur .addrow input[type=date]{flex:1 1 160px;min-width:0}"
   +".rhy-recur select:disabled,.rhy-recur input:disabled{opacity:.45;cursor:not-allowed;background:var(--mist)}";
@@ -170,10 +170,10 @@
    if(t.value==="monthly"||t.value==="quarterly"){rr.monthlyMode=rr.monthlyMode||"onDay";rr.dayOfMonth=rr.dayOfMonth||new Date().getDate();}
    if(t.value==="yearly"){rr.monthlyMode=rr.monthlyMode||"onDay";rr.month=rr.month||(new Date().getMonth()+1);rr.monthDay=rr.monthDay||new Date().getDate();}
    if(t.value==="custom"){rr.every=rr.every||1;rr.unit=rr.unit||"weeks";if(!rr.weekdays)rr.weekdays=[];}
-   if(t.value==="weekly"&&!rr.weekdays)rr.weekdays=[];
+   if(t.value==="weekly"&&(!Array.isArray(rr.weekdays)||rr.weekdays.length!==1))rr.weekdays=[new Date().getDay()];
    render();e.stopImmediatePropagation();return;
   }
-  if(fld==="unit"){rr.unit=t.value;if(t.value==="weeks"&&!rr.weekdays)rr.weekdays=[];render();e.stopImmediatePropagation();return;}
+  if(fld==="unit"){rr.unit=t.value;if(t.value==="weeks"&&(!Array.isArray(rr.weekdays)||!rr.weekdays.length))rr.weekdays=[new Date().getDay()];render();e.stopImmediatePropagation();return;}
   if(fld==="every"||fld==="dayOfMonth"||fld==="ord"||fld==="ordWeekday"||fld==="month"||fld==="monthThe"||fld==="monthDay"){var dst=fld==="monthThe"?"month":fld;rr[dst]=+t.value||1;render();e.stopImmediatePropagation();return;}
   rr[fld]=t.value;render();e.stopImmediatePropagation();
  },true);
@@ -190,7 +190,7 @@
      ensureRhythm(nc);rp.rhythms=rp.rhythms||[];rp.rhythms.push(nc);rhythmDraft=null;save();render();flash("Rhythm added");
     }
    }else if(rhythmDraft&&rhythmDraft.pid===ra){flash("Give the rhythm a name first");}
-   else{rhythmDraft={pid:ra,text:"",freq:"weekly",tod:"anytime",weekdays:[],every:1,unit:"weeks"};render();}
+   else{rhythmDraft={pid:ra,text:"",freq:"weekly",tod:"anytime",weekdays:[new Date().getDay()],every:1,unit:"weeks"};render();}
    e.stopImmediatePropagation();return;
   }
   b=e.target.closest("[data-rhyconfirm]");
