@@ -39,7 +39,7 @@
  }
  migrateAllRhythms();
  /* ---- recurrence editor builders (mirror of rhythms2) ---- */
- function rDowPills(r,A){var sel=r.weekdays||[];return '<span class="dow-pills">'+DOW.map(function(d,i){return '<label class="dow-pill"><input type="checkbox" '+A("weekdays")+' value="'+i+'"'+(sel.indexOf(i)>=0?' checked':'')+'><span>'+d.charAt(0)+'</span></label>';}).join('')+'</span>';}
+ function rDowPills(r,A){var sel=r.weekdays;if(!Array.isArray(sel))sel=(sel===null||sel===undefined||sel==="")?[]:[+sel];if(sel.length>1)sel=[+sel[0]];r.weekdays=sel;return '<span class="dow-pills">'+DOW.map(function(d,i){return '<label class="dow-pill"><input type="checkbox" '+A("weekdays")+' value="'+i+'"'+(sel.indexOf(i)>=0?' checked':'')+'><span>'+d.charAt(0)+'</span></label>';}).join('')+'</span>';}
  function rDaySelect(r,A,fld,dis,maxDay){var mx=maxDay||31,cur=r[fld]?+r[fld]:null,o='<select '+A(fld)+(dis?' disabled':'')+'>';for(var i=1;i<=mx;i++)o+='<option value="'+i+'"'+(cur===i?' selected':'')+'>'+i+'</option>';return o+'</select>';}
  function rOrdSelect(r,A,fld,dis){var d=dis?' disabled':'';return '<select '+A(fld||"ord")+d+'>'+R_ORDS.map(function(o,i){return '<option value="'+(i+1)+'"'+((+r.ord||1)===i+1?' selected':'')+'>'+o+'</option>';}).join('')+'</select><select '+A("ordWeekday")+d+'>'+DOW.map(function(d,i){return '<option value="'+i+'"'+((+r.ordWeekday||0)===i?' selected':'')+'>'+d+'</option>';}).join('')+'</select>';}
  function rMonthSelect(r,A,fld,dis){return '<select '+A(fld||"month")+(dis?' disabled':'')+'>'+R_MOS.map(function(m,i){return '<option value="'+(i+1)+'"'+((+r.month||1)===i+1?' selected':'')+'>'+m+'</option>';}).join('')+'</select>';}
@@ -105,7 +105,7 @@
   r.text=title;r.tod=field('tod').value;
   if(found.kind==='rhythm'){
    r.freq=field('frequency').value;
-   r.weekdays=Array.prototype.slice.call(form.querySelectorAll('[data-cpf="weekdays"]:checked')).map(function(x){return +x.value;});
+   r.weekdays=Array.prototype.slice.call(form.querySelectorAll('[data-cpf="weekdays"]:checked')).map(function(x){return +x.value;});if(!r.weekdays.length)r.weekdays=[new Date().getDay()];if(r.weekdays.length>1)r.weekdays=[r.weekdays[0]];
    var mm=form.querySelector('[data-cpf="monthlyMode"]:checked');if(mm)r.monthlyMode=mm.value;
    ['ord','ordWeekday','month','monthThe','every'].forEach(function(k){var f2=field(k);{var dst=k==="monthThe"?"month":k;r[dst]=+f2.value||1;}});
    ['dayOfMonth','monthDay','qmonth'].forEach(function(k){var f2=field(k);if(f2&&f2.value!=='')r[k]=+f2.value||1;});
@@ -159,6 +159,27 @@
   var found=carePlanFind(form.getAttribute("data-cpform"));
   if(found&&found.record){found.record.monthlyMode=t.value;render();}
  });
+ /* ---- weekday pills: single-day enforcement at window-capture.
+    WHY WINDOW: r2's document-capture weekday handler (wd.push, multi-select)
+    runs before r3's document handlers and calls stopImmediatePropagation,
+    so it would win. Window-capture fires before ALL document listeners. ---- */
+ window.addEventListener("change",function(e){
+  var t=e.target;
+  if(!t||!t.matches||!t.closest)return;
+  var isRf=t.matches('[data-rfield$="|weekdays"]'),isCp=t.matches('[data-cpf="weekdays"]');
+  if(!isRf&&!isCp)return;
+  if(isCp){
+   var fm2=t.closest("[data-cpform]");
+   if(fm2&&t.checked)Array.prototype.slice.call(fm2.querySelectorAll('[data-cpf="weekdays"]')).forEach(function(x){if(x!==t)x.checked=false;});
+   e.stopImmediatePropagation();return;
+  }
+  var rf=t.getAttribute("data-rfield").split("|"),rr2=null;
+  if(rf[1]==="draft"){if(rhythmDraft&&rhythmDraft.pid===rf[0])rr2=rhythmDraft;}
+  else if(rhythmEditDraft&&rhythmEditDraft.id===rf[1]&&editRhythmId===rf[1])rr2=rhythmEditDraft;
+  if(!rr2)return;
+  rr2.weekdays=t.checked?[+t.value]:[];
+  render();e.stopImmediatePropagation();
+ },true);
  /* ---- handlers: create/edit rhythms (revives rhythms2's dead listeners) ---- */
  document.addEventListener("change",function(e){
   var t=e.target;
