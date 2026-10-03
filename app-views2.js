@@ -1,11 +1,1 @@
-"use strict";
-/* ============ views: prayer, echo, offload, settings, sync ============ */
-var PRAYER_CATS=["Family","Marriage","Kids","Friends","Work & Ministry","Church & Pastors","World & Others"];
-var editingPrayerId=null;
-function prayerDate(value){if(!value)return "";var d=new Date(value+"T12:00:00");return isNaN(d.getTime())?value:String(d.getDate()).padStart(2,"0")+" "+["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"][d.getMonth()]+" "+d.getFullYear();}
-function prayerRow(p){
- var person=S.people.find(function(person){return person.id===p.personId;});
- var count='Prayed for '+(p.prayed||0)+' '+((p.prayed||0)===1?'time':'times');
- var out='<article class="prayer-item">';
- if(editingPrayerId===p.id){
-  out+='<label class="field">Title<input id="prayerEditText" value="'+esc(p.text)+'"></label><label class="field">Details<textarea id="prayerEditDetails" placeholder="What would you like to pray for?">'+esc(p.details||"")+'</textarea></label><div class="addrow"><select id="prayerEditCat" aria-label="Category">'+PRAYER_CATS.map(function(c){return '<option'+(p.category===c?' selected':'')+'>'+esc(c)+'</option>';}).join('')+'</select><select id="prayerEditPerson" aria-label="Person"><option value="">No person</option>'+S.people.map(function(person){return '<option value="'+person.id+'"'+(p.personId===person.id?' selected':'')+'>'+esc(person.name)+'</option>';}).join('')+'</select></div><div class="pp-opts"><label class="pp-option">Frequency<select id="prayerEditFreq" aria-label="Prayer frequency">'+Object.keys(FREQS).map(function(k){return '<option value="'+k+'"'+(p.freq===k?' selected':'')+'>'+FREQS[k].label+'</option>';}).join('')+'<option value="none"'+(p.freq?'':' selected')+'>No schedule</option></select></label><label class="pp-option">Time<select id="prayerEditTod" aria-label="Prayer time of day">'+Object.keys(TODS).map(function(k){return '<option value="'+k+'"'+((p.tod||'anytime')===k?' selected':'')+'>'+esc(TODS[k])+'</option>';}).join('')+'</select></label><label class="pp-option" data-schedule-day'+(scheduleHasWeekday(p.freq)?'':' hidden')+'>Day of week'+dayCirclesHTML(p.scheduleDow, "prayerEdit")+'</label></div><div class="prayer-actions"><button class="btn mini" data-prayersave="'+p.id+'">Save</button><button class="btn mini ghost" data-prayercancel="1">Cancel</button><button class="btn mini danger" data-prayerdel="'+p.id+'">Delete</button></div>';
+BASE64_ENCODED
