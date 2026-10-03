@@ -97,6 +97,17 @@ function rhythmMatchesDay(r,date){
 }
 function rWkTxt(r){var wd=r.weekdays||[];return wd.length?" on "+wd.slice().sort(function(a,b){return a-b;}).map(function(i){return DOW[i];}).join(" & "):"";}
 function rMoTxt(r){if(r.monthlyMode==="onThe")return " on the "+(R_ORDS[(+r.ord||1)-1]||"1st")+" "+DOW[+r.ordWeekday||0];return r.dayOfMonth?" on day "+r.dayOfMonth:"";}
+function rQuarterlyTxt(r){
+ var offset=Math.max(1,Math.min(3,+r.qmonth||1))-1;
+ var months=[0,3,6,9].map(function(q){return q+offset;});
+ var names=months.map(function(m){return R_MOS[m];}).join(", ");
+ if(r.monthlyMode==="onThe")return " on the "+(R_ORDS[(+r.ord||1)-1]||"1st")+" "+DOW[+r.ordWeekday||0]+" in "+names;
+ var day=+r.dayOfMonth||0;
+ if(!day)return " in "+names;
+ var valid=months.filter(function(m){return day<=(m===1?29:new Date(2026,m+1,0).getDate());});
+ var dates=valid.map(function(m){return R_MOS[m]+" "+day;}).join(", ");
+ return " on "+dates+(valid.length<months.length?" (months without that date are skipped)":"");
+}
 function rYrTxt(r){if(r.monthlyMode==="onThe")return " on the "+(R_ORDS[(+r.ord||1)-1]||"1st")+" "+DOW[+r.ordWeekday||0]+" of "+R_MOS[(+r.month||1)-1];return " on "+(R_MOS[(+r.month||1)-1]||"")+" "+(r.monthDay||1);}
 function rUntilTxt(r){if(!r.until)return "";var d=new Date(r.until+"T12:00:00");return " until "+R_MOS[d.getMonth()]+" "+d.getDate()+", "+d.getFullYear();}
 rhythmFreqLabel=function(r){
@@ -105,7 +116,7 @@ rhythmFreqLabel=function(r){
  if(r.freq==="custom"){var u=r.unit||"weeks";return "Every "+(+r.every||1)+" "+u+(u==="weeks"?rWkTxt(r):u==="months"?rMoTxt(r):u==="years"?rYrTxt(r):"")+rUntilTxt(r);}
  if(r.freq==="weekly")return "Weekly"+rWkTxt(r)+rUntilTxt(r);
  if(r.freq==="monthly")return "Monthly"+rMoTxt(r)+rUntilTxt(r);
- if(r.freq==="quarterly")return "Quarterly"+rMoTxt(r)+rUntilTxt(r);
+ if(r.freq==="quarterly")return "Quarterly"+rQuarterlyTxt(r)+rUntilTxt(r);
  if(r.freq==="yearly")return "Yearly"+rYrTxt(r)+rUntilTxt(r);
  return "Daily"+rUntilTxt(r);
 };
@@ -113,9 +124,11 @@ personRhythms=function(p){return ((p&&p.rhythms)||[]).filter(function(r){return 
 personScore=function(p){
  var rs=personRhythms(p),ti=personTouchInfo(p),ts=touchScoreFromDays(ti.days);
  var conn=rs.length?avg(rs.map(rhythmScore)):connScoreFromDays(ti.days,personCadenceDays(p));
- var ps=prayerScoreFromDays(personPrayerInfo(p).days);
- if(!rs.length)return Math.round(0.7*conn+0.3*ps);
- return Math.round(clamp(0.4*conn+0.3*ts+0.3*ps,0,100));
+ var ps=prayerMeterScore(p),total=0,weight=0;
+ if(conn!==null){total+=0.4*conn;weight+=0.4;}
+ total+=0.3*ts;weight+=0.3;
+ if(ps!==null){total+=0.3*ps;weight+=0.3;}
+ return Math.round(clamp(total/weight,0,100));
 };
 defaultRhythms=function(){return[{id:uid(),text:"Pray together",freq:"daily",tod:"early"},{id:uid(),text:"Afternoon walk around the block",freq:"daily",tod:"afternoon"},{id:uid(),text:"Date night",freq:"weekly",weekdays:[5],tod:"evening"},{id:uid(),text:"Overnight getaway",freq:"quarterly",tod:"anytime"}];};
 rhythmScheduledToday=function(r,date){
@@ -164,7 +177,7 @@ personRhythmScheduleHTML=function(r,idf){
 /* ---- person page rhythm rows (profile Rhythms tab) ---- */
 rhythmRow=function(p,r){
  ensureRhythm(r);
- var sc=rhythmScore(r),c=scoreClass(sc);
+ var sc=rhythmScore(r),c=scoreClass(sc),scoreText=sc===null?"—":sc;
  if(editRhythmId===r.id){
   if(!rhythmEditDraft||rhythmEditDraft.id!==r.id)rhythmEditDraft=JSON.parse(JSON.stringify(r));
   r=rhythmEditDraft;
@@ -173,13 +186,13 @@ rhythmRow=function(p,r){
   out+='<div class="addrow" style="margin-top:2px"><input data-rfield="'+idf+'|text" value="'+esc(r.text)+'" placeholder="What is the rhythm?"></div>';
   out+=personRhythmScheduleHTML(r,idf);
   out+='<div class="addrow"><button class="btn mini" data-rhyeditsave="'+idf+'">Save</button><button class="btn mini ghost" data-rhyeditcancel="1">Cancel</button><button class="btn mini danger" style="margin-left:auto" data-rhydel="'+idf+'">Delete</button></div>';
-  out+='<div class="hint" style="font-size:11px;color:var(--ink-faint);margin:4px 0 8px">Changes are saved when you select Save.</div></div>';
+  out+='</div>';
   return out;
  }
  var rl=rhythmLast(r),lastTxt=rl?("last tended "+when(rl.ts)):"not yet tended";
  var timingTxt=lastTxt+(rl&&rhythmDaysSince(r)!==0?" \u00B7 "+rhythmDueTxt(r):"");
- if(rhyDoneDraft&&rhyDoneDraft.key===p.id+"|"+r.id){return '<div class="rhyrow"><span class="rhythm-health" title="Rhythm health"><span class="sm-dot '+c+'" aria-hidden="true"></span><span>'+sc+'%</span></span><div class="gr-main"><b>'+esc(r.text||"(unnamed rhythm)")+'</b><div class="gr-meta">'+esc(rhythmFreqLabel(r))+" \u00B7 "+esc(timingTxt)+'</div></div>'+rhyDoneBtn(p.id+"|"+r.id)+'</div><div class="hint" style="font-size:11px;color:var(--ink-faint);margin:0 0 8px 26px">When did it actually happen? That date drives the meter.</div>';}
- return '<div class="rhyrow"><span class="rhythm-health" title="Rhythm health"><span class="sm-dot '+c+'" aria-hidden="true"></span><span>'+sc+'%</span></span><div class="gr-main"><b>'+esc(r.text||"(unnamed rhythm)")+'</b><div class="gr-meta">'+esc(rhythmFreqLabel(r))+(r.tod&&r.tod!=="anytime"?" \u00B7 "+esc(TODS[r.tod]):"")+(rhythmEnded(r)?" \u00B7 ended":"")+" \u00B7 "+esc(timingTxt)+'</div></div><button class="btn mini" data-rhydone="'+p.id+'|'+r.id+'" title="Record a moment of care">Tend</button><button class="iconbtn rhythm-history-trigger" data-rhyhistory="'+p.id+'|'+r.id+'" title="View rhythm history" aria-label="View history for '+esc(r.text)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button class="iconbtn" data-rhyedit="'+r.id+'" title="edit">\u270E</button></div>';
+ if(rhyDoneDraft&&rhyDoneDraft.key===p.id+"|"+r.id){return '<div class="rhyrow"><span class="rhythm-health" title="Rhythm health"><span class="sm-dot '+c+'" aria-hidden="true"></span><span>'+scoreText+'%</span></span><div class="gr-main"><b>'+esc(r.text||"(unnamed rhythm)")+'</b><div class="gr-meta">'+esc(rhythmFreqLabel(r))+" \u00B7 "+esc(timingTxt)+'</div></div>'+rhyDoneBtn(p.id+"|"+r.id)+'</div><div class="hint" style="font-size:11px;color:var(--ink-faint);margin:0 0 8px 26px">When did it actually happen? That date drives the meter.</div>';}
+ return '<div class="rhyrow"><span class="rhythm-health" title="Rhythm health"><span class="sm-dot '+c+'" aria-hidden="true"></span><span>'+scoreText+'%</span></span><div class="gr-main"><b>'+esc(r.text||"(unnamed rhythm)")+'</b><div class="gr-meta">'+esc(rhythmFreqLabel(r))+(r.tod&&r.tod!=="anytime"?" \u00B7 "+esc(TODS[r.tod]):"")+(rhythmEnded(r)?" \u00B7 ended":"")+" \u00B7 "+esc(timingTxt)+'</div></div><button class="btn mini" data-rhydone="'+p.id+'|'+r.id+'" title="Record a moment of care">Tend</button><button class="iconbtn rhythm-history-trigger" data-rhyhistory="'+p.id+'|'+r.id+'" title="View rhythm history" aria-label="View history for '+esc(r.text)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button class="iconbtn" data-rhyedit="'+r.id+'" title="edit">\u270E</button></div>';
 };
 draftRow=function(p){
  var r=rhythmDraft,idf=p.id+"|draft";
@@ -187,7 +200,7 @@ draftRow=function(p){
  var out='<div class="rhyedit">';
  out+='<div class="addrow" style="margin-top:2px"><input data-rfield="'+idf+'|text" value="'+esc(r.text||"")+'" placeholder="What is the rhythm?"></div>';
  out+=personRhythmScheduleHTML(r,idf);
- out+='<div class="hint" style="font-size:11px;color:var(--ink-faint);margin:4px 0 2px">Name it, then hit Save Rhythm below.</div></div>';
+ out+='</div>';
  return out;
 };
 
@@ -199,7 +212,7 @@ carePlanEditHTML=function(item,key){
  if(kind!=='rhythm')frequencies.unshift(['','No frequency']);
  if(kind==='goal')frequencies.push(['custom','Custom interval']);
  var peopleOptions=[['','No person']].concat(S.people.map(function(p){return [p.id,p.name];}));
- var out='<div class="careplan-edit" data-cpform="'+esc(key)+'"><div class="careplan-edit-head"><span class="careplan-kind careplan-kind-'+kind+'">'+(kind==='rhythm'?'Rhythm':kind==='prayer'?'Prayer':'Goal')+'</span><strong>Edit '+kind+'</strong></div><label class="careplan-field">Title<input data-cpf="title" value="'+esc(r.text||'')+'"></label>';
+ var out='<div class="careplan-edit'+(kind==='rhythm'?' careplan-rhythm-edit':'')+'" data-cpform="'+esc(key)+'"><div class="careplan-edit-head"><span class="careplan-kind careplan-kind-'+kind+'">'+(kind==='rhythm'?'Rhythm':kind==='prayer'?'Prayer':'Goal')+'</span><strong>Edit '+kind+'</strong></div><label class="careplan-field">Title<input data-cpf="title" value="'+esc(r.text||'')+'"></label>';
  if(kind!=='rhythm')out+='<label class="careplan-field">Details<textarea data-cpf="details">'+esc(r.details||'')+'</textarea></label>';
  out+='<div class="careplan-edit-grid"><label class="careplan-field">Frequency<select data-cpf="frequency">'+carePlanOptions(frequencies,kind==='prayer'?r.freq:kind==='goal'?(r.cadence||r.freq):r.freq)+'</select></label><label class="careplan-field">Time of day<select data-cpf="tod">'+carePlanOptions(times,r.tod||'anytime')+'</select></label>';
  if(kind!=='rhythm')out+='<label class="careplan-field" data-schedule-day'+(scheduleHasWeekday(kind==='goal'?r.cadence:r.freq)?'':' hidden')+'>Day of week<select data-cpf="scheduleDow">'+scheduleDayOptions(r.scheduleDow)+'</select></label>';

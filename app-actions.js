@@ -1,1 +1,197 @@
-BASE64_ENCODED
+
+
+
+"use strict";
+/* ============ actions & bindings ============ */
+function logEvent(areaId,personId,type,title,note,whenTs,goalId,rhythmId,extra){var _ev={id:uid(),ts:(whenTs||Date.now()),areaId:areaId,personId:personId||null,type:type||"inperson",kind:type||"inperson",title:title||"",note:note||"",goalId:goalId||null,rhythmId:rhythmId||null,weight:(ETYPES[type]?ETYPES[type].w:3)};if(extra)for(var _k in extra)_ev[_k]=extra[_k];S.events.push(_ev);save();render();}
+function deleteEvent(id){S.events=S.events.filter(function(e){return e.id!==id;});save();render();flash("Entry deleted");}
+function updateEvent(id,patch){var e=S.events.find(function(x){return x.id===id;});if(e){Object.keys(patch).forEach(function(k){e[k]=patch[k];});e.weight=(ETYPES[e.type]?ETYPES[e.type].w:3);save();render();flash("Entry updated");}}
+window.openModal=function(){var sel=el("logArea"),selp=el("logPerson"),selk=el("logKind");sel.innerHTML=AREA_IDS.map(function(a){return '<option value="'+a+'">'+S.areas[a].name+'</option>';}).join("");selp.innerHTML='<option value="">- no specific person -</option>'+S.people.map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+'</option>';}).join("");selk.innerHTML=Object.keys(KINDS).map(function(k){return '<option value="'+k+'">'+KINDS[k].label+'</option>';}).join("");el("logNote").value="";el("logModal").classList.add("open");};
+window.closeModal=function(){el("logModal").classList.remove("open");};
+window.submitLog=function(){logEvent(el("logArea").value,el("logPerson").value||null,el("logKind").value,el("logNote").value.trim());window.closeModal();};
+function openPersonTab(pid){tab="people";currentArea=null;currentPerson=pid;openDetail=null;render();}
+function downloadICS(title){var d=new Date();d.setDate(d.getDate()+1);d.setHours(7,0,0,0);function st(dt){return dt.getUTCFullYear()+String(dt.getUTCMonth()+1).padStart(2,"0")+String(dt.getUTCDate()).padStart(2,"0")+"T"+String(dt.getUTCHours()).padStart(2,"0")+String(dt.getUTCMinutes()).padStart(2,"0")+"00Z";}var end=new Date(d.getTime()+15*60000);var ics=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Tend//EN","BEGIN:VEVENT","UID:"+uid()+"@tend","DTSTAMP:"+st(new Date()),"DTSTART:"+st(d),"DTEND:"+st(end),"SUMMARY:"+title.replace(/[,;]/g,""),"DESCRIPTION:From Tend","END:VEVENT","END:VCALENDAR"].join("\r\n");var blob=new Blob([ics],{type:"text/calendar"});var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="tend-reminder.ics";a.click();flash("Reminder file downloaded");}
+function saveEncNote(pid,ta){var p=S.people.find(function(x){return x.id===pid;});if(p){p.encouragementNote=ta.value;save();var h=document.querySelector('[data-enchint="'+pid+'"]');if(h){h.classList.add("show");setTimeout(function(){h.classList.remove("show");},900);}}}
+function savePersonNote(pid,field,ta){var p=S.people.find(function(x){return x.id===pid;});if(p){p[field]=ta.value;save();var h=document.getElementById("prayerSaveHint");if(h){h.classList.add("show");clearTimeout(savePersonNote._t);savePersonNote._t=setTimeout(function(){h.classList.remove("show");},900);}}}
+
+function bind(){
+ if(window._tendDelegated)return;
+ window._tendDelegated=true;
+ document.addEventListener("toggle",function(e){var t=e.target;if(t.matches&&t.matches("[data-plan-block]"))planOpenState[t.getAttribute("data-plan-block")]=t.open;},true);
+ document.addEventListener("cancel",function(e){if(e.target.id==="rippleDialog"){window._rippleModalOpen=false;editingConn=null;}},true);
+ document.addEventListener("click",function(e){
+  var t=e.target,b;
+  if(b=t.closest('[data-settingstab]')){settingsTab=b.getAttribute('data-settingstab');document.querySelectorAll('[data-settingstab]').forEach(function(x){x.setAttribute('aria-selected',String(x.getAttribute('data-settingstab')===settingsTab));});document.querySelectorAll('.settings-panel').forEach(function(x){x.hidden=x.id!=='settings-panel-'+settingsTab;});return;}
+  if(b=t.closest("[data-rhyhistory]")){openRhythmHistory(b.getAttribute("data-rhyhistory"));return;}
+  if(b=t.closest("[data-noteadd]")){var kind=b.getAttribute("data-notekind");var input=el("noteNew-"+kind);if(input&&input.value.trim()){S.followups.push({id:uid(),personId:b.getAttribute("data-noteadd"),kind:kind,text:input.value.trim(),done:false});save();render();}return;}
+  if(b=t.closest("[data-personprayeropen]")){window._personPrayerDraftFor=b.getAttribute("data-personprayeropen");render();var field=el("personPrayerTitle");if(field)field.focus();return;}
+  if(b=t.closest("[data-personprayercancel]")){window._personPrayerDraftFor=null;render();return;}
+  if(b=t.closest("[data-personprayeradd]")){var person=S.people.find(function(p){return p.id===b.getAttribute("data-personprayeradd");});var title=el("personPrayerTitle").value.trim();if(person&&title){var categories={marriage:"Marriage",parenting:"Kids",friendships:"Friends"};var freq=el("personPrayerFreq").value;S.prayers.push({id:uid(),personId:person.id,category:categories[person.area]||"Family",text:title,details:el("personPrayerDetails").value.trim(),freq:freq==="none"?null:freq,tod:el("personPrayerTod").value,scheduleDow:scheduleHasWeekday(freq)&&el("personPrayerDow").value!==""?+el("personPrayerDow").value:null,added:todayStr(),answered:false,archived:false,prayed:0});window._personPrayerDraftFor=null;save();render();flash("Prayer added");}else flash("Add a prayer title");return;}
+  if(b=t.closest("[data-profiletab]")){var selected=b.getAttribute("data-profiletab");profileTabs[currentPerson]=selected;document.querySelectorAll('[data-profiletab]').forEach(function(button){button.setAttribute('aria-selected',String(button.getAttribute('data-profiletab')===selected));});document.querySelectorAll('.profile-tab-panel').forEach(function(panel){panel.hidden=panel.id!=="profile-panel-"+selected;});return;}
+  if(b=t.closest("[data-rippleidea]")){var pid=b.getAttribute("data-rippleidea");rippleIdeaOffsets[pid]=(rippleIdeaOffsets[pid]||0)+1;var person=S.people.find(function(p){return p.id===pid;});if(person)el("rippleIdea").textContent=rippleIdea(person);return;}
+  if(b=t.closest("[data-rippleopen]")){window._rippleModalOpen=true;render();var dialog=el("rippleDialog");if(dialog){dialog.removeAttribute("open");dialog.showModal();}return;}
+  if(b=t.closest("[data-planview]")){var pv=b.getAttribute("data-planview");planViewState=(planViewState===pv)?null:pv;render();return;}
+  if(b=t.closest("[data-areanav]")){currentArea=b.getAttribute("data-areanav");openDetail=null;editingId=null;editingEvent=null;render();window.scrollTo(0,0);return;}
+  if(b=t.closest("[data-utilnav]")){tab=b.getAttribute("data-utilnav");window._psModalOpen=false;currentArea=null;openDetail=null;editingId=null;editingEvent=null;currentPerson=null;editingConn=null;editRhythmId=null;rhythmEditDraft=null;editSparkId=null;rhythmDraft=null;rhyDoneDraft=null;render();window.scrollTo(0,0);return;}
+  if(b=t.closest("[data-areago]")){currentArea=b.getAttribute("data-areago");openDetail=null;editingId=null;editingEvent=null;render();window.scrollTo(0,0);return;}
+  if(b=t.closest("[data-personrhythms]")){var pid=b.getAttribute("data-personrhythms");profileTabs[pid]="rhythms";currentArea=null;openPersonTab(pid);var target=el("profile-tab-rhythms");if(target){target.focus({preventScroll:true});target.scrollIntoView({behavior:"smooth",block:"start"});}return;}
+  if(b=t.closest("[data-openperson]")){openPersonTab(b.getAttribute("data-openperson"));return;}
+  if(b=t.closest("[data-closeperson]")){currentPerson=null;window._psModalOpen=false;editingConn=null;editRhythmId=null;rhythmEditDraft=null;editSparkId=null;rhythmDraft=null;rhyDoneDraft=null;render();return;}
+  if(b=t.closest("[data-psettings]")){window._psModalOpen=true;render();return;}
+  if(b=t.closest("[data-psettingsclose]")){window._psModalOpen=false;render();return;}
+  if(b=t.closest("[data-prayquick]")){var pqP=S.people.find(function(x){return x.id===b.getAttribute("data-prayquick");});if(pqP){var pqRef=b.getAttribute("data-prayref");var pqPr=(pqRef&&pqRef!=="focus")?S.prayers.find(function(x){return x.id===pqRef;}):null;var prayedAt=Date.now();if(pqPr){pqPr.prayed=(pqPr.prayed||0)+1;pqPr.lastPrayed=todayStr();pqPr.prayerLogs=pqPr.prayerLogs||[];pqPr.prayerLogs.push(prayedAt);}logEvent(pqP.area,pqP.id,"prayer",pqPr?pqPr.text:"Prayer focus",pqPr?(pqPr.details||""):(pqP.prayerFocus||""),prayedAt,null,null,{});actDoneAdd(pqP.id,pqRef||"focus");render();flash("Prayed \u2713");}return;}
+  if(b=t.closest("[data-rhycancel]")){rhythmDraft=null;render();return;}
+  if(b=t.closest("[data-rhyadd]")){var ra=b.getAttribute("data-rhyadd");
+   if(rhythmDraft&&rhythmDraft.pid===ra&&rhythmDraft.text&&rhythmDraft.text.trim()){
+    var rp2=S.people.find(function(x){return x.id===ra;});
+    if(rp2){var nc={id:uid(),text:rhythmDraft.text.trim(),category:rhythmDraft.category||"connection",freq:rhythmDraft.freq||"weekly",tod:rhythmDraft.tod||"anytime",scheduleDow:scheduleHasWeekday(rhythmDraft.freq)?rhythmDraft.scheduleDow:null};
+     if(nc.freq==="custom"){nc.customType=rhythmDraft.customType||"weekly";nc.customDow=rhythmDraft.customDow||0;nc.customOrd=rhythmDraft.customOrd||1;}
+     if(rhythmDraft.durVal>=1){nc.durUnit=rhythmDraft.durUnit||"min";nc.durVal=rhythmDraft.durVal;}
+     rp2.rhythms=rp2.rhythms||[];rp2.rhythms.push(nc);rhythmDraft=null;save();render();flash("Rhythm added");}
+   }else if(rhythmDraft&&rhythmDraft.pid===ra){flash("Give the rhythm a name first");}
+   else{rhythmDraft={pid:ra,text:"",category:"connection",freq:"weekly",tod:"anytime",durUnit:"min",durVal:0};render();}
+   return;}
+  if(b=t.closest("[data-sparkdo]")){var spd=b.getAttribute("data-sparkdo").split("|");var spp=S.people.find(function(x){return x.id===spd[0];});var ss=spp&&(spp.sparks||[]).find(function(x){return x.id===spd[1];});if(ss){ss.done=true;ss.doneTs=Date.now();actDoneAdd(spp.id,ss.id);logEvent(spp.area,spp.id,"quality",ss.text,"Spark landed",Date.now(),null,null,{origin:"spark"});flash("Spark landed - connection logged");}return;}
+  if(b=t.closest("[data-sedit]")){var sei=b.getAttribute("data-sedit");editSparkId=(editSparkId===sei)?null:sei;render();return;}
+  if(b=t.closest("[data-scleardate]")){var scs=findSparkById(editSparkId);if(scs){scs.by=null;scs.time=null;save();render();flash("Date removed - waits in Free moment");}return;}
+  if(b=t.closest("[data-pphorm]")){var prp=S.people.find(function(x){return x.id===b.getAttribute("data-pphorm");});if(prp){prp.photo=null;save();render();flash("Photo removed");}return;}
+  if(b=t.closest("[data-psubmit]")){var psp=S.people.find(function(x){return x.id===b.getAttribute("data-psubmit");});
+   if(psp){var pk=el("plogType")?el("plogType").value:"quality";var rippleLabel=RIPPLE_TYPES[pk];if(pk==="other"){pk=(el("plogOther")&&el("plogOther").value.trim())||"other";rippleLabel=pk==="other"?"Other":pk;}
+    var pAll=el("momentAllDay")?el("momentAllDay").checked:false;
+    var pDv=(el("momentDate")&&el("momentDate").value)||todayStr();var pTv=(!pAll&&el("momentTime")&&el("momentTime").value)?el("momentTime").value:"12:00";
+    var pTs=new Date(pDv+"T"+pTv+":00").getTime();
+    var pTtl=el("momentTitle")?el("momentTitle").value.trim():"";var pNt=el("momentNote")?el("momentNote").value.trim():"";
+    var pTitle=pTtl||("Time with "+psp.name);
+    window._rippleModalOpen=false;var editingRipple=editingConn;editingConn=null;
+    if(editingRipple){updateEvent(editingRipple,{kind:pk,type:(ETYPES[pk]?pk:""),ts:pTs,title:pTitle,note:pNt,allDay:pAll,rippleLabel:rippleLabel});editingConn=null;flash("Connection updated \u2713");}
+    else{logEvent(psp.area,psp.id,pk,pTitle,pNt,pTs,null,null,{allDay:pAll,rippleLabel:rippleLabel});flash("Connection logged \u2713");}}
+   return;}
+  if(b=t.closest("[data-peditcancel]")){window._rippleModalOpen=false;editingConn=null;render();return;}
+  if(b=t.closest("[data-spdel]")){var sdd=b.getAttribute("data-spdel").split("|");var sdp=S.people.find(function(x){return x.id===sdd[0];});if(sdp){sdp.sparks=(sdp.sparks||[]).filter(function(x){return x.id!==sdd[1];});save();render();}return;}
+  if(b=t.closest("[data-spadd]")){var sra=b.getAttribute("data-spadd");var srp=S.people.find(function(x){return x.id===sra;});var sri=document.querySelector('[data-spnewtext="'+sra+'"]');var srd=document.querySelector('[data-spnewdate="'+sra+'"]');var srt=document.querySelector('[data-spnewtime="'+sra+'"]');if(srp&&sri&&sri.value.trim()){srp.sparks=srp.sparks||[];srp.sparks.push({id:uid(),text:sri.value.trim(),by:(srd&&srd.value)?srd.value:null,time:(srt&&srt.value)?srt.value:null,tod:"anytime",done:false});save();render();flash("Spark added");}return;}
+  if(b=t.closest("[data-goaldone]")){var g=S.goals.find(function(x){return x.id===b.getAttribute("data-goaldone");});if(g&&typeof completeGoal==="function")completeGoal(g);return;}
+  if(b=t.closest("[data-rhydone]")){rhyDoneDraft={key:b.getAttribute("data-rhydone"),date:todayStr(),time:nowHM()};render();return;}
+  if(b=t.closest("[data-rhyconfirm]")){var rck=b.getAttribute("data-rhyconfirm").split("|");var rcp=S.people.find(function(x){return x.id===rck[0];});var rcr=rcp&&(rcp.rhythms||[]).find(function(x){return x.id===rck[1];});var rcd=document.querySelector('[data-rhydate="'+b.getAttribute("data-rhyconfirm")+'"]');var rct=document.querySelector('[data-rhytime="'+b.getAttribute("data-rhyconfirm")+'"]');if(rcp&&rcr&&rcd&&rcd.value){var rts=rcd.value+"T"+((rct&&rct.value)?rct.value:"12:00")+":00";rhyDoneDraft=null;actDoneAdd(rcp.id,rcr.id);logEvent(rcp.area,rcp.id,(rcr.category==="prayer"?"prayer":"quality"),rcr.text,"",new Date(rts).getTime(),null,rcr.id);flash("Rhythm tended \u2713");}return;}
+  if(b=t.closest("[data-rhycancel2]")){rhyDoneDraft=null;render();return;}
+  if(b=t.closest("[data-rhyeditcancel]")){editRhythmId=null;rhythmEditDraft=null;render();return;}
+  if(b=t.closest("[data-rhyeditsave]")){var key=b.getAttribute("data-rhyeditsave").split("|");var person=S.people.find(function(x){return x.id===key[0];});var rhythm=person&&(person.rhythms||[]).find(function(x){return x.id===key[1];});if(rhythm&&rhythmEditDraft&&rhythmEditDraft.id===rhythm.id){if(!rhythmEditDraft.text.trim()){flash("Give this rhythm a name");return;}Object.assign(rhythm,rhythmEditDraft);editRhythmId=null;rhythmEditDraft=null;save();render();flash("Rhythm saved");}return;}
+  if(b=t.closest("[data-rhyedit]")){rhythmEditDraft=null;editRhythmId=(editRhythmId===b.getAttribute("data-rhyedit"))?null:b.getAttribute("data-rhyedit");render();return;}
+  if(b=t.closest("[data-rhydel]")){var rl=b.getAttribute("data-rhydel").split("|");var rp3=S.people.find(function(x){return x.id===rl[0];});if(rp3){rp3.rhythms=(rp3.rhythms||[]).filter(function(x){return x.id!==rl[1];});editRhythmId=null;rhythmEditDraft=null;save();render();flash("Rhythm removed");}return;}
+  if(b=t.closest("[data-plandone]")){var log={};try{log=JSON.parse(decodeURIComponent(b.getAttribute("data-plandone")));}catch(err){return;}var tid=b.getAttribute("data-taskid");if(tid){var tk=S.tasks.find(function(x){return x.id===tid;});if(tk)tk.done=true;}logEvent(log.area||"faith",null,log.type||"note",log.title||"","",Date.now(),log.goalId||null);flash("Done. On to the next.");return;}
+  if(b=t.closest("[data-upitem]")){var kd=S.keyDates.find(function(k){return k.id===b.getAttribute("data-upitem");});var cl=S.checklists.find(function(c){return c.linkId===kd.id;});if(cl)showChecklist(cl.id);return;}
+  if(b=t.closest("[data-eedit]")){var id=b.getAttribute("data-eedit");editingEvent=S.events.find(function(x){return x.id===id;});if(editingEvent){editingId=id;render();window.scrollTo(0,document.body.scrollHeight);}return;}
+  if(b=t.closest("[data-edel]")){deleteEvent(b.getAttribute("data-edel"));return;}
+  if(b=t.closest("[data-taskdel]")){S.tasks=S.tasks.filter(function(x){return x.id!==b.getAttribute("data-taskdel");});save();render();return;}
+  if(b=t.closest("[data-taskadd]")){var aid=b.getAttribute("data-taskadd");var inp=document.querySelector('[data-tasknew="'+aid+'"]');if(inp&&inp.value.trim()){S.tasks.push({id:uid(),areaId:aid,text:inp.value.trim(),done:false});save();render();}return;}
+  if(b=t.closest("[data-fuedit]")){editingFollowupId=b.getAttribute("data-fuedit");render();return;}
+  if(b=t.closest("[data-fucancel]")){editingFollowupId=null;render();return;}
+  if(b=t.closest("[data-fudel]")){S.followups=S.followups.filter(function(x){return x.id!==b.getAttribute("data-fudel");});editingFollowupId=null;save();render();flash("Deleted");return;}
+  if(b=t.closest("[data-fusave]")){var f=S.followups.find(function(x){return x.id===b.getAttribute("data-fusave");});var text=el("followupEditText").value.trim();if(f&&text){f.text=text;editingFollowupId=null;save();render();}return;}
+  if(b=t.closest("[data-fuadd]")){var pid=b.getAttribute("data-fuadd");var ft=el("personFUNew");if(ft&&ft.value.trim()){S.followups.push({id:uid(),personId:pid,text:ft.value.trim(),done:false,due:null});save();render();}return;}
+  if(b=t.closest("[data-pray]")){var p=S.prayers.find(function(x){return x.id===b.getAttribute("data-pray");});if(p&&!p.answered&&!p.archived){p.prayed=(p.prayed||0)+1;p.lastPrayed=todayStr();p.prayerLogs=p.prayerLogs||[];p.prayerLogs.push(Date.now());save();render();flash("Prayer recorded");}return;}
+  if(b=t.closest("[data-prayerarchive]")){var p=S.prayers.find(function(x){return x.id===b.getAttribute("data-prayerarchive");});if(p){p.archived=true;p.archivedDate=todayStr();p.answered=false;p.answeredDate=null;save();render();}return;}
+  if(b=t.closest("[data-prayeredit]")){editingPrayerId=b.getAttribute("data-prayeredit");render();return;}
+  if(b=t.closest("[data-prayercancel]")){editingPrayerId=null;render();return;}
+  if(b=t.closest("[data-prayersave]")){var p=S.prayers.find(function(x){return x.id===b.getAttribute("data-prayersave");});var text=el("prayerEditText").value.trim();if(p&&text){p.text=text;p.details=el("prayerEditDetails").value.trim();p.category=el("prayerEditCat").value;p.personId=el("prayerEditPerson").value||null;p.freq=el("prayerEditFreq").value==="none"?null:el("prayerEditFreq").value;p.tod=el("prayerEditTod").value;var editDow=el("prayerEditDow");p.scheduleDow=scheduleHasWeekday(p.freq)&&editDow&&editDow.value!==""?+editDow.value:null;editingPrayerId=null;save();render();flash("Prayer updated");}else flash("Add a prayer request before saving");return;}
+  if(b=t.closest("[data-prayerans]")){var p=S.prayers.find(function(x){return x.id===b.getAttribute("data-prayerans");});if(p){p.answered=true;p.archived=false;p.archivedDate=null;p.answeredDate=todayStr();save();render();flash("God answered \u2713");}return;}
+  if(b=t.closest("[data-prayerunans]")){var p=S.prayers.find(function(x){return x.id===b.getAttribute("data-prayerunans");});if(p){p.answered=false;p.answeredDate=null;p.archived=false;p.archivedDate=null;save();render();}return;}
+  if(b=t.closest("[data-prayerdel]")){S.prayers=S.prayers.filter(function(x){return x.id!==b.getAttribute("data-prayerdel");});editingPrayerId=null;window._ppEditId=null;save();render();return;}
+  if(b=t.closest("[data-prayerics]")){var p=S.prayers.find(function(x){return x.id===b.getAttribute("data-prayerics");});if(p)downloadICS("Pray: "+p.text);return;}
+  if(b=t.closest("[data-echodel]")){S.echoes=S.echoes.filter(function(x){return x.id!==b.getAttribute("data-echodel");});save();render();return;}
+  if(b=t.closest("[data-echoadd]")){var bid=b.getAttribute("data-echoadd");var blk=S.echoes.find(function(x){return x.id===bid;});var inp=document.querySelector('[data-echonew="'+bid+'"]');if(blk&&inp&&inp.value.trim()){blk.items=blk.items||[];blk.items.push({id:uid(),text:inp.value.trim(),status:"to contact"});save();render();}return;}
+  if(b=t.closest("[data-echoitemdel]")){var parts=b.getAttribute("data-echoitemdel").split("|");var blk=S.echoes.find(function(x){return x.id===parts[0];});if(blk){blk.items=blk.items.filter(function(i){return i.id!==parts[1];});save();render();}return;}
+  if(b=t.closest("[data-echostatus]")){var parts=b.getAttribute("data-echostatus").split("|");var it=findEchoItem(parts[1]||parts[0]);if(it){var order=["to contact","contacted","met","booked","passed"];it.status=order[(order.indexOf(it.status)+1)%order.length];save();render();}return;}
+  if(b=t.closest("[data-ideadel]")){S.ideas=S.ideas.filter(function(x){return x.id!==b.getAttribute("data-ideadel");});save();render();return;}
+  if(b=t.closest("[data-ideatask]")){var i=S.ideas.find(function(x){return x.id===b.getAttribute("data-ideatask");});if(i&&!i.converted){var area=prompt("Which area? "+AREA_IDS.join(", "),"today");if(area===null)return;area=area.trim().toLowerCase();if(!S.areas[area]){flash("Not an area: "+area);return;}S.tasks.push({id:uid(),areaId:area,text:i.text,done:false});i.converted="task in "+S.areas[area].name;save();render();}return;}
+  if(b=t.closest("[data-ideaperson]")){var i=S.ideas.find(function(x){return x.id===b.getAttribute("data-ideaperson");});if(i&&!i.converted){var pn=prompt("Save as a note for who? "+S.people.map(function(x){return x.name;}).join(", "));if(pn===null)return;var person=S.people.find(function(x){return x.name.toLowerCase()===pn.trim().toLowerCase();});if(!person){flash("No person named "+pn);return;}S.events.push({id:uid(),ts:Date.now(),areaId:person.area,personId:person.id,kind:"note",type:"note",title:"Encouragement idea",note:i.text,weight:2});i.converted="note on "+person.name;save();render();}return;}
+  if(b=t.closest("[data-idealb]")){var i=S.ideas.find(function(x){return x.id===b.getAttribute("data-idealb");});if(i){var txt="From my Tend Offload inbox, help me develop this: '"+i.text+"'. Turn it into concrete next steps or a short plan.";if(navigator.clipboard){navigator.clipboard.writeText(txt).then(function(){flash("Copied - paste into Littlebird");});}else flash("Copy failed");}return;}
+  if(b=t.closest("[data-cldel]")){var parts=b.getAttribute("data-cldel").split("|");var cl=S.checklists.find(function(c){return c.id===parts[0];});if(!cl)return;cl.items=cl.items.filter(function(i){return i.id!==parts[1];});save();render();return;}
+  if(b=t.closest("[data-cladd]")){var cid=b.getAttribute("data-cladd");var cl=S.checklists.find(function(c){return c.id===cid;});var inp=document.querySelector('[data-clnew="'+cid+'"]');if(cl&&inp&&inp.value.trim()){cl.items.push({id:uid(),text:inp.value.trim(),done:false});save();render();}return;}
+  if(b=t.closest("[data-gdel]")){S.goals=S.goals.filter(function(g){return g.id!==b.getAttribute("data-gdel");});save();render();return;}
+  if(b=t.closest("[data-gadd]")){var gid=b.getAttribute("data-gadd");var inp=document.querySelector('[data-gnewtext="'+gid+'"]');if(inp&&inp.value.trim()){S.goals.push({id:uid(),area:gid,text:inp.value.trim(),cadence:"daily",personId:null});save();render();}return;}
+  if(b=t.closest("[data-plog]")){var p=S.people.find(function(x){return x.id===currentPerson;});
+   if(p){var dv=el("momentDate")?el("momentDate").value:"";var tv=el("momentTime")?el("momentTime").value:"";var nv=el("momentNote")?el("momentNote").value.trim():"";var tsN=new Date((dv||todayStr())+"T"+(tv||"12:00")+":00").getTime();var k=b.getAttribute("data-plog");
+    window._rippleModalOpen=false;var editingRipple=editingConn;editingConn=null;
+    if(editingRipple){updateEvent(editingRipple,{kind:k,type:k,ts:tsN,note:nv,title:"Time with "+p.name});editingConn=null;}
+    else{logEvent(p.area,currentPerson,k,"Time with "+p.name,nv,tsN);flash("Connection logged \u2713");}}
+   return;}
+  if(b=t.closest("[data-plogother]")){var p2=S.people.find(function(x){return x.id===currentPerson;});
+   if(p2){var custom=prompt("What kind of moment? (e.g. Golf, Movie, Project together)");if(!custom)return;
+    var dv2=el("momentDate")?el("momentDate").value:"";var tv2=el("momentTime")?el("momentTime").value:"";var nv2=el("momentNote")?el("momentNote").value.trim():"";var ts2N=new Date((dv2||todayStr())+"T"+(tv2||"12:00")+":00").getTime();
+    window._rippleModalOpen=false;var editingRipple=editingConn;editingConn=null;
+    if(editingRipple){updateEvent(editingRipple,{kind:custom,type:"",ts:ts2N,note:nv2,title:"Time with "+p2.name});editingConn=null;}
+    else{logEvent(p2.area,currentPerson,custom,"Time with "+p2.name,nv2,ts2N);flash("Connection logged \u2713");}}
+   return;}
+  if(b=t.closest("[data-evedit]")){var ev=S.events.find(function(z){return z.id===b.getAttribute("data-evedit");});
+   if(ev){editingConn=ev.id;window._rippleModalOpen=true;render();var dialog=el("rippleDialog");if(dialog){dialog.removeAttribute("open");dialog.showModal();}flash("Editing - update the form and hit Update");}return;}
+  if(b=t.closest("[data-evdel]")){deleteEvent(b.getAttribute("data-evdel"));return;}
+  if(b=t.closest("[data-kddel]")){S.keyDates=S.keyDates.filter(function(k){return k.id!==b.getAttribute("data-kddel");});save();render();return;}
+  if(b=t.closest("[data-kdadd]")){var pid=b.getAttribute("data-kdadd");var inp=document.querySelector('[data-kdlabel="'+pid+'"]');if(inp&&inp.value.trim()){S.keyDates.push({id:uid(),personId:pid,label:inp.value.trim(),month:1,day:1});save();render();flash("Added - tell Littlebird the date to set it precisely");}return;}
+  if(b=t.closest("#logSubmit")){var dv=el("logDate").value;var ts=dv?new Date(dv+"T12:00:00").getTime():Date.now();var title=el("logTitle").value.trim();var talk=el("logTalk").value.trim();var person=el("logPersonSel").value||null;var type=el("logTypeSel").value;if(editingId){var patch={ts:ts,personId:person,type:type,kind:type,title:title,note:talk};if(editingEvent&&editingEvent.rippleLabel&&RIPPLE_TYPES[type])patch.rippleLabel=RIPPLE_TYPES[type];updateEvent(editingId,patch);editingId=null;editingEvent=null;}else{logEvent(currentArea,person,type,title,talk,ts,null);}return;}
+  if(b=t.closest("#logCancel")){editingId=null;editingEvent=null;render();return;}
+  if(b=t.closest("#saveDayBlocks")){var blocks=DEFAULT_DAY_BLOCKS.map(function(block){return {id:block.id,name:document.querySelector('[data-block-name="'+block.id+'"]').value.trim(),start:document.querySelector('[data-block-start="'+block.id+'"]').value};});var error=validateDayBlocks(blocks);if(error){el("dayBlocksError").textContent=error;return;}S.settings=S.settings||{};S.settings.dayBlocks=blocks;save();render();flash("Time sections saved");return;}
+  if(b=t.closest("#setSave")){S.settings.greenAt=clamp(+el("setGreen").value||80,50,100);S.settings.yellowAt=clamp(+el("setYellow").value||50,10,80);S.settings.baseline=clamp(+el("setBase").value||50,0,100);save();render();flash("Thresholds saved");return;}
+  if(b=t.closest("[data-calretry]")){localStorage.removeItem("tend:cal2");window._calLoading=false;loadCalendars();return;}
+  if(b=t.closest("#calAdd")){S.calendars.push({id:uid(),name:"New calendar",url:"",color:"#4C9AFF"});save();render();return;}
+  if(b=t.closest("#calSaveAll")){document.querySelectorAll("[data-calrow]").forEach(function(row){var id=row.getAttribute("data-calrow");var c=S.calendars.find(function(x){return x.id===id;});if(!c)return;c.name=row.querySelector("[data-calname]").value;c.url=row.querySelector("[data-calurl]").value.trim();c.color=row.querySelector("[data-calcolor]").value;});save();localStorage.removeItem("tend:cal2");if(window.TEND_LOAD_CALENDAR)TEND_LOAD_CALENDAR();render();flash("Calendars saved");return;}
+  if(b=t.closest("[data-caldel]")){S.calendars=S.calendars.filter(function(x){return x.id!==b.getAttribute("data-caldel");});save();localStorage.removeItem("tend:cal2");render();return;}
+  if(b=t.closest("#syncSave")){SYNCcfg.owner=el("syncOwner").value.trim();SYNCcfg.repo=el("syncRepo").value.trim();SYNCcfg.token=el("syncToken").value.trim();localStorage.setItem(LS_SYNC,JSON.stringify(SYNCcfg));updateSyncDot();flash("Sync settings saved");render();return;}
+  if(b=t.closest("#syncPull")){pullNow(true);return;}
+  if(b=t.closest("#syncPush")){pushNow();return;}
+  if(b=t.closest("#syncExport")){var blob=new Blob([JSON.stringify(S,null,2)],{type:"application/json"});var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="tend-backup-"+new Date().toISOString().slice(0,10)+".json";a.click();return;}
+  if(b=t.closest("#prayerFormOpen")){prayerFormOpen=true;render();return;}
+  if(b=t.closest("#prayerFormCancel")){prayerFormOpen=false;render();return;}
+  if(b=t.closest("#prayerAdd")){var nt=el("prayerNew");if(nt&&nt.value.trim()){S.prayers.push({id:uid(),category:el("prayerCat").value,personId:el("prayerPerson").value||null,text:nt.value.trim(),details:el("prayerDetails").value.trim(),freq:el("prayerNewFreq").value==="none"?null:el("prayerNewFreq").value,tod:el("prayerNewTod").value,scheduleDow:scheduleHasWeekday(el("prayerNewFreq").value)&&el("prayerNewDow").value!==""?+el("prayerNewDow").value:null,added:new Date().toISOString().slice(0,10),answered:false,prayed:0});prayerFormOpen=false;save();render();flash("Prayer added");}else flash("Give the prayer a title first");return;}
+  if(b=t.closest("#echoAdd")){var nt=el("echoNew");if(nt&&nt.value.trim()){S.echoes.push({id:uid(),title:nt.value.trim(),note:"",items:[]});save();render();}return;}
+  if(b=t.closest("#ideaAdd")){var nt=el("ideaNew");if(nt&&nt.value.trim()){S.ideas.push({id:uid(),text:nt.value.trim(),ts:Date.now(),done:false,converted:null});save();render();}return;}
+  if(b=t.closest("#introOk")){try{localStorage.setItem("tend:introSeen","1");}catch(err){}render();return;}
+  if(b=t.closest("[data-dosugg]")){var parts=b.getAttribute("data-dosugg").split("|");logEvent(parts[1],parts[2]||null,parts[3],parts[0]);flash("Logged. Well tended.");return;}
+ });
+ document.addEventListener("change",function(e){
+  var t=e.target;
+  if(t.matches('[data-holiday]')){S.settings=S.settings||{};S.settings.holidays=S.settings.holidays||{};S.settings.holidays[t.getAttribute('data-holiday')]=t.checked;save();return;}
+  if(t.id==="plogType"){var por=el("plogOtherRow");if(por)por.style.display=(t.value==="other")?"flex":"none";return;}
+  if(t.id==="momentAllDay"){var pmt=el("momentTime");if(pmt){pmt.disabled=t.checked;if(t.checked)pmt.value="";}return;}
+  if(t.matches("[data-task]")){var x=S.tasks.find(function(z){return z.id===t.getAttribute("data-task");});if(x){x.done=t.checked;save();render();}}
+  else if(t.matches("[data-clitem]")){var parts=t.getAttribute("data-clitem").split("|");var cl=S.checklists.find(function(c){return c.id===parts[0];});if(!cl)return;var it=cl.items.find(function(i){return i.id===parts[1];});if(it){it.done=t.checked;save();render();}}
+  else if(t.matches("[data-fudone]")){var f=S.followups.find(function(z){return z.id===t.getAttribute("data-fudone");});if(f){f.done=t.checked;f.completedDate=f.done?todayStr():null;save();render();}}
+  else if(t.matches("[data-praymark]")){var p=S.prayers.find(function(z){return z.id===t.getAttribute("data-praymark");});if(p){p.prayed=(p.prayed||0)+1;p.lastPrayed=new Date().toISOString().slice(0,10);save();render();flash("Prayed \u2713");}}
+  else if(t.matches("[data-gtext]")){var g=S.goals.find(function(z){return z.id===t.getAttribute("data-gtext");});if(g){g.text=t.value;save();}}
+  else if(t.matches("[data-gcad]")){var g=S.goals.find(function(z){return z.id===t.getAttribute("data-gcad");});if(g){g.cadence=t.value;save();render();}}
+  else if(t.matches("[data-gdays]")){var g=S.goals.find(function(z){return z.id===t.getAttribute("data-gdays");});if(g){g.days=+t.value||2;save();}}
+  else if(t.matches("[data-gperson]")){var g=S.goals.find(function(z){return z.id===t.getAttribute("data-gperson");});if(g){g.personId=t.value||null;save();}}
+  else if(t.matches("[data-gtod]")){var g=S.goals.find(function(z){return z.id===t.getAttribute("data-gtod");});if(g){g.tod=t.value;save();render();}}
+  else if(t.matches("[data-sfield]")){var sfE=findSparkById(editSparkId);if(sfE){var sfF=t.getAttribute("data-sfield");if(sfF==="by"){sfE.by=t.value||null;if(!sfE.by)sfE.time=null;}else if(sfF==="time"){sfE.time=t.value||null;}else sfE[sfF]=t.value;save();render();}}
+  else if(t.matches("[data-pphoto]")){var pfE=t.getAttribute("data-pphoto");var pfP=S.people.find(function(x){return x.id===pfE;});var pfF=t.files&&t.files[0];if(pfP&&pfF){var prd=new FileReader();prd.onload=function(){var pim=new Image();pim.onload=function(){var pcv=document.createElement("canvas");var psz=144;pcv.width=psz;pcv.height=psz;var pcx=pcv.getContext("2d");var pw=pim.width,ph=pim.height,pdim=Math.min(pw,ph);pcx.drawImage(pim,(pw-pdim)/2,(ph-pdim)/2,pdim,pdim,0,0,psz,psz);pfP.photo=pcv.toDataURL("image/jpeg",.82);save();render();flash("Photo saved");};pim.src=prd.result;};prd.readAsDataURL(pfF);}return;}
+  else if(t.matches("[data-pfield]")){if(t.type==="date")return;var pf=t.getAttribute("data-pfield");var pp=S.people.find(function(x){return x.id===t.getAttribute("data-pid");});if(pp){if(!(pf==="relation"&&t.value==="__custom"))pp[pf]=t.value;save();render();flash("Saved");}}
+  else if(t.matches("[data-rfield]")){var rf=t.getAttribute("data-rfield").split("|");var rr4=null;
+   if(rf[1]==="draft"){if(rhythmDraft&&rhythmDraft.pid===rf[0])rr4=rhythmDraft;}
+   else if(rhythmEditDraft&&rhythmEditDraft.id===rf[1]&&editRhythmId===rf[1])rr4=rhythmEditDraft;
+   if(rr4){var fld=rf[2];if(fld==="text"){rr4.text=t.value;return;}if(fld==="scheduleDow")rr4[fld]=t.value===""?null:+t.value;else if(fld==="customDow"||fld==="customOrd"||fld==="durVal")rr4[fld]=+t.value||0;else rr4[fld]=t.value;if(fld==="freq"&&!scheduleHasWeekday(t.value))rr4.scheduleDow=null;if(fld==="durUnit"){var mx=DUR_UNITS[rr4.durUnit]?DUR_UNITS[rr4.durUnit].max:120;if(!(rr4.durVal>=1&&rr4.durVal<=mx))rr4.durVal=0;}render();}}
+ });
+ // Date segments emit change while the year is still being typed. Commit on blur
+ // without rebuilding the profile, preserving focus and the open settings panel.
+ document.addEventListener("focusout",function(e){
+  var t=e.target;
+  if(!t.matches('input[type="date"][data-pfield]')||!t.validity.valid)return;
+  var person=S.people.find(function(p){return p.id===t.getAttribute("data-pid");});
+  var field=t.getAttribute("data-pfield");
+  if(person&&person[field]!==t.value){person[field]=t.value;save();flash("Saved");}
+ });
+ document.addEventListener("input",function(e){
+  var t=e.target;
+  if(t.matches("[data-block-start]")){var index=DEFAULT_DAY_BLOCKS.findIndex(function(b){return b.id===t.getAttribute("data-block-start");});var previous=(index+6)%7;var end=document.querySelector('[data-block-end="'+DEFAULT_DAY_BLOCKS[previous].id+'"]');if(end)end.textContent=Number.isFinite(dayTimeMinutes(t.value))?dayTimeLabel(t.value)+(previous===6?' (next day)':''):'—';return;}
+
+  if(t.matches("[data-encnote]"))saveEncNote(t.getAttribute("data-encnote"),t);
+  else if(t.matches("[data-phpray]"))savePersonNote(t.getAttribute("data-pid"),"howToPray",t);
+  else if(t.matches("[data-pfocus]"))savePersonNote(t.getAttribute("data-pid"),"prayerFocus",t);
+  else if(t.matches("[data-rfield]")){var rf5=t.getAttribute("data-rfield").split("|");if(rf5[2]==="text"&&rhythmEditDraft&&rhythmEditDraft.id===rf5[1]&&editRhythmId===rf5[1])rhythmEditDraft.text=t.value;if(rf5[2]==="text"&&rf5[1]==="draft"&&rhythmDraft&&rhythmDraft.pid===rf5[0]){rhythmDraft.text=t.value;var _b5=document.querySelector('[data-rhyadd="'+rf5[0]+'"]');if(_b5)_b5.textContent=(t.value&&t.value.trim())?"Save Rhythm":"+ Add rhythm";}}
+ });
+}
+
+
+
+
+
+/* one-time migration: legacy howToPray textarea -> prayernote checklist item (v20260930u) */
+(function(){var ch=false;S.people.forEach(function(p){var t=String(p.howToPray||"").trim();if(t&&!p.prayerNotesMigrated&&!S.followups.some(function(f){return f.personId===p.id&&(f.kind||"followup")==="prayernote";})) {p.prayerNotesMigrated=true;S.followups.push({id:uid(),personId:p.id,kind:"prayernote",text:t,done:false,ts:Date.now()});p.howToPray="";ch=true;}});if(ch)save();})();

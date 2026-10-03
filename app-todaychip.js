@@ -22,7 +22,7 @@
     var r=(p.rhythms||[]).find(function(x){return x.id===rid;});
     if(!r)continue;
     var sc=rhythmScore(r);
-    var chip=' <span title="Rhythm health" style="display:inline-flex;align-items:center;gap:4px;vertical-align:middle;margin-left:2px;flex-shrink:0;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap"><span style="width:10px;height:10px;border-radius:3px;flex:none;background:'+personHealthColor(sc)+'"></span><span>'+sc+'%</span></span>';
+    var chip=' <span title="Rhythm health" style="display:inline-flex;align-items:center;gap:4px;vertical-align:middle;margin-left:2px;flex-shrink:0;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap"><span style="width:10px;height:10px;border-radius:3px;flex:none;background:'+personHealthColor(sc)+'"></span><span>'+(sc===null?'—':sc)+'%</span></span>';
     var pos=seg.indexOf('pill rhy');
     var anchor=seg.indexOf(' Rhythm</span>',pos);
     if(anchor>=0){

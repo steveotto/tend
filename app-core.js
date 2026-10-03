@@ -119,10 +119,16 @@ var saveTimer=null,pushTimer=null;
 function save(){localStorage.setItem(LS_STATE,JSON.stringify(S));window._tendDirty=true;clearTimeout(saveTimer);saveTimer=setTimeout(function(){flash("Saved");},150);if(window.SYNCcfg&&SYNCcfg.auto&&SYNCcfg.token&&typeof schedulePush==="function")schedulePush();}
 function flash(msg){var f=document.getElementById("flash");f.textContent=msg||"Saved";f.classList.add("show");clearTimeout(flash._t);flash._t=setTimeout(function(){f.classList.remove("show");},1200);}
 /* ============ meters ============ */
-function daysSince(ts){return Math.floor((Date.now()-ts)/86400000);}
+function daysSince(ts){
+ var logged=new Date(ts),today=new Date();
+ if(isNaN(logged.getTime()))return 999;
+ var loggedDay=Date.UTC(logged.getFullYear(),logged.getMonth(),logged.getDate());
+ var todayDay=Date.UTC(today.getFullYear(),today.getMonth(),today.getDate());
+ return Math.max(0,Math.round((todayDay-loggedDay)/86400000));
+}
 function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
 function settings(){return S.settings||DEFAULT_SETTINGS;}
-function scoreClass(v){var s=settings();return v>=s.greenAt?"green":(v>=s.yellowAt?"yellow":"red");}
+function scoreClass(v){if(v===null||v===undefined)return "neutral";var s=settings();return v>=s.greenAt?"green":(v>=s.yellowAt?"yellow":"red");}
 function scoreLabel(v){var s=settings();if(v>=s.greenAt)return "Healthy";if(v>=s.yellowAt)return "Slipping - tend it soon";return "Needs attention now";}
 function goalInterval(g){return !g.cadence?Infinity:g.cadence==="custom"?(g.days||2):(CADENCES[g.cadence]?CADENCES[g.cadence].days:(FREQS[g.cadence]?FREQS[g.cadence].days:7));}
 function lastGoalEvent(g){var best=null;S.events.forEach(function(e){if(e.goalId===g.id&&(!best||e.ts>best.ts))best=e;});return best;}
@@ -141,7 +147,7 @@ function eventHasPerson(e,pid){return e.personId===pid||(Array.isArray(e.personI
 function eventsFor(areaId,personId){return S.events.filter(function(e){return e.areaId===areaId&&(personId?eventHasPerson(e,personId):!e.personId&&!e.personIds);});}
 function areaGoals(id){return S.goals.filter(function(g){return g.area===id&&!g.completed;});}
 function personGoals(pid){return S.goals.filter(function(g){return g.personId===pid;});}
-function avg(arr){if(!arr.length)return null;return Math.round(arr.reduce(function(a,b){return a+b;},0)/arr.length);}
+function avg(arr){arr=arr.filter(function(v){return Number.isFinite(v);});if(!arr.length)return null;return Math.round(arr.reduce(function(a,b){return a+b;},0)/arr.length);}
 function areaScore(id){var cr=S.rhythms.filter(function(r){return r.category===id&&!r.disabled;});if(cr.length>0)return avg(cr.map(rhythmScore));var g=areaGoals(id).map(goalScore);return avg(g)!==null?avg(g):rawScore(eventsFor(id));}
 /* ============ person score: connection-first ============ */
 function personCadenceDays(p){var cc=p.connectCadence||"weekly";if(cc==="daily")return 1;if(cc==="weekly")return 7;if(cc==="biweekly")return 14;if(cc==="monthly")return 30;return p.cadenceDays||30;}
@@ -184,6 +190,8 @@ function personScore(p){
  var ti=personTouchInfo(p),ts=touchScoreFromDays(ti.days);
  var conn=crs.length?avg(crs.map(rhythmScore)):connScoreFromDays(ti.days,personCadenceDays(p));
  var ps=prs.length?avg(prs.map(rhythmScore)):prayerScoreFromDays(personPrayerInfo(p).days);
+ if(conn===null)conn=ts;
+ if(ps===null)ps=prayerScoreFromDays(personPrayerInfo(p).days);
  if(!crs.length&&!prs.length)return Math.round(0.7*conn+0.3*ps);
  return Math.round(clamp(0.4*conn+0.3*ts+0.3*ps,0,100));
 }

@@ -16,6 +16,7 @@
  /* ---- migration (mirror of rhythms2, re-applied lazily) ---- */
  function ensureRhythm(r){
   if(!r)return r;
+  if(!r.added&&!r.start)r.added=todayStr();
   if(r.freq==="twicewk"){r.freq="custom";r.every=3;r.unit="days";}
   else if(r.freq==="biweekly"){r.freq="custom";r.every=2;r.unit="weeks";r.weekdays=[+(r.scheduleDow||0)];}
   else if(r.freq==="custom"&&(r.customType!==undefined||r.customDow!==undefined||r.customOrd!==undefined)){
@@ -56,8 +57,9 @@
    out+='<div class="addrow"><label class="rmode"><input type="radio" name="'+grp+'" '+A("monthlyMode")+' value="onThe"'+(r.monthlyMode==="onThe"?' checked':'')+'> On the</label>'+rOrdSelect(r,A,null,r.monthlyMode!=="onThe")+'<span class="rsep">of</span>'+rMonthSelect(r,A,"monthThe",r.monthlyMode!=="onThe")+'</div>';
   }
   if(r.freq==="custom")out+='<div class="addrow"><span class="rlabel">Repeat every</span><input type="number" min="1" max="365" '+A("every")+' value="'+(+r.every||1)+'"><select '+A("unit")+'>'+["days","weeks","months","years"].map(function(x){return '<option value="'+x+'"'+((r.unit||"weeks")===x?' selected':'')+'>'+x+'</option>';}).join('')+'</select></div>'
-  +'<div class="addrow rhy-daterow"><label class="rlabel">Starting on</label><input type="date" '+A("start")+' value="'+esc(r.start||"")+'"><label class="rlabel">Until</label><input type="date" '+A("until")+' value="'+esc(r.until||"")+'" title="Optional end date"></div>';
-  else out+='<div class="addrow"><label class="rlabel">Until (optional)</label><input type="date" '+A("until")+' value="'+esc(r.until||"")+'"></div>';
+  +'<div class="addrow rhy-daterow"><label class="rlabel">Starting on</label><input type="date" '+A("start")+' value="'+esc(r.start||"")+'"></div>';
+  var hasEnd=!!(r.until||r.endDateEnabled);
+  out+='<div class="rhy-end-date"><label class="rhy-end-toggle"><input type="checkbox" '+A("endDateEnabled")+(hasEnd?' checked':'')+'> End date</label><label class="rhy-end-field" data-rhythm-end-date-field'+(hasEnd?'':' hidden')+'>Ends on<input type="date" '+A("until")+' value="'+esc(r.until||"")+'"'+(hasEnd?' required':' disabled')+'></label></div>';
   return out;
  }
  /* ---- profile editor: same recurrence UI as the care plan editor ---- */
@@ -70,10 +72,11 @@
  /* ---- style: heights, widths, disabled look ---- */
  try{
   var st=document.createElement("style");
-  st.textContent=".rhythm-schedule-grid select,.careplan-edit-grid select,.rhy-recur .addrow select,.rhy-recur .addrow input{min-height:48px!important;height:48px;padding:10px 14px;font-size:16px!important;line-height:1.4}"
+  st.textContent=".rhythm-schedule-grid select,.careplan-rhythm-edit .careplan-edit-grid select,.rhy-recur .addrow select,.rhy-recur .addrow input{min-height:44px!important;height:44px;padding:8px 12px;font-size:13.5px!important;line-height:1.4}"
   +".rhy-recur .addrow select,.rhy-recur .addrow input[type=number]{flex:0 0 auto;width:auto;min-width:84px}"
   +".rhy-recur .addrow input[type=date]{flex:0 0 auto;width:160px}"
   +".rhy-recur .rhy-daterow{flex-wrap:wrap;gap:10px}"
+  +".rhy-end-date{display:grid;gap:8px;margin-top:4px}.rhy-end-toggle{display:inline-flex;align-items:center;gap:8px;width:max-content;color:var(--ink);font-size:13px;cursor:pointer}.rhy-end-toggle input{width:17px;height:17px;accent-color:var(--forest)}.rhy-end-field{display:grid;gap:5px;width:max-content;color:var(--ink-soft);font-size:12px}.rhy-end-field[hidden]{display:none}.rhy-end-field input[type=date]{width:180px}"
   +".rhy-recur select:disabled,.rhy-recur input:disabled{opacity:.45;cursor:not-allowed;background:var(--mist)}";
   document.head.appendChild(st);
  }catch(err){}
@@ -85,7 +88,7 @@
   if(kind!=='rhythm')frequencies.unshift(['','No frequency']);
   if(kind==='goal')frequencies.push(['custom','Custom interval']);
   var peopleOptions=[['','No person']].concat(S.people.map(function(p){return [p.id,p.name];}));
-  var out='<div class="careplan-edit" data-cpform="'+esc(key)+'"><div class="careplan-edit-head"><span class="careplan-kind careplan-kind-'+kind+'">'+(kind==='rhythm'?'Rhythm':kind==='prayer'?'Prayer':'Goal')+'</span><strong>Edit '+kind+'</strong></div><label class="careplan-field">Title<input data-cpf="title" value="'+esc(r.text||'')+'"></label>';
+  var out='<div class="careplan-edit'+(kind==='rhythm'?' careplan-rhythm-edit':'')+'" data-cpform="'+esc(key)+'"><div class="careplan-edit-head"><span class="careplan-kind careplan-kind-'+kind+'">'+(kind==='rhythm'?'Rhythm':kind==='prayer'?'Prayer':'Goal')+'</span><strong>Edit '+kind+'</strong></div><label class="careplan-field">Title<input data-cpf="title" value="'+esc(r.text||'')+'"></label>';
   if(kind!=='rhythm')out+='<label class="careplan-field">Details<textarea data-cpf="details">'+esc(r.details||'')+'</textarea></label>';
   out+='<div class="careplan-edit-grid"><label class="careplan-field">Frequency<select data-cpf="frequency">'+carePlanOptions(frequencies,kind==='prayer'?r.freq:kind==='goal'?(r.cadence||r.freq):r.freq)+'</select></label><label class="careplan-field">Time of day<select data-cpf="tod">'+carePlanOptions(times,r.tod||'anytime')+'</select></label>';
   if(kind!=='rhythm')out+='<label class="careplan-field" data-schedule-day'+(scheduleHasWeekday(kind==='goal'?r.cadence:r.freq)?'':' hidden')+'>Day of week<select data-cpf="scheduleDow">'+scheduleDayOptions(r.scheduleDow)+'</select></label>';
@@ -102,6 +105,8 @@
   var found=carePlanFind(key),r=found.record;if(!r)return;
   var field=function(name){return form.querySelector('[data-cpf="'+name+'"]');};
   var title=field('title').value.trim();if(!title){flash('Add a title');field('title').focus();return;}
+  var endToggle=found.kind==='rhythm'?field('endDateEnabled'):null,un=found.kind==='rhythm'?field('until'):null;
+  if(endToggle&&endToggle.checked&&(!un||!un.value)){flash('Choose an end date');if(un)un.focus();return;}
   r.text=title;r.tod=field('tod').value;
   if(found.kind==='rhythm'){
    r.freq=field('frequency').value;
@@ -110,7 +115,7 @@
    ['ord','ordWeekday','month','monthThe','every'].forEach(function(k){var f2=field(k);{var dst=k==="monthThe"?"month":k;r[dst]=+f2.value||1;}});
    ['dayOfMonth','monthDay','qmonth'].forEach(function(k){var f2=field(k);if(f2&&f2.value!=='')r[k]=+f2.value||1;});
    var uf=field('unit');if(uf)r.unit=uf.value;
-   var un=field('until');r.until=un&&un.value?un.value:null;
+   r.until=endToggle&&endToggle.checked?un.value:null;r.endDateEnabled=!!r.until;
    var sf=field('start');if(sf)r.start=sf.value?sf.value:null;
    ensureRhythm(r);
    var newPerson=S.people.find(function(p){return p.id===field('person').value;});
@@ -127,18 +132,18 @@
   var p=S.people.find(function(x){return x.id===pid;});if(!p)return html;
   migrateAllRhythms();
   var rs=personRhythms(p),pInfo=personPrayerInfo(p);
-  var pScore=prayerScoreFromDays(pInfo.days),pCls=scoreClass(pScore);
+  var pScore=prayerMeterScore(p),pCls=scoreClass(pScore),pScoreText=pScore===null?'—':pScore;
   var pills;
   if(rs.length){
    var rm=avg(rs.map(rhythmScore)),rmCls=scoreClass(rm);
    var pTouch=personTouchInfo(p),tScore=touchScoreFromDays(pTouch.days),tCls=scoreClass(tScore);
-   pills='<div class="pmeters three"><div class="pmeter"><div class="pm-lab"><span>Rhythms</span><span class="pm-val '+rmCls+'">'+rm+'</span></div><div class="bar"><i class="'+rmCls+'" style="width:'+rm+'%"></i></div><div class="pm-note">'+rs.length+" rhythm"+(rs.length===1?"":"s")+'</div></div>'
+   pills='<div class="pmeters three"><div class="pmeter"><div class="pm-lab"><span>Rhythms</span><span class="pm-val '+rmCls+'">'+(rm===null?'—':rm)+'</span></div><div class="bar"><i class="'+rmCls+'" style="width:'+(rm===null?0:rm)+'%"></i></div><div class="pm-note">'+rs.length+" rhythm"+(rs.length===1?"":"s")+'</div></div>'
    +'<div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val '+tCls+'">'+tScore+'</span></div><div class="bar"><i class="'+tCls+'" style="width:'+tScore+'%"></i></div><div class="pm-note">'+(pTouch.last?("last: "+when(pTouch.last.ts)):"no connections yet")+'</div></div>'
-   +'<div class="pmeter"><div class="pm-lab"><span>Prayer</span><span class="pm-val '+pCls+'">'+pScore+'</span></div><div class="bar"><i class="'+pCls+'" style="width:'+pScore+'%"></i></div><div class="pm-note">'+(pInfo.last?("last: "+when(pInfo.last.ts)):"no prayers logged")+'</div></div></div>';
+   +'<div class="pmeter"><div class="pm-lab"><span>Prayer</span><span class="pm-val '+pCls+'">'+pScoreText+'</span></div><div class="bar"><i class="'+pCls+'" style="width:'+(pScore===null?0:pScore)+'%"></i></div><div class="pm-note">'+(pInfo.last?("last: "+when(pInfo.last.ts)):"no prayers logged")+'</div></div></div>';
   }else{
    var cInfo=personConnInfo(p),cScore=connScoreFromDays(cInfo.days,personCadenceDays(p)),cCls=scoreClass(cScore);
    pills='<div class="pmeters"><div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val '+cCls+'">'+cScore+'</span></div><div class="bar"><i class="'+cCls+'" style="width:'+cScore+'%"></i></div><div class="pm-note">'+(cInfo.last?("last: "+when(cInfo.last.ts)):"no connections yet")+'</div></div>'
-   +'<div class="pmeter"><div class="pm-lab"><span>Prayer</span><span class="pm-val '+pCls+'">'+pScore+'</span></div><div class="bar"><i class="'+pCls+'" style="width:'+pScore+'%"></i></div><div class="pm-note">'+(pInfo.last?("last: "+when(pInfo.last.ts)):"no prayers logged")+'</div></div></div>';
+   +'<div class="pmeter"><div class="pm-lab"><span>Prayer</span><span class="pm-val '+pCls+'">'+pScoreText+'</span></div><div class="bar"><i class="'+pCls+'" style="width:'+(pScore===null?0:pScore)+'%"></i></div><div class="pm-note">'+(pInfo.last?("last: "+when(pInfo.last.ts)):"no prayers logged")+'</div></div></div>';
   }
   var i=html.indexOf('<div class="pmeters');
   if(i<0)return html;
@@ -166,6 +171,17 @@
  window.addEventListener("change",function(e){
   var t=e.target;
   if(!t||!t.matches||!t.closest)return;
+  if(t.matches('[data-rfield$="|endDateEnabled"]')){
+   var endParts=t.getAttribute('data-rfield').split('|'),endDraft=endParts[1]==='draft'?rhythmDraft:rhythmEditDraft;
+   if(endDraft){endDraft.endDateEnabled=t.checked;if(!t.checked)endDraft.until=null;render();}
+   e.stopImmediatePropagation();return;
+  }
+  if(t.matches('[data-cpf="endDateEnabled"]')){
+   var endField=t.closest('[data-cpform]').querySelector('[data-rhythm-end-date-field]'),endInput=endField.querySelector('[data-cpf="until"]');
+   endField.hidden=!t.checked;endInput.disabled=!t.checked;endInput.required=t.checked;
+   if(!t.checked)endInput.value='';else endInput.focus();
+   e.stopImmediatePropagation();return;
+  }
   var isRf=t.matches('[data-rfield$="|weekdays"]'),isCp=t.matches('[data-cpf="weekdays"]');
   if(!isRf&&!isCp)return;
   if(isCp){
@@ -179,6 +195,15 @@
   if(!rr2)return;
   rr2.weekdays=t.checked?[+t.value]:[];
   render();e.stopImmediatePropagation();
+ },true);
+ window.addEventListener('click',function(e){
+  var button=e.target&&e.target.closest&&e.target.closest('[data-rhyadd],[data-rhyeditsave]');if(!button)return;
+  var key=button.hasAttribute('data-rhyeditsave')?button.getAttribute('data-rhyeditsave'):button.getAttribute('data-rhyadd')+'|draft';
+  var toggle=document.querySelector('[data-rfield="'+key+'|endDateEnabled"]');
+  var date=document.querySelector('[data-rfield="'+key+'|until"]');
+  if(toggle&&toggle.checked&&(!date||!date.value)){
+   e.preventDefault();e.stopImmediatePropagation();flash('Choose an end date');if(date)date.focus();
+  }
  },true);
  /* ---- handlers: create/edit rhythms (revives rhythms2's dead listeners) ---- */
  document.addEventListener("change",function(e){
@@ -211,7 +236,7 @@
    if(rhythmDraft&&rhythmDraft.pid===ra&&rhythmDraft.text&&rhythmDraft.text.trim()){
     var rp=S.people.find(function(x){return x.id===ra;});
     if(rp){
-     var nc={id:uid(),text:rhythmDraft.text.trim(),freq:rhythmDraft.freq||"weekly",tod:rhythmDraft.tod||"anytime"};
+     var nc={id:uid(),text:rhythmDraft.text.trim(),freq:rhythmDraft.freq||"weekly",tod:rhythmDraft.tod||"anytime",added:todayStr()};
      RHYTHM_FIELD_LIST.forEach(function(k){var v=rhythmDraft[k];if(v===undefined||v===null||v==="")return;if(Array.isArray(v)){if(v.length)nc[k]=v.slice();}else nc[k]=v;});
      ensureRhythm(nc);rp.rhythms=rp.rhythms||[];rp.rhythms.push(nc);rhythmDraft=null;save();render();flash("Rhythm added");
     }
