@@ -280,6 +280,7 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .prayer-day-pill{position:relative;display:inline-flex;cursor:pointer}
 .prayer-day-pill input{position:absolute;opacity:0;width:1px;height:1px}
 .prayer-day-pill span{display:grid;place-items:center;width:34px;height:34px;border:1px solid var(--line);border-radius:50%;background:#fff;color:var(--ink-soft);font-size:13.5px;font-weight:600}
+.prayer-day-pill:hover span{border-color:var(--mint);color:var(--ink)}
 .prayer-day-pill input:checked+span{background:var(--forest);border-color:var(--forest);color:#fff}
 .prayer-day-pill input:focus-visible+span{outline:2px solid var(--forest);outline-offset:2px}
 .prayer-end{display:grid;gap:8px;align-content:start}
