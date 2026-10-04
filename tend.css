@@ -223,6 +223,9 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .pmeters{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
 @media(max-width:720px){.pmeters{grid-template-columns:1fr}}
 .pmeter{background:var(--canvas);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.pmeter-link{cursor:pointer;scroll-margin-top:150px}
+.pmeter-link:hover{border-color:var(--forest);background:var(--mist)}
+.pmeter-link:focus-visible{outline:2px solid var(--forest);outline-offset:3px}
 .pm-lab{display:flex;justify-content:space-between;font-size:13px;font-weight:600}
 .pm-val.green{color:#12B76A}.pm-val.yellow{color:#C77E00}.pm-val.red{color:#FF5A45}
 .pm-note{font-size:11.5px;color:var(--ink-faint);margin-top:6px}
@@ -398,6 +401,15 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .prayer-footer .prayer-tools{margin-left:0;gap:0}
 .prayer-status-actions{margin-left:auto}
 .prayer-item .prayer-details{margin:8px 0}
+.prayer-rhythm-row{display:flex;align-items:center;gap:10px;border-bottom:1px dashed var(--line)}
+.prayer-rhythm-row .prayer-health{min-width:52px}
+.prayer-rhythm-row .prayer-content{min-width:0}
+.prayer-rhythm-row .prayer-heading{margin:0}
+.prayer-rhythm-row .prayer-details{margin:4px 0 0}
+.prayer-rhythm-row .gr-meta{margin-top:3px}
+.prayer-rhythm-row .prayer-date{margin-top:4px}
+.prayer-rhythm-row .prayer-row-actions{margin-left:auto}
+@media(max-width:680px){.prayer-rhythm-row{flex-wrap:wrap}.prayer-rhythm-row .prayer-content{flex:1;min-width:65%}.prayer-rhythm-row .prayer-row-actions{margin-left:62px}}
 .prayer-main-row{display:flex;align-items:center;gap:16px}
 .prayer-content{flex:1;min-width:0}
 .prayer-content .prayer-date{margin:5px 0 0}

@@ -134,13 +134,14 @@
   var pills;
   if(rs.length){
    var rm=avg(rs.map(rhythmScore)),rmCls=scoreClass(rm);
-   var pTouch=personTouchInfo(p),tScore=touchScoreFromDays(pTouch.days),tCls=scoreClass(tScore);
+   var pTouch=personConnInfo(p),tScore=connectionScore(p),tCls=scoreClass(tScore);
    pills='<div class="pmeters three"><div class="pmeter"><div class="pm-lab"><span>Rhythms</span><span class="pm-val '+rmCls+'">'+(rm===null?'—':rm)+'</span></div><div class="bar"><i class="'+rmCls+'" style="width:'+(rm===null?0:rm)+'%"></i></div><div class="pm-note">'+rs.length+" rhythm"+(rs.length===1?"":"s")+'</div></div>'
-   +'<div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val '+tCls+'">'+tScore+'</span></div><div class="bar"><i class="'+tCls+'" style="width:'+tScore+'%"></i></div><div class="pm-note">'+(pTouch.last?("last: "+when(pTouch.last.ts)):"no connections yet")+'</div></div>'
+   +'<div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val '+tCls+'">'+tScore+'</span></div><div class="bar"><i class="'+tCls+'" style="width:'+tScore+'%"></i></div><div class="pm-note">'+(pTouch.last?("Last: "+when(pTouch.last.ts)):"No connections yet")+' · Goal: '+esc(personCadenceGoalLabel(p))+'</div></div>'
    +'<div class="pmeter"><div class="pm-lab"><span>Prayer</span><span class="pm-val '+pCls+'">'+pScoreText+'</span></div><div class="bar"><i class="'+pCls+'" style="width:'+(pScore===null?0:pScore)+'%"></i></div><div class="pm-note">'+(pInfo.last?("last: "+when(pInfo.last.ts)):"no prayers logged")+'</div></div></div>';
   }else{
-   var cInfo=personConnInfo(p),cScore=connScoreFromDays(cInfo.days,personCadenceDays(p)),cCls=scoreClass(cScore);
-   pills='<div class="pmeters"><div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val '+cCls+'">'+cScore+'</span></div><div class="bar"><i class="'+cCls+'" style="width:'+cScore+'%"></i></div><div class="pm-note">'+(cInfo.last?("last: "+when(cInfo.last.ts)):"no connections yet")+'</div></div>'
+   var cInfo=personConnInfo(p),cScore=connectionScore(p),cCls=scoreClass(cScore);
+   pills='<div class="pmeters three"><div class="pmeter"><div class="pm-lab"><span>Rhythms</span><span class="pm-val neutral">—</span></div><div class="bar"><i style="width:0%"></i></div><div class="pm-note">No rhythms yet</div></div>'
+   +'<div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val '+cCls+'">'+cScore+'</span></div><div class="bar"><i class="'+cCls+'" style="width:'+cScore+'%"></i></div><div class="pm-note">'+(cInfo.last?("Last: "+when(cInfo.last.ts)):"No connections yet")+' · Goal: '+esc(personCadenceGoalLabel(p))+'</div></div>'
    +'<div class="pmeter"><div class="pm-lab"><span>Prayer</span><span class="pm-val '+pCls+'">'+pScoreText+'</span></div><div class="bar"><i class="'+pCls+'" style="width:'+(pScore===null?0:pScore)+'%"></i></div><div class="pm-note">'+(pInfo.last?("last: "+when(pInfo.last.ts)):"no prayers logged")+'</div></div></div>';
   }
   var i=html.indexOf('<div class="pmeters');
@@ -149,6 +150,9 @@
   var depth=0,m2,end=-1;
   while((m2=tagRe.exec(html))){if(m2[0].charAt(1)===String.fromCharCode(47)){depth--;}else{depth++;}if(depth===0){end=m2.index+m2[0].length;break;}}
   if(end<0)return html;
+  var meterTargets=["rhythms","connection","prayer"];
+  var meterIndex=0;
+  pills=pills.replace(/<div class="pmeter">/g,function(){var target=meterTargets[meterIndex++];return '<div class="pmeter pmeter-link" role="button" tabindex="0" data-meter-tab="'+target+'" aria-label="Open '+target+' for '+esc(p.name)+'">';});
   return html.slice(0,i)+pills+html.slice(end);
  };
  document.addEventListener("change",function(e){

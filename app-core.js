@@ -157,9 +157,11 @@ function areaScore(id){
  return goalAverage!==null?goalAverage:rawScore(eventsFor(id));
 }
 /* ============ person score: connection-first ============ */
-function personCadenceDays(p){var cc=p.connectCadence||"weekly";if(cc==="daily")return 1;if(cc==="weekly")return 7;if(cc==="biweekly")return 14;if(cc==="monthly")return 30;return p.cadenceDays||30;}
-function personCadenceLabel(p){var cc=p.connectCadence||"weekly";return {daily:"daily",weekly:"weekly",biweekly:"every 2 weeks",monthly:"monthly"}[cc]||("every "+(p.cadenceDays||30)+" days");}
-function personConnInfo(p){var last=null;S.events.forEach(function(e){if(eventHasPerson(e,p.id)&&e.kind!=="prayer"&&e.type!=="prayer"&&(!last||e.ts>last.ts))last=e;});return {last:last,days:last?daysSince(last.ts):999};}
+function personCadenceDays(p){var cc=p.connectCadence||"weekly";if(cc==="daily")return 1;if(cc==="twicewk")return 3.5;if(cc==="weekly")return 7;if(cc==="biweekly")return 14;if(cc==="monthly")return 30;return p.cadenceDays||30;}
+function personCadenceLabel(p){var cc=p.connectCadence||"weekly";return {daily:"daily",twicewk:"twice weekly",weekly:"weekly",biweekly:"every 2 weeks",monthly:"monthly"}[cc]||("every "+(p.cadenceDays||30)+" days");}
+function personCadenceGoalLabel(p){return {daily:"daily interaction",twicewk:"2 interactions a week",weekly:"weekly interaction",biweekly:"interaction every 2 weeks",monthly:"monthly interaction"}[p.connectCadence||"weekly"]||("interaction every "+personCadenceDays(p)+" days");}
+function connectionEvent(e){return !!e.ts&&e.type!=="prayer"&&e.kind!=="prayer"&&(!!e.rhythmId||e.origin==="spark"||["quality","inperson","call","video","text","note","gift","other"].indexOf(e.type)>=0);}
+function personConnInfo(p){var last=null;S.events.forEach(function(e){if(eventHasPerson(e,p.id)&&connectionEvent(e)&&(!last||e.ts>last.ts))last=e;});return {last:last,days:last?daysSince(last.ts):999};}
 function personPrayerInfo(p){var last=null;S.events.forEach(function(e){if(e.personId===p.id&&(e.kind==="prayer"||e.type==="prayer")&&(!last||e.ts>last.ts))last=e;});return {last:last,days:last?daysSince(last.ts):999};}
 function connScoreFromDays(d,cad){var r=d/cad,v;if(r<=0.33)v=100;else if(r<=1)v=100-30*(r-0.33)/0.67;else if(r<=2)v=70-30*(r-1);else if(r<3)v=40-30*(r-2);else v=10;return Math.round(clamp(v,10,100));}
 function prayerScoreFromDays(d){return Math.round(clamp(100-10*d,30,100));}
@@ -193,18 +195,15 @@ function sparkDays(s){if(!s.by)return 999;var t=new Date();t.setHours(12,0,0,0);
 function sparkDueTxt(s){if(!s.by)return "someday";var d=sparkDays(s);if(d<0)return (-d)+"d overdue";if(d===0)return "today";if(d===1)return "tomorrow";return "in "+d+"d";}
 function sparkLive(s){if(s.done)return false;if(!s.by)return true;return sparkDays(s)<=0;}
 function openSparks(p){return ((p&&p.sparks)||[]).filter(function(s){return !s.done;}).sort(function(a,b){return (a.by||"9999")<(b.by||"9999")?-1:1;});}
-function personTouchInfo(p){var last=null;S.events.forEach(function(e){if(eventHasPerson(e,p.id)&&e.kind!=="prayer"&&e.type!=="prayer"&&(!last||e.ts>last.ts))last=e;});return {last:last,days:last?daysSince(last.ts):999};}
-function touchScoreFromDays(d){return Math.max(10,100-10*d);}
+function personTouchInfo(p){return personConnInfo(p);}
+function connectionScore(p){var info=personConnInfo(p);return info.last?Math.max(0,100-10*Math.max(0,Math.floor(info.days-personCadenceDays(p))+1)):0;}
+function touchScoreFromDays(d,p){return p?connectionScore(p):Math.max(0,100-10*d);}
 function touchSuggestion(p){var ideas={qt:["Plan a 30-minute walk together","Coffee and conversation, phones down","Do an errand side by side"],wa:["Text one specific encouragement","Speak an affirmation out loud","Write a short note of thanks"],as:["Do one of their chores, unasked","Bring their favorite drink home","Fix something on their list"],gf:["Pick up a small favorite treat","Order the book they mentioned","Send flowers for no reason"],pt:["A long, unhurried hug","Sit close this evening","Take a walk hand in hand"]};var arr=(p&&p.loveLanguage&&ideas[p.loveLanguage])||["Send a thoughtful text","A quick call on the commute","A handwritten note"];return arr[Math.floor(Date.now()/864e5)%arr.length];}
-function personScore(p){
- var crs=personRhythms(p,"connection"),prs=personRhythms(p,"prayer");
- var ti=personTouchInfo(p),ts=touchScoreFromDays(ti.days);
- var conn=crs.length?avg(crs.map(rhythmScore)):connScoreFromDays(ti.days,personCadenceDays(p));
- var ps=prs.length?avg(prs.map(rhythmScore)):prayerScoreFromDays(personPrayerInfo(p).days);
- if(conn===null)conn=ts;
- if(ps===null)ps=prayerScoreFromDays(personPrayerInfo(p).days);
- if(!crs.length&&!prs.length)return Math.round(0.7*conn+0.3*ps);
- return Math.round(clamp(0.4*conn+0.3*ts+0.3*ps,0,100));
+function personScore(p){var rhythms=avg(personRhythms(p).map(rhythmScore)),connection=connectionScore(p),prayer=typeof prayerMeterScore==="function"?prayerMeterScore(p):null,total=0,weight=0;
+ if(rhythms!==null){total+=0.4*rhythms;weight+=0.4;}
+ if(connection!==null){total+=0.3*connection;weight+=0.3;}
+ if(prayer!==null){total+=0.3*prayer;weight+=0.3;}
+ return weight?Math.round(clamp(total/weight,0,100)):0;
 }
 function nextOccurrence(kd){var t=new Date();var d=new Date(t.getFullYear(),kd.month-1,kd.day);if(d<t)d=new Date(t.getFullYear()+1,kd.month-1,kd.day);return d;}
 function daysUntil(kd){return Math.ceil((nextOccurrence(kd)-new Date())/86400000);}

@@ -123,11 +123,10 @@ rhythmFreqLabel=function(r){
 };
 personRhythms=function(p){return ((p&&p.rhythms)||[]).filter(function(r){return !rhythmEnded(ensureRhythm(r));});};
 personScore=function(p){
- var rs=personRhythms(p),ti=personTouchInfo(p),ts=touchScoreFromDays(ti.days);
- var conn=rs.length?avg(rs.map(rhythmScore)):connScoreFromDays(ti.days,personCadenceDays(p));
+ var rs=personRhythms(p),rhythms=avg(rs.map(rhythmScore)),conn=connectionScore(p);
  var ps=prayerMeterScore(p),total=0,weight=0;
- if(conn!==null){total+=0.4*conn;weight+=0.4;}
- total+=0.3*ts;weight+=0.3;
+ if(rhythms!==null){total+=0.4*rhythms;weight+=0.4;}
+ total+=0.3*conn;weight+=0.3;
  if(ps!==null){total+=0.3*ps;weight+=0.3;}
  return Math.round(clamp(total/weight,0,100));
 };
