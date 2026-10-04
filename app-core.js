@@ -128,6 +128,7 @@ function daysSince(ts){
 }
 function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
 function settings(){return S.settings||DEFAULT_SETTINGS;}
+function scoreBaseline(){var saved=settings().baseline;if(saved===null||saved===undefined||saved==="")return DEFAULT_SETTINGS.baseline;var value=Number(saved);return Number.isFinite(value)?clamp(value,0,100):DEFAULT_SETTINGS.baseline;}
 function scoreClass(v){if(v===null||v===undefined)return "neutral";var s=settings();return v>=s.greenAt?"green":(v>=s.yellowAt?"yellow":"red");}
 function scoreLabel(v){var s=settings();if(v>=s.greenAt)return "Healthy";if(v>=s.yellowAt)return "Slipping - tend it soon";return "Needs attention now";}
 function goalInterval(g){return !g.cadence?Infinity:g.cadence==="custom"?(g.days||2):(CADENCES[g.cadence]?CADENCES[g.cadence].days:(FREQS[g.cadence]?FREQS[g.cadence].days:7));}
@@ -140,7 +141,7 @@ function goalScore(g){
  if(d<3*iv)return Math.round(80-30*((d-iv)/(2*iv)));
  return Math.round(Math.max(20,50-30*((d-3*iv)/iv)));
 }
-function rawScore(evs,base){base=(base===undefined)?settings().baseline:base;if(!evs.length)return base;var bonus=0,last=0;evs.forEach(function(e){var d=daysSince(e.ts);if(d>90)return;bonus+=(e.weight||typeWeight(e))*clamp(1-d/45,0,1);if(d>last)last=d;});return clamp(Math.round(settings().baseline-1.4*clamp(last,0,30)+bonus),0,100);}
+function rawScore(evs,base){base=(base===undefined)?scoreBaseline():base;if(!Number.isFinite(base))base=scoreBaseline();if(!evs.length)return base;var bonus=0,last=0;evs.forEach(function(e){var d=daysSince(e.ts);if(d>90)return;bonus+=(e.weight||typeWeight(e))*clamp(1-d/45,0,1);if(d>last)last=d;});return clamp(Math.round(base-1.4*clamp(last,0,30)+bonus),0,100);}
 function migrateEvents(){S.events.forEach(function(e){if(!e.type)e.type=KIND2TYPE[e.kind]||"note";if(!e.title&&e.kind&&KINDS[e.kind])e.title=KINDS[e.kind].label;});}
 migrateEvents();
 function eventHasPerson(e,pid){return e.personId===pid||(Array.isArray(e.personIds)&&e.personIds.indexOf(pid)!==-1);}
@@ -171,6 +172,10 @@ function durValOf(r){if(r.durVal)return r.durVal;var m=DUR_LEGACY[r.dur];return 
 function rhythmDurLabel(r){if(!r)return"";var v=+r.durVal||0,u=r.durUnit;if(!v){var m=DUR_LEGACY[r.dur];if(m){v=m[0];u=m[1];}else return r.dur||"";}if(u==="min")return v+" min";if(u==="hrs")return v+(v===1?" hr":" hrs");return v+(v===1?" day":" days");}
 var DOW=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 var DOW_SHORT=["S","M","T","W","T","F","S"];
+function scheduleOptions(options,current){return options.map(function(o){return '<option value="'+esc(o[0])+'"'+(String(current)===String(o[0])?' selected':'')+'>'+esc(o[1])+'</option>';}).join('');}
+function scheduleWeekdayPills(selected,attr,allowMultiple){var days=Array.isArray(selected)?selected.map(Number):[];return '<span class="dow-pills" data-schedule-days="'+(allowMultiple?'multiple':'single')+'">'+DOW.map(function(day,i){return '<label class="dow-pill"><input type="checkbox" '+attr+' value="'+i+'" aria-label="'+day+'"'+(days.indexOf(i)>=0?' checked':'')+'><span>'+day.slice(0,3)+'</span></label>';}).join('')+'</span>';}
+function scheduleMonthPattern(item,attr,group){var mode=item.monthlyMode==="onThe"?"onThe":"onDay",day=+item.dayOfMonth||1,ord=+item.ord||1,dow=+item.ordWeekday||0;return '<div class="addrow"><label class="rmode"><input type="radio" name="'+group+'" '+attr('monthlyMode')+' value="onDay"'+(mode==='onDay'?' checked':'')+'> On day</label><select '+attr('dayOfMonth')+(mode==='onThe'?' disabled':'')+'>'+scheduleOptions(Array.from({length:28},function(_,i){return [i+1,String(i+1)];}),day)+'</select></div><div class="addrow"><label class="rmode"><input type="radio" name="'+group+'" '+attr('monthlyMode')+' value="onThe"'+(mode==='onThe'?' checked':'')+'> On the</label><select '+attr('ord')+(mode==='onDay'?' disabled':'')+'>'+scheduleOptions([[1,'1st'],[2,'2nd'],[3,'3rd'],[4,'4th'],[5,'last']],ord)+'</select><select '+attr('ordWeekday')+(mode==='onDay'?' disabled':'')+'>'+scheduleOptions(DOW.map(function(d,i){return [i,d];}),dow)+'</select></div>';}
+function scheduleEndDate(item,attr,fieldAttr){var on=!!(item.until||item.endDateEnabled);return '<div class="rhy-end-date"><label class="rhy-end-toggle"><input type="checkbox" '+attr('endDateEnabled')+(on?' checked':'')+'> End date</label><label class="rhy-end-field" '+fieldAttr+(on?'':' hidden')+'>Ends on<input type="date" '+attr('until')+' value="'+esc(item.until||'')+'"'+(on?' required':' disabled')+'></label></div>';}
 function scheduleHasWeekday(freq){return ["weekly","biweekly","monthly","quarterly","yearly","annual"].indexOf(freq)!==-1;}
 function scheduleDayLabel(item){var freq=item.freq||item.cadence;if(!scheduleHasWeekday(freq))return "";if(Array.isArray(item.scheduleDows)&&item.scheduleDows.length)return item.scheduleDows.map(function(d){return DOW_SHORT[d];}).join(",");return item.scheduleDow!==null&&item.scheduleDow!==undefined&&DOW[+item.scheduleDow]?DOW[+item.scheduleDow]:"";}
 function scheduleDayMatches(item,date){var dow=(date||new Date()).getDay();if(Array.isArray(item.scheduleDows)&&item.scheduleDows.length)return item.scheduleDows.indexOf(dow)>=0;var day=scheduleDayLabel(item);return !day||day===DOW[dow];}

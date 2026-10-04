@@ -115,6 +115,7 @@ rhythmFreqLabel=function(r){
  if(rhythmEnded(r))return (r.freq==="custom"?"Every "+(+r.every||1)+" "+(r.unit||"weeks"):RHYTHM_FREQS[r.freq]?RHYTHM_FREQS[r.freq].label:"Rhythm")+" - ended"+rUntilTxt(r);
  if(r.freq==="custom"){var u=r.unit||"weeks";return "Every "+(+r.every||1)+" "+u+(u==="weeks"?rWkTxt(r):u==="months"?rMoTxt(r):u==="years"?rYrTxt(r):"")+rUntilTxt(r);}
  if(r.freq==="weekly")return "Weekly"+rWkTxt(r)+rUntilTxt(r);
+ if(r.freq==="selectdays")return "Selected days"+rWkTxt(r)+rUntilTxt(r);
  if(r.freq==="monthly")return "Monthly"+rMoTxt(r)+rUntilTxt(r);
  if(r.freq==="quarterly")return "Quarterly"+rQuarterlyTxt(r)+rUntilTxt(r);
  if(r.freq==="yearly")return "Yearly"+rYrTxt(r)+rUntilTxt(r);
@@ -204,6 +205,9 @@ draftRow=function(p){
  return out;
 };
 
+/* Later overrides in this legacy file depend on Care Plan globals that load
+   afterward. app-rhythms3.js provides the active implementations instead. */
+return;
 /* ---- care plan: rhythm edit form + save ---- */
 carePlanEditHTML=function(item,key){
  var r=item.record,kind=item.kind;

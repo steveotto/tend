@@ -16,6 +16,7 @@ function recNormRule(r){
  if(!rule){
   rule={freq:(r&&r.freq)||"weekly",start:(r&&r.start)||(r&&r.added)||null,end:null};
   var f=rule.freq;
+  if(f==="selectdays"){rule.freq="weekly";rule.days=(Array.isArray(r.weekdays)&&r.weekdays.length)?r.weekdays.map(Number):[1];}
   if(f==="weekly"){rule.days=(Array.isArray(r.weekdays)&&r.weekdays.length)?r.weekdays.slice():[(r&&r.scheduleDow!=null)?+r.scheduleDow:1];}
   else if(f==="custom"){
    if(r.customType===undefined&&r.customDow===undefined&&r.customOrd===undefined&&(r.every||r.unit)){
@@ -26,7 +27,7 @@ function recNormRule(r){
    else{var ct=(r&&r.customType)||"weekly";if(ct==="weekly"){rule.freq="weekly";rule.days=[(r&&r.customDow!=null)?+r.customDow:1];}
    else if(ct==="monthly"){rule.freq="monthly";rule.mode="weekday";rule.weeks=[(r&&r.customOrd)||1];rule.dow=(r&&r.customDow)!=null?+r.customDow:5;}
    else{rule.freq="monthly";rule.mode="date";rule.dom=15;}}}
-  else if(f==="monthly"){rule.mode=(r.monthlyMode==="onThe")?"weekday":"date";rule.dom=(r.dom==="last"||r.dom)?r.dom:(+r.dayOfMonth||1);rule.weeks=[+r.ord||1];rule.dow=+r.ordWeekday||0;}
+  else if(f==="monthly"){rule.mode=(r.monthlyMode==="onThe")?"weekday":"date";rule.dom=(r.dom==="last"||r.dom)?r.dom:(+r.dayOfMonth||+r.monthDay||1);rule.weeks=[(+r.ord===5?-1:+r.ord)||1];rule.dow=+r.ordWeekday||0;}
   else if(f==="quarterly"){rule.mode=(r.monthlyMode==="onThe")?"weekday":"date";rule.dom=(r.dom==="last"||r.dom)?r.dom:(+r.dayOfMonth||1);rule.weeks=[+r.ord||1];rule.dow=+r.ordWeekday||0;rule.month=r.qmonth?(+r.qmonth-1):0;}
   else if(f==="yearly"){rule.mode=(r.monthlyMode==="onThe")?"weekday":"date";rule.dom=(r.dom==="last"||r.dom)?r.dom:(+r.monthDay||1);rule.weeks=[+r.ord||1];rule.dow=+r.ordWeekday||0;rule.month=r.month?(+r.month-1):0;}
  }
@@ -37,6 +38,8 @@ function recNormRule(r){
 }
 function recD2(d){return d.toISOString().slice(0,10);}
 function recParse(s){var p=s.split("-");return new Date(+p[0],+p[1]-1,+p[2]);}
+function recDayNumber(s){var d=recParse(s);return Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/86400000;}
+function recDayString(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 function recDaysIn(y,m){return new Date(y,m+1,0).getDate();}
 function recWOM(d){return Math.floor((d-1)/7)+1;}
 function recIsLast(d,y,m){return d+7>recDaysIn(y,m);}
@@ -210,3 +213,21 @@ window.rhythmScore=function(r){
   return null;
  }
 };
+function scheduleHealthScore(item,lastDate,today){
+ var rule=recNormRule(item),day=today||todayStr();
+ if(rule.end&&day>rule.end)day=rule.end;
+ if(lastDate){
+  if(rule.freq==="daily")return Math.max(0,100-10*Math.max(0,recDayNumber(day)-recDayNumber(lastDate)));
+  var next=recNext(rule,(function(){var d=recParse(lastDate);d.setDate(d.getDate()+1);return recD2(d);})(),1)[0];
+  if(!next||day<=next)return 100;
+  var following=recNext(rule,(function(){var d=recParse(next);d.setDate(d.getDate()+1);return recD2(d);})(),1)[0];
+  var span=following?recDayNumber(following)-recDayNumber(next):rhythmPeriod(item);
+  return Math.max(0,Math.round(100-(recDayNumber(day)-recDayNumber(next))*Math.min(10,100/Math.max(1,span))));
+ }
+ var start=rule.start||item.added;if(!start)return null;
+ var first=recNext(rule,start,1)[0];if(!first||day<=first)return null;
+ var second=recNext(rule,(function(){var d=recParse(first);d.setDate(d.getDate()+1);return recD2(d);})(),1)[0];
+ var windowDays=second?recDayNumber(second)-recDayNumber(first):rhythmPeriod(item);
+ return Math.max(0,Math.round(100-(recDayNumber(day)-recDayNumber(first))*Math.min(10,100/Math.max(1,windowDays))));
+}
+window.rhythmScore=function(r){var last=rhythmLast(r);return scheduleHealthScore(r,last?recDayString(new Date(last.ts)):null,todayStr());};
