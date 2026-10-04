@@ -307,7 +307,7 @@ function personProfile(pid){
  var cInfo=personConnInfo(p),pInfo=personPrayerInfo(p);
  var cScore=connScoreFromDays(cInfo.days,personCadenceDays(p)),cCls=scoreClass(cScore);
  var pScore=prs.length?avg(prs.map(rhythmScore)):prayerScoreFromDays(pInfo.days),pCls=scoreClass(pScore);
- var evs=S.events.filter(function(e){return e.personId===pid;}).sort(function(a,b){return b.ts-a.ts;});
+ var evs=S.events.filter(function(e){return eventHasPerson(e,pid);}).sort(function(a,b){return b.ts-a.ts;});
  var prayers=S.prayers.filter(function(x){return x.personId===pid;});
  var kds=S.keyDates.filter(function(k){return k.personId===pid;});
  var ll=p.loveLanguage||"";
@@ -347,16 +347,13 @@ function personProfile(pid){
  out+='<div style="display:flex;gap:8px;margin-top:2px"><button class="btn" data-psubmit="'+pid+'">'+(editingConn?"Update":"Log it")+'</button>'+'<button class="btn ghost" data-peditcancel="1">Cancel</button>'+'</div>';
  out+='</div></dialog>';
  }
- /* recent moments: shared history for rhythms, ripples, and sparks */
- out+='<div class="card" style="margin-bottom:22px"><div class="subhead">Recent moments<span class="hint" style="margin-left:8px;text-transform:none;letter-spacing:0;font-weight:400">the care you have shared</span></div>';
- if(evs.length){
-  out+=evs.slice(0,5).map(rippleLine).join("");
-  if(evs.length>5)out+='<details class="recent-moments-more"><summary>Show all ('+evs.length+' moments)</summary><div>'+evs.slice(5).map(rippleLine).join("")+'</div></details>';
- }else out+='<div class="empty">No moments logged yet.</div>';
- out+='</div>';
  activeProfileTab=profileTabs[pid]||"rhythms";
- var counts={rhythms:(p.rhythms||[]).length,sparks:openSparks(p).length,prayer:prayers.filter(function(x){return !x.answered&&!x.archived;}).length,notes:S.followups.filter(function(f){return f.personId===pid&&!f.done;}).length};
- out+='<div class="profile-tabs" role="tablist" aria-label="Person collections">'+[["rhythms","Rhythms"],["sparks","Sparks"],["prayer","Prayer"],["notes","Notes"]].map(function(item){return '<button role="tab" id="profile-tab-'+item[0]+'" aria-controls="profile-panel-'+item[0]+'" aria-selected="'+(activeProfileTab===item[0])+'" data-profiletab="'+item[0]+'">'+collectionIcon(item[0])+item[1]+' <span class="tab-count">'+counts[item[0]]+'</span></button>';}).join('')+'</div>';
+ var connections=evs.filter(connectionEvent);
+ var counts={rhythms:(p.rhythms||[]).length,connection:connections.length,sparks:openSparks(p).length,prayer:prayers.filter(function(x){return !x.answered&&!x.archived;}).length,notes:S.followups.filter(function(f){return f.personId===pid&&!f.done;}).length};
+ out+='<div class="profile-tabs" role="tablist" aria-label="Person collections">'+[["rhythms","Rhythms"],["connection","Connection"],["sparks","Sparks"],["prayer","Prayer"],["notes","Notes"]].map(function(item){return '<button role="tab" id="profile-tab-'+item[0]+'" aria-controls="profile-panel-'+item[0]+'" aria-selected="'+(activeProfileTab===item[0])+'" data-profiletab="'+item[0]+'">'+(item[0]==="connection"?'♡ ':collectionIcon(item[0]))+item[1]+' <span class="tab-count">'+counts[item[0]]+'</span></button>';}).join('')+'</div>';
+ out+=profilePanelStart("connection")+'<div class="subhead">Recent connections</div><p class="settings-help">'+esc(personCadenceLabel(p))+' goal · 10 points lost each day after it is due.</p>';
+ if(connections.length){out+=connections.slice(0,5).map(rippleLine).join("");if(connections.length>5)out+='<details class="recent-moments-more"><summary>Show all ('+connections.length+' connections)</summary><div>'+connections.slice(5).map(rippleLine).join("")+'</div></details>';}else out+='<div class="empty">No connections logged yet.</div>';
+ out+='</section>';
  out+=profilePanelStart("rhythms");
  if((p.rhythms||[]).length){sortedPersonRhythms(p).forEach(function(r){out+=rhythmRow(p,r);});}
  else out+='<div class="empty">No rhythms yet - add the recurring things that keep this relationship tended.</div>';
@@ -394,7 +391,7 @@ function personProfile(pid){
  m+='<div class="subhead" style="margin-top:6px">Key dates</div>';
  if(kds.length){kds.forEach(function(k){m+='<div class="logline"><span class="kind">'+esc(k.label)+'</span><span class="txt">'+(daysUntil(k)===0?"today":"in "+daysUntil(k)+" days")+'</span><span class="entry-actions"><button class="iconbtn" data-kddel="'+k.id+'" title="delete">\uD83D\uDDD1</button></span></div>';});}else m+='<div class="empty">None yet.</div>';
  m+='<div class="addrow"><input placeholder="Add key date (label)" data-kdlabel="'+pid+'"><button class="btn mini" data-kdadd="'+pid+'">Add</button></div>';
- m+='<div class="field connection-cadence-field" style="margin-top:14px"><label for="personConnectionCadence">Default connection cadence</label><select id="personConnectionCadence" aria-describedby="connectionCadenceHelp" data-pfield="connectCadence" data-pid="'+pid+'">'+[["daily","daily"],["weekly","weekly"],["biweekly","every 2 weeks"],["monthly","monthly"]].map(function(o){return '<option value="'+o[0]+'"'+((p.connectCadence||"weekly")===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("")+'</select><p id="connectionCadenceHelp" class="settings-help">Used for the health meter when no connection rhythms are set up. Each connection rhythm follows its own frequency.</p></div>';
+ m+='<div class="field connection-cadence-field" style="margin-top:14px"><label for="personConnectionCadence">Connection cadence</label><select id="personConnectionCadence" aria-describedby="connectionCadenceHelp" data-pfield="connectCadence" data-pid="'+pid+'">'+[["daily","Daily"],["twicewk","Twice weekly"],["weekly","Weekly"],["biweekly","Every 2 weeks"],["monthly","Monthly"]].map(function(o){return '<option value="'+o[0]+'"'+((p.connectCadence||"weekly")===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("")+'</select><p id="connectionCadenceHelp" class="settings-help">The Connection meter stays at 100% until this cadence is due, then loses 10 points per day without a new interaction. Tend a rhythm, complete a spark, or log a connection to reset it.</p></div>';
  m+='<div class="field"><label>Love language</label><select data-pfield="loveLanguage" data-pid="'+pid+'"><option value="">- not set -</option>'+Object.keys(LL_LANGUAGES).map(function(k){return '<option value="'+k+'"'+(ll===k?" selected":"")+'>'+LL_LANGUAGES[k]+'</option>';}).join("")+'</select></div>';
  m+='<div class="field"><label>Photo</label><div class="person-photo-controls">'+personAvatar(p,56)+'<input type="file" accept="image/*" data-pphoto="'+pid+'">'+(p.photo?'<button class="btn mini danger" data-pphorm="'+pid+'">Remove</button>':'')+'</div><div class="hint" style="font-size:11px;color:var(--ink-faint)">Crops to a circle for their card.</div></div>';
  m+='</div></div>';
