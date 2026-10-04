@@ -368,7 +368,7 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .prayer-item{padding:16px 0;border-bottom:1px solid var(--line)}
 .prayer-item:last-child{border-bottom:0}
 .prayer-meta,.prayer-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.prayed-pill{display:inline-flex;border-radius:99px;background:var(--mist);color:var(--forest-deep);padding:6px 12px;font-size:13px;font-weight:600}
+.prayed-pill{display:inline-flex;border-radius:99px;background:var(--mist);color:var(--forest-deep);padding:3px 10px;font-size:13px;font-weight:600}
 .prayer-text{margin:12px 0 8px;overflow-wrap:anywhere}
 .prayer-date{font-size:12px;color:var(--ink-soft);margin-bottom:12px}
 .prayer-past,.prayer-notes{margin-top:16px}
@@ -380,13 +380,11 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .prayer-person{display:inline-flex;align-items:center;gap:6px;background:var(--mist);border-radius:99px;padding:4px 10px 4px 4px;font-size:12px;font-weight:500;white-space:nowrap}
 .prayer-details{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink-soft);font-size:14px;margin:0 0 12px}
 .prayer-count{margin-bottom:12px}
-button.prayed-pill{border:1px solid transparent;min-height:44px;cursor:pointer}
-button.prayed-pill:hover{border-color:var(--forest);background:var(--mist)}
 .prayer-tools{display:inline-flex;gap:4px;margin-left:auto}
 .prayer-icon{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border:0;border-radius:12px;background:transparent;color:var(--ink-soft)}
 .prayer-icon:hover{background:var(--mist);color:var(--forest-deep)}
 .prayer-icon svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
-.prayer-icon:focus-visible,button.prayed-pill:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+.prayer-icon:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
 .prayer-new-field{margin-top:16px}
 
 /* Compact prayer rows with aligned count and secondary actions. */
@@ -397,6 +395,14 @@ button.prayed-pill:hover{border-color:var(--forest);background:var(--mist)}
 .prayer-footer .prayer-tools{margin-left:0;gap:0}
 .prayer-status-actions{margin-left:auto}
 .prayer-item .prayer-details{margin:8px 0}
+.prayer-main-row{display:flex;align-items:center;gap:16px}
+.prayer-content{flex:1;min-width:0}
+.prayer-content .prayer-date{margin:5px 0 0}
+.prayer-row-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.prayer-row-actions .btn.mini{min-height:38px;padding:7px 14px}
+.prayer-row-actions .prayer-close-menu{margin-left:0}
+.prayer-row-actions .prayer-edit-trigger{min-width:36px;min-height:44px}
+@media(max-width:680px){.prayer-main-row{align-items:flex-start;flex-direction:column;gap:8px}.prayer-row-actions{flex-wrap:wrap}}
 @media(max-width:520px){.prayer-footer{gap:4px 8px}.prayer-status-actions{flex-wrap:wrap}}
 
 .connection-cadence-field{margin-top:24px;margin-bottom:24px}
