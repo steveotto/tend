@@ -1,23 +1,7 @@
 {
-  "synced": "2026-10-03T21:54:55.571Z",
+  "synced": "2026-10-04T00:14:01.205Z",
   "source": "iCloud published feed",
   "events": [
-    {
-      "t": "Cancel zenfy",
-      "s": "2026-09-03T00:00:00",
-      "e": "2026-09-04T00:00:00",
-      "allDay": true,
-      "cal": "Home",
-      "notes": ""
-    },
-    {
-      "t": "Northstar Orientation 2-4",
-      "s": "2026-09-03T00:00:00",
-      "e": "2026-09-04T00:00:00",
-      "allDay": true,
-      "cal": "Home",
-      "notes": ""
-    },
     {
       "t": "PLN",
       "s": "2026-09-05T16:30:00.000Z",
