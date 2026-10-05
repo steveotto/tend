@@ -255,9 +255,9 @@ function prayerRowHTML(pr,pid){
  }
  var times=pr.prayed||0;
  return '<div class="preq pp-row"><div class="ptext" style="flex:1">'+
- '<b>'+esc(pr.text)+'</b> <span class="pc-chip pray">Prayed '+(times===1?"once":times+" times")+'</span>'+
- (pr.details?'<div style="font-size:12.5px;color:var(--ink-soft);margin-top:3px">'+esc(pr.details)+'</div>':'')+
- '<div class="prayer-schedule-summary">'+esc(pr.freq&&FREQS[pr.freq]?FREQS[pr.freq].label:'No schedule')+(scheduleDayLabel(pr)?' · '+esc(scheduleDayLabel(pr)):'')+' · '+esc(TODS[pr.tod]||TODS.anytime||'Anytime')+'</div></div>'+
+ '<b class="tend-type-title">'+esc(pr.text)+'</b> <span class="pc-chip pray">Prayed '+(times===1?"once":times+" times")+'</span>'+
+ (pr.details?'<div class="tend-type-description" style="margin-top:3px">'+esc(pr.details)+'</div>':'')+
+ '<div class="prayer-schedule-summary tend-type-description">'+esc(pr.freq&&FREQS[pr.freq]?FREQS[pr.freq].label:'No schedule')+(scheduleDayLabel(pr)?' · '+esc(scheduleDayLabel(pr)):'')+' · '+esc(TODS[pr.tod]||TODS.anytime||'Anytime')+'</div></div>'+
  '<div class="pp-btns">'+
  '<button class="btn mini" data-prayquick="'+pid+'" data-prayref="'+pr.id+'">Pray</button>'+
  '<button class="btn mini ghost pp-answered" data-prayerans="'+pr.id+'" title="Mark prayer answered"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m7 12 3 3 7-7"/></svg>Answered</button>'+
@@ -274,7 +274,7 @@ function prayerList(prayers){
  if(done.length){
   out+='<div class="subhead" style="margin-top:14px;color:var(--forest)">Answered \u2713</div>';
   done.forEach(function(pr){
-   out+='<div class="preq answered"><div class="ptext">'+esc(pr.text)+(pr.answered&&pr.answeredDate?'<div style="font-size:11px;color:var(--forest)">answered '+esc(pr.answeredDate)+'</div>':'')+'</div><button class="pp-icon pp-history" data-prayerhistory="'+pr.id+'" title="View prayer history" aria-label="View history for '+esc(pr.text)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button class="del" data-prayerunans="'+pr.id+'" title="restore">\u21BA</button></div>';
+   out+='<div class="preq answered"><div class="ptext"><span class="tend-type-title">'+esc(pr.text)+'</span>'+(pr.answered&&pr.answeredDate?'<div class="tend-type-description">answered '+esc(pr.answeredDate)+'</div>':'')+'</div><button class="pp-icon pp-history" data-prayerhistory="'+pr.id+'" title="View prayer history" aria-label="View history for '+esc(pr.text)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button class="del" data-prayerunans="'+pr.id+'" title="restore">\u21BA</button></div>';
   });
  }
  return out;

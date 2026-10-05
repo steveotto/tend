@@ -1,6 +1,6 @@
 "use strict";
 /* ============ views: prayer, echo, offload, settings, sync ============ */
-var PRAYER_CATS=["Family","Marriage","Kids","Friends","Work & Ministry","Church & Pastors","World & Others"];
+var PRAYER_CATS=["Family","Marriage","Kids","Friends","Work & Ministry","Church & Pastors","World & Others","Faith"];
 var editingPrayerId=null;
 function prayerDate(value){if(!value)return "";var d=new Date(value+"T12:00:00");return isNaN(d.getTime())?value:String(d.getDate()).padStart(2,"0")+" "+["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"][d.getMonth()]+" "+d.getFullYear();}
 function prayerRow(p){

@@ -4,9 +4,109 @@
 "use strict";
 /* ============ actions & bindings ============ */
 function logEvent(areaId,personId,type,title,note,whenTs,goalId,rhythmId,extra){var _ev={id:uid(),ts:(whenTs||Date.now()),areaId:areaId,personId:personId||null,type:type||"inperson",kind:type||"inperson",title:title||"",note:note||"",goalId:goalId||null,rhythmId:rhythmId||null,weight:(ETYPES[type]?ETYPES[type].w:3)};if(extra)for(var _k in extra)_ev[_k]=extra[_k];S.events.push(_ev);save();render();}
+function recordPrayer(prayer,logForPerson){
+ if(!prayer||prayer.answered||prayer.archived)return false;
+ var prayedAt=Date.now();
+ prayer.prayed=(prayer.prayed||0)+1;prayer.lastPrayed=todayStr();prayer.prayerLogs=prayer.prayerLogs||[];prayer.prayerLogs.push(prayedAt);
+ var person=logForPerson&&prayer.personId&&S.people.find(function(item){return item.id===prayer.personId;});
+ if(person){
+  if(typeof actDoneAdd==="function")actDoneAdd(person.id,prayer.id);
+  logEvent(person.area,person.id,"prayer",prayer.text||"Prayer",prayer.details||"",prayedAt,null,null,{prayerId:prayer.id});
+ }else{save();render();}
+ flash(logForPerson?"Prayed \u2713":"Prayer recorded");
+ return true;
+}
 document.addEventListener("keydown",function(e){if((e.key==="Enter"||e.key===" ")&&e.target.matches&&e.target.matches("[data-meter-tab]")){e.preventDefault();e.target.click();}});
 function deleteEvent(id){S.events=S.events.filter(function(e){return e.id!==id;});save();render();flash("Entry deleted");}
 function updateEvent(id,patch){var e=S.events.find(function(x){return x.id===id;});if(e){Object.keys(patch).forEach(function(k){e[k]=patch[k];});e.weight=(ETYPES[e.type]?ETYPES[e.type].w:3);save();render();flash("Entry updated");}}
+var tendDialogDraft=null;
+function tendDialogHTML(){
+ function stepper(segment,label,direction){var title=direction>0?"Increase ":"Decrease ";return '<button type="button" class="tend-time-step" tabindex="-1" data-tend-step="'+segment+'" data-step-direction="'+direction+'" aria-label="'+title+label+'"><svg viewBox="0 0 12 8" aria-hidden="true"><path d="'+(direction>0?"m1 7 5-5 5 5":"m1 1 5 5 5-5")+'"/></svg></button>';}
+ return '<dialog id="tendDialog" class="tend-dialog" aria-labelledby="tendHeading"><div class="tend-form"><button type="button" class="iconbtn tend-close" data-tend-cancel aria-label="Close">×</button><span class="focus-eyebrow">Tend</span><h2 id="tendHeading">When did you tend it?</h2><p id="tendTitle"></p><label>Date<input type="date" id="tendDate" required></label><label>Time<span class="tend-time-control"><input type="time" id="tendTime" step="60" tabindex="-1" aria-hidden="true" hidden><span class="tend-time-segment"><input type="text" id="tendTimeHour" inputmode="numeric" maxlength="2" autocomplete="off" aria-label="Hour" aria-describedby="tendTimeHelp"><span class="tend-time-steppers">'+stepper("hour","hour",1)+stepper("hour","hour",-1)+'</span></span><span class="tend-time-separator" aria-hidden="true">:</span><span class="tend-time-segment"><input type="text" id="tendTimeMinute" inputmode="numeric" maxlength="2" autocomplete="off" aria-label="Minute" aria-describedby="tendTimeHelp"><span class="tend-time-steppers">'+stepper("minute","minute",1)+stepper("minute","minute",-1)+'</span></span><select id="tendTimePeriod" aria-label="AM or PM"><option value="AM">AM</option><option value="PM">PM</option></select></span></label><div class="tend-actions"><button type="button" class="btn ghost" data-tend-cancel>Cancel</button><button type="button" class="btn" data-tend-save>Save</button></div></div></dialog>';
+}
+function setTendTime(value){
+ var parts=String(value||"").match(/^(\d{2}):(\d{2})$/),hourField=document.getElementById("tendTimeHour"),minuteField=document.getElementById("tendTimeMinute"),period=document.getElementById("tendTimePeriod"),nativeTime=document.getElementById("tendTime");
+ if(!parts||!hourField||!minuteField||!period||!nativeTime)return;
+ var hour=+parts[1];hourField.value=String(hour%12||12).padStart(2,"0");minuteField.value=parts[2];period.value=hour<12?"AM":"PM";nativeTime.value=parts[1]+":"+parts[2];
+}
+function normalizeTendTimeSegment(field){if(!field||!field.value)return;var bounds=field.id==="tendTimeHour"?[1,12]:[0,59],value=Number(field.value);if(!Number.isFinite(value))return;value=Math.max(bounds[0],Math.min(bounds[1],value));field.value=String(value).padStart(2,"0");}
+function syncTendTime(){
+ var hourField=document.getElementById("tendTimeHour"),minuteField=document.getElementById("tendTimeMinute"),period=document.getElementById("tendTimePeriod"),nativeTime=document.getElementById("tendTime");
+ if(!hourField||!minuteField||!period||!nativeTime)return false;
+ var hour=Number(hourField.value),minute=Number(minuteField.value);
+ if(!/^\d{1,2}$/.test(hourField.value)||hour<1||hour>12){nativeTime.value="";return false;}
+ if(!/^\d{1,2}$/.test(minuteField.value)||minute<0||minute>59){nativeTime.value="";return false;}
+ var hour24=hour%12+(period.value==="PM"?12:0);nativeTime.value=String(hour24).padStart(2,"0")+":"+String(minute).padStart(2,"0");return true;
+}
+function stepTendTime(segment,direction){
+ var field=document.getElementById(segment==="hour"?"tendTimeHour":"tendTimeMinute"),min=segment==="hour"?1:0,max=segment==="hour"?12:59;
+ normalizeTendTimeSegment(field);var current=field&&field.value?Number(field.value):(segment==="hour"?1:0),next=current+direction;
+ if(next>max)next=min;if(next<min)next=max;field.value=String(next).padStart(2,"0");syncTendTime();field.focus();field.select();
+}
+function openTendDialog(button){
+ var kind=button.getAttribute("data-tend-open"),personId=button.getAttribute("data-person-id"),rhythmId=button.getAttribute("data-rhythm-id"),goalId=button.getAttribute("data-goal-id"),areaId=button.getAttribute("data-area-id")||button.getAttribute("data-rhythm-area"),title="",rhythm=null,goal=null;
+ if(kind==="person-rhythm"){var person=S.people.find(function(item){return item.id===personId;});rhythm=person&&(person.rhythms||[]).find(function(item){return item.id===rhythmId;});if(!person||!rhythm)return;title=rhythm.text||"Rhythm";}
+ else if(kind==="faith-rhythm"){rhythm=typeof faithFindRhythm==="function"?faithFindRhythm(rhythmId):null;if(!rhythm)return;title=rhythm.text||"Faith rhythm";}
+ else if(kind==="area-rhythm"){rhythm=(S.areaRhythms||[]).find(function(item){return item.id===rhythmId&&Array.isArray(item.areas)&&item.areas.indexOf(areaId)!==-1;});if(!rhythm)return;title=rhythm.text||"Rhythm";}
+ else if(kind==="goal"){goal=S.goals.find(function(item){return item.id===goalId;});if(!goal||goal.completed)return;title=goal.text||"Goal";}
+ else return;
+ var dialog=document.getElementById("tendDialog");
+ if(!dialog){var wrapper=document.createElement("div");wrapper.innerHTML=tendDialogHTML();dialog=wrapper.firstElementChild;dialog.addEventListener("close",function(){tendDialogDraft=null;dialog.remove();});document.body.appendChild(dialog);}
+ tendDialogDraft={kind:kind,personId:personId,rhythmId:rhythmId,goalId:goalId,areaId:areaId};
+ dialog.querySelector("#tendHeading").textContent=kind==="goal"?"When did you tend this goal?":"When did you tend it?";
+ dialog.querySelector("#tendTitle").textContent=title;
+ dialog.querySelector("#tendDate").value=todayStr();
+ setTendTime(nowHM());
+ dialog.showModal();
+ dialog.querySelector("#tendDate").focus();
+}
+function saveTendDialog(){
+ var dialog=document.getElementById("tendDialog"),draft=tendDialogDraft,date=dialog&&dialog.querySelector("#tendDate"),time=dialog&&dialog.querySelector("#tendTime");
+ if(!draft||!date||!date.value){flash("Choose a date");if(date)date.focus();return;}
+ if(!syncTendTime()){flash("Enter a valid hour and minute");var hourField=document.getElementById("tendTimeHour"),minuteField=document.getElementById("tendTimeMinute");if(!/^\d{1,2}$/.test(hourField.value)||+hourField.value<1||+hourField.value>12)hourField.focus();else minuteField.focus();return;}
+ var timestamp=new Date(date.value+"T"+time.value+":00").getTime();
+ if(!Number.isFinite(timestamp)){flash("Enter a valid date and time");return;}
+ if(draft.kind==="person-rhythm"){
+  var person=S.people.find(function(item){return item.id===draft.personId;}),rhythm=person&&(person.rhythms||[]).find(function(item){return item.id===draft.rhythmId;});
+  if(!person||!rhythm){flash("This rhythm is no longer available");dialog.close();return;}
+  actDoneAdd(person.id,rhythm.id);
+  logEvent(draft.areaId||person.area,person.id,(rhythm.category==="prayer"||/^pray/i.test(rhythm.text||""))?"prayer":"quality",rhythm.text,"",timestamp,null,rhythm.id);
+  flash("Rhythm tended ✓");
+ }else if(draft.kind==="faith-rhythm"){
+  var faithRhythm=typeof faithFindRhythm==="function"?faithFindRhythm(draft.rhythmId):null;
+  if(!faithRhythm){flash("This rhythm is no longer available");dialog.close();return;}
+  faithLogRhythm(faithRhythm,timestamp);
+ }else if(draft.kind==="area-rhythm"){
+  var areaRhythm=(S.areaRhythms||[]).find(function(item){return item.id===draft.rhythmId&&Array.isArray(item.areas)&&item.areas.indexOf(draft.areaId)!==-1;});
+  if(!areaRhythm){flash("This rhythm is no longer available");dialog.close();return;}
+  logEvent(draft.areaId,null,"quality",areaRhythm.text,"",timestamp,null,areaRhythm.id);
+  flash("Rhythm tended ✓");
+ }else if(draft.kind==="goal"){
+  var goal=S.goals.find(function(item){return item.id===draft.goalId;});
+  if(!goal){flash("This goal is no longer available");dialog.close();return;}
+  completeGoal(goal,timestamp);
+ }
+ tendDialogDraft=null;
+ dialog.close();
+ if(typeof focusRefreshDialog==="function")focusRefreshDialog();
+}
+document.addEventListener("click",function(event){
+ var target=event.target,button=target&&target.closest&&target.closest("[data-tend-open],[data-tend-save],[data-tend-cancel],[data-tend-step]");
+ if(!button)return;
+ event.preventDefault();event.stopImmediatePropagation();
+ if(button.matches("[data-tend-open]"))openTendDialog(button);
+ else if(button.matches("[data-tend-save]"))saveTendDialog();
+ else if(button.matches("[data-tend-cancel]")){var dialog=document.getElementById("tendDialog");tendDialogDraft=null;if(dialog)dialog.close();}
+ else if(button.matches("[data-tend-step]"))stepTendTime(button.getAttribute("data-tend-step"),+button.getAttribute("data-step-direction"));
+},true);
+document.addEventListener("input",function(event){var field=event.target;if(!field||!field.matches||!field.matches("#tendTimeHour,#tendTimeMinute"))return;field.value=field.value.replace(/\D/g,"").slice(0,2);syncTendTime();});
+document.addEventListener("focusout",function(event){var field=event.target;if(!field||!field.matches||!field.matches("#tendTimeHour,#tendTimeMinute"))return;normalizeTendTimeSegment(field);syncTendTime();});
+document.addEventListener("change",function(event){if(event.target&&event.target.id==="tendTimePeriod")syncTendTime();});
+document.addEventListener("keydown",function(event){
+ var field=event.target;if(!field||!field.matches||!field.matches("#tendTimeHour,#tendTimeMinute"))return;
+ if(event.key==="ArrowUp"||event.key==="ArrowDown"){event.preventDefault();stepTendTime(field.id==="tendTimeHour"?"hour":"minute",event.key==="ArrowUp"?1:-1);}
+ else if(event.key==="Enter"){event.preventDefault();normalizeTendTimeSegment(field);syncTendTime();var next=field.id==="tendTimeHour"?document.getElementById("tendTimeMinute"):document.getElementById("tendTimePeriod");next.focus();if(next.select)next.select();}
+});
 window.openModal=function(){var sel=el("logArea"),selp=el("logPerson"),selk=el("logKind");sel.innerHTML=AREA_IDS.map(function(a){return '<option value="'+a+'">'+S.areas[a].name+'</option>';}).join("");selp.innerHTML='<option value="">- no specific person -</option>'+S.people.map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+'</option>';}).join("");selk.innerHTML=Object.keys(KINDS).map(function(k){return '<option value="'+k+'">'+KINDS[k].label+'</option>';}).join("");el("logNote").value="";el("logModal").classList.add("open");};
 window.closeModal=function(){el("logModal").classList.remove("open");};
 window.submitLog=function(){logEvent(el("logArea").value,el("logPerson").value||null,el("logKind").value,el("logNote").value.trim());window.closeModal();};
@@ -19,13 +119,26 @@ function bind(){
  if(window._tendDelegated)return;
  window._tendDelegated=true;
  document.addEventListener("toggle",function(e){var t=e.target;if(t.matches&&t.matches("[data-plan-block]"))planOpenState[t.getAttribute("data-plan-block")]=t.open;},true);
- document.addEventListener("cancel",function(e){if(e.target.id==="rippleDialog"){window._rippleModalOpen=false;editingConn=null;}},true);
+ document.addEventListener("cancel",function(e){
+  if(e.target.id==="rippleDialog"){window._rippleModalOpen=false;editingConn=null;return;}
+  if(e.target.matches&&e.target.matches("dialog[data-profile-editor]")){
+   e.preventDefault();var editor=e.target.getAttribute("data-profile-editor");
+   if(editor==="rhythm")rhythmDraft=null;
+   else if(editor==="spark")sparkDraftOpenFor=null;
+   else if(editor==="prayer")window._personPrayerDraftFor=null;
+   else if(editor==="note")noteDraftOpenFor=null;
+   render();
+  }
+ },true);
  document.addEventListener("click",function(e){
   var t=e.target,b;
   if(b=t.closest('[data-settingstab]')){settingsTab=b.getAttribute('data-settingstab');document.querySelectorAll('[data-settingstab]').forEach(function(x){x.setAttribute('aria-selected',String(x.getAttribute('data-settingstab')===settingsTab));});document.querySelectorAll('.settings-panel').forEach(function(x){x.hidden=x.id!=='settings-panel-'+settingsTab;});return;}
   if(b=t.closest("[data-rhyhistory]")){openRhythmHistory(b.getAttribute("data-rhyhistory"));return;}
   if(b=t.closest("[data-noteadd]")){var kind=b.getAttribute("data-notekind");var input=el("noteNew-"+kind);if(input&&input.value.trim()){S.followups.push({id:uid(),personId:b.getAttribute("data-noteadd"),kind:kind,text:input.value.trim(),done:false});save();render();}return;}
-  if(b=t.closest("[data-personprayeropen]")){window._personPrayerDraftFor=b.getAttribute("data-personprayeropen");render();var field=el("personPrayerTitle");if(field)field.focus();return;}
+  if(b=t.closest("[data-profilenoteopen]")){noteDraftOpenFor=b.getAttribute("data-profilenoteopen");render();var noteField=el("profileNoteText");if(noteField)noteField.focus();return;}
+  if(b=t.closest("[data-profilenotecancel]")){noteDraftOpenFor=null;render();return;}
+  if(b=t.closest("[data-profilenotesave]")){var noteText=el("profileNoteText"),noteKind=el("profileNoteKind");if(noteText&&noteText.value.trim()){S.followups.push({id:uid(),personId:b.getAttribute("data-profilenotesave"),kind:noteKind?noteKind.value:"followup",text:noteText.value.trim(),done:false});noteDraftOpenFor=null;save();render();flash("Note added");}else if(noteText){flash("Add a note first");noteText.focus();}return;}
+  if(b=t.closest("[data-personprayeropen]")){window._personPrayerDraftFor=b.getAttribute("data-personprayeropen");render();var field=document.querySelector('[data-prayer-editor="new-person"] [data-prayer-field="title"]');if(field)field.focus();return;}
   if(b=t.closest("[data-personprayercancel]")){window._personPrayerDraftFor=null;render();return;}
   if(b=t.closest("[data-personprayeradd]")){var person=S.people.find(function(p){return p.id===b.getAttribute("data-personprayeradd");});var title=el("personPrayerTitle").value.trim();if(person&&title){var categories={marriage:"Marriage",parenting:"Kids",friendships:"Friends"};var freq=el("personPrayerFreq").value;S.prayers.push({id:uid(),personId:person.id,category:categories[person.area]||"Family",text:title,details:el("personPrayerDetails").value.trim(),freq:freq==="none"?null:freq,tod:el("personPrayerTod").value,scheduleDow:scheduleHasWeekday(freq)&&el("personPrayerDow").value!==""?+el("personPrayerDow").value:null,added:todayStr(),answered:false,archived:false,prayed:0});window._personPrayerDraftFor=null;save();render();flash("Prayer added");}else flash("Add a prayer title");return;}
   if(b=t.closest("[data-meter-tab],[data-profiletab]")){var selected=b.getAttribute("data-meter-tab")||b.getAttribute("data-profiletab");profileTabs[currentPerson]=selected;document.querySelectorAll('[data-profiletab]').forEach(function(button){button.setAttribute('aria-selected',String(button.getAttribute('data-profiletab')===selected));});document.querySelectorAll('.profile-tab-panel').forEach(function(panel){panel.hidden=panel.id!=="profile-panel-"+selected;});if(b.hasAttribute('data-meter-tab')){var target=el("profile-tab-"+selected);if(target){target.focus({preventScroll:true});target.scrollIntoView({behavior:"smooth",block:"start"});}}return;}
@@ -33,14 +146,14 @@ function bind(){
   if(b=t.closest("[data-rippleopen]")){window._rippleModalOpen=true;render();var dialog=el("rippleDialog");if(dialog){dialog.removeAttribute("open");dialog.showModal();}return;}
   if(b=t.closest("[data-planview]")){var pv=b.getAttribute("data-planview");planViewState=(planViewState===pv)?null:pv;render();return;}
   if(b=t.closest("[data-areanav]")){currentArea=b.getAttribute("data-areanav");openDetail=null;editingId=null;editingEvent=null;render();window.scrollTo(0,0);return;}
-  if(b=t.closest("[data-utilnav]")){tab=b.getAttribute("data-utilnav");window._psModalOpen=false;currentArea=null;openDetail=null;editingId=null;editingEvent=null;currentPerson=null;editingConn=null;editRhythmId=null;rhythmEditDraft=null;editSparkId=null;rhythmDraft=null;rhyDoneDraft=null;render();window.scrollTo(0,0);return;}
+  if(b=t.closest("[data-utilnav]")){tab=b.getAttribute("data-utilnav");window._psModalOpen=false;window._personPrayerDraftFor=null;currentArea=null;openDetail=null;editingId=null;editingEvent=null;currentPerson=null;editingConn=null;editRhythmId=null;rhythmEditDraft=null;editSparkId=null;sparkDraftOpenFor=null;noteDraftOpenFor=null;rhythmDraft=null;render();window.scrollTo(0,0);return;}
   if(b=t.closest("[data-areago]")){currentArea=b.getAttribute("data-areago");openDetail=null;editingId=null;editingEvent=null;render();window.scrollTo(0,0);return;}
   if(b=t.closest("[data-personrhythms]")){var pid=b.getAttribute("data-personrhythms");profileTabs[pid]="rhythms";currentArea=null;openPersonTab(pid);var target=el("profile-tab-rhythms");if(target){target.focus({preventScroll:true});target.scrollIntoView({behavior:"smooth",block:"start"});}return;}
   if(b=t.closest("[data-openperson]")){openPersonTab(b.getAttribute("data-openperson"));return;}
-  if(b=t.closest("[data-closeperson]")){currentPerson=null;window._psModalOpen=false;editingConn=null;editRhythmId=null;rhythmEditDraft=null;editSparkId=null;rhythmDraft=null;rhyDoneDraft=null;render();return;}
+  if(b=t.closest("[data-closeperson]")){currentPerson=null;window._psModalOpen=false;window._personPrayerDraftFor=null;editingConn=null;editRhythmId=null;rhythmEditDraft=null;editSparkId=null;sparkDraftOpenFor=null;noteDraftOpenFor=null;rhythmDraft=null;render();return;}
   if(b=t.closest("[data-psettings]")){window._psModalOpen=true;render();return;}
   if(b=t.closest("[data-psettingsclose]")){window._psModalOpen=false;render();return;}
-  if(b=t.closest("[data-prayquick]")){var pqP=S.people.find(function(x){return x.id===b.getAttribute("data-prayquick");});if(pqP){var pqRef=b.getAttribute("data-prayref");var pqPr=(pqRef&&pqRef!=="focus")?S.prayers.find(function(x){return x.id===pqRef;}):null;var prayedAt=Date.now();if(pqPr){pqPr.prayed=(pqPr.prayed||0)+1;pqPr.lastPrayed=todayStr();pqPr.prayerLogs=pqPr.prayerLogs||[];pqPr.prayerLogs.push(prayedAt);}logEvent(pqP.area,pqP.id,"prayer",pqPr?pqPr.text:"Prayer focus",pqPr?(pqPr.details||""):(pqP.prayerFocus||""),prayedAt,null,null,{});actDoneAdd(pqP.id,pqRef||"focus");render();flash("Prayed \u2713");}return;}
+  if(b=t.closest("[data-prayquick]")){var pqP=S.people.find(function(x){return x.id===b.getAttribute("data-prayquick");});if(pqP){var pqRef=b.getAttribute("data-prayref");var pqPr=(pqRef&&pqRef!=="focus")?S.prayers.find(function(x){return x.id===pqRef;}):null;if(pqPr)recordPrayer(pqPr,true);else{logEvent(pqP.area,pqP.id,"prayer","Prayer focus",pqP.prayerFocus||"",Date.now(),null,null,{});actDoneAdd(pqP.id,pqRef||"focus");render();flash("Prayed \u2713");}}return;}
   if(b=t.closest("[data-rhycancel]")){rhythmDraft=null;render();return;}
   if(b=t.closest("[data-rhyadd]")){var ra=b.getAttribute("data-rhyadd");
    if(rhythmDraft&&rhythmDraft.pid===ra&&rhythmDraft.text&&rhythmDraft.text.trim()){
@@ -53,6 +166,8 @@ function bind(){
    else{rhythmDraft={pid:ra,text:"",category:"connection",freq:"weekly",tod:"anytime",durUnit:"min",durVal:0};render();}
    return;}
   if(b=t.closest("[data-sparkdo]")){var spd=b.getAttribute("data-sparkdo").split("|");var spp=S.people.find(function(x){return x.id===spd[0];});var ss=spp&&(spp.sparks||[]).find(function(x){return x.id===spd[1];});if(ss){ss.done=true;ss.doneTs=Date.now();actDoneAdd(spp.id,ss.id);logEvent(spp.area,spp.id,"quality",ss.text,"Spark landed",Date.now(),null,null,{origin:"spark"});flash("Spark landed - connection logged");}return;}
+  if(b=t.closest("[data-sparkaddopen]")){sparkDraftOpenFor=b.getAttribute("data-sparkaddopen");render();var sparkTitle=document.querySelector('[data-spnewtext="'+sparkDraftOpenFor+'"]');if(sparkTitle)sparkTitle.focus();return;}
+  if(b=t.closest("[data-sparkaddcancel]")){sparkDraftOpenFor=null;render();return;}
   if(b=t.closest("[data-sedit]")){var sei=b.getAttribute("data-sedit");editSparkId=(editSparkId===sei)?null:sei;render();return;}
   if(b=t.closest("[data-scleardate]")){var scs=findSparkById(editSparkId);if(scs){scs.by=null;scs.time=null;save();render();flash("Date removed - waits in Free moment");}return;}
   if(b=t.closest("[data-pphorm]")){var prp=S.people.find(function(x){return x.id===b.getAttribute("data-pphorm");});if(prp){prp.photo=null;save();render();flash("Photo removed");}return;}
@@ -69,11 +184,8 @@ function bind(){
    return;}
   if(b=t.closest("[data-peditcancel]")){window._rippleModalOpen=false;editingConn=null;render();return;}
   if(b=t.closest("[data-spdel]")){var sdd=b.getAttribute("data-spdel").split("|");var sdp=S.people.find(function(x){return x.id===sdd[0];});if(sdp){sdp.sparks=(sdp.sparks||[]).filter(function(x){return x.id!==sdd[1];});save();render();}return;}
-  if(b=t.closest("[data-spadd]")){var sra=b.getAttribute("data-spadd");var srp=S.people.find(function(x){return x.id===sra;});var sri=document.querySelector('[data-spnewtext="'+sra+'"]');var srd=document.querySelector('[data-spnewdate="'+sra+'"]');var srt=document.querySelector('[data-spnewtime="'+sra+'"]');if(srp&&sri&&sri.value.trim()){srp.sparks=srp.sparks||[];srp.sparks.push({id:uid(),text:sri.value.trim(),by:(srd&&srd.value)?srd.value:null,time:(srt&&srt.value)?srt.value:null,tod:"anytime",done:false});save();render();flash("Spark added");}return;}
+  if(b=t.closest("[data-spadd]")){var sra=b.getAttribute("data-spadd");var srp=S.people.find(function(x){return x.id===sra;});var sri=document.querySelector('[data-spnewtext="'+sra+'"]');var srd=document.querySelector('[data-spnewdate="'+sra+'"]');var srt=document.querySelector('[data-spnewtime="'+sra+'"]');if(srp&&sri&&sri.value.trim()){srp.sparks=srp.sparks||[];srp.sparks.push({id:uid(),text:sri.value.trim(),by:(srd&&srd.value)?srd.value:null,time:(srt&&srt.value)?srt.value:null,tod:"anytime",done:false});sparkDraftOpenFor=null;save();render();flash("Spark added");}else if(sri){flash("Add a spark idea first");sri.focus();}return;}
   if(b=t.closest("[data-goaldone]")){var g=S.goals.find(function(x){return x.id===b.getAttribute("data-goaldone");});if(g&&typeof completeGoal==="function")completeGoal(g);return;}
-  if(b=t.closest("[data-rhydone]")){rhyDoneDraft={key:b.getAttribute("data-rhydone"),date:todayStr(),time:nowHM()};render();return;}
-  if(b=t.closest("[data-rhyconfirm]")){var rck=b.getAttribute("data-rhyconfirm").split("|");var rcp=S.people.find(function(x){return x.id===rck[0];});var rcr=rcp&&(rcp.rhythms||[]).find(function(x){return x.id===rck[1];});var rcd=document.querySelector('[data-rhydate="'+b.getAttribute("data-rhyconfirm")+'"]');var rct=document.querySelector('[data-rhytime="'+b.getAttribute("data-rhyconfirm")+'"]');if(rcp&&rcr&&rcd&&rcd.value){var rts=rcd.value+"T"+((rct&&rct.value)?rct.value:"12:00")+":00";rhyDoneDraft=null;actDoneAdd(rcp.id,rcr.id);logEvent(rcp.area,rcp.id,(rcr.category==="prayer"?"prayer":"quality"),rcr.text,"",new Date(rts).getTime(),null,rcr.id);flash("Rhythm tended \u2713");}return;}
-  if(b=t.closest("[data-rhycancel2]")){rhyDoneDraft=null;render();return;}
   if(b=t.closest("[data-rhyeditcancel]")){editRhythmId=null;rhythmEditDraft=null;render();return;}
   if(b=t.closest("[data-rhyeditsave]")){var key=b.getAttribute("data-rhyeditsave").split("|");var person=S.people.find(function(x){return x.id===key[0];});var rhythm=person&&(person.rhythms||[]).find(function(x){return x.id===key[1];});if(rhythm&&rhythmEditDraft&&rhythmEditDraft.id===rhythm.id){if(!rhythmEditDraft.text.trim()){flash("Give this rhythm a name");return;}Object.assign(rhythm,rhythmEditDraft);editRhythmId=null;rhythmEditDraft=null;save();render();flash("Rhythm saved");}return;}
   if(b=t.closest("[data-rhyedit]")){rhythmEditDraft=null;editRhythmId=(editRhythmId===b.getAttribute("data-rhyedit"))?null:b.getAttribute("data-rhyedit");render();return;}
@@ -89,7 +201,7 @@ function bind(){
   if(b=t.closest("[data-fudel]")){S.followups=S.followups.filter(function(x){return x.id!==b.getAttribute("data-fudel");});editingFollowupId=null;save();render();flash("Deleted");return;}
   if(b=t.closest("[data-fusave]")){var f=S.followups.find(function(x){return x.id===b.getAttribute("data-fusave");});var text=el("followupEditText").value.trim();if(f&&text){f.text=text;editingFollowupId=null;save();render();}return;}
   if(b=t.closest("[data-fuadd]")){var pid=b.getAttribute("data-fuadd");var ft=el("personFUNew");if(ft&&ft.value.trim()){S.followups.push({id:uid(),personId:pid,text:ft.value.trim(),done:false,due:null});save();render();}return;}
-  if(b=t.closest("[data-pray]")){var p=S.prayers.find(function(x){return x.id===b.getAttribute("data-pray");});if(p&&!p.answered&&!p.archived){p.prayed=(p.prayed||0)+1;p.lastPrayed=todayStr();p.prayerLogs=p.prayerLogs||[];p.prayerLogs.push(Date.now());save();render();flash("Prayer recorded");}return;}
+  if(b=t.closest("[data-pray]")){var p=S.prayers.find(function(x){return x.id===b.getAttribute("data-pray");});if(p)recordPrayer(p,!!p.personId);return;}
   if(b=t.closest("[data-prayerarchive]")){var p=S.prayers.find(function(x){return x.id===b.getAttribute("data-prayerarchive");});if(p){p.archived=true;p.archivedDate=todayStr();p.answered=false;p.answeredDate=null;save();render();}return;}
   if(b=t.closest("[data-prayeredit]")){editingPrayerId=b.getAttribute("data-prayeredit");render();return;}
   if(b=t.closest("[data-prayercancel]")){editingPrayerId=null;render();return;}

@@ -63,7 +63,6 @@ function defaultRhythms(){return[{id:uid(),text:"Pray together",category:"prayer
 function defaultSparks(){return[{id:uid(),text:"Watch the movie Jake mentioned",by:todayStr(),tod:"evening",done:false}];}
 function defaultFaithRhythms(){return[
  {id:uid(),text:"Scripture reading",category:"faith",group:"Scripture",freq:"daily",tod:"early",takeNotes:true,description:"Immersing yourself in the Bible to know and love God more.",disabled:false},
- {id:uid(),text:"Prayer time",category:"faith",group:"Prayer",freq:"daily",tod:"early",takeNotes:true,description:"Conversational communion with God — speaking and listening.",disabled:false},
  {id:uid(),text:"Solitude & silence",category:"faith",group:"Solitude",freq:"weekly",tod:"anytime",takeNotes:true,description:"Withdrawing from noise and people to be alone with God.",disabled:false},
  {id:uid(),text:"Sabbath",category:"faith",group:"Sabbath",freq:"weekly",tod:"anytime",scheduleDow:0,description:"A full day of rest, delight, and presence with God and others.",disabled:false},
  {id:uid(),text:"Community gathering",category:"faith",group:"Community",freq:"weekly",tod:"anytime",description:"Meeting with the people of God for worship, teaching, and life together.",disabled:false},
@@ -81,19 +80,20 @@ function defaultCategories(){return{
 function defaultFaithConfig(){return{
  disabledGroups:[],
  groupDescriptions:{
-  Scripture:"Immersing yourself in the Bible to know and love God more.",
-  Prayer:"Conversational communion with God — speaking and listening.",
-  Solitude:"Withdrawing from noise and people to be alone with God.",
-  Sabbath:"A full day of rest, delight, and presence with God and others.",
-  Community:"Meeting with the people of God for worship, teaching, and life together.",
-  Fasting:"Voluntarily abstaining from food to create space for God.",
-  Generosity:"Giving away money, time, or resources as an act of worship.",
-  Service:"Using your gifts and time to serve others in love.",
-  Witness:"Telling others about Jesus through word and deed.",
-  Other:""
+  Scripture:"Build a steady practice of reading and reflecting on Scripture.",
+  Prayer:"A place to hold your active requests and make room for focused prayer.",
+  Solitude:"Make room for quiet, reflection, and listening.",
+  Sabbath:"A weekly invitation to pause, delight, and reconnect with God.",
+  Community:"Strengthen belonging through shared worship and life together.",
+  Fasting:"Explore intentional practices of simplicity and attentiveness.",
+  Generosity:"Practice open-handed living with what you have.",
+  Service:"Turn care for others into regular acts of service.",
+  Witness:"Live and share your faith with the people around you.",
+  Other:"A home for spiritual practices that do not fit another section."
  }
 };}
 function todayStr(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function rhythmEnded(r){return !!(r&&r.until&&todayStr()>r.until);}
 function nowHM(){var d=new Date();return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");}
 function fmtHM(ts){var d=new Date(ts);var h=d.getHours(),m=String(d.getMinutes()).padStart(2,"0");var ap=h>=12?"pm":"am";h=h%12||12;return h+":"+m+ap;}
 function defaultState(){return{version:2,
@@ -113,7 +113,7 @@ var _jk=st.people.find(function(x){return x.id==="jacob";});if(_jk&&!(_jk.sparks
  st.checklists=st.checklists&&st.checklists.length?st.checklists:defaultChecklists();
  st.ideas=st.ideas||[];st.echoes=st.echoes&&st.echoes.length?st.echoes:defaultState().echoes;
  return st;}catch(e){return defaultState();}}
-function ensureShape(st){st=st||{};["events","tasks","goals","followups","prayers","ideas","echoes","keyDates","checklists"].forEach(function(k){if(!Array.isArray(st[k]))st[k]=[];});if(!Array.isArray(st.calendars)||!st.calendars.length)st.calendars=defaultState().calendars;if(!st.people||!st.people.length)st.people=defaultState().people;if(!st.areas)st.areas=defaultState().areas;if(!st.settings)st.settings=JSON.parse(JSON.stringify(DEFAULT_SETTINGS));if(!Array.isArray(st.rhythms)||!st.rhythms.length)st.rhythms=defaultFaithRhythms();if(!st.categories)st.categories=defaultCategories();if(!st.faithConfig)st.faithConfig=defaultFaithConfig();st.people.forEach(function(p){if(p.encouragementNote&&p.encouragementNote.trim()&&!p.encouragementChecklistMigrated){var id="enc-legacy-"+p.id;if(!st.followups.some(function(f){return f.id===id;}))st.followups.push({id:id,personId:p.id,kind:"encouragement",text:p.encouragementNote,done:false});p.encouragementChecklistMigrated=true;}if(!p.prayerNotesChecklistMigrated){[["howToPray","prayer-request-note"],["prayerFocus","prayer-focus-note"]].forEach(function(pair){var text=p[pair[0]],id="prayer-note-"+pair[0]+"-"+p.id;if(text&&text.trim()&&!st.followups.some(function(f){return f.id===id;}))st.followups.push({id:id,personId:p.id,kind:pair[1],text:text,done:false});});p.prayerNotesChecklistMigrated=true;}});return st;}
+function ensureShape(st){st=st||{};["events","tasks","goals","followups","prayers","ideas","echoes","keyDates","checklists"].forEach(function(k){if(!Array.isArray(st[k]))st[k]=[];});if(!Array.isArray(st.calendars)||!st.calendars.length)st.calendars=defaultState().calendars;if(!st.people||!st.people.length)st.people=defaultState().people;if(!st.areas)st.areas=defaultState().areas;if(!st.settings)st.settings=JSON.parse(JSON.stringify(DEFAULT_SETTINGS));if(!Array.isArray(st.rhythms))st.rhythms=defaultFaithRhythms();if(!st.categories)st.categories=defaultCategories();var faithDefaults=defaultFaithConfig();if(!st.faithConfig)st.faithConfig=faithDefaults;else{if(!Array.isArray(st.faithConfig.disabledGroups))st.faithConfig.disabledGroups=[];st.faithConfig.groupDescriptions=Object.assign({},faithDefaults.groupDescriptions,st.faithConfig.groupDescriptions||{});}st.people.forEach(function(p){if(p.encouragementNote&&p.encouragementNote.trim()&&!p.encouragementChecklistMigrated){var id="enc-legacy-"+p.id;if(!st.followups.some(function(f){return f.id===id;}))st.followups.push({id:id,personId:p.id,kind:"encouragement",text:p.encouragementNote,done:false});p.encouragementChecklistMigrated=true;}if(!p.prayerNotesChecklistMigrated){[["howToPray","prayer-request-note"],["prayerFocus","prayer-focus-note"]].forEach(function(pair){var text=p[pair[0]],id="prayer-note-"+pair[0]+"-"+p.id;if(text&&text.trim()&&!st.followups.some(function(f){return f.id===id;}))st.followups.push({id:id,personId:p.id,kind:pair[1],text:text,done:false});});p.prayerNotesChecklistMigrated=true;}});return st;}
 var S=load();
 var saveTimer=null,pushTimer=null;
 function save(){localStorage.setItem(LS_STATE,JSON.stringify(S));window._tendDirty=true;clearTimeout(saveTimer);saveTimer=setTimeout(function(){flash("Saved");},150);if(window.SYNCcfg&&SYNCcfg.auto&&SYNCcfg.token&&typeof schedulePush==="function")schedulePush();}
@@ -150,6 +150,7 @@ function areaGoals(id){return S.goals.filter(function(g){return g.area===id&&!g.
 function personGoals(pid){return S.goals.filter(function(g){return g.personId===pid;});}
 function avg(arr){arr=arr.filter(function(v){return Number.isFinite(v);});if(!arr.length)return null;return Math.round(arr.reduce(function(a,b){return a+b;},0)/arr.length);}
 function areaScore(id){
+ if(id==="faith"&&typeof faithScores==="function"){var faith=faithScores().overall;return faith===null?0:faith;}
  var rhythms=S.rhythms.filter(function(r){return r.category===id&&!r.disabled;});
  var rhythmAverage=avg(rhythms.map(rhythmScore));
  if(rhythmAverage!==null)return rhythmAverage;
@@ -180,7 +181,7 @@ function scheduleMonthPattern(item,attr,group){var mode=item.monthlyMode==="onTh
 function scheduleEndDate(item,attr,fieldAttr){var on=!!(item.until||item.endDateEnabled);return '<div class="rhy-end-date"><label class="rhy-end-toggle"><input type="checkbox" '+attr('endDateEnabled')+(on?' checked':'')+'> End date</label><label class="rhy-end-field" '+fieldAttr+(on?'':' hidden')+'>Ends on<input type="date" '+attr('until')+' value="'+esc(item.until||'')+'"'+(on?' required':' disabled')+'></label></div>';}
 function scheduleHasWeekday(freq){return ["weekly","biweekly","monthly","quarterly","yearly","annual"].indexOf(freq)!==-1;}
 function scheduleDayLabel(item){var freq=item.freq||item.cadence;if(!scheduleHasWeekday(freq))return "";if(Array.isArray(item.scheduleDows)&&item.scheduleDows.length)return item.scheduleDows.map(function(d){return DOW_SHORT[d];}).join(",");return item.scheduleDow!==null&&item.scheduleDow!==undefined&&DOW[+item.scheduleDow]?DOW[+item.scheduleDow]:"";}
-function scheduleDayMatches(item,date){var dow=(date||new Date()).getDay();if(Array.isArray(item.scheduleDows)&&item.scheduleDows.length)return item.scheduleDows.indexOf(dow)>=0;var day=scheduleDayLabel(item);return !day||day===DOW[dow];}
+function scheduleDayMatches(item,date){var dow=(date||new Date()).getDay();if(Array.isArray(item.scheduleDows)&&item.scheduleDows.length)return item.scheduleDows.indexOf(dow)>=0;if(Array.isArray(item.weekdays)&&item.weekdays.length)return item.weekdays.map(Number).indexOf(dow)>=0;var day=scheduleDayLabel(item);return !day||day===DOW[dow];}
 function scheduleDayOptions(selected){return '<option value="">Any day</option>'+DOW.map(function(day,i){return '<option value="'+i+'"'+(selected!==null&&selected!==undefined&&String(selected)===String(i)?' selected':'')+'>'+day+'</option>';}).join('');}
 function dayCirclesHTML(selected,prefix){var out="<span class=\"day-circles\" data-circles=\""+prefix+"\">";DOW_SHORT.forEach(function(d,i){var sel=Array.isArray(selected)?selected.indexOf(i)>=0:selected===i;out+="<span class=\"day-circle\""+(sel?" on":"")+" data-circle=\""+i+"\">"+d+"</span>";});return out+"</span>";}
 var ORDINALS=["1st","2nd","3rd","4th"];

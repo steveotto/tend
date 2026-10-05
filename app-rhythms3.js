@@ -12,7 +12,7 @@
  var RHYTHM_FREQS={selectdays:{label:"Select Days"},daily:{label:"Daily"},weekly:{label:"Weekly"},monthly:{label:"Monthly"},quarterly:{label:"Quarterly"},yearly:{label:"Yearly"},custom:{label:"Custom"}};
  var R_MOS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
  var R_ORDS=["1st","2nd","3rd","4th","last"];
- var RHYTHM_FIELD_LIST=["weekdays","monthlyMode","dayOfMonth","ord","ordWeekday","month","monthDay","qmonth","every","unit","until","start"];
+ var RHYTHM_FIELD_LIST=["description","areas","faithGroup","weekdays","monthlyMode","dayOfMonth","ord","ordWeekday","month","monthDay","qmonth","every","unit","until","start"];
  /* ---- migration (mirror of rhythms2, re-applied lazily) ---- */
  function ensureRhythm(r){
   if(!r)return r;
@@ -87,7 +87,8 @@
   if(kind==='goal')frequencies.push(['custom','Custom interval']);
   var peopleOptions=[['','No person']].concat(S.people.map(function(p){return [p.id,p.name];}));
   var out='<div class="careplan-edit'+(kind==='rhythm'?' careplan-rhythm-edit':'')+'" data-cpform="'+esc(key)+'"><div class="careplan-edit-head"><span class="careplan-kind careplan-kind-'+kind+'">'+(kind==='rhythm'?'Rhythm':kind==='prayer'?'Prayer':'Goal')+'</span><strong>Edit '+kind+'</strong></div><label class="careplan-field">Title<input data-cpf="title" value="'+esc(r.text||'')+'"></label>';
-  if(kind!=='rhythm')out+='<label class="careplan-field">Details<textarea data-cpf="details">'+esc(r.details||'')+'</textarea></label>';
+  if(kind==='rhythm')out+='<label class="careplan-field">Description (optional)<textarea data-cpf="description" placeholder="Add context or details">'+esc(r.description||'')+'</textarea></label>';
+  else out+='<label class="careplan-field">Details<textarea data-cpf="details">'+esc(r.details||'')+'</textarea></label>';
   out+='<div class="careplan-edit-grid"><label class="careplan-field">Frequency<select data-cpf="frequency">'+carePlanOptions(frequencies,kind==='prayer'?r.freq:kind==='goal'?(r.cadence||r.freq):r.freq)+'</select></label><label class="careplan-field">Time of day<select data-cpf="tod">'+carePlanOptions(times,r.tod||'anytime')+'</select></label>';
   if(kind!=='rhythm')out+='<label class="careplan-field" data-schedule-day'+(scheduleHasWeekday(kind==='goal'?r.cadence:r.freq)?'':' hidden')+'>Day of week<select data-cpf="scheduleDow">'+scheduleDayOptions(r.scheduleDow)+'</select></label>';
   if(kind==='rhythm')out+='<label class="careplan-field">Person<select data-cpf="person">'+carePlanOptions(S.people.map(function(p){return [p.id,p.name];}),item.person.id)+'</select></label>';
@@ -107,6 +108,7 @@
   if(endToggle&&endToggle.checked&&(!un||!un.value)){flash('Choose an end date');if(un)un.focus();return;}
   r.text=title;r.tod=field('tod').value;
   if(found.kind==='rhythm'){
+   r.description=field('description').value.trim();
    r.freq=field('frequency').value;
    r.weekdays=Array.prototype.slice.call(form.querySelectorAll('[data-cpf="weekdays"]:checked')).map(function(x){return +x.value;});if(!r.weekdays.length)r.weekdays=[new Date().getDay()];if(r.freq!=="selectdays"&&r.weekdays.length>1)r.weekdays=[r.weekdays[0]];
    var mm=form.querySelector('[data-cpf="monthlyMode"]:checked');if(mm)r.monthlyMode=mm.value;
@@ -135,14 +137,14 @@
   if(rs.length){
    var rm=avg(rs.map(rhythmScore)),rmCls=scoreClass(rm);
    var pTouch=personConnInfo(p),tScore=connectionScore(p),tCls=scoreClass(tScore);
-   pills='<div class="pmeters three"><div class="pmeter"><div class="pm-lab"><span>Rhythms</span><span class="pm-val '+rmCls+'">'+(rm===null?'—':rm)+'</span></div><div class="bar"><i class="'+rmCls+'" style="width:'+(rm===null?0:rm)+'%"></i></div><div class="pm-note">'+rs.length+" rhythm"+(rs.length===1?"":"s")+'</div></div>'
-   +'<div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val '+tCls+'">'+tScore+'</span></div><div class="bar"><i class="'+tCls+'" style="width:'+tScore+'%"></i></div><div class="pm-note">'+(pTouch.last?("Last: "+when(pTouch.last.ts)):"No connections yet")+' · Goal: '+esc(personCadenceGoalLabel(p))+'</div></div>'
-   +'<div class="pmeter"><div class="pm-lab"><span>Prayer</span><span class="pm-val '+pCls+'">'+pScoreText+'</span></div><div class="bar"><i class="'+pCls+'" style="width:'+(pScore===null?0:pScore)+'%"></i></div><div class="pm-note">'+(pInfo.last?("last: "+when(pInfo.last.ts)):"no prayers logged")+'</div></div></div>';
+   pills='<div class="pmeters three"><div class="pmeter"><div class="pm-lab"><span>Rhythms</span><span class="pm-val tend-type-metric '+rmCls+'">'+(rm===null?'—':rm)+'</span></div><div class="bar"><i class="'+rmCls+'" style="width:'+(rm===null?0:rm)+'%"></i></div><div class="pm-note">'+rs.length+" rhythm"+(rs.length===1?"":"s")+'</div></div>'
+   +'<div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val tend-type-metric '+tCls+'">'+tScore+'</span></div><div class="bar"><i class="'+tCls+'" style="width:'+tScore+'%"></i></div><div class="pm-note">'+(pTouch.last?("Last: "+when(pTouch.last.ts)):"No connections yet")+' · Goal: '+esc(personCadenceGoalLabel(p))+'</div></div>'
+   +'<div class="pmeter"><div class="pm-lab"><span>Prayer</span><span class="pm-val tend-type-metric '+pCls+'">'+pScoreText+'</span></div><div class="bar"><i class="'+pCls+'" style="width:'+(pScore===null?0:pScore)+'%"></i></div><div class="pm-note">'+(pInfo.last?("Last: "+when(pInfo.last.ts)):"No prayers logged")+'</div></div></div>';
   }else{
    var cInfo=personConnInfo(p),cScore=connectionScore(p),cCls=scoreClass(cScore);
-   pills='<div class="pmeters three"><div class="pmeter"><div class="pm-lab"><span>Rhythms</span><span class="pm-val neutral">—</span></div><div class="bar"><i style="width:0%"></i></div><div class="pm-note">No rhythms yet</div></div>'
-   +'<div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val '+cCls+'">'+cScore+'</span></div><div class="bar"><i class="'+cCls+'" style="width:'+cScore+'%"></i></div><div class="pm-note">'+(cInfo.last?("Last: "+when(cInfo.last.ts)):"No connections yet")+' · Goal: '+esc(personCadenceGoalLabel(p))+'</div></div>'
-   +'<div class="pmeter"><div class="pm-lab"><span>Prayer</span><span class="pm-val '+pCls+'">'+pScoreText+'</span></div><div class="bar"><i class="'+pCls+'" style="width:'+(pScore===null?0:pScore)+'%"></i></div><div class="pm-note">'+(pInfo.last?("last: "+when(pInfo.last.ts)):"no prayers logged")+'</div></div></div>';
+   pills='<div class="pmeters three"><div class="pmeter"><div class="pm-lab"><span>Rhythms</span><span class="pm-val tend-type-metric neutral">—</span></div><div class="bar"><i style="width:0%"></i></div><div class="pm-note">No rhythms yet</div></div>'
+   +'<div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val tend-type-metric '+cCls+'">'+cScore+'</span></div><div class="bar"><i class="'+cCls+'" style="width:'+cScore+'%"></i></div><div class="pm-note">'+(cInfo.last?("Last: "+when(cInfo.last.ts)):"No connections yet")+' · Goal: '+esc(personCadenceGoalLabel(p))+'</div></div>'
+   +'<div class="pmeter"><div class="pm-lab"><span>Prayer</span><span class="pm-val tend-type-metric '+pCls+'">'+pScoreText+'</span></div><div class="bar"><i class="'+pCls+'" style="width:'+(pScore===null?0:pScore)+'%"></i></div><div class="pm-note">'+(pInfo.last?("Last: "+when(pInfo.last.ts)):"No prayers logged")+'</div></div></div>';
   }
   var i=html.indexOf('<div class="pmeters');
   if(i<0)return html;
@@ -248,21 +250,6 @@
    }else if(rhythmDraft&&rhythmDraft.pid===ra){flash("Give the rhythm a name first");}
    else{rhythmDraft={pid:ra,text:"",freq:"weekly",tod:"anytime",weekdays:[new Date().getDay()],every:1,unit:"weeks"};render();}
    e.stopImmediatePropagation();return;
-  }
-  b=e.target.closest("[data-rhyconfirm]");
-  if(b){
-   var rck=b.getAttribute("data-rhyconfirm").split("|");
-   var rcp=S.people.find(function(x){return x.id===rck[0];});
-   var rcr=rcp&&(rcp.rhythms||[]).find(function(x){return x.id===rck[1];});
-   var rcd=document.querySelector('[data-rhydate="'+b.getAttribute("data-rhyconfirm")+'"]');
-   var rct=document.querySelector('[data-rhytime="'+b.getAttribute("data-rhyconfirm")+'"]');
-   if(rcp&&rcr&&rcd&&rcd.value){
-    var rts=rcd.value+"T"+((rct&&rct.value)?rct.value:"12:00")+":00";
-    rhyDoneDraft=null;actDoneAdd(rcp.id,rcr.id);
-    logEvent(rcp.area,rcp.id,(/^pray/i.test(rcr.text||"")?"prayer":"quality"),rcr.text,"",new Date(rts).getTime(),null,rcr.id);
-    flash("Rhythm tended \u2713");
-   }
-   e.stopImmediatePropagation();
   }
  },true);
 })();
