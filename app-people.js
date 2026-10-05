@@ -281,38 +281,6 @@ function prayerList(prayers){
 }
 window.prayerList=prayerList; /* views1 personProfile calls this bare */
 
-/* ---------- history for one prayer ---------- */
-function prayerHistoryData(pr,now){
- now=now||new Date();var latest=now.getTime();
- var dates=(pr.prayerLogs||[]).filter(function(ts){return Number.isFinite(ts)&&ts<=latest;}).slice();
- // Older profile prayers were logged as events before per-prayer dates were stored.
- S.events.forEach(function(e){
-  if(e.personId!==pr.personId||!(e.kind==="prayer"||e.type==="prayer")||e.title!==pr.text||!Number.isFinite(e.ts)||e.ts>latest)return;
-  if(!dates.some(function(ts){return Math.abs(ts-e.ts)<60000;}))dates.push(e.ts);
- });
- if(!dates.length&&pr.lastPrayed){var last=new Date(pr.lastPrayed+'T12:00:00').getTime();if(Number.isFinite(last)&&last<=latest)dates.push(last);}
- dates.sort(function(a,b){return a-b;});
- var total=Math.max(pr.prayed||0,dates.length),unknown=Math.max(0,total-dates.length);
- function weekStart(d){var start=new Date(d.getFullYear(),d.getMonth(),d.getDate());start.setDate(start.getDate()-(start.getDay()+6)%7);return start;}
- var end=weekStart(now),start=new Date(end);start.setDate(start.getDate()-9*7);
- if(dates.length){var first=weekStart(new Date(dates[0]));if(first<start)start=first;}
- var bins=[];for(var day=new Date(start);day<=end;day.setDate(day.getDate()+7)){
-  var next=new Date(day);next.setDate(next.getDate()+7);
-  var count=dates.filter(function(ts){return ts>=day.getTime()&&ts<next.getTime();}).length;
-  bins.push({label:'Week of '+day.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),count:count,current:day.getTime()===end.getTime()});
- }
- return {bins:bins,total:total,unknown:unknown};
-}
-function openPrayerHistory(id){
- var pr=S.prayers.find(function(x){return x.id===id;});if(!pr)return;
- var old=document.getElementById('prayerHistoryDialog');if(old)old.remove();
- var data=prayerHistoryData(pr),max=Math.max.apply(null,[1].concat(data.bins.map(function(b){return b.count;})));
- var dialog=document.createElement('dialog');dialog.id='prayerHistoryDialog';dialog.className='rhythm-history-dialog';dialog.setAttribute('aria-labelledby','prayerHistoryTitle');
- dialog.innerHTML='<div class="history-heading"><div><span class="history-eyebrow">Prayer history</span><h2 id="prayerHistoryTitle">'+esc(pr.text)+'</h2></div><button class="iconbtn" data-prayerhistoryclose="1" aria-label="Close history">✕</button></div><div class="history-stat"><strong>'+data.total+'</strong> time'+(data.total===1?'':'s')+' prayed <span>across '+data.bins.length+' weeks</span></div><p class="settings-help">Each bar shows prayers logged for this request during that week. The current week is still in progress.'+(data.unknown?' '+data.unknown+' earlier prayer'+(data.unknown===1?' has':'s have')+' no saved date and cannot be placed on the chart.':'')+'</p>'+(data.total?'':'<div class="history-empty">Your history starts when you tap Pray.</div>')+'<div class="history-scroll" tabindex="0" aria-label="Prayer history chart, scroll horizontally"><div class="history-bars">'+data.bins.map(function(bin,i){return '<button class="history-column" data-prayerhistorybin="'+i+'" title="'+esc(bin.label)+': '+bin.count+' prayer'+(bin.count===1?'':'s')+'" aria-label="'+esc(bin.label)+': '+bin.count+' prayer'+(bin.count===1?'':'s')+(bin.current?', in progress':'')+'"><span class="history-count">'+bin.count+'</span><span class="history-track"><span class="history-fill" style="height:'+(bin.count?Math.max(4,100*bin.count/max):2)+'%;background:'+(bin.count?'#1E9C68':'var(--line)')+'"></span></span><span class="history-label">'+esc(bin.label)+(bin.current?' •':'')+'</span></button>';}).join('')+'</div></div><p class="history-selection" aria-live="polite">Select a bar to see the date and count.</p>';
- dialog.addEventListener('click',function(e){if(e.target.closest('[data-prayerhistoryclose]'))dialog.close();var button=e.target.closest('[data-prayerhistorybin]');if(button){var bin=data.bins[+button.getAttribute('data-prayerhistorybin')];dialog.querySelector('.history-selection').textContent=bin.label+' — '+bin.count+' prayer'+(bin.count===1?'':'s')+(bin.current?' (in progress)':'');}});
- dialog.addEventListener('close',function(){dialog.remove();});document.body.appendChild(dialog);dialog.showModal();var scroll=dialog.querySelector('.history-scroll');scroll.scrollLeft=scroll.scrollWidth;
-}
-
 /* ---------- tending a prayer rhythm counts as PRAYER, never a connection ---------- */
 var _logEvent=logEvent;
 window.logEvent=function(areaId,personId,type,title,note,whenTs,goalId,rhythmId,extra){
@@ -327,7 +295,7 @@ window.logEvent=function(areaId,personId,type,title,note,whenTs,goalId,rhythmId,
 /* ---------- handlers ---------- */
 document.addEventListener("click",function(e){
  var t=e.target;if(!t||!t.closest)return;var b;
- if(b=t.closest("[data-prayerhistory]")){openPrayerHistory(b.getAttribute("data-prayerhistory"));return;}
+ if(b=t.closest("[data-prayerhistory]")){window.openPrayerHistory(b.getAttribute("data-prayerhistory"));return;}
  if(b=t.closest("[data-addperson]")){apOpen();return;}
  if(b=t.closest("[data-apclose]")){el("addPersonModal").classList.remove("open");return;}
  if(b=t.closest("#apCreate")){apCreate();return;}

@@ -252,28 +252,6 @@ carePlanSave=function(key,form){
  carePlanEdit=null;save();render();flash('Updated in Care Plan');
 };
 
-/* ---- rhythm history: new frequency model ---- */
-rhythmHistoryData=function(person,rhythm,now){
- now=now||new Date();
- var u0=rhythm.freq==='custom'?(rhythm.unit||'weeks'):rhythm.freq;
- var unit=u0==='daily'?'day':(u0==='weekly'||u0==='weeks')?'week':(u0==='monthly'||u0==='months')?'month':u0==='quarterly'?'quarter':(u0==='yearly'||u0==='years')?'year':'week';
- var minimum=unit==='day'?30:unit==='week'?24:unit==='month'?6:unit==='quarter'?4:2;
- function floor(date){var d=new Date(date.getFullYear(),date.getMonth(),date.getDate());if(unit==='week')d.setDate(d.getDate()-(d.getDay()+6)%7);if(unit==='month')d=new Date(d.getFullYear(),d.getMonth(),1);if(unit==='quarter')d=new Date(d.getFullYear(),Math.floor(d.getMonth()/3)*3,1);if(unit==='year')d=new Date(d.getFullYear(),0,1);return d;}
- function step(d,n){var result=new Date(d);if(unit==='day'||unit==='week')result.setDate(result.getDate()+n*(unit==='week'?7:1));else result.setMonth(result.getMonth()+n*(unit==='month'?1:unit==='quarter'?3:12));return result;}
- var events=S.events.filter(function(e){return e.personId===person.id&&e.rhythmId===rhythm.id&&Number.isFinite(e.ts)&&e.ts<=now.getTime();}).sort(function(a,b){return a.ts-b.ts;});
- var end=floor(now),start=step(end,1-minimum);
- if(events.length&&floor(new Date(events[0].ts))<start)start=floor(new Date(events[0].ts));
- var bins=[],index=0;
- for(var date=new Date(start);date<=end;date=step(date,1)){
-  var next=step(date,1),count=0;
-  while(index<events.length&&events[index].ts<next.getTime()){if(events[index].ts>=date.getTime())count++;index++;}
-  var target=1,status=count===0?'empty':count>=target?'met':'partial';
-  var label=unit==='month'?date.toLocaleDateString('en-US',{month:'short',year:'numeric'}):unit==='year'?String(date.getFullYear()):unit==='quarter'?'Q'+(Math.floor(date.getMonth()/3)+1)+' '+date.getFullYear():date.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-  bins.push({label:(unit==='week'?'Week of ':'')+label,count:count,target:target,status:status,current:date.getTime()===end.getTime()});
- }
- return {unit:unit,bins:bins,total:events.length};
-};
-
 /* ---- scheduled-planned line: rhythms appear once (no category doubling) ---- */
 nextDateLine=function(pid){
  var base=_nextDateLine(pid);

@@ -22,7 +22,7 @@
    var option='<div class="rhythm-area-option"><label><input type="checkbox" data-rfield="'+esc(idf)+'|areas" value="'+id+'"'+(checked?' checked':'')+'><span class="rhythm-area-icon" aria-hidden="true">'+(AREA_ICONS[id]||"")+'</span><span data-faith-category-label>'+esc(checked&&id==="faith"&&r.faithGroup?"Faith - "+r.faithGroup:name)+'</span></label>';
    if(id==="faith"){
     var selected=FAITH_SUBCATEGORIES.indexOf(r.faithGroup)>=0?r.faithGroup:"Prayer";
-    option+='<div class="rhythm-faith-flyout"'+(checked?'':' hidden')+'><span class="rhythm-faith-flyout-title">Faith practice</span>'+FAITH_SUBCATEGORIES.map(function(group){return '<label><input type="radio" name="faith-subcategory-'+esc(idf).replace(/[^a-z0-9_-]/gi,"-")+'" data-rhythm-faith-group data-rhythm-faith-owner="'+esc(idf)+'" value="'+esc(group)+'"'+(group===selected?' checked':'')+'><span>Faith - '+esc(group)+'</span></label>';}).join("")+'</div>';
+    option+='<div class="rhythm-faith-flyout" hidden><span class="rhythm-faith-flyout-title">Faith practice</span>'+FAITH_SUBCATEGORIES.map(function(group){return '<label><input type="radio" name="faith-subcategory-'+esc(idf).replace(/[^a-z0-9_-]/gi,"-")+'" data-rhythm-faith-group data-rhythm-faith-owner="'+esc(idf)+'" value="'+esc(group)+'"'+(group===selected?' checked':'')+'><span>Faith - '+esc(group)+'</span></label>';}).join("")+'</div>';
    }
    return option+'</div>';
   }).join("")+'</fieldset>';
@@ -33,7 +33,7 @@
   if(!ids.length)return "";
   return '<span class="rhythm-area-badges" aria-label="Categories: '+esc(ids.map(function(id){return categoryLabel(id,r);}).join(", "))+'">'+ids.map(function(id){
    var name=categoryLabel(id,r);
-   return '<span class="rhythm-area-badge" title="'+esc(name)+'" aria-label="'+esc(name)+'">'+(AREA_ICONS[id]||"")+'</span>';
+   return '<button type="button" class="rhythm-area-badge" data-rhythm-area-badge="'+esc(id)+'" data-category-tooltip="'+esc(name)+'"'+(id==="faith"?' data-rhythm-faith-subcategory="'+esc(r.faithGroup||"Prayer")+'"':'')+' title="'+esc(name)+'" aria-label="Open '+esc(name)+'">'+(AREA_ICONS[id]||"")+'</button>';
   }).join("")+'</span>';
  }
  var baseScheduleHTML=window.personRhythmScheduleHTML;
@@ -43,7 +43,7 @@
  };
  var baseFaithRhythmRow=window.faithRhythmRowHTML;
  window.faithRhythmRowHTML=function(record){
-  return baseFaithRhythmRow(record).replace("</strong>","</strong>"+areaBadges(record));
+  return baseFaithRhythmRow(record).replace("</b>","</b>"+areaBadges(record));
  };
  var basePersonRhythmRow=window.rhythmRow;
  window.rhythmRow=function(person,record){
@@ -85,6 +85,8 @@
   var score=rhythmScore(record),last=rhythmLast(record),lastText=last?"last tended "+when(last.ts):"not yet tended";
   return '<div class="rhyrow"><span class="rhythm-health"><span class="sm-dot '+scoreClass(score)+'" aria-hidden="true"></span><span>'+score+'%</span></span><div class="gr-main"><b class="tend-type-title">'+esc(record.text||"(unnamed rhythm)")+'</b>'+(record.description?'<div class="gr-meta tend-type-description">'+esc(record.description)+'</div>':'')+'<div class="gr-meta tend-type-meta">'+esc(rhythmFreqLabel(record))+(record.tod&&record.tod!=="anytime"?" · "+esc(TODS[record.tod]):"")+" · "+esc(lastText)+(last&&rhythmDaysSince(record)!==0?" · "+esc(rhythmDueTxt(record)):"")+'</div></div><button type="button" class="btn mini" data-tend-open="area-rhythm" data-area-id="'+esc(id)+'" data-rhythm-id="'+esc(record.id)+'">Tend</button><button type="button" class="iconbtn rhythm-history-trigger" data-rhyhistory="area-rhythm|'+esc(id)+'|'+esc(record.id)+'" aria-label="View history for '+esc(record.text)+'" title="View rhythm history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button type="button" class="iconbtn" data-area-rhythm-edit="'+esc(id)+'|'+esc(record.id)+'" aria-label="Edit '+esc(record.text)+'" title="Edit">✎</button><button type="button" class="iconbtn" data-area-rhythm-delete="'+esc(id)+'|'+esc(record.id)+'" aria-label="Delete '+esc(record.text)+'" title="Delete">×</button></div>';
  }
+ window.faithLinkedRhythmCount=function(group){return categoryRhythms("faith").filter(function(item){return (item.record.faithGroup||"Prayer")===group&&!item.record.disabled&&!rhythmEnded(item.record);}).length;};
+ window.faithLinkedRhythmRows=function(group){return categoryRhythms("faith").filter(function(item){return (item.record.faithGroup||"Prayer")===group&&!item.record.disabled&&!rhythmEnded(item.record);}).sort(function(a,b){return String(a.record.text||"").localeCompare(String(b.record.text||""));}).map(function(item){return categoryRhythmRow(item,"faith");}).join("");};
  function categoryRhythmFormHTML(id,record,rid){
   var idf="area-"+id+"|"+rid;
   return '<div class="rhyedit area-rhythm-edit" data-area-rhythm-form="'+esc(id)+'|'+esc(rid)+'"><label class="careplan-field">Rhythm<input data-crf="text" value="'+esc(record.text||"")+'" placeholder="What is the rhythm?"></label><label class="careplan-field rhythm-description-field">Description (optional)<textarea data-crf="description" placeholder="Add context or details">'+esc(record.description||"")+'</textarea></label>'+window.personRhythmScheduleHTML(record,idf)+'<label class="careplan-field">Person (optional)<select data-crf="personId"><option value="">No person</option>'+S.people.map(function(person){return '<option value="'+esc(person.id)+'"'+(record.personId===person.id?' selected':'')+'>'+esc(person.name)+'</option>';}).join("")+'</select></label><div class="careplan-actions"><button type="button" class="btn mini" data-area-rhythm-save="'+esc(id)+'|'+esc(rid)+'">Save</button><button type="button" class="btn mini ghost" data-area-rhythm-cancel="1">Cancel</button></div></div>';
@@ -97,19 +99,6 @@
   var record=newAreaRhythm(id);
   return categoryRhythmFormHTML(id,record,"draft");
  }
- function faithLinkedRhythmsHTML(group){
-  var rows=categoryRhythms("faith").filter(function(item){return (item.record.faithGroup||"Prayer")===group;});
-  var draft=areaRhythmDraft&&areaRhythmDraft.areaId==="faith"&&areaRhythmDraft.record.faithGroup===group;
-  var out='<section class="card faith-linked-rhythms" aria-label="'+esc(group)+' rhythms"><div class="category-rhythms-heading"><div><h3>Rhythms</h3><p>Practices connected to '+esc(group)+'.</p></div><button type="button" class="btn mini ghost" data-area-rhythm-new="faith" data-faith-group="'+esc(group)+'">+ Add rhythm</button></div>';
-  if(draft)out+=categoryRhythmFormForArea("faith");
-  if(rows.length)rows.slice().sort(function(a,b){return String(a.record.text||"").localeCompare(String(b.record.text||""));}).forEach(function(item){out+=categoryRhythmRow(item,"faith");});
-  else if(!draft)out+='<div class="empty">No rhythms in this practice yet.</div>';
-  return out+'</section>';
- }
- var baseFaithRhythmsHTML=window.faithRhythmsHTML;
- window.faithRhythmsHTML=function(group){
-  return baseFaithRhythmsHTML(group)+faithLinkedRhythmsHTML(group);
- };
  function categoryRhythmSections(id){
   if(!CATEGORY_AREA_SET[id])return "";
   var rows=categoryRhythms(id),due=rows.filter(categoryRhythmDue),out='<section class="card category-today-rhythms"><div class="subhead">Today</div>';
@@ -191,11 +180,11 @@
   areaRhythmDraft=null;areaRhythmEditId=null;save();render();flash("Rhythm saved");
  }
  function findRhythmOwner(rid){var result=null;S.people.some(function(person){var record=(person.rhythms||[]).find(function(item){return item.id===rid;});if(record){result={person:person,record:record};return true;}return false;});return result;}
- function syncFaithFlyout(fieldset){
+ function syncFaithFlyout(fieldset,open){
   if(!fieldset)return;
   var faithOption=fieldset.querySelector('.rhythm-area-option input[data-rfield$="|areas"][value="faith"]');
   var flyout=fieldset.querySelector(".rhythm-faith-flyout");
-  if(faithOption&&flyout)flyout.hidden=!faithOption.checked;
+  if(faithOption&&flyout){flyout.hidden=!faithOption.checked||!open;flyout.style.display=flyout.hidden?"none":"";}
   if(faithOption&&faithOption.checked){
    var selected=fieldset.querySelector("[data-rhythm-faith-group]:checked"),label=fieldset.querySelector("[data-faith-category-label]");
    if(label&&selected)label.textContent="Faith - "+selected.value;
@@ -211,7 +200,7 @@
    var ownerForm=target.closest(".rhythm-area-checks"),categoryLabelNode=ownerForm&&ownerForm.querySelector("[data-faith-category-label]");
    if(categoryLabelNode)categoryLabelNode.textContent="Faith - "+target.value;
    var flyout=ownerForm&&ownerForm.querySelector(".rhythm-faith-flyout");
-   if(flyout)flyout.hidden=true;
+   if(flyout){flyout.hidden=true;flyout.style.display="none";}
    event.stopImmediatePropagation();return;
   }
   var field=target.getAttribute("data-rfield");
@@ -219,8 +208,8 @@
   var parts=field.split("|");if(parts.length!==3)return;
   if(parts[2]==="areas"){
    var profileRecord=parts[1]==="draft"?(rhythmDraft&&rhythmDraft.pid===parts[0]?rhythmDraft:null):(rhythmEditDraft&&rhythmEditDraft.id===parts[1]?rhythmEditDraft:null);
-   if(profileRecord){profileRecord.areas=Array.prototype.slice.call(target.closest(".rhythm-area-checks").querySelectorAll('input[data-rfield$="|areas"]:checked')).map(function(input){return input.value;});if(profileRecord.areas.indexOf("faith")!==-1&&!profileRecord.faithGroup)profileRecord.faithGroup="Prayer";syncFaithFlyout(target.closest(".rhythm-area-checks"));event.stopImmediatePropagation();return;}
-   if(parts[0]==="faith"&&faithRhythmDraft){faithRhythmDraft.areas=Array.prototype.slice.call(target.closest(".rhythm-area-checks").querySelectorAll("input:checked")).map(function(input){return input.value;});event.stopImmediatePropagation();return;}
+   if(profileRecord){profileRecord.areas=Array.prototype.slice.call(target.closest(".rhythm-area-checks").querySelectorAll('input[data-rfield$="|areas"]:checked')).map(function(input){return input.value;});if(profileRecord.areas.indexOf("faith")!==-1&&!profileRecord.faithGroup)profileRecord.faithGroup="Prayer";if(target.value==="faith")syncFaithFlyout(target.closest(".rhythm-area-checks"),target.checked);event.stopImmediatePropagation();return;}
+   if(parts[0]==="faith"&&faithRhythmDraft){faithRhythmDraft.areas=Array.prototype.slice.call(target.closest(".rhythm-area-checks").querySelectorAll("input:checked")).map(function(input){return input.value;});if(target.value==="faith")syncFaithFlyout(target.closest(".rhythm-area-checks"),target.checked);event.stopImmediatePropagation();return;}
   }
   if(parts[0].indexOf("area-")!==0)return;
   var areaId=parts[0].slice(5),record=parts[1]==="draft"?(areaRhythmDraft&&areaRhythmDraft.areaId===areaId?areaRhythmDraft.record:null):categoryRhythmRecord(areaId,parts[1]);
@@ -228,7 +217,7 @@
   var form=target.closest("[data-area-rhythm-form]");
   var rerender=applyRhythmField(record,parts[2],target,form);
   if(parts[2]==="areas"&&record.areas.indexOf("faith")!==-1&&!record.faithGroup)record.faithGroup="Prayer";
-  if(parts[2]==="areas")syncFaithFlyout(target.closest(".rhythm-area-checks"));
+  if(parts[2]==="areas"&&target.value==="faith")syncFaithFlyout(target.closest(".rhythm-area-checks"),target.checked);
   event.stopImmediatePropagation();
   if(rerender)render();
  },true);
@@ -239,6 +228,17 @@
   if(record)record[target.getAttribute("data-crf")]=target.value;
  },true);
  window.addEventListener("click",function(event){
+  var badge=event.target&&event.target.closest&&event.target.closest("[data-rhythm-area-badge]");
+  if(badge){
+   event.preventDefault();event.stopImmediatePropagation();
+   var area=badge.getAttribute("data-rhythm-area-badge");
+   currentPerson=null;openDetail=null;editingId=null;editingEvent=null;currentArea=area;tab="today";
+   if(area==="faith"){
+    var group=badge.getAttribute("data-rhythm-faith-subcategory")||"Prayer";
+    faithConfig().selectedGroup=group;faithConfig().practiceTabs=faithConfig().practiceTabs||{};faithConfig().practiceTabs[group]="rhythms";
+   }
+   render();window.scrollTo(0,0);return;
+  }
   var button=event.target&&event.target.closest&&event.target.closest("[data-area-rhythm-new],[data-area-rhythm-edit],[data-area-rhythm-save],[data-area-rhythm-cancel],[data-area-rhythm-delete]");
   if(button){
    event.preventDefault();event.stopImmediatePropagation();
@@ -275,7 +275,7 @@
   event.preventDefault();event.stopImmediatePropagation();currentArea=area;tab="today";render();
  },true);
  var styles=document.createElement("style");
- styles.textContent=".rhythm-area-checks{display:flex;gap:7px;flex-wrap:wrap;border:0;padding:6px 0;margin:4px 0}.rhythm-area-checks legend{font-size:12px;color:var(--ink-soft);margin-bottom:4px}.rhythm-area-checks label{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;padding:5px 9px;font-size:12px;cursor:pointer}.rhythm-area-checks input{accent-color:var(--forest)}.rhythm-area-option{position:relative}.rhythm-faith-flyout{position:absolute;z-index:5;top:calc(100% + 5px);left:0;display:grid;gap:3px;min-width:175px;padding:9px;border:1px solid var(--line);border-radius:12px;background:var(--canvas);box-shadow:0 8px 24px rgba(0,0,0,.14)}.rhythm-faith-flyout[hidden]{display:none}.rhythm-faith-flyout-title{padding:2px 6px 5px;color:var(--ink-soft);font-size:11px;font-weight:600}.rhythm-area-checks .rhythm-faith-flyout label{border:0;border-radius:7px;padding:5px 6px;white-space:nowrap}.rhythm-area-icon,.rhythm-area-badge{display:inline-flex;align-items:center;justify-content:center}.rhythm-area-icon svg{width:16px;height:16px}.rhythm-area-badges{display:inline-flex;gap:4px;vertical-align:middle;margin-left:6px}.rhythm-area-badge{width:23px;height:23px;border:1px solid var(--line);border-radius:50%;background:var(--canvas)}.rhythm-area-badge svg{width:14px;height:14px}.rhythm-person-badge,.rhythm-owner-badge{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;background:var(--canvas);padding:2px 7px;font-size:11px;color:var(--ink-soft);vertical-align:middle}.rhythm-person-badge .avatar{display:inline-flex}.category-rhythms-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}.category-rhythm-edit{display:grid;gap:10px}.category-rhythm-edit .careplan-field{display:grid;gap:5px}.category-rhythm-edit .careplan-field>input,.category-rhythm-edit .careplan-field>select,.category-rhythm-edit textarea{font:inherit;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--canvas)}.category-rhythm-edit textarea{min-height:60px}.category-rhythm-edit .careplan-actions{display:flex;gap:8px}.category-rhythms .rhythm-person-badge{flex:0 0 auto}";
- styles.textContent+=".rhythm-faith-flyout label{width:100%;box-sizing:border-box;border:1px solid transparent;background:transparent;transition:background-color .16s ease,border-color .16s ease,color .16s ease,transform .16s ease}.rhythm-faith-flyout label:hover,.rhythm-faith-flyout label:focus-within{background:rgba(28,145,103,.11);border-color:rgba(28,145,103,.16);color:var(--forest);transform:translateX(2px)}.rhythm-faith-flyout label:has(input:checked){background:rgba(28,145,103,.09);color:var(--forest);font-weight:600}.rhythm-faith-flyout input{accent-color:var(--forest)}.rhythm-faith-flyout-title{display:flex;align-items:center;gap:7px}.rhythm-faith-flyout-title:before{content:'';width:18px;height:2px;border-radius:2px;background:var(--forest);opacity:.65}.faith-linked-rhythms{margin-top:12px}.faith-linked-rhythms .category-rhythms-heading h3{margin:0;font-size:16px}.faith-linked-rhythms .category-rhythms-heading p{margin:3px 0 0;color:var(--ink-soft);font-size:12px}";
+ styles.textContent=".rhythm-area-checks{display:flex;gap:7px;flex-wrap:wrap;border:0;padding:6px 0;margin:4px 0}.rhythm-area-checks legend{font-size:12px;color:var(--ink-soft);margin-bottom:4px}.rhythm-area-checks label{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;padding:5px 9px;font-size:12px;cursor:pointer}.rhythm-area-checks input{accent-color:var(--forest)}.rhythm-area-option{position:relative}.rhythm-faith-flyout{position:absolute;z-index:5;top:calc(100% + 5px);left:0;display:grid;gap:3px;min-width:175px;padding:9px;border:1px solid var(--line);border-radius:12px;background:var(--canvas);box-shadow:0 8px 24px rgba(0,0,0,.14)}.rhythm-faith-flyout[hidden]{display:none}.rhythm-faith-flyout-title{padding:2px 6px 5px;color:var(--ink-soft);font-size:11px;font-weight:600}.rhythm-area-checks .rhythm-faith-flyout label{border:0;border-radius:7px;padding:5px 6px;white-space:nowrap}.rhythm-area-icon,.rhythm-area-badge{display:inline-flex;align-items:center;justify-content:center}.rhythm-area-icon svg{width:16px;height:16px}.rhythm-area-badges{display:inline-flex;gap:4px;vertical-align:middle;margin-left:6px}.rhythm-area-badge{position:relative;width:23px;height:23px;padding:3px;border:1px solid var(--line);border-radius:50%;background:var(--canvas);color:var(--ink-soft);cursor:pointer;transition:border-color .15s ease,color .15s ease,background .15s ease}.rhythm-area-badge:hover,.rhythm-area-badge:focus-visible{border-color:var(--forest);background:var(--mist);color:var(--forest);outline:2px solid transparent}.rhythm-area-badge:after{position:absolute;z-index:20;left:50%;bottom:calc(100% + 7px);width:max-content;max-width:220px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--ink);color:#fff;content:attr(data-category-tooltip);font:500 11px/1.3 var(--sans);white-space:nowrap;pointer-events:none;opacity:0;transform:translate(-50%,3px);transition:opacity .12s ease,transform .12s ease}.rhythm-area-badge:hover:after,.rhythm-area-badge:focus-visible:after{opacity:1;transform:translate(-50%,0)}.rhythm-area-badge svg{width:14px;height:14px}.rhythm-person-badge,.rhythm-owner-badge{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;background:var(--canvas);padding:2px 7px;font-size:11px;color:var(--ink-soft);vertical-align:middle}.rhythm-person-badge .avatar{display:inline-flex}.category-rhythms-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}.category-rhythm-edit{display:grid;gap:10px}.category-rhythm-edit .careplan-field{display:grid;gap:5px}.category-rhythm-edit .careplan-field>input,.category-rhythm-edit .careplan-field>select,.category-rhythm-edit textarea{font:inherit;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--canvas)}.category-rhythm-edit textarea{min-height:60px}.category-rhythm-edit .careplan-actions{display:flex;gap:8px}.category-rhythms .rhythm-person-badge{flex:0 0 auto}";
+ styles.textContent+=".rhythm-faith-flyout label{width:100%;box-sizing:border-box;border:1px solid transparent;background:transparent;transition:background-color .16s ease,border-color .16s ease,color .16s ease,transform .16s ease}.rhythm-faith-flyout label:hover,.rhythm-faith-flyout label:focus-within{background:rgba(28,145,103,.11);border-color:rgba(28,145,103,.16);color:var(--forest);transform:translateX(2px)}.rhythm-faith-flyout label:has(input:checked){background:rgba(28,145,103,.09);color:var(--forest);font-weight:600}.rhythm-faith-flyout input{accent-color:var(--forest)}.rhythm-faith-flyout-title{display:flex;align-items:center;gap:7px}.rhythm-faith-flyout-title:before{content:'';width:18px;height:2px;border-radius:2px;background:var(--forest);opacity:.65}";
  document.head.appendChild(styles);
 })();

@@ -230,4 +230,4 @@ function scheduleHealthScore(item,lastDate,today){
  var windowDays=second?recDayNumber(second)-recDayNumber(first):rhythmPeriod(item);
  return Math.max(0,Math.round(100-(recDayNumber(day)-recDayNumber(first))*Math.min(10,100/Math.max(1,windowDays))));
 }
-window.rhythmScore=function(r){var last=rhythmLast(r);return scheduleHealthScore(r,last?recDayString(new Date(last.ts)):null,todayStr());};
+window.rhythmScore=function(r){var last=rhythmLast(r);return last?scheduleHealthScore(r,recDayString(new Date(last.ts)),todayStr()):null;};
