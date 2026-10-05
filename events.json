@@ -1,15 +1,7 @@
 {
-  "synced": "2026-10-05T16:33:39.321Z",
+  "synced": "2026-10-05T18:37:56.637Z",
   "source": "iCloud published feed",
   "events": [
-    {
-      "t": "PLN",
-      "s": "2026-09-05T16:30:00.000Z",
-      "e": "2026-09-05T17:30:00.000Z",
-      "allDay": false,
-      "cal": "Home",
-      "notes": ""
-    },
     {
       "t": "Amy- Dr.Chris",
       "s": "2026-09-09T19:00:00.000Z",
