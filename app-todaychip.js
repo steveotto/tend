@@ -16,9 +16,9 @@
    for(var i=1;i<parts.length;i++){
     var seg=parts[i];
     if(seg.indexOf('pill rhy')<0)continue;
-    var m=seg.match(/data-(?:rhydone|rhydate|rhyconfirm)="([^"]+)"/);
+    var m=seg.match(/data-rhythm-id="([^"]+)"/);
     if(!m)continue;
-    var rid=m[1].split("|")[1];
+    var rid=m[1];
     var r=(p.rhythms||[]).find(function(x){return x.id===rid;});
     if(!r)continue;
     var sc=rhythmScore(r);

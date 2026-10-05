@@ -26,7 +26,7 @@
 var RHYTHM_FREQS={daily:{label:"Daily"},weekly:{label:"Weekly"},monthly:{label:"Monthly"},quarterly:{label:"Quarterly"},yearly:{label:"Yearly"},custom:{label:"Custom"}};
 var R_MOS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 var R_ORDS=["1st","2nd","3rd","4th","last"];
-var RHYTHM_FIELD_LIST=["weekdays","monthlyMode","dayOfMonth","ord","ordWeekday","month","monthDay","every","unit","until"];
+var RHYTHM_FIELD_LIST=["description","weekdays","monthlyMode","dayOfMonth","ord","ordWeekday","month","monthDay","every","unit","until"];
 
 /* ---- migration: legacy category/duration-era rhythms -> v2, in place ---- */
 function ensureRhythm(r){
@@ -41,7 +41,8 @@ function ensureRhythm(r){
  if((r.freq==="monthly"||r.freq==="quarterly")&&r.monthlyMode===undefined){r.monthlyMode="onDay";r.dayOfMonth=r.dayOfMonth||null;}
  if(r.freq==="yearly"&&r.month===undefined){r.monthlyMode=r.monthlyMode||"onDay";r.month=r.month||null;r.monthDay=r.monthDay||null;}
  if(r.freq==="custom"&&!r.unit)r.unit="weeks";
- ["customType","customDow","customOrd","scheduleDow","category","dur","durVal","durUnit"].forEach(function(k){delete r[k];});
+ ["customType","customDow","customOrd","scheduleDow","dur","durVal","durUnit"].forEach(function(k){delete r[k];});
+ if(r.category!=="faith")delete r.category;
  return r;
 }
 function migrateAllRhythms(){
@@ -65,7 +66,6 @@ function rhythmPeriod(r){
  if(u==="days")return Math.max(1,ev);
  return 7;
 }
-function rhythmEnded(r){return !!(r.until&&todayStr()>r.until);}
 function rhythmMatchesDay(r,date){
  date=date||new Date();
  if(rhythmEnded(r))return false;
@@ -177,13 +177,14 @@ personRhythmScheduleHTML=function(r,idf){
 /* ---- person page rhythm rows (profile Rhythms tab) ---- */
 rhythmRow=function(p,r){
  ensureRhythm(r);
- var sc=rhythmScore(r),c=scoreClass(sc),scoreText=sc===null?"—":sc;
+ var sc=rhythmScore(r),c=scoreClass(sc),scoreText=sc===null?"-":sc;
  if(editRhythmId===r.id){
   if(!rhythmEditDraft||rhythmEditDraft.id!==r.id)rhythmEditDraft=JSON.parse(JSON.stringify(r));
   r=rhythmEditDraft;
   var idf=p.id+"|"+r.id;
   var out='<div class="rhyedit">';
   out+='<div class="addrow" style="margin-top:2px"><input data-rfield="'+idf+'|text" value="'+esc(r.text)+'" placeholder="What is the rhythm?"></div>';
+  out+='<label class="careplan-field rhythm-description-field">Description (optional)<textarea data-rfield="'+idf+'|description" placeholder="Add context or details">'+esc(r.description||'')+'</textarea></label>';
   out+=personRhythmScheduleHTML(r,idf);
   out+='<div class="addrow"><button class="btn mini" data-rhyeditsave="'+idf+'">Save</button><button class="btn mini ghost" data-rhyeditcancel="1">Cancel</button><button class="btn mini danger" style="margin-left:auto" data-rhydel="'+idf+'">Delete</button></div>';
   out+='</div>';
@@ -191,14 +192,15 @@ rhythmRow=function(p,r){
  }
  var rl=rhythmLast(r),lastTxt=rl?("last tended "+when(rl.ts)):"not yet tended";
  var timingTxt=lastTxt+(rl&&rhythmDaysSince(r)!==0?" \u00B7 "+rhythmDueTxt(r):"");
- if(rhyDoneDraft&&rhyDoneDraft.key===p.id+"|"+r.id){return '<div class="rhyrow"><span class="rhythm-health" title="Rhythm health"><span class="sm-dot '+c+'" aria-hidden="true"></span><span>'+scoreText+'%</span></span><div class="gr-main"><b>'+esc(r.text||"(unnamed rhythm)")+'</b><div class="gr-meta">'+esc(rhythmFreqLabel(r))+" \u00B7 "+esc(timingTxt)+'</div></div>'+rhyDoneBtn(p.id+"|"+r.id)+'</div><div class="hint" style="font-size:11px;color:var(--ink-faint);margin:0 0 8px 26px">When did it actually happen? That date drives the meter.</div>';}
- return '<div class="rhyrow"><span class="rhythm-health" title="Rhythm health"><span class="sm-dot '+c+'" aria-hidden="true"></span><span>'+scoreText+'%</span></span><div class="gr-main"><b>'+esc(r.text||"(unnamed rhythm)")+'</b><div class="gr-meta">'+esc(rhythmFreqLabel(r))+(r.tod&&r.tod!=="anytime"?" \u00B7 "+esc(TODS[r.tod]):"")+(rhythmEnded(r)?" \u00B7 ended":"")+" \u00B7 "+esc(timingTxt)+'</div></div><button class="btn mini" data-rhydone="'+p.id+'|'+r.id+'" title="Record a moment of care">Tend</button><button class="iconbtn rhythm-history-trigger" data-rhyhistory="'+p.id+'|'+r.id+'" title="View rhythm history" aria-label="View history for '+esc(r.text)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button class="iconbtn" data-rhyedit="'+r.id+'" title="edit">\u270E</button></div>';
+ var description=r.description&&String(r.description).trim()?'<div class="gr-meta tend-type-description">'+esc(String(r.description).trim())+'</div>':'';
+ return '<div class="rhyrow"><span class="rhythm-health tend-type-metric" title="Rhythm health"><span class="sm-dot '+c+'" aria-hidden="true"></span><span>'+scoreText+(sc===null?'':'%')+'</span></span><div class="gr-main"><b class="tend-type-title">'+esc(r.text||"(unnamed rhythm)")+'</b>'+description+'<div class="gr-meta tend-type-meta">'+esc(rhythmFreqLabel(r))+(r.tod&&r.tod!=="anytime"?" \u00b7 "+esc(TODS[r.tod]):"")+(rhythmEnded(r)?" \u00b7 ended":"")+" \u00b7 "+esc(timingTxt)+'</div></div>'+rhyDoneBtn(p.id+"|"+r.id)+'<button class="iconbtn rhythm-history-trigger" data-rhyhistory="'+p.id+'|'+r.id+'" title="View rhythm history" aria-label="View history for '+esc(r.text)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button class="iconbtn" data-rhyedit="'+r.id+'" title="edit">\u270E</button></div>';
 };
 draftRow=function(p){
  var r=rhythmDraft,idf=p.id+"|draft";
  if(!r.weekdays)r.weekdays=[];
  var out='<div class="rhyedit">';
  out+='<div class="addrow" style="margin-top:2px"><input data-rfield="'+idf+'|text" value="'+esc(r.text||"")+'" placeholder="What is the rhythm?"></div>';
+ out+='<label class="careplan-field rhythm-description-field">Description (optional)<textarea data-rfield="'+idf+'|description" placeholder="Add context or details">'+esc(r.description||'')+'</textarea></label>';
  out+=personRhythmScheduleHTML(r,idf);
  out+='</div>';
  return out;
@@ -347,21 +349,6 @@ document.addEventListener("click",function(e){
   }else if(rhythmDraft&&rhythmDraft.pid===ra){flash("Give the rhythm a name first");}
   else{rhythmDraft={pid:ra,text:"",freq:"weekly",tod:"anytime",weekdays:[],every:1,unit:"weeks"};render();}
   e.stopImmediatePropagation();return;
- }
- b=e.target.closest("[data-rhyconfirm]");
- if(b){
-  var rck=b.getAttribute("data-rhyconfirm").split("|");
-  var rcp=S.people.find(function(x){return x.id===rck[0];});
-  var rcr=rcp&&(rcp.rhythms||[]).find(function(x){return x.id===rck[1];});
-  var rcd=document.querySelector('[data-rhydate="'+b.getAttribute("data-rhyconfirm")+'"]');
-  var rct=document.querySelector('[data-rhytime="'+b.getAttribute("data-rhyconfirm")+'"]');
-  if(rcp&&rcr&&rcd&&rcd.value){
-   var rts=rcd.value+"T"+((rct&&rct.value)?rct.value:"12:00")+":00";
-   rhyDoneDraft=null;actDoneAdd(rcp.id,rcr.id);
-   logEvent(rcp.area,rcp.id,(/^pray/i.test(rcr.text||"")?"prayer":"quality"),rcr.text,"",new Date(rts).getTime(),null,rcr.id);
-   flash("Rhythm tended \u2713");
-  }
-  e.stopImmediatePropagation();
  }
 },true);
 })();

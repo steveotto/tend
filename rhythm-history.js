@@ -5,7 +5,7 @@ function rhythmHistoryData(person,rhythm,now){
  var minimum=unit==='day'?30:unit==='week'?24:unit==='fortnight'?12:unit==='month'?6:unit==='quarter'?4:2;
  function floor(date){var d=new Date(date.getFullYear(),date.getMonth(),date.getDate());if(unit==='week')d.setDate(d.getDate()-(d.getDay()+6)%7);if(unit==='fortnight'){var anchor=Date.UTC(1970,0,5),days=Math.floor((Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())-anchor)/864e5);d.setDate(d.getDate()-((days%14)+14)%14);}if(unit==='month')d=new Date(d.getFullYear(),d.getMonth(),1);if(unit==='quarter')d=new Date(d.getFullYear(),Math.floor(d.getMonth()/3)*3,1);if(unit==='year')d=new Date(d.getFullYear(),0,1);return d;}
  function step(d,n){var result=new Date(d);if(unit==='day'||unit==='week'||unit==='fortnight')result.setDate(result.getDate()+n*(unit==='fortnight'?14:unit==='week'?7:1));else result.setMonth(result.getMonth()+n*(unit==='month'?1:unit==='quarter'?3:12));return result;}
- var events=S.events.filter(function(e){return e.personId===person.id&&e.rhythmId===rhythm.id&&Number.isFinite(e.ts)&&e.ts<=now.getTime();}).sort(function(a,b){return a.ts-b.ts;});
+ var events=S.events.filter(function(e){var matchesPerson=person.id==="faith"?e.areaId==="faith":String(person.id).indexOf("area-rhythm:")===0?true:e.personId===person.id;return matchesPerson&&e.rhythmId===rhythm.id&&Number.isFinite(e.ts)&&e.ts<=now.getTime();}).sort(function(a,b){return a.ts-b.ts;});
  var end=floor(now),start=step(end,1-minimum);
  if(events.length&&floor(new Date(events[0].ts))<start)start=floor(new Date(events[0].ts));
  var bins=[],index=0;
@@ -19,7 +19,7 @@ function rhythmHistoryData(person,rhythm,now){
  return {unit:unit,bins:bins,total:events.length};
 }
 function openRhythmHistory(key){
- var ids=key.split('|'),person=S.people.find(function(p){return p.id===ids[0];}),rhythm=person&&(person.rhythms||[]).find(function(r){return r.id===ids[1];});if(!rhythm)return;
+ var ids=key.split('|'),isFaith=ids[0]==="faith",isArea=ids[0]==="area-rhythm",person=isFaith?{id:"faith",name:"Faith"}:isArea?{id:"area-rhythm:"+ids[1],name:S.areas[ids[1]]?S.areas[ids[1]].name:"Category"}:S.people.find(function(p){return p.id===ids[0];}),rhythm=isFaith?S.rhythms.find(function(r){return r.id===ids[1]&&r.category==="faith";}):isArea?(S.areaRhythms||[]).find(function(r){return r.id===ids[2]&&Array.isArray(r.areas)&&r.areas.indexOf(ids[1])!==-1;}):person&&(person.rhythms||[]).find(function(r){return r.id===ids[1];});if(!rhythm)return;
  var previous=document.getElementById('rhythmHistoryDialog');if(previous)previous.remove();
  var data=rhythmHistoryData(person,rhythm),max=Math.max.apply(null,[1].concat(data.bins.map(function(b){return b.count;})));
  var colors={met:'#1E9C68',partial:'#D9A514',empty:'var(--line)'},statusLabels={met:'Cadence met',partial:'Partial progress',empty:'No logged moments'};
