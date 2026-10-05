@@ -1,5 +1,5 @@
 {
-  "synced": "2026-10-05T09:18:06.269Z",
+  "synced": "2026-10-05T16:33:39.321Z",
   "source": "iCloud published feed",
   "events": [
     {
@@ -148,11 +148,11 @@
     },
     {
       "t": "Vision Tour",
-      "s": "2026-10-06T00:00:00",
-      "e": "2026-10-07T00:00:00",
-      "allDay": true,
+      "s": "2026-10-06T23:00:00.000Z",
+      "e": "2026-10-07T00:30:00.000Z",
+      "allDay": false,
       "cal": "Home",
-      "notes": ""
+      "notes": "[TEND]"
     },
     {
       "t": "Meet with Jocelyn Mesiti",
