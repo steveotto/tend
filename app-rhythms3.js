@@ -84,20 +84,17 @@
   var frequencies=kind==='rhythm'?Object.keys(RHYTHM_FREQS).map(function(k){return [k,RHYTHM_FREQS[k].label];}):Object.keys(FREQS).map(function(k){return [k,FREQS[k].label];});
   var times=[['anytime','No timeframe assigned'],['allday','All day']].concat(dayBlocks().map(function(b){return [b.id,b.name];}));
   if(kind!=='rhythm')frequencies.unshift(['','No frequency']);
-  if(kind==='goal')frequencies.push(['custom','Custom interval']);
   var peopleOptions=[['','No person']].concat(S.people.map(function(p){return [p.id,p.name];}));
-  var out='<div class="careplan-edit'+(kind==='rhythm'?' careplan-rhythm-edit':'')+'" data-cpform="'+esc(key)+'"><div class="careplan-edit-head"><span class="careplan-kind careplan-kind-'+kind+'">'+(kind==='rhythm'?'Rhythm':kind==='prayer'?'Prayer':'Goal')+'</span><strong>Edit '+kind+'</strong></div><label class="careplan-field">Title<input data-cpf="title" value="'+esc(r.text||'')+'"></label>';
+  var out='<dialog class="profile-editor-dialog" data-editor-modal aria-label="Edit '+(kind==='rhythm'?'rhythm':'prayer')+'"><div class="profile-editor-body careplan-edit'+(kind==='rhythm'?' careplan-rhythm-edit':'')+'" data-cpform="'+esc(key)+'"><div class="careplan-edit-head"><span class="careplan-kind careplan-kind-'+kind+'">'+(kind==='rhythm'?'Rhythm':'Prayer')+'</span><strong>Edit '+(kind==='rhythm'?'rhythm':'prayer')+'</strong></div><label class="careplan-field">Title<input data-cpf="title" value="'+esc(r.text||'')+'"></label>';
   if(kind==='rhythm')out+='<label class="careplan-field">Description (optional)<textarea data-cpf="description" placeholder="Add context or details">'+esc(r.description||'')+'</textarea></label>';
   else out+='<label class="careplan-field">Details<textarea data-cpf="details">'+esc(r.details||'')+'</textarea></label>';
-  out+='<div class="careplan-edit-grid"><label class="careplan-field">Frequency<select data-cpf="frequency">'+carePlanOptions(frequencies,kind==='prayer'?r.freq:kind==='goal'?(r.cadence||r.freq):r.freq)+'</select></label><label class="careplan-field">Time of day<select data-cpf="tod">'+carePlanOptions(times,r.tod||'anytime')+'</select></label>';
-  if(kind!=='rhythm')out+='<label class="careplan-field" data-schedule-day'+(scheduleHasWeekday(kind==='goal'?r.cadence:r.freq)?'':' hidden')+'>Day of week<select data-cpf="scheduleDow">'+scheduleDayOptions(r.scheduleDow)+'</select></label>';
+  out+='<div class="careplan-edit-grid"><label class="careplan-field">Frequency<select data-cpf="frequency">'+carePlanOptions(frequencies,r.freq)+'</select></label><label class="careplan-field">Time of day<select data-cpf="tod">'+carePlanOptions(times,r.tod||'anytime')+'</select></label>';
+  if(kind==='prayer')out+='<label class="careplan-field" data-schedule-day'+(scheduleHasWeekday(r.freq)?'':' hidden')+'>Day of week<select data-cpf="scheduleDow">'+scheduleDayOptions(r.scheduleDow)+'</select></label>';
   if(kind==='rhythm')out+='<label class="careplan-field">Person<select data-cpf="person">'+carePlanOptions(S.people.map(function(p){return [p.id,p.name];}),item.person.id)+'</select></label>';
   if(kind==='prayer')out+='<label class="careplan-field">Person<select data-cpf="person">'+carePlanOptions(peopleOptions,r.personId)+'</select></label><label class="careplan-field">Status<select data-cpf="status">'+carePlanOptions([['active','Active'],['answered','Answered'],['archived','Archived']],r.answered?'answered':r.archived?'archived':'active')+'</select></label>';
-  if(kind==='goal')out+='<label class="careplan-field">Area<select data-cpf="area">'+carePlanOptions(AREA_IDS.map(function(id){return [id,S.areas[id].name];}),r.area)+'</select></label>';
   out+='</div>';
   if(kind==='rhythm'){var A=function(f){return 'data-cpf="'+f+'"';};out+='<div class="rhy-recur">'+rhythmRecurrenceHTML(r,A)+'</div>';}
-  if(kind==='goal')out+='<div class="careplan-custom" data-cpcustom'+(r.cadence==='custom'?'':' hidden')+'><label class="careplan-field">Every how many days?<input data-cpf="days" type="number" min="1" max="365" value="'+(r.days||2)+'"></label></div><fieldset class="careplan-people"><legend>People</legend>'+S.people.map(function(p){return '<label><input type="checkbox" data-cpperson="'+esc(p.id)+'"'+(item.people.indexOf(p.id)!==-1?' checked':'')+'>'+esc(p.name)+'</label>';}).join('')+'</fieldset>';
-  out+='<div class="careplan-actions"><button type="button" class="btn mini" data-cpsave="'+esc(key)+'">Save</button><button type="button" class="btn mini ghost" data-cpcancel="'+esc(key)+'">Cancel</button><button type="button" class="btn mini ghost careplan-delete" data-cpdelete="'+esc(key)+'">Delete</button></div></div>';
+  out+='<div class="careplan-actions"><button type="button" class="btn mini" data-cpsave="'+esc(key)+'">Save</button><button type="button" class="btn mini ghost" data-cpcancel="'+esc(key)+'" data-editor-cancel>Cancel</button><button type="button" class="btn mini ghost careplan-delete" data-cpdelete="'+esc(key)+'">Delete</button></div></div></dialog>';
   return out;
  };
  window.carePlanSave=function(key,form){
@@ -122,7 +119,6 @@
    if(newPerson&&newPerson!==found.person){found.person.rhythms=found.person.rhythms.filter(function(x){return x!==r;});newPerson.rhythms=newPerson.rhythms||[];newPerson.rhythms.push(r);}
   }
   if(found.kind==='prayer'){r.details=field('details').value.trim();r.freq=field('frequency').value||null;r.scheduleDow=r.freq&&scheduleHasWeekday(r.freq)&&field('scheduleDow')&&field('scheduleDow').value!==''?+field('scheduleDow').value:null;r.personId=field('person').value||null;var status=field('status').value;r.answered=status==='answered';r.archived=status==='archived';}
-  if(found.kind==='goal'){r.details=field('details').value.trim();r.cadence=field('frequency').value||null;r.days=field('days')?Math.max(1,+field('days').value||2):r.days;r.area=field('area').value;r.personIds=Array.from(form.querySelectorAll('[data-cpperson]:checked')).map(function(x){return x.getAttribute('data-cpperson');});r.personId=r.personIds[0]||null;}
   carePlanEdit=null;save();render();flash('Updated in Care Plan');
  };
  /* ---- person profile pills: same inputs as personScore, robust replace ---- */
@@ -138,12 +134,12 @@
    var rm=avg(rs.map(rhythmScore)),rmCls=scoreClass(rm);
    var pTouch=personConnInfo(p),tScore=connectionScore(p),tCls=scoreClass(tScore);
    pills='<div class="pmeters three"><div class="pmeter"><div class="pm-lab"><span>Rhythms</span><span class="pm-val tend-type-metric '+rmCls+'">'+(rm===null?'—':rm)+'</span></div><div class="bar"><i class="'+rmCls+'" style="width:'+(rm===null?0:rm)+'%"></i></div><div class="pm-note">'+rs.length+" rhythm"+(rs.length===1?"":"s")+'</div></div>'
-   +'<div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val tend-type-metric '+tCls+'">'+tScore+'</span></div><div class="bar"><i class="'+tCls+'" style="width:'+tScore+'%"></i></div><div class="pm-note">'+(pTouch.last?("Last: "+when(pTouch.last.ts)):"No connections yet")+' · Goal: '+esc(personCadenceGoalLabel(p))+'</div></div>'
+   +'<div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val tend-type-metric '+tCls+'">'+tScore+'</span></div><div class="bar"><i class="'+tCls+'" style="width:'+tScore+'%"></i></div><div class="pm-note">'+(pTouch.last?("Last: "+when(pTouch.last.ts)):"No connections yet")+' · Target: '+esc(personCadenceTargetLabel(p))+'</div></div>'
    +'<div class="pmeter"><div class="pm-lab"><span>Prayer</span><span class="pm-val tend-type-metric '+pCls+'">'+pScoreText+'</span></div><div class="bar"><i class="'+pCls+'" style="width:'+(pScore===null?0:pScore)+'%"></i></div><div class="pm-note">'+(pInfo.last?("Last: "+when(pInfo.last.ts)):"No prayers logged")+'</div></div></div>';
   }else{
    var cInfo=personConnInfo(p),cScore=connectionScore(p),cCls=scoreClass(cScore);
    pills='<div class="pmeters three"><div class="pmeter"><div class="pm-lab"><span>Rhythms</span><span class="pm-val tend-type-metric neutral">—</span></div><div class="bar"><i style="width:0%"></i></div><div class="pm-note">No rhythms yet</div></div>'
-   +'<div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val tend-type-metric '+cCls+'">'+cScore+'</span></div><div class="bar"><i class="'+cCls+'" style="width:'+cScore+'%"></i></div><div class="pm-note">'+(cInfo.last?("Last: "+when(cInfo.last.ts)):"No connections yet")+' · Goal: '+esc(personCadenceGoalLabel(p))+'</div></div>'
+   +'<div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val tend-type-metric '+cCls+'">'+cScore+'</span></div><div class="bar"><i class="'+cCls+'" style="width:'+cScore+'%"></i></div><div class="pm-note">'+(cInfo.last?("Last: "+when(cInfo.last.ts)):"No connections yet")+' · Target: '+esc(personCadenceTargetLabel(p))+'</div></div>'
    +'<div class="pmeter"><div class="pm-lab"><span>Prayer</span><span class="pm-val tend-type-metric '+pCls+'">'+pScoreText+'</span></div><div class="bar"><i class="'+pCls+'" style="width:'+(pScore===null?0:pScore)+'%"></i></div><div class="pm-note">'+(pInfo.last?("Last: "+when(pInfo.last.ts)):"No prayers logged")+'</div></div></div>';
   }
   var i=html.indexOf('<div class="pmeters');

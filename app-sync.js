@@ -2,12 +2,13 @@
 /* ============ GitHub sync ============ */
 var SYNCcfg=(function(){try{return JSON.parse(localStorage.getItem(LS_SYNC))||{auto:true};}catch(e){return {auto:true};}})();
 window.SYNCcfg=SYNCcfg;
-var TEND_VERSION="v20261005ax";window.TEND_VERSION=TEND_VERSION;
+var TEND_VERSION="v20261006remove1";window.TEND_VERSION=TEND_VERSION;
 window._tendDirty=false;
 function ghHeaders(){return {"Authorization":"Bearer "+SYNCcfg.token,"Accept":"application/vnd.github+json"};}
 function updateSyncDot(){var dot=el("syncDot"),lbl=el("syncLabel");if(!SYNCcfg.token){dot.className="syncdot";lbl.textContent="local only";}else{dot.className="syncdot on";lbl.textContent="synced";}}
 function updateSyncErr(){var dot=el("syncDot");dot.className="syncdot err";el("syncLabel").textContent="sync error";}
 function schedulePush(){clearTimeout(pushTimer);pushTimer=setTimeout(pushNow,4000);}
+function pushPurgedGoalData(){if(!window._goalDataPurged)return;window._goalDataPurged=false;window._tendDirty=true;if(SYNCcfg.auto)schedulePush();}
 function addPersonDraftOpen(){var modal=document.getElementById("addPersonModal");return !!(modal&&modal.classList.contains("open"));}
 function pushNow(){
  if(!SYNCcfg.token||!SYNCcfg.owner||!SYNCcfg.repo){flash("Configure sync first");return;}
@@ -20,7 +21,7 @@ function pushNow(){
   return fetch(url,{method:"PUT",headers:ghHeaders(),body:JSON.stringify(body)});
  }).then(function(r){
   if(!r.ok)throw new Error("push failed ("+r.status+")");
-  SYNCcfg.lastSync=Date.now();window._tendDirty=false;localStorage.setItem(LS_SYNC,JSON.stringify(SYNCcfg));updateSyncDot();flash("Synced to GitHub");if(tab==="sync")render();
+  SYNCcfg.lastSync=Date.now();window._tendDirty=false;window._goalDataPurged=false;localStorage.setItem(LS_SYNC,JSON.stringify(SYNCcfg));updateSyncDot();flash("Synced to GitHub");if(tab==="sync")render();
  }).catch(function(e){console.error(e);updateSyncErr();flash(e.message);});}
 function pullNow(explicit){
  if(!explicit&&addPersonDraftOpen())return;
@@ -31,10 +32,11 @@ function pullNow(explicit){
   if(!r.ok)throw new Error("pull failed ("+r.status+")");return r.json();
  }).then(function(j){
   if(!explicit&&addPersonDraftOpen())return;
-  if(!j)return;var remote=JSON.parse(decodeURIComponent(escape(atob(j.content))));
+  if(!j){pushPurgedGoalData();return;}var remote=JSON.parse(decodeURIComponent(escape(atob(j.content))));if(remote&&(Object.prototype.hasOwnProperty.call(remote,"goals")||(Array.isArray(remote.events)&&remote.events.some(function(event){return !!event.goalId;}))))window._goalDataPurged=true;
   if(window._tendDirty){if(explicit)flash("Local changes not pushed - pull skipped. Push first, or use Force pull if cloud wins.");return;}
   if(remote.events&&remote.events.length>=S.events.length){S=ensureShape(remote);localStorage.setItem(LS_STATE,JSON.stringify(S));}
-  else if(explicit){flash("Cloud is older/smaller than local - kept local. Use Force pull (cloud wins) to overwrite.");return;}
+  else if(explicit){pushPurgedGoalData();flash("Cloud is older/smaller than local - kept local. Use Force pull (cloud wins) to overwrite.");return;}
+  pushPurgedGoalData();
   SYNCcfg.lastSync=Date.now();localStorage.setItem(LS_SYNC,JSON.stringify(SYNCcfg));updateSyncDot();flash("Pulled from GitHub");render();
  }).catch(function(e){console.error(e);updateSyncErr();if(explicit)flash(e.message);});}
 function forcePullNow(){
@@ -47,6 +49,7 @@ function forcePullNow(){
   var remote=JSON.parse(decodeURIComponent(escape(atob(j.content))));
   S=ensureShape(remote);localStorage.setItem(LS_STATE,JSON.stringify(S));
   window._tendDirty=false;
+  pushPurgedGoalData();
   SYNCcfg.lastSync=Date.now();localStorage.setItem(LS_SYNC,JSON.stringify(SYNCcfg));updateSyncDot();
   flash("Cloud wins - local data replaced");
   render();

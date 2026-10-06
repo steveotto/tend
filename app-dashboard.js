@@ -1,6 +1,6 @@
 "use strict";
 /* ============ settings (with sync) + iCloud calendar ============ */
-var settingsTab='general';
+var settingsTab='peoplemeters';
 function holidayFixed(month,day){return function(y){return new Date(y,month-1,day);};}
 function holidayWeekday(month,weekday,n){return function(y){var d=new Date(y,month-1,1);return new Date(y,month-1,1+(weekday-d.getDay()+7)%7+7*(n-1));};}
 var majorHolidays=[
@@ -24,22 +24,43 @@ var majorHolidays=[
 ];
 function holidayEnabled(id){return !!(S.settings&&S.settings.holidays&&S.settings.holidays[id]);}
 function holidaySettingsHTML(){return '<div class="card"><div class="subhead">Major holidays</div><p class="settings-help">Choose which U.S. holidays and occasions appear in Coming up, starting 30 days ahead. Uses the actual date, rather than an observed day off. Changes save automatically.</p><div class="holiday-options">'+majorHolidays.map(function(h){return '<label><input type="checkbox" data-holiday="'+h.id+'"'+(holidayEnabled(h.id)?' checked':'')+'><span>'+esc(h.name)+'</span></label>';}).join('')+'</div></div>';}
+var keyDateEditorDraft=null;
+function keyDateEditorHTML(){
+ if(!keyDateEditorDraft)return '';
+ var draft=keyDateEditorDraft,months=["January","February","March","April","May","June","July","August","September","October","November","December"];
+ return '<dialog class="profile-editor-dialog" data-editor-modal aria-label="'+(draft.id?'Edit':'Add')+' key date"><div class="profile-editor-body"><h3>'+(draft.id?'Edit':'Add')+' key date</h3><label class="field">Name<input id="keyDateEditorLabel" value="'+esc(draft.label||'')+'" placeholder="Key date name"></label><div class="key-date-editor-date"><label class="field">Month<select id="keyDateEditorMonth">'+months.map(function(month,index){return '<option value="'+(index+1)+'"'+(+draft.month===index+1?' selected':'')+'>'+month+'</option>';}).join('')+'</select></label><label class="field">Day<input id="keyDateEditorDay" type="number" min="1" max="31" value="'+(draft.day||1)+'"></label><label class="field">Year <span class="hint">(optional)</span><input id="keyDateEditorYear" type="number" min="1900" max="2100" value="'+(draft.year||'')+'" placeholder="Repeats yearly"></label></div>'+(S.people.length?'<fieldset class="key-date-editor-people"><legend>People</legend>'+S.people.map(function(person){var selected=kdPeopleIds(draft).indexOf(person.id)!==-1;return '<label><input type="checkbox" data-kd-editor-person="'+esc(person.id)+'"'+(selected?' checked':'')+'> '+esc(person.name)+'</label>';}).join('')+'</fieldset>':'')+'<div class="profile-editor-actions"><button type="button" class="btn mini" data-kd-editor-save>Save</button><button type="button" class="btn mini ghost" data-kd-editor-cancel data-editor-cancel>Cancel</button>'+(draft.id?'<button type="button" class="btn mini danger" style="margin-left:auto" data-kd-editor-delete>Delete</button>':'')+'</div></div></dialog>';
+}
 function keyDatesSettingsHTML(){
- var out='<div class="card"><div class="subhead">Key dates</div><p class="settings-help">Milestones worth planning for - in Coming up 30 days ahead. Optionally associate people (choose as many as apply); an associated date also appears on each person\'s profile, and one added from a person\'s profile links to them automatically. Changes save automatically.</p>';
- out+='<div class="addrow"><input id="kdNewLabel" placeholder="New key date (label)"><select id="kdNewMonth">'+[1,2,3,4,5,6,7,8,9,10,11,12].map(function(m2){return '<option value="'+m2+'">'+["January","February","March","April","May","June","July","August","September","October","November","December"][m2-1]+'</option>';}).join('')+'</select><input id="kdNewDay" type="number" min="1" max="31" value="1" style="width:56px" aria-label="Day"><button class="btn mini" id="kdAddGlobal">Add</button></div>';
- if(S.people.length)out+='<div class="kd-people">'+S.people.map(function(np){return '<label class="kd-person"><input type="checkbox" data-kdnewglobal="'+np.id+'"> '+esc(np.name)+'</label>';}).join('')+'</div>';
- out+='<div style="margin-top:10px">';
+ var out='<div class="card"><div class="subhead">Key dates</div><p class="settings-help">Milestones shown in Coming up and on associated people\'s profiles. Add or edit a date to set its name, date, and people.</p><button type="button" class="btn mini" data-kd-editor-add>+ Add key date</button><div class="settings-key-dates">';
  S.keyDates.forEach(function(k){
-  var who=kdPeopleIds(k);
-  out+='<div class="kd-row"><div class="kd-when"><input class="kd-text" data-kdtext="'+k.id+'" value="'+esc(k.label)+'" placeholder="Label"><div class="kd-md"><select data-kdmonth="'+k.id+'" aria-label="Month">'+[1,2,3,4,5,6,7,8,9,10,11,12].map(function(m2){return '<option value="'+m2+'"'+(k.month===m2?' selected':'')+'>'+["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][m2-1]+'</option>';}).join('')+'</select><input type="number" min="1" max="31" data-kdday="'+k.id+'" value="'+(k.day||1)+'" aria-label="Day"></div></div>'+(S.people.length?'<div class="kd-people">'+S.people.map(function(np){return '<label class="kd-person"><input type="checkbox" data-kdperson="'+k.id+'|'+np.id+'"'+(who.indexOf(np.id)>=0?' checked':'')+'> '+esc(np.name)+'</label>';}).join('')+'</div>':'')+'<button class="del" data-kddel="'+k.id+'" title="remove">\u00D7</button></div>';
+  var names=kdPeopleIds(k).map(function(id){var person=S.people.find(function(candidate){return candidate.id===id;});return person?person.name:'';}).filter(Boolean);
+  out+='<div class="settings-key-date-row"><div><strong>'+esc(k.label)+'</strong><span>'+esc(kdDateTxt(k))+(names.length?' · '+esc(names.join(', ')):'')+'</span></div><button type="button" class="btn mini ghost" data-kd-editor-edit="'+esc(k.id)+'">Edit</button></div>';
  });
- if(!S.keyDates.length)out+='<div class="empty">No key dates yet - add one above, or from a person\'s profile.</div>';
- out+='</div></div>';
+ if(!S.keyDates.length)out+='<div class="empty">No key dates yet — add one here or from a person\'s profile.</div>';
+ out+='</div>'+keyDateEditorHTML()+'</div>';
  return out;}
+document.addEventListener('click',function(event){
+ var button=event.target.closest&&event.target.closest('[data-kd-editor-add],[data-kd-editor-edit],[data-kd-editor-save],[data-kd-editor-cancel],[data-kd-editor-delete]');
+ if(!button)return;
+ if(button.hasAttribute('data-kd-editor-add')){keyDateEditorDraft={id:null,label:'',month:1,day:1,personIds:[]};render();return;}
+ if(button.hasAttribute('data-kd-editor-edit')){var source=S.keyDates.find(function(date){return date.id===button.getAttribute('data-kd-editor-edit');});if(source){keyDateEditorDraft=JSON.parse(JSON.stringify(source));render();}return;}
+ if(button.hasAttribute('data-kd-editor-cancel')){keyDateEditorDraft=null;render();return;}
+ if(button.hasAttribute('data-kd-editor-delete')){if(keyDateEditorDraft&&keyDateEditorDraft.id){S.keyDates=S.keyDates.filter(function(date){return date.id!==keyDateEditorDraft.id;});keyDateEditorDraft=null;save();render();flash('Key date removed');}return;}
+ if(button.hasAttribute('data-kd-editor-save')){
+  var label=document.getElementById('keyDateEditorLabel'),day=document.getElementById('keyDateEditorDay'),year=document.getElementById('keyDateEditorYear'),month=document.getElementById('keyDateEditorMonth');
+  if(!label||!label.value.trim()){flash('Add a key date name');if(label)label.focus();return;}
+  var selected=[];document.querySelectorAll('[data-kd-editor-person]:checked').forEach(function(input){selected.push(input.getAttribute('data-kd-editor-person'));});
+  var date=keyDateEditorDraft,record=date.id?S.keyDates.find(function(item){return item.id===date.id;}):null;
+  if(!record){record={id:uid()};S.keyDates.push(record);}
+  record.label=label.value.trim();record.month=+(month&&month.value)||1;record.day=Math.min(31,Math.max(1,+(day&&day.value)||1));record.personIds=selected;record.personId=selected[0]||'';
+  if(year&&String(year.value).trim())record.year=Math.min(2100,Math.max(1900,+year.value||1900));else delete record.year;
+  keyDateEditorDraft=null;save();render();flash(date.id?'Key date updated':'Key date added');
+ }
+});
 function settingsPanel(key){return '<section class="profile-tab-panel settings-panel" id="settings-panel-'+key+'" role="tabpanel" aria-labelledby="settings-tab-'+key+'"'+(settingsTab===key?'':' hidden')+'>';}
 function renderSettings(){
- var out='<div class="sectiontitle" style="margin-top:6px"><h2>Settings</h2><span class="hint">meters, calendar, goals, sync</span></div>';
- out+='<div class="profile-tabs" role="tablist" aria-label="Settings">'+[['general','General'],['times','Daily time sections'],['dates','Key dates'],['holidays','Major holidays'],['goals','Goals']].map(function(t){return '<button role="tab" id="settings-tab-'+t[0]+'" aria-controls="settings-panel-'+t[0]+'" aria-selected="'+(settingsTab===t[0])+'" data-settingstab="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div>';
+ var out='<div class="sectiontitle" style="margin-top:6px"><h2>Settings</h2><span class="hint">people, time, focus, sync</span></div>';
+ out+='<div class="profile-tabs" role="tablist" aria-label="Settings">'+[['general','General'],['times','Daily time sections'],['dates','Key dates'],['holidays','Major holidays']].map(function(t){return '<button role="tab" id="settings-tab-'+t[0]+'" aria-controls="settings-panel-'+t[0]+'" aria-selected="'+(settingsTab===t[0])+'" data-settingstab="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div>';
  out+=settingsPanel('times')+dayBlockSettingsHTML()+'</section>'+settingsPanel('dates')+keyDatesSettingsHTML()+'</section>'+settingsPanel('holidays')+holidaySettingsHTML()+'</section>'+settingsPanel('general');
  /* meters */
  var s=settings();
@@ -60,23 +81,6 @@ function renderSettings(){
  });
  if(!S.calendars.length)out+='<div class="empty">No calendars yet - add one below.</div>';
  out+='<div style="display:flex;gap:8px;margin-top:10px"><button class="btn ghost" id="calAdd">+ Add calendar</button><button class="btn" id="calSaveAll">Save &amp; refresh</button></div></div>';
- out+='</section>'+settingsPanel('goals');
- /* goals */
- out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Goals</div>';
- AREA_IDS.forEach(function(id){
-  var gs=S.goals.filter(function(g){return g.area===id;});
-  out+='<div style="margin-bottom:12px"><b style="font-size:14px">'+S.areas[id].name+'</b>';
-  gs.forEach(function(g){
-   out+='<div class="goalrow edit"><input class="goaltext" data-gtext="'+g.id+'" value="'+esc(g.text)+'">'+
-   '<select data-gcad="'+g.id+'">'+["daily","weekly","monthly","custom"].map(function(c){return '<option value="'+c+'"'+(g.cadence===c?" selected":"")+'>'+c+'</option>';}).join("")+'</select>'+
-   (g.cadence==="custom"?'<input type="number" data-gdays="'+g.id+'" value="'+(g.days||2)+'" style="width:56px">':'')+
-   '<select data-gtod="'+g.id+'" title="Time of day">'+Object.keys(TODS).map(function(t){return '<option value="'+t+'"'+((g.tod||"anytime")===t?" selected":"")+'>'+esc(TODS[t])+'</option>';}).join("")+'</select>'+
-   '<select data-gperson="'+g.id+'"><option value="">- no person -</option>'+S.people.map(function(p){return '<option value="'+p.id+'"'+(g.personId===p.id?" selected":"")+'>'+esc(p.name)+'</option>';}).join("")+'</select>'+
-   '<button class="del" data-gdel="'+g.id+'">\u00D7</button></div>';
-  });
-  out+='<div class="addrow"><input placeholder="New goal for '+S.areas[id].name+'..." data-gnewtext="'+id+'"><button class="btn mini" data-gadd="'+id+'">Add</button></div></div>';
- });
- out+='</div>';
  out+='</section>';
  /* sync */
  var st=window.SYNCcfg||{};
@@ -124,20 +128,20 @@ function fetchICS(u){
  }
  return tryOne(proxies[0]).catch(function(){return tryOne(proxies[1]);}).catch(function(){return tryOne(proxies[2]);});
 }
-function loadCalendars(){
+function loadCalendars(force){
  var strip=el("calStrip");
  var cals=(S.calendars||[]).filter(function(c){return calUrl(c.url);});
  if(!cals.length){window._calLoading=false;if(strip)strip.innerHTML='<div class="empty">No calendars connected - add one in Settings.</div>';return;}
  if(window._calLoading)return;window._calLoading=true;
  var cached=null;try{cached=JSON.parse(localStorage.getItem("tend:cal2")||"null");}catch(e){}
- if(cached&&Date.now()-cached.at<900000&&cached.n===cals.length){window._calLoading=false;renderCalStrip(cached.events);return;}
+ if(!force&&cached&&Date.now()-cached.at<900000&&cached.n===cals.length){window._calLoading=false;window._calSync=cached.synced||cached.at;renderCalStrip(cached.events);return;}
  if(strip)strip.innerHTML='<div class="empty">Loading calendars...</div>';
  function toEv(x){var m=null;cals.forEach(function(c2){if(x.cal&&c2.name===x.cal)m=c2;});if(!m)m=cals[0];return {t:x.t,s:Date.parse(x.s),e:Date.parse(x.e||x.s),cal:x.cal||m.name,color:m.color||"#4C9AFF",allDay:x.allDay};}
  fetch("events.json?t="+Date.now()).then(function(r){if(!r.ok)throw new Error("nofeed");return r.json();}).then(function(data){
   if(!data||!data.events||!data.events.length)throw new Error("empty");
-  window._calLoading=false;window._calSync=data.synced;
+  window._calLoading=false;window._calSync=data.synced||Date.now();
   var evs=data.events.map(toEv);evs.sort(function(a,b){return a.s-b.s;});
-  localStorage.setItem("tend:cal2",JSON.stringify({at:Date.now(),events:evs,n:cals.length}));
+  localStorage.setItem("tend:cal2",JSON.stringify({at:Date.now(),synced:window._calSync,events:evs,n:cals.length}));
   renderCalStrip(evs);
  }).catch(function(){
   var jobs=cals.map(function(ca){
@@ -152,7 +156,7 @@ function loadCalendars(){
    evs.sort(function(a,b){return a.s-b.s;});
    window._calLoading=false;
    if(errs.length&&cals.length===errs.length){renderCalStrip([],errs);return;}
-   if(!errs.length)localStorage.setItem("tend:cal2",JSON.stringify({at:Date.now(),events:evs,n:cals.length}));
+   if(!errs.length){window._calSync=Date.now();localStorage.setItem("tend:cal2",JSON.stringify({at:window._calSync,synced:window._calSync,events:evs,n:cals.length}));}
    renderCalStrip(evs,errs);
   });
  });
@@ -171,7 +175,7 @@ function renderCalStrip(evs,errs){
  if(errs&&errs.length)out+='<div class="empty">Could not load: '+esc(errs.join(", "))+' (calendar proxies may be down - try again)</div><button class="btn mini ghost" data-calretry="1" style="margin-top:6px">Retry</button>';
  var t0=new Date();t0.setHours(0,0,0,0);var t1=t0.getTime()+86400000;var now=Date.now();
  var tod=(evs||[]).filter(function(e){return e.s<t1&&e.e>t0;}).sort(function(a,b){return a.s-b.s;});
- if(!tod.length){out+='<div class="empty">Nothing else on the calendar today - wide open.</div>';}
+ if(!tod.length){out+='<div class="calendar-breathing-room"><span class="calendar-breathing-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="16" rx="3"/><path d="M7.5 3v4M16.5 3v4M3.5 9.5h17M8.5 15l2.2 2.2 4.8-4.8"/></svg></span><div><strong>A little room to breathe</strong><p>Your calendar is clear today. Enjoy the open space.</p></div></div>';}
  else{
   var allDay=tod.filter(function(e){return e.allDay;}),timed=tod.filter(function(e){return !e.allDay;});
   var nextShown=false;
@@ -187,7 +191,7 @@ function renderCalStrip(evs,errs){
    out+=item(e,cls);
   });
  }
- if(window._calSync){var sa=now-Date.parse(window._calSync);out+='<div class="calsync">Synced '+when(Date.parse(window._calSync))+(sa>7200000?" - may be out of date":"")+'</div>';}
+ if(window._calSync){var syncDate=new Date(window._calSync),syncToday=syncDate.toDateString()===new Date(now).toDateString(),syncWhen=syncToday?"today":syncDate.toLocaleDateString(undefined,{month:"short",day:"numeric"});out+='<button type="button" class="calsync" data-calrefresh title="Refresh calendar events now">Synced '+syncWhen+' at '+fmtT(syncDate.getTime())+'</button>';}
  strip.innerHTML=out;}
 window.TEND_LOAD_CALENDAR=loadCalendars;
 setTimeout(function(){if(el("calStrip")&&typeof loadCalendars==="function")loadCalendars();},600);
