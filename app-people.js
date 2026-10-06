@@ -9,9 +9,9 @@ var css=document.createElement("style");css.textContent=[
 ".pc-toggles{display:flex;gap:8px;flex-wrap:wrap}",
 ".pc-toggle{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 14px;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-faint);cursor:pointer;transition:all .15s}",
 ".pc-toggle .pc-dot{width:8px;height:8px;border-radius:50%;background:#C8CEC9;flex:none;transition:background .15s}",
-".pc-toggle.on{color:var(--ink);border-color:var(--forest);background:rgba(31,156,104,.06)}",
-".pc-toggle.on .pc-dot{background:var(--pc-c,#1F9C68)}",
-".pc-toggle[data-pfilter='marriage']{--pc-c:#B8912F}.pc-toggle[data-pfilter='parenting']{--pc-c:#4C7CA8}.pc-toggle[data-pfilter='friendships']{--pc-c:#C1663E}",
+".pc-toggle.on{color:var(--ink);border-color:var(--forest);background:rgba(103,197,163,.15)}",
+".pc-toggle.on .pc-dot{background:var(--pc-c,var(--forest))}",
+".pc-toggle[data-pfilter='marriage']{--pc-c:#246B52}.pc-toggle[data-pfilter='parenting']{--pc-c:#67C5A3}.pc-toggle[data-pfilter='friendships']{--pc-c:#5E6B63}",
 ".person-card{position:relative;display:flex;flex-direction:column;min-height:264px;transition:box-shadow .15s,transform .15s}",
 ".person-card:hover{box-shadow:0 10px 28px rgba(32,39,35,.09);transform:translateY(-2px)}",
 ".pc-identity{display:flex;justify-content:space-between;align-items:center;gap:12px}",
@@ -27,9 +27,9 @@ var css=document.createElement("style");css.textContent=[
 ".pc-birthday-row .pc-countdown{font-weight:400;color:var(--ink-soft)}",
 ".pc-birthday-row svg{width:14px;height:14px;flex:none;color:var(--ink-faint)}",
 ".pc-chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;letter-spacing:.01em;padding:3px 11px;border-radius:999px;background:#F2F4F1;color:var(--ink-soft);white-space:nowrap}",
-".pc-chip.rel-marriage{background:rgba(184,145,47,.13);color:#8A6D1F}",
-".pc-chip.rel-parenting{background:rgba(76,124,168,.13);color:#38648C}",
-".pc-chip.rel-friendships{background:rgba(193,102,62,.13);color:#9C4F2C}",
+".pc-chip.rel-marriage{background:rgba(36,107,82,.13);color:#246B52}",
+".pc-chip.rel-parenting{background:rgba(103,197,163,.15);color:#246B52}",
+".pc-chip.rel-friendships{background:rgba(94,107,99,.13);color:#5E6B63}",
 ".pc-chip.conn{background:#F2F4F1;font-weight:500}",
 ".pc-chip.pray{background:rgba(31,156,104,.1);color:#1F5C40}",
 ".pc-flabel{display:block;font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-faint);margin:10px 0 4px}",
@@ -185,7 +185,7 @@ window.renderPeople=renderPeople=function(){
   if(!f[cat])return;shown++;
   var sc=personScore(p),c=scoreClass(sc);
   var ci=personConnInfo(p);
-  var prayers=S.prayers.filter(function(x){return x.personId===p.id&&!x.answered&&!x.archived;}).length;
+  var prayers=personPrayerRecords(p).filter(function(x){return !x.answered&&!x.archived;}).length;
   out+='<div class="card person-card pc-'+cat+'" data-openperson="'+p.id+'" style="cursor:pointer">'+
   '<div class="pc-identity"><div class="pc-person">'+personAvatar(p,42)+'<div><h3>'+esc(p.name)+'</h3><div class="pc-relation"><span class="pc-relation-dot" aria-hidden="true"></span>'+esc(p.relation||CAT_LABEL[cat])+'</div></div></div><span class="person-card-score">'+sc+'</span></div>'+
   personHealthMeter(sc,p.name,true)+
@@ -213,7 +213,7 @@ window.personChip=function(k){
 function hexToRgb(h){h=String(h||"").replace("#","");if(h.length===3)h=h.split("").map(function(c){return c+c;}).join("");var n=parseInt(h,16);if(isNaN(n))n=0x4C9AFF;return {r:(n>>16)&255,g:(n>>8)&255,b:n&255};}
 function catTint(hex,a){var r=hexToRgb(hex);return "rgba("+r.r+","+r.g+","+r.b+","+a+")";}
 function catShade(hex,f){var r=hexToRgb(hex);return "rgb("+Math.round(r.r*(1-f))+","+Math.round(r.g*(1-f))+","+Math.round(r.b*(1-f))+")";}
-var CAT_DEFAULTS={marriage:"#B8912F",parenting:"#4C7CA8",friendships:"#C1663E"};
+var CAT_DEFAULTS={marriage:"#246B52",parenting:"#67C5A3",friendships:"#5E6B63"};
 function catColors(){var s=(S.settings&&S.settings.peopleCat)||{};var out={};["marriage","parenting","friendships"].forEach(function(k){out[k]=s[k]||CAT_DEFAULTS[k];});return out;}
 function applyCatColors(){
  var c=catColors(),st="";
@@ -240,17 +240,21 @@ function peopleColorsSettingsHTML(){
 /* ---------- prayer list (person profile) - was lost in the profile-tabs refactor ---------- */
 function prayerRowHTML(pr,pid){
  if(window._ppEditId===pr.id){
+  var prayerOwner=pr.profileOwnerId||pr.personId||"global";
   return '<div class="preq pp-row"><div class="ptext" style="flex:1">'+
   '<input data-ppfield="'+pr.id+'|text" value="'+esc(pr.text)+'" style="width:100%;margin-bottom:6px">'+
   '<textarea data-ppfield="'+pr.id+'|details" placeholder="Details (optional)" style="width:100%;min-height:50px">'+esc(pr.details||"")+'</textarea>'+
   '<div class="pp-opts"><label class="pp-option">Frequency<select data-ppfield="'+pr.id+'|freq" aria-label="Prayer frequency">'+Object.keys(FREQS).map(function(k){return '<option value="'+k+'"'+(pr.freq===k?' selected':'')+'>'+FREQS[k].label+'</option>';}).join("")+'<option value="none"'+(pr.freq?'':' selected')+'>No schedule</option></select></label><label class="pp-option">Time<select data-ppfield="'+pr.id+'|tod" aria-label="Prayer time of day">'+Object.keys(TODS).map(function(k){return '<option value="'+k+'"'+((pr.tod||'anytime')===k?' selected':'')+'>'+esc(TODS[k])+'</option>';}).join("")+'</select></label><label class="pp-option" data-schedule-day'+(scheduleHasWeekday(pr.freq)?'':' hidden')+'>Day of week<select data-ppfield="'+pr.id+'|scheduleDow">'+scheduleDayOptions(pr.scheduleDow)+'</select></label></div>'+
-  '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn mini" data-ppsave="'+pr.id+'">Save</button><button class="btn mini ghost" data-ppcancel="1">Cancel</button><button class="btn mini danger" data-prayerdel="'+pr.id+'">Delete</button></div>'+
+  tendAssociationControlsHTML("prayer",prayerOwner,pr.id,pr)+
+  '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn mini" data-ppsave="'+pr.id+'">Save</button><button class="btn mini ghost" data-ppcancel="1">Cancel</button><button class="btn mini danger" data-prayerdel="'+pr.id+'">'+(pr.profileViewingId&&pr.profileViewingId!==prayerOwner?"Remove":"Delete")+'</button></div>'+
   '</div></div>';
  }
  var times=pr.prayed||0;
+ var prayerBadges=tendAssociationPeopleBadges(pr,pr.profileOwnerId||pr.personId||"global",pr.profileViewingId||null,"prayer")+tendPrayerCategoryBadges(pr);
  return '<div class="preq pp-row"><div class="ptext" style="flex:1">'+
  '<b class="tend-type-title">'+esc(pr.text)+'</b> <span class="pc-chip pray">Prayed '+(times===1?"once":times+" times")+'</span>'+
  (pr.details?'<div class="tend-type-description" style="margin-top:3px">'+esc(pr.details)+'</div>':'')+
+ (prayerBadges?'<div class="tend-type-badges">'+prayerBadges+'</div>':'')+
  '<div class="prayer-schedule-summary tend-type-description">'+esc(pr.freq&&FREQS[pr.freq]?FREQS[pr.freq].label:'No schedule')+(scheduleDayLabel(pr)?' · '+esc(scheduleDayLabel(pr)):'')+' · '+esc(TODS[pr.tod]||TODS.anytime||'Anytime')+'</div></div>'+
  '<div class="pp-btns">'+
  '<button class="btn mini" data-prayquick="'+pid+'" data-prayref="'+pr.id+'">Pray</button>'+
@@ -263,12 +267,13 @@ function prayerList(prayers){
  if(!prayers.length)return '<div class="empty" style="margin-top:10px">No prayers yet - add one above.</div>';
  var act=prayers.filter(function(x){return !x.answered&&!x.archived;});
  var done=prayers.filter(function(x){return x.answered||x.archived;});
- var pid=(prayers[0]&&prayers[0].personId)||"";
- var out=act.map(function(pr){return prayerRowHTML(pr,pid);}).join("");
+ var pid=(prayers[0]&&(prayers[0].profileViewingId||prayers[0].personId))||"";
+ var out=act.map(function(pr){return prayerRowHTML(pr,pr.profileViewingId||pid);}).join("");
  if(done.length){
   out+='<div class="subhead" style="margin-top:14px;color:var(--forest)">Answered \u2713</div>';
   done.forEach(function(pr){
-   out+='<div class="preq answered"><div class="ptext"><span class="tend-type-title">'+esc(pr.text)+'</span>'+(pr.answered&&pr.answeredDate?'<div class="tend-type-description">answered '+esc(pr.answeredDate)+'</div>':'')+'</div><button class="pp-icon pp-history" data-prayerhistory="'+pr.id+'" title="View prayer history" aria-label="View history for '+esc(pr.text)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button class="del" data-prayerunans="'+pr.id+'" title="restore">\u21BA</button></div>';
+   var badges=tendAssociationPeopleBadges(pr,pr.profileOwnerId||pr.personId||"global",pr.profileViewingId||null,"prayer")+tendPrayerCategoryBadges(pr);
+   out+='<div class="preq answered"><div class="ptext"><span class="tend-type-title">'+esc(pr.text)+'</span>'+(pr.answered&&pr.answeredDate?'<div class="tend-type-description">answered '+esc(pr.answeredDate)+'</div>':'')+(badges?'<div class="tend-type-badges">'+badges+'</div>':'')+'</div><button class="pp-icon pp-history" data-prayerhistory="'+pr.id+'" title="View prayer history" aria-label="View history for '+esc(pr.text)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button class="del" data-prayerunans="'+pr.id+'" title="restore">\u21BA</button></div>';
   });
  }
  return out;
@@ -295,9 +300,9 @@ document.addEventListener("click",function(e){
  if(b=t.closest("#apCreate")){apCreate();return;}
  if(b=t.closest("#apPhotoClear")){window._apPhoto=null;el("apPhotoPreview").style.display="none";el("apPhotoPreview").removeAttribute("src");el("apPhotoClear").style.display="none";el("apPhoto").value="";return;}
  if(b=t.closest("[data-pfilter]")){var k=b.getAttribute("data-pfilter");var f2=pfilters();f2[k]=!f2[k];setPF(f2);render();return;}
- if(b=t.closest("[data-ppedit]")){window._ppEditId=b.getAttribute("data-ppedit");render();return;}
- if(b=t.closest("[data-ppcancel]")){window._ppEditId=null;render();return;}
- if(b=t.closest("[data-ppsave]")){var ppid=b.getAttribute("data-ppsave");var pp=S.prayers.find(function(x){return x.id===ppid;});if(pp){var t1=document.querySelector('[data-ppfield="'+ppid+'|text"]'),t2=document.querySelector('[data-ppfield="'+ppid+'|details"]'),freq=document.querySelector('[data-ppfield="'+ppid+'|freq"]'),tod=document.querySelector('[data-ppfield="'+ppid+'|tod"]');if(t1&&t1.value.trim()){pp.text=t1.value.trim();pp.details=t2?t2.value.trim():"";pp.freq=freq&&freq.value!=="none"?freq.value:null;pp.tod=tod?tod.value:"anytime";var dow=document.querySelector('[data-ppfield="'+ppid+'|scheduleDow"]');pp.scheduleDow=scheduleHasWeekday(pp.freq)&&dow&&dow.value!==""?+dow.value:null;window._ppEditId=null;save();render();flash("Prayer updated");}else flash("Keep a title on it");}return;}
+ if(b=t.closest("[data-ppedit]")){window._ppEditId=b.getAttribute("data-ppedit");var editPrayerRecord=S.prayers.find(function(item){return item.id===window._ppEditId;});if(editPrayerRecord)delete tendItemAssociationDrafts[tendAssociationKey("prayer",editPrayerRecord.personId||"global",editPrayerRecord.id)];render();return;}
+ if(b=t.closest("[data-ppcancel]")){var cancelledPrayer=S.prayers.find(function(item){return item.id===window._ppEditId;});if(cancelledPrayer)delete tendItemAssociationDrafts[tendAssociationKey("prayer",cancelledPrayer.personId||"global",cancelledPrayer.id)];window._ppEditId=null;render();return;}
+ if(b=t.closest("[data-ppsave]")){var ppid=b.getAttribute("data-ppsave");var pp=S.prayers.find(function(x){return x.id===ppid;});if(pp){var t1=document.querySelector('[data-ppfield="'+ppid+'|text"]'),t2=document.querySelector('[data-ppfield="'+ppid+'|details"]'),freq=document.querySelector('[data-ppfield="'+ppid+'|freq"]'),tod=document.querySelector('[data-ppfield="'+ppid+'|tod"]');if(t1&&t1.value.trim()){pp.text=t1.value.trim();pp.details=t2?t2.value.trim():"";pp.freq=freq&&freq.value!=="none"?freq.value:null;pp.tod=tod?tod.value:"anytime";var dow=document.querySelector('[data-ppfield="'+ppid+'|scheduleDow"]');pp.scheduleDow=scheduleHasWeekday(pp.freq)&&dow&&dow.value!==""?+dow.value:null;tendAssociationCommit("prayer",pp.personId||"global",pp.id,pp);window._ppEditId=null;save();render();flash("Prayer updated");}else flash("Keep a title on it");}return;}
  if(b=t.closest("#catColorReset")){if(S.settings)S.settings.peopleCat=JSON.parse(JSON.stringify(CAT_DEFAULTS));save();applyCatColors();render();flash("Colors reset");return;}
  var sm=t.closest(".submeter[data-person]");
  if(sm&&!t.closest('[data-openperson]')){var pid=sm.getAttribute("data-person");

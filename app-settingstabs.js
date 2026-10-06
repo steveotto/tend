@@ -32,10 +32,27 @@ document.addEventListener('click',function(event){
   calendarEditorDraft=null;save();refreshCalendarSettings();render();flash(draft.id?'Calendar updated':'Calendar added');
  }
 });
+function badgeColorsSettingsHTML(){
+ var colors=badgeColorSettings(),labels={rhythm:'Rhythm',spark:'Spark',prayer:'Prayer',faith:'Faith'};
+ return '<div class="card settings-card"><div class="subhead">Badge colors</div><p class="settings-help">Choose a distinct brand color for each badge. The app keeps the badge text readable against a softly tinted background.</p><div class="badge-color-settings">'+Object.keys(labels).map(function(key){return '<label class="badge-color-setting" for="badgeColor-'+key+'"><span>'+labels[key]+'</span><input type="color" id="badgeColor-'+key+'" data-badge-color="'+key+'" value="'+colors[key]+'"><span class="plan-kind plan-kind-'+key+'">'+(key==='faith'?collectionIcon('faith'):key==='rhythm'?collectionIcon('rhythms'):key==='spark'?collectionIcon('sparks'):collectionIcon('prayer'))+' '+labels[key]+'</span></label>';}).join('')+'</div><p class="settings-help">Color changes are saved automatically on this device.</p></div>';
+}
+document.addEventListener('input',function(event){
+ var input=event.target.closest&&event.target.closest('[data-badge-color]');
+ if(!input||!/^#[0-9a-fA-F]{6}$/.test(input.value))return;
+ document.documentElement.style.setProperty('--badge-'+input.getAttribute('data-badge-color')+'-color',input.value);
+});
+document.addEventListener('change',function(event){
+ var input=event.target.closest&&event.target.closest('[data-badge-color]'),key;
+ if(!input||!/^#[0-9a-fA-F]{6}$/.test(input.value))return;
+ key=input.getAttribute('data-badge-color');
+ S.settings.badgeColors=badgeColorSettings();
+ S.settings.badgeColors[key]=input.value;
+ save();applyBadgeColors();flash('Badge color saved');
+});
 function renderSettings(){
  if(settingsTab==='general'||settingsTab==='peoplecolors'||settingsTab==='goals')settingsTab='peoplemeters';
  if(settingsTab==='times'||settingsTab==='dates'||settingsTab==='holidays'||settingsTab==='calendars')settingsTab='schedule';
- var tabs=[['peoplemeters','People & meters'],['schedule','Time & dates'],['focus','Focus'],['sync','Sync']];
+ var tabs=[['peoplemeters','People & meters'],['badges','Badge colors'],['schedule','Time & dates'],['focus','Focus'],['sync','Sync']];
  var out='<div class="sectiontitle settings-title"><h2>Settings</h2><span class="hint">Make Tend work for you</span></div>';
  out+='<p class="settings-intro">Choose a section below to update your preferences.</p>';
  out+='<div class="profile-tabs settings-tabs" role="tablist" aria-label="Settings">'+tabs.map(function(t){return '<button type="button" role="tab" id="settings-tab-'+t[0]+'" aria-controls="settings-panel-'+t[0]+'" aria-selected="'+(settingsTab===t[0])+'" data-settingstab="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div>';
@@ -49,6 +66,7 @@ function renderSettings(){
   '<div class="setrow meter-baseline-row"><label for="setBase">Starting score for inactive areas</label><input type="number" id="setBase" min="0" max="100" value="'+settings().baseline+'"></div>'+
   '<p class="settings-help meter-baseline-help">This baseline starts activity-based area scores when there are no recent events and no active rhythms. Faith uses its active practice scores; people, rhythms, and prayers use their own scoring.</p>'+
   '<button class="btn" id="setSave">Save meter settings</button></div></div></section>';
+ out+=settingsPanel('badges')+badgeColorsSettingsHTML()+'</section>';
  out+=settingsPanel('schedule')+dayBlockSettingsHTML()+keyDatesSettingsHTML()+holidaySettingsHTML();
  out+='<div class="card settings-card"><div class="subhead">Connected calendars</div><p class="settings-help">Add a public iCloud calendar to show its events on your Tend dashboard. On iCloud.com, open Calendar, choose the share icon beside a calendar, enable Public Calendar, and copy its link.</p>';
  (S.calendars||[]).forEach(function(ca){

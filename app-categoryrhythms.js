@@ -15,7 +15,7 @@
  var areaRhythmDraft=null,areaRhythmEditId=null;
  var faithPickerPrevious=null;
 
- function areaIds(r){return Array.isArray(r.areas)?r.areas.filter(function(id){return CATEGORY_AREA_SET[id];}):[];}
+ function areaIds(r){var ids=Array.isArray(r.areas)?r.areas.filter(function(id){return CATEGORY_AREA_SET[id];}):[];if((r.category==="faith"||FAITH_SUBCATEGORIES.indexOf(r.faithGroup)>=0)&&ids.indexOf("faith")<0)ids.unshift("faith");return ids;}
  function areaChecks(r,idf){
   return '<fieldset class="rhythm-area-checks"><legend>Show in categories</legend>'+CATEGORY_AREAS.map(function(id){
    var name=CATEGORY_AREA_LABELS[id]||(S.areas[id]&&S.areas[id].name)||id;
@@ -29,7 +29,8 @@
    return option+'</div>';
   }).join("")+'</fieldset>';
  }
- function categoryLabel(id,record){return id==="faith"&&record&&record.faithGroup?"Faith - "+record.faithGroup:CATEGORY_AREA_LABELS[id]||(S.areas[id]&&S.areas[id].name)||id;}
+ function categoryLabel(id,record){return id==="faith"?"Faith - "+(record&&record.faithGroup||"Prayer"):CATEGORY_AREA_LABELS[id]||(S.areas[id]&&S.areas[id].name)||id;}
+ window.tendRhythmCategoryIds=areaIds;
  function areaBadges(r){
   var ids=areaIds(r);
   if(!ids.length)return "";
@@ -38,10 +39,11 @@
    return '<button type="button" class="rhythm-area-badge" data-rhythm-area-badge="'+esc(id)+'" data-category-tooltip="'+esc(name)+'"'+(id==="faith"?' data-rhythm-faith-subcategory="'+esc(r.faithGroup||"Prayer")+'"':'')+' title="'+esc(name)+'" aria-label="Open '+esc(name)+'">'+(AREA_ICONS[id]||"")+'</button>';
   }).join("")+'</span>';
  }
+ window.tendCategoryBadges=areaBadges;
  var baseScheduleHTML=window.personRhythmScheduleHTML;
  window.personRhythmScheduleHTML=function(r,idf){
   if(String(idf).indexOf("faith|")===0)return baseScheduleHTML(r,idf);
-  return baseScheduleHTML(r,idf)+areaChecks(r,idf);
+  return baseScheduleHTML(r,idf);
  };
  var baseFaithRhythmRow=window.faithRhythmRowHTML;
  window.faithRhythmRowHTML=function(record){
@@ -79,12 +81,12 @@
   if(item.person){
    var html=window.rhythmRow(item.person,record);
    html=html.replace(/data-tend-open="person-rhythm"/,function(match){return match+' data-rhythm-area="'+esc(id)+'"';});
-   html=html.replace("</b>",'</b><button type="button" class="rhythm-person-badge" data-openperson="'+esc(item.person.id)+'" aria-label="Open '+esc(item.person.name)+'">'+personAvatar(item.person,22)+'<span>'+esc(item.person.name.trim().split(/\s+/)[0])+'</span></button>');
+   html=html.replace("</strong>",'</strong><span class="pill rhy">'+collectionIcon("rhythms")+' Rhythm</span><button type="button" class="rhythm-person-badge" data-openperson="'+esc(item.person.id)+'" aria-label="Open '+esc(item.person.name)+'">'+personAvatar(item.person,22)+'<span>'+esc(item.person.name.trim().split(/\s+/)[0])+'</span></button>');
    return html;
   }
   if(areaRhythmEditId===record.id){var editRecord=areaRhythmDraft&&areaRhythmDraft.areaId===id&&areaRhythmDraft.record.id===record.id?areaRhythmDraft.record:record;return categoryRhythmFormHTML(id,editRecord,record.id);}
-  var score=rhythmScore(record),last=rhythmLast(record),lastText=last?"last tended "+when(last.ts):"not yet tended";
-  return '<div class="rhyrow"><span class="rhythm-health"><span class="sm-dot '+scoreClass(score)+'" aria-hidden="true"></span><span>'+score+'%</span></span><div class="gr-main"><b class="tend-type-title">'+esc(record.text||"(unnamed rhythm)")+'</b>'+(record.description?'<div class="gr-meta tend-type-description">'+esc(record.description)+'</div>':'')+'<div class="gr-meta tend-type-meta">'+esc(rhythmFreqLabel(record))+(record.tod&&record.tod!=="anytime"?" · "+esc(TODS[record.tod]):"")+" · "+esc(lastText)+(last&&rhythmDaysSince(record)!==0?" · "+esc(rhythmDueTxt(record)):"")+'</div></div><button type="button" class="btn mini" data-tend-open="area-rhythm" data-area-id="'+esc(id)+'" data-rhythm-id="'+esc(record.id)+'">Tend</button><button type="button" class="iconbtn rhythm-history-trigger" data-rhyhistory="area-rhythm|'+esc(id)+'|'+esc(record.id)+'" aria-label="View history for '+esc(record.text)+'" title="View rhythm history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button type="button" class="iconbtn" data-area-rhythm-edit="'+esc(id)+'|'+esc(record.id)+'" aria-label="Edit '+esc(record.text)+'" title="Edit">✎</button><button type="button" class="iconbtn" data-area-rhythm-delete="'+esc(id)+'|'+esc(record.id)+'" aria-label="Delete '+esc(record.text)+'" title="Delete">×</button></div>';
+  var score=rhythmScore(record),badges='<span class="pill rhy">'+collectionIcon("rhythms")+' Rhythm</span>'+areaBadges(record),meta=tendRhythmMetaLabel(record,null,true);
+  return '<div class="rhyrow"><span class="rhythm-health"><span class="sm-dot '+scoreClass(score)+'" aria-hidden="true"></span><span>'+score+'%</span></span><div class="gr-main">'+tendRowContent(record.text||"(unnamed rhythm)",record.description||"",meta,badges)+'</div><button type="button" class="btn mini" data-tend-open="area-rhythm" data-area-id="'+esc(id)+'" data-rhythm-id="'+esc(record.id)+'">Tend</button><button type="button" class="iconbtn rhythm-history-trigger" data-rhyhistory="area-rhythm|'+esc(id)+'|'+esc(record.id)+'" aria-label="View history for '+esc(record.text)+'" title="View rhythm history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button type="button" class="iconbtn" data-area-rhythm-edit="'+esc(id)+'|'+esc(record.id)+'" aria-label="Edit '+esc(record.text)+'" title="Edit">✎</button><button type="button" class="iconbtn" data-area-rhythm-delete="'+esc(id)+'|'+esc(record.id)+'" aria-label="Delete '+esc(record.text)+'" title="Delete">×</button></div>';
  }
  window.faithLinkedRhythmCount=function(group){return categoryRhythms("faith").filter(function(item){return (item.record.faithGroup||"Prayer")===group&&!item.record.disabled&&!rhythmEnded(item.record);}).length;};
  window.faithLinkedRhythmRows=function(group){return categoryRhythms("faith").filter(function(item){return (item.record.faithGroup||"Prayer")===group&&!item.record.disabled&&!rhythmEnded(item.record);}).sort(function(a,b){return String(a.record.text||"").localeCompare(String(b.record.text||""));}).map(function(item){return categoryRhythmRow(item,"faith");}).join("");};
@@ -299,5 +301,6 @@
  styles.textContent+=".rhythm-area-checks .rhythm-faith-option{display:block;flex:0 0 auto}";
  styles.textContent+=".rhythm-area-checks{display:grid;grid-template-columns:repeat(3,max-content);justify-content:center;align-items:center;gap:8px 12px}.rhythm-area-checks legend{grid-column:1/-1}.rhythm-area-checks .rhythm-faith-option{flex:none}@media(max-width:520px){.rhythm-area-checks{grid-template-columns:repeat(2,max-content);gap:8px}}";
  styles.textContent+=".profile-editor-dialog .rhyedit{border:0;background:transparent;padding:0}.profile-editor-dialog .rhythm-area-checks{box-sizing:border-box;width:100%;margin:8px 0 4px;padding:12px;border:1px solid var(--line);border-radius:12px}";
+ styles.textContent+=".profile-editor-dialog .rhythm-area-checks{grid-template-columns:repeat(3,minmax(0,1fr));justify-content:stretch;align-items:stretch}.profile-editor-dialog .rhythm-area-option,.profile-editor-dialog .rhythm-area-option>label{box-sizing:border-box;width:100%;min-width:0}.profile-editor-dialog .rhythm-area-option>label{min-height:34px}@media(max-width:520px){.profile-editor-dialog .rhythm-area-checks{grid-template-columns:repeat(2,minmax(0,1fr))}}";
  document.head.appendChild(styles);
 })();
