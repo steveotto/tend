@@ -3,7 +3,7 @@
    filled green state - matches areanav/tabs "selected" language. Without
    this rule the .active class has no styles, so every day looks the same. */
 (function(){var st=document.createElement("style");st.id="dayJumpActiveStyle";
-st.textContent=".day-jumps .btn.active,.btn.ghost.active{background:var(--forest);color:#fff;border-color:var(--forest);box-shadow:0 1px 6px rgba(30,156,104,.25)}"
+st.textContent=".day-jumps .btn.active,.btn.ghost.active{background:var(--forest);color:#fff;border-color:var(--forest);box-shadow:0 1px 6px rgba(36,107,82,.25)}"
 +".day-jumps .btn.active:hover,.btn.ghost.active:hover{background:var(--forest-deep)}";
 document.head.appendChild(st);})();
 /* ============ rhythms: no more Connection/Prayer sub-category ============

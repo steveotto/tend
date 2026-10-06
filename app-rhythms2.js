@@ -178,22 +178,25 @@ personRhythmScheduleHTML=function(r,idf){
 rhythmRow=function(p,r){
  ensureRhythm(r);
  var sc=rhythmScore(r),c=scoreClass(sc),scoreText=sc===null?"-":sc;
+ var ownerId=r.profileOwnerId||p.id,idf=ownerId+"|"+r.id;
  if(editRhythmId===r.id){
-  if(!rhythmEditDraft||rhythmEditDraft.id!==r.id)rhythmEditDraft=JSON.parse(JSON.stringify(r));
+  if(!rhythmEditDraft||rhythmEditDraft.id!==r.id){rhythmEditDraft=JSON.parse(JSON.stringify(r));delete rhythmEditDraft.profileOwnerId;}
   r=rhythmEditDraft;
-  var idf=p.id+"|"+r.id;
-  var out='<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="rhythm-editor-title"><div class="profile-editor-body"><h3 id="rhythm-editor-title">Edit Rhythm</h3><div class="rhyedit">';
+  var out='<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="rhythm-editor-title"><div class="profile-editor-body"><h3 id="rhythm-editor-title" tabindex="-1">Edit Rhythm</h3><div class="rhyedit">';
   out+='<div class="addrow" style="margin-top:2px"><input data-rfield="'+idf+'|text" value="'+esc(r.text)+'" placeholder="What is the rhythm?"></div>';
   out+='<label class="careplan-field rhythm-description-field">Description (optional)<textarea data-rfield="'+idf+'|description" placeholder="Add context or details">'+esc(r.description||'')+'</textarea></label>';
   out+=personRhythmScheduleHTML(r,idf);
-  out+='<div class="profile-editor-actions"><button class="btn mini" data-rhyeditsave="'+idf+'">Save</button><button class="btn mini ghost" data-rhyeditcancel="1" data-editor-cancel>Cancel</button><button class="btn mini danger" style="margin-left:auto" data-rhydel="'+idf+'">Delete</button></div>';
+  out+=rhythmPickerControlsHTML(ownerId,r,idf);
+  out+='<div class="profile-editor-actions rhythm-editor-actions"><div class="rhythm-editor-primary-actions"><button class="btn mini" data-rhyeditsave="'+idf+'">Save</button><button class="btn mini ghost" data-rhyeditcancel="1" data-editor-cancel>Cancel</button></div><button class="btn mini danger" data-rhydel="'+idf+'">'+(currentPerson!==ownerId?"Remove":"Delete")+'</button></div>';
   out+='</div></div></dialog>';
   return out;
  }
- var rl=rhythmLast(r),lastTxt=rl?("last tended "+when(rl.ts)):"not yet tended";
- var timingTxt=lastTxt+(rl&&rhythmDaysSince(r)!==0?" \u00B7 "+rhythmDueTxt(r):"");
- var description=r.description&&String(r.description).trim()?'<div class="gr-meta tend-type-description">'+esc(String(r.description).trim())+'</div>':'';
- return '<div class="rhyrow"><span class="rhythm-health tend-type-metric" title="Rhythm health"><span class="sm-dot '+c+'" aria-hidden="true"></span><span>'+scoreText+(sc===null?'':'%')+'</span></span><div class="gr-main"><b class="tend-type-title">'+esc(r.text||"(unnamed rhythm)")+'</b>'+description+'<div class="gr-meta tend-type-meta">'+esc(rhythmFreqLabel(r))+(r.tod&&r.tod!=="anytime"?" \u00b7 "+esc(TODS[r.tod]):"")+(rhythmEnded(r)?" \u00b7 ended":"")+" \u00b7 "+esc(timingTxt)+'</div></div>'+rhyDoneBtn(p.id+"|"+r.id)+'<button class="iconbtn rhythm-history-trigger" data-rhyhistory="'+p.id+'|'+r.id+'" title="View rhythm history" aria-label="View history for '+esc(r.text)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button class="iconbtn" data-rhyedit="'+r.id+'" title="edit">\u270E</button></div>';
+ var categories=rhythmPeopleBadges(r,p.id)+(typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(r):"");
+ var meta=tendRhythmMetaLabel(r,null,true)+(rhythmEnded(r)?" \u00b7 ended":"");
+ var faithShared=r.sharedFaithRhythm===true;
+ var tendAction=faithShared&&typeof faithTendAction==="function"?faithTendAction(r):rhyDoneBtn(ownerId+"|"+r.id);
+ var editAction=faithShared?'<button class="iconbtn" data-faith-rhythm-profile-edit="'+esc(r.id)+'" title="Edit in Faith" aria-label="Edit '+esc(r.text)+' in Faith">\u270E</button><button class="iconbtn" data-rhydel="faith|'+esc(r.id)+'" title="Remove from profile" aria-label="Remove '+esc(r.text)+' from this profile">\u00D7</button>':'<button class="iconbtn" data-rhyedit="'+idf+'" title="edit">\u270E</button>';
+ return '<div class="rhyrow"><span class="rhythm-health tend-type-metric" title="Rhythm health"><span class="sm-dot '+c+'" aria-hidden="true"></span><span>'+scoreText+(sc===null?'':'%')+'</span></span><div class="gr-main">'+tendRowContent(r.text||"(unnamed rhythm)",String(r.description||"").trim(),meta,categories)+'</div>'+tendAction+'<button class="iconbtn rhythm-history-trigger" data-rhyhistory="'+ownerId+'|'+r.id+'" title="View rhythm history" aria-label="View history for '+esc(r.text)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button>'+editAction+'</div>';
 };
 draftRow=function(p){
  var r=rhythmDraft,idf=p.id+"|draft";
@@ -202,6 +205,7 @@ draftRow=function(p){
  out+='<div class="addrow" style="margin-top:2px"><input data-rfield="'+idf+'|text" value="'+esc(r.text||"")+'" placeholder="What is the rhythm?"></div>';
  out+='<label class="careplan-field rhythm-description-field">Description (optional)<textarea data-rfield="'+idf+'|description" placeholder="Add context or details">'+esc(r.description||'')+'</textarea></label>';
  out+=personRhythmScheduleHTML(r,idf);
+ out+=rhythmPickerControlsHTML(p.id,r,idf);
  out+='</div>';
  return out;
 };

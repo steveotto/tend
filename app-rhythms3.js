@@ -12,7 +12,7 @@
  var RHYTHM_FREQS={selectdays:{label:"Select Days"},daily:{label:"Daily"},weekly:{label:"Weekly"},monthly:{label:"Monthly"},quarterly:{label:"Quarterly"},yearly:{label:"Yearly"},custom:{label:"Custom"}};
  var R_MOS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
  var R_ORDS=["1st","2nd","3rd","4th","last"];
- var RHYTHM_FIELD_LIST=["description","areas","faithGroup","weekdays","monthlyMode","dayOfMonth","ord","ordWeekday","month","monthDay","qmonth","every","unit","until","start"];
+ var RHYTHM_FIELD_LIST=["description","areas","faithGroup","weekdays","monthlyMode","dayOfMonth","ord","ordWeekday","month","monthDay","qmonth","every","unit","until","start","sharedWith"];
  /* ---- migration (mirror of rhythms2, re-applied lazily) ---- */
  function ensureRhythm(r){
   if(!r)return r;
@@ -49,7 +49,8 @@
   if(u==="weekly"||u==="weeks"||u==="selectdays")out+='<div class="addrow"><span class="rlabel">On</span>'+rDowPills(r,A)+'</div>';
   if(u==="monthly"||u==="months"||u==="quarterly"){
    if(u==="quarterly"){var qm=+r.qmonth||(((new Date().getMonth())%3)+1);out+='<div class="addrow"><span class="rlabel">In</span><select '+A("qmonth")+'>'+[[1,"Jan \u2022 Apr \u2022 Jul \u2022 Oct"],[2,"Feb \u2022 May \u2022 Aug \u2022 Nov"],[3,"Mar \u2022 Jun \u2022 Sep \u2022 Dec"]].map(function(q){return '<option value="'+q[0]+'"'+(qm===q[0]?' selected':'')+'>'+q[1]+'</option>';}).join('')+'</select></div>';}
-   out+=scheduleMonthPattern(r,A,grp);
+   var onDay=r.monthlyMode!=="onThe";
+   out+='<div class="addrow monthly-mode-options"><div class="monthly-mode-option"><label class="rmode"><input type="radio" name="'+grp+'" '+A("monthlyMode")+' value="onDay"'+(onDay?' checked':'')+'> On day</label><select '+A("dayOfMonth")+(onDay?'':' disabled')+'>'+scheduleOptions(Array.from({length:28},function(_,i){return [i+1,String(i+1)];}),r.dayOfMonth||1)+'</select></div><div class="monthly-mode-option"><label class="rmode"><input type="radio" name="'+grp+'" '+A("monthlyMode")+' value="onThe"'+(onDay?'':' checked')+'> On the</label>'+rOrdSelect(r,A,null,onDay)+'</div></div>';
   }
   if(u==="yearly"||u==="years"){
    out+='<div class="addrow"><label class="rmode"><input type="radio" name="'+grp+'" '+A("monthlyMode")+' value="onDay"'+(r.monthlyMode!=="onThe"?' checked':'')+'> On</label>'+rMonthSelect(r,A,"month",r.monthlyMode==="onThe")+rDaySelect(r,A,"monthDay",r.monthlyMode==="onThe",31)+'</div>';
@@ -74,7 +75,7 @@
   +".rhy-recur .addrow select,.rhy-recur .addrow input[type=number]{flex:0 0 auto;width:auto;min-width:84px}"
   +".rhy-recur .addrow input[type=date]{flex:0 0 auto;width:160px}"
   +".rhy-recur .rhy-daterow{flex-wrap:wrap;gap:10px}"
-  +".rhy-end-date{display:grid;gap:8px;margin-top:4px}.rhy-end-toggle{display:inline-flex;align-items:center;gap:8px;width:max-content;color:var(--ink);font-size:13px;cursor:pointer}.rhy-end-toggle input{width:17px;height:17px;accent-color:var(--forest)}.rhy-end-field{display:grid;gap:5px;width:max-content;color:var(--ink-soft);font-size:12px}.rhy-end-field[hidden]{display:none}.rhy-end-field input[type=date]{width:180px}"
+  +".rhy-end-date{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:8px}.rhy-end-toggle{display:inline-flex;align-items:center;gap:8px;width:max-content;color:var(--ink);font-size:13px;cursor:pointer}.rhy-end-toggle input{width:17px;height:17px;accent-color:var(--forest)}.rhy-end-field{display:inline-flex;align-items:center;gap:8px;width:max-content;color:var(--ink-soft);font-size:12px}.rhy-end-field[hidden]{display:none}.rhy-end-field input[type=date]{width:180px}"
   +".rhy-recur select:disabled,.rhy-recur input:disabled{opacity:.45;cursor:not-allowed;background:var(--mist)}";
   document.head.appendChild(st);
  }catch(err){}
