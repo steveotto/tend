@@ -3,13 +3,8 @@
 (function(){
 var css=document.createElement("style");css.textContent=".plan-pills{flex-wrap:wrap}";document.head.appendChild(css);
 window.planPills=function(it){
- var label=it.rhythm||it.rkey?"Rhythm":it.spark||it.sparky?"Spark":it.taskId?"Task":it.goalId?"Goal":"Suggestion";
+ var label=it.rhythm||it.rkey?"Rhythm":it.spark||it.sparky?"Spark":it.taskId?"Task":"Suggestion";
  var ids=[];
- if(it.goalId&&typeof goalPeople==="function"){
-  var g=S.goals.find(function(x){return x.id===it.goalId;});
-  /* goalPeople returns id STRINGS; tolerate person objects too */
-  if(g)ids=goalPeople(g).map(function(x){return (typeof x==="string")?x:(x&&x.id);}).filter(Boolean);
- }
  if(!ids.length&&it.personId)ids=[it.personId];
  var pills=ids.map(function(id){
   var person=S.people.find(function(p){return p.id===id;});

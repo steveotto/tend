@@ -1,5 +1,5 @@
 "use strict";
-/* ============ Tend core: state, goals, meter engine v2 ============ */
+/* ============ Tend core: state and meter engine v2 ============ */
 var LS_STATE="tend:state",LS_SYNC="tend:sync";
 var KINDS={coffee:{label:"Coffee / one-on-one",w:8},meal:{label:"Meal together",w:7},date:{label:"Date / night out",w:9},call:{label:"Call / FaceTime",w:4},text:{label:"Text / note",w:2},quality:{label:"Quality time",w:7},workout:{label:"Workout",w:5},outdoors:{label:"Walk / outdoors",w:4},prayer:{label:"Prayer",w:4},scripture:{label:"Scripture",w:3},rest:{label:"Rest / sabbath",w:5},actservice:{label:"Act of service",w:6},note:{label:"Note / journal",w:2}};
 var ETYPES={inperson:{label:"In Person",w:8},text:{label:"Text",w:2},call:{label:"Call",w:5},video:{label:"Facetime",w:6},prayer:{label:"Prayer",w:3},quality:{label:"In Person",w:8},note:{label:"Handwritten Note",w:2},gift:{label:"Gift",w:5},other:{label:"Other",w:3}};
@@ -7,23 +7,8 @@ var KIND2TYPE={coffee:"inperson",meal:"inperson",date:"inperson",quality:"inpers
 var RIPPLE_TYPES={text:"Text",call:"Call",video:"Facetime",prayer:"Prayer",quality:"In Person",note:"Handwritten Note",gift:"Gift",other:"Other"};
 function typeLabel(e){if(e.rippleLabel)return e.rippleLabel==="One-on-One"?"In Person":e.rippleLabel;return e.type&&ETYPES[e.type]?ETYPES[e.type].label:(KINDS[e.kind]?KINDS[e.kind].label:e.kind);}
 function typeWeight(e){return e.type&&ETYPES[e.type]?ETYPES[e.type].w:(KINDS[e.kind]?KINDS[e.kind].w:3);}
-var CADENCES={daily:{label:"Daily",days:1},weekly:{label:"Weekly",days:7},monthly:{label:"Monthly",days:30},annual:{label:"Annually",days:365},custom:{label:"Custom",days:2}};
 var DEFAULT_SETTINGS={greenAt:80,yellowAt:50,baseline:50};
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
-function defaultGoals(){return[
- {id:"g-bible",area:"faith",text:"Read the Bible",cadence:"daily",personId:null,kind:"scripture"},
- {id:"g-pray-amy",area:"marriage",text:"Pray with Amy",cadence:"daily",personId:"amy",kind:"prayer"},
- {id:"g-date-amy",area:"marriage",text:"Date night with Amy",cadence:"weekly",personId:"amy",kind:"date"},
- {id:"g-d-hannah",area:"parenting",text:"One-on-one date with Hannah",cadence:"monthly",personId:"hannah",kind:"date"},
- {id:"g-d-jake",area:"parenting",text:"One-on-one date with Jake",cadence:"monthly",personId:"jacob",kind:"date"},
- {id:"g-d-leah",area:"parenting",text:"One-on-one date with Leah",cadence:"monthly",personId:"leah",kind:"date"},
- {id:"g-d-lucas",area:"parenting",text:"Connect with Lucas",cadence:"monthly",personId:"lucas",kind:"quality"},
- {id:"g-d-addi",area:"parenting",text:"Connect with Addi",cadence:"monthly",personId:"addi",kind:"quality"},
- {id:"g-walk",area:"health",text:"Evening walk with Amy",cadence:"daily",personId:"amy",kind:"outdoors"},
- {id:"g-strength",area:"health",text:"30 min strength training",cadence:"custom",days:2,kind:"workout"},
- {id:"g-core",area:"health",text:"Daily core: plank 3 min, ab wheel, decline sit-ups",cadence:"daily",kind:"workout"},
- {id:"g-wedding",area:"parenting",text:"Wedding prep with Jake",cadence:"weekly",personId:"jacob",kind:"quality"}
-];}
 function defaultKeyDates(){return[
  {id:"kd-leah",personId:"leah",label:"Leah's birthday",month:9,day:28},
  {id:"kd-hannah",personId:"hannah",label:"Hannah's birthday",month:2,day:13},
@@ -98,22 +83,21 @@ function nowHM(){var d=new Date();return String(d.getHours()).padStart(2,"0")+":
 function fmtHM(ts){var d=new Date(ts);var h=d.getHours(),m=String(d.getMinutes()).padStart(2,"0");var ap=h>=12?"pm":"am";h=h%12||12;return h+":"+m+ap;}
 function defaultState(){return{version:2,
  people:[{id:"amy",name:"Amy",relation:"Spouse",area:"marriage",rhythms:defaultRhythms()},{id:"hannah",name:"Hannah",relation:"Daughter",area:"parenting"},{id:"jacob",name:"Jake",relation:"Son",area:"parenting",sparks:defaultSparks()},{id:"leah",name:"Leah",relation:"Daughter",area:"parenting"},{id:"lucas",name:"Lucas",relation:"Bonus son",area:"parenting"},{id:"addi",name:"Addi",relation:"Bonus daughter",area:"parenting"}],
- events:[],tasks:[],goals:defaultGoals(),followups:[],prayers:[],ideas:[],echoes:[{id:uid(),title:"Photographers - Jake & Addi's wedding",note:"Contacts to reach out to. Status: to contact / contacted / met / booked / passed.",items:[]}],keyDates:defaultKeyDates(),checklists:defaultChecklists(),settings:JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),rhythms:defaultFaithRhythms(),categories:defaultCategories(),faithConfig:defaultFaithConfig(),
+ events:[],tasks:[],followups:[],prayers:[],ideas:[],echoes:[{id:uid(),title:"Photographers - Jake & Addi's wedding",note:"Contacts to reach out to. Status: to contact / contacted / met / booked / passed.",items:[]}],keyDates:defaultKeyDates(),checklists:defaultChecklists(),settings:JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),rhythms:defaultFaithRhythms(),categories:defaultCategories(),faithConfig:defaultFaithConfig(),
  calendars:[{id:"cal-home",name:"Home",url:"https://p106-caldav.icloud.com/published/2/MjcyMTgwNTc5MjcyMTgwNfAweM4Mnge_B7jsSIKiQGrhnfAemrtl8LYeoKtz2A0MTFihcXWvdiyB4fotJ9jrIRWeawSqJWitMgtfFaZ1XRxvE-3phMRdiHY_izguI0iXG6szeG4SjHgOO6Uvy8Rgbw",color:"#4C9AFF"}],
  areas:{faith:{name:"Faith"},marriage:{name:"Marriage"},parenting:{name:"Parenting"},health:{name:"Health & Fitness"},finances:{name:"Finances"},friendships:{name:"Friendships"}}};}
-function load(){try{var s=localStorage.getItem(LS_STATE);if(!s)return defaultState();var st=ensureShape(JSON.parse(s));st.version=2;
-if(st.areas&&st.areas.fitness){st.areas.health={name:"Health & Fitness"};delete st.areas.fitness;(st.events||[]).forEach(function(x){if(x.areaId==="fitness")x.areaId="health";});(st.tasks||[]).forEach(function(x){if(x.areaId==="fitness")x.areaId="health";});(st.goals||[]).forEach(function(g){if(g.area==="fitness")g.area="health";});}
+function load(){try{var s=localStorage.getItem(LS_STATE);if(!s)return defaultState();var original=JSON.parse(s),needsGoalCleanup=!!original&&(Object.prototype.hasOwnProperty.call(original,"goals")||(Array.isArray(original.events)&&original.events.some(function(event){return !!event.goalId;}))),st=ensureShape(original);st.version=2;
+if(st.areas&&st.areas.fitness){st.areas.health={name:"Health & Fitness"};delete st.areas.fitness;(st.events||[]).forEach(function(x){if(x.areaId==="fitness")x.areaId="health";});(st.tasks||[]).forEach(function(x){if(x.areaId==="fitness")x.areaId="health";});}
  if(!st.areas.finances)st.areas.finances={name:"Finances"};
  var wantPeople=[{id:"amy",name:"Amy",relation:"wife"},{id:"hannah",name:"Hannah",relation:"daughter"},{id:"jacob",name:"Jake",relation:"son"},{id:"leah",name:"Leah",relation:"daughter"},{id:"lucas",name:"Lucas",relation:"son-in-law"},{id:"addi",name:"Addi",relation:"future daughter-in-law"}];
  wantPeople.forEach(function(p){var ex=st.people&&st.people.find(function(x){return x.id===p.id;});if(ex){if(p.id==="jacob")ex.name="Jake";ex.area=ex.area||"parenting";}else{st.people.push({id:p.id,name:p.name,relation:p.relation,area:p.id==="amy"?"marriage":"parenting"});}});
  var _am=st.people.find(function(x){return x.id==="amy";});if(_am&&!_am.rhythms)_am.rhythms=defaultRhythms();
 var _jk=st.people.find(function(x){return x.id==="jacob";});if(_jk&&!(_jk.sparks&&_jk.sparks.length))_jk.sparks=defaultSparks();
- st.goals=st.goals&&st.goals.length?st.goals:defaultGoals();
  st.keyDates=st.keyDates&&st.keyDates.length?st.keyDates:defaultKeyDates();
  st.checklists=st.checklists&&st.checklists.length?st.checklists:defaultChecklists();
  st.ideas=st.ideas||[];st.echoes=st.echoes&&st.echoes.length?st.echoes:defaultState().echoes;
- return st;}catch(e){return defaultState();}}
-function ensureShape(st){st=st||{};["events","tasks","goals","followups","prayers","ideas","echoes","keyDates","checklists"].forEach(function(k){if(!Array.isArray(st[k]))st[k]=[];});if(!Array.isArray(st.calendars)||!st.calendars.length)st.calendars=defaultState().calendars;if(!st.people||!st.people.length)st.people=defaultState().people;if(!st.areas)st.areas=defaultState().areas;if(!st.settings)st.settings=JSON.parse(JSON.stringify(DEFAULT_SETTINGS));if(!Array.isArray(st.rhythms))st.rhythms=defaultFaithRhythms();if(!st.categories)st.categories=defaultCategories();var faithDefaults=defaultFaithConfig();if(!st.faithConfig)st.faithConfig=faithDefaults;else{if(!Array.isArray(st.faithConfig.disabledGroups))st.faithConfig.disabledGroups=[];st.faithConfig.groupDescriptions=Object.assign({},faithDefaults.groupDescriptions,st.faithConfig.groupDescriptions||{});}st.people.forEach(function(p){if(p.encouragementNote&&p.encouragementNote.trim()&&!p.encouragementChecklistMigrated){var id="enc-legacy-"+p.id;if(!st.followups.some(function(f){return f.id===id;}))st.followups.push({id:id,personId:p.id,kind:"encouragement",text:p.encouragementNote,done:false});p.encouragementChecklistMigrated=true;}if(!p.prayerNotesChecklistMigrated){[["howToPray","prayer-request-note"],["prayerFocus","prayer-focus-note"]].forEach(function(pair){var text=p[pair[0]],id="prayer-note-"+pair[0]+"-"+p.id;if(text&&text.trim()&&!st.followups.some(function(f){return f.id===id;}))st.followups.push({id:id,personId:p.id,kind:pair[1],text:text,done:false});});p.prayerNotesChecklistMigrated=true;}});return st;}
+ if(needsGoalCleanup)localStorage.setItem(LS_STATE,JSON.stringify(st));return st;}catch(e){return defaultState();}}
+function ensureShape(st){st=st||{};["events","tasks","followups","prayers","ideas","echoes","keyDates","checklists"].forEach(function(k){if(!Array.isArray(st[k]))st[k]=[];});var hadGoals=!!(Array.isArray(st.goals)&&st.goals.length)||(Array.isArray(st.events)&&st.events.some(function(event){return !!event.goalId;}));if(hadGoals&&typeof window!=="undefined")window._goalDataPurged=true;delete st.goals;st.events=st.events.filter(function(event){return !event.goalId;});if(!Array.isArray(st.calendars)||!st.calendars.length)st.calendars=defaultState().calendars;if(!st.people||!st.people.length)st.people=defaultState().people;if(!st.areas)st.areas=defaultState().areas;if(!st.settings)st.settings=JSON.parse(JSON.stringify(DEFAULT_SETTINGS));if(!Array.isArray(st.rhythms))st.rhythms=defaultFaithRhythms();if(!st.categories)st.categories=defaultCategories();var faithDefaults=defaultFaithConfig();if(!st.faithConfig)st.faithConfig=faithDefaults;else{if(!Array.isArray(st.faithConfig.disabledGroups))st.faithConfig.disabledGroups=[];st.faithConfig.groupDescriptions=Object.assign({},faithDefaults.groupDescriptions,st.faithConfig.groupDescriptions||{});}st.people.forEach(function(p){if(p.encouragementNote&&p.encouragementNote.trim()&&!p.encouragementChecklistMigrated){var id="enc-legacy-"+p.id;if(!st.followups.some(function(f){return f.id===id;}))st.followups.push({id:id,personId:p.id,kind:"encouragement",text:p.encouragementNote,done:false});p.encouragementChecklistMigrated=true;}if(!p.prayerNotesChecklistMigrated){[["howToPray","prayer-request-note"],["prayerFocus","prayer-focus-note"]].forEach(function(pair){var text=p[pair[0]],id="prayer-note-"+pair[0]+"-"+p.id;if(text&&text.trim()&&!st.followups.some(function(f){return f.id===id;}))st.followups.push({id:id,personId:p.id,kind:pair[1],text:text,done:false});});p.prayerNotesChecklistMigrated=true;}});return st;}
 var S=load();
 var saveTimer=null,pushTimer=null;
 function save(){localStorage.setItem(LS_STATE,JSON.stringify(S));window._tendDirty=true;clearTimeout(saveTimer);saveTimer=setTimeout(function(){flash("Saved");},150);if(window.SYNCcfg&&SYNCcfg.auto&&SYNCcfg.token&&typeof schedulePush==="function")schedulePush();}
@@ -131,36 +115,23 @@ function settings(){return S.settings||DEFAULT_SETTINGS;}
 function scoreBaseline(){var saved=settings().baseline;if(saved===null||saved===undefined||saved==="")return DEFAULT_SETTINGS.baseline;var value=Number(saved);return Number.isFinite(value)?clamp(value,0,100):DEFAULT_SETTINGS.baseline;}
 function scoreClass(v){if(v===null||v===undefined)return "neutral";var s=settings();return v>=s.greenAt?"green":(v>=s.yellowAt?"yellow":"red");}
 function scoreLabel(v){var s=settings();if(v>=s.greenAt)return "Healthy";if(v>=s.yellowAt)return "Slipping - tend it soon";return "Needs attention now";}
-function goalInterval(g){return !g.cadence?Infinity:g.cadence==="custom"?(g.days||2):(CADENCES[g.cadence]?CADENCES[g.cadence].days:(FREQS[g.cadence]?FREQS[g.cadence].days:7));}
-function lastGoalEvent(g){var best=null;S.events.forEach(function(e){if(e.goalId===g.id&&(!best||e.ts>best.ts))best=e;});return best;}
-function goalLastDone(g){var e=lastGoalEvent(g);if(e)return Math.floor((Date.now()-e.ts)/86400000);return null;}
-function goalScore(g){
- var d=goalLastDone(g);if(d===null)return 45;
- var iv=goalInterval(g);
- if(d<iv)return Math.round(100-20*(d/iv));
- if(d<3*iv)return Math.round(80-30*((d-iv)/(2*iv)));
- return Math.round(Math.max(20,50-30*((d-3*iv)/iv)));
-}
 function rawScore(evs,base){base=(base===undefined)?scoreBaseline():base;if(!Number.isFinite(base))base=scoreBaseline();if(!evs.length)return base;var bonus=0,last=0;evs.forEach(function(e){var d=daysSince(e.ts);if(d>90)return;bonus+=(e.weight||typeWeight(e))*clamp(1-d/45,0,1);if(d>last)last=d;});return clamp(Math.round(base-1.4*clamp(last,0,30)+bonus),0,100);}
 function migrateEvents(){S.events.forEach(function(e){if(!e.type)e.type=KIND2TYPE[e.kind]||"note";if(!e.title&&e.kind&&KINDS[e.kind])e.title=KINDS[e.kind].label;});}
 migrateEvents();
 function eventHasPerson(e,pid){return e.personId===pid||(Array.isArray(e.personIds)&&e.personIds.indexOf(pid)!==-1);}
 function eventsFor(areaId,personId){return S.events.filter(function(e){return e.areaId===areaId&&(personId?eventHasPerson(e,personId):!e.personId&&!e.personIds);});}
-function areaGoals(id){return S.goals.filter(function(g){return g.area===id&&!g.completed;});}
-function personGoals(pid){return S.goals.filter(function(g){return g.personId===pid;});}
 function avg(arr){arr=arr.filter(function(v){return Number.isFinite(v);});if(!arr.length)return null;return Math.round(arr.reduce(function(a,b){return a+b;},0)/arr.length);}
 function areaScore(id){
  if(id==="faith"&&typeof faithScores==="function"){var faith=faithScores().overall;return faith===null?0:faith;}
  var rhythms=S.rhythms.filter(function(r){return r.category===id&&!r.disabled;});
  var rhythmAverage=avg(rhythms.map(rhythmScore));
  if(rhythmAverage!==null)return rhythmAverage;
- var goalAverage=avg(areaGoals(id).map(goalScore));
- return goalAverage!==null?goalAverage:rawScore(eventsFor(id));
+ return rawScore(eventsFor(id));
 }
 /* ============ person score: connection-first ============ */
 function personCadenceDays(p){var cc=p.connectCadence||"weekly";if(cc==="daily")return 1;if(cc==="twicewk")return 3.5;if(cc==="weekly")return 7;if(cc==="biweekly")return 14;if(cc==="monthly")return 30;return p.cadenceDays||30;}
 function personCadenceLabel(p){var cc=p.connectCadence||"weekly";return {daily:"daily",twicewk:"twice weekly",weekly:"weekly",biweekly:"every 2 weeks",monthly:"monthly"}[cc]||("every "+(p.cadenceDays||30)+" days");}
-function personCadenceGoalLabel(p){return {daily:"daily interaction",twicewk:"2 interactions a week",weekly:"weekly interaction",biweekly:"interaction every 2 weeks",monthly:"monthly interaction"}[p.connectCadence||"weekly"]||("interaction every "+personCadenceDays(p)+" days");}
+function personCadenceTargetLabel(p){return {daily:"daily interaction",twicewk:"2 interactions a week",weekly:"weekly interaction",biweekly:"interaction every 2 weeks",monthly:"monthly interaction"}[p.connectCadence||"weekly"]||("interaction every "+personCadenceDays(p)+" days");}
 function connectionEvent(e){return !!e.ts&&e.type!=="prayer"&&e.kind!=="prayer"&&(!!e.rhythmId||e.origin==="spark"||["quality","inperson","call","video","text","note","gift","other"].indexOf(e.type)>=0);}
 function personConnInfo(p){var last=null;S.events.forEach(function(e){if(eventHasPerson(e,p.id)&&connectionEvent(e)&&(!last||e.ts>last.ts))last=e;});return {last:last,days:last?daysSince(last.ts):999};}
 function personPrayerInfo(p){var last=null;S.events.forEach(function(e){if(e.personId===p.id&&(e.kind==="prayer"||e.type==="prayer")&&(!last||e.ts>last.ts))last=e;});return {last:last,days:last?daysSince(last.ts):999};}
@@ -208,7 +179,6 @@ function personScore(p){var rhythms=avg(personRhythms(p).map(rhythmScore)),conne
 }
 function nextOccurrence(kd){var t=new Date();var d=new Date(t.getFullYear(),kd.month-1,kd.day);if(d<t)d=new Date(t.getFullYear()+1,kd.month-1,kd.day);return d;}
 function daysUntil(kd){return Math.ceil((nextOccurrence(kd)-new Date())/86400000);}
-function trend(id){var g=areaGoals(id);var any=g.some(function(gg){var e=lastGoalEvent(gg);return e&&(Date.now()-e.ts)<7*86400000;});return any?{cls:"up",arrow:"▲"}:{cls:"flat",arrow:"▬"};}
 /* ============ helpers ============ */
 function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function personName(id){var p=S.people.find(function(x){return x.id===id;});return p?p.name:"";}

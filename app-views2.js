@@ -34,21 +34,25 @@ function renderPrayer(){
 }
 function renderEcho(){
  var out='<div class="sectiontitle" style="margin-top:6px"><h2>Echoblocks</h2><span class="hint">outreach blocks that echo back - calls, notes, intros</span></div>';
- out+='<div class="addrow"><input id="echoNew" placeholder="New block: Photographers, Pastors, Old friends..."><button class="btn" id="echoAdd">Add block</button></div><div style="margin-top:14px" class="grid">';
+ out+='<button type="button" class="btn" data-echoopen>+ Add block</button>';
+ if(echoDraftOpen)out+='<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="echo-editor-title"><div class="profile-editor-body"><h3 id="echo-editor-title">Add Echoblock</h3><label class="profile-note-type">Block name<input id="echoNew" placeholder="Photographers, Pastors, Old friends..."></label><div class="profile-editor-actions"><button class="btn" id="echoAdd">Save Block</button><button class="btn ghost" id="echoCancel" data-editor-cancel>Cancel</button></div></div></dialog>';
+ out+='<div style="margin-top:14px" class="grid">';
  if(!S.echoes.length)out='<div class="sectiontitle" style="margin-top:6px"><h2>Echoblocks</h2></div><div class="empty" style="text-align:center;padding:30px 0">No blocks yet. A block is a group of people you keep reaching out to - like photographers for Jake & Addi\'s wedding.</div>';
  S.echoes.forEach(function(b){
   out+='<div class="card echo-block"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:16px;font-weight:600">'+esc(b.title)+'</h3><button class="del" data-echodel="'+b.id+'">\u00D7</button></div>';
   if(b.note)out+='<div style="font-size:12px;color:var(--ink-faint);margin-bottom:8px">'+esc(b.note)+'</div>';
   out+='<ul class="tasks">';
   (b.items||[]).forEach(function(it){out+='<li><span class="badge st-'+it.status.replace(/ /g,"-")+'">'+it.status+'</span><span class="txt">'+esc(it.text)+'</span><button class="del" data-echoitemdel="'+b.id+'|'+it.id+'">\u00D7</button></li>';});
-  out+='</ul><div class="addrow"><input placeholder="Add contact / outreach..." data-echonew="'+b.id+'"><button class="btn mini" data-echoadd="'+b.id+'">Add</button></div></div>';
+  out+='</ul><button type="button" class="btn mini ghost" data-echoitemopen="'+b.id+'">+ Add contact / outreach</button></div>';
+  if(echoItemDraftId===b.id)out+='<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="echo-item-title"><div class="profile-editor-body"><h3 id="echo-item-title">Add Outreach Item</h3><label class="profile-note-type">Contact or action<input placeholder="Name or next step" data-echonew="'+b.id+'"></label><div class="profile-editor-actions"><button class="btn mini" data-echoadd="'+b.id+'">Save Item</button><button class="btn mini ghost" data-echoitemcancel data-editor-cancel>Cancel</button></div></div></dialog>';
  });
  out+='</div>';
  out+='<div class="card" style="margin-top:14px;font-size:13px;color:var(--ink-soft)"><b>Working with Littlebird:</b> ask Littlebird to draft the outreach email or text, or to research vendors - then paste results here as items.</div>';
  return out;}
 function renderOffload(){
  var out='<div class="sectiontitle" style="margin-top:6px"><h2>Offload</h2><span class="hint">brain dump now, sort later</span></div>';
- out+='<div class="addrow"><input id="ideaNew" placeholder="Any idea, to-do, worry - get it out of your head..."><button class="btn" id="ideaAdd">Offload</button></div>';
+ out+='<button type="button" class="btn" data-ideaopen>+ Add to Offload</button>';
+ if(ideaDraftOpen)out+='<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="idea-editor-title"><div class="profile-editor-body"><h3 id="idea-editor-title">Add to Offload</h3><label class="profile-note-type">Idea or reminder<textarea id="ideaNew" placeholder="Any idea, to-do, worry - get it out of your head..."></textarea></label><div class="profile-editor-actions"><button class="btn" id="ideaAdd">Save</button><button class="btn ghost" data-ideacancel data-editor-cancel>Cancel</button></div></div></dialog>';
  out+='<div style="margin-top:14px">';
  if(!S.ideas.length)out+='<div class="empty" style="text-align:center;padding:30px 0">Inbox zero. It will fill up again - that is what it is for.</div>';
  S.ideas.forEach(function(i){
@@ -62,21 +66,11 @@ function renderSettings(){
  var st=settings();
  var out='<div class="sectiontitle" style="margin-top:6px"><h2>Settings</h2></div>';
  out+='<div class="grid"><div class="card" style="grid-column:1/-1"><h3 style="font-size:16px;font-weight:600;margin-bottom:10px">Meter thresholds</h3>';
- out+='<div style="font-size:13px;color:var(--ink-soft);margin-bottom:12px">How meters are scored: every goal has a cadence (daily, weekly, monthly...). Doing it inside the window scores 80-100 (green); slipping past scores 50-80 (yellow); well overdue scores below 50 (red). Area meters average their goals. Fresh start = baseline.</div>';
+ out+='<div style="font-size:13px;color:var(--ink-soft);margin-bottom:12px">How meters are scored: recent activity and rhythm health inform each score. Area meters average activity across the area. Fresh start = baseline.</div>';
  out+='<div class="setrow"><label>Green at or above</label><input type="number" id="setGreen" min="50" max="100" value="'+st.greenAt+'"></div>';
  out+='<div class="setrow"><label>Yellow at or above (below = red)</label><input type="number" id="setYellow" min="10" max="80" value="'+st.yellowAt+'"></div>';
  out+='<div class="setrow"><label>Fresh-start baseline</label><input type="number" id="setBase" min="0" max="100" value="'+st.baseline+'"></div>';
  out+='<button class="btn" id="setSave">Save thresholds</button></div></div>';
- out+='<div class="sectiontitle"><h2>Goals</h2><span class="hint">what "healthy" means for each area</span></div><div class="grid">';
- AREA_IDS.forEach(function(id){
-  var goals=areaGoals(id);
-  out+='<div class="card"><h3 style="font-size:16px;font-weight:600;margin-bottom:8px">'+S.areas[id].name+'</h3>';
-  goals.forEach(function(g){
-   out+='<div class="goalrow edit"><div class="gr-main"><input class="goaltext" data-gtext="'+g.id+'" value="'+esc(g.text)+'"><div class="gr-meta" style="display:flex;gap:6px;margin-top:5px"><select data-gcad="'+g.id+'">'+Object.keys(CADENCES).map(function(c){return '<option value="'+c+'"'+(g.cadence===c?" selected":"")+'>'+CADENCES[c].label+'</option>';}).join("")+'</select>'+(g.cadence==="custom"?'<input type="number" min="1" max="365" style="width:60px" data-gdays="'+g.id+'" value="'+(g.days||2)+'">':'')+'<select data-gtod="'+g.id+'" title="Time of day">'+Object.keys(TODS).map(function(t){return '<option value="'+t+'"'+((g.tod||"anytime")===t?" selected":"")+'>'+esc(TODS[t])+'</option>';}).join("")+'</select><select data-gperson="'+g.id+'"><option value="">- anyone -</option>'+S.people.map(function(p){return '<option value="'+p.id+'"'+(g.personId===p.id?" selected":"")+'>'+esc(p.name)+'</option>';}).join("")+'</select></div></div><button class="del" data-gdel="'+g.id+'">\u00D7</button></div>';});
-  out+='<div class="addrow"><input placeholder="New goal..." data-gnewtext="'+id+'"><button class="btn mini" data-gadd="'+id+'">Add</button></div></div>';
- });
- out+='</div>';
- out+='<div class="card" style="margin-top:14px;font-size:13px;color:var(--ink-soft)"><b>How the Faith example works:</b> "Read the Bible" is a daily goal. Log it today \u2192 green. A day or two stale \u2192 yellow. Three or more days \u2192 red. Change any cadence above and the meter follows.</div>';
  return out;}
 function syncStatusHTML(){
  if(!SYNCcfg.token)return "Not configured - running locally on this device.";

@@ -219,7 +219,7 @@ document.addEventListener("click",function(e){
   if(inp&&inp.value.trim()){
    var others=[];document.querySelectorAll('[data-kdnewperson^="'+pid+'|"]').forEach(function(c){if(c.checked&&!c.disabled)others.push(c.getAttribute("data-kdnewperson").split("|")[1]);});
    S.keyDates.push({id:uid(),personId:pid,personIds:[pid].concat(others),label:inp.value.trim(),month:1,day:1});
-   save();render();flash("Added - set month and day in Settings, Key dates tab");
+   personKeyDateDraftFor=null;save();render();flash("Added - set month and day in Settings, Key dates tab");
   }return;}
  if(b=t.closest("[data-kdpillx]")){e.preventDefault();var px=b.getAttribute("data-kdpillx").split("|");
   if(px[0]==="new"){window._kdNewPeople=(window._kdNewPeople||[]).filter(function(x){return x!==px[1];});syncNewPeopleCell();}
@@ -314,22 +314,34 @@ window.llIconHTML=function(p){
 })();
 
 /* ============ renderArea override: ov-style meter + clickable person mini-cards ============ */
+function areaHistoryRow(e){
+ var ids=Array.isArray(e.personIds)&&e.personIds.length?e.personIds:(e.personId?[e.personId]:[]);
+ return '<div class="entry"><div class="entry-main"><div class="entry-head"><span class="entry-date">'+new Date(e.ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'</span><span class="badge">'+esc(typeLabel(e))+'</span>'+ids.map(function(pid){return '<span class="entry-person">'+esc(personName(pid))+'</span>';}).join('')+'</div>'+(e.title?'<div class="entry-title">'+esc(e.title)+'</div>':'')+(e.note?'<div class="entry-note">'+esc(e.note)+'</div>':'')+'</div><div class="entry-actions"><button class="iconbtn" data-eedit="'+esc(e.id)+'" title="Edit entry">✎</button><button class="iconbtn" data-edel="'+esc(e.id)+'" title="Delete entry">♲</button></div></div>';
+}
+function areaHistoryHTML(id){
+ var events=S.events.filter(function(e){return e.areaId===id&&(id!=='friendships'||e.personId||(e.personIds&&e.personIds.length));}).sort(function(a,b){return b.ts-a.ts;});
+ var out='<div class="card area-history-card"><div class="subhead">History</div>';
+ if(!events.length)return out+'<div class="empty">Nothing logged yet.</div></div>';
+ out+=events.slice(0,10).map(areaHistoryRow).join('');
+ if(events.length>10)out+='<details class="area-history-more"><summary>Show more ('+(events.length-10)+')</summary>'+events.slice(10).map(areaHistoryRow).join('')+'</details>';
+ return out+'</div>';
+}
 function renderArea(id){
  var v=areaScore(id),c=scoreClass(v);
- var goals=areaGoals(id);
  var kids=S.people.filter(function(p){return p.area===id;});
  var out='<div class="sectiontitle" style="margin-top:2px"><h2>'+S.areas[id].name+'</h2><span class="hint">'+scoreLabel(v)+'</span></div>';
  out+='<div class="card" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:18px;font-weight:500">Health meter</h3><span class="ov-score '+c+'">'+v+'</span></div><div class="bar-ov"><i class="ov-marker" style="left:'+v+'%"></i></div><div class="meta" style="margin-top:6px"><span class="statusword '+c+'">'+scoreLabel(v)+'</span></div>';
  if(kids.length)out+='<div class="menu-grid" style="margin-top:14px">'+kids.map(function(p2){var ps=personScore(p2),pc=scoreClass(ps);return '<button class="menu-area" data-openperson="'+p2.id+'"><span class="pm-av">'+personAvatar(p2,22)+'</span><span class="ma-name">'+esc(p2.name)+'</span><span class="ma-score '+pc+'">'+ps+'</span></button>';}).join("")+'</div>';
  out+='</div>';
- out+=areaGoalsHTML(id);
  out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Tasks</div><ul class="tasks">';
  S.tasks.filter(function(t){return t.areaId===id;}).forEach(function(t){out+='<li class="'+(t.done?"done":"")+'"><input type="checkbox" class="cb" data-task="'+t.id+'"'+(t.done?" checked":"")+'><span class="txt">'+esc(t.text)+'</span><button class="del" data-taskdel="'+t.id+'">\u00D7</button></li>';});
- out+='</ul><div class="addrow"><input placeholder="Add a task..." data-tasknew="'+id+'"><button class="btn mini" data-taskadd="'+id+'">Add</button></div></div>';
- out+='<div class="card" style="margin-bottom:14px" id="logformcard"><div class="subhead">'+(editingId?"Edit entry":"Log an activity")+'</div>'+
- '<div class="addrow" style="margin-top:0"><input type="date" id="logDate" value="'+(editingEvent?fmtDate(editingEvent.ts):fmtDate(Date.now()))+'"><select id="logPersonSel"><option value="">- person (optional) -</option>'+S.people.filter(function(p){return p.area===id;}).map(function(p){return '<option value="'+p.id+'"'+((editingEvent&&editingEvent.personId===p.id)?" selected":"")+'>'+esc(p.name)+'</option>';}).join("")+'</select><select id="logTypeSel">'+Object.keys(ETYPES).map(function(t){return '<option value="'+t+'"'+((editingEvent?editingEvent.type:"inperson")===t?" selected":"")+'>'+ETYPES[t].label+'</option>';}).join("")+'</select></div>'+ 
+ out+='</ul><button type="button" class="btn mini ghost" data-task-open="'+id+'">+ Add task</button></div>';
+ if(taskDraftArea===id)out+='<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="task-editor-title"><div class="profile-editor-body"><h3 id="task-editor-title">Add Task</h3><label class="profile-note-type">Task<input placeholder="What needs to be done?" data-tasknew="'+id+'"></label><div class="profile-editor-actions"><button class="btn mini" data-taskadd="'+id+'">Save Task</button><button class="btn mini ghost" data-task-cancel data-editor-cancel>Cancel</button></div></div></dialog>';
+ out+='<div class="card area-activity-actions" style="margin-bottom:14px" id="logformcard">'+(!editingId&&!activityComposerOpen?'<button type="button" class="btn" data-activity-open>+ Log an activity</button>':'')+'</div>';
+ if(editingId||activityComposerOpen)out+='<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="activity-editor-title"><div class="profile-editor-body"><h3 id="activity-editor-title">'+(editingId?"Edit activity":"Log an activity")+'</h3>'+
+ '<div class="addrow" style="margin-top:0"><input type="date" id="logDate" value="'+(editingEvent?fmtDate(editingEvent.ts):fmtDate(Date.now()))+'"><select id="logPersonSel"><option value="">- person (optional) -</option>'+S.people.filter(function(p){return p.area===id;}).map(function(p){return '<option value="'+p.id+'"'+((editingEvent&&editingEvent.personId===p.id)?" selected":"")+'>'+esc(p.name)+'</option>';}).join("")+'</select><select id="logTypeSel">'+Object.keys(ETYPES).map(function(t){return '<option value="'+t+'"'+((editingEvent?editingEvent.type:"inperson")===t?" selected":"")+'>'+ETYPES[t].label+'</option>';}).join("")+'</select></div>'+
  '<div class="addrow"><input id="logTitle" placeholder="What did you do?" value="'+(editingEvent?esc(editingEvent.title||""):"")+'"></div>'+
- '<div class="addrow"><textarea id="logTalk" placeholder="What did you talk about?">'+(editingEvent?esc(editingEvent.note||""):"")+'</textarea></div>'+
- '<div style="display:flex;gap:8px"><button class="btn" id="logSubmit">'+(editingId?"Update":"Log it")+'</button>'+(editingId?'<button class="btn ghost" id="logCancel">Cancel</button>':'')+'</div></div>';
+ '<div class="addrow"><textarea id="logTalk" placeholder="What do you want to remember?">'+(editingEvent?esc(editingEvent.note||""):"")+'</textarea></div>'+
+ '<div class="profile-editor-actions"><button class="btn" id="logSubmit">'+(editingId?"Save activity":"Save activity")+'</button><button class="btn ghost" id="logCancel" data-editor-cancel>Cancel</button>'+(editingId?'<button class="btn mini danger" style="margin-left:auto" data-edel="'+esc(editingId)+'">Delete activity</button>':'')+'</div></div></dialog>';
  out+=areaHistoryHTML(id);
  return out;}

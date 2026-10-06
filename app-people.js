@@ -226,22 +226,16 @@ function applyCatColors(){
 }
 applyCatColors();
 
-/* ---------- settings: People colors tab ---------- */
-var _renderSettings=renderSettings;
-window.renderSettings=renderSettings=function(){
- var html=_renderSettings.apply(this,arguments);
+/* ---------- settings: People colors ---------- */
+function peopleColorsSettingsHTML(){
  var c=catColors();
- var btn='<button role="tab" id="settings-tab-peoplecolors" aria-controls="settings-panel-peoplecolors" aria-selected="'+((typeof settingsTab!=="undefined"&&settingsTab==="peoplecolors"))+'" data-settingstab="peoplecolors">People</button>';
- html=html.replace(/(<button role="tab" id="settings-tab-sync")/,btn+"$1");
- var panel='<section class="settings-panel" id="settings-panel-peoplecolors" role="tabpanel" aria-labelledby="settings-tab-peoplecolors"'+((typeof settingsTab!=="undefined"&&settingsTab==="peoplecolors")?"":" hidden")+'>'+
- '<div class="card" style="margin-bottom:14px"><div class="subhead">People category colors</div>'+
+ return '<div class="card settings-card"><div class="subhead">People colors</div>'+
  '<p class="settings-help">Colors the relationship dots on People cards, the filter dots, and the avatar rings on health-meter badges.</p>'+
  [["marriage","Marriage"],["parenting","Parenting"],["friendships","Friendships"]].map(function(x){
   return '<label class="cat-color-row"><input type="color" data-catcolor="'+x[0]+'" value="'+c[x[0]]+'" title="'+x[1]+' color"><span>'+x[1]+'</span></label>';
  }).join("")+
- '<button class="btn ghost" id="catColorReset" type="button">Reset to defaults</button></div></section>';
- return html+panel;
-};
+ '<button class="btn ghost" id="catColorReset" type="button">Reset to defaults</button></div>';
+}
 
 /* ---------- prayer list (person profile) - was lost in the profile-tabs refactor ---------- */
 function prayerRowHTML(pr,pid){
@@ -283,13 +277,13 @@ window.prayerList=prayerList; /* views1 personProfile calls this bare */
 
 /* ---------- tending a prayer rhythm counts as PRAYER, never a connection ---------- */
 var _logEvent=logEvent;
-window.logEvent=function(areaId,personId,type,title,note,whenTs,goalId,rhythmId,extra){
+window.logEvent=function(areaId,personId,type,title,note,whenTs,rhythmId,extra){
  if(rhythmId&&type!=="prayer"){
   var pr=null;
   S.people.forEach(function(pp){(pp.rhythms||[]).forEach(function(r){if(r.id===rhythmId)pr=r;});});
   if(pr&&(pr.category==="prayer"||/^pray/i.test(pr.text||"")))type="prayer";
  }
- return _logEvent(areaId,personId,type,title,note,whenTs,goalId,rhythmId,extra);
+ return _logEvent(areaId,personId,type,title,note,whenTs,rhythmId,extra);
 };
 
 /* ---------- handlers ---------- */

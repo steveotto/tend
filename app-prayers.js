@@ -17,6 +17,7 @@ function prayerLogsFor(p){var logs=(p.prayerLogs||[]).filter(function(ts){return
  if(!logs.length&&p.lastPrayed){var legacy=new Date(p.lastPrayed+"T12:00:00").getTime();if(Number.isFinite(legacy))logs.push(legacy);}
  return logs.sort(function(a,b){return a-b;});
 }
+function prayerLastPrayedLabel(p){var logs=prayerLogsFor(p),last=logs.length?logs[logs.length-1]:null;return last===null?"not yet prayed":prayerTimeAgo(prayerDayString(new Date(last)));}
 function prayerScore(p,now){if(!p||p.answered||p.archived||(p.until&&(now?prayerDayString(now):todayStr())>p.until))return null;var logs=prayerLogsFor(p),last=logs.length?prayerDayString(new Date(logs[logs.length-1])):null;return scheduleHealthScore(Object.assign({},p,{freq:prayerFreq(p)}),last,now?prayerDayString(now):todayStr());}
 function prayerIsDue(p){if(!p||p.answered||p.archived||(p.until&&todayStr()>p.until))return false;
  var logs=prayerLogsFor(p),last=logs.length?prayerDayString(new Date(logs[logs.length-1])):null;
@@ -48,14 +49,14 @@ function prayerEditorFields(p){p=p||{};var f=prayerFreq(p),days=(p.weekdays||[])
 }
 function prayerEditor(p,context){var profile=context==="profile",faith=context==="faith",newPrayer=!p.id;
  var header=profile||faith?'':'<div class="prayer-identity-fields"><label class="prayer-field">Category<select data-prayer-field="category">'+PRAYER_CATS.map(function(c){return '<option'+((p.category||"Family")===c?' selected':'')+'>'+esc(c)+'</option>';}).join("")+'</select></label><label class="prayer-field">Person<select data-prayer-field="person"><option value="">No person</option>'+S.people.map(function(person){return '<option value="'+esc(person.id)+'"'+(p.personId===person.id?' selected':'')+'>'+esc(person.name)+'</option>';}).join("")+'</select></label></div>';
- var actions='<div class="prayer-editor-actions"><button type="button" class="btn mini" '+(newPrayer?(profile?'data-personprayeradd="'+esc(p.personId)+'"':faith?'data-faith-prayer-save="1"':'id="prayerAdd"'):'data-prayersave="'+esc(p.id)+'"')+'>'+ (newPrayer?'Save prayer':'Save')+'</button><button type="button" class="btn mini ghost" '+(newPrayer?(profile?'data-personprayercancel="1"':faith?'data-faith-prayer-cancel="1"':'id="prayerFormCancel"'):'data-prayercancel="1"')+'>Cancel</button>'+(newPrayer?'':'<button type="button" class="btn mini danger prayer-delete" data-prayerdel="'+esc(p.id)+'">Delete</button>')+'</div>';
+ var actions='<div class="prayer-editor-actions"><button type="button" class="btn mini" '+(newPrayer?(profile?'data-personprayeradd="'+esc(p.personId)+'"':faith?'data-faith-prayer-save="1"':'id="prayerAdd"'):'data-prayersave="'+esc(p.id)+'"')+'>'+ (newPrayer?'Save prayer':'Save')+'</button><button type="button" class="btn mini ghost" '+(newPrayer?(profile?'data-personprayercancel="1"':faith?'data-faith-prayer-cancel="1"':'id="prayerFormCancel"'):'data-prayercancel="1"')+' data-editor-cancel>Cancel</button>'+(newPrayer?'':'<button type="button" class="btn mini danger prayer-delete" data-prayerdel="'+esc(p.id)+'">Delete</button>')+'</div>';
  if(faith)header='<input type="hidden" data-prayer-field="category" value="Faith">';
  return '<div class="prayer-editor" data-prayer-editor="'+(newPrayer?(profile?'new-person':'new-global'):'edit')+'"'+(profile?' data-person-id="'+esc(p.personId)+'"':'')+(faith?' data-faith-section="'+esc(p.faithSection||'Other')+'"':'')+'>'+header+'<label class="prayer-field">Title<input data-prayer-field="title" value="'+esc(p.text||'')+'" placeholder="Prayer title"></label><label class="prayer-field">Details<textarea data-prayer-field="details" placeholder="Details (optional)">'+esc(p.details||'')+'</textarea></label>'+prayerEditorFields(p)+actions+'</div>';
 }
 function personPrayerAddFields(pid){var p=S.people.find(function(x){return x.id===pid;}),categories={marriage:"Marriage",parenting:"Kids",friendships:"Friends"};return prayerEditor({personId:pid,category:categories[p&&p.area]||"Family",freq:"selectdays",weekdays:[new Date().getDay()],tod:"anytime",added:todayStr()},"profile");}
 function prayerCloseMenu(p){return '<details class="prayer-close-menu"><summary class="btn mini ghost">Close</summary><div class="prayer-close-options"><button type="button" data-prayerans="'+esc(p.id)+'">Answered</button><button type="button" data-prayerarchive="'+esc(p.id)+'">Archive</button></div></details>';}
 function prayerItemHTML(p,profile){var faith=profile==="faith",person=S.people.find(function(x){return x.id===p.personId;}),count=p.prayed||0,closed=p.answered||p.archived;
- if(editingPrayerId===p.id)return '<article class="prayer-item prayer-item-editing">'+prayerEditor(p,faith?'faith':profile?'profile':'global')+'</article>';
+ if(editingPrayerId===p.id)return '<dialog class="profile-editor-dialog prayer-edit-dialog" data-editor-modal aria-label="Edit prayer">'+prayerEditor(p,faith?'faith':profile?'profile':'global')+'</dialog>';
  var sc=prayerScore(p),scoreText=sc===null?'-':sc+'%';
  var prayAttr=profile&&!faith?'data-prayquick="'+esc(p.personId)+'" data-prayref="'+esc(p.id)+'"':'data-pray="'+esc(p.id)+'"';
  var prayButton=closed?'':'<button class="btn mini" '+prayAttr+'>Pray</button>';
@@ -63,7 +64,7 @@ function prayerItemHTML(p,profile){var faith=profile==="faith",person=S.people.f
  var score='<span class="rhythm-health prayer-health tend-type-metric" title="Prayer health"><span class="sm-dot '+scoreClassName+'" aria-hidden="true"></span><span>'+scoreText+'</span></span>';
  var identity='<div class="prayer-heading"><h3 class="prayer-title tend-type-title">'+esc(p.text)+'</h3>'+(person&&!profile?'<span class="prayer-person">'+personAvatar(person,24)+esc(person.name)+'</span>':!person&&p.faithOwner==="me"?'<span class="prayer-person">Me</span>':'')+'<span class="prayed-pill">Prayed for '+count+' '+(count===1?'time':'times')+'</span></div>';
  var details=p.details?'<p class="prayer-details tend-type-description">'+esc(p.details)+'</p>':'';
- var meta='<div class="gr-meta">'+esc(prayerScheduleLabel(p))+(p.lastPrayed?' · last prayed '+esc(prayerTimeAgo(p.lastPrayed)):' · not yet prayed')+' · added '+esc(prayerDate(p.added))+(p.answered?' · answered '+esc(prayerDate(p.answeredDate)):'')+(p.archived?' · archived '+esc(prayerDate(p.archivedDate)):'')+'</div>';
+ var meta='<div class="gr-meta">'+esc(prayerScheduleLabel(p))+' · last prayed '+esc(prayerLastPrayedLabel(p))+' · added '+esc(prayerDate(p.added))+(p.answered?' · answered '+esc(prayerDate(p.answeredDate)):'')+(p.archived?' · archived '+esc(prayerDate(p.archivedDate)):'')+'</div>';
  var actions='<div class="prayer-row-actions">'+prayButton+(closed?'<button class="btn mini ghost" data-prayerunans="'+esc(p.id)+'">Reopen</button>':prayerCloseMenu(p))+'<button class="iconbtn rhythm-history-trigger" data-prayerhistory="'+esc(p.id)+'" aria-label="View history for '+esc(p.text)+'" title="View prayer history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button class="iconbtn prayer-edit-trigger" data-prayeredit="'+esc(p.id)+'" aria-label="Edit '+esc(p.text)+'" title="Edit prayer">✎</button></div>';
  return '<article class="prayer-item prayer-rhythm-row">'+score+'<div class="prayer-content gr-main">'+identity+details+meta+'</div>'+actions+'</article>';
 }
@@ -75,7 +76,8 @@ window.prayerList=function(items,profile){items=items||[];var active=items.filte
  return out;
 };
 window.renderPrayer=function(){var out='<div class="sectiontitle" style="margin-top:6px"><h2>Prayer</h2><span class="hint">carry these people before God</span></div>';
- out+='<div class="card prayer-compose">'+(prayerComposerOpen?prayerEditor({freq:"selectdays",weekdays:[new Date().getDay()],tod:"anytime",added:todayStr()},"global"):'<button type="button" class="btn" id="prayerFormOpen">+ Add prayer</button>')+'</div>';
+ out+='<div class="card prayer-compose"><button type="button" class="btn" id="prayerFormOpen">+ Add prayer</button></div>';
+ if(prayerComposerOpen)out+='<dialog class="profile-editor-dialog prayer-edit-dialog" data-editor-modal aria-labelledby="prayer-compose-title"><div class="profile-editor-body"><h3 id="prayer-compose-title">Add Prayer</h3>'+prayerEditor({freq:"selectdays",weekdays:[new Date().getDay()],tod:"anytime",added:todayStr()},"global")+'</div></dialog>';
  PRAYER_CATS.forEach(function(cat){var items=S.prayers.filter(function(p){return p.category===cat&&!p.answered&&!p.archived;});if(items.length)out+='<div class="card prayer-cat"><div class="subhead">'+esc(cat)+'</div>'+items.map(function(p){return prayerItemHTML(p,false);}).join('')+'</div>';});
  var closed=S.prayers.filter(function(p){return p.answered||p.archived;});if(closed.length)out+='<div class="card prayer-cat"><div class="subhead">History</div>'+window.prayerList(closed,false)+'</div>';
  if(!S.prayers.length)out+='<div class="empty">Prayers tagged with a person also show up on their profile.</div>';
@@ -84,7 +86,7 @@ window.renderPrayer=function(){var out='<div class="sectiontitle" style="margin-
 var prayerPreviousCarePlanEditHTML=window.carePlanEditHTML;
 window.carePlanEditHTML=function(item,key){
  if(item.kind!=="prayer")return prayerPreviousCarePlanEditHTML(item,key);
- return '<div class="careplan-edit careplan-prayer-edit" data-cpform="'+esc(key)+'"><div class="careplan-edit-head"><span class="careplan-kind careplan-kind-prayer">Prayer</span><strong>Edit prayer</strong></div>'+prayerEditor(item.record,"global").replace('data-prayersave="'+esc(item.id)+'"','data-cpsave="'+esc(key)+'"')+'</div>';
+ return '<dialog class="profile-editor-dialog" data-editor-modal aria-label="Edit prayer"><div class="profile-editor-body careplan-edit careplan-prayer-edit" data-cpform="'+esc(key)+'"><div class="careplan-edit-head"><span class="careplan-kind careplan-kind-prayer">Prayer</span><strong>Edit prayer</strong></div>'+prayerEditor(item.record,"global").replace('data-prayersave="'+esc(item.id)+'"','data-cpsave="'+esc(key)+'"').replace('data-prayercancel="1"','data-cpcancel="'+esc(key)+'" data-editor-cancel')+'</div></dialog>';
 };
 var prayerPreviousCarePlanFreq=window.carePlanFreq;
 window.carePlanFreq=function(item){return item.kind==="prayer"?prayerScheduleLabel(item.record):prayerPreviousCarePlanFreq(item);};
