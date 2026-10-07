@@ -679,6 +679,9 @@ details.moor .moor-body{padding:2px 18px 14px}
 .faith-submeter strong{font-size:17px;font-weight:600}
 .faith-submeter small{grid-column:1/-1;color:var(--ink-faint);font-size:11px}
 .faith-today-list{margin-top:8px}
+.faith-today-controls,.today-queue-tools{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.faith-today-controls{margin:8px 0 4px}
+.today-queue-tools .plan-kind-toggles{gap:5px}
 .faith-today-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--line)}
 .faith-today-row:last-child{border-bottom:0}
 .faith-today-copy{display:grid;gap:3px;min-width:0}

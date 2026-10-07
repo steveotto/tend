@@ -149,21 +149,27 @@ function faithTendAction(r){
  return '<button type="button" class="btn mini" data-tend-open="faith-rhythm" data-rhythm-id="'+esc(r.id)+'">Tend</button>';
 }
 function faithTodayRhythms(){
- return faithActiveRhythms().filter(function(r){return r.tod&&r.tod!=="anytime"&&rhythmScheduledToday(r);}).sort(function(a,b){
-  return faithTimeRank(a.tod)-faithTimeRank(b.tod)||String(a.text||"").localeCompare(String(b.text||""));
+ return faithAllRhythmRecords().filter(todayRhythmEligible).sort(function(a,b){
+  return rhythmPeriod(a)-rhythmPeriod(b)||rhythmScore(a)-rhythmScore(b)||String(a.text||"").localeCompare(String(b.text||""));
  });
 }
 function faithTodayHTML(){
- var rhythms=faithTodayRhythms();
- var out=rhythms.length?rhythms.map(function(r){
-  var time=dayBlocks().find(function(block){return block.id===r.tod;});
-  return '<article class="faith-today-row"><div class="faith-today-copy"><strong>'+esc(r.text||"Faith rhythm")+'</strong><span>'+esc(r.faithGroup)+(time?" · "+esc(time.name):"")+' · '+esc(rhythmFreqLabel(r))+'</span></div>'+faithTendAction(r)+'</article>';
- }).join(""):'<p class="empty">No Faith rhythms scheduled for today.</p>';
- if(faithGroupEnabled("Prayer")){
-  var prayerCount=faithTodayPrayerCount();
-  out+='<button type="button" class="faith-prayer-invitation" data-faith-prayer-today="1"><span><strong>Prayer Time</strong><small>'+(prayerCount?prayerCount+" request"+(prayerCount===1?"":"s")+" scheduled today":"No prayer requests scheduled today")+'</small></span><span aria-hidden="true">›</span></button>';
- }
- return out;
+ var visibility=planKindVisibilityFor("faith"),rhythms=faithTodayRhythms(),sparks=faithSparkRecords().filter(function(s){var group=s.faithSection||s.faithGroup||(s.profileOwnerId!=="faith"?"Prayer":"Other");return faithGroupEnabled(group)&&!s.done&&(!s.by||sparkLive(s));}),prayers=faithActivePrayers().filter(prayerIsDue);
+ var rows=[];
+ if(visibility.rhythm!==false)rhythms.forEach(function(r){
+  var owner=S.people.find(function(person){return (person.rhythms||[]).some(function(item){return item.id===r.id;});}),block=r.tod&&r.tod!=="anytime"?dayBlocks().find(function(item){return item.id===r.tod;}):null,meta=(r.faithGroup||"Faith")+(block?" · "+block.name:"")+" · "+rhythmFreqLabel(r),badges=tendAssociationPeopleBadges(r,owner?owner.id:"faith",null,"rhythm")+planPills({faithRhythm:r.id});
+  rows.push('<article class="faith-today-row actrow"><span class="act-ic" style="background:'+personHealthColor(rhythmScore(r))+'"></span><div class="pi-main">'+tendRowContent(r.text||"Faith rhythm",String(r.description||"").trim(),meta,'<span class="plan-pills">'+badges+'</span>')+'</div>'+faithTendAction(r)+'</article>');
+ });
+ if(visibility.spark!==false)sparks.forEach(function(s){
+  var owner=s.profileOwnerId||"faith",badges=tendAssociationPeopleBadges(s,owner,null,"spark")+tendAssociationCategoryBadges(s)+planPills({spark:"faith|"+s.id});
+  rows.push('<article class="faith-today-row actrow"><span class="act-ic" style="background:var(--forest)"></span><div class="pi-main">'+tendRowContent(s.text||"Faith Spark",s.details||"",(s.time?fmtHM12(s.time)+" · ":"")+sparkDueTxt(s),'<span class="plan-pills">'+badges+'</span>')+'</div><button type="button" class="btn mini sparkbtn" data-faith-sparkdone="'+esc(owner+"|"+s.id)+'">Complete</button></article>');
+ });
+ if(visibility.prayer!==false)prayers.forEach(function(p){
+  var meta=prayerScheduleLabel(p)+" · Last prayed "+prayerLastPrayedLabel(p);
+  rows.push('<article class="faith-today-row actrow"><span class="act-ic" style="background:#5B7BA6"></span><div class="pi-main">'+tendRowContent(p.text||"Prayer",p.details||"",meta,'<span class="plan-pills">'+planPills({prayer:p.id})+'</span>')+'</div><button type="button" class="btn mini" data-pray="'+esc(p.id)+'">Pray</button></article>');
+ });
+ var count=rows.length,total=rhythms.length+sparks.length+prayers.length;
+ return '<div class="faith-today-controls"><span class="qpill'+(count?"":" clear")+'">'+(count?count+" for today":total?"items hidden":"nothing due today")+'</span>'+planKindTogglesHTML("faith","Faith Today item filters")+'</div>'+(count?rows.join(""):'<p class="empty">'+(total?"Items hidden by the type filters.":"Nothing due today across rhythms, sparks, and prayers.")+'</p>');
 }
 function faithOverallHealth(rhythms,prayers){
  var total=0,weight=0;
