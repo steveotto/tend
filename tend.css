@@ -733,7 +733,9 @@ details.moor .moor-body{padding:2px 18px 14px}
 .faith-prayer-row .prayer-rhythm-row>.prayer-content{grid-area:content;min-width:0;width:auto}
 .faith-prayer-row .prayer-rhythm-row>.prayer-row-actions{grid-area:actions;justify-content:flex-start;flex-wrap:wrap;margin:4px 0 0 62px}
 .faith-prayer-person{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:99px;background:var(--mist);color:var(--ink-soft);font-size:12px;font-weight:600}
-.faith-prayer-session{min-height:calc(100vh - 140px);align-content:start;max-width:760px;margin:0 auto;padding-top:4vh}
+.faith-prayer-session{position:fixed;inset:0;display:grid;align-content:start;gap:18px;width:100vw;max-width:none;height:100vh;height:100dvh;max-height:none;margin:0;padding:clamp(20px,5vh,56px) clamp(16px,5vw,48px);overflow-y:auto;border:0;border-radius:0;background:var(--canvas);color:var(--ink);box-sizing:border-box}
+.faith-prayer-session::backdrop{background:rgba(18,32,25,.62)}
+.faith-prayer-session>.faith-session-heading,.faith-prayer-session>.faith-session-progress,.faith-prayer-session>.faith-session-track,.faith-prayer-session>.faith-session-card,.faith-prayer-session>.faith-session-actions,.faith-prayer-session>.faith-session-help,.faith-prayer-session>.faith-session-empty{width:min(100%,760px);justify-self:center;box-sizing:border-box}
 .faith-session-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.faith-session-heading h1{margin-top:5px;font-size:25px}
 .faith-eyebrow{color:var(--forest);font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
 .faith-session-progress{text-align:center;color:var(--ink-soft);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
