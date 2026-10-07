@@ -84,6 +84,20 @@ function faithMigrateData(){
 function faithRhythms(group){
  return S.rhythms.filter(function(r){return r.category==="faith"&&r.faithGroup===group&&!r.disabled&&!r.legacyPrayerSeed&&!rhythmEnded(r);});
 }
+function faithPracticeRhythmRecords(group){
+ var rhythms=faithRhythms(group),seen={};
+ rhythms.forEach(function(r){seen[r.id]=true;});
+ if(group==="Prayer"){
+  var linked=[];
+  (S.people||[]).forEach(function(person){(person.rhythms||[]).forEach(function(r){linked.push(r);});});
+  (S.areaRhythms||[]).forEach(function(r){linked.push(r);});
+  linked.forEach(function(r){
+   var linkedToFaith=r.category==="faith"||Array.isArray(r.areas)&&r.areas.indexOf("faith")>=0||FAITH_GROUPS.indexOf(r.faithGroup)>=0;
+   if(linkedToFaith&&(r.faithGroup||"Prayer")===group&&!r.disabled&&!rhythmEnded(r)&&!seen[r.id]){seen[r.id]=true;rhythms.push(r);}
+  });
+ }
+ return rhythms;
+}
 function faithActiveRhythms(){
  return S.rhythms.filter(function(r){return r.category==="faith"&&r.faithGroup&&r.faithGroup!=="Prayer"&&faithGroupEnabled(r.faithGroup)&&!r.disabled&&!r.legacyPrayerSeed&&!rhythmEnded(r);});
 }
@@ -100,6 +114,15 @@ function faithScoreClass(score){return Number.isFinite(score)?scoreClass(score):
 function faithNavScoreHTML(score){
  var value=faithScoreText(score),level=faithScoreClass(score);
  return '<span class="rhythm-health faith-nav-score" aria-label="'+(Number.isFinite(score)?score+" percent":"No rhythm score")+'"><span class="sm-dot '+level+'" aria-hidden="true"></span><span>'+value+(Number.isFinite(score)?"%":"")+'</span></span>';
+}
+function faithPracticeHealth(group){
+ var rhythms=avg(faithPracticeRhythmRecords(group).map(function(r){return rhythmScore(r);}));
+ if(group!=="Prayer")return rhythms;
+ var prayers=avg(faithActivePrayers().filter(function(p){return p.category==="Faith"&&(p.faithSection||"Prayer")==="Prayer";}).map(function(p){return prayerScore(p);}));
+ var total=0,weight=0;
+ if(rhythms!==null){total+=.4*rhythms;weight+=.4;}
+ if(prayers!==null){total+=.3*prayers;weight+=.3;}
+ return weight?Math.round(total/weight):null;
 }
 function faithTimeRank(tod){if(tod==="allday")return -1;var blocks=dayBlocks(),index=blocks.findIndex(function(block){return block.id===tod;});return index<0?blocks.length:index;}
 function faithPracticeCount(group){return faithRhythms(group).length+(typeof window.faithLinkedRhythmCount==="function"?window.faithLinkedRhythmCount(group):0);}
@@ -135,7 +158,7 @@ function faithSectionNavHTML(selected){
  var groups=faithPracticeGroups();
  if(!groups.length)return '<div class="faith-section-nav-empty">All practice sections are off. Re-enable one in Sections settings.</div>';
  return '<nav class="faith-section-nav" aria-label="Faith practices">'+groups.map(function(group){
-  var score=avg(faithRhythms(group).map(function(r){return rhythmScore(r);}));
+  var score=faithPracticeHealth(group);
   return '<button type="button" data-faith-select="'+esc(group)+'" aria-current="'+(group===selected?"page":"false")+'"><span>'+esc(group)+'</span><span class="faith-nav-meta"><span class="faith-count">'+faithPracticeCount(group)+'</span>'+faithNavScoreHTML(score)+'</span></button>';
  }).join("")+'</nav>';
 }
