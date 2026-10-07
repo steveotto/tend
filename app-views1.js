@@ -242,7 +242,7 @@ function rhythmPeopleBadges(r,excludeId){
  var ids=[r.profileOwnerId||excludeId].concat(Array.isArray(r.sharedWith)?r.sharedWith:[]);
  return ids.filter(function(id,index){return id&&id!==excludeId&&ids.indexOf(id)===index;}).map(function(id){var person=S.people.find(function(x){return x.id===id;});return person?'<button type="button" class="prayer-person person-badge-clickable person-rhythm-link" data-personbadge="'+esc(person.id)+'|rhythm" aria-label="Open '+esc(person.name)+' rhythms">'+personAvatar(person,24)+esc(person.name)+'</button>':"";}).join("");
 }
-var tendItemAssociationDrafts={},tendItemPickerDraft=null,sparkAddDrafts={},prayerAddDrafts={};
+var tendItemAssociationDrafts={},tendItemPickerDraft=null,sparkAddDrafts={},prayerAddDrafts={},noteAddDrafts={};
 function tendAssociationKey(type,ownerId,itemId){return type+"|"+ownerId+"|"+itemId;}
 function tendAssociationValues(type,ownerId,itemId,record){
  var draft=tendItemAssociationDrafts[tendAssociationKey(type,ownerId,itemId)];
@@ -313,7 +313,7 @@ function tendAssociationPickerHTML(picker){
 function tendAssociationRecord(type,ownerId,itemId){
  if(type==="connection")return S.events.find(function(event){return event.id===itemId;});
  if(type==="followup"){
-  if(itemId==="new")return ownerId==="faith"?faithNoteDraft:null;
+  if(itemId==="new")return ownerId==="faith"?faithNoteDraft:noteAddDrafts[ownerId]||null;
   return S.followups.find(function(item){return item.id===itemId;});
  }
  if(type==="spark"){
@@ -456,11 +456,12 @@ function noteKindLabel(kind){return kind==="prayernote"||kind==="prayer"||kind==
 function noteKindOptions(selected){selected=selected==="prayernote"?"prayer":selected;return [["general","General"],["encouragement","Encouragement"],["followup","Follow-up"],["prayer","Prayer"]].map(function(option){return '<option value="'+option[0]+'"'+(option[0]===selected?' selected':'')+'>'+option[1]+'</option>';}).join("");}
 function profileNoteTitleText(note){return String(note.title||note.text||"");}
 function profileNoteDetails(note){return String(note.details||"");}
+function followupAssociationOwner(note){return note&&note.kind==="faith-note"?"faith":note&&(note.personId||"global");}
 function personNoteRecords(person){return S.followups.filter(function(note){return note.personId===person.id||(Array.isArray(note.sharedWith)&&note.sharedWith.indexOf(person.id)!==-1);});}
 function notesChecklist(p,addAction){
  var items=personNoteRecords(p);
  function row(f){
-  if(editingFollowupId===f.id)return '<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="note-editor-title"><div class="profile-editor-body"><h3 id="note-editor-title">Edit Note</h3>'+(f.kind==="faith-note"?'<div class="profile-note-type"><span>Type</span><strong>Prayer</strong></div>':'<label class="profile-note-type">Type<select data-fu-kind>'+noteKindOptions(f.kind==="encouragement"?"encouragement":f.kind==="followup"?"followup":f.kind==="prayernote"?"prayer":"general")+'</select></label>')+'<label class="profile-note-type">Title<input id="followupEditTitle" aria-label="Note title" value="'+esc(profileNoteTitleText(f))+'"></label><label class="profile-note-type">Details<textarea id="followupEditDetails" aria-label="Note details" placeholder="Add details (optional)">'+esc(profileNoteDetails(f))+'</textarea></label>'+(f.kind==="faith-note"?tendAssociationControlsHTML("followup","faith",f.id,f):"")+'<div class="profile-editor-actions"><button class="btn mini" data-fusave="'+f.id+'">Save Note</button><button class="btn mini ghost" data-fucancel="1" data-editor-cancel>Cancel</button><button class="btn mini danger" data-fudel="'+f.id+'">Delete Note</button></div></div></dialog>';
+  if(editingFollowupId===f.id){var associationOwner=followupAssociationOwner(f)||p.id;return '<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="note-editor-title"><div class="profile-editor-body"><h3 id="note-editor-title">Edit Note</h3>'+(f.kind==="faith-note"?'<div class="profile-note-type"><span>Type</span><strong>Prayer</strong></div>':'<label class="profile-note-type">Type<select data-fu-kind>'+noteKindOptions(f.kind==="encouragement"?"encouragement":f.kind==="followup"?"followup":f.kind==="prayernote"?"prayer":"general")+'</select></label>')+'<label class="profile-note-type">Title<input id="followupEditTitle" aria-label="Note title" value="'+esc(profileNoteTitleText(f))+'"></label><label class="profile-note-type">Details<textarea id="followupEditDetails" aria-label="Note details" placeholder="Add details (optional)">'+esc(profileNoteDetails(f))+'</textarea></label>'+tendAssociationControlsHTML("followup",associationOwner,f.id,f)+'<div class="profile-editor-actions"><button class="btn mini" data-fusave="'+f.id+'">Save Note</button><button class="btn mini ghost" data-fucancel="1" data-editor-cancel>Cancel</button><button class="btn mini danger" data-fudel="'+f.id+'">Delete Note</button></div></div></dialog>';}
   var stamp=f.createdAt||f.ts?"Added "+when(f.createdAt||f.ts):f.due?"Due "+f.due:"";
   var ownerId=f.kind==="faith-note"?"faith":f.personId||p.id,badges=tendAssociationPeopleBadges(f,ownerId,p.id,"notes")+tendAssociationCategoryBadges(f);
   return '<div class="person-note-row'+(f.done?' is-done':'')+'"><span class="person-note-type-column">'+esc(noteKindLabel(f.kind))+'</span>'+tendRowContent(profileNoteTitleText(f),profileNoteDetails(f),stamp,badges)+'<div class="person-note-actions">'+(f.done?'<button class="btn mini ghost" data-fudone="'+f.id+'" aria-label="Reopen note">Reopen</button>':'<button class="btn mini note-done" data-fudone="'+f.id+'" aria-label="Complete note">Done</button>')+'<button class="iconbtn" data-fuedit="'+f.id+'" aria-label="Edit note" title="Edit">✎</button><button class="iconbtn" data-fudel="'+f.id+'" aria-label="Delete note" title="Delete">×</button></div></div>';
@@ -648,7 +649,7 @@ function personProfile(pid){
  out+='</section>';
  out+=profilePanelStart("notes")+'<p class="profile-tab-intro">Keep useful thoughts, encouragement, prayer, and follow-ups together.</p>';
  out+='<div class="person-notes">'+notesChecklist(p,noteDraftOpenFor===pid?"":'<div class="profile-add-action"><button class="btn mini ghost" data-profilenoteopen="'+pid+'">+ Add note</button></div>')+'</div>';
- if(noteDraftOpenFor===pid)out+='<dialog class="profile-editor-dialog" data-profile-editor="note" aria-labelledby="profile-editor-title"><div class="profile-editor-body"><h3 id="profile-editor-title">Add Note</h3><label class="profile-note-type">Type<select id="profileNoteKind">'+noteKindOptions("general")+'</select></label><label class="profile-note-type">Title<input id="profileNoteTitle" placeholder="A short title"></label><label class="profile-note-type">Details<textarea id="profileNoteDetails" placeholder="Add details (optional)"></textarea></label><div class="profile-editor-actions"><button class="btn mini" data-profilenotesave="'+pid+'">Save Note</button><button class="btn mini ghost" data-profilenotecancel="1" data-editor-cancel>Cancel</button></div></div></dialog>';
+ if(noteDraftOpenFor===pid){var noteDraft=noteAddDrafts[pid]||(noteAddDrafts[pid]={personId:pid,sharedWith:[],areas:[]});out+='<dialog class="profile-editor-dialog" data-profile-editor="note" aria-labelledby="profile-editor-title"><div class="profile-editor-body"><h3 id="profile-editor-title">Add Note</h3><label class="profile-note-type">Type<select id="profileNoteKind">'+noteKindOptions("general")+'</select></label><label class="profile-note-type">Title<input id="profileNoteTitle" placeholder="A short title"></label><label class="profile-note-type">Details<textarea id="profileNoteDetails" placeholder="Add details (optional)"></textarea></label>'+tendAssociationControlsHTML("followup",pid,"new",noteDraft)+'<div class="profile-editor-actions"><button class="btn mini" data-profilenotesave="'+pid+'">Save Note</button><button class="btn mini ghost" data-profilenotecancel="1" data-editor-cancel>Cancel</button></div></div></dialog>';}
  out+='</section>';
  /* person settings: gear in the header opens this modal */
  var relIn=REL_OPTIONS.indexOf(p.relation);
