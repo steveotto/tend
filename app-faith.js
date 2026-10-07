@@ -243,7 +243,7 @@ function faithPrayerSessionHTML(){
 }
 function faithPrayerHub(){
  var view=faithSelectedPrayerView(),labels={today:"Today",mine:"My prayers",all:"All prayers"},content=view==="today"?faithPrayerTodayHTML():view==="mine"?faithPrayerMineHTML():faithPrayerAllHTML();
- return '<div class="faith-prayer-hub" id="faith-prayer-hub"><nav class="faith-prayer-views" aria-label="Prayer views">'+["today","mine","all"].map(function(key){return '<button type="button" data-faith-prayer-view="'+key+'" aria-pressed="'+(view===key)+'">'+labels[key]+'</button>';}).join("")+'</nav><div class="faith-prayer-content"><div class="faith-session-options"><button type="button" class="btn mini" data-faith-session-start="'+view+'">Focused Prayer</button></div>'+content+'</div></div>';
+ return '<div class="faith-prayer-hub" id="faith-prayer-hub"><div class="faith-prayer-toolbar"><label class="faith-prayer-view-picker"><span>View</span><select data-faith-prayer-view aria-label="Prayer list view">'+["today","mine","all"].map(function(key){return '<option value="'+key+'"'+(view===key?' selected':'')+'>'+labels[key]+'</option>';}).join("")+'</select></label><button type="button" class="btn mini" data-faith-session-start="'+view+'">Focused Prayer</button></div><div class="faith-prayer-content">'+content+'</div></div>';
 }
 function faithPracticeContent(group){
  var description=faithConfig().groupDescriptions[group]||"";
@@ -401,7 +401,6 @@ document.addEventListener("click",function(event){
  if(b.matches("[data-faith-settings-close]")){faithSettingsOpen=false;render();event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-select]")){var selected=b.getAttribute("data-faith-select");faithConfig().selectedGroup=selected;save();render();var navButton=document.querySelector('[data-faith-select="'+selected+'"]');if(navButton)navButton.focus();event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-practice-tab]")){var parts=b.getAttribute("data-faith-practice-tab").split("|"),tabs=faithConfig().practiceTabs||{};tabs[parts[0]]=parts[1];faithConfig().practiceTabs=tabs;save();render();var tabButton=document.querySelector('[data-faith-practice-tab="'+parts[0]+'|'+parts[1]+'"]');if(tabButton)tabButton.focus();event.stopImmediatePropagation();return;}
- if(b.matches("[data-faith-prayer-view]")){var view=b.getAttribute("data-faith-prayer-view");faithConfig().prayerView=view;save();render();var viewButton=document.querySelector('[data-faith-prayer-view="'+view+'"]');if(viewButton)viewButton.focus();event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-prayer-filter-action]")){var action=b.getAttribute("data-faith-prayer-filter-action");faithConfig().prayerPeople=action==="all"?null:[];faithConfig().prayerGroups={marriage:action==="all",parenting:action==="all",friendships:action==="all"};faithPrayerPeopleOpen=true;save();faithPrayerFilterRender("filter-action",action);event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-prayer-today]")){faithConfig().selectedGroup="Prayer";faithConfig().prayerView="today";faithConfig().practiceTabs=faithConfig().practiceTabs||{};faithConfig().practiceTabs.Prayer="prayer";save();render();var hub=document.getElementById("faith-prayer-hub");if(hub)hub.scrollIntoView({behavior:"smooth",block:"start"});event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-session-start]")){var sessionView=b.getAttribute("data-faith-session-start");faithPrayerSession={view:sessionView,all:sessionView==="all",ids:faithPrayerSessionSort(sessionView),index:0};render();var card=document.querySelector("[data-faith-session-card]");if(card)card.focus();event.stopImmediatePropagation();return;}
@@ -440,6 +439,12 @@ document.addEventListener("click",function(event){
 },true);
 document.addEventListener("change",function(event){
  var t=event.target;if(!t.matches)return;
+ if(t.matches("[data-faith-prayer-view]")){
+  var view=t.value;if(["today","mine","all"].indexOf(view)<0)return;
+  faithConfig().prayerView=view;save();render();
+  var picker=document.querySelector("[data-faith-prayer-view]");if(picker)picker.focus();
+  event.stopImmediatePropagation();return;
+ }
  if(t.matches&&t.matches("[data-faith-prayer-person]")){
   var personId=t.getAttribute("data-faith-prayer-person"),config=faithConfig();config.prayerPeople=Array.from(document.querySelectorAll("[data-faith-prayer-person]:checked")).map(function(input){return input.getAttribute("data-faith-prayer-person");});faithPrayerPeopleOpen=true;save();faithPrayerFilterRender("person",personId);event.stopImmediatePropagation();return;
  }
