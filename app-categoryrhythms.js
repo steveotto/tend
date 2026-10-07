@@ -108,7 +108,11 @@
   if(due.length){
    due.forEach(function(item){var r=item.record,p=item.person,score=rhythmScore(r),tag=p?'<button type="button" class="rhythm-person-badge" data-openperson="'+esc(p.id)+'">'+personAvatar(p,22)+'<span>'+esc(p.name.trim().split(/\s+/)[0])+'</span></button>':'<span class="rhythm-owner-badge">Personal</span>';
     var tend=p?'<button type="button" class="btn mini" data-tend-open="person-rhythm" data-person-id="'+esc(p.id)+'" data-rhythm-id="'+esc(r.id)+'" data-rhythm-area="'+esc(id)+'">Tend</button>':'<button type="button" class="btn mini" data-tend-open="area-rhythm" data-area-id="'+esc(id)+'" data-rhythm-id="'+esc(r.id)+'">Tend</button>';
-    out+='<div class="actrow"><span class="act-ic" style="background:'+personHealthColor(score)+'"></span><div class="pi-main"><div class="pi-label">'+esc(r.text||"(unnamed rhythm)")+'</div><div class="pi-sub">'+esc(rhythmFreqLabel(r))+' · '+esc(rhythmDueTxt(r))+'</div></div>'+tag+tend+'</div>';
+    var meta=tendRhythmMetaLabel(r,null,true);
+    if(p){
+     var badges=typeof window.planPills==="function"?window.planPills({personId:p.id,rhythm:p.id+"|"+r.id}):'<span class="pill rhy">'+collectionIcon("rhythms")+' Rhythm</span>'+rhythmPeopleBadges(r,p.id)+(typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(r):"");
+     out+='<div class="actrow"><span class="act-ic" style="background:'+personHealthColor(score)+'"></span><div class="pi-main">'+tendRowContent(r.text||"(unnamed rhythm)",String(r.description||"").trim(),meta,badges)+'</div>'+(typeof window.planPills==="function"?"":tag)+tend+'</div>';
+    }else out+='<div class="actrow"><span class="act-ic" style="background:'+personHealthColor(score)+'"></span><div class="pi-main"><div class="pi-label">'+esc(r.text||"(unnamed rhythm)")+'</div><div class="pi-sub">'+esc(meta)+'</div></div>'+tag+tend+'</div>';
    });
   }else out+='<div class="empty">No rhythms due today.</div>';
   out+='</section><section class="card category-rhythms"><div class="category-rhythms-heading"><div><div class="subhead">Rhythms</div><div class="profile-tab-intro">Recurring practices connected to this category.</div></div><button type="button" class="btn mini ghost" data-area-rhythm-new="'+esc(id)+'">+ Add rhythm</button></div>';
