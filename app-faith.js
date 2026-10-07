@@ -102,7 +102,7 @@ function faithNavScoreHTML(score){
  return '<span class="rhythm-health faith-nav-score" aria-label="'+(Number.isFinite(score)?score+" percent":"No rhythm score")+'"><span class="sm-dot '+level+'" aria-hidden="true"></span><span>'+value+(Number.isFinite(score)?"%":"")+'</span></span>';
 }
 function faithTimeRank(tod){if(tod==="allday")return -1;var blocks=dayBlocks(),index=blocks.findIndex(function(block){return block.id===tod;});return index<0?blocks.length:index;}
-function faithPracticeCount(group){return group==="Prayer"?faithActivePrayers().length:faithRhythms(group).length+(typeof window.faithLinkedRhythmCount==="function"?window.faithLinkedRhythmCount(group):0);}
+function faithPracticeCount(group){return faithRhythms(group).length+(typeof window.faithLinkedRhythmCount==="function"?window.faithLinkedRhythmCount(group):0);}
 function faithPracticeGroups(){return FAITH_GROUPS.filter(faithGroupEnabled);}
 function faithTendAction(r){
  return '<button type="button" class="btn mini" data-tend-open="faith-rhythm" data-rhythm-id="'+esc(r.id)+'">Tend</button>';
@@ -135,8 +135,8 @@ function faithSectionNavHTML(selected){
  var groups=faithPracticeGroups();
  if(!groups.length)return '<div class="faith-section-nav-empty">All practice sections are off. Re-enable one in Sections settings.</div>';
  return '<nav class="faith-section-nav" aria-label="Faith practices">'+groups.map(function(group){
-  var score=group==="Prayer"?null:avg(faithRhythms(group).map(function(r){return rhythmScore(r);}));
-  return '<button type="button" data-faith-select="'+esc(group)+'" aria-current="'+(group===selected?"page":"false")+'"><span>'+esc(group)+'</span><span class="faith-nav-meta"><span class="faith-count">'+faithPracticeCount(group)+'</span>'+(group==="Prayer"?"":faithNavScoreHTML(score))+'</span></button>';
+  var score=avg(faithRhythms(group).map(function(r){return rhythmScore(r);}));
+  return '<button type="button" data-faith-select="'+esc(group)+'" aria-current="'+(group===selected?"page":"false")+'"><span>'+esc(group)+'</span><span class="faith-nav-meta"><span class="faith-count">'+faithPracticeCount(group)+'</span>'+faithNavScoreHTML(score)+'</span></button>';
  }).join("")+'</nav>';
 }
 function faithRhythmEditorHTML(r){
