@@ -70,5 +70,5 @@ function openRhythmHistory(key,showOccurrences){
   if(!event)return;
   S.events=S.events.filter(function(item){return item!==event;});save();dialog.close();render();openRhythmHistory(key,true);flash('Tend removed from history');
  });
- dialog.addEventListener('close',function(){dialog.remove();});document.body.appendChild(dialog);dialog.showModal();var scroll=dialog.querySelector('.history-scroll');scroll.scrollLeft=scroll.scrollWidth;var hint=dialog.querySelector('.history-scroll-hint');if(hint)hint.hidden=scroll.scrollWidth<=scroll.clientWidth+1;
+ dialog.addEventListener('close',function(){dialog.remove();});document.body.appendChild(dialog);tendShowModal(dialog);var scroll=dialog.querySelector('.history-scroll');scroll.scrollLeft=scroll.scrollWidth;var hint=dialog.querySelector('.history-scroll-hint');if(hint)hint.hidden=scroll.scrollWidth<=scroll.clientWidth+1;
 }
