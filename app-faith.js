@@ -165,13 +165,23 @@ function faithTodayHTML(){
  }
  return out;
 }
-function faithHealthHTML(){
+function faithOverallHealth(rhythms,prayers){
+ var total=0,weight=0;
+ if(rhythms!==null){total+=.4*rhythms;weight+=.4;}
+ if(prayers!==null){total+=.3*prayers;weight+=.3;}
+ return weight?Math.round(total/weight):null;
+}
+function faithScores(){
  var rhythms=faithAllRhythmRecords(),prayers=faithActivePrayers(),rhythmScoreValue=avg(rhythms.map(function(r){return rhythmScore(r);})),prayerScoreValue=avg(prayers.map(function(p){return prayerScore(p);}));
+ return {overall:faithOverallHealth(rhythmScoreValue,prayerScoreValue),rhythms:rhythms};
+}
+function faithHealthHTML(){
+ var rhythms=faithAllRhythmRecords(),prayers=faithActivePrayers(),rhythmScoreValue=avg(rhythms.map(function(r){return rhythmScore(r);})),prayerScoreValue=avg(prayers.map(function(p){return prayerScore(p);})),overall=faithOverallHealth(rhythmScoreValue,prayerScoreValue),level=faithScoreClass(overall);
  function meter(label,score,note){
   var value=Number.isFinite(score)?score:null,level=faithScoreClass(value);
   return '<div class="pmeter"><div class="pm-lab"><span>'+label+'</span><span class="pm-val '+level+'">'+faithScoreText(value)+'</span></div><div class="bar" role="meter" aria-label="Overall Faith '+label.toLowerCase()+' health" aria-valuemin="0" aria-valuemax="100"'+(value===null?' aria-valuetext="No score available"':' aria-valuenow="'+value+'" aria-valuetext="'+value+' out of 100"')+'><i class="'+level+'" style="width:'+(value===null?0:value)+'%"></i></div><div class="pm-note">'+note+'</div></div>';
  }
- return '<section class="card faith-health-card" aria-labelledby="faithHealthTitle"><div class="faith-health-head"><h2 id="faithHealthTitle">Overall Faith health</h2></div><div class="pmeters faith-overall-meters">'+meter("Rhythms",rhythmScoreValue,rhythms.length+" active rhythm"+(rhythms.length===1?"":"s"))+meter("Prayer",prayerScoreValue,prayers.length+" active prayer"+(prayers.length===1?"":"s"))+'</div></section>';
+ return '<section class="card faith-health-card" aria-labelledby="faithHealthTitle"><div class="person-health-heading"><div><h4 id="faithHealthTitle">Overall Faith health</h4><p>Faith rhythms and prayers, tended together.</p></div><span class="person-profile-score">'+faithScoreText(overall)+'<small>/ 100</small></span></div><div class="bar-ov faith-overall-health-meter" role="meter" aria-label="Overall Faith health" aria-valuemin="0" aria-valuemax="100"'+(overall===null?' aria-valuetext="No active Faith health scores"':' aria-valuenow="'+overall+'" aria-valuetext="'+overall+' out of 100: '+esc(scoreLabel(overall))+'"')+'>'+(overall===null?'':'<i class="ov-marker" style="left:clamp(10px, '+overall+'%, calc(100% - 10px))" aria-hidden="true"></i>')+'</div><div class="person-health-status statusword '+level+'">'+(overall===null?"No active Faith health scores":esc(scoreLabel(overall)))+'</div><div class="pmeters faith-overall-meters">'+meter("Rhythms",rhythmScoreValue,rhythms.length+" active rhythm"+(rhythms.length===1?"":"s"))+meter("Prayer",prayerScoreValue,prayers.length+" active prayer"+(prayers.length===1?"":"s"))+'</div></section>';
 }
 function faithSettingsHTML(){
  return faithSettingsOpen?'<section class="faith-sections-settings" id="faith-sections-settings" aria-labelledby="faithSectionsTitle"><div class="faith-settings-heading"><div><h2 id="faithSectionsTitle">Sections</h2><p>Choose which practice sections appear on this page.</p></div><button type="button" class="iconbtn" data-faith-settings-close="1" aria-label="Close section settings">×</button></div><div class="faith-settings-list">'+FAITH_GROUPS.map(function(group){return '<label><input type="checkbox" data-faith-enabled="'+esc(group)+'"'+(faithGroupEnabled(group)?" checked":"")+'><span>'+esc(group)+'</span></label>';}).join("")+'</div></section>':'';
