@@ -248,6 +248,7 @@ function tendAssociationValues(type,ownerId,itemId,record){
  var draft=tendItemAssociationDrafts[tendAssociationKey(type,ownerId,itemId)];
  var sharedWith=draft?draft.sharedWith:record&&record.sharedWith,areas=draft?draft.areas:record&&record.areas;
  if(type==="connection"&&!draft){sharedWith=record&&Array.isArray(record.personIds)?record.personIds:record&&record.personId?[record.personId]:[];}
+ if(type==="followup"&&record&&record.kind==="faith-note"&&!draft&&(!Array.isArray(areas)||areas.indexOf("faith")===-1))areas=(Array.isArray(areas)?areas:[]).concat("faith");
  return {sharedWith:Array.isArray(sharedWith)?sharedWith:[],areas:Array.isArray(areas)?areas:[]};
 }
 function tendPersonRelationshipGroup(person){
@@ -284,7 +285,10 @@ function tendAssociationPeopleBadges(record,ownerId,excludeId,section){
  }).join("");
 }
 function tendAssociationCategoryBadges(record){
- return record&&record.areas&&typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges({areas:record.areas}):"";
+ if(!record||typeof window.tendCategoryBadges!=="function")return "";
+ var areas=Array.isArray(record.areas)?record.areas.slice():[];
+ if(record.kind==="faith-note"&&areas.indexOf("faith")===-1)areas.push("faith");
+ return window.tendCategoryBadges({areas:areas,faithGroup:record.faithSection||record.faithGroup});
 }
 function tendPrayerCategoryBadges(prayer){
  var area={Marriage:"marriage",Kids:"parenting",Friends:"friendships",Faith:"faith"}[prayer&&prayer.category],areas=(prayer&&prayer.areas||[]).slice();
@@ -295,19 +299,23 @@ function tendAssociationControlsHTML(type,ownerId,itemId,record){
  var values=tendAssociationValues(type,ownerId,itemId,record),names={faith:"Faith",marriage:"Marriage",parenting:"Parenting",health:"Health & Fitness",finances:"Finances",friendships:"Friendships"};
  var key=type+"|"+ownerId+"|"+itemId;
  var action=itemId==="new"?"Add":"Edit";
- var categories=values.areas.map(function(id){return '<span class="rhythm-picker-chip category-selected">'+(AREA_ICONS[id]||"")+esc(names[id]||id)+'</span>';}).join("");
+ var categories=values.areas.map(function(id){var label=id==="faith"&&record&&record.kind==="faith-note"?"Faith - "+(record.faithSection||"Prayer"):names[id]||id;return '<span class="rhythm-picker-chip category-selected">'+(AREA_ICONS[id]||"")+esc(label)+'</span>';}).join("");
  var people=values.sharedWith.map(function(id){var person=S.people.find(function(x){return x.id===id;});return person?'<span class="rhythm-picker-person">'+personAvatar(person,22)+esc(person.name)+'</span>':"";}).join("");
  return '<div class="rhythm-picker-controls item-association-controls" data-item-association-controls="'+esc(key)+'"><div class="rhythm-picker-row"><button type="button" class="rhythm-picker-trigger" data-item-picker-open="'+esc(key+'|categories')+'">'+action+' categories</button>'+categories+'</div><div class="rhythm-picker-row"><button type="button" class="rhythm-picker-trigger" data-item-picker-open="'+esc(key+'|people')+'">'+action+' people</button>'+people+'</div></div>';
 }
 function tendAssociationPickerHTML(picker){
  var people=picker.kind==="people",ownerId=picker.ownerId,type=picker.type,itemId=picker.itemId,target=type+"|"+ownerId+"|"+itemId+"|"+picker.kind;
- var itemName=type==="spark"?"spark":type==="connection"?"connection":"prayer";
+ var itemName=type==="spark"?"spark":type==="connection"?"connection":type==="followup"?"note":"prayer";
  var names={faith:"Faith",marriage:"Marriage",parenting:"Parenting",health:"Health & Fitness",finances:"Finances",friendships:"Friendships"};
  var choices=people?S.people.map(function(person){var isOwner=ownerId!=="connection"&&person.id===ownerId,selected=isOwner||picker.selected.indexOf(person.id)!==-1;return '<button type="button" class="prayer-person person-badge-clickable rhythm-picker-option'+(selected?' selected':'')+'" data-item-picker-toggle="'+esc(target+'|'+person.id)+'" aria-pressed="'+selected+'"'+(isOwner?' disabled':'')+'>'+personAvatar(person,28)+esc(person.name)+'</button>';}).join(""):["faith","marriage","parenting","health","finances","friendships"].map(function(id){var selected=picker.selected.indexOf(id)!==-1;return '<button type="button" class="rhythm-picker-option category-option'+(selected?' selected':'')+'" data-item-picker-toggle="'+esc(target+'|'+id)+'" aria-pressed="'+selected+'">'+(AREA_ICONS[id]||"")+'<span>'+names[id]+'</span></button>';}).join("");
  return '<dialog class="profile-editor-dialog rhythm-picker-dialog" data-item-association-dialog aria-labelledby="item-association-title"><div class="profile-editor-body"><h3 id="item-association-title" tabindex="-1">'+(people?"People for this "+itemName:"Categories for this "+itemName)+'</h3><p class="profile-tab-intro">'+(people?"Choose everyone involved in this "+itemName+".":"Choose the categories where this "+itemName+" should appear.")+'</p>'+(people&&ownerId!=="connection"?tendPeopleGroupToggleBar(picker.selected,ownerId,"data-item-picker-group"):"")+'<div class="rhythm-picker-options">'+choices+'</div><div class="profile-editor-actions"><button type="button" class="btn mini" data-item-picker-save>Save</button><button type="button" class="btn mini ghost" data-item-picker-cancel>Cancel</button></div></div></dialog>';
 }
 function tendAssociationRecord(type,ownerId,itemId){
  if(type==="connection")return S.events.find(function(event){return event.id===itemId;});
+ if(type==="followup"){
+  if(itemId==="new")return ownerId==="faith"?faithNoteDraft:null;
+  return S.followups.find(function(item){return item.id===itemId;});
+ }
  if(type==="spark"){
   if(itemId==="new")return sparkAddDrafts[ownerId]||(sparkAddDrafts[ownerId]={sharedWith:[],areas:[]});
   if(sparkEditDraft&&sparkEditDraft.id===itemId)return sparkEditDraft;
@@ -336,6 +344,7 @@ function tendAssociationCommit(type,ownerId,itemId,record){
    record.areas=draft.areas.slice();
   }else{
    var recordOwner=record.personId||ownerId;record.sharedWith=draft.sharedWith.filter(function(id){return id!==recordOwner&&S.people.some(function(person){return person.id===id;});});record.areas=draft.areas.slice();
+   if(type==="followup"&&record.kind==="faith-note"&&record.areas.indexOf("faith")===-1)record.areas.push("faith");
   }
  }
  delete tendItemAssociationDrafts[key];
@@ -443,27 +452,30 @@ function tendRhythmMetaLabel(r,eventTs,includeDue){
  if(includeDue&&last&&rhythmDaysSince(r)!==0)parts.push(rhythmDueTxt(r));
  return parts.join(" \u00B7 ");
 }
-function noteKindLabel(kind){return kind==="prayernote"||kind==="prayer"?"Prayer":kind==="encouragement"?"Encouragement":kind==="followup"?"Follow-up":"General";}
+function noteKindLabel(kind){return kind==="prayernote"||kind==="prayer"||kind==="faith-note"?"Prayer":kind==="encouragement"?"Encouragement":kind==="followup"?"Follow-up":"General";}
 function noteKindOptions(selected){selected=selected==="prayernote"?"prayer":selected;return [["general","General"],["encouragement","Encouragement"],["followup","Follow-up"],["prayer","Prayer"]].map(function(option){return '<option value="'+option[0]+'"'+(option[0]===selected?' selected':'')+'>'+option[1]+'</option>';}).join("");}
 function profileNoteTitleText(note){return String(note.title||note.text||"");}
 function profileNoteDetails(note){return String(note.details||"");}
+function personNoteRecords(person){return S.followups.filter(function(note){return note.personId===person.id||(Array.isArray(note.sharedWith)&&note.sharedWith.indexOf(person.id)!==-1);});}
 function notesChecklist(p,addAction){
- var items=S.followups.filter(function(f){return f.personId===p.id;});
+ var items=personNoteRecords(p);
  function row(f){
-  if(editingFollowupId===f.id)return '<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="note-editor-title"><div class="profile-editor-body"><h3 id="note-editor-title">Edit Note</h3><label class="profile-note-type">Type<select data-fu-kind>'+noteKindOptions(f.kind==="encouragement"?"encouragement":f.kind==="followup"?"followup":f.kind==="prayernote"?"prayer":"general")+'</select></label><label class="profile-note-type">Title<input id="followupEditTitle" aria-label="Note title" value="'+esc(profileNoteTitleText(f))+'"></label><label class="profile-note-type">Details<textarea id="followupEditDetails" aria-label="Note details" placeholder="Add details (optional)">'+esc(profileNoteDetails(f))+'</textarea></label><div class="profile-editor-actions"><button class="btn mini" data-fusave="'+f.id+'">Save Note</button><button class="btn mini ghost" data-fucancel="1" data-editor-cancel>Cancel</button><button class="btn mini danger" data-fudel="'+f.id+'">Delete Note</button></div></div></dialog>';
+  if(editingFollowupId===f.id)return '<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="note-editor-title"><div class="profile-editor-body"><h3 id="note-editor-title">Edit Note</h3>'+(f.kind==="faith-note"?'<div class="profile-note-type"><span>Type</span><strong>Prayer</strong></div>':'<label class="profile-note-type">Type<select data-fu-kind>'+noteKindOptions(f.kind==="encouragement"?"encouragement":f.kind==="followup"?"followup":f.kind==="prayernote"?"prayer":"general")+'</select></label>')+'<label class="profile-note-type">Title<input id="followupEditTitle" aria-label="Note title" value="'+esc(profileNoteTitleText(f))+'"></label><label class="profile-note-type">Details<textarea id="followupEditDetails" aria-label="Note details" placeholder="Add details (optional)">'+esc(profileNoteDetails(f))+'</textarea></label>'+(f.kind==="faith-note"?tendAssociationControlsHTML("followup","faith",f.id,f):"")+'<div class="profile-editor-actions"><button class="btn mini" data-fusave="'+f.id+'">Save Note</button><button class="btn mini ghost" data-fucancel="1" data-editor-cancel>Cancel</button><button class="btn mini danger" data-fudel="'+f.id+'">Delete Note</button></div></div></dialog>';
   var stamp=f.createdAt||f.ts?"Added "+when(f.createdAt||f.ts):f.due?"Due "+f.due:"";
-  return '<div class="person-note-row'+(f.done?' is-done':'')+'"><span class="person-note-type-column">'+esc(noteKindLabel(f.kind))+'</span>'+tendRowContent(profileNoteTitleText(f),profileNoteDetails(f),stamp,"")+'<div class="person-note-actions">'+(f.done?'<button class="btn mini ghost" data-fudone="'+f.id+'" aria-label="Reopen note">Reopen</button>':'<button class="btn mini note-done" data-fudone="'+f.id+'" aria-label="Complete note">Done</button>')+'<button class="iconbtn" data-fuedit="'+f.id+'" aria-label="Edit note" title="Edit">✎</button><button class="iconbtn" data-fudel="'+f.id+'" aria-label="Delete note" title="Delete">×</button></div></div>';
+  var ownerId=f.kind==="faith-note"?"faith":f.personId||p.id,badges=tendAssociationPeopleBadges(f,ownerId,p.id,"notes")+tendAssociationCategoryBadges(f);
+  return '<div class="person-note-row'+(f.done?' is-done':'')+'"><span class="person-note-type-column">'+esc(noteKindLabel(f.kind))+'</span>'+tendRowContent(profileNoteTitleText(f),profileNoteDetails(f),stamp,badges)+'<div class="person-note-actions">'+(f.done?'<button class="btn mini ghost" data-fudone="'+f.id+'" aria-label="Reopen note">Reopen</button>':'<button class="btn mini note-done" data-fudone="'+f.id+'" aria-label="Complete note">Done</button>')+'<button class="iconbtn" data-fuedit="'+f.id+'" aria-label="Edit note" title="Edit">✎</button><button class="iconbtn" data-fudel="'+f.id+'" aria-label="Delete note" title="Delete">×</button></div></div>';
  }
  var active=items.filter(function(f){return !f.done;}),done=items.filter(function(f){return f.done;});
  return (active.length?active.map(row).join(""):'<div class="empty">No notes yet - add something to remember.</div>')+(done.length?'<button type="button" class="recent-moments-toggle" data-note-history="'+esc(p.id)+'">Show history ('+done.length+')</button>':'')+(addAction||"");
 }
 function openPersonNoteHistory(personId){
  var person=S.people.find(function(item){return item.id===personId;});if(!person)return;
- var notes=S.followups.filter(function(note){return note.personId===personId&&note.done;}).sort(function(a,b){return (b.completedDate||b.createdAt||b.ts||0)>(a.completedDate||a.createdAt||a.ts||0)?1:-1;});
+ var notes=personNoteRecords(person).filter(function(note){return note.done;}).sort(function(a,b){return (b.completedDate||b.createdAt||b.ts||0)>(a.completedDate||a.createdAt||a.ts||0)?1:-1;});
  function row(note){
   var stamp=note.createdAt||note.ts?"Added "+when(note.createdAt||note.ts):note.due?"Due "+note.due:"";
   if(note.completedDate)stamp+=(stamp?" · ":"")+"Completed "+when(note.completedDate);
-  return '<div class="person-note-row is-done"><span class="person-note-type-column">'+esc(noteKindLabel(note.kind))+'</span>'+tendRowContent(profileNoteTitleText(note),profileNoteDetails(note),stamp,"")+'<div class="person-note-actions"><button class="btn mini ghost" data-fudone="'+esc(note.id)+'" aria-label="Reopen note">Reopen</button><button class="iconbtn" data-fuedit="'+esc(note.id)+'" aria-label="Edit note" title="Edit">✎</button><button class="iconbtn" data-fudel="'+esc(note.id)+'" aria-label="Delete note" title="Delete">×</button></div></div>';
+  var ownerId=note.kind==="faith-note"?"faith":note.personId||person.id,badges=tendAssociationPeopleBadges(note,ownerId,person.id,"notes")+tendAssociationCategoryBadges(note);
+  return '<div class="person-note-row is-done"><span class="person-note-type-column">'+esc(noteKindLabel(note.kind))+'</span>'+tendRowContent(profileNoteTitleText(note),profileNoteDetails(note),stamp,badges)+'<div class="person-note-actions"><button class="btn mini ghost" data-fudone="'+esc(note.id)+'" aria-label="Reopen note">Reopen</button><button class="iconbtn" data-fuedit="'+esc(note.id)+'" aria-label="Edit note" title="Edit">✎</button><button class="iconbtn" data-fudel="'+esc(note.id)+'" aria-label="Delete note" title="Delete">×</button></div></div>';
  }
  var dialog=document.createElement("dialog");dialog.className="rhythm-history-dialog note-history-dialog";dialog.setAttribute("aria-labelledby","noteHistoryTitle");
  dialog.innerHTML='<div class="history-person"><span class="history-person-avatar">'+personAvatar(person,42)+'</span><strong>'+esc(person.name)+'</strong></div><div class="history-heading"><div><h2 id="noteHistoryTitle">Completed notes</h2><p class="history-rhythm-details">'+notes.length+' completed note'+(notes.length===1?"":"s")+'</p></div><button class="iconbtn" data-note-history-close aria-label="Close note history">✕</button></div><div class="notes-history-list note-history-modal-list">'+(notes.length?notes.map(row).join(""):'<div class="empty">No completed notes yet.</div>')+'</div>';
@@ -598,7 +610,7 @@ function personProfile(pid){
  }
  activeProfileTab=profileTabs[pid]||"rhythms";
  var connections=evs.filter(connectionEvent);
- var counts={rhythms:sortedPersonRhythms(p).length,connection:connections.length,sparks:sortedPersonSparks(p).length,prayer:prayers.filter(function(x){return !x.answered&&!x.archived;}).length,notes:S.followups.filter(function(f){return f.personId===pid&&!f.done;}).length};
+ var counts={rhythms:sortedPersonRhythms(p).length,connection:connections.length,sparks:sortedPersonSparks(p).length,prayer:prayers.filter(function(x){return !x.answered&&!x.archived;}).length,notes:personNoteRecords(p).filter(function(f){return !f.done;}).length};
  out+='<div class="profile-tabs-row">'+(profileBadgePerson===pid?'<span class="profile-tabs-person">'+personAvatar(p,44)+'</span>':'')+'<div class="profile-tabs" role="tablist" aria-label="Person collections">'+[["rhythms","Rhythms"],["connection","Connection"],["sparks","Sparks"],["prayer","Prayer"],["notes","Notes"]].map(function(item){return '<button role="tab" id="profile-tab-'+item[0]+'" aria-controls="profile-panel-'+item[0]+'" aria-selected="'+(activeProfileTab===item[0])+'" data-profiletab="'+item[0]+'">'+collectionIcon(item[0])+item[1]+' <span class="tab-count">'+counts[item[0]]+'</span></button>';}).join('')+'</div></div>';
  out+=profilePanelStart("connection")+'<div class="connection-history-toolbar"><p class="profile-tab-intro">Shared moments add up and keep your connection strong.</p><button type="button" class="iconbtn rhythm-history-trigger" data-connection-history="'+esc(pid)+'" title="View connection history" aria-label="View connection history for '+esc(p.name)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button></div>';
  if(connections.length){
