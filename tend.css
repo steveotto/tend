@@ -667,7 +667,8 @@ details.moor .moor-body{padding:2px 18px 14px}
 .faith-health-status{font-size:16px;font-weight:600}
 .faith-health-card>p{margin-top:6px;color:var(--ink-faint);font-size:13px}
 .faith-practice-meters{gap:10px;margin:12px 0 16px}
-.faith-practice-meter{min-width:0;padding:10px 14px}
+.faith-practice-meter{width:100%;min-width:0;padding:10px 14px;border:1px solid var(--line);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
+.faith-practice-meter:hover,.faith-practice-meter:focus-visible{border-color:var(--forest);background:var(--mist);outline-color:var(--forest)}
 .faith-practice-meter .bar{height:7px;margin:7px 0 4px;overflow:hidden;border-radius:99px;background:var(--mist)}
 .faith-practice-meter .pm-val.neutral{color:var(--ink-faint)}
 .faith-submeters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
