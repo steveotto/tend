@@ -36,6 +36,37 @@ function badgeColorsSettingsHTML(){
  var colors=badgeColorSettings(),labels={rhythm:'Rhythm',spark:'Spark',prayer:'Prayer',faith:'Faith'};
  return '<div class="card settings-card"><div class="subhead">Badge colors</div><p class="settings-help">Choose a distinct brand color for each badge. The app keeps the badge text readable against a softly tinted background.</p><div class="badge-color-settings">'+Object.keys(labels).map(function(key){return '<label class="badge-color-setting" for="badgeColor-'+key+'"><span>'+labels[key]+'</span><input type="color" id="badgeColor-'+key+'" data-badge-color="'+key+'" value="'+colors[key]+'"><span class="plan-kind plan-kind-'+key+'">'+(key==='faith'?collectionIcon('faith'):key==='rhythm'?collectionIcon('rhythms'):key==='spark'?collectionIcon('sparks'):collectionIcon('prayer'))+' '+labels[key]+'</span></label>';}).join('')+'</div><p class="settings-help">Color changes are saved automatically on this device.</p></div>';
 }
+function myProfileSettingsHTML(){
+ var photo=settings().profilePhoto||null;
+ return settingsPanel('profile')+'<div class="card settings-card"><div class="subhead">My profile</div><p class="settings-help">Add a photo to personalize the places where Tend shows you as “Me”. Your photo is saved with your Tend data.</p><div class="person-photo-controls">'+personAvatar({name:"Me",photo:photo},72)+'<input type="file" accept="image/*" data-profile-photo aria-label="Upload your profile photo">'+(photo?'<button type="button" class="btn mini danger" data-profile-photo-remove>Remove photo</button>':'')+'</div><p class="settings-help">Images are cropped to a square and compressed before saving.</p></div></section>';
+}
+document.addEventListener('click',function(event){
+ var button=event.target.closest&&event.target.closest('[data-profile-photo-remove]');
+ if(!button)return;
+ if(settings().profilePhoto){delete settings().profilePhoto;save();render();flash('Profile photo removed');}
+});
+document.addEventListener('change',function(event){
+ var input=event.target.closest&&event.target.closest('[data-profile-photo]'),file=input&&input.files&&input.files[0];
+ if(!file)return;
+ if(!/^image\//i.test(file.type)){flash('Choose an image file');input.value='';return;}
+ var reader=new FileReader();
+ reader.onerror=function(){flash('Could not read that image');input.value='';};
+ reader.onload=function(){
+  var image=new Image();
+  image.onerror=function(){flash('Could not load that image');input.value='';};
+  image.onload=function(){
+   var size=144,side=Math.min(image.naturalWidth,image.naturalHeight),canvas=document.createElement('canvas');
+   if(!side){flash('That image has no usable dimensions');input.value='';return;}
+   canvas.width=size;canvas.height=size;
+   var context=canvas.getContext('2d');
+   if(!context){flash('Could not process that image');input.value='';return;}
+   context.drawImage(image,(image.naturalWidth-side)/2,(image.naturalHeight-side)/2,side,side,0,0,size,size);
+   settings().profilePhoto=canvas.toDataURL('image/jpeg',.82);save();render();flash('Profile photo saved');
+  };
+  image.src=reader.result;
+ };
+ reader.readAsDataURL(file);
+});
 document.addEventListener('input',function(event){
  var input=event.target.closest&&event.target.closest('[data-badge-color]');
  if(!input||!/^#[0-9a-fA-F]{6}$/.test(input.value))return;
@@ -52,10 +83,11 @@ document.addEventListener('change',function(event){
 function renderSettings(){
  if(settingsTab==='general'||settingsTab==='peoplecolors'||settingsTab==='goals')settingsTab='peoplemeters';
  if(settingsTab==='times'||settingsTab==='dates'||settingsTab==='holidays'||settingsTab==='calendars')settingsTab='schedule';
- var tabs=[['peoplemeters','People & meters'],['badges','Badge colors'],['schedule','Time & dates'],['focus','Focus'],['sync','Sync']];
+ var tabs=[['profile','My profile'],['peoplemeters','People & meters'],['badges','Badge colors'],['schedule','Time & dates'],['focus','Focus'],['sync','Sync']];
  var out='<div class="sectiontitle settings-title"><h2>Settings</h2><span class="hint">Make Tend work for you</span></div>';
  out+='<p class="settings-intro">Choose a section below to update your preferences.</p>';
  out+='<div class="profile-tabs settings-tabs" role="tablist" aria-label="Settings">'+tabs.map(function(t){return '<button type="button" role="tab" id="settings-tab-'+t[0]+'" aria-controls="settings-panel-'+t[0]+'" aria-selected="'+(settingsTab===t[0])+'" data-settingstab="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div>';
+ out+=myProfileSettingsHTML();
  out+=settingsPanel('peoplemeters')+
   '<div class="settings-group-grid">'+
   (typeof peopleColorsSettingsHTML==='function'?peopleColorsSettingsHTML():'')+

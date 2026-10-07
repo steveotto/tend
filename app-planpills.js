@@ -16,8 +16,9 @@ window.planPills=function(it){
  var categories=record&&typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(record):"";
  var associationBadges=record&&kind==="spark"&&typeof tendAssociationPeopleBadges==="function"?tendAssociationPeopleBadges(record,String(it.spark).split("|")[0],currentPerson,"spark"):"";
  if(record&&kind==="prayer"&&typeof tendAssociationPeopleBadges==="function")associationBadges=tendAssociationPeopleBadges(record,record.personId||"global",currentPerson,"prayer");
+ var ownerBadge=record&&kind==="prayer"&&record.faithOwner==="me"&&!record.personId?'<span class="prayer-person">'+personAvatar({name:"Me",photo:settings().profilePhoto},24)+'Me</span>':"";
  var areaPill=!person&&!kind&&area&&S.areas[area]?'<span class="plan-kind">'+esc(S.areas[area].name)+'</span>':"";
- return personBadge+associationBadges+typeBadge+categories+areaPill;
+ return personBadge+ownerBadge+associationBadges+typeBadge+categories+areaPill;
 };
 })();
 var DEFAULT_BADGE_COLORS={rhythm:"#246B52",spark:"#67C5A3",prayer:"#5E6B63",faith:"#202723"};
