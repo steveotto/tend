@@ -773,8 +773,8 @@ details.moor .moor-body{padding:2px 18px 14px}
 .faith-history-row time,.faith-notes-list time{color:var(--ink-faint);font-size:12px}
 .faith-notes-list{list-style:none}
 .faith-notes-list li{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}
-.faith-notes-list li>span{flex:1;min-width:0}
-.faith-notes-list li.done>span{text-decoration:line-through;color:var(--ink-faint)}
+.faith-notes-list li>.tend-row-content{flex:1;min-width:0}
+.faith-notes-list li.done>.tend-row-content{opacity:.65}
 .faith-notes-list li input[type=checkbox]{flex:none}
 .faith-notes-list .faith-note-edit input{flex:1;min-width:100px}
 .faith-sections-settings{padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--card)}
@@ -1027,13 +1027,13 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .utility-primary button.utility-primary-button.active .utility-nav-icon,nav.tabs button.focus-nav-button.active .utility-nav-icon{background:var(--tend-mint)}
 
 /* Shared type scale for person panels, prayer rows, and the Today queue. */
-.person-profile .tend-type-title,.profile-tab-panel .tend-type-title,.today-with-person .tend-type-title,.prayer-item .tend-type-title,.faith-rhythm-row .tend-type-title{
+.person-profile .tend-type-title,.profile-tab-panel .tend-type-title,.today-with-person .tend-type-title,.prayer-item .tend-type-title,.faith-rhythm-row .tend-type-title,.faith-notes-list .tend-type-title{
  font-family:var(--sans);font-size:var(--tend-item-title-size);font-weight:600;line-height:1.4;color:var(--ink)
 }
-.person-profile .tend-type-description,.profile-tab-panel .tend-type-description,.today-with-person .tend-type-description,.prayer-item .tend-type-description,.faith-rhythm-row .tend-type-description{
+.person-profile .tend-type-description,.profile-tab-panel .tend-type-description,.today-with-person .tend-type-description,.prayer-item .tend-type-description,.faith-rhythm-row .tend-type-description,.faith-notes-list .tend-type-description{
  font-family:var(--sans);font-size:var(--tend-item-description-size);font-weight:400;line-height:1.5;color:var(--ink-soft)
 }
-.person-profile .tend-type-meta,.profile-tab-panel .tend-type-meta,.today-with-person .tend-type-meta,.faith-rhythm-row .tend-type-meta{
+.person-profile .tend-type-meta,.profile-tab-panel .tend-type-meta,.today-with-person .tend-type-meta,.faith-rhythm-row .tend-type-meta,.faith-notes-list .tend-type-meta{
  font-family:var(--sans);font-size:var(--tend-item-meta-size);line-height:1.45;color:var(--ink-faint)
 }
 .person-profile .tend-type-metric,.profile-tab-panel .tend-type-metric,.today-with-person .tend-type-metric,.prayer-item .tend-type-metric,.person-profile .rhythm-health{

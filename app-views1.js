@@ -498,19 +498,34 @@ function actQueueHTML(p){
  if(!visP.length&&focusOpen)visP=[{id:"focus",focus:true,text:p.prayerFocus}];
  var padP=[];
  var waiting=waitR.length+waitS.length+waitP.length+(visP.some(function(x){return x.focus;})?1:0);
- var rows=[];
+ var dayOrder=dayBlocks().map(function(block){return block.id;}),rows=[],rowOrder=0;
+ function queueFrequency(item,type){
+  if(type==="rhythm")return rhythmPeriod(item);
+  if(type==="prayer"){
+   if(item.focus)return Infinity;
+   var frequency=prayerFreq(item);
+   if(frequency==="selectdays")return 7/Math.max(1,(item.weekdays||[]).length);
+   return {daily:1,weekly:7,monthly:30}[frequency]||Infinity;
+  }
+  return Infinity;
+ }
+ function queueRow(html,item,type){
+  var time=dayOrder.indexOf(item.tod);
+  rows.push({html:html,frequency:queueFrequency(item,type),time:time<0?dayOrder.length:time,order:rowOrder++});
+ }
  function rhyRowQ(r,dim){
   var sub=tendRhythmMetaLabel(r,null,true);
   return '<div class="actrow'+(dim?" done":"")+'"><span class="act-ic" style="background:'+personHealthColor(rhythmScore(r))+'"></span><div class="pi-main">'+tendRowContent(r.text||"(unnamed rhythm)",String(r.description||"").trim(),sub,planPills({personId:p.id,rhythm:p.id+"|"+r.id}))+'</div>'+(dim?'<span class="praycount tend-type-metric">Tended \u2713</span>':rhyDoneBtn(p.id+"|"+r.id))+'</div>';
  }
- visR.forEach(function(r){rows.push(rhyRowQ(r,false));});
- padR.forEach(function(r){rows.push(rhyRowQ(r,true));});
- visS.forEach(function(s){var ownerId=s.profileOwnerId||p.id,meta=(s.time?fmtHM12(s.time)+" \u00b7 ":"")+sparkDueTxt(s);rows.push('<div class="actrow"><span class="act-ic" style="background:var(--forest)"></span><div class="pi-main">'+tendRowContent(s.text,s.details||"",meta,planPills({personId:p.id,spark:ownerId+"|"+s.id}))+'</div><button class="btn mini sparkbtn" data-sparkdo="'+ownerId+'|'+s.id+'|'+p.id+'">Do it</button></div>');});
- padS.forEach(function(s){var ownerId=s.profileOwnerId||p.id;rows.push('<div class="actrow done"><span class="act-ic" style="background:var(--forest)"></span><div class="pi-main">'+tendRowContent(s.text,s.details||"",sparkDueTxt(s),planPills({personId:p.id,spark:ownerId+"|"+s.id}))+'</div><span class="praycount tend-type-metric">Done \u2713</span></div>');});
- visP.forEach(function(x){var meta=x.focus?"Prayer focus":prayerScheduleLabel(x)+" \u00b7 Last prayed "+prayerLastPrayedLabel(x)+" \u00b7 Prayed "+(x.prayed||0)+" times";rows.push('<div class="actrow"><span class="act-ic" style="background:#5B7BA6"></span><div class="pi-main">'+tendRowContent(x.focus?'Prayer focus: '+x.text:x.text,x.details||"",meta,planPills({personId:p.id,prayer:x.id}))+'</div><button class="btn mini ghost" data-prayquick="'+p.id+'" data-prayref="'+(x.focus?"focus":x.id)+'">Pray</button></div>');});
- padP.forEach(function(x){rows.push('<div class="actrow done"><span class="act-ic" style="background:#5B7BA6"></span><div class="pi-main">'+tendRowContent(x.focus?'Prayer focus: '+x.text:x.text,"","Prayed today",planPills({personId:p.id,prayer:x.id}))+'</div><span class="praycount tend-type-metric">Prayed \u2713</span></div>');});
+ visR.forEach(function(r){queueRow(rhyRowQ(r,false),r,"rhythm");});
+ padR.forEach(function(r){queueRow(rhyRowQ(r,true),r,"rhythm");});
+ visS.forEach(function(s){var ownerId=s.profileOwnerId||p.id,meta=(s.time?fmtHM12(s.time)+" \u00b7 ":"")+sparkDueTxt(s);queueRow('<div class="actrow"><span class="act-ic" style="background:var(--forest)"></span><div class="pi-main">'+tendRowContent(s.text,s.details||"",meta,planPills({personId:p.id,spark:ownerId+"|"+s.id}))+'</div><button class="btn mini sparkbtn" data-sparkdo="'+ownerId+'|'+s.id+'|'+p.id+'">Do it</button></div>',s,"spark");});
+ padS.forEach(function(s){var ownerId=s.profileOwnerId||p.id;queueRow('<div class="actrow done"><span class="act-ic" style="background:var(--forest)"></span><div class="pi-main">'+tendRowContent(s.text,s.details||"",sparkDueTxt(s),planPills({personId:p.id,spark:ownerId+"|"+s.id}))+'</div><span class="praycount tend-type-metric">Done \u2713</span></div>',s,"spark");});
+ visP.forEach(function(x){var meta=x.focus?"Prayer focus":prayerScheduleLabel(x)+" \u00b7 Last prayed "+prayerLastPrayedLabel(x)+" \u00b7 Prayed "+(x.prayed||0)+" times";queueRow('<div class="actrow"><span class="act-ic" style="background:#5B7BA6"></span><div class="pi-main">'+tendRowContent(x.focus?'Prayer focus: '+x.text:x.text,x.details||"",meta,planPills({personId:p.id,prayer:x.id}))+'</div><button class="btn mini ghost" data-prayquick="'+p.id+'" data-prayref="'+(x.focus?"focus":x.id)+'">Pray</button></div>',x,"prayer");});
+ padP.forEach(function(x){queueRow('<div class="actrow done"><span class="act-ic" style="background:#5B7BA6"></span><div class="pi-main">'+tendRowContent(x.focus?'Prayer focus: '+x.text:x.text,"","Prayed today",planPills({personId:p.id,prayer:x.id}))+'</div><span class="praycount tend-type-metric">Prayed \u2713</span></div>',x,"prayer");});
  var out='<div class="card act today-with-person" style="margin-bottom:14px"><div class="qhead"><div class="subhead" style="margin:0">Today with '+first+'</div><span><span class="qpill'+(waiting?"":" clear")+'">'+(waiting?waiting+" in queue":"all tended \u2713")+'</span></span></div>';
- if(rows.length)out+=rows.join("");
+ rows.sort(function(a,b){return a.frequency<b.frequency?-1:a.frequency>b.frequency?1:a.time-b.time||a.order-b.order;});
+ if(rows.length)out+=rows.map(function(row){return row.html;}).join("");
  else out+='<div class="empty" style="margin-top:8px">Nothing waiting - these next steps are all tended.</div>';
  out+='</div>';
  /* one coaching nudge, at the bottom of the queue */
