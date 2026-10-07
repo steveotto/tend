@@ -115,14 +115,27 @@ function faithNavScoreHTML(score){
  var value=faithScoreText(score),level=faithScoreClass(score);
  return '<span class="rhythm-health faith-nav-score" aria-label="'+(Number.isFinite(score)?score+" percent":"No rhythm score")+'"><span class="sm-dot '+level+'" aria-hidden="true"></span><span>'+value+(Number.isFinite(score)?"%":"")+'</span></span>';
 }
-function faithPracticeHealth(group){
- var rhythms=avg(faithPracticeRhythmRecords(group).map(function(r){return rhythmScore(r);}));
- if(group!=="Prayer")return rhythms;
+function faithPracticeHealthParts(){
+ var rhythms=avg(faithPracticeRhythmRecords("Prayer").map(function(r){return rhythmScore(r);}));
  var prayers=avg(faithActivePrayers().filter(function(p){return p.category==="Faith"&&(p.faithSection||"Prayer")==="Prayer";}).map(function(p){return prayerScore(p);}));
+ return {rhythms:rhythms,prayers:prayers};
+}
+function faithPracticeHealth(group){
+ if(group!=="Prayer")return avg(faithPracticeRhythmRecords(group).map(function(r){return rhythmScore(r);}));
+ var parts=faithPracticeHealthParts(),rhythms=parts.rhythms,prayers=parts.prayers;
  var total=0,weight=0;
  if(rhythms!==null){total+=.4*rhythms;weight+=.4;}
  if(prayers!==null){total+=.3*prayers;weight+=.3;}
  return weight?Math.round(total/weight):null;
+}
+function faithPracticeMetersHTML(group){
+ if(group!=="Prayer")return "";
+ var parts=faithPracticeHealthParts(),rhythms=faithPracticeRhythmRecords(group),prayers=faithActivePrayers().filter(function(p){return p.category==="Faith"&&(p.faithSection||"Prayer")==="Prayer";});
+ function meter(label,score,note){
+  var value=Number.isFinite(score)?score:null,level=faithScoreClass(value);
+  return '<div class="pmeter faith-practice-meter"><div class="pm-lab"><span>'+label+'</span><span class="pm-val '+level+'">'+faithScoreText(value)+'</span></div><div class="bar" role="meter" aria-label="'+label+' health" aria-valuemin="0" aria-valuemax="100"'+(value===null?' aria-valuetext="No score available"':' aria-valuenow="'+value+'" aria-valuetext="'+value+' out of 100"')+'><i class="'+level+'" style="width:'+(value===null?0:value)+'%"></i></div><div class="pm-note">'+note+'</div></div>';
+ }
+ return '<div class="pmeters faith-practice-meters">'+meter("Rhythms",parts.rhythms,rhythms.length+" rhythm"+(rhythms.length===1?"":"s"))+meter("Prayer",parts.prayers,prayers.length+" active prayer"+(prayers.length===1?"":"s"))+'</div>';
 }
 function faithTimeRank(tod){if(tod==="allday")return -1;var blocks=dayBlocks(),index=blocks.findIndex(function(block){return block.id===tod;});return index<0?blocks.length:index;}
 function faithPracticeCount(group){return faithRhythms(group).length+(typeof window.faithLinkedRhythmCount==="function"?window.faithLinkedRhythmCount(group):0);}
@@ -286,7 +299,7 @@ function faithPracticeContent(group){
   return faithActivePrayers().length;
  }
  var content=selected==="rhythms"?faithRhythmsHTML(group):selected==="sparks"?faithSparksHTML(group):selected==="notes"?faithNotesHTML(group):faithPrayerHub();
- return '<section class="card faith-practice-card" id="faith-practice-panel" aria-labelledby="faithPracticeTitle"><header class="faith-practice-heading"><h2 id="faithPracticeTitle">'+esc(group)+'</h2>'+(description?'<div class="faith-practice-focus"><span class="faith-practice-focus-label">Practice focus</span><p>'+esc(description)+'</p></div>':"")+'</header><nav class="profile-tabs faith-practice-tabs" aria-label="'+esc(group)+' sections">'+tabs.map(function(tab){return '<button type="button" data-faith-practice-tab="'+esc(group)+'|'+tab+'" aria-selected="'+(tab===selected)+'">'+collectionIcon(tab)+labels[tab]+' <span class="tab-count">'+count(tab)+'</span></button>';}).join("")+'</nav><div class="faith-tab-content">'+content+'</div></section>';
+ return '<section class="card faith-practice-card" id="faith-practice-panel" aria-labelledby="faithPracticeTitle"><header class="faith-practice-heading"><h2 id="faithPracticeTitle">'+esc(group)+'</h2>'+(description?'<div class="faith-practice-focus"><span class="faith-practice-focus-label">Practice focus</span><p>'+esc(description)+'</p></div>':"")+'</header>'+faithPracticeMetersHTML(group)+'<nav class="profile-tabs faith-practice-tabs" aria-label="'+esc(group)+' sections">'+tabs.map(function(tab){return '<button type="button" data-faith-practice-tab="'+esc(group)+'|'+tab+'" aria-selected="'+(tab===selected)+'">'+collectionIcon(tab)+labels[tab]+' <span class="tab-count">'+count(tab)+'</span></button>';}).join("")+'</nav><div class="faith-tab-content">'+content+'</div></section>';
 }
 function faithSparkEditorHTML(item){
  var ownerId=faithSparkOwnerId||"faith";
