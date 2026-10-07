@@ -236,7 +236,9 @@ function sortedPersonRhythms(person){
 function sortedPersonSparks(person){
  var sparks=[];
  S.people.forEach(function(owner){(owner.sparks||[]).forEach(function(spark){if(owner.id===person.id||(Array.isArray(spark.sharedWith)&&spark.sharedWith.indexOf(person.id)!==-1))sparks.push(Object.assign({},spark,{profileOwnerId:owner.id}));});});
- return sparks.filter(function(spark){return !spark.done;}).sort(function(a,b){return (a.by||"9999")<(b.by||"9999")?-1:1;});
+ (S.ideas||[]).forEach(function(spark){if((spark.category==="faith"||spark.area==="faith"||spark.faithSection)&&Array.isArray(spark.sharedWith)&&spark.sharedWith.indexOf(person.id)!==-1)sparks.push(Object.assign({},spark,{profileOwnerId:"faith",sharedFaithSpark:true}));});
+ var seen={};
+ return sparks.filter(function(spark){if(spark.done||seen[spark.id])return false;seen[spark.id]=true;return true;}).sort(function(a,b){return (a.by||"9999")<(b.by||"9999")?-1:1;});
 }
 function rhythmPeopleBadges(r,excludeId){
  var ids=[r.profileOwnerId||excludeId].concat(Array.isArray(r.sharedWith)?r.sharedWith:[]);
@@ -249,7 +251,7 @@ function tendAssociationValues(type,ownerId,itemId,record){
  var sharedWith=draft?draft.sharedWith:record&&record.sharedWith,areas=draft?draft.areas:record&&record.areas;
  var faithGroup=draft&&draft.faithGroup||record&&(record.faithSection||record.faithGroup);
  if(type==="connection"&&!draft){sharedWith=record&&Array.isArray(record.personIds)?record.personIds:record&&record.personId?[record.personId]:[];}
- if(type==="followup"&&record&&record.kind==="faith-note"&&!draft&&(!Array.isArray(areas)||areas.indexOf("faith")===-1))areas=(Array.isArray(areas)?areas:[]).concat("faith");
+ if((type==="followup"&&record&&record.kind==="faith-note"||type==="spark"&&ownerId==="faith")&&!draft&&(!Array.isArray(areas)||areas.indexOf("faith")===-1))areas=(Array.isArray(areas)?areas:[]).concat("faith");
  return {sharedWith:Array.isArray(sharedWith)?sharedWith:[],areas:Array.isArray(areas)?areas:[],faithGroup:faithGroup};
 }
 function tendPersonRelationshipGroup(person){
@@ -309,15 +311,15 @@ function tendAssociationPickerHTML(picker){
  var people=picker.kind==="people",ownerId=picker.ownerId,type=picker.type,itemId=picker.itemId,target=type+"|"+ownerId+"|"+itemId+"|"+picker.kind;
  var itemName=type==="spark"?"spark":type==="connection"?"connection":type==="followup"?"note":"prayer";
  var names={faith:"Faith",marriage:"Marriage",parenting:"Parenting",health:"Health & Fitness",finances:"Finances",friendships:"Friendships"};
- if(!people&&type==="followup"&&picker.faithSubcategoryOpen){
+ if(!people&&(type==="followup"||type==="spark")&&picker.faithSubcategoryOpen){
   var faithGroups=typeof FAITH_GROUPS!=="undefined"?FAITH_GROUPS:["Sabbath","Prayer","Fasting","Solitude","Generosity","Community","Service","Witness","Scripture","Other"];
   var selectedGroup=faithGroups.indexOf(picker.faithGroup)>=0?picker.faithGroup:"Prayer";
   var options=faithGroups.map(function(group){return '<button type="button" class="rhythm-picker-option category-option'+(group===selectedGroup?' selected':'')+'" data-item-picker-faith-group="'+esc(group)+'" aria-pressed="'+(group===selectedGroup)+'"><span>'+esc(group)+'</span></button>';}).join("");
   var faithRecord=tendAssociationRecord(type,ownerId,itemId);
-  if(picker.selected.indexOf("faith")>=0&&(!faithRecord||faithRecord.kind!=="faith-note"))options+='<button type="button" class="rhythm-picker-option category-option" data-item-picker-faith-remove><span>Remove Faith category</span></button>';
-  return '<dialog class="profile-editor-dialog rhythm-picker-dialog" data-item-association-dialog aria-labelledby="item-association-title"><div class="profile-editor-body"><button type="button" class="rhythm-picker-trigger" data-item-picker-faith-back>‹ Categories</button><h3 id="item-association-title" tabindex="-1">Faith subcategory</h3><p class="profile-tab-intro">Choose where this note belongs in Faith.</p><div class="rhythm-picker-options" role="group" aria-label="Faith subcategory">'+options+'</div><div class="profile-editor-actions"><button type="button" class="btn mini ghost" data-item-picker-cancel>Cancel</button></div></div></dialog>';
+  if(picker.selected.indexOf("faith")>=0&&(!faithRecord||faithRecord.kind!=="faith-note")&&!(type==="spark"&&ownerId==="faith"))options+='<button type="button" class="rhythm-picker-option category-option" data-item-picker-faith-remove><span>Remove Faith category</span></button>';
+  return '<dialog class="profile-editor-dialog rhythm-picker-dialog" data-item-association-dialog aria-labelledby="item-association-title"><div class="profile-editor-body"><button type="button" class="rhythm-picker-trigger" data-item-picker-faith-back>‹ Categories</button><h3 id="item-association-title" tabindex="-1">Faith subcategory</h3><p class="profile-tab-intro">Choose where this '+itemName+' belongs in Faith.</p><div class="rhythm-picker-options" role="group" aria-label="Faith subcategory">'+options+'</div><div class="profile-editor-actions"><button type="button" class="btn mini ghost" data-item-picker-cancel>Cancel</button></div></div></dialog>';
  }
- var choices=people?S.people.map(function(person){var isOwner=ownerId!=="connection"&&person.id===ownerId,selected=isOwner||picker.selected.indexOf(person.id)!==-1;return '<button type="button" class="prayer-person person-badge-clickable rhythm-picker-option'+(selected?' selected':'')+'" data-item-picker-toggle="'+esc(target+'|'+person.id)+'" aria-pressed="'+selected+'"'+(isOwner?' disabled':'')+'>'+personAvatar(person,28)+esc(person.name)+'</button>';}).join(""):["faith","marriage","parenting","health","finances","friendships"].map(function(id){var selected=picker.selected.indexOf(id)!==-1;if(id==="faith"&&type==="followup")return '<button type="button" class="rhythm-picker-option category-option'+(selected?' selected':'')+'" data-item-picker-faith-open aria-haspopup="dialog" aria-pressed="'+selected+'">'+(AREA_ICONS[id]||"")+'<span>Faith - '+esc(picker.faithGroup||"Prayer")+'</span></button>';return '<button type="button" class="rhythm-picker-option category-option'+(selected?' selected':'')+'" data-item-picker-toggle="'+esc(target+'|'+id)+'" aria-pressed="'+selected+'">'+(AREA_ICONS[id]||"")+'<span>'+names[id]+'</span></button>';}).join("");
+ var choices=people?S.people.map(function(person){var isOwner=ownerId!=="connection"&&person.id===ownerId,selected=isOwner||picker.selected.indexOf(person.id)!==-1;return '<button type="button" class="prayer-person person-badge-clickable rhythm-picker-option'+(selected?' selected':'')+'" data-item-picker-toggle="'+esc(target+'|'+person.id)+'" aria-pressed="'+selected+'"'+(isOwner?' disabled':'')+'>'+personAvatar(person,28)+esc(person.name)+'</button>';}).join(""):["faith","marriage","parenting","health","finances","friendships"].map(function(id){var selected=picker.selected.indexOf(id)!==-1;if(id==="faith"&&(type==="followup"||type==="spark"))return '<button type="button" class="rhythm-picker-option category-option'+(selected?' selected':'')+'" data-item-picker-faith-open aria-haspopup="dialog" aria-pressed="'+selected+'">'+(AREA_ICONS[id]||"")+'<span>Faith - '+esc(picker.faithGroup||"Prayer")+'</span></button>';return '<button type="button" class="rhythm-picker-option category-option'+(selected?' selected':'')+'" data-item-picker-toggle="'+esc(target+'|'+id)+'" aria-pressed="'+selected+'">'+(AREA_ICONS[id]||"")+'<span>'+names[id]+'</span></button>';}).join("");
  return '<dialog class="profile-editor-dialog rhythm-picker-dialog" data-item-association-dialog aria-labelledby="item-association-title"><div class="profile-editor-body"><h3 id="item-association-title" tabindex="-1">'+(people?"People for this "+itemName:"Categories for this "+itemName)+'</h3><p class="profile-tab-intro">'+(people?"Choose everyone involved in this "+itemName+".":"Choose the categories where this "+itemName+" should appear.")+'</p>'+(people&&ownerId!=="connection"?tendPeopleGroupToggleBar(picker.selected,ownerId,"data-item-picker-group"):"")+'<div class="rhythm-picker-options">'+choices+'</div><div class="profile-editor-actions"><button type="button" class="btn mini" data-item-picker-save>Save</button><button type="button" class="btn mini ghost" data-item-picker-cancel>Cancel</button></div></div></dialog>';
 }
 function tendAssociationRecord(type,ownerId,itemId){
@@ -327,8 +329,10 @@ function tendAssociationRecord(type,ownerId,itemId){
   return S.followups.find(function(item){return item.id===itemId;});
  }
  if(type==="spark"){
-  if(itemId==="new")return sparkAddDrafts[ownerId]||(sparkAddDrafts[ownerId]={sharedWith:[],areas:[]});
+  if(itemId==="new")return ownerId==="faith"?(sparkAddDrafts.faith||faithSparkDraft):(sparkAddDrafts[ownerId]||(sparkAddDrafts[ownerId]={sharedWith:[],areas:[]}));
   if(sparkEditDraft&&sparkEditDraft.id===itemId)return sparkEditDraft;
+  if(ownerId==="faith"&&faithSparkDraft&&faithSparkDraft.id===itemId)return faithSparkDraft;
+  if(ownerId==="faith")return S.ideas.find(function(item){return item.id===itemId;});
   var owner=S.people.find(function(person){return person.id===ownerId;});return owner&&(owner.sparks||[]).find(function(item){return item.id===itemId;});
  }
  if(itemId==="new")return prayerAddDrafts[ownerId]||(prayerAddDrafts[ownerId]={sharedWith:[],areas:[]});
@@ -364,6 +368,9 @@ function tendAssociationCommit(type,ownerId,itemId,record){
    if(type==="followup"&&record.kind==="faith-note"&&record.areas.indexOf("faith")===-1)record.areas.push("faith");
    if(type==="followup"&&record.areas.indexOf("faith")>=0&&draft.faithGroup)record.faithSection=draft.faithGroup;
    else if(type==="followup"&&record.kind!=="faith-note")delete record.faithSection;
+   if(type==="spark"&&record.areas.indexOf("faith")>=0&&draft.faithGroup)record.faithSection=draft.faithGroup;
+   if(type==="spark"&&ownerId==="faith"&&record.areas.indexOf("faith")===-1)record.areas.push("faith");
+   else if(type==="spark"&&ownerId!=="faith")delete record.faithSection;
   }
  }
  delete tendItemAssociationDrafts[key];
