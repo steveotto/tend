@@ -188,7 +188,7 @@
   if(!fieldset)return;
   var faithOption=fieldset.querySelector('.rhythm-area-option input[data-rfield$="|areas"][value="faith"]');
   var flyout=fieldset.querySelector(".rhythm-faith-flyout");
-  if(flyout&&faithOption){if(faithOption.checked&&open&&!flyout.open)flyout.showModal();else if((!faithOption.checked||!open)&&flyout.open)flyout.close();}
+  if(flyout&&faithOption){if(faithOption.checked&&open&&!flyout.open)tendShowModal(flyout);else if((!faithOption.checked||!open)&&flyout.open)flyout.close();}
  }
  function faithRecord(owner){
   var parts=owner.split("|"),id=parts[0],rid=parts[1];
@@ -244,7 +244,7 @@
  },true);
  window.addEventListener("click",function(event){
   var faithCategory=event.target&&event.target.closest&&event.target.closest(".rhythm-faith-option label");
-  if(faithCategory){var faithCheckbox=faithCategory.querySelector('input[data-rfield$="|areas"][value="faith"]');if(faithCheckbox&&event.target!==faithCheckbox&&faithCheckbox.checked){event.preventDefault();event.stopImmediatePropagation();var faithForm=faithCategory.closest(".rhythm-area-checks"),faithDialog=faithForm&&faithForm.querySelector(".rhythm-faith-flyout");if(faithDialog&&!faithDialog.open){var field=faithCheckbox.getAttribute("data-rfield").split("|"),existing=faithRecord(field[0]+"|"+field[1]);faithPickerPrevious={owner:field[0]+"|"+field[1],checked:true,faithGroup:existing&&existing.faithGroup||null,areas:(existing&&existing.areas||[]).slice()};faithDialog.showModal();}return;}}
+  if(faithCategory){var faithCheckbox=faithCategory.querySelector('input[data-rfield$="|areas"][value="faith"]');if(faithCheckbox&&event.target!==faithCheckbox&&faithCheckbox.checked){event.preventDefault();event.stopImmediatePropagation();var faithForm=faithCategory.closest(".rhythm-area-checks"),faithDialog=faithForm&&faithForm.querySelector(".rhythm-faith-flyout");if(faithDialog&&!faithDialog.open){var field=faithCheckbox.getAttribute("data-rfield").split("|"),existing=faithRecord(field[0]+"|"+field[1]);faithPickerPrevious={owner:field[0]+"|"+field[1],checked:true,faithGroup:existing&&existing.faithGroup||null,areas:(existing&&existing.areas||[]).slice()};tendShowModal(faithDialog);}return;}}
   var faithCancel=event.target&&event.target.closest&&event.target.closest("[data-faith-cancel]");
   if(faithCancel){var cancelDialog=faithCancel.closest(".rhythm-faith-flyout");if(cancelDialog&&cancelDialog.open){cancelFaithPicker(cancelDialog);cancelDialog.close();}return;}
   var badge=event.target&&event.target.closest&&event.target.closest("[data-rhythm-area-badge]");

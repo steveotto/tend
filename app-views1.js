@@ -39,7 +39,12 @@ function sizeProfileTabPanels(root){
  });
 }
 window.addEventListener("resize",function(){if(tab==="people"&&currentPerson)sizeProfileTabPanels(el("view"));});
-function render(){renderNav();var v=el("view");
+var tendRenderScrollSnapshot=null;
+function tendRestorePageScroll(position){requestAnimationFrame(function(){window.scrollTo(position.x,position.y);});}
+function tendShowModal(dialog){if(!dialog||dialog.open)return;var snapshot=tendRenderScrollSnapshot,position=snapshot?snapshot.position:{x:window.scrollX,y:window.scrollY};if(!snapshot||snapshot.preserve)dialog.addEventListener("close",function(){tendRestorePageScroll(position);},{once:true});dialog.showModal();if(!snapshot||snapshot.preserve)tendRestorePageScroll(position);}
+function tendRenderRouteKey(){var faith=S&&S.faithConfig,group=faith&&faith.selectedGroup;return JSON.stringify([tab,currentArea,currentPerson,currentPerson&&profileTabs[currentPerson],openDetail,group,faith&&faith.prayerView,faith&&faith.practiceTabs&&faith.practiceTabs[group],typeof faithPrayerSession!=="undefined"&&faithPrayerSession?"session":null,typeof settingsTab!=="undefined"?settingsTab:null]);}
+var tendLastRenderRouteKey=null;
+function render(){var routeKey=tendRenderRouteKey(),preserve=routeKey===tendLastRenderRouteKey,scrollPosition={x:window.scrollX,y:window.scrollY},previousSnapshot=tendRenderScrollSnapshot;tendRenderScrollSnapshot={position:scrollPosition,preserve:preserve};renderNav();var v=el("view");
  if(navKind()==="area"&&currentArea)v.innerHTML=currentArea==="faith"&&typeof renderFaithPage==="function"?renderFaithPage():renderArea(currentArea);
  else if(tab==="today")v.innerHTML=renderToday();
  else if(tab==="people")v.innerHTML=renderPeople();
@@ -50,9 +55,9 @@ function render(){renderNav();var v=el("view");
  else if(tab==="settings")v.innerHTML=renderSettings();
  sizeProfileTabPanels(v);
  if(typeof bind==="function")bind();
- var activePanel=currentPerson&&v.querySelector('.profile-tab-panel:not([hidden])'),editorDialog=activePanel&&activePanel.querySelector('dialog[data-profile-editor],dialog[data-editor-modal]');if(!editorDialog)editorDialog=v.querySelector('dialog[data-editor-modal]');if(editorDialog){if(!editorDialog.open)editorDialog.showModal();editorDialog.addEventListener("cancel",function(event){var cancel=editorDialog.querySelector("[data-editor-cancel]");if(cancel){event.preventDefault();cancel.click();}});}
- var rhythmPickerDialog=v.querySelector("dialog[data-rhythm-picker-dialog]");if(rhythmPickerDialog&&!rhythmPickerDialog.open){rhythmPickerDialog.showModal();var rhythmPickerTitle=rhythmPickerDialog.querySelector("#rhythm-picker-title");if(rhythmPickerTitle)rhythmPickerTitle.focus({preventScroll:true});}
- if(tab==="today"&&!currentArea&&el("calStrip")&&typeof loadCalendars==="function")loadCalendars();if(tab==="today"&&!currentArea&&typeof loadNowWeather==="function")loadNowWeather();}
+ var activePanel=currentPerson&&v.querySelector('.profile-tab-panel:not([hidden])'),editorDialog=activePanel&&activePanel.querySelector('dialog[data-profile-editor],dialog[data-editor-modal]');if(!editorDialog)editorDialog=v.querySelector('dialog[data-editor-modal]');if(editorDialog){if(!editorDialog.open)tendShowModal(editorDialog);editorDialog.addEventListener("cancel",function(event){var cancel=editorDialog.querySelector("[data-editor-cancel]");if(cancel){event.preventDefault();cancel.click();}});}
+ var rhythmPickerDialog=v.querySelector("dialog[data-rhythm-picker-dialog]");if(rhythmPickerDialog&&!rhythmPickerDialog.open){tendShowModal(rhythmPickerDialog);var rhythmPickerTitle=rhythmPickerDialog.querySelector("#rhythm-picker-title");if(rhythmPickerTitle)rhythmPickerTitle.focus({preventScroll:true});}
+ if(tab==="today"&&!currentArea&&el("calStrip")&&typeof loadCalendars==="function")loadCalendars();if(tab==="today"&&!currentArea&&typeof loadNowWeather==="function")loadNowWeather();tendRenderScrollSnapshot=previousSnapshot;var renderedRouteKey=tendRenderRouteKey();tendLastRenderRouteKey=renderedRouteKey;if(preserve&&routeKey===renderedRouteKey)tendRestorePageScroll(scrollPosition);}
 /* ============ overall meter ============ */
 function overallScore(){return avg(AREA_IDS.map(areaScore))||50;}
 function areaMenuHTML(){
@@ -130,11 +135,11 @@ function prioritizePlanItems(items){
  return {visible:visible,more:more};
 }
 function planCandidates(bid,curBid){
- var out=[];
+ var out=[],seenSparks=Object.create(null);
  S.tasks.forEach(function(t){if(!t.done&&((t.tod&&t.tod!=="anytime")?t.tod===bid:bid===curBid))out.push(taskItem(t));});
  S.people.forEach(function(person){
   (person.rhythms||[]).forEach(function(r){var blk=(r.tod&&r.tod!=="anytime")?r.tod:curBid;if(blk!==bid||!dashboardRhythmEligible(r))return;out.push({scheduled:!!r.tod&&r.tod!=="anytime",calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),rhythm:person.id+"|"+r.id,personId:person.id,label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,true)});});
-  sortedPersonSparks(person).forEach(function(spark){if(!spark.by||!sparkLive(spark))return;if((sparkBlock(spark)||curBid)!==bid)return;out.push({spark:(spark.profileOwnerId||person.id)+"|"+spark.id,personId:person.id,label:spark.text,description:spark.details||"",sub:(spark.time?fmtHM12(spark.time)+" \u00b7 ":"")+sparkDueTxt(spark)});});
+  sortedPersonSparks(person).forEach(function(spark){if(!spark.by||!sparkLive(spark))return;if((sparkBlock(spark)||curBid)!==bid)return;var key=(spark.profileOwnerId||person.id)+"|"+spark.id;if(seenSparks[key])return;seenSparks[key]=true;out.push({spark:key,personId:person.id,label:spark.text,description:spark.details||"",sub:(spark.time?fmtHM12(spark.time)+" \u00b7 ":"")+sparkDueTxt(spark)});});
  });
  if(typeof faithActiveRhythms==="function"&&typeof rhythmScheduledToday==="function"){
   faithActiveRhythms().forEach(function(r){if(r.tod!==bid||!rhythmScheduledToday(r))return;out.push({scheduled:true,calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),faithRhythm:r.id,faithGroup:r.faithGroup,area:"faith",label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,true)});});
@@ -242,6 +247,7 @@ function tendAssociationKey(type,ownerId,itemId){return type+"|"+ownerId+"|"+ite
 function tendAssociationValues(type,ownerId,itemId,record){
  var draft=tendItemAssociationDrafts[tendAssociationKey(type,ownerId,itemId)];
  var sharedWith=draft?draft.sharedWith:record&&record.sharedWith,areas=draft?draft.areas:record&&record.areas;
+ if(type==="connection"&&!draft){sharedWith=record&&Array.isArray(record.personIds)?record.personIds:record&&record.personId?[record.personId]:[];}
  return {sharedWith:Array.isArray(sharedWith)?sharedWith:[],areas:Array.isArray(areas)?areas:[]};
 }
 function tendPersonRelationshipGroup(person){
@@ -288,17 +294,20 @@ function tendPrayerCategoryBadges(prayer){
 function tendAssociationControlsHTML(type,ownerId,itemId,record){
  var values=tendAssociationValues(type,ownerId,itemId,record),names={faith:"Faith",marriage:"Marriage",parenting:"Parenting",health:"Health & Fitness",finances:"Finances",friendships:"Friendships"};
  var key=type+"|"+ownerId+"|"+itemId;
+ var action=itemId==="new"?"Add":"Edit";
  var categories=values.areas.map(function(id){return '<span class="rhythm-picker-chip category-selected">'+(AREA_ICONS[id]||"")+esc(names[id]||id)+'</span>';}).join("");
  var people=values.sharedWith.map(function(id){var person=S.people.find(function(x){return x.id===id;});return person?'<span class="rhythm-picker-person">'+personAvatar(person,22)+esc(person.name)+'</span>':"";}).join("");
- return '<div class="rhythm-picker-controls item-association-controls" data-item-association-controls="'+esc(key)+'"><div class="rhythm-picker-row"><button type="button" class="rhythm-picker-trigger" data-item-picker-open="'+esc(key+'|categories')+'">Add categories</button>'+categories+'</div><div class="rhythm-picker-row"><button type="button" class="rhythm-picker-trigger" data-item-picker-open="'+esc(key+'|people')+'">Add people</button>'+people+'</div></div>';
+ return '<div class="rhythm-picker-controls item-association-controls" data-item-association-controls="'+esc(key)+'"><div class="rhythm-picker-row"><button type="button" class="rhythm-picker-trigger" data-item-picker-open="'+esc(key+'|categories')+'">'+action+' categories</button>'+categories+'</div><div class="rhythm-picker-row"><button type="button" class="rhythm-picker-trigger" data-item-picker-open="'+esc(key+'|people')+'">'+action+' people</button>'+people+'</div></div>';
 }
 function tendAssociationPickerHTML(picker){
  var people=picker.kind==="people",ownerId=picker.ownerId,type=picker.type,itemId=picker.itemId,target=type+"|"+ownerId+"|"+itemId+"|"+picker.kind;
+ var itemName=type==="spark"?"spark":type==="connection"?"connection":"prayer";
  var names={faith:"Faith",marriage:"Marriage",parenting:"Parenting",health:"Health & Fitness",finances:"Finances",friendships:"Friendships"};
- var choices=people?S.people.map(function(person){var isOwner=person.id===ownerId,selected=isOwner||picker.selected.indexOf(person.id)!==-1;return '<button type="button" class="prayer-person person-badge-clickable rhythm-picker-option'+(selected?' selected':'')+'" data-item-picker-toggle="'+esc(target+'|'+person.id)+'" aria-pressed="'+selected+'"'+(isOwner?' disabled':'')+'>'+personAvatar(person,28)+esc(person.name)+'</button>';}).join(""):["faith","marriage","parenting","health","finances","friendships"].map(function(id){var selected=picker.selected.indexOf(id)!==-1;return '<button type="button" class="rhythm-picker-option category-option'+(selected?' selected':'')+'" data-item-picker-toggle="'+esc(target+'|'+id)+'" aria-pressed="'+selected+'">'+(AREA_ICONS[id]||"")+'<span>'+names[id]+'</span></button>';}).join("");
- return '<dialog class="profile-editor-dialog rhythm-picker-dialog" data-item-association-dialog aria-labelledby="item-association-title"><div class="profile-editor-body"><h3 id="item-association-title" tabindex="-1">'+(people?"People for this "+(type==="spark"?"spark":"prayer"):"Categories for this "+(type==="spark"?"spark":"prayer"))+'</h3><p class="profile-tab-intro">'+(people?"Choose everyone sharing this "+(type==="spark"?"spark":"prayer")+".":"Choose the categories where this "+(type==="spark"?"spark":"prayer")+" should appear.")+'</p>'+(people?tendPeopleGroupToggleBar(picker.selected,ownerId,"data-item-picker-group"):"")+'<div class="rhythm-picker-options">'+choices+'</div><div class="profile-editor-actions"><button type="button" class="btn mini" data-item-picker-save>Save</button><button type="button" class="btn mini ghost" data-item-picker-cancel>Cancel</button></div></div></dialog>';
+ var choices=people?S.people.map(function(person){var isOwner=ownerId!=="connection"&&person.id===ownerId,selected=isOwner||picker.selected.indexOf(person.id)!==-1;return '<button type="button" class="prayer-person person-badge-clickable rhythm-picker-option'+(selected?' selected':'')+'" data-item-picker-toggle="'+esc(target+'|'+person.id)+'" aria-pressed="'+selected+'"'+(isOwner?' disabled':'')+'>'+personAvatar(person,28)+esc(person.name)+'</button>';}).join(""):["faith","marriage","parenting","health","finances","friendships"].map(function(id){var selected=picker.selected.indexOf(id)!==-1;return '<button type="button" class="rhythm-picker-option category-option'+(selected?' selected':'')+'" data-item-picker-toggle="'+esc(target+'|'+id)+'" aria-pressed="'+selected+'">'+(AREA_ICONS[id]||"")+'<span>'+names[id]+'</span></button>';}).join("");
+ return '<dialog class="profile-editor-dialog rhythm-picker-dialog" data-item-association-dialog aria-labelledby="item-association-title"><div class="profile-editor-body"><h3 id="item-association-title" tabindex="-1">'+(people?"People for this "+itemName:"Categories for this "+itemName)+'</h3><p class="profile-tab-intro">'+(people?"Choose everyone involved in this "+itemName+".":"Choose the categories where this "+itemName+" should appear.")+'</p>'+(people&&ownerId!=="connection"?tendPeopleGroupToggleBar(picker.selected,ownerId,"data-item-picker-group"):"")+'<div class="rhythm-picker-options">'+choices+'</div><div class="profile-editor-actions"><button type="button" class="btn mini" data-item-picker-save>Save</button><button type="button" class="btn mini ghost" data-item-picker-cancel>Cancel</button></div></div></dialog>';
 }
 function tendAssociationRecord(type,ownerId,itemId){
+ if(type==="connection")return S.events.find(function(event){return event.id===itemId;});
  if(type==="spark"){
   if(itemId==="new")return sparkAddDrafts[ownerId]||(sparkAddDrafts[ownerId]={sharedWith:[],areas:[]});
   if(sparkEditDraft&&sparkEditDraft.id===itemId)return sparkEditDraft;
@@ -313,13 +322,22 @@ function tendAssociationPickerOpen(key){
  var values=tendAssociationValues(type,ownerId,itemId,record),picker={type:type,ownerId:ownerId,itemId:itemId,kind:kind,selected:(kind==="people"?values.sharedWith:values.areas).slice()};
  tendItemPickerDraft=picker;
  var wrapper=document.createElement("div");wrapper.innerHTML=tendAssociationPickerHTML(picker);
- var dialog=wrapper.firstElementChild;document.body.appendChild(dialog);dialog.showModal();
+ var dialog=wrapper.firstElementChild;document.body.appendChild(dialog);tendShowModal(dialog);
  var title=dialog.querySelector("#item-association-title");if(title)title.focus({preventScroll:true});
  dialog.addEventListener("close",function(){dialog.remove();tendItemPickerDraft=null;});
 }
 function tendAssociationCommit(type,ownerId,itemId,record){
  var key=tendAssociationKey(type,ownerId,itemId),draft=tendItemAssociationDrafts[key];
- if(draft&&record){var recordOwner=record.personId||ownerId;record.sharedWith=draft.sharedWith.filter(function(id){return id!==recordOwner&&S.people.some(function(person){return person.id===id;});});record.areas=draft.areas.slice();}
+ if(draft&&record){
+  if(type==="connection"){
+   record.personIds=draft.sharedWith.filter(function(id,index,ids){return ids.indexOf(id)===index&&S.people.some(function(person){return person.id===id;});});
+   record.personId=record.personIds[0]||null;
+   var primaryPerson=S.people.find(function(person){return person.id===record.personId;});if(primaryPerson)record.areaId=primaryPerson.area;
+   record.areas=draft.areas.slice();
+  }else{
+   var recordOwner=record.personId||ownerId;record.sharedWith=draft.sharedWith.filter(function(id){return id!==recordOwner&&S.people.some(function(person){return person.id===id;});});record.areas=draft.areas.slice();
+  }
+ }
  delete tendItemAssociationDrafts[key];
 }
 function rhythmPickerRecord(ownerId,rid){
@@ -408,11 +426,14 @@ function tendRowContent(title,description,meta,badges){
  return '<div class="tend-row-content"><div class="tend-row-heading"><strong class="tend-type-title">'+esc(title||"")+'</strong>'+(badges||"")+'</div>'+(description?'<div class="tend-type-description">'+esc(description)+'</div>':'')+(meta?'<div class="tend-type-meta">'+esc(meta)+'</div>':'')+'</div>';
 }
 function tendRhythmFrequencyLabel(r){
- if(r.freq==="custom"&&r.customType!=="monthly")return "Weekly on "+(DOW[r.customDow||0]||DOW[0]);
  if(r.freq==="selectdays"&&Array.isArray(r.weekdays)&&r.weekdays.length)return "Every "+r.weekdays.slice().sort().map(function(day){return DOW_SHORT[+day];}).join(", ");
- var label=rhythmFreqLabel(r),day=scheduleDayLabel(r);
- if(day&&r.freq==="weekly")return "Weekly on "+day;
- if(day&&r.freq!=="custom")return label+" on "+day;
+ var label=rhythmFreqLabel(r),freq=r.freq||(r.rule&&r.rule.freq),day;
+ if(freq==="weekly"){
+  var days=r.rule&&Array.isArray(r.rule.days)?r.rule.days:Array.isArray(r.weekdays)?r.weekdays:r.scheduleDow!==null&&r.scheduleDow!==undefined&&r.scheduleDow!==""?[+r.scheduleDow]:[];
+  days=days.map(Number).filter(function(value,index,all){return value>=0&&value<7&&all.indexOf(value)===index;}).sort(function(a,b){return a-b;});
+  return days.length?label+" on "+days.map(function(value){return DOW[value];}).join(", "):label;
+ }
+ if(freq==="monthly"){day=scheduleDayLabel(r);if(day){var match=day.match(/^on the (\d+)$/i);if(match){var date=+match[1],lastTwo=date%100,suffix=lastTwo>=11&&lastTwo<=13?"th":date%10===1?"st":date%10===2?"nd":date%10===3?"rd":"th";day="on the "+date+suffix;}return label+" "+day.replace(/^on\s+/i,"on ");}}
  return label;
 }
 function tendRhythmMetaLabel(r,eventTs,includeDue){
@@ -450,7 +471,7 @@ function openPersonNoteHistory(personId){
   if(event.target.closest("[data-note-history-close]")){dialog.close();return;}
   if(event.target.closest("[data-fudone],[data-fuedit],[data-fudel]"))dialog.close();
  });
- dialog.addEventListener("close",function(){dialog.remove();});document.body.appendChild(dialog);dialog.showModal();
+ dialog.addEventListener("close",function(){dialog.remove();});document.body.appendChild(dialog);tendShowModal(dialog);
 }
 function profilePanelStart(key){return '<section class="card profile-tab-panel" id="profile-panel-'+key+'" role="tabpanel" aria-labelledby="profile-tab-'+key+'"'+(activeProfileTab===key?'':' hidden')+'>';}
 var activeProfileTab="rhythms";
@@ -534,16 +555,30 @@ function personProfile(pid){
  /* ripples: modal */
  if(window._rippleModalOpen||editingConn){
  var edEv=editingConn?(S.events.find(function(z){return z.id===editingConn;})||{}):null;
+ var sparkConnection=edEv&&(edEv.origin==="spark"||edEv.note==="Spark landed"),rhythmConnection=edEv&&!!edEv.rhythmId,rhythmOwner=rhythmConnection&&connectionRhythmOwner(edEv),rhythmDraftRecord=rhythmOwner&&rhythmEditDraft&&rhythmEditDraft.id===edEv.rhythmId?rhythmEditDraft:rhythmOwner&&(rhythmOwner.rhythms||[]).find(function(item){return item.id===edEv.rhythmId;});
+ var associationKey=edEv&&tendAssociationKey("connection","connection",edEv.id);
+ if(edEv&&!tendItemAssociationDrafts[associationKey])tendItemAssociationDrafts[associationKey]={sharedWith:connectionParticipantIds(edEv),areas:connectionCategoryIds(edEv)};
  out+='<dialog class="ripple-dialog" id="rippleDialog" data-editor-modal aria-labelledby="rippleDialogTitle"><div class="box"><div class="subhead" id="rippleDialogTitle">'+(editingConn?'Edit Connection':'Add Connection')+'</div><p class="profile-tab-intro">Record a moment you shared with '+first+'.</p>';
  var rippleKind=edEv?(edEv.kind||edEv.type):"text";
  if(edEv&&!RIPPLE_TYPES[rippleKind])rippleKind="other";
  var rippleTime=edEv?new Date(edEv.ts||Date.now()):new Date();
  var rippleTimeValue=String(rippleTime.getHours()).padStart(2,"0")+":"+String(rippleTime.getMinutes()).padStart(2,"0");
- out+='<div class="ripple-fields">'+(edEv&&edEv.rhythmId?'<div class="ripple-field"><span>Type</span><div class="ripple-type-value">Rhythm</div></div>':'<label class="ripple-field">Type<select id="plogType">'+Object.keys(RIPPLE_TYPES).map(function(k){return '<option value="'+k+'"'+(rippleKind===k?' selected':'')+'>'+RIPPLE_TYPES[k]+'</option>';}).join("")+'</select></label>')+'<label class="ripple-field">Date<input type="date" id="momentDate" value="'+(edEv?fmtDate(edEv.ts||Date.now()):fmtDate(Date.now()))+'"></label><label class="ripple-field">Time<input type="time" id="momentTime" '+(edEv&&edEv.allDay?"disabled":"")+' value="'+rippleTimeValue+'"></label><label class="ripple-all-day"><input type="checkbox" id="momentAllDay" class="cb" '+(edEv&&edEv.allDay?"checked":"")+'> All Day</label></div>';
- out+='<div class="qlog" id="plogOtherRow" style="display:'+(rippleKind==="other"&&!(edEv&&edEv.rhythmId)?'flex':'none')+'"><input id="plogOther" aria-label="Other ripple type" value="'+esc(rippleKind==="other"&&edEv?(edEv.rippleLabel||edEv.kind||""):"")+'" placeholder="What kind of moment?" class="ripple-other"></div>';
- out+='<div class="addrow" style="margin-top:8px"><input id="momentTitle" value="'+esc(edEv&&edEv.title&&edEv.title.indexOf("Time with")!==0?edEv.title:"")+'" placeholder="Title - e.g. Encouraging Message"></div>';
- out+='<div class="addrow" style="align-items:flex-start"><textarea id="momentNote" placeholder="Notes - what you want to remember..." style="min-height:70px;flex:1;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--canvas);font-size:15px">'+esc(edEv?(edEv.note||""):"")+'</textarea></div>';
- out+='<div class="profile-editor-actions"><button class="btn" data-psubmit="'+pid+'">Save</button><button class="btn ghost" data-peditcancel="1" data-editor-cancel>Cancel</button>'+(editingConn?'<button class="btn mini danger" style="margin-left:auto" data-connectiondelete="'+esc(editingConn)+'">Delete</button>':'')+'</div>';
+ out+='<div class="ripple-fields">'+(edEv&&(rhythmConnection||sparkConnection)?'<div class="ripple-field"><span>Type</span><div class="ripple-type-value">'+(sparkConnection?"Spark":"Rhythm")+'</div></div>':'<label class="ripple-field">Type<select id="plogType">'+Object.keys(RIPPLE_TYPES).map(function(k){return '<option value="'+k+'"'+(rippleKind===k?' selected':'')+'>'+RIPPLE_TYPES[k]+'</option>';}).join("")+'</select></label>')+'<label class="ripple-field">Date<input type="date" id="momentDate" value="'+(edEv?fmtDate(edEv.ts||Date.now()):fmtDate(Date.now()))+'"></label><label class="ripple-field">Time<input type="time" id="momentTime" '+(edEv&&edEv.allDay?"disabled":"")+' value="'+rippleTimeValue+'"></label><label class="ripple-all-day"><input type="checkbox" id="momentAllDay" class="cb" '+(edEv&&edEv.allDay?"checked":"")+'> All Day</label></div>';
+ out+='<div class="qlog" id="plogOtherRow" style="display:'+(rippleKind==="other"&&!(edEv&&(rhythmConnection||sparkConnection))?'flex':'none')+'"><input id="plogOther" aria-label="Other ripple type" value="'+esc(rippleKind==="other"&&edEv?(edEv.rippleLabel||edEv.kind||""):"")+'" placeholder="What kind of moment?" class="ripple-other"></div>';
+ if(!rhythmConnection){
+  out+='<div class="addrow" style="margin-top:8px"><input id="momentTitle" value="'+esc(edEv&&edEv.title&&edEv.title.indexOf("Time with")!==0?edEv.title:"")+'" placeholder="Title - e.g. Encouraging Message"></div>';
+  out+='<div class="addrow" style="align-items:flex-start"><textarea id="momentNote" placeholder="Notes - what you want to remember..." style="min-height:70px;flex:1;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--canvas);font-size:15px">'+esc(edEv?(sparkConnection&&edEv.note==="Spark landed"?"":edEv.note||""):"")+'</textarea></div>';
+ }
+ if(edEv&&sparkConnection)out+=tendAssociationControlsHTML("connection","connection",edEv.id,edEv);
+ if(edEv&&rhythmConnection){
+  if(rhythmDraftRecord){
+   var rhythmFieldId=rhythmOwner.id+"|"+rhythmDraftRecord.id;
+   if(!rhythmEditDraft||rhythmEditDraft.id!==rhythmDraftRecord.id){rhythmEditDraft=JSON.parse(JSON.stringify(rhythmDraftRecord));editRhythmId=rhythmDraftRecord.id;rhythmDraftRecord=rhythmEditDraft;}
+   out+='<div class="connection-rhythm-fields"><p class="profile-tab-intro">Rhythm details update the recurring rhythm; people and categories below apply to this logged connection.</p><label class="careplan-field">Rhythm<input data-rfield="'+esc(rhythmFieldId)+'|text" value="'+esc(rhythmDraftRecord.text||"")+'" placeholder="Rhythm name"></label><label class="careplan-field">Description (optional)<textarea data-rfield="'+esc(rhythmFieldId)+'|description" placeholder="Add context or details">'+esc(rhythmDraftRecord.description||"")+'</textarea></label>'+personRhythmScheduleHTML(rhythmDraftRecord,rhythmFieldId)+'</div>';
+  }
+  out+=tendAssociationControlsHTML("connection","connection",edEv.id,edEv);
+ }
+ out+='<div class="profile-editor-actions"><button class="btn" data-psubmit="'+pid+'">Save</button><button class="btn ghost" data-peditcancel="1" data-editor-cancel>Cancel</button>'+(editingConn?'<button class="btn mini danger" style="margin-left:auto" data-connectionundo="'+esc(editingConn)+'">'+(sparkConnection?"Restore":"Undo")+'</button>':'')+'</div>';
  out+='</div></dialog>';
  }
  activeProfileTab=profileTabs[pid]||"rhythms";
@@ -571,7 +606,7 @@ function personProfile(pid){
  if(sps.length){sps.forEach(function(s){
   var sparkOwnerId=s.profileOwnerId||pid,sparkBadges=tendAssociationPeopleBadges(s,sparkOwnerId,pid,"spark")+tendAssociationCategoryBadges(s);
   var sparkMeta=(s.time?fmtHM12(s.time)+" \u00b7 ":"")+sparkDueTxt(s)+(s.by?" \u00b7 "+s.by:"");
-  out+='<div class="rhyrow"><span class="sm-dot" style="background:none;color:var(--forest);font-size:15px">\u2726</span><div class="gr-main">'+tendRowContent(s.text,s.details||"",sparkMeta,sparkBadges)+'</div><button class="btn mini" data-sparkdo="'+sparkOwnerId+'|'+s.id+'|'+pid+'">Do it</button><button class="iconbtn" data-sedit="'+sparkOwnerId+'|'+s.id+'" title="edit">\u270E</button><button class="iconbtn" data-spdel="'+sparkOwnerId+'|'+s.id+'|'+pid+'" title="remove">\u00D7</button></div>';
+  out+='<div class="rhyrow" data-spark-row="'+esc(sparkOwnerId+"|"+s.id)+'"><span class="sm-dot" style="background:none;color:var(--forest);font-size:15px">\u2726</span><div class="gr-main">'+tendRowContent(s.text,s.details||"",sparkMeta,sparkBadges)+'</div><button class="btn mini" data-sparkdo="'+sparkOwnerId+'|'+s.id+'|'+pid+'">Do it</button><button class="iconbtn" data-sedit="'+sparkOwnerId+'|'+s.id+'" title="edit">\u270E</button><button class="iconbtn" data-spdel="'+sparkOwnerId+'|'+s.id+'|'+pid+'" title="remove">\u00D7</button></div>';
   if(editSparkId===s.id&&sparkEditDraft&&sparkEditDraft.id===s.id){out+='<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="spark-editor-title"><div class="profile-editor-body"><h3 id="spark-editor-title">Edit Spark</h3><div class="addrow spark-draft"><input data-sfield="text" value="'+esc(sparkEditDraft.text)+'" placeholder="Spark text"><textarea data-sfield="details" placeholder="Details (optional)">'+esc(sparkEditDraft.details||"")+'</textarea><input type="date" data-sfield="by" value="'+esc(sparkEditDraft.by||"")+'" aria-label="Spark date" style="max-width:150px"><input type="time" data-sfield="time" value="'+esc(sparkEditDraft.time||"")+'" aria-label="Spark time" style="max-width:110px"><button class="btn mini ghost" data-scleardate="1">No date</button></div>'+tendAssociationControlsHTML("spark",sparkOwnerId,s.id,sparkEditDraft)+'<p class="profile-tab-intro">With a date it lands on the dashboard; without one it waits in Free moment.</p><div class="profile-editor-actions"><button class="btn mini" data-sparkeditsave="'+s.id+'">Save Spark</button><button class="btn mini ghost" data-sparkeditcancel data-editor-cancel>Cancel</button><button class="btn mini danger" data-spdel="'+sparkOwnerId+'|'+s.id+'|'+pid+'">'+(pid!==sparkOwnerId?"Remove Spark":"Delete Spark")+'</button></div></div></dialog>';}
  });}
  else out+='<div class="empty">No sparks yet - the fun, no-pressure "we should do this sometime" list.</div>';
@@ -629,6 +664,25 @@ function connectionRhythm(e){
  if(!rhythm&&S.areaRhythms)rhythm=S.areaRhythms.find(function(item){return item.id===e.rhythmId;});
  return rhythm;
 }
+function connectionRhythmOwner(e){
+var owner=null;if(e&&e.rhythmId)S.people.some(function(person){if((person.rhythms||[]).some(function(item){return item.id===e.rhythmId;})){owner=person;return true;}return false;});return owner;
+}
+function connectionSpark(e){
+ var owner=S.people.find(function(person){return person.id===(e.sparkOwnerId||e.personId);}),spark=owner&&(owner.sparks||[]).find(function(item){return e.sparkId?item.id===e.sparkId:item.done&&item.text===e.title&&Number.isFinite(item.doneTs)&&Math.abs(item.doneTs-e.ts)<60000;});
+ if(!spark&&!e.sparkId)S.people.some(function(person){var match=(person.sparks||[]).find(function(item){return item.done&&item.text===e.title&&Number.isFinite(item.doneTs)&&Math.abs(item.doneTs-e.ts)<60000;});if(match){owner=person;spark=match;return true;}return false;});
+ return {owner:owner,spark:spark};
+}
+function connectionParticipantIds(e){
+ var ids=Array.isArray(e.personIds)?e.personIds.slice():(e.personId?[e.personId]:[]);
+ if(e.origin==="spark"||e.note==="Spark landed"){var sparkData=connectionSpark(e);if(sparkData.spark&&sparkData.owner)[sparkData.owner.id].concat(sparkData.spark.sharedWith||[]).forEach(function(id){if(ids.indexOf(id)<0)ids.push(id);});}
+ else if(e.rhythmId&&!Array.isArray(e.personIds)){var rhythm=connectionRhythm(e);if(rhythm)(rhythm.sharedWith||[]).forEach(function(id){if(ids.indexOf(id)<0)ids.push(id);});}
+ return ids.filter(function(id,index){return id&&ids.indexOf(id)===index&&S.people.some(function(person){return person.id===id;});});
+}
+function connectionCategoryIds(e){
+ if(Array.isArray(e.areas))return e.areas;
+ if(e.origin==="spark"||e.note==="Spark landed"){var sparkData=connectionSpark(e);return sparkData.spark&&Array.isArray(sparkData.spark.areas)?sparkData.spark.areas:[];}
+ var rhythm=e.rhythmId&&connectionRhythm(e);return rhythm&&typeof window.tendRhythmCategoryIds==="function"?window.tendRhythmCategoryIds(rhythm):[];
+}
 function rippleLine(e){
  var title=(e.title&&e.title.indexOf("Time with")!==0)?e.title.replace(/^Prayer: /,""):"";
  var isSpark=e.origin==="spark"||e.note==="Spark landed";
@@ -640,22 +694,22 @@ function rippleLine(e){
  }
  var timestamp=rhythmMeta||when(e.ts)+(daysSince(e.ts)===0&&!e.allDay?" "+fmtHM(e.ts):"");
  timestamp=timestamp.replace(/^today\b/,"Today");
- var rhythmOwner=rhythm&&S.people.find(function(person){return (person.rhythms||[]).some(function(item){return item.id===rhythm.id;});});
- var rhythmParticipants=rhythm&&rhythmOwner?rhythmPeopleBadges(Object.assign({},rhythm,{profileOwnerId:rhythmOwner.id}),currentPerson||e.personId):"";
- var categories=rhythmParticipants+(rhythm&&typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(rhythm):"");
+ var connectionPeople=connectionParticipantIds(e);
+ var otherParticipants=connectionPeople.filter(function(id,index,ids){return id&&id!==(currentPerson||e.personId)&&ids.indexOf(id)===index;}).map(function(id){var person=S.people.find(function(item){return item.id===id;});return person?'<button type="button" class="prayer-person person-badge-clickable" data-personbadge="'+esc(person.id)+'|connection" aria-label="Open '+esc(person.name)+' connection">'+personAvatar(person,24)+esc(person.name)+'</button>':"";}).join("");
+ var connectionCategories=connectionCategoryIds(e),categories=otherParticipants+(typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges({areas:connectionCategories}):"");
  return '<div class="logline moment-row"><div class="moment-type">'+typeBadge+'</div><div class="gr-main">'+tendRowContent(title||"Connection",details,timestamp,categories)+'</div><span class="entry-actions"><button class="iconbtn" data-evedit="'+e.id+'" title="Edit connection" aria-label="Edit connection">\u270E</button><button class="iconbtn" data-evdel="'+e.id+'" title="Delete connection" aria-label="Delete connection">\uD83D\uDDD1</button></span></div>';
 }
 /* ============ free moment + spark chip ============ */
 function sparkChip(p){var s=sortedPersonSparks(p)[0];if(!s)return "";return '<div class="pf-next" style="color:var(--forest)">\u2726 '+esc(s.text)+' \u00b7 '+esc(sparkDueTxt(s))+'</div>';}
 function freeMomentHTML(){
- var cands=[];
+ var cands=[],seenSparks=Object.create(null);
  S.people.forEach(function(p){(p.rhythms||[]).forEach(function(r){var d=rhythmDaysSince(r);if((r.tod||"anytime")==="anytime"&&rhythmScheduledToday(r))cands.push({pri:10+(d===999?0:d),rhythm:p.id+"|"+r.id,personId:p.id,label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,true)});});});
- S.people.forEach(function(p){sortedPersonSparks(p).forEach(function(s){if(sparkLive(s)&&!s.by)cands.push({pri:15,spark:(s.profileOwnerId||p.id)+"|"+s.id,personId:p.id,label:s.text,description:s.details||"",sub:"No deadline yet",act:' data-openperson="'+p.id+'"',btn:"Open"});});});
+ S.people.forEach(function(p){sortedPersonSparks(p).forEach(function(s){if(sparkLive(s)&&!s.by){var key=(s.profileOwnerId||p.id)+"|"+s.id;if(seenSparks[key])return;seenSparks[key]=true;cands.push({pri:15,spark:key+"|"+p.id,personId:p.id,label:s.text,description:s.details||"",sub:"No deadline yet",act:' data-sparkdo="'+key+"|"+p.id+'"',btn:"Do it"});}});});
  var lo=S.people.map(function(p){return {p:p,s:personScore(p)};}).sort(function(a,b){return a.s-b.s;})[0];
  if(lo&&lo.s<80)cands.push({pri:(100-lo.s)/10,label:"Reach out to "+lo.p.name,sub:(lo.p.relation||"")+" \u00b7 meter "+lo.s+" - lowest",act:' data-openperson="'+lo.p.id+'"',btn:"Open"});
  cands.sort(function(a,b){return b.pri-a.pri;});
  if(!cands.length)return "";
- var out='<div class="sectiontitle"><h2>Free moment?</h2><span class="hint">the top of the stack, right now</span></div><div class="card">';
+ var out='<div class="sectiontitle"><h2>Free moment?</h2><span class="hint">Your best options right now (up to 4)</span></div><div class="card">';
  cands.slice(0,4).forEach(function(c){var bb=c.rhythm?rhyDoneBtn(c.rhythm):'<button class="btn mini'+(c.spark?" sparkbtn":"")+'"'+c.act+'>'+c.btn+'</button>';out+='<div class="planitem"><div class="pi-main">'+tendRowContent(c.label,c.description,c.sub,'<span class="plan-pills">'+planPills(c)+'</span>')+'</div>'+bb+'</div>';});
  return out+'</div>';}
 /* ============ area subpages ============ */
