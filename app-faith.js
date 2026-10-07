@@ -117,7 +117,7 @@ function faithNavScoreHTML(score){
 }
 function faithPracticeHealthParts(){
  var rhythms=avg(faithPracticeRhythmRecords("Prayer").map(function(r){return rhythmScore(r);}));
- var prayers=avg(faithActivePrayers().filter(function(p){return p.category==="Faith"&&(p.faithSection||"Prayer")==="Prayer";}).map(function(p){return prayerScore(p);}));
+ var prayers=avg(faithActivePrayers().map(function(p){return prayerScore(p);}));
  return {rhythms:rhythms,prayers:prayers};
 }
 function faithPracticeHealth(group){
@@ -130,12 +130,12 @@ function faithPracticeHealth(group){
 }
 function faithPracticeMetersHTML(group){
  if(group!=="Prayer")return "";
- var parts=faithPracticeHealthParts(),rhythms=faithPracticeRhythmRecords(group),prayers=faithActivePrayers().filter(function(p){return p.category==="Faith"&&(p.faithSection||"Prayer")==="Prayer";});
+ var parts=faithPracticeHealthParts(),rhythms=faithPracticeRhythmRecords(group),prayers=faithActivePrayers();
  function meter(label,score,note){
   var value=Number.isFinite(score)?score:null,level=faithScoreClass(value);
   return '<div class="pmeter faith-practice-meter"><div class="pm-lab"><span>'+label+'</span><span class="pm-val '+level+'">'+faithScoreText(value)+'</span></div><div class="bar" role="meter" aria-label="'+label+' health" aria-valuemin="0" aria-valuemax="100"'+(value===null?' aria-valuetext="No score available"':' aria-valuenow="'+value+'" aria-valuetext="'+value+' out of 100"')+'><i class="'+level+'" style="width:'+(value===null?0:value)+'%"></i></div><div class="pm-note">'+note+'</div></div>';
  }
- return '<div class="pmeters faith-practice-meters">'+meter("Rhythms",parts.rhythms,rhythms.length+" rhythm"+(rhythms.length===1?"":"s"))+meter("Prayer",parts.prayers,prayers.length+" active prayer"+(prayers.length===1?"":"s"))+'</div>';
+ return '<div class="pmeters faith-practice-meters">'+meter("Rhythms",parts.rhythms,rhythms.length+" rhythm"+(rhythms.length===1?"":"s"))+meter("Prayer",parts.prayers,prayers.length+" prayer"+(prayers.length===1?"":"s"))+'</div>';
 }
 function faithTimeRank(tod){if(tod==="allday")return -1;var blocks=dayBlocks(),index=blocks.findIndex(function(block){return block.id===tod;});return index<0?blocks.length:index;}
 function faithPracticeCount(group){return faithRhythms(group).length+(typeof window.faithLinkedRhythmCount==="function"?window.faithLinkedRhythmCount(group):0);}

@@ -669,9 +669,6 @@ details.moor .moor-body{padding:2px 18px 14px}
 .faith-practice-meters{gap:10px;margin:12px 0 16px}
 .faith-practice-meter{min-width:0;padding:10px 14px}
 .faith-practice-meter .bar{height:7px;margin:7px 0 4px;overflow:hidden;border-radius:99px;background:var(--mist)}
-.faith-practice-meter .bar i{display:block;height:100%;border-radius:inherit;background:var(--forest)}
-.faith-practice-meter .bar i.yellow{background:#F3B43F}
-.faith-practice-meter .bar i.red{background:#E66A5C}
 .faith-practice-meter .pm-val.neutral{color:var(--ink-faint)}
 .faith-submeters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .faith-submeter{display:grid;grid-template-columns:1fr auto;align-items:center;gap:3px 10px;min-width:0;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
