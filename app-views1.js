@@ -331,7 +331,7 @@ function tendAssociationRecord(type,ownerId,itemId){
  if(type==="spark"){
   if(itemId==="new")return ownerId==="faith"?(sparkAddDrafts.faith||faithSparkDraft):(sparkAddDrafts[ownerId]||(sparkAddDrafts[ownerId]={sharedWith:[],areas:[]}));
   if(sparkEditDraft&&sparkEditDraft.id===itemId)return sparkEditDraft;
-  if(ownerId==="faith"&&faithSparkDraft&&faithSparkDraft.id===itemId)return faithSparkDraft;
+  if(faithSparkDraft&&faithSparkDraft.id===itemId&&faithSparkOwnerId===ownerId)return faithSparkDraft;
   if(ownerId==="faith")return S.ideas.find(function(item){return item.id===itemId;});
   var owner=S.people.find(function(person){return person.id===ownerId;});return owner&&(owner.sparks||[]).find(function(item){return item.id===itemId;});
  }
@@ -368,9 +368,11 @@ function tendAssociationCommit(type,ownerId,itemId,record){
    if(type==="followup"&&record.kind==="faith-note"&&record.areas.indexOf("faith")===-1)record.areas.push("faith");
    if(type==="followup"&&record.areas.indexOf("faith")>=0&&draft.faithGroup)record.faithSection=draft.faithGroup;
    else if(type==="followup"&&record.kind!=="faith-note")delete record.faithSection;
-   if(type==="spark"&&record.areas.indexOf("faith")>=0&&draft.faithGroup)record.faithSection=draft.faithGroup;
-   if(type==="spark"&&ownerId==="faith"&&record.areas.indexOf("faith")===-1)record.areas.push("faith");
-   else if(type==="spark"&&ownerId!=="faith")delete record.faithSection;
+   if(type==="spark"){
+    if(ownerId==="faith"&&record.areas.indexOf("faith")===-1)record.areas.push("faith");
+    if(record.areas.indexOf("faith")>=0)record.faithSection=draft.faithGroup||record.faithSection||"Prayer";
+    else if(ownerId!=="faith")delete record.faithSection;
+   }
   }
  }
  delete tendItemAssociationDrafts[key];

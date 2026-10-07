@@ -1,7 +1,7 @@
 "use strict";
 /* ============ Faith practice page ============ */
 var FAITH_GROUPS=["Sabbath","Prayer","Fasting","Solitude","Generosity","Community","Service","Witness","Scripture","Other"];
-var faithRhythmDraft=null,faithSparkDraft=null,faithSparkEditId=null,faithNoteDraft=null,faithNoteEditId=null,faithPrayerDraftOpen=false,faithSettingsOpen=false,faithPrayerSession=null,faithPrayerPeopleOpen=false;
+var faithRhythmDraft=null,faithSparkDraft=null,faithSparkEditId=null,faithSparkOwnerId="faith",faithNoteDraft=null,faithNoteEditId=null,faithPrayerDraftOpen=false,faithSettingsOpen=false,faithPrayerSession=null,faithPrayerPeopleOpen=false;
 var faithGroupDescriptions={
  Sabbath:"A weekly invitation to pause, delight, and reconnect with God.",
  Prayer:"A place to hold your active requests and make room for focused prayer.",
@@ -248,7 +248,7 @@ function faithPracticeContent(group){
  var tabs=group==="Prayer"?["rhythms","sparks","notes","prayer"]:["rhythms","sparks","notes"],labels={rhythms:"Rhythms",sparks:"Sparks",notes:"Notes",prayer:"Prayer"},selected=faithPracticeTab(group);
  function count(tab){
   if(tab==="rhythms")return faithRhythms(group).length+(typeof window.faithLinkedRhythmCount==="function"?window.faithLinkedRhythmCount(group):0);
-  if(tab==="sparks")return S.ideas.filter(function(item){return (item.category==="faith"||item.area==="faith"||item.faithSection)&&!item.done&&(item.faithSection||"Other")===group;}).length;
+  if(tab==="sparks")return faithSparkRecords().filter(function(item){return !item.done&&(item.faithSection||item.faithGroup||(item.profileOwnerId!=="faith"?"Prayer":"Other"))===group;}).length;
   if(tab==="notes")return S.followups.filter(function(item){return item.kind==="faith-note"&&!item.done&&(item.faithSection||"Other")===group;}).length;
   return faithActivePrayers().length;
  }
@@ -256,20 +256,34 @@ function faithPracticeContent(group){
  return '<section class="card faith-practice-card" id="faith-practice-panel" aria-labelledby="faithPracticeTitle"><header class="faith-practice-heading"><h2 id="faithPracticeTitle">'+esc(group)+'</h2>'+(description?'<div class="faith-practice-focus"><span class="faith-practice-focus-label">Practice focus</span><p>'+esc(description)+'</p></div>':"")+'</header><nav class="profile-tabs faith-practice-tabs" aria-label="'+esc(group)+' sections">'+tabs.map(function(tab){return '<button type="button" data-faith-practice-tab="'+esc(group)+'|'+tab+'" aria-selected="'+(tab===selected)+'">'+collectionIcon(tab)+labels[tab]+' <span class="tab-count">'+count(tab)+'</span></button>';}).join("")+'</nav><div class="faith-tab-content">'+content+'</div></section>';
 }
 function faithSparkEditorHTML(item){
- return '<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="faith-spark-editor-title"><div class="profile-editor-body faith-item-editor"><h3 id="faith-spark-editor-title">'+(item.id?"Edit Spark":"Add Spark")+'</h3><label>Title<input data-faith-spark-title value="'+esc(item.text||"")+'" placeholder="Idea - a movie, a talk, a trip..."></label><label>Details<textarea data-faith-spark-details placeholder="Details (optional)">'+esc(item.details||"")+'</textarea></label><div class="faith-edit-grid"><label>Planned date<input type="date" data-faith-spark-date value="'+esc(item.by||"")+'"></label><label>Time<input type="time" data-faith-spark-time value="'+esc(item.time||"")+'"></label></div>'+tendAssociationControlsHTML("spark","faith",item.id||"new",item)+'<div class="faith-item-actions"><button type="button" class="btn mini" data-faith-spark-save="'+(item.id||"new")+'">Save Spark</button><button type="button" class="btn mini ghost" data-faith-spark-cancel="1" data-editor-cancel>Cancel</button>'+(item.id?'<button type="button" class="btn mini danger" data-faith-spark-delete="'+esc(item.id)+'">Delete Spark</button>':'')+'</div></div></dialog>';
+ var ownerId=faithSparkOwnerId||"faith";
+ return '<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="faith-spark-editor-title"><div class="profile-editor-body faith-item-editor"><h3 id="faith-spark-editor-title">'+(item.id?"Edit Spark":"Add Spark")+'</h3><label>Title<input data-faith-spark-title value="'+esc(item.text||"")+'" placeholder="Idea - a movie, a talk, a trip..."></label><label>Details<textarea data-faith-spark-details placeholder="Details (optional)">'+esc(item.details||"")+'</textarea></label><div class="faith-edit-grid"><label>Planned date<input type="date" data-faith-spark-date value="'+esc(item.by||"")+'"></label><label>Time<input type="time" data-faith-spark-time value="'+esc(item.time||"")+'"></label></div>'+tendAssociationControlsHTML("spark",ownerId,item.id||"new",item)+'<div class="faith-item-actions"><button type="button" class="btn mini" data-faith-spark-save="'+(item.id||"new")+'">Save Spark</button><button type="button" class="btn mini ghost" data-faith-spark-cancel="1" data-editor-cancel>Cancel</button>'+(item.id?'<button type="button" class="btn mini danger" data-faith-spark-delete="'+esc(ownerId+"|"+item.id)+'">Delete Spark</button>':'')+'</div></div></dialog>';
+}
+function faithSparkRecords(){
+ var records=[];
+ (S.ideas||[]).forEach(function(spark){if((Array.isArray(spark.areas)&&spark.areas.indexOf("faith")>=0)||spark.category==="faith"||spark.area==="faith"||spark.faithSection)records.push(Object.assign({},spark,{profileOwnerId:"faith"}));});
+ (S.people||[]).forEach(function(owner){(owner.sparks||[]).forEach(function(spark){if((Array.isArray(spark.areas)&&spark.areas.indexOf("faith")>=0)||spark.category==="faith"||spark.area==="faith"||spark.faithSection)records.push(Object.assign({},spark,{profileOwnerId:owner.id}));});});
+ var seen={};
+ return records.filter(function(spark){if(seen[spark.id])return false;seen[spark.id]=true;return true;});
+}
+function faithFindSpark(ownerId,id){
+ if(ownerId==="faith")return (S.ideas||[]).find(function(spark){return spark.id===id;})||null;
+ var owner=S.people.find(function(person){return person.id===ownerId;});
+ return owner&&(owner.sparks||[]).find(function(spark){return spark.id===id;})||null;
 }
 function faithSparksHTML(group){
  group=group||faithSelectedGroup();
- var items=S.ideas.filter(function(item){return item.category==="faith"||item.area==="faith"||item.faithSection;}).filter(function(item){return !item.done&&(item.faithSection||"Other")===group;}).sort(function(a,b){return String(a.by||"9999").localeCompare(String(b.by||"9999"));});
+ var items=faithSparkRecords().filter(function(item){return !item.done&&(item.faithSection||item.faithGroup||(item.profileOwnerId!=="faith"?"Prayer":"Other"))===group;}).sort(function(a,b){return String(a.by||"9999").localeCompare(String(b.by||"9999"));});
  var out=items.length?items.map(function(item){
-  if(faithSparkEditId===item.id)return faithSparkEditorHTML(item);
-  var sparkBadges=tendAssociationPeopleBadges(item,"faith",null,"spark")+tendAssociationCategoryBadges(item);
-  return '<article class="faith-item-row faith-spark-row"><span class="faith-spark-icon" aria-hidden="true">✦</span><div class="faith-item-copy">'+tendRowContent(item.text||"Untitled Spark",item.details||"",(item.by?esc(sparkDueTxt(item)):"Flexible · no date")+(item.time?" · "+esc(fmtHM12(item.time)):""),sparkBadges)+'</div><div class="faith-item-actions"><button type="button" class="btn mini" data-faith-sparkdone="'+esc(item.id)+'">Complete</button><button type="button" class="iconbtn" data-faith-spark-edit="'+esc(item.id)+'" aria-label="Edit '+esc(item.text)+'">✎</button><button type="button" class="iconbtn" data-faith-spark-delete="'+esc(item.id)+'" aria-label="Delete '+esc(item.text)+'">×</button></div></article>';
+  var ownerId=item.profileOwnerId||"faith";
+  if(faithSparkEditId===item.id&&faithSparkOwnerId===ownerId)return faithSparkEditorHTML(item);
+  var sparkBadges=tendAssociationPeopleBadges(item,ownerId,null,"spark")+tendAssociationCategoryBadges(item);
+  return '<article class="faith-item-row faith-spark-row"><span class="faith-spark-icon" aria-hidden="true">✦</span><div class="faith-item-copy">'+tendRowContent(item.text||"Untitled Spark",item.details||"",(item.by?esc(sparkDueTxt(item)):"Flexible · no date")+(item.time?" · "+esc(fmtHM12(item.time)):""),sparkBadges)+'</div><div class="faith-item-actions"><button type="button" class="btn mini" data-faith-sparkdone="'+esc(ownerId+"|"+item.id)+'">Complete</button><button type="button" class="iconbtn" data-faith-spark-edit="'+esc(ownerId+"|"+item.id)+'" aria-label="Edit '+esc(item.text)+'">✎</button><button type="button" class="iconbtn" data-faith-spark-delete="'+esc(ownerId+"|"+item.id)+'" aria-label="Delete '+esc(item.text)+'">×</button></div></article>';
  }).join(""):'<div class="empty">No Sparks in this practice yet.</div>';
  if(faithSparkDraft&&!faithSparkEditId&&(faithSparkDraft.faithSection||"Other")===group)out+=faithSparkEditorHTML(faithSparkDraft);
  else if(!faithSparkDraft)out+='<div class="faith-add-row"><button type="button" class="btn mini ghost" data-faith-spark-add="1">+ Add Spark</button></div>';
- var history=S.ideas.filter(function(item){return (item.category==="faith"||item.area==="faith"||item.faithSection)&&item.done&&(item.faithSection||"Other")===group;}).sort(function(a,b){return (b.completedTs||0)-(a.completedTs||0);});
- if(history.length)out+='<details class="faith-history-list"><summary>Completed Sparks ('+history.length+')</summary>'+history.map(function(item){return '<div class="faith-history-row"><span>'+esc(item.text)+'</span><time>'+(item.completedDate?esc(prayerDate(item.completedDate)):"Completed")+'</time><button type="button" class="btn mini ghost" data-faith-spark-reopen="'+esc(item.id)+'">Reopen</button></div>';}).join("")+'</details>';
+ var history=faithSparkRecords().filter(function(item){return item.done&&(item.faithSection||item.faithGroup||(item.profileOwnerId!=="faith"?"Prayer":"Other"))===group;}).sort(function(a,b){return (b.completedTs||0)-(a.completedTs||0);});
+ if(history.length)out+='<details class="faith-history-list"><summary>Completed Sparks ('+history.length+')</summary>'+history.map(function(item){return '<div class="faith-history-row"><span>'+esc(item.text)+'</span><time>'+(item.completedDate?esc(prayerDate(item.completedDate)):"Completed")+'</time><button type="button" class="btn mini ghost" data-faith-spark-reopen="'+esc(item.profileOwnerId+"|"+item.id)+'">Reopen</button></div>';}).join("")+'</details>';
  return out;
 }
 function faithNoteRowHTML(item,done){
@@ -325,12 +339,13 @@ function faithSaveSpark(){
  var draft=faithSparkDraft;if(!draft)return;
  var title=document.querySelector("[data-faith-spark-title]");
  if(!title||!title.value.trim()){flash("Give the Spark a title");if(title)title.focus();return;}
- draft.text=title.value.trim();draft.details=(document.querySelector("[data-faith-spark-details]")||{}).value||"";draft.by=(document.querySelector("[data-faith-spark-date]")||{}).value||null;draft.time=(document.querySelector("[data-faith-spark-time]")||{}).value||null;draft.tod=draft.tod||"anytime";draft.faithSection=draft.faithSection||faithSelectedGroup();draft.category="faith";draft.area="faith";draft.areas=Array.isArray(draft.areas)?draft.areas:["faith"];if(draft.areas.indexOf("faith")<0)draft.areas.push("faith");
- var record;
- if(draft.id){record=S.ideas.find(function(item){return item.id===draft.id;});if(record)Object.assign(record,draft);}
- else{record=Object.assign({id:uid(),done:false},draft);S.ideas.push(record);}
- if(record){tendAssociationCommit("spark","faith",draft.id||"new",record);delete sparkAddDrafts.faith;}
- faithSparkDraft=null;faithSparkEditId=null;save();render();flash("Spark saved");
+ draft.text=title.value.trim();draft.details=(document.querySelector("[data-faith-spark-details]")||{}).value||"";draft.by=(document.querySelector("[data-faith-spark-date]")||{}).value||null;draft.time=(document.querySelector("[data-faith-spark-time]")||{}).value||null;draft.tod=draft.tod||"anytime";
+ var ownerId=faithSparkOwnerId||"faith",record;
+ if(ownerId==="faith"){draft.faithSection=draft.faithSection||faithSelectedGroup();draft.category="faith";draft.area="faith";draft.areas=Array.isArray(draft.areas)?draft.areas:["faith"];if(draft.areas.indexOf("faith")<0)draft.areas.push("faith");}
+ if(draft.id){record=faithFindSpark(ownerId,draft.id);if(record)Object.assign(record,draft);}
+ else{record=Object.assign({id:uid(),done:false},draft);if(ownerId==="faith")S.ideas.push(record);else{var newSparkOwner=S.people.find(function(person){return person.id===ownerId;});if(newSparkOwner){newSparkOwner.sparks=newSparkOwner.sparks||[];newSparkOwner.sparks.push(record);}}}
+ if(record){tendAssociationCommit("spark",ownerId,draft.id||"new",record);delete sparkAddDrafts[ownerId];}
+ faithSparkDraft=null;faithSparkEditId=null;faithSparkOwnerId="faith";save();render();flash("Spark saved");
 }
 function faithSavePrayer(button){
  var form=button.closest("[data-prayer-editor]");if(!form||typeof prayerSaveFromForm!=="function")return false;
@@ -403,13 +418,13 @@ document.addEventListener("click",function(event){
  if(b.matches("[data-faith-rhythm-cancel]")){faithRhythmDraft=null;render();event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-rhythm-delete]")){var id=b.getAttribute("data-faith-rhythm-delete");S.rhythms=S.rhythms.filter(function(r){return r.id!==id;});faithRhythmDraft=null;save();render();flash("Rhythm removed");event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-rhythm-history]")){openRhythmHistory("faith|"+b.getAttribute("data-faith-rhythm-history"));event.stopImmediatePropagation();return;}
- if(b.matches("[data-faith-spark-add]")){delete tendItemAssociationDrafts[tendAssociationKey("spark","faith","new")];faithSparkDraft={id:null,text:"",details:"",by:"",time:"",tod:"anytime",category:"faith",area:"faith",faithSection:faithSelectedGroup(),sharedWith:[],areas:["faith"]};sparkAddDrafts.faith=faithSparkDraft;faithSparkEditId=null;render();var sparkTitle=document.querySelector("[data-faith-spark-title]");if(sparkTitle)sparkTitle.focus();event.stopImmediatePropagation();return;}
- if(b.matches("[data-faith-spark-edit]")){var spark=S.ideas.find(function(item){return item.id===b.getAttribute("data-faith-spark-edit");});if(spark){delete tendItemAssociationDrafts[tendAssociationKey("spark","faith",spark.id)];faithSparkDraft=JSON.parse(JSON.stringify(spark));faithSparkEditId=spark.id;}render();event.stopImmediatePropagation();return;}
+ if(b.matches("[data-faith-spark-add]")){faithSparkOwnerId="faith";delete tendItemAssociationDrafts[tendAssociationKey("spark","faith","new")];faithSparkDraft={id:null,text:"",details:"",by:"",time:"",tod:"anytime",category:"faith",area:"faith",faithSection:faithSelectedGroup(),sharedWith:[],areas:["faith"]};sparkAddDrafts.faith=faithSparkDraft;faithSparkEditId=null;render();var sparkTitle=document.querySelector("[data-faith-spark-title]");if(sparkTitle)sparkTitle.focus();event.stopImmediatePropagation();return;}
+ if(b.matches("[data-faith-spark-edit]")){var sparkKey=b.getAttribute("data-faith-spark-edit").split("|"),sparkOwnerId=sparkKey[0],sparkId=sparkKey[1],spark=faithFindSpark(sparkOwnerId,sparkId);if(spark){faithSparkOwnerId=sparkOwnerId;delete tendItemAssociationDrafts[tendAssociationKey("spark",sparkOwnerId,spark.id)];faithSparkDraft=JSON.parse(JSON.stringify(spark));faithSparkEditId=spark.id;}render();event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-spark-save]")){faithSaveSpark();event.stopImmediatePropagation();return;}
- if(b.matches("[data-faith-spark-cancel]")){if(faithSparkDraft&&faithSparkDraft.id)delete tendItemAssociationDrafts[tendAssociationKey("spark","faith",faithSparkDraft.id)];faithSparkDraft=null;delete sparkAddDrafts.faith;delete tendItemAssociationDrafts[tendAssociationKey("spark","faith","new")];faithSparkEditId=null;render();event.stopImmediatePropagation();return;}
- if(b.matches("[data-faith-sparkdone]")){faithCompleteSpark(S.ideas.find(function(item){return item.id===b.getAttribute("data-faith-sparkdone");}));event.stopImmediatePropagation();return;}
- if(b.matches("[data-faith-spark-delete]")){var deletedSparkId=b.getAttribute("data-faith-spark-delete");S.ideas=S.ideas.filter(function(item){return item.id!==deletedSparkId;});if(faithSparkDraft&&faithSparkDraft.id===deletedSparkId){faithSparkDraft=null;faithSparkEditId=null;}delete tendItemAssociationDrafts[tendAssociationKey("spark","faith",deletedSparkId)];save();render();event.stopImmediatePropagation();return;}
- if(b.matches("[data-faith-spark-reopen]")){var item=S.ideas.find(function(spark){return spark.id===b.getAttribute("data-faith-spark-reopen");});if(item){item.done=false;item.completedTs=null;item.completedDate=null;save();render();}event.stopImmediatePropagation();return;}
+ if(b.matches("[data-faith-spark-cancel]")){if(faithSparkDraft&&faithSparkDraft.id)delete tendItemAssociationDrafts[tendAssociationKey("spark",faithSparkOwnerId,faithSparkDraft.id)];faithSparkDraft=null;delete sparkAddDrafts[faithSparkOwnerId];delete tendItemAssociationDrafts[tendAssociationKey("spark",faithSparkOwnerId,"new")];faithSparkEditId=null;faithSparkOwnerId="faith";render();event.stopImmediatePropagation();return;}
+ if(b.matches("[data-faith-sparkdone]")){var doneKey=b.getAttribute("data-faith-sparkdone").split("|"),doneSpark=faithFindSpark(doneKey[0],doneKey[1]);if(doneSpark)faithCompleteSpark(doneSpark);event.stopImmediatePropagation();return;}
+ if(b.matches("[data-faith-spark-delete]")){var deleteKey=b.getAttribute("data-faith-spark-delete").split("|"),deletedSparkId=deleteKey[1];if(deleteKey[0]==="faith")S.ideas=S.ideas.filter(function(item){return item.id!==deletedSparkId;});else{var deleteOwner=S.people.find(function(person){return person.id===deleteKey[0];});if(deleteOwner)deleteOwner.sparks=(deleteOwner.sparks||[]).filter(function(item){return item.id!==deletedSparkId;});}if(faithSparkDraft&&faithSparkDraft.id===deletedSparkId){faithSparkDraft=null;faithSparkEditId=null;faithSparkOwnerId="faith";}delete tendItemAssociationDrafts[tendAssociationKey("spark",deleteKey[0],deletedSparkId)];save();render();event.stopImmediatePropagation();return;}
+ if(b.matches("[data-faith-spark-reopen]")){var reopenKey=b.getAttribute("data-faith-spark-reopen").split("|"),item=faithFindSpark(reopenKey[0],reopenKey[1]);if(item){item.done=false;item.completedTs=null;item.completedDate=null;save();render();}event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-prayer-add]")){delete prayerAddDrafts.global;delete tendItemAssociationDrafts[tendAssociationKey("prayer","global","new")];faithConfig().selectedGroup="Prayer";faithConfig().prayerView="mine";faithConfig().practiceTabs=faithConfig().practiceTabs||{};faithConfig().practiceTabs.Prayer="prayer";faithPrayerDraftOpen=true;render();var title=document.querySelector('[data-prayer-editor="new-global"] [data-prayer-field="title"]');if(title)title.focus();event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-prayer-cancel]")){delete prayerAddDrafts.global;delete tendItemAssociationDrafts[tendAssociationKey("prayer","global","new")];faithPrayerDraftOpen=false;render();event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-prayer-save]")){if(faithSavePrayer(b)){faithPrayerDraftOpen=false;render();}event.stopImmediatePropagation();return;}
