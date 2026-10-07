@@ -721,6 +721,8 @@ details.moor .moor-body{padding:2px 18px 14px}
 .faith-prayer-view-toggle span{color:var(--ink-faint);font-size:15px}
 .faith-prayer-toolbar .faith-prayer-filter{margin:0 auto 0 0}
 .faith-prayer-toolbar>.btn{font-size:13px}
+.faith-prayer-toolbar .faith-start-prayer{display:inline-flex;align-items:center;gap:8px}
+.faith-prayer-session-count{display:inline-grid;place-items:center;min-width:21px;height:21px;padding:0 5px;border-radius:99px;background:rgba(255,255,255,.2);color:inherit;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
 .faith-prayer-time-group{margin:16px 0}.faith-prayer-time-group h3{margin-bottom:4px;color:var(--ink-soft);font-size:12px;font-weight:650;letter-spacing:.08em;text-transform:uppercase}
 .faith-prayer-row .prayer-item{margin:0}
 .faith-prayer-row .prayer-rhythm-row{display:grid;grid-template-columns:52px minmax(0,1fr);grid-template-areas:"health content" "actions actions";align-items:start;gap:8px 10px}
