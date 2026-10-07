@@ -154,7 +154,7 @@ function faithRhythmsHTML(group){
 }
 function faithPrayerIdentity(p){
  if(p.personId){var person=S.people.find(function(item){return item.id===p.personId;});return person?'<span class="faith-prayer-person">'+personAvatar(person,24)+esc(person.name)+'</span>':'<span class="faith-prayer-person">Person</span>';}
- return p.faithOwner==="me"?'<span class="faith-prayer-person">Me</span>':'<span class="faith-prayer-person">Unassigned</span>';
+ return p.faithOwner==="me"?'<span class="faith-prayer-person">'+(settings().profilePhoto?personAvatar({name:"Me",photo:settings().profilePhoto},24):"")+'Me</span>':'<span class="faith-prayer-person">Unassigned</span>';
 }
 function faithPrayerTimeGroups(){
  var today=faithActivePrayers().filter(faithPrayerScheduledToday);
