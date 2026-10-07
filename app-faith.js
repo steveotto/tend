@@ -37,7 +37,11 @@ function faithConfig(){
  return S.faithConfig;
 }
 function faithSelectedGroup(){var group=faithConfig().selectedGroup;return FAITH_GROUPS.indexOf(group)>=0?group:"Sabbath";}
-function faithSelectedPrayerView(){var view=faithConfig().prayerView;return ["today","mine","all"].indexOf(view)>=0?view:"today";}
+function faithSelectedPrayerView(){
+ var config=faithConfig(),view=config.prayerView;
+ if(view==="mine"){config.prayerView="all";config.prayerPeople=["me"];config.prayerGroups={marriage:false,parenting:false,friendships:false};save();return "all";}
+ return view==="all"?"all":"today";
+}
 function faithPracticeTab(group){var tabs=faithConfig().practiceTabs||{},tab=tabs[group];return (group==="Prayer"?["rhythms","sparks","notes","prayer"]:["rhythms","sparks","notes"]).indexOf(tab)>=0?tab:(group==="Prayer"?"prayer":"rhythms");}
 function faithGroupEnabled(group){return faithConfig().disabledGroups.indexOf(group)<0;}
 function faithIsLegacyPrayerSeed(r){
@@ -169,7 +173,7 @@ function faithPrayerRows(items){
  return items.map(function(p){return '<div class="faith-prayer-row">'+prayerItemHTML(p,false)+'</div>';}).join("");
 }
 function faithPrayerTodayHTML(){
- var items=faithPrayerTimeGroups();
+ var items=faithPrayerTimeGroups().filter(faithPrayerAllMatches);
  if(!items.length)return '<div class="empty">No active requests are scheduled for today.</div>';
  var buckets={};
  items.forEach(function(p){var key=p.tod||"anytime";(buckets[key]||(buckets[key]=[])).push(p);});
@@ -178,11 +182,14 @@ function faithPrayerTodayHTML(){
 }
 function faithPrayerAllMatches(p){
  var config=faithConfig(),selectedPeople=Array.isArray(config.prayerPeople)?config.prayerPeople:null,groups=Object.assign({marriage:true,parenting:true,friendships:true},config.prayerGroups||{});
- if(!p.personId)return true;
- var person=S.people.find(function(item){return item.id===p.personId;});
- if(!person)return false;
- if(selectedPeople&&selectedPeople.indexOf(person.id)<0)return false;
- return !!groups[faithPrayerPersonGroup(person)];
+ if(selectedPeople===null)return true;
+ if(selectedPeople.indexOf("me")>=0&&faithPrayerIsMine(p))return true;
+ var personIds=(p.personId?[p.personId]:[]).concat(Array.isArray(p.sharedWith)?p.sharedWith:[]);
+ return personIds.some(function(id){
+  if(selectedPeople.indexOf(id)<0)return false;
+  var person=S.people.find(function(item){return item.id===id;});
+  return !!person&&!!groups[faithPrayerPersonGroup(person)];
+ });
 }
 function faithPrayerHasPeople(p){return !!(p&&(p.personId||Array.isArray(p.sharedWith)&&p.sharedWith.length));}
 function faithPrayerIsMine(p){return p.faithOwner==="me"&&!faithPrayerHasPeople(p);}
@@ -196,13 +203,15 @@ function faithPrayerScoreOrder(a,b){
 function faithPrayerAllHTML(){
  var active=faithActivePrayers().filter(faithPrayerAllMatches).slice().sort(faithPrayerScoreOrder);
  var closed=S.prayers.filter(function(p){return (p.answered||p.archived)&&faithPrayerAllMatches(p);});
- var people=S.people.slice().sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""));});
- var config=faithConfig(),selectedPeople=Array.isArray(config.prayerPeople)?config.prayerPeople:null,groups=Object.assign({marriage:true,parenting:true,friendships:true},config.prayerGroups||{});
- var selectedCount=selectedPeople?selectedPeople.length:people.length;
- var controls='<details class="faith-prayer-filter"'+(faithPrayerPeopleOpen?" open":"")+'><summary><span>People</span><span class="faith-prayer-filter-count">'+selectedCount+' selected</span></summary><div class="faith-prayer-filter-panel"><div class="faith-prayer-filter-actions"><button type="button" data-faith-prayer-filter-action="all">Show all</button><button type="button" data-faith-prayer-filter-action="clear">Clear all</button></div><div class="faith-prayer-filter-groups">'+["marriage","parenting","friendships"].map(function(group){var labels={marriage:"Marriage",parenting:"Parenting",friendships:"Friendships"};return '<label><input type="checkbox" data-faith-prayer-group="'+group+'"'+(groups[group]?' checked':'')+'><span>'+labels[group]+'</span></label>';}).join("")+'</div><div class="faith-prayer-filter-people">'+people.map(function(person){var checked=!selectedPeople||selectedPeople.indexOf(person.id)>=0;return '<label class="faith-prayer-person-option"><input type="checkbox" data-faith-prayer-person="'+esc(person.id)+'"'+(checked?' checked':'')+'>'+personAvatar(person,24)+'<span>'+esc(person.name)+'</span></label>';}).join("")+'</div></div></details>';
- var out=controls+(active.length?faithPrayerRows(active):'<div class="empty">No active prayer requests match these filters.</div>');
+ var out=active.length?faithPrayerRows(active):'<div class="empty">No active prayer requests match these filters.</div>';
  if(closed.length)out+='<details class="faith-history-list"><summary>Answered and archived ('+closed.length+')</summary>'+faithPrayerRows(closed)+'</details>';
  return out;
+}
+function faithPrayerPeopleFilterHTML(){
+ var people=S.people.slice().sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""));});
+ var config=faithConfig(),selectedPeople=Array.isArray(config.prayerPeople)?config.prayerPeople:null,groups=Object.assign({marriage:true,parenting:true,friendships:true},config.prayerGroups||{});
+ var selectedCount=selectedPeople?selectedPeople.length:people.length+1;
+ return '<details class="faith-prayer-filter"'+(faithPrayerPeopleOpen?" open":"")+'><summary><span>People</span><span class="faith-prayer-filter-count">'+selectedCount+' selected</span></summary><div class="faith-prayer-filter-panel"><div class="faith-prayer-filter-actions"><button type="button" data-faith-prayer-filter-action="all">Show all</button><button type="button" data-faith-prayer-filter-action="clear">Clear all</button></div><label class="faith-prayer-person-option faith-prayer-me-option"><input type="checkbox" data-faith-prayer-person="me"'+(!selectedPeople||selectedPeople.indexOf("me")>=0?' checked':'')+'>'+(settings().profilePhoto?personAvatar({name:"Me",photo:settings().profilePhoto},24):'<span class="faith-prayer-me-avatar">Me</span>')+'<span>Me</span></label><div class="faith-prayer-filter-groups">'+["marriage","parenting","friendships"].map(function(group){var labels={marriage:"Marriage",parenting:"Parenting",friendships:"Friendships"};return '<label><input type="checkbox" data-faith-prayer-group="'+group+'"'+(groups[group]?' checked':'')+'><span>'+labels[group]+'</span></label>';}).join("")+'</div><div class="faith-prayer-filter-people">'+people.map(function(person){var checked=!selectedPeople||selectedPeople.indexOf(person.id)>=0;return '<label class="faith-prayer-person-option"><input type="checkbox" data-faith-prayer-person="'+esc(person.id)+'"'+(checked?' checked':'')+'>'+personAvatar(person,24)+'<span>'+esc(person.name)+'</span></label>';}).join("")+'</div></div></details>';
 }
 function faithPrayerFilterRender(attribute,value){
  var scrollX=window.scrollX,scrollY=window.scrollY,panel=document.querySelector(".faith-prayer-filter-panel"),panelScrollTop=panel?panel.scrollTop:0;
@@ -220,17 +229,13 @@ function faithPrayerPersonGroup(person){
  if(/son|daughter|father|dad|mother|mom|brother|sister|in-law|in law|grandchild|grandson|granddaughter|nephew|niece|bonus/.test(relation))return "parenting";
  return "friendships";
 }
-function faithPrayerMineHTML(){
- var mine=S.prayers.filter(faithPrayerIsMine);
- var out=mine.length?window.prayerList(mine,false):'<div class="empty">No prayers for you yet. Add one for yourself and it will also appear on the main Prayer page.</div>';
- if(faithPrayerDraftOpen){
-  var form=prayerEditor({category:"Faith",faithSection:"Prayer",faithOwner:"me",freq:"selectdays",weekdays:[new Date().getDay()],tod:"anytime",added:todayStr()},"faith");
-  out+='<dialog class="profile-editor-dialog" data-editor-modal aria-label="Add a prayer for me"><div class="profile-editor-body"><h3>Add a prayer for me</h3>'+form.replace('data-faith-section="Prayer"','data-faith-section="Prayer" data-faith-owner="me"')+'</div></dialog>';
- }else out+='<div class="faith-add-row"><button type="button" class="btn mini ghost" data-faith-prayer-add="1">+ Add a prayer for me</button></div>';
- return out;
+function faithPrayerAddDialogHTML(){
+ if(!faithPrayerDraftOpen)return "";
+ var form=prayerEditor({category:"Faith",faithSection:"Prayer",faithOwner:"me",freq:"selectdays",weekdays:[new Date().getDay()],tod:"anytime",added:todayStr()},"faith");
+ return '<dialog class="profile-editor-dialog" data-editor-modal aria-label="Add a prayer for me"><div class="profile-editor-body"><h3>Add a prayer for me</h3>'+form.replace('data-faith-section="Prayer"','data-faith-section="Prayer" data-faith-owner="me"')+'</div></dialog>';
 }
 function faithPrayerSessionSort(view){
- var items=faithActivePrayers().filter(function(p){return view==="today"?faithPrayerScheduledToday(p):view==="mine"?faithPrayerIsMine(p):faithPrayerAllMatches(p);});
+ var items=faithActivePrayers().filter(function(p){return (view!=="today"||faithPrayerScheduledToday(p))&&faithPrayerAllMatches(p);});
  return items.sort(faithPrayerScoreOrder).map(function(p){return p.id;});
 }
 function faithPrayerSessionHTML(){
@@ -242,8 +247,8 @@ function faithPrayerSessionHTML(){
  return '<main class="faith-page faith-prayer-session"><header class="faith-session-heading"><div><span class="faith-eyebrow">Faith · Prayer time</span><h1>One request at a time</h1></div><button type="button" class="btn ghost" data-faith-session-exit="1">Pause / Exit</button></header><div class="faith-session-progress" aria-live="polite">'+(faithPrayerSession.index+1)+' of '+items.length+'</div><div class="faith-session-track" aria-hidden="true"><span style="width:'+Math.round((faithPrayerSession.index+1)/items.length*100)+'%"></span></div><article class="card faith-session-card" data-faith-session-card tabindex="-1"><div class="faith-session-person">'+faithPrayerIdentity(p)+'</div><h2>'+esc(p.text||"Prayer request")+'</h2><p>'+(p.details?esc(p.details):"")+'</p><div class="faith-session-meta">'+esc(prayerScheduleLabel(p))+' · prayed '+(p.prayed||0)+' '+((p.prayed||0)===1?"time":"times")+'</div></article><nav class="faith-session-actions" aria-label="Prayer time actions"><button type="button" class="btn ghost" data-faith-session-back="1"'+(faithPrayerSession.index===0?' disabled':'')+'>Back</button><button type="button" class="btn ghost" data-faith-session-skip="1">Skip</button><button type="button" class="btn faith-session-prayed" data-faith-session-prayed="'+esc(p.id)+'">Prayed</button></nav><p class="faith-session-help">Use ← / → to move between requests. Moving never records a prayer.</p></main>';
 }
 function faithPrayerHub(){
- var view=faithSelectedPrayerView(),labels={today:"Today",mine:"My prayers",all:"All prayers"},content=view==="today"?faithPrayerTodayHTML():view==="mine"?faithPrayerMineHTML():faithPrayerAllHTML();
- return '<div class="faith-prayer-hub" id="faith-prayer-hub"><div class="faith-prayer-toolbar"><label class="faith-prayer-view-picker"><span>View</span><select data-faith-prayer-view aria-label="Prayer list view">'+["today","mine","all"].map(function(key){return '<option value="'+key+'"'+(view===key?' selected':'')+'>'+labels[key]+'</option>';}).join("")+'</select></label><button type="button" class="btn mini" data-faith-session-start="'+view+'">Focused Prayer</button></div><div class="faith-prayer-content">'+content+'</div></div>';
+ var view=faithSelectedPrayerView(),nextView=view==="today"?"all":"today",content=view==="today"?faithPrayerTodayHTML():faithPrayerAllHTML(),buttonLabel=view==="today"?"Today":"All";
+ return '<div class="faith-prayer-hub" id="faith-prayer-hub"><div class="faith-prayer-toolbar"><button type="button" class="faith-prayer-view-toggle" data-faith-prayer-view="'+nextView+'" aria-pressed="'+(view==="all")+'" aria-label="Switch to '+(nextView==="today"?"Today":"All")+' prayers">'+buttonLabel+' <span aria-hidden="true">↔</span></button>'+faithPrayerPeopleFilterHTML()+'<button type="button" class="btn mini" data-faith-session-start="'+view+'">Focused Prayer</button></div><div class="faith-prayer-content">'+content+(!faithPrayerDraftOpen?'<div class="faith-add-row"><button type="button" class="btn mini ghost" data-faith-prayer-add="1">+ Add a prayer for me</button></div>':'')+'</div>'+faithPrayerAddDialogHTML()+'</div>';
 }
 function faithPracticeContent(group){
  var description=faithConfig().groupDescriptions[group]||"";
@@ -401,6 +406,7 @@ document.addEventListener("click",function(event){
  if(b.matches("[data-faith-settings-close]")){faithSettingsOpen=false;render();event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-select]")){var selected=b.getAttribute("data-faith-select");faithConfig().selectedGroup=selected;save();render();var navButton=document.querySelector('[data-faith-select="'+selected+'"]');if(navButton)navButton.focus();event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-practice-tab]")){var parts=b.getAttribute("data-faith-practice-tab").split("|"),tabs=faithConfig().practiceTabs||{};tabs[parts[0]]=parts[1];faithConfig().practiceTabs=tabs;save();render();var tabButton=document.querySelector('[data-faith-practice-tab="'+parts[0]+'|'+parts[1]+'"]');if(tabButton)tabButton.focus();event.stopImmediatePropagation();return;}
+ if(b.matches("[data-faith-prayer-view]")){var view=b.getAttribute("data-faith-prayer-view");if(["today","all"].indexOf(view)<0)return;faithConfig().prayerView=view;save();render();var viewButton=document.querySelector('[data-faith-prayer-view]');if(viewButton)viewButton.focus();event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-prayer-filter-action]")){var action=b.getAttribute("data-faith-prayer-filter-action");faithConfig().prayerPeople=action==="all"?null:[];faithConfig().prayerGroups={marriage:action==="all",parenting:action==="all",friendships:action==="all"};faithPrayerPeopleOpen=true;save();faithPrayerFilterRender("filter-action",action);event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-prayer-today]")){faithConfig().selectedGroup="Prayer";faithConfig().prayerView="today";faithConfig().practiceTabs=faithConfig().practiceTabs||{};faithConfig().practiceTabs.Prayer="prayer";save();render();var hub=document.getElementById("faith-prayer-hub");if(hub)hub.scrollIntoView({behavior:"smooth",block:"start"});event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-session-start]")){var sessionView=b.getAttribute("data-faith-session-start");faithPrayerSession={view:sessionView,all:sessionView==="all",ids:faithPrayerSessionSort(sessionView),index:0};render();var card=document.querySelector("[data-faith-session-card]");if(card)card.focus();event.stopImmediatePropagation();return;}
@@ -426,7 +432,7 @@ document.addEventListener("click",function(event){
  if(b.matches("[data-faith-sparkdone]")){var doneKey=b.getAttribute("data-faith-sparkdone").split("|"),doneSpark=faithFindSpark(doneKey[0],doneKey[1]);if(doneSpark)faithCompleteSpark(doneSpark);event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-spark-delete]")){var deleteKey=b.getAttribute("data-faith-spark-delete").split("|"),deletedSparkId=deleteKey[1];if(deleteKey[0]==="faith")S.ideas=S.ideas.filter(function(item){return item.id!==deletedSparkId;});else{var deleteOwner=S.people.find(function(person){return person.id===deleteKey[0];});if(deleteOwner)deleteOwner.sparks=(deleteOwner.sparks||[]).filter(function(item){return item.id!==deletedSparkId;});}if(faithSparkDraft&&faithSparkDraft.id===deletedSparkId){faithSparkDraft=null;faithSparkEditId=null;faithSparkOwnerId="faith";}delete tendItemAssociationDrafts[tendAssociationKey("spark",deleteKey[0],deletedSparkId)];save();render();event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-spark-reopen]")){var reopenKey=b.getAttribute("data-faith-spark-reopen").split("|"),item=faithFindSpark(reopenKey[0],reopenKey[1]);if(item){item.done=false;item.completedTs=null;item.completedDate=null;save();render();}event.stopImmediatePropagation();return;}
- if(b.matches("[data-faith-prayer-add]")){delete prayerAddDrafts.global;delete tendItemAssociationDrafts[tendAssociationKey("prayer","global","new")];faithConfig().selectedGroup="Prayer";faithConfig().prayerView="mine";faithConfig().practiceTabs=faithConfig().practiceTabs||{};faithConfig().practiceTabs.Prayer="prayer";faithPrayerDraftOpen=true;render();var title=document.querySelector('[data-prayer-editor="new-global"] [data-prayer-field="title"]');if(title)title.focus();event.stopImmediatePropagation();return;}
+ if(b.matches("[data-faith-prayer-add]")){delete prayerAddDrafts.global;delete tendItemAssociationDrafts[tendAssociationKey("prayer","global","new")];faithConfig().selectedGroup="Prayer";faithConfig().prayerView="all";faithConfig().prayerPeople=null;faithConfig().prayerGroups={marriage:true,parenting:true,friendships:true};faithConfig().practiceTabs=faithConfig().practiceTabs||{};faithConfig().practiceTabs.Prayer="prayer";faithPrayerDraftOpen=true;render();var title=document.querySelector('[data-prayer-editor="new-global"] [data-prayer-field="title"]');if(title)title.focus();event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-prayer-cancel]")){delete prayerAddDrafts.global;delete tendItemAssociationDrafts[tendAssociationKey("prayer","global","new")];faithPrayerDraftOpen=false;render();event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-prayer-save]")){if(faithSavePrayer(b)){faithPrayerDraftOpen=false;render();}event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-note-open]")){faithNoteDraft={kind:"faith-note",text:"",faithSection:b.getAttribute("data-faith-note-open")||faithSelectedGroup(),sharedWith:[],areas:["faith"]};render();var note=document.querySelector("[data-faith-note-text]");if(note)note.focus();event.stopImmediatePropagation();return;}
@@ -439,17 +445,11 @@ document.addEventListener("click",function(event){
 },true);
 document.addEventListener("change",function(event){
  var t=event.target;if(!t.matches)return;
- if(t.matches("[data-faith-prayer-view]")){
-  var view=t.value;if(["today","mine","all"].indexOf(view)<0)return;
-  faithConfig().prayerView=view;save();render();
-  var picker=document.querySelector("[data-faith-prayer-view]");if(picker)picker.focus();
-  event.stopImmediatePropagation();return;
- }
  if(t.matches&&t.matches("[data-faith-prayer-person]")){
   var personId=t.getAttribute("data-faith-prayer-person"),config=faithConfig();config.prayerPeople=Array.from(document.querySelectorAll("[data-faith-prayer-person]:checked")).map(function(input){return input.getAttribute("data-faith-prayer-person");});faithPrayerPeopleOpen=true;save();faithPrayerFilterRender("person",personId);event.stopImmediatePropagation();return;
  }
  if(t.matches&&t.matches("[data-faith-prayer-group]")){
-  var config=faithConfig(),group=t.getAttribute("data-faith-prayer-group"),groups=Object.assign({marriage:true,parenting:true,friendships:true},config.prayerGroups||{}),selected=Array.isArray(config.prayerPeople)?config.prayerPeople.slice():S.people.map(function(person){return person.id;}),members=S.people.filter(function(person){return faithPrayerPersonGroup(person)===group;}).map(function(person){return person.id;});
+  var config=faithConfig(),group=t.getAttribute("data-faith-prayer-group"),groups=Object.assign({marriage:true,parenting:true,friendships:true},config.prayerGroups||{}),selected=Array.isArray(config.prayerPeople)?config.prayerPeople.slice():["me"].concat(S.people.map(function(person){return person.id;})),members=S.people.filter(function(person){return faithPrayerPersonGroup(person)===group;}).map(function(person){return person.id;});
   groups[group]=t.checked;config.prayerGroups=groups;
   config.prayerPeople=t.checked?selected.concat(members.filter(function(id){return selected.indexOf(id)<0;})):selected.filter(function(id){return members.indexOf(id)<0;});
   faithPrayerPeopleOpen=true;save();faithPrayerFilterRender("group",group);event.stopImmediatePropagation();return;
