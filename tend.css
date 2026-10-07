@@ -733,7 +733,7 @@ details.moor .moor-body{padding:2px 18px 14px}
 .faith-session-track{height:5px;overflow:hidden;border-radius:99px;background:var(--mist)}.faith-session-track span{display:block;height:100%;border-radius:inherit;background:var(--forest);transition:width .2s}
 .faith-session-card{display:grid;align-content:center;gap:15px;min-height:340px;padding:clamp(24px,6vw,52px);text-align:center}
 .faith-session-card h2{font-size:clamp(24px,4vw,34px);line-height:1.25}.faith-session-card>p{font-size:16px;line-height:1.7;white-space:pre-wrap}.faith-session-person{display:flex;justify-content:center}.faith-session-meta{color:var(--ink-faint);font-size:12px}
-.faith-session-actions{display:flex;justify-content:center;gap:10px}.faith-session-actions .btn{min-width:100px;min-height:46px}.faith-session-prayed{min-width:150px!important;background:var(--forest);color:#fff}
+.faith-session-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}.faith-session-actions .btn{min-width:100px;min-height:46px}.faith-session-prayed{min-width:150px!important;background:var(--forest);color:#fff}
 .faith-session-help{text-align:center;color:var(--ink-faint);font-size:12px}
 .faith-session-empty{display:grid;justify-items:center;gap:12px;min-height:300px;padding:32px;text-align:center}.faith-session-empty h1{font-size:25px}.faith-session-empty p{color:var(--ink-soft)}.faith-session-empty .faith-item-actions{justify-content:center;flex-wrap:wrap}
 .faith-practice-tabs{margin:0 0 14px;padding:0 0 12px;border-bottom:1px solid var(--line)}
