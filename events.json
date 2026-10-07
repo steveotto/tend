@@ -1,5 +1,5 @@
 {
-  "synced": "2026-10-06T23:08:59.916Z",
+  "synced": "2026-10-07T02:32:01.606Z",
   "source": "iCloud published feed",
   "events": [
     {
@@ -350,6 +350,14 @@
       "t": "NO SCHOOL",
       "s": "2027-02-15T00:00:00",
       "e": "2027-02-20T00:00:00",
+      "allDay": true,
+      "cal": "Home",
+      "notes": ""
+    },
+    {
+      "t": "FLORIDA",
+      "s": "2027-02-15T00:00:00",
+      "e": "2027-02-25T00:00:00",
       "allDay": true,
       "cal": "Home",
       "notes": ""
