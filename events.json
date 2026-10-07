@@ -1,5 +1,5 @@
 {
-  "synced": "2026-10-07T18:10:42.898Z",
+  "synced": "2026-10-07T22:06:58.013Z",
   "source": "iCloud published feed",
   "events": [
     {
@@ -267,18 +267,18 @@
       "notes": ""
     },
     {
-      "t": "CompassCare Christmas Party",
-      "s": "2026-12-11T00:00:00",
-      "e": "2026-12-12T00:00:00",
-      "allDay": true,
+      "t": "Sleep Study Consult",
+      "s": "2026-12-10T19:45:00.000Z",
+      "e": "2026-12-10T20:45:00.000Z",
+      "allDay": false,
       "cal": "Home",
       "notes": ""
     },
     {
-      "t": "Sleep Study Consult",
-      "s": "2026-12-16T14:45:00.000Z",
-      "e": "2026-12-16T15:45:00.000Z",
-      "allDay": false,
+      "t": "CompassCare Christmas Party",
+      "s": "2026-12-11T00:00:00",
+      "e": "2026-12-12T00:00:00",
+      "allDay": true,
       "cal": "Home",
       "notes": ""
     },
