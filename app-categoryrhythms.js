@@ -134,17 +134,6 @@
   var marker='<div class="card" style="margin-bottom:14px"><div class="subhead">Tasks</div>';
   return html.replace(marker,categoryRhythmSections(id)+marker);
  };
- var baseRenderFaithPage=window.renderFaithPage;
- window.renderFaithPage=function(){
-  var html=baseRenderFaithPage();
-  if(!categoryRhythms("faith").some(categoryRhythmDue))return html;
-  var sections=categoryRhythmSections("faith");
-  var duplicateRhythmList='<section class="card category-rhythms">';
-  var divider=sections.indexOf('</section>'+duplicateRhythmList);
-  var todaySection=divider<0?sections:sections.slice(0,divider+'</section>'.length);
-  return html.replace("</main>",todaySection+"</main>");
- };
-
  function applyRhythmField(record,field,target,form){
   if(field==="text"||field==="description"){record[field]=target.value;return false;}
   if(field==="areas"){record.areas=Array.prototype.slice.call(form.querySelectorAll('[data-rfield$="|areas"]:checked')).map(function(input){return input.value;});return false;}
