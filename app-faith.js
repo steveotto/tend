@@ -184,6 +184,8 @@ function faithPrayerAllMatches(p){
  if(selectedPeople&&selectedPeople.indexOf(person.id)<0)return false;
  return !!groups[faithPrayerPersonGroup(person)];
 }
+function faithPrayerHasPeople(p){return !!(p&&(p.personId||Array.isArray(p.sharedWith)&&p.sharedWith.length));}
+function faithPrayerIsMine(p){return p.faithOwner==="me"&&!faithPrayerHasPeople(p);}
 function faithPrayerScoreOrder(a,b){
  var aScore=prayerScore(a),bScore=prayerScore(b),rank=(Number.isFinite(aScore)?aScore:101)-(Number.isFinite(bScore)?bScore:101);
  if(rank)return rank;
@@ -219,7 +221,7 @@ function faithPrayerPersonGroup(person){
  return "friendships";
 }
 function faithPrayerMineHTML(){
- var mine=S.prayers.filter(function(p){return p.faithOwner==="me";});
+ var mine=S.prayers.filter(faithPrayerIsMine);
  var out=mine.length?window.prayerList(mine,false):'<div class="empty">No prayers for you yet. Add one for yourself and it will also appear on the main Prayer page.</div>';
  if(faithPrayerDraftOpen){
   var form=prayerEditor({category:"Faith",faithSection:"Prayer",faithOwner:"me",freq:"selectdays",weekdays:[new Date().getDay()],tod:"anytime",added:todayStr()},"faith");
@@ -228,7 +230,7 @@ function faithPrayerMineHTML(){
  return out;
 }
 function faithPrayerSessionSort(view){
- var items=faithActivePrayers().filter(function(p){return view==="today"?faithPrayerScheduledToday(p):view==="mine"?p.faithOwner==="me":faithPrayerAllMatches(p);});
+ var items=faithActivePrayers().filter(function(p){return view==="today"?faithPrayerScheduledToday(p):view==="mine"?faithPrayerIsMine(p):faithPrayerAllMatches(p);});
  return items.sort(faithPrayerScoreOrder).map(function(p){return p.id;});
 }
 function faithPrayerSessionHTML(){
