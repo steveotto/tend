@@ -1099,8 +1099,8 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .plan-item-meta-people{display:flex;align-items:center;gap:6px;flex:none;width:auto;min-width:0;min-height:28px}
 .home-dashboard .plan-item-category-row{display:flex;align-items:center;gap:6px;flex:none;min-width:0;margin-left:auto}
 .home-dashboard .plan-item-category-row>.rhythm-area-badges{display:flex;align-items:center;gap:4px;min-width:0}
-.home-dashboard .plan-item-category-row .rhythm-area-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;padding:4px;border:1px solid var(--line);border-radius:50%;background:var(--mist);color:var(--forest-deep);cursor:pointer}
-.home-dashboard .plan-item-category-row .rhythm-area-badge svg{width:14px;height:14px}
+.home-dashboard .plan-item-category-row .rhythm-area-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;width:20px;height:20px;padding:3px;border:1px solid var(--line);border-radius:50%;background:var(--mist);color:var(--forest-deep);cursor:pointer}
+.home-dashboard .plan-item-category-row .rhythm-area-badge svg{width:12px;height:12px}
 .home-dashboard .plan-item-category-row .rhythm-area-badge:hover{background:#dff3e9}
 .home-dashboard .plan-item-footer{grid-column:1;grid-row:3;display:grid;grid-template-columns:minmax(0,1fr);gap:6px;min-width:0}
 .home-dashboard .plan-item-footer-badges{display:flex;align-items:center;gap:8px;min-width:0}
@@ -1419,6 +1419,8 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-category-row>.rhythm-area-badges{gap:4px}
  html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badge{width:30px;height:30px;padding:5px}
  html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badge svg{width:18px;height:18px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-category-row .rhythm-area-badge{width:24px;height:24px;padding:4px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-category-row .rhythm-area-badge svg{width:14px;height:14px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-action>.btn{min-height:44px;padding:8px 14px;font-size:14px!important}
 }
 @media(max-width:720px){
