@@ -180,7 +180,8 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
   .wrap{padding-top:calc(96px + env(safe-area-inset-top))}
 }
 .overall-card{--canvas:#FBFCFB;--ink:#17251E;--ink-soft:#51605A;--ink-faint:rgba(94,107,99,.66);--forest:#1E9C68;--mint:#3FC68F;--mist:#E3F6ED;--line:#DEE8E1;--forest-deep:#137A4F;margin-bottom:14px}
-.ov-score{font-family:var(--serif);font-size:56px;font-weight:600;line-height:1;color:#17251E}
+.ov-score,.person-card-score,.person-profile-score{font-family:var(--sans);font-weight:600;line-height:1;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ov-score{font-size:56px;color:#17251E}
 .menu-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:16px}
 @media(min-width:640px){.menu-grid{grid-template-columns:repeat(3,1fr)}}
 .menu-area{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:14px;padding:14px 16px;min-height:56px;font-size:15.5px;font-weight:600;color:var(--ink);transition:all .15s;text-align:left}
@@ -397,7 +398,7 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .pill.spk,.pill.pry{background:var(--mist);color:var(--forest)}
 
 /* People share the dashboard's health scale; profile details stay in one card. */
-.person-card-score{font-size:32px;font-weight:600;line-height:1;color:#17251E;font-variant-numeric:tabular-nums}
+.person-card-score{font-size:32px;color:#17251E}
 .person-health-status{color:#17251E}
 .person-card h3{overflow-wrap:anywhere}
 .person-card .person-health-bar{height:8px;margin:20px 0 12px;box-shadow:none}
@@ -415,8 +416,7 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .person-health-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:24px;padding-top:24px;border-top:1px solid var(--line)}
 .person-health-heading h4{font-size:18px;font-weight:500;margin:0}
 .person-health-heading p{font-size:13px;color:var(--ink-soft);margin:8px 0 0}
-.person-profile-score{font-size:48px;line-height:1;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
-.person-profile-score small{font-size:13px;font-weight:400;color:var(--ink-soft);margin-left:8px}
+.person-profile-score{font-size:48px}
 .person-profile .person-health-bar{margin:24px 0;height:14px}
 .person-profile .chips{margin-top:16px}
 .person-profile .pmeters{margin-top:24px}
@@ -424,7 +424,6 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
  .person-health-heading{align-items:flex-start}
  .person-health-heading p{max-width:190px;line-height:1.5}
  .person-profile-score{font-size:36px}
- .person-profile-score small{display:block;text-align:right;margin-top:8px}
 }
 
 .rhythm-health{display:inline-flex;align-items:center;gap:6px;min-width:52px;flex-shrink:0;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink-soft);white-space:nowrap}
