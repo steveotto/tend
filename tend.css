@@ -1343,16 +1343,18 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .plan-detail-icon{width:15px;height:15px}
  .home-dashboard .plan-pills>.plan-kind-rhythm,
  .home-dashboard .plan-pills>.plan-kind-spark,
- .home-dashboard .plan-pills>.plan-kind-prayer{position:relative;display:inline-grid;place-items:center;flex:none;width:30px;height:30px;min-width:30px;margin:0;padding:0;border:1px solid var(--line);border-radius:50%;font-size:0;letter-spacing:0;line-height:0}
+ .home-dashboard .plan-pills>.plan-kind-prayer{position:relative;display:inline-grid;place-items:center;flex:none;width:24px;height:24px;min-width:24px;margin:0;padding:0;border:1px solid var(--line);border-radius:50%;font-size:0;letter-spacing:0;line-height:0}
  .home-dashboard .plan-pills>.plan-kind-rhythm .collection-icon,
  .home-dashboard .plan-pills>.plan-kind-spark .collection-icon{position:absolute;top:50%;left:50%;display:block;margin:0;transform:translate(-50%,-50%)}
- .home-dashboard .plan-pills>.plan-kind-prayer .collection-icon{position:absolute;top:50%;left:50%;display:block;margin:0;transform:translate(-50%,calc(-50% - 3px))}
+ .home-dashboard .plan-pills>.plan-kind-prayer .collection-icon{position:absolute;top:50%;left:50%;display:block;margin:0;transform:translate(-50%,calc(-50% - 2px))}
  .home-dashboard .plan-pills>.prayer-person{border:1px solid var(--line)}
+ .home-dashboard .plan-pills>.prayer-person{gap:5px;padding:3px 8px 3px 3px;font-size:10px}
+ .home-dashboard .plan-pills>.prayer-person .avatar{width:19px!important;height:19px!important}
  .home-dashboard .plan-pills>.prayer-person .avatar{border:0}
- .home-dashboard .plan-pills>.pill .collection-icon{width:16px;height:16px}
- .home-dashboard .rhythm-area-badges{display:inline-flex;align-items:center;gap:7px}
- .home-dashboard .rhythm-area-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;width:30px;height:30px;padding:5px;border:1px solid var(--line);border-radius:50%;background:var(--mist);color:var(--forest-deep)}
- .home-dashboard .rhythm-area-badge svg{width:18px;height:18px}
+ .home-dashboard .plan-pills>.pill .collection-icon{width:13px;height:13px}
+ .home-dashboard .rhythm-area-badges{display:inline-flex;align-items:center;gap:6px}
+ .home-dashboard .rhythm-area-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;padding:4px;border:1px solid var(--line);border-radius:50%;background:var(--mist);color:var(--forest-deep)}
+ .home-dashboard .rhythm-area-badge svg{width:14px;height:14px}
 }
 @media(max-width:600px){
  .home-dashboard>.sectiontitle h2,
@@ -1373,14 +1375,15 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  html[data-mobile-text-size="large"] .home-dashboard .plan-detail-icon{width:17px;height:17px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-rhythm,
  html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-spark,
- html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-prayer{width:38px;height:38px;min-width:38px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-prayer{width:30px;height:30px;min-width:30px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-rhythm .collection-icon,
  html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-spark .collection-icon,
- html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-prayer .collection-icon{width:22px;height:22px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-prayer .collection-icon{width:18px;height:18px}
  html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badges{gap:8px}
- html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badge{width:38px;height:38px;padding:7px}
- html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badge svg{width:22px;height:22px}
- html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.prayer-person{font-size:14px}
+ html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badge{width:30px;height:30px;padding:5px}
+ html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badge svg{width:18px;height:18px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.prayer-person{gap:4px;padding:3px 7px 3px 3px;font-size:11px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.prayer-person .avatar{width:26px!important;height:26px!important}
 }
 @media(max-width:720px){
  .sticky-nav{position:fixed;top:auto;right:0;bottom:0;left:0;z-index:80;width:100%;margin:0;padding:7px 14px calc(7px + env(safe-area-inset-bottom));border:0;border-top:1px solid var(--line);background:var(--card);box-shadow:0 -4px 20px rgba(32,39,35,.12)}
