@@ -151,7 +151,7 @@ function layoutPlanPeopleBadges(root){
    badges.forEach(function(badge){visible.appendChild(badge);});
    var wasOpen=overflow.open;
    overflow.hidden=false;
-   var badgeGap=parseFloat(getComputedStyle(visible).columnGap)||0,widths=badges.map(function(badge){return badge.getBoundingClientRect().width;}),limit=config[6]==="people"&&badges.length>2?1:config[5],shown=Math.min(badges.length,limit);
+   var badgeGap=parseFloat(getComputedStyle(visible).columnGap)||0,widths=badges.map(function(badge){return badge.getBoundingClientRect().width;}),limit=config[6]==="people"&&badges.length>2?1:config[6]==="categories"&&badges.length>3?2:config[5],shown=Math.min(badges.length,limit);
    lists.push({visible:visible,overflow:overflow,menu:menu,summary:summary,badges:badges,wasOpen:wasOpen,gap:badgeGap,widths:widths,shown:shown,type:config[6]});
   });
   var actionWidth=action?action.getBoundingClientRect().width+gap:0,available=Math.max(0,row.clientWidth-actionWidth-gap*Math.max(0,lists.length-1));
