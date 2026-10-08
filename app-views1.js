@@ -128,14 +128,17 @@ function planItemPeople(it){
  ids=ids.filter(function(id,index){return id&&ids.indexOf(id)===index&&S.people.some(function(person){return person.id===id;});});
  return ids.map(function(id){var person=S.people.find(function(p){return p.id===id;});if(!person)return "";var rhythmLink=(kind==="rhythm"||!!it.faithRhythm)&&person.id!==ownerId;return '<button type="button" class="prayer-person person-badge-clickable'+(rhythmLink?' person-rhythm-link':'')+'" '+(rhythmLink?'data-personrhythms="'+esc(person.id)+'" aria-label="Open '+esc(person.name)+' rhythms"':'data-openperson="'+esc(person.id)+'" aria-label="Open '+esc(person.name)+' profile"')+'>'+personAvatar(person,24)+esc(person.name)+'</button>';}).join("");
 }
+function planItemKindBadge(it){
+ var kind=planItemKind(it);
+ return kind?'<span class="pill plan-kind-badge '+(kind==="rhythm"?"rhy":kind==="spark"?"spk":"pry")+'" aria-label="'+(kind==="rhythm"?"Rhythm":kind==="spark"?"Spark":"Prayer")+'" title="'+(kind==="rhythm"?"Rhythm":kind==="spark"?"Spark":"Prayer")+'">'+collectionIcon(kind==="rhythm"?"rhythms":kind==="spark"?"sparks":"prayer")+'</span>':"";
+}
 function planCategoryBadges(it){
- var kind=planItemKind(it),typeBadge=kind?'<span class="pill '+(kind==="rhythm"?"rhy":kind==="spark"?"spk":"pry")+'">'+collectionIcon(kind==="rhythm"?"rhythms":kind==="spark"?"sparks":"prayer")+' '+(kind==="rhythm"?"Rhythm":kind==="spark"?"Spark":"Prayer")+'</span>':"";
  var record=null;
  if(it.rhythm){var ids=String(it.rhythm).split("|"),owner=S.people.find(function(p){return p.id===ids[0];});record=owner&&(owner.rhythms||[]).find(function(r){return r.id===ids[1];});}
  else if(it.faithRhythm)record=typeof faithFindRhythm==="function"?faithFindRhythm(it.faithRhythm):null;
  else if(it.prayer){var prayerRecord=(S.prayers||[]).find(function(p){return p.id===it.prayer;});if(prayerRecord&&prayerRecord.category==="Faith")record={areas:["faith"],faithGroup:prayerRecord.faithSection||prayerRecord.faithGroup};}
  var categories=record&&typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(record):"";
- return typeBadge+categories;
+ return categories;
 }
 function layoutPlanPeopleBadges(root){
  (root||document).querySelectorAll("[data-plan-people]").forEach(function(container){
@@ -164,7 +167,10 @@ function planItemCopy(it,action){
  return '<div class="plan-item-copy"><div class="plan-item-header'+(people?' has-people':'')+'">'+(people?'<div class="plan-people" data-plan-people><span class="plan-people-visible">'+people+'</span><details class="plan-people-overflow" hidden><summary></summary><span class="plan-people-menu"></span></details></div>':'')+'<div class="plan-item-heading"><strong class="tend-type-title">'+esc(it.label||"")+'</strong></div>'+(action||"")+'</div><div class="plan-item-description">'+(it.description?'<div class="tend-type-description">'+esc(it.description)+'</div>':'')+'</div></div>';
 }
 function planItemFooter(it,meta,sub){
- return '<div class="plan-item-footer"><div class="plan-item-footer-badges"><span class="plan-pills">'+planCategoryBadges(it)+'</span>'+(!meta&&sub?'<div class="tend-type-meta">'+esc(sub)+'</div>':"")+'</div>'+(meta||"")+'</div>';
+ var kindBadge=planItemKindBadge(it),categories=planCategoryBadges(it),fallbackSub=!meta&&sub&&!kindBadge?'<div class="tend-type-meta">'+esc(sub)+'</div>':"";
+ if(meta&&kindBadge)meta=meta.replace('<div class="plan-item-meta">','<div class="plan-item-meta">'+kindBadge);
+ else if(kindBadge)meta='<div class="plan-item-meta">'+kindBadge+(sub?'<span class="plan-item-meta-entry">'+esc(sub)+'</span>':"")+'</div>';
+ return '<div class="plan-item-footer">'+(categories||fallbackSub?'<div class="plan-item-footer-badges"><span class="plan-pills">'+categories+'</span>'+fallbackSub+'</div>':"")+(meta||"")+'</div>';
 }
 function genItem(label,sub,area,type,title){return {label:label,sub:sub,log:{area:area,type:type,title:title||label}};}
 function taskItem(t){return {label:t.text,sub:"task · "+(S.areas[t.areaId]?S.areas[t.areaId].name:""),log:{area:t.areaId,type:"note",title:"Task: "+t.text},taskId:t.id};}
