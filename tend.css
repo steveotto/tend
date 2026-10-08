@@ -111,7 +111,7 @@ ul.tasks li.done .txt{color:var(--ink-faint);text-decoration:line-through}
 .quicklog{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 4px}
 .quicklog button{border:1px solid var(--line);background:var(--canvas);border-radius:99px;padding:10px 16px;font-size:14.5px;font-weight:600;color:var(--ink-soft);transition:all .12s}
 .quicklog button:hover{border-color:var(--forest);color:var(--forest)}
-.sectiontitle{display:flex;align-items:baseline;gap:12px;margin:26px 0 12px}
+.sectiontitle{display:flex;align-items:baseline;gap:12px;margin:32px 0 12px}
 .sectiontitle h2{font-size:22px;font-weight:500}
 .sectiontitle .hint{font-size:12.5px;color:var(--ink-faint);font-style:normal;font-weight:400;font-family:var(--sans)}
 .notewrap textarea{width:100%;min-height:88px;border:1px solid var(--line);border-radius:12px;background:var(--canvas);padding:12px 14px;font-size:15.5px;line-height:1.55;resize:vertical}
@@ -1112,7 +1112,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .plan-item-meta-details>.plan-kind-badge{display:none}
 .home-dashboard .plan-item-action{display:flex;flex:none;justify-content:flex-end;min-width:0}
 .home-dashboard .plan-item-action>.btn{width:auto;min-width:76px;min-height:42px;padding:7px 14px;border-radius:9px;font-size:13px;font-weight:650}
-.home-dashboard .planblock{margin:0 0 28px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.home-dashboard .planblock{margin:0 0 32px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
 .home-dashboard .planblock.current{border:0;box-shadow:none}
 .home-dashboard .current-plan-summary{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;min-height:0;margin:0 0 10px;padding:0;border-radius:0;background:transparent;color:var(--ink)}
 .home-dashboard .current-plan-topline{min-height:24px}
@@ -1133,6 +1133,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 @media(max-width:360px){.home-dashboard .current-plan-time-option{grid-template-columns:88px minmax(0,1fr) 46px;gap:4px;padding-right:7px;padding-left:7px}.home-dashboard .current-plan-time-option-name,.home-dashboard .current-plan-time-option-range,.home-dashboard .current-plan-time-option-count{font-size:10px}}
 .home-dashboard .current-plan-items>.plan-empty-card{display:flex;box-sizing:border-box;min-height:104px;align-items:center;justify-content:center;margin:0;padding:24px 18px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);font-size:15px;font-style:normal;text-align:center}
 .home-dashboard .current-plan-details{align-items:center}
+.home-dashboard .calendar-sync-slot{margin-bottom:32px}
 .home-dashboard .current-plan-filter{position:relative;flex:none}
 .home-dashboard .current-plan-item-count{display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;min-height:30px;padding:2px 8px;border:0;border-radius:8px;background:#E9ECEA;color:var(--ink-soft);font:inherit;font-size:12px;line-height:1.35;white-space:nowrap;cursor:pointer;list-style:none}
 .home-dashboard .current-plan-filter>.current-plan-item-count{min-height:30px;padding:2px 8px;background:#E9ECEA}
@@ -1185,7 +1186,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .dashboard-greeting h2{font-size:20px}
  .home-dashboard .dashboard-greeting .hint{font-size:11px}
  .home-dashboard .overall-card,.home-dashboard .calendar-card,.home-dashboard .planblock,.home-dashboard .dashboard-free-moment,.home-dashboard .cl-card{margin:0 0 10px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
- .home-dashboard .planblock{margin-bottom:28px}
+ .home-dashboard .planblock{margin-bottom:32px}
  .home-dashboard .dashboard-overall-heading{align-items:center!important;margin:0 0 10px;padding:8px 11px;border-radius:9px;background:var(--mist)}
  .home-dashboard .dashboard-overall-heading h3{font-size:16px!important;font-weight:700!important;color:var(--forest-deep)}
  .home-dashboard .ov-score{font-size:32px}
@@ -1207,6 +1208,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .planblock.current{border:0;box-shadow:none}
  .home-dashboard .planblock summary{min-height:44px;padding:8px 11px;border-radius:9px;background:var(--mist);color:var(--forest-deep)}
  .home-dashboard .current-plan-summary{margin-bottom:10px}
+ .home-dashboard .current-plan-period{padding-left:12px}
  .home-dashboard .current-plan-topline{min-height:24px}
  .home-dashboard .current-plan-now{font-size:19px;font-weight:700;color:var(--ink)}
  .home-dashboard .current-plan-period .plan-block-name{font-size:15px;font-weight:500;color:var(--ink)}
@@ -1350,7 +1352,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .utility-primary button.utility-primary-button,nav.tabs button.focus-nav-button{flex:1 1 0}
 }
 @media(max-width:600px){
- .home-dashboard>.sectiontitle:not(.dashboard-greeting){margin-top:26px;margin-bottom:10px}
+ .home-dashboard>.sectiontitle:not(.dashboard-greeting){margin-top:32px;margin-bottom:12px}
  .home-dashboard .dashboard-greeting{align-items:center;margin:26px 0 18px;padding:8px 11px;border-radius:9px;background:var(--mist);color:var(--forest-deep)}
  .home-dashboard .dashboard-greeting h2{font-size:18px;font-weight:700;line-height:1.35;color:var(--forest-deep)}
  .home-dashboard .dashboard-greeting .hint{margin-left:auto;text-align:right}
@@ -1358,7 +1360,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .day-jumps .btn{display:flex;align-items:center;justify-content:center;min-width:0;min-height:38px;padding:5px 3px;text-align:center;white-space:normal}
 }
 @media(max-width:600px){
- html[data-mobile-text-size="large"] .home-dashboard>.sectiontitle:not(.dashboard-greeting){margin-top:30px}
+ html[data-mobile-text-size="large"] .home-dashboard>.sectiontitle:not(.dashboard-greeting){margin-top:36px}
  html[data-mobile-text-size="large"] .home-dashboard .dashboard-greeting{margin-top:30px;padding:11px 13px}
  html[data-mobile-text-size="large"] .home-dashboard .dashboard-greeting h2{font-size:21px}
  html[data-mobile-text-size="large"] .home-dashboard .menu-area .ma-name{min-width:0;flex:1 1 0;overflow-wrap:anywhere}
@@ -1392,8 +1394,10 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard>.sectiontitle:not(.dashboard-greeting),
  .home-dashboard .dashboard-overall-heading,
  .home-dashboard .planblock[data-plan-block="allday"]>summary{
-  padding:0;margin:0 0 12px;border:0;border-radius:0;background:transparent;color:var(--ink)
+  padding:0;border:0;border-radius:0;background:transparent;color:var(--ink)
  }
+ .home-dashboard>.sectiontitle:not(.dashboard-greeting){margin:32px 0 12px}
+ .home-dashboard .dashboard-overall-heading,.home-dashboard .planblock[data-plan-block="allday"]>summary{margin:0 0 12px}
  .home-dashboard .dashboard-greeting{display:flex;flex-direction:column;align-items:flex-start;gap:3px;margin:24px 0 18px;padding:0 12px}
  .home-dashboard .dashboard-greeting h2{margin:0;font-size:22px!important;line-height:1.25}
  .home-dashboard .dashboard-greeting .hint{order:-1;margin:0;color:var(--ink-soft);font-size:12px;line-height:1.4;text-align:left}
@@ -1504,7 +1508,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .calendar-card{margin:0 0 14px;padding:10px 12px;border:1px solid var(--line);border-radius:16px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)}
  .home-dashboard .calitem{gap:8px;padding:9px 4px;border-bottom:1px solid var(--line);border-radius:0;background:transparent}
  .home-dashboard #calStrip .calitem:last-child{border-bottom:0}
- .home-dashboard .calendar-sync-slot{display:block;margin:-6px 0 22px;padding:0}
+ .home-dashboard .calendar-sync-slot{display:block;margin:-6px 0 32px;padding:0}
  .home-dashboard .calendar-sync-slot .calsync{margin:0 0 0 auto;font-size:12px}
  html[data-mobile-text-size="large"] .home-dashboard .calendar-sync-slot .calsync{font-size:14px}
 }
