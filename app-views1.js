@@ -123,8 +123,8 @@ function planPills(it){
  var categories=record&&typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(record):"";
  return (person&&person.id!==currentPerson?'<button type="button" class="prayer-person person-badge-clickable'+((it.rhythm||it.rkey)?' person-rhythm-link':'')+'" '+((it.rhythm||it.rkey)?'data-personrhythms="'+esc(person.id)+'" aria-label="Open '+esc(person.name)+' rhythms"':'data-openperson="'+esc(person.id)+'" aria-label="Open '+esc(person.name)+' profile"')+'>'+personAvatar(person,24)+esc(person.name)+'</button>':'')+typeBadge+categories;
 }
-function planItemCopy(it){
- return '<div class="plan-item-copy"><strong class="tend-type-title">'+esc(it.label||"")+'</strong>'+(it.description?'<div class="tend-type-description">'+esc(it.description)+'</div>':'')+'<span class="plan-pills">'+planPills(it)+'</span></div>';
+function planItemCopy(it,action){
+ return '<div class="plan-item-copy"><strong class="tend-type-title">'+esc(it.label||"")+'</strong>'+(action||"")+(it.description?'<div class="tend-type-description">'+esc(it.description)+'</div>':'')+'<span class="plan-pills">'+planPills(it)+'</span></div>';
 }
 function genItem(label,sub,area,type,title){return {label:label,sub:sub,log:{area:area,type:type,title:title||label}};}
 function taskItem(t){return {label:t.text,sub:"task · "+(S.areas[t.areaId]?S.areas[t.areaId].name:""),log:{area:t.areaId,type:"note",title:"Task: "+t.text},taskId:t.id};}
@@ -196,7 +196,8 @@ function planBlockCard(b,curId,isCur,isAllDay){
  function itemHTML(it){
   var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.faithRhythm?'<button type="button" class="btn mini" data-tend-open="faith-rhythm" data-rhythm-id="'+esc(it.faithRhythm)+'">Tend</button>':(it.prayer?'<button type="button" class="btn mini" data-pray="'+esc(it.prayer)+'">Pray</button>':(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>')));
   var meta=planItemMetaBar(it.sub);
-  return '<div class="planitem"><div class="pi-main">'+planItemCopy(it)+(meta?"":(it.sub?'<div class="tend-type-meta">'+esc(it.sub)+'</div>':""))+'</div>'+btn+meta+'</div>';
+  var tagged=!!planItemKind(it);
+  return '<div class="planitem"><div class="pi-main">'+planItemCopy(it,tagged?btn:"")+(meta?"":(it.sub?'<div class="tend-type-meta">'+esc(it.sub)+'</div>':""))+'</div>'+(tagged?"":btn)+meta+'</div>';
  }
  var body=queue.visible.length?queue.visible.map(itemHTML).join(""):'<div class="empty">'+(allItems.length?'Items hidden by the type filters.':'Nothing queued - all tended.')+'</div>';
  if(isCur)return '<div id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock current"><div class="current-plan-summary"><div class="current-plan-topline"><span class="current-plan-now">Now</span><div class="current-plan-weather" id="nowWeather">'+(typeof nowWeatherHTML==="function"?nowWeatherHTML():"")+'</div></div><div class="current-plan-details"><div class="current-plan-period"><span class="plan-block-name">'+esc(b.name)+'</span><span class="current-plan-range">'+esc(b.range)+'</span></div><span class="current-plan-item-count"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3h8M5.5 8h8M5.5 13h8M2.5 3h.01M2.5 8h.01M2.5 13h.01"/></svg>'+queue.visible.length+' item'+(queue.visible.length===1?'':'s')+'</span></div></div><div class="current-plan-items">'+body+'</div><div class="current-plan-filters">'+planKindTogglesHTML(toggleScope,"Now item filters")+'</div></div>';
@@ -799,7 +800,7 @@ function freeMomentHTML(){
  cands.sort(function(a,b){return b.pri-a.pri;});
  if(!cands.length)return "";
  var out='<div class="sectiontitle"><h2>Free moment?</h2><span class="hint">Your best options right now (up to 4)</span></div><div class="card dashboard-free-moment">';
- cands.slice(0,4).forEach(function(c){var bb=c.rhythm?rhyDoneBtn(c.rhythm):'<button class="btn mini'+(c.spark?" sparkbtn":"")+'"'+c.act+'>'+c.btn+'</button>',meta=planItemMetaBar(c.sub);out+='<div class="planitem"><div class="pi-main">'+planItemCopy(c)+(meta?"":(c.sub?'<div class="tend-type-meta">'+esc(c.sub)+'</div>':""))+'</div>'+bb+meta+'</div>';});
+ cands.slice(0,4).forEach(function(c){var bb=c.rhythm?rhyDoneBtn(c.rhythm):'<button class="btn mini'+(c.spark?" sparkbtn":"")+'"'+c.act+'>'+c.btn+'</button>',meta=planItemMetaBar(c.sub),tagged=!!planItemKind(c);out+='<div class="planitem"><div class="pi-main">'+planItemCopy(c,tagged?bb:"")+(meta?"":(c.sub?'<div class="tend-type-meta">'+esc(c.sub)+'</div>':""))+'</div>'+(tagged?"":bb)+meta+'</div>';});
  return out+'</div>';}
 /* ============ area subpages ============ */
 function renderArea(id){
