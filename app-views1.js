@@ -148,11 +148,11 @@ function planCandidates(bid,curBid){
  var out=[],seenSparks=Object.create(null);
  S.tasks.forEach(function(t){if(!t.done&&((t.tod&&t.tod!=="anytime")?t.tod===bid:bid===curBid))out.push(taskItem(t));});
  S.people.forEach(function(person){
-  (person.rhythms||[]).forEach(function(r){var blk=(r.tod&&r.tod!=="anytime")?r.tod:curBid;if(blk!==bid||!dashboardRhythmEligible(r))return;out.push({scheduled:!!r.tod&&r.tod!=="anytime",calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),rhythm:person.id+"|"+r.id,personId:person.id,label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,true)});});
+  (person.rhythms||[]).forEach(function(r){var blk=(r.tod&&r.tod!=="anytime")?r.tod:curBid;if(blk!==bid||!dashboardRhythmEligible(r))return;out.push({scheduled:!!r.tod&&r.tod!=="anytime",calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),rhythm:person.id+"|"+r.id,personId:person.id,label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,false)});});
   sortedPersonSparks(person).forEach(function(spark){if(!spark.by||!sparkLive(spark))return;if((sparkBlock(spark)||curBid)!==bid)return;var key=(spark.profileOwnerId||person.id)+"|"+spark.id;if(seenSparks[key])return;seenSparks[key]=true;out.push({spark:key,personId:person.id,label:spark.text,description:spark.details||"",sub:(spark.time?fmtHM12(spark.time)+" \u00b7 ":"")+sparkDueTxt(spark)});});
  });
  if(typeof faithActiveRhythms==="function"&&typeof rhythmScheduledToday==="function"){
-  faithActiveRhythms().forEach(function(r){if(r.tod!==bid||!rhythmScheduledToday(r))return;out.push({scheduled:true,calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),faithRhythm:r.id,faithGroup:r.faithGroup,area:"faith",label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,true)});});
+  faithActiveRhythms().forEach(function(r){if(r.tod!==bid||!rhythmScheduledToday(r))return;out.push({scheduled:true,calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),faithRhythm:r.id,faithGroup:r.faithGroup,area:"faith",label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,false)});});
  }
  if(typeof prayerIsDue==="function"){
   (S.prayers||[]).forEach(function(p){var block=p.tod&&p.tod!=="anytime"?p.tod:"allday";if(!prayerIsDue(p)||block!==bid)return;var prayerPeople=(p.personId?[p.personId]:[]).concat(Array.isArray(p.sharedWith)?p.sharedWith:[]);if(!prayerPeople.length)prayerPeople=[null];prayerPeople.filter(function(id,index){return prayerPeople.indexOf(id)===index;}).forEach(function(personId){out.push({scheduled:!!p.tod&&p.tod!=="anytime",calendarDay:!p.tod||p.tod==="anytime",prayer:p.id,personId:personId,label:p.text,description:p.details||"",sub:prayerScheduleLabel(p)+" \u00b7 last prayed "+prayerLastPrayedLabel(p)});});});
@@ -498,7 +498,7 @@ function tendRhythmFrequencyLabel(r){
  if(freq==="weekly"){
   var days=r.rule&&Array.isArray(r.rule.days)?r.rule.days:Array.isArray(r.weekdays)?r.weekdays:r.scheduleDow!==null&&r.scheduleDow!==undefined&&r.scheduleDow!==""?[+r.scheduleDow]:[];
   days=days.map(Number).filter(function(value,index,all){return value>=0&&value<7&&all.indexOf(value)===index;}).sort(function(a,b){return a-b;});
-  return days.length?label+" on "+days.map(function(value){return DOW[value];}).join(", "):label;
+  return days.length&& !/\bon\b/i.test(label) ? label+" on "+days.map(function(value){return DOW[value];}).join(", "):label;
  }
  if(freq==="monthly"){day=scheduleDayLabel(r);if(day){var match=day.match(/^on the (\d+)$/i);if(match){var date=+match[1],lastTwo=date%100,suffix=lastTwo>=11&&lastTwo<=13?"th":date%10===1?"st":date%10===2?"nd":date%10===3?"rd":"th";day="on the "+date+suffix;}return label+" "+day.replace(/^on\s+/i,"on ");}}
  return label;
@@ -792,7 +792,7 @@ function rippleLine(e){
 function sparkChip(p){var s=sortedPersonSparks(p)[0];if(!s)return "";return '<div class="pf-next" style="color:var(--forest)">\u2726 '+esc(s.text)+' \u00b7 '+esc(sparkDueTxt(s))+'</div>';}
 function freeMomentHTML(){
  var cands=[],seenSparks=Object.create(null);
- S.people.forEach(function(p){(p.rhythms||[]).forEach(function(r){var d=rhythmDaysSince(r);if((r.tod||"anytime")==="anytime"&&rhythmScheduledToday(r))cands.push({pri:10+(d===999?0:d),rhythm:p.id+"|"+r.id,personId:p.id,label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,true)});});});
+ S.people.forEach(function(p){(p.rhythms||[]).forEach(function(r){var d=rhythmDaysSince(r);if((r.tod||"anytime")==="anytime"&&rhythmScheduledToday(r))cands.push({pri:10+(d===999?0:d),rhythm:p.id+"|"+r.id,personId:p.id,label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,false)});});});
  S.people.forEach(function(p){sortedPersonSparks(p).forEach(function(s){if(sparkLive(s)&&!s.by){var key=(s.profileOwnerId||p.id)+"|"+s.id;if(seenSparks[key])return;seenSparks[key]=true;cands.push({pri:15,spark:key+"|"+p.id,personId:p.id,label:s.text,description:s.details||"",sub:"No deadline yet",act:' data-sparkdo="'+key+"|"+p.id+'"',btn:"Do it"});}});});
  var lo=S.people.map(function(p){return {p:p,s:personScore(p)};}).sort(function(a,b){return a.s-b.s;})[0];
  if(lo&&lo.s<80)cands.push({pri:(100-lo.s)/10,label:"Reach out to "+lo.p.name,sub:(lo.p.relation||"")+" \u00b7 meter "+lo.s+" - lowest",act:' data-openperson="'+lo.p.id+'"',btn:"Open"});
