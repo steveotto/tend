@@ -1078,6 +1078,14 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .tend-row-content>.tend-type-meta{display:block;margin:3px 0 0;padding-top:0;border-top:0;color:var(--ink-faint);font-size:11.5px;line-height:1.4;overflow-wrap:anywhere}
 .planblock .tend-row-content>.tend-type-description{font-family:var(--sans);font-size:var(--tend-item-description-size);font-weight:400;line-height:1.5}
 .planblock .tend-row-content>.tend-type-meta{margin-top:2px;padding-top:0;border-top:0}
+.plan-item-details{grid-column:1/-1;order:6;min-width:0;margin-top:2px;color:var(--ink-faint);font-size:11px;line-height:1.4}
+.plan-item-details>summary{display:flex;align-items:center;gap:5px;width:max-content;min-height:24px;cursor:pointer;list-style:none;color:var(--ink-faint);font-size:11px;font-weight:600}
+.plan-item-details>summary::-webkit-details-marker{display:none}
+.plan-item-details>summary:after{content:"";width:6px;height:6px;margin:0 0 3px 2px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);transition:transform .15s}
+.plan-item-details[open]>summary:after{margin-bottom:-3px;transform:rotate(225deg)}
+.plan-item-detail-rows{display:grid;gap:5px;margin-top:3px;padding-top:6px;border-top:1px solid var(--line)}
+.plan-item-detail{display:flex;align-items:center;gap:7px;min-width:0;color:var(--ink-soft);font-size:11.5px;line-height:1.4}
+.plan-detail-icon{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;color:var(--ink-faint)}
 .card:not(.planblock)>.planitem .tend-row-content>.tend-type-description{font-family:var(--sans);font-size:var(--tend-item-description-size);font-weight:400;line-height:1.5}
 .card:not(.planblock)>.planitem .tend-row-content>.tend-type-meta{margin-top:2px;padding-top:0;border-top:0}
 .today-with-person .tend-row-content>.tend-type-meta{margin-top:2px;padding-top:0;border-top:0}
@@ -1333,6 +1341,10 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .plan-pills{grid-column:1/-1;order:4;display:flex;align-items:center;gap:7px;min-width:0}
  .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .tend-type-description{grid-column:1/-1;order:3;margin:0;font-size:14px;line-height:1.5}
  .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .tend-type-meta{grid-column:1/-1;order:5;margin:0;padding:0;border:0;font-size:12px}
+ .home-dashboard .plan-item-details{grid-column:1/-1;order:6;margin:0;font-size:12px}
+ .home-dashboard .plan-item-details>summary{min-height:28px;font-size:12px}
+ .home-dashboard .plan-item-detail{font-size:12px}
+ .home-dashboard .plan-detail-icon{width:15px;height:15px}
  .home-dashboard .plan-pills>.plan-kind-rhythm,
  .home-dashboard .plan-pills>.plan-kind-spark,
  .home-dashboard .plan-pills>.plan-kind-prayer{display:inline-flex;align-items:center;justify-content:center;flex:none;width:30px;height:30px;min-width:30px;margin:0;padding:0;border:1px solid currentColor;border-radius:50%;font-size:0;letter-spacing:0}
@@ -1355,6 +1367,11 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer)>.btn.mini{min-height:60px;padding:12px 18px;font-size:20px!important}
  html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .tend-type-description{font-size:19px}
  html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .tend-type-meta{font-size:14px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-details,
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-details>summary,
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-detail{font-size:15px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-details>summary{min-height:32px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-detail-icon{width:17px;height:17px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-rhythm,
  html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-spark,
  html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-prayer{width:38px;height:38px;min-width:38px}

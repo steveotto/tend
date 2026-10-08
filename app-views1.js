@@ -166,6 +166,19 @@ function planKindTogglesHTML(scope,label){
  var visibility=planKindVisibilityFor(scope);
  return '<span class="plan-kind-toggles" role="group" aria-label="'+esc(label||"Show or hide item types")+'">'+[["rhythm","Rhythm","rhythms"],["spark","Spark","sparks"],["prayer","Prayer","prayer"]].map(function(type){var active=visibility[type[0]]!==false,buttonLabel=(active?"Hide ":"Show ")+type[1]+" items";return '<button type="button" class="plan-kind-toggle plan-kind-'+type[0]+(active?"":" is-muted")+'" data-plan-kind-toggle="'+esc(scope)+'" data-kind="'+type[0]+'" aria-label="'+buttonLabel+'" title="'+buttonLabel+'" aria-pressed="'+active+'">'+collectionIcon(type[2])+'</button>';}).join("")+'</span>';
 }
+function planMetaIcon(kind){
+ var paths={frequency:'<path d="M20 7a8 8 0 0 0-14-2L3 8m0-5v5h5 M4 17a8 8 0 0 0 14 2l3-3m0 5v-5h-5"/>',time:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',activity:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'};
+ return '<svg class="plan-detail-icon" viewBox="0 0 24 24" aria-hidden="true">'+paths[kind]+'</svg>';
+}
+function planItemDetails(meta){
+ var parts=String(meta||"").split(" \u00b7 ").filter(Boolean);
+ if(!parts.length||!parts.some(function(part){return /last tended|last prayed|not yet tended|not yet prayed/i.test(part);}))return "";
+ return '<details class="plan-item-details"><summary>Extra details</summary><div class="plan-item-detail-rows">'+parts.map(function(part,index){
+  var normalized=part.toLowerCase(),isTime=Object.keys(TODS||{}).some(function(key){return TODS[key]&&TODS[key].toLowerCase()===normalized;});
+  var kind=isTime?"time":/last tended|last prayed|not yet tended|not yet prayed|^tended |^prayed /.test(normalized)?"activity":index===0?"frequency":"activity";
+  return '<div class="plan-item-detail">'+planMetaIcon(kind)+'<span>'+esc(part)+'</span></div>';
+ }).join("")+'</div></details>';
+}
 function planBlockCard(b,curId,isCur,isAllDay){
  isAllDay=!!isAllDay;
  var toggleScope=isCur?"now":"other",visibility=planKindVisibilityFor(toggleScope);
@@ -176,7 +189,8 @@ function planBlockCard(b,curId,isCur,isAllDay){
  var block=dayBlocks().find(function(item){return item.id===b.id;}),blockStart=block?block.start:"";
  function itemHTML(it){
   var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.faithRhythm?'<button type="button" class="btn mini" data-tend-open="faith-rhythm" data-rhythm-id="'+esc(it.faithRhythm)+'">Tend</button>':(it.prayer?'<button type="button" class="btn mini" data-pray="'+esc(it.prayer)+'">Pray</button>':(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>')));
-  return '<div class="planitem"><div class="pi-main">'+tendRowContent(it.label,it.description,it.sub,'<span class="plan-pills">'+planPills(it)+'</span>')+'</div>'+btn+'</div>';
+  var details=planItemDetails(it.sub);
+  return '<div class="planitem"><div class="pi-main">'+tendRowContent(it.label,it.description,details?"":it.sub,'<span class="plan-pills">'+planPills(it)+'</span>')+details+'</div>'+btn+'</div>';
  }
  var body=queue.visible.length?queue.visible.map(itemHTML).join(""):'<div class="empty">'+(allItems.length?'Items hidden by the type filters.':'Nothing queued - all tended.')+'</div>';
  if(isCur)return '<div id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock current"><div class="current-plan-summary"><div class="current-plan-topline"><span class="current-plan-now">Now</span><div class="current-plan-weather" id="nowWeather">'+(typeof nowWeatherHTML==="function"?nowWeatherHTML():"")+'</div></div><span class="plan-block-name">'+esc(b.name)+'</span>'+range+'</div><div class="current-plan-items">'+body+'</div><div class="current-plan-filters">'+planKindTogglesHTML(toggleScope,"Now item filters")+'</div></div>';
@@ -779,7 +793,7 @@ function freeMomentHTML(){
  cands.sort(function(a,b){return b.pri-a.pri;});
  if(!cands.length)return "";
  var out='<div class="sectiontitle"><h2>Free moment?</h2><span class="hint">Your best options right now (up to 4)</span></div><div class="card dashboard-free-moment">';
- cands.slice(0,4).forEach(function(c){var bb=c.rhythm?rhyDoneBtn(c.rhythm):'<button class="btn mini'+(c.spark?" sparkbtn":"")+'"'+c.act+'>'+c.btn+'</button>';out+='<div class="planitem"><div class="pi-main">'+tendRowContent(c.label,c.description,c.sub,'<span class="plan-pills">'+planPills(c)+'</span>')+'</div>'+bb+'</div>';});
+ cands.slice(0,4).forEach(function(c){var bb=c.rhythm?rhyDoneBtn(c.rhythm):'<button class="btn mini'+(c.spark?" sparkbtn":"")+'"'+c.act+'>'+c.btn+'</button>',details=planItemDetails(c.sub);out+='<div class="planitem"><div class="pi-main">'+tendRowContent(c.label,c.description,details?"":c.sub,'<span class="plan-pills">'+planPills(c)+'</span>')+details+'</div>'+bb+'</div>';});
  return out+'</div>';}
 /* ============ area subpages ============ */
 function renderArea(id){
