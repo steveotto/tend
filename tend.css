@@ -1408,3 +1408,9 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .calendar-sync-slot .calsync{margin:0 0 0 auto;font-size:12px}
  html[data-mobile-text-size="large"] .home-dashboard .calendar-sync-slot .calsync{font-size:14px}
 }
+@media(max-width:600px){
+ .home-dashboard>.sectiontitle:not(.dashboard-greeting) h2,
+ .home-dashboard .current-plan-now{font-size:24px!important}
+ html[data-mobile-text-size="large"] .home-dashboard>.sectiontitle:not(.dashboard-greeting) h2,
+ html[data-mobile-text-size="large"] .home-dashboard .current-plan-now{font-size:30px!important}
+}
