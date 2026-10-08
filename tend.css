@@ -1092,6 +1092,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .plan-people{grid-column:1;grid-row:2;display:flex;align-items:center;gap:6px;min-width:0;width:100%}
 .home-dashboard .plan-people-visible{display:flex;align-items:center;gap:6px;min-width:0}
 .home-dashboard .plan-people .prayer-person{flex:none}
+.home-dashboard .plan-people .avatar,.home-dashboard .plan-people-menu .avatar{border:0!important}
 .home-dashboard .plan-item-heading{grid-column:1;grid-row:1;min-width:0}
 .home-dashboard .plan-item-header:not(.has-people) .plan-item-heading{grid-row:1}
 .home-dashboard .plan-item-header>.btn{grid-column:2;grid-row:1/-1;align-self:start;justify-self:end}
