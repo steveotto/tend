@@ -124,7 +124,7 @@ function planPills(it){
  return (person&&person.id!==currentPerson?'<button type="button" class="prayer-person person-badge-clickable'+((it.rhythm||it.rkey)?' person-rhythm-link':'')+'" '+((it.rhythm||it.rkey)?'data-personrhythms="'+esc(person.id)+'" aria-label="Open '+esc(person.name)+' rhythms"':'data-openperson="'+esc(person.id)+'" aria-label="Open '+esc(person.name)+' profile"')+'>'+personAvatar(person,24)+esc(person.name)+'</button>':'')+typeBadge+categories;
 }
 function planItemCopy(it,action){
- return '<div class="plan-item-copy">'+(action||"")+'<strong class="tend-type-title">'+esc(it.label||"")+'</strong>'+(it.description?'<div class="tend-type-description">'+esc(it.description)+'</div>':'')+'<span class="plan-pills">'+planPills(it)+'</span></div>';
+ return '<div class="plan-item-copy"><div class="plan-item-heading"><strong class="tend-type-title">'+esc(it.label||"")+'</strong>'+(action||"")+'</div><div class="plan-item-description">'+(it.description?'<div class="tend-type-description">'+esc(it.description)+'</div>':'')+'</div><span class="plan-pills">'+planPills(it)+'</span></div>';
 }
 function genItem(label,sub,area,type,title){return {label:label,sub:sub,log:{area:area,type:type,title:title||label}};}
 function taskItem(t){return {label:t.text,sub:"task · "+(S.areas[t.areaId]?S.areas[t.areaId].name:""),log:{area:t.areaId,type:"note",title:"Task: "+t.text},taskId:t.id};}
