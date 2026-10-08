@@ -123,6 +123,9 @@ function planPills(it){
  var categories=record&&typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(record):"";
  return (person&&person.id!==currentPerson?'<button type="button" class="prayer-person person-badge-clickable'+((it.rhythm||it.rkey)?' person-rhythm-link':'')+'" '+((it.rhythm||it.rkey)?'data-personrhythms="'+esc(person.id)+'" aria-label="Open '+esc(person.name)+' rhythms"':'data-openperson="'+esc(person.id)+'" aria-label="Open '+esc(person.name)+' profile"')+'>'+personAvatar(person,24)+esc(person.name)+'</button>':'')+typeBadge+categories;
 }
+function planItemCopy(it){
+ return '<div class="plan-item-copy"><strong class="tend-type-title">'+esc(it.label||"")+'</strong>'+(it.description?'<div class="tend-type-description">'+esc(it.description)+'</div>':'')+'<span class="plan-pills">'+planPills(it)+'</span></div>';
+}
 function genItem(label,sub,area,type,title){return {label:label,sub:sub,log:{area:area,type:type,title:title||label}};}
 function taskItem(t){return {label:t.text,sub:"task · "+(S.areas[t.areaId]?S.areas[t.areaId].name:""),log:{area:t.areaId,type:"note",title:"Task: "+t.text},taskId:t.id};}
 function dashboardRhythmEligible(r){
@@ -176,10 +179,11 @@ function planItemMetaBar(meta){
  var isTime=function(part){var normalized=part.toLowerCase();return Object.keys(TODS||{}).some(function(key){return TODS[key]&&TODS[key].toLowerCase()===normalized;});};
  var isOccurred=function(part){return /last tended|last prayed|not yet tended|not yet prayed|^tended |^prayed /i.test(part);};
  var time=parts.filter(isTime),occurred=parts.filter(isOccurred),frequency=parts.filter(function(part){return !isTime(part)&&!isOccurred(part)&&!/^(ends |due )/i.test(part);}).slice(0,1),extra=parts.filter(function(part){return !isTime(part)&&!isOccurred(part)&&frequency.indexOf(part)===-1;});
- return '<div class="plan-item-meta">'+frequency.concat(time,occurred,extra).map(function(part){
-  var kind=isTime(part)?"time":frequency.indexOf(part)!==-1?"frequency":"occurred";
-  return '<span class="plan-item-meta-entry">'+planMetaIcon(kind)+'<span>'+esc(part)+'</span></span>';
- }).join("")+'</div>';
+ function entries(items,kind){return items.map(function(part){
+  var iconKind=kind==="schedule"?(isTime(part)?"time":"frequency"):"occurred";
+  return '<span class="plan-item-meta-entry">'+planMetaIcon(iconKind)+'<span>'+esc(part)+'</span></span>';
+ }).join("");}
+ return '<div class="plan-item-meta">'+entries(frequency.concat(time,extra),"schedule")+entries(occurred,"occurred")+'</div>';
 }
 function planBlockCard(b,curId,isCur,isAllDay){
  isAllDay=!!isAllDay;
@@ -192,7 +196,7 @@ function planBlockCard(b,curId,isCur,isAllDay){
  function itemHTML(it){
   var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.faithRhythm?'<button type="button" class="btn mini" data-tend-open="faith-rhythm" data-rhythm-id="'+esc(it.faithRhythm)+'">Tend</button>':(it.prayer?'<button type="button" class="btn mini" data-pray="'+esc(it.prayer)+'">Pray</button>':(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>')));
   var meta=planItemMetaBar(it.sub);
-  return '<div class="planitem"><div class="pi-main">'+tendRowContent(it.label,it.description,meta?"":it.sub,'<span class="plan-pills">'+planPills(it)+'</span>')+'</div>'+btn+meta+'</div>';
+  return '<div class="planitem"><div class="pi-main">'+planItemCopy(it)+(meta?"":(it.sub?'<div class="tend-type-meta">'+esc(it.sub)+'</div>':""))+'</div>'+btn+meta+'</div>';
  }
  var body=queue.visible.length?queue.visible.map(itemHTML).join(""):'<div class="empty">'+(allItems.length?'Items hidden by the type filters.':'Nothing queued - all tended.')+'</div>';
  if(isCur)return '<div id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock current"><div class="current-plan-summary"><div class="current-plan-topline"><span class="current-plan-now">Now</span><div class="current-plan-weather" id="nowWeather">'+(typeof nowWeatherHTML==="function"?nowWeatherHTML():"")+'</div></div><span class="plan-block-name">'+esc(b.name)+'</span>'+range+'</div><div class="current-plan-items">'+body+'</div><div class="current-plan-filters">'+planKindTogglesHTML(toggleScope,"Now item filters")+'</div></div>';
@@ -795,7 +799,7 @@ function freeMomentHTML(){
  cands.sort(function(a,b){return b.pri-a.pri;});
  if(!cands.length)return "";
  var out='<div class="sectiontitle"><h2>Free moment?</h2><span class="hint">Your best options right now (up to 4)</span></div><div class="card dashboard-free-moment">';
- cands.slice(0,4).forEach(function(c){var bb=c.rhythm?rhyDoneBtn(c.rhythm):'<button class="btn mini'+(c.spark?" sparkbtn":"")+'"'+c.act+'>'+c.btn+'</button>',meta=planItemMetaBar(c.sub);out+='<div class="planitem"><div class="pi-main">'+tendRowContent(c.label,c.description,meta?"":c.sub,'<span class="plan-pills">'+planPills(c)+'</span>')+'</div>'+bb+meta+'</div>';});
+ cands.slice(0,4).forEach(function(c){var bb=c.rhythm?rhyDoneBtn(c.rhythm):'<button class="btn mini'+(c.spark?" sparkbtn":"")+'"'+c.act+'>'+c.btn+'</button>',meta=planItemMetaBar(c.sub);out+='<div class="planitem"><div class="pi-main">'+planItemCopy(c)+(meta?"":(c.sub?'<div class="tend-type-meta">'+esc(c.sub)+'</div>':""))+'</div>'+bb+meta+'</div>';});
  return out+'</div>';}
 /* ============ area subpages ============ */
 function renderArea(id){
