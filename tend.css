@@ -111,7 +111,7 @@ ul.tasks li.done .txt{color:var(--ink-faint);text-decoration:line-through}
 .quicklog{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 4px}
 .quicklog button{border:1px solid var(--line);background:var(--canvas);border-radius:99px;padding:10px 16px;font-size:14.5px;font-weight:600;color:var(--ink-soft);transition:all .12s}
 .quicklog button:hover{border-color:var(--forest);color:var(--forest)}
-.sectiontitle{display:flex;align-items:baseline;gap:12px;margin:26px 0 12px}
+.sectiontitle{display:flex;align-items:baseline;gap:12px;margin:32px 0 12px}
 .sectiontitle h2{font-size:22px;font-weight:500}
 .sectiontitle .hint{font-size:12.5px;color:var(--ink-faint);font-style:normal;font-weight:400;font-family:var(--sans)}
 .notewrap textarea{width:100%;min-height:88px;border:1px solid var(--line);border-radius:12px;background:var(--canvas);padding:12px 14px;font-size:15.5px;line-height:1.55;resize:vertical}
@@ -213,7 +213,8 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .calrow input.cal-color{padding:4px;height:42px;cursor:pointer}
 .calrow .del{font-size:18px}
 .cal-dot{width:10px;height:10px;border-radius:3px;flex:none;align-self:center}
-.cal-calname{margin-left:auto;font-size:11px;color:var(--ink-faint);font-weight:600;white-space:nowrap}
+.cal-side{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex:none;margin-left:auto}
+.cal-calname{font-size:11px;color:var(--ink-faint);font-weight:600;white-space:nowrap}
 .momentrow{display:flex;align-items:center;gap:10px;margin:6px 0 4px}
 .momentrow input[type=date]{border:1px solid var(--line);border-radius:10px;padding:8px 11px;background:var(--canvas);font-size:14px}
 .momentrow .hint{font-size:11px;color:var(--ink-faint)}
@@ -267,7 +268,7 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .cal-title{font-size:15px;font-weight:600;color:var(--ink)}
 .cal-range{font-size:11.5px;color:var(--ink-faint);margin-top:1px;font-variant-numeric:tabular-nums}
 .calitem.past{opacity:.45}
-.calitem.now{background:var(--mist);box-shadow:inset 3px 0 0 var(--forest)}
+.calitem.now{background:var(--mist)}
 .now-badge{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--forest);border-radius:6px;padding:3px 8px;flex:none}
 .next-badge{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--forest);background:transparent;border:1px solid var(--mint);border-radius:6px;padding:2px 7px;flex:none}
 .cal-calname{font-size:11px;color:var(--ink-faint);font-weight:600;white-space:nowrap;flex:none}
@@ -520,7 +521,7 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .plan-block-name{color:var(--forest);font-size:16px;font-weight:600;letter-spacing:.02em}
 .current-plan-summary .plan-range{font-size:12px;font-weight:400}
 .current-plan-weather{position:absolute;top:50%;right:0;display:flex;align-items:center;justify-content:center;width:68px;min-width:0;transform:translateY(-50%)}
-.planblock .planitem>.btn{box-sizing:border-box;width:68px;min-width:68px;flex:none;text-align:center}
+.planblock .planitem>.btn,.planblock .planitem .plan-item-copy>.btn{box-sizing:border-box;width:68px;min-width:68px;flex:none;text-align:center}
 .now-weather{display:flex;align-items:center;gap:5px;min-width:0;min-height:0;padding:0;border:0;border-radius:0;background:transparent!important;color:var(--ink-soft);box-shadow:none}
 .now-weather svg{width:22px;height:22px;flex:none;fill:none;stroke:var(--forest);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;opacity:1}
 .now-weather-reading{display:grid;justify-items:start;gap:0}
@@ -535,6 +536,21 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .now-weather-prompt:hover{border-color:var(--mint);color:var(--forest)}
 .now-weather-prompt:disabled{cursor:wait;opacity:.7}
 .now-weather-prompt-icon{font-size:16px;color:var(--mint)}
+.current-plan-topline{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.current-plan-now{font-size:19px;font-weight:700;line-height:1.35;color:var(--ink)}
+.current-plan-summary{display:flex;align-items:stretch;flex-direction:column;gap:8px;min-height:0;margin:0 0 10px;padding:12px 14px;border-radius:14px;background:var(--canvas);color:var(--ink)}
+.current-plan-summary>.plan-block-name{font-size:15px;font-weight:700;line-height:1.35}
+.current-plan-summary>.plan-range{margin:0;font-size:13px;line-height:1.4}
+.current-plan-details{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
+.current-plan-period{display:flex;align-items:baseline;gap:9px;min-width:0}
+.current-plan-period .plan-block-name{font-size:15px;font-weight:500;line-height:1.35;color:var(--ink)}
+.current-plan-range{color:var(--ink-soft);font-size:13px;line-height:1.35;font-variant-numeric:tabular-nums;white-space:nowrap}
+.current-plan-item-count{display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;flex:none;color:var(--ink-soft);font-size:12px;line-height:1.35;white-space:nowrap}
+.current-plan-item-count svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.current-plan-weather{position:static;width:auto;transform:none}
+.current-plan-filters{display:flex;justify-content:flex-end;margin:2px 0 0}
+.now-weather.compact{display:flex;align-items:center;gap:5px;color:var(--ink-soft);font-size:13px;line-height:1.3;white-space:nowrap}
+.now-weather.compact strong,.now-weather.compact span{font-size:13px;font-weight:600;color:inherit}
 .plan-pills{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;margin-left:8px;vertical-align:middle}
 .planblock{scroll-margin-top:160px}
 .planblock summary{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;font-size:16px;font-weight:600;min-height:44px;padding:8px 0}
@@ -1068,6 +1084,96 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .tend-row-content>.tend-type-meta{display:block;margin:3px 0 0;padding-top:0;border-top:0;color:var(--ink-faint);font-size:11.5px;line-height:1.4;overflow-wrap:anywhere}
 .planblock .tend-row-content>.tend-type-description{font-family:var(--sans);font-size:var(--tend-item-description-size);font-weight:400;line-height:1.5}
 .planblock .tend-row-content>.tend-type-meta{margin-top:2px;padding-top:0;border-top:0}
+.home-dashboard .planitem:has(.plan-item-top-meta){display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto;align-items:stretch;gap:12px;min-height:0;margin:0 0 12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)}
+.home-dashboard .planitem:has(.plan-item-top-meta)>.pi-main{grid-column:1;grid-row:1;min-width:0;min-height:0}
+.home-dashboard .planitem:has(.plan-item-top-meta) .plan-item-copy{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;row-gap:12px;min-width:0}
+.home-dashboard .plan-people{display:flex;align-items:center;gap:6px;min-width:0;width:100%}
+.home-dashboard .plan-people-visible{display:flex;align-items:center;gap:6px;min-width:0}
+.home-dashboard .plan-people .prayer-person{flex:none}
+.home-dashboard .plan-people .avatar,.home-dashboard .plan-people-menu .avatar{border:0!important}
+.home-dashboard .plan-item-heading{display:flex;align-items:flex-start;gap:8px;grid-column:1;grid-row:1;min-width:0}
+.home-dashboard .plan-item-heading .tend-type-title{display:block;flex:1;min-width:0;margin:0;font-size:17px}
+.home-dashboard .plan-item-description{display:flex;flex-direction:column;align-items:flex-start;min-height:0;overflow-wrap:anywhere}
+.home-dashboard .plan-item-no-description{font-style:italic;color:var(--ink-faint)}
+.home-dashboard .plan-item-top-meta{grid-column:1;grid-row:2;display:flex;align-items:center;gap:8px;min-width:0}
+.home-dashboard .plan-item-meta-people{display:flex;align-items:center;gap:6px;flex:none;width:auto;min-width:0;min-height:28px}
+.home-dashboard .plan-item-category-row{display:flex;align-items:center;gap:6px;flex:none;min-width:0;margin-left:auto}
+.home-dashboard .plan-item-category-row>.rhythm-area-badges{display:flex;align-items:center;gap:4px;min-width:0}
+.home-dashboard .plan-item-category-row .rhythm-area-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;width:20px;height:20px;padding:3px;border:1px solid var(--line);border-radius:50%;background:var(--mist);color:var(--forest-deep);cursor:pointer}
+.home-dashboard .plan-item-category-row .rhythm-area-badge svg{width:12px;height:12px}
+.home-dashboard .plan-item-category-row .rhythm-area-badge:hover{background:#dff3e9}
+.home-dashboard .plan-item-footer{grid-column:1;grid-row:3;display:grid;grid-template-columns:minmax(0,1fr);gap:6px;min-width:0}
+.home-dashboard .plan-item-footer-badges{display:flex;align-items:center;gap:8px;min-width:0}
+.home-dashboard .plan-item-footer-badges .plan-pills{display:flex;align-items:center;gap:6px;min-width:0}
+.home-dashboard .plan-item-footer-badges .tend-type-meta{margin:0;padding:0;border:0}
+.home-dashboard .plan-item-meta-details>.plan-kind-badge{position:relative;display:inline-grid;place-items:center;box-sizing:border-box;flex:none;width:24px;height:24px;min-width:24px;margin:0;padding:0;border:1px solid var(--line);border-radius:50%;font-size:0;letter-spacing:0;line-height:0}
+.home-dashboard .plan-item-meta-details>.plan-kind-badge .collection-icon{position:absolute;top:50%;left:50%;display:block;width:13px;height:13px;margin:0;transform:translate(-50%,-50%)}
+.home-dashboard .plan-item-meta-details>.plan-kind-badge.pry .collection-icon{transform:translate(-50%,calc(-50% - 2px))}
+.home-dashboard .plan-item-meta-details>.plan-kind-badge{display:none}
+.home-dashboard .plan-item-action{display:flex;flex:none;justify-content:flex-end;min-width:0}
+.home-dashboard .plan-item-action>.btn{width:auto;min-width:76px;min-height:42px;padding:7px 14px;border-radius:9px;font-size:13px;font-weight:650}
+.home-dashboard .planblock{margin:0 0 32px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.home-dashboard .planblock.current{border:0;box-shadow:none}
+.home-dashboard .current-plan-summary{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;min-height:0;margin:0 0 10px;padding:0;border-radius:0;background:transparent;color:var(--ink)}
+.home-dashboard .current-plan-topline{min-height:24px}
+.home-dashboard .current-plan-time-menu{position:relative;z-index:20;display:inline-block;min-width:0}
+.home-dashboard .planblock .current-plan-time-picker{position:relative;display:inline-flex;align-items:center;min-width:0;gap:12px;margin-left:12px;padding:4px 0;border:0;border-radius:0;background:transparent!important;color:var(--ink)!important;font-size:22px;font-weight:700;line-height:1.35;cursor:pointer;list-style:none}
+.home-dashboard .current-plan-time-chevron{display:grid;width:28px;height:28px;place-items:center;flex:none;border-radius:8px;background:#E2E6E4;color:var(--ink)}
+.home-dashboard .current-plan-time-chevron svg{display:block;width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.home-dashboard .current-plan-time-picker::-webkit-details-marker{display:none}
+.home-dashboard .planblock .current-plan-time-picker:hover .current-plan-time-chevron,.home-dashboard .planblock .current-plan-time-menu[open]>.current-plan-time-picker .current-plan-time-chevron{background:#D9DEDC}
+.home-dashboard .planblock .current-plan-time-picker:hover,.home-dashboard .planblock .current-plan-time-menu[open]>.current-plan-time-picker{background:transparent!important;color:var(--ink)!important}
+.home-dashboard .current-plan-time-picker:focus-visible{outline:2px solid var(--forest);outline-offset:2px;border-radius:4px}
+.home-dashboard .current-plan-time-options{position:absolute;top:calc(100% + 7px);left:0;z-index:40;display:grid;gap:2px;box-sizing:border-box;width:min(340px,calc(100vw - 32px));max-height:min(60vh,420px);overflow:auto;padding:6px;border:1px solid var(--line);border-radius:12px;background:var(--card);box-shadow:0 8px 24px rgba(32,39,35,.16)}
+.home-dashboard .current-plan-time-option{display:grid;grid-template-columns:112px minmax(0,1fr) 56px;align-items:center;gap:6px;min-width:0;padding:10px 11px;border:0;border-radius:8px;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.home-dashboard .current-plan-time-option:hover,.home-dashboard .current-plan-time-option:focus-visible{outline:0;background:var(--mist)}
+.home-dashboard .current-plan-time-option.is-current{background:#F1F2F1}
+.home-dashboard .current-plan-time-option.is-current .current-plan-time-option-name{color:var(--forest)}
+.home-dashboard .current-plan-time-option.is-selected:not(.is-current){background:color-mix(in srgb,var(--mint) 20%,var(--card))}
+.home-dashboard .current-plan-time-option-name{flex:none;font-size:13px;font-weight:650}
+.home-dashboard .current-plan-time-option-range,.home-dashboard .current-plan-time-option-count{min-width:0;color:var(--ink-soft);font-size:12px;text-align:left;white-space:nowrap}
+@media(max-width:360px){.home-dashboard .current-plan-time-option{grid-template-columns:88px minmax(0,1fr) 46px;gap:4px;padding-right:7px;padding-left:7px}.home-dashboard .current-plan-time-option-name,.home-dashboard .current-plan-time-option-range,.home-dashboard .current-plan-time-option-count{font-size:10px}}
+.home-dashboard .current-plan-items>.plan-empty-card{display:flex;box-sizing:border-box;min-height:104px;align-items:center;justify-content:center;margin:0;padding:24px 18px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);font-size:15px;font-style:normal;text-align:center}
+.home-dashboard .current-plan-details{align-items:center}
+.home-dashboard .calendar-sync-slot{margin-bottom:32px}
+.home-dashboard .current-plan-filter{position:relative;flex:none}
+.home-dashboard .current-plan-item-count{display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;min-height:30px;padding:2px 8px;border:0;border-radius:8px;background:#E9ECEA;color:var(--ink-soft);font:inherit;font-size:12px;line-height:1.35;white-space:nowrap;cursor:pointer;list-style:none}
+.home-dashboard .current-plan-filter>.current-plan-item-count{min-height:30px;padding:2px 8px;background:#E9ECEA}
+.home-dashboard .current-plan-filter>.current-plan-item-count:hover{background:#E2E6E4}
+.home-dashboard .current-plan-item-count::-webkit-details-marker{display:none}
+.home-dashboard .current-plan-item-count svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.home-dashboard .current-plan-item-count:hover{background:#E2E6E4;color:var(--forest)}
+.home-dashboard .current-plan-item-count:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+.home-dashboard .current-plan-filter-menu{position:absolute;z-index:30;top:calc(100% + 4px);right:0;display:flex;justify-content:flex-end;min-width:120px;padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--card);box-shadow:0 8px 24px rgba(32,39,35,.16)}
+.home-dashboard .current-plan-filter-menu .plan-kind-toggles{gap:7px}
+.home-dashboard .current-plan-filter-menu .plan-kind-toggle{width:30px;height:30px;min-width:30px;min-height:30px;padding:0;border:1px solid var(--line)!important;border-radius:50%;box-shadow:none}
+.home-dashboard .current-plan-filter-menu .plan-kind-toggle .collection-icon{width:19px;height:19px}
+.home-dashboard .current-plan-filter-menu .plan-kind-toggle.is-muted{opacity:.55;border-color:var(--line)!important;color:var(--ink-faint)}
+.home-dashboard .current-plan-filter-menu .plan-kind-toggle:hover{opacity:.8}
+.home-dashboard .current-plan-filter-menu .plan-kind-toggle.is-muted:hover{opacity:.8}
+.home-dashboard .dashboard-free-moment{display:grid;gap:12px;margin:0 0 14px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.home-dashboard .dashboard-free-moment>.planitem:has(.plan-item-top-meta){margin-bottom:0}
+.home-dashboard .uprow{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin:0 0 18px}
+.home-dashboard .upitem{display:flex;align-items:center;min-width:0;gap:9px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);font-size:15px}
+.home-dashboard .upmain{display:flex;flex:1;min-width:0;flex-direction:column}
+.home-dashboard .upitem .updays{flex:none;white-space:nowrap}
+.home-dashboard .planitem:has(.plan-item-meta-details>.plan-kind-badge.rhy) .plan-item-action>.btn{border-color:#B8E1CA;background:#E3F6ED;color:#1C5844}
+.home-dashboard .planitem:has(.plan-item-meta-details>.plan-kind-badge.rhy) .plan-item-action>.btn:hover{border-color:#9BD4B4;background:#D2EEDD;color:#1C5844}
+.home-dashboard .planitem:has(.plan-item-meta-details>.plan-kind-badge.pry) .plan-item-action>.btn{border-color:#C8D8F0;background:#E8F0FB;color:#405D84}
+.home-dashboard .planitem:has(.plan-item-meta-details>.plan-kind-badge.pry) .plan-item-action>.btn:hover{border-color:#B4C9E8;background:#DCE8F8;color:#405D84}
+.home-dashboard .planitem:has(.plan-item-meta-details>.plan-kind-badge.spk) .plan-item-action>.btn{border-color:#E8CF74;background:#FFF3C4;color:#735B16}
+.home-dashboard .planitem:has(.plan-item-meta-details>.plan-kind-badge.spk) .plan-item-action>.btn:hover{border-color:#DCC05B;background:#FCE9A2;color:#735B16}
+.plan-item-meta{grid-column:1/-1;order:6;display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;min-width:0;margin-top:2px;padding-top:14px;border-top:1px solid var(--line);color:var(--ink-soft);font-size:11.5px;line-height:1.4}
+.home-dashboard .plan-item-footer>.plan-item-meta{box-sizing:border-box;grid-column:1;grid-row:auto;order:initial;display:grid;grid-template-columns:minmax(0,1fr);gap:4px;min-height:0;margin:0;padding-top:6px}
+.home-dashboard .plan-item-meta-people{display:flex;align-items:center;gap:6px;min-width:0}
+.home-dashboard .plan-item-meta-people .plan-people-visible{display:flex;align-items:center;gap:6px;min-width:0}
+.home-dashboard .plan-item-meta-people .prayer-person{flex:none;gap:5px;padding:3px 8px 3px 3px;border:1px solid var(--line);font-size:10px}
+.home-dashboard .plan-item-meta-people .avatar{width:19px!important;height:19px!important;border:0!important}
+.home-dashboard .plan-item-meta-details{display:flex;align-items:center;gap:8px 16px;min-width:0;min-height:24px}
+.home-dashboard .plan-item-meta-details .plan-item-meta-entry:last-child{margin-left:auto;text-align:right;justify-content:flex-end}
+.plan-item-meta-entry{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.plan-detail-icon{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;color:var(--ink-faint)}
+.home-dashboard .plan-item-meta-details .plan-detail-icon-frequency{width:12px;height:12px}
 .card:not(.planblock)>.planitem .tend-row-content>.tend-type-description{font-family:var(--sans);font-size:var(--tend-item-description-size);font-weight:400;line-height:1.5}
 .card:not(.planblock)>.planitem .tend-row-content>.tend-type-meta{margin-top:2px;padding-top:0;border-top:0}
 .today-with-person .tend-row-content>.tend-type-meta{margin-top:2px;padding-top:0;border-top:0}
@@ -1083,13 +1189,14 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .dashboard-greeting h2{font-size:20px}
  .home-dashboard .dashboard-greeting .hint{font-size:11px}
  .home-dashboard .overall-card,.home-dashboard .calendar-card,.home-dashboard .planblock,.home-dashboard .dashboard-free-moment,.home-dashboard .cl-card{margin:0 0 10px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+ .home-dashboard .planblock{margin-bottom:32px}
  .home-dashboard .dashboard-overall-heading{align-items:center!important;margin:0 0 10px;padding:8px 11px;border-radius:9px;background:var(--mist)}
  .home-dashboard .dashboard-overall-heading h3{font-size:16px!important;font-weight:700!important;color:var(--forest-deep)}
  .home-dashboard .ov-score{font-size:32px}
  .home-dashboard .bar-ov{height:11px;margin:12px 0 19px}
  .home-dashboard .overall-card>.meta{font-size:12px}
- .home-dashboard .menu-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:0;margin:10px 0 0;border-top:1px solid var(--line)}
- .home-dashboard .menu-area{gap:7px;min-width:0;min-height:47px;padding:8px 5px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;font-size:13px;box-shadow:none}
+ .home-dashboard .menu-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0 0;border-top:0}
+ .home-dashboard .menu-area{gap:7px;min-width:0;min-height:47px;padding:8px 5px;border:1px solid var(--line);border-radius:9px;background:var(--card);font-size:13px;box-shadow:none}
  .home-dashboard .menu-area-icon{width:17px;height:17px}
  .home-dashboard .menu-area .ma-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
  .home-dashboard .menu-area .ma-score{font-size:12px}
@@ -1102,21 +1209,34 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .now-badge,.home-dashboard .next-badge{font-size:9px;padding:2px 5px}
  .home-dashboard .planblock{padding:0}
  .home-dashboard .planblock.current{border:0;box-shadow:none}
- .home-dashboard .planblock summary,.home-dashboard .current-plan-summary{min-height:44px;padding:8px 11px;border-radius:9px;background:var(--mist);color:var(--forest-deep)}
- .home-dashboard .current-plan-summary{align-items:flex-start;gap:8px}
- .home-dashboard .current-plan-summary .plan-summary-copy{align-items:flex-start;flex-direction:column;gap:2px;padding-right:0}
+ .home-dashboard .planblock summary{min-height:44px;padding:8px 11px;border-radius:9px;background:var(--mist);color:var(--forest-deep)}
+ .home-dashboard .current-plan-summary{margin-bottom:10px}
+ .home-dashboard .current-plan-period{padding-left:12px}
+ .home-dashboard .current-plan-topline{min-height:24px}
+ .home-dashboard .current-plan-now{font-size:19px;font-weight:700;color:var(--ink)}
+ .home-dashboard .current-plan-period .plan-block-name{font-size:15px;font-weight:500;color:var(--ink)}
+ .home-dashboard .current-plan-range{font-size:13px;color:var(--ink-soft)}
  .home-dashboard .current-plan-weather{position:static;width:auto;transform:none}
- .home-dashboard .planblock summary .plan-block-name,.home-dashboard .current-plan-summary .plan-block-name{font-size:15px;font-weight:700}
- .home-dashboard .plan-summary-meta,.home-dashboard .current-plan-summary .plan-range{font-size:10.5px}
+ .home-dashboard .current-plan-items{margin-top:0!important}
+ .home-dashboard .current-plan-filters{justify-content:flex-start;margin:4px 0 12px}
+ .home-dashboard .current-plan-filters .plan-kind-toggles{gap:6px}
+ .home-dashboard .current-plan-filters .plan-kind-toggle{width:30px;height:30px;min-width:30px;min-height:30px}
+ .home-dashboard .current-plan-filters .plan-kind-toggle .collection-icon{width:16px;height:16px}
+ .home-dashboard .now-weather.compact{font-size:13px}
+ .home-dashboard .now-weather.compact strong,.home-dashboard .now-weather.compact span{font-size:13px}
+ .home-dashboard .current-plan-weather .now-weather-prompt{padding:0;border:0;border-radius:0;background:transparent!important;color:var(--ink-soft);font-size:13px;text-align:right}
+ .home-dashboard .current-plan-weather .now-weather-prompt:hover{background:transparent!important;color:var(--forest-deep);text-decoration:underline}
+ .home-dashboard .planblock summary .plan-block-name{font-size:15px;font-weight:700}
+ .home-dashboard .plan-summary-meta{font-size:10.5px}
  .home-dashboard .planitem{align-items:flex-start;gap:8px;padding:9px 0}
  .home-dashboard .planblock .planitem>.btn{width:auto;min-width:58px;min-height:38px;padding:6px 9px;font-size:12px}
  .home-dashboard .day-jumps{gap:6px;margin:7px 0 9px}
  .home-dashboard .day-jumps .btn{flex:1 1 auto;min-height:34px;padding:5px 8px;font-size:11px}
  .home-dashboard .plan-kind-toggles{gap:3px}
  .home-dashboard .plan-kind-toggle{width:23px;height:23px;min-width:23px;min-height:23px}
- .home-dashboard .dashboard-free-moment .planitem{border-bottom:1px dashed var(--line)}
- .home-dashboard .uprow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;margin:0 0 10px;border-top:1px solid var(--line)}
- .home-dashboard .upitem{min-width:0;gap:7px;padding:9px 4px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;font-size:12px}
+ .home-dashboard .dashboard-free-moment .planitem{border-bottom:1px solid var(--line)}
+ .home-dashboard .uprow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0 0 10px;border:0}
+ .home-dashboard .upitem{min-width:0;gap:7px;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);font-size:12px}
  .home-dashboard .updays{font-size:10px}
  .home-dashboard .uplabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
  .home-dashboard .cl-card summary{padding:8px 11px;border-radius:9px;background:var(--mist);color:var(--forest-deep);font-size:14px!important}
@@ -1147,8 +1267,15 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  html[data-mobile-text-size="large"] .home-dashboard .cal-title{font-size:17px}
  html[data-mobile-text-size="large"] .home-dashboard .cal-range,html[data-mobile-text-size="large"] .home-dashboard .cal-calname{font-size:13px}
  html[data-mobile-text-size="large"] .home-dashboard .now-badge,html[data-mobile-text-size="large"] .home-dashboard .next-badge{font-size:11px}
- html[data-mobile-text-size="large"] .home-dashboard .planblock summary .plan-block-name,html[data-mobile-text-size="large"] .home-dashboard .current-plan-summary .plan-block-name{font-size:19px}
- html[data-mobile-text-size="large"] .home-dashboard .plan-summary-meta,html[data-mobile-text-size="large"] .home-dashboard .current-plan-summary .plan-range{font-size:13px}
+ html[data-mobile-text-size="large"] .home-dashboard .planblock summary .plan-block-name{font-size:19px}
+ html[data-mobile-text-size="large"] .home-dashboard .current-plan-now{font-size:24px}
+ html[data-mobile-text-size="large"] .home-dashboard .current-plan-time-picker{font-size:24px}
+ html[data-mobile-text-size="large"] .home-dashboard .current-plan-period .plan-block-name{font-size:18px}
+ html[data-mobile-text-size="large"] .home-dashboard .current-plan-range{font-size:16px}
+ html[data-mobile-text-size="large"] .home-dashboard .now-weather.compact,
+ html[data-mobile-text-size="large"] .home-dashboard .now-weather.compact strong,
+ html[data-mobile-text-size="large"] .home-dashboard .now-weather.compact span{font-size:15px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-summary-meta{font-size:13px}
  html[data-mobile-text-size="large"] .home-dashboard .tend-type-title,html[data-mobile-text-size="large"] .home-dashboard .pi-label{font-size:19px}
  html[data-mobile-text-size="large"] .home-dashboard .tend-type-description{font-size:17px}
  html[data-mobile-text-size="large"] .home-dashboard .tend-type-meta,html[data-mobile-text-size="large"] .home-dashboard .pi-sub{font-size:14px}
@@ -1158,7 +1285,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  html[data-mobile-text-size="large"] .home-dashboard .plan-kind-toggle .collection-icon{width:17px;height:17px}
  html[data-mobile-text-size="large"] .home-dashboard .avatar{width:32px!important;height:32px!important}
  html[data-mobile-text-size="large"] .home-dashboard .act-ic{width:12px;height:12px}
- html[data-mobile-text-size="large"] .home-dashboard .upitem{gap:8px;padding:12px 4px;font-size:15px}
+ html[data-mobile-text-size="large"] .home-dashboard .upitem{gap:8px;padding:12px 14px;font-size:15px}
  html[data-mobile-text-size="large"] .home-dashboard .updays{font-size:13px}
  html[data-mobile-text-size="large"] .home-dashboard .cl-card summary{font-size:17px!important}
  html[data-mobile-text-size="large"] .home-dashboard .cb{width:22px;height:22px}
@@ -1228,7 +1355,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .utility-primary button.utility-primary-button,nav.tabs button.focus-nav-button{flex:1 1 0}
 }
 @media(max-width:600px){
- .home-dashboard>.sectiontitle:not(.dashboard-greeting){margin-top:26px;margin-bottom:10px}
+ .home-dashboard>.sectiontitle:not(.dashboard-greeting){margin-top:32px;margin-bottom:12px}
  .home-dashboard .dashboard-greeting{align-items:center;margin:26px 0 18px;padding:8px 11px;border-radius:9px;background:var(--mist);color:var(--forest-deep)}
  .home-dashboard .dashboard-greeting h2{font-size:18px;font-weight:700;line-height:1.35;color:var(--forest-deep)}
  .home-dashboard .dashboard-greeting .hint{margin-left:auto;text-align:right}
@@ -1236,7 +1363,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .day-jumps .btn{display:flex;align-items:center;justify-content:center;min-width:0;min-height:38px;padding:5px 3px;text-align:center;white-space:normal}
 }
 @media(max-width:600px){
- html[data-mobile-text-size="large"] .home-dashboard>.sectiontitle:not(.dashboard-greeting){margin-top:30px}
+ html[data-mobile-text-size="large"] .home-dashboard>.sectiontitle:not(.dashboard-greeting){margin-top:36px}
  html[data-mobile-text-size="large"] .home-dashboard .dashboard-greeting{margin-top:30px;padding:11px 13px}
  html[data-mobile-text-size="large"] .home-dashboard .dashboard-greeting h2{font-size:21px}
  html[data-mobile-text-size="large"] .home-dashboard .menu-area .ma-name{min-width:0;flex:1 1 0;overflow-wrap:anywhere}
@@ -1247,8 +1374,8 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .brand .sub:last-child{font-size:10px!important}
 }
 @media(max-width:600px){
- .home-dashboard .uprow{grid-template-columns:minmax(0,1fr);gap:0}
- .home-dashboard .upitem{display:flex;width:100%;align-items:flex-start;gap:10px;padding:10px 4px}
+ .home-dashboard .uprow{grid-template-columns:minmax(0,1fr);gap:8px}
+ .home-dashboard .upitem{display:flex;width:100%;align-items:flex-start;gap:10px;padding:10px}
  .home-dashboard .updays{flex:none;white-space:nowrap}
  .home-dashboard .upmain .uplabel{flex:1;min-width:0;overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:anywhere}
  .home-dashboard .menu-grid{gap:6px 8px;border-top:0}
@@ -1270,14 +1397,18 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard>.sectiontitle:not(.dashboard-greeting),
  .home-dashboard .dashboard-overall-heading,
  .home-dashboard .planblock[data-plan-block="allday"]>summary{
-  padding:0;margin:0 0 12px;border:0;border-radius:0;background:transparent;color:var(--ink)
+  padding:0;border:0;border-radius:0;background:transparent;color:var(--ink)
  }
+ .home-dashboard>.sectiontitle:not(.dashboard-greeting){margin:32px 0 12px}
+ .home-dashboard .dashboard-overall-heading,.home-dashboard .planblock[data-plan-block="allday"]>summary{margin:0 0 12px}
  .home-dashboard .dashboard-greeting{display:flex;flex-direction:column;align-items:flex-start;gap:3px;margin:24px 0 18px;padding:0 12px}
  .home-dashboard .dashboard-greeting h2{margin:0;font-size:22px!important;line-height:1.25}
- .home-dashboard .dashboard-greeting .hint{margin:0;color:var(--ink-soft);font-size:12px;line-height:1.4;text-align:left}
- .home-dashboard .overall-card{padding:0 12px}
+ .home-dashboard .dashboard-greeting .hint{order:-1;margin:0;color:var(--ink-soft);font-size:12px;line-height:1.4;text-align:left}
+ .home-dashboard .overall-card{margin:0 0 14px;padding:14px 16px;border:1px solid var(--line);border-radius:16px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)}
  .home-dashboard .dashboard-overall-heading{align-items:center!important;gap:12px;margin:0 0 10px}
  .home-dashboard .dashboard-overall-heading h3{margin:0;font-size:19px!important;line-height:1.3}
+ .home-dashboard .bar-ov{margin-bottom:8px}
+ .home-dashboard .overall-card>.meta{position:relative;z-index:3;margin-top:0!important}
  .home-dashboard>.sectiontitle h2,
  .home-dashboard .dashboard-overall-heading h3,
  .home-dashboard .planblock[data-plan-block="allday"]>summary .plan-block-name{
@@ -1287,29 +1418,28 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard>.sectiontitle.dashboard-greeting h2{margin:0;font-size:22px!important;line-height:1.25}
  .home-dashboard .dashboard-greeting .hint{margin:0;color:var(--ink-soft);font-size:12px;line-height:1.4;text-align:left}
  .home-dashboard .dashboard-greeting{padding:0 12px;border-radius:0;background:transparent;color:var(--ink)}
- .home-dashboard .overall-card{padding:0 12px}
+ .home-dashboard .overall-card{margin:0 0 14px;padding:14px 16px;border:1px solid var(--line);border-radius:16px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)}
  .home-dashboard .dashboard-overall-heading{align-items:center!important;gap:12px;margin:0 0 10px}
  .home-dashboard .dashboard-overall-heading h3{margin:0;font-size:19px!important;line-height:1.3}
  .home-dashboard .current-plan-heading{padding:0}
  .home-dashboard .day-jumps .btn.active{background:var(--forest);color:#fff}
- .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer){
-  display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;column-gap:12px;row-gap:9px;margin:0 0 12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)
+ .home-dashboard .planitem:has(.plan-item-top-meta){
+ display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto;align-items:stretch;gap:12px;min-height:0;margin:0 0 12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)
  }
- .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer)>.pi-main{display:contents}
- .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .tend-row-content,
- .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .tend-row-heading{display:contents}
- .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .tend-type-title{grid-column:1;grid-row:1;align-self:center;order:1;font-size:17px}
- .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer)>.btn{grid-column:2;grid-row:1;order:2;width:auto;min-width:70px;min-height:44px;padding:9px 16px;border-radius:10px;font-size:16px!important;font-weight:650}
- .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .plan-pills{grid-column:1/-1;order:4;display:flex;align-items:center;gap:7px;min-width:0}
- .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .tend-type-description{grid-column:1/-1;order:3;margin:0;font-size:14px;line-height:1.5}
- .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .tend-type-meta{grid-column:1/-1;order:5;margin:0;padding:0;border:0;font-size:12px}
- .home-dashboard .plan-pills>.plan-kind-rhythm,
- .home-dashboard .plan-pills>.plan-kind-spark,
- .home-dashboard .plan-pills>.plan-kind-prayer{display:inline-flex;align-items:center;justify-content:center;flex:none;width:30px;height:30px;min-width:30px;margin:0;padding:0;border:1px solid currentColor;border-radius:50%;font-size:0;letter-spacing:0}
- .home-dashboard .plan-pills>.pill .collection-icon{width:16px;height:16px}
- .home-dashboard .rhythm-area-badges{display:inline-flex;align-items:center;gap:7px}
- .home-dashboard .rhythm-area-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;width:30px;height:30px;padding:5px;border:1px solid var(--line);border-radius:50%;background:var(--mist);color:var(--forest-deep)}
- .home-dashboard .rhythm-area-badge svg{width:18px;height:18px}
+ .home-dashboard .planitem:has(.plan-item-top-meta)>.pi-main{grid-column:1;grid-row:1;display:block;min-width:0;min-height:0}
+ .home-dashboard .planitem:has(.plan-item-top-meta) .plan-item-copy{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;row-gap:12px;min-height:0}
+ .home-dashboard .planitem:has(.plan-item-top-meta) .tend-type-title{display:block;min-width:0;margin:0;font-size:17px}
+ .home-dashboard .planitem:has(.plan-item-top-meta) .tend-type-description,.home-dashboard .plan-item-no-description{display:block;margin:0;padding:0;font-size:14px;line-height:1.5}
+ .home-dashboard .planitem:has(.plan-item-top-meta) .plan-item-top-meta{grid-row:2}
+ .home-dashboard .planitem:has(.plan-item-top-meta) .plan-item-footer{grid-row:3}
+ .home-dashboard .plan-item-action>.btn{min-height:42px;padding:7px 14px;font-size:13px!important}
+ .home-dashboard .plan-item-meta-details{gap:8px 16px}
+ .home-dashboard .plan-detail-icon{width:15px;height:15px}
+ .home-dashboard .plan-item-meta-details .plan-detail-icon-frequency{width:13px;height:13px}
+ .home-dashboard .rhythm-area-badges{display:inline-flex;align-items:center;gap:6px}
+ .home-dashboard .plan-item-category-row>.rhythm-area-badges{gap:4px}
+ .home-dashboard .rhythm-area-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;padding:4px;border:1px solid var(--line);border-radius:50%;background:var(--mist);color:var(--forest-deep)}
+ .home-dashboard .rhythm-area-badge svg{width:14px;height:14px}
 }
 @media(max-width:600px){
  .home-dashboard>.sectiontitle h2,
@@ -1320,21 +1450,28 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  html[data-mobile-text-size="large"] .home-dashboard .planblock[data-plan-block="allday"]>summary .plan-block-name{font-size:24px!important}
  html[data-mobile-text-size="large"] .home-dashboard .dashboard-greeting{margin:24px 0 18px;padding:0 12px}
  html[data-mobile-text-size="large"]  .home-dashboard>.sectiontitle.dashboard-greeting h2{font-size:27px!important}
- html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer){column-gap:14px;row-gap:12px;padding:16px}
- html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .tend-type-title{font-size:23px}
- html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer)>.btn.mini{min-height:60px;padding:12px 18px;font-size:20px!important}
- html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .tend-type-description{font-size:19px}
- html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .tend-type-meta{font-size:14px}
- html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-rhythm,
- html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-spark,
- html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-prayer{width:38px;height:38px;min-width:38px}
- html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-rhythm .collection-icon,
- html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-spark .collection-icon,
- html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-prayer .collection-icon{width:22px;height:22px}
+ html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-top-meta){padding:16px}
+ html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-top-meta) .tend-type-title{font-size:23px}
+ html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-top-meta) .tend-type-description,html[data-mobile-text-size="large"] .home-dashboard .plan-item-no-description{font-size:19px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta{font-size:15px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-detail-icon{width:17px;height:17px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-details>.plan-kind-badge{width:30px;height:30px;min-width:30px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-details>.plan-kind-badge .collection-icon{width:18px;height:18px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-footer>.plan-item-meta{padding-top:6px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-people .prayer-person{gap:4px;padding:3px 7px 3px 3px;font-size:11px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-people .avatar{width:26px!important;height:26px!important}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-details{font-size:14px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-details .plan-detail-icon{width:17px;height:17px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-details .plan-detail-icon-frequency{width:15px;height:15px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-details>.plan-kind-badge{width:30px;height:30px;min-width:30px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-details>.plan-kind-badge .collection-icon{width:18px;height:18px}
  html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badges{gap:8px}
- html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badge{width:38px;height:38px;padding:7px}
- html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badge svg{width:22px;height:22px}
- html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.prayer-person{font-size:14px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-category-row>.rhythm-area-badges{gap:4px}
+ html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badge{width:30px;height:30px;padding:5px}
+ html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badge svg{width:18px;height:18px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-category-row .rhythm-area-badge{width:24px;height:24px;padding:4px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-category-row .rhythm-area-badge svg{width:14px;height:14px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-action>.btn{min-height:44px;padding:8px 14px;font-size:14px!important}
 }
 @media(max-width:720px){
  .sticky-nav{position:fixed;top:auto;right:0;bottom:0;left:0;z-index:80;width:100%;margin:0;padding:7px 14px calc(7px + env(safe-area-inset-bottom));border:0;border-top:1px solid var(--line);background:var(--card);box-shadow:0 -4px 20px rgba(32,39,35,.12)}
@@ -1369,4 +1506,46 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 }
 @media(min-width:721px){
  .mobile-head-actions{display:none}
+}
+@media(max-width:600px){
+ .home-dashboard .calendar-card{margin:0 0 14px;padding:10px 12px;border:1px solid var(--line);border-radius:16px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)}
+ .home-dashboard .calitem{gap:8px;padding:9px 4px;border-bottom:1px solid var(--line);border-radius:0;background:transparent}
+ .home-dashboard #calStrip .calitem:last-child{border-bottom:0}
+ .home-dashboard .calendar-sync-slot{display:block;margin:-6px 0 32px;padding:0}
+ .home-dashboard .calendar-sync-slot .calsync{margin:0 0 0 auto;font-size:12px}
+ html[data-mobile-text-size="large"] .home-dashboard .calendar-sync-slot .calsync{font-size:14px}
+}
+@media(max-width:600px){
+ .home-dashboard>.sectiontitle:not(.dashboard-greeting) h2,
+ .home-dashboard .current-plan-now,.home-dashboard .current-plan-time-picker{font-size:24px!important}
+ html[data-mobile-text-size="large"] .home-dashboard>.sectiontitle:not(.dashboard-greeting) h2,
+ html[data-mobile-text-size="large"] .home-dashboard .current-plan-now,
+ html[data-mobile-text-size="large"] .home-dashboard .current-plan-time-picker{font-size:30px!important}
+}
+.home-dashboard .plan-people-overflow,.home-dashboard .plan-category-overflow{position:relative;flex:none}
+.home-dashboard .plan-people-overflow>summary,.home-dashboard .plan-category-overflow>summary{display:inline-flex;align-items:center;justify-content:center;min-height:24px;padding:2px 8px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink-soft);font-size:11px;font-weight:650;line-height:1.2;white-space:nowrap;cursor:pointer;list-style:none}
+.home-dashboard .plan-people-overflow>summary::-webkit-details-marker,.home-dashboard .plan-category-overflow>summary::-webkit-details-marker{display:none}
+.home-dashboard .plan-people-menu,.home-dashboard .plan-category-menu{position:absolute;z-index:20;top:calc(100% + 6px);left:0;display:grid;gap:6px;min-width:max-content;max-width:min(280px,80vw);max-height:240px;overflow:auto;padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--card);box-shadow:0 8px 24px rgba(32,39,35,.16)}
+.home-dashboard .plan-people-menu .prayer-person{width:100%;justify-content:flex-start}
+.home-dashboard .plan-category-menu{right:0;left:auto;grid-template-columns:repeat(auto-fit,24px);min-width:72px}
+.home-dashboard .plan-category-menu .rhythm-area-badge{width:24px;height:24px}
+@media(max-width:600px){
+ .home-dashboard .current-plan-summary{padding-right:13px;padding-left:0}
+ .home-dashboard>.sectiontitle:not(.dashboard-greeting){padding-right:12px;padding-left:12px}
+ .home-dashboard .planitem:has(.plan-item-top-meta){
+  display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto;align-items:stretch;gap:12px;min-height:0;margin:0 0 12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)
+ }
+ .home-dashboard .planitem:has(.plan-item-top-meta)>.pi-main{grid-column:1;grid-row:1;display:block;min-width:0;min-height:0}
+ .home-dashboard .planitem:has(.plan-item-top-meta) .plan-item-copy{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;row-gap:12px;height:auto}
+ .home-dashboard .plan-item-heading{display:flex;grid-row:1}
+ .home-dashboard .plan-item-heading .tend-type-title{font-size:17px}
+ .home-dashboard .plan-item-description{min-height:0}
+ .home-dashboard .plan-item-top-meta{grid-row:2}
+ .home-dashboard .plan-item-footer{grid-row:3}
+ .home-dashboard .plan-item-footer>.plan-item-meta{gap:4px;min-height:0;padding-top:6px;font-size:12px}
+ .home-dashboard .plan-item-action>.btn{width:auto;min-width:76px;min-height:42px;padding:7px 14px;border-radius:9px;font-size:13px!important}
+ html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-top-meta){padding:16px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-heading .tend-type-title{font-size:23px}
+ html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-top-meta) .tend-type-description,html[data-mobile-text-size="large"] .home-dashboard .plan-item-no-description{font-size:19px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-action>.btn{min-height:44px;padding:8px 14px;font-size:14px!important}
 }

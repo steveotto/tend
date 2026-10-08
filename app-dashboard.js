@@ -183,7 +183,7 @@ function renderCalStrip(evs,errs){
    var badge="";
    if(cls.indexOf("now")>=0)badge='<span class="now-badge">Now</span>';
    else if(cls.indexOf("next")>=0){var until=Math.max(1,Math.round((e.s-now)/60000)),hours=Math.floor(until/60),minutes=until%60;badge='<span class="next-badge">in '+(hours?hours+' hr'+(hours===1?'':'s')+(minutes?' '+minutes+' min':''):minutes+' min')+'</span>';}
-   return '<div class="calitem '+cls+'"><span class="cal-bar" style="background:'+(e.color||"#4C9AFF")+'"></span><div class="cal-main"><div class="cal-title">'+esc(e.t||"(untitled)")+'</div><div class="cal-range">'+rangeTxt(e,t0,t1)+'</div></div>'+badge+'<span class="cal-calname">'+esc(e.cal||"")+'</span></div>';
+   return '<div class="calitem '+cls+'"><span class="cal-bar" style="background:'+(e.color||"#4C9AFF")+'"></span><div class="cal-main"><div class="cal-title">'+esc(e.t||"(untitled)")+'</div><div class="cal-range">'+rangeTxt(e,t0,t1)+'</div></div><div class="cal-side">'+badge+'<span class="cal-calname">'+esc(e.cal||"")+'</span></div></div>';
   }
   allDay.forEach(function(e){out+=item(e,"");});
   timed.forEach(function(e){
@@ -193,7 +193,7 @@ function renderCalStrip(evs,errs){
  }
  strip.innerHTML=out;
  var syncSlot=el("calendarSyncSlot");
- if(syncSlot){if(window._calSync){var syncDate=new Date(window._calSync),syncToday=syncDate.toDateString()===new Date(now).toDateString(),syncWhen=syncToday?"today":syncDate.toLocaleDateString(undefined,{month:"short",day:"numeric"});syncSlot.innerHTML='<button type="button" class="calsync" data-calrefresh title="Refresh calendar events now">Synced '+syncWhen+' at '+fmtT(syncDate.getTime())+'</button>';}else syncSlot.innerHTML="";}
+ if(syncSlot){if(window._calSync){var syncDate=new Date(window._calSync),syncToday=syncDate.toDateString()===new Date(now).toDateString(),syncLabel=syncToday?"Calendar synced at "+fmtT(syncDate.getTime()):"Calendar synced "+syncDate.toLocaleDateString(undefined,{weekday:"long"})+" at "+fmtT(syncDate.getTime());syncSlot.innerHTML='<button type="button" class="calsync" data-calrefresh title="Refresh calendar events now">'+syncLabel+'</button>';}else syncSlot.innerHTML="";}
 }
 window.TEND_LOAD_CALENDAR=loadCalendars;
 setTimeout(function(){if(el("calStrip")&&typeof loadCalendars==="function")loadCalendars();},600);

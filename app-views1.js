@@ -45,7 +45,7 @@ function sizeProfileTabPanels(root){
   panel.style.marginBottom=spare+"px";
  });
 }
-window.addEventListener("resize",function(){if(tab==="people"&&currentPerson)sizeProfileTabPanels(el("view"));});
+window.addEventListener("resize",function(){if(tab==="people"&&currentPerson)sizeProfileTabPanels(el("view"));if(typeof layoutPlanPeopleBadges==="function")requestAnimationFrame(function(){layoutPlanPeopleBadges(el("view"));});});
 var tendRenderScrollSnapshot=null;
 function tendRestorePageScroll(position){requestAnimationFrame(function(){window.scrollTo(position.x,position.y);});}
 function tendShowModal(dialog){if(!dialog||dialog.open)return;var snapshot=tendRenderScrollSnapshot,position=snapshot?snapshot.position:{x:window.scrollX,y:window.scrollY};if(!snapshot||snapshot.preserve)dialog.addEventListener("close",function(){tendRestorePageScroll(position);},{once:true});dialog.showModal();if(!snapshot||snapshot.preserve)tendRestorePageScroll(position);}
@@ -61,6 +61,7 @@ function render(){var routeKey=tendRenderRouteKey(),preserve=routeKey===tendLast
  else if(tab==="offload")v.innerHTML=renderOffload();
  else if(tab==="settings")v.innerHTML=renderSettings();
  sizeProfileTabPanels(v);
+ if(typeof layoutPlanPeopleBadges==="function")layoutPlanPeopleBadges(v);
  if(typeof bind==="function")bind();
  var activePanel=currentPerson&&v.querySelector('.profile-tab-panel:not([hidden])'),editorDialog=activePanel&&activePanel.querySelector('dialog[data-profile-editor],dialog[data-editor-modal]');if(!editorDialog)editorDialog=v.querySelector('dialog[data-editor-modal]');if(editorDialog){if(!editorDialog.open)tendShowModal(editorDialog);editorDialog.addEventListener("cancel",function(event){var cancel=editorDialog.querySelector("[data-editor-cancel]");if(cancel){event.preventDefault();cancel.click();}});}
  var rhythmPickerDialog=v.querySelector("dialog[data-rhythm-picker-dialog]");if(rhythmPickerDialog&&!rhythmPickerDialog.open){tendShowModal(rhythmPickerDialog);var rhythmPickerTitle=rhythmPickerDialog.querySelector("#rhythm-picker-title");if(rhythmPickerTitle)rhythmPickerTitle.focus({preventScroll:true});}
@@ -78,8 +79,8 @@ function renderToday(){
  var greet=h<12?"Good morning":(h<18?"Good afternoon":"Good evening");
  var ov=overallScore(),oc=scoreClass(ov);
  var out='<main class="home-dashboard"><div class="sectiontitle dashboard-greeting" style="margin-top:6px"><h2>'+greet+', Steve</h2><span class="hint">'+days[d.getDay()]+", "+mos[d.getMonth()]+" "+d.getDate()+'</span></div>';
- out+='<div class="card overall-card"><div class="dashboard-overall-heading" style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:18px;font-weight:500">Overall health</h3><span class="ov-score '+oc+'">'+ov+'</span></div><div class="bar-ov"><i class="ov-marker" style="left:'+ov+'%"></i></div>'+'<div class="meta" style="margin-top:6px"><span class="statusword '+oc+'">'+scoreLabel(ov)+'</span> · averaged across 6 areas</div>'+areaMenuHTML()+'</div>';
- out+='<div class="sectiontitle calendar-sectiontitle"><h2>Calendar Events</h2><span id="calendarSyncSlot" class="calendar-sync-slot"></span></div><div class="card calendar-card"><div id="calStrip"><div class="empty">'+((S.calendars||[]).length?"Loading calendars...":"No calendars connected - add one in Settings.")+'</div></div></div>';
+ out+='<div class="card overall-card"><div class="dashboard-overall-heading" style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:18px;font-weight:500">Overall health</h3><span class="ov-score '+oc+'">'+ov+'</span></div><div class="bar-ov"><i class="ov-marker" style="left:'+ov+'%"></i></div>'+'<div class="meta" style="margin-top:6px"><span class="statusword '+oc+'">'+scoreLabel(ov)+'</span></div>'+areaMenuHTML()+'</div>';
+ out+='<div class="sectiontitle calendar-sectiontitle"><h2>On your calendar</h2></div><div class="card calendar-card"><div id="calStrip"><div class="empty">'+((S.calendars||[]).length?"Loading calendars...":"No calendars connected - add one in Settings.")+'</div></div></div><div id="calendarSyncSlot" class="calendar-sync-slot"></div>';
  out+=planHTML();
  out+=freeMomentHTML();
  out+=upcomingHTML();
@@ -114,14 +115,82 @@ function rhythmScheduledToday(r,date){
  if(r.freq==="custom")return date.getDay()===(r.customDow||0)&&(r.customType!=="monthly"||Math.ceil(date.getDate()/7)===(r.customOrd||1));
  return scheduleDayMatches(r,date)&&(r.freq==="daily"||rhythmDaysSince(r)>=rhythmPeriod(r));
 }
-function planPills(it){
- var person=S.people.find(function(p){return p.id===it.personId;}),kind=planItemKind(it),typeBadge=kind?'<span class="pill '+(kind==="rhythm"?"rhy":kind==="spark"?"spk":"pry")+'">'+collectionIcon(kind==="rhythm"?"rhythms":kind==="spark"?"sparks":"prayer")+' '+(kind==="rhythm"?"Rhythm":kind==="spark"?"Spark":"Prayer")+'</span>':"";
+function planItemPeople(it){
+ var ids=Array.isArray(it.personIds)?it.personIds.slice():[],kind=planItemKind(it),record=null,ownerId="";
+ if(it.personId)ids.push(it.personId);
+ if(it.rhythm){var rhythmIds=String(it.rhythm).split("|");ownerId=rhythmIds[0];var owner=S.people.find(function(p){return p.id===ownerId;});record=owner&&(owner.rhythms||[]).find(function(r){return r.id===rhythmIds[1];});}
+ else if(it.faithRhythm)record=typeof faithFindRhythm==="function"?faithFindRhythm(it.faithRhythm):null;
+ else if(it.prayer)record=(S.prayers||[]).find(function(p){return p.id===it.prayer;});
+ else if(it.spark){var sparkIds=String(it.spark).split("|");ownerId=sparkIds[0];var sparkOwner=S.people.find(function(p){return p.id===ownerId;});record=sparkOwner&&(sparkOwner.sparks||[]).find(function(s){return s.id===sparkIds[1];});}
+ if(ownerId)ids.push(ownerId);
+ if(record&&Array.isArray(record.personIds))ids=ids.concat(record.personIds);
+ if(record&&Array.isArray(record.sharedWith))ids=ids.concat(record.sharedWith);
+ ids=ids.filter(function(id,index){return id&&ids.indexOf(id)===index&&S.people.some(function(person){return person.id===id;});});
+ return ids.map(function(id){var person=S.people.find(function(p){return p.id===id;});if(!person)return "";var rhythmLink=(kind==="rhythm"||!!it.faithRhythm)&&person.id!==ownerId,firstName=String(person.name||"").trim().split(/\s+/)[0];return '<button type="button" class="prayer-person person-badge-clickable'+(rhythmLink?' person-rhythm-link':'')+'" '+(rhythmLink?'data-personrhythms="'+esc(person.id)+'" aria-label="Open '+esc(person.name)+' rhythms"':'data-openperson="'+esc(person.id)+'" aria-label="Open '+esc(person.name)+' profile"')+'>'+personAvatar(person,24)+esc(firstName||person.name)+'</button>';}).join("");
+}
+function planItemKindBadge(it){
+ var kind=planItemKind(it);
+ return kind?'<span class="pill plan-kind-badge '+(kind==="rhythm"?"rhy":kind==="spark"?"spk":"pry")+'" aria-label="'+(kind==="rhythm"?"Rhythm":kind==="spark"?"Spark":"Prayer")+'" title="'+(kind==="rhythm"?"Rhythm":kind==="spark"?"Spark":"Prayer")+'">'+collectionIcon(kind==="rhythm"?"rhythms":kind==="spark"?"sparks":"prayer")+'</span>':"";
+}
+function planCategoryBadges(it){
  var record=null;
  if(it.rhythm){var ids=String(it.rhythm).split("|"),owner=S.people.find(function(p){return p.id===ids[0];});record=owner&&(owner.rhythms||[]).find(function(r){return r.id===ids[1];});}
  else if(it.faithRhythm)record=typeof faithFindRhythm==="function"?faithFindRhythm(it.faithRhythm):null;
  else if(it.prayer){var prayerRecord=(S.prayers||[]).find(function(p){return p.id===it.prayer;});if(prayerRecord&&prayerRecord.category==="Faith")record={areas:["faith"],faithGroup:prayerRecord.faithSection||prayerRecord.faithGroup};}
  var categories=record&&typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(record):"";
- return (person&&person.id!==currentPerson?'<button type="button" class="prayer-person person-badge-clickable'+((it.rhythm||it.rkey)?' person-rhythm-link':'')+'" '+((it.rhythm||it.rkey)?'data-personrhythms="'+esc(person.id)+'" aria-label="Open '+esc(person.name)+' rhythms"':'data-openperson="'+esc(person.id)+'" aria-label="Open '+esc(person.name)+' profile"')+'>'+personAvatar(person,24)+esc(person.name)+'</button>':'')+typeBadge+categories;
+ return categories;
+}
+function layoutPlanPeopleBadges(root){
+ (root||document).querySelectorAll(".plan-item-top-meta").forEach(function(row){
+  var people=row.querySelector("[data-plan-people]"),categories=row.querySelector("[data-plan-categories]"),gap=parseFloat(getComputedStyle(row).columnGap)||0,lists=[];
+  [[people,".plan-people-visible",".plan-people-overflow",".plan-people-menu",".prayer-person",2,"people"],[categories,".plan-category-visible",".plan-category-overflow",".plan-category-menu",".rhythm-area-badge",3,"categories"]].forEach(function(config){
+   var container=config[0];if(!container)return;
+   var visible=container.querySelector(config[1]),overflow=container.querySelector(config[2]),menu=container.querySelector(config[3]),summary=overflow&&overflow.querySelector("summary");
+   if(!visible||!overflow||!menu||!summary)return;
+   var badges=Array.prototype.slice.call(visible.querySelectorAll(config[4])).concat(Array.prototype.slice.call(menu.querySelectorAll(config[4])));
+   badges.forEach(function(badge){visible.appendChild(badge);});
+   var wasOpen=overflow.open;
+   overflow.hidden=false;
+   var badgeGap=parseFloat(getComputedStyle(visible).columnGap)||0,widths=badges.map(function(badge){return badge.getBoundingClientRect().width;}),limit=config[6]==="people"?2:config[6]==="categories"&&badges.length>3?3:config[5],shown=Math.min(badges.length,limit);
+   lists.push({visible:visible,overflow:overflow,menu:menu,summary:summary,badges:badges,wasOpen:wasOpen,gap:badgeGap,widths:widths,shown:shown,type:config[6]});
+  });
+  var available=Math.max(0,row.clientWidth-gap*Math.max(0,lists.length-1));
+  function usedWidth(list,count){
+   var total=list.widths.slice(0,count).reduce(function(sum,width){return sum+width;},0);
+   return total+Math.max(0,count-1)*list.gap+(count<list.badges.length?list.summary.getBoundingClientRect().width+(count?list.gap:0):0);
+  }
+  function setSummary(list){list.summary.textContent="+"+(list.badges.length-list.shown)+" more";list.summary.setAttribute("aria-label","Show "+(list.badges.length-list.shown)+" more "+list.type);}
+  lists.forEach(function(list){if(list.shown<list.badges.length)setSummary(list);});
+  while(lists.reduce(function(sum,list){return sum+usedWidth(list,list.shown);},0)>available){
+   var reducible=lists.filter(function(list){return list.shown>0;}).sort(function(a,b){return a.type==="categories"?-1:1;})[0];
+   if(!reducible)break;
+   reducible.shown--;
+   setSummary(reducible);
+  }
+  lists.forEach(function(list){
+   list.overflow.hidden=list.shown>=list.badges.length;
+   list.badges.slice(list.shown).forEach(function(badge){list.menu.appendChild(badge);});
+   list.overflow.open=list.wasOpen&&!list.overflow.hidden;
+  });
+ });
+}
+function planItemCopy(it,action){
+ var description=String(it.description||"").trim();
+ return '<div class="plan-item-copy"><div class="plan-item-heading"><strong class="tend-type-title">'+esc(it.label||"")+'</strong>'+(action?'<div class="plan-item-action">'+action+'</div>':"")+'</div><div class="plan-item-description">'+(description?'<div class="tend-type-description">'+esc(description)+'</div>':'<div class="plan-item-no-description">No details...</div>')+'</div></div>';
+}
+function planItemPeopleRow(it){
+ var people=planItemPeople(it);
+ return people?'<div class="plan-item-meta-people plan-people" data-plan-people><span class="plan-people-visible">'+people+'</span><details class="plan-people-overflow" hidden><summary></summary><span class="plan-people-menu"></span></details></div>':"";
+}
+function planItemTopRow(it){
+ var categories=planCategoryBadges(it),categoryRow=categories?'<div class="plan-item-category-row" data-plan-categories><span class="rhythm-area-badges plan-category-visible">'+categories.replace(/^<span class="rhythm-area-badges"[^>]*>|<\/span>$/g,"")+'</span><details class="plan-category-overflow" hidden><summary></summary><span class="plan-category-menu"></span></details></div>':"";
+ return '<div class="plan-item-top-meta">'+planItemPeopleRow(it)+categoryRow+'</div>';
+}
+function planItemFooter(it,meta,sub){
+ var kindBadge=planItemKindBadge(it),fallbackSub=!meta&&sub&&!kindBadge?'<div class="tend-type-meta">'+esc(sub)+'</div>':"",details=meta?meta.replace('<div class="plan-item-meta">',"").replace(/<\/div>$/,""):"";
+ if(kindBadge)details=kindBadge+(details||(sub?'<span class="plan-item-meta-entry">'+esc(sub)+'</span>':""));
+ var detailRows=details?'<div class="plan-item-meta"><div class="plan-item-meta-details">'+details+'</div></div>':"";
+ return '<div class="plan-item-footer">'+(fallbackSub?'<div class="plan-item-footer-badges"><span class="plan-pills"></span>'+fallbackSub+'</div>':"")+detailRows+'</div>';
 }
 function genItem(label,sub,area,type,title){return {label:label,sub:sub,log:{area:area,type:type,title:title||label}};}
 function taskItem(t){return {label:t.text,sub:"task · "+(S.areas[t.areaId]?S.areas[t.areaId].name:""),log:{area:t.areaId,type:"note",title:"Task: "+t.text},taskId:t.id};}
@@ -145,18 +214,18 @@ function planCandidates(bid,curBid){
  var out=[],seenSparks=Object.create(null);
  S.tasks.forEach(function(t){if(!t.done&&((t.tod&&t.tod!=="anytime")?t.tod===bid:bid===curBid))out.push(taskItem(t));});
  S.people.forEach(function(person){
-  (person.rhythms||[]).forEach(function(r){var blk=(r.tod&&r.tod!=="anytime")?r.tod:curBid;if(blk!==bid||!dashboardRhythmEligible(r))return;out.push({scheduled:!!r.tod&&r.tod!=="anytime",calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),rhythm:person.id+"|"+r.id,personId:person.id,label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,true)});});
+  (person.rhythms||[]).forEach(function(r){var blk=(r.tod&&r.tod!=="anytime")?r.tod:curBid;if(blk!==bid||!dashboardRhythmEligible(r))return;out.push({scheduled:!!r.tod&&r.tod!=="anytime",calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),rhythm:person.id+"|"+r.id,personId:person.id,label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,false)});});
   sortedPersonSparks(person).forEach(function(spark){if(!spark.by||!sparkLive(spark))return;if((sparkBlock(spark)||curBid)!==bid)return;var key=(spark.profileOwnerId||person.id)+"|"+spark.id;if(seenSparks[key])return;seenSparks[key]=true;out.push({spark:key,personId:person.id,label:spark.text,description:spark.details||"",sub:(spark.time?fmtHM12(spark.time)+" \u00b7 ":"")+sparkDueTxt(spark)});});
  });
  if(typeof faithActiveRhythms==="function"&&typeof rhythmScheduledToday==="function"){
-  faithActiveRhythms().forEach(function(r){if(r.tod!==bid||!rhythmScheduledToday(r))return;out.push({scheduled:true,calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),faithRhythm:r.id,faithGroup:r.faithGroup,area:"faith",label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,true)});});
+  faithActiveRhythms().forEach(function(r){if(r.tod!==bid||!rhythmScheduledToday(r))return;out.push({scheduled:true,calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),faithRhythm:r.id,faithGroup:r.faithGroup,area:"faith",label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,false)});});
  }
  if(typeof prayerIsDue==="function"){
   (S.prayers||[]).forEach(function(p){var block=p.tod&&p.tod!=="anytime"?p.tod:"allday";if(!prayerIsDue(p)||block!==bid)return;var prayerPeople=(p.personId?[p.personId]:[]).concat(Array.isArray(p.sharedWith)?p.sharedWith:[]);if(!prayerPeople.length)prayerPeople=[null];prayerPeople.filter(function(id,index){return prayerPeople.indexOf(id)===index;}).forEach(function(personId){out.push({scheduled:!!p.tod&&p.tod!=="anytime",calendarDay:!p.tod||p.tod==="anytime",prayer:p.id,personId:personId,label:p.text,description:p.details||"",sub:prayerScheduleLabel(p)+" \u00b7 last prayed "+prayerLastPrayedLabel(p)});});});
  }
  return out;
 }
-var planOpenState={};var planViewState="allday";var planKindVisibility={now:{rhythm:true,spark:true,prayer:true},other:{rhythm:true,spark:true,prayer:true}};
+var planFocusState="now";var planKindFilterOpen={now:false,other:false};var planKindVisibility={now:{rhythm:true,spark:true,prayer:true},other:{rhythm:true,spark:true,prayer:true}};
 function planKindVisibilityFor(scope){
  if(!planKindVisibility[scope])planKindVisibility[scope]={rhythm:true,spark:true,prayer:true};
  return planKindVisibility[scope];
@@ -166,33 +235,60 @@ function planKindTogglesHTML(scope,label){
  var visibility=planKindVisibilityFor(scope);
  return '<span class="plan-kind-toggles" role="group" aria-label="'+esc(label||"Show or hide item types")+'">'+[["rhythm","Rhythm","rhythms"],["spark","Spark","sparks"],["prayer","Prayer","prayer"]].map(function(type){var active=visibility[type[0]]!==false,buttonLabel=(active?"Hide ":"Show ")+type[1]+" items";return '<button type="button" class="plan-kind-toggle plan-kind-'+type[0]+(active?"":" is-muted")+'" data-plan-kind-toggle="'+esc(scope)+'" data-kind="'+type[0]+'" aria-label="'+buttonLabel+'" title="'+buttonLabel+'" aria-pressed="'+active+'">'+collectionIcon(type[2])+'</button>';}).join("")+'</span>';
 }
-function planBlockCard(b,curId,isCur,isAllDay){
+function planKindFilterHTML(scope,count,label){
+ label=label|| (scope==="now"?"Now":"All Day");
+ var itemLabel=count===1?"item":"items";
+ return '<details class="current-plan-filter" data-plan-kind-filter="'+esc(scope)+'"'+(planKindFilterOpen[scope]?' open':'')+'><summary class="current-plan-item-count" aria-label="Filter '+label+' item types" title="Filter '+label+' item types"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3h8M5.5 8h8M5.5 13h8M2.5 3h.01M2.5 8h.01M2.5 13h.01"/></svg>'+count+' '+itemLabel+'</summary><div class="current-plan-filter-menu">'+planKindTogglesHTML(scope,label+" item filters")+'</div></details>';
+}
+function planFocusMenuHTML(blocks,currentId,selectedId){
+ var current=blocks.filter(function(item){return item.id===currentId;})[0]||blocks[0];
+ var selected=selectedId==="now"?"Now":selectedId==="allday"?"All Day":(blocks.filter(function(item){return item.id===selectedId;})[0]||current).name;
+ var options=blocks.map(function(item){return {id:item.id,name:item.name,range:item.range,isNow:item.id===currentId};});
+ options.push({id:"allday",name:"All Day",range:"Any time today",isAllDay:true});
+ return '<details class="current-plan-time-menu"><summary class="current-plan-time-picker" aria-label="Choose a time frame, currently '+esc(selected)+'"><span>'+esc(selected)+'</span><span class="current-plan-time-chevron" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4.5L12.5 6"/></svg></span></summary><div class="current-plan-time-options" role="group" aria-label="Time frames">'+options.map(function(item){var isSelected=(selectedId==="now"&&item.isNow)||selectedId===item.id,count=prioritizePlanItems(planCandidates(item.id,currentId).filter(function(candidate){var kind=planItemKind(candidate);return !kind||planKindVisibilityFor("now")[kind]!==false;})).visible.length,itemLabel=count===1?"item":"items";return '<button type="button" class="current-plan-time-option'+(item.isNow?' is-current':'')+(isSelected?' is-selected':'')+'" data-plan-focus="'+(item.isNow?"now":esc(item.id))+'" aria-pressed="'+isSelected+'"><span class="current-plan-time-option-name">'+esc(item.name)+'</span><span class="current-plan-time-option-range">'+esc(item.range)+'</span><span class="current-plan-time-option-count">'+count+' '+itemLabel+'</span></button>';}).join("")+'</div></details>';
+}
+function planMetaIcon(kind){
+ var paths={frequency:'<path d="M20 7a8 8 0 0 0-14-2L3 8m0-5v5h5 M4 17a8 8 0 0 0 14 2l3-3m0 5v-5h-5"/>',time:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',occurred:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18m-13 5 2 2 4-4"/>'};
+ return '<svg class="plan-detail-icon'+(kind==="frequency"?" plan-detail-icon-frequency":"")+'" viewBox="0 0 24 24" aria-hidden="true">'+paths[kind]+'</svg>';
+}
+function planItemMetaBar(meta){
+ var parts=String(meta||"").split(" \u00b7 ").filter(Boolean);
+ if(!parts.length||!parts.some(function(part){return /last tended|last prayed|not yet tended|not yet prayed/i.test(part);}))return "";
+ var isTime=function(part){var normalized=part.toLowerCase();return Object.keys(TODS||{}).some(function(key){return TODS[key]&&TODS[key].toLowerCase()===normalized;});};
+ var isOccurred=function(part){return /last tended|last prayed|not yet tended|not yet prayed|^tended |^prayed /i.test(part);};
+ var time=parts.filter(isTime),occurred=parts.filter(isOccurred),frequency=parts.filter(function(part){return !isTime(part)&&!isOccurred(part)&&!/^(ends |due )/i.test(part);}).slice(0,1),extra=parts.filter(function(part){return !isTime(part)&&!isOccurred(part)&&frequency.indexOf(part)===-1;});
+ function entries(items,kind){return items.map(function(part){
+  var iconKind=kind==="schedule"?(isTime(part)?"time":"frequency"):"occurred";
+  return '<span class="plan-item-meta-entry">'+planMetaIcon(iconKind)+'<span>'+esc(part)+'</span></span>';
+ }).join("");}
+ return '<div class="plan-item-meta">'+entries(frequency.concat(time,extra),"schedule")+entries(occurred,"occurred")+'</div>';
+}
+function planBlockCard(b,curId,isCur,isAllDay,focusBlocks){
  isAllDay=!!isAllDay;
- var toggleScope=isCur?"now":"other",visibility=planKindVisibilityFor(toggleScope);
+ var toggleScope="now",visibility=planKindVisibilityFor(toggleScope);
  var allItems=planCandidates(b.id,curId),items=allItems.filter(function(item){var kind=planItemKind(item);return !kind||visibility[kind]!==false;});
  var queue=prioritizePlanItems(items);
- var range='<span class="plan-range">'+b.range+' \u00b7 '+queue.visible.length+' item'+(queue.visible.length===1?'':'s')+'</span>';
- var summaryMeta='<span class="plan-summary-meta">'+range+planKindTogglesHTML(toggleScope)+'</span>';
  var block=dayBlocks().find(function(item){return item.id===b.id;}),blockStart=block?block.start:"";
+ function header(){
+  var label=isCur?"Now":isAllDay?"All Day":b.name,weather=isCur?nowWeatherHTML():isAllDay?nowWeatherHTML():(typeof planWeatherHTML==="function"?planWeatherHTML(blockStart):""),
+   heading=planFocusMenuHTML(focusBlocks,curId,planFocusState),
+   period=isCur?'<span class="plan-block-name">'+esc(b.name)+'</span><span class="current-plan-range">'+esc(b.range)+'</span>':isAllDay?'<span class="current-plan-range current-plan-all-day-range">Any time today</span>':'<span class="current-plan-range">'+esc(b.range)+'</span>';
+  return '<div class="current-plan-summary"><div class="current-plan-topline">'+heading+'<div class="current-plan-weather"'+(isCur?' id="nowWeather"':'')+'>'+weather+'</div></div><div class="current-plan-details"><div class="current-plan-period">'+period+'</div>'+planKindFilterHTML(toggleScope,queue.visible.length,label)+'</div></div>';
+ }
  function itemHTML(it){
   var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.faithRhythm?'<button type="button" class="btn mini" data-tend-open="faith-rhythm" data-rhythm-id="'+esc(it.faithRhythm)+'">Tend</button>':(it.prayer?'<button type="button" class="btn mini" data-pray="'+esc(it.prayer)+'">Pray</button>':(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>')));
-  return '<div class="planitem"><div class="pi-main">'+tendRowContent(it.label,it.description,it.sub,'<span class="plan-pills">'+planPills(it)+'</span>')+'</div>'+btn+'</div>';
+  var meta=planItemMetaBar(it.sub);
+  return '<div class="planitem"><div class="pi-main">'+planItemCopy(it,btn)+'</div>'+planItemTopRow(it)+planItemFooter(it,meta,it.sub)+'</div>';
  }
- var body=queue.visible.length?queue.visible.map(itemHTML).join(""):'<div class="empty">'+(allItems.length?'Items hidden by the type filters.':'Nothing queued - all tended.')+'</div>';
- if(isCur)return '<div id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock current"><div class="current-plan-summary"><span class="plan-summary-copy"><span class="plan-block-name">'+esc(b.name)+'</span>'+summaryMeta+'</span><div class="current-plan-weather" id="nowWeather">'+(typeof nowWeatherHTML==="function"?nowWeatherHTML():"")+'</div></div><div class="current-plan-items" style="margin-top:8px">'+body+'</div></div>';
- var hasSavedOpen=Object.prototype.hasOwnProperty.call(planOpenState,b.id),isOpen=isAllDay?(hasSavedOpen?planOpenState[b.id]:queue.visible.length>0):true;
- return '<details id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock"'+(isOpen?' open':'')+'><summary><span class="plan-summary-copy"><span class="plan-block-name">'+esc(b.name)+'</span>'+summaryMeta+'</span><span class="plan-weather-slot" data-plan-weather="'+esc(blockStart)+'">'+(typeof planWeatherHTML==="function"?planWeatherHTML(blockStart):"")+'</span></summary><div style="margin-top:8px">'+body+'</div></details>';
+ var body=queue.visible.length?queue.visible.map(itemHTML).join(""):'<div class="empty plan-empty-card">'+(allItems.length?'Items hidden by the type filters.':'Nothing queued - all items tended.')+'</div>';
+ return '<section id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock current'+(isAllDay?' all-day':'')+'">'+header()+'<div class="current-plan-items">'+body+'</div></section>';
 }
 function planHTML(){
  var blocks=planBlocksDef();
  var current=blocks.filter(function(x){return x.cur;})[0]||blocks[0],curId=current.id;
- var out='<div class="sectiontitle current-plan-heading"><h2>Now</h2></div>';
- out+=planBlockCard(current,curId,true);
- out+='<nav class="day-jumps" aria-label="Other time blocks">'+blocks.filter(function(b){return b.id!==curId;}).map(function(b){var active=planViewState===b.id;return '<button type="button" class="btn mini ghost'+(active?' active':'')+'" data-planview="'+b.id+'" aria-pressed="'+active+'">'+esc(b.name)+'</button>';}).join('')+'<button type="button" class="btn mini ghost day-jump-all-day'+(planViewState==="allday"?' active':'')+'" data-planview="allday" aria-pressed="'+(planViewState==="allday")+'">All Day</button></nav>';
- var sel=blocks.filter(function(b){return b.id===planViewState&&b.id!==curId;})[0];
- if(planViewState==="allday")out+=planBlockCard({id:'allday',name:'All Day',range:'Any time today'},curId,false,true);
- else if(sel)out+=planBlockCard(sel,curId,false,false);
- return out;}
+ var selected=planFocusState==="allday"?{id:"allday",name:"All Day",range:"Any time today"}:blocks.filter(function(block){return block.id===planFocusState&&block.id!==curId;})[0],focus=planFocusState==="now"||!selected?current:selected;
+ if(!selected&&planFocusState!=="now")planFocusState="now";
+ return planBlockCard(focus,curId,focus.id===curId,focus.id==="allday",blocks);}
 function upcomingDates(now){
  var today=new Date(now||Date.now());today.setHours(0,0,0,0);var rows=[];
  function add(label,month,day,attrs){
@@ -479,7 +575,7 @@ function tendRhythmFrequencyLabel(r){
  if(freq==="weekly"){
   var days=r.rule&&Array.isArray(r.rule.days)?r.rule.days:Array.isArray(r.weekdays)?r.weekdays:r.scheduleDow!==null&&r.scheduleDow!==undefined&&r.scheduleDow!==""?[+r.scheduleDow]:[];
   days=days.map(Number).filter(function(value,index,all){return value>=0&&value<7&&all.indexOf(value)===index;}).sort(function(a,b){return a-b;});
-  return days.length?label+" on "+days.map(function(value){return DOW[value];}).join(", "):label;
+  return days.length&& !/\bon\b/i.test(label) ? label+" on "+days.map(function(value){return DOW[value];}).join(", "):label;
  }
  if(freq==="monthly"){day=scheduleDayLabel(r);if(day){var match=day.match(/^on the (\d+)$/i);if(match){var date=+match[1],lastTwo=date%100,suffix=lastTwo>=11&&lastTwo<=13?"th":date%10===1?"st":date%10===2?"nd":date%10===3?"rd":"th";day="on the "+date+suffix;}return label+" "+day.replace(/^on\s+/i,"on ");}}
  return label;
@@ -773,14 +869,14 @@ function rippleLine(e){
 function sparkChip(p){var s=sortedPersonSparks(p)[0];if(!s)return "";return '<div class="pf-next" style="color:var(--forest)">\u2726 '+esc(s.text)+' \u00b7 '+esc(sparkDueTxt(s))+'</div>';}
 function freeMomentHTML(){
  var cands=[],seenSparks=Object.create(null);
- S.people.forEach(function(p){(p.rhythms||[]).forEach(function(r){var d=rhythmDaysSince(r);if((r.tod||"anytime")==="anytime"&&rhythmScheduledToday(r))cands.push({pri:10+(d===999?0:d),rhythm:p.id+"|"+r.id,personId:p.id,label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,true)});});});
+ S.people.forEach(function(p){(p.rhythms||[]).forEach(function(r){var d=rhythmDaysSince(r);if((r.tod||"anytime")==="anytime"&&rhythmScheduledToday(r))cands.push({pri:10+(d===999?0:d),rhythm:p.id+"|"+r.id,personId:p.id,label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,false)});});});
  S.people.forEach(function(p){sortedPersonSparks(p).forEach(function(s){if(sparkLive(s)&&!s.by){var key=(s.profileOwnerId||p.id)+"|"+s.id;if(seenSparks[key])return;seenSparks[key]=true;cands.push({pri:15,spark:key+"|"+p.id,personId:p.id,label:s.text,description:s.details||"",sub:"No deadline yet",act:' data-sparkdo="'+key+"|"+p.id+'"',btn:"Do it"});}});});
  var lo=S.people.map(function(p){return {p:p,s:personScore(p)};}).sort(function(a,b){return a.s-b.s;})[0];
  if(lo&&lo.s<80)cands.push({pri:(100-lo.s)/10,label:"Reach out to "+lo.p.name,sub:(lo.p.relation||"")+" \u00b7 meter "+lo.s+" - lowest",act:' data-openperson="'+lo.p.id+'"',btn:"Open"});
  cands.sort(function(a,b){return b.pri-a.pri;});
  if(!cands.length)return "";
- var out='<div class="sectiontitle"><h2>Free moment?</h2><span class="hint">Your best options right now (up to 4)</span></div><div class="card dashboard-free-moment">';
- cands.slice(0,4).forEach(function(c){var bb=c.rhythm?rhyDoneBtn(c.rhythm):'<button class="btn mini'+(c.spark?" sparkbtn":"")+'"'+c.act+'>'+c.btn+'</button>';out+='<div class="planitem"><div class="pi-main">'+tendRowContent(c.label,c.description,c.sub,'<span class="plan-pills">'+planPills(c)+'</span>')+'</div>'+bb+'</div>';});
+ var out='<div class="sectiontitle"><h2>Free moment?</h2><span class="hint">Your best options right now (up to 4)</span></div><div class="dashboard-free-moment">';
+ cands.slice(0,4).forEach(function(c){var bb=c.rhythm?rhyDoneBtn(c.rhythm):'<button class="btn mini'+(c.spark?" sparkbtn":"")+'"'+c.act+'>'+c.btn+'</button>',meta=planItemMetaBar(c.sub);out+='<div class="planitem"><div class="pi-main">'+planItemCopy(c,bb)+'</div>'+planItemTopRow(c)+planItemFooter(c,meta,c.sub)+'</div>';});
  return out+'</div>';}
 /* ============ area subpages ============ */
 function renderArea(id){
