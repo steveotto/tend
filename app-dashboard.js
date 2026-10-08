@@ -193,7 +193,7 @@ function renderCalStrip(evs,errs){
  }
  strip.innerHTML=out;
  var syncSlot=el("calendarSyncSlot");
- if(syncSlot){if(window._calSync){var syncDate=new Date(window._calSync),syncToday=syncDate.toDateString()===new Date(now).toDateString(),syncWhen=syncToday?"today":syncDate.toLocaleDateString(undefined,{month:"short",day:"numeric"});syncSlot.innerHTML='<button type="button" class="calsync" data-calrefresh title="Refresh calendar events now">Synced '+syncWhen+' at '+fmtT(syncDate.getTime())+'</button>';}else syncSlot.innerHTML="";}
+ if(syncSlot){if(window._calSync){var syncDate=new Date(window._calSync),syncToday=syncDate.toDateString()===new Date(now).toDateString(),syncLabel=syncToday?"Calendar synced at "+fmtT(syncDate.getTime()):"Calendar synced "+syncDate.toLocaleDateString(undefined,{weekday:"long"})+" at "+fmtT(syncDate.getTime());syncSlot.innerHTML='<button type="button" class="calsync" data-calrefresh title="Refresh calendar events now">'+syncLabel+'</button>';}else syncSlot.innerHTML="";}
 }
 window.TEND_LOAD_CALENDAR=loadCalendars;
 setTimeout(function(){if(el("calStrip")&&typeof loadCalendars==="function")loadCalendars();},600);

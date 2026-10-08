@@ -78,8 +78,8 @@ function renderToday(){
  var greet=h<12?"Good morning":(h<18?"Good afternoon":"Good evening");
  var ov=overallScore(),oc=scoreClass(ov);
  var out='<main class="home-dashboard"><div class="sectiontitle dashboard-greeting" style="margin-top:6px"><h2>'+greet+', Steve</h2><span class="hint">'+days[d.getDay()]+", "+mos[d.getMonth()]+" "+d.getDate()+'</span></div>';
- out+='<div class="card overall-card"><div class="dashboard-overall-heading" style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:18px;font-weight:500">Overall health</h3><span class="ov-score '+oc+'">'+ov+'</span></div><div class="bar-ov"><i class="ov-marker" style="left:'+ov+'%"></i></div>'+'<div class="meta" style="margin-top:6px"><span class="statusword '+oc+'">'+scoreLabel(ov)+'</span> · averaged across 6 areas</div>'+areaMenuHTML()+'</div>';
- out+='<div class="sectiontitle calendar-sectiontitle"><h2>Calendar Events</h2><span id="calendarSyncSlot" class="calendar-sync-slot"></span></div><div class="card calendar-card"><div id="calStrip"><div class="empty">'+((S.calendars||[]).length?"Loading calendars...":"No calendars connected - add one in Settings.")+'</div></div></div>';
+ out+='<div class="card overall-card"><div class="dashboard-overall-heading" style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:18px;font-weight:500">Overall health</h3><span class="ov-score '+oc+'">'+ov+'</span></div><div class="bar-ov"><i class="ov-marker" style="left:'+ov+'%"></i></div>'+'<div class="meta" style="margin-top:6px"><span class="statusword '+oc+'">'+scoreLabel(ov)+'</span></div>'+areaMenuHTML()+'</div>';
+ out+='<div class="sectiontitle calendar-sectiontitle"><h2>On your calendar</h2></div><div class="card calendar-card"><div id="calStrip"><div class="empty">'+((S.calendars||[]).length?"Loading calendars...":"No calendars connected - add one in Settings.")+'</div></div><div id="calendarSyncSlot" class="calendar-sync-slot"></div></div>';
  out+=planHTML();
  out+=freeMomentHTML();
  out+=upcomingHTML();
