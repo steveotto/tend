@@ -1112,7 +1112,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .plan-item-meta-details>.plan-kind-badge{display:none}
 .home-dashboard .plan-item-action{display:flex;flex:none;justify-content:flex-end;min-width:0}
 .home-dashboard .plan-item-action>.btn{width:auto;min-width:76px;min-height:42px;padding:7px 14px;border-radius:9px;font-size:13px;font-weight:650}
-.home-dashboard .planblock{margin:0 0 10px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.home-dashboard .planblock{margin:0 0 28px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
 .home-dashboard .planblock.current{border:0;box-shadow:none}
 .home-dashboard .current-plan-summary{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;min-height:0;margin:0 0 10px;padding:0;border-radius:0;background:transparent;color:var(--ink)}
 .home-dashboard .current-plan-topline{min-height:24px}
@@ -1131,7 +1131,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .current-plan-time-option-name{flex:none;font-size:13px;font-weight:650}
 .home-dashboard .current-plan-time-option-range,.home-dashboard .current-plan-time-option-count{min-width:0;color:var(--ink-soft);font-size:12px;text-align:left;white-space:nowrap}
 @media(max-width:360px){.home-dashboard .current-plan-time-option{grid-template-columns:88px minmax(0,1fr) 46px;gap:4px;padding-right:7px;padding-left:7px}.home-dashboard .current-plan-time-option-name,.home-dashboard .current-plan-time-option-range,.home-dashboard .current-plan-time-option-count{font-size:10px}}
-.home-dashboard .current-plan-items>.plan-empty-card{box-sizing:border-box;min-height:48px;margin:0;padding:15px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink-soft);font-size:13px;font-style:normal}
+.home-dashboard .current-plan-items>.plan-empty-card{display:flex;box-sizing:border-box;min-height:104px;align-items:center;justify-content:center;margin:0;padding:24px 18px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);font-size:15px;font-style:normal;text-align:center}
 .home-dashboard .current-plan-details{align-items:center}
 .home-dashboard .current-plan-filter{position:relative;flex:none}
 .home-dashboard .current-plan-item-count{display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;min-height:30px;padding:2px 8px;border:0;border-radius:8px;background:#E9ECEA;color:var(--ink-soft);font:inherit;font-size:12px;line-height:1.35;white-space:nowrap;cursor:pointer;list-style:none}
@@ -1185,6 +1185,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .dashboard-greeting h2{font-size:20px}
  .home-dashboard .dashboard-greeting .hint{font-size:11px}
  .home-dashboard .overall-card,.home-dashboard .calendar-card,.home-dashboard .planblock,.home-dashboard .dashboard-free-moment,.home-dashboard .cl-card{margin:0 0 10px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+ .home-dashboard .planblock{margin-bottom:28px}
  .home-dashboard .dashboard-overall-heading{align-items:center!important;margin:0 0 10px;padding:8px 11px;border-radius:9px;background:var(--mist)}
  .home-dashboard .dashboard-overall-heading h3{font-size:16px!important;font-weight:700!important;color:var(--forest-deep)}
  .home-dashboard .ov-score{font-size:32px}
