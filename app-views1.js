@@ -243,7 +243,7 @@ function planKindFilterHTML(scope,count,label){
 function planFocusMenuHTML(blocks,currentId,selectedId){
  var current=blocks.filter(function(item){return item.id===currentId;})[0]||blocks[0];
  var selected=selectedId==="now"?"Now":selectedId==="allday"?"All Day":(blocks.filter(function(item){return item.id===selectedId;})[0]||current).name;
- var options=blocks.map(function(item){return {id:item.id,name:item.name+(item.id===currentId?" (Now)":""),range:item.range,isNow:item.id===currentId};});
+ var options=blocks.map(function(item){return {id:item.id,name:item.name,range:item.range,isNow:item.id===currentId};});
  options.push({id:"allday",name:"All Day",range:"Any time today",isAllDay:true});
  return '<details class="current-plan-time-menu"><summary class="current-plan-time-picker" aria-label="Choose a time frame, currently '+esc(selected)+'"><span>'+esc(selected)+'</span></summary><div class="current-plan-time-options" role="group" aria-label="Time frames">'+options.map(function(item){var isSelected=(selectedId==="now"&&item.isNow)||selectedId===item.id,count=prioritizePlanItems(planCandidates(item.id,currentId).filter(function(candidate){var kind=planItemKind(candidate);return !kind||planKindVisibilityFor("now")[kind]!==false;})).visible.length,itemLabel=count===1?"item":"items";return '<button type="button" class="current-plan-time-option'+(item.isNow?' is-current':'')+(isSelected?' is-selected':'')+'" data-plan-focus="'+(item.isNow?"now":esc(item.id))+'" aria-pressed="'+isSelected+'"><span class="current-plan-time-option-name">'+esc(item.name)+'</span><span class="current-plan-time-option-range">'+esc(item.range)+'</span><span class="current-plan-time-option-count">'+count+' '+itemLabel+'</span></button>';}).join("")+'</div></details>';
 }

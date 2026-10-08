@@ -1126,6 +1126,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .current-plan-time-option{display:grid;grid-template-columns:112px minmax(0,1fr) 56px;align-items:center;gap:6px;min-width:0;padding:10px 11px;border:0;border-radius:8px;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 .home-dashboard .current-plan-time-option:hover,.home-dashboard .current-plan-time-option:focus-visible{outline:0;background:var(--mist)}
 .home-dashboard .current-plan-time-option.is-current{background:#F1F2F1}
+.home-dashboard .current-plan-time-option.is-current .current-plan-time-option-name{color:var(--forest)}
 .home-dashboard .current-plan-time-option.is-selected:not(.is-current){background:color-mix(in srgb,var(--mint) 20%,var(--card))}
 .home-dashboard .current-plan-time-option-name{flex:none;font-size:13px;font-weight:650}
 .home-dashboard .current-plan-time-option-range,.home-dashboard .current-plan-time-option-count{min-width:0;color:var(--ink-soft);font-size:12px;text-align:left;white-space:nowrap}
