@@ -302,10 +302,13 @@ function faithPrayerSessionSort(view){
 function faithPrayerSessionCriteriaHTML(){
  var selected=faithPrayerSession.people;
  if(selected===undefined)selected=faithConfig().prayerPeople;
- var people=selected===null?null:(selected||[]).map(function(id){return id==="me"?"Me":(S.people.find(function(person){return person.id===id;})||{}).name;}).filter(Boolean);
- var labels=people===null?["Everyone"]:people.length?people:["No people selected"];
- labels.push(faithPrayerSession.view==="today"?"Today":"All prayers");
- return '<div class="faith-session-criteria" aria-label="Prayer session criteria">'+labels.map(function(label){return '<span>'+esc(label)+'</span>';}).join("")+'</div>';
+ var ids=selected===null?["me"].concat(S.people.map(function(person){return person.id;})):(selected||[]),people=ids.map(function(id){return id==="me"?{id:"me",name:"Me",photo:settings().profilePhoto}:S.people.find(function(person){return person.id===id;});}).filter(Boolean),labels=people.map(function(person){
+  var first=person.id==="me"?"Me":String(person.name||"").trim().split(/\s+/)[0]||"Person";
+  return '<span class="faith-session-person-badge">'+personAvatar(person,24)+esc(first)+'</span>';
+ }).join("");
+ if(!labels)labels='<span class="faith-session-filter-label">No people selected</span>';
+ labels+='<span class="faith-session-filter-label">'+(faithPrayerSession.view==="today"?"Today":"All prayers")+'</span>';
+ return '<div class="faith-session-criteria" aria-label="Prayer session criteria">'+labels+'</div>';
 }
 function faithPrayerSessionHTML(){
  var ids=faithPrayerSession?faithPrayerSession.ids:[],items=ids.map(function(id){return S.prayers.find(function(p){return p.id===id&&!p.answered&&!p.archived;});}).filter(Boolean);
