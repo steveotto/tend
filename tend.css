@@ -1097,7 +1097,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .plan-item-no-description{font-style:italic;color:var(--ink-faint)}
 .home-dashboard .plan-item-top-meta{grid-column:1;grid-row:2;display:flex;align-items:center;gap:8px;min-width:0}
 .home-dashboard .plan-item-meta-people{display:flex;align-items:center;gap:6px;flex:none;width:auto;min-width:0;min-height:28px}
-.home-dashboard .plan-item-category-row{display:flex;align-items:center;gap:6px;flex:none;min-width:0}
+.home-dashboard .plan-item-category-row{display:flex;align-items:center;gap:6px;flex:none;min-width:0;margin-left:auto}
 .home-dashboard .plan-item-category-row>.rhythm-area-badges{display:flex;align-items:center;gap:4px;min-width:0}
 .home-dashboard .plan-item-category-row .rhythm-area-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;padding:4px;border:1px solid var(--line);border-radius:50%;background:var(--mist);color:var(--forest-deep);cursor:pointer}
 .home-dashboard .plan-item-category-row .rhythm-area-badge svg{width:14px;height:14px}
@@ -1474,7 +1474,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .plan-people-overflow>summary::-webkit-details-marker,.home-dashboard .plan-category-overflow>summary::-webkit-details-marker{display:none}
 .home-dashboard .plan-people-menu,.home-dashboard .plan-category-menu{position:absolute;z-index:20;top:calc(100% + 6px);left:0;display:grid;gap:6px;min-width:max-content;max-width:min(280px,80vw);max-height:240px;overflow:auto;padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--card);box-shadow:0 8px 24px rgba(32,39,35,.16)}
 .home-dashboard .plan-people-menu .prayer-person{width:100%;justify-content:flex-start}
-.home-dashboard .plan-category-menu{grid-template-columns:repeat(auto-fit,24px);min-width:72px}
+.home-dashboard .plan-category-menu{right:0;left:auto;grid-template-columns:repeat(auto-fit,24px);min-width:72px}
 .home-dashboard .plan-category-menu .rhythm-area-badge{width:24px;height:24px}
 @media(max-width:600px){
  .home-dashboard .planitem:has(.plan-item-top-meta){
