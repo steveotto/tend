@@ -224,9 +224,9 @@ function planCandidates(bid,curBid){
  }
  return out;
 }
-var planFocusState="now";var planKindFilterOpen={now:false,other:false};var planKindVisibility={now:{rhythm:true,spark:true,prayer:true},other:{rhythm:true,spark:true,prayer:true}};
+var planFocusState="now";var planKindFilterOpen={now:false,other:false};var planKindVisibility={now:{rhythm:true,spark:true},other:{rhythm:true,spark:true}};
 function planKindVisibilityFor(scope){
- if(!planKindVisibility[scope])planKindVisibility[scope]={rhythm:true,spark:true,prayer:true};
+ if(!planKindVisibility[scope])planKindVisibility[scope]={rhythm:true,spark:true};
  return planKindVisibility[scope];
 }
 function planItemKind(item){return item.rhythm||item.rkey||item.faithRhythm?"rhythm":item.spark||item.sparky?"spark":item.prayer?"prayer":"";}
@@ -289,8 +289,8 @@ function planHTML(){
  if(!selected&&planFocusState!=="now")planFocusState="now";
  return planBlockCard(focus,curId,focus.id===curId,focus.id==="allday",blocks);}
 function dashboardFocusedPrayerHTML(){
- var view=faithSelectedPrayerView();
- return '<section class="dashboard-focused-prayer" aria-label="Focused prayer">'+faithFocusedPrayerButtonHTML(view)+'</section>';
+ var blocks=planBlocksDef(),current=blocks.filter(function(block){return block.cur;})[0]||blocks[0],selected=blocks.filter(function(block){return block.id===planFocusState;})[0],timeBlock=planFocusState==="allday"?"all":planFocusState==="now"||!selected?current.id:selected.id,count=faithDashboardPrayerSessionSort(timeBlock,null).length;
+ return '<section class="dashboard-focused-prayer" aria-label="Focused prayer"><button type="button" class="btn mini faith-start-prayer" data-dashboard-prayer-open="1" data-focus-time="'+esc(timeBlock)+'" aria-label="Set up focused prayer for '+count+' '+(count===1?"prayer":"prayers")+'">Focused Prayer <span class="faith-prayer-session-count" aria-hidden="true">'+count+'</span></button>'+faithDashboardPrayerSetupHTML()+'</section>';
 }
 function upcomingDates(now){
  var today=new Date(now||Date.now());today.setHours(0,0,0,0);var rows=[];

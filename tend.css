@@ -1155,6 +1155,14 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .dashboard-free-moment>.planitem:has(.plan-item-top-meta){margin-bottom:0}
 .home-dashboard .dashboard-focused-prayer{display:flex;justify-content:flex-end;margin:0 0 32px}
 .home-dashboard .dashboard-focused-prayer .faith-start-prayer{display:inline-flex;align-items:center;gap:8px}
+.dashboard-prayer-setup .profile-editor-body{display:grid;gap:14px}
+.dashboard-prayer-time-label{display:grid;gap:6px;color:var(--ink-soft);font-size:13px}
+.dashboard-prayer-time-label select{width:100%;min-height:44px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;font:inherit}
+.dashboard-prayer-people{min-width:0;margin:0;padding:12px;border:1px solid var(--line);border-radius:12px}
+.dashboard-prayer-people legend{padding:0 6px;color:var(--ink-soft);font-size:13px}
+.dashboard-prayer-people .faith-prayer-filter-actions{padding-bottom:8px}
+.dashboard-prayer-people-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px;max-height:300px;overflow:auto;padding-top:8px}
+.dashboard-prayer-setup .faith-item-actions{margin-top:0}
 .home-dashboard .uprow{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin:0 0 18px}
 .home-dashboard .upitem{display:flex;align-items:center;min-width:0;gap:9px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);font-size:15px}
 .home-dashboard .upmain{display:flex;flex:1;min-width:0;flex-direction:column}
@@ -1536,6 +1544,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard>.sectiontitle:not(.dashboard-greeting){padding-right:12px;padding-left:12px}
  .home-dashboard .dashboard-focused-prayer{justify-content:stretch}
  .home-dashboard .dashboard-focused-prayer .faith-start-prayer{width:100%}
+ .dashboard-prayer-people-list{grid-template-columns:minmax(0,1fr);max-height:36vh}
  .home-dashboard .planitem:has(.plan-item-top-meta){
   display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto;align-items:stretch;gap:12px;min-height:0;margin:0 0 12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)
  }
