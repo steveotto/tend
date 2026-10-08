@@ -169,8 +169,8 @@ function planItemFooter(it,meta,sub){
  var kindBadge=planItemKindBadge(it),categories=planCategoryBadges(it),people=planItemPeople(it),fallbackSub=!meta&&sub&&!kindBadge?'<div class="tend-type-meta">'+esc(sub)+'</div>':"",details=meta?meta.replace('<div class="plan-item-meta">',"").replace(/<\/div>$/,""):"";
  if(kindBadge)details=kindBadge+(details||(sub?'<span class="plan-item-meta-entry">'+esc(sub)+'</span>':""));
  var peopleRow=people?'<div class="plan-item-meta-people plan-people" data-plan-people><span class="plan-people-visible">'+people+'</span><details class="plan-people-overflow" hidden><summary></summary><span class="plan-people-menu"></span></details></div>':"";
- var detailRows=peopleRow||details?'<div class="plan-item-meta">'+peopleRow+(details?'<div class="plan-item-meta-details">'+details+'</div>':"")+'</div>':"";
- return '<div class="plan-item-footer">'+(categories||fallbackSub?'<div class="plan-item-footer-badges"><span class="plan-pills">'+categories+'</span>'+fallbackSub+'</div>':"")+detailRows+'</div>';
+ var detailRows=details?'<div class="plan-item-meta"><div class="plan-item-meta-details">'+details+'</div></div>':"";
+ return '<div class="plan-item-footer">'+(categories||fallbackSub?'<div class="plan-item-footer-badges"><span class="plan-pills">'+categories+'</span>'+fallbackSub+'</div>':"")+peopleRow+detailRows+'</div>';
 }
 function genItem(label,sub,area,type,title){return {label:label,sub:sub,log:{area:area,type:type,title:title||label}};}
 function taskItem(t){return {label:t.text,sub:"task · "+(S.areas[t.areaId]?S.areas[t.areaId].name:""),log:{area:t.areaId,type:"note",title:"Task: "+t.text},taskId:t.id};}
