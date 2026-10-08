@@ -1504,6 +1504,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .plan-category-menu{right:0;left:auto;grid-template-columns:repeat(auto-fit,24px);min-width:72px}
 .home-dashboard .plan-category-menu .rhythm-area-badge{width:24px;height:24px}
 @media(max-width:600px){
+ .home-dashboard .current-plan-summary{padding-right:13px;padding-left:13px}
  .home-dashboard .planitem:has(.plan-item-top-meta){
   display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto;align-items:stretch;gap:12px;min-height:0;margin:0 0 12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)
  }
