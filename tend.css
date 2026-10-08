@@ -1366,12 +1366,12 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .tend-type-meta{grid-column:1/-1;grid-row:3;order:5;margin:8px 0 0;padding:0;border:0;font-size:12px}
  .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .plan-item-meta{grid-column:1/-1;grid-row:2;order:6;gap:8px 16px;margin:0;font-size:12px}
  .home-dashboard .plan-detail-icon{width:15px;height:15px}
- .home-dashboard .plan-pills>.plan-kind-rhythm,
- .home-dashboard .plan-pills>.plan-kind-spark,
- .home-dashboard .plan-pills>.plan-kind-prayer{position:relative;display:inline-grid;place-items:center;flex:none;width:24px;height:24px;min-width:24px;margin:0;padding:0;border:1px solid var(--line);border-radius:50%;font-size:0;letter-spacing:0;line-height:0}
- .home-dashboard .plan-pills>.plan-kind-rhythm .collection-icon,
- .home-dashboard .plan-pills>.plan-kind-spark .collection-icon{position:absolute;top:50%;left:50%;display:block;margin:0;transform:translate(-50%,-50%)}
- .home-dashboard .plan-pills>.plan-kind-prayer .collection-icon{position:absolute;top:50%;left:50%;display:block;margin:0;transform:translate(-50%,calc(-50% - 2px))}
+ .home-dashboard .plan-pills>.pill.rhy,
+ .home-dashboard .plan-pills>.pill.spk,
+ .home-dashboard .plan-pills>.pill.pry{position:relative;display:inline-grid;place-items:center;flex:none;width:24px;height:24px;min-width:24px;margin:0;padding:0;border:1px solid var(--line);border-radius:50%;font-size:0;letter-spacing:0;line-height:0}
+ .home-dashboard .plan-pills>.pill.rhy .collection-icon,
+ .home-dashboard .plan-pills>.pill.spk .collection-icon{position:absolute;top:50%;left:50%;display:block;margin:0;transform:translate(-50%,-50%)}
+ .home-dashboard .plan-pills>.pill.pry .collection-icon{position:absolute;top:50%;left:50%;display:block;margin:0;transform:translate(-50%,calc(-50% - 2px))}
  .home-dashboard .plan-pills>.prayer-person{border:1px solid var(--line)}
  .home-dashboard .plan-pills>.prayer-person{gap:5px;padding:3px 8px 3px 3px;font-size:10px}
  .home-dashboard .plan-pills>.prayer-person .avatar{width:19px!important;height:19px!important}
@@ -1398,12 +1398,12 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .tend-type-meta{font-size:14px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta{font-size:15px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-detail-icon{width:17px;height:17px}
- html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-rhythm,
- html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-spark,
- html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-prayer{width:30px;height:30px;min-width:30px}
- html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-rhythm .collection-icon,
- html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-spark .collection-icon,
- html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.plan-kind-prayer .collection-icon{width:18px;height:18px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.pill.rhy,
+ html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.pill.spk,
+ html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.pill.pry{width:30px;height:30px;min-width:30px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.pill.rhy .collection-icon,
+ html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.pill.spk .collection-icon,
+ html[data-mobile-text-size="large"] .home-dashboard .plan-pills>.pill.pry .collection-icon{width:18px;height:18px}
  html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badges{gap:8px}
  html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badge{width:30px;height:30px;padding:5px}
  html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badge svg{width:18px;height:18px}
