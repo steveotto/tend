@@ -1342,7 +1342,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .current-plan-heading{padding:0}
  .home-dashboard .day-jumps .btn.active{background:var(--forest);color:#fff}
  .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer){
-  display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;column-gap:12px;row-gap:0;margin:0 0 12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)
+  display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;column-gap:12px;row-gap:0;min-height:180px;margin:0 0 12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)
  }
  .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer)>.pi-main{grid-column:1/-1;grid-row:1;display:block;min-width:0}
  .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .plan-item-copy{display:flow-root}
@@ -1379,7 +1379,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  html[data-mobile-text-size="large"] .home-dashboard .planblock[data-plan-block="allday"]>summary .plan-block-name{font-size:24px!important}
  html[data-mobile-text-size="large"] .home-dashboard .dashboard-greeting{margin:24px 0 18px;padding:0 12px}
  html[data-mobile-text-size="large"]  .home-dashboard>.sectiontitle.dashboard-greeting h2{font-size:27px!important}
- html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer){column-gap:14px;row-gap:0;padding:16px}
+ html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer){column-gap:14px;row-gap:0;min-height:220px;padding:16px}
  html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .tend-type-title{font-size:23px}
  html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .plan-item-copy>.btn.mini{min-height:60px;padding:12px 18px;font-size:20px!important}
  html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .tend-type-description{font-size:19px}
