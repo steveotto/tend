@@ -217,7 +217,7 @@ function planKindTogglesHTML(scope,label){
 }
 function planMetaIcon(kind){
  var paths={frequency:'<path d="M20 7a8 8 0 0 0-14-2L3 8m0-5v5h5 M4 17a8 8 0 0 0 14 2l3-3m0 5v-5h-5"/>',time:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',occurred:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18m-13 5 2 2 4-4"/>'};
- return '<svg class="plan-detail-icon" viewBox="0 0 24 24" aria-hidden="true">'+paths[kind]+'</svg>';
+ return '<svg class="plan-detail-icon'+(kind==="frequency"?" plan-detail-icon-frequency":"")+'" viewBox="0 0 24 24" aria-hidden="true">'+paths[kind]+'</svg>';
 }
 function planItemMetaBar(meta){
  var parts=String(meta||"").split(" \u00b7 ").filter(Boolean);

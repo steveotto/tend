@@ -1120,6 +1120,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .plan-item-meta-details .plan-item-meta-entry:last-child{margin-left:auto;text-align:right;justify-content:flex-end}
 .plan-item-meta-entry{display:inline-flex;align-items:center;gap:6px;min-width:0}
 .plan-detail-icon{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;color:var(--ink-faint)}
+.home-dashboard .plan-item-meta-details .plan-detail-icon-frequency{width:12px;height:12px}
 .card:not(.planblock)>.planitem .tend-row-content>.tend-type-description{font-family:var(--sans);font-size:var(--tend-item-description-size);font-weight:400;line-height:1.5}
 .card:not(.planblock)>.planitem .tend-row-content>.tend-type-meta{margin-top:2px;padding-top:0;border-top:0}
 .today-with-person .tend-row-content>.tend-type-meta{margin-top:2px;padding-top:0;border-top:0}
@@ -1378,6 +1379,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .planitem:has(.plan-item-footer .plan-kind-badge) .plan-item-meta{grid-column:1/-1;grid-row:auto;order:6;gap:4px;margin:0;font-size:12px}
  .home-dashboard .plan-item-meta-details{gap:8px 16px}
  .home-dashboard .plan-detail-icon{width:15px;height:15px}
+ .home-dashboard .plan-item-meta-details .plan-detail-icon-frequency{width:13px;height:13px}
  .home-dashboard .plan-pills>.prayer-person{border:1px solid var(--line)}
  .home-dashboard .plan-pills>.prayer-person{gap:5px;padding:3px 8px 3px 3px;font-size:10px}
  .home-dashboard .plan-pills>.prayer-person .avatar{width:19px!important;height:19px!important}
@@ -1410,6 +1412,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-people .avatar{width:26px!important;height:26px!important}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-details{font-size:14px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-details .plan-detail-icon{width:17px;height:17px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-details .plan-detail-icon-frequency{width:15px;height:15px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-details>.plan-kind-badge{width:30px;height:30px;min-width:30px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-details>.plan-kind-badge .collection-icon{width:18px;height:18px}
  html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badges{gap:8px}
