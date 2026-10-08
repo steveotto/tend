@@ -225,7 +225,7 @@ function planCandidates(bid,curBid){
  }
  return out;
 }
-var planViewState="allday";var planKindFilterOpen={now:false,other:false};var planKindVisibility={now:{rhythm:true,spark:true,prayer:true},other:{rhythm:true,spark:true,prayer:true}};
+var planFocusState="now";var planKindFilterOpen={now:false,other:false};var planKindVisibility={now:{rhythm:true,spark:true,prayer:true},other:{rhythm:true,spark:true,prayer:true}};
 function planKindVisibilityFor(scope){
  if(!planKindVisibility[scope])planKindVisibility[scope]={rhythm:true,spark:true,prayer:true};
  return planKindVisibility[scope];
@@ -240,10 +240,11 @@ function planKindFilterHTML(scope,count,label){
  var itemLabel=count===1?"item":"items";
  return '<details class="current-plan-filter" data-plan-kind-filter="'+esc(scope)+'"'+(planKindFilterOpen[scope]?' open':'')+'><summary class="current-plan-item-count" aria-label="Filter '+label+' item types" title="Filter '+label+' item types"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3h8M5.5 8h8M5.5 13h8M2.5 3h.01M2.5 8h.01M2.5 13h.01"/></svg>'+count+' '+itemLabel+'</summary><div class="current-plan-filter-menu">'+planKindTogglesHTML(scope,label+" item filters")+'</div></details>';
 }
-function planViewSelectHTML(currentId){
- var blocks=planBlocksDef(),options='<option value="allday"'+(planViewState==="allday"?' selected':'')+'>All Day</option>';
- blocks.filter(function(item){return item.id!==currentId;}).forEach(function(item){options+='<option value="'+esc(item.id)+'"'+(planViewState===item.id?' selected':'')+'>'+esc(item.name)+'</option>';});
- return '<span class="current-plan-time-picker"><select class="current-plan-time-select" data-planview-select aria-label="Choose another time frame">'+options+'</select></span>';
+function planFocusMenuHTML(blocks,currentId,selectedId){
+ var current=blocks.filter(function(item){return item.id===currentId;})[0]||blocks[0];
+ var selected=selectedId==="now"?"Now":(blocks.filter(function(item){return item.id===selectedId;})[0]||current).name;
+ var options=[{id:"now",name:"Now",detail:current.name+" · "+current.range}].concat(blocks.filter(function(item){return item.id!==currentId;}));
+ return '<details class="current-plan-time-menu"><summary class="current-plan-time-picker" aria-label="Choose a time frame, currently '+esc(selected)+'">'+esc(selected)+'</summary><div class="current-plan-time-options" role="group" aria-label="Time frames">'+options.map(function(item){var isNow=item.id==="now",count=prioritizePlanItems(planCandidates(isNow?currentId:item.id,currentId).filter(function(candidate){var kind=planItemKind(candidate);return !kind||planKindVisibilityFor("now")[kind]!==false;})).visible.length,itemLabel=count===1?"item":"items",detail=(isNow?item.detail:item.range)+" · "+count+" "+itemLabel;return '<button type="button" class="current-plan-time-option'+((selectedId===item.id)?' is-selected':'')+'" data-plan-focus="'+esc(item.id)+'" aria-pressed="'+(selectedId===item.id)+'"><span class="current-plan-time-option-name">'+esc(item.name)+'</span><span class="current-plan-time-option-detail">'+esc(detail)+'</span></button>';}).join("")+'</div></details>';
 }
 function planMetaIcon(kind){
  var paths={frequency:'<path d="M20 7a8 8 0 0 0-14-2L3 8m0-5v5h5 M4 17a8 8 0 0 0 14 2l3-3m0 5v-5h-5"/>',time:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',occurred:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18m-13 5 2 2 4-4"/>'};
@@ -261,15 +262,15 @@ function planItemMetaBar(meta){
  }).join("");}
  return '<div class="plan-item-meta">'+entries(frequency.concat(time,extra),"schedule")+entries(occurred,"occurred")+'</div>';
 }
-function planBlockCard(b,curId,isCur,isAllDay){
+function planBlockCard(b,curId,isCur,isAllDay,focusBlocks){
  isAllDay=!!isAllDay;
- var toggleScope=isCur?"now":"other",visibility=planKindVisibilityFor(toggleScope);
+ var toggleScope=isAllDay?"other":"now",visibility=planKindVisibilityFor(toggleScope);
  var allItems=planCandidates(b.id,curId),items=allItems.filter(function(item){var kind=planItemKind(item);return !kind||visibility[kind]!==false;});
  var queue=prioritizePlanItems(items);
  var block=dayBlocks().find(function(item){return item.id===b.id;}),blockStart=block?block.start:"";
  function header(){
   var label=isCur?"Now":isAllDay?"All Day":b.name,weather=isCur?nowWeatherHTML():isAllDay?nowWeatherHTML():(typeof planWeatherHTML==="function"?planWeatherHTML(blockStart):""),
-   heading=isCur?'<span class="current-plan-now">Now</span>':planViewSelectHTML(curId),
+   heading=isAllDay?'<span class="current-plan-now">All Day</span>':planFocusMenuHTML(focusBlocks,curId,planFocusState),
    period=isCur?'<span class="plan-block-name">'+esc(b.name)+'</span><span class="current-plan-range">'+esc(b.range)+'</span>':isAllDay?'<span class="current-plan-range current-plan-all-day-range">Any time today</span>':'<span class="current-plan-range">'+esc(b.range)+'</span>';
   return '<div class="current-plan-summary"><div class="current-plan-topline">'+heading+'<div class="current-plan-weather"'+(isCur?' id="nowWeather"':'')+'>'+weather+'</div></div><div class="current-plan-details"><div class="current-plan-period">'+period+'</div>'+planKindFilterHTML(toggleScope,queue.visible.length,label)+'</div></div>';
  }
@@ -284,10 +285,10 @@ function planBlockCard(b,curId,isCur,isAllDay){
 function planHTML(){
  var blocks=planBlocksDef();
  var current=blocks.filter(function(x){return x.cur;})[0]||blocks[0],curId=current.id;
- var out=planBlockCard(current,curId,true);
- var sel=blocks.filter(function(b){return b.id===planViewState&&b.id!==curId;})[0];
- if(planViewState==="allday")out+=planBlockCard({id:'allday',name:'All Day',range:'Any time today'},curId,false,true);
- else if(sel)out+=planBlockCard(sel,curId,false,false);
+ var selected=blocks.filter(function(block){return block.id===planFocusState&&block.id!==curId;})[0],focus=planFocusState==="now"||!selected?current:selected;
+ if(!selected&&planFocusState!=="now")planFocusState="now";
+ var out=planBlockCard(focus,curId,focus.id===curId,false,blocks);
+ out+=planBlockCard({id:'allday',name:'All Day',range:'Any time today'},curId,false,true,blocks);
  return out;}
 function upcomingDates(now){
  var today=new Date(now||Date.now());today.setHours(0,0,0,0);var rows=[];

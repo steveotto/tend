@@ -123,15 +123,6 @@ function bind(){
  if(window._tendDelegated)return;
  window._tendDelegated=true;
  document.addEventListener("input",function(e){if(e.target&&/^set(Green|Yellow|Base)$/.test(e.target.id)&&typeof updateMeterThresholdPreview==="function")updateMeterThresholdPreview();});
- document.addEventListener("change",function(e){
-  var select=e.target&&e.target.closest&&e.target.closest("[data-planview-select]");
-  if(select){
-   var blocks=planBlocksDef(),current=blocks.filter(function(block){return block.cur;})[0]||blocks[0],selected=select.value;
-   var allowed=blocks.some(function(block){return block.id===selected&&block.id!==current.id;});
-   planViewState=selected==="allday"||allowed?selected:"allday";
-   render();
-  }
- });
  document.addEventListener("toggle",function(e){var t=e.target;if(t.matches&&t.matches("[data-plan-kind-filter]"))planKindFilterOpen[t.getAttribute("data-plan-kind-filter")]=t.open;},true);
  document.addEventListener("cancel",function(e){
   if(e.target.id==="rippleDialog"){if(editingConn)delete tendItemAssociationDrafts[tendAssociationKey("connection","connection",editingConn)];rhythmEditDraft=null;editRhythmId=null;window._rippleModalOpen=false;editingConn=null;return;}
@@ -148,6 +139,8 @@ function bind(){
  document.addEventListener("click",function(e){
   var t=e.target,b,openPlanFilter=document.querySelector(".current-plan-filter[open]");
   if(openPlanFilter&&!openPlanFilter.contains(t))openPlanFilter.open=false;
+  var openPlanTimeMenu=document.querySelector(".current-plan-time-menu[open]");
+  if(openPlanTimeMenu&&!openPlanTimeMenu.contains(t))openPlanTimeMenu.open=false;
   if(b=t.closest('[data-settingstab]')){settingsTab=b.getAttribute('data-settingstab');document.querySelectorAll('[data-settingstab]').forEach(function(x){x.setAttribute('aria-selected',String(x.getAttribute('data-settingstab')===settingsTab));});document.querySelectorAll('.settings-panel').forEach(function(x){x.hidden=x.id!=='settings-panel-'+settingsTab;});return;}
   if(b=t.closest("[data-rhyhistory]")){openRhythmHistory(b.getAttribute("data-rhyhistory"));return;}
   if(b=t.closest("[data-connection-history]")){openConnectionHistory(b.getAttribute("data-connection-history"));return;}
@@ -164,6 +157,7 @@ function bind(){
   if(b=t.closest("[data-rippleidea]")){var pid=b.getAttribute("data-rippleidea");rippleIdeaOffsets[pid]=(rippleIdeaOffsets[pid]||0)+1;var person=S.people.find(function(p){return p.id===pid;});if(person)el("rippleIdea").textContent=rippleIdea(person);return;}
   if(b=t.closest("[data-rippleopen]")){window._rippleModalOpen=true;render();var rippleType=el("plogType");if(rippleType)rippleType.focus();return;}
   if(b=t.closest("[data-plan-kind-toggle]")){e.preventDefault();e.stopPropagation();var scope=b.getAttribute("data-plan-kind-toggle"),kind=b.getAttribute("data-kind"),visibility=planKindVisibilityFor(scope);if(Object.prototype.hasOwnProperty.call(visibility,kind)){planKindFilterOpen[scope]=true;visibility[kind]=visibility[kind]===false;render();}return;}
+  if(b=t.closest("[data-plan-focus]")){e.preventDefault();var blocks=planBlocksDef(),current=blocks.filter(function(block){return block.cur;})[0]||blocks[0],selected=b.getAttribute("data-plan-focus");planFocusState=selected==="now"||blocks.some(function(block){return block.id===selected&&block.id!==current.id;})?selected:"now";render();return;}
   if(b=t.closest("[data-areanav]")){currentArea=b.getAttribute("data-areanav");if(currentArea==="faith")faithConfig().selectedGroup="Sabbath";openDetail=null;editingId=null;editingEvent=null;activityComposerOpen=false;taskDraftArea=null;render();window.scrollTo(0,0);return;}
   if(b=t.closest("[data-utilnav]")){tab=b.getAttribute("data-utilnav");if(tab==="settings")settingsTab="profile";document.body.classList.remove("mobile-search-open");var mobileSearchToggle=document.querySelector("[data-mobile-search-toggle]");if(mobileSearchToggle)mobileSearchToggle.setAttribute("aria-expanded","false");window._psModalOpen=false;window._personPrayerDraftFor=null;currentArea=null;openDetail=null;editingId=null;editingEvent=null;activityComposerOpen=false;taskDraftArea=null;currentPerson=null;editingConn=null;editRhythmId=null;rhythmEditDraft=null;editSparkId=null;sparkEditDraft=null;sparkDraftOpenFor=null;noteDraftOpenFor=null;rhythmDraft=null;render();window.scrollTo(0,0);return;}
   if(b=t.closest("[data-areago]")){currentArea=b.getAttribute("data-areago");if(currentArea==="faith")faithConfig().selectedGroup="Sabbath";openDetail=null;editingId=null;editingEvent=null;render();window.scrollTo(0,0);return;}
