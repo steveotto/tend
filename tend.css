@@ -1131,6 +1131,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .current-plan-time-option-name{flex:none;font-size:13px;font-weight:650}
 .home-dashboard .current-plan-time-option-range,.home-dashboard .current-plan-time-option-count{min-width:0;color:var(--ink-soft);font-size:12px;text-align:left;white-space:nowrap}
 @media(max-width:360px){.home-dashboard .current-plan-time-option{grid-template-columns:88px minmax(0,1fr) 46px;gap:4px;padding-right:7px;padding-left:7px}.home-dashboard .current-plan-time-option-name,.home-dashboard .current-plan-time-option-range,.home-dashboard .current-plan-time-option-count{font-size:10px}}
+.home-dashboard .current-plan-items>.plan-empty-card{box-sizing:border-box;min-height:48px;margin:0;padding:15px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink-soft);font-size:13px;font-style:normal}
 .home-dashboard .current-plan-details{align-items:center}
 .home-dashboard .current-plan-filter{position:relative;flex:none}
 .home-dashboard .current-plan-item-count{display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;min-height:30px;padding:2px 8px;border:0;border-radius:8px;background:#E9ECEA;color:var(--ink-soft);font:inherit;font-size:12px;line-height:1.35;white-space:nowrap;cursor:pointer;list-style:none}

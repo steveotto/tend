@@ -242,8 +242,9 @@ function planKindFilterHTML(scope,count,label){
 }
 function planFocusMenuHTML(blocks,currentId,selectedId){
  var current=blocks.filter(function(item){return item.id===currentId;})[0]||blocks[0];
- var selected=selectedId==="now"?"Now":(blocks.filter(function(item){return item.id===selectedId;})[0]||current).name;
+ var selected=selectedId==="now"?"Now":selectedId==="allday"?"All Day":(blocks.filter(function(item){return item.id===selectedId;})[0]||current).name;
  var options=blocks.map(function(item){return {id:item.id,name:item.name+(item.id===currentId?" (Now)":""),range:item.range,isNow:item.id===currentId};});
+ options.push({id:"allday",name:"All Day",range:"Any time today",isAllDay:true});
  return '<details class="current-plan-time-menu"><summary class="current-plan-time-picker" aria-label="Choose a time frame, currently '+esc(selected)+'"><svg class="current-plan-now-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="6.2"/><path d="M10 6.5v3.8l2.4 1.5M10 1.5v1.2M10 17.3v1.2M1.5 10h1.2M17.3 10h1.2M4 4l.9.9M15.1 15.1l.9.9"/></svg><span>'+esc(selected)+'</span></summary><div class="current-plan-time-options" role="group" aria-label="Time frames">'+options.map(function(item){var isSelected=(selectedId==="now"&&item.isNow)||selectedId===item.id,count=prioritizePlanItems(planCandidates(item.id,currentId).filter(function(candidate){var kind=planItemKind(candidate);return !kind||planKindVisibilityFor("now")[kind]!==false;})).visible.length,itemLabel=count===1?"item":"items";return '<button type="button" class="current-plan-time-option'+(item.isNow?' is-current':'')+(isSelected?' is-selected':'')+'" data-plan-focus="'+(item.isNow?"now":esc(item.id))+'" aria-pressed="'+isSelected+'"><span class="current-plan-time-option-name">'+esc(item.name)+'</span><span class="current-plan-time-option-range">'+esc(item.range)+'</span><span class="current-plan-time-option-count">'+count+' '+itemLabel+'</span></button>';}).join("")+'</div></details>';
 }
 function planMetaIcon(kind){
@@ -264,13 +265,13 @@ function planItemMetaBar(meta){
 }
 function planBlockCard(b,curId,isCur,isAllDay,focusBlocks){
  isAllDay=!!isAllDay;
- var toggleScope=isAllDay?"other":"now",visibility=planKindVisibilityFor(toggleScope);
+ var toggleScope="now",visibility=planKindVisibilityFor(toggleScope);
  var allItems=planCandidates(b.id,curId),items=allItems.filter(function(item){var kind=planItemKind(item);return !kind||visibility[kind]!==false;});
  var queue=prioritizePlanItems(items);
  var block=dayBlocks().find(function(item){return item.id===b.id;}),blockStart=block?block.start:"";
  function header(){
   var label=isCur?"Now":isAllDay?"All Day":b.name,weather=isCur?nowWeatherHTML():isAllDay?nowWeatherHTML():(typeof planWeatherHTML==="function"?planWeatherHTML(blockStart):""),
-   heading=isAllDay?'<span class="current-plan-now">All Day</span>':planFocusMenuHTML(focusBlocks,curId,planFocusState),
+   heading=planFocusMenuHTML(focusBlocks,curId,planFocusState),
    period=isCur?'<span class="plan-block-name">'+esc(b.name)+'</span><span class="current-plan-range">'+esc(b.range)+'</span>':isAllDay?'<span class="current-plan-range current-plan-all-day-range">Any time today</span>':'<span class="current-plan-range">'+esc(b.range)+'</span>';
   return '<div class="current-plan-summary"><div class="current-plan-topline">'+heading+'<div class="current-plan-weather"'+(isCur?' id="nowWeather"':'')+'>'+weather+'</div></div><div class="current-plan-details"><div class="current-plan-period">'+period+'</div>'+planKindFilterHTML(toggleScope,queue.visible.length,label)+'</div></div>';
  }
@@ -279,17 +280,15 @@ function planBlockCard(b,curId,isCur,isAllDay,focusBlocks){
   var meta=planItemMetaBar(it.sub);
   return '<div class="planitem"><div class="pi-main">'+planItemCopy(it,btn)+'</div>'+planItemTopRow(it)+planItemFooter(it,meta,it.sub)+'</div>';
  }
- var body=queue.visible.length?queue.visible.map(itemHTML).join(""):'<div class="empty">'+(allItems.length?'Items hidden by the type filters.':'Nothing queued - all tended.')+'</div>';
+ var body=queue.visible.length?queue.visible.map(itemHTML).join(""):'<div class="empty plan-empty-card">'+(allItems.length?'Items hidden by the type filters.':'Nothing queued - all items tended.')+'</div>';
  return '<section id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock current'+(isAllDay?' all-day':'')+'">'+header()+'<div class="current-plan-items">'+body+'</div></section>';
 }
 function planHTML(){
  var blocks=planBlocksDef();
  var current=blocks.filter(function(x){return x.cur;})[0]||blocks[0],curId=current.id;
- var selected=blocks.filter(function(block){return block.id===planFocusState&&block.id!==curId;})[0],focus=planFocusState==="now"||!selected?current:selected;
+ var selected=planFocusState==="allday"?{id:"allday",name:"All Day",range:"Any time today"}:blocks.filter(function(block){return block.id===planFocusState&&block.id!==curId;})[0],focus=planFocusState==="now"||!selected?current:selected;
  if(!selected&&planFocusState!=="now")planFocusState="now";
- var out=planBlockCard(focus,curId,focus.id===curId,false,blocks);
- out+=planBlockCard({id:'allday',name:'All Day',range:'Any time today'},curId,false,true,blocks);
- return out;}
+ return planBlockCard(focus,curId,focus.id===curId,focus.id==="allday",blocks);}
 function upcomingDates(now){
  var today=new Date(now||Date.now());today.setHours(0,0,0,0);var rows=[];
  function add(label,month,day,attrs){
