@@ -240,6 +240,11 @@ function planKindFilterHTML(scope,count,label){
  var itemLabel=count===1?"item":"items";
  return '<details class="current-plan-filter" data-plan-kind-filter="'+esc(scope)+'"'+(planKindFilterOpen[scope]?' open':'')+'><summary class="current-plan-item-count" aria-label="Filter '+label+' item types" title="Filter '+label+' item types"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3h8M5.5 8h8M5.5 13h8M2.5 3h.01M2.5 8h.01M2.5 13h.01"/></svg>'+count+' '+itemLabel+'</summary><div class="current-plan-filter-menu">'+planKindTogglesHTML(scope,label+" item filters")+'</div></details>';
 }
+function planViewSelectHTML(currentId){
+ var blocks=planBlocksDef(),options='<option value="allday"'+(planViewState==="allday"?' selected':'')+'>All Day</option>';
+ blocks.filter(function(item){return item.id!==currentId;}).forEach(function(item){options+='<option value="'+esc(item.id)+'"'+(planViewState===item.id?' selected':'')+'>'+esc(item.name)+'</option>';});
+ return '<span class="current-plan-time-picker"><select class="current-plan-time-select" data-planview-select aria-label="Choose another time frame">'+options+'</select></span>';
+}
 function planMetaIcon(kind){
  var paths={frequency:'<path d="M20 7a8 8 0 0 0-14-2L3 8m0-5v5h5 M4 17a8 8 0 0 0 14 2l3-3m0 5v-5h-5"/>',time:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',occurred:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18m-13 5 2 2 4-4"/>'};
  return '<svg class="plan-detail-icon'+(kind==="frequency"?" plan-detail-icon-frequency":"")+'" viewBox="0 0 24 24" aria-hidden="true">'+paths[kind]+'</svg>';
@@ -264,8 +269,9 @@ function planBlockCard(b,curId,isCur,isAllDay){
  var block=dayBlocks().find(function(item){return item.id===b.id;}),blockStart=block?block.start:"";
  function header(){
   var label=isCur?"Now":isAllDay?"All Day":b.name,weather=isCur?nowWeatherHTML():isAllDay?nowWeatherHTML():(typeof planWeatherHTML==="function"?planWeatherHTML(blockStart):""),
+   heading=isCur?'<span class="current-plan-now">Now</span>':planViewSelectHTML(curId),
    period=isCur?'<span class="plan-block-name">'+esc(b.name)+'</span><span class="current-plan-range">'+esc(b.range)+'</span>':isAllDay?'<span class="current-plan-range current-plan-all-day-range">Any time today</span>':'<span class="current-plan-range">'+esc(b.range)+'</span>';
-  return '<div class="current-plan-summary"><div class="current-plan-topline"><span class="current-plan-now">'+esc(label)+'</span><div class="current-plan-weather"'+(isCur?' id="nowWeather"':'')+'>'+weather+'</div></div><div class="current-plan-details"><div class="current-plan-period">'+period+'</div>'+planKindFilterHTML(toggleScope,queue.visible.length,label)+'</div></div>';
+  return '<div class="current-plan-summary"><div class="current-plan-topline">'+heading+'<div class="current-plan-weather"'+(isCur?' id="nowWeather"':'')+'>'+weather+'</div></div><div class="current-plan-details"><div class="current-plan-period">'+period+'</div>'+planKindFilterHTML(toggleScope,queue.visible.length,label)+'</div></div>';
  }
  function itemHTML(it){
   var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.faithRhythm?'<button type="button" class="btn mini" data-tend-open="faith-rhythm" data-rhythm-id="'+esc(it.faithRhythm)+'">Tend</button>':(it.prayer?'<button type="button" class="btn mini" data-pray="'+esc(it.prayer)+'">Pray</button>':(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>')));
@@ -279,7 +285,6 @@ function planHTML(){
  var blocks=planBlocksDef();
  var current=blocks.filter(function(x){return x.cur;})[0]||blocks[0],curId=current.id;
  var out=planBlockCard(current,curId,true);
- out+='<nav class="day-jumps" aria-label="Other time blocks">'+blocks.filter(function(b){return b.id!==curId;}).map(function(b){var active=planViewState===b.id;return '<button type="button" class="btn mini ghost'+(active?' active':'')+'" data-planview="'+b.id+'" aria-pressed="'+active+'">'+esc(b.name)+'</button>';}).join('')+'<button type="button" class="btn mini ghost day-jump-all-day'+(planViewState==="allday"?' active':'')+'" data-planview="allday" aria-pressed="'+(planViewState==="allday")+'">All Day</button></nav>';
  var sel=blocks.filter(function(b){return b.id===planViewState&&b.id!==curId;})[0];
  if(planViewState==="allday")out+=planBlockCard({id:'allday',name:'All Day',range:'Any time today'},curId,false,true);
  else if(sel)out+=planBlockCard(sel,curId,false,false);

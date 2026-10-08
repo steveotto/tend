@@ -1116,6 +1116,11 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .planblock.current{border:0;box-shadow:none}
 .home-dashboard .current-plan-summary{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;min-height:0;margin:0 0 10px;padding:0;border-radius:0;background:transparent;color:var(--ink)}
 .home-dashboard .current-plan-topline{min-height:24px}
+.home-dashboard .current-plan-time-picker{position:relative;display:inline-flex;align-items:center;min-width:0;font-size:19px;font-weight:700;line-height:1.35}
+.home-dashboard .current-plan-time-picker:after{position:absolute;right:3px;width:0;height:0;border-top:5px solid currentColor;border-right:4px solid transparent;border-left:4px solid transparent;content:"";pointer-events:none}
+.home-dashboard .current-plan-time-select{max-width:100%;padding:2px 22px 2px 0;border:0;border-radius:5px;appearance:none;background:transparent;color:var(--ink);font:inherit;cursor:pointer}
+.home-dashboard .current-plan-time-select:hover{color:var(--forest)}
+.home-dashboard .current-plan-time-select:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
 .home-dashboard .current-plan-details{align-items:center}
 .home-dashboard .current-plan-filter{position:relative;flex:none}
 .home-dashboard .current-plan-item-count{display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;min-height:30px;padding:2px 8px;border:0;border-radius:8px;background:#E9ECEA;color:var(--ink-soft);font:inherit;font-size:12px;line-height:1.35;white-space:nowrap;cursor:pointer;list-style:none}
@@ -1247,6 +1252,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  html[data-mobile-text-size="large"] .home-dashboard .now-badge,html[data-mobile-text-size="large"] .home-dashboard .next-badge{font-size:11px}
  html[data-mobile-text-size="large"] .home-dashboard .planblock summary .plan-block-name{font-size:19px}
  html[data-mobile-text-size="large"] .home-dashboard .current-plan-now{font-size:24px}
+ html[data-mobile-text-size="large"] .home-dashboard .current-plan-time-picker{font-size:24px}
  html[data-mobile-text-size="large"] .home-dashboard .current-plan-period .plan-block-name{font-size:18px}
  html[data-mobile-text-size="large"] .home-dashboard .current-plan-range{font-size:16px}
  html[data-mobile-text-size="large"] .home-dashboard .now-weather.compact,
