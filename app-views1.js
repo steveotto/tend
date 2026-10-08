@@ -141,31 +141,31 @@ function planCategoryBadges(it){
  return categories;
 }
 function layoutPlanPeopleBadges(root){
- (root||document).querySelectorAll("[data-plan-people],[data-plan-categories]").forEach(function(container){
-  var isPeople=container.hasAttribute("data-plan-people"),visible=container.querySelector(isPeople?".plan-people-visible":".rhythm-area-badges"),overflow=container.querySelector(isPeople?".plan-people-overflow":".plan-category-overflow"),menu=container.querySelector(isPeople?".plan-people-menu":".plan-category-menu"),summary=overflow&&overflow.querySelector("summary"),selector=isPeople?".prayer-person":".rhythm-area-badge";
+ (root||document).querySelectorAll("[data-plan-people]").forEach(function(container){
+  var visible=container.querySelector(".plan-people-visible"),overflow=container.querySelector(".plan-people-overflow"),menu=container.querySelector(".plan-people-menu"),summary=overflow&&overflow.querySelector("summary");
   if(!visible||!overflow||!menu||!summary)return;
-  var wasOpen=overflow.open,badges=Array.prototype.slice.call(visible.querySelectorAll(selector)).concat(Array.prototype.slice.call(menu.querySelectorAll(selector)));
+  var wasOpen=overflow.open,badges=Array.prototype.slice.call(visible.children).concat(Array.prototype.slice.call(menu.children));
   badges.forEach(function(badge){visible.appendChild(badge);});
   overflow.hidden=true;
   if(!badges.length)return;
   var available=container.clientWidth,gap=parseFloat(getComputedStyle(visible).columnGap)||0,widths=badges.map(function(badge){return badge.getBoundingClientRect().width;}),shown=badges.length;
   function totalWidth(count){var total=widths.slice(0,count).reduce(function(sum,width){return sum+width;},0);return total+Math.max(0,count-1)*gap;}
-  if(isPeople&&badges.length>2)shown=1;
+  if(badges.length>2)shown=1;
   if(totalWidth(shown)>available||shown<badges.length){
    overflow.hidden=false;
-   if(isPeople&&badges.length>2){
+   if(badges.length>2){
     summary.textContent="+"+(badges.length-shown)+" more";
     summary.setAttribute("aria-label","Show "+(badges.length-shown)+" more people");
    }else{
-    for(shown=Math.min(shown,badges.length-1);shown>=0;shown--){
+    for(shown=badges.length-1;shown>=0;shown--){
      summary.textContent="+"+(badges.length-shown)+" more";
-     summary.setAttribute("aria-label","Show "+(badges.length-shown)+(isPeople?" more people":" more categories"));
+     summary.setAttribute("aria-label","Show "+(badges.length-shown)+" more people");
      if(totalWidth(shown)+(shown?gap:0)+summary.getBoundingClientRect().width<=available)break;
     }
     if(shown<0)shown=0;
    }
    badges.slice(shown).forEach(function(badge){menu.appendChild(badge);});
-  }
+  }else overflow.hidden=true;
   overflow.open=wasOpen&&!overflow.hidden;
  });
 }
@@ -173,13 +173,18 @@ function planItemCopy(it){
  var description=String(it.description||"").trim();
  return '<div class="plan-item-copy"><div class="plan-item-heading"><strong class="tend-type-title">'+esc(it.label||"")+'</strong></div><div class="plan-item-description">'+(description?'<div class="tend-type-description">'+esc(description)+'</div>':'<div class="plan-item-no-description">No details...</div>')+'</div></div>';
 }
-function planItemFooter(it,meta,sub,action){
- var kindBadge=planItemKindBadge(it),categories=planCategoryBadges(it),people=planItemPeople(it),fallbackSub=!meta&&sub&&!kindBadge?'<div class="tend-type-meta">'+esc(sub)+'</div>':"",details=meta?meta.replace('<div class="plan-item-meta">',"").replace(/<\/div>$/,""):"";
+function planItemPeopleRow(it){
+ var people=planItemPeople(it);
+ return people?'<div class="plan-item-meta-people plan-people" data-plan-people><span class="plan-people-visible">'+people+'</span><details class="plan-people-overflow" hidden><summary></summary><span class="plan-people-menu"></span></details></div>':"";
+}
+function planItemTopRow(it,action){
+ return '<div class="plan-item-top-meta">'+planItemPeopleRow(it)+(action?'<div class="plan-item-action">'+action+'</div>':"")+'</div>';
+}
+function planItemFooter(it,meta,sub){
+ var kindBadge=planItemKindBadge(it),categories=planCategoryBadges(it),fallbackSub=!meta&&sub&&!kindBadge?'<div class="tend-type-meta">'+esc(sub)+'</div>':"",details=meta?meta.replace('<div class="plan-item-meta">',"").replace(/<\/div>$/,""):"";
  if(kindBadge)details=kindBadge+(details||(sub?'<span class="plan-item-meta-entry">'+esc(sub)+'</span>':""));
- var peopleRow=people?'<div class="plan-item-meta-people plan-people" data-plan-people><span class="plan-people-visible">'+people+'</span><details class="plan-people-overflow" hidden><summary></summary><span class="plan-people-menu"></span></details></div>':"";
- var categoryRow=categories?'<div class="plan-item-category-row" data-plan-categories>'+categories+'<details class="plan-category-overflow" hidden><summary></summary><span class="plan-category-menu"></span></details></div>':"";
  var detailRows=details?'<div class="plan-item-meta"><div class="plan-item-meta-details">'+details+'</div></div>':"";
- return '<div class="plan-item-footer">'+peopleRow+categoryRow+(fallbackSub?'<div class="plan-item-meta plan-item-meta-fallback">'+fallbackSub+'</div>':"")+detailRows+(action?'<div class="plan-item-action">'+action+'</div>':"")+'</div>';
+ return '<div class="plan-item-footer">'+(categories||fallbackSub?'<div class="plan-item-footer-badges"><span class="plan-pills">'+categories+'</span>'+fallbackSub+'</div>':"")+detailRows+'</div>';
 }
 function genItem(label,sub,area,type,title){return {label:label,sub:sub,log:{area:area,type:type,title:title||label}};}
 function taskItem(t){return {label:t.text,sub:"task · "+(S.areas[t.areaId]?S.areas[t.areaId].name:""),log:{area:t.areaId,type:"note",title:"Task: "+t.text},taskId:t.id};}
@@ -251,7 +256,7 @@ function planBlockCard(b,curId,isCur,isAllDay){
  function itemHTML(it){
   var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.faithRhythm?'<button type="button" class="btn mini" data-tend-open="faith-rhythm" data-rhythm-id="'+esc(it.faithRhythm)+'">Tend</button>':(it.prayer?'<button type="button" class="btn mini" data-pray="'+esc(it.prayer)+'">Pray</button>':(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>')));
   var meta=planItemMetaBar(it.sub);
-  return '<div class="planitem"><div class="pi-main">'+planItemCopy(it)+'</div>'+planItemFooter(it,meta,it.sub,btn)+'</div>';
+  return '<div class="planitem"><div class="pi-main">'+planItemCopy(it)+'</div>'+planItemTopRow(it,btn)+planItemFooter(it,meta,it.sub)+'</div>';
  }
  var body=queue.visible.length?queue.visible.map(itemHTML).join(""):'<div class="empty">'+(allItems.length?'Items hidden by the type filters.':'Nothing queued - all tended.')+'</div>';
  if(isCur)return '<div id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock current"><div class="current-plan-summary"><div class="current-plan-topline"><span class="current-plan-now">Now</span><div class="current-plan-weather" id="nowWeather">'+(typeof nowWeatherHTML==="function"?nowWeatherHTML():"")+'</div></div><div class="current-plan-details"><div class="current-plan-period"><span class="plan-block-name">'+esc(b.name)+'</span><span class="current-plan-range">'+esc(b.range)+'</span></div><span class="current-plan-item-count"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3h8M5.5 8h8M5.5 13h8M2.5 3h.01M2.5 8h.01M2.5 13h.01"/></svg>'+queue.visible.length+' item'+(queue.visible.length===1?'':'s')+'</span></div></div><div class="current-plan-items">'+body+'</div><div class="current-plan-filters">'+planKindTogglesHTML(toggleScope,"Now item filters")+'</div></div>';
@@ -854,7 +859,7 @@ function freeMomentHTML(){
  cands.sort(function(a,b){return b.pri-a.pri;});
  if(!cands.length)return "";
  var out='<div class="sectiontitle"><h2>Free moment?</h2><span class="hint">Your best options right now (up to 4)</span></div><div class="card dashboard-free-moment">';
- cands.slice(0,4).forEach(function(c){var bb=c.rhythm?rhyDoneBtn(c.rhythm):'<button class="btn mini'+(c.spark?" sparkbtn":"")+'"'+c.act+'>'+c.btn+'</button>',meta=planItemMetaBar(c.sub);out+='<div class="planitem"><div class="pi-main">'+planItemCopy(c)+'</div>'+planItemFooter(c,meta,c.sub,bb)+'</div>';});
+ cands.slice(0,4).forEach(function(c){var bb=c.rhythm?rhyDoneBtn(c.rhythm):'<button class="btn mini'+(c.spark?" sparkbtn":"")+'"'+c.act+'>'+c.btn+'</button>',meta=planItemMetaBar(c.sub);out+='<div class="planitem"><div class="pi-main">'+planItemCopy(c)+'</div>'+planItemTopRow(c,bb)+planItemFooter(c,meta,c.sub)+'</div>';});
  return out+'</div>';}
 /* ============ area subpages ============ */
 function renderArea(id){
