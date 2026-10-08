@@ -141,32 +141,37 @@ function planCategoryBadges(it){
  return categories;
 }
 function layoutPlanPeopleBadges(root){
- (root||document).querySelectorAll("[data-plan-people]").forEach(function(container){
-  var visible=container.querySelector(".plan-people-visible"),overflow=container.querySelector(".plan-people-overflow"),menu=container.querySelector(".plan-people-menu"),summary=overflow&&overflow.querySelector("summary");
-  if(!visible||!overflow||!menu||!summary)return;
-  var wasOpen=overflow.open,badges=Array.prototype.slice.call(visible.children).concat(Array.prototype.slice.call(menu.children));
-  badges.forEach(function(badge){visible.appendChild(badge);});
-  overflow.hidden=true;
-  if(!badges.length)return;
-  var available=container.clientWidth,gap=parseFloat(getComputedStyle(visible).columnGap)||0,widths=badges.map(function(badge){return badge.getBoundingClientRect().width;}),shown=badges.length;
-  function totalWidth(count){var total=widths.slice(0,count).reduce(function(sum,width){return sum+width;},0);return total+Math.max(0,count-1)*gap;}
-  if(badges.length>2)shown=1;
-  if(totalWidth(shown)>available||shown<badges.length){
+ (root||document).querySelectorAll(".plan-item-top-meta").forEach(function(row){
+  var people=row.querySelector("[data-plan-people]"),categories=row.querySelector("[data-plan-categories]"),action=row.querySelector(".plan-item-action"),gap=parseFloat(getComputedStyle(row).columnGap)||0,lists=[];
+  [[people,".plan-people-visible",".plan-people-overflow",".plan-people-menu",".prayer-person",2,"people"],[categories,".plan-category-visible",".plan-category-overflow",".plan-category-menu",".rhythm-area-badge",3,"categories"]].forEach(function(config){
+   var container=config[0];if(!container)return;
+   var visible=container.querySelector(config[1]),overflow=container.querySelector(config[2]),menu=container.querySelector(config[3]),summary=overflow&&overflow.querySelector("summary");
+   if(!visible||!overflow||!menu||!summary)return;
+   var badges=Array.prototype.slice.call(visible.querySelectorAll(config[4])).concat(Array.prototype.slice.call(menu.querySelectorAll(config[4])));
+   badges.forEach(function(badge){visible.appendChild(badge);});
+   var wasOpen=overflow.open;
    overflow.hidden=false;
-   if(badges.length>2){
-    summary.textContent="+"+(badges.length-shown)+" more";
-    summary.setAttribute("aria-label","Show "+(badges.length-shown)+" more people");
-   }else{
-    for(shown=badges.length-1;shown>=0;shown--){
-     summary.textContent="+"+(badges.length-shown)+" more";
-     summary.setAttribute("aria-label","Show "+(badges.length-shown)+" more people");
-     if(totalWidth(shown)+(shown?gap:0)+summary.getBoundingClientRect().width<=available)break;
-    }
-    if(shown<0)shown=0;
-   }
-   badges.slice(shown).forEach(function(badge){menu.appendChild(badge);});
-  }else overflow.hidden=true;
-  overflow.open=wasOpen&&!overflow.hidden;
+   var badgeGap=parseFloat(getComputedStyle(visible).columnGap)||0,widths=badges.map(function(badge){return badge.getBoundingClientRect().width;}),limit=config[6]==="people"&&badges.length>2?1:config[5],shown=Math.min(badges.length,limit);
+   lists.push({visible:visible,overflow:overflow,menu:menu,summary:summary,badges:badges,wasOpen:wasOpen,gap:badgeGap,widths:widths,shown:shown,type:config[6]});
+  });
+  var actionWidth=action?action.getBoundingClientRect().width+gap:0,available=Math.max(0,row.clientWidth-actionWidth-gap*Math.max(0,lists.length-1));
+  function usedWidth(list,count){
+   var total=list.widths.slice(0,count).reduce(function(sum,width){return sum+width;},0);
+   return total+Math.max(0,count-1)*list.gap+(count<list.badges.length?list.summary.getBoundingClientRect().width+(count?list.gap:0):0);
+  }
+  function setSummary(list){list.summary.textContent="+"+(list.badges.length-list.shown)+" more";list.summary.setAttribute("aria-label","Show "+(list.badges.length-list.shown)+" more "+list.type);}
+  lists.forEach(function(list){if(list.shown<list.badges.length)setSummary(list);});
+  while(lists.reduce(function(sum,list){return sum+usedWidth(list,list.shown);},0)>available){
+   var reducible=lists.filter(function(list){return list.shown>0;}).sort(function(a,b){return a.type==="categories"?-1:1;})[0];
+   if(!reducible)break;
+   reducible.shown--;
+   setSummary(reducible);
+  }
+  lists.forEach(function(list){
+   list.overflow.hidden=list.shown>=list.badges.length;
+   list.badges.slice(list.shown).forEach(function(badge){list.menu.appendChild(badge);});
+   list.overflow.open=list.wasOpen&&!list.overflow.hidden;
+  });
  });
 }
 function planItemCopy(it){
@@ -178,13 +183,14 @@ function planItemPeopleRow(it){
  return people?'<div class="plan-item-meta-people plan-people" data-plan-people><span class="plan-people-visible">'+people+'</span><details class="plan-people-overflow" hidden><summary></summary><span class="plan-people-menu"></span></details></div>':"";
 }
 function planItemTopRow(it,action){
- return '<div class="plan-item-top-meta">'+planItemPeopleRow(it)+(action?'<div class="plan-item-action">'+action+'</div>':"")+'</div>';
+ var categories=planCategoryBadges(it),categoryRow=categories?'<div class="plan-item-category-row" data-plan-categories><span class="rhythm-area-badges plan-category-visible">'+categories.replace(/^<span class="rhythm-area-badges"[^>]*>|<\/span>$/g,"")+'</span><details class="plan-category-overflow" hidden><summary></summary><span class="plan-category-menu"></span></details></div>':"";
+ return '<div class="plan-item-top-meta">'+planItemPeopleRow(it)+categoryRow+(action?'<div class="plan-item-action">'+action+'</div>':"")+'</div>';
 }
 function planItemFooter(it,meta,sub){
- var kindBadge=planItemKindBadge(it),categories=planCategoryBadges(it),fallbackSub=!meta&&sub&&!kindBadge?'<div class="tend-type-meta">'+esc(sub)+'</div>':"",details=meta?meta.replace('<div class="plan-item-meta">',"").replace(/<\/div>$/,""):"";
+ var kindBadge=planItemKindBadge(it),fallbackSub=!meta&&sub&&!kindBadge?'<div class="tend-type-meta">'+esc(sub)+'</div>':"",details=meta?meta.replace('<div class="plan-item-meta">',"").replace(/<\/div>$/,""):"";
  if(kindBadge)details=kindBadge+(details||(sub?'<span class="plan-item-meta-entry">'+esc(sub)+'</span>':""));
  var detailRows=details?'<div class="plan-item-meta"><div class="plan-item-meta-details">'+details+'</div></div>':"";
- return '<div class="plan-item-footer">'+(categories||fallbackSub?'<div class="plan-item-footer-badges"><span class="plan-pills">'+categories+'</span>'+fallbackSub+'</div>':"")+detailRows+'</div>';
+ return '<div class="plan-item-footer">'+(fallbackSub?'<div class="plan-item-footer-badges"><span class="plan-pills"></span>'+fallbackSub+'</div>':"")+detailRows+'</div>';
 }
 function genItem(label,sub,area,type,title){return {label:label,sub:sub,log:{area:area,type:type,title:title||label}};}
 function taskItem(t){return {label:t.text,sub:"task · "+(S.areas[t.areaId]?S.areas[t.areaId].name:""),log:{area:t.areaId,type:"note",title:"Task: "+t.text},taskId:t.id};}
