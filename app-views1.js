@@ -142,7 +142,7 @@ function planCategoryBadges(it){
 }
 function layoutPlanPeopleBadges(root){
  (root||document).querySelectorAll(".plan-item-top-meta").forEach(function(row){
-  var people=row.querySelector("[data-plan-people]"),categories=row.querySelector("[data-plan-categories]"),action=row.querySelector(".plan-item-action"),gap=parseFloat(getComputedStyle(row).columnGap)||0,lists=[];
+  var people=row.querySelector("[data-plan-people]"),categories=row.querySelector("[data-plan-categories]"),gap=parseFloat(getComputedStyle(row).columnGap)||0,lists=[];
   [[people,".plan-people-visible",".plan-people-overflow",".plan-people-menu",".prayer-person",2,"people"],[categories,".plan-category-visible",".plan-category-overflow",".plan-category-menu",".rhythm-area-badge",3,"categories"]].forEach(function(config){
    var container=config[0];if(!container)return;
    var visible=container.querySelector(config[1]),overflow=container.querySelector(config[2]),menu=container.querySelector(config[3]),summary=overflow&&overflow.querySelector("summary");
@@ -154,7 +154,7 @@ function layoutPlanPeopleBadges(root){
    var badgeGap=parseFloat(getComputedStyle(visible).columnGap)||0,widths=badges.map(function(badge){return badge.getBoundingClientRect().width;}),limit=config[6]==="people"&&badges.length>2?1:config[6]==="categories"&&badges.length>3?2:config[5],shown=Math.min(badges.length,limit);
    lists.push({visible:visible,overflow:overflow,menu:menu,summary:summary,badges:badges,wasOpen:wasOpen,gap:badgeGap,widths:widths,shown:shown,type:config[6]});
   });
-  var actionWidth=action?action.getBoundingClientRect().width+gap:0,available=Math.max(0,row.clientWidth-actionWidth-gap*Math.max(0,lists.length-1));
+  var available=Math.max(0,row.clientWidth-gap*Math.max(0,lists.length-1));
   function usedWidth(list,count){
    var total=list.widths.slice(0,count).reduce(function(sum,width){return sum+width;},0);
    return total+Math.max(0,count-1)*list.gap+(count<list.badges.length?list.summary.getBoundingClientRect().width+(count?list.gap:0):0);
@@ -174,17 +174,17 @@ function layoutPlanPeopleBadges(root){
   });
  });
 }
-function planItemCopy(it){
+function planItemCopy(it,action){
  var description=String(it.description||"").trim();
- return '<div class="plan-item-copy"><div class="plan-item-heading"><strong class="tend-type-title">'+esc(it.label||"")+'</strong></div><div class="plan-item-description">'+(description?'<div class="tend-type-description">'+esc(description)+'</div>':'<div class="plan-item-no-description">No details...</div>')+'</div></div>';
+ return '<div class="plan-item-copy"><div class="plan-item-heading"><strong class="tend-type-title">'+esc(it.label||"")+'</strong>'+(action?'<div class="plan-item-action">'+action+'</div>':"")+'</div><div class="plan-item-description">'+(description?'<div class="tend-type-description">'+esc(description)+'</div>':'<div class="plan-item-no-description">No details...</div>')+'</div></div>';
 }
 function planItemPeopleRow(it){
  var people=planItemPeople(it);
  return people?'<div class="plan-item-meta-people plan-people" data-plan-people><span class="plan-people-visible">'+people+'</span><details class="plan-people-overflow" hidden><summary></summary><span class="plan-people-menu"></span></details></div>':"";
 }
-function planItemTopRow(it,action){
+function planItemTopRow(it){
  var categories=planCategoryBadges(it),categoryRow=categories?'<div class="plan-item-category-row" data-plan-categories><span class="rhythm-area-badges plan-category-visible">'+categories.replace(/^<span class="rhythm-area-badges"[^>]*>|<\/span>$/g,"")+'</span><details class="plan-category-overflow" hidden><summary></summary><span class="plan-category-menu"></span></details></div>':"";
- return '<div class="plan-item-top-meta">'+planItemPeopleRow(it)+categoryRow+(action?'<div class="plan-item-action">'+action+'</div>':"")+'</div>';
+ return '<div class="plan-item-top-meta">'+planItemPeopleRow(it)+categoryRow+'</div>';
 }
 function planItemFooter(it,meta,sub){
  var kindBadge=planItemKindBadge(it),fallbackSub=!meta&&sub&&!kindBadge?'<div class="tend-type-meta">'+esc(sub)+'</div>':"",details=meta?meta.replace('<div class="plan-item-meta">',"").replace(/<\/div>$/,""):"";
@@ -262,7 +262,7 @@ function planBlockCard(b,curId,isCur,isAllDay){
  function itemHTML(it){
   var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.faithRhythm?'<button type="button" class="btn mini" data-tend-open="faith-rhythm" data-rhythm-id="'+esc(it.faithRhythm)+'">Tend</button>':(it.prayer?'<button type="button" class="btn mini" data-pray="'+esc(it.prayer)+'">Pray</button>':(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>')));
   var meta=planItemMetaBar(it.sub);
-  return '<div class="planitem"><div class="pi-main">'+planItemCopy(it)+'</div>'+planItemTopRow(it,btn)+planItemFooter(it,meta,it.sub)+'</div>';
+  return '<div class="planitem"><div class="pi-main">'+planItemCopy(it,btn)+'</div>'+planItemTopRow(it)+planItemFooter(it,meta,it.sub)+'</div>';
  }
  var body=queue.visible.length?queue.visible.map(itemHTML).join(""):'<div class="empty">'+(allItems.length?'Items hidden by the type filters.':'Nothing queued - all tended.')+'</div>';
  if(isCur)return '<div id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock current"><div class="current-plan-summary"><div class="current-plan-topline"><span class="current-plan-now">Now</span><div class="current-plan-weather" id="nowWeather">'+(typeof nowWeatherHTML==="function"?nowWeatherHTML():"")+'</div></div><div class="current-plan-details"><div class="current-plan-period"><span class="plan-block-name">'+esc(b.name)+'</span><span class="current-plan-range">'+esc(b.range)+'</span></div><span class="current-plan-item-count"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3h8M5.5 8h8M5.5 13h8M2.5 3h.01M2.5 8h.01M2.5 13h.01"/></svg>'+queue.visible.length+' item'+(queue.visible.length===1?'':'s')+'</span></div></div><div class="current-plan-items">'+body+'</div><div class="current-plan-filters">'+planKindTogglesHTML(toggleScope,"Now item filters")+'</div></div>';
@@ -865,7 +865,7 @@ function freeMomentHTML(){
  cands.sort(function(a,b){return b.pri-a.pri;});
  if(!cands.length)return "";
  var out='<div class="sectiontitle"><h2>Free moment?</h2><span class="hint">Your best options right now (up to 4)</span></div><div class="card dashboard-free-moment">';
- cands.slice(0,4).forEach(function(c){var bb=c.rhythm?rhyDoneBtn(c.rhythm):'<button class="btn mini'+(c.spark?" sparkbtn":"")+'"'+c.act+'>'+c.btn+'</button>',meta=planItemMetaBar(c.sub);out+='<div class="planitem"><div class="pi-main">'+planItemCopy(c)+'</div>'+planItemTopRow(c,bb)+planItemFooter(c,meta,c.sub)+'</div>';});
+ cands.slice(0,4).forEach(function(c){var bb=c.rhythm?rhyDoneBtn(c.rhythm):'<button class="btn mini'+(c.spark?" sparkbtn":"")+'"'+c.act+'>'+c.btn+'</button>',meta=planItemMetaBar(c.sub);out+='<div class="planitem"><div class="pi-main">'+planItemCopy(c,bb)+'</div>'+planItemTopRow(c)+planItemFooter(c,meta,c.sub)+'</div>';});
  return out+'</div>';}
 /* ============ area subpages ============ */
 function renderArea(id){

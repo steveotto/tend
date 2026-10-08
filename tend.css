@@ -1091,8 +1091,8 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .plan-people-visible{display:flex;align-items:center;gap:6px;min-width:0}
 .home-dashboard .plan-people .prayer-person{flex:none}
 .home-dashboard .plan-people .avatar,.home-dashboard .plan-people-menu .avatar{border:0!important}
-.home-dashboard .plan-item-heading{display:block;grid-column:1;grid-row:1;min-width:0}
-.home-dashboard .plan-item-heading .tend-type-title{display:block;width:100%;min-width:0;margin:0}
+.home-dashboard .plan-item-heading{display:flex;align-items:flex-start;gap:8px;grid-column:1;grid-row:1;min-width:0}
+.home-dashboard .plan-item-heading .tend-type-title{display:block;flex:1;min-width:0;margin:0}
 .home-dashboard .plan-item-description{display:flex;flex-direction:column;align-items:flex-start;min-height:0;overflow-wrap:anywhere}
 .home-dashboard .plan-item-no-description{font-style:italic;color:var(--ink-faint)}
 .home-dashboard .plan-item-top-meta{grid-column:1;grid-row:2;display:flex;align-items:center;gap:8px;min-width:0}
@@ -1102,7 +1102,6 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .plan-item-category-row .rhythm-area-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;padding:4px;border:1px solid var(--line);border-radius:50%;background:var(--mist);color:var(--forest-deep);cursor:pointer}
 .home-dashboard .plan-item-category-row .rhythm-area-badge svg{width:14px;height:14px}
 .home-dashboard .plan-item-category-row .rhythm-area-badge:hover{background:#dff3e9}
-.home-dashboard .plan-item-top-meta>.plan-item-action{margin-left:auto}
 .home-dashboard .plan-item-footer{grid-column:1;grid-row:3;display:grid;grid-template-columns:minmax(0,1fr);gap:6px;min-width:0}
 .home-dashboard .plan-item-footer-badges{display:flex;align-items:center;gap:8px;min-width:0}
 .home-dashboard .plan-item-footer-badges .plan-pills{display:flex;align-items:center;gap:6px;min-width:0}
@@ -1483,7 +1482,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  }
  .home-dashboard .planitem:has(.plan-item-top-meta)>.pi-main{grid-column:1;grid-row:1;display:block;min-width:0;min-height:0}
  .home-dashboard .planitem:has(.plan-item-top-meta) .plan-item-copy{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;row-gap:10px;height:auto}
- .home-dashboard .plan-item-heading{display:block;grid-row:1}
+ .home-dashboard .plan-item-heading{display:flex;grid-row:1}
  .home-dashboard .plan-item-heading .tend-type-title{font-size:17px}
  .home-dashboard .plan-item-description{min-height:0}
  .home-dashboard .plan-item-top-meta{grid-row:2}
