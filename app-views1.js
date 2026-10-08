@@ -225,7 +225,7 @@ function planCandidates(bid,curBid){
  }
  return out;
 }
-var planOpenState={};var planViewState="allday";var planKindVisibility={now:{rhythm:true,spark:true,prayer:true},other:{rhythm:true,spark:true,prayer:true}};
+var planViewState="allday";var planKindFilterOpen={now:false,other:false};var planKindVisibility={now:{rhythm:true,spark:true,prayer:true},other:{rhythm:true,spark:true,prayer:true}};
 function planKindVisibilityFor(scope){
  if(!planKindVisibility[scope])planKindVisibility[scope]={rhythm:true,spark:true,prayer:true};
  return planKindVisibility[scope];
@@ -234,6 +234,11 @@ function planItemKind(item){return item.rhythm||item.rkey||item.faithRhythm?"rhy
 function planKindTogglesHTML(scope,label){
  var visibility=planKindVisibilityFor(scope);
  return '<span class="plan-kind-toggles" role="group" aria-label="'+esc(label||"Show or hide item types")+'">'+[["rhythm","Rhythm","rhythms"],["spark","Spark","sparks"],["prayer","Prayer","prayer"]].map(function(type){var active=visibility[type[0]]!==false,buttonLabel=(active?"Hide ":"Show ")+type[1]+" items";return '<button type="button" class="plan-kind-toggle plan-kind-'+type[0]+(active?"":" is-muted")+'" data-plan-kind-toggle="'+esc(scope)+'" data-kind="'+type[0]+'" aria-label="'+buttonLabel+'" title="'+buttonLabel+'" aria-pressed="'+active+'">'+collectionIcon(type[2])+'</button>';}).join("")+'</span>';
+}
+function planKindFilterHTML(scope,count,label){
+ label=label|| (scope==="now"?"Now":"All Day");
+ var itemLabel=count===1?"item":"items";
+ return '<details class="current-plan-filter" data-plan-kind-filter="'+esc(scope)+'"'+(planKindFilterOpen[scope]?' open':'')+'><summary class="current-plan-item-count" aria-label="Filter '+label+' item types" title="Filter '+label+' item types"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3h8M5.5 8h8M5.5 13h8M2.5 3h.01M2.5 8h.01M2.5 13h.01"/></svg>'+count+' '+itemLabel+'</summary><div class="current-plan-filter-menu">'+planKindTogglesHTML(scope,label+" item filters")+'</div></details>';
 }
 function planMetaIcon(kind){
  var paths={frequency:'<path d="M20 7a8 8 0 0 0-14-2L3 8m0-5v5h5 M4 17a8 8 0 0 0 14 2l3-3m0 5v-5h-5"/>',time:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',occurred:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18m-13 5 2 2 4-4"/>'};
@@ -256,18 +261,19 @@ function planBlockCard(b,curId,isCur,isAllDay){
  var toggleScope=isCur?"now":"other",visibility=planKindVisibilityFor(toggleScope);
  var allItems=planCandidates(b.id,curId),items=allItems.filter(function(item){var kind=planItemKind(item);return !kind||visibility[kind]!==false;});
  var queue=prioritizePlanItems(items);
- var range='<span class="plan-range">'+b.range+' \u00b7 '+queue.visible.length+' item'+(queue.visible.length===1?'':'s')+'</span>';
- var summaryMeta='<span class="plan-summary-meta">'+range+(isCur?'':planKindTogglesHTML(toggleScope))+'</span>';
  var block=dayBlocks().find(function(item){return item.id===b.id;}),blockStart=block?block.start:"";
+ function header(){
+  var label=isCur?"Now":isAllDay?"All Day":b.name,weather=isCur?nowWeatherHTML():isAllDay?nowWeatherHTML():(typeof planWeatherHTML==="function"?planWeatherHTML(blockStart):""),
+   period=isCur?'<span class="plan-block-name">'+esc(b.name)+'</span><span class="current-plan-range">'+esc(b.range)+'</span>':isAllDay?'<span class="current-plan-range current-plan-all-day-range">Any time today</span>':'<span class="current-plan-range">'+esc(b.range)+'</span>';
+  return '<div class="current-plan-summary"><div class="current-plan-topline"><span class="current-plan-now">'+esc(label)+'</span><div class="current-plan-weather"'+(isCur?' id="nowWeather"':'')+'>'+weather+'</div></div><div class="current-plan-details"><div class="current-plan-period">'+period+'</div>'+planKindFilterHTML(toggleScope,queue.visible.length,label)+'</div></div>';
+ }
  function itemHTML(it){
   var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.faithRhythm?'<button type="button" class="btn mini" data-tend-open="faith-rhythm" data-rhythm-id="'+esc(it.faithRhythm)+'">Tend</button>':(it.prayer?'<button type="button" class="btn mini" data-pray="'+esc(it.prayer)+'">Pray</button>':(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>')));
   var meta=planItemMetaBar(it.sub);
   return '<div class="planitem"><div class="pi-main">'+planItemCopy(it,btn)+'</div>'+planItemTopRow(it)+planItemFooter(it,meta,it.sub)+'</div>';
  }
  var body=queue.visible.length?queue.visible.map(itemHTML).join(""):'<div class="empty">'+(allItems.length?'Items hidden by the type filters.':'Nothing queued - all tended.')+'</div>';
- if(isCur)return '<div id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock current"><div class="current-plan-summary"><div class="current-plan-topline"><span class="current-plan-now">Now</span><div class="current-plan-weather" id="nowWeather">'+(typeof nowWeatherHTML==="function"?nowWeatherHTML():"")+'</div></div><div class="current-plan-details"><div class="current-plan-period"><span class="plan-block-name">'+esc(b.name)+'</span><span class="current-plan-range">'+esc(b.range)+'</span></div><span class="current-plan-item-count"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3h8M5.5 8h8M5.5 13h8M2.5 3h.01M2.5 8h.01M2.5 13h.01"/></svg>'+queue.visible.length+' item'+(queue.visible.length===1?'':'s')+'</span></div></div><div class="current-plan-items">'+body+'</div><div class="current-plan-filters">'+planKindTogglesHTML(toggleScope,"Now item filters")+'</div></div>';
- var hasSavedOpen=Object.prototype.hasOwnProperty.call(planOpenState,b.id),isOpen=isAllDay?(hasSavedOpen?planOpenState[b.id]:queue.visible.length>0):true;
- return '<details id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock"'+(isOpen?' open':'')+'><summary><span class="plan-summary-copy"><span class="plan-block-name">'+esc(b.name)+'</span>'+summaryMeta+'</span><span class="plan-weather-slot" data-plan-weather="'+esc(blockStart)+'">'+(typeof planWeatherHTML==="function"?planWeatherHTML(blockStart):"")+'</span></summary><div style="margin-top:8px">'+body+'</div></details>';
+ return '<section id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock current'+(isAllDay?' all-day':'')+'">'+header()+'<div class="current-plan-items">'+body+'</div></section>';
 }
 function planHTML(){
  var blocks=planBlocksDef();
@@ -864,7 +870,7 @@ function freeMomentHTML(){
  if(lo&&lo.s<80)cands.push({pri:(100-lo.s)/10,label:"Reach out to "+lo.p.name,sub:(lo.p.relation||"")+" \u00b7 meter "+lo.s+" - lowest",act:' data-openperson="'+lo.p.id+'"',btn:"Open"});
  cands.sort(function(a,b){return b.pri-a.pri;});
  if(!cands.length)return "";
- var out='<div class="sectiontitle"><h2>Free moment?</h2><span class="hint">Your best options right now (up to 4)</span></div><div class="card dashboard-free-moment">';
+ var out='<div class="sectiontitle"><h2>Free moment?</h2><span class="hint">Your best options right now (up to 4)</span></div><div class="dashboard-free-moment">';
  cands.slice(0,4).forEach(function(c){var bb=c.rhythm?rhyDoneBtn(c.rhythm):'<button class="btn mini'+(c.spark?" sparkbtn":"")+'"'+c.act+'>'+c.btn+'</button>',meta=planItemMetaBar(c.sub);out+='<div class="planitem"><div class="pi-main">'+planItemCopy(c,bb)+'</div>'+planItemTopRow(c)+planItemFooter(c,meta,c.sub)+'</div>';});
  return out+'</div>';}
 /* ============ area subpages ============ */

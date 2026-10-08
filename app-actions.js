@@ -123,7 +123,7 @@ function bind(){
  if(window._tendDelegated)return;
  window._tendDelegated=true;
  document.addEventListener("input",function(e){if(e.target&&/^set(Green|Yellow|Base)$/.test(e.target.id)&&typeof updateMeterThresholdPreview==="function")updateMeterThresholdPreview();});
- document.addEventListener("toggle",function(e){var t=e.target;if(t.matches&&t.matches("[data-plan-block]"))planOpenState[t.getAttribute("data-plan-block")]=t.open;},true);
+ document.addEventListener("toggle",function(e){var t=e.target;if(t.matches&&t.matches("[data-plan-kind-filter]"))planKindFilterOpen[t.getAttribute("data-plan-kind-filter")]=t.open;},true);
  document.addEventListener("cancel",function(e){
   if(e.target.id==="rippleDialog"){if(editingConn)delete tendItemAssociationDrafts[tendAssociationKey("connection","connection",editingConn)];rhythmEditDraft=null;editRhythmId=null;window._rippleModalOpen=false;editingConn=null;return;}
   if(e.target.matches&&e.target.matches("dialog[data-rhythm-picker-dialog]")){e.preventDefault();rhythmPickerDraft=null;render();return;}
@@ -137,7 +137,8 @@ function bind(){
   }
  },true);
  document.addEventListener("click",function(e){
-  var t=e.target,b;
+  var t=e.target,b,openPlanFilter=document.querySelector(".current-plan-filter[open]");
+  if(openPlanFilter&&!openPlanFilter.contains(t))openPlanFilter.open=false;
   if(b=t.closest('[data-settingstab]')){settingsTab=b.getAttribute('data-settingstab');document.querySelectorAll('[data-settingstab]').forEach(function(x){x.setAttribute('aria-selected',String(x.getAttribute('data-settingstab')===settingsTab));});document.querySelectorAll('.settings-panel').forEach(function(x){x.hidden=x.id!=='settings-panel-'+settingsTab;});return;}
   if(b=t.closest("[data-rhyhistory]")){openRhythmHistory(b.getAttribute("data-rhyhistory"));return;}
   if(b=t.closest("[data-connection-history]")){openConnectionHistory(b.getAttribute("data-connection-history"));return;}
@@ -153,7 +154,7 @@ function bind(){
   if(b=t.closest("[data-meter-tab],[data-profiletab]")){var selected=b.getAttribute("data-meter-tab")||b.getAttribute("data-profiletab");profileTabs[currentPerson]=selected;document.querySelectorAll('[data-profiletab]').forEach(function(button){button.setAttribute('aria-selected',String(button.getAttribute('data-profiletab')===selected));});document.querySelectorAll('.profile-tab-panel').forEach(function(panel){panel.hidden=panel.id!=="profile-panel-"+selected;});if(b.hasAttribute('data-meter-tab')){var target=el("profile-tab-"+selected);if(target){target.focus({preventScroll:true});target.scrollIntoView({behavior:"smooth",block:"start"});}}return;}
   if(b=t.closest("[data-rippleidea]")){var pid=b.getAttribute("data-rippleidea");rippleIdeaOffsets[pid]=(rippleIdeaOffsets[pid]||0)+1;var person=S.people.find(function(p){return p.id===pid;});if(person)el("rippleIdea").textContent=rippleIdea(person);return;}
   if(b=t.closest("[data-rippleopen]")){window._rippleModalOpen=true;render();var rippleType=el("plogType");if(rippleType)rippleType.focus();return;}
-  if(b=t.closest("[data-plan-kind-toggle]")){e.preventDefault();e.stopPropagation();var scope=b.getAttribute("data-plan-kind-toggle"),kind=b.getAttribute("data-kind"),visibility=planKindVisibilityFor(scope);if(Object.prototype.hasOwnProperty.call(visibility,kind)){visibility[kind]=visibility[kind]===false;render();}return;}
+  if(b=t.closest("[data-plan-kind-toggle]")){e.preventDefault();e.stopPropagation();var scope=b.getAttribute("data-plan-kind-toggle"),kind=b.getAttribute("data-kind"),visibility=planKindVisibilityFor(scope);if(Object.prototype.hasOwnProperty.call(visibility,kind)){planKindFilterOpen[scope]=true;visibility[kind]=visibility[kind]===false;render();}return;}
   if(b=t.closest("[data-planview]")){var pv=b.getAttribute("data-planview");planViewState=(planViewState===pv)?null:pv;render();return;}
   if(b=t.closest("[data-areanav]")){currentArea=b.getAttribute("data-areanav");if(currentArea==="faith")faithConfig().selectedGroup="Sabbath";openDetail=null;editingId=null;editingEvent=null;activityComposerOpen=false;taskDraftArea=null;render();window.scrollTo(0,0);return;}
   if(b=t.closest("[data-utilnav]")){tab=b.getAttribute("data-utilnav");if(tab==="settings")settingsTab="profile";document.body.classList.remove("mobile-search-open");var mobileSearchToggle=document.querySelector("[data-mobile-search-toggle]");if(mobileSearchToggle)mobileSearchToggle.setAttribute("aria-expanded","false");window._psModalOpen=false;window._personPrayerDraftFor=null;currentArea=null;openDetail=null;editingId=null;editingEvent=null;activityComposerOpen=false;taskDraftArea=null;currentPerson=null;editingConn=null;editRhythmId=null;rhythmEditDraft=null;editSparkId=null;sparkEditDraft=null;sparkDraftOpenFor=null;noteDraftOpenFor=null;rhythmDraft=null;render();window.scrollTo(0,0);return;}
