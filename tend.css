@@ -538,7 +538,7 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .now-weather-prompt-icon{font-size:16px;color:var(--mint)}
 .current-plan-topline{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .current-plan-now{font-size:19px;font-weight:700;line-height:1.35;color:var(--ink)}
-.current-plan-summary{display:flex;align-items:stretch;flex-direction:column;gap:8px;min-height:0;margin:0 0 10px;padding:12px 14px;border-radius:14px;background:#E3F1EA;color:var(--ink)}
+.current-plan-summary{display:flex;align-items:stretch;flex-direction:column;gap:8px;min-height:0;margin:0 0 10px;padding:12px 14px;border-left:3px solid var(--mint);border-radius:0 14px 14px 0;background:var(--canvas);color:var(--ink)}
 .current-plan-summary>.plan-block-name{font-size:15px;font-weight:700;line-height:1.35}
 .current-plan-summary>.plan-range{margin:0;font-size:13px;line-height:1.4}
 .current-plan-weather{position:static;width:auto;transform:none}
@@ -1427,7 +1427,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .calendar-card{margin:0 0 14px;padding:10px 12px;border:1px solid var(--line);border-radius:16px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)}
  .home-dashboard .calitem{gap:8px;padding:9px 4px;border-bottom:1px solid var(--line);border-radius:0;background:transparent}
  .home-dashboard #calStrip .calitem:last-child{border-bottom:0}
- .home-dashboard .calendar-sync-slot{display:block;margin:-6px 0 14px;padding:0}
+ .home-dashboard .calendar-sync-slot{display:block;margin:-6px 0 22px;padding:0}
  .home-dashboard .calendar-sync-slot .calsync{margin:0 0 0 auto;font-size:12px}
  html[data-mobile-text-size="large"] .home-dashboard .calendar-sync-slot .calsync{font-size:14px}
 }
