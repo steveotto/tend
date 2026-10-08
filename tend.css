@@ -1127,9 +1127,9 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .current-plan-item-count:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
 .home-dashboard .current-plan-filter-menu{position:absolute;z-index:30;top:calc(100% + 4px);right:0;display:flex;justify-content:flex-end;min-width:120px;padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--card);box-shadow:0 8px 24px rgba(32,39,35,.16)}
 .home-dashboard .current-plan-filter-menu .plan-kind-toggles{gap:7px}
-.home-dashboard .current-plan-filter-menu .plan-kind-toggle{width:30px;height:30px;min-width:30px;min-height:30px;padding:0;border:1px solid;border-radius:50%;box-shadow:none}
+.home-dashboard .current-plan-filter-menu .plan-kind-toggle{width:30px;height:30px;min-width:30px;min-height:30px;padding:0;border:1px solid var(--line)!important;border-radius:50%;box-shadow:none}
 .home-dashboard .current-plan-filter-menu .plan-kind-toggle .collection-icon{width:19px;height:19px}
-.home-dashboard .current-plan-filter-menu .plan-kind-toggle.is-muted{opacity:.38;color:var(--ink-faint)}
+.home-dashboard .current-plan-filter-menu .plan-kind-toggle.is-muted{opacity:.55;border-color:var(--line)!important;color:var(--ink-faint)}
 .home-dashboard .current-plan-filter-menu .plan-kind-toggle:hover{opacity:.8}
 .home-dashboard .current-plan-filter-menu .plan-kind-toggle.is-muted:hover{opacity:.8}
 .home-dashboard .dashboard-free-moment{display:grid;gap:10px;margin:0 0 14px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
