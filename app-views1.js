@@ -70,14 +70,14 @@ function renderToday(){
  var days=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];var mos=["January","February","March","April","May","June","July","August","September","October","November","December"];
  var greet=h<12?"Good morning":(h<18?"Good afternoon":"Good evening");
  var ov=overallScore(),oc=scoreClass(ov);
- var out='<div class="sectiontitle" style="margin-top:6px"><h2>'+greet+', Steve</h2><span class="hint">'+days[d.getDay()]+", "+mos[d.getMonth()]+" "+d.getDate()+'</span></div>';
- out+='<div class="card overall-card"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:18px;font-weight:500">Overall health</h3><span class="ov-score '+oc+'">'+ov+'</span></div><div class="bar-ov"><i class="ov-marker" style="left:'+ov+'%"></i></div>'+'<div class="meta" style="margin-top:6px"><span class="statusword '+oc+'">'+scoreLabel(ov)+'</span> · averaged across 6 areas</div>'+areaMenuHTML()+'</div>';
+ var out='<main class="home-dashboard"><div class="sectiontitle dashboard-greeting" style="margin-top:6px"><h2>'+greet+', Steve</h2><span class="hint">'+days[d.getDay()]+", "+mos[d.getMonth()]+" "+d.getDate()+'</span></div>';
+ out+='<div class="card overall-card"><div class="dashboard-overall-heading" style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:18px;font-weight:500">Overall health</h3><span class="ov-score '+oc+'">'+ov+'</span></div><div class="bar-ov"><i class="ov-marker" style="left:'+ov+'%"></i></div>'+'<div class="meta" style="margin-top:6px"><span class="statusword '+oc+'">'+scoreLabel(ov)+'</span> · averaged across 6 areas</div>'+areaMenuHTML()+'</div>';
  out+='<div class="sectiontitle calendar-sectiontitle"><h2>Calendar Events</h2><span id="calendarSyncSlot" class="calendar-sync-slot"></span></div><div class="card calendar-card"><div id="calStrip"><div class="empty">'+((S.calendars||[]).length?"Loading calendars...":"No calendars connected - add one in Settings.")+'</div></div></div>';
  out+=planHTML();
  out+=freeMomentHTML();
  out+=upcomingHTML();
  out+=renderChecklists();
- return out;}
+ return out+'</main>';}
 /* ============ time-aware routine plan ============ */
 var DEFAULT_DAY_BLOCKS=[
  {id:"early",name:"Early morning",start:"05:30"},{id:"morning",name:"Midday focus",start:"09:00"},
@@ -598,7 +598,7 @@ function personProfile(pid){
  var bd=bdayInfo(p.birthday);
  /* head card: identity + health dashboard */
  var out='<div class="card detail open person-profile" id="personPanel"><div class="person-profile-head"><div class="person-identity">'+personAvatar(p,52)+'<div><h3>'+esc(p.name)+'</h3><div class="rel">'+esc(p.relation||"")+'</div></div></div><div class="profile-head-actions"><button class="pbtn" data-psettings="1" title="Person settings">\u2699</button><button class="pbtn" data-closeperson="1" title="Close">\u2715</button></div></div>';
- out+='<div class="person-health-heading"><div><h4>Tending health</h4><p>The rhythms and moments that keep you connected.</p></div><span class="person-profile-score">'+sc+'<small>/ 100</small></span></div>'+personHealthMeter(sc,p.name)+'<div class="person-health-status statusword '+c+'">'+scoreLabel(sc)+'</div><div class="chips">';
+ out+='<div class="person-health-heading"><div><h4>Tending health</h4><p>The rhythms and moments that keep you connected.</p></div><span class="person-profile-score">'+sc+'</span></div>'+personHealthMeter(sc,p.name)+'<div class="person-health-status statusword '+c+'">'+scoreLabel(sc)+'</div><div class="chips">';
  out+=ll?'<span class="chip">\u2665 '+esc(LL_LANGUAGES[ll])+'</span>':'<span class="chip info">no love language set</span>';
  out+=bd?'<span class="chip'+(bd.days<=14?" warn":" info")+'">\uD83C\uDF82 Birthday: '+esc(bd.label)+'</span>':'<span class="chip info">no birthday set</span>';
  if(p.anniversary){var an2=annivInfo(p.anniversary);if(an2)out+='<span class="chip info">\u2665 Anniversary: '+esc(an2.label)+'</span>';}
@@ -772,7 +772,7 @@ function freeMomentHTML(){
  if(lo&&lo.s<80)cands.push({pri:(100-lo.s)/10,label:"Reach out to "+lo.p.name,sub:(lo.p.relation||"")+" \u00b7 meter "+lo.s+" - lowest",act:' data-openperson="'+lo.p.id+'"',btn:"Open"});
  cands.sort(function(a,b){return b.pri-a.pri;});
  if(!cands.length)return "";
- var out='<div class="sectiontitle"><h2>Free moment?</h2><span class="hint">Your best options right now (up to 4)</span></div><div class="card">';
+ var out='<div class="sectiontitle"><h2>Free moment?</h2><span class="hint">Your best options right now (up to 4)</span></div><div class="card dashboard-free-moment">';
  cands.slice(0,4).forEach(function(c){var bb=c.rhythm?rhyDoneBtn(c.rhythm):'<button class="btn mini'+(c.spark?" sparkbtn":"")+'"'+c.act+'>'+c.btn+'</button>';out+='<div class="planitem"><div class="pi-main">'+tendRowContent(c.label,c.description,c.sub,'<span class="plan-pills">'+planPills(c)+'</span>')+'</div>'+bb+'</div>';});
  return out+'</div>';}
 /* ============ area subpages ============ */

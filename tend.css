@@ -70,6 +70,7 @@ nav.tabs button.active{background:var(--card);color:var(--forest);box-shadow:0 1
 .setrow{display:flex;align-items:center;gap:12px;margin-bottom:12px}
 .setrow label{flex:1;font-size:13px;color:var(--ink-soft)}
 .setrow input{width:90px;border:1px solid var(--line);border-radius:12px;padding:8px 10px;background:var(--canvas)}
+.setrow select{width:140px;min-height:40px;padding:7px 9px;border:1px solid var(--line);border-radius:9px;background:var(--canvas);color:var(--ink)}
 .pf-next{margin-top:8px;font-size:12px;font-weight:600;color:var(--forest)}
 .entry-person{font-size:11.5px;color:var(--forest);font-weight:600}
 .badge.st-to-contact{background:#FF5A45;color:#fff}
@@ -179,7 +180,8 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
   .wrap{padding-top:calc(96px + env(safe-area-inset-top))}
 }
 .overall-card{--canvas:#FBFCFB;--ink:#17251E;--ink-soft:#51605A;--ink-faint:rgba(94,107,99,.66);--forest:#1E9C68;--mint:#3FC68F;--mist:#E3F6ED;--line:#DEE8E1;--forest-deep:#137A4F;margin-bottom:14px}
-.ov-score{font-family:var(--serif);font-size:56px;font-weight:600;line-height:1;color:#17251E}
+.ov-score,.person-card-score,.person-profile-score{font-family:var(--sans);font-weight:600;line-height:1;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ov-score{font-size:56px;color:#17251E}
 .menu-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:16px}
 @media(min-width:640px){.menu-grid{grid-template-columns:repeat(3,1fr)}}
 .menu-area{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:14px;padding:14px 16px;min-height:56px;font-size:15.5px;font-weight:600;color:var(--ink);transition:all .15s;text-align:left}
@@ -396,7 +398,7 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .pill.spk,.pill.pry{background:var(--mist);color:var(--forest)}
 
 /* People share the dashboard's health scale; profile details stay in one card. */
-.person-card-score{font-size:32px;font-weight:600;line-height:1;color:#17251E;font-variant-numeric:tabular-nums}
+.person-card-score{font-size:32px;color:#17251E}
 .person-health-status{color:#17251E}
 .person-card h3{overflow-wrap:anywhere}
 .person-card .person-health-bar{height:8px;margin:20px 0 12px;box-shadow:none}
@@ -414,8 +416,7 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .person-health-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:24px;padding-top:24px;border-top:1px solid var(--line)}
 .person-health-heading h4{font-size:18px;font-weight:500;margin:0}
 .person-health-heading p{font-size:13px;color:var(--ink-soft);margin:8px 0 0}
-.person-profile-score{font-size:48px;line-height:1;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
-.person-profile-score small{font-size:13px;font-weight:400;color:var(--ink-soft);margin-left:8px}
+.person-profile-score{font-size:48px}
 .person-profile .person-health-bar{margin:24px 0;height:14px}
 .person-profile .chips{margin-top:16px}
 .person-profile .pmeters{margin-top:24px}
@@ -423,7 +424,6 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
  .person-health-heading{align-items:flex-start}
  .person-health-heading p{max-width:190px;line-height:1.5}
  .person-profile-score{font-size:36px}
- .person-profile-score small{display:block;text-align:right;margin-top:8px}
 }
 
 .rhythm-health{display:inline-flex;align-items:center;gap:6px;min-width:52px;flex-shrink:0;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink-soft);white-space:nowrap}
@@ -742,7 +742,9 @@ details.moor .moor-body{padding:2px 18px 14px}
 .faith-prayer-session>.faith-session-heading,.faith-prayer-session>.faith-session-progress,.faith-prayer-session>.faith-session-track,.faith-prayer-session>.faith-session-card,.faith-prayer-session>.faith-session-actions,.faith-prayer-session>.faith-session-help,.faith-prayer-session>.faith-session-empty{width:min(100%,760px);justify-self:center;box-sizing:border-box}
 .faith-session-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.faith-session-heading h1{margin-top:5px;font-size:25px}
 .faith-session-criteria{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap;max-width:min(60%,560px)}
-.faith-session-criteria span{display:inline-flex;align-items:center;min-height:30px;padding:4px 10px;border:1px solid var(--line);border-radius:99px;background:var(--mist);color:var(--ink-soft);font-size:12px;font-weight:600;white-space:nowrap}
+.faith-session-criteria .faith-session-person-badge{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:3px 9px 3px 3px;border:1px solid var(--line);border-radius:99px;background:var(--mist);color:var(--ink-soft);font-size:12px;font-weight:600;white-space:nowrap}
+.faith-session-person-badge .avatar{flex:none;width:24px!important;height:24px!important}
+.faith-session-criteria .faith-session-filter-label{display:inline-flex;align-items:center;min-height:30px;padding:4px 10px;border:1px solid var(--line);border-radius:99px;background:var(--mist);color:var(--ink-soft);font-size:12px;font-weight:600;white-space:nowrap}
 .faith-eyebrow{color:var(--forest);font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
 .faith-session-progress{text-align:center;color:var(--ink-soft);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
 .faith-session-track{height:5px;overflow:hidden;border-radius:99px;background:var(--mist)}.faith-session-track span{display:block;height:100%;border-radius:inherit;background:var(--forest);transition:width .2s}
@@ -1070,6 +1072,101 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .today-with-person .tend-row-content>.tend-type-meta{margin-top:2px;padding-top:0;border-top:0}
 .today-with-person .actrow [data-prayquick]{background:var(--forest);border-color:var(--forest);color:#fff}
 .today-with-person .actrow [data-prayquick]:hover{background:var(--forest-deep);border-color:var(--forest-deep);color:#fff}
+
+/* Phone-only dashboard: use section bars and separators instead of nested cards. */
+@media(max-width:600px){
+ .home-dashboard{margin:0 -10px;font-size:15px}
+ .home-dashboard>.sectiontitle:not(.dashboard-greeting){align-items:center;gap:8px;margin:20px 0 8px;padding:8px 11px;border-radius:9px;background:var(--mist);color:var(--forest-deep)}
+ .home-dashboard>.sectiontitle:not(.dashboard-greeting) h2{font-size:16px;font-weight:700;line-height:1.35}
+ .home-dashboard .dashboard-greeting{display:flex;align-items:baseline;gap:8px;margin:6px 0 12px}
+ .home-dashboard .dashboard-greeting h2{font-size:20px}
+ .home-dashboard .dashboard-greeting .hint{font-size:11px}
+ .home-dashboard .overall-card,.home-dashboard .calendar-card,.home-dashboard .planblock,.home-dashboard .dashboard-free-moment,.home-dashboard .cl-card{margin:0 0 10px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+ .home-dashboard .dashboard-overall-heading{align-items:center!important;margin:0 0 10px;padding:8px 11px;border-radius:9px;background:var(--mist)}
+ .home-dashboard .dashboard-overall-heading h3{font-size:16px!important;font-weight:700!important;color:var(--forest-deep)}
+ .home-dashboard .ov-score{font-size:32px}
+ .home-dashboard .bar-ov{height:11px;margin:12px 0 19px}
+ .home-dashboard .overall-card>.meta{font-size:12px}
+ .home-dashboard .menu-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:0;margin:10px 0 0;border-top:1px solid var(--line)}
+ .home-dashboard .menu-area{gap:7px;min-width:0;min-height:47px;padding:8px 5px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;font-size:13px;box-shadow:none}
+ .home-dashboard .menu-area-icon{width:17px;height:17px}
+ .home-dashboard .menu-area .ma-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .home-dashboard .menu-area .ma-score{font-size:12px}
+ .home-dashboard .calendar-card{padding:0}
+ .home-dashboard .calendar-card .calsync{margin:6px 0 0}
+ .home-dashboard .calitem{gap:8px;padding:8px 2px;border-radius:0;background:transparent}
+ .home-dashboard .cal-time{min-width:46px;font-size:11px}
+ .home-dashboard .cal-title{font-size:13.5px}
+ .home-dashboard .cal-range,.home-dashboard .cal-calname{font-size:10.5px}
+ .home-dashboard .now-badge,.home-dashboard .next-badge{font-size:9px;padding:2px 5px}
+ .home-dashboard .planblock{padding:0}
+ .home-dashboard .planblock.current{border:0;box-shadow:none}
+ .home-dashboard .planblock summary,.home-dashboard .current-plan-summary{min-height:44px;padding:8px 11px;border-radius:9px;background:var(--mist);color:var(--forest-deep)}
+ .home-dashboard .current-plan-summary{align-items:flex-start;gap:8px}
+ .home-dashboard .current-plan-summary .plan-summary-copy{align-items:flex-start;flex-direction:column;gap:2px;padding-right:0}
+ .home-dashboard .current-plan-weather{position:static;width:auto;transform:none}
+ .home-dashboard .planblock summary .plan-block-name,.home-dashboard .current-plan-summary .plan-block-name{font-size:15px;font-weight:700}
+ .home-dashboard .plan-summary-meta,.home-dashboard .current-plan-summary .plan-range{font-size:10.5px}
+ .home-dashboard .planitem{align-items:flex-start;gap:8px;padding:9px 0}
+ .home-dashboard .planblock .planitem>.btn{width:auto;min-width:58px;min-height:38px;padding:6px 9px;font-size:12px}
+ .home-dashboard .day-jumps{gap:6px;margin:7px 0 9px}
+ .home-dashboard .day-jumps .btn{flex:1 1 auto;min-height:34px;padding:5px 8px;font-size:11px}
+ .home-dashboard .plan-kind-toggles{gap:3px}
+ .home-dashboard .plan-kind-toggle{width:23px;height:23px;min-width:23px;min-height:23px}
+ .home-dashboard .dashboard-free-moment .planitem{border-bottom:1px dashed var(--line)}
+ .home-dashboard .uprow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;margin:0 0 10px;border-top:1px solid var(--line)}
+ .home-dashboard .upitem{min-width:0;gap:7px;padding:9px 4px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;font-size:12px}
+ .home-dashboard .updays{font-size:10px}
+ .home-dashboard .uplabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .home-dashboard .cl-card summary{padding:8px 11px;border-radius:9px;background:var(--mist);color:var(--forest-deep);font-size:14px!important}
+ .home-dashboard .cl-card .tasks{gap:8px;padding:9px 0}
+ .home-dashboard .cl-card .tasks li{align-items:center;padding:3px 0}
+ .home-dashboard .empty{font-size:12px}
+ .home-dashboard .calendar-breathing-room strong{font-size:14px}
+ .home-dashboard .calendar-breathing-room p{font-size:11.5px}
+}
+@media(max-width:600px){
+ html[data-mobile-text-size="large"] .home-dashboard{font-size:19px;--tend-item-title-size:19px;--tend-item-description-size:17px;--tend-item-meta-size:14px;--tend-item-action-size:16px;--tend-section-heading-size:20px}
+ html[data-mobile-text-size="large"] .home-dashboard>.sectiontitle:not(.dashboard-greeting){margin-top:23px;padding:11px 13px}
+ html[data-mobile-text-size="large"] .home-dashboard>.sectiontitle:not(.dashboard-greeting) h2,
+ html[data-mobile-text-size="large"] .home-dashboard .dashboard-overall-heading h3{font-size:20px!important}
+ html[data-mobile-text-size="large"] .home-dashboard .dashboard-greeting h2{font-size:24px}
+ html[data-mobile-text-size="large"] .home-dashboard .dashboard-greeting .hint{font-size:14px}
+ html[data-mobile-text-size="large"] .home-dashboard .ov-score{font-size:42px}
+ html[data-mobile-text-size="large"] .home-dashboard .bar-ov{height:16px}
+ html[data-mobile-text-size="large"] .home-dashboard .overall-card>.meta{font-size:15px}
+ html[data-mobile-text-size="large"] .home-dashboard .menu-area{min-height:58px;font-size:16px}
+ html[data-mobile-text-size="large"] .home-dashboard .menu-area-icon{width:22px;height:22px}
+ html[data-mobile-text-size="large"] .home-dashboard .menu-area-icon svg{width:22px;height:22px}
+ html[data-mobile-text-size="large"] .home-dashboard .menu-area .ma-score{font-size:15px}
+ html[data-mobile-text-size="large"] .home-dashboard .menu-area .ma-name{display:block;overflow:visible;white-space:normal;line-height:1.15}
+ html[data-mobile-text-size="large"] .home-dashboard .calitem{gap:10px;padding:11px 2px}
+ html[data-mobile-text-size="large"] .home-dashboard .cal-bar{width:6px}
+ html[data-mobile-text-size="large"] .home-dashboard .cal-time{min-width:54px;font-size:14px}
+ html[data-mobile-text-size="large"] .home-dashboard .cal-title{font-size:17px}
+ html[data-mobile-text-size="large"] .home-dashboard .cal-range,html[data-mobile-text-size="large"] .home-dashboard .cal-calname{font-size:13px}
+ html[data-mobile-text-size="large"] .home-dashboard .now-badge,html[data-mobile-text-size="large"] .home-dashboard .next-badge{font-size:11px}
+ html[data-mobile-text-size="large"] .home-dashboard .planblock summary .plan-block-name,html[data-mobile-text-size="large"] .home-dashboard .current-plan-summary .plan-block-name{font-size:19px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-summary-meta,html[data-mobile-text-size="large"] .home-dashboard .current-plan-summary .plan-range{font-size:13px}
+ html[data-mobile-text-size="large"] .home-dashboard .tend-type-title,html[data-mobile-text-size="large"] .home-dashboard .pi-label{font-size:19px}
+ html[data-mobile-text-size="large"] .home-dashboard .tend-type-description{font-size:17px}
+ html[data-mobile-text-size="large"] .home-dashboard .tend-type-meta,html[data-mobile-text-size="large"] .home-dashboard .pi-sub{font-size:14px}
+ html[data-mobile-text-size="large"] .home-dashboard .planitem>.btn{min-width:70px;min-height:48px;font-size:16px}
+ html[data-mobile-text-size="large"] .home-dashboard .day-jumps .btn{min-height:46px;font-size:14px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-kind-toggle{width:30px;height:30px;min-width:30px;min-height:30px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-kind-toggle .collection-icon{width:17px;height:17px}
+ html[data-mobile-text-size="large"] .home-dashboard .avatar{width:32px!important;height:32px!important}
+ html[data-mobile-text-size="large"] .home-dashboard .act-ic{width:12px;height:12px}
+ html[data-mobile-text-size="large"] .home-dashboard .upitem{gap:8px;padding:12px 4px;font-size:15px}
+ html[data-mobile-text-size="large"] .home-dashboard .updays{font-size:13px}
+ html[data-mobile-text-size="large"] .home-dashboard .cl-card summary{font-size:17px!important}
+ html[data-mobile-text-size="large"] .home-dashboard .cb{width:22px;height:22px}
+ html[data-mobile-text-size="large"] .home-dashboard .empty{font-size:16px}
+ html[data-mobile-text-size="large"] .home-dashboard .calendar-breathing-icon{width:48px;height:48px}
+ html[data-mobile-text-size="large"] .home-dashboard .calendar-breathing-icon svg{width:27px;height:27px}
+ html[data-mobile-text-size="large"] .home-dashboard .calendar-breathing-room strong{font-size:18px}
+ html[data-mobile-text-size="large"] .home-dashboard .calendar-breathing-room p{font-size:15px}
+}
 .tend-row-content .plan-pills{display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap;margin:0;vertical-align:middle}
 .tend-row-content .pill{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
 .tend-row-content .pill .collection-icon{width:14px;height:14px}

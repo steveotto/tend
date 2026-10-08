@@ -7,7 +7,7 @@ var KIND2TYPE={coffee:"inperson",meal:"inperson",date:"inperson",quality:"inpers
 var RIPPLE_TYPES={text:"Text",call:"Call",video:"Facetime",prayer:"Prayer",quality:"In Person",note:"Handwritten Note",gift:"Gift",other:"Other"};
 function typeLabel(e){if(e.rippleLabel)return e.rippleLabel==="One-on-One"?"In Person":e.rippleLabel;return e.type&&ETYPES[e.type]?ETYPES[e.type].label:(KINDS[e.kind]?KINDS[e.kind].label:e.kind);}
 function typeWeight(e){return e.type&&ETYPES[e.type]?ETYPES[e.type].w:(KINDS[e.kind]?KINDS[e.kind].w:3);}
-var DEFAULT_SETTINGS={greenAt:80,yellowAt:50,baseline:50};
+var DEFAULT_SETTINGS={greenAt:80,yellowAt:50,baseline:50,mobileTextSize:"normal"};
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
 function defaultKeyDates(){return[
  {id:"kd-leah",personId:"leah",label:"Leah's birthday",month:9,day:28},

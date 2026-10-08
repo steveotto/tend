@@ -1,6 +1,21 @@
 "use strict";
 /* ============ settings tabs override: focused, task-based settings groups ============ */
 var calendarEditorDraft=null;
+function applyMobileDashboardTextSize(){
+ var size=settings().mobileTextSize==="large"?"large":"normal";
+ document.documentElement.setAttribute("data-mobile-text-size",size);
+}
+applyMobileDashboardTextSize();
+function mobileDisplaySettingsHTML(){
+ var selected=settings().mobileTextSize==="large"?"large":"normal";
+ return settingsPanel('display')+'<div class="card settings-card"><div class="subhead">Mobile display</div><p class="settings-help">Choose the text size for the Dashboard on phones. This changes only mobile; tablet and desktop layouts stay the same.</p><div class="setrow"><label for="mobileTextSize">Mobile text size</label><select id="mobileTextSize" data-mobile-text-size><option value="normal"'+(selected==="normal"?' selected':'')+'>Normal</option><option value="large"'+(selected==="large"?' selected':'')+'>Large</option></select></div></div></section>';
+}
+document.addEventListener('change',function(event){
+ var input=event.target.closest&&event.target.closest('[data-mobile-text-size]');
+ if(!input)return;
+ settings().mobileTextSize=input.value==="large"?"large":"normal";
+ applyMobileDashboardTextSize();save();flash('Mobile display saved');
+});
 function openCalendarEditor(id){
  var calendar=id?S.calendars.find(function(item){return item.id===id;}):null;
  calendarEditorDraft=calendar?JSON.parse(JSON.stringify(calendar)):{id:null,name:'',url:'',color:'#4C9AFF'};
@@ -83,11 +98,12 @@ document.addEventListener('change',function(event){
 function renderSettings(){
  if(settingsTab==='general'||settingsTab==='peoplecolors'||settingsTab==='goals')settingsTab='peoplemeters';
  if(settingsTab==='times'||settingsTab==='dates'||settingsTab==='holidays'||settingsTab==='calendars')settingsTab='schedule';
- var tabs=[['profile','My profile'],['peoplemeters','People & meters'],['badges','Badge colors'],['schedule','Time & dates'],['focus','Focus'],['sync','Sync']];
+ var tabs=[['profile','My profile'],['display','Display'],['peoplemeters','People & meters'],['badges','Badge colors'],['schedule','Time & dates'],['focus','Focus'],['sync','Sync']];
  var out='<div class="sectiontitle settings-title"><h2>Settings</h2><span class="hint">Make Tend work for you</span></div>';
  out+='<p class="settings-intro">Choose a section below to update your preferences.</p>';
  out+='<div class="profile-tabs settings-tabs" role="tablist" aria-label="Settings">'+tabs.map(function(t){return '<button type="button" role="tab" id="settings-tab-'+t[0]+'" aria-controls="settings-panel-'+t[0]+'" aria-selected="'+(settingsTab===t[0])+'" data-settingstab="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div>';
  out+=myProfileSettingsHTML();
+ out+=mobileDisplaySettingsHTML();
  out+=settingsPanel('peoplemeters')+
   '<div class="settings-group-grid">'+
   (typeof peopleColorsSettingsHTML==='function'?peopleColorsSettingsHTML():'')+

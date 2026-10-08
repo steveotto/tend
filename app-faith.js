@@ -187,7 +187,7 @@ function faithHealthHTML(){
   var value=Number.isFinite(score)?score:null,level=faithScoreClass(value);
   return '<div class="pmeter"><div class="pm-lab"><span>'+label+'</span><span class="pm-val '+level+'">'+faithScoreText(value)+'</span></div><div class="bar" role="meter" aria-label="Overall Faith '+label.toLowerCase()+' health" aria-valuemin="0" aria-valuemax="100"'+(value===null?' aria-valuetext="No score available"':' aria-valuenow="'+value+'" aria-valuetext="'+value+' out of 100"')+'><i class="'+level+'" style="width:'+(value===null?0:value)+'%"></i></div><div class="pm-note">'+note+'</div></div>';
  }
- return '<section class="card faith-health-card" aria-labelledby="faithHealthTitle"><div class="person-health-heading"><div><h4 id="faithHealthTitle">Overall Faith health</h4><p>Faith rhythms and prayers, tended together.</p></div><span class="person-profile-score">'+faithScoreText(overall)+'<small>/ 100</small></span></div><div class="bar-ov faith-overall-health-meter" role="meter" aria-label="Overall Faith health" aria-valuemin="0" aria-valuemax="100"'+(overall===null?' aria-valuetext="No active Faith health scores"':' aria-valuenow="'+overall+'" aria-valuetext="'+overall+' out of 100: '+esc(scoreLabel(overall))+'"')+'>'+(overall===null?'':'<i class="ov-marker" style="left:clamp(10px, '+overall+'%, calc(100% - 10px))" aria-hidden="true"></i>')+'</div><div class="person-health-status statusword '+level+'">'+(overall===null?"No active Faith health scores":esc(scoreLabel(overall)))+'</div><div class="pmeters faith-overall-meters">'+meter("Rhythms",rhythmScoreValue,rhythms.length+" active rhythm"+(rhythms.length===1?"":"s"))+meter("Prayer",prayerScoreValue,prayers.length+" active prayer"+(prayers.length===1?"":"s"))+'</div></section>';
+ return '<section class="card faith-health-card" aria-labelledby="faithHealthTitle"><div class="person-health-heading"><div><h4 id="faithHealthTitle">Overall Faith health</h4><p>Faith rhythms and prayers, tended together.</p></div><span class="person-profile-score">'+faithScoreText(overall)+'</span></div><div class="bar-ov faith-overall-health-meter" role="meter" aria-label="Overall Faith health" aria-valuemin="0" aria-valuemax="100"'+(overall===null?' aria-valuetext="No active Faith health scores"':' aria-valuenow="'+overall+'" aria-valuetext="'+overall+' out of 100: '+esc(scoreLabel(overall))+'"')+'>'+(overall===null?'':'<i class="ov-marker" style="left:clamp(10px, '+overall+'%, calc(100% - 10px))" aria-hidden="true"></i>')+'</div><div class="person-health-status statusword '+level+'">'+(overall===null?"No active Faith health scores":esc(scoreLabel(overall)))+'</div><div class="pmeters faith-overall-meters">'+meter("Rhythms",rhythmScoreValue,rhythms.length+" active rhythm"+(rhythms.length===1?"":"s"))+meter("Prayer",prayerScoreValue,prayers.length+" active prayer"+(prayers.length===1?"":"s"))+'</div></section>';
 }
 function faithSettingsHTML(){
  return faithSettingsOpen?'<section class="faith-sections-settings" id="faith-sections-settings" aria-labelledby="faithSectionsTitle"><div class="faith-settings-heading"><div><h2 id="faithSectionsTitle">Sections</h2><p>Choose which practice sections appear on this page.</p></div><button type="button" class="iconbtn" data-faith-settings-close="1" aria-label="Close section settings">×</button></div><div class="faith-settings-list">'+FAITH_GROUPS.map(function(group){return '<label><input type="checkbox" data-faith-enabled="'+esc(group)+'"'+(faithGroupEnabled(group)?" checked":"")+'><span>'+esc(group)+'</span></label>';}).join("")+'</div></section>':'';
@@ -302,10 +302,13 @@ function faithPrayerSessionSort(view){
 function faithPrayerSessionCriteriaHTML(){
  var selected=faithPrayerSession.people;
  if(selected===undefined)selected=faithConfig().prayerPeople;
- var people=selected===null?null:(selected||[]).map(function(id){return id==="me"?"Me":(S.people.find(function(person){return person.id===id;})||{}).name;}).filter(Boolean);
- var labels=people===null?["Everyone"]:people.length?people:["No people selected"];
- labels.push(faithPrayerSession.view==="today"?"Today":"All prayers");
- return '<div class="faith-session-criteria" aria-label="Prayer session criteria">'+labels.map(function(label){return '<span>'+esc(label)+'</span>';}).join("")+'</div>';
+ var ids=selected===null?["me"].concat(S.people.map(function(person){return person.id;})):(selected||[]),people=ids.map(function(id){return id==="me"?{id:"me",name:"Me",photo:settings().profilePhoto}:S.people.find(function(person){return person.id===id;});}).filter(Boolean),labels=people.map(function(person){
+  var first=person.id==="me"?"Me":String(person.name||"").trim().split(/\s+/)[0]||"Person";
+  return '<span class="faith-session-person-badge">'+personAvatar(person,24)+esc(first)+'</span>';
+ }).join("");
+ if(!labels)labels='<span class="faith-session-filter-label">No people selected</span>';
+ labels+='<span class="faith-session-filter-label">'+(faithPrayerSession.view==="today"?"Today":"All prayers")+'</span>';
+ return '<div class="faith-session-criteria" aria-label="Prayer session criteria">'+labels+'</div>';
 }
 function faithPrayerSessionHTML(){
  var ids=faithPrayerSession?faithPrayerSession.ids:[],items=ids.map(function(id){return S.prayers.find(function(p){return p.id===id&&!p.answered&&!p.archived;});}).filter(Boolean);
