@@ -8,7 +8,7 @@ function applyMobileDashboardTextSize(){
 applyMobileDashboardTextSize();
 function mobileDisplaySettingsHTML(){
  var selected=settings().mobileTextSize==="large"?"large":"normal";
- return settingsPanel('display')+'<div class="card settings-card"><div class="subhead">Mobile display</div><p class="settings-help">Choose the text size for the Dashboard on phones. This changes only mobile; tablet and desktop layouts stay the same.</p><div class="setrow"><label for="mobileTextSize">Mobile text size</label><select id="mobileTextSize" data-mobile-text-size><option value="normal"'+(selected==="normal"?' selected':'')+'>Normal</option><option value="large"'+(selected==="large"?' selected':'')+'>Large</option></select></div></div></section>';
+ return settingsPanel('display')+'<div class="card settings-card"><div class="subhead">Mobile display</div><p class="settings-help">Choose the text size for Today and other pages on phones. This changes only mobile; tablet and desktop layouts stay the same.</p><div class="setrow"><label for="mobileTextSize">Mobile text size</label><select id="mobileTextSize" data-mobile-text-size><option value="normal"'+(selected==="normal"?' selected':'')+'>Normal</option><option value="large"'+(selected==="large"?' selected':'')+'>Large</option></select></div></div></section>';
 }
 document.addEventListener('change',function(event){
  var input=event.target.closest&&event.target.closest('[data-mobile-text-size]');
@@ -98,7 +98,7 @@ document.addEventListener('change',function(event){
 function renderSettings(){
  if(settingsTab==='general'||settingsTab==='peoplecolors'||settingsTab==='goals')settingsTab='peoplemeters';
  if(settingsTab==='times'||settingsTab==='dates'||settingsTab==='holidays'||settingsTab==='calendars')settingsTab='schedule';
- var tabs=[['profile','My profile'],['display','Display'],['peoplemeters','People & meters'],['badges','Badge colors'],['schedule','Time & dates'],['focus','Focus'],['sync','Sync']];
+ var tabs=[['profile','My profile'],['display','Display'],['peoplemeters','People & meters'],['badges','Badge colors'],['schedule','Time & dates'],['focus','Focus'],['plan','Plan'],['offload','Offload'],['sync','Sync']];
  var out='<div class="sectiontitle settings-title"><h2>Settings</h2><span class="hint">Make Tend work for you</span></div>';
  out+='<p class="settings-intro">Choose a section below to update your preferences.</p>';
  out+='<div class="profile-tabs settings-tabs" role="tablist" aria-label="Settings">'+tabs.map(function(t){return '<button type="button" role="tab" id="settings-tab-'+t[0]+'" aria-controls="settings-panel-'+t[0]+'" aria-selected="'+(settingsTab===t[0])+'" data-settingstab="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div>';
@@ -123,6 +123,8 @@ function renderSettings(){
  if(!S.calendars.length)out+='<div class="empty">No calendars connected yet.</div>';
  out+='<div class="settings-actions"><button type="button" class="btn ghost" data-calendar-editor-add>Add calendar</button></div>'+calendarEditorHTML()+'</div></section>';
  out+=settingsPanel('focus')+focusSettingsHTML()+'</section>';
+ out+=settingsPanel('plan')+(typeof renderCarePlan==='function'?renderCarePlan():'')+'</section>';
+ out+=settingsPanel('offload')+(typeof renderOffload==='function'?renderOffload():'')+'</section>';
  out+=settingsPanel('sync');
  var st=window.SYNCcfg||{};
  out+='<div class="card settings-card"><div class="subhead">Sync your data</div><p class="settings-help">Connect to your private data repository to back up and sync Tend between devices. These settings are stored on this device.</p>'+
