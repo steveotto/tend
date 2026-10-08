@@ -1094,7 +1094,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .plan-people .prayer-person{flex:none}
 .home-dashboard .plan-item-heading{grid-column:1;grid-row:1;min-width:0}
 .home-dashboard .plan-item-header:not(.has-people) .plan-item-heading{grid-row:1}
-.home-dashboard .plan-item-header>.btn{grid-column:2;grid-row:1/-1;align-self:center;justify-self:end}
+.home-dashboard .plan-item-header>.btn{grid-column:2;grid-row:1/-1;align-self:start;justify-self:end}
 .home-dashboard .plan-item-header:not(.has-people)>.btn{grid-row:1}
 .home-dashboard .plan-item-header .tend-type-title{display:block;min-width:0;margin:0}
 .home-dashboard .plan-item-description{min-height:3em;overflow-wrap:anywhere}
