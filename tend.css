@@ -1100,9 +1100,9 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .plan-item-footer-badges{display:flex;align-items:center;gap:8px;min-width:0}
 .home-dashboard .plan-item-footer-badges .plan-pills{display:flex;align-items:center;gap:6px;min-width:0}
 .home-dashboard .plan-item-footer-badges .tend-type-meta{margin:0;padding:0;border:0}
-.home-dashboard .plan-item-meta>.plan-kind-badge{position:relative;display:inline-grid;place-items:center;box-sizing:border-box;flex:none;width:22px;height:22px;min-width:22px;margin:0;padding:0;border:1px solid var(--line);border-radius:50%;font-size:0;letter-spacing:0;line-height:0}
-.home-dashboard .plan-item-meta>.plan-kind-badge .collection-icon{position:absolute;top:50%;left:50%;display:block;width:13px;height:13px;margin:0;transform:translate(-50%,-50%)}
-.home-dashboard .plan-item-meta>.plan-kind-badge.pry .collection-icon{transform:translate(-50%,calc(-50% - 2px))}
+.home-dashboard .plan-item-meta-details>.plan-kind-badge{position:relative;display:inline-grid;place-items:center;box-sizing:border-box;flex:none;width:24px;height:24px;min-width:24px;margin:0;padding:0;border:1px solid var(--line);border-radius:50%;font-size:0;letter-spacing:0;line-height:0}
+.home-dashboard .plan-item-meta-details>.plan-kind-badge .collection-icon{position:absolute;top:50%;left:50%;display:block;width:13px;height:13px;margin:0;transform:translate(-50%,-50%)}
+.home-dashboard .plan-item-meta-details>.plan-kind-badge.pry .collection-icon{transform:translate(-50%,calc(-50% - 2px))}
 .plan-item-meta{grid-column:1/-1;order:6;display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;min-width:0;margin-top:2px;padding-top:14px;border-top:1px solid var(--line);color:var(--ink-soft);font-size:11.5px;line-height:1.4}
 .home-dashboard .plan-item-footer>.plan-item-meta{box-sizing:border-box;grid-column:1;grid-row:auto;order:initial;display:grid;grid-template-columns:minmax(0,1fr);gap:4px;min-height:0;margin:0;padding-top:6px}
 .home-dashboard .plan-item-meta-people{display:flex;align-items:center;gap:6px;min-width:0}
@@ -1396,15 +1396,15 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-footer .plan-kind-badge) .plan-item-description{min-height:3em}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta{font-size:15px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-detail-icon{width:17px;height:17px}
- html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta>.plan-kind-badge{width:24px;height:24px;min-width:24px}
- html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta>.plan-kind-badge .collection-icon{width:18px;height:18px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-details>.plan-kind-badge{width:30px;height:30px;min-width:30px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-details>.plan-kind-badge .collection-icon{width:18px;height:18px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-footer>.plan-item-meta{padding-top:6px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-people .prayer-person{gap:4px;padding:3px 7px 3px 3px;font-size:11px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-people .avatar{width:26px!important;height:26px!important}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-details{font-size:14px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-details .plan-detail-icon{width:17px;height:17px}
- html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta>.plan-kind-badge{width:22px;height:22px;min-width:22px}
- html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta>.plan-kind-badge .collection-icon{width:16px;height:16px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-details>.plan-kind-badge{width:30px;height:30px;min-width:30px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta-details>.plan-kind-badge .collection-icon{width:18px;height:18px}
  html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badges{gap:8px}
  html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badge{width:30px;height:30px;padding:5px}
  html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badge svg{width:18px;height:18px}
@@ -1477,8 +1477,8 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .plan-item-footer{grid-row:2}
  .home-dashboard .plan-item-footer-badges .plan-pills{padding:0}
  .home-dashboard .plan-item-footer>.plan-item-meta{gap:8px;min-height:0;padding-top:4px;font-size:12px}
- .home-dashboard .plan-item-meta>.plan-kind-badge{width:20px;height:20px;min-width:20px}
- .home-dashboard .plan-item-meta>.plan-kind-badge .collection-icon{width:12px;height:12px}
+ .home-dashboard .plan-item-meta-details>.plan-kind-badge{width:24px;height:24px;min-width:24px}
+ .home-dashboard .plan-item-meta-details>.plan-kind-badge .collection-icon{width:13px;height:13px}
  html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-footer .plan-kind-badge){min-height:220px;padding:16px 16px 8px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-header .tend-type-title{font-size:23px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-header>.btn.mini{min-height:60px;padding:12px 18px;font-size:20px!important}
