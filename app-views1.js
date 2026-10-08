@@ -289,8 +289,8 @@ function planHTML(){
  if(!selected&&planFocusState!=="now")planFocusState="now";
  return planBlockCard(focus,curId,focus.id===curId,focus.id==="allday",blocks);}
 function dashboardFocusedPrayerHTML(){
- var blocks=planBlocksDef(),current=blocks.filter(function(block){return block.cur;})[0]||blocks[0],selected=blocks.filter(function(block){return block.id===planFocusState;})[0],timeBlock=planFocusState==="allday"?"all":planFocusState==="now"||!selected?current.id:selected.id,count=faithDashboardPrayerSessionSort(timeBlock,null).length;
- return '<section class="dashboard-focused-prayer" aria-label="Focused prayer"><button type="button" class="btn mini faith-start-prayer" data-dashboard-prayer-open="1" data-focus-time="'+esc(timeBlock)+'" aria-label="Set up focused prayer for '+count+' '+(count===1?"prayer":"prayers")+'">Focused Prayer <span class="faith-prayer-session-count" aria-hidden="true">'+count+'</span></button>'+faithDashboardPrayerSetupHTML()+'</section>';
+ var timeBlock=dashboardPrayerTimeMode==="all"?"all":dayBlockAt(new Date()),people=dashboardPrayerPeople,count=faithDashboardPrayerSessionSort(timeBlock,people).length;
+ return '<section class="dashboard-focused-prayer" aria-label="Focused prayer"><div class="dashboard-prayer-controls"><button type="button" class="faith-prayer-view-toggle dashboard-prayer-time-toggle" data-dashboard-prayer-time-toggle aria-label="Switch timeframe to '+(dashboardPrayerTimeMode==="all"?"Now":"All")+'">'+(dashboardPrayerTimeMode==="all"?"All":"Now")+' <span aria-hidden="true">↔</span></button>'+faithDashboardPrayerPeopleHTML()+'</div><button type="button" class="btn mini faith-start-prayer" data-dashboard-prayer-start="1" aria-label="Start focused prayer for '+count+' '+(count===1?"prayer":"prayers")+'">Focused Prayer <span class="faith-prayer-session-count" aria-hidden="true">'+count+'</span></button></section>';
 }
 function upcomingDates(now){
  var today=new Date(now||Date.now());today.setHours(0,0,0,0);var rows=[];
