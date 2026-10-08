@@ -164,7 +164,7 @@ function layoutPlanPeopleBadges(root){
 }
 function planItemCopy(it,action){
  var people=planItemPeople(it);
- return '<div class="plan-item-copy"><div class="plan-item-header'+(people?' has-people':'')+'">'+(people?'<div class="plan-people" data-plan-people><span class="plan-people-visible">'+people+'</span><details class="plan-people-overflow" hidden><summary></summary><span class="plan-people-menu"></span></details></div>':'')+'<div class="plan-item-heading"><strong class="tend-type-title">'+esc(it.label||"")+'</strong></div>'+(action||"")+'</div><div class="plan-item-description">'+(it.description?'<div class="tend-type-description">'+esc(it.description)+'</div>':'')+'</div></div>';
+ return '<div class="plan-item-copy"><div class="plan-item-header"><div class="plan-item-heading"><strong class="tend-type-title">'+esc(it.label||"")+'</strong></div>'+(action||"")+'</div><div class="plan-item-description">'+(it.description?'<div class="tend-type-description">'+esc(it.description)+'</div>':'')+(people?'<div class="plan-people" data-plan-people><span class="plan-people-visible">'+people+'</span><details class="plan-people-overflow" hidden><summary></summary><span class="plan-people-menu"></span></details></div>':'')+'</div></div>';
 }
 function planItemFooter(it,meta,sub){
  var kindBadge=planItemKindBadge(it),categories=planCategoryBadges(it),fallbackSub=!meta&&sub&&!kindBadge?'<div class="tend-type-meta">'+esc(sub)+'</div>':"";
