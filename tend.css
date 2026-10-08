@@ -1096,6 +1096,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .plan-item-header>.btn{grid-column:2;grid-row:1;align-self:start;justify-self:end}
 .home-dashboard .plan-item-header .tend-type-title{display:block;min-width:0;margin:0}
 .home-dashboard .plan-item-description{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-height:3em;overflow-wrap:anywhere}
+.home-dashboard .plan-item-description>.plan-people{margin-top:auto;padding-bottom:4px}
 .home-dashboard .plan-item-footer{grid-column:1;grid-row:2;display:grid;grid-template-columns:minmax(0,1fr);gap:6px;min-width:0}
 .home-dashboard .plan-item-footer-badges{display:flex;align-items:center;gap:8px;min-width:0}
 .home-dashboard .plan-item-footer-badges .plan-pills{display:flex;align-items:center;gap:6px;min-width:0}
