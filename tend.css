@@ -1084,7 +1084,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .tend-row-content>.tend-type-meta{display:block;margin:3px 0 0;padding-top:0;border-top:0;color:var(--ink-faint);font-size:11.5px;line-height:1.4;overflow-wrap:anywhere}
 .planblock .tend-row-content>.tend-type-description{font-family:var(--sans);font-size:var(--tend-item-description-size);font-weight:400;line-height:1.5}
 .planblock .tend-row-content>.tend-type-meta{margin-top:2px;padding-top:0;border-top:0}
-.home-dashboard .planitem:has(.plan-item-top-meta){display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto;align-items:stretch;gap:12px;min-height:0}
+.home-dashboard .planitem:has(.plan-item-top-meta){display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto;align-items:stretch;gap:12px;min-height:0;margin:0 0 12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)}
 .home-dashboard .planitem:has(.plan-item-top-meta)>.pi-main{grid-column:1;grid-row:1;min-width:0;min-height:0}
 .home-dashboard .planitem:has(.plan-item-top-meta) .plan-item-copy{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;row-gap:12px;min-width:0}
 .home-dashboard .plan-people{display:flex;align-items:center;gap:6px;min-width:0;width:100%}
@@ -1092,7 +1092,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .plan-people .prayer-person{flex:none}
 .home-dashboard .plan-people .avatar,.home-dashboard .plan-people-menu .avatar{border:0!important}
 .home-dashboard .plan-item-heading{display:flex;align-items:flex-start;gap:8px;grid-column:1;grid-row:1;min-width:0}
-.home-dashboard .plan-item-heading .tend-type-title{display:block;flex:1;min-width:0;margin:0}
+.home-dashboard .plan-item-heading .tend-type-title{display:block;flex:1;min-width:0;margin:0;font-size:17px}
 .home-dashboard .plan-item-description{display:flex;flex-direction:column;align-items:flex-start;min-height:0;overflow-wrap:anywhere}
 .home-dashboard .plan-item-no-description{font-style:italic;color:var(--ink-faint)}
 .home-dashboard .plan-item-top-meta{grid-column:1;grid-row:2;display:flex;align-items:center;gap:8px;min-width:0}
@@ -1111,7 +1111,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .plan-item-meta-details>.plan-kind-badge.pry .collection-icon{transform:translate(-50%,calc(-50% - 2px))}
 .home-dashboard .plan-item-meta-details>.plan-kind-badge{display:none}
 .home-dashboard .plan-item-action{display:flex;flex:none;justify-content:flex-end;min-width:0}
-.home-dashboard .plan-item-action>.btn{width:auto;min-width:76px;min-height:40px;padding:7px 14px;border-radius:9px;font-size:13px;font-weight:650}
+.home-dashboard .plan-item-action>.btn{width:auto;min-width:76px;min-height:42px;padding:7px 14px;border-radius:9px;font-size:13px;font-weight:650}
 .home-dashboard .planitem:has(.plan-item-meta-details>.plan-kind-badge.rhy) .plan-item-action>.btn{border-color:#B8E1CA;background:#E3F6ED;color:#1C5844}
 .home-dashboard .planitem:has(.plan-item-meta-details>.plan-kind-badge.rhy) .plan-item-action>.btn:hover{border-color:#9BD4B4;background:#D2EEDD;color:#1C5844}
 .home-dashboard .planitem:has(.plan-item-meta-details>.plan-kind-badge.pry) .plan-item-action>.btn{border-color:#C8D8F0;background:#E8F0FB;color:#405D84}
