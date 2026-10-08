@@ -163,14 +163,14 @@ function layoutPlanPeopleBadges(root){
  });
 }
 function planItemCopy(it,action){
- var people=planItemPeople(it);
- return '<div class="plan-item-copy"><div class="plan-item-header"><div class="plan-item-heading"><strong class="tend-type-title">'+esc(it.label||"")+'</strong></div>'+(action||"")+'</div><div class="plan-item-description">'+(it.description?'<div class="tend-type-description">'+esc(it.description)+'</div>':'')+(people?'<div class="plan-people" data-plan-people><span class="plan-people-visible">'+people+'</span><details class="plan-people-overflow" hidden><summary></summary><span class="plan-people-menu"></span></details></div>':'')+'</div></div>';
+ return '<div class="plan-item-copy"><div class="plan-item-header"><div class="plan-item-heading"><strong class="tend-type-title">'+esc(it.label||"")+'</strong></div>'+(action||"")+'</div><div class="plan-item-description">'+(it.description?'<div class="tend-type-description">'+esc(it.description)+'</div>':'')+'</div></div>';
 }
 function planItemFooter(it,meta,sub){
- var kindBadge=planItemKindBadge(it),categories=planCategoryBadges(it),fallbackSub=!meta&&sub&&!kindBadge?'<div class="tend-type-meta">'+esc(sub)+'</div>':"";
- if(meta&&kindBadge)meta=meta.replace('<div class="plan-item-meta">','<div class="plan-item-meta">'+kindBadge);
- else if(kindBadge)meta='<div class="plan-item-meta">'+kindBadge+(sub?'<span class="plan-item-meta-entry">'+esc(sub)+'</span>':"")+'</div>';
- return '<div class="plan-item-footer">'+(categories||fallbackSub?'<div class="plan-item-footer-badges"><span class="plan-pills">'+categories+'</span>'+fallbackSub+'</div>':"")+(meta||"")+'</div>';
+ var kindBadge=planItemKindBadge(it),categories=planCategoryBadges(it),people=planItemPeople(it),fallbackSub=!meta&&sub&&!kindBadge?'<div class="tend-type-meta">'+esc(sub)+'</div>':"",details=meta?meta.replace('<div class="plan-item-meta">',"").replace(/<\/div>$/,""):"";
+ if(kindBadge)details=kindBadge+(details||(sub?'<span class="plan-item-meta-entry">'+esc(sub)+'</span>':""));
+ var peopleRow=people?'<div class="plan-item-meta-people plan-people" data-plan-people><span class="plan-people-visible">'+people+'</span><details class="plan-people-overflow" hidden><summary></summary><span class="plan-people-menu"></span></details></div>':"";
+ var detailRows=peopleRow||details?'<div class="plan-item-meta">'+peopleRow+(details?'<div class="plan-item-meta-details">'+details+'</div>':"")+'</div>':"";
+ return '<div class="plan-item-footer">'+(categories||fallbackSub?'<div class="plan-item-footer-badges"><span class="plan-pills">'+categories+'</span>'+fallbackSub+'</div>':"")+detailRows+'</div>';
 }
 function genItem(label,sub,area,type,title){return {label:label,sub:sub,log:{area:area,type:type,title:title||label}};}
 function taskItem(t){return {label:t.text,sub:"task · "+(S.areas[t.areaId]?S.areas[t.areaId].name:""),log:{area:t.areaId,type:"note",title:"Task: "+t.text},taskId:t.id};}
