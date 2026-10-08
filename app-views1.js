@@ -227,7 +227,7 @@ function planItemMetaBar(meta){
  var time=parts.filter(isTime),occurred=parts.filter(isOccurred),frequency=parts.filter(function(part){return !isTime(part)&&!isOccurred(part)&&!/^(ends |due )/i.test(part);}).slice(0,1),extra=parts.filter(function(part){return !isTime(part)&&!isOccurred(part)&&frequency.indexOf(part)===-1;});
  function entries(items,kind){return items.map(function(part){
   var iconKind=kind==="schedule"?(isTime(part)?"time":"frequency"):"occurred";
-  return '<span class="plan-item-meta-entry">'+(iconKind==="frequency"?"":planMetaIcon(iconKind))+'<span>'+esc(part)+'</span></span>';
+  return '<span class="plan-item-meta-entry">'+planMetaIcon(iconKind)+'<span>'+esc(part)+'</span></span>';
  }).join("");}
  return '<div class="plan-item-meta">'+entries(frequency.concat(time,extra),"schedule")+entries(occurred,"occurred")+'</div>';
 }
