@@ -1219,7 +1219,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .plan-kind-toggle{width:23px;height:23px;min-width:23px;min-height:23px}
  .home-dashboard .dashboard-free-moment .planitem{border-bottom:1px solid var(--line)}
  .home-dashboard .uprow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0 0 10px;border:0}
- .home-dashboard .upitem{min-width:0;gap:7px;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--card);font-size:12px}
+ .home-dashboard .upitem{min-width:0;gap:7px;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);font-size:12px}
  .home-dashboard .updays{font-size:10px}
  .home-dashboard .uplabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
  .home-dashboard .cl-card summary{padding:8px 11px;border-radius:9px;background:var(--mist);color:var(--forest-deep);font-size:14px!important}
@@ -1268,7 +1268,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  html[data-mobile-text-size="large"] .home-dashboard .plan-kind-toggle .collection-icon{width:17px;height:17px}
  html[data-mobile-text-size="large"] .home-dashboard .avatar{width:32px!important;height:32px!important}
  html[data-mobile-text-size="large"] .home-dashboard .act-ic{width:12px;height:12px}
- html[data-mobile-text-size="large"] .home-dashboard .upitem{gap:8px;padding:12px 4px;font-size:15px}
+ html[data-mobile-text-size="large"] .home-dashboard .upitem{gap:8px;padding:12px 14px;font-size:15px}
  html[data-mobile-text-size="large"] .home-dashboard .updays{font-size:13px}
  html[data-mobile-text-size="large"] .home-dashboard .cl-card summary{font-size:17px!important}
  html[data-mobile-text-size="large"] .home-dashboard .cb{width:22px;height:22px}
