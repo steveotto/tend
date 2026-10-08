@@ -70,6 +70,7 @@ nav.tabs button.active{background:var(--card);color:var(--forest);box-shadow:0 1
 .setrow{display:flex;align-items:center;gap:12px;margin-bottom:12px}
 .setrow label{flex:1;font-size:13px;color:var(--ink-soft)}
 .setrow input{width:90px;border:1px solid var(--line);border-radius:12px;padding:8px 10px;background:var(--canvas)}
+.setrow select{width:140px;min-height:40px;padding:7px 9px;border:1px solid var(--line);border-radius:9px;background:var(--canvas);color:var(--ink)}
 .pf-next{margin-top:8px;font-size:12px;font-weight:600;color:var(--forest)}
 .entry-person{font-size:11.5px;color:var(--forest);font-weight:600}
 .badge.st-to-contact{background:#FF5A45;color:#fff}
@@ -1072,6 +1073,101 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .today-with-person .tend-row-content>.tend-type-meta{margin-top:2px;padding-top:0;border-top:0}
 .today-with-person .actrow [data-prayquick]{background:var(--forest);border-color:var(--forest);color:#fff}
 .today-with-person .actrow [data-prayquick]:hover{background:var(--forest-deep);border-color:var(--forest-deep);color:#fff}
+
+/* Phone-only dashboard: use section bars and separators instead of nested cards. */
+@media(max-width:600px){
+ .home-dashboard{margin:0 -10px;font-size:15px}
+ .home-dashboard>.sectiontitle:not(.dashboard-greeting){align-items:center;gap:8px;margin:20px 0 8px;padding:8px 11px;border-radius:9px;background:var(--mist);color:var(--forest-deep)}
+ .home-dashboard>.sectiontitle:not(.dashboard-greeting) h2{font-size:16px;font-weight:700;line-height:1.35}
+ .home-dashboard .dashboard-greeting{display:flex;align-items:baseline;gap:8px;margin:6px 0 12px}
+ .home-dashboard .dashboard-greeting h2{font-size:20px}
+ .home-dashboard .dashboard-greeting .hint{font-size:11px}
+ .home-dashboard .overall-card,.home-dashboard .calendar-card,.home-dashboard .planblock,.home-dashboard .dashboard-free-moment,.home-dashboard .cl-card{margin:0 0 10px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+ .home-dashboard .dashboard-overall-heading{align-items:center!important;margin:0 0 10px;padding:8px 11px;border-radius:9px;background:var(--mist)}
+ .home-dashboard .dashboard-overall-heading h3{font-size:16px!important;font-weight:700!important;color:var(--forest-deep)}
+ .home-dashboard .ov-score{font-size:32px}
+ .home-dashboard .bar-ov{height:11px;margin:12px 0 19px}
+ .home-dashboard .overall-card>.meta{font-size:12px}
+ .home-dashboard .menu-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:0;margin:10px 0 0;border-top:1px solid var(--line)}
+ .home-dashboard .menu-area{gap:7px;min-width:0;min-height:47px;padding:8px 5px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;font-size:13px;box-shadow:none}
+ .home-dashboard .menu-area-icon{width:17px;height:17px}
+ .home-dashboard .menu-area .ma-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .home-dashboard .menu-area .ma-score{font-size:12px}
+ .home-dashboard .calendar-card{padding:0}
+ .home-dashboard .calendar-card .calsync{margin:6px 0 0}
+ .home-dashboard .calitem{gap:8px;padding:8px 2px;border-radius:0;background:transparent}
+ .home-dashboard .cal-time{min-width:46px;font-size:11px}
+ .home-dashboard .cal-title{font-size:13.5px}
+ .home-dashboard .cal-range,.home-dashboard .cal-calname{font-size:10.5px}
+ .home-dashboard .now-badge,.home-dashboard .next-badge{font-size:9px;padding:2px 5px}
+ .home-dashboard .planblock{padding:0}
+ .home-dashboard .planblock.current{border:0;box-shadow:none}
+ .home-dashboard .planblock summary,.home-dashboard .current-plan-summary{min-height:44px;padding:8px 11px;border-radius:9px;background:var(--mist);color:var(--forest-deep)}
+ .home-dashboard .current-plan-summary{align-items:flex-start;gap:8px}
+ .home-dashboard .current-plan-summary .plan-summary-copy{align-items:flex-start;flex-direction:column;gap:2px;padding-right:0}
+ .home-dashboard .current-plan-weather{position:static;width:auto;transform:none}
+ .home-dashboard .planblock summary .plan-block-name,.home-dashboard .current-plan-summary .plan-block-name{font-size:15px;font-weight:700}
+ .home-dashboard .plan-summary-meta,.home-dashboard .current-plan-summary .plan-range{font-size:10.5px}
+ .home-dashboard .planitem{align-items:flex-start;gap:8px;padding:9px 0}
+ .home-dashboard .planblock .planitem>.btn{width:auto;min-width:58px;min-height:38px;padding:6px 9px;font-size:12px}
+ .home-dashboard .day-jumps{gap:6px;margin:7px 0 9px}
+ .home-dashboard .day-jumps .btn{flex:1 1 auto;min-height:34px;padding:5px 8px;font-size:11px}
+ .home-dashboard .plan-kind-toggles{gap:3px}
+ .home-dashboard .plan-kind-toggle{width:23px;height:23px;min-width:23px;min-height:23px}
+ .home-dashboard .dashboard-free-moment .planitem{border-bottom:1px dashed var(--line)}
+ .home-dashboard .uprow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;margin:0 0 10px;border-top:1px solid var(--line)}
+ .home-dashboard .upitem{min-width:0;gap:7px;padding:9px 4px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;font-size:12px}
+ .home-dashboard .updays{font-size:10px}
+ .home-dashboard .uplabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .home-dashboard .cl-card summary{padding:8px 11px;border-radius:9px;background:var(--mist);color:var(--forest-deep);font-size:14px!important}
+ .home-dashboard .cl-card .tasks{gap:8px;padding:9px 0}
+ .home-dashboard .cl-card .tasks li{align-items:center;padding:3px 0}
+ .home-dashboard .empty{font-size:12px}
+ .home-dashboard .calendar-breathing-room strong{font-size:14px}
+ .home-dashboard .calendar-breathing-room p{font-size:11.5px}
+}
+@media(max-width:600px){
+ html[data-mobile-text-size="large"] .home-dashboard{font-size:19px;--tend-item-title-size:19px;--tend-item-description-size:17px;--tend-item-meta-size:14px;--tend-item-action-size:16px;--tend-section-heading-size:20px}
+ html[data-mobile-text-size="large"] .home-dashboard>.sectiontitle:not(.dashboard-greeting){margin-top:23px;padding:11px 13px}
+ html[data-mobile-text-size="large"] .home-dashboard>.sectiontitle:not(.dashboard-greeting) h2,
+ html[data-mobile-text-size="large"] .home-dashboard .dashboard-overall-heading h3{font-size:20px!important}
+ html[data-mobile-text-size="large"] .home-dashboard .dashboard-greeting h2{font-size:24px}
+ html[data-mobile-text-size="large"] .home-dashboard .dashboard-greeting .hint{font-size:14px}
+ html[data-mobile-text-size="large"] .home-dashboard .ov-score{font-size:42px}
+ html[data-mobile-text-size="large"] .home-dashboard .bar-ov{height:16px}
+ html[data-mobile-text-size="large"] .home-dashboard .overall-card>.meta{font-size:15px}
+ html[data-mobile-text-size="large"] .home-dashboard .menu-area{min-height:58px;font-size:16px}
+ html[data-mobile-text-size="large"] .home-dashboard .menu-area-icon{width:22px;height:22px}
+ html[data-mobile-text-size="large"] .home-dashboard .menu-area-icon svg{width:22px;height:22px}
+ html[data-mobile-text-size="large"] .home-dashboard .menu-area .ma-score{font-size:15px}
+ html[data-mobile-text-size="large"] .home-dashboard .menu-area .ma-name{display:block;overflow:visible;white-space:normal;line-height:1.15}
+ html[data-mobile-text-size="large"] .home-dashboard .calitem{gap:10px;padding:11px 2px}
+ html[data-mobile-text-size="large"] .home-dashboard .cal-bar{width:6px}
+ html[data-mobile-text-size="large"] .home-dashboard .cal-time{min-width:54px;font-size:14px}
+ html[data-mobile-text-size="large"] .home-dashboard .cal-title{font-size:17px}
+ html[data-mobile-text-size="large"] .home-dashboard .cal-range,html[data-mobile-text-size="large"] .home-dashboard .cal-calname{font-size:13px}
+ html[data-mobile-text-size="large"] .home-dashboard .now-badge,html[data-mobile-text-size="large"] .home-dashboard .next-badge{font-size:11px}
+ html[data-mobile-text-size="large"] .home-dashboard .planblock summary .plan-block-name,html[data-mobile-text-size="large"] .home-dashboard .current-plan-summary .plan-block-name{font-size:19px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-summary-meta,html[data-mobile-text-size="large"] .home-dashboard .current-plan-summary .plan-range{font-size:13px}
+ html[data-mobile-text-size="large"] .home-dashboard .tend-type-title,html[data-mobile-text-size="large"] .home-dashboard .pi-label{font-size:19px}
+ html[data-mobile-text-size="large"] .home-dashboard .tend-type-description{font-size:17px}
+ html[data-mobile-text-size="large"] .home-dashboard .tend-type-meta,html[data-mobile-text-size="large"] .home-dashboard .pi-sub{font-size:14px}
+ html[data-mobile-text-size="large"] .home-dashboard .planitem>.btn{min-width:70px;min-height:48px;font-size:16px}
+ html[data-mobile-text-size="large"] .home-dashboard .day-jumps .btn{min-height:46px;font-size:14px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-kind-toggle{width:30px;height:30px;min-width:30px;min-height:30px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-kind-toggle .collection-icon{width:17px;height:17px}
+ html[data-mobile-text-size="large"] .home-dashboard .avatar{width:32px!important;height:32px!important}
+ html[data-mobile-text-size="large"] .home-dashboard .act-ic{width:12px;height:12px}
+ html[data-mobile-text-size="large"] .home-dashboard .upitem{gap:8px;padding:12px 4px;font-size:15px}
+ html[data-mobile-text-size="large"] .home-dashboard .updays{font-size:13px}
+ html[data-mobile-text-size="large"] .home-dashboard .cl-card summary{font-size:17px!important}
+ html[data-mobile-text-size="large"] .home-dashboard .cb{width:22px;height:22px}
+ html[data-mobile-text-size="large"] .home-dashboard .empty{font-size:16px}
+ html[data-mobile-text-size="large"] .home-dashboard .calendar-breathing-icon{width:48px;height:48px}
+ html[data-mobile-text-size="large"] .home-dashboard .calendar-breathing-icon svg{width:27px;height:27px}
+ html[data-mobile-text-size="large"] .home-dashboard .calendar-breathing-room strong{font-size:18px}
+ html[data-mobile-text-size="large"] .home-dashboard .calendar-breathing-room p{font-size:15px}
+}
 .tend-row-content .plan-pills{display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap;margin:0;vertical-align:middle}
 .tend-row-content .pill{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
 .tend-row-content .pill .collection-icon{width:14px;height:14px}
