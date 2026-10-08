@@ -1151,7 +1151,8 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .current-plan-filter-menu .plan-kind-toggle.is-muted{opacity:.55;border-color:var(--line)!important;color:var(--ink-faint)}
 .home-dashboard .current-plan-filter-menu .plan-kind-toggle:hover{opacity:.8}
 .home-dashboard .current-plan-filter-menu .plan-kind-toggle.is-muted:hover{opacity:.8}
-.home-dashboard .dashboard-free-moment{display:grid;gap:10px;margin:0 0 14px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.home-dashboard .dashboard-free-moment{display:grid;gap:12px;margin:0 0 14px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.home-dashboard .dashboard-free-moment>.planitem:has(.plan-item-top-meta){margin-bottom:0}
 .home-dashboard .uprow{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin:0 0 18px}
 .home-dashboard .upitem{display:flex;align-items:center;min-width:0;gap:9px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);font-size:15px}
 .home-dashboard .upmain{display:flex;flex:1;min-width:0;flex-direction:column}
