@@ -1117,12 +1117,11 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .current-plan-summary{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;min-height:0;margin:0 0 10px;padding:0;border-radius:0;background:transparent;color:var(--ink)}
 .home-dashboard .current-plan-topline{min-height:24px}
 .home-dashboard .current-plan-time-menu{position:relative;z-index:20;display:inline-block;min-width:0}
-.home-dashboard .current-plan-time-picker{position:relative;display:inline-flex;align-items:center;gap:6px;min-width:0;padding:4px 22px 4px 9px;border:0;border-radius:9px;background:#F1F2F1!important;color:var(--ink)!important;font-size:22px;font-weight:700;line-height:1.35;cursor:pointer;list-style:none}
-.home-dashboard .current-plan-time-picker:after{position:absolute;right:3px;width:0;height:0;border-top:5px solid currentColor;border-right:4px solid transparent;border-left:4px solid transparent;content:"";pointer-events:none}
+.home-dashboard .planblock .current-plan-time-picker{position:relative;display:inline-flex;align-items:center;min-width:0;padding:4px 32px 4px 9px;border:0;border-radius:9px;background:#E9EBEA!important;color:var(--ink)!important;font-size:22px;font-weight:700;line-height:1.35;cursor:pointer;list-style:none}
+.home-dashboard .current-plan-time-picker:after{position:absolute;right:9px;width:0;height:0;border-top:7px solid currentColor;border-right:6px solid transparent;border-left:6px solid transparent;content:"";pointer-events:none}
 .home-dashboard .current-plan-time-picker::-webkit-details-marker{display:none}
-.home-dashboard .current-plan-time-menu[open]>.current-plan-time-picker,.home-dashboard .current-plan-time-picker:hover{background:#E9EBEA!important;color:var(--ink)!important}
+.home-dashboard .planblock .current-plan-time-menu[open]>.current-plan-time-picker,.home-dashboard .planblock .current-plan-time-picker:hover{background:#E2E6E4!important;color:var(--ink)!important}
 .home-dashboard .current-plan-time-picker:focus-visible{outline:2px solid var(--forest);outline-offset:2px;border-radius:4px}
-.home-dashboard .current-plan-now-icon{width:17px;height:17px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .home-dashboard .current-plan-time-options{position:absolute;top:calc(100% + 7px);left:0;z-index:40;display:grid;gap:2px;box-sizing:border-box;width:min(340px,calc(100vw - 32px));max-height:min(60vh,420px);overflow:auto;padding:6px;border:1px solid var(--line);border-radius:12px;background:var(--card);box-shadow:0 8px 24px rgba(32,39,35,.16)}
 .home-dashboard .current-plan-time-option{display:grid;grid-template-columns:112px minmax(0,1fr) 56px;align-items:center;gap:6px;min-width:0;padding:10px 11px;border:0;border-radius:8px;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 .home-dashboard .current-plan-time-option:hover,.home-dashboard .current-plan-time-option:focus-visible{outline:0;background:var(--mist)}
