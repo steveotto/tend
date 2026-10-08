@@ -1084,16 +1084,26 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .tend-row-content>.tend-type-meta{display:block;margin:3px 0 0;padding-top:0;border-top:0;color:var(--ink-faint);font-size:11.5px;line-height:1.4;overflow-wrap:anywhere}
 .planblock .tend-row-content>.tend-type-description{font-family:var(--sans);font-size:var(--tend-item-description-size);font-weight:400;line-height:1.5}
 .planblock .tend-row-content>.tend-type-meta{margin-top:2px;padding-top:0;border-top:0}
-.home-dashboard .planitem:has(.plan-item-meta){display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;column-gap:12px;row-gap:8px}
-.home-dashboard .planitem:has(.plan-item-meta)>.pi-main{grid-column:1;grid-row:1;min-width:0}
-.home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .pi-main{grid-column:1/-1;grid-row:1;display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;min-width:0}
-.home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .plan-item-copy{display:contents}
-.home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .tend-type-title{grid-column:1;grid-row:1}
-.home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .pi-main>.plan-item-copy>.btn{grid-column:2;grid-row:1;justify-self:end}
-.home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .tend-type-description,
-.home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .plan-pills,
-.home-dashboard .planitem:has(.plan-pills .plan-kind-rhythm,.plan-pills .plan-kind-spark,.plan-pills .plan-kind-prayer) .tend-type-meta{grid-column:1/-1}
+.home-dashboard .planitem:has(.plan-item-footer-badges .pill.rhy,.plan-item-footer-badges .pill.spk,.plan-item-footer-badges .pill.pry){display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;align-items:stretch;min-height:180px}
+.home-dashboard .planitem:has(.plan-item-footer-badges .pill.rhy,.plan-item-footer-badges .pill.spk,.plan-item-footer-badges .pill.pry)>.pi-main{grid-column:1;grid-row:1;min-width:0;min-height:0}
+.home-dashboard .planitem:has(.plan-item-footer-badges .pill.rhy,.plan-item-footer-badges .pill.spk,.plan-item-footer-badges .pill.pry) .plan-item-copy{display:grid;grid-template-rows:auto minmax(3em,1fr);row-gap:6px;height:100%;min-height:0}
+.home-dashboard .plan-item-header{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:12px;min-width:0}
+.home-dashboard .plan-item-header:not(.has-people){grid-template-rows:auto}
+.home-dashboard .plan-people{grid-column:1;grid-row:1;display:flex;align-items:center;gap:6px;min-width:0;width:100%}
+.home-dashboard .plan-people-visible{display:flex;align-items:center;gap:6px;min-width:0}
+.home-dashboard .plan-people .prayer-person{flex:none}
+.home-dashboard .plan-item-heading{grid-column:1;grid-row:2;min-width:0}
+.home-dashboard .plan-item-header:not(.has-people) .plan-item-heading{grid-row:1}
+.home-dashboard .plan-item-header>.btn{grid-column:2;grid-row:1/-1;align-self:center;justify-self:end}
+.home-dashboard .plan-item-header:not(.has-people)>.btn{grid-row:1}
+.home-dashboard .plan-item-header .tend-type-title{display:block;min-width:0;margin:0}
+.home-dashboard .plan-item-description{min-height:3em;overflow-wrap:anywhere}
+.home-dashboard .plan-item-footer{grid-column:1;grid-row:2;display:grid;grid-template-columns:minmax(0,1fr);gap:6px;min-width:0}
+.home-dashboard .plan-item-footer-badges{display:flex;align-items:center;gap:8px;min-width:0}
+.home-dashboard .plan-item-footer-badges .plan-pills{display:flex;align-items:center;gap:6px;min-width:0}
+.home-dashboard .plan-item-footer-badges .tend-type-meta{margin:0;padding:0;border:0}
 .plan-item-meta{grid-column:1/-1;order:6;display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;min-width:0;margin-top:2px;padding-top:14px;border-top:1px solid var(--line);color:var(--ink-soft);font-size:11.5px;line-height:1.4}
+.home-dashboard .plan-item-footer>.plan-item-meta{grid-column:1;grid-row:auto;order:initial;margin:0}
 .plan-item-meta-entry{display:inline-flex;align-items:center;gap:6px;min-width:0}
 .plan-item-meta-entry:last-child{margin-left:auto;text-align:right;justify-content:flex-end}
 .plan-detail-icon{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;color:var(--ink-faint)}
@@ -1447,4 +1457,29 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .current-plan-now{font-size:24px!important}
  html[data-mobile-text-size="large"] .home-dashboard>.sectiontitle:not(.dashboard-greeting) h2,
  html[data-mobile-text-size="large"] .home-dashboard .current-plan-now{font-size:30px!important}
+}
+.home-dashboard .plan-people-overflow{position:relative;flex:none}
+.home-dashboard .plan-people-overflow>summary{display:inline-flex;align-items:center;justify-content:center;min-height:24px;padding:2px 8px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink-soft);font-size:11px;font-weight:650;line-height:1.2;white-space:nowrap;cursor:pointer;list-style:none}
+.home-dashboard .plan-people-overflow>summary::-webkit-details-marker{display:none}
+.home-dashboard .plan-people-menu{position:absolute;z-index:20;top:calc(100% + 6px);left:0;display:grid;gap:6px;min-width:max-content;max-width:min(280px,80vw);max-height:240px;overflow:auto;padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--card);box-shadow:0 8px 24px rgba(32,39,35,.16)}
+.home-dashboard .plan-people-menu .prayer-person{width:100%;justify-content:flex-start}
+@media(max-width:600px){
+ .home-dashboard .planitem:has(.plan-item-footer-badges .pill.rhy,.plan-item-footer-badges .pill.spk,.plan-item-footer-badges .pill.pry){
+  display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;align-items:stretch;min-height:180px;margin:0 0 12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)
+ }
+ .home-dashboard .planitem:has(.plan-item-footer-badges .pill.rhy,.plan-item-footer-badges .pill.spk,.plan-item-footer-badges .pill.pry)>.pi-main{grid-column:1;grid-row:1;display:block;min-width:0;min-height:0}
+ .home-dashboard .planitem:has(.plan-item-footer-badges .pill.rhy,.plan-item-footer-badges .pill.spk,.plan-item-footer-badges .pill.pry) .plan-item-copy{grid-template-rows:auto minmax(3em,1fr);height:100%}
+ .home-dashboard .plan-item-heading{display:block;grid-row:2}
+ .home-dashboard .plan-item-header:not(.has-people) .plan-item-heading{grid-row:1}
+ .home-dashboard .plan-item-header .tend-type-title{font-size:17px}
+ .home-dashboard .plan-item-header>.btn{width:auto;min-width:70px;min-height:44px;padding:9px 16px;border-radius:10px;font-size:16px!important;font-weight:650}
+ .home-dashboard .plan-item-description{min-height:3em}
+ .home-dashboard .plan-item-footer{grid-row:2}
+ .home-dashboard .plan-item-footer-badges .plan-pills{padding:0}
+ .home-dashboard .plan-item-footer>.plan-item-meta{gap:8px 16px;font-size:12px}
+ html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-footer-badges .pill.rhy,.plan-item-footer-badges .pill.spk,.plan-item-footer-badges .pill.pry){min-height:220px;padding:16px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-header .tend-type-title{font-size:23px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-header>.btn.mini{min-height:60px;padding:12px 18px;font-size:20px!important}
+ html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-footer-badges .pill.rhy,.plan-item-footer-badges .pill.spk,.plan-item-footer-badges .pill.pry) .tend-type-description{font-size:19px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-footer-badges .tend-type-meta{font-size:14px}
 }
