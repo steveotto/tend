@@ -1355,7 +1355,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .current-plan-heading{padding:0}
  .home-dashboard .day-jumps .btn.active{background:var(--forest);color:#fff}
  .home-dashboard .planitem:has(.plan-item-footer .plan-kind-badge){
-  display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;align-items:stretch;min-height:180px;margin:0 0 12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)
+  display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;align-items:stretch;min-height:180px;margin:0 0 12px;padding:12px 12px 8px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)
  }
  .home-dashboard .planitem:has(.plan-item-footer .plan-kind-badge)>.pi-main{grid-column:1;grid-row:1;display:block;min-width:0;min-height:0}
  .home-dashboard .planitem:has(.plan-item-footer .plan-kind-badge) .plan-item-copy{display:grid;grid-template-rows:auto minmax(3em,1fr) auto;row-gap:6px;height:100%;min-height:0}
@@ -1385,7 +1385,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  html[data-mobile-text-size="large"] .home-dashboard .planblock[data-plan-block="allday"]>summary .plan-block-name{font-size:24px!important}
  html[data-mobile-text-size="large"] .home-dashboard .dashboard-greeting{margin:24px 0 18px;padding:0 12px}
  html[data-mobile-text-size="large"]  .home-dashboard>.sectiontitle.dashboard-greeting h2{font-size:27px!important}
- html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-footer .plan-kind-badge){min-height:220px;padding:16px}
+ html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-footer .plan-kind-badge){min-height:220px;padding:16px 16px 8px}
  html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-footer .plan-kind-badge) .tend-type-title{font-size:23px}
  html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-footer .plan-kind-badge) .plan-item-heading>.btn.mini{min-height:60px;padding:12px 18px;font-size:20px!important}
  html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-footer .plan-kind-badge) .tend-type-description{font-size:19px}
@@ -1394,7 +1394,9 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  html[data-mobile-text-size="large"] .home-dashboard .plan-detail-icon{width:17px;height:17px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta>.plan-kind-badge{width:24px;height:24px;min-width:24px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta>.plan-kind-badge .collection-icon{width:18px;height:18px}
- html[data-mobile-text-size="large"] .home-dashboard .plan-item-footer>.plan-item-meta{padding-top:10px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-footer>.plan-item-meta{padding-top:6px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta>.plan-kind-badge{width:22px;height:22px;min-width:22px}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-meta>.plan-kind-badge .collection-icon{width:16px;height:16px}
  html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badges{gap:8px}
  html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badge{width:30px;height:30px;padding:5px}
  html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badge svg{width:18px;height:18px}
@@ -1456,7 +1458,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .plan-people-menu .prayer-person{width:100%;justify-content:flex-start}
 @media(max-width:600px){
  .home-dashboard .planitem:has(.plan-item-footer .plan-kind-badge){
-  display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;align-items:stretch;min-height:180px;margin:0 0 12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)
+  display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;align-items:stretch;min-height:180px;margin:0 0 12px;padding:12px 12px 8px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)
  }
  .home-dashboard .planitem:has(.plan-item-footer .plan-kind-badge)>.pi-main{grid-column:1;grid-row:1;display:block;min-width:0;min-height:0}
  .home-dashboard .planitem:has(.plan-item-footer .plan-kind-badge) .plan-item-copy{grid-template-rows:auto minmax(3em,1fr);height:100%}
@@ -1467,8 +1469,10 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .plan-item-description{min-height:3em}
  .home-dashboard .plan-item-footer{grid-row:2}
  .home-dashboard .plan-item-footer-badges .plan-pills{padding:0}
- .home-dashboard .plan-item-footer>.plan-item-meta{gap:8px;font-size:12px}
- html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-footer .plan-kind-badge){min-height:220px;padding:16px}
+ .home-dashboard .plan-item-footer>.plan-item-meta{gap:8px;min-height:0;padding-top:4px;font-size:12px}
+ .home-dashboard .plan-item-meta>.plan-kind-badge{width:20px;height:20px;min-width:20px}
+ .home-dashboard .plan-item-meta>.plan-kind-badge .collection-icon{width:12px;height:12px}
+ html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-footer .plan-kind-badge){min-height:220px;padding:16px 16px 8px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-header .tend-type-title{font-size:23px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-header>.btn.mini{min-height:60px;padding:12px 18px;font-size:20px!important}
  html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-footer .plan-kind-badge) .tend-type-description{font-size:19px}
