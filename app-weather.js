@@ -8,7 +8,7 @@ function weatherIcon(code,isDay){
  if(code===1||code===2)return '<path d="M20 16.2a4.1 4.1 0 0 0-1.7-7.8A6.3 6.3 0 0 0 6 9.8a3.5 3.5 0 0 0 .5 7h13.1Z"/><path d="M15 3v2m4 0 1.4-1.4"/>';
  if(code===3||code===45||code===48)return '<path d="M20 16.2a4.1 4.1 0 0 0-1.7-7.8A6.3 6.3 0 0 0 6 9.8a3.5 3.5 0 0 0 .5 7h13.1Z"/>'+(code>=45?'<path d="M5 20h14M8 22h8"/>':'');
  if(code>=51&&code<=67||code>=80&&code<=82)return '<path d="M19.5 15.7a4 4 0 0 0-1.6-7.6A6.2 6.2 0 0 0 6 9.8a3.4 3.4 0 0 0 .5 6.8h13Z"/><path d="m9 19-1 2m6-2-1 2m6-2-1 2"/>';
- if(code>=71&&code<=77||code>=85)return '<path d="M19.5 15.7a4 4 0 0 0-1.6-7.6A6.2 6.2 0 0 0 6 9.8a3.4 3.4 0 0 0 .5 6.8h13Z"/><path d="M9 19v2m6-2v2m-3 1v1"/>';
+ if(code>=71&&code<=77||code>=85&&code<=86)return '<path d="M19.5 15.7a4 4 0 0 0-1.6-7.6A6.2 6.2 0 0 0 6 9.8a3.4 3.4 0 0 0 .5 6.8h13Z"/><path d="M7 19v4m-2-2h4m3-2v4m-2-2h4m3-2v4m-2-2h4"/>';
  if(code>=95)return '<path d="M19.5 15.7a4 4 0 0 0-1.6-7.6A6.2 6.2 0 0 0 6 9.8a3.4 3.4 0 0 0 .5 6.8h13Z"/><path d="m13 17-3 4h3l-1 3 4-5h-3l1-2Z"/>';
  return '<circle cx="12" cy="12" r="4"/>';
 }
@@ -25,25 +25,33 @@ function weatherDescription(code,isDay){
  return "Current weather";
 }
 function weatherTheme(code,isDay){
- if(code===0)return isDay?"clear":"night";
- if(code===1||code===2)return "partly";
+ if(!isDay)return "night";
+ if(code===0)return "sunny";
+ if(code===1)return "clear";
+ if(code===2)return "partly";
  if(code===3||code===45||code===48)return "cloudy";
  if(code>=51&&code<=67||code>=80&&code<=82)return "rain";
  if(code>=71&&code<=77||code>=85&&code<=86)return "snow";
  if(code>=95)return "storm";
  return "partly";
 }
+function weatherCardHTML(report){
+ var description=report.description||weatherDescription(report.code,report.isDay);
+ return '<span class="weather-card '+weatherTheme(report.code,report.isDay)+'" role="img" aria-label="'+esc(description)+', '+Math.round(report.temperature)+' degrees"><svg viewBox="0 0 24 24" aria-hidden="true">'+weatherIcon(report.code,report.isDay)+'</svg><span class="weather-card-reading"><strong>'+Math.round(report.temperature)+'<sup>°</sup></strong><span>'+esc(description)+'</span></span></span>';
+}
+function weatherPromptHTML(){
+ var label=nowWeather.status==="loading"?"Loading weather":nowWeather.status==="error"?"Weather unavailable":"Weather";
+ return '<button type="button" class="weather-card weather-card-prompt" data-weather-retry'+(nowWeather.status==="loading"?' disabled':'')+'><span class="now-weather-prompt-icon" aria-hidden="true">☼</span><span>'+label+(nowWeather.status==="error"?' · Retry':'')+'</span></button>';
+}
 function nowWeatherHTML(){
  if(nowWeather.status==="ready"&&nowWeather.report){
-  var current=nowWeather.report;
-  return '<div class="now-weather compact '+weatherTheme(current.code,current.isDay)+'" role="img" aria-label="'+esc(current.description)+', '+Math.round(current.temperature)+' degrees"><strong>'+Math.round(current.temperature)+'°</strong><span>· '+esc(current.description)+'</span></div>';
+  return weatherCardHTML(nowWeather.report);
  }
- var label=nowWeather.status==="loading"?"Loading weather":nowWeather.status==="error"?"Weather unavailable":"Weather";
- return '<button type="button" class="now-weather now-weather-prompt" data-weather-retry'+(nowWeather.status==="loading"?' disabled':'')+'><span class="now-weather-prompt-icon" aria-hidden="true">☼</span><span>'+label+(nowWeather.status==="error"?' · Retry':'')+'</span></button>';
+ return nowWeather.status==="error"?weatherPromptHTML():"";
 }
 function renderNowWeather(){
  var widget=document.getElementById("nowWeather");
- if(widget)widget.innerHTML=nowWeatherHTML();
+ if(widget){var time=widget.getAttribute("data-plan-weather-time");widget.innerHTML=time?planWeatherHTML(time):nowWeatherHTML();widget.closest(".current-plan-summary").classList.toggle("has-weather",!!widget.innerHTML);}
  renderPlanWeather();
 }
 function weatherForTime(time){
@@ -61,10 +69,10 @@ function weatherForTime(time){
  return best;
 }
 function planWeatherHTML(time){
+ if(nowWeather.status==="idle"||nowWeather.status==="loading")return "";
  var forecast=weatherForTime(time);
- if(!forecast)return "";
- var description=weatherDescription(forecast.code,forecast.isDay);
- return '<span class="plan-weather '+weatherTheme(forecast.code,forecast.isDay)+'" role="img" aria-label="'+esc(description)+', '+Math.round(forecast.temperature)+' degrees"><svg viewBox="0 0 24 24" aria-hidden="true">'+weatherIcon(forecast.code,forecast.isDay)+'</svg><strong>'+Math.round(forecast.temperature)+'°</strong><span>'+esc(description)+'</span></span>';
+ if(!forecast)return nowWeather.status==="error"?weatherPromptHTML():"";
+ return weatherCardHTML(forecast);
 }
 function renderPlanWeather(){
  document.querySelectorAll("[data-plan-weather]").forEach(function(widget){
