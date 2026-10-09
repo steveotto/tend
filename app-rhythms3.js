@@ -84,6 +84,7 @@
   var r=item.record,kind=item.kind;
   var frequencies=kind==='rhythm'?Object.keys(RHYTHM_FREQS).map(function(k){return [k,RHYTHM_FREQS[k].label];}):Object.keys(FREQS).map(function(k){return [k,FREQS[k].label];});
   var times=[['anytime','No timeframe assigned'],['allday','All day']].concat(dayBlocks().map(function(b){return [b.id,b.name];}));
+  if(kind==='spark')return '<dialog class="profile-editor-dialog" data-editor-modal aria-label="Edit Spark schedule"><div class="profile-editor-body careplan-edit" data-cpform="'+esc(key)+'"><div class="careplan-edit-head"><span class="careplan-kind careplan-kind-spark">Spark</span><strong>Edit Spark schedule</strong></div><label class="careplan-field">Time of day<select data-cpf="tod">'+carePlanOptions(times,r.tod||'anytime')+'</select></label><div class="careplan-edit-grid"><label class="careplan-field">Date<input type="date" data-cpf="by" value="'+esc(r.by||'')+'"></label><label class="careplan-field">Time<input type="time" data-cpf="time" value="'+esc(r.time||'')+'"></label></div><div class="careplan-actions"><button type="button" class="btn mini" data-cpsave="'+esc(key)+'">Save</button><button type="button" class="btn mini ghost" data-cpcancel="'+esc(key)+'" data-editor-cancel>Cancel</button></div></div></dialog>';
   if(kind!=='rhythm')frequencies.unshift(['','No frequency']);
   var peopleOptions=[['','No person']].concat(S.people.map(function(p){return [p.id,p.name];}));
   var out='<dialog class="profile-editor-dialog" data-editor-modal aria-label="Edit '+(kind==='rhythm'?'rhythm':'prayer')+'"><div class="profile-editor-body careplan-edit'+(kind==='rhythm'?' careplan-rhythm-edit':'')+'" data-cpform="'+esc(key)+'"><div class="careplan-edit-head"><span class="careplan-kind careplan-kind-'+kind+'">'+(kind==='rhythm'?'Rhythm':'Prayer')+'</span><strong>Edit '+(kind==='rhythm'?'rhythm':'prayer')+'</strong></div><label class="careplan-field">Title<input data-cpf="title" value="'+esc(r.text||'')+'"></label>';
@@ -101,6 +102,7 @@
  window.carePlanSave=function(key,form){
   var found=carePlanFind(key),r=found.record;if(!r)return;
   var field=function(name){return form.querySelector('[data-cpf="'+name+'"]');};
+  if(found.kind==='spark'){var by=field('by').value;r.tod=field('tod').value;r.by=by||null;r.time=by&&field('time').value?field('time').value:null;carePlanEdit=null;save();render();flash('Spark schedule updated');return;}
   var title=field('title').value.trim();if(!title){flash('Add a title');field('title').focus();return;}
   var endToggle=found.kind==='rhythm'?field('endDateEnabled'):null,un=found.kind==='rhythm'?field('until'):null;
   if(endToggle&&endToggle.checked&&(!un||!un.value)){flash('Choose an end date');if(un)un.focus();return;}
