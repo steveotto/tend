@@ -82,9 +82,11 @@ function renderToday(){
  out+='<div class="card overall-card"><div class="dashboard-overall-heading" style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:18px;font-weight:500">Overall health</h3><span class="ov-score '+oc+'">'+ov+'</span></div><div class="bar-ov"><i class="ov-marker" style="left:'+ov+'%"></i></div>'+'<div class="meta" style="margin-top:6px"><span class="statusword '+oc+'">'+scoreLabel(ov)+'</span></div>'+areaMenuHTML()+'</div>';
  out+='<div class="sectiontitle calendar-sectiontitle"><h2>On your calendar</h2></div><div class="card calendar-card"><div id="calStrip"><div class="empty">'+((S.calendars||[]).length?"Loading calendars...":"No calendars connected - add one in Settings.")+'</div></div></div><div id="calendarSyncSlot" class="calendar-sync-slot"></div>';
  out+=planHTML();
+ out+=dashboardFocusedPrayerHTML();
  out+=freeMomentHTML();
  out+=upcomingHTML();
  out+=renderChecklists();
+ if(typeof faithPrayerSession!=="undefined"&&faithPrayerSession)out+=faithPrayerSessionHTML();
  return out+'</main>';}
 /* ============ time-aware routine plan ============ */
 var DEFAULT_DAY_BLOCKS=[
@@ -220,20 +222,17 @@ function planCandidates(bid,curBid){
  if(typeof faithActiveRhythms==="function"&&typeof rhythmScheduledToday==="function"){
   faithActiveRhythms().forEach(function(r){if(r.tod!==bid||!rhythmScheduledToday(r))return;out.push({scheduled:true,calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),faithRhythm:r.id,faithGroup:r.faithGroup,area:"faith",label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,false)});});
  }
- if(typeof prayerIsDue==="function"){
-  (S.prayers||[]).forEach(function(p){var block=p.tod&&p.tod!=="anytime"?p.tod:"allday";if(!prayerIsDue(p)||block!==bid)return;var prayerPeople=(p.personId?[p.personId]:[]).concat(Array.isArray(p.sharedWith)?p.sharedWith:[]);if(!prayerPeople.length)prayerPeople=[null];prayerPeople.filter(function(id,index){return prayerPeople.indexOf(id)===index;}).forEach(function(personId){out.push({scheduled:!!p.tod&&p.tod!=="anytime",calendarDay:!p.tod||p.tod==="anytime",prayer:p.id,personId:personId,label:p.text,description:p.details||"",sub:prayerScheduleLabel(p)+" \u00b7 last prayed "+prayerLastPrayedLabel(p)});});});
- }
  return out;
 }
-var planFocusState="now";var planKindFilterOpen={now:false,other:false};var planKindVisibility={now:{rhythm:true,spark:true,prayer:true},other:{rhythm:true,spark:true,prayer:true}};
+var planFocusState="now";var planKindFilterOpen={now:false,other:false};var planKindVisibility={now:{rhythm:true,spark:true},other:{rhythm:true,spark:true}};
 function planKindVisibilityFor(scope){
- if(!planKindVisibility[scope])planKindVisibility[scope]={rhythm:true,spark:true,prayer:true};
+ if(!planKindVisibility[scope])planKindVisibility[scope]={rhythm:true,spark:true};
  return planKindVisibility[scope];
 }
 function planItemKind(item){return item.rhythm||item.rkey||item.faithRhythm?"rhythm":item.spark||item.sparky?"spark":item.prayer?"prayer":"";}
 function planKindTogglesHTML(scope,label){
  var visibility=planKindVisibilityFor(scope);
- return '<span class="plan-kind-toggles" role="group" aria-label="'+esc(label||"Show or hide item types")+'">'+[["rhythm","Rhythm","rhythms"],["spark","Spark","sparks"],["prayer","Prayer","prayer"]].map(function(type){var active=visibility[type[0]]!==false,buttonLabel=(active?"Hide ":"Show ")+type[1]+" items";return '<button type="button" class="plan-kind-toggle plan-kind-'+type[0]+(active?"":" is-muted")+'" data-plan-kind-toggle="'+esc(scope)+'" data-kind="'+type[0]+'" aria-label="'+buttonLabel+'" title="'+buttonLabel+'" aria-pressed="'+active+'">'+collectionIcon(type[2])+'</button>';}).join("")+'</span>';
+ return '<span class="plan-kind-toggles" role="group" aria-label="'+esc(label||"Show or hide item types")+'">'+[["rhythm","Rhythm","rhythms"],["spark","Spark","sparks"]].map(function(type){var active=visibility[type[0]]!==false,buttonLabel=(active?"Hide ":"Show ")+type[1]+" items";return '<button type="button" class="plan-kind-toggle plan-kind-'+type[0]+(active?"":" is-muted")+'" data-plan-kind-toggle="'+esc(scope)+'" data-kind="'+type[0]+'" aria-label="'+buttonLabel+'" title="'+buttonLabel+'" aria-pressed="'+active+'">'+collectionIcon(type[2])+'</button>';}).join("")+'</span>';
 }
 function planKindFilterHTML(scope,count,label){
  label=label|| (scope==="now"?"Now":"All Day");
@@ -289,6 +288,10 @@ function planHTML(){
  var selected=planFocusState==="allday"?{id:"allday",name:"All Day",range:"Any time today"}:blocks.filter(function(block){return block.id===planFocusState&&block.id!==curId;})[0],focus=planFocusState==="now"||!selected?current:selected;
  if(!selected&&planFocusState!=="now")planFocusState="now";
  return planBlockCard(focus,curId,focus.id===curId,focus.id==="allday",blocks);}
+function dashboardFocusedPrayerHTML(){
+ var timeBlock=dashboardPrayerTimeMode==="all"?"all":dayBlockAt(new Date()),people=dashboardPrayerPeople,count=faithDashboardPrayerSessionSort(timeBlock,people).length;
+ return '<section class="dashboard-focused-prayer" aria-label="Focused prayer"><div class="dashboard-prayer-controls"><button type="button" class="faith-prayer-view-toggle dashboard-prayer-time-toggle" data-dashboard-prayer-time-toggle aria-label="Switch timeframe to '+(dashboardPrayerTimeMode==="all"?"Now":"All")+'">'+(dashboardPrayerTimeMode==="all"?"All":"Now")+' <span aria-hidden="true">↔</span></button>'+faithDashboardPrayerPeopleHTML()+'</div><button type="button" class="btn mini faith-start-prayer" data-dashboard-prayer-start="1" aria-label="Start focused prayer for '+count+' '+(count===1?"prayer":"prayers")+'">Focused Prayer <span class="faith-prayer-session-count" aria-hidden="true">'+count+'</span></button></section>';
+}
 function upcomingDates(now){
  var today=new Date(now||Date.now());today.setHours(0,0,0,0);var rows=[];
  function add(label,month,day,attrs){

@@ -1153,6 +1153,16 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .current-plan-filter-menu .plan-kind-toggle.is-muted:hover{opacity:.8}
 .home-dashboard .dashboard-free-moment{display:grid;gap:12px;margin:0 0 14px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
 .home-dashboard .dashboard-free-moment>.planitem:has(.plan-item-top-meta){margin-bottom:0}
+.home-dashboard .dashboard-focused-prayer{display:grid;gap:14px;margin:0 0 32px}
+.home-dashboard .dashboard-prayer-controls{display:flex;align-items:center;gap:12px;min-width:0}
+.home-dashboard .dashboard-prayer-time-toggle{justify-content:center;flex:none;min-width:112px;min-height:48px}
+.home-dashboard .dashboard-prayer-filter{z-index:12;flex:1;min-width:0;margin:0}
+.home-dashboard .dashboard-prayer-filter>summary{box-sizing:border-box;width:100%;min-width:0;min-height:48px;padding:8px 14px;font-size:16px}
+.home-dashboard .dashboard-prayer-filter .faith-prayer-filter-count{font-size:14px}
+.home-dashboard .dashboard-prayer-filter .faith-prayer-filter-panel{top:calc(100% + 6px);right:0;left:auto;width:min(360px,calc(100vw - 48px))}
+.home-dashboard .dashboard-prayer-filter .faith-prayer-filter-people{grid-template-columns:repeat(2,minmax(0,1fr))}
+.home-dashboard .dashboard-focused-prayer>.faith-start-prayer{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:56px;font-size:17px}
+.home-dashboard .dashboard-focused-prayer>.faith-start-prayer .faith-prayer-session-count{min-width:28px;height:28px;font-size:14px}
 .home-dashboard .uprow{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin:0 0 18px}
 .home-dashboard .upitem{display:flex;align-items:center;min-width:0;gap:9px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);font-size:15px}
 .home-dashboard .upmain{display:flex;flex:1;min-width:0;flex-direction:column}
@@ -1532,6 +1542,14 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 @media(max-width:600px){
  .home-dashboard .current-plan-summary{padding-right:13px;padding-left:0}
  .home-dashboard>.sectiontitle:not(.dashboard-greeting){padding-right:12px;padding-left:12px}
+ .home-dashboard .dashboard-focused-prayer{gap:12px}
+ .home-dashboard .dashboard-prayer-controls{gap:8px}
+ .home-dashboard .dashboard-prayer-time-toggle{min-width:88px;min-height:44px}
+ .home-dashboard .dashboard-prayer-filter>summary{min-height:44px;padding:7px 10px;font-size:14px}
+ .home-dashboard .dashboard-prayer-filter .faith-prayer-filter-count{font-size:12px}
+ .home-dashboard .dashboard-prayer-filter .faith-prayer-filter-panel{right:0;left:auto}
+ .home-dashboard .dashboard-prayer-filter .faith-prayer-filter-people{grid-template-columns:minmax(0,1fr);max-height:36vh}
+ .home-dashboard .dashboard-focused-prayer>.faith-start-prayer{min-height:52px;font-size:15px}
  .home-dashboard .planitem:has(.plan-item-top-meta){
   display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto;align-items:stretch;gap:12px;min-height:0;margin:0 0 12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)
  }
