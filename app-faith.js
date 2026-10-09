@@ -511,7 +511,7 @@ document.addEventListener("change",function(event){
 },true);
 document.addEventListener("click",function(event){
  var t=event.target,button=t.closest&&t.closest("[data-dashboard-prayer-people-open]");
- if(button){dashboardPrayerPeopleOpen=true;render();var firstControl=document.querySelector("#dashboard-prayer-people-dialog .dashboard-prayer-time-picker");if(firstControl)firstControl.focus({preventScroll:true});event.stopImmediatePropagation();return;}
+ if(button){dashboardPrayerPeopleOpen=true;render();var dialogTitle=document.querySelector("#dashboard-prayer-people-title");if(dialogTitle)dialogTitle.focus({preventScroll:true});event.stopImmediatePropagation();return;}
  var summary=t.closest&&t.closest(".faith-prayer-filter>summary");
  if(summary){faithPrayerPeopleOpen=!faithPrayerPeopleOpen;return;}
  var b=t.closest&&t.closest("button");if(!b)return;

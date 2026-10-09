@@ -255,7 +255,7 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .calendar-sectiontitle{align-items:center;justify-content:flex-start}
 .calendar-sync-slot{display:inline-flex;align-items:center}
 .calendar-sectiontitle .calsync{margin:0 0 0 2px;padding:2px 0}
-.calsync{display:block;margin:14px 0 0 auto;padding:2px 0;border:0;background:transparent;color:var(--ink-faint);font:inherit;font-size:11px;text-align:right;font-variant-numeric:tabular-nums;cursor:pointer}
+.calsync{display:block;margin:14px 0 0 auto;padding:2px 0;border:0;background:transparent;color:var(--ink-faint);font:inherit;font-size:10px;text-align:right;font-variant-numeric:tabular-nums;cursor:pointer}
 .calsync:hover{color:var(--forest);text-decoration:underline;text-underline-offset:3px}
 .calsync:focus-visible{outline:2px solid var(--forest);outline-offset:3px;border-radius:3px}
 .calsync:disabled{cursor:wait;text-decoration:none}
@@ -551,8 +551,9 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .current-plan-period{display:flex;align-items:baseline;gap:9px;min-width:0}
 .current-plan-period .plan-block-name{font-size:15px;font-weight:500;line-height:1.35;color:var(--ink)}
 .current-plan-range{color:var(--ink-soft);font-size:13px;line-height:1.35;font-variant-numeric:tabular-nums;white-space:nowrap}
-.current-plan-item-count{display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;flex:none;color:var(--ink-soft);font-size:12px;line-height:1.35;white-space:nowrap}
-.current-plan-item-count svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.current-plan-item-count{display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;flex:none;color:var(--ink-soft);font-size:11px;line-height:1.35;white-space:nowrap}
+.current-plan-heading-controls>.current-plan-item-count{align-self:flex-end;margin:0 0 10px 12px}
+.current-plan-item-count svg{width:14px;height:14px;transform:translateY(-1px);fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
 .current-plan-weather{position:static;width:auto;transform:none}
 .current-plan-filters{display:flex;justify-content:flex-end;margin:2px 0 0}
 .now-weather.compact{display:flex;align-items:center;gap:5px;color:var(--ink-soft);font-size:13px;line-height:1.3;white-space:nowrap}
@@ -1127,8 +1128,9 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .plan-item-action>.btn{width:auto;min-width:76px;min-height:42px;padding:7px 14px;border-radius:9px;font-size:13px;font-weight:650}
 .home-dashboard .planblock{margin:0 0 32px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
 .home-dashboard .planblock.current{border:0;box-shadow:none}
-.home-dashboard .current-plan-summary{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;min-height:0;margin:0 0 10px;padding:0;border-radius:0;background:transparent;color:var(--ink)}
-.home-dashboard .current-plan-topline{min-height:24px}
+.home-dashboard .current-plan-summary{display:grid;grid-template-columns:minmax(0,1fr) 164px;grid-template-rows:auto auto;column-gap:12px;row-gap:0;min-height:68px;margin:0 0 10px;padding:0;border-radius:0;background:transparent;color:var(--ink)}
+.home-dashboard .current-plan-topline{grid-column:1;grid-row:1;min-width:0;min-height:24px;justify-content:flex-start}
+.home-dashboard .current-plan-heading-controls{display:flex;align-items:center;gap:8px;min-width:0}
 .home-dashboard .current-plan-time-menu{position:relative;z-index:20;display:inline-block;min-width:0}
 .home-dashboard .planblock .current-plan-time-picker{position:relative;display:inline-flex;align-items:center;min-width:0;gap:12px;margin-left:12px;padding:4px 0;border:0;border-radius:0;background:transparent!important;color:var(--ink)!important;font-size:22px;font-weight:700;line-height:1.35;cursor:pointer;list-style:none}
 .home-dashboard .current-plan-time-chevron{display:grid;width:28px;height:28px;place-items:center;flex:none;border-radius:8px;background:#E2E6E4;color:var(--ink)}
@@ -1147,23 +1149,26 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .current-plan-time-option-range,.home-dashboard .current-plan-time-option-count{min-width:0;color:var(--ink-soft);font-size:12px;text-align:left;white-space:nowrap}
 @media(max-width:360px){.home-dashboard .current-plan-time-option{grid-template-columns:88px minmax(0,1fr) 46px;gap:4px;padding-right:7px;padding-left:7px}.home-dashboard .current-plan-time-option-name,.home-dashboard .current-plan-time-option-range,.home-dashboard .current-plan-time-option-count{font-size:10px}}
 .home-dashboard .current-plan-items>.plan-empty-card{display:flex;box-sizing:border-box;min-height:104px;align-items:center;justify-content:center;margin:0;padding:24px 18px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);font-size:15px;font-style:normal;text-align:center}
-.home-dashboard .current-plan-details{align-items:center}
+.home-dashboard .current-plan-details{grid-column:1;grid-row:2;align-items:center}
+.home-dashboard .current-plan-weather{grid-column:2;grid-row:1 / 3;align-self:stretch;justify-self:end;width:calc(100% - 13px);min-width:0;transform:translateX(-9px)}
+.home-dashboard .current-plan-summary:not(.has-weather){grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;min-height:0}
+.home-dashboard .current-plan-weather:empty{display:none}
+.weather-card{--weather-gradient:linear-gradient(115deg,#0750df,#2397f4);--weather-icon:#3286dc;display:flex;box-sizing:border-box;width:100%;height:100%;min-height:68px;align-items:center;justify-content:flex-end;gap:9px;overflow:hidden;padding:7px 4px;color:var(--ink)}
+.weather-card.sunny{--weather-gradient:linear-gradient(115deg,#ff4b00,#ff9800);--weather-icon:#f58220}
+.weather-card.clear,.weather-card.partly{--weather-gradient:linear-gradient(115deg,#0750df,#2397f4);--weather-icon:#3286dc}
+.weather-card.cloudy{--weather-gradient:linear-gradient(115deg,#4c607a,#8999ad);--weather-icon:#73859b}
+.weather-card.night{--weather-gradient:linear-gradient(115deg,#5c08bb,#b21de5);--weather-icon:#8527cf}
+.weather-card.rain{--weather-gradient:linear-gradient(115deg,#087dbb,#2ba7d7);--weather-icon:#219ac4}
+.weather-card.snow{--weather-gradient:linear-gradient(115deg,#4f81a2,#76a7c2);--weather-icon:#6698b4}
+.weather-card.storm{--weather-gradient:linear-gradient(115deg,#433a8c,#7053bd);--weather-icon:#5b51a4}
+.weather-card svg{width:40px;height:40px;flex:none;fill:var(--weather-icon);stroke:var(--weather-icon);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.weather-card-reading{display:grid;justify-items:center;min-width:0;line-height:1}
+.weather-card-reading strong{background:var(--weather-gradient);background-clip:text;color:transparent;-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:38px;font-weight:850;letter-spacing:-.065em;font-variant-numeric:tabular-nums}
+.weather-card-reading sup{position:relative;top:-.45em;margin-left:1px;font-size:.42em;letter-spacing:0}
+.weather-card-reading>span{max-width:100%;margin-top:3px;color:var(--ink-soft);font-size:10px;font-weight:600;text-align:center;text-transform:capitalize;white-space:normal}
+.weather-card-prompt{border:0;font-family:var(--sans);font-size:11px;line-height:1.2;text-align:center;cursor:pointer}
+.weather-card-prompt:disabled{cursor:wait;opacity:.78}
 .home-dashboard .calendar-sync-slot{margin-bottom:32px}
-.home-dashboard .current-plan-filter{position:relative;flex:none}
-.home-dashboard .current-plan-item-count{display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;min-height:30px;padding:2px 8px;border:0;border-radius:8px;background:#E9ECEA;color:var(--ink-soft);font:inherit;font-size:12px;line-height:1.35;white-space:nowrap;cursor:pointer;list-style:none}
-.home-dashboard .current-plan-filter>.current-plan-item-count{min-height:30px;padding:2px 8px;background:#E9ECEA}
-.home-dashboard .current-plan-filter>.current-plan-item-count:hover{background:#E2E6E4}
-.home-dashboard .current-plan-item-count::-webkit-details-marker{display:none}
-.home-dashboard .current-plan-item-count svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
-.home-dashboard .current-plan-item-count:hover{background:#E2E6E4;color:var(--forest)}
-.home-dashboard .current-plan-item-count:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
-.home-dashboard .current-plan-filter-menu{position:absolute;z-index:30;top:calc(100% + 4px);right:0;display:flex;justify-content:flex-end;min-width:120px;padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--card);box-shadow:0 8px 24px rgba(32,39,35,.16)}
-.home-dashboard .current-plan-filter-menu .plan-kind-toggles{gap:7px}
-.home-dashboard .current-plan-filter-menu .plan-kind-toggle{width:30px;height:30px;min-width:30px;min-height:30px;padding:0;border:1px solid var(--line)!important;border-radius:50%;box-shadow:none}
-.home-dashboard .current-plan-filter-menu .plan-kind-toggle .collection-icon{width:19px;height:19px}
-.home-dashboard .current-plan-filter-menu .plan-kind-toggle.is-muted{opacity:.55;border-color:var(--line)!important;color:var(--ink-faint)}
-.home-dashboard .current-plan-filter-menu .plan-kind-toggle:hover{opacity:.8}
-.home-dashboard .current-plan-filter-menu .plan-kind-toggle.is-muted:hover{opacity:.8}
 .home-dashboard .dashboard-free-moment{display:grid;gap:12px;margin:0 0 14px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
 .home-dashboard .dashboard-free-moment>.planitem:has(.plan-item-top-meta){margin-bottom:0}
 .home-dashboard .dashboard-focused-prayer{display:grid;gap:12px;margin:0 0 32px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.06)}
@@ -1225,8 +1230,8 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .dashboard-prayer-people-dialog .dashboard-prayer-people-actions{gap:10px}
 .home-dashboard .dashboard-focused-prayer>.faith-start-prayer{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:56px;font-size:17px}
 .home-dashboard .dashboard-focused-prayer>.faith-start-prayer .faith-prayer-session-count{min-width:28px;height:28px;font-size:14px}
-.home-dashboard .uprow{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin:0 0 18px}
-.home-dashboard .upitem{display:flex;align-items:center;min-width:0;gap:9px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);font-size:15px}
+.home-dashboard .uprow{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 18px}
+.home-dashboard .upitem{display:flex;box-sizing:border-box;flex:0 1 340px;width:100%;max-width:340px;align-items:center;min-width:0;gap:9px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);font-size:15px}
 .home-dashboard .upmain{display:flex;flex:1;min-width:0;flex-direction:column}
 .home-dashboard .upitem .updays{flex:none;white-space:nowrap}
 .home-dashboard .planitem:has(.plan-item-meta-details>.plan-kind-badge.rhy) .plan-item-action>.btn{border-color:#B8E1CA;background:#E3F6ED;color:#1C5844}
@@ -1282,13 +1287,18 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .planblock{padding:0}
  .home-dashboard .planblock.current{border:0;box-shadow:none}
  .home-dashboard .planblock summary{min-height:44px;padding:8px 11px;border-radius:9px;background:var(--mist);color:var(--forest-deep)}
- .home-dashboard .current-plan-summary{margin-bottom:10px}
+ .home-dashboard .current-plan-summary{grid-template-columns:minmax(0,1fr) 136px;min-height:64px;margin-bottom:10px;column-gap:8px}
  .home-dashboard .current-plan-period{padding-left:12px}
  .home-dashboard .current-plan-topline{min-height:24px}
  .home-dashboard .current-plan-now{font-size:19px;font-weight:700;color:var(--ink)}
  .home-dashboard .current-plan-period .plan-block-name{font-size:15px;font-weight:500;color:var(--ink)}
  .home-dashboard .current-plan-range{font-size:13px;color:var(--ink-soft)}
- .home-dashboard .current-plan-weather{position:static;width:auto;transform:none}
+ .home-dashboard .current-plan-weather{grid-column:2;grid-row:1 / 3;width:calc(100% - 13px);transform:translateX(-10px)}
+ .home-dashboard .weather-card{min-height:64px;gap:6px;padding:6px 3px}
+ .home-dashboard .weather-card svg{width:34px;height:34px}
+ .home-dashboard .weather-card-reading strong{font-size:32px}
+ .home-dashboard .weather-card-reading>span{font-size:9px}
+ .home-dashboard .weather-card-prompt .now-weather-prompt-icon{color:var(--weather-icon)}
  .home-dashboard .current-plan-items{margin-top:0!important}
  .home-dashboard .current-plan-filters{justify-content:flex-start;margin:4px 0 12px}
  .home-dashboard .current-plan-filters .plan-kind-toggles{gap:6px}
@@ -1307,7 +1317,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .plan-kind-toggles{gap:3px}
  .home-dashboard .plan-kind-toggle{width:23px;height:23px;min-width:23px;min-height:23px}
  .home-dashboard .dashboard-free-moment .planitem{border-bottom:1px solid var(--line)}
- .home-dashboard .uprow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0 0 10px;border:0}
+ .home-dashboard .uprow{gap:8px;margin:0 0 10px;border:0}
  .home-dashboard .upitem{min-width:0;gap:7px;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);font-size:12px}
  .home-dashboard .updays{font-size:10px}
  .home-dashboard .uplabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1317,6 +1327,14 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .empty{font-size:12px}
  .home-dashboard .calendar-breathing-room strong{font-size:14px}
  .home-dashboard .calendar-breathing-room p{font-size:11.5px}
+}
+@media(max-width:380px){
+ .home-dashboard .current-plan-summary{grid-template-columns:minmax(0,1fr) 120px;column-gap:6px}
+ .home-dashboard .current-plan-weather{width:calc(100% - 13px);transform:translateX(-11px)}
+ .home-dashboard .weather-card{gap:4px;padding:5px 2px}
+ .home-dashboard .weather-card svg{width:30px;height:30px}
+ .home-dashboard .weather-card-reading strong{font-size:29px}
+ .home-dashboard .weather-card-reading>span{font-size:8px}
 }
 @media(max-width:600px){
  html[data-mobile-text-size="large"] .home-dashboard{font-size:19px;--tend-item-title-size:19px;--tend-item-description-size:17px;--tend-item-meta-size:14px;--tend-item-action-size:16px;--tend-section-heading-size:20px}
@@ -1446,8 +1464,8 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .brand .sub:last-child{font-size:10px!important}
 }
 @media(max-width:600px){
- .home-dashboard .uprow{grid-template-columns:minmax(0,1fr);gap:8px}
- .home-dashboard .upitem{display:flex;width:100%;align-items:flex-start;gap:10px;padding:10px}
+ .home-dashboard .uprow{gap:8px}
+ .home-dashboard .upitem{display:flex;flex-basis:340px;width:100%;max-width:340px;align-items:flex-start;gap:10px;padding:10px}
  .home-dashboard .updays{flex:none;white-space:nowrap}
  .home-dashboard .upmain .uplabel{flex:1;min-width:0;overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:anywhere}
  .home-dashboard .menu-grid{gap:6px 8px;border-top:0}
@@ -1590,7 +1608,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .calitem{gap:8px;padding:9px 4px;border-bottom:1px solid var(--line);border-radius:0;background:transparent}
  .home-dashboard #calStrip .calitem:last-child{border-bottom:0}
  .home-dashboard .calendar-sync-slot{display:block;margin:-6px 0 32px;padding:0}
- .home-dashboard .calendar-sync-slot .calsync{margin:0 0 0 auto;font-size:12px}
+ .home-dashboard .calendar-sync-slot .calsync{margin:0 0 0 auto;font-size:11px}
  html[data-mobile-text-size="large"] .home-dashboard .calendar-sync-slot .calsync{font-size:14px}
 }
 @media(max-width:600px){

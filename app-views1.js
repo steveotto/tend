@@ -275,27 +275,27 @@ function planCandidates(bid,curBid){
  }
  return out;
 }
-var planFocusState="now";var planKindFilterOpen={now:false,other:false};var planKindVisibility={now:{rhythm:true,spark:true},other:{rhythm:true,spark:true}};
+var planFocusState="now";var planKindVisibility={};
 function planKindVisibilityFor(scope){
  if(!planKindVisibility[scope])planKindVisibility[scope]={rhythm:true,spark:true};
  return planKindVisibility[scope];
 }
 function planItemKind(item){return item.rhythm||item.rkey||item.faithRhythm?"rhythm":item.spark||item.sparky?"spark":item.prayer?"prayer":"";}
+function planNowItems(items){return items.filter(function(item){return planItemKind(item)!=="spark";});}
 function planKindTogglesHTML(scope,label){
  var visibility=planKindVisibilityFor(scope);
  return '<span class="plan-kind-toggles" role="group" aria-label="'+esc(label||"Show or hide item types")+'">'+[["rhythm","Rhythm","rhythms"],["spark","Spark","sparks"]].map(function(type){var active=visibility[type[0]]!==false,buttonLabel=(active?"Hide ":"Show ")+type[1]+" items";return '<button type="button" class="plan-kind-toggle plan-kind-'+type[0]+(active?"":" is-muted")+'" data-plan-kind-toggle="'+esc(scope)+'" data-kind="'+type[0]+'" aria-label="'+buttonLabel+'" title="'+buttonLabel+'" aria-pressed="'+active+'">'+collectionIcon(type[2])+'</button>';}).join("")+'</span>';
 }
-function planKindFilterHTML(scope,count,label){
- label=label|| (scope==="now"?"Now":"All Day");
+function planItemCountHTML(count){
  var itemLabel=count===1?"item":"items";
- return '<details class="current-plan-filter" data-plan-kind-filter="'+esc(scope)+'"'+(planKindFilterOpen[scope]?' open':'')+'><summary class="current-plan-item-count" aria-label="Filter '+label+' item types" title="Filter '+label+' item types"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3h8M5.5 8h8M5.5 13h8M2.5 3h.01M2.5 8h.01M2.5 13h.01"/></svg>'+count+' '+itemLabel+'</summary><div class="current-plan-filter-menu">'+planKindTogglesHTML(scope,label+" item filters")+'</div></details>';
+ return '<span class="current-plan-item-count" aria-label="'+count+' '+itemLabel+'"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3h8M5.5 8h8M5.5 13h8M2.5 3h.01M2.5 8h.01M2.5 13h.01"/></svg>'+count+' '+itemLabel+'</span>';
 }
 function planFocusMenuHTML(blocks,currentId,selectedId){
  var current=blocks.filter(function(item){return item.id===currentId;})[0]||blocks[0];
  var selected=selectedId==="now"?"Now":selectedId==="allday"?"All Day":(blocks.filter(function(item){return item.id===selectedId;})[0]||current).name;
  var options=blocks.map(function(item){return {id:item.id,name:item.name,range:item.range,isNow:item.id===currentId};});
  options.push({id:"allday",name:"All Day",range:"Any time today",isAllDay:true});
- return '<details class="current-plan-time-menu"><summary class="current-plan-time-picker" aria-label="Choose a time frame, currently '+esc(selected)+'"><span>'+esc(selected)+'</span><span class="current-plan-time-chevron" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4.5L12.5 6"/></svg></span></summary><div class="current-plan-time-options" role="group" aria-label="Time frames">'+options.map(function(item){var isSelected=(selectedId==="now"&&item.isNow)||selectedId===item.id,count=prioritizePlanItems(planCandidates(item.id,currentId).filter(function(candidate){var kind=planItemKind(candidate);return !kind||planKindVisibilityFor("now")[kind]!==false;})).visible.length,itemLabel=count===1?"item":"items";return '<button type="button" class="current-plan-time-option'+(item.isNow?' is-current':'')+(isSelected?' is-selected':'')+'" data-plan-focus="'+(item.isNow?"now":esc(item.id))+'" aria-pressed="'+isSelected+'"><span class="current-plan-time-option-name">'+esc(item.name)+'</span><span class="current-plan-time-option-range">'+esc(item.range)+'</span><span class="current-plan-time-option-count">'+count+' '+itemLabel+'</span></button>';}).join("")+'</div></details>';
+ return '<details class="current-plan-time-menu"><summary class="current-plan-time-picker" aria-label="Choose a time frame, currently '+esc(selected)+'"><span>'+esc(selected)+'</span><span class="current-plan-time-chevron" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4.5L12.5 6"/></svg></span></summary><div class="current-plan-time-options" role="group" aria-label="Time frames">'+options.map(function(item){var isSelected=(selectedId==="now"&&item.isNow)||selectedId===item.id,candidates=planCandidates(item.id,currentId),count=prioritizePlanItems(item.isNow?planNowItems(candidates):candidates).visible.length,itemLabel=count===1?"item":"items";return '<button type="button" class="current-plan-time-option'+(item.isNow?' is-current':'')+(isSelected?' is-selected':'')+'" data-plan-focus="'+(item.isNow?"now":esc(item.id))+'" aria-pressed="'+isSelected+'"><span class="current-plan-time-option-name">'+esc(item.name)+'</span><span class="current-plan-time-option-range">'+esc(item.range)+'</span><span class="current-plan-time-option-count">'+count+' '+itemLabel+'</span></button>';}).join("")+'</div></details>';
 }
 function planMetaIcon(kind){
  var paths={frequency:'<path d="M20 7a8 8 0 0 0-14-2L3 8m0-5v5h5 M4 17a8 8 0 0 0 14 2l3-3m0 5v-5h-5"/>',time:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',occurred:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18m-13 5 2 2 4-4"/>'};
@@ -315,22 +315,21 @@ function planItemMetaBar(meta){
 }
 function planBlockCard(b,curId,isCur,isAllDay,focusBlocks){
  isAllDay=!!isAllDay;
- var toggleScope="now",visibility=planKindVisibilityFor(toggleScope);
- var allItems=planCandidates(b.id,curId),items=allItems.filter(function(item){var kind=planItemKind(item);return !kind||visibility[kind]!==false;});
+ var allItems=planCandidates(b.id,curId);if(isCur)allItems=planNowItems(allItems);var items=allItems;
  var queue=prioritizePlanItems(items);
  var block=dayBlocks().find(function(item){return item.id===b.id;}),blockStart=block?block.start:"";
  function header(){
   var label=isCur?"Now":isAllDay?"All Day":b.name,weather=isCur?nowWeatherHTML():isAllDay?nowWeatherHTML():(typeof planWeatherHTML==="function"?planWeatherHTML(blockStart):""),
    heading=planFocusMenuHTML(focusBlocks,curId,planFocusState),
    period=isCur?'<span class="plan-block-name">'+esc(b.name)+'</span><span class="current-plan-range">'+esc(b.range)+'</span>':isAllDay?'<span class="current-plan-range current-plan-all-day-range">Any time today</span>':'<span class="current-plan-range">'+esc(b.range)+'</span>';
-  return '<div class="current-plan-summary"><div class="current-plan-topline">'+heading+'<div class="current-plan-weather"'+(isCur?' id="nowWeather"':'')+'>'+weather+'</div></div><div class="current-plan-details"><div class="current-plan-period">'+period+'</div>'+planKindFilterHTML(toggleScope,queue.visible.length,label)+'</div></div>';
+  return '<div class="current-plan-summary'+(weather?" has-weather":"")+'"><div class="current-plan-topline"><div class="current-plan-heading-controls">'+heading+planItemCountHTML(queue.visible.length)+'</div></div><div class="current-plan-details"><div class="current-plan-period">'+period+'</div></div><div class="current-plan-weather" id="nowWeather" data-plan-weather-time="'+(isCur||isAllDay?"":esc(blockStart))+'">'+weather+'</div></div>';
  }
  function itemHTML(it){
   var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.faithRhythm?'<button type="button" class="btn mini" data-tend-open="faith-rhythm" data-rhythm-id="'+esc(it.faithRhythm)+'">Tend</button>':(it.prayer?'<button type="button" class="btn mini" data-pray="'+esc(it.prayer)+'">Pray</button>':(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>')));
   var meta=planItemMetaBar(it.sub);
   return '<div class="planitem"><div class="pi-main">'+planItemCopy(it,btn)+'</div>'+planItemTopRow(it)+planItemFooter(it,meta,it.sub)+'</div>';
  }
- var body=queue.visible.length?queue.visible.map(itemHTML).join(""):'<div class="empty plan-empty-card">'+(allItems.length?'Items hidden by the type filters.':'Nothing queued - all items tended.')+'</div>';
+ var body=queue.visible.length?queue.visible.map(itemHTML).join(""):'<div class="empty plan-empty-card">Nothing queued - all items tended.</div>';
  return '<section id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock current'+(isAllDay?' all-day':'')+'">'+header()+'<div class="current-plan-items">'+body+'</div></section>';
 }
 function planHTML(){
