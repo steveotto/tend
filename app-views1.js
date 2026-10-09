@@ -1,5 +1,24 @@
 "use strict";
 /* ============ views: dashboard, area pages, people ============ */
+var dashboardSparkCarouselIndex=0,dashboardSparkCarouselAnimating=false,dashboardSparkCarouselReady=false,dashboardSparkCarouselInitPending=false;
+function dashboardInitSparkCarousel(){
+ if(dashboardSparkCarouselReady||dashboardSparkCarouselInitPending)return;
+ dashboardSparkCarouselInitPending=true;
+ requestAnimationFrame(function(){
+  requestAnimationFrame(function(){
+   dashboardSparkCarouselInitPending=false;
+   var card=document.querySelector("[data-dashboard-free-spark-card]");
+   if(!card||!card.isConnected)return;
+   var bounds=card.getBoundingClientRect();
+   if(!bounds.width||!bounds.height)return;
+   dashboardSparkCarouselReady=true;
+   document.querySelectorAll("[data-dashboard-spark-carousel-step]").forEach(function(button){
+    var step=Number(button.getAttribute("data-dashboard-spark-carousel-step"));
+    button.disabled=dashboardSparkCarouselIndex+step<0||dashboardSparkCarouselIndex+step>=dashboardFreeMomentSparkQueue().length;
+   });
+  });
+ });
+}
 function renderNav(){
  var an=el("areaNav");if(an)an.innerHTML=AREA_IDS.map(function(id){return '<button data-areanav="'+id+'" class="'+(navKind()==="area"&&currentArea===id?"active":"")+'"><span class="nav-ic">'+(AREA_ICONS[id]||"")+'</span><span>'+S.areas[id].name+'</span></button>';}).join("");
  var un=el("utilNav");if(un){var settingsActive=tab==="settings"||tab==="careplan"||tab==="offload";un.innerHTML='<div class="utility-primary"><button type="button" data-utilnav="today" class="utility-primary-button'+(tab==="today"&&navKind()!=="area"?" active":"")+'"><span class="utility-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg></span><span>Today</span></button>'+(typeof focusNavButtonHTML==="function"?focusNavButtonHTML():'')+'<button type="button" data-utilnav="people" class="utility-primary-button'+(tab==="people"&&navKind()!=="area"?" active":"")+'"><span class="utility-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20v-1.5a6.5 6.5 0 0 1 13 0V20zM16 5a3.5 3.5 0 0 0 0 6.8M18 14a5.5 5.5 0 0 1 3.5 5.2V20h-3"/></svg></span><span>People</span></button><button type="button" data-utilnav="settings" class="utility-primary-button'+(settingsActive&&navKind()!=="area"?" active":"")+'" aria-label="More, settings"><span class="utility-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span><span>More</span></button></div><label class="utility-search"><span class="utility-search-icon" aria-hidden="true">⌕</span><input type="search" id="tendSearch" placeholder="Search Tend..." autocomplete="off" aria-label="Search people, rhythms, prayers, and sparks" aria-controls="tendSearchResults" aria-expanded="false"><button type="button" class="utility-search-clear" data-search-clear aria-label="Clear search" hidden>×</button><div class="utility-search-results" id="tendSearchResults" role="region" aria-label="Search results" hidden></div></label>';}
@@ -22,6 +41,38 @@ document.addEventListener("click",function(event){
  if(toggle){var open=!document.body.classList.contains("mobile-search-open");document.body.classList.toggle("mobile-search-open",open);toggle.setAttribute("aria-expanded",String(open));if(open){var input=el("tendSearch");if(input)requestAnimationFrame(function(){input.focus();});}else{var search=el("tendSearch");if(search){search.value="";tendSearchUpdate();}toggle.focus();}return;}
  toggle=event.target.closest&&event.target.closest("[data-mobile-display-toggle]");
  if(toggle){var next=settings().mobileTextSize==="large"?"normal":"large";settings().mobileTextSize=next;document.documentElement.setAttribute("data-mobile-text-size",next);save();toggle.setAttribute("aria-pressed",String(next==="large"));toggle.setAttribute("aria-label","Switch to "+(next==="large"?"Normal":"Large")+" text");toggle.title="Switch to "+(next==="large"?"Normal":"Large")+" text";flash(next==="large"?"Large text enabled":"Normal text enabled");}
+});
+document.addEventListener("click",function(event){
+ var button=event.target.closest&&event.target.closest("[data-dashboard-spark-carousel-step]");
+ if(!button)return;
+ event.stopImmediatePropagation();
+ if(!dashboardSparkCarouselReady||dashboardSparkCarouselAnimating)return;
+ var queue=dashboardFreeMomentSparkQueue(),step=Number(button.getAttribute("data-dashboard-spark-carousel-step"));
+ var currentIndex=Math.max(0,Math.min(queue.length-1,dashboardSparkCarouselIndex)),nextIndex=currentIndex+step;
+ if(!queue.length||!Number.isInteger(step)||!step||nextIndex<0||nextIndex>=queue.length)return;
+ var oldCard=document.querySelector("[data-dashboard-free-spark-card]"),animate=!!oldCard&&!window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+ function slideCard(card,from,to,onFinish){
+  if(!card||!animate||typeof card.animate!=="function"){onFinish();return;}
+  var finished=false,animation=card.animate([{transform:"translateX("+from+")"},{transform:"translateX("+to+")"}],{duration:460,easing:"cubic-bezier(.22,.72,.24,1)",fill:"forwards"}),
+      finish=function(){if(finished)return;finished=true;animation.onfinish=null;animation.cancel();onFinish();};
+  animation.onfinish=finish;
+  setTimeout(finish,520);
+ }
+ function showNextCard(){
+  dashboardSparkCarouselIndex=nextIndex;
+  renderPreservingScroll();
+  var newCard=document.querySelector("[data-dashboard-free-spark-card]"),nextButton=document.querySelector('[data-dashboard-spark-carousel-step="'+step+'"]:not(:disabled)');
+  if(!nextButton)nextButton=document.querySelector('[data-dashboard-spark-carousel-step="'+(-step)+'"]:not(:disabled)')||document.querySelector("[data-dashboard-free-spark]");
+  if(nextButton)nextButton.focus({preventScroll:true});
+  if(!animate||!newCard){dashboardSparkCarouselAnimating=false;return;}
+  slideCard(newCard,step>0?"100%":"-100%","0%",function(){dashboardSparkCarouselAnimating=false;});
+ }
+ if(!animate){showNextCard();return;}
+ dashboardSparkCarouselAnimating=true;
+ document.querySelectorAll("[data-dashboard-spark-carousel-step]").forEach(function(control){control.disabled=true;});
+ oldCard.setAttribute("aria-hidden","true");
+ oldCard.inert=true;
+ slideCard(oldCard,"0%",step>0?"-100%":"100%",showNextCard);
 });
 document.addEventListener("input",function(event){if(event.target&&event.target.id==="tendSearch")tendSearchUpdate();});
 document.addEventListener("keydown",function(event){if(event.target&&event.target.id==="tendSearch"&&event.key==="Escape"){event.target.value="";tendSearchUpdate();event.target.blur();document.body.classList.remove("mobile-search-open");var toggle=document.querySelector("[data-mobile-search-toggle]");if(toggle){toggle.setAttribute("aria-expanded","false");toggle.focus();}}});
@@ -82,7 +133,7 @@ function renderToday(){
  out+='<div class="card overall-card"><div class="dashboard-overall-heading" style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:18px;font-weight:500">Overall health</h3><span class="ov-score '+oc+'">'+ov+'</span></div><div class="bar-ov"><i class="ov-marker" style="left:'+ov+'%"></i></div>'+'<div class="meta" style="margin-top:6px"><span class="statusword '+oc+'">'+scoreLabel(ov)+'</span></div>'+areaMenuHTML()+'</div>';
  out+='<div class="sectiontitle calendar-sectiontitle"><h2>On your calendar</h2></div><div class="card calendar-card"><div id="calStrip"><div class="empty">'+((S.calendars||[]).length?"Loading calendars...":"No calendars connected - add one in Settings.")+'</div></div></div><div id="calendarSyncSlot" class="calendar-sync-slot"></div>';
  out+=planHTML();
- out+=dashboardFocusedPrayerHTML();
+ out+='<div class="sectiontitle"><h2>Prayer</h2></div>'+dashboardFocusedPrayerHTML();
  out+=freeMomentHTML();
  out+=upcomingHTML();
  out+=renderChecklists();
@@ -289,8 +340,8 @@ function planHTML(){
  if(!selected&&planFocusState!=="now")planFocusState="now";
  return planBlockCard(focus,curId,focus.id===curId,focus.id==="allday",blocks);}
 function dashboardFocusedPrayerHTML(){
- var timeBlock=dashboardPrayerTimeMode==="all"?"all":dayBlockAt(new Date()),people=dashboardPrayerPeople,count=faithDashboardPrayerSessionSort(timeBlock,people).length;
- return '<section class="dashboard-focused-prayer" aria-label="Focused prayer"><div class="dashboard-prayer-controls"><button type="button" class="faith-prayer-view-toggle dashboard-prayer-time-toggle" data-dashboard-prayer-time-toggle aria-label="Switch timeframe to '+(dashboardPrayerTimeMode==="all"?"Now":"All")+'">'+(dashboardPrayerTimeMode==="all"?"All":"Now")+' <span aria-hidden="true">↔</span></button>'+faithDashboardPrayerPeopleHTML()+'</div><button type="button" class="btn mini faith-start-prayer" data-dashboard-prayer-start="1" aria-label="Start focused prayer for '+count+' '+(count===1?"prayer":"prayers")+'">Focused Prayer <span class="faith-prayer-session-count" aria-hidden="true">'+count+'</span></button></section>';
+ var timeBlock=faithDashboardPrayerTimeBlock(dashboardPrayerTimeMode),people=dashboardPrayerPeople,count=faithDashboardPrayerSessionSort(timeBlock,people).length;
+ return '<section class="dashboard-focused-prayer" aria-label="Focused prayer"><div class="dashboard-prayer-controls">'+faithDashboardPrayerPeopleHTML()+'</div><button type="button" class="btn mini faith-start-prayer" data-dashboard-prayer-start="1" aria-label="Start focused prayer for '+count+' '+(count===1?"prayer":"prayers")+'">Focused Prayer <span class="faith-prayer-session-count" aria-hidden="true">'+count+'</span></button>'+faithDashboardPrayerPeopleDialogHTML()+'</section>';
 }
 function upcomingDates(now){
  var today=new Date(now||Date.now());today.setHours(0,0,0,0);var rows=[];
@@ -416,6 +467,11 @@ function tendAssociationControlsHTML(type,ownerId,itemId,record){
  var categories=values.areas.map(function(id){var label=id==="faith"?"Faith - "+faithGroup:names[id]||id;return '<span class="rhythm-picker-chip category-selected">'+(AREA_ICONS[id]||"")+esc(label)+'</span>';}).join("");
  var people=values.sharedWith.map(function(id){var person=S.people.find(function(x){return x.id===id;});return person?'<span class="rhythm-picker-person">'+personAvatar(person,22)+esc(person.name)+'</span>':"";}).join("");
  return '<div class="rhythm-picker-controls item-association-controls" data-item-association-controls="'+esc(key)+'"><div class="rhythm-picker-row"><button type="button" class="rhythm-picker-trigger" data-item-picker-open="'+esc(key+'|categories')+'">'+action+' categories</button>'+categories+'</div><div class="rhythm-picker-row"><button type="button" class="rhythm-picker-trigger" data-item-picker-open="'+esc(key+'|people')+'">'+action+' people</button>'+people+'</div></div>';
+}
+function tendSparkEditModalHTML(ownerId,viewerId,planEditor){
+ var spark=sparkEditDraft;if(!spark||spark.id!==editSparkId)return "";
+ var deleteButton=planEditor?'<button class="btn mini danger" data-cpsparkdelete="'+esc(spark.id)+'">Delete Spark</button>':ownerId==="faith"?'<button class="btn mini danger" data-faith-spark-delete="faith|'+esc(spark.id)+'">Delete Spark</button>':'<button class="btn mini danger" data-spdel="'+esc(ownerId+"|"+spark.id+"|"+viewerId)+'">'+(viewerId!==ownerId?"Remove Spark":"Delete Spark")+'</button>';
+ return '<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="spark-editor-title"><div class="profile-editor-body"><h3 id="spark-editor-title">Edit Spark</h3><div class="addrow spark-draft"><input data-sfield="text" value="'+esc(spark.text||"")+'" placeholder="Spark text"><textarea data-sfield="details" placeholder="Details (optional)">'+esc(spark.details||"")+'</textarea><input type="date" data-sfield="by" value="'+esc(spark.by||"")+'" aria-label="Spark date" style="max-width:150px"><input type="time" data-sfield="time" value="'+esc(spark.time||"")+'" aria-label="Spark time" style="max-width:110px"><button class="btn mini ghost" data-scleardate="1">No date</button></div>'+tendAssociationControlsHTML("spark",ownerId,spark.id,spark)+'<p class="profile-tab-intro">With a date it lands on the dashboard; without one it waits in Free moment.</p><div class="profile-editor-actions"><button class="btn mini" data-sparkeditsave="'+esc(spark.id)+'">Save Spark</button><button class="btn mini ghost" data-sparkeditcancel data-editor-cancel>Cancel</button>'+deleteButton+'</div></div></dialog>';
 }
 function tendAssociationPickerHTML(picker){
  var people=picker.kind==="people",ownerId=picker.ownerId,type=picker.type,itemId=picker.itemId,target=type+"|"+ownerId+"|"+itemId+"|"+picker.kind;
@@ -776,7 +832,7 @@ function personProfile(pid){
   var sparkOwnerId=s.profileOwnerId||pid,sparkBadges=tendAssociationPeopleBadges(s,sparkOwnerId,pid,"spark")+tendAssociationCategoryBadges(s);
   var sparkMeta=(s.time?fmtHM12(s.time)+" \u00b7 ":"")+sparkDueTxt(s)+(s.by?" \u00b7 "+s.by:"");
   out+='<div class="rhyrow" data-spark-row="'+esc(sparkOwnerId+"|"+s.id)+'"><span class="sm-dot" style="background:none;color:var(--forest);font-size:15px">\u2726</span><div class="gr-main">'+tendRowContent(s.text,s.details||"",sparkMeta,sparkBadges)+'</div><button class="btn mini" data-sparkdo="'+sparkOwnerId+'|'+s.id+'|'+pid+'">Do it</button><button class="iconbtn" data-sedit="'+sparkOwnerId+'|'+s.id+'" title="edit">\u270E</button><button class="iconbtn" data-spdel="'+sparkOwnerId+'|'+s.id+'|'+pid+'" title="remove">\u00D7</button></div>';
-  if(editSparkId===s.id&&sparkEditDraft&&sparkEditDraft.id===s.id){out+='<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="spark-editor-title"><div class="profile-editor-body"><h3 id="spark-editor-title">Edit Spark</h3><div class="addrow spark-draft"><input data-sfield="text" value="'+esc(sparkEditDraft.text)+'" placeholder="Spark text"><textarea data-sfield="details" placeholder="Details (optional)">'+esc(sparkEditDraft.details||"")+'</textarea><input type="date" data-sfield="by" value="'+esc(sparkEditDraft.by||"")+'" aria-label="Spark date" style="max-width:150px"><input type="time" data-sfield="time" value="'+esc(sparkEditDraft.time||"")+'" aria-label="Spark time" style="max-width:110px"><button class="btn mini ghost" data-scleardate="1">No date</button></div>'+tendAssociationControlsHTML("spark",sparkOwnerId,s.id,sparkEditDraft)+'<p class="profile-tab-intro">With a date it lands on the dashboard; without one it waits in Free moment.</p><div class="profile-editor-actions"><button class="btn mini" data-sparkeditsave="'+s.id+'">Save Spark</button><button class="btn mini ghost" data-sparkeditcancel data-editor-cancel>Cancel</button><button class="btn mini danger" data-spdel="'+sparkOwnerId+'|'+s.id+'|'+pid+'">'+(pid!==sparkOwnerId?"Remove Spark":"Delete Spark")+'</button></div></div></dialog>';}
+  if(editSparkId===s.id&&sparkEditDraft&&sparkEditDraft.id===s.id){out+=tendSparkEditModalHTML(sparkOwnerId,pid);}
  });}
  else out+='<div class="empty">No sparks yet - the fun, no-pressure "we should do this sometime" list.</div>';
  var addingSpark=sparkDraftOpenFor===pid;
@@ -870,17 +926,36 @@ function rippleLine(e){
 }
 /* ============ free moment + spark chip ============ */
 function sparkChip(p){var s=sortedPersonSparks(p)[0];if(!s)return "";return '<div class="pf-next" style="color:var(--forest)">\u2726 '+esc(s.text)+' \u00b7 '+esc(sparkDueTxt(s))+'</div>';}
+function dashboardSparkAddedLabel(spark){
+ var value=spark.createdAt||spark.createdTs||spark.addedAt||spark.dateAdded||spark.createdDate;
+ if(!value)return "Added date unavailable";
+ var date=null,text=String(value);
+ if(typeof value==="number"||/^\d{10,13}$/.test(text)){var timestamp=Number(value);date=new Date(text.length===10?timestamp*1000:timestamp);}
+ else if(/^\d{4}-\d{2}-\d{2}$/.test(text)){var parts=text.split("-").map(Number);date=new Date(parts[0],parts[1]-1,parts[2]);}
+ else date=new Date(value);
+ if(!Number.isFinite(date.getTime()))return "Added date unavailable";
+ return "Added "+date.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});
+}
+function dashboardSparkDeadlineLabel(spark){
+ if(!spark.by)return "Someday";
+ return "Due "+sparkDueTxt(spark)+(spark.time?" · "+fmtHM12(spark.time):"");
+}
+function dashboardFreeMomentSparkQueue(){
+ var sparks=[],seen=Object.create(null);
+ S.people.forEach(function(person){sortedPersonSparks(person).forEach(function(spark){if(!sparkLive(spark))return;var key=(spark.profileOwnerId||person.id)+"|"+spark.id;if(seen[key])return;seen[key]=true;sparks.push({spark:key+"|"+person.id,personId:person.id,label:spark.text,description:spark.details||"",deadline:dashboardSparkDeadlineLabel(spark)});});});
+ return sparks;
+}
 function freeMomentHTML(){
- var cands=[],seenSparks=Object.create(null);
- S.people.forEach(function(p){(p.rhythms||[]).forEach(function(r){var d=rhythmDaysSince(r);if((r.tod||"anytime")==="anytime"&&rhythmScheduledToday(r))cands.push({pri:10+(d===999?0:d),rhythm:p.id+"|"+r.id,personId:p.id,label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,false)});});});
- S.people.forEach(function(p){sortedPersonSparks(p).forEach(function(s){if(sparkLive(s)&&!s.by){var key=(s.profileOwnerId||p.id)+"|"+s.id;if(seenSparks[key])return;seenSparks[key]=true;cands.push({pri:15,spark:key+"|"+p.id,personId:p.id,label:s.text,description:s.details||"",sub:"No deadline yet",act:' data-sparkdo="'+key+"|"+p.id+'"',btn:"Do it"});}});});
- var lo=S.people.map(function(p){return {p:p,s:personScore(p)};}).sort(function(a,b){return a.s-b.s;})[0];
- if(lo&&lo.s<80)cands.push({pri:(100-lo.s)/10,label:"Reach out to "+lo.p.name,sub:(lo.p.relation||"")+" \u00b7 meter "+lo.s+" - lowest",act:' data-openperson="'+lo.p.id+'"',btn:"Open"});
- cands.sort(function(a,b){return b.pri-a.pri;});
- if(!cands.length)return "";
- var out='<div class="sectiontitle"><h2>Free moment?</h2><span class="hint">Your best options right now (up to 4)</span></div><div class="dashboard-free-moment">';
- cands.slice(0,4).forEach(function(c){var bb=c.rhythm?rhyDoneBtn(c.rhythm):'<button class="btn mini'+(c.spark?" sparkbtn":"")+'"'+c.act+'>'+c.btn+'</button>',meta=planItemMetaBar(c.sub);out+='<div class="planitem"><div class="pi-main">'+planItemCopy(c,bb)+'</div>'+planItemTopRow(c)+planItemFooter(c,meta,c.sub)+'</div>';});
- return out+'</div>';}
+ var sparkQueue=dashboardFreeMomentSparkQueue();
+ if(!sparkQueue.length){dashboardSparkCarouselIndex=0;dashboardSparkCarouselAnimating=false;return "";}
+ dashboardSparkCarouselIndex=Math.max(0,Math.min(sparkQueue.length-1,dashboardSparkCarouselIndex));
+ dashboardInitSparkCarousel();
+ var current=sparkQueue[dashboardSparkCarouselIndex],
+     action='<button type="button" class="btn mini sparkbtn" data-sparkdo="'+esc(current.spark)+'" data-dashboard-free-spark>Do it</button>',
+     footer='<div class="plan-item-footer dashboard-spark-footer"><span class="dashboard-spark-added">'+(dashboardSparkCarouselIndex+1)+' of '+sparkQueue.length+'</span><span class="dashboard-spark-deadline">'+esc(current.deadline)+'</span></div>',
+     out='<div class="sectiontitle dashboard-free-moment-heading"><h2>Free moment?</h2></div><div class="dashboard-free-moment dashboard-free-moment-carousel"><div class="dashboard-free-moment-stage"><div class="planitem dashboard-free-moment-card" data-dashboard-free-spark-card><div class="pi-main">'+planItemCopy(current,action)+'</div>'+planItemTopRow(current)+footer+'</div></div><nav class="dashboard-free-moment-controls" aria-label="Spark carousel"><button type="button" class="dashboard-free-moment-arrow" data-dashboard-spark-carousel-step="-1" aria-label="Previous Spark"'+(!dashboardSparkCarouselReady||dashboardSparkCarouselIndex===0?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6 9 12 15 18"/></svg></button><button type="button" class="dashboard-free-moment-arrow" data-dashboard-spark-carousel-step="1" aria-label="Next Spark"'+(!dashboardSparkCarouselReady||dashboardSparkCarouselIndex===sparkQueue.length-1?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6 15 12 9 18"/></svg></button></nav></div>';
+ return out;
+}
 /* ============ area subpages ============ */
 function renderArea(id){
  var v=areaScore(id),c=scoreClass(v);
