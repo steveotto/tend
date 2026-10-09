@@ -306,12 +306,12 @@ function planItemMetaBar(meta){
  if(!parts.length||!parts.some(function(part){return /last tended|last prayed|not yet tended|not yet prayed/i.test(part);}))return "";
  var isTime=function(part){var normalized=part.toLowerCase();return Object.keys(TODS||{}).some(function(key){return TODS[key]&&TODS[key].toLowerCase()===normalized;});};
  var isOccurred=function(part){return /last tended|last prayed|not yet tended|not yet prayed|^tended |^prayed /i.test(part);};
- var time=parts.filter(isTime),occurred=parts.filter(isOccurred),frequency=parts.filter(function(part){return !isTime(part)&&!isOccurred(part)&&!/^(ends |due )/i.test(part);}).slice(0,1),extra=parts.filter(function(part){return !isTime(part)&&!isOccurred(part)&&frequency.indexOf(part)===-1;});
+ var time=parts.filter(isTime),occurred=parts.filter(isOccurred),frequency=parts.filter(function(part){return !isTime(part)&&!isOccurred(part)&&!/^(ends |due )/i.test(part)&&!/ready to tend again/i.test(part);}).slice(0,1);
  function entries(items,kind){return items.map(function(part){
   var iconKind=kind==="schedule"?(isTime(part)?"time":"frequency"):"occurred";
   return '<span class="plan-item-meta-entry">'+planMetaIcon(iconKind)+'<span>'+esc(part)+'</span></span>';
  }).join("");}
- return '<div class="plan-item-meta">'+entries(frequency.concat(time,extra),"schedule")+entries(occurred,"occurred")+'</div>';
+ return '<div class="plan-item-meta">'+entries(frequency.concat(time),"schedule")+entries(occurred,"occurred")+'</div>';
 }
 function planBlockCard(b,curId,isCur,isAllDay,focusBlocks){
  isAllDay=!!isAllDay;
@@ -374,7 +374,7 @@ function personHealthMeter(score,name,solid){
 }
 function renderPeople(){
  var HINT='rhythms, sparks, prayers - tending the people you love';
- if(currentPerson)return '<div class="sectiontitle" style="margin-top:6px"><h2>People</h2><span class="hint">'+HINT+'</span></div>'+personProfile(currentPerson);
+ if(currentPerson)return personProfile(currentPerson);
  var out='<div class="sectiontitle" style="margin-top:6px"><h2>People</h2><span class="hint">'+HINT+'</span></div><div class="grid">';
  S.people.forEach(function(p){
   var sc=personScore(p),c=scoreClass(sc);
@@ -624,8 +624,8 @@ function rippleIdea(p){
  return ideas[(Math.floor(Date.now()/864e5)+(rippleIdeaOffsets[p.id]||0))%ideas.length];
 }
 function collectionIcon(key){var paths={rhythms:'<path d="M20 7a8 8 0 0 0-14-2L3 8m0-5v5h5 M4 17a8 8 0 0 0 14 2l3-3m0 5v-5h-5"/>',connection:'<path d="m9.5 14.5-2 2a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0 M14.5 9.5l2-2a3.5 3.5 0 0 1 5 5l-4 4a3.5 3.5 0 0 1-5 0 M8.5 15.5l7-7"/>',sparks:'<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/>',prayer:'<circle cx="17" cy="4.3" r="2.7"/><path d="M10.2 8.1c.7-.8 1.9-.9 2.7-.2l3.3 2.8 2-2c.8-.8 2.1-.8 2.9 0s.8 2.1 0 2.9l-3.4 3.4c-.8.8-2.1.8-2.9 0l-1.1-1-2.6 3.2 4.5 3.2c.6.4.9 1.1.9 1.8 0 1-.8 1.8-1.8 1.8H5.1c-1.2 0-2.1-.9-2.1-2.1s.9-2.1 2.1-2.1h4.3l-3.1-2.3c-1.3-.9-1.5-2.7-.5-3.9z"/>',faith:'<path d="M12 3v18 M6.5 8h11"/>',notes:'<path d="M14 3H5v18h14V8Z M14 3v5h5 M8 12h8 M8 16h6"/>'};return '<svg class="collection-icon'+(key==="prayer"?" collection-icon-prayer":"")+'" viewBox="0 0 24 24" aria-hidden="true">'+(paths[key]||"")+'</svg>';}
-function tendRowContent(title,description,meta,badges){
- return '<div class="tend-row-content"><div class="tend-row-heading"><strong class="tend-type-title">'+esc(title||"")+'</strong>'+(badges||"")+'</div>'+(description?'<div class="tend-type-description">'+esc(description)+'</div>':'')+(meta?'<div class="tend-type-meta">'+esc(meta)+'</div>':'')+'</div>';
+function tendRowContent(title,description,meta,badges,peopleBadges,metaMarkup,showNoDetails){
+ return '<div class="tend-row-content"><div class="tend-row-heading"><strong class="tend-type-title">'+esc(title||"")+'</strong>'+(badges||"")+'</div>'+(description?'<div class="tend-type-description">'+esc(description)+'</div>':showNoDetails?'<div class="tend-type-description no-details">No details...</div>':'')+(peopleBadges?'<div class="tend-row-people">'+peopleBadges+'</div>':'')+(metaMarkup!==undefined?metaMarkup:(meta?'<div class="tend-type-meta">'+esc(meta)+'</div>':""))+'</div>';
 }
 function tendRhythmFrequencyLabel(r){
  if(r.freq==="selectdays"&&Array.isArray(r.weekdays)&&r.weekdays.length)return "Every "+r.weekdays.slice().sort().map(function(day){return DOW_SHORT[+day];}).join(", ");
@@ -683,25 +683,25 @@ function profilePanelStart(key){return '<section class="card profile-tab-panel" 
 var activeProfileTab="rhythms";
 function actQueueHTML(p){
  var first=esc(p.name.split(" ")[0]);
- var doneSess=window._actDone[p.id]||[],visibility=planKindVisibilityFor("person:"+p.id);
+ var doneSess=window._actDone[p.id]||[];
  /* rhythm queue: most overdue first, max 2 visible; session-tended rhythms pad the empty slots */
  var allR=(p.rhythms||[]).filter(function(r){return (r.category||"connection")!=="prayer";});
- var waitR=visibility.rhythm===false?[]:allR.filter(function(r){return todayRhythmEligible(r);}).sort(function(a,b){return rhythmPeriod(a)-rhythmPeriod(b)||rhythmScore(a)-rhythmScore(b);});
+ var waitR=allR.filter(function(r){return todayRhythmEligible(r);}).sort(function(a,b){return rhythmPeriod(a)-rhythmPeriod(b)||rhythmScore(a)-rhythmScore(b);});
  var visR=waitR.slice(0,2);
  var padR=[];
  /* spark queue: max 2 visible */
  var allS=sortedPersonSparks(p);
- var waitS=visibility.spark===false?[]:allS.filter(function(s){return (!s.by||sparkLive(s))&&doneSess.indexOf(s.id)<0;});
+ var waitS=allS.filter(function(s){return (!s.by||sparkLive(s))&&doneSess.indexOf(s.id)<0;});
  var visS=waitS.slice(0,1);
  var padS=[];
- if(visibility.spark!==false&&visS.length<2)doneSess.slice().reverse().forEach(function(id){if(padS.length<2-visS.length){var ss2=allS.find(function(s){return s.id===id;});if(ss2)padS.push(ss2);}});
+ if(visS.length<2)doneSess.slice().reverse().forEach(function(id){if(padS.length<2-visS.length){var ss2=allS.find(function(s){return s.id===id;});if(ss2)padS.push(ss2);}});
  /* prayer queue: active prayers first, then the static prayer focus; one visible */
  var allP=personPrayerRecords(p).filter(function(x){return !x.answered&&!x.archived;});
- var waitP=visibility.prayer===false?[]:allP.filter(function(x){return prayerIsDue(x);}).sort(function(a,b){return (a.lastPrayed||"").localeCompare(b.lastPrayed||"")||(a.added||"").localeCompare(b.added||"");});
+ var waitP=allP.filter(function(x){return prayerIsDue(x);}).sort(function(a,b){return (a.lastPrayed||"").localeCompare(b.lastPrayed||"")||(a.added||"").localeCompare(b.added||"");});
  var visP=waitP.slice(0,2);
  var hasFocus=p.prayerFocus&&p.prayerFocus.trim();
  var focusEligible=hasFocus&&!allP.length&&doneSess.indexOf("focus")<0&&!S.events.some(function(e){return e.personId===p.id&&e.title==="Prayer focus"&&daysSince(e.ts)===0;});
- var focusOpen=visibility.prayer!==false&&focusEligible;
+ var focusOpen=focusEligible;
  if(!visP.length&&focusOpen)visP=[{id:"focus",focus:true,text:p.prayerFocus}];
  var padP=[];
  var waiting=waitR.length+waitS.length+waitP.length+(visP.some(function(x){return x.focus;})?1:0);
@@ -721,18 +721,18 @@ function actQueueHTML(p){
   rows.push({html:html,frequency:queueFrequency(item,type),time:time<0?dayOrder.length:time,order:rowOrder++});
  }
  function rhyRowQ(r,dim){
-  var sub=tendRhythmMetaLabel(r,null,true);
-  return '<div class="actrow'+(dim?" done":"")+'"><span class="act-ic" style="background:'+personHealthColor(rhythmScore(r))+'"></span><div class="pi-main">'+tendRowContent(r.text||"(unnamed rhythm)",String(r.description||"").trim(),sub,planPills({personId:p.id,rhythm:p.id+"|"+r.id}))+'</div>'+(dim?'<span class="praycount tend-type-metric">Tended \u2713</span>':rhyDoneBtn(p.id+"|"+r.id))+'</div>';
+  var sub=tendRhythmMetaLabel(r,null,true),metaMarkup=planItemMetaBar(sub);
+  var people=tendAssociationPeopleBadges(r,p.id,p.id,"rhythm");
+  return '<div class="actrow'+(dim?" done":"")+'"><div class="pi-main">'+tendRowContent(r.text||"(unnamed rhythm)",String(r.description||"").trim(),sub,planPills({personId:p.id,rhythm:p.id+"|"+r.id,hideTypeBadge:true}),people,"",true)+'</div>'+(dim?'<span class="praycount tend-type-metric">Tended \u2713</span>':rhyDoneBtn(p.id+"|"+r.id))+metaMarkup+'</div>';
  }
  visR.forEach(function(r){queueRow(rhyRowQ(r,false),r,"rhythm");});
  padR.forEach(function(r){queueRow(rhyRowQ(r,true),r,"rhythm");});
- visS.forEach(function(s){var ownerId=s.profileOwnerId||p.id,meta=(s.time?fmtHM12(s.time)+" \u00b7 ":"")+sparkDueTxt(s);queueRow('<div class="actrow"><span class="act-ic" style="background:var(--forest)"></span><div class="pi-main">'+tendRowContent(s.text,s.details||"",meta,planPills({personId:p.id,spark:ownerId+"|"+s.id}))+'</div><button class="btn mini sparkbtn" data-sparkdo="'+ownerId+'|'+s.id+'|'+p.id+'">Do it</button></div>',s,"spark");});
- padS.forEach(function(s){var ownerId=s.profileOwnerId||p.id;queueRow('<div class="actrow done"><span class="act-ic" style="background:var(--forest)"></span><div class="pi-main">'+tendRowContent(s.text,s.details||"",sparkDueTxt(s),planPills({personId:p.id,spark:ownerId+"|"+s.id}))+'</div><span class="praycount tend-type-metric">Done \u2713</span></div>',s,"spark");});
- visP.forEach(function(x){var meta=x.focus?"Prayer focus":prayerScheduleLabel(x)+" \u00b7 Last prayed "+prayerLastPrayedLabel(x)+" \u00b7 Prayed "+(x.prayed||0)+" times";queueRow('<div class="actrow"><span class="act-ic" style="background:#5B7BA6"></span><div class="pi-main">'+tendRowContent(x.focus?'Prayer focus: '+x.text:x.text,x.details||"",meta,planPills({personId:p.id,prayer:x.id}))+'</div><button class="btn mini ghost" data-prayquick="'+p.id+'" data-prayref="'+(x.focus?"focus":x.id)+'">Pray</button></div>',x,"prayer");});
- padP.forEach(function(x){queueRow('<div class="actrow done"><span class="act-ic" style="background:#5B7BA6"></span><div class="pi-main">'+tendRowContent(x.focus?'Prayer focus: '+x.text:x.text,"","Prayed today",planPills({personId:p.id,prayer:x.id}))+'</div><span class="praycount tend-type-metric">Prayed \u2713</span></div>',x,"prayer");});
- var allWaiting=allR.filter(todayRhythmEligible).length+allS.filter(function(s){return (!s.by||sparkLive(s))&&doneSess.indexOf(s.id)<0;}).length+allP.filter(prayerIsDue).length+(focusEligible?1:0);
- var emptyMessage=waiting?"":allWaiting?"Items hidden by the type filters.":"Nothing waiting - these next steps are all tended.";
- var out='<div class="card act today-with-person" style="margin-bottom:14px"><div class="qhead"><div class="subhead" style="margin:0">Today with '+first+'</div><div class="today-queue-tools"><span class="qpill'+(waiting?"":" clear")+'">'+(waiting?waiting+" in queue":allWaiting?"items hidden":"all tended \u2713")+'</span>'+planKindTogglesHTML("person:"+p.id,"Today with "+p.name+" item filters")+'</div></div>';
+ visS.forEach(function(s){var ownerId=s.profileOwnerId||p.id,meta=(s.time?fmtHM12(s.time)+" \u00b7 ":"")+sparkDueTxt(s),people=tendAssociationPeopleBadges(s,ownerId,p.id,"spark");queueRow('<div class="actrow"><div class="pi-main">'+tendRowContent(s.text,s.details||"",meta,planPills({personId:p.id,spark:ownerId+"|"+s.id,hideTypeBadge:true}),people,"",true)+'</div><button class="btn mini sparkbtn" data-sparkdo="'+ownerId+'|'+s.id+'|'+p.id+'">Do it</button>'+planItemMetaBar(meta)+'</div>',s,"spark");});
+ padS.forEach(function(s){var ownerId=s.profileOwnerId||p.id,meta=sparkDueTxt(s),people=tendAssociationPeopleBadges(s,ownerId,p.id,"spark");queueRow('<div class="actrow done"><div class="pi-main">'+tendRowContent(s.text,s.details||"",meta,planPills({personId:p.id,spark:ownerId+"|"+s.id,hideTypeBadge:true}),people,"",true)+'</div><span class="praycount tend-type-metric">Done \u2713</span>'+planItemMetaBar(meta)+'</div>',s,"spark");});
+ visP.forEach(function(x){var meta=x.focus?"Prayer focus":prayerScheduleLabel(x)+" \u00b7 Last prayed "+prayerLastPrayedLabel(x),people=x.focus?"":tendAssociationPeopleBadges(x,x.personId||"global",p.id,"prayer");queueRow('<div class="actrow"><div class="pi-main">'+tendRowContent(x.focus?'Prayer focus: '+x.text:x.text,x.details||"",meta,planPills({personId:p.id,prayer:x.id,hideTypeBadge:true}),people,"",true)+'</div><button class="btn mini ghost" data-prayquick="'+p.id+'" data-prayref="'+(x.focus?"focus":x.id)+'">Pray</button>'+planItemMetaBar(meta)+'</div>',x,"prayer");});
+ padP.forEach(function(x){var people=x.focus?"":tendAssociationPeopleBadges(x,x.personId||"global",p.id,"prayer");queueRow('<div class="actrow done"><div class="pi-main">'+tendRowContent(x.focus?'Prayer focus: '+x.text:x.text,"","Prayed today",planPills({personId:p.id,prayer:x.id,hideTypeBadge:true}),people,"",true)+'</div><span class="praycount tend-type-metric">Prayed \u2713</span>'+planItemMetaBar("Prayed today")+'</div>',x,"prayer");});
+ var emptyMessage="Nothing waiting - these next steps are all tended.";
+ var out='<div class="sectiontitle today-with-person-heading"><h2>Today with '+first+'</h2><span class="qpill'+(waiting?"":" clear")+'">'+(waiting?waiting+" in queue":"all tended \u2713")+'</span></div><div class="card act today-with-person" style="margin-bottom:14px">';
  rows.sort(function(a,b){return a.frequency<b.frequency?-1:a.frequency>b.frequency?1:a.time-b.time||a.order-b.order;});
  if(rows.length)out+=rows.map(function(row){return row.html;}).join("");
  else out+='<div class="empty" style="margin-top:8px">'+emptyMessage+'</div>';
@@ -757,9 +757,10 @@ function personProfile(pid){
  var ll=p.loveLanguage||"";
  var first=esc(p.name.split(" ")[0]);
  var bd=bdayInfo(p.birthday);
- /* head card: identity + health dashboard */
- var out='<div class="card detail open person-profile" id="personPanel"><div class="person-profile-head"><div class="person-identity">'+personAvatar(p,52)+'<div><h3>'+esc(p.name)+'</h3><div class="rel">'+esc(p.relation||"")+'</div></div></div><div class="profile-head-actions"><button class="pbtn" data-psettings="1" title="Person settings">\u2699</button><button class="pbtn" data-closeperson="1" title="Close">\u2715</button></div></div>';
- out+='<div class="person-health-heading"><div><h4>Tending health</h4><p>The rhythms and moments that keep you connected.</p></div><span class="person-profile-score">'+sc+'</span></div>'+personHealthMeter(sc,p.name)+'<div class="person-health-status statusword '+c+'">'+scoreLabel(sc)+'</div><div class="chips">';
+ /* Profile identity sits above the card; profile details remain in the card. */
+ var header='<div class="person-profile-head person-profile-header"><div class="person-identity">'+personAvatar(p,52)+'<div><h3>'+esc(p.name)+'</h3><div class="rel">'+esc(p.relation||"")+'</div></div></div><div class="profile-head-actions"><button class="pbtn" data-psettings="1" title="Person settings">\u2699</button><button class="pbtn" data-closeperson="1" title="Close">\u2715</button></div></div>';
+ var out='<div class="card detail open person-profile" id="personPanel">';
+ out+='<div class="person-health-heading dashboard-overall-heading"><h3>Overall health</h3><span class="ov-score '+c+'">'+sc+'</span></div>'+personHealthMeter(sc,p.name)+'<div class="meta person-profile-health-status"><span class="statusword '+c+'">'+scoreLabel(sc)+'</span></div><div class="chips">';
  out+=ll?'<span class="chip">\u2665 '+esc(LL_LANGUAGES[ll])+'</span>':'<span class="chip info">no love language set</span>';
  out+=bd?'<span class="chip'+(bd.days<=14?" warn":" info")+'">\uD83C\uDF82 Birthday: '+esc(bd.label)+'</span>':'<span class="chip info">no birthday set</span>';
  if(p.anniversary){var an2=annivInfo(p.anniversary);if(an2)out+='<span class="chip info">\u2665 Anniversary: '+esc(an2.label)+'</span>';}
@@ -866,7 +867,7 @@ function personProfile(pid){
  m+='<div class="field"><label>Photo</label><div class="person-photo-controls">'+personAvatar(p,56)+'<input type="file" accept="image/*" data-pphoto="'+pid+'">'+(p.photo?'<button class="btn mini danger" data-pphorm="'+pid+'">Remove</button>':'')+'</div><div class="hint" style="font-size:11px;color:var(--ink-faint)">Crops to a circle for their card.</div></div>';
  m+='</div></div>';
  out+=m;
- return out;}
+ return '<div class="person-profile-page">'+header+out+'</div>';}
 function renderChecklists(){
  if(!S.checklists||!S.checklists.length)return "";
  var out="";

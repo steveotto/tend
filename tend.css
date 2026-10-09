@@ -272,7 +272,7 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .now-badge{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--forest);border-radius:6px;padding:3px 8px;flex:none}
 .next-badge{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--forest);background:transparent;border:1px solid var(--mint);border-radius:6px;padding:2px 7px;flex:none}
 .cal-calname{font-size:11px;color:var(--ink-faint);font-weight:600;white-space:nowrap;flex:none}
-#personPanel{margin-top:24px}
+#personPanel{margin-top:8px}
 .detail.open{margin-bottom:8px}
 .card .subhead{letter-spacing:.16em}
 
@@ -416,16 +416,21 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .person-health-status{font-size:13px;font-weight:600;margin-bottom:8px}
 .person-card .meta{font-size:13px;color:var(--ink-soft)}
 .person-profile-head{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.person-profile-header{margin:6px 0 8px;padding:8px 6px 8px;border-bottom:0}
 .person-identity{display:flex;align-items:center;gap:16px;min-width:0}
 .person-identity>div{min-width:0}
 .person-identity h3{overflow-wrap:anywhere}
 .person-identity .rel{font-size:14px;color:var(--ink-soft)}
 .person-profile-head .btn{flex-shrink:0}
 .person-health-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:24px;padding-top:24px;border-top:1px solid var(--line)}
+.person-profile .person-health-heading{margin:0;padding:0;border-top:0;align-items:baseline}
+.person-profile .person-health-heading h3{font-size:18px;font-weight:500}
 .person-health-heading h4{font-size:18px;font-weight:500;margin:0}
 .person-health-heading p{font-size:13px;color:var(--ink-soft);margin:8px 0 0}
 .person-profile-score{font-size:48px}
-.person-profile .person-health-bar{margin:24px 0;height:14px}
+.person-profile .person-health-bar{margin:14px 0 26px;height:16px}
+.person-profile .person-health-bar .ov-marker{border-left-width:11px;border-right-width:11px;border-bottom-width:14px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.3))}
+.person-profile-health-status{margin:0 0 8px;font-size:16.5px;line-height:1.55}
 .person-profile .chips{margin-top:16px}
 .person-profile .pmeters{margin-top:24px}
 @media(max-width:480px){
@@ -1254,8 +1259,24 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .card:not(.planblock)>.planitem .tend-row-content>.tend-type-description{font-family:var(--sans);font-size:var(--tend-item-description-size);font-weight:400;line-height:1.5}
 .card:not(.planblock)>.planitem .tend-row-content>.tend-type-meta{margin-top:2px;padding-top:0;border-top:0}
 .today-with-person .tend-row-content>.tend-type-meta{margin-top:2px;padding-top:0;border-top:0}
-.today-with-person .actrow [data-prayquick]{background:var(--forest);border-color:var(--forest);color:#fff}
-.today-with-person .actrow [data-prayquick]:hover{background:var(--forest-deep);border-color:var(--forest-deep);color:#fff}
+.today-with-person .actrow{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px}
+.today-with-person .actrow>.pi-main{min-width:0}
+.today-with-person .actrow>.plan-item-meta{grid-column:1/-1;box-sizing:border-box;display:flex;align-items:center;gap:8px 18px;width:100%;min-width:0;margin:2px 0 0;padding:0;border:0;color:var(--ink-faint);font-size:var(--tend-item-meta-size);line-height:1.45}
+.today-with-person .plan-item-meta-entry:last-child{margin-left:auto;text-align:right;justify-content:flex-end}
+.today-with-person .plan-detail-icon{width:14px;height:14px}
+.today-with-person .tend-type-description.no-details{font-style:italic;color:var(--ink-faint)}
+.today-with-person .tend-row-people{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.today-with-person .tend-row-people .prayer-person{margin:0}
+.today-with-person .person-section-badge,.today-with-person .pill.rhy,.today-with-person .pill.spk,.today-with-person .pill.pry,.today-with-person .plan-kind-rhythm,.today-with-person .plan-kind-spark,.today-with-person .plan-kind-prayer{display:none!important}
+.today-with-person .actrow>.btn{box-sizing:border-box;width:auto;min-width:76px;min-height:42px;padding:7px 14px;border-radius:9px;font-size:13px;font-weight:650}
+.today-with-person .actrow>[data-tend-open]{border-color:#B8E1CA;background:#E3F6ED;color:#1C5844}
+.today-with-person .actrow>[data-tend-open]:hover{border-color:#9BD4B4;background:#D2EEDD;color:#1C5844}
+.today-with-person .actrow>.sparkbtn{border-color:#E8CF74;background:#FFF3C4;color:#735B16}
+.today-with-person .actrow>.sparkbtn:hover{border-color:#DCC05B;background:#FCE9A2;color:#735B16}
+.today-with-person .actrow>[data-prayquick]{border-color:#C8D8F0;background:#E8F0FB;color:#405D84}
+.today-with-person .actrow>[data-prayquick]:hover{border-color:#B4C9E8;background:#DCE8F8;color:#405D84}
+.today-with-person-heading{justify-content:space-between;align-items:center}
+.today-with-person-heading .qpill{flex:none;margin-left:auto}
 
 /* Phone-only dashboard: use section bars and separators instead of nested cards. */
 @media(max-width:600px){
@@ -1272,6 +1293,11 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .ov-score{font-size:32px}
  .home-dashboard .bar-ov{height:11px;margin:12px 0 19px}
  .home-dashboard .overall-card>.meta{font-size:12px}
+ .person-profile .person-health-heading.dashboard-overall-heading{align-items:center!important;margin:0 0 10px;padding:0;border-radius:0;background:transparent}
+ .person-profile .dashboard-overall-heading h3{font-size:16px!important;font-weight:700!important;color:var(--ink)}
+ .person-profile .ov-score{font-size:32px}
+ .person-profile .person-health-bar{height:11px;margin:12px 0 19px}
+ .person-profile-health-status{font-size:12px}
  .home-dashboard .menu-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0 0;border-top:0}
  .home-dashboard .menu-area{gap:7px;min-width:0;min-height:47px;padding:8px 5px;border:1px solid var(--line);border-radius:9px;background:var(--card);font-size:13px;box-shadow:none}
  .home-dashboard .menu-area-icon{width:17px;height:17px}
@@ -1338,6 +1364,18 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 }
 @media(max-width:600px){
  html[data-mobile-text-size="large"] .home-dashboard{font-size:19px;--tend-item-title-size:19px;--tend-item-description-size:17px;--tend-item-meta-size:14px;--tend-item-action-size:16px;--tend-section-heading-size:20px}
+ html[data-mobile-text-size="large"] .today-with-person{font-size:19px;--tend-item-title-size:19px;--tend-item-description-size:17px;--tend-item-meta-size:14px;--tend-item-metric-size:15px;--tend-item-action-size:16px}
+ html[data-mobile-text-size="large"] .today-with-person .tend-row-content>.tend-type-meta{font-size:14px;line-height:1.45}
+ html[data-mobile-text-size="large"] .today-with-person .actrow .pi-label,
+ html[data-mobile-text-size="large"] .today-with-person .tend-type-title{font-size:19px}
+ html[data-mobile-text-size="large"] .today-with-person .tend-type-description{font-size:17px}
+ html[data-mobile-text-size="large"] .today-with-person .tend-type-metric,
+ html[data-mobile-text-size="large"] .today-with-person .praycount{font-size:15px}
+ html[data-mobile-text-size="large"] .today-with-person .plan-item-meta{font-size:14px}
+ html[data-mobile-text-size="large"] .today-with-person .plan-detail-icon{width:17px;height:17px}
+ html[data-mobile-text-size="large"] .today-with-person .prayer-person{font-size:14px}
+ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini.btn{min-height:48px;padding:8px 14px;font-size:16px!important}
+ html[data-mobile-text-size="large"] .today-with-person .empty{font-size:16px}
  html[data-mobile-text-size="large"] .home-dashboard>.sectiontitle:not(.dashboard-greeting){margin-top:23px;padding:11px 13px}
  html[data-mobile-text-size="large"] .home-dashboard>.sectiontitle:not(.dashboard-greeting) h2,
  html[data-mobile-text-size="large"] .home-dashboard .dashboard-overall-heading h3{font-size:20px!important}
@@ -1346,6 +1384,20 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  html[data-mobile-text-size="large"] .home-dashboard .ov-score{font-size:42px}
  html[data-mobile-text-size="large"] .home-dashboard .bar-ov{height:16px}
  html[data-mobile-text-size="large"] .home-dashboard .overall-card>.meta{font-size:15px}
+ html[data-mobile-text-size="large"] .person-profile .dashboard-overall-heading h3{font-size:20px!important}
+ html[data-mobile-text-size="large"] .person-profile .ov-score{font-size:42px}
+ html[data-mobile-text-size="large"] .person-profile .person-health-bar{height:16px}
+ html[data-mobile-text-size="large"] .person-profile-health-status{font-size:15px}
+ html[data-mobile-text-size="large"] .person-profile-header .avatar{width:64px!important;height:64px!important;font-size:24px!important}
+ html[data-mobile-text-size="large"] .person-profile-header .person-identity h3{font-size:27px;line-height:1.25}
+ html[data-mobile-text-size="large"] .person-profile-header .person-identity .rel{font-size:17px}
+ html[data-mobile-text-size="large"] .person-profile-header .ll-ic{width:22px;height:22px;margin-left:7px;vertical-align:-4px}
+ html[data-mobile-text-size="large"] .person-profile .chips .chip{padding:7px 15px;font-size:15px}
+ html[data-mobile-text-size="large"] .person-profile .chips .ll-ic{width:20px;height:20px;vertical-align:-4px}
+ html[data-mobile-text-size="large"] .person-profile .pmeter{padding:16px 18px}
+ html[data-mobile-text-size="large"] .person-profile .pm-lab{font-size:16px}
+ html[data-mobile-text-size="large"] .person-profile .pm-val{font-size:16px}
+ html[data-mobile-text-size="large"] .person-profile .pm-note{font-size:14px}
  html[data-mobile-text-size="large"] .home-dashboard .menu-area{min-height:58px;font-size:16px}
  html[data-mobile-text-size="large"] .home-dashboard .menu-area-icon{width:22px;height:22px}
  html[data-mobile-text-size="large"] .home-dashboard .menu-area-icon svg{width:22px;height:22px}
@@ -1398,6 +1450,8 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .profile-tab-panel .btn.mini,.today-with-person .btn.mini{
  min-height:44px;padding:9px 16px;font-family:var(--sans);font-size:var(--tend-item-action-size);font-weight:600
 }
+.today-with-person .actrow>.btn.mini{min-height:42px;padding:7px 14px;border-radius:9px;font-size:13px;font-weight:650}
+html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-height:44px;padding:8px 14px;font-size:14px!important}
 .profile-tab-panel .prayer-editor-actions .btn.mini{font-size:var(--tend-item-action-size)}
 .profile-tab-panel .subhead,.today-with-person .subhead{font-size:var(--tend-section-heading-size);letter-spacing:.05em}
 .profile-tabs button{font-family:var(--sans);font-size:14px;font-weight:600}
@@ -1500,10 +1554,11 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .bar-ov{margin-bottom:8px}
  .home-dashboard .overall-card>.meta{position:relative;z-index:3;margin-top:0!important}
  .home-dashboard>.sectiontitle h2,
- .home-dashboard .dashboard-overall-heading h3,
+ .home-dashboard .dashboard-overall-heading h3,.today-with-person-heading h2,
  .home-dashboard .planblock[data-plan-block="allday"]>summary .plan-block-name{
   color:var(--ink);font-size:18px!important;font-weight:700!important;line-height:1.35
  }
+ .person-profile .dashboard-overall-heading h3{font-size:19px!important;font-weight:700!important;line-height:1.35}
  .home-dashboard .dashboard-greeting{margin:24px 0 18px;padding:0 12px;align-items:flex-start;flex-direction:column;gap:3px}
  .home-dashboard>.sectiontitle.dashboard-greeting h2{margin:0;font-size:22px!important;line-height:1.25}
  .home-dashboard .dashboard-greeting .hint{margin:0;color:var(--ink-soft);font-size:12px;line-height:1.4;text-align:left}
@@ -1533,11 +1588,13 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 }
 @media(max-width:600px){
  .home-dashboard>.sectiontitle h2,
- .home-dashboard .dashboard-overall-heading h3,
+ .home-dashboard .dashboard-overall-heading h3,.today-with-person-heading h2,
  .home-dashboard .planblock[data-plan-block="allday"]>summary .plan-block-name{font-size:19px!important}
  html[data-mobile-text-size="large"] .home-dashboard>.sectiontitle:not(.dashboard-greeting) h2,
  html[data-mobile-text-size="large"] .home-dashboard .dashboard-overall-heading h3,
+ html[data-mobile-text-size="large"] .today-with-person-heading h2,
  html[data-mobile-text-size="large"] .home-dashboard .planblock[data-plan-block="allday"]>summary .plan-block-name{font-size:24px!important}
+ html[data-mobile-text-size="large"] .person-profile .dashboard-overall-heading h3{font-size:24px!important;font-weight:700!important;line-height:1.35}
  html[data-mobile-text-size="large"] .home-dashboard .dashboard-greeting{margin:24px 0 18px;padding:0 12px}
  html[data-mobile-text-size="large"]  .home-dashboard>.sectiontitle.dashboard-greeting h2{font-size:27px!important}
  html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-top-meta){padding:16px}
