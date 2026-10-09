@@ -1157,10 +1157,22 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .dashboard-prayer-controls{display:flex;align-items:center;gap:12px;min-width:0}
 .home-dashboard .dashboard-prayer-time-toggle{justify-content:center;flex:none;min-width:112px;min-height:48px}
 .home-dashboard .dashboard-prayer-filter{z-index:12;flex:1;min-width:0;margin:0}
-.home-dashboard .dashboard-prayer-filter>summary{box-sizing:border-box;width:100%;min-width:0;min-height:48px;padding:8px 14px;font-size:16px}
+.home-dashboard button.dashboard-prayer-filter{display:flex;align-items:center;justify-content:space-between;gap:12px;box-sizing:border-box;width:100%;min-height:48px;padding:8px 14px;border:1px solid var(--line);border-radius:11px;background:var(--canvas);color:var(--ink);font:inherit;font-size:16px;font-weight:600;text-align:left}
+.home-dashboard button.dashboard-prayer-filter:hover,.home-dashboard button.dashboard-prayer-filter:focus-visible{border-color:var(--forest);outline-color:var(--forest)}
 .home-dashboard .dashboard-prayer-filter .faith-prayer-filter-count{font-size:14px}
-.home-dashboard .dashboard-prayer-filter .faith-prayer-filter-panel{top:calc(100% + 6px);right:0;left:auto;width:min(360px,calc(100vw - 48px))}
-.home-dashboard .dashboard-prayer-filter .faith-prayer-filter-people{grid-template-columns:repeat(2,minmax(0,1fr))}
+.dashboard-prayer-people-dialog{width:min(520px,calc(100vw - 32px));max-width:none;max-height:min(82vh,720px);padding:0;border:1px solid var(--line);border-radius:18px;box-shadow:0 20px 60px rgba(32,39,35,.28)}
+.dashboard-prayer-people-dialog::backdrop{background:rgba(25,45,35,.48)}
+.dashboard-prayer-people-dialog .profile-editor-body{display:grid;gap:10px;max-height:inherit;padding:22px}
+.dashboard-prayer-people-dialog h3{margin:0}
+.dashboard-prayer-group-toggles{display:flex;gap:7px;flex-wrap:wrap}
+.dashboard-prayer-group-toggle{min-height:36px;padding:6px 10px;border:1px solid var(--line);border-radius:999px;background:var(--canvas);color:var(--forest);font:inherit;font-size:12px;font-weight:650}
+.dashboard-prayer-group-toggle:hover,.dashboard-prayer-group-toggle:focus-visible{border-color:var(--forest);outline-color:var(--forest)}
+.dashboard-prayer-people-list{max-height:min(42vh,340px);overflow:auto}
+.dashboard-prayer-people-list .faith-prayer-person-option{margin-top:0}
+.dashboard-prayer-people-group{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;padding-top:9px;border-top:1px solid var(--line)}
+.dashboard-prayer-people-group h4,.dashboard-prayer-people-empty{grid-column:1/-1;color:var(--ink-soft);font-size:12px;font-weight:650}
+.dashboard-prayer-people-empty{padding:4px 6px;font-weight:400}
+.dashboard-prayer-people-dialog .profile-editor-actions{justify-content:flex-end;margin-top:0}
 .home-dashboard .dashboard-focused-prayer>.faith-start-prayer{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:56px;font-size:17px}
 .home-dashboard .dashboard-focused-prayer>.faith-start-prayer .faith-prayer-session-count{min-width:28px;height:28px;font-size:14px}
 .home-dashboard .uprow{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin:0 0 18px}
@@ -1545,10 +1557,10 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .dashboard-focused-prayer{gap:12px}
  .home-dashboard .dashboard-prayer-controls{gap:8px}
  .home-dashboard .dashboard-prayer-time-toggle{min-width:88px;min-height:44px}
- .home-dashboard .dashboard-prayer-filter>summary{min-height:44px;padding:7px 10px;font-size:14px}
+ .home-dashboard button.dashboard-prayer-filter{min-height:44px;padding:7px 10px;font-size:14px}
  .home-dashboard .dashboard-prayer-filter .faith-prayer-filter-count{font-size:12px}
- .home-dashboard .dashboard-prayer-filter .faith-prayer-filter-panel{right:0;left:auto}
- .home-dashboard .dashboard-prayer-filter .faith-prayer-filter-people{grid-template-columns:minmax(0,1fr);max-height:36vh}
+ .dashboard-prayer-people-dialog .profile-editor-body{padding:18px}
+ .dashboard-prayer-people-group{grid-template-columns:minmax(0,1fr)}
  .home-dashboard .dashboard-focused-prayer>.faith-start-prayer{min-height:52px;font-size:15px}
  .home-dashboard .planitem:has(.plan-item-top-meta){
   display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto;align-items:stretch;gap:12px;min-height:0;margin:0 0 12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)
