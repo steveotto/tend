@@ -81,11 +81,11 @@
   if(item.person){
    var html=window.rhythmRow(item.person,record);
    html=html.replace(/data-tend-open="person-rhythm"/,function(match){return match+' data-rhythm-area="'+esc(id)+'"';});
-   html=html.replace("</strong>",'</strong><span class="pill rhy">'+collectionIcon("rhythms")+' Rhythm</span><button type="button" class="rhythm-person-badge" data-openperson="'+esc(item.person.id)+'" aria-label="Open '+esc(item.person.name)+'">'+personAvatar(item.person,22)+'<span>'+esc(item.person.name.trim().split(/\s+/)[0])+'</span></button>');
+   html=html.replace("</strong>",'</strong><button type="button" class="rhythm-person-badge" data-openperson="'+esc(item.person.id)+'" aria-label="Open '+esc(item.person.name)+'">'+personAvatar(item.person,22)+'<span>'+esc(item.person.name.trim().split(/\s+/)[0])+'</span></button>');
    return html;
   }
   if(areaRhythmEditId===record.id){var editRecord=areaRhythmDraft&&areaRhythmDraft.areaId===id&&areaRhythmDraft.record.id===record.id?areaRhythmDraft.record:record;return categoryRhythmFormHTML(id,editRecord,record.id);}
-  var score=rhythmScore(record),badges='<span class="pill rhy">'+collectionIcon("rhythms")+' Rhythm</span>'+areaBadges(record),meta=tendRhythmMetaLabel(record,null,true);
+  var score=rhythmScore(record),badges=areaBadges(record),meta=tendRhythmMetaLabel(record,null,true);
   return '<div class="rhyrow"><span class="rhythm-health"><span class="sm-dot '+scoreClass(score)+'" aria-hidden="true"></span><span>'+score+'%</span></span><div class="gr-main">'+tendRowContent(record.text||"(unnamed rhythm)",record.description||"",meta,badges)+'</div><button type="button" class="btn mini" data-tend-open="area-rhythm" data-area-id="'+esc(id)+'" data-rhythm-id="'+esc(record.id)+'">Tend</button><button type="button" class="iconbtn rhythm-history-trigger" data-rhyhistory="area-rhythm|'+esc(id)+'|'+esc(record.id)+'" aria-label="View history for '+esc(record.text)+'" title="View rhythm history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button type="button" class="iconbtn" data-area-rhythm-edit="'+esc(id)+'|'+esc(record.id)+'" aria-label="Edit '+esc(record.text)+'" title="Edit">✎</button><button type="button" class="iconbtn" data-area-rhythm-delete="'+esc(id)+'|'+esc(record.id)+'" aria-label="Delete '+esc(record.text)+'" title="Delete">×</button></div>';
  }
  window.faithLinkedRhythmCount=function(group){return categoryRhythms("faith").filter(function(item){return (item.record.faithGroup||"Prayer")===group&&!item.record.disabled&&!rhythmEnded(item.record);}).length;};
@@ -113,7 +113,7 @@
      var tend=p?'<button type="button" class="btn mini" data-tend-open="person-rhythm" data-person-id="'+esc(p.id)+'" data-rhythm-id="'+esc(r.id)+'" data-rhythm-area="'+esc(id)+'">Tend</button>':'<button type="button" class="btn mini" data-tend-open="area-rhythm" data-area-id="'+esc(id)+'" data-rhythm-id="'+esc(r.id)+'">Tend</button>';
      var meta=tendRhythmMetaLabel(r,null,true);
      if(p){
-      var badges=typeof window.planPills==="function"?window.planPills({personId:p.id,rhythm:p.id+"|"+r.id}):'<span class="pill rhy">'+collectionIcon("rhythms")+' Rhythm</span>'+rhythmPeopleBadges(r,p.id)+(typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(r):"");
+      var badges=typeof window.planPills==="function"?window.planPills({personId:p.id,rhythm:p.id+"|"+r.id,hideTypeBadge:true}):rhythmPeopleBadges(r,p.id)+(typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(r):"");
       out+='<div class="actrow"><span class="act-ic" style="background:'+personHealthColor(score)+'"></span><div class="pi-main">'+tendRowContent(r.text||"(unnamed rhythm)",String(r.description||"").trim(),meta,badges)+'</div>'+(typeof window.planPills==="function"?"":tag)+tend+'</div>';
      }else out+='<div class="actrow"><span class="act-ic" style="background:'+personHealthColor(score)+'"></span><div class="pi-main"><div class="pi-label">'+esc(r.text||"(unnamed rhythm)")+'</div><div class="pi-sub">'+esc(meta)+'</div></div>'+tag+tend+'</div>';
     });
