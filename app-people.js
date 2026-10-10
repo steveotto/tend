@@ -182,6 +182,7 @@ window.renderPeople=renderPeople=function(){
  out+='<div class="grid">';
  S.people.forEach(function(p){
   var cat=personCategory(p);
+  if(cat==="friendships")p=Object.assign({},p,{name:String(p.name||"").trim().split(/\s+/)[0]||p.name});
   if(!f[cat])return;shown++;
   var sc=personScore(p),c=scoreClass(sc);
   var ci=personConnInfo(p);
