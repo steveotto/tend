@@ -354,7 +354,7 @@ function todayQueueMetaBar(meta){
  function entry(part,kind,icon){return '<span class="plan-item-meta-entry plan-item-meta-entry--'+kind+'">'+(icon?planMetaIcon(icon):"")+'<span>'+esc(part)+'</span></span>';}
  var frequency=details.filter(function(part){return /^(daily|weekly|monthly|quarterly|yearly|annually|every\b|once\b)/i.test(part);}),other=details.filter(function(part){return frequency.indexOf(part)===-1;});
  if(!frequency.length&&!time.length&&!history.length&&!other.length)return "";
- return '<div class="plan-item-meta">'+frequency.map(function(part){return entry(part,"schedule","frequency");}).join("")+time.map(function(part){return entry(part,"time","time");}).join("")+other.map(function(part){return entry(part,"detail","");}).join("")+history.map(function(part){return entry(part,"history","");}).join("")+'</div>';
+ return '<div class="plan-item-meta">'+frequency.map(function(part){return entry(part,"schedule","frequency");}).join("")+time.map(function(part){return entry(part,"time","time");}).join("")+other.map(function(part){return entry(part,"detail","");}).join("")+history.map(function(part){return entry(part,"history","occurred");}).join("")+'</div>';
 }
 function planBlockCard(b,curId,isCur,isAllDay,focusBlocks){
  isAllDay=!!isAllDay;
@@ -685,7 +685,7 @@ function tendRhythmFrequencyLabel(r){
   days=days.map(Number).filter(function(value,index,all){return value>=0&&value<7&&all.indexOf(value)===index;}).sort(function(a,b){return a-b;});
   return days.length&& !/\bon\b/i.test(label) ? label+" on "+days.map(function(value){return DOW[value];}).join(", "):label;
  }
- if(freq==="monthly"){day=scheduleDayLabel(r);if(day){var match=day.match(/^on the (\d+)$/i);if(match){var date=+match[1],lastTwo=date%100,suffix=lastTwo>=11&&lastTwo<=13?"th":date%10===1?"st":date%10===2?"nd":date%10===3?"rd":"th";day="on the "+date+suffix;}return label+" "+day.replace(/^on\s+/i,"on ");}}
+ if(freq==="monthly"){day=scheduleDayLabel(r);if(day){var match=day.match(/^on the (\d+)$/i);if(match){var date=+match[1],lastTwo=date%100,suffix=lastTwo>=11&&lastTwo<=13?"th":date%10===1?"st":date%10===2?"nd":date%10===3?"rd":"th";day="on the "+date+suffix;}day=day.replace(/^on\s+/i,"on ");return label.toLowerCase().indexOf(day.toLowerCase())>=0?label:label+" "+day;}}
  return label;
 }
 function tendRhythmMetaLabel(r,eventTs,includeDue){
@@ -848,10 +848,11 @@ function personProfile(pid){
   if(connections.length>5)out+='<button type="button" class="recent-moments-toggle" data-connection-list-view-all="'+esc(pid)+'">View All ('+connections.length+')</button>';
  }else out+='<div class="empty">No connections logged yet.</div>';
  out+='</section>';
- out+=profilePanelStart("rhythms")+'<div class="profile-panel-toolbar"><p class="profile-tab-intro">Recurring practices that help you stay connected.</p><button type="button" class="btn mini ghost" data-rhyadd="'+esc(pid)+'">'+profileActionIcon("log")+'Add rhythm</button></div>';
+ out+=profilePanelStart("rhythms")+'<div class="profile-panel-toolbar profile-rhythm-toolbar"><p class="profile-tab-intro">Recurring practices that help you stay connected.</p><button type="button" class="btn mini ghost profile-rhythm-add" data-rhyadd="'+esc(pid)+'">'+profileActionIcon("log")+'<span>Add rhythm</span></button></div><div class="profile-rhythm-list">';
  var profileRhythms=sortedPersonRhythms(p);
  if(profileRhythms.length){profileRhythms.forEach(function(r){out+=rhythmRow(p,r);});}
  else out+='<div class="empty">No rhythms yet - add the recurring things that keep this relationship tended.</div>';
+ out+='</div>';
  var dO=rhythmDraft&&rhythmDraft.pid===pid;
  if(dO)out+='<dialog class="profile-editor-dialog" data-profile-editor="rhythm" aria-labelledby="profile-editor-title"><div class="profile-editor-body"><h3 id="profile-editor-title">Add Rhythm</h3>'+draftRow(p)+'<div class="profile-editor-actions"><button class="btn mini" data-rhyadd="'+pid+'">Save Rhythm</button><button class="btn mini ghost" data-rhycancel="1" data-editor-cancel>Cancel</button></div></div></dialog>';
  out+=rhythmPickerModalHTML();
