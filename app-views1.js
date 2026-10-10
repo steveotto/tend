@@ -434,14 +434,15 @@ function sortedPersonRhythms(person){
  var rhythms=[];
  S.people.forEach(function(owner){(owner.rhythms||[]).forEach(function(r){if(owner.id===person.id||(Array.isArray(r.sharedWith)&&r.sharedWith.indexOf(person.id)!==-1))rhythms.push(Object.assign({},r,{profileOwnerId:owner.id}));});});
  (S.rhythms||[]).forEach(function(r){if((r.category==="faith"||r.faithGroup)&&Array.isArray(r.sharedWith)&&r.sharedWith.indexOf(person.id)!==-1)rhythms.push(Object.assign({},r,{profileOwnerId:"faith",sharedFaithRhythm:true}));});
- return rhythms.sort(function(a,b){return rhythmPeriod(a)-rhythmPeriod(b)||timeRank(a)-timeRank(b);});
+ var seen=Object.create(null);
+ return rhythms.filter(function(r){var key=(r.profileOwnerId||person.id)+"|"+r.id;if(seen[key])return false;seen[key]=true;return true;}).sort(function(a,b){return rhythmPeriod(a)-rhythmPeriod(b)||timeRank(a)-timeRank(b);});
 }
 function sortedPersonSparks(person){
  var sparks=[];
  S.people.forEach(function(owner){(owner.sparks||[]).forEach(function(spark){if(owner.id===person.id||(Array.isArray(spark.sharedWith)&&spark.sharedWith.indexOf(person.id)!==-1))sparks.push(Object.assign({},spark,{profileOwnerId:owner.id}));});});
  (S.ideas||[]).forEach(function(spark){if((spark.category==="faith"||spark.area==="faith"||spark.faithSection)&&Array.isArray(spark.sharedWith)&&spark.sharedWith.indexOf(person.id)!==-1)sparks.push(Object.assign({},spark,{profileOwnerId:"faith",sharedFaithSpark:true}));});
- var seen={};
- return sparks.filter(function(spark){if(spark.done||seen[spark.id])return false;seen[spark.id]=true;return true;}).sort(function(a,b){return (a.by||"9999")<(b.by||"9999")?-1:1;});
+ var seen=Object.create(null);
+ return sparks.filter(function(spark){var key=(spark.profileOwnerId||person.id)+"|"+spark.id;if(spark.done||seen[key])return false;seen[key]=true;return true;}).sort(function(a,b){return (a.by||"9999")<(b.by||"9999")?-1:1;});
 }
 function rhythmPeopleBadges(r,excludeId){
  var ids=[r.profileOwnerId||excludeId].concat(Array.isArray(r.sharedWith)?r.sharedWith:[]);
@@ -672,6 +673,7 @@ function rippleIdea(p){
  return ideas[(Math.floor(Date.now()/864e5)+(rippleIdeaOffsets[p.id]||0))%ideas.length];
 }
 function collectionIcon(key){var paths={rhythms:'<path d="M20 7a8 8 0 0 0-14-2L3 8m0-5v5h5 M4 17a8 8 0 0 0 14 2l3-3m0 5v-5h-5"/>',connection:'<path d="m9.5 14.5-2 2a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0 M14.5 9.5l2-2a3.5 3.5 0 0 1 5 5l-4 4a3.5 3.5 0 0 1-5 0 M8.5 15.5l7-7"/>',sparks:'<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/>',prayer:'<circle cx="17" cy="4.3" r="2.7"/><path d="M10.2 8.1c.7-.8 1.9-.9 2.7-.2l3.3 2.8 2-2c.8-.8 2.1-.8 2.9 0s.8 2.1 0 2.9l-3.4 3.4c-.8.8-2.1.8-2.9 0l-1.1-1-2.6 3.2 4.5 3.2c.6.4.9 1.1.9 1.8 0 1-.8 1.8-1.8 1.8H5.1c-1.2 0-2.1-.9-2.1-2.1s.9-2.1 2.1-2.1h4.3l-3.1-2.3c-1.3-.9-1.5-2.7-.5-3.9z"/>',faith:'<path d="M12 3v18 M6.5 8h11"/>',notes:'<path d="M14 3H5v18h14V8Z M14 3v5h5 M8 12h8 M8 16h6"/>'};return '<svg class="collection-icon'+(key==="prayer"?" collection-icon-prayer":"")+'" viewBox="0 0 24 24" aria-hidden="true">'+(paths[key]||"")+'</svg>';}
+function profileActionIcon(name){var paths={edit:'<path d="m14 5 5 5M4 20l4.2-.8L20 7.4 16.6 4 4.8 15.8Z"/>',remove:'<path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m3 3v7m6-7v7"/>',log:'<path d="M12 5v14M5 12h14"/>',view:'<path d="M5 12h14m-6-6 6 6-6 6"/>',chart:'<path d="M4 3v17h17M8 16v-5m5 5V6m5 10V9"/>'};return '<svg class="profile-action-icon" viewBox="0 0 24 24" aria-hidden="true">'+(paths[name]||"")+'</svg>';}
 function tendRowContent(title,description,meta,badges,peopleBadges,metaMarkup,showNoDetails){
  return '<div class="tend-row-content"><div class="tend-row-heading"><strong class="tend-type-title">'+esc(title||"")+'</strong>'+(badges||"")+'</div>'+(description?'<div class="tend-type-description">'+esc(description)+'</div>':showNoDetails?'<div class="tend-type-description no-details">No details...</div>':'')+(peopleBadges?'<div class="tend-row-people">'+peopleBadges+'</div>':'')+(metaMarkup!==undefined?metaMarkup:(meta?'<div class="tend-type-meta">'+esc(meta)+'</div>':""))+'</div>';
 }
@@ -705,7 +707,7 @@ function notesChecklist(p,addAction){
   if(editingFollowupId===f.id){var associationOwner=followupAssociationOwner(f)||p.id;return '<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="note-editor-title"><div class="profile-editor-body"><h3 id="note-editor-title">Edit Note</h3>'+(f.kind==="faith-note"?'<div class="profile-note-type"><span>Type</span><strong>Prayer</strong></div>':'<label class="profile-note-type">Type<select data-fu-kind>'+noteKindOptions(f.kind==="encouragement"?"encouragement":f.kind==="followup"?"followup":f.kind==="prayernote"?"prayer":"general")+'</select></label>')+'<label class="profile-note-type">Title<input id="followupEditTitle" aria-label="Note title" value="'+esc(profileNoteTitleText(f))+'"></label><label class="profile-note-type">Details<textarea id="followupEditDetails" aria-label="Note details" placeholder="Add details (optional)">'+esc(profileNoteDetails(f))+'</textarea></label>'+tendAssociationControlsHTML("followup",associationOwner,f.id,f)+'<div class="profile-editor-actions"><button class="btn mini" data-fusave="'+f.id+'">Save Note</button><button class="btn mini ghost" data-fucancel="1" data-editor-cancel>Cancel</button><button class="btn mini danger" data-fudel="'+f.id+'">Delete Note</button></div></div></dialog>';}
   var stamp=f.createdAt||f.ts?"Added "+when(f.createdAt||f.ts):f.due?"Due "+f.due:"";
   var ownerId=f.kind==="faith-note"?"faith":f.personId||p.id,badges=tendAssociationPeopleBadges(f,ownerId,p.id,"notes")+tendAssociationCategoryBadges(f);
-  return '<div class="person-note-row'+(f.done?' is-done':'')+'"><span class="person-note-type-column">'+esc(noteKindLabel(f.kind))+'</span>'+tendRowContent(profileNoteTitleText(f),profileNoteDetails(f),stamp,badges)+'<div class="person-note-actions">'+(f.done?'<button class="btn mini ghost" data-fudone="'+f.id+'" aria-label="Reopen note">Reopen</button>':'<button class="btn mini note-done" data-fudone="'+f.id+'" aria-label="Complete note">Done</button>')+'<button class="iconbtn" data-fuedit="'+f.id+'" aria-label="Edit note" title="Edit">✎</button><button class="iconbtn" data-fudel="'+f.id+'" aria-label="Delete note" title="Delete">×</button></div></div>';
+  return '<div class="person-note-row'+(f.done?' is-done':'')+'"><span class="person-note-type-column">'+esc(noteKindLabel(f.kind))+'</span>'+tendRowContent(profileNoteTitleText(f),profileNoteDetails(f),stamp,"",badges)+'<div class="person-note-actions">'+(f.done?'<button class="btn mini ghost" data-fudone="'+f.id+'" aria-label="Reopen note">Reopen</button>':'<button class="btn mini note-done" data-fudone="'+f.id+'" aria-label="Complete note">Done</button>')+'<button type="button" class="iconbtn" data-fuedit="'+esc(f.id)+'" aria-label="Edit note" title="Edit">'+profileActionIcon("edit")+'</button><button type="button" class="iconbtn" data-fudel="'+esc(f.id)+'" aria-label="Delete note" title="Delete">'+profileActionIcon("remove")+'</button></div></div>';
  }
  var active=items.filter(function(f){return !f.done;}),done=items.filter(function(f){return f.done;});
  return (active.length?active.map(row).join(""):'<div class="empty">No notes yet - add something to remember.</div>')+(done.length?'<button type="button" class="recent-moments-toggle" data-note-history="'+esc(p.id)+'">Show history ('+done.length+')</button>':'')+(addAction||"");
@@ -717,7 +719,7 @@ function openPersonNoteHistory(personId){
   var stamp=note.createdAt||note.ts?"Added "+when(note.createdAt||note.ts):note.due?"Due "+note.due:"";
   if(note.completedDate)stamp+=(stamp?" · ":"")+"Completed "+when(note.completedDate);
   var ownerId=note.kind==="faith-note"?"faith":note.personId||person.id,badges=tendAssociationPeopleBadges(note,ownerId,person.id,"notes")+tendAssociationCategoryBadges(note);
-  return '<div class="person-note-row is-done"><span class="person-note-type-column">'+esc(noteKindLabel(note.kind))+'</span>'+tendRowContent(profileNoteTitleText(note),profileNoteDetails(note),stamp,badges)+'<div class="person-note-actions"><button class="btn mini ghost" data-fudone="'+esc(note.id)+'" aria-label="Reopen note">Reopen</button><button class="iconbtn" data-fuedit="'+esc(note.id)+'" aria-label="Edit note" title="Edit">✎</button><button class="iconbtn" data-fudel="'+esc(note.id)+'" aria-label="Delete note" title="Delete">×</button></div></div>';
+  return '<div class="person-note-row is-done"><span class="person-note-type-column">'+esc(noteKindLabel(note.kind))+'</span>'+tendRowContent(profileNoteTitleText(note),profileNoteDetails(note),stamp,"",badges)+'<div class="person-note-actions"><button class="btn mini ghost" data-fudone="'+esc(note.id)+'" aria-label="Reopen note">Reopen</button><button type="button" class="iconbtn" data-fuedit="'+esc(note.id)+'" aria-label="Edit note" title="Edit">'+profileActionIcon("edit")+'</button><button type="button" class="iconbtn" data-fudel="'+esc(note.id)+'" aria-label="Delete note" title="Delete">'+profileActionIcon("remove")+'</button></div></div>';
  }
  var dialog=document.createElement("dialog");dialog.className="rhythm-history-dialog note-history-dialog";dialog.setAttribute("aria-labelledby","noteHistoryTitle");
  dialog.innerHTML='<div class="history-person"><span class="history-person-avatar">'+personAvatar(person,42)+'</span><strong>'+esc(person.name)+'</strong></div><div class="history-heading"><div><h2 id="noteHistoryTitle">Completed notes</h2><p class="history-rhythm-details">'+notes.length+' completed note'+(notes.length===1?"":"s")+'</p></div><button class="iconbtn" data-note-history-close aria-label="Close note history">✕</button></div><div class="notes-history-list note-history-modal-list">'+(notes.length?notes.map(row).join(""):'<div class="empty">No completed notes yet.</div>')+'</div>';
@@ -735,10 +737,12 @@ function actQueueHTML(p){
  var allR=(p.rhythms||[]).filter(function(r){return (r.category||"connection")!=="prayer";});
  var waitR=allR.filter(function(r){return todayRhythmEligible(r);}).sort(function(a,b){return rhythmPeriod(a)-rhythmPeriod(b)||rhythmScore(a)-rhythmScore(b);});
  var visR=waitR;
- var waiting=waitR.length;
+ var dueSparks=sortedPersonSparks(p).filter(function(spark){return !!spark.by&&sparkLive(spark);});
+ var waiting=waitR.length+dueSparks.length;
  var dayOrder=dayBlocks().map(function(block){return block.id;}),rows=[],rowOrder=0;
  function queueFrequency(item,type){
   if(type==="rhythm")return rhythmPeriod(item);
+  if(type==="spark")return Number.MAX_SAFE_INTEGER;
   return Infinity;
  }
  function queueRow(html,item,type){
@@ -750,7 +754,12 @@ function actQueueHTML(p){
   var badges=tendQueuePeopleAndCategoryBadges(r,p.id,p.id,"rhythm");
   return '<div class="actrow'+(dim?" done":"")+'"><div class="pi-main">'+tendRowContent(r.text||"(unnamed rhythm)",String(r.description||"").trim(),sub,"",badges,"",true)+'</div>'+(dim?'<span class="praycount tend-type-metric">Tended \u2713</span>':rhyDoneBtn(p.id+"|"+r.id))+todayQueueMetaBar(sub)+'</div>';
  }
+ function sparkRowQ(spark){
+  var ownerId=spark.profileOwnerId||p.id,sub=(spark.time?fmtHM12(spark.time)+" \u00b7 ":"")+sparkDueTxt(spark),badges=tendQueuePeopleAndCategoryBadges(spark,ownerId,p.id,"spark");
+  return '<div class="actrow person-queue-spark"><div class="pi-main">'+tendRowContent(spark.text||"(unnamed spark)",String(spark.details||"").trim(),sub,"",badges)+'</div><button type="button" class="btn mini sparkbtn" data-sparkdo="'+esc(ownerId+"|"+spark.id+"|"+p.id)+'">Do it</button></div>';
+ }
  visR.forEach(function(r){queueRow(rhyRowQ(r,false),r,"rhythm");});
+ dueSparks.forEach(function(spark){queueRow(sparkRowQ(spark),spark,"spark");});
  var emptyMessage="Nothing waiting - these next steps are all tended.";
  var out='<div class="sectiontitle today-with-person-heading"><h2>Today with '+first+'</h2><span class="qpill'+(waiting?"":" clear")+'">'+(waiting?waiting+" in queue":"all tended \u2713")+'</span></div><div class="card act today-with-person" style="margin-bottom:14px">';
  rows.sort(function(a,b){return a.frequency<b.frequency?-1:a.frequency>b.frequency?1:a.time-b.time||a.order-b.order;});
@@ -781,7 +790,7 @@ function personProfile(pid){
  var first=esc(p.name.split(" ")[0]);
  var bd=bdayInfo(p.birthday);
  /* Profile identity sits above the card; profile details remain in the card. */
- var header='<div class="person-profile-head person-profile-header"><div class="person-identity">'+personAvatar(p,52)+'<div><h3>'+esc(p.name)+'</h3><div class="rel">'+esc(p.relation||"")+'</div></div></div><div class="profile-head-actions"><button class="pbtn" data-psettings="1" title="Person settings">\u2699</button><button class="pbtn" data-closeperson="1" title="Close">\u2715</button></div></div>';
+ var header='<div class="person-profile-head person-profile-header"><div class="person-identity">'+personAvatar(p,52)+'<div><h3>'+esc(p.name)+'</h3><div class="rel">'+esc(p.relation||"")+'</div></div></div><div class="profile-head-actions"><button type="button" class="btn mini ghost profile-header-log" data-rippleopen="1">'+profileActionIcon("log")+'<span>Log connection</span></button><button type="button" class="pbtn" data-psettings="1" title="Person settings" aria-label="Person settings">\u2699</button><button type="button" class="pbtn" data-closeperson="1" title="Close" aria-label="Close person profile">\u2715</button></div></div>';
  var out='<div class="card detail open person-profile" id="personPanel">';
  out+='<div class="person-health-heading dashboard-overall-heading"><h3>Overall health</h3><span class="ov-score '+c+'">'+sc+'</span></div>'+personHealthMeter(sc,p.name)+'<div class="meta person-profile-health-status"><span class="statusword '+c+'">'+scoreLabel(sc)+'</span></div><div class="chips">';
  out+=ll?'<span class="chip info">'+(typeof window.llIconHTML==="function"?window.llIconHTML(p):"")+esc(LL_LANGUAGES[ll])+'</span>':'<span class="chip info">no love language set</span>';
@@ -832,43 +841,39 @@ function personProfile(pid){
  activeProfileTab=profileTabs[pid]||"rhythms";
  var connections=evs.filter(connectionEvent);
  var counts={rhythms:sortedPersonRhythms(p).length,connection:connections.length,sparks:sortedPersonSparks(p).length,prayer:prayers.filter(function(x){return !x.answered&&!x.archived;}).length,notes:personNoteRecords(p).filter(function(f){return !f.done;}).length};
- out+='<div class="sectiontitle profile-settings-heading"><h2>Tend Settings</h2></div><div class="profile-tabs-row"><div class="profile-tabs" role="tablist" aria-label="Tend settings">'+[["rhythms","Rhythms"],["connection","Connection"],["sparks","Sparks"],["prayer","Prayer"],["notes","Notes"]].map(function(item){var selected=activeProfileTab===item[0];return '<button role="tab" id="profile-tab-'+item[0]+'" aria-controls="profile-panel-'+item[0]+'" aria-selected="'+selected+'" data-profiletab="'+item[0]+'" aria-label="'+item[1]+'" title="'+item[1]+'">'+collectionIcon(item[0])+'<span class="profile-tab-label">'+item[1]+'</span><span class="tab-count">'+counts[item[0]]+'</span></button>';}).join('')+'</div></div>';
- out+=profilePanelStart("connection")+'<div class="connection-history-toolbar"><p class="profile-tab-intro">Shared moments add up and keep your connection strong.</p><button type="button" class="iconbtn rhythm-history-trigger" data-connection-history="'+esc(pid)+'" title="View connection history" aria-label="View connection history for '+esc(p.name)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button></div>';
+ out+='<div class="sectiontitle profile-settings-heading"><h2>Manage with '+esc(p.name)+'</h2></div><div class="profile-tabs-row"><div class="profile-tabs" role="tablist" aria-label="Manage with '+esc(p.name)+'">'+[["rhythms","Rhythms"],["connection","Connections"],["sparks","Sparks"],["prayer","Prayer"],["notes","Notes"]].map(function(item){var selected=activeProfileTab===item[0];return '<button type="button" role="tab" id="profile-tab-'+item[0]+'" aria-controls="profile-panel-'+item[0]+'" aria-selected="'+selected+'" tabindex="'+(selected?"0":"-1")+'" data-profiletab="'+item[0]+'">'+collectionIcon(item[0])+'<span class="profile-tab-label">'+item[1]+'</span><span class="tab-count">'+counts[item[0]]+'</span></button>';}).join('')+'</div></div>';
+ out+=profilePanelStart("connection")+'<div class="profile-panel-toolbar"><p class="profile-tab-intro">Shared moments add up and keep your connection strong.</p><div class="profile-panel-actions"><button type="button" class="btn mini ghost" data-rippleopen="1">'+profileActionIcon("log")+'Log connection</button><button type="button" class="btn mini ghost profile-secondary-action" data-connection-history="'+esc(pid)+'">'+profileActionIcon("chart")+'History</button></div></div>';
  if(connections.length){
   out+='<div class="connection-list">'+connections.slice(0,5).map(rippleLine).join("")+'</div>';
   if(connections.length>5)out+='<button type="button" class="recent-moments-toggle" data-connection-list-view-all="'+esc(pid)+'">View All ('+connections.length+')</button>';
  }else out+='<div class="empty">No connections logged yet.</div>';
- out+='<div class="today-ripple"><button class="btn mini ghost" data-rippleopen="1">+ Log Connection</button></div>';
  out+='</section>';
- out+=profilePanelStart("rhythms")+'<p class="profile-tab-intro">Recurring practices that help you stay connected.</p>';
+ out+=profilePanelStart("rhythms")+'<div class="profile-panel-toolbar"><p class="profile-tab-intro">Recurring practices that help you stay connected.</p><button type="button" class="btn mini ghost" data-rhyadd="'+esc(pid)+'">'+profileActionIcon("log")+'Add rhythm</button></div>';
  var profileRhythms=sortedPersonRhythms(p);
  if(profileRhythms.length){profileRhythms.forEach(function(r){out+=rhythmRow(p,r);});}
  else out+='<div class="empty">No rhythms yet - add the recurring things that keep this relationship tended.</div>';
  var dO=rhythmDraft&&rhythmDraft.pid===pid;
  if(dO)out+='<dialog class="profile-editor-dialog" data-profile-editor="rhythm" aria-labelledby="profile-editor-title"><div class="profile-editor-body"><h3 id="profile-editor-title">Add Rhythm</h3>'+draftRow(p)+'<div class="profile-editor-actions"><button class="btn mini" data-rhyadd="'+pid+'">Save Rhythm</button><button class="btn mini ghost" data-rhycancel="1" data-editor-cancel>Cancel</button></div></div></dialog>';
- else out+='<div class="profile-add-action"><button class="btn mini ghost" data-rhyadd="'+pid+'">+ Add rhythm</button></div>';
  out+=rhythmPickerModalHTML();
  out+='</section>';
- out+=profilePanelStart("sparks")+'<p class="profile-tab-intro">Low-pressure ideas to enjoy together.</p>';
+ out+=profilePanelStart("sparks")+'<div class="profile-panel-toolbar"><p class="profile-tab-intro">Low-pressure ideas to enjoy together.</p><button type="button" class="btn mini ghost" data-sparkaddopen="'+esc(pid)+'">'+profileActionIcon("log")+'Add spark</button></div>';
  var sps=sortedPersonSparks(p);
  if(sps.length){sps.forEach(function(s){
   var sparkOwnerId=s.profileOwnerId||pid,sparkBadges=tendAssociationPeopleBadges(s,sparkOwnerId,pid,"spark")+tendAssociationCategoryBadges(s);
   var sparkMeta=(s.time?fmtHM12(s.time)+" \u00b7 ":"")+sparkDueTxt(s)+(s.by?" \u00b7 "+s.by:"");
-  out+='<div class="rhyrow" data-spark-row="'+esc(sparkOwnerId+"|"+s.id)+'"><span class="sm-dot" style="background:none;color:var(--forest);font-size:15px">\u2726</span><div class="gr-main">'+tendRowContent(s.text,s.details||"",sparkMeta,sparkBadges)+'</div><button class="btn mini" data-sparkdo="'+sparkOwnerId+'|'+s.id+'|'+pid+'">Do it</button><button class="iconbtn" data-sedit="'+sparkOwnerId+'|'+s.id+'" title="edit">\u270E</button><button class="iconbtn" data-spdel="'+sparkOwnerId+'|'+s.id+'|'+pid+'" title="remove">\u00D7</button></div>';
+  out+='<div class="rhyrow profile-item-row" data-spark-row="'+esc(sparkOwnerId+"|"+s.id)+'"><span class="profile-item-type">'+collectionIcon("sparks")+'</span><div class="gr-main">'+tendRowContent(s.text,s.details||"",sparkMeta,"",sparkBadges)+'</div><div class="profile-item-actions"><button type="button" class="btn mini sparkbtn" data-sparkdo="'+esc(sparkOwnerId+"|"+s.id+"|"+pid)+'">Do it</button><button type="button" class="btn mini ghost profile-secondary-action" data-sedit="'+esc(sparkOwnerId+"|"+s.id)+'">'+profileActionIcon("edit")+'Edit</button><button type="button" class="btn mini ghost profile-secondary-action" data-spdel="'+esc(sparkOwnerId+"|"+s.id+"|"+pid)+'">'+profileActionIcon("remove")+'Remove</button></div></div>';
   if(editSparkId===s.id&&sparkEditDraft&&sparkEditDraft.id===s.id){out+=tendSparkEditModalHTML(sparkOwnerId,pid);}
  });}
  else out+='<div class="empty">No sparks yet - the fun, no-pressure "we should do this sometime" list.</div>';
  var addingSpark=sparkDraftOpenFor===pid;
  if(addingSpark)out+='<dialog class="profile-editor-dialog" data-profile-editor="spark" aria-labelledby="profile-editor-title"><div class="profile-editor-body"><h3 id="profile-editor-title">Add Spark</h3><div class="addrow spark-draft"><input placeholder="Idea - a movie, a talk, a trip..." data-spnewtext="'+pid+'"><textarea placeholder="Details (optional)" data-spnewdetails="'+pid+'"></textarea><input type="date" data-spnewdate="'+pid+'" aria-label="Spark date" style="max-width:150px"><input type="time" data-spnewtime="'+pid+'" aria-label="Spark time" style="max-width:110px"></div>'+tendAssociationControlsHTML("spark",pid,"new",sparkAddDrafts[pid]||(sparkAddDrafts[pid]={sharedWith:[],areas:[]}))+'<div class="profile-editor-actions"><button class="btn mini" data-spadd="'+pid+'">Save Spark</button><button class="btn mini ghost" data-sparkaddcancel="'+pid+'" data-editor-cancel>Cancel</button></div></div></dialog>';
- else out+='<div class="profile-add-action"><button class="btn mini ghost" data-sparkaddopen="'+pid+'">+ Add spark</button></div>';
  out+='</section>';
  var addingPrayer=window._personPrayerDraftFor===pid;
- out+=profilePanelStart("prayer")+'<p class="profile-tab-intro">Prayer requests to remember and bring before God.</p>'+prayerList(prayers,true);
+ out+=profilePanelStart("prayer")+'<div class="profile-panel-toolbar"><p class="profile-tab-intro">Prayer requests to remember and bring before God.</p><button type="button" class="btn mini ghost" data-personprayeropen="'+esc(pid)+'">'+profileActionIcon("log")+'Add prayer</button></div>'+prayerList(prayers,true);
  if(addingPrayer)out+='<dialog class="profile-editor-dialog" data-profile-editor="prayer" aria-labelledby="profile-editor-title"><div class="profile-editor-body"><h3 id="profile-editor-title">Add Prayer</h3>'+personPrayerAddFields(pid)+'</div></dialog>';
- else out+='<div class="person-prayer-add"><div class="person-prayer-form-actions"><button class="btn mini ghost" data-personprayeropen="'+pid+'">+ Add prayer</button></div></div>';
  out+='</section>';
- out+=profilePanelStart("notes")+'<p class="profile-tab-intro">Keep useful thoughts, encouragement, prayer, and follow-ups together.</p>';
- out+='<div class="person-notes">'+notesChecklist(p,noteDraftOpenFor===pid?"":'<div class="profile-add-action"><button class="btn mini ghost" data-profilenoteopen="'+pid+'">+ Add note</button></div>')+'</div>';
+ out+=profilePanelStart("notes")+'<div class="profile-panel-toolbar"><p class="profile-tab-intro">Keep useful thoughts, encouragement, prayer, and follow-ups together.</p><button type="button" class="btn mini ghost" data-profilenoteopen="'+esc(pid)+'">'+profileActionIcon("log")+'Add note</button></div>';
+ out+='<div class="person-notes">'+notesChecklist(p,"")+'</div>';
  if(noteDraftOpenFor===pid){var noteDraft=noteAddDrafts[pid]||(noteAddDrafts[pid]={personId:pid,sharedWith:[],areas:[]});out+='<dialog class="profile-editor-dialog" data-profile-editor="note" aria-labelledby="profile-editor-title"><div class="profile-editor-body"><h3 id="profile-editor-title">Add Note</h3><label class="profile-note-type">Type<select id="profileNoteKind">'+noteKindOptions("general")+'</select></label><label class="profile-note-type">Title<input id="profileNoteTitle" placeholder="A short title"></label><label class="profile-note-type">Details<textarea id="profileNoteDetails" placeholder="Add details (optional)"></textarea></label>'+tendAssociationControlsHTML("followup",pid,"new",noteDraft)+'<div class="profile-editor-actions"><button class="btn mini" data-profilenotesave="'+pid+'">Save Note</button><button class="btn mini ghost" data-profilenotecancel="1" data-editor-cancel>Cancel</button></div></div></dialog>';}
  out+='</section>';
  /* person settings: gear in the header opens this modal */
@@ -945,7 +950,7 @@ function rippleLine(e){
  var connectionPeople=connectionParticipantIds(e);
  var otherParticipants=connectionPeople.filter(function(id,index,ids){return id&&id!==(currentPerson||e.personId)&&ids.indexOf(id)===index;}).map(function(id){var person=S.people.find(function(item){return item.id===id;});return person?'<button type="button" class="prayer-person person-badge-clickable" data-personbadge="'+esc(person.id)+'|connection" aria-label="Open '+esc(person.name)+' connection">'+personAvatar(person,24)+esc(person.name)+'</button>':"";}).join("");
  var connectionCategories=connectionCategoryIds(e),categories=otherParticipants+(typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges({areas:connectionCategories}):"");
- return '<div class="logline moment-row"><div class="moment-type">'+typeBadge+'</div><div class="gr-main">'+tendRowContent(title||"Connection",details,timestamp,categories)+'</div><span class="entry-actions"><button class="iconbtn" data-evedit="'+e.id+'" title="Edit connection" aria-label="Edit connection">\u270E</button><button class="iconbtn" data-evdel="'+e.id+'" title="Delete connection" aria-label="Delete connection">\uD83D\uDDD1</button></span></div>';
+ return '<div class="logline moment-row"><div class="moment-type">'+typeBadge+'</div><div class="gr-main">'+tendRowContent(title||"Connection",details,timestamp,"",categories)+'</div><span class="entry-actions"><button type="button" class="iconbtn" data-evedit="'+esc(e.id)+'" title="Edit connection" aria-label="Edit connection">'+profileActionIcon("edit")+'</button><button type="button" class="iconbtn" data-evdel="'+esc(e.id)+'" title="Delete connection" aria-label="Delete connection">'+profileActionIcon("remove")+'</button></span></div>';
 }
 /* ============ free moment + spark chip ============ */
 function sparkChip(p){var s=sortedPersonSparks(p)[0];if(!s)return "";return '<div class="pf-next" style="color:var(--forest)">\u2726 '+esc(s.text)+' \u00b7 '+esc(sparkDueTxt(s))+'</div>';}
@@ -970,7 +975,7 @@ function dashboardFreeMomentSparkQueue(){
 }
 function personFreeMomentSparkQueue(person){
  var seen=Object.create(null);
- return sortedPersonSparks(person).filter(function(spark){var key=(spark.profileOwnerId||person.id)+"|"+spark.id;if(!sparkLive(spark)||seen[key])return false;seen[key]=true;return true;}).map(function(spark){return {spark:(spark.profileOwnerId||person.id)+"|"+spark.id+"|"+person.id,personId:person.id,label:spark.text,description:spark.details||"",deadline:dashboardSparkDeadlineLabel(spark)};});
+ return sortedPersonSparks(person).filter(function(spark){var key=(spark.profileOwnerId||person.id)+"|"+spark.id;if(spark.by||!sparkLive(spark)||seen[key])return false;seen[key]=true;return true;}).map(function(spark){return {spark:(spark.profileOwnerId||person.id)+"|"+spark.id+"|"+person.id,personId:person.id,label:spark.text,description:spark.details||"",deadline:dashboardSparkDeadlineLabel(spark)};});
 }
 function personFreeMomentHTML(person){
  var sparkQueue=personFreeMomentSparkQueue(person),personId=person.id;
@@ -980,7 +985,7 @@ function personFreeMomentHTML(person){
  var current=sparkQueue[index],
      action='<button type="button" class="btn mini sparkbtn" data-sparkdo="'+esc(current.spark)+'">Do it</button>',
      footer='<div class="plan-item-footer dashboard-spark-footer person-spark-footer"><span>'+(index+1)+' of '+sparkQueue.length+'</span><span class="dashboard-spark-deadline">'+esc(current.deadline)+'</span></div>';
- return '<div class="sectiontitle dashboard-free-moment-heading person-free-moment-heading"><h2>Free moment?</h2></div><div class="dashboard-free-moment dashboard-free-moment-carousel person-free-moment"><div class="dashboard-free-moment-stage"><div class="planitem dashboard-free-moment-card person-free-moment-card" data-person-free-spark-card="'+esc(personId)+'"><div class="pi-main">'+planItemCopy(current,action)+'</div>'+planItemTopRow(current)+footer+'</div></div><nav class="dashboard-free-moment-controls" aria-label="'+esc(person.name)+' Spark carousel"><button type="button" class="dashboard-free-moment-arrow" data-person-spark-carousel-person="'+esc(personId)+'" data-person-spark-carousel-step="-1" aria-label="Previous Spark"'+(index===0?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6 9 12 15 18"/></svg></button><button type="button" class="dashboard-free-moment-arrow" data-person-spark-carousel-person="'+esc(personId)+'" data-person-spark-carousel-step="1" aria-label="Next Spark"'+(index===sparkQueue.length-1?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6 15 12 9 18"/></svg></button></nav></div>';
+ return '<div class="sectiontitle dashboard-free-moment-heading person-free-moment-heading"><h2>Free moment with '+esc(person.name)+'?</h2><button type="button" class="profile-view-all-sparks" data-person-sparks-view-all="'+esc(personId)+'">View all '+profileActionIcon("view")+'</button></div><div class="dashboard-free-moment dashboard-free-moment-carousel person-free-moment"><div class="dashboard-free-moment-stage"><div class="planitem dashboard-free-moment-card person-free-moment-card" data-person-free-spark-card="'+esc(personId)+'"><div class="pi-main">'+planItemCopy(current,action)+'</div>'+planItemTopRow(current)+footer+'</div></div><nav class="dashboard-free-moment-controls" aria-label="'+esc(person.name)+' Spark carousel"><button type="button" class="dashboard-free-moment-arrow" data-person-spark-carousel-person="'+esc(personId)+'" data-person-spark-carousel-step="-1" aria-label="Previous Spark"'+(index===0?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6 9 12 15 18"/></svg></button><button type="button" class="dashboard-free-moment-arrow" data-person-spark-carousel-person="'+esc(personId)+'" data-person-spark-carousel-step="1" aria-label="Next Spark"'+(index===sparkQueue.length-1?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6 15 12 9 18"/></svg></button></nav></div>';
 }
 function freeMomentHTML(){
  var sparkQueue=dashboardFreeMomentSparkQueue();
