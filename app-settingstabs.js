@@ -2,13 +2,14 @@
 /* ============ settings tabs override: focused, task-based settings groups ============ */
 var calendarEditorDraft=null;
 function applyMobileDashboardTextSize(){
- var size=settings().mobileTextSize==="large"?"large":"normal";
- document.documentElement.setAttribute("data-mobile-text-size",size);
+ var savedSize=settings().mobileTextSize,size=savedSize==="large"||savedSize==="larger"?savedSize:"normal";
+ document.documentElement.setAttribute("data-mobile-text-size",size==="larger"?"large":size);
+ document.documentElement.setAttribute("data-mobile-text-size-level",size);
 }
 applyMobileDashboardTextSize();
 function mobileDisplaySettingsHTML(){
- var selected=settings().mobileTextSize==="large"?"large":"normal";
- return settingsPanel('display')+'<div class="card settings-card"><div class="subhead">Mobile display</div><p class="settings-help">Choose the text size for Today and other pages on phones. This changes only mobile; tablet and desktop layouts stay the same.</p><div class="setrow"><label for="mobileTextSize">Mobile text size</label><select id="mobileTextSize" data-mobile-text-size><option value="normal"'+(selected==="normal"?' selected':'')+'>Normal</option><option value="large"'+(selected==="large"?' selected':'')+'>Large</option></select></div></div></section>';
+ var savedSize=settings().mobileTextSize,selected=savedSize==="large"||savedSize==="larger"?savedSize:"normal";
+ return settingsPanel('display')+'<div class="card settings-card"><div class="subhead">Mobile display</div><p class="settings-help">Choose the text size for Today and other pages on phones. This changes only mobile; tablet and desktop layouts stay the same.</p><div class="setrow"><label for="mobileTextSize">Mobile text size</label><select id="mobileTextSize" data-mobile-text-size><option value="normal"'+(selected==="normal"?' selected':'')+'>Normal</option><option value="large"'+(selected==="large"?' selected':'')+'>Large</option><option value="larger"'+(selected==="larger"?' selected':'')+'>Larger</option></select></div></div></section>';
 }
 function weatherSettingsHTML(){
  return settingsPanel('weather')+'<div class="card settings-card"><div class="subhead">Weather</div><p class="settings-help">Tend asks your browser for your current location first. Allow location access for this site to get local weather. If location is unavailable or denied, Tend uses this fallback location instead.</p><label class="field" for="weatherFallbackLocation">Fallback location<input id="weatherFallbackLocation" type="text" autocomplete="address-level2" value="'+esc(settings().weatherFallbackLocation||"")+'" placeholder="City, state or postal code"></label><p class="settings-help">Enter a city, town, or postal code. Weather is provided by Open-Meteo; your location is used only to request the forecast.</p><div class="settings-actions"><button type="button" class="btn" data-weather-settings-save>Save weather settings</button></div></div></section>';
@@ -16,7 +17,7 @@ function weatherSettingsHTML(){
 document.addEventListener('change',function(event){
  var input=event.target.closest&&event.target.closest('[data-mobile-text-size]');
  if(!input)return;
- settings().mobileTextSize=input.value==="large"?"large":"normal";
+ settings().mobileTextSize=input.value==="large"||input.value==="larger"?input.value:"normal";
  applyMobileDashboardTextSize();save();flash('Mobile display saved');
 });
 document.addEventListener('click',function(event){

@@ -1,6 +1,7 @@
 "use strict";
 /* ============ views: dashboard, area pages, people ============ */
 var dashboardSparkCarouselIndex=0,dashboardSparkCarouselAnimating=false,dashboardSparkCarouselReady=false,dashboardSparkCarouselInitPending=false;
+var personSparkCarouselIndexes=Object.create(null),personSparkCarouselAnimating=Object.create(null);
 function dashboardInitSparkCarousel(){
  if(dashboardSparkCarouselReady||dashboardSparkCarouselInitPending)return;
  dashboardSparkCarouselInitPending=true;
@@ -22,7 +23,7 @@ function dashboardInitSparkCarousel(){
 function renderNav(){
  var an=el("areaNav");if(an)an.innerHTML=AREA_IDS.map(function(id){return '<button data-areanav="'+id+'" class="'+(navKind()==="area"&&currentArea===id?"active":"")+'"><span class="nav-ic">'+(AREA_ICONS[id]||"")+'</span><span>'+S.areas[id].name+'</span></button>';}).join("");
  var un=el("utilNav");if(un){var settingsActive=tab==="settings"||tab==="careplan"||tab==="offload";un.innerHTML='<div class="utility-primary"><button type="button" data-utilnav="today" class="utility-primary-button'+(tab==="today"&&navKind()!=="area"?" active":"")+'"><span class="utility-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg></span><span>Today</span></button>'+(typeof focusNavButtonHTML==="function"?focusNavButtonHTML():'')+'<button type="button" data-utilnav="people" class="utility-primary-button'+(tab==="people"&&navKind()!=="area"?" active":"")+'"><span class="utility-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20v-1.5a6.5 6.5 0 0 1 13 0V20zM16 5a3.5 3.5 0 0 0 0 6.8M18 14a5.5 5.5 0 0 1 3.5 5.2V20h-3"/></svg></span><span>People</span></button><button type="button" data-utilnav="settings" class="utility-primary-button'+(settingsActive&&navKind()!=="area"?" active":"")+'" aria-label="More, settings"><span class="utility-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span><span>More</span></button></div><label class="utility-search"><span class="utility-search-icon" aria-hidden="true">⌕</span><input type="search" id="tendSearch" placeholder="Search Tend..." autocomplete="off" aria-label="Search people, rhythms, prayers, and sparks" aria-controls="tendSearchResults" aria-expanded="false"><button type="button" class="utility-search-clear" data-search-clear aria-label="Clear search" hidden>×</button><div class="utility-search-results" id="tendSearchResults" role="region" aria-label="Search results" hidden></div></label>';}
- var displayToggle=document.querySelector("[data-mobile-display-toggle]"),large=settings().mobileTextSize==="large";if(displayToggle){displayToggle.setAttribute("aria-pressed",String(large));displayToggle.setAttribute("aria-label","Switch to "+(large?"Normal":"Large")+" text");displayToggle.title="Switch to "+(large?"Normal":"Large")+" text";}
+ var displayToggle=document.querySelector("[data-mobile-display-toggle]"),textSize=settings().mobileTextSize,large=textSize==="large"||textSize==="larger",nextTextSize=textSize==="normal"?"Large":textSize==="large"?"Larger":"Normal";if(displayToggle){displayToggle.setAttribute("aria-pressed",String(large));displayToggle.setAttribute("aria-label","Switch to "+nextTextSize+" text");displayToggle.title="Switch to "+nextTextSize+" text";}
 }
 function tendSearchText(value){return String(value||"").toLocaleLowerCase();}
 function tendSearchMatches(query){var q=tendSearchText(query),people=S.people||[],results={people:[],rhythms:[],prayers:[],sparks:[]};if(!q)return results;
@@ -40,9 +41,39 @@ document.addEventListener("click",function(event){
  var toggle=event.target.closest&&event.target.closest("[data-mobile-search-toggle]");
  if(toggle){var open=!document.body.classList.contains("mobile-search-open");document.body.classList.toggle("mobile-search-open",open);toggle.setAttribute("aria-expanded",String(open));if(open){var input=el("tendSearch");if(input)requestAnimationFrame(function(){input.focus();});}else{var search=el("tendSearch");if(search){search.value="";tendSearchUpdate();}toggle.focus();}return;}
  toggle=event.target.closest&&event.target.closest("[data-mobile-display-toggle]");
- if(toggle){var next=settings().mobileTextSize==="large"?"normal":"large";settings().mobileTextSize=next;document.documentElement.setAttribute("data-mobile-text-size",next);save();toggle.setAttribute("aria-pressed",String(next==="large"));toggle.setAttribute("aria-label","Switch to "+(next==="large"?"Normal":"Large")+" text");toggle.title="Switch to "+(next==="large"?"Normal":"Large")+" text";flash(next==="large"?"Large text enabled":"Normal text enabled");}
+ if(toggle){var current=settings().mobileTextSize,next=current==="normal"?"large":current==="large"?"larger":"normal",nextLabel=next==="normal"?"Normal":next==="large"?"Large":"Larger";settings().mobileTextSize=next;document.documentElement.setAttribute("data-mobile-text-size",next==="larger"?"large":next);document.documentElement.setAttribute("data-mobile-text-size-level",next);save();toggle.setAttribute("aria-pressed",String(next!=="normal"));toggle.setAttribute("aria-label","Switch to "+(next==="normal"?"Large":next==="large"?"Larger":"Normal")+" text");toggle.title="Switch to "+(next==="normal"?"Large":next==="large"?"Larger":"Normal")+" text";flash(next==="larger"?"Extra-large text enabled":nextLabel+" text enabled");}
 });
 document.addEventListener("click",function(event){
+ var personButton=event.target.closest&&event.target.closest("[data-person-spark-carousel-step]");
+ if(personButton){
+  event.stopImmediatePropagation();
+  var personId=personButton.getAttribute("data-person-spark-carousel-person"),step=Number(personButton.getAttribute("data-person-spark-carousel-step")),person=S.people.find(function(item){return item.id===personId;}),queue=personFreeMomentSparkQueue(person),currentIndex=personSparkCarouselIndexes[personId]||0,nextIndex=currentIndex+step;
+  if(!person||personSparkCarouselAnimating[personId]||!queue.length||!Number.isInteger(step)||!step||nextIndex<0||nextIndex>=queue.length)return;
+  var oldCard=Array.from(document.querySelectorAll("[data-person-free-spark-card]")).find(function(card){return card.getAttribute("data-person-free-spark-card")===personId;}),animate=!!oldCard&&!window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function slidePersonCard(card,from,to,onFinish){
+   if(!card||!animate||typeof card.animate!=="function"){onFinish();return;}
+   var finished=false,animation=card.animate([{transform:"translateX("+from+")"},{transform:"translateX("+to+")"}],{duration:460,easing:"cubic-bezier(.22,.72,.24,1)",fill:"forwards"}),
+       finish=function(){if(finished)return;finished=true;animation.onfinish=null;animation.cancel();onFinish();};
+   animation.onfinish=finish;
+   setTimeout(finish,520);
+  }
+  function showPersonSpark(){
+   personSparkCarouselIndexes[personId]=nextIndex;
+   renderPreservingScroll();
+   var newCard=Array.from(document.querySelectorAll("[data-person-free-spark-card]")).find(function(card){return card.getAttribute("data-person-free-spark-card")===personId;});
+   var buttons=Array.from(document.querySelectorAll("[data-person-spark-carousel-step]")).filter(function(button){return button.getAttribute("data-person-spark-carousel-person")===personId;}),nextButton=buttons.find(function(button){return Number(button.getAttribute("data-person-spark-carousel-step"))===step&&!button.disabled;});
+   if(!nextButton)nextButton=buttons.find(function(button){return !button.disabled;});
+   if(nextButton)nextButton.focus({preventScroll:true});
+   if(!animate||!newCard){personSparkCarouselAnimating[personId]=false;return;}
+   slidePersonCard(newCard,step>0?"100%":"-100%","0%",function(){personSparkCarouselAnimating[personId]=false;});
+  }
+  if(!animate){showPersonSpark();return;}
+  personSparkCarouselAnimating[personId]=true;
+  document.querySelectorAll("[data-person-spark-carousel-step]").forEach(function(control){if(control.getAttribute("data-person-spark-carousel-person")===personId)control.disabled=true;});
+  if(oldCard){oldCard.setAttribute("aria-hidden","true");oldCard.inert=true;}
+  slidePersonCard(oldCard,"0%",step>0?"-100%":"100%",showPersonSpark);
+  return;
+ }
  var button=event.target.closest&&event.target.closest("[data-dashboard-spark-carousel-step]");
  if(!button)return;
  event.stopImmediatePropagation();
@@ -102,7 +133,7 @@ function tendRestorePageScroll(position){requestAnimationFrame(function(){window
 function tendShowModal(dialog){if(!dialog||dialog.open)return;var snapshot=tendRenderScrollSnapshot,position=snapshot?snapshot.position:{x:window.scrollX,y:window.scrollY};if(!snapshot||snapshot.preserve)dialog.addEventListener("close",function(){tendRestorePageScroll(position);},{once:true});dialog.showModal();if(!snapshot||snapshot.preserve)tendRestorePageScroll(position);}
 function tendRenderRouteKey(){var faith=S&&S.faithConfig,group=faith&&faith.selectedGroup;return JSON.stringify([tab,currentArea,currentPerson,currentPerson&&profileTabs[currentPerson],openDetail,group,faith&&faith.prayerView,faith&&faith.practiceTabs&&faith.practiceTabs[group],typeof faithPrayerSession!=="undefined"&&faithPrayerSession?"session":null,typeof settingsTab!=="undefined"?settingsTab:null]);}
 var tendLastRenderRouteKey=null;
-function render(){var routeKey=tendRenderRouteKey(),preserve=routeKey===tendLastRenderRouteKey,scrollPosition={x:window.scrollX,y:window.scrollY},previousSnapshot=tendRenderScrollSnapshot;tendRenderScrollSnapshot={position:scrollPosition,preserve:preserve};renderNav();var v=el("view");
+function render(){var existingPersonSettingsModal=el("personSettingsModal");if(existingPersonSettingsModal&&existingPersonSettingsModal.parentElement===document.body)existingPersonSettingsModal.remove();var routeKey=tendRenderRouteKey(),preserve=routeKey===tendLastRenderRouteKey,scrollPosition={x:window.scrollX,y:window.scrollY},previousSnapshot=tendRenderScrollSnapshot;tendRenderScrollSnapshot={position:scrollPosition,preserve:preserve};renderNav();var syncFooter=el("syncDot");if(syncFooter)syncFooter.hidden=!(tab==="today"&&!currentArea);var v=el("view");
  if(navKind()==="area"&&currentArea)v.innerHTML=currentArea==="faith"&&typeof renderFaithPage==="function"?renderFaithPage():renderArea(currentArea);
  else if(tab==="today")v.innerHTML=renderToday();
  else if(tab==="people")v.innerHTML=renderPeople();
@@ -111,6 +142,7 @@ function render(){var routeKey=tendRenderRouteKey(),preserve=routeKey===tendLast
  else if(tab==="echo")v.innerHTML=renderEcho();
  else if(tab==="offload")v.innerHTML=renderOffload();
  else if(tab==="settings")v.innerHTML=renderSettings();
+ var personSettingsModal=tab==="people"&&currentPerson?v.querySelector("#personSettingsModal"):null;if(personSettingsModal){document.body.appendChild(personSettingsModal);var relationSelect=personSettingsModal.querySelector('select[data-pfield="relation"]');if(relationSelect&&typeof window.unifyRelSelect==="function")window.unifyRelSelect(relationSelect);}
  sizeProfileTabPanels(v);
  if(typeof layoutPlanPeopleBadges==="function")layoutPlanPeopleBadges(v);
  if(typeof bind==="function")bind();
@@ -312,6 +344,17 @@ function planItemMetaBar(meta){
   return '<span class="plan-item-meta-entry">'+planMetaIcon(iconKind)+'<span>'+esc(part)+'</span></span>';
  }).join("");}
  return '<div class="plan-item-meta">'+entries(frequency.concat(time),"schedule")+entries(occurred,"occurred")+'</div>';
+}
+function todayQueueMetaBar(meta){
+ var parts=String(meta||"").split(" \u00b7 ").filter(Boolean);
+ if(!parts.length)return "";
+ var isTime=function(part){var normalized=part.toLowerCase();return Object.keys(TODS||{}).some(function(key){return TODS[key]&&TODS[key].toLowerCase()===normalized;})||/^\d{1,2}(?::\d{2})?\s?(?:am|pm)$/i.test(part);};
+ var isHistory=function(part){return /last tended|last prayed|not yet tended|not yet prayed|^tended |^prayed /i.test(part);};
+ var time=parts.filter(isTime),history=parts.filter(isHistory),details=parts.filter(function(part){return !isTime(part)&&!isHistory(part)&&!/ready to tend again/i.test(part);});
+ function entry(part,kind,icon){return '<span class="plan-item-meta-entry plan-item-meta-entry--'+kind+'">'+(icon?planMetaIcon(icon):"")+'<span>'+esc(part)+'</span></span>';}
+ var frequency=details.filter(function(part){return /^(daily|weekly|monthly|quarterly|yearly|annually|every\b|once\b)/i.test(part);}),other=details.filter(function(part){return frequency.indexOf(part)===-1;});
+ if(!frequency.length&&!time.length&&!history.length&&!other.length)return "";
+ return '<div class="plan-item-meta">'+frequency.map(function(part){return entry(part,"schedule","frequency");}).join("")+time.map(function(part){return entry(part,"time","time");}).join("")+other.map(function(part){return entry(part,"detail","");}).join("")+history.map(function(part){return entry(part,"history","");}).join("")+'</div>';
 }
 function planBlockCard(b,curId,isCur,isAllDay,focusBlocks){
  isAllDay=!!isAllDay;
@@ -688,37 +731,14 @@ function profilePanelStart(key){return '<section class="card profile-tab-panel" 
 var activeProfileTab="rhythms";
 function actQueueHTML(p){
  var first=esc(p.name.split(" ")[0]);
- var doneSess=window._actDone[p.id]||[];
- /* rhythm queue: most overdue first, max 2 visible; session-tended rhythms pad the empty slots */
+ /* Show every due connection rhythm in the personal queue. */
  var allR=(p.rhythms||[]).filter(function(r){return (r.category||"connection")!=="prayer";});
  var waitR=allR.filter(function(r){return todayRhythmEligible(r);}).sort(function(a,b){return rhythmPeriod(a)-rhythmPeriod(b)||rhythmScore(a)-rhythmScore(b);});
- var visR=waitR.slice(0,2);
- var padR=[];
- /* spark queue: max 2 visible */
- var allS=sortedPersonSparks(p);
- var waitS=allS.filter(function(s){return (!s.by||sparkLive(s))&&doneSess.indexOf(s.id)<0;});
- var visS=waitS.slice(0,1);
- var padS=[];
- if(visS.length<2)doneSess.slice().reverse().forEach(function(id){if(padS.length<2-visS.length){var ss2=allS.find(function(s){return s.id===id;});if(ss2)padS.push(ss2);}});
- /* prayer queue: active prayers first, then the static prayer focus; one visible */
- var allP=personPrayerRecords(p).filter(function(x){return !x.answered&&!x.archived;});
- var waitP=allP.filter(function(x){return prayerIsDue(x);}).sort(function(a,b){return (a.lastPrayed||"").localeCompare(b.lastPrayed||"")||(a.added||"").localeCompare(b.added||"");});
- var visP=waitP.slice(0,2);
- var hasFocus=p.prayerFocus&&p.prayerFocus.trim();
- var focusEligible=hasFocus&&!allP.length&&doneSess.indexOf("focus")<0&&!S.events.some(function(e){return e.personId===p.id&&e.title==="Prayer focus"&&daysSince(e.ts)===0;});
- var focusOpen=focusEligible;
- if(!visP.length&&focusOpen)visP=[{id:"focus",focus:true,text:p.prayerFocus}];
- var padP=[];
- var waiting=waitR.length+waitS.length+waitP.length+(visP.some(function(x){return x.focus;})?1:0);
+ var visR=waitR;
+ var waiting=waitR.length;
  var dayOrder=dayBlocks().map(function(block){return block.id;}),rows=[],rowOrder=0;
  function queueFrequency(item,type){
   if(type==="rhythm")return rhythmPeriod(item);
-  if(type==="prayer"){
-   if(item.focus)return Infinity;
-   var frequency=prayerFreq(item);
-   if(frequency==="selectdays")return 7/Math.max(1,(item.weekdays||[]).length);
-   return {daily:1,weekly:7,monthly:30}[frequency]||Infinity;
-  }
   return Infinity;
  }
  function queueRow(html,item,type){
@@ -726,22 +746,21 @@ function actQueueHTML(p){
   rows.push({html:html,frequency:queueFrequency(item,type),time:time<0?dayOrder.length:time,order:rowOrder++});
  }
  function rhyRowQ(r,dim){
-  var sub=tendRhythmMetaLabel(r,null,true),metaMarkup=planItemMetaBar(sub);
+  var sub=tendRhythmMetaLabel(r,null,true);
   var badges=tendQueuePeopleAndCategoryBadges(r,p.id,p.id,"rhythm");
-  return '<div class="actrow'+(dim?" done":"")+'"><div class="pi-main">'+tendRowContent(r.text||"(unnamed rhythm)",String(r.description||"").trim(),sub,"",badges,"",true)+'</div>'+(dim?'<span class="praycount tend-type-metric">Tended \u2713</span>':rhyDoneBtn(p.id+"|"+r.id))+metaMarkup+'</div>';
+  return '<div class="actrow'+(dim?" done":"")+'"><div class="pi-main">'+tendRowContent(r.text||"(unnamed rhythm)",String(r.description||"").trim(),sub,"",badges,"",true)+'</div>'+(dim?'<span class="praycount tend-type-metric">Tended \u2713</span>':rhyDoneBtn(p.id+"|"+r.id))+todayQueueMetaBar(sub)+'</div>';
  }
  visR.forEach(function(r){queueRow(rhyRowQ(r,false),r,"rhythm");});
- padR.forEach(function(r){queueRow(rhyRowQ(r,true),r,"rhythm");});
- visS.forEach(function(s){var ownerId=s.profileOwnerId||p.id,meta=(s.time?fmtHM12(s.time)+" \u00b7 ":"")+sparkDueTxt(s),badges=tendQueuePeopleAndCategoryBadges(s,ownerId,p.id,"spark");queueRow('<div class="actrow"><div class="pi-main">'+tendRowContent(s.text,s.details||"",meta,"",badges,"",true)+'</div><button class="btn mini sparkbtn" data-sparkdo="'+ownerId+'|'+s.id+'|'+p.id+'">Do it</button>'+planItemMetaBar(meta)+'</div>',s,"spark");});
- padS.forEach(function(s){var ownerId=s.profileOwnerId||p.id,meta=sparkDueTxt(s),badges=tendQueuePeopleAndCategoryBadges(s,ownerId,p.id,"spark");queueRow('<div class="actrow done"><div class="pi-main">'+tendRowContent(s.text,s.details||"",meta,"",badges,"",true)+'</div><span class="praycount tend-type-metric">Done \u2713</span>'+planItemMetaBar(meta)+'</div>',s,"spark");});
- visP.forEach(function(x){var meta=x.focus?"Prayer focus":prayerScheduleLabel(x)+" \u00b7 Last prayed "+prayerLastPrayedLabel(x),badges=x.focus?"":tendQueuePeopleAndCategoryBadges(x,x.personId||"global",p.id,"prayer");queueRow('<div class="actrow"><div class="pi-main">'+tendRowContent(x.focus?'Prayer focus: '+x.text:x.text,x.details||"",meta,"",badges,"",true)+'</div><button class="btn mini ghost" data-prayquick="'+p.id+'" data-prayref="'+(x.focus?"focus":x.id)+'">Pray</button>'+planItemMetaBar(meta)+'</div>',x,"prayer");});
- padP.forEach(function(x){var badges=x.focus?"":tendQueuePeopleAndCategoryBadges(x,x.personId||"global",p.id,"prayer");queueRow('<div class="actrow done"><div class="pi-main">'+tendRowContent(x.focus?'Prayer focus: '+x.text:x.text,"","Prayed today","",badges,"",true)+'</div><span class="praycount tend-type-metric">Prayed \u2713</span>'+planItemMetaBar("Prayed today")+'</div>',x,"prayer");});
  var emptyMessage="Nothing waiting - these next steps are all tended.";
  var out='<div class="sectiontitle today-with-person-heading"><h2>Today with '+first+'</h2><span class="qpill'+(waiting?"":" clear")+'">'+(waiting?waiting+" in queue":"all tended \u2713")+'</span></div><div class="card act today-with-person" style="margin-bottom:14px">';
  rows.sort(function(a,b){return a.frequency<b.frequency?-1:a.frequency>b.frequency?1:a.time-b.time||a.order-b.order;});
  if(rows.length)out+=rows.map(function(row){return row.html;}).join("");
  else out+='<div class="empty" style="margin-top:8px">'+emptyMessage+'</div>';
  out+='</div>';
+ out+='<div class="sectiontitle today-with-person-heading"><h2>Pray for '+first+'</h2></div>';
+ if(typeof window.personFocusedPrayerHTML==="function")out+=window.personFocusedPrayerHTML(p);
+ if(typeof faithPrayerSession!=="undefined"&&faithPrayerSession&&faithPrayerSession.source==="person"&&faithPrayerSession.personId===p.id)out+=faithPrayerSessionHTML();
+ out+=personFreeMomentHTML(p);
  /* one coaching nudge, at the bottom of the queue */
  var llq=p.loveLanguage||"",bdq=bdayInfo(p.birthday),nudq=[];
  if(bdq&&bdq.days<=14)nudq.push('<b>Birthday '+esc(bdq.label)+' is in '+bdq.days+' day'+(bdq.days===1?"":"s")+' - plan something.</b>');
@@ -758,7 +777,6 @@ function personProfile(pid){
  var pScore=prs.length?avg(prs.map(rhythmScore)):prayerScoreFromDays(pInfo.days),pCls=scoreClass(pScore);
  var evs=S.events.filter(function(e){return eventHasPerson(e,pid);}).sort(function(a,b){return b.ts-a.ts;});
  var prayers=S.prayers.filter(function(x){return x.personId===pid||(Array.isArray(x.sharedWith)&&x.sharedWith.indexOf(pid)!==-1);}).map(function(item){return Object.assign({},item,{profileOwnerId:item.personId,profileViewingId:pid});});
- var kds=S.keyDates.filter(function(k){return k.personId===pid;});
  var ll=p.loveLanguage||"";
  var first=esc(p.name.split(" ")[0]);
  var bd=bdayInfo(p.birthday);
@@ -766,7 +784,7 @@ function personProfile(pid){
  var header='<div class="person-profile-head person-profile-header"><div class="person-identity">'+personAvatar(p,52)+'<div><h3>'+esc(p.name)+'</h3><div class="rel">'+esc(p.relation||"")+'</div></div></div><div class="profile-head-actions"><button class="pbtn" data-psettings="1" title="Person settings">\u2699</button><button class="pbtn" data-closeperson="1" title="Close">\u2715</button></div></div>';
  var out='<div class="card detail open person-profile" id="personPanel">';
  out+='<div class="person-health-heading dashboard-overall-heading"><h3>Overall health</h3><span class="ov-score '+c+'">'+sc+'</span></div>'+personHealthMeter(sc,p.name)+'<div class="meta person-profile-health-status"><span class="statusword '+c+'">'+scoreLabel(sc)+'</span></div><div class="chips">';
- out+=ll?'<span class="chip">\u2665 '+esc(LL_LANGUAGES[ll])+'</span>':'<span class="chip info">no love language set</span>';
+ out+=ll?'<span class="chip info">'+(typeof window.llIconHTML==="function"?window.llIconHTML(p):"")+esc(LL_LANGUAGES[ll])+'</span>':'<span class="chip info">no love language set</span>';
  out+=bd?'<span class="chip'+(bd.days<=14?" warn":" info")+'">\uD83C\uDF82 Birthday: '+esc(bd.label)+'</span>':'<span class="chip info">no birthday set</span>';
  if(p.anniversary){var an2=annivInfo(p.anniversary);if(an2)out+='<span class="chip info">\u2665 Anniversary: '+esc(an2.label)+'</span>';}
  out+='</div>';
@@ -855,21 +873,21 @@ function personProfile(pid){
  out+='</section>';
  /* person settings: gear in the header opens this modal */
  var relIn=REL_OPTIONS.indexOf(p.relation);
- var m='<div class="modal'+(window._psModalOpen?" open":"")+'" id="personSettingsModal"><div class="box person-settings-box"><div class="settings-head"><h3>Person settings - '+esc(p.name)+'</h3><button class="iconbtn" data-psettingsclose="1" title="Done">\u2715</button></div>';
- m+='<div class="field"><label>Relationship</label><select data-pfield="relation" data-pid="'+pid+'"><option value="">- not set -</option>';
+ var m='<div class="modal'+(window._psModalOpen?" open":"")+'" id="personSettingsModal"><div class="box person-settings-box" role="dialog" aria-modal="true" aria-labelledby="personSettingsTitle"><div class="settings-head"><h3 id="personSettingsTitle">Person settings - '+esc(p.name)+'</h3><button type="button" class="iconbtn" data-psettingsclose="1" title="Done" aria-label="Close person settings">\u2715</button></div><div class="person-settings-content">';
+ m+='<section class="person-settings-section"><h4 class="settings-section-title">Person</h4>';
+ m+='<div class="field person-photo-field"><label>Photo</label><div class="person-photo-controls">'+personAvatar(p,56)+'<input type="file" accept="image/*" data-pphoto="'+pid+'" aria-label="Upload photo for '+esc(p.name)+'">'+(p.photo?'<button type="button" class="btn mini danger" data-pphorm="'+pid+'">Remove photo</button>':'')+'</div><div class="hint person-photo-help">Crops to a circle for their card.</div></div>';
+ m+='<div class="field"><label for="personRelation-'+esc(pid)+'">Relationship</label><select id="personRelation-'+esc(pid)+'" data-pfield="relation" data-pid="'+pid+'"><option value="">- not set -</option>';
  if(p.relation&&relIn<0)m+='<option value="'+esc(p.relation)+'" selected>'+esc(p.relation)+' (custom)</option>';
  m+=REL_OPTIONS.map(function(o){return '<option value="'+o+'"'+(relIn>=0&&REL_OPTIONS[relIn]===o?" selected":"")+'>'+o+'</option>';}).join("");
  m+='<option value="__custom"'+(p.relation&&relIn<0?" selected":"")+'>Custom...</option></select>';
- if(p.relation&&relIn<0)m+='<div class="addrow"><input data-pfield="relation" data-pid="'+pid+'" value="'+esc(p.relation)+'" placeholder="Type the custom relationship"></div>';
+ if(p.relation&&relIn<0)m+='<div class="addrow"><input id="personCustomRelation-'+esc(pid)+'" aria-label="Custom relationship" data-pfield="relation" data-pid="'+pid+'" value="'+esc(p.relation)+'" placeholder="Type the custom relationship"></div>';
  m+='</div>';
- m+='<div class="grid2"><div class="field"><label>Birthday</label><input type="date" data-pfield="birthday" data-pid="'+pid+'" value="'+esc(p.birthday||"")+'"></div><div class="field"><label>Anniversary</label><input type="date" data-pfield="anniversary" data-pid="'+pid+'" value="'+esc(p.anniversary||"")+'"></div></div>';
- m+='<div class="subhead" style="margin-top:6px">Key dates</div>';
- if(kds.length){kds.forEach(function(k){m+='<div class="logline"><span class="kind">'+esc(k.label)+'</span><span class="txt">'+(daysUntil(k)===0?"today":"in "+daysUntil(k)+" days")+'</span><span class="entry-actions"><button class="iconbtn" data-kddel="'+k.id+'" title="delete">\uD83D\uDDD1</button></span></div>';});}else m+='<div class="empty">None yet.</div>';
- m+='<button type="button" class="btn mini ghost" data-personkeydateopen="'+pid+'">+ Add key date</button>';
- if(personKeyDateDraftFor===pid)out+='<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="person-key-date-title"><div class="profile-editor-body"><h3 id="person-key-date-title">Add Key Date</h3><label class="profile-note-type">Name<input placeholder="Birthday, anniversary, or milestone" data-kdlabel="'+pid+'"></label><div class="profile-editor-actions"><button class="btn mini" data-kdadd="'+pid+'">Save Key Date</button><button type="button" class="btn mini ghost" data-personkeydatecancel data-editor-cancel>Cancel</button></div></div></dialog>';
- m+='<div class="field connection-cadence-field" style="margin-top:14px"><label for="personConnectionCadence">Connection cadence</label><select id="personConnectionCadence" aria-describedby="connectionCadenceHelp" data-pfield="connectCadence" data-pid="'+pid+'">'+[["daily","Daily"],["twicewk","Twice weekly"],["weekly","Weekly"],["biweekly","Every 2 weeks"],["monthly","Monthly"]].map(function(o){return '<option value="'+o[0]+'"'+((p.connectCadence||"weekly")===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("")+'</select><p id="connectionCadenceHelp" class="settings-help">The Connection meter stays at 100% until this cadence is due, then loses 10 points per day without a new interaction. Tend a rhythm, complete a spark, or log a connection to reset it.</p></div>';
- m+='<div class="field"><label>Love language</label><select data-pfield="loveLanguage" data-pid="'+pid+'"><option value="">- not set -</option>'+Object.keys(LL_LANGUAGES).map(function(k){return '<option value="'+k+'"'+(ll===k?" selected":"")+'>'+LL_LANGUAGES[k]+'</option>';}).join("")+'</select></div>';
- m+='<div class="field"><label>Photo</label><div class="person-photo-controls">'+personAvatar(p,56)+'<input type="file" accept="image/*" data-pphoto="'+pid+'">'+(p.photo?'<button class="btn mini danger" data-pphorm="'+pid+'">Remove</button>':'')+'</div><div class="hint" style="font-size:11px;color:var(--ink-faint)">Crops to a circle for their card.</div></div>';
+ m+='<div class="grid2 settings-grid-two"><div class="field"><label for="personBirthday-'+esc(pid)+'">Birthday</label><input id="personBirthday-'+esc(pid)+'" type="date" data-pfield="birthday" data-pid="'+pid+'" value="'+esc(p.birthday||"")+'"></div><div class="field"><label for="personAnniversary-'+esc(pid)+'">Anniversary</label><input id="personAnniversary-'+esc(pid)+'" type="date" data-pfield="anniversary" data-pid="'+pid+'" value="'+esc(p.anniversary||"")+'"></div></div>';
+ m+='</section>';
+ m+='<section class="person-settings-section"><h4 class="settings-section-title">Connection</h4><div class="settings-connection-grid">';
+ m+='<div class="field connection-cadence-field"><div class="person-settings-label-row"><label for="personConnectionCadence">Connection cadence</label><span class="settings-tooltip-wrap"><button type="button" class="settings-tooltip-trigger" aria-label="About connection cadence" aria-describedby="connectionCadenceHelp"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8"/><path d="M7.9 7.5a2.2 2.2 0 1 1 3.8 1.5c-1 .9-1.7 1.1-1.7 2.5 M10 14.3v.1"/></svg></button><span class="settings-tooltip" id="connectionCadenceHelp" role="tooltip">The Connection meter stays at 100% until this cadence is due, then loses 10 points per day without a new interaction. Tend a rhythm, complete a spark, or log a connection to reset it.</span></span></div><select id="personConnectionCadence" data-pfield="connectCadence" data-pid="'+pid+'">'+[["daily","Daily"],["twicewk","Twice weekly"],["weekly","Weekly"],["biweekly","Every 2 weeks"],["monthly","Monthly"]].map(function(o){return '<option value="'+o[0]+'"'+((p.connectCadence||"weekly")===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("")+'</select></div>';
+ m+='<div class="field"><div class="person-settings-label-row"><label for="personLoveLanguage-'+esc(pid)+'">Love language</label><a class="ll-quiz" href="https://5lovelanguages.com/quizzes/love-language" target="_blank" rel="noopener" aria-label="Take the Love Language quiz (opens in a new tab)" title="Take the Love Language quiz"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3.5h10a1.5 1.5 0 0 1 1.5 1.5v12H3.5V5A1.5 1.5 0 0 1 5 3.5Z M7 7h6 M7 10h6 M7 13h3 M6 2v3 M14 2v3"/></svg></a></div><select id="personLoveLanguage-'+esc(pid)+'" data-pfield="loveLanguage" data-pid="'+pid+'"><option value="">- not set -</option>'+Object.keys(LL_LANGUAGES).map(function(k){return '<option value="'+k+'"'+(ll===k?" selected":"")+'>'+LL_LANGUAGES[k]+'</option>';}).join("")+'</select></div>';
+ m+='</div></section>';
  m+='</div></div>';
  out+=m;
  return '<div class="person-profile-page">'+header+out+'</div>';}
@@ -950,6 +968,20 @@ function dashboardFreeMomentSparkQueue(){
  S.people.forEach(function(person){sortedPersonSparks(person).forEach(function(spark){if(!sparkLive(spark))return;var key=(spark.profileOwnerId||person.id)+"|"+spark.id;if(seen[key])return;seen[key]=true;sparks.push({spark:key+"|"+person.id,personId:person.id,label:spark.text,description:spark.details||"",deadline:dashboardSparkDeadlineLabel(spark)});});});
  return sparks;
 }
+function personFreeMomentSparkQueue(person){
+ var seen=Object.create(null);
+ return sortedPersonSparks(person).filter(function(spark){var key=(spark.profileOwnerId||person.id)+"|"+spark.id;if(!sparkLive(spark)||seen[key])return false;seen[key]=true;return true;}).map(function(spark){return {spark:(spark.profileOwnerId||person.id)+"|"+spark.id+"|"+person.id,personId:person.id,label:spark.text,description:spark.details||"",deadline:dashboardSparkDeadlineLabel(spark)};});
+}
+function personFreeMomentHTML(person){
+ var sparkQueue=personFreeMomentSparkQueue(person),personId=person.id;
+ if(!sparkQueue.length){personSparkCarouselIndexes[personId]=0;personSparkCarouselAnimating[personId]=false;return "";}
+ var index=Math.max(0,Math.min(sparkQueue.length-1,personSparkCarouselIndexes[personId]||0));
+ personSparkCarouselIndexes[personId]=index;
+ var current=sparkQueue[index],
+     action='<button type="button" class="btn mini sparkbtn" data-sparkdo="'+esc(current.spark)+'">Do it</button>',
+     footer='<div class="plan-item-footer dashboard-spark-footer person-spark-footer"><span>'+(index+1)+' of '+sparkQueue.length+'</span><span class="dashboard-spark-deadline">'+esc(current.deadline)+'</span></div>';
+ return '<div class="sectiontitle dashboard-free-moment-heading person-free-moment-heading"><h2>Free moment?</h2></div><div class="dashboard-free-moment dashboard-free-moment-carousel person-free-moment"><div class="dashboard-free-moment-stage"><div class="planitem dashboard-free-moment-card person-free-moment-card" data-person-free-spark-card="'+esc(personId)+'"><div class="pi-main">'+planItemCopy(current,action)+'</div>'+planItemTopRow(current)+footer+'</div></div><nav class="dashboard-free-moment-controls" aria-label="'+esc(person.name)+' Spark carousel"><button type="button" class="dashboard-free-moment-arrow" data-person-spark-carousel-person="'+esc(personId)+'" data-person-spark-carousel-step="-1" aria-label="Previous Spark"'+(index===0?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6 9 12 15 18"/></svg></button><button type="button" class="dashboard-free-moment-arrow" data-person-spark-carousel-person="'+esc(personId)+'" data-person-spark-carousel-step="1" aria-label="Next Spark"'+(index===sparkQueue.length-1?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6 15 12 9 18"/></svg></button></nav></div>';
+}
 function freeMomentHTML(){
  var sparkQueue=dashboardFreeMomentSparkQueue();
  if(!sparkQueue.length){dashboardSparkCarouselIndex=0;dashboardSparkCarouselAnimating=false;return "";}
@@ -996,7 +1028,7 @@ var REL_OPTIONS=["Spouse","Son","Daughter","Bonus son","Bonus daughter","Son-in-
 var LL_NUDGES={qt:"time together - a walk, an errand, a shared meal - speaks louder than a text.",wa:"a specific, spoken affirmation lands deeper than any gift. Send the text. Make the call.",as:"doing a chore or errand for them preaches louder than words.",gf:"small, thoughtful gifts say 'I was thinking of you' - keep a running list.",pt:"presence in person - a hug, a hand on the shoulder - matters most."};
 function bdayInfo(b){if(!b)return null;var parts=String(b).split("-");if(parts.length<3)return null;var m=+parts[1],d=+parts[2];if(!m||!d)return null;var t=new Date();var today=new Date(t.getFullYear(),t.getMonth(),t.getDate());var next=new Date(t.getFullYear(),m-1,d);if(next<today)next=new Date(t.getFullYear()+1,m-1,d);var du=Math.round((next-today)/86400000);var mos=["January","February","March","April","May","June","July","August","September","October","November","December"];return {label:mos[m-1]+" "+d,days:du};}
 var editingConn=null,editingFollowupId=null;
-var editSparkId=null,sparkEditOwnerId=null,sparkEditDraft=null,sparkDraftOpenFor=null,noteDraftOpenFor=null,personKeyDateDraftFor=null;
+var editSparkId=null,sparkEditOwnerId=null,sparkEditDraft=null,sparkDraftOpenFor=null,noteDraftOpenFor=null;
 var editRhythmId=null, rhythmEditDraft=null;
 var rhythmDraft=null;
 var tab="today",openDetail=null,currentArea=null,currentPerson=null,profileBadgePerson=null,rhythmPickerDraft=null;

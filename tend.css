@@ -26,6 +26,7 @@ input,textarea,select{font-family:var(--sans);font-size:16px;color:var(--ink)}
 .syncdot.on i{background:var(--mint)}
 .syncdot.err i{background:var(--ink-soft)}
 .sync-footer{justify-content:flex-end;margin-top:14px;padding:10px 4px 0;border-top:1px solid var(--line)}
+.syncdot[hidden]{display:none!important}
 nav.tabs{display:flex;gap:4px;margin:16px 0 22px;background:var(--mist);padding:4px;border-radius:12px;width:fit-content;max-width:100%}
 nav.tabs button{border:none;background:transparent;padding:11px 16px;border-radius:12px;font-size:14.5px;font-weight:600;color:var(--ink-soft);transition:all .15s;white-space:nowrap}
 nav.tabs button.active{background:var(--card);color:var(--forest);box-shadow:0 1px 3px rgba(32,39,35,.1)}
@@ -584,6 +585,7 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .pbtn{width:36px;height:36px;border:1px solid var(--line);border-radius:10px;background:#fff;display:grid;place-items:center;font-size:15px;color:var(--ink-soft);transition:all .15s;padding:0}
 .pbtn:hover{border-color:var(--mint);color:var(--ink)}
 .card.act{border:1.5px solid var(--mint);box-shadow:0 0 0 3px rgba(103,197,163,.18)}
+.card.act.today-with-person{border:1px solid var(--line);box-shadow:none;padding:18px 20px}
 .qhead{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;margin-bottom:6px}
 .qpill{font-size:10.5px;font-weight:700;color:#8A6D1F;background:#F7EED3;border-radius:99px;padding:2px 9px;letter-spacing:.03em;white-space:nowrap}
 .qpill.clear{background:var(--mist);color:var(--forest-deep)}
@@ -602,17 +604,44 @@ details.moor summary .moor-cnt{margin-left:auto;font-size:11px;color:var(--ink-f
 details.moor summary .chev{color:var(--ink-faint);font-size:11px;transition:transform .2s}
 details.moor[open] summary .chev{transform:rotate(90deg)}
 details.moor .moor-body{padding:2px 18px 14px}
-.modal .box.person-settings-box{max-width:760px;width:100%;max-height:calc(100dvh - 40px);overflow-y:auto}
-.person-settings-box .field{min-width:0;margin-bottom:18px}
-.person-settings-box .field>label{display:block;margin-bottom:7px}
-.person-settings-box .field>input,.person-settings-box .field>select{width:100%;min-width:0}
-.person-photo-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.modal .box.person-settings-box{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;box-sizing:border-box;flex:none;width:calc(100vw - 40px);max-width:760px;min-width:0;max-height:calc(100dvh - 40px);min-height:0;overflow:hidden;padding:24px;border:1px solid var(--line);border-radius:20px;background:#fff;color:var(--ink);box-shadow:0 16px 60px #17251e40}
+.person-settings-box .settings-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex:none;margin:0 0 16px}
+.person-settings-box .settings-head h3{min-width:0;margin:0;font-size:20px;font-weight:600;line-height:1.3;overflow-wrap:anywhere}
+.person-settings-box .settings-head .iconbtn{flex-shrink:0}
+.person-settings-content{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 2px 2px 0}
+.person-settings-section{display:grid;gap:14px;padding:0 0 20px;margin:0 0 20px;border-bottom:1px solid var(--line)}
+.person-settings-section:last-child{padding-bottom:0;margin-bottom:0;border-bottom:0}
+.person-settings-box .settings-section-title{margin:0;color:var(--ink-soft);font-family:var(--sans);font-size:13.5px;font-weight:600;line-height:1.4;letter-spacing:0}
+.person-settings-box .field{display:grid;align-content:start;gap:6px;min-width:0;margin:0}
+.person-settings-box .field>label{display:block;margin:0;color:var(--ink-soft);font-family:var(--sans);font-size:13px;font-weight:500;line-height:1.4}
+.person-settings-box .person-settings-label-row{display:flex;align-items:center;gap:6px;min-width:0;min-height:18px}
+.person-settings-box .person-settings-label-row>label{margin:0;color:var(--ink-soft);font-family:var(--sans);font-size:13px;font-weight:500;line-height:1.4}
+.person-settings-box .field>input:not([type=file]),.person-settings-box .field>select,.person-settings-box .person-photo-controls input[type=file]{width:100%;min-width:0}
+.person-settings-box input:not([type=checkbox]):not([type=radio]):not([type=file]),.person-settings-box select{box-sizing:border-box;height:44px;min-height:44px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font-family:var(--sans);font-size:13.5px;font-weight:400;line-height:1.4}
+.person-settings-box input[type=date]{min-width:0}
+.person-settings-box .grid2.settings-grid-two,.settings-connection-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.person-settings-box .person-photo-field{gap:8px}
+.person-photo-controls{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:wrap}
+.person-photo-controls>.avatar{width:56px!important;height:56px!important;flex:none}
 .person-photo-controls>input[type="file"]{flex:1 1 200px;min-width:0;max-width:100%;font-size:13px}
 .person-photo-controls>.btn{flex-shrink:0}
-.person-settings-box .settings-head h3{overflow-wrap:anywhere}
-.person-settings-box .settings-head .iconbtn{flex-shrink:0}
+.person-settings-box .person-photo-help{font-size:11px;color:var(--ink-faint)}
+.settings-tooltip-wrap{position:relative;display:inline-flex;flex:none}
+.settings-tooltip-trigger{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--ink-faint);cursor:help}
+.settings-tooltip-trigger svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.settings-tooltip-trigger:hover,.settings-tooltip-trigger:focus-visible{color:var(--forest);outline:2px solid rgba(36,107,82,.25);outline-offset:2px}
+.settings-tooltip{position:absolute;z-index:30;top:calc(100% + 8px);left:-8px;width:min(320px,calc(100vw - 64px));padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink-soft);box-shadow:0 8px 24px rgba(23,37,30,.16);font-size:12px;font-weight:400;line-height:1.5;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .12s ease}
+.settings-tooltip-wrap:hover .settings-tooltip,.settings-tooltip-wrap:focus-within .settings-tooltip{opacity:1;visibility:visible}
+.person-settings-box .ll-quiz{display:inline-flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;margin:0;border:1px solid transparent;border-radius:6px;color:var(--forest);text-decoration:none}
+.person-settings-box .ll-quiz svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.person-settings-box .ll-quiz:hover,.person-settings-box .ll-quiz:focus-visible{border-color:var(--line);background:var(--mist);outline:2px solid rgba(36,107,82,.2);outline-offset:1px}
 .settings-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .settings-head h3{font-size:18px;margin-bottom:0}
+@media(max-width:600px){
+ .modal .box.person-settings-box{width:calc(100vw - 24px);max-height:calc(100dvh - 24px);padding:18px}
+ .person-settings-section{gap:12px;padding-bottom:16px;margin-bottom:16px}
+ .person-settings-box .grid2.settings-grid-two,.settings-connection-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+}
 
 .today-ripple{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px;padding-top:0;border-top:0}
 .today-ripple>span{flex:1;min-width:160px;font-size:13px;color:var(--ink-soft)}
@@ -1214,12 +1243,13 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 @keyframes dashboard-spark-slide-to-left{from{transform:translateX(0)}to{transform:translateX(-100%)}}
 @keyframes dashboard-spark-slide-to-right{from{transform:translateX(0)}to{transform:translateX(100%)}}
 @media(prefers-reduced-motion:reduce){.home-dashboard .dashboard-free-moment-card.slide-from-right,.home-dashboard .dashboard-free-moment-card.slide-from-left,.home-dashboard .dashboard-free-moment-card.slide-to-left,.home-dashboard .dashboard-free-moment-card.slide-to-right{animation:none!important}}
-.home-dashboard .dashboard-prayer-controls{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;min-width:0}
+.home-dashboard .dashboard-prayer-controls{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;min-width:0}
 .home-dashboard .dashboard-prayer-time-toggle{justify-content:center;flex:none;min-width:112px;min-height:44px}
-.home-dashboard .dashboard-prayer-filter{z-index:12;flex:none;min-width:0;margin:0}
-.home-dashboard button.dashboard-prayer-filter{display:inline-flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px 8px;box-sizing:border-box;width:auto;max-width:100%;min-height:44px;padding:7px 12px;border:1px solid var(--line);border-radius:11px;background:var(--canvas);color:var(--ink);font:inherit;font-size:14px;font-weight:600;text-align:center;white-space:normal}
-.home-dashboard button.dashboard-prayer-filter:hover,.home-dashboard button.dashboard-prayer-filter:focus-visible{border-color:var(--forest);outline-color:var(--forest)}
-.home-dashboard .dashboard-prayer-filter .faith-prayer-filter-count{font-size:12px;line-height:1.35}
+.home-dashboard .dashboard-prayer-context{min-width:0;color:var(--ink-soft);font-size:14px;line-height:1.4}
+.tend-filter-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;flex:none;min-height:44px;padding:7px 12px;border:1px solid var(--line);border-radius:11px;background:var(--card);color:var(--ink-soft);font:inherit;font-size:14px;font-weight:600;line-height:1.2;cursor:pointer}
+.tend-filter-button svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.tend-filter-button:hover,.tend-filter-button:focus-visible{border-color:var(--forest);color:var(--forest);outline-color:var(--forest)}
+.home-dashboard .dashboard-prayer-filter{z-index:12;min-width:0;margin:0}
 .dashboard-prayer-people-dialog{width:min(520px,94vw);max-height:85vh;padding:20px}
 .dashboard-prayer-people-dialog:focus,.dashboard-prayer-people-dialog #dashboard-prayer-people-title:focus{outline:none}
 .dashboard-prayer-people-dialog .profile-editor-body{display:grid;gap:8px}
@@ -1245,6 +1275,55 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .dashboard-prayer-people-dialog .dashboard-prayer-people-actions{gap:10px}
 .home-dashboard .dashboard-focused-prayer>.faith-start-prayer{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:56px;font-size:17px}
 .home-dashboard .dashboard-focused-prayer>.faith-start-prayer .faith-prayer-session-count{min-width:28px;height:28px;font-size:14px}
+.person-profile-page .person-focused-prayer{display:grid;gap:12px;margin:0 0 14px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.06)}
+.person-profile-page>.sectiontitle{box-sizing:border-box;padding-right:12px;padding-left:12px}
+.person-focused-prayer .dashboard-prayer-controls{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;min-width:0}
+.person-focused-prayer .dashboard-prayer-context{min-width:0;color:var(--ink-soft);font-size:14px;line-height:1.4}
+.person-focused-prayer>.faith-start-prayer{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:52px}
+.person-focused-prayer>.faith-start-prayer .faith-prayer-session-count{min-width:26px;height:26px}
+.person-dashboard-prayer-dialog .current-plan-time-menu{position:relative;z-index:20;display:inline-block;min-width:0}
+.person-dashboard-prayer-dialog .current-plan-time-options{position:absolute;top:calc(100% + 7px);left:0;z-index:40;display:grid;gap:2px;box-sizing:border-box;width:min(420px,calc(100vw - 72px));max-height:min(60vh,420px);overflow:auto;padding:6px;border:1px solid var(--line);border-radius:12px;background:var(--card);box-shadow:0 8px 24px rgba(32,39,35,.16)}
+.person-dashboard-prayer-dialog .current-plan-time-option{display:grid;grid-template-columns:100px minmax(0,1fr) max-content;align-items:center;gap:6px;min-width:0;padding:10px 11px;border:0;border-radius:8px;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.person-dashboard-prayer-dialog .current-plan-time-option:hover,.person-dashboard-prayer-dialog .current-plan-time-option:focus-visible{outline:0;background:var(--mist)}
+.person-dashboard-prayer-dialog .current-plan-time-option.is-current{background:#F1F2F1}
+.person-dashboard-prayer-dialog .current-plan-time-option.is-current .current-plan-time-option-name{color:var(--forest)}
+.person-dashboard-prayer-dialog .current-plan-time-option.is-selected:not(.is-current){background:color-mix(in srgb,var(--mint) 20%,var(--card))}
+.person-dashboard-prayer-dialog .current-plan-time-option-name{font-size:14px;font-weight:650}
+.person-dashboard-prayer-dialog .current-plan-time-option-range,.person-dashboard-prayer-dialog .current-plan-time-option-count{min-width:0;color:var(--ink-soft);font-size:11px;text-align:left;white-space:nowrap}
+.person-dashboard-prayer-dialog .dashboard-prayer-time-options{left:0;width:min(420px,calc(100vw - 72px))}
+.person-focused-prayer .tend-filter-button:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+@media(max-width:600px){.person-profile-page .person-focused-prayer{gap:10px;padding:12px}.person-focused-prayer .dashboard-prayer-controls{gap:7px}.person-focused-prayer .dashboard-prayer-context{font-size:13px}.person-focused-prayer>.faith-start-prayer{min-height:48px}}
+@media(max-width:380px){.person-dashboard-prayer-dialog .current-plan-time-options,.person-dashboard-prayer-dialog .dashboard-prayer-time-options{width:calc(100vw - 48px)}.person-dashboard-prayer-dialog .current-plan-time-option{grid-template-columns:82px minmax(0,1fr) max-content;gap:4px;padding-right:7px;padding-left:7px}.person-dashboard-prayer-dialog .current-plan-time-option-name,.person-dashboard-prayer-dialog .current-plan-time-option-range,.person-dashboard-prayer-dialog .current-plan-time-option-count{font-size:10px}}
+.person-profile-page .person-free-moment{display:grid;gap:12px;margin:0 0 14px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.person-profile-page .person-free-moment-heading{align-items:flex-start;flex-direction:column;gap:6px}
+.person-profile-page .person-free-moment-heading h2{align-self:flex-start;text-align:left}
+.person-profile-page .person-free-moment .dashboard-free-moment-stage{position:relative;overflow:hidden;border-radius:14px}
+.person-profile-page .person-free-moment-card.planitem:has(.plan-item-top-meta){box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto auto;align-items:stretch;gap:12px;height:216px;min-height:0;margin:0;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)}
+.person-profile-page .person-free-moment-card>.pi-main{grid-column:1;grid-row:1;min-width:0;min-height:0}
+.person-profile-page .person-free-moment-card .plan-item-copy{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;row-gap:12px;min-width:0}
+.person-profile-page .person-free-moment-card .plan-item-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;min-width:0}
+.person-profile-page .person-free-moment-card .tend-type-title{display:block;min-width:0;margin:0;font-size:17px}
+.person-profile-page .person-free-moment-card .plan-item-description{display:flex;min-height:0;flex-direction:column;align-items:flex-start;overflow-wrap:anywhere}
+.person-profile-page .person-free-moment-card .tend-type-description,.person-profile-page .person-free-moment-card .plan-item-no-description{display:block;margin:0;padding:0;font-size:14px;line-height:1.5}
+.person-profile-page .person-free-moment-card .plan-item-action{display:flex;flex:none;justify-content:flex-end;min-width:0}
+.person-profile-page .person-free-moment-card .plan-item-action>.btn{width:auto;min-width:76px;min-height:42px;padding:7px 14px;border-radius:9px;font-size:13px;font-weight:650}
+.person-profile-page .person-free-moment-card .sparkbtn{border-color:#E8CF74;background:#FFF3C4;color:#735B16}
+.person-profile-page .person-free-moment-card .sparkbtn:hover{border-color:#DCC05B;background:#FCE9A2;color:#735B16}
+.person-profile-page .person-free-moment-card .plan-item-top-meta{grid-column:1;grid-row:2;display:flex;align-items:center;gap:8px;min-width:0}
+.person-profile-page .person-free-moment-card .plan-item-footer{grid-column:1;grid-row:3;display:flex;align-items:center;gap:8px;min-width:0}
+.person-profile-page .person-free-moment-card .person-spark-footer{justify-content:space-between;min-height:24px;color:var(--ink-muted);font-size:12px}
+.person-profile-page .person-spark-footer>span{min-width:0;overflow-wrap:anywhere}
+.person-profile-page .person-spark-footer .dashboard-spark-deadline{text-align:right}
+.person-profile-page .person-free-moment-card{will-change:transform,opacity}
+.person-profile-page .dashboard-free-moment-controls{display:flex;justify-content:center;gap:10px}
+.person-profile-page .person-free-moment .dashboard-free-moment-arrow{appearance:none;box-sizing:border-box;display:grid;flex:0 0 44px;width:44px;min-width:44px;height:44px;min-height:44px;place-items:center;overflow:visible;padding:0;border:1px solid transparent;border-radius:50%;background:transparent;color:var(--ink);font-size:0;line-height:0;cursor:pointer}
+.person-profile-page .person-free-moment .dashboard-free-moment-arrow:hover:not(:disabled){border-color:var(--forest);background:var(--mist);color:var(--forest)}
+.person-profile-page .person-free-moment .dashboard-free-moment-arrow:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+.person-profile-page .person-free-moment .dashboard-free-moment-arrow:disabled{opacity:.38;cursor:default}
+.person-profile-page .person-free-moment .dashboard-free-moment-arrow svg{display:block;flex:none;width:24px;height:24px;overflow:visible;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.person-profile-page .person-free-moment-card{transition:none}
+@media(max-width:600px){.person-profile-page .person-free-moment-card.planitem:has(.plan-item-top-meta){height:230px}.person-profile-page .person-free-moment .plan-item-action>.btn{min-height:42px;padding:7px 14px;font-size:13px!important}}
+@media(prefers-reduced-motion:reduce){.person-profile-page .person-free-moment-card{will-change:auto}}
 .home-dashboard .uprow{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 18px}
 .home-dashboard .upitem{display:flex;box-sizing:border-box;flex:0 1 340px;width:100%;max-width:340px;align-items:center;min-width:0;gap:9px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);font-size:15px}
 .home-dashboard .upmain{display:flex;flex:1;min-width:0;flex-direction:column}
@@ -1269,15 +1348,23 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .card:not(.planblock)>.planitem .tend-row-content>.tend-type-description{font-family:var(--sans);font-size:var(--tend-item-description-size);font-weight:400;line-height:1.5}
 .card:not(.planblock)>.planitem .tend-row-content>.tend-type-meta{margin-top:2px;padding-top:0;border-top:0}
 .today-with-person .tend-row-content>.tend-type-meta{margin-top:2px;padding-top:0;border-top:0}
-.today-with-person .actrow{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px}
+.today-with-person .actrow{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:7px 14px;padding:24px 0;border-bottom:1px solid var(--line)}
+.today-with-person .actrow:last-child{border-bottom:0}
 .today-with-person .actrow>.pi-main{min-width:0}
-.today-with-person .actrow>.plan-item-meta{grid-column:1/-1;box-sizing:border-box;display:flex;align-items:center;gap:8px 18px;width:100%;min-width:0;margin:2px 0 0;padding:0;border:0;color:var(--ink-faint);font-size:var(--tend-item-meta-size);line-height:1.45}
-.today-with-person .plan-item-meta-entry:last-child{margin-left:auto;text-align:right;justify-content:flex-end}
+.today-with-person .actrow>.btn{align-self:start;justify-self:end}
+.today-with-person .actrow>.plan-item-meta{grid-column:1/-1;box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;gap:2px 12px;width:100%;min-width:0;margin:2px 0 0;padding:0;border:0;color:var(--ink-faint);font-size:var(--tend-item-meta-size);line-height:1.4}
+.today-with-person .plan-item-meta-entry{gap:5px}
+.today-with-person .plan-item-meta-entry--history{flex:none}
 .today-with-person .plan-detail-icon{width:14px;height:14px}
-.today-with-person .tend-type-description.no-details{font-style:italic;color:var(--ink-faint)}
-.today-with-person .tend-row-people{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.today-with-person .tend-row-content{gap:4px}
+.today-with-person .tend-type-title{font-weight:650;line-height:1.3}
+.today-with-person .tend-type-description{font-size:calc(var(--tend-item-description-size) - 1px);line-height:1.5}
+.today-with-person .tend-type-description.no-details{font-size:calc(var(--tend-item-description-size) - 2px);font-style:italic;color:var(--ink-faint)}
+.today-with-person .tend-row-people{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;margin-top:2px}
 .today-with-person .tend-row-people .prayer-person{margin:0}
-.today-with-person .person-section-badge,.today-with-person .pill.rhy,.today-with-person .pill.spk,.today-with-person .pill.pry,.today-with-person .plan-kind-rhythm,.today-with-person .plan-kind-spark,.today-with-person .plan-kind-prayer{display:none!important}
+.today-with-person .tend-row-people .rhythm-area-badges{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.today-with-person .tend-row-people .rhythm-area-badge{flex:none}
+.today-with-person .person-section-badge,.today-with-person .pill.rhy,.today-with-person .pill.spk,.today-with-person .pill.pry,.today-with-person .plan-kind-rhythm,.today-with-person .plan-kind-spark,.today-with-person .plan-kind-prayer{display:inline-flex}
 .today-with-person .actrow>.btn{box-sizing:border-box;width:auto;min-width:76px;min-height:42px;padding:7px 14px;border-radius:9px;font-size:13px;font-weight:650}
 .today-with-person .actrow>[data-tend-open]{border-color:#B8E1CA;background:#E3F6ED;color:#1C5844}
 .today-with-person .actrow>[data-tend-open]:hover{border-color:#9BD4B4;background:#D2EEDD;color:#1C5844}
@@ -1287,6 +1374,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .today-with-person .actrow>[data-prayquick]:hover{border-color:#B4C9E8;background:#DCE8F8;color:#405D84}
 .today-with-person-heading{justify-content:space-between;align-items:center}
 .today-with-person-heading .qpill{flex:none;margin-left:auto}
+@media(max-width:520px){.today-with-person .actrow{column-gap:10px;padding:20px 0}.today-with-person .plan-item-meta-entry--history{flex-basis:100%}}
 
 /* Phone-only dashboard: use section bars and separators instead of nested cards. */
 @media(max-width:600px){
@@ -1373,12 +1461,50 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .weather-card-reading>span{font-size:8px}
 }
 @media(max-width:600px){
+ html[data-mobile-text-size-level="larger"] .home-dashboard .overall-card>.bar-ov{margin-bottom:22px}
+ html[data-mobile-text-size-level="larger"] .home-dashboard,
+ html[data-mobile-text-size-level="larger"] .person-profile{zoom:1.15}
+ html[data-mobile-text-size="large"] .grid:has(>.person-card){grid-template-columns:minmax(0,1fr);gap:16px}
+ html[data-mobile-text-size="large"] .grid:has(>.person-card)>.person-card{min-height:0;padding:18px;font-size:18px}
+ html[data-mobile-text-size="large"] .grid:has(>.person-card) .pc-identity,
+ html[data-mobile-text-size="large"] .grid:has(>.person-card) .pc-person{min-width:0}
+ html[data-mobile-text-size="large"] .grid:has(>.person-card) .pc-person h3{font-size:26px;line-height:1.2;white-space:normal;overflow-wrap:anywhere}
+ html[data-mobile-text-size="large"] .grid:has(>.person-card) .pc-person .avatar{width:56px!important;height:56px!important}
+ html[data-mobile-text-size="large"] .grid:has(>.person-card) .person-card-score{font-size:40px}
+ html[data-mobile-text-size="large"] .grid:has(>.person-card) .pc-relation,
+ html[data-mobile-text-size="large"] .grid:has(>.person-card) .pc-status{font-size:16px}
+ html[data-mobile-text-size="large"] .grid:has(>.person-card) .pc-meta,
+ html[data-mobile-text-size="large"] .grid:has(>.person-card) .person-card .meta,
+ html[data-mobile-text-size="large"] .grid:has(>.person-card) .pc-birthday-row{font-size:15px;flex-wrap:wrap;white-space:normal}
+ html[data-mobile-text-size-level="larger"] .grid:has(>.person-card)>.person-card{padding:22px;font-size:21px}
+ html[data-mobile-text-size-level="larger"] .grid:has(>.person-card) .pc-person h3{font-size:30px}
+ html[data-mobile-text-size-level="larger"] .grid:has(>.person-card) .pc-person .avatar{width:64px!important;height:64px!important}
+ html[data-mobile-text-size-level="larger"] .grid:has(>.person-card) .person-card-score{font-size:46px}
+ html[data-mobile-text-size-level="larger"] .grid:has(>.person-card) .pc-relation,
+ html[data-mobile-text-size-level="larger"] .grid:has(>.person-card) .pc-status{font-size:19px}
+ html[data-mobile-text-size-level="larger"] .grid:has(>.person-card) .pc-meta,
+ html[data-mobile-text-size-level="larger"] .grid:has(>.person-card) .person-card .meta,
+ html[data-mobile-text-size-level="larger"] .grid:has(>.person-card) .pc-birthday-row{font-size:17px}
+ html[data-mobile-text-size-level="larger"] .home-dashboard .faith-prayer-session{width:86.9vw;height:86.9vh;height:86.9dvh;max-height:none}
+ html[data-mobile-text-size-level="larger"] .faith-session-heading,
+ html[data-mobile-text-size-level="larger"] .faith-session-progress,
+ html[data-mobile-text-size-level="larger"] .faith-session-track,
+ html[data-mobile-text-size-level="larger"] .faith-session-card,
+ html[data-mobile-text-size-level="larger"] .faith-session-actions,
+ html[data-mobile-text-size-level="larger"] .faith-session-help,
+ html[data-mobile-text-size-level="larger"] .faith-session-empty{min-width:0;max-width:100%;overflow-wrap:anywhere}
+ html[data-mobile-text-size-level="larger"] .faith-session-actions{width:100%;gap:8px}
+ html[data-mobile-text-size-level="larger"] .faith-session-actions .btn{flex:0 1 110px;min-width:0;max-width:100%;white-space:normal}
+ html[data-mobile-text-size-level="larger"] .faith-session-actions .faith-session-prayed{min-width:0!important}
+ html[data-mobile-text-size-level="larger"] .faith-session-card>p{white-space:pre-wrap;overflow-wrap:anywhere}
+ html[data-mobile-text-size-level="larger"] .mobile-display-toggle[aria-pressed="true"]{border-color:var(--forest);background:#cfe5da;color:var(--forest-deep)}
  html[data-mobile-text-size="large"] .home-dashboard{font-size:19px;--tend-item-title-size:19px;--tend-item-description-size:17px;--tend-item-meta-size:14px;--tend-item-action-size:16px;--tend-section-heading-size:20px}
  html[data-mobile-text-size="large"] .today-with-person{font-size:19px;--tend-item-title-size:19px;--tend-item-description-size:17px;--tend-item-meta-size:14px;--tend-item-metric-size:15px;--tend-item-action-size:16px}
  html[data-mobile-text-size="large"] .today-with-person .tend-row-content>.tend-type-meta{font-size:14px;line-height:1.45}
  html[data-mobile-text-size="large"] .today-with-person .actrow .pi-label,
  html[data-mobile-text-size="large"] .today-with-person .tend-type-title{font-size:19px}
- html[data-mobile-text-size="large"] .today-with-person .tend-type-description{font-size:17px}
+ html[data-mobile-text-size="large"] .today-with-person .tend-type-description{font-size:16px}
+ html[data-mobile-text-size="large"] .today-with-person .tend-type-description.no-details{font-size:14px}
  html[data-mobile-text-size="large"] .today-with-person .tend-type-metric,
  html[data-mobile-text-size="large"] .today-with-person .praycount{font-size:15px}
  html[data-mobile-text-size="large"] .today-with-person .plan-item-meta{font-size:14px}
@@ -1701,8 +1827,8 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
  .home-dashboard .dashboard-free-moment-helper{flex-wrap:nowrap}
  .home-dashboard .dashboard-free-moment-card.planitem:has(.plan-item-top-meta){height:230px}
  .home-dashboard .dashboard-prayer-time-toggle{min-width:88px;min-height:44px}
- .home-dashboard button.dashboard-prayer-filter{min-height:44px;padding:7px 10px;font-size:14px}
- .home-dashboard .dashboard-prayer-filter .faith-prayer-filter-count{font-size:12px}
+ .home-dashboard .dashboard-prayer-context{font-size:13px}
+ .home-dashboard .tend-filter-button{min-height:44px;padding:7px 10px;font-size:14px}
  .dashboard-prayer-people-dialog{padding:16px}
  .dashboard-prayer-people-dialog .profile-editor-body{padding:18px}
  .home-dashboard .dashboard-focused-prayer>.faith-start-prayer{min-height:52px;font-size:15px}

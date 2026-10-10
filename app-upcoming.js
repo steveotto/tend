@@ -1,9 +1,7 @@
 "use strict";
 /* ============ key-date helpers (multi-person) ============ */
 window.kdPeopleIds=function(k){if(!k)return[];var a=Array.isArray(k.personIds)?k.personIds.filter(Boolean):[];if(k.personId&&a.indexOf(k.personId)<0)a.push(k.personId);return a;};
-window.kdPeopleChkHTML=function(k,lockedPid){return '<div class="kd-people">'+S.people.map(function(np){var on=kdPeopleIds(k).indexOf(np.id)>=0;return '<label class="kd-person"><input type="checkbox" data-kdperson="'+k.id+'|'+np.id+'"'+(on?' checked':'')+(np.id===lockedPid?' disabled':'')+'> '+esc(np.name)+'</label>';}).join('')+'</div>';};
 window.kdDateTxt=function(k){var occ=nextOccurrence(k);return MOS_SHORT[occ.getMonth()]+' '+occ.getDate()+(kdHasYear(k)?', '+occ.getFullYear():'');};
-window.kdLogLineHTML=function(k){var dd=daysUntil(k),txt=dd<0?"passed":(dd===0?"today":"in "+dd+" days");return '<div class="logline"><span class="kind">'+esc(k.label)+'</span><span class="txt">'+kdDateTxt(k)+' &middot; '+txt+'</span><span class="entry-actions"><button class="iconbtn" data-kddel="'+k.id+'" title="delete">\uD83D\uDDD1</button></span></div>';};
 (S.keyDates||[]).forEach(function(k){if(!Array.isArray(k.personIds))k.personIds=k.personId?[k.personId]:[];});
 /* ============ key dates v2: optional year + people dropdown picker ============ */
 window.kdHasYear=function(k){return !!(k&&k.year!==undefined&&k.year!==null&&k.year!==""&&!isNaN(+k.year));};
@@ -50,7 +48,7 @@ window.kdSettingsV2=function(){
    +'<span class="kd-people-cell">'+kdPillsHTML(k.id,who)+kdPickHTML(k.id,who)+'</span>'
    +'<button class="del" data-kddel="'+k.id+'" title="remove">\u00D7</button></div>';
  });
- if(!S.keyDates.length)out+='<div class="empty">No key dates yet - add one above, or from a person\'s profile.</div>';
+ if(!S.keyDates.length)out+='<div class="empty">No key dates yet - add one above.</div>';
  /* profile-derived dates (birthday / anniversary on the person record) shown read-only */
  var covered={};
  S.keyDates.forEach(function(k){kdPeopleIds(k).forEach(function(id){covered[id+"|"+k.month+"|"+k.day]=true;});});
@@ -167,7 +165,6 @@ var KD_STYLE=".kd-people{display:flex;flex-wrap:wrap;gap:4px 12px;margin:6px 0}.
  ".kd-pill-ro{opacity:.85}.kd-pill-ro:hover{border-color:var(--line)}"+
  ".kd-derived-head{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);padding:14px 0 2px}"+
  ".pm-av{display:inline-flex;align-items:center;flex:none}.pm-av .avatar{margin:0}"+
-  ".ll-quiz{font-size:12.5px;font-weight:500;color:var(--forest);margin-left:10px;text-decoration:none;border-bottom:1px dashed rgba(47,94,66,.5);white-space:nowrap}"+
  "@media (max-width:820px){.kd-grid{grid-template-columns:1fr 1fr}.kd-grid-head{display:none}.kd-date{width:auto}}";
 (function(){var s=document.createElement("style");s.textContent=KD_STYLE;document.head.appendChild(s);})();
 nextDateLine=function(pid){var kds=S.keyDates.filter(function(k){return kdPeopleIds(k).indexOf(pid)>=0&&daysUntil(k)>=0;});if(!kds.length)return "";var best=null;kds.forEach(function(k){var d=daysUntil(k);if(best===null||d<best.d)best={k:k,d:d};});if(!best)return "";return '<div class="pf-next">'+esc(best.k.label)+' \u00B7 '+(best.d===0?"TODAY":"in "+best.d+" days")+'</div>';};
@@ -179,24 +176,7 @@ nextDateLine=function(pid){var kds=S.keyDates.filter(function(k){return kdPeople
   var html;
   try{html=_pp(pid);}finally{S.keyDates=_kbd;}
   html=html.split('<small>/ 100</small>').join('');
-  html=html.replace(/(<select data-pfield="loveLanguage"[\s\S]*?<\/select>)/,'$1 <a class="ll-quiz" href="https://5lovelanguages.com/quizzes/love-language" target="_blank" rel="noopener">Take the quiz</a>');
-  var p=S.people.find(function(q){return q.id===pid;});if(!p)return html;
-  var mark='Key dates</div>';
-  var start=html.indexOf(mark);if(start<0)return html;
-  var end=html.indexOf('connection-cadence-field',start);if(end<0)return html;
-  var sec=html.slice(start,end);
-  var kds=S.keyDates.filter(function(k){return kdPeopleIds(k).indexOf(pid)>=0;});
-  var have={};
-  sec=sec.replace(/<div class="logline"><span class="kind">([\s\S]*?)<\/span><span class="txt">([\s\S]*?)<\/span><span class="entry-actions"><button class="iconbtn" data-kddel="([^"]+)" title="delete">[\s\S]*?<\/button><\/span><\/div>/g,function(all,kindTxt,txtTxt,id){have[id]=true;var k=S.keyDates.find(function(x){return x.id===id;});if(!k)return all;var rebuilt='<div class="logline"><span class="kind">'+esc(k.label)+'</span><span class="txt">'+kdDateTxt(k)+' &middot; '+txtTxt+'</span><span class="entry-actions"><button class="iconbtn" data-kddel="'+id+'" title="delete">\uD83D\uDDD1</button></span></div>';return rebuilt+(k?kdPeopleChkHTML(k,pid):"");});
-  var missing=kds.filter(function(k){return !have[k.id];});
-  if(missing.length){
-   sec=sec.replace('<div class="empty">None yet.</div>','');
-   var inject=missing.map(function(k){return kdLogLineHTML(k)+kdPeopleChkHTML(k,pid);}).join('');
-   var ar=sec.indexOf('<div class="addrow"><input placeholder="Add key date');
-   if(ar>=0)sec=sec.slice(0,ar)+inject+sec.slice(ar);else sec+=inject;
-  }
-  sec=sec.replace(/(<div class="addrow"><input placeholder="Add key date \(label\)" data-kdlabel="[^"]*"><button class="btn mini" data-kdadd="[^"]*">Add<\/button><\/div>)/,'$1<div class="kd-people">'+S.people.map(function(np){return '<label class="kd-person"><input type="checkbox" data-kdnewperson="'+pid+'|'+np.id+'"'+(np.id===pid?' checked disabled':'')+'> '+esc(np.name)+'</label>';}).join('')+'</div>');
-  return html.slice(0,start)+sec+html.slice(end);
+  return html;
  };
 })();
 document.addEventListener("click",function(e){
@@ -213,13 +193,6 @@ document.addEventListener("click",function(e){
    S.keyDates.push(nk);
    window._kdNewPeople=[];window._kdOpenPick=null;
    save();render();flash("Key date added");
-  }return;}
- if(b=t.closest("[data-kdadd]")){e.stopImmediatePropagation();e.preventDefault();
-  var pid=b.getAttribute("data-kdadd");var inp=document.querySelector('[data-kdlabel="'+pid+'"]');
-  if(inp&&inp.value.trim()){
-   var others=[];document.querySelectorAll('[data-kdnewperson^="'+pid+'|"]').forEach(function(c){if(c.checked&&!c.disabled)others.push(c.getAttribute("data-kdnewperson").split("|")[1]);});
-   S.keyDates.push({id:uid(),personId:pid,personIds:[pid].concat(others),label:inp.value.trim(),month:1,day:1});
-   personKeyDateDraftFor=null;save();render();flash("Added - set month and day in Settings, Key dates tab");
   }return;}
  if(b=t.closest("[data-kdpillx]")){e.preventDefault();var px=b.getAttribute("data-kdpillx").split("|");
   if(px[0]==="new"){window._kdNewPeople=(window._kdNewPeople||[]).filter(function(x){return x!==px[1];});syncNewPeopleCell();}
