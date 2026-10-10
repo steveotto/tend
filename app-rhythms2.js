@@ -175,6 +175,89 @@ personRhythmScheduleHTML=function(r,idf){
 };
 
 /* ---- person page rhythm rows (profile Rhythms tab) ---- */
+function rhythmCardOrdinal(value){
+ var number=+value,lastTwo=number%100,suffix=lastTwo>=11&&lastTwo<=13?"th":number%10===1?"st":number%10===2?"nd":number%10===3?"rd":"th";
+ return number+suffix;
+}
+function rhythmCardWeekdays(r){
+ var days=r.rule&&Array.isArray(r.rule.days)?r.rule.days:Array.isArray(r.weekdays)?r.weekdays:Array.isArray(r.scheduleDows)?r.scheduleDows:r.scheduleDow!==null&&r.scheduleDow!==undefined&&r.scheduleDow!==""?[r.scheduleDow]:[];
+ return days.map(Number).filter(function(value,index,all){return value>=0&&value<7&&all.indexOf(value)===index;}).sort(function(a,b){return a-b;});
+}
+function rhythmCardFrequency(r){
+ var freq=r.freq||(r.rule&&r.rule.freq),unit=freq==="custom"?(r.unit||"weeks"):freq,every=Math.max(1,+r.every||1),days=rhythmCardWeekdays(r),weekdayLabels=days.map(function(day){return DOW[day].slice(0,3);}),weekdayText=days.map(function(day){return DOW[day];}),label="Daily",narrow="Daily",full;
+ if(freq==="biweekly"){unit="weeks";every=2;}
+ if(freq==="annual")unit="yearly";
+ if(unit==="weekly"||unit==="weeks"||unit==="selectdays"){
+  if(unit==="selectdays"){label="Selected";narrow="Sel";}
+  else if(unit==="weeks"&&every===2){label="Biweekly";narrow="2 wk";}
+  else if(unit==="weeks"&&every>1){label="Every "+every+" wk";narrow=every+" wk";}
+  else {label="Weekly";narrow="Wk";}
+  if(weekdayLabels.length){label+=" · "+weekdayLabels.join(", ");narrow+=" · "+weekdayLabels.join(", ");}
+  full=unit==="selectdays"?"Selected days"+(weekdayText.length?" on "+weekdayText.join(", "):""):unit==="weeks"&&every>1?"Every "+every+" weeks"+(weekdayText.length?" on "+weekdayText.join(", "):""):"Weekly"+(weekdayText.length?" on "+weekdayText.join(", "):"");
+ }else if(unit==="days"){
+  label=every===1?"Daily":"Every "+every+" days";
+  narrow=every===1?"Daily":every+"d";
+  full=every===1?"Daily":"Every "+every+" days";
+ }else if(unit==="monthly"||unit==="months"){
+  label="Monthly";narrow="Mo";
+  if(r.monthlyMode==="onThe"){
+   label+=" · "+(R_ORDS[(+r.ord||1)-1]||"1st")+" "+DOW[+r.ordWeekday||0].slice(0,3);
+   narrow+=" · "+(+r.ord===5?"Last":rhythmCardOrdinal(r.ord||1))+" "+DOW[+r.ordWeekday||0].slice(0,3);
+   full=(unit==="months"&&every>1?"Every "+every+" months":"Monthly")+" on the "+(+r.ord===5?"last":rhythmCardOrdinal(r.ord||1))+" "+DOW[+r.ordWeekday||0];
+  }else if(r.dayOfMonth){
+   label+=" · "+rhythmCardOrdinal(r.dayOfMonth);narrow+=" · "+rhythmCardOrdinal(r.dayOfMonth);
+   full=(unit==="months"&&every>1?"Every "+every+" months":"Monthly")+" on the "+rhythmCardOrdinal(r.dayOfMonth);
+  }else full=(unit==="months"&&every>1?"Every "+every+" months":"Monthly");
+  if(unit==="months"&&every>1){label="Every "+every+" mo"+(label.indexOf(" · ")>=0?label.slice(label.indexOf(" · ")):"");narrow=every+"mo"+(narrow.indexOf(" · ")>=0?narrow.slice(narrow.indexOf(" · ")):"");}
+ }else if(unit==="quarterly"){
+  label="Quarterly";narrow="Qtr";
+  full=tendRhythmFrequencyLabel(r);
+ }else if(unit==="yearly"||unit==="years"){
+  label="Yearly";narrow="Yr";
+  if(r.monthlyMode==="onThe"){
+   var month=R_MOS[(+r.monthThe||+r.month||1)-1]||"";
+   label+=" · "+(R_ORDS[(+r.ord||1)-1]||"1st")+" "+DOW[+r.ordWeekday||0].slice(0,3)+(month?" · "+month:"");
+   narrow+=" · "+month;
+   full=(unit==="years"&&every>1?"Every "+every+" years":"Yearly")+" on the "+(+r.ord===5?"last":rhythmCardOrdinal(r.ord||1))+" "+DOW[+r.ordWeekday||0]+(month?" of "+month:"");
+  }else if(r.month){
+   label+=" · "+R_MOS[(+r.month)-1];narrow+=" · "+R_MOS[(+r.month)-1];
+   full=(unit==="years"&&every>1?"Every "+every+" years":"Yearly")+" on "+R_MOS[+r.month-1]+(r.monthDay?" "+r.monthDay:"");
+  }else full=unit==="years"&&every>1?"Every "+every+" years":"Yearly";
+  if(unit==="years"&&every>1){label="Every "+every+" yr"+(label.indexOf(" · ")>=0?label.slice(label.indexOf(" · ")):"");narrow=every+"y"+(narrow.indexOf(" · ")>=0?narrow.slice(narrow.indexOf(" · ")):"");}
+ }else if(unit==="daily"){
+  label=every===1?"Daily":"Every "+every+" days";
+  narrow=every===1?"Daily":every+"d";
+  full=every===1?"Daily":"Every "+every+" days";
+ }
+ if(!full)full=tendRhythmFrequencyLabel(r);
+ if(unit!=="quarterly"&&r.until)full+=rUntilTxt(r);
+ full=full.replace(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/g,function(month){return {Jan:"January",Feb:"February",Mar:"March",Apr:"April",May:"May",Jun:"June",Jul:"July",Aug:"August",Sep:"September",Oct:"October",Nov:"November",Dec:"December"}[month];});
+ if(rhythmEnded(r)){label+=" · ended";narrow+=" · ended";if(unit!=="quarterly")full+=" · ended";}
+ return {full:full,label:label,narrow:narrow};
+}
+window.rhythmCardFrequencyLabel=function(r){return rhythmCardFrequency(r).label;};
+function rhythmCardTime(r){
+ var key=r.tod||"anytime",full=key==="anytime"?"Anytime":TODS[key]||key,normal=full,narrow=full;
+ var standard=String(full).toLowerCase();
+ if(standard==="early morning"){full="Early morning";normal="Early AM";narrow="AM";}
+ else if(standard==="morning"){full="Morning";normal="Morning";narrow="AM";}
+ else if(standard==="afternoon"){full="Afternoon";normal="Afternoon";narrow="PM";}
+ else if(standard==="evening"){full="Evening";normal="Evening";narrow="PM";}
+ else if(standard==="night"){full="Night";normal="Night";narrow="Night";}
+ else if(full)full=full.charAt(0).toUpperCase()+full.slice(1);
+ return {full:full,label:normal,narrow:narrow};
+}
+function rhythmCardLastTended(last){
+ if(!last)return {full:"Never tended",label:"Never"};
+ var days=daysSince(last.ts),full,label;
+ if(days===0){label="Today";full="today";}
+ else if(days===1){label="Yesterday";full="yesterday";}
+ else if(days<7){label=days+"d ago";full=days+" days ago";}
+ else if(days<30){var weeks=Math.floor(days/7);label=weeks+"w ago";full=weeks+(weeks===1?" week ago":" weeks ago");}
+ else if(days<365){var months=Math.floor(days/30);label=months+"mo ago";full=months+(months===1?" month ago":" months ago");}
+ else {var years=Math.floor(days/365);label=years+"y ago";full=years+(years===1?" year ago":" years ago");}
+ return {full:full,label:label};
+}
 rhythmRow=function(p,r){
  ensureRhythm(r);
  var sc=rhythmScore(r),hasScore=Number.isFinite(sc),c=scoreClass(hasScore?sc:null),scoreText=hasScore?sc+"%":"\u2014";
@@ -192,15 +275,16 @@ rhythmRow=function(p,r){
   return out;
  }
  var categories=rhythmPeopleBadges(r,p.id)+(typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(r):"");
- var last=rhythmLast(r),schedule=tendRhythmFrequencyLabel(r),status=last?"Last tended "+when(last.ts):"Not yet tended";
- var timeLabel=r.tod&&r.tod!=="anytime"&&TODS[r.tod]?TODS[r.tod]:"";
- if(rhythmEnded(r))status+=" \u00b7 ended";
+ var last=rhythmLast(r),frequency=rhythmCardFrequency(r),time=rhythmCardTime(r),history=rhythmCardLastTended(last);
  var faithShared=r.sharedFaithRhythm===true;
  var tendAction=faithShared&&typeof faithTendAction==="function"?faithTendAction(r):rhyDoneBtn(ownerId+"|"+r.id);
  var editAction=faithShared?'<button type="button" class="btn mini ghost profile-secondary-action profile-rhythm-icon-action profile-rhythm-edit-action" data-faith-rhythm-profile-edit="'+esc(r.id)+'" aria-label="Edit '+esc(r.text)+'" title="Edit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l4.2-.8L20 7.4 16.6 4 4.8 15.8Z"/></svg></button>':'<button type="button" class="btn mini ghost profile-secondary-action profile-rhythm-icon-action profile-rhythm-edit-action" data-rhyedit="'+idf+'" aria-label="Edit '+esc(r.text)+'" title="Edit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l4.2-.8L20 7.4 16.6 4 4.8 15.8Z"/></svg></button>';
  var removeAction=faithShared?'<button type="button" class="iconbtn profile-remove-action" data-rhydel="faith|'+esc(r.id)+'" title="Remove from profile" aria-label="Remove '+esc(r.text)+' from this profile"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m3 3v7m6-7v7"/></svg></button>':"";
  var chartAction='<button type="button" class="rhythm-health profile-rhythm-health profile-rhythm-chart-action '+c+'" data-rhyhistory="'+ownerId+'|'+r.id+'" aria-label="Rhythm health '+(hasScore?sc+"%":"unknown")+'. View chart." title="View rhythm health chart"><span>'+scoreText+'</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17M8 16v-5m5 5V6m5 10V9"/></svg></button>';
- var scheduleMeta='<div class="profile-rhythm-meta"><div class="profile-rhythm-meta-schedule"><span class="plan-item-meta-entry">'+planMetaIcon("frequency")+'<span>'+esc(schedule)+'</span></span>'+(timeLabel?'<span class="plan-item-meta-entry">'+planMetaIcon("time")+'<span>'+esc(timeLabel)+'</span></span>':"")+'<div class="profile-rhythm-meta-history"><span class="plan-item-meta-entry">'+planMetaIcon("occurred")+'<span>'+esc(status)+'</span></span></div></div></div>';
+ var scheduleMeta='<div class="profile-rhythm-meta" role="group" aria-label="Rhythm schedule and history">'
+  +'<span class="profile-rhythm-meta-item profile-rhythm-meta-frequency" role="group" aria-label="Frequency: '+esc(frequency.full)+'">'+planMetaIcon("frequency")+'<span class="profile-rhythm-meta-text"><span class="profile-rhythm-meta-wide">'+esc(frequency.label)+'</span><span class="profile-rhythm-meta-narrow">'+esc(frequency.narrow)+'</span></span></span>'
+  +'<span class="profile-rhythm-meta-item profile-rhythm-meta-time" role="group" aria-label="Preferred time: '+esc(time.full)+'">'+planMetaIcon("time")+'<span class="profile-rhythm-meta-text"><span class="profile-rhythm-meta-wide">'+esc(time.label)+'</span><span class="profile-rhythm-meta-narrow">'+esc(time.narrow)+'</span></span></span>'
+  +'<span class="profile-rhythm-meta-item profile-rhythm-meta-history" role="group" aria-label="'+(last?"Last tended: "+esc(history.full):"Never tended")+'">'+planMetaIcon("occurred")+'<span class="profile-rhythm-meta-text">'+esc(history.label)+'</span></span></div>';
  return '<div class="rhyrow card profile-rhythm-row"><div class="profile-rhythm-main"><div class="profile-rhythm-top"><div class="profile-rhythm-heading"><div class="profile-rhythm-title-line"><strong class="tend-type-title">'+esc(r.text||"(unnamed rhythm)")+'</strong>'+editAction+'</div>'
   +(String(r.description||"").trim()?'<div class="tend-type-description">'+esc(String(r.description).trim())+'</div>':'<div class="tend-type-description no-details">No details...</div>')
   +'</div><div class="profile-rhythm-tend">'+tendAction+chartAction+'</div></div>'

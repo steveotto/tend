@@ -55,24 +55,32 @@ function prayerEditor(p,context){var profile=context==="profile",faith=context==
  return '<div class="prayer-editor" data-prayer-editor="'+(newPrayer?(profile?'new-person':'new-global'):'edit')+'" data-assoc-owner="'+esc(assocOwner)+'" data-assoc-id="'+esc(assocId)+'"'+(profile?' data-person-id="'+esc(p.personId)+'"':'')+(faith?' data-faith-section="'+esc(p.faithSection||'Other')+'"':'')+'>'+header+'<label class="prayer-field">Title<input data-prayer-field="title" value="'+esc(p.text||'')+'" placeholder="Prayer title"></label><label class="prayer-field">Details<textarea data-prayer-field="details" placeholder="Details (optional)">'+esc(p.details||'')+'</textarea></label>'+prayerEditorFields(p)+tendAssociationControlsHTML("prayer",assocOwner,assocId,p)+actions+'</div>';
 }
 function personPrayerAddFields(pid){var p=S.people.find(function(x){return x.id===pid;}),categories={marriage:"Marriage",parenting:"Kids",friendships:"Friends"};return prayerEditor({personId:pid,category:categories[p&&p.area]||"Family",freq:"selectdays",weekdays:[new Date().getDay()],tod:"anytime",added:todayStr()},"profile");}
-function prayerActionMenu(p,prayAttr){return '<details class="prayer-action-menu"><summary class="btn mini ghost">Prayer actions</summary><div class="prayer-action-options"><button type="button" '+prayAttr+'>Pray</button><button type="button" data-prayerans="'+esc(p.id)+'">Answered</button><button type="button" data-prayerarchive="'+esc(p.id)+'">Archive</button></div></details>';}
+function prayerActionMenu(p,prayAttr){return '<details class="prayer-action-menu"><summary class="btn mini ghost">Actions</summary><div class="prayer-action-options"><button type="button" '+prayAttr+'>Pray</button><button type="button" data-prayerans="'+esc(p.id)+'">Answered</button><button type="button" data-prayerarchive="'+esc(p.id)+'">Archived</button></div></details>';}
 function prayerItemHTML(p,profile){var faith=profile==="faith",person=S.people.find(function(x){return x.id===p.personId;}),count=p.prayed||0,closed=p.answered||p.archived,ownerId=p.profileOwnerId||p.personId||"global",viewerId=p.profileViewingId||p.personId;
  if(editingPrayerId===p.id)return '<dialog class="profile-editor-dialog prayer-edit-dialog" data-editor-modal aria-label="Edit prayer">'+prayerEditor(p,faith?'faith':profile?'profile':'global')+'</dialog>';
  var sc=prayerScore(p),scoreText=sc===null?'-':sc+'%';
  var prayAttr=profile&&!faith?'data-prayquick="'+esc(viewerId)+'" data-prayref="'+esc(p.id)+'"':'data-pray="'+esc(p.id)+'"';
  var scoreClassName=sc===null?'neutral':scoreClass(sc);
- var score='<span class="rhythm-health prayer-health tend-type-metric" title="Prayer health"><span class="sm-dot '+scoreClassName+'" aria-hidden="true"></span><span>'+scoreText+'</span></span>';
+ var historyLabel='Prayer health '+(sc===null?'unknown':sc+'%')+'. View chart.';
+ var score=profile&&!faith?'<button type="button" class="rhythm-health profile-prayer-health profile-prayer-chart-action '+scoreClassName+'" data-prayerhistory="'+esc(p.id)+'" aria-label="'+esc(historyLabel)+'" title="View prayer health chart"><span>'+scoreText+'</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5m5 5V6m5 10V9"/></svg></button>':'<span class="rhythm-health prayer-health tend-type-metric" title="Prayer health"><span class="sm-dot '+scoreClassName+'" aria-hidden="true"></span><span>'+scoreText+'</span></span>';
  var categories=tendPrayerCategoryBadges(p);
  var participantBadges=tendAssociationPeopleBadges(p,ownerId,profile?viewerId:null,"prayer");
  var badges=(!person&&p.faithOwner==="me"&&!profile?'<span class="prayer-person">'+(settings().profilePhoto?personAvatar({name:"Me",photo:settings().profilePhoto},24):"")+'Me</span>':'')+(!profile?'<span class="pill pry">'+collectionIcon("prayer")+' Prayer</span>':"")+participantBadges+categories;
  var identity=tendRowContent(p.text,p.details||"",prayerScheduleLabel(p)+' · Last prayed '+prayerLastPrayedLabel(p)+' · Prayed '+count+' '+(count===1?'time':'times')+' · Added '+prayerDate(p.added)+(p.answered?' · Answered '+prayerDate(p.answeredDate):'')+(p.archived?' · Archived '+prayerDate(p.archivedDate):''),profile?"":badges,profile?badges:"");
  var details="",meta="";
+ var editAction='<button type="button" class="iconbtn prayer-edit-trigger profile-prayer-edit" data-prayeredit="'+esc(p.id)+'" aria-label="Edit '+esc(p.text)+'" title="Edit prayer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l4.2-.8L20 7.4 16.6 4 4.8 15.8Z"/></svg></button>';
+ if(profile&&!faith){
+  identity=identity.replace('</strong>','</strong>'+editAction);
+  var prayerAction=closed?'<button type="button" class="btn mini ghost" data-prayerunans="'+esc(p.id)+'">Reopen</button>':prayerActionMenu(p,prayAttr);
+  return '<article class="prayer-item prayer-rhythm-row profile-prayer-row"><div class="prayer-content gr-main">'+identity+details+meta+'</div><div class="profile-prayer-actions">'+prayerAction+score+'</div></article>';
+ }
  var actions='<div class="prayer-row-actions">'+(closed?'<button class="btn mini ghost" data-prayerunans="'+esc(p.id)+'">Reopen</button>':prayerActionMenu(p,prayAttr))+'<button class="iconbtn rhythm-history-trigger" data-prayerhistory="'+esc(p.id)+'" aria-label="View history for '+esc(p.text)+'" title="View prayer history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button type="button" class="iconbtn prayer-edit-trigger" data-prayeredit="'+esc(p.id)+'" aria-label="Edit '+esc(p.text)+'" title="Edit prayer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l4.2-.8L20 7.4 16.6 4 4.8 15.8Z"/></svg></button></div>';
  return '<article class="prayer-item prayer-rhythm-row">'+score+'<div class="prayer-content gr-main">'+identity+details+meta+'</div>'+actions+'</article>';
 }
 window.prayerRow=function(p){return prayerItemHTML(p,false);};
 window.prayerList=function(items,profile){items=items||[];var active=items.filter(function(p){return !p.answered&&!p.archived;});
  var out=active.length?active.map(function(p){return prayerItemHTML(p,!!profile);}).join(''):'<div class="empty">No active prayer requests.</div>';
+ if(profile&&active.length)out='<div class="profile-prayer-list">'+out+'</div>';
  var answered=items.filter(function(p){return p.answered;}),archived=items.filter(function(p){return p.archived;});
  if(profile){
   var personId=items.length?(items[0].profileViewingId||items[0].personId):"";
