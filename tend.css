@@ -661,6 +661,50 @@ details.moor .moor-body{padding:2px 18px 14px}
 .profile-tabs button:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
 .tab-count{display:grid;place-items:center;flex:none;min-width:28px;height:28px;border-radius:50%;padding:0 5px;background:var(--forest);color:white;font-size:13px;font-weight:700}
 .profile-tab-panel[hidden]{display:none}
+.person-profile-page .profile-tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr));align-items:stretch;gap:8px}
+.person-profile-page .profile-tabs button,.person-profile-page .profile-tabs button[aria-selected="true"],.person-profile-page .profile-tabs button:not([aria-selected="true"]){box-sizing:border-box;display:flex;flex:initial;width:100%;min-width:0;min-height:48px;justify-content:flex-start;padding:8px 12px;border-radius:12px;transition:background .15s,border-color .15s,color .15s}
+.person-profile-page .profile-tabs button:not([aria-selected="true"]) .profile-tab-label{position:static;width:auto;height:auto;overflow:visible;clip:auto;white-space:normal}
+.person-profile-page .profile-tabs button[aria-selected="true"]{background:var(--mist);border-color:var(--forest);color:var(--forest-deep)}
+.person-profile-page .profile-tabs button .collection-icon{width:19px;height:19px}
+.person-profile-page .profile-tabs button:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+.person-profile-page .profile-tabs button .tab-count{min-width:24px;height:24px;margin-left:auto;font-size:12px}
+.profile-action-icon{display:block;flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.profile-header-log,.profile-panel-actions>.btn,.profile-view-all-sparks{display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.profile-header-log .profile-action-icon,.profile-panel-actions .profile-action-icon{width:16px;height:16px}
+.profile-head-actions{align-items:center;flex-wrap:wrap}
+.profile-panel-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px}
+.profile-panel-toolbar .profile-tab-intro{margin:0;min-width:0}
+.profile-panel-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;flex:none}
+.profile-panel-toolbar>.btn{display:inline-flex;flex:none;flex-direction:row;width:max-content}
+.profile-panel-toolbar>.btn .profile-action-icon{width:15px;height:15px}
+.profile-panel-toolbar>.btn{white-space:nowrap}
+.profile-tab-panel .profile-secondary-action{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:40px;padding:7px 12px}
+.profile-tab-panel .profile-secondary-action .profile-action-icon,.profile-tab-panel .profile-secondary-action svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.profile-tab-panel .profile-rhythm-row,.profile-tab-panel .profile-item-row{box-sizing:border-box;align-items:center;padding:15px 0;border-bottom:1px solid var(--line)}
+.profile-tab-panel .profile-rhythm-row:last-of-type,.profile-tab-panel .profile-item-row:last-of-type{border-bottom:0}
+.person-profile-page .profile-rhythm-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px}
+.profile-rhythm-content{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:start;gap:14px;min-width:0}
+.profile-rhythm-content>.gr-main{min-width:0}
+.profile-rhythm-content .rhythm-health{min-width:55px;padding-top:2px}
+.profile-rhythm-actions,.profile-item-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+.profile-rhythm-actions>.btn.mini,.profile-item-actions>.btn.mini{min-height:40px;padding:7px 11px}
+.profile-rhythm-actions>.profile-secondary-action,.profile-item-actions>.profile-secondary-action{color:var(--forest-deep)}
+.profile-item-row{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:12px}
+.profile-item-type{display:flex;align-items:flex-start;justify-content:center;padding-top:3px;color:var(--forest)}
+.profile-item-type .collection-icon{width:18px;height:18px}
+.profile-item-row>.gr-main{min-width:0}
+.profile-item-actions{grid-column:3;grid-row:1}
+.profile-tab-panel .person-note-row{grid-template-columns:minmax(0,1fr) auto;align-items:start;border-bottom:1px solid var(--line)}
+.profile-tab-panel .person-note-row:not(.is-editing)>.person-note-type-column{grid-column:1;grid-row:1}
+.profile-tab-panel .person-note-row:not(.is-editing)>.tend-row-content{grid-column:1;grid-row:2}
+.profile-tab-panel .person-note-row:not(.is-editing)>.person-note-actions{grid-column:2;grid-row:1/3;align-self:center}
+.profile-tab-panel .person-note-row:last-child{border-bottom:0}
+.profile-tab-panel .preq{border-bottom:1px solid var(--line)}
+.profile-tab-panel .preq:last-child{border-bottom:0}
+.profile-tab-panel .person-free-moment-heading{display:flex;align-items:center;justify-content:space-between;flex-direction:row;gap:12px}
+.person-profile-page .profile-view-all-sparks{min-height:38px;padding:6px 4px;border:0;background:transparent;color:var(--forest-deep);font:inherit;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap}
+.person-profile-page .profile-view-all-sparks:hover{text-decoration:underline}
+.person-profile-page .profile-view-all-sparks:focus-visible{outline:2px solid var(--forest);outline-offset:2px;border-radius:5px}
 .moment-row{display:grid;grid-template-columns:100px minmax(0,1fr) auto;align-items:start;gap:12px;padding:10px 0}
 .moment-row .moment-type{display:flex;align-items:flex-start;padding-top:1px}
 .moment-row .moment-type .pill{margin:0}
@@ -677,6 +721,30 @@ details.moor .moor-body{padding:2px 18px 14px}
  .profile-tabs button[aria-selected="true"]{padding:7px 11px}
  .profile-tabs button .collection-icon{width:22px;height:22px}
  .tab-count{min-width:26px;height:26px;font-size:12px}
+}
+@media(max-width:680px){
+ .profile-head-actions{gap:6px}
+ .profile-head-actions .profile-header-log{min-height:38px;padding:6px 10px}
+ .person-profile-page .profile-tabs{grid-template-columns:repeat(auto-fit,minmax(min(100%,132px),1fr));gap:7px}
+ .profile-panel-toolbar{align-items:flex-start;flex-direction:column}
+ .profile-panel-actions{width:100%;justify-content:flex-start}
+ .profile-panel-toolbar>.btn{align-self:flex-start}
+ .person-profile-page .profile-rhythm-row{grid-template-columns:minmax(0,1fr);gap:10px}
+ .profile-rhythm-actions{justify-content:flex-start}
+ .profile-item-row{grid-template-columns:18px minmax(0,1fr);align-items:start;gap:9px}
+ .profile-item-actions{grid-column:2;grid-row:2;justify-content:flex-start}
+ .profile-item-actions>.btn.mini{min-height:40px}
+ .profile-tab-panel .person-note-row:not(.is-editing){grid-template-columns:minmax(0,1fr) auto}
+ .profile-tab-panel .person-note-row:not(.is-editing)>.person-note-actions{grid-column:2;grid-row:1/3}
+}
+@media(max-width:420px){
+ .person-profile-header{align-items:flex-start}
+ .profile-head-actions{justify-content:flex-end}
+ .profile-head-actions .profile-header-log span{font-size:12px}
+ .profile-rhythm-content{grid-template-columns:minmax(0,1fr);gap:7px}
+ .profile-rhythm-content .rhythm-health{min-width:0}
+ .profile-rhythm-actions{gap:5px}
+ .profile-rhythm-actions>.btn.mini,.profile-item-actions>.btn.mini{padding:7px 9px}
 }
 @media(max-width:420px){
  .moment-row{grid-template-columns:78px minmax(0,1fr) auto;gap:6px}
@@ -1297,10 +1365,13 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .person-profile-page .person-free-moment{display:grid;gap:12px;margin:0 0 14px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
 .person-profile-page .person-free-moment-heading{align-items:flex-start;flex-direction:column;gap:6px}
 .person-profile-page .person-free-moment-heading h2{align-self:flex-start;text-align:left}
+.person-profile-page .person-free-moment-heading{display:flex;align-items:center;justify-content:space-between;flex-direction:row;gap:12px}
+.person-profile-page .person-free-moment-heading h2{flex:1;min-width:0;font-size:clamp(17px,4.5vw,22px)}
+.person-profile-page .person-free-moment-heading .profile-view-all-sparks{flex:none}
 .person-profile-page .person-free-moment .dashboard-free-moment-stage{position:relative;overflow:hidden;border-radius:14px}
-.person-profile-page .person-free-moment-card.planitem:has(.plan-item-top-meta){box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto auto;align-items:stretch;gap:12px;height:216px;min-height:0;margin:0;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)}
+.person-profile-page .person-free-moment-card.planitem:has(.plan-item-top-meta){box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto;align-items:stretch;gap:8px;height:auto;min-height:0;margin:0;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.07)}
 .person-profile-page .person-free-moment-card>.pi-main{grid-column:1;grid-row:1;min-width:0;min-height:0}
-.person-profile-page .person-free-moment-card .plan-item-copy{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;row-gap:12px;min-width:0}
+.person-profile-page .person-free-moment-card .plan-item-copy{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;row-gap:8px;min-width:0}
 .person-profile-page .person-free-moment-card .plan-item-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;min-width:0}
 .person-profile-page .person-free-moment-card .tend-type-title{display:block;min-width:0;margin:0;font-size:17px}
 .person-profile-page .person-free-moment-card .plan-item-description{display:flex;min-height:0;flex-direction:column;align-items:flex-start;overflow-wrap:anywhere}
@@ -1322,7 +1393,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .person-profile-page .person-free-moment .dashboard-free-moment-arrow:disabled{opacity:.38;cursor:default}
 .person-profile-page .person-free-moment .dashboard-free-moment-arrow svg{display:block;flex:none;width:24px;height:24px;overflow:visible;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .person-profile-page .person-free-moment-card{transition:none}
-@media(max-width:600px){.person-profile-page .person-free-moment-card.planitem:has(.plan-item-top-meta){height:230px}.person-profile-page .person-free-moment .plan-item-action>.btn{min-height:42px;padding:7px 14px;font-size:13px!important}}
+@media(max-width:600px){.person-profile-page .person-free-moment .plan-item-action>.btn{min-height:42px;padding:7px 14px;font-size:13px!important}}
 @media(prefers-reduced-motion:reduce){.person-profile-page .person-free-moment-card{will-change:auto}}
 .home-dashboard .uprow{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 18px}
 .home-dashboard .upitem{display:flex;box-sizing:border-box;flex:0 1 340px;width:100%;max-width:340px;align-items:center;min-width:0;gap:9px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);font-size:15px}
