@@ -144,7 +144,7 @@ function renderSettings(){
  if(settingsTab==='general'||settingsTab==='peoplecolors'||settingsTab==='goals')settingsTab='peoplemeters';
  if(settingsTab==='times'||settingsTab==='dates'||settingsTab==='holidays'||settingsTab==='calendars')settingsTab='schedule';
  var tabs=[['profile','My profile'],['display','Display'],['peoplemeters','People & meters'],['badges','Action colors'],['schedule','Time & dates'],['weather','Weather'],['focus','Focus'],['plan','Plan'],['offload','Offload'],['sync','Sync']];
- var out='<div class="sectiontitle settings-title"><h2>Settings</h2><span class="hint">Make Tend work for you</span></div>';
+ var out=tendSectionHeaderHTML({title:"Settings",subtitle:"Make Tend work for you",className:"settings-title"});
  out+='<p class="settings-intro">Choose a section below to update your preferences.</p>';
  out+='<div class="profile-tabs settings-tabs" role="tablist" aria-label="Settings">'+tabs.map(function(t){return '<button type="button" role="tab" id="settings-tab-'+t[0]+'" aria-controls="settings-panel-'+t[0]+'" aria-selected="'+(settingsTab===t[0])+'" data-settingstab="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div>';
  out+=myProfileSettingsHTML();

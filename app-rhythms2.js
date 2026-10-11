@@ -174,7 +174,7 @@ personRhythmScheduleHTML=function(r,idf){
  +'<div class="rhy-recur">'+rhythmRecurrenceHTML(r,A)+'</div>';
 };
 
-/* ---- person page rhythm rows (profile Rhythms tab) ---- */
+/* ---- shared RhythmCard metadata adapters ---- */
 function rhythmCardOrdinal(value){
  var number=+value,lastTwo=number%100,suffix=lastTwo>=11&&lastTwo<=13?"th":number%10===1?"st":number%10===2?"nd":number%10===3?"rd":"th";
  return number+suffix;
@@ -258,41 +258,32 @@ function rhythmCardLastTended(last){
  else {var years=Math.floor(days/365);label=years+"y ago";full=years+(years===1?" year ago":" years ago");}
  return {full:full,label:label};
 }
-rhythmRow=function(p,r){
+window.tendRhythmCardMetadata=function(r){
+ var last=rhythmLast(r);
+ return {frequency:rhythmCardFrequency(r),time:rhythmCardTime(r),lastTended:rhythmCardLastTended(last),frequencyIconHTML:planMetaIcon("frequency"),timeIconHTML:planMetaIcon("time"),lastIconHTML:planMetaIcon("occurred")};
+};
+window.rhythmRow=function(p,r,cardOptions){
+ cardOptions=cardOptions||{};
  ensureRhythm(r);
- var sc=rhythmScore(r),hasScore=Number.isFinite(sc),c=scoreClass(hasScore?sc:null),scoreText=hasScore?sc+"%":"\u2014";
+ var sc=rhythmScore(r),hasScore=Number.isFinite(sc);
  var ownerId=r.profileOwnerId||p.id,idf=ownerId+"|"+r.id;
  if(editRhythmId===r.id){
   if(!rhythmEditDraft||rhythmEditDraft.id!==r.id){rhythmEditDraft=JSON.parse(JSON.stringify(r));delete rhythmEditDraft.profileOwnerId;}
-  r=rhythmEditDraft;
-  var out='<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="rhythm-editor-title"><div class="profile-editor-body"><h3 id="rhythm-editor-title" tabindex="-1">Edit Rhythm</h3><div class="rhyedit">';
-  out+='<div class="addrow" style="margin-top:2px"><input data-rfield="'+idf+'|text" value="'+esc(r.text)+'" placeholder="What is the rhythm?"></div>';
-  out+='<label class="careplan-field rhythm-description-field">Description (optional)<textarea data-rfield="'+idf+'|description" placeholder="Add context or details">'+esc(r.description||'')+'</textarea></label>';
-  out+=personRhythmScheduleHTML(r,idf);
-  out+=rhythmPickerControlsHTML(ownerId,r,idf);
-  out+='<div class="profile-editor-actions rhythm-editor-actions"><div class="rhythm-editor-primary-actions"><button class="btn mini" data-rhyeditsave="'+idf+'">Save</button><button class="btn mini ghost" data-rhyeditcancel="1" data-editor-cancel>Cancel</button></div><button class="btn mini danger" data-rhydel="'+idf+'">'+(currentPerson!==ownerId?"Remove":"Delete")+'</button></div>';
-  out+='</div></div></dialog>';
-  return out;
+  return window.tendRhythmEditModalHTML(rhythmEditDraft,{mode:"profile",idf:idf,ownerId:ownerId,viewerId:p.id});
  }
- var categories=rhythmPeopleBadges(r,p.id)+(typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(r):"");
- var last=rhythmLast(r),frequency=rhythmCardFrequency(r),time=rhythmCardTime(r),history=rhythmCardLastTended(last);
+ var metadata=window.tendRhythmCardMetadata(r),people=cardOptions.peopleBadgesHTML!==undefined?cardOptions.peopleBadgesHTML:rhythmPeopleBadges(r,p.id),categories=typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(r):"",extraPeople=cardOptions.additionalPeopleBadgesHTML||"";
  var faithShared=r.sharedFaithRhythm===true;
- var tendAction=faithShared&&typeof faithTendAction==="function"?faithTendAction(r):rhyDoneBtn(ownerId+"|"+r.id);
- var editAction=faithShared?'<button type="button" class="btn mini ghost profile-secondary-action profile-rhythm-icon-action profile-rhythm-edit-action" data-faith-rhythm-profile-edit="'+esc(r.id)+'" aria-label="Edit '+esc(r.text)+'" title="Edit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l4.2-.8L20 7.4 16.6 4 4.8 15.8Z"/></svg></button>':'<button type="button" class="btn mini ghost profile-secondary-action profile-rhythm-icon-action profile-rhythm-edit-action" data-rhyedit="'+idf+'" aria-label="Edit '+esc(r.text)+'" title="Edit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l4.2-.8L20 7.4 16.6 4 4.8 15.8Z"/></svg></button>';
- var removeAction=faithShared?'<button type="button" class="iconbtn profile-remove-action" data-rhydel="faith|'+esc(r.id)+'" title="Remove from profile" aria-label="Remove '+esc(r.text)+' from this profile"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m3 3v7m6-7v7"/></svg></button>':"";
- var chartAction='<button type="button" class="rhythm-health profile-rhythm-health profile-rhythm-chart-action '+c+'" data-rhyhistory="'+ownerId+'|'+r.id+'" aria-label="Rhythm health '+(hasScore?sc+"%":"unknown")+'. View chart." title="View rhythm health chart"><span>'+scoreText+'</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17M8 16v-5m5 5V6m5 10V9"/></svg></button>';
- var scheduleMeta='<div class="profile-rhythm-meta" role="group" aria-label="Rhythm schedule and history">'
-  +'<span class="profile-rhythm-meta-item profile-rhythm-meta-frequency" role="group" aria-label="Frequency: '+esc(frequency.full)+'">'+planMetaIcon("frequency")+'<span class="profile-rhythm-meta-text"><span class="profile-rhythm-meta-wide">'+esc(frequency.label)+'</span><span class="profile-rhythm-meta-narrow">'+esc(frequency.narrow)+'</span></span></span>'
-  +'<span class="profile-rhythm-meta-item profile-rhythm-meta-time" role="group" aria-label="Preferred time: '+esc(time.full)+'">'+planMetaIcon("time")+'<span class="profile-rhythm-meta-text"><span class="profile-rhythm-meta-wide">'+esc(time.label)+'</span><span class="profile-rhythm-meta-narrow">'+esc(time.narrow)+'</span></span></span>'
-  +'<span class="profile-rhythm-meta-item profile-rhythm-meta-history" role="group" aria-label="'+(last?"Last tended: "+esc(history.full):"Never tended")+'">'+planMetaIcon("occurred")+'<span class="profile-rhythm-meta-text">'+esc(history.label)+'</span></span></div>';
- return '<div class="rhyrow card profile-rhythm-row"><div class="profile-rhythm-main"><div class="profile-rhythm-top"><div class="profile-rhythm-heading"><div class="profile-rhythm-title-line"><strong class="tend-type-title">'+esc(r.text||"(unnamed rhythm)")+'</strong>'+editAction+'</div>'
-  +(String(r.description||"").trim()?'<div class="tend-type-description">'+esc(String(r.description).trim())+'</div>':'<div class="tend-type-description no-details">No details...</div>')
-  +'</div><div class="profile-rhythm-tend">'+tendAction+chartAction+'</div></div>'
-  +(categories?'<div class="tend-row-people">'+categories+'</div>':'')+'</div>'
-  +(removeAction?'<div class="profile-rhythm-footer"><div class="profile-rhythm-actions">'+removeAction+'</div></div>':"")
-  +scheduleMeta+'</div>';
+ var tendAttributes=Object.assign(faithShared&&typeof faithTendAction==="function"?{"data-tend-open":"faith-rhythm","data-rhythm-id":r.id}:{"data-tend-open":"person-rhythm","data-person-id":ownerId,"data-rhythm-id":r.id},cardOptions.tendAttributes||{});
+ var editAttributes=Object.assign(faithShared?{"data-faith-rhythm-profile-edit":r.id}:{"data-rhyedit":idf},cardOptions.editAttributes||{});
+ return tendRhythmCardHTML(r,{title:r.text||"(unnamed rhythm)",description:r.description,score:hasScore?sc:null,scoreClass:scoreClass(hasScore?sc:null),peopleBadgesHTML:people+extraPeople,categoryBadgesHTML:categories,frequency:metadata.frequency,time:metadata.time,lastTended:metadata.lastTended,frequencyIconHTML:metadata.frequencyIconHTML,timeIconHTML:metadata.timeIconHTML,lastIconHTML:metadata.lastIconHTML,
+  tendAttributes:tendAttributes,
+  editAttributes:editAttributes,
+  historyAttributes:cardOptions.historyAttributes||{"data-rhyhistory":idf},
+  removeAttributes:faithShared?{"data-rhydel":"faith|"+r.id}:null,
+  removeLabel:"Remove "+(r.text||"rhythm")+" from this profile",removeTitle:"Remove from profile"
+ });
 };
-draftRow=function(p){
+window.draftRow=function(p){
  var r=rhythmDraft,idf=p.id+"|draft";
  if(!r.weekdays)r.weekdays=[];
  var out='<div class="rhyedit">';

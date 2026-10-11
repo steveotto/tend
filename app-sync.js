@@ -2,11 +2,11 @@
 /* ============ GitHub sync ============ */
 var SYNCcfg=(function(){try{return JSON.parse(localStorage.getItem(LS_SYNC))||{auto:true};}catch(e){return {auto:true};}})();
 window.SYNCcfg=SYNCcfg;
-var TEND_VERSION="v20261011-time-wheel-picker";window.TEND_VERSION=TEND_VERSION;
+var TEND_VERSION="v0.1.2";window.TEND_VERSION=TEND_VERSION;
 window._tendDirty=false;
 function ghHeaders(){return {"Authorization":"Bearer "+SYNCcfg.token,"Accept":"application/vnd.github+json"};}
-function updateSyncDot(){var dot=el("syncDot"),lbl=el("syncLabel");if(!SYNCcfg.token){dot.className="syncdot";lbl.textContent="local only";}else{dot.className="syncdot on";lbl.textContent="synced";}}
-function updateSyncErr(){var dot=el("syncDot");dot.className="syncdot err";el("syncLabel").textContent="sync error";}
+function updateSyncDot(){var dot=el("syncDot"),lbl=el("syncLabel");if(!SYNCcfg.token){dot.className="syncdot sync-footer";lbl.textContent="local only";}else{dot.className="syncdot sync-footer on";lbl.textContent="synced";}}
+function updateSyncErr(){var dot=el("syncDot");dot.className="syncdot sync-footer err";el("syncLabel").textContent="sync error";}
 function renderSyncPreservingScroll(){var x=window.scrollX,y=window.scrollY;render();requestAnimationFrame(function(){requestAnimationFrame(function(){window.scrollTo(x,y);});});}
 function schedulePush(){clearTimeout(pushTimer);pushTimer=setTimeout(pushNow,4000);}
 function pushPurgedGoalData(){if(!window._goalDataPurged)return;window._goalDataPurged=false;window._tendDirty=true;if(SYNCcfg.auto)schedulePush();}
@@ -63,13 +63,13 @@ setInterval(function(){var pb=document.getElementById("syncPull");if(!pb)return;
  var rb=document.getElementById("syncReloadLatest");
  if(!rb){rb=document.createElement("button");rb.id="syncReloadLatest";rb.className="btn ghost";rb.type="button";rb.title="Fetch the newest version from the server and reload this page";rb.textContent="Reload latest";pb.parentNode.insertBefore(rb,pb.nextSibling);}
  var ls=SYNCcfg.lastSync?new Date(SYNCcfg.lastSync).toLocaleTimeString():"never";
- line.innerHTML="<b style='color:var(--ink)'>Code: "+TEND_VERSION+"</b> &middot; data last synced: "+ls+(window._tendDirty?" &middot; <span style='color:#B3402E;font-weight:700'>unpushed local changes</span>":" &middot; <span style='color:var(--forest);font-weight:700'>all changes pushed</span>");
+ line.innerHTML="<b style='color:var(--ink)'>Version "+TEND_VERSION.replace(/^v/,"")+"</b> &middot; data last synced: "+ls+(window._tendDirty?" &middot; <span style='color:#B3402E;font-weight:700'>unpushed local changes</span>":" &middot; <span style='color:var(--forest);font-weight:700'>all changes pushed</span>");
 },500);
 document.addEventListener("click",function(e){var t=e.target;if(t&&t.closest&&t.closest("#syncForcePull")){forcePullNow();}});
 function forceRefreshApp(){
  var bust=Date.now();
  fetch("index.html?bust="+bust,{cache:"reload"}).then(function(r){return r.text();}).then(function(txt){
-  var m=txt.match(/app-sync\.js\?v=([0-9A-Za-z-]+)/);
+  var m=txt.match(/app-sync\.js\?v=([0-9A-Za-z.-]+)/);
   var latest=m?m[1]:"";
   var cur=TEND_VERSION.replace(/^v/,"");
   if(latest&&latest!==cur){flash("Update found ("+latest+") - reloading...");setTimeout(function(){location.replace(location.pathname+"?fresh="+bust);},700);}

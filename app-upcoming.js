@@ -136,7 +136,7 @@ function calIconHTML(date){
 }
 function upcomingHTML(){
  var rows=upcomingDates();
- return '<div class="sectiontitle"><h2>Coming up</h2><span class="hint">next 30 days</span></div><div class="uprow">'+(rows.length?rows.map(function(x){
+ return tendSectionHeaderHTML({title:"Coming up",subtitle:"next 30 days"})+'<div class="uprow">'+(rows.length?rows.map(function(x){
   var dtxt=DOW_SHORT[x.date.getDay()]+' \u00b7 '+MOS_SHORT[x.date.getMonth()]+' '+x.date.getDate();
   return '<div class="upitem"'+x.attrs+'>'+calIconHTML(x.date)+'<span class="upmain"><span class="uplabel">'+esc(x.label)+'</span><span class="update">'+dtxt+'</span></span><span class="updays '+(x.days<=7?'soon':x.days<=21?'mid':'far')+'">'+(x.days===0?'today':'in '+x.days+'d')+'</span></div>';
  }).join(''):'<div class="empty">No personal dates or selected holidays in the next 30 days.</div>')+'</div>';
@@ -302,7 +302,7 @@ function areaHistoryHTML(id){
 function renderArea(id){
  var v=areaScore(id),c=scoreClass(v);
  var kids=S.people.filter(function(p){return p.area===id;});
- var out='<div class="sectiontitle" style="margin-top:2px"><h2>'+S.areas[id].name+'</h2><span class="hint">'+scoreLabel(v)+'</span></div>';
+ var out=tendSectionHeaderHTML({title:S.areas[id].name,metadata:scoreLabel(v),style:"margin-top:2px"});
  out+='<div class="card" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:18px;font-weight:500">Health meter</h3><span class="ov-score '+c+'">'+v+'</span></div><div class="bar-ov"><i class="ov-marker" style="left:'+v+'%"></i></div><div class="meta" style="margin-top:6px"><span class="statusword '+c+'">'+scoreLabel(v)+'</span></div>';
  if(kids.length)out+='<div class="menu-grid" style="margin-top:14px">'+kids.map(function(p2){var ps=personScore(p2),pc=scoreClass(ps);return '<button class="menu-area" data-openperson="'+p2.id+'"><span class="pm-av">'+personAvatar(p2,22)+'</span><span class="ma-name">'+esc(p2.name)+'</span><span class="ma-score '+pc+'">'+ps+'</span></button>';}).join("")+'</div>';
  out+='</div>';

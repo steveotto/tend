@@ -158,15 +158,15 @@ function faithTodayHTML(){
  var rows=[];
  if(visibility.rhythm!==false)rhythms.forEach(function(r){
   var owner=S.people.find(function(person){return (person.rhythms||[]).some(function(item){return item.id===r.id;});}),block=r.tod&&r.tod!=="anytime"?dayBlocks().find(function(item){return item.id===r.tod;}):null,meta=(r.faithGroup||"Faith")+(block?" · "+block.name:"")+" · "+rhythmFreqLabel(r),badges=tendAssociationPeopleBadges(r,owner?owner.id:"faith",null,"rhythm")+planPills({faithRhythm:r.id});
-  rows.push('<article class="faith-today-row actrow"><span class="act-ic" style="background:'+personHealthColor(rhythmScore(r))+'"></span><div class="pi-main">'+tendRowContent(r.text||"Faith rhythm",String(r.description||"").trim(),meta,'<span class="plan-pills">'+badges+'</span>')+'</div>'+faithTendAction(r)+'</article>');
+  rows.push('<article class="faith-today-row actrow"><span class="act-ic" style="background:'+personHealthColor(rhythmScore(r))+'"></span><div class="pi-main">'+tendRhythmCardContentHTML(r,{title:r.text||"Faith rhythm",description:String(r.description||"").trim(),meta:meta,badges:'<span class="plan-pills">'+badges+'</span>'})+'</div>'+faithTendAction(r)+'</article>');
  });
  if(visibility.spark!==false)sparks.forEach(function(s){
   var owner=s.profileOwnerId||"faith",badges=tendAssociationPeopleBadges(s,owner,null,"spark")+tendAssociationCategoryBadges(s)+planPills({spark:"faith|"+s.id});
-  rows.push('<article class="faith-today-row actrow"><span class="act-ic" style="background:var(--forest)"></span><div class="pi-main">'+tendRowContent(s.text||"Faith Spark",s.details||"",(s.time?fmtHM12(s.time)+" · ":"")+sparkDueTxt(s),'<span class="plan-pills">'+badges+'</span>')+'</div><button type="button" class="btn mini sparkbtn" data-faith-sparkdone="'+esc(owner+"|"+s.id)+'">Complete</button></article>');
+  rows.push('<article class="faith-today-row actrow"><span class="act-ic" style="background:var(--forest)"></span><div class="pi-main">'+tendSparkCardContentHTML(s,{title:s.text||"Faith Spark",description:s.details||"",meta:(s.time?fmtHM12(s.time)+" · ":"")+sparkDueTxt(s),badges:'<span class="plan-pills">'+badges+'</span>'})+'</div><button type="button" class="btn mini sparkbtn" data-faith-sparkdone="'+esc(owner+"|"+s.id)+'">Complete</button></article>');
  });
  if(visibility.prayer!==false)prayers.forEach(function(p){
   var meta=prayerScheduleLabel(p)+" · Last prayed "+prayerLastPrayedLabel(p);
-  rows.push('<article class="faith-today-row actrow"><span class="act-ic" style="background:#5B7BA6"></span><div class="pi-main">'+tendRowContent(p.text||"Prayer",p.details||"",meta,'<span class="plan-pills">'+planPills({prayer:p.id})+'</span>')+'</div><button type="button" class="btn mini" data-pray="'+esc(p.id)+'">Pray</button></article>');
+  rows.push('<article class="faith-today-row actrow"><span class="act-ic" style="background:#5B7BA6"></span><div class="pi-main">'+tendPrayerCardContentHTML(p,{title:p.text||"Prayer",description:p.details||"",meta:meta,badges:'<span class="plan-pills">'+planPills({prayer:p.id})+'</span>'})+'</div><button type="button" class="btn mini" data-pray="'+esc(p.id)+'">Pray</button></article>');
  });
  var count=rows.length,total=rhythms.length+sparks.length+prayers.length;
  return '<div class="faith-today-controls"><span class="qpill'+(count?"":" clear")+'">'+(count?count+" for today":total?"items hidden":"nothing due today")+'</span>'+planKindTogglesHTML("faith","Faith Today item filters")+'</div>'+(count?rows.join(""):'<p class="empty">'+(total?"Items hidden by the type filters.":"Nothing due today across rhythms, sparks, and prayers.")+'</p>');
@@ -206,9 +206,12 @@ function faithRhythmEditorHTML(r){
 }
 function faithRhythmRowHTML(r){
  if(faithRhythmDraft&&faithRhythmDraft.id===r.id)return faithRhythmEditorHTML(faithRhythmDraft);
- var score=rhythmScore(r),className=faithScoreClass(score),meta=tendRhythmMetaLabel(r,null,true)+(rhythmDurLabel(r)?" · "+rhythmDurLabel(r):"");
- var categories=typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(r):"",people=typeof rhythmPeopleBadges==="function"?rhythmPeopleBadges(r,null):"",badges='<span class="pill rhy">'+collectionIcon("rhythms")+' Rhythm</span>'+people+categories;
- return '<div class="rhyrow faith-rhythm-row"><span class="rhythm-health" title="Rhythm health"><span class="sm-dot '+className+'" aria-hidden="true"></span><span>'+faithScoreText(score)+(Number.isFinite(score)?"%":"")+'</span></span><div class="gr-main">'+tendRowContent(r.text||"Untitled rhythm",r.description||"",meta,badges)+'</div>'+faithTendAction(r)+'<button type="button" class="iconbtn rhythm-history-trigger" data-faith-rhythm-history="'+esc(r.id)+'" aria-label="View history for '+esc(r.text)+'" title="History graph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button type="button" class="iconbtn" data-faith-rhythm-edit="'+esc(r.id)+'" aria-label="Edit '+esc(r.text)+'" title="Edit">✎</button></div>';
+ var score=rhythmScore(r),metadata=window.tendRhythmCardMetadata(r);
+ return tendRhythmCardHTML(r,{title:r.text||"(unnamed rhythm)",description:r.description,score:Number.isFinite(score)?score:null,scoreClass:faithScoreClass(score),
+  peopleBadgesHTML:typeof rhythmPeopleBadges==="function"?rhythmPeopleBadges(r,null):"",categoryBadgesHTML:typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(r):"",
+  frequency:metadata.frequency,time:metadata.time,lastTended:metadata.lastTended,frequencyIconHTML:metadata.frequencyIconHTML,timeIconHTML:metadata.timeIconHTML,lastIconHTML:metadata.lastIconHTML,
+  tendAttributes:{"data-tend-open":"faith-rhythm","data-rhythm-id":r.id},editAttributes:{"data-faith-rhythm-edit":r.id},historyAttributes:{"data-faith-rhythm-history":r.id}
+ });
 }
 function faithRhythmsHTML(group){
  var rhythms=faithRhythms(group),linked=typeof window.faithLinkedRhythmRows==="function"?window.faithLinkedRhythmRows(group):"",out=rhythms.map(faithRhythmRowHTML).join("")+linked;
@@ -309,20 +312,36 @@ function faithDashboardPrayerMatches(p,timeBlock,people){
 function faithDashboardPrayerSessionSort(timeBlock,people){
  return faithActivePrayers().filter(function(p){return faithDashboardPrayerMatches(p,timeBlock,people);}).sort(faithPrayerScoreOrder).map(function(p){return p.id;});
 }
+function faithPrayerTimeframePickerData(mode,people){
+ var options=planBlocksDef().map(function(item){
+  var id=item.cur?"now":item.id;
+  return {id:id,label:item.name,timeDescription:item.range,count:faithDashboardPrayerSessionSort(item.id,people).length,isCurrent:item.cur};
+ });
+ var allDayCount=faithDashboardPrayerSessionSort("all",people).length;
+ return tendPrayerTimeframePickerState(mode,options,allDayCount);
+}
 window.personFocusedPrayerHTML=function(person){
- var pid=person.id,mode=personDashboardPrayerTimeModes[pid]||"now",timeBlock=faithDashboardPrayerTimeBlock(mode),people=[pid],count=faithDashboardPrayerSessionSort(timeBlock,people).length,timeLabel=faithDashboardPrayerTimeLabel(timeBlock);
+ var pid=person.id,mode=personDashboardPrayerTimeModes[pid]||"now",people=[pid],pickerData=faithPrayerTimeframePickerData(mode,people),count=pickerData.selectedCount,timeLabel=pickerData.label;
  var dialog="";
  if(personDashboardPrayerDialogOpen===pid){
-  var timeOptions=planBlocksDef().map(function(item){
-   var value=item.cur?"now":item.id,active=mode===value,optionCount=faithDashboardPrayerSessionSort(item.id,people).length;
-   return '<button type="button" class="current-plan-time-option'+(item.cur?" is-current":"")+(active?" is-selected":"")+'" data-person-dashboard-prayer-time-option="'+esc(pid+"|"+value)+'" aria-pressed="'+active+'"><span class="current-plan-time-option-name">'+esc(item.name)+'</span><span class="current-plan-time-option-range">'+esc(item.range)+'</span><span class="current-plan-time-option-count">'+optionCount+' '+(optionCount===1?"prayer":"prayers")+'</span></button>';
+  var timeToggle=tendPrayerTimeframePickerHTML({
+   personId:pid,
+   label:pickerData.label,
+   options:pickerData.options,
+   selectedTimeframeId:pickerData.selectedTimeframeId,
+   allDayCount:pickerData.allDayCount
   });
-  var allDayCount=faithDashboardPrayerSessionSort("all",people).length;
-  timeOptions.push('<button type="button" class="current-plan-time-option'+(mode==="allday"?" is-selected":"")+'" data-person-dashboard-prayer-time-option="'+esc(pid+"|allday")+'" aria-pressed="'+(mode==="allday")+'"><span class="current-plan-time-option-name">All Day</span><span class="current-plan-time-option-range">Any time today</span><span class="current-plan-time-option-count">'+allDayCount+' '+(allDayCount===1?"prayer":"prayers")+'</span></button>');
-  var label=faithDashboardPrayerTimeName(mode),timeToggle='<div class="dashboard-prayer-time-select"><details class="dashboard-prayer-time-menu"><summary class="dashboard-prayer-time-picker" aria-label="Choose timeframe, currently '+esc(label)+'"><span>'+esc(label)+'</span><span class="dashboard-prayer-time-chevron" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4.5L12.5 6"/></svg></span></summary><div class="current-plan-time-options dashboard-prayer-time-options" role="group" aria-label="Prayer timeframes">'+timeOptions.join("")+'</div></details></div>';
-  dialog='<dialog class="profile-editor-dialog rhythm-picker-dialog dashboard-prayer-people-dialog person-dashboard-prayer-dialog" id="person-dashboard-prayer-dialog" data-editor-modal aria-labelledby="person-dashboard-prayer-title"><div class="profile-editor-body"><h3 id="person-dashboard-prayer-title" tabindex="-1">Prayer timeframe for '+esc(person.name)+'</h3>'+timeToggle+'<p class="dashboard-prayer-people-count" aria-live="polite">Focused Prayer will include <strong>'+count+' '+(count===1?"prayer request":"prayer requests")+'</strong> · '+esc(timeLabel)+'</p><div class="profile-editor-actions dashboard-prayer-people-actions"><button type="button" class="btn mini ghost" data-person-dashboard-prayer-close="'+esc(pid)+'" data-editor-cancel>Done</button></div></div></dialog>';
+  dialog=tendPrayerFilterDialogHTML({
+   id:"person-dashboard-prayer-dialog",
+   titleId:"person-dashboard-prayer-title",
+   title:"Prayer timeframe for "+person.name,
+   timeframeHTML:timeToggle,
+   count:count,
+   timeLabel:timeLabel,
+   closeActionHTML:'<button type="button" class="btn mini ghost" data-person-dashboard-prayer-close="'+esc(pid)+'" data-editor-cancel>Done</button>'
+  });
  }
- return '<section class="dashboard-focused-prayer person-focused-prayer" aria-label="Focused prayer for '+esc(person.name)+'"><div class="dashboard-prayer-controls"><span class="dashboard-prayer-context">'+count+' '+(count===1?"prayer":"prayers")+' · '+esc(timeLabel)+'</span>'+tendFilterButtonHTML({className:"dashboard-prayer-filter",label:"Filter",ariaLabel:"Filter prayer timeframe for "+person.name+": "+timeLabel,haspopup:"dialog",controls:"person-dashboard-prayer-dialog",attributes:{"data-person-dashboard-prayer-open":pid}})+'</div><button type="button" class="btn mini faith-start-prayer" data-person-dashboard-prayer-start="'+esc(pid)+'" aria-label="Start focused prayer for '+count+' '+(count===1?"prayer":"prayers")+' for '+esc(person.name)+'">'+collectionIcon("prayer")+'<span>Focused Prayer</span><span class="faith-prayer-session-count" aria-hidden="true">'+count+'</span></button>'+dialog+'</section>';
+ return tendFocusedPrayerSectionHTML({className:"person-focused-prayer",ariaLabel:"Focused prayer for "+person.name,controlsHTML:'<span class="dashboard-prayer-context">'+count+' '+(count===1?"prayer":"prayers")+' · '+esc(timeLabel)+'</span>'+tendFilterButtonHTML({className:"dashboard-prayer-filter",label:"Filter",ariaLabel:"Filter prayer timeframe for "+person.name+": "+timeLabel,haspopup:"dialog",controls:"person-dashboard-prayer-dialog",attributes:{"data-person-dashboard-prayer-open":pid}}),actionHTML:'<button type="button" class="btn mini faith-start-prayer" data-person-dashboard-prayer-start="'+esc(pid)+'" aria-label="Start focused prayer for '+count+' '+(count===1?"prayer":"prayers")+' for '+esc(person.name)+'">'+collectionIcon("prayer")+'<span>Focused Prayer</span><span class="faith-prayer-session-count" aria-hidden="true">'+count+'</span></button>',dialogHTML:dialog});
 };
 function tendFilterButtonHTML(options){
  options=options||{};
@@ -330,7 +349,7 @@ function tendFilterButtonHTML(options){
  return '<button type="button" class="'+esc(className)+'"'+attributes+(options.haspopup?' aria-haspopup="'+esc(options.haspopup)+'"':"")+(options.controls?' aria-controls="'+esc(options.controls)+'"':"")+' aria-label="'+esc(options.ariaLabel||label)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 5h17l-6.5 7.2v5.3l-4 2v-7.3z"/></svg><span>'+esc(label)+'</span></button>';
 }
 function faithDashboardPrayerPeopleHTML(){
- var people=S.people.slice().sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""));}),selected=dashboardPrayerPeople,selectedCount=selected===null?people.length+1:selected.length,timeBlock=faithDashboardPrayerTimeBlock(dashboardPrayerTimeMode),timeLabel=faithDashboardPrayerTimeLabel(timeBlock);
+ var people=S.people.slice().sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""));}),selected=dashboardPrayerPeople,selectedCount=selected===null?people.length+1:selected.length,pickerData=faithPrayerTimeframePickerData(dashboardPrayerTimeMode,selected),timeLabel=pickerData.label;
  return '<span class="dashboard-prayer-context">'+selectedCount+' '+(selectedCount===1?"person":"people")+' · '+esc(timeLabel)+'</span>'+tendFilterButtonHTML({className:"dashboard-prayer-filter",label:"Filter",ariaLabel:"Filter prayer: "+selectedCount+" "+(selectedCount===1?"person":"people")+" · "+timeLabel,haspopup:"dialog",controls:"dashboard-prayer-people-dialog",attributes:{"data-dashboard-prayer-people-open":""}});
 }
 function faithDashboardPrayerTimeBlock(mode){
@@ -346,7 +365,7 @@ function faithDashboardPrayerTimeName(mode){
 }
 function faithDashboardPrayerPeopleDialogHTML(){
  if(!dashboardPrayerPeopleOpen)return "";
- var selected=dashboardPrayerPeople===null?["me"].concat(S.people.map(function(person){return person.id;})):dashboardPrayerPeople.slice(),groups=[["marriage","Marriage"],["parenting","Parenting"],["friendships","Friendships"]],groupOrder={marriage:0,parenting:1,friendships:2},timeBlock=faithDashboardPrayerTimeBlock(dashboardPrayerTimeMode),prayerCount=faithDashboardPrayerSessionSort(timeBlock,dashboardPrayerPeople).length,timeLabel=dashboardPrayerTimeMode==="now"?"Now ("+faithDashboardPrayerTimeLabel(timeBlock)+")":faithDashboardPrayerTimeName(dashboardPrayerTimeMode);
+ var selected=dashboardPrayerPeople===null?["me"].concat(S.people.map(function(person){return person.id;})):dashboardPrayerPeople.slice(),groups=[["marriage","Marriage"],["parenting","Parenting"],["friendships","Friendships"]],groupOrder={marriage:0,parenting:1,friendships:2},pickerData=faithPrayerTimeframePickerData(dashboardPrayerTimeMode,dashboardPrayerPeople),prayerCount=pickerData.selectedCount,timeLabel=pickerData.label;
  function firstName(person){return String(person&&person.name||"").trim().split(/\s+/)[0]||"";}
  function personOption(person){
   var checked=selected.indexOf(person.id)>=0;
@@ -354,16 +373,25 @@ function faithDashboardPrayerPeopleDialogHTML(){
  }
  var meSelected=selected.indexOf("me")>=0,mePerson={name:"Me",photo:settings().profilePhoto};
  var orderedPeople=S.people.slice().sort(function(a,b){var groupDifference=groupOrder[faithPrayerPersonGroup(a)]-groupOrder[faithPrayerPersonGroup(b)];return groupDifference||firstName(a).localeCompare(firstName(b));});
- var timeBlocks=planBlocksDef(),timeOptions=timeBlocks.map(function(item){var value=item.cur?"now":item.id,active=dashboardPrayerTimeMode===value,count=faithDashboardPrayerSessionSort(item.id,dashboardPrayerPeople).length;return '<button type="button" class="current-plan-time-option'+(item.cur?" is-current":"")+(active?" is-selected":"")+'" data-dashboard-prayer-time-option="'+esc(value)+'" aria-pressed="'+active+'"><span class="current-plan-time-option-name">'+esc(item.name)+'</span><span class="current-plan-time-option-range">'+esc(item.range)+'</span><span class="current-plan-time-option-count">'+count+' '+(count===1?"prayer":"prayers")+'</span></button>';});
- var allDayActive=dashboardPrayerTimeMode==="allday"||dashboardPrayerTimeMode==="all",allDayCount=faithDashboardPrayerSessionSort("all",dashboardPrayerPeople).length;
- timeOptions.push('<button type="button" class="current-plan-time-option'+(allDayActive?" is-selected":"")+'" data-dashboard-prayer-time-option="allday" aria-pressed="'+allDayActive+'"><span class="current-plan-time-option-name">All Day</span><span class="current-plan-time-option-range">Any time today</span><span class="current-plan-time-option-count">'+allDayCount+' '+(allDayCount===1?"prayer":"prayers")+'</span></button>');
- var timeLabel=faithDashboardPrayerTimeName(dashboardPrayerTimeMode),timeToggle='<div class="dashboard-prayer-time-select"><details class="dashboard-prayer-time-menu"><summary class="dashboard-prayer-time-picker" aria-label="Choose timeframe, currently '+esc(timeLabel)+'"><span>'+esc(timeLabel)+'</span><span class="dashboard-prayer-time-chevron" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4.5L12.5 6"/></svg></span></summary><div class="current-plan-time-options dashboard-prayer-time-options" role="group" aria-label="Prayer timeframes">'+timeOptions.join("")+'</div></details></div>';
- return '<dialog class="profile-editor-dialog rhythm-picker-dialog dashboard-prayer-people-dialog" id="dashboard-prayer-people-dialog" data-editor-modal aria-labelledby="dashboard-prayer-people-title"><div class="profile-editor-body"><h3 id="dashboard-prayer-people-title" tabindex="-1">People for focused prayer</h3>'+timeToggle+'<p class="profile-tab-intro">Choose whose prayer requests to include.</p><p class="dashboard-prayer-people-count" aria-live="polite">Focused Prayer will include <strong>'+prayerCount+' '+(prayerCount===1?"prayer request":"prayer requests")+'</strong> · '+esc(timeLabel)+'</p>'+tendPeopleGroupToggleBar(selected,"me","data-dashboard-prayer-group-toggle")+'<div class="rhythm-picker-options dashboard-prayer-people-options"><button type="button" class="prayer-person person-badge-clickable rhythm-picker-option'+(meSelected?" selected":"")+'" data-dashboard-prayer-person-toggle="me" aria-pressed="'+meSelected+'">'+personAvatar(mePerson,28)+'Me</button>'+orderedPeople.map(personOption).join("")+'</div><div class="profile-editor-actions dashboard-prayer-people-actions"><button type="button" class="btn mini" data-dashboard-prayer-people-pray>Pray</button><button type="button" class="btn mini ghost" data-dashboard-prayer-people-close data-editor-cancel>Done</button></div></div></dialog>';
-}
-function faithDashboardPrayerTimeLabel(timeBlock){
- if(timeBlock==="all")return "All Day";
- var block=dayBlocks().find(function(item){return item.id===timeBlock;});
- return block?block.name:"Current timeframe";
+ var timeLabel=pickerData.label,timeToggle=tendPrayerTimeframePickerHTML({
+  label:timeLabel,
+  options:pickerData.options,
+  selectedTimeframeId:pickerData.selectedTimeframeId,
+  allDayCount:pickerData.allDayCount
+ });
+ var selectionHTML=tendPeopleGroupToggleBar(selected,"me","data-dashboard-prayer-group-toggle")+'<div class="rhythm-picker-options dashboard-prayer-people-options"><button type="button" class="prayer-person person-badge-clickable rhythm-picker-option'+(meSelected?" selected":"")+'" data-dashboard-prayer-person-toggle="me" aria-pressed="'+meSelected+'">'+personAvatar(mePerson,28)+'Me</button>'+orderedPeople.map(personOption).join("")+'</div>';
+ return tendPrayerFilterDialogHTML({
+  id:"dashboard-prayer-people-dialog",
+  titleId:"dashboard-prayer-people-title",
+  title:"People for focused prayer",
+  timeframeHTML:timeToggle,
+  intro:"Choose whose prayer requests to include.",
+  count:prayerCount,
+  timeLabel:timeLabel,
+  selectionHTML:selectionHTML,
+  primaryActionHTML:'<button type="button" class="btn mini" data-dashboard-prayer-people-pray>Pray</button>',
+  closeActionHTML:'<button type="button" class="btn mini ghost" data-dashboard-prayer-people-close data-editor-cancel>Done</button>'
+ });
 }
 function faithFocusedPrayerButtonHTML(view){
  var prayerCount=faithPrayerSessionSort(view);
@@ -392,7 +420,7 @@ function faithPracticeContent(group){
   return faithActivePrayers().length;
  }
  var content=selected==="rhythms"?faithRhythmsHTML(group):selected==="sparks"?faithSparksHTML(group):selected==="notes"?faithNotesHTML(group):faithPrayerHub();
- return '<section class="card faith-practice-card" id="faith-practice-panel" aria-labelledby="faithPracticeTitle"><header class="faith-practice-heading"><h2 id="faithPracticeTitle">'+esc(group)+'</h2>'+(description?'<div class="faith-practice-focus"><span class="faith-practice-focus-label">Practice focus</span><p>'+esc(description)+'</p></div>':"")+'</header>'+faithPracticeMetersHTML(group)+'<nav class="profile-tabs faith-practice-tabs" aria-label="'+esc(group)+' sections">'+tabs.map(function(tab){return '<button type="button" data-faith-practice-tab="'+esc(group)+'|'+tab+'" aria-selected="'+(tab===selected)+'">'+collectionIcon(tab)+labels[tab]+' <span class="tab-count">'+count(tab)+'</span></button>';}).join("")+'</nav><div class="faith-tab-content">'+content+'</div></section>';
+ return '<section class="card faith-practice-card" id="faith-practice-panel" aria-labelledby="faithPracticeTitle"><header class="faith-practice-heading">'+tendSectionHeaderHTML({title:group,titleId:"faithPracticeTitle",style:"margin:0"})+(description?'<div class="faith-practice-focus"><span class="faith-practice-focus-label">Practice focus</span><p>'+esc(description)+'</p></div>':"")+'</header>'+faithPracticeMetersHTML(group)+'<nav class="profile-tabs faith-practice-tabs" aria-label="'+esc(group)+' sections">'+tabs.map(function(tab){return '<button type="button" data-faith-practice-tab="'+esc(group)+'|'+tab+'" aria-selected="'+(tab===selected)+'">'+collectionIcon(tab)+labels[tab]+' <span class="tab-count">'+count(tab)+'</span></button>';}).join("")+'</nav><div class="faith-tab-content">'+content+'</div></section>';
 }
 function faithSparkEditorHTML(item){
  var ownerId=faithSparkOwnerId||"faith";
@@ -417,7 +445,7 @@ function faithSparksHTML(group){
   var ownerId=item.profileOwnerId||"faith";
   if(faithSparkEditId===item.id&&faithSparkOwnerId===ownerId)return faithSparkEditorHTML(item);
   var sparkBadges=tendAssociationPeopleBadges(item,ownerId,null,"spark")+tendAssociationCategoryBadges(item);
-  return '<article class="faith-item-row faith-spark-row"><span class="faith-spark-icon" aria-hidden="true">✦</span><div class="faith-item-copy">'+tendRowContent(item.text||"Untitled Spark",item.details||"",(item.by?esc(sparkDueTxt(item)):"Flexible · no date")+(item.time?" · "+esc(fmtHM12(item.time)):""),sparkBadges)+'</div><div class="faith-item-actions"><button type="button" class="btn mini" data-faith-sparkdone="'+esc(ownerId+"|"+item.id)+'">Complete</button><button type="button" class="iconbtn" data-faith-spark-edit="'+esc(ownerId+"|"+item.id)+'" aria-label="Edit '+esc(item.text)+'">✎</button><button type="button" class="iconbtn" data-faith-spark-delete="'+esc(ownerId+"|"+item.id)+'" aria-label="Delete '+esc(item.text)+'">×</button></div></article>';
+  return '<article class="faith-item-row faith-spark-row"><span class="faith-spark-icon" aria-hidden="true">✦</span><div class="faith-item-copy">'+tendSparkCardContentHTML(item,{title:item.text||"Untitled Spark",description:item.details||"",meta:(item.by?esc(sparkDueTxt(item)):"Flexible · no date")+(item.time?" · "+esc(fmtHM12(item.time)):""),badges:sparkBadges})+'</div><div class="faith-item-actions"><button type="button" class="btn mini" data-faith-sparkdone="'+esc(ownerId+"|"+item.id)+'">Complete</button><button type="button" class="iconbtn" data-faith-spark-edit="'+esc(ownerId+"|"+item.id)+'" aria-label="Edit '+esc(item.text)+'">✎</button><button type="button" class="iconbtn" data-faith-spark-delete="'+esc(ownerId+"|"+item.id)+'" aria-label="Delete '+esc(item.text)+'">×</button></div></article>';
  }).join(""):'<div class="empty">No Sparks in this practice yet.</div>';
  if(faithSparkDraft&&!faithSparkEditId&&(faithSparkDraft.faithSection||"Other")===group)out+=faithSparkEditorHTML(faithSparkDraft);
  else if(!faithSparkDraft)out+='<div class="faith-add-row"><button type="button" class="btn mini ghost" data-faith-spark-add="1">+ Add Spark</button></div>';
@@ -444,8 +472,8 @@ function renderFaithPage(){
  if(faithPrayerSession)return faithPrayerSessionHTML();
  var enabled=faithPracticeGroups(),selected=faithSelectedGroup(),config=faithConfig();
  if(enabled.length&&enabled.indexOf(selected)<0){selected=enabled[0];config.selectedGroup=selected;}
- var out='<main class="faith-page"><header class="sectiontitle faith-page-heading"><h2>Faith</h2><span class="hint">Small practices, tended over time.</span><button type="button" class="btn ghost faith-sections-toggle" data-faith-settings="1" aria-expanded="'+faithSettingsOpen+'" aria-controls="faith-sections-settings">⚙ Sections</button></header>';
- out+=faithSettingsHTML()+faithHealthHTML()+'<section class="card faith-today-card" aria-labelledby="faithTodayTitle"><h2 id="faithTodayTitle">Today in Faith</h2><div class="faith-today-list">'+faithTodayHTML()+'</div></section>';
+ var out='<main class="faith-page">'+tendSectionHeaderHTML({title:"Faith",subtitle:"Small practices, tended over time.",className:"faith-page-heading",tagName:"header",trailingHTML:'<button type="button" class="btn ghost faith-sections-toggle" data-faith-settings="1" aria-expanded="'+faithSettingsOpen+'" aria-controls="faith-sections-settings">⚙ Sections</button>'});
+ out+=faithSettingsHTML()+faithHealthHTML()+'<section class="card faith-today-card" aria-labelledby="faithTodayTitle">'+tendSectionHeaderHTML({title:"Today in Faith",titleId:"faithTodayTitle",style:"margin:0 0 12px"})+'<div class="faith-today-list">'+faithTodayHTML()+'</div></section>';
  out+='<section class="faith-browser" aria-label="Faith practice navigation"><div class="faith-section-nav-wrap">'+faithSectionNavHTML(selected)+'</div><div class="faith-practice-wrap">'+(enabled.length?faithPracticeContent(selected):'<section class="card faith-practice-card"><p>Turn on a section in Sections settings to manage Faith practices.</p></section>')+'</div></section>';
  out+='</main>';
  return out;
@@ -545,10 +573,9 @@ document.addEventListener("click",function(event){
  if(b.matches("[data-faith-prayer-view]")){var view=b.getAttribute("data-faith-prayer-view");if(["today","all"].indexOf(view)<0)return;faithConfig().prayerView=view;save();render();var viewButton=document.querySelector('[data-faith-prayer-view]');if(viewButton)viewButton.focus();event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-prayer-filter-action]")){var action=b.getAttribute("data-faith-prayer-filter-action");faithConfig().prayerPeople=action==="all"?null:[];faithConfig().prayerGroups={marriage:action==="all",parenting:action==="all",friendships:action==="all"};faithPrayerPeopleOpen=true;save();faithPrayerFilterRender("filter-action",action);event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-prayer-today]")){faithConfig().selectedGroup="Prayer";faithConfig().prayerView="today";faithConfig().practiceTabs=faithConfig().practiceTabs||{};faithConfig().practiceTabs.Prayer="prayer";save();render();var hub=document.getElementById("faith-prayer-hub");if(hub)hub.scrollIntoView({behavior:"smooth",block:"start"});event.stopImmediatePropagation();return;}
- if(b.matches("[data-person-dashboard-prayer-time-option]")){var personTimeParts=b.getAttribute("data-person-dashboard-prayer-time-option").split("|"),personIdForTime=personTimeParts[0],personTime=personTimeParts[1],validPersonTime=personTime==="now"||personTime==="allday"||dayBlocks().some(function(block){return block.id===personTime;});personDashboardPrayerTimeModes[personIdForTime]=validPersonTime?personTime:"now";personDashboardPrayerDialogOpen=personIdForTime;render();var personTimePicker=document.querySelector("#person-dashboard-prayer-dialog .dashboard-prayer-time-picker");if(personTimePicker)personTimePicker.focus();event.stopImmediatePropagation();return;}
+ if(b.matches("[data-prayer-time-option]")){var selectedPrayerTime=b.getAttribute("data-prayer-time-option"),personIdForTime=b.getAttribute("data-prayer-time-person"),validPrayerTime=selectedPrayerTime==="now"||selectedPrayerTime==="allday"||dayBlocks().some(function(block){return block.id===selectedPrayerTime;});if(personIdForTime){personDashboardPrayerTimeModes[personIdForTime]=validPrayerTime?selectedPrayerTime:"now";personDashboardPrayerDialogOpen=personIdForTime;}else{dashboardPrayerTimeMode=validPrayerTime?selectedPrayerTime:"now";}render();var prayerTimeDialogId=personIdForTime?"#person-dashboard-prayer-dialog":"#dashboard-prayer-people-dialog",prayerTimePicker=document.querySelector(prayerTimeDialogId+" .prayer-timeframe-picker__trigger");if(prayerTimePicker)prayerTimePicker.focus();event.stopImmediatePropagation();return;}
  if(b.matches("[data-person-dashboard-prayer-close]")){var closedPersonId=b.getAttribute("data-person-dashboard-prayer-close");personDashboardPrayerDialogOpen=null;render();var personFilterTriggers=Array.from(document.querySelectorAll("[data-person-dashboard-prayer-open]")),personFilterTrigger=personFilterTriggers.find(function(trigger){return trigger.getAttribute("data-person-dashboard-prayer-open")===closedPersonId;});if(personFilterTrigger)personFilterTrigger.focus();event.stopImmediatePropagation();return;}
  if(b.matches("[data-person-dashboard-prayer-start]")){var prayerPersonId=b.getAttribute("data-person-dashboard-prayer-start"),prayerPerson=S.people.find(function(person){return person.id===prayerPersonId;}),personTimeMode=personDashboardPrayerTimeModes[prayerPersonId]||"now",personTimeBlock=faithDashboardPrayerTimeBlock(personTimeMode);faithPrayerSession={view:"dashboard",all:false,people:[prayerPersonId],timeBlock:personTimeBlock,ids:faithDashboardPrayerSessionSort(personTimeBlock,[prayerPersonId]),index:0,source:"person",personId:prayerPersonId,personName:prayerPerson&&prayerPerson.name||"Person"};personDashboardPrayerDialogOpen=null;render();var personPrayerCard=document.querySelector("[data-faith-session-card]")||document.querySelector(".faith-prayer-session [data-faith-session-exit]");if(personPrayerCard)personPrayerCard.focus();event.stopImmediatePropagation();return;}
- if(b.matches("[data-dashboard-prayer-time-option]")){var timeOption=b.getAttribute("data-dashboard-prayer-time-option"),validTime=timeOption==="now"||timeOption==="allday"||dayBlocks().some(function(block){return block.id===timeOption;});dashboardPrayerTimeMode=validTime?timeOption:"now";render();var timePicker=document.querySelector("#dashboard-prayer-people-dialog .dashboard-prayer-time-picker");if(timePicker)timePicker.focus();event.stopImmediatePropagation();return;}
  if(b.matches("[data-dashboard-prayer-people-close]")){dashboardPrayerPeopleOpen=false;render();var peopleTrigger=document.querySelector("[data-dashboard-prayer-people-open]");if(peopleTrigger)peopleTrigger.focus();event.stopImmediatePropagation();return;}
  if(b.matches("[data-dashboard-prayer-group-toggle]")){var groupId=b.getAttribute("data-dashboard-prayer-group-toggle"),groupSelected=dashboardPrayerPeople===null?["me"].concat(S.people.map(function(person){return person.id;})):dashboardPrayerPeople.slice();tendApplyPeopleGroupToggle(groupSelected,"me",groupId);var allPeopleIds=["me"].concat(S.people.map(function(person){return person.id;}));dashboardPrayerPeople=groupSelected.length===allPeopleIds.length&&allPeopleIds.every(function(id){return groupSelected.indexOf(id)>=0;})?null:groupSelected;dashboardPrayerPeopleOpen=true;render();var groupToggle=document.querySelector('[data-dashboard-prayer-group-toggle="'+groupId+'"]');if(groupToggle)groupToggle.focus();event.stopImmediatePropagation();return;}
  if(b.matches("[data-dashboard-prayer-people-action]")){dashboardPrayerPeople=b.getAttribute("data-dashboard-prayer-people-action")==="all"?null:[];dashboardPrayerPeopleOpen=true;render();var peopleAction=document.querySelector('[data-dashboard-prayer-people-action="'+b.getAttribute("data-dashboard-prayer-people-action")+'"]');if(peopleAction)peopleAction.focus();event.stopImmediatePropagation();return;}
