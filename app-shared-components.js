@@ -59,7 +59,7 @@ function tendTodayWithPersonHTML(options){
 function tendRecordCardContentHTML(kind,record,options){
  record=record||{};options=options||{};
  var title=options.title!==undefined?options.title:record.text||"",description=String(options.description!==undefined?options.description:(kind==="spark"?record.details:record.description)||"").trim(),meta=options.meta,badges=options.badges||"",peopleBadges=options.peopleBadges||"",metaMarkup=options.metaMarkup;
- if(options.layout==="plan")return '<div class="plan-item-copy"><div class="plan-item-heading"><strong class="tend-type-title">'+esc(title)+'</strong>'+(options.actionHTML?'<div class="plan-item-action">'+options.actionHTML+'</div>':"")+'</div><div class="plan-item-description">'+(description?'<div class="tend-type-description">'+esc(description)+'</div>':options.showNoDetails?'<div class="plan-item-no-description">No details...</div>':"")+'</div></div>';
+ if(options.layout==="plan")return '<div class="plan-item-copy"><div class="plan-item-heading">'+(options.headingEditHTML?'<div class="spark-card__title-line"><strong class="tend-type-title">'+esc(title)+'</strong><div class="spark-card__title-edit">'+options.headingEditHTML+'</div></div>':'<strong class="tend-type-title">'+esc(title)+'</strong>')+(options.actionHTML?'<div class="plan-item-action">'+options.actionHTML+'</div>':"")+'</div><div class="plan-item-description">'+(description?'<div class="tend-type-description">'+esc(description)+'</div>':options.showNoDetails?'<div class="plan-item-no-description">No details...</div>':"")+'</div></div>';
  if(options.layout==="profile")return '<div class="profile-rhythm-heading"><div class="profile-rhythm-title-line"><strong class="tend-type-title">'+esc(title||"")+'</strong>'+(options.headingActionHTML||"")+'</div>'+(description?'<div class="tend-type-description">'+esc(description)+'</div>':options.showNoDetails?'<div class="tend-type-description no-details">No details...</div>':"")+'</div>';
  if(options.layout==="careplan")return '<div class="careplan-title"><strong class="tend-type-title">'+esc(title||"")+'</strong>'+peopleBadges+'</div>'+(meta?'<div class="careplan-meta tend-type-meta">'+esc(meta)+'</div>':"")+(description?'<div class="careplan-details tend-type-description">'+esc(description)+'</div>':options.showNoDetails?'<div class="careplan-details tend-type-description no-details">No details...</div>':"");
  return '<div class="tend-row-content"><div class="tend-row-heading"><strong class="tend-type-title">'+esc(title||"")+'</strong>'+badges+'</div>'+(description?'<div class="tend-type-description">'+esc(description)+'</div>':options.showNoDetails?'<div class="tend-type-description no-details">No details...</div>':'')+(peopleBadges?'<div class="tend-row-people">'+peopleBadges+'</div>':'')+(metaMarkup!==undefined?metaMarkup:(meta?'<div class="tend-type-meta">'+esc(meta)+'</div>':""))+'</div>';
@@ -96,6 +96,21 @@ function tendRhythmCardHTML(record,options){
 function tendSparkCardContentHTML(record,options){
  options=options||{};
  return tendRecordCardContentHTML("spark",record,{title:options.title!==undefined?options.title:record&&record.text,description:options.description!==undefined?options.description:record&&record.details,meta:options.meta,badges:options.badges,peopleBadges:options.peopleBadges,metaMarkup:options.metaMarkup,showNoDetails:options.showNoDetails,layout:options.layout,actionHTML:options.actionHTML,headingActionHTML:options.headingActionHTML});
+}
+function tendSparkCardHTML(record,options){
+ record=record||{};options=options||{};
+ var title=options.title!==undefined?options.title:record.text||"";
+ function attributes(values){
+  return Object.keys(values||{}).map(function(name){
+   if(!/^data-[a-z0-9-]+$/i.test(name))return "";
+   return " "+name+'="'+esc(values[name])+'"';
+  }).join("");
+ }
+ var classes=["spark-card","planitem"].concat(options.className?[options.className]:[]).join(" ");
+ return '<div class="'+esc(classes)+'"'+attributes(options.cardAttributes)+'>'
+  +'<div class="pi-main">'+tendRecordCardContentHTML("spark",record,{layout:"plan",title:title,description:options.description!==undefined?options.description:record.details,actionHTML:options.actionHTML,headingEditHTML:options.headingEditHTML,showNoDetails:true})+'</div>'
+  +(options.topMetaHTML||'<div class="plan-item-top-meta"></div>')
+  +'<div class="plan-item-footer dashboard-spark-footer'+(options.footerClass?" "+esc(options.footerClass):"")+'">'+(options.footerHTML||"")+'</div></div>';
 }
 function tendPrayerCardContentHTML(record,options){
  options=options||{};
