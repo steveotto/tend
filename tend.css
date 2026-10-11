@@ -25,7 +25,7 @@ input,textarea,select{font-family:var(--sans);font-size:16px;color:var(--ink)}
 .syncdot i{width:7px;height:7px;border-radius:50%;background:var(--ink-faint);display:inline-block}
 .syncdot.on i{background:var(--mint)}
 .syncdot.err i{background:var(--ink-soft)}
-.sync-footer{justify-content:flex-end;margin-top:14px;padding:10px 4px 0;border-top:1px solid var(--line)}
+.sync-footer{justify-content:flex-end;margin-top:14px;padding:10px 4px 0;border-top:0}
 .syncdot[hidden]{display:none!important}
 nav.tabs{display:flex;gap:4px;margin:16px 0 22px;background:var(--mist);padding:4px;border-radius:12px;width:fit-content;max-width:100%}
 nav.tabs button{border:none;background:transparent;padding:11px 16px;border-radius:12px;font-size:14.5px;font-weight:600;color:var(--ink-soft);transition:all .15s;white-space:nowrap}
@@ -1296,6 +1296,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .dashboard-spark-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:24px;color:var(--ink-muted);font-size:12px}
 .home-dashboard .dashboard-spark-footer>span{min-width:0;overflow-wrap:anywhere}
 .home-dashboard .dashboard-spark-deadline{text-align:right}
+.home-dashboard .dashboard-spark-deadline{color:var(--ink-faint)!important}
 .home-dashboard .plan-item-footer-badges{display:flex;align-items:center;gap:8px;min-width:0}
 .home-dashboard .plan-item-footer-badges .plan-pills{display:flex;align-items:center;gap:6px;min-width:0}
 .home-dashboard .plan-item-footer-badges .tend-type-meta{margin:0;padding:0;border:0}
@@ -1368,6 +1369,17 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .dashboard-free-moment-card.slide-to-left{animation:dashboard-spark-slide-to-left .46s cubic-bezier(.65,0,.78,.28) both}
 .home-dashboard .dashboard-free-moment-card.slide-to-right{animation:dashboard-spark-slide-to-right .46s cubic-bezier(.65,0,.78,.28) both}
 .home-dashboard .dashboard-free-moment-controls{display:flex;justify-content:center;gap:10px}
+.home-dashboard .dashboard-spark-carousel-count{
+ min-width:3.5em;
+ align-self:center;
+ color:var(--ink-faint);
+ font-family:var(--sans);
+ font-size:var(--tend-type-metadata);
+ font-weight:400;
+ line-height:1.4;
+ text-align:center;
+ font-variant-numeric:tabular-nums
+}
 .home-dashboard .dashboard-free-moment-arrow{appearance:none;box-sizing:border-box;display:grid;flex:0 0 44px;width:44px;min-width:44px;height:44px;min-height:44px;place-items:center;overflow:visible;padding:0;border:1px solid transparent;border-radius:50%;background:transparent;color:var(--ink);font-size:0;line-height:0;cursor:pointer}
 .home-dashboard .dashboard-free-moment-arrow:hover:not(:disabled){border-color:var(--forest);background:var(--mist);color:var(--forest)}
 .home-dashboard .dashboard-free-moment-arrow:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
@@ -1857,11 +1869,6 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
  html[data-mobile-text-size="large"] .home-dashboard .dashboard-greeting h2{font-size:21px}
  html[data-mobile-text-size="large"] .home-dashboard .menu-area .ma-name{min-width:0;flex:1 1 0;overflow-wrap:anywhere}
 }
-@media(max-width:380px){
- .brand{gap:8px}
- .brand img{height:34px!important}
- .brand .sub:last-child{font-size:10px!important}
-}
 @media(max-width:600px){
  .home-dashboard .uprow{gap:8px}
  .home-dashboard .upitem{display:flex;flex-basis:340px;width:100%;max-width:340px;align-items:flex-start;gap:10px;padding:10px}
@@ -1988,9 +1995,12 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
  body.mobile-search-open .utility-search-results{top:calc(100% + 8px);max-height:min(60vh,520px)}
  .wrap{padding-bottom:calc(100px + env(safe-area-inset-bottom))}
  .apphead{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 0 12px}
- .brand img{height:32px!important}
- .brand>div{display:none}
- .sync-footer{position:static;justify-content:flex-end;margin-top:14px;padding:10px 4px 0;border-top:1px solid var(--line);color:var(--ink-soft)}
+ .brand{min-width:0}
+ .brand img{height:var(--tend-brand-logo-mobile-height)!important;width:auto;display:block;flex:none}
+ .brand-copy{display:block;min-width:0}
+ .brand-copy #headDate{display:none}
+ .brand-tagline{max-width:12rem;overflow-wrap:anywhere}
+ .sync-footer{position:static;justify-content:flex-end;margin-top:14px;padding:10px 4px 0;border-top:0;color:var(--ink-soft)}
  .mobile-head-actions{display:flex;align-items:center;gap:8px}
  .mobile-head-button{display:grid;place-items:center;width:46px;height:46px;padding:0;border:1px solid var(--line);border-radius:13px;background:var(--card);color:var(--ink);font-size:16px;font-weight:600}
  .mobile-head-button.mobile-display-toggle{width:46px;min-width:46px;padding:4px 0;align-content:center;gap:1px;transition:background-color .15s,border-color .15s,color .15s}
@@ -2088,6 +2098,8 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
  --tend-type-weather-temperature:1.9rem;
  --tend-type-calendar-day:.9rem;
  --tend-type-calendar-month:.75rem;
+ --tend-brand-logo-height:2.625rem;
+ --tend-brand-logo-mobile-height:2rem;
  --tend-calendar-icon-width:2.25rem;
  --tend-calendar-icon-height:2.5rem;
  --tend-calendar-icon-radius:.5rem;
@@ -2108,6 +2120,8 @@ html[data-mobile-text-size-level="large"]{
  --tend-type-weather-temperature:2.1375rem;
  --tend-type-calendar-day:1.0125rem;
  --tend-type-calendar-month:.8125rem;
+ --tend-brand-logo-height:2.953125rem;
+ --tend-brand-logo-mobile-height:2.25rem;
  --tend-calendar-icon-width:2.75rem;
  --tend-calendar-icon-height:3.0625rem;
  --tend-calendar-icon-radius:.5625rem;
@@ -2128,9 +2142,25 @@ html[data-mobile-text-size-level="larger"]{
  --tend-type-weather-temperature:2.375rem;
  --tend-type-calendar-day:1.125rem;
  --tend-type-calendar-month:.875rem;
+ --tend-brand-logo-height:3.28125rem;
+ --tend-brand-logo-mobile-height:2.5rem;
  --tend-calendar-icon-width:3.25rem;
  --tend-calendar-icon-height:3.625rem;
  --tend-calendar-icon-radius:.625rem;
+}
+.brand img{height:var(--tend-brand-logo-height)!important;width:auto;display:block}
+.brand-copy{min-width:0}
+.brand-tagline{
+ color:var(--ink-soft);
+ font-family:var(--sans);
+ font-size:calc(var(--tend-type-metadata)*.75);
+ font-weight:500;
+ letter-spacing:.02em;
+ line-height:1.3;
+ overflow-wrap:anywhere
+}
+@media(max-width:600px){
+ .brand img{height:var(--tend-brand-logo-mobile-height)!important}
 }
 .home-dashboard{
  --tend-dashboard-content-edge:17px;
@@ -2147,6 +2177,34 @@ html[data-mobile-text-size-level="larger"]{
  margin-top:var(--tend-dashboard-section-gap);
  margin-bottom:var(--tend-dashboard-content-gap)
 }
+.people-section-title h2{
+ flex:none;
+ color:var(--ink);
+ font-family:var(--sans);
+ font-size:var(--tend-type-section-header)!important;
+ font-weight:700!important;
+ line-height:1.25!important;
+ overflow-wrap:anywhere
+}
+.people-section-title .hint{
+ flex:1 1 100%;
+ width:100%;
+ color:var(--ink-faint);
+ font-family:var(--sans);
+ font-size:var(--tend-type-metadata)!important;
+ font-weight:400!important;
+ line-height:1.4;
+ overflow-wrap:anywhere
+}
+.people-section-title{align-items:flex-start;flex-direction:column;gap:2px}
+.pc-toolbar .pc-toggle{
+ min-height:44px;
+ padding:.45em 1em;
+ font-family:var(--sans);
+ font-size:var(--tend-type-category-label)!important;
+ font-weight:600;
+ line-height:1.3
+}
 .home-dashboard .dashboard-greeting{margin:1.5rem 0 1rem}
 .home-dashboard .overall-card,
 .home-dashboard .calendar-card,
@@ -2158,6 +2216,7 @@ html[data-mobile-text-size-level="larger"]{
 .home-dashboard .planitem:has(.plan-item-top-meta){gap:var(--tend-dashboard-content-gap)!important}
 .home-dashboard .planitem:has(.plan-item-top-meta) .plan-item-copy{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;row-gap:4px!important}
 .home-dashboard .planitem:has(.plan-item-top-meta) .plan-item-heading{display:contents}
+.home-dashboard .planitem:has(.plan-item-top-meta) .plan-item-heading>.tend-type-title{margin-right:.5rem}
 .home-dashboard .planitem:has(.plan-item-top-meta) .plan-item-heading>.tend-type-title{grid-column:1;grid-row:1;min-width:0}
 .home-dashboard .planitem:has(.plan-item-top-meta) .plan-item-heading>.plan-item-action{grid-column:2;grid-row:1}
 .home-dashboard .planitem:has(.plan-item-top-meta) .plan-item-description{grid-column:1/-1;grid-row:2}
@@ -2371,6 +2430,17 @@ body:has(.home-dashboard) .dashboard-prayer-people-dialog .btn{
  overflow-wrap:anywhere
 }
 .home-dashboard .plan-item-action>.btn{min-width:76px}
+.home-dashboard .plan-item-action{align-self:start}
+.home-dashboard .plan-item-action>.btn{
+ width:82px!important;
+ min-width:82px!important;
+ max-width:82px!important;
+ height:44px!important;
+ min-height:44px!important;
+ max-height:44px!important;
+ padding:0 8px!important;
+ align-self:start
+}
 .home-dashboard .plan-kind-toggle,
 .home-dashboard .plan-item-category-row .rhythm-area-badge{
  box-sizing:border-box;

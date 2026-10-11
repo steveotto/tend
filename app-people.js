@@ -174,7 +174,7 @@ window.renderPeople=renderPeople=function(){
  var HINT='rhythms, sparks, prayers - tending the people you love';
  if(currentPerson)return _renderPeople();
  var f=pfilters();
- var out='<div class="sectiontitle" style="margin-top:6px"><h2>People</h2><span class="hint">'+HINT+'</span></div>';
+ var out='<div class="sectiontitle people-section-title" style="margin-top:6px"><h2>People</h2><span class="hint">'+HINT+'</span></div>';
  out+='<div class="pc-toolbar"><div class="pc-toggles">'+["marriage","parenting","friendships"].map(function(k){
   return '<button type="button" class="pc-toggle'+(f[k]?" on":"")+'" data-pfilter="'+k+'" aria-pressed="'+(!!f[k])+'"><span class="pc-dot"></span>'+CAT_LABEL[k]+'</button>';
  }).join("")+'</div><button type="button" class="btn" data-addperson>+ Add person</button></div>';

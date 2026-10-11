@@ -1,5 +1,5 @@
 "use strict";
-/* app-headversion.js - shows the code version in the header next to the
+/* app-headversion.js - shows the app version next to sync status in the
    sync status. Clicking the version acts like the "Reload latest" button:
    it force-refreshes every file from the server and hard-reloads the page.
    Overlay: safe to delete. */
@@ -12,7 +12,7 @@
   var base=lbl.getAttribute("data-base")||String(lbl.textContent).split(" \u00b7 ")[0].trim();
   if(!base)return;
   lbl.setAttribute("data-base",base);
-  var want=base+" \u00b7 <span id=\"syncVerLink\" title=\"Reload latest code - same as the Reload latest button\" style=\"cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px\">"+v+"</span>";
+  var want=base+" \u00b7 <span id=\"syncVerLink\" title=\"Reload latest code - same as the Reload latest button\" style=\"cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px\">Version "+v+"</span>";
   if(lbl.innerHTML!==want)lbl.innerHTML=want;
  }
  setInterval(apply,500);
