@@ -1362,7 +1362,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .dashboard-free-moment-card .sparkbtn{border-color:var(--action-spark-border,#E8CF74);background:var(--action-spark-background,#FFF3C4);color:var(--action-spark-text,#735B16)}
 .home-dashboard .dashboard-free-moment-card .sparkbtn:hover{border-color:var(--action-spark-border,#E8CF74);background:var(--action-spark-hover,#FCE9A2);color:var(--action-spark-text,#735B16)}
 .home-dashboard .dashboard-free-moment-card{will-change:transform,opacity}
-.home-dashboard .dashboard-free-moment-card.planitem:has(.plan-item-top-meta){box-sizing:border-box;height:216px;grid-template-rows:minmax(0,1fr) auto auto}
+.home-dashboard .dashboard-free-moment-card.planitem:has(.plan-item-top-meta){box-sizing:border-box;min-height:0;grid-template-rows:auto auto auto}
 .home-dashboard .dashboard-free-moment-card.slide-from-right{animation:dashboard-spark-slide-from-right .46s cubic-bezier(.22,.72,.24,1) both}
 .home-dashboard .dashboard-free-moment-card.slide-from-left{animation:dashboard-spark-slide-from-left .46s cubic-bezier(.22,.72,.24,1) both}
 .home-dashboard .dashboard-free-moment-card.slide-to-left{animation:dashboard-spark-slide-to-left .46s cubic-bezier(.65,0,.78,.28) both}
@@ -1603,7 +1603,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .home-dashboard .menu-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0 0;border-top:0}
  .home-dashboard .menu-area{gap:7px;min-width:0;min-height:47px;padding:8px 5px;border:1px solid var(--line);border-radius:9px;background:var(--card);font-size:13px;box-shadow:none}
  .home-dashboard .menu-area-icon{width:17px;height:17px}
- .home-dashboard .menu-area .ma-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .home-dashboard .menu-area .ma-name{min-width:0;overflow-wrap:anywhere}
  .home-dashboard .menu-area .ma-score{font-size:12px}
  .home-dashboard .calendar-card{padding:0}
  .home-dashboard .calendar-card .calsync{margin:6px 0 0}
@@ -1666,7 +1666,6 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 }
 @media(max-width:600px){
  html[data-mobile-text-size-level="larger"] .home-dashboard .overall-card>.bar-ov{margin-bottom:22px}
- html[data-mobile-text-size-level="larger"] .home-dashboard,
  html[data-mobile-text-size-level="larger"] .person-profile{zoom:1.15}
  html[data-mobile-text-size="large"] .grid:has(>.person-card){grid-template-columns:minmax(0,1fr);gap:16px}
  html[data-mobile-text-size="large"] .grid:has(>.person-card)>.person-card{min-height:0;padding:18px;font-size:18px}
@@ -1725,7 +1724,6 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  }
  html[data-mobile-text-size="large"] .home-dashboard>.sectiontitle:not(.dashboard-greeting){margin-top:23px;padding:11px 13px}
  html[data-mobile-text-size="large"] .home-dashboard>.sectiontitle:not(.dashboard-greeting) h2,
- html[data-mobile-text-size="large"] .home-dashboard .dashboard-overall-heading h3{font-size:20px!important}
  html[data-mobile-text-size="large"] .home-dashboard .dashboard-greeting h2{font-size:24px}
  html[data-mobile-text-size="large"] .home-dashboard .dashboard-greeting .hint{font-size:14px}
  html[data-mobile-text-size="large"] .home-dashboard .ov-score{font-size:42px}
@@ -1936,14 +1934,9 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
 @media(max-width:600px){
  .home-dashboard>.sectiontitle h2,
  .home-dashboard .dashboard-overall-heading h3,.today-with-person-heading h2,
- .home-dashboard .planblock[data-plan-block="allday"]>summary .plan-block-name{font-size:19px!important}
- html[data-mobile-text-size="large"] .home-dashboard>.sectiontitle:not(.dashboard-greeting) h2,
- html[data-mobile-text-size="large"] .home-dashboard .dashboard-overall-heading h3,
  html[data-mobile-text-size="large"] .today-with-person-heading h2,
- html[data-mobile-text-size="large"] .home-dashboard .planblock[data-plan-block="allday"]>summary .plan-block-name{font-size:24px!important}
  html[data-mobile-text-size="large"] .person-profile .dashboard-overall-heading h3{font-size:24px!important;font-weight:700!important;line-height:1.35}
  html[data-mobile-text-size="large"] .home-dashboard .dashboard-greeting{margin:24px 0 18px;padding:0 12px}
- html[data-mobile-text-size="large"]  .home-dashboard>.sectiontitle.dashboard-greeting h2{font-size:27px!important}
  html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-top-meta){padding:16px}
  html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-top-meta) .tend-type-title{font-size:23px}
  html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-top-meta) .tend-type-description,html[data-mobile-text-size="large"] .home-dashboard .plan-item-no-description{font-size:19px}
@@ -1965,7 +1958,7 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
  html[data-mobile-text-size="large"] .home-dashboard .rhythm-area-badge svg{width:18px;height:18px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-category-row .rhythm-area-badge{width:24px;height:24px;padding:4px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-category-row .rhythm-area-badge svg{width:14px;height:14px}
- html[data-mobile-text-size="large"] .home-dashboard .plan-item-action>.btn{min-height:44px;padding:8px 14px;font-size:14px!important}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-action>.btn{min-height:44px;padding:8px 14px}
  html[data-mobile-text-size="large"] .home-dashboard .dashboard-focused-prayer>.faith-start-prayer,html[data-mobile-text-size="large"] .person-profile-page .person-focused-prayer>.faith-start-prayer{min-height:44px;padding:8px 14px;font-size:14px}
 }
 @media(max-width:720px){
@@ -2032,13 +2025,6 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
  .home-dashboard .calendar-sync-slot .calsync{margin:0 0 0 auto;font-size:11px}
  html[data-mobile-text-size="large"] .home-dashboard .calendar-sync-slot .calsync{font-size:14px}
 }
-@media(max-width:600px){
- .home-dashboard>.sectiontitle:not(.dashboard-greeting) h2,
- .home-dashboard .current-plan-now,.home-dashboard .current-plan-time-picker{font-size:24px!important}
- html[data-mobile-text-size="large"] .home-dashboard>.sectiontitle:not(.dashboard-greeting) h2,
- html[data-mobile-text-size="large"] .home-dashboard .current-plan-now,
- html[data-mobile-text-size="large"] .home-dashboard .current-plan-time-picker{font-size:30px!important}
-}
 .home-dashboard .plan-people-overflow,.home-dashboard .plan-category-overflow{position:relative;flex:none}
 .home-dashboard .plan-people-overflow>summary,.home-dashboard .plan-category-overflow>summary{display:inline-flex;align-items:center;justify-content:center;min-height:24px;padding:2px 8px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink-soft);font-size:11px;font-weight:650;line-height:1.2;white-space:nowrap;cursor:pointer;list-style:none}
 .home-dashboard .plan-people-overflow>summary::-webkit-details-marker,.home-dashboard .plan-category-overflow>summary::-webkit-details-marker{display:none}
@@ -2053,7 +2039,7 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
  .home-dashboard .dashboard-prayer-controls{gap:7px}
  .home-dashboard .dashboard-free-moment-heading{gap:6px}
  .home-dashboard .dashboard-free-moment-helper{flex-wrap:nowrap}
- .home-dashboard .dashboard-free-moment-card.planitem:has(.plan-item-top-meta){height:230px}
+ .home-dashboard .dashboard-free-moment-card.planitem:has(.plan-item-top-meta){height:auto;min-height:0}
  .home-dashboard .dashboard-prayer-time-toggle{min-width:88px;min-height:44px}
  .home-dashboard .dashboard-prayer-context,.person-focused-prayer .dashboard-prayer-context{font-size:13px}
  .home-dashboard .tend-filter-button,.person-focused-prayer .tend-filter-button{min-height:44px;padding:7px 10px;font-size:14px}
@@ -2074,7 +2060,404 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
  html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-top-meta){padding:16px}
  html[data-mobile-text-size="large"] .home-dashboard .plan-item-heading .tend-type-title{font-size:23px}
  html[data-mobile-text-size="large"] .home-dashboard .planitem:has(.plan-item-top-meta) .tend-type-description,html[data-mobile-text-size="large"] .home-dashboard .plan-item-no-description{font-size:19px}
- html[data-mobile-text-size="large"] .home-dashboard .plan-item-action>.btn{min-height:44px;padding:8px 14px;font-size:14px!important}
+ html[data-mobile-text-size="large"] .home-dashboard .plan-item-action>.btn{min-height:44px;padding:8px 14px}
+ html[data-mobile-text-size-level="larger"] .home-dashboard .planitem:has(.plan-item-top-meta){gap:14px;padding:18px}
+ html[data-mobile-text-size-level="larger"] .home-dashboard .planitem:has(.plan-item-top-meta) .tend-type-title{line-height:1.3}
+ html[data-mobile-text-size-level="larger"] .home-dashboard .planitem:has(.plan-item-top-meta) .tend-type-description,html[data-mobile-text-size-level="larger"] .home-dashboard .plan-item-no-description{line-height:1.5}
+ html[data-mobile-text-size-level="larger"] .home-dashboard .plan-item-meta-people .prayer-person{gap:5px;padding:4px 9px 4px 4px;font-size:13px}
+ html[data-mobile-text-size-level="larger"] .home-dashboard .plan-item-meta-people .avatar{width:30px!important;height:30px!important}
+ html[data-mobile-text-size-level="larger"] .home-dashboard .plan-detail-icon{width:19px;height:19px}
+ html[data-mobile-text-size-level="larger"] .home-dashboard .planitem:has(.plan-item-top-meta) .plan-item-action>.btn{min-height:50px;padding:9px 16px}
+}
+
+/* Reusable semantic typography scale. Values use the measured Large
+   dashboard headings as anchors; role rules below are scoped to Today. */
+:root{
+ --tend-type-section-header:1.35rem;
+ --tend-type-title:1.2rem;
+ --tend-type-description:1.032rem;
+ --tend-type-metadata:.864rem;
+ --tend-type-category-label:.96rem;
+ --tend-type-person-badge:.936rem;
+ --tend-type-special-badge:.936rem;
+ --tend-type-button-label:.984rem;
+ --tend-type-time-block:.96rem;
+ --tend-type-navigation:.864rem;
+ --tend-type-overall-score:2.8rem;
+ --tend-type-area-score:.75rem;
+ --tend-type-weather-temperature:1.9rem;
+ --tend-type-calendar-day:.9rem;
+ --tend-type-calendar-month:.75rem;
+ --tend-calendar-icon-width:2.25rem;
+ --tend-calendar-icon-height:2.5rem;
+ --tend-calendar-icon-radius:.5rem;
+}
+html[data-mobile-text-size-level="large"]{
+ --tend-type-section-header:1.51875rem;
+ --tend-type-title:1.35rem;
+ --tend-type-description:1.161rem;
+ --tend-type-metadata:.972rem;
+ --tend-type-category-label:1.08rem;
+ --tend-type-person-badge:1.053rem;
+ --tend-type-special-badge:1.053rem;
+ --tend-type-button-label:1.107rem;
+ --tend-type-time-block:1.08rem;
+ --tend-type-navigation:.972rem;
+ --tend-type-overall-score:3.15rem;
+ --tend-type-area-score:.84375rem;
+ --tend-type-weather-temperature:2.1375rem;
+ --tend-type-calendar-day:1.0125rem;
+ --tend-type-calendar-month:.8125rem;
+ --tend-calendar-icon-width:2.75rem;
+ --tend-calendar-icon-height:3.0625rem;
+ --tend-calendar-icon-radius:.5625rem;
+}
+html[data-mobile-text-size-level="larger"]{
+ --tend-type-section-header:1.6875rem;
+ --tend-type-title:1.5rem;
+ --tend-type-description:1.29rem;
+ --tend-type-metadata:1.08rem;
+ --tend-type-category-label:1.2rem;
+ --tend-type-person-badge:1.17rem;
+ --tend-type-special-badge:1.17rem;
+ --tend-type-button-label:1.23rem;
+ --tend-type-time-block:1.2rem;
+ --tend-type-navigation:1.08rem;
+ --tend-type-overall-score:3.5rem;
+ --tend-type-area-score:.9375rem;
+ --tend-type-weather-temperature:2.375rem;
+ --tend-type-calendar-day:1.125rem;
+ --tend-type-calendar-month:.875rem;
+ --tend-calendar-icon-width:3.25rem;
+ --tend-calendar-icon-height:3.625rem;
+ --tend-calendar-icon-radius:.625rem;
+}
+.home-dashboard{
+ --tend-dashboard-content-edge:17px;
+ --tend-dashboard-card-padding:1rem;
+ --tend-dashboard-content-gap:.75rem;
+ --tend-dashboard-section-gap:2rem;
+ font-family:var(--sans)
+}
+.home-dashboard>.sectiontitle{
+ box-sizing:border-box;
+ padding-left:var(--tend-dashboard-content-edge)!important
+}
+.home-dashboard>.sectiontitle:not(.dashboard-greeting){
+ margin-top:var(--tend-dashboard-section-gap);
+ margin-bottom:var(--tend-dashboard-content-gap)
+}
+.home-dashboard .dashboard-greeting{margin:1.5rem 0 1rem}
+.home-dashboard .overall-card,
+.home-dashboard .calendar-card,
+.home-dashboard .dashboard-focused-prayer,
+.home-dashboard .upitem,
+.home-dashboard .planitem:has(.plan-item-top-meta){
+ padding:var(--tend-dashboard-card-padding)!important
+}
+.home-dashboard .planitem:has(.plan-item-top-meta){gap:var(--tend-dashboard-content-gap)!important}
+.home-dashboard .planitem:has(.plan-item-top-meta) .plan-item-copy{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;row-gap:4px!important}
+.home-dashboard .planitem:has(.plan-item-top-meta) .plan-item-heading{display:contents}
+.home-dashboard .planitem:has(.plan-item-top-meta) .plan-item-heading>.tend-type-title{grid-column:1;grid-row:1;min-width:0}
+.home-dashboard .planitem:has(.plan-item-top-meta) .plan-item-heading>.plan-item-action{grid-column:2;grid-row:1}
+.home-dashboard .planitem:has(.plan-item-top-meta) .plan-item-description{grid-column:1/-1;grid-row:2}
+.home-dashboard .dashboard-focused-prayer{
+ grid-template-columns:minmax(0,1fr) auto;
+ grid-template-rows:auto auto;
+ align-items:center;
+ column-gap:var(--tend-dashboard-content-gap);
+ row-gap:8px;
+ margin-bottom:var(--tend-dashboard-section-gap)
+}
+.home-dashboard .dashboard-focused-prayer>.dashboard-prayer-controls{display:contents}
+.home-dashboard .dashboard-focused-prayer .dashboard-prayer-filter{grid-column:1;grid-row:1;justify-self:start}
+.home-dashboard .dashboard-focused-prayer>.faith-start-prayer{grid-column:2;grid-row:1;justify-self:end}
+.home-dashboard .dashboard-focused-prayer .dashboard-prayer-context{grid-column:1/-1;grid-row:2;justify-self:start}
+@media(max-width:385px){
+ .home-dashboard .dashboard-focused-prayer{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto}
+ .home-dashboard .dashboard-focused-prayer .dashboard-prayer-filter{grid-column:1;grid-row:1;white-space:nowrap}
+ .home-dashboard .dashboard-focused-prayer>.faith-start-prayer{grid-column:1;grid-row:2}
+ .home-dashboard .dashboard-focused-prayer .dashboard-prayer-context{grid-column:1;grid-row:3}
+}
+.home-dashboard .calendar-breathing-room{min-height:0;padding:var(--tend-dashboard-content-gap) 0}
+.home-dashboard .current-plan-items>.plan-empty-card{min-height:0;padding:var(--tend-dashboard-card-padding)}
+.home-dashboard .dashboard-free-moment,
+.home-dashboard .planblock{margin-bottom:var(--tend-dashboard-section-gap)}
+.home-dashboard>.sectiontitle h2,
+.home-dashboard>.sectiontitle.dashboard-greeting h2{
+ color:var(--ink);
+ font-family:var(--sans);
+ font-size:var(--tend-type-section-header)!important;
+ font-weight:700!important;
+ line-height:1.25!important;
+ overflow-wrap:anywhere
+}
+.home-dashboard .dashboard-overall-heading h3{
+ color:var(--ink);
+ font-family:var(--sans);
+ font-size:var(--tend-type-title)!important;
+ font-weight:700!important;
+ line-height:1.3!important;
+ overflow-wrap:anywhere
+}
+.home-dashboard .dashboard-overall-heading{display:flex;justify-content:space-between;align-items:baseline}
+.home-dashboard .dashboard-overall-heading{padding-left:0!important}
+.home-dashboard .dashboard-greeting{padding-left:var(--tend-dashboard-content-edge)!important}
+.home-dashboard .dashboard-greeting .hint,
+.home-dashboard>.sectiontitle .hint,
+.home-dashboard .cal-time,
+.home-dashboard .current-plan-range,
+.home-dashboard .current-plan-item-count,
+.home-dashboard .plan-summary-meta,
+.home-dashboard .plan-item-meta,
+.home-dashboard .plan-item-meta-entry,
+.home-dashboard .tend-type-meta,
+.home-dashboard .dashboard-spark-footer,
+.home-dashboard .cal-range,
+.home-dashboard .cal-calname,
+.home-dashboard .calsync,
+.home-dashboard .updays,
+.home-dashboard .update,
+.home-dashboard .weather-card-reading>span,
+.home-dashboard .cal-ic-top,
+.home-dashboard .dashboard-free-moment-count,
+.home-dashboard .current-plan-time-option-range,
+.home-dashboard .current-plan-time-option-count,
+.home-dashboard .dashboard-prayer-people-count,
+.home-dashboard .dashboard-prayer-time-option-range,
+.home-dashboard .dashboard-prayer-time-option-count,
+.home-dashboard .calendar-card .empty,
+.home-dashboard .uprow>.empty{
+ font-family:var(--sans);
+ font-size:var(--tend-type-metadata)!important;
+ font-weight:400!important;
+ line-height:1.4;
+ overflow-wrap:anywhere
+}
+.home-dashboard .tend-type-title,
+.home-dashboard .cal-title,
+.home-dashboard .upmain .uplabel,
+.home-dashboard .calendar-breathing-room strong{
+ color:var(--ink);
+ font-family:var(--sans);
+ font-size:var(--tend-type-title)!important;
+ font-weight:700!important;
+ line-height:1.3!important;
+ white-space:normal!important;
+ overflow:visible;
+ text-overflow:clip;
+ overflow-wrap:anywhere
+}
+.home-dashboard .tend-type-description,
+.home-dashboard .plan-item-no-description,
+.home-dashboard .dashboard-prayer-context,
+.home-dashboard .current-plan-items>.plan-empty-card,
+.home-dashboard .calendar-breathing-room p{
+ font-family:var(--sans);
+ font-size:var(--tend-type-description)!important;
+ font-weight:400!important;
+ line-height:1.5!important;
+ overflow-wrap:anywhere
+}
+.home-dashboard .dashboard-prayer-context{
+ font-size:var(--tend-type-metadata)!important;
+ line-height:1.4!important
+}
+.home-dashboard .plan-item-description,
+.home-dashboard .plan-item-copy,
+.home-dashboard .plan-item-heading,
+.home-dashboard .plan-item-top-meta,
+.home-dashboard .plan-item-meta-details,
+.home-dashboard .plan-item-footer,
+.home-dashboard .dashboard-prayer-controls{
+ min-width:0;
+ max-width:100%;
+ flex-wrap:wrap
+}
+.home-dashboard .plan-item-copy{grid-template-rows:auto auto!important;height:auto!important}
+.home-dashboard .plan-item-description{min-height:0!important}
+.home-dashboard .plan-item-meta-details{align-items:flex-start}
+.home-dashboard .plan-item-meta-details>.plan-item-meta-entry--history{margin-left:auto;text-align:right;justify-content:flex-end}
+.home-dashboard .plan-item-meta-details>.plan-kind-badge.rhy{display:none!important}
+.home-dashboard .plan-item-meta-details .plan-item-meta-entry:last-child:not(.plan-item-meta-entry--history){margin-left:0;text-align:left;justify-content:flex-start}
+.home-dashboard .plan-item-meta{display:flex;flex-wrap:wrap;gap:4px 10px}
+.home-dashboard .planitem,
+.home-dashboard .dashboard-free-moment-card.planitem:has(.plan-item-top-meta){height:auto!important;min-height:0}
+.home-dashboard .current-plan-time-picker,
+.home-dashboard .current-plan-now{
+ font-family:var(--sans);
+ font-size:var(--tend-type-section-header)!important;
+ font-weight:700!important;
+ line-height:1.25!important
+}
+.home-dashboard .current-plan-time-picker{margin-left:var(--tend-dashboard-content-edge)!important}
+.home-dashboard .current-plan-period{padding-left:var(--tend-dashboard-content-edge)!important}
+.home-dashboard .planblock summary .plan-block-name,
+.home-dashboard .current-plan-period .plan-block-name{
+ font-family:var(--sans);
+ font-size:var(--tend-type-time-block)!important;
+ font-weight:600!important;
+ line-height:1.3!important;
+ white-space:normal;
+ overflow-wrap:anywhere
+}
+.home-dashboard .menu-area .ma-name{
+ min-width:0;
+ flex:1 1 0;
+ font-family:var(--sans);
+ font-size:var(--tend-type-category-label)!important;
+ font-weight:600!important;
+ line-height:1.3;
+ white-space:normal;
+ overflow-wrap:break-word;
+ word-break:normal
+}
+.home-dashboard .menu-area{min-width:0}
+.home-dashboard .menu-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.home-dashboard .plan-item-meta-people .prayer-person,
+.home-dashboard .plan-people-menu .prayer-person,
+.home-dashboard .dashboard-prayer-controls .prayer-person,
+.home-dashboard .plan-people-overflow>summary,
+.home-dashboard .plan-category-overflow>summary,
+body:has(.home-dashboard) .dashboard-prayer-people-dialog .prayer-person{
+ box-sizing:border-box;
+ min-height:44px;
+ font-family:var(--sans);
+ font-size:var(--tend-type-person-badge)!important;
+ font-weight:500!important;
+ line-height:1.2;
+ white-space:normal;
+ overflow-wrap:anywhere
+}
+.home-dashboard .plan-item-meta-details>.plan-kind-badge{
+ display:inline-grid;
+ min-width:24px;
+ min-height:24px;
+ font-size:var(--tend-type-special-badge)!important;
+ font-weight:500!important;
+ line-height:1.2
+}
+.home-dashboard .now-badge,
+.home-dashboard .next-badge{
+ font-family:var(--sans);
+ font-size:var(--tend-type-special-badge)!important;
+ font-weight:500!important;
+ line-height:1.2;
+ white-space:normal;
+ overflow-wrap:anywhere
+}
+.home-dashboard .faith-prayer-session-count{
+ box-sizing:border-box;
+ min-width:24px;
+ min-height:24px;
+ height:auto;
+ padding:2px 5px;
+ font-size:var(--tend-type-special-badge)!important;
+ font-weight:500!important;
+ line-height:1.2
+}
+.home-dashboard .plan-item-action>.btn,
+.home-dashboard .dashboard-focused-prayer>.faith-start-prayer,
+.home-dashboard .tend-filter-button,
+.home-dashboard .day-jumps .btn,
+body:has(.home-dashboard) .dashboard-prayer-people-dialog .btn{
+ box-sizing:border-box;
+ min-height:44px!important;
+ font-family:var(--sans);
+ font-size:var(--tend-type-button-label)!important;
+ font-weight:600!important;
+ line-height:1.25!important;
+ white-space:normal;
+ overflow-wrap:anywhere
+}
+.home-dashboard .plan-item-action>.btn{min-width:76px}
+.home-dashboard .plan-kind-toggle,
+.home-dashboard .plan-item-category-row .rhythm-area-badge{
+ box-sizing:border-box;
+ width:44px!important;
+ height:44px!important;
+ min-width:44px!important;
+ min-height:44px!important
+}
+.home-dashboard .plan-kind-toggle .collection-icon,
+.home-dashboard .plan-item-category-row .rhythm-area-badge svg{
+ width:18px;
+ height:18px
+}
+.home-dashboard .ov-score{
+ font-size:var(--tend-type-overall-score)!important;
+ font-variant-numeric:tabular-nums
+}
+.home-dashboard .menu-area .ma-score{
+ font-size:var(--tend-type-area-score)!important;
+ font-variant-numeric:tabular-nums
+}
+.home-dashboard .weather-card-reading strong{
+ font-size:var(--tend-type-weather-temperature)!important;
+ font-variant-numeric:tabular-nums
+}
+.home-dashboard .cal-ic-day{
+ min-height:1.25em;
+ line-height:1.1!important;
+ font-size:var(--tend-type-calendar-day)!important;
+ font-variant-numeric:tabular-nums
+}
+.home-dashboard .cal-ic{box-sizing:border-box;width:var(--tend-calendar-icon-width);height:var(--tend-calendar-icon-height);min-height:var(--tend-calendar-icon-height);border-radius:var(--tend-calendar-icon-radius)}
+.home-dashboard .cal-ic-top{flex:0 0 auto;height:auto!important;font-size:var(--tend-type-calendar-month)!important;line-height:1.2!important;white-space:nowrap}
+.home-dashboard .upitem{min-height:44px}
+.home-dashboard .updays{white-space:normal}
+.home-dashboard .cal-range,
+.home-dashboard .current-plan-range,
+.home-dashboard .cal-calname{white-space:normal;overflow-wrap:anywhere}
+body:has(.home-dashboard) .utility-primary button.utility-primary-button,
+body:has(.home-dashboard) nav.tabs button.focus-nav-button{
+ min-height:44px;
+ font-family:var(--sans);
+ font-size:var(--tend-type-navigation)!important;
+ font-weight:500!important;
+ line-height:1.2;
+ white-space:normal
+}
+body:has(.home-dashboard) .utility-primary button.utility-primary-button>span:last-child,
+body:has(.home-dashboard) nav.tabs button.focus-nav-button>span:last-child{
+ font-size:var(--tend-type-navigation)!important;
+ font-weight:500!important
+}
+body:has(.home-dashboard) .mobile-display-toggle{min-width:44px;min-height:44px}
+@media(max-width:600px){
+ .home-dashboard{--tend-dashboard-content-edge:17px}
+ .home-dashboard .dashboard-greeting{margin:1.5rem 0 1rem}
+ .home-dashboard .dashboard-overall-heading{padding-top:0;padding-bottom:0}
+ .home-dashboard .current-plan-summary{min-height:0}
+ .home-dashboard .current-plan-period{padding-left:var(--tend-dashboard-content-edge)!important}
+ .home-dashboard .planblock summary{flex-wrap:wrap}
+}
+@media(max-width:720px){
+ .home-dashboard .menu-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:430px){
+ .home-dashboard .menu-grid{grid-template-columns:minmax(0,1fr)}
+}
+html:not([data-mobile-text-size-level="large"]):not([data-mobile-text-size-level="larger"]) .home-dashboard .plan-item-meta-people .prayer-person{
+ position:relative;
+ isolation:isolate;
+ gap:5px;
+ padding:3px 9px 3px 3px;
+ border-color:transparent;
+ background:transparent;
+}
+html:not([data-mobile-text-size-level="large"]):not([data-mobile-text-size-level="larger"]) .home-dashboard .plan-item-meta-people .prayer-person::before{
+ position:absolute;
+ z-index:-1;
+ inset:5px 0;
+ border:1px solid var(--line);
+ border-radius:999px;
+ background:var(--mist);
+ content:"";
+}
+html:not([data-mobile-text-size-level="large"]):not([data-mobile-text-size-level="larger"]) .home-dashboard .plan-item-meta-people .prayer-person .avatar{
+ width:24px!important;
+ height:24px!important;
 }
 
 /* Person management rhythm rows keep content aligned and actions grouped. */
@@ -2229,6 +2612,7 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
  html[data-mobile-text-size="large"] .person-profile-page .profile-rhythm-meta,
  html[data-mobile-text-size-level="larger"] .person-profile-page .profile-rhythm-meta{font-size:10.5px}
 }
+
 @media(max-width:300px){
  .person-profile-page .profile-rhythm-meta-frequency .profile-rhythm-meta-wide{display:none}
  .person-profile-page .profile-rhythm-meta-frequency .profile-rhythm-meta-narrow{display:inline}
@@ -2345,3 +2729,18 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
 .plan-kind-rhythm,.pill.rhy,.careplan-kind-rhythm,.person-section-badge.plan-kind-rhythm,.plan-kind-badge.rhy{border-color:var(--action-rhythm-border,#B8E1CA);background:var(--action-rhythm-background,#E3F6ED);color:var(--action-rhythm-text,#1C5844)}
 .plan-kind-spark,.pill.spk,.person-section-badge.plan-kind-spark,.plan-kind-badge.spk{border-color:var(--action-spark-border,#E8CF74);background:var(--action-spark-background,#FFF3C4);color:var(--action-spark-text,#735B16)}
 .plan-kind-prayer,.pill.pry,.careplan-kind-prayer,.person-section-badge.plan-kind-prayer,.plan-kind-badge.pry{border-color:var(--action-prayer-border,#D2C5DF);background:var(--action-prayer-background,#F0EAF5);color:var(--action-prayer-text,#705A8D)}
+
+html[data-mobile-text-size] .home-dashboard .upitem .cal-ic{
+ box-sizing:border-box;
+ width:var(--tend-calendar-icon-width)!important;
+ height:var(--tend-calendar-icon-height)!important;
+ min-height:var(--tend-calendar-icon-height)!important;
+ border-radius:var(--tend-calendar-icon-radius)!important;
+ font-size:1rem;
+ line-height:1!important
+}
+html[data-mobile-text-size] .home-dashboard .upitem .cal-ic-top{
+ height:auto!important;
+ font-size:var(--tend-type-calendar-month)!important;
+ line-height:1.2!important
+}
