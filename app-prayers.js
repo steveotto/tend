@@ -28,12 +28,18 @@ function prayerIsDue(p){if(!p||p.answered||p.archived||(p.until&&todayStr()>p.un
 function personPrayerRecords(person){return S.prayers.filter(function(p){return p.personId===person.id||(Array.isArray(p.sharedWith)&&p.sharedWith.indexOf(person.id)!==-1);});}
 function prayerMeterScore(person){return avg(personPrayerRecords(person).filter(function(p){return !p.answered&&!p.archived;}).map(function(p){return prayerScore(p);}));}
 function personPrayerScheduleInfo(person){var last=null;personPrayerRecords(person).filter(function(p){return !p.answered&&!p.archived;}).forEach(function(p){prayerLogsFor(p).forEach(function(ts){if(last===null||ts>last)last=ts;});});return {last:last===null?null:{ts:last}};}
-function prayerScheduleLabel(p){var f=prayerFreq(p),days=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],label="Daily";
+function prayerScheduleFrequencyLabel(p){var f=prayerFreq(p),days=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],label="Daily";
  if(f==="daily")label="Daily";
  if(f==="weekly")label="Weekly on "+days[p.scheduleDow==null?((p.weekdays||[])[0]??1):+p.scheduleDow];
  if(f==="selectdays")label="Every "+(p.weekdays||[]).slice().sort().map(function(x){return days[+x];}).join(", ");
  if(f==="monthly")label=recDescribe(Object.assign(recNormRule(Object.assign({},p,{freq:f})),{end:null})).replace(/^Every month /,'Monthly ');
- label+=" · "+(TODS[p.tod]||TODS.anytime||"Anytime");
+ return label;
+}
+function prayerScheduleTime(p){var key=p.tod||"anytime",full=key==="anytime"?"Anytime":TODS[key]||key;
+ if(typeof window.tendRhythmCardTime==="function")return window.tendRhythmCardTime({tod:key});
+ return {full:full,label:full,narrow:full};
+}
+function prayerScheduleLabel(p){var label=prayerScheduleFrequencyLabel(p)+" · "+prayerScheduleTime(p).full;
  if(p.until)label+=" · ends "+prayerDate(p.until);
  return label;
 }
@@ -56,6 +62,14 @@ function prayerEditor(p,context){var profile=context==="profile",faith=context==
 }
 function personPrayerAddFields(pid){var p=S.people.find(function(x){return x.id===pid;}),categories={marriage:"Marriage",parenting:"Kids",friendships:"Friends"};return prayerEditor({personId:pid,category:categories[p&&p.area]||"Family",freq:"selectdays",weekdays:[new Date().getDay()],tod:"anytime",added:todayStr()},"profile");}
 function prayerActionMenu(p,prayAttr){return '<details class="prayer-action-menu"><summary class="btn mini ghost">Actions</summary><div class="prayer-action-options"><button type="button" '+prayAttr+'>Pray</button><button type="button" data-prayerans="'+esc(p.id)+'">Answered</button><button type="button" data-prayerarchive="'+esc(p.id)+'">Archived</button></div></details>';}
+function prayerProfileMetaHTML(p){
+ var logs=prayerLogsFor(p),last=logs.length?{ts:logs[logs.length-1]}:null,relative=typeof window.tendRhythmCardLastTended==="function"?window.tendRhythmCardLastTended(last):{label:last?prayerLastPrayedLabel(p):"Never",full:last?prayerLastPrayedLabel(p):"Never prayed"};
+ var frequency=prayerScheduleFrequencyLabel(p),time=prayerScheduleTime(p);
+ return '<footer class="rhythm-card__meta profile-prayer-meta" aria-label="Prayer schedule and history">'
+  +'<span class="rhythm-card__meta-item" aria-label="Frequency: '+esc(frequency)+'">'+planMetaIcon("frequency")+'<span class="rhythm-card__meta-text">'+esc(frequency)+'</span></span>'
+  +'<span class="rhythm-card__meta-item" aria-label="Time of day: '+esc(time.full||time.label)+'">'+planMetaIcon("time")+'<span class="rhythm-card__meta-text"><span class="rhythm-card__meta-wide">'+esc(time.label||time.full)+'</span><span class="rhythm-card__meta-narrow">'+esc(time.narrow||time.label||time.full)+'</span></span></span>'
+  +'<span class="rhythm-card__meta-item rhythm-card__last" aria-label="Last prayed '+esc(relative.full)+'">'+planMetaIcon("occurred")+'<span>'+esc(relative.label)+'</span></span></footer>';
+}
 function prayerItemHTML(p,profile){var faith=profile==="faith",person=S.people.find(function(x){return x.id===p.personId;}),count=p.prayed||0,closed=p.answered||p.archived,ownerId=p.profileOwnerId||p.personId||"global",viewerId=p.profileViewingId||p.personId;
  if(editingPrayerId===p.id)return '<dialog class="profile-editor-dialog prayer-edit-dialog" data-editor-modal aria-label="Edit prayer">'+prayerEditor(p,faith?'faith':profile?'profile':'global')+'</dialog>';
  var sc=prayerScore(p),scoreText=sc===null?'-':sc+'%';
@@ -66,13 +80,15 @@ function prayerItemHTML(p,profile){var faith=profile==="faith",person=S.people.f
  var categories=tendPrayerCategoryBadges(p);
  var participantBadges=tendAssociationPeopleBadges(p,ownerId,profile?viewerId:null,"prayer");
  var badges=(!person&&p.faithOwner==="me"&&!profile?'<span class="prayer-person">'+(settings().profilePhoto?personAvatar({name:"Me",photo:settings().profilePhoto},24):"")+'Me</span>':'')+(!profile?'<span class="pill pry">'+collectionIcon("prayer")+' Prayer</span>':"")+participantBadges+categories;
- var identity=tendPrayerCardContentHTML(p,{meta:prayerScheduleLabel(p)+' · Last prayed '+prayerLastPrayedLabel(p)+' · Prayed '+count+' '+(count===1?'time':'times')+' · Added '+prayerDate(p.added)+(p.answered?' · Answered '+prayerDate(p.answeredDate):'')+(p.archived?' · Archived '+prayerDate(p.archivedDate):''),badges:profile?"":badges,peopleBadges:profile?badges:""});
+ var prayerMeta=prayerScheduleLabel(p)+' · Last prayed '+prayerLastPrayedLabel(p)+' · Prayed '+count+' '+(count===1?'time':'times')+' · Added '+prayerDate(p.added)+(p.answered?' · Answered '+prayerDate(p.answeredDate):'')+(p.archived?' · Archived '+prayerDate(p.archivedDate):'');
+ var identity=tendPrayerCardContentHTML(p,{meta:profile&&!faith?"":prayerMeta,badges:profile?"":badges,peopleBadges:profile?badges:""});
  var details="",meta="";
  var editAction='<button type="button" class="iconbtn prayer-edit-trigger profile-prayer-edit" data-prayeredit="'+esc(p.id)+'" aria-label="Edit '+esc(p.text)+'" title="Edit prayer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l4.2-.8L20 7.4 16.6 4 4.8 15.8Z"/></svg></button>';
  if(profile&&!faith){
+  editAction='<button type="button" class="rhythm-card__edit prayer-edit-trigger" data-prayeredit="'+esc(p.id)+'" aria-label="Edit '+esc(p.text)+'" title="Edit prayer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l4.2-.8L20 7.4 16.6 4 4.8 15.8Z"/></svg></button>';
   identity=identity.replace('</strong>','</strong>'+editAction);
   var prayerAction=closed?'<button type="button" class="btn mini ghost" data-prayerunans="'+esc(p.id)+'">Reopen</button>':prayerActionMenu(p,prayAttr);
-  return '<article class="prayer-item prayer-rhythm-row profile-prayer-row"><div class="prayer-content gr-main">'+identity+details+meta+'</div><div class="profile-prayer-actions">'+prayerAction+score+'</div></article>';
+  return '<article class="prayer-item prayer-rhythm-row profile-prayer-row"><div class="prayer-content gr-main">'+identity+details+meta+'</div><div class="profile-prayer-actions">'+prayerAction+score+'</div>'+prayerProfileMetaHTML(p)+'</article>';
  }
  var actions='<div class="prayer-row-actions">'+(closed?'<button class="btn mini ghost" data-prayerunans="'+esc(p.id)+'">Reopen</button>':prayerActionMenu(p,prayAttr))+'<button class="iconbtn rhythm-history-trigger" data-prayerhistory="'+esc(p.id)+'" aria-label="View history for '+esc(p.text)+'" title="View prayer history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button type="button" class="iconbtn prayer-edit-trigger" data-prayeredit="'+esc(p.id)+'" aria-label="Edit '+esc(p.text)+'" title="Edit prayer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l4.2-.8L20 7.4 16.6 4 4.8 15.8Z"/></svg></button></div>';
  return '<article class="prayer-item prayer-rhythm-row">'+score+'<div class="prayer-content gr-main">'+identity+details+meta+'</div>'+actions+'</article>';

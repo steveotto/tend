@@ -247,6 +247,7 @@ function rhythmCardTime(r){
  else if(full)full=full.charAt(0).toUpperCase()+full.slice(1);
  return {full:full,label:normal,narrow:narrow};
 }
+window.tendRhythmCardTime=function(r){return rhythmCardTime(r);};
 function rhythmCardLastTended(last){
  if(!last)return {full:"Never tended",label:"Never"};
  var days=daysSince(last.ts),full,label;
@@ -258,6 +259,7 @@ function rhythmCardLastTended(last){
  else {var years=Math.floor(days/365);label=years+"y ago";full=years+(years===1?" year ago":" years ago");}
  return {full:full,label:label};
 }
+window.tendRhythmCardLastTended=function(last){return rhythmCardLastTended(last);};
 window.tendRhythmCardMetadata=function(r){
  var last=rhythmLast(r);
  return {frequency:rhythmCardFrequency(r),time:rhythmCardTime(r),lastTended:rhythmCardLastTended(last),frequencyIconHTML:planMetaIcon("frequency"),timeIconHTML:planMetaIcon("time"),lastIconHTML:planMetaIcon("occurred")};

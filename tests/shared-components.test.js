@@ -9,6 +9,7 @@ const vm = require("node:vm");
 const source = fs.readFileSync(path.join(__dirname, "..", "app-shared-components.js"), "utf8");
 const faithSource = fs.readFileSync(path.join(__dirname, "..", "app-faith.js"), "utf8");
 const homeRhythmSource = fs.readFileSync(path.join(__dirname, "..", "app-views1.js"), "utf8");
+const prayerSource = fs.readFileSync(path.join(__dirname, "..", "app-prayers.js"), "utf8");
 const personRhythmSource = fs.readFileSync(path.join(__dirname, "..", "app-rhythms2.js"), "utf8");
 const categoryRhythmSource = fs.readFileSync(path.join(__dirname, "..", "app-categoryrhythms.js"), "utf8");
 const styles = fs.readFileSync(path.join(__dirname, "..", "tend.css"), "utf8");
@@ -91,6 +92,102 @@ test("Home, Person, and category rhythm cards share one renderer and card struct
   assert.match(styles, /\.rhythm-card \.rhythm-card__badges \.prayer-person/);
   assert.match(styles, /\.rhythm-card \.rhythm-card__badges \.rhythm-area-badge/);
   assert.doesNotMatch(styles, /\.person-profile-page \.profile-rhythm-row/);
+});
+
+test("Home and Person Spark cards use one shared renderer and preserve card actions", () => {
+  const components = loadComponents();
+  const spark = {
+    id: "movie-night",
+    text: "Movie night",
+    details: "Pick a film together",
+    by: "2026-10-25",
+    time: "19:30"
+  };
+  const homeCard = components.tendSparkCardHTML(spark, {
+    title: spark.text,
+    description: spark.details,
+    actionHTML: '<button class="btn sparkbtn" data-sparkdo="amy|movie-night|amy">Do it</button>',
+    headingEditHTML: '<button class="plan-item-edit-trigger" data-sedit="amy|movie-night" aria-label="Edit Movie night">Edit</button>',
+    topMetaHTML: '<div class="plan-item-top-meta"><div class="plan-people-visible">Amy and Leah</div></div>',
+    footerHTML: '<span class="dashboard-spark-deadline">Due Oct 25</span>',
+    className: "dashboard-free-moment-card",
+    cardAttributes: { "data-dashboard-free-spark-card": "" }
+  });
+  const personCard = components.tendSparkCardHTML(spark, {
+    title: spark.text,
+    description: spark.details,
+    actionHTML: '<button class="btn sparkbtn" data-sparkdo="amy|movie-night|leah">Do it</button>',
+    headingEditHTML: '<button class="profile-rhythm-edit-action" data-sedit="amy|movie-night" aria-label="Edit Movie night">Edit</button>',
+    topMetaHTML: '<div class="plan-item-top-meta"><button data-personbadge="amy|spark">Amy</button></div>',
+    footerHTML: '<span class="spark-card__meta-item">7:30pm</span><span class="dashboard-spark-deadline">Due Oct 25</span>',
+    className: "profile-spark-row",
+    cardAttributes: { "data-spark-row": "amy|movie-night" }
+  });
+
+  for (const card of [homeCard, personCard]) {
+    assert.match(card, /^<div class="spark-card planitem /);
+    assert.match(card, /class="plan-item-copy"/);
+    assert.match(card, /class="spark-card__title-line"[\s\S]*class="spark-card__title-edit"[\s\S]*data-sedit=/);
+    assert.match(card, /class="plan-item-top-meta"/);
+    assert.match(card, /class="plan-item-footer dashboard-spark-footer/);
+    assert.match(card, /Movie night/);
+    assert.match(card, /Pick a film together/);
+    assert.match(card, /data-sparkdo=/);
+    assert.match(card, /Due Oct 25/);
+  }
+  assert.match(homeCard, /data-dashboard-free-spark-card=""/);
+  assert.match(personCard, /data-spark-row="amy\|movie-night"/);
+  assert.match(personCard, /data-sedit="amy\|movie-night"/);
+  assert.doesNotMatch(personCard.match(/class="plan-item-top-meta"[\s\S]*?<\/div>/)[0], /data-sedit=/);
+  assert.equal((source.match(/function tendSparkCardHTML\(/g) || []).length, 1);
+  assert.match(homeRhythmSource, /function freeMomentSparkCardHTML\(item,options\)/);
+  assert.match(homeRhythmSource, /return tendSparkCardHTML\(item,/);
+  assert.match(homeRhythmSource, /headingEditHTML:planItemEditAction\(item\)/);
+  assert.match(homeRhythmSource, /topMetaHTML:planItemTopRow\(item,false\)/);
+  assert.equal((homeRhythmSource.match(/freeMomentSparkCardHTML\(current,/g) || []).length, 2);
+  assert.match(homeRhythmSource, /out\+=tendSparkCardHTML\(s,/);
+  assert.match(homeRhythmSource, /headingEditHTML:editAction/);
+  assert.doesNotMatch(homeRhythmSource, /<div class="spark-card/);
+  assert.doesNotMatch(homeRhythmSource, /class="profile-spark-top"/);
+  assert.doesNotMatch(homeRhythmSource, /class="planitem dashboard-free-moment-card"/);
+  assert.match(styles, /\.spark-card\{/);
+  assert.match(styles, /\.spark-card \.sparkbtn\{border:1px solid/);
+  assert.match(styles, /\.spark-card \.spark-card__title-line\{display:block;flex:0 1 auto/);
+  assert.match(styles, /\.spark-card \.plan-item-copy \.plan-item-heading \.spark-card__title-line \.tend-type-title\{display:inline/);
+  assert.match(styles, /\.spark-card \.plan-people\{display:flex;align-items:center;gap:6px;min-width:0;width:auto\}/);
+  assert.match(styles, /\.spark-card \.plan-item-category-row\{display:flex;align-items:center;gap:6px;flex:none;min-width:0;margin-left:0\}/);
+  assert.match(styles, /\.home-dashboard \.spark-card \.plan-item-category-row \.rhythm-area-badge\{[\s\S]*?width:20px!important;[\s\S]*?height:20px!important/);
+  assert.match(styles, /\.home-dashboard \.spark-card \.plan-item-category-row \.rhythm-area-badge svg\{[\s\S]*?width:12px!important;[\s\S]*?height:12px!important/);
+  assert.match(styles, /\.home-dashboard \.current-plan-items>\.rhythm-card\{margin-bottom:14px\}/);
+  assert.doesNotMatch(styles, /\.person-profile-page \.profile-spark-row\.card/);
+  assert.doesNotMatch(styles, /\.person-profile-page \.person-free-moment-card \.tend-type-title/);
+});
+
+test("Person prayer section follows the profile card treatment with a shared-style metadata footer", () => {
+  assert.match(homeRhythmSource, /function profilePanelStart\(key\)\{return '<section class=\"'\+\(key===\"prayer\"\?\"\":\"card \"\)\+'profile-tab-panel\"/);
+  assert.match(homeRhythmSource, /class=\"profile-panel-toolbar profile-rhythm-toolbar\"[^>]*>.*?class=\"btn mini ghost profile-rhythm-add profile-prayer-add\" data-personprayeropen=/);
+  assert.match(prayerSource, /function prayerProfileMetaHTML\(p\)/);
+  assert.match(prayerSource, /class=\"rhythm-card__meta profile-prayer-meta\" aria-label=\"Prayer schedule and history\"/);
+  assert.match(prayerSource, /planMetaIcon\(\"frequency\"\)[\s\S]*?planMetaIcon\(\"time\"\)[\s\S]*?planMetaIcon\(\"occurred\"\)/);
+  assert.match(prayerSource, /rhythm-card__meta-item rhythm-card__last/);
+  assert.match(prayerSource, /window\.tendRhythmCardTime\(\{tod:key\}\)/);
+  assert.match(prayerSource, /window\.tendRhythmCardLastTended\(last\)/);
+  assert.match(personRhythmSource, /window\.tendRhythmCardTime=function\(r\)\{return rhythmCardTime\(r\);\}/);
+  assert.match(personRhythmSource, /window\.tendRhythmCardLastTended=function\(last\)\{return rhythmCardLastTended\(last\);\}/);
+  assert.doesNotMatch(prayerSource.match(/function prayerProfileMetaHTML\(p\)\{([\s\S]*?)\n\}/)[1], /Prayed .* times|Added /);
+  assert.match(prayerSource, /class=\"rhythm-card__edit prayer-edit-trigger\" data-prayeredit=/);
+  assert.match(prayerSource, /prayerProfileMetaHTML\(p\)/);
+  assert.match(styles, /\.person-profile-page #profile-panel-prayer\{padding:0;border:0;background:transparent;box-shadow:none\}/);
+  assert.match(styles, /\.person-profile-page \.profile-prayer-row\{[^}]*grid-template-areas:\"content actions\" \"meta meta\"/);
+  assert.match(styles, /#profile-panel-prayer \.profile-prayer-add\{border-color:var\(--forest\);background:transparent;color:var\(--forest\)\}/);
+});
+
+test("Prayer action dropdown options are unshaded until hovered", () => {
+  assert.match(styles, /\.prayer-action-options button\{background:transparent;color:var\(--action-prayer-text,#705A8D\)\}/);
+  assert.match(styles, /\.prayer-action-options button:hover[\s\S]*?background:var\(--action-prayer-hover,#E6DCEE\)/);
+  assert.match(styles, /\.person-profile-page \.profile-prayer-row \.prayer-action-options button\{border:0;background:transparent/);
+  assert.match(styles, /\.person-profile-page \.profile-prayer-row \.prayer-action-options button:hover,[\s\S]*?background:var\(--action-prayer-hover,#E6DCEE\)/);
+  assert.doesNotMatch(styles, /\.prayer-action-options button\{border:1px solid/);
 });
 
 test("shared section and card components escape text and preserve semantic layouts", () => {

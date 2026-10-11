@@ -222,6 +222,7 @@ function planCategoryBadges(it){
  if(it.rhythm){var ids=String(it.rhythm).split("|"),owner=S.people.find(function(p){return p.id===ids[0];});record=owner&&(owner.rhythms||[]).find(function(r){return r.id===ids[1];});}
  else if(it.faithRhythm)record=typeof faithFindRhythm==="function"?faithFindRhythm(it.faithRhythm):null;
  else if(it.prayer){var prayerRecord=(S.prayers||[]).find(function(p){return p.id===it.prayer;});if(prayerRecord&&prayerRecord.category==="Faith")record={areas:["faith"],faithGroup:prayerRecord.faithSection||prayerRecord.faithGroup};}
+ else if(it.spark){var sparkIds=String(it.spark).split("|"),sparkOwner=S.people.find(function(p){return p.id===sparkIds[0];});record=sparkOwner&&(sparkOwner.sparks||[]).find(function(s){return s.id===sparkIds[1];});}
  var categories=record&&typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(record):"";
  return categories;
 }
@@ -278,9 +279,13 @@ function planItemPeopleRow(it){
  var people=planItemPeople(it);
  return people?'<div class="plan-item-meta-people plan-people" data-plan-people><span class="plan-people-visible">'+people+'</span><details class="plan-people-overflow" hidden><summary></summary><span class="plan-people-menu"></span></details></div>':"";
 }
-function planItemTopRow(it){
- var categories=planCategoryBadges(it),editAction=planItemEditAction(it),categoryRow=categories||editAction?'<div class="plan-item-category-row'+(categories?'':' plan-item-category-row-empty')+'"'+(categories?' data-plan-categories':'')+'>'+(categories?'<span class="rhythm-area-badges plan-category-visible">'+categories.replace(/^<span class="rhythm-area-badges"[^>]*>|<\/span>$/g,"")+'</span><details class="plan-category-overflow" hidden><summary></summary><span class="plan-category-menu"></span></details>':"")+editAction+'</div>':"";
+function planItemTopRow(it,showEdit){
+ var categories=planCategoryBadges(it),editAction=showEdit===false?"":planItemEditAction(it),categoryRow=categories||editAction?'<div class="plan-item-category-row'+(categories?'':' plan-item-category-row-empty')+'"'+(categories?' data-plan-categories':'')+'>'+(categories?'<span class="rhythm-area-badges plan-category-visible">'+categories.replace(/^<span class="rhythm-area-badges"[^>]*>|<\/span>$/g,"")+'</span><details class="plan-category-overflow" hidden><summary></summary><span class="plan-category-menu"></span></details>':"")+editAction+'</div>':"";
  return '<div class="plan-item-top-meta">'+planItemPeopleRow(it)+categoryRow+'</div>';
+}
+function freeMomentSparkCardHTML(item,options){
+ options=options||{};
+ return tendSparkCardHTML(item,{title:item.label,description:item.description,actionHTML:options.actionHTML,headingEditHTML:planItemEditAction(item),topMetaHTML:planItemTopRow(item,false),footerHTML:options.footerHTML,className:options.className,cardAttributes:options.cardAttributes});
 }
 function planRhythmCardBadges(it){
  var people=planItemPeopleRow(it),categories=planCategoryBadges(it);
@@ -734,7 +739,7 @@ function openPersonNoteHistory(personId){
  });
  dialog.addEventListener("close",function(){dialog.remove();});document.body.appendChild(dialog);tendShowModal(dialog);
 }
-function profilePanelStart(key){return '<section class="card profile-tab-panel" id="profile-panel-'+key+'" role="tabpanel" aria-labelledby="profile-tab-'+key+'"'+(activeProfileTab===key?'':' hidden')+'>';}
+function profilePanelStart(key){return '<section class="'+(key==="prayer"?"":"card ")+'profile-tab-panel" id="profile-panel-'+key+'" role="tabpanel" aria-labelledby="profile-tab-'+key+'"'+(activeProfileTab===key?'':' hidden')+'>';}
 var activeProfileTab="rhythms";
 function actQueueHTML(p){
  /* Show every due connection rhythm in the personal queue. */
@@ -860,13 +865,13 @@ function personProfile(pid){
  out+=profilePanelStart("sparks")+'<div class="profile-panel-toolbar profile-rhythm-toolbar"><p class="profile-tab-intro">Low-pressure ideas to enjoy together.</p><button type="button" class="btn mini ghost profile-rhythm-add" data-sparkaddopen="'+esc(pid)+'">'+profileActionIcon("log")+'<span>Add spark</span></button></div><div class="profile-spark-list">';
  var sps=sortedPersonSparks(p);
  if(sps.length){sps.forEach(function(s){
-  var sparkOwnerId=s.profileOwnerId||pid,sparkBadges=tendAssociationPeopleBadges(s,sparkOwnerId,pid,"spark")+tendAssociationCategoryBadges(s),sparkDate=s.by?sparkDueTxt(s)+" · "+s.by:"Someday";
+  var sparkOwnerId=s.profileOwnerId||pid,personBadges=tendAssociationPeopleBadges(s,sparkOwnerId,pid,"spark"),categoryBadges=tendAssociationCategoryBadges(s),sparkDate=s.by?sparkDueTxt(s)+" · "+s.by:"Someday";
   var editAction='<button type="button" class="btn mini ghost profile-secondary-action profile-rhythm-icon-action profile-rhythm-edit-action" data-sedit="'+esc(sparkOwnerId+"|"+s.id)+'" aria-label="Edit '+esc(s.text)+'" title="Edit">'+profileActionIcon("edit")+'</button>';
-  var sparkMeta='<div class="profile-spark-meta" role="group" aria-label="Spark timing">'
-   +(s.time?'<span class="profile-spark-meta-item" aria-label="Preferred time: '+esc(fmtHM12(s.time))+'">'+planMetaIcon("time")+'<span>'+esc(fmtHM12(s.time))+'</span></span>':"")
-   +'<span class="profile-spark-meta-item profile-spark-meta-date" aria-label="'+(s.by?"Due "+esc(s.by)+", "+esc(sparkDueTxt(s)):"No due date")+'">'+planMetaIcon("occurred")+'<span>'+esc(sparkDate)+'</span></span></div>';
-  out+='<div class="rhyrow card profile-spark-row" data-spark-row="'+esc(sparkOwnerId+"|"+s.id)+'"><div class="profile-rhythm-main"><div class="profile-spark-top">'+tendSparkCardContentHTML(s,{title:s.text||"(unnamed spark)",description:String(s.details||"").trim(),layout:"profile",headingActionHTML:editAction,showNoDetails:true})+'<div class="profile-spark-actions"><button type="button" class="btn mini sparkbtn" data-sparkdo="'+esc(sparkOwnerId+"|"+s.id+"|"+pid)+'">Do it</button></div></div>'
-   +(sparkBadges?'<div class="tend-row-people">'+sparkBadges+'</div>':'')+'</div>'+sparkMeta+'</div>';
+  var sparkTopMeta='<div class="plan-item-top-meta">'+(personBadges?'<div class="plan-item-meta-people plan-people"><span class="plan-people-visible">'+personBadges+'</span></div>':'')+(categoryBadges?'<div class="plan-item-category-row"><span class="rhythm-area-badges plan-category-visible">'+categoryBadges.replace(/^<span class="rhythm-area-badges"[^>]*>|<\/span>$/g,"")+'</span></div>':'')+'</div>';
+  var sparkAction='<button type="button" class="btn mini sparkbtn" data-sparkdo="'+esc(sparkOwnerId+"|"+s.id+"|"+pid)+'">Do it</button>';
+  var sparkFooter=(s.time?'<span class="spark-card__meta-item" aria-label="Preferred time: '+esc(fmtHM12(s.time))+'">'+planMetaIcon("time")+'<span>'+esc(fmtHM12(s.time))+'</span></span>':"")
+   +'<span class="spark-card__meta-item dashboard-spark-deadline" aria-label="'+(s.by?"Due "+esc(s.by)+", "+esc(sparkDueTxt(s)):"No due date")+'">'+planMetaIcon("occurred")+'<span>'+esc(sparkDate)+'</span></span>';
+  out+=tendSparkCardHTML(s,{title:s.text||"(unnamed spark)",description:String(s.details||"").trim(),actionHTML:sparkAction,headingEditHTML:editAction,topMetaHTML:sparkTopMeta,footerHTML:sparkFooter,footerClass:"profile-spark-footer",className:"profile-spark-row",cardAttributes:{"data-spark-row":sparkOwnerId+"|"+s.id}});
   if(editSparkId===s.id&&sparkEditDraft&&sparkEditDraft.id===s.id){out+=tendSparkEditModalHTML(sparkOwnerId,pid);}
  });}
  else out+='<div class="empty">No sparks yet - the fun, no-pressure "we should do this sometime" list.</div>';
@@ -875,7 +880,7 @@ function personProfile(pid){
  if(addingSpark)out+='<dialog class="profile-editor-dialog" data-profile-editor="spark" aria-labelledby="profile-editor-title"><div class="profile-editor-body"><h3 id="profile-editor-title">Add Spark</h3><div class="addrow spark-draft"><input placeholder="Idea - a movie, a talk, a trip..." data-spnewtext="'+pid+'"><textarea placeholder="Details (optional)" data-spnewdetails="'+pid+'"></textarea><input type="date" data-spnewdate="'+pid+'" aria-label="Spark date" style="max-width:150px"><input type="time" data-spnewtime="'+pid+'" aria-label="Spark time" style="max-width:110px"></div>'+tendAssociationControlsHTML("spark",pid,"new",sparkAddDrafts[pid]||(sparkAddDrafts[pid]={sharedWith:[],areas:[]}))+'<div class="profile-editor-actions"><button class="btn mini" data-spadd="'+pid+'">Save Spark</button><button class="btn mini ghost" data-sparkaddcancel="'+pid+'" data-editor-cancel>Cancel</button></div></div></dialog>';
  out+='</section>';
  var addingPrayer=window._personPrayerDraftFor===pid;
- out+=profilePanelStart("prayer")+'<div class="profile-panel-toolbar"><p class="profile-tab-intro">Prayer requests to remember and bring before God.</p><button type="button" class="btn mini ghost" data-personprayeropen="'+esc(pid)+'">'+profileActionIcon("log")+'Add prayer</button></div>'+prayerList(prayers,true);
+ out+=profilePanelStart("prayer")+'<div class="profile-panel-toolbar profile-rhythm-toolbar"><p class="profile-tab-intro">Prayer requests to remember and bring before God.</p><button type="button" class="btn mini ghost profile-rhythm-add profile-prayer-add" data-personprayeropen="'+esc(pid)+'">'+profileActionIcon("log")+'<span>Add prayer</span></button></div>'+prayerList(prayers,true);
  if(addingPrayer)out+='<dialog class="profile-editor-dialog" data-profile-editor="prayer" aria-labelledby="profile-editor-title"><div class="profile-editor-body"><h3 id="profile-editor-title">Add Prayer</h3>'+personPrayerAddFields(pid)+'</div></dialog>';
  out+='</section>';
  out+=profilePanelStart("notes")+'<div class="profile-panel-toolbar"><p class="profile-tab-intro">Keep useful thoughts, encouragement, prayer, and follow-ups together.</p><button type="button" class="btn mini ghost" data-profilenoteopen="'+esc(pid)+'">'+profileActionIcon("log")+'Add note</button></div>';
@@ -990,8 +995,9 @@ function personFreeMomentHTML(person){
  personSparkCarouselIndexes[personId]=index;
  var current=sparkQueue[index],
      action='<button type="button" class="btn mini sparkbtn" data-sparkdo="'+esc(current.spark)+'">Do it</button>',
-     footer='<div class="plan-item-footer dashboard-spark-footer person-spark-footer"><span>'+(index+1)+' of '+sparkQueue.length+'</span><span class="dashboard-spark-deadline">'+esc(current.deadline)+'</span></div>';
- return tendSectionHeaderHTML({title:"Free moment with "+person.name+"?",className:"dashboard-free-moment-heading person-free-moment-heading",trailingHTML:'<button type="button" class="profile-view-all-sparks" data-person-sparks-view-all="'+esc(personId)+'">View all '+profileActionIcon("view")+'</button>'})+'<div class="dashboard-free-moment dashboard-free-moment-carousel person-free-moment"><div class="dashboard-free-moment-stage"><div class="planitem dashboard-free-moment-card person-free-moment-card" data-person-free-spark-card="'+esc(personId)+'"><div class="pi-main">'+planItemCopy(current,action)+'</div>'+planItemTopRow(current)+footer+'</div></div><nav class="dashboard-free-moment-controls" aria-label="'+esc(person.name)+' Spark carousel"><button type="button" class="dashboard-free-moment-arrow" data-person-spark-carousel-person="'+esc(personId)+'" data-person-spark-carousel-step="-1" aria-label="Previous Spark"'+(index===0?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6 9 12 15 18"/></svg></button><button type="button" class="dashboard-free-moment-arrow" data-person-spark-carousel-person="'+esc(personId)+'" data-person-spark-carousel-step="1" aria-label="Next Spark"'+(index===sparkQueue.length-1?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6 15 12 9 18"/></svg></button></nav></div>';
+     footerHTML='<span>'+(index+1)+' of '+sparkQueue.length+'</span><span class="dashboard-spark-deadline">'+esc(current.deadline)+'</span>',
+     card=freeMomentSparkCardHTML(current,{actionHTML:action,footerHTML:footerHTML,className:"dashboard-free-moment-card person-free-moment-card",cardAttributes:{"data-person-free-spark-card":personId}});
+ return tendSectionHeaderHTML({title:"Free moment with "+person.name+"?",className:"dashboard-free-moment-heading person-free-moment-heading",trailingHTML:'<button type="button" class="profile-view-all-sparks" data-person-sparks-view-all="'+esc(personId)+'">View all '+profileActionIcon("view")+'</button>'})+'<div class="dashboard-free-moment dashboard-free-moment-carousel person-free-moment"><div class="dashboard-free-moment-stage">'+card+'</div><nav class="dashboard-free-moment-controls" aria-label="'+esc(person.name)+' Spark carousel"><button type="button" class="dashboard-free-moment-arrow" data-person-spark-carousel-person="'+esc(personId)+'" data-person-spark-carousel-step="-1" aria-label="Previous Spark"'+(index===0?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6 9 12 15 18"/></svg></button><button type="button" class="dashboard-free-moment-arrow" data-person-spark-carousel-person="'+esc(personId)+'" data-person-spark-carousel-step="1" aria-label="Next Spark"'+(index===sparkQueue.length-1?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6 15 12 9 18"/></svg></button></nav></div>';
 }
 function freeMomentHTML(){
  var sparkQueue=dashboardFreeMomentSparkQueue();
@@ -1000,8 +1006,9 @@ function freeMomentHTML(){
  dashboardInitSparkCarousel();
  var current=sparkQueue[dashboardSparkCarouselIndex],
      action='<button type="button" class="btn mini sparkbtn" data-sparkdo="'+esc(current.spark)+'" data-dashboard-free-spark>Do it</button>',
-     footer='<div class="plan-item-footer dashboard-spark-footer"><span class="dashboard-spark-deadline">'+esc(current.deadline)+'</span></div>',
-     out=tendSectionHeaderHTML({title:"Free moment?",className:"dashboard-free-moment-heading"})+'<div class="dashboard-free-moment dashboard-free-moment-carousel"><div class="dashboard-free-moment-stage"><div class="planitem dashboard-free-moment-card" data-dashboard-free-spark-card><div class="pi-main">'+planItemCopy(current,action)+'</div>'+planItemTopRow(current)+footer+'</div></div><nav class="dashboard-free-moment-controls" aria-label="Spark carousel"><button type="button" class="dashboard-free-moment-arrow" data-dashboard-spark-carousel-step="-1" aria-label="Previous Spark"'+(!dashboardSparkCarouselReady||dashboardSparkCarouselIndex===0?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6 9 12 15 18"/></svg></button><span class="dashboard-spark-carousel-count" aria-live="polite">'+(dashboardSparkCarouselIndex+1)+' of '+sparkQueue.length+'</span><button type="button" class="dashboard-free-moment-arrow" data-dashboard-spark-carousel-step="1" aria-label="Next Spark"'+(!dashboardSparkCarouselReady||dashboardSparkCarouselIndex===sparkQueue.length-1?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6 15 12 9 18"/></svg></button></nav></div>';
+     footerHTML='<span class="dashboard-spark-deadline">'+esc(current.deadline)+'</span>',
+     card=freeMomentSparkCardHTML(current,{actionHTML:action,footerHTML:footerHTML,className:"dashboard-free-moment-card",cardAttributes:{"data-dashboard-free-spark-card":""}}),
+     out=tendSectionHeaderHTML({title:"Free moment?",className:"dashboard-free-moment-heading"})+'<div class="dashboard-free-moment dashboard-free-moment-carousel"><div class="dashboard-free-moment-stage">'+card+'</div><nav class="dashboard-free-moment-controls" aria-label="Spark carousel"><button type="button" class="dashboard-free-moment-arrow" data-dashboard-spark-carousel-step="-1" aria-label="Previous Spark"'+(!dashboardSparkCarouselReady||dashboardSparkCarouselIndex===0?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6 9 12 15 18"/></svg></button><span class="dashboard-spark-carousel-count" aria-live="polite">'+(dashboardSparkCarouselIndex+1)+' of '+sparkQueue.length+'</span><button type="button" class="dashboard-free-moment-arrow" data-dashboard-spark-carousel-step="1" aria-label="Next Spark"'+(!dashboardSparkCarouselReady||dashboardSparkCarouselIndex===sparkQueue.length-1?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6 15 12 9 18"/></svg></button></nav></div>';
  return out;
 }
 /* ============ area subpages ============ */
