@@ -1860,14 +1860,14 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
  .home-dashboard .menu-grid{gap:6px 8px;border-top:0}
  .home-dashboard .menu-area{gap:7px;padding:7px 6px;border:1px solid var(--line);border-radius:9px}
  .home-dashboard .menu-area>.sm-dot{display:none}
- .home-dashboard .menu-area .ma-score{display:inline-flex;flex:none;align-items:center;justify-content:center;min-width:29px;height:25px;margin-left:auto;padding:0 5px;border-radius:7px;background:#738078;color:#fff;font-size:12px;font-weight:700}
+ .home-dashboard .menu-area .ma-score{box-sizing:border-box;display:inline-flex;flex:0 0 48px;align-items:center;justify-content:center;width:48px;min-width:48px;height:25px;margin-left:auto;padding:0 5px;border-radius:7px;background:#738078;color:#fff;font-size:12px;font-weight:700}
  .home-dashboard .menu-area .ma-score.green{background:#12B76A;color:#fff}
  .home-dashboard .menu-area .ma-score.yellow{background:#C77E00;color:#fff}
  .home-dashboard .menu-area .ma-score.red{background:#F04531;color:#fff}
 }
 @media(max-width:600px){
  html[data-mobile-text-size="large"] .home-dashboard .menu-area{gap:8px}
- html[data-mobile-text-size="large"] .home-dashboard .menu-area .ma-score{min-width:34px;height:30px;font-size:15px}
+ html[data-mobile-text-size="large"] .home-dashboard .menu-area .ma-score{height:30px;font-size:15px}
 }
 @media(max-width:720px){
  .nav-row-areas{display:none}
@@ -2177,6 +2177,31 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
  html[data-mobile-text-size-level="larger"] .person-profile-page .profile-rhythm-tend>[data-tend-open]{font-size:17px}
  html[data-mobile-text-size-level="larger"] .person-profile-page .profile-rhythm-health{font-size:16px}
  html[data-mobile-text-size-level="larger"] .person-profile-page .profile-rhythm-main>.tend-row-people{font-size:17px}
+ html[data-mobile-text-size="large"] .person-profile-page .person-focused-prayer{gap:10px;padding:14px}
+ html[data-mobile-text-size="large"] .person-focused-prayer .dashboard-prayer-context{font-size:15px}
+ html[data-mobile-text-size="large"] .person-profile-page .person-focused-prayer>.faith-start-prayer{min-height:44px;padding:8px 14px;font-size:14px}
+ html[data-mobile-text-size="large"] .person-focused-prayer>.faith-start-prayer>.collection-icon{width:17px;height:17px}
+ html[data-mobile-text-size="large"] .person-focused-prayer .dashboard-prayer-filter{font-size:15px}
+ html[data-mobile-text-size="large"] .person-profile-page .person-free-moment-card.planitem:has(.plan-item-top-meta){gap:10px;padding:16px}
+ html[data-mobile-text-size="large"] .person-profile-page .person-free-moment-card .plan-item-copy{row-gap:10px}
+ html[data-mobile-text-size="large"] .person-profile-page .person-free-moment-card .tend-type-title{font-size:21px}
+ html[data-mobile-text-size="large"] .person-profile-page .person-free-moment-card .tend-type-description,html[data-mobile-text-size="large"] .person-profile-page .person-free-moment-card .plan-item-no-description{font-size:17px}
+ html[data-mobile-text-size="large"] .person-profile-page .person-free-moment-card .plan-item-top-meta{font-size:14px}
+ html[data-mobile-text-size="large"] .person-profile-page .person-free-moment-card .plan-item-action>.btn{min-height:44px;padding:8px 14px;font-size:14px!important}
+ html[data-mobile-text-size="large"] .person-profile-page .person-free-moment-card .person-spark-footer{font-size:14px}
+ html[data-mobile-text-size-level="larger"] .person-profile-page .person-focused-prayer{gap:12px;padding:16px}
+ html[data-mobile-text-size-level="larger"] .person-focused-prayer .dashboard-prayer-context{font-size:17px}
+ html[data-mobile-text-size-level="larger"] .person-profile-page .person-focused-prayer>.faith-start-prayer{min-height:48px;padding:9px 16px;font-size:16px}
+ html[data-mobile-text-size-level="larger"] .person-focused-prayer>.faith-start-prayer>.collection-icon{width:18px;height:18px}
+ html[data-mobile-text-size-level="larger"] .person-focused-prayer>.faith-start-prayer .faith-prayer-session-count{min-width:26px;height:26px;font-size:13px}
+ html[data-mobile-text-size-level="larger"] .person-focused-prayer .dashboard-prayer-filter{min-height:48px;font-size:17px}
+ html[data-mobile-text-size-level="larger"] .person-profile-page .person-free-moment-card.planitem:has(.plan-item-top-meta){gap:12px;padding:18px}
+ html[data-mobile-text-size-level="larger"] .person-profile-page .person-free-moment-card .plan-item-copy{row-gap:12px}
+ html[data-mobile-text-size-level="larger"] .person-profile-page .person-free-moment-card .tend-type-title{font-size:24px}
+ html[data-mobile-text-size-level="larger"] .person-profile-page .person-free-moment-card .tend-type-description,html[data-mobile-text-size-level="larger"] .person-profile-page .person-free-moment-card .plan-item-no-description{font-size:20px}
+ html[data-mobile-text-size-level="larger"] .person-profile-page .person-free-moment-card .plan-item-top-meta{font-size:16px}
+ html[data-mobile-text-size-level="larger"] .person-profile-page .person-free-moment-card .plan-item-action>.btn{min-height:48px;padding:9px 16px;font-size:16px!important}
+ html[data-mobile-text-size-level="larger"] .person-profile-page .person-free-moment-card .person-spark-footer{font-size:16px}
 }
 
 @media(max-width:380px){
