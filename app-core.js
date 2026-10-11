@@ -7,7 +7,7 @@ var KIND2TYPE={coffee:"inperson",meal:"inperson",date:"inperson",quality:"inpers
 var RIPPLE_TYPES={text:"Text",call:"Call",video:"Facetime",prayer:"Prayer",quality:"In Person",note:"Handwritten Note",gift:"Gift",other:"Other"};
 function typeLabel(e){if(e.rippleLabel)return e.rippleLabel==="One-on-One"?"In Person":e.rippleLabel;return e.type&&ETYPES[e.type]?ETYPES[e.type].label:(KINDS[e.kind]?KINDS[e.kind].label:e.kind);}
 function typeWeight(e){return e.type&&ETYPES[e.type]?ETYPES[e.type].w:(KINDS[e.kind]?KINDS[e.kind].w:3);}
-var DEFAULT_SETTINGS={greenAt:80,yellowAt:50,baseline:50,mobileTextSize:"normal"};
+var DEFAULT_SETTINGS={greenAt:80,yellowAt:50,baseline:50,mobileTextSize:"normal",actionColors:{rhythm:"#246B52",spark:"#D4A43A",prayer:"#8B78A6"}};
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
 function defaultKeyDates(){return[
  {id:"kd-leah",personId:"leah",label:"Leah's birthday",month:9,day:28},
@@ -191,7 +191,32 @@ function meterBar(v,cls){return '<div class="bar"><i class="'+cls+'" style="widt
 function personChip(k){var ps=personScore(k);var c=scoreClass(ps);return '<span class="submeter" data-person="'+k.id+'" title="'+scoreLabel(ps)+'"><span class="sm-dot '+c+'"></span><span class="sm-name">'+esc(k.name)+'</span><span class="sm-bar"><i class="'+c+'" style="width:'+ps+'%"></i></span><span class="sm-num">'+ps+'</span></span>';}
 
 
-function personAvatar(p,sz){if(p&&p.photo)return '<img class="avatar" src="'+p.photo+'" style="width:'+sz+'px;height:'+sz+'px" alt="">';var ini=((p&&p.name)||"?").split(" ").map(function(w){return w.charAt(0);}).join("").slice(0,2).toUpperCase();return '<span class="avatar init" style="width:'+sz+'px;height:'+sz+'px;font-size:'+Math.round(sz*.38)+'px">'+esc(ini)+'</span>';}
+function generatedPersonAvatar(p,sz){
+ var seed=String(p&& (p.id||p.name)||"?"),hash=2166136261;
+ for(var i=0;i<seed.length;i++){hash^=seed.charCodeAt(i);hash=Math.imul(hash,16777619);}
+ var palettes=[
+  {bg:"#E9D9C7",skin:"#C98259",hair:"#382B29",shirt:"#557C79"},
+  {bg:"#D9E6E8",skin:"#E1B48D",hair:"#574233",shirt:"#6C7895"},
+  {bg:"#E8DCE8",skin:"#A96545",hair:"#2E292B",shirt:"#956A7E"},
+  {bg:"#DDE8D8",skin:"#F0CBA6",hair:"#765237",shirt:"#66855F"},
+  {bg:"#E9E1CB",skin:"#8E563D",hair:"#25272D",shirt:"#55718C"},
+  {bg:"#DDE5F0",skin:"#D99C75",hair:"#44363E",shirt:"#8A6C9B"}
+ ],palette=palettes[(hash>>>0)%palettes.length],style=p&&["masculine","feminine","neutral"].indexOf(p.avatarStyle)>=0?p.avatarStyle:"neutral";
+ var hairBack=style==="feminine"
+  ?'<path d="M15 29C13 13 21 5 32 5s20 9 18 25l-2 22-8 5H24l-8-6z" fill="'+palette.hair+'"/>'
+  :'<path d="M16 29C14 13 22 5 32 5s18 8 16 24l-4 10H20z" fill="'+palette.hair+'"/>';
+ var hairline=style==="feminine"
+  ?'<path d="M17 25C17 13 23 7 32 7s15 7 15 18c-4-1-7-3-9-6-2 3-4 4-7 5-3-2-6-3-8-1-2 1-4 2-6 2z" fill="'+palette.hair+'"/><circle cx="21" cy="15" r="4" fill="'+palette.hair+'"/><circle cx="28" cy="9" r="4" fill="'+palette.hair+'"/><circle cx="37" cy="9" r="4" fill="'+palette.hair+'"/><circle cx="44" cy="16" r="4" fill="'+palette.hair+'"/>'
+  :style==="masculine"
+   ?'<path d="M17 26C16 13 23 7 32 7c10 0 15 8 15 19-4-2-7-5-9-9-4 4-11 7-21 9z" fill="'+palette.hair+'"/>'
+   :'<path d="M17 25C17 13 23 7 32 7c8 0 14 6 15 17-5-1-9-5-11-9-4 5-11 9-19 10z" fill="'+palette.hair+'"/>';
+ var sideHair=style==="feminine"?'<path d="M17 24c-3 9-2 18 0 27m30-27c3 9 2 18 0 27" fill="none" stroke="'+palette.hair+'" stroke-width="5" stroke-linecap="round"/>':'';
+ var hasBeard=style==="masculine"&&(hash&1),facialHair=hasBeard?'<path d="M19 38c1 3 3 6 6 8 2 1 5 2 7 2s5-1 7-2c3-2 5-5 6-8-2 1-4 2-7 2-2 0-4-1-6-2-2 1-4 2-6 2-3 0-5-1-7-2z" fill="'+palette.hair+'" opacity=".94"/>':'';
+ var mouth='<path d="M28 36c2 2 6 2 8 0" fill="none" stroke="#7D4138" stroke-width="1.7" stroke-linecap="round"/>';
+ var svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="'+palette.bg+'"/><path d="M7 64c1-13 11-20 25-20s24 7 25 20" fill="'+palette.shirt+'"/><path d="M27 41h10v12H27z" fill="'+palette.skin+'"/>'+hairBack+'<ellipse cx="32" cy="29" rx="14" ry="18" fill="'+palette.skin+'"/>'+sideHair+hairline+'<path d="M23 28h1m16 0h1" stroke="#352B2B" stroke-width="2" stroke-linecap="round"/>'+mouth+facialHair+'</svg>';
+ return '<img class="avatar generated-avatar" src="data:image/svg+xml,'+encodeURIComponent(svg)+'" style="width:'+sz+'px;height:'+sz+'px" alt="">';
+}
+function personAvatar(p,sz){if(p&&p.photo)return '<img class="avatar" src="'+p.photo+'" style="width:'+sz+'px;height:'+sz+'px" alt="">';return generatedPersonAvatar(p,sz);}
 function fmtHM12(hm){var parts=String(hm||"").split(":");if(parts.length<2)return "";var h=+parts[0],m=+parts[1];if(isNaN(h)||isNaN(m))return "";var ap=h>=12?"pm":"am";h=h%12||12;return h+":"+String(m).padStart(2,"0")+ap;}
 function sparkBlock(s){if(s.tod&&s.tod!=="anytime")return s.tod;if(s.time){var parts=s.time.split(":");var date=new Date();date.setHours(+parts[0],+parts[1],0,0);if(!isNaN(date.getTime()))return dayBlockAt(date);}return null;}
 function findSparkById(sid){var f=null;S.people.forEach(function(x){((x.sparks)||[]).forEach(function(s2){if(s2.id===sid)f=s2;});});if(!f)f=(S.ideas||[]).find(function(item){return item.id===sid&&(item.category==="faith"||item.area==="faith"||item.faithSection);})||null;return f;}
