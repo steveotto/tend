@@ -9,7 +9,7 @@ function applyMobileDashboardTextSize(){
 applyMobileDashboardTextSize();
 function mobileDisplaySettingsHTML(){
  var savedSize=settings().mobileTextSize,selected=savedSize==="large"||savedSize==="larger"?savedSize:"normal";
- return settingsPanel('display')+'<div class="card settings-card"><div class="subhead">Mobile display</div><p class="settings-help">Choose the text size for Today and other pages on phones. This changes only mobile; tablet and desktop layouts stay the same.</p><div class="setrow"><label for="mobileTextSize">Mobile text size</label><select id="mobileTextSize" data-mobile-text-size><option value="normal"'+(selected==="normal"?' selected':'')+'>Normal</option><option value="large"'+(selected==="large"?' selected':'')+'>Large</option><option value="larger"'+(selected==="larger"?' selected':'')+'>Larger</option></select></div></div></section>';
+ return settingsPanel('display')+'<div class="card settings-card"><div class="subhead">Mobile display</div><p class="settings-help">Choose the text size for Today and other pages on phones. This changes only mobile; tablet and desktop layouts stay the same.</p><div class="setrow"><label for="mobileTextSize">Mobile text size</label><select id="mobileTextSize" data-mobile-text-size><option value="normal"'+(selected==="normal"?' selected':'')+'>Small</option><option value="large"'+(selected==="large"?' selected':'')+'>Medium</option><option value="larger"'+(selected==="larger"?' selected':'')+'>Large</option></select></div></div></section>';
 }
 function weatherSettingsHTML(){
  return settingsPanel('weather')+'<div class="card settings-card"><div class="subhead">Weather</div><p class="settings-help">Tend asks your browser for your current location first. Allow location access for this site to get local weather. If location is unavailable or denied, Tend uses this fallback location instead.</p><label class="field" for="weatherFallbackLocation">Fallback location<input id="weatherFallbackLocation" type="text" autocomplete="address-level2" value="'+esc(settings().weatherFallbackLocation||"")+'" placeholder="City, state or postal code"></label><p class="settings-help">Enter a city, town, or postal code. Weather is provided by Open-Meteo; your location is used only to request the forecast.</p><div class="settings-actions"><button type="button" class="btn" data-weather-settings-save>Save weather settings</button></div></div></section>';
@@ -60,9 +60,18 @@ document.addEventListener('click',function(event){
   calendarEditorDraft=null;save();refreshCalendarSettings();render();flash(draft.id?'Calendar updated':'Calendar added');
  }
 });
-function badgeColorsSettingsHTML(){
- var colors=badgeColorSettings(),labels={rhythm:'Rhythm',spark:'Spark',prayer:'Prayer',faith:'Faith'};
- return '<div class="card settings-card"><div class="subhead">Badge colors</div><p class="settings-help">Choose a distinct brand color for each badge. The app keeps the badge text readable against a softly tinted background.</p><div class="badge-color-settings">'+Object.keys(labels).map(function(key){return '<label class="badge-color-setting" for="badgeColor-'+key+'"><span>'+labels[key]+'</span><input type="color" id="badgeColor-'+key+'" data-badge-color="'+key+'" value="'+colors[key]+'"><span class="plan-kind plan-kind-'+key+'">'+(key==='faith'?collectionIcon('faith'):key==='rhythm'?collectionIcon('rhythms'):key==='spark'?collectionIcon('sparks'):collectionIcon('prayer'))+' '+labels[key]+'</span></label>';}).join('')+'</div><p class="settings-help">Color changes are saved automatically on this device.</p></div>';
+function actionColorsSettingsHTML(){
+ var colors=actionColorSettings(),labels={rhythm:["Rhythms","Tend"],spark:["Sparks","Do it"],prayer:["Prayer","Pray"]};
+ var cards=Object.keys(labels).map(function(key){
+  return '<article class="action-color-card"><div class="action-color-card-heading"><div><h3>'+labels[key][0]+'</h3><span>'+labels[key][1]+'</span></div><button type="button" class="action-color-swatch" data-action-color-open="'+key+'" style="--action-swatch:'+colors[key]+'" aria-label="Choose '+labels[key][0].toLowerCase()+' action color"></button></div><button type="button" class="btn mini action-color-preview action-color-'+key+'" data-action-color-open="'+key+'" aria-label="Preview '+labels[key][1]+' button. Tap to choose its color">'+labels[key][1]+'</button><input class="action-color-input" type="color" data-action-color="'+key+'" value="'+colors[key]+'" aria-label="'+labels[key][0]+' action base color"></article>';
+ }).join("");
+ return '<div class="card settings-card"><div class="subhead">Action colors</div><p class="settings-help">Choose a color for each action. Tend will create a matching palette automatically.</p><div class="action-color-settings">'+cards+'</div><div class="action-color-footer"><p class="settings-help">Changes save automatically and update action buttons throughout Tend.</p><button type="button" class="action-color-reset" data-action-colors-reset>Reset to defaults</button></div></div><div class="card settings-card faith-badge-colors-card"><div class="subhead">Faith badge color</div><p class="settings-help">This badge color is separate from action colors.</p><div class="badge-color-settings"><label class="badge-color-setting" for="badgeColor-faith"><span>Faith</span><input type="color" id="badgeColor-faith" data-badge-color="faith" value="'+badgeColorSettings().faith+'"><span class="plan-kind plan-kind-faith">'+collectionIcon('faith')+' Faith</span></label></div></div>';
+}
+function openActionColorPicker(key){
+ var input=document.querySelector('[data-action-color="'+key+'"]');
+ if(!input)return;
+ if(typeof input.showPicker==="function"){try{input.showPicker();return;}catch(error){}}
+ input.click();
 }
 function myProfileSettingsHTML(){
  var photo=settings().profilePhoto||null;
@@ -100,6 +109,24 @@ document.addEventListener('input',function(event){
  if(!input||!/^#[0-9a-fA-F]{6}$/.test(input.value))return;
  document.documentElement.style.setProperty('--badge-'+input.getAttribute('data-badge-color')+'-color',input.value);
 });
+document.addEventListener('click',function(event){
+ var picker=event.target.closest&&event.target.closest('[data-action-color-open]');
+ if(picker){openActionColorPicker(picker.getAttribute('data-action-color-open'));return;}
+ var reset=event.target.closest&&event.target.closest('[data-action-colors-reset]');
+ if(!reset)return;
+ S.settings.actionColors=Object.assign({},DEFAULT_ACTION_COLORS);
+ applyActionColors();save();render();flash('Action colors reset');
+});
+document.addEventListener('input',function(event){
+ var input=event.target.closest&&event.target.closest('[data-action-color]');
+ if(!input||!/^#[0-9a-fA-F]{6}$/.test(input.value))return;
+ var key=input.getAttribute('data-action-color');
+ S.settings.actionColors=Object.assign(actionColorSettings(),{[key]:input.value});
+ applyActionColors();
+ var swatch=document.querySelector('[data-action-color-open="'+key+'"].action-color-swatch');
+ if(swatch)swatch.style.setProperty('--action-swatch',input.value);
+ save();
+});
 document.addEventListener('change',function(event){
  var input=event.target.closest&&event.target.closest('[data-badge-color]'),key;
  if(!input||!/^#[0-9a-fA-F]{6}$/.test(input.value))return;
@@ -108,10 +135,15 @@ document.addEventListener('change',function(event){
  S.settings.badgeColors[key]=input.value;
  save();applyBadgeColors();flash('Badge color saved');
 });
+document.addEventListener('change',function(event){
+ var input=event.target.closest&&event.target.closest('[data-action-color]');
+ if(!input||!/^#[0-9a-fA-F]{6}$/.test(input.value))return;
+ flash('Action color saved');
+});
 function renderSettings(){
  if(settingsTab==='general'||settingsTab==='peoplecolors'||settingsTab==='goals')settingsTab='peoplemeters';
  if(settingsTab==='times'||settingsTab==='dates'||settingsTab==='holidays'||settingsTab==='calendars')settingsTab='schedule';
- var tabs=[['profile','My profile'],['display','Display'],['peoplemeters','People & meters'],['badges','Badge colors'],['schedule','Time & dates'],['weather','Weather'],['focus','Focus'],['plan','Plan'],['offload','Offload'],['sync','Sync']];
+ var tabs=[['profile','My profile'],['display','Display'],['peoplemeters','People & meters'],['badges','Action colors'],['schedule','Time & dates'],['weather','Weather'],['focus','Focus'],['plan','Plan'],['offload','Offload'],['sync','Sync']];
  var out='<div class="sectiontitle settings-title"><h2>Settings</h2><span class="hint">Make Tend work for you</span></div>';
  out+='<p class="settings-intro">Choose a section below to update your preferences.</p>';
  out+='<div class="profile-tabs settings-tabs" role="tablist" aria-label="Settings">'+tabs.map(function(t){return '<button type="button" role="tab" id="settings-tab-'+t[0]+'" aria-controls="settings-panel-'+t[0]+'" aria-selected="'+(settingsTab===t[0])+'" data-settingstab="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div>';
@@ -127,7 +159,7 @@ function renderSettings(){
   '<div class="setrow meter-baseline-row"><label for="setBase">Starting score for inactive areas</label><input type="number" id="setBase" min="0" max="100" value="'+settings().baseline+'"></div>'+
   '<p class="settings-help meter-baseline-help">This baseline starts activity-based area scores when there are no recent events and no active rhythms. Faith uses its active practice scores; people, rhythms, and prayers use their own scoring.</p>'+
   '<button class="btn" id="setSave">Save meter settings</button></div></div></section>';
- out+=settingsPanel('badges')+badgeColorsSettingsHTML()+'</section>';
+ out+=settingsPanel('badges')+actionColorsSettingsHTML()+'</section>';
  out+=settingsPanel('schedule')+dayBlockSettingsHTML()+keyDatesSettingsHTML()+holidaySettingsHTML();
  out+='<div class="card settings-card"><div class="subhead">Connected calendars</div><p class="settings-help">Add a public iCloud calendar to show its events on your Tend dashboard. On iCloud.com, open Calendar, choose the share icon beside a calendar, enable Public Calendar, and copy its link.</p>';
  (S.calendars||[]).forEach(function(ca){

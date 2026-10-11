@@ -23,7 +23,7 @@ function dashboardInitSparkCarousel(){
 function renderNav(){
  var an=el("areaNav");if(an)an.innerHTML=AREA_IDS.map(function(id){return '<button data-areanav="'+id+'" class="'+(navKind()==="area"&&currentArea===id?"active":"")+'"><span class="nav-ic">'+(AREA_ICONS[id]||"")+'</span><span>'+S.areas[id].name+'</span></button>';}).join("");
  var un=el("utilNav");if(un){var settingsActive=tab==="settings"||tab==="careplan"||tab==="offload";un.innerHTML='<div class="utility-primary"><button type="button" data-utilnav="today" class="utility-primary-button'+(tab==="today"&&navKind()!=="area"?" active":"")+'"><span class="utility-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg></span><span>Today</span></button>'+(typeof focusNavButtonHTML==="function"?focusNavButtonHTML():'')+'<button type="button" data-utilnav="people" class="utility-primary-button'+(tab==="people"&&navKind()!=="area"?" active":"")+'"><span class="utility-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20v-1.5a6.5 6.5 0 0 1 13 0V20zM16 5a3.5 3.5 0 0 0 0 6.8M18 14a5.5 5.5 0 0 1 3.5 5.2V20h-3"/></svg></span><span>People</span></button><button type="button" data-utilnav="settings" class="utility-primary-button'+(settingsActive&&navKind()!=="area"?" active":"")+'" aria-label="More, settings"><span class="utility-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span><span>More</span></button></div><label class="utility-search"><span class="utility-search-icon" aria-hidden="true">⌕</span><input type="search" id="tendSearch" placeholder="Search Tend..." autocomplete="off" aria-label="Search people, rhythms, prayers, and sparks" aria-controls="tendSearchResults" aria-expanded="false"><button type="button" class="utility-search-clear" data-search-clear aria-label="Clear search" hidden>×</button><div class="utility-search-results" id="tendSearchResults" role="region" aria-label="Search results" hidden></div></label>';}
- var displayToggle=document.querySelector("[data-mobile-display-toggle]"),textSize=settings().mobileTextSize,large=textSize==="large"||textSize==="larger",nextTextSize=textSize==="normal"?"Large":textSize==="large"?"Larger":"Normal";if(displayToggle){displayToggle.setAttribute("aria-pressed",String(large));displayToggle.setAttribute("aria-label","Switch to "+nextTextSize+" text");displayToggle.title="Switch to "+nextTextSize+" text";}
+ var displayToggle=document.querySelector("[data-mobile-display-toggle]"),textSize=settings().mobileTextSize,sizeLabel=textSize==="large"?"Medium":textSize==="larger"?"Large":"Small",nextTextSize=textSize==="normal"?"Medium":textSize==="large"?"Large":"Small";if(displayToggle){displayToggle.setAttribute("data-text-size",sizeLabel.toLowerCase());displayToggle.setAttribute("aria-label","Mobile text size: "+sizeLabel+". Tap to increase to "+nextTextSize);displayToggle.title="Mobile text size: "+sizeLabel+". Tap to increase to "+nextTextSize;}
 }
 function tendSearchText(value){return String(value||"").toLocaleLowerCase();}
 function tendSearchMatches(query){var q=tendSearchText(query),people=S.people||[],results={people:[],rhythms:[],prayers:[],sparks:[]};if(!q)return results;
@@ -41,7 +41,7 @@ document.addEventListener("click",function(event){
  var toggle=event.target.closest&&event.target.closest("[data-mobile-search-toggle]");
  if(toggle){var open=!document.body.classList.contains("mobile-search-open");document.body.classList.toggle("mobile-search-open",open);toggle.setAttribute("aria-expanded",String(open));if(open){var input=el("tendSearch");if(input)requestAnimationFrame(function(){input.focus();});}else{var search=el("tendSearch");if(search){search.value="";tendSearchUpdate();}toggle.focus();}return;}
  toggle=event.target.closest&&event.target.closest("[data-mobile-display-toggle]");
- if(toggle){var current=settings().mobileTextSize,next=current==="normal"?"large":current==="large"?"larger":"normal",nextLabel=next==="normal"?"Normal":next==="large"?"Large":"Larger";settings().mobileTextSize=next;document.documentElement.setAttribute("data-mobile-text-size",next==="larger"?"large":next);document.documentElement.setAttribute("data-mobile-text-size-level",next);save();toggle.setAttribute("aria-pressed",String(next!=="normal"));toggle.setAttribute("aria-label","Switch to "+(next==="normal"?"Large":next==="large"?"Larger":"Normal")+" text");toggle.title="Switch to "+(next==="normal"?"Large":next==="large"?"Larger":"Normal")+" text";flash(next==="larger"?"Extra-large text enabled":nextLabel+" text enabled");}
+ if(toggle){var current=settings().mobileTextSize,next=current==="normal"?"large":current==="large"?"larger":"normal",nextLabel=next==="normal"?"Small":next==="large"?"Medium":"Large",followingLabel=next==="normal"?"Medium":next==="large"?"Large":"Small";settings().mobileTextSize=next;document.documentElement.setAttribute("data-mobile-text-size",next==="larger"?"large":next);document.documentElement.setAttribute("data-mobile-text-size-level",next);save();toggle.setAttribute("data-text-size",nextLabel.toLowerCase());toggle.setAttribute("aria-label","Mobile text size: "+nextLabel+". Tap to increase to "+followingLabel);toggle.title="Mobile text size: "+nextLabel+". Tap to increase to "+followingLabel;flash(nextLabel+" text enabled");}
 });
 document.addEventListener("click",function(event){
  var personButton=event.target.closest&&event.target.closest("[data-person-spark-carousel-step]");
@@ -333,7 +333,7 @@ function planMetaIcon(kind){
  var paths={frequency:'<path d="M20 7a8 8 0 0 0-14-2L3 8m0-5v5h5 M4 17a8 8 0 0 0 14 2l3-3m0 5v-5h-5"/>',time:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',occurred:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18m-13 5 2 2 4-4"/>'};
  return '<svg class="plan-detail-icon'+(kind==="frequency"?" plan-detail-icon-frequency":"")+'" viewBox="0 0 24 24" aria-hidden="true">'+paths[kind]+'</svg>';
 }
-function planItemMetaBar(meta){
+function planItemMetaBar(meta,isRhythm){
  var parts=String(meta||"").split(" \u00b7 ").filter(Boolean);
  if(!parts.length||!parts.some(function(part){return /last tended|last prayed|not yet tended|not yet prayed/i.test(part);}))return "";
  var isTime=function(part){var normalized=part.toLowerCase();return Object.keys(TODS||{}).some(function(key){return TODS[key]&&TODS[key].toLowerCase()===normalized;});};
@@ -341,17 +341,18 @@ function planItemMetaBar(meta){
  var time=parts.filter(isTime),occurred=parts.filter(isOccurred),frequency=parts.filter(function(part){return !isTime(part)&&!isOccurred(part)&&!/^(ends |due )/i.test(part)&&!/ready to tend again/i.test(part);}).slice(0,1);
  function entries(items,kind){return items.map(function(part){
   var iconKind=kind==="schedule"?(isTime(part)?"time":"frequency"):"occurred";
-  return '<span class="plan-item-meta-entry">'+planMetaIcon(iconKind)+'<span>'+esc(part)+'</span></span>';
+  var label=isRhythm?part.replace(/^last tended\s+/i,""):part;
+  return '<span class="plan-item-meta-entry">'+planMetaIcon(iconKind)+'<span>'+esc(label)+'</span></span>';
  }).join("");}
  return '<div class="plan-item-meta">'+entries(frequency.concat(time),"schedule")+entries(occurred,"occurred")+'</div>';
 }
-function todayQueueMetaBar(meta){
+function todayQueueMetaBar(meta,isRhythm){
  var parts=String(meta||"").split(" \u00b7 ").filter(Boolean);
  if(!parts.length)return "";
  var isTime=function(part){var normalized=part.toLowerCase();return Object.keys(TODS||{}).some(function(key){return TODS[key]&&TODS[key].toLowerCase()===normalized;})||/^\d{1,2}(?::\d{2})?\s?(?:am|pm)$/i.test(part);};
  var isHistory=function(part){return /last tended|last prayed|not yet tended|not yet prayed|^tended |^prayed /i.test(part);};
  var time=parts.filter(isTime),history=parts.filter(isHistory),details=parts.filter(function(part){return !isTime(part)&&!isHistory(part)&&!/ready to tend again/i.test(part);});
- function entry(part,kind,icon){return '<span class="plan-item-meta-entry plan-item-meta-entry--'+kind+'">'+(icon?planMetaIcon(icon):"")+'<span>'+esc(part)+'</span></span>';}
+ function entry(part,kind,icon){var label=isRhythm?part.replace(/^last tended\s+/i,""):part;return '<span class="plan-item-meta-entry plan-item-meta-entry--'+kind+'">'+(icon?planMetaIcon(icon):"")+'<span>'+esc(label)+'</span></span>';}
  var frequency=details.filter(function(part){return /^(daily|weekly|monthly|quarterly|yearly|annually|every\b|once\b)/i.test(part);}),other=details.filter(function(part){return frequency.indexOf(part)===-1;});
  if(!frequency.length&&!time.length&&!history.length&&!other.length)return "";
  return '<div class="plan-item-meta">'+frequency.map(function(part){return entry(part,"schedule","frequency");}).join("")+time.map(function(part){return entry(part,"time","time");}).join("")+other.map(function(part){return entry(part,"detail","");}).join("")+history.map(function(part){return entry(part,"history","occurred");}).join("")+'</div>';
@@ -369,7 +370,7 @@ function planBlockCard(b,curId,isCur,isAllDay,focusBlocks){
  }
  function itemHTML(it){
   var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.faithRhythm?'<button type="button" class="btn mini" data-tend-open="faith-rhythm" data-rhythm-id="'+esc(it.faithRhythm)+'">Tend</button>':(it.prayer?'<button type="button" class="btn mini" data-pray="'+esc(it.prayer)+'">Pray</button>':(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>')));
-  var meta=planItemMetaBar(it.sub);
+  var meta=planItemMetaBar(it.sub,!!(it.rhythm||it.faithRhythm));
   return '<div class="planitem"><div class="pi-main">'+planItemCopy(it,btn)+'</div>'+planItemTopRow(it)+planItemFooter(it,meta,it.sub)+'</div>';
  }
  var body=queue.visible.length?queue.visible.map(itemHTML).join(""):'<div class="empty plan-empty-card">Nothing queued - all items tended.</div>';
@@ -383,7 +384,7 @@ function planHTML(){
  return planBlockCard(focus,curId,focus.id===curId,focus.id==="allday",blocks);}
 function dashboardFocusedPrayerHTML(){
  var timeBlock=faithDashboardPrayerTimeBlock(dashboardPrayerTimeMode),people=dashboardPrayerPeople,count=faithDashboardPrayerSessionSort(timeBlock,people).length;
- return '<section class="dashboard-focused-prayer" aria-label="Focused prayer"><div class="dashboard-prayer-controls">'+faithDashboardPrayerPeopleHTML()+'</div><button type="button" class="btn mini faith-start-prayer" data-dashboard-prayer-start="1" aria-label="Start focused prayer for '+count+' '+(count===1?"prayer":"prayers")+'">Focused Prayer <span class="faith-prayer-session-count" aria-hidden="true">'+count+'</span></button>'+faithDashboardPrayerPeopleDialogHTML()+'</section>';
+ return '<section class="dashboard-focused-prayer" aria-label="Focused prayer"><div class="dashboard-prayer-controls">'+faithDashboardPrayerPeopleHTML()+'</div><button type="button" class="btn mini faith-start-prayer" data-dashboard-prayer-start="1" aria-label="Start focused prayer for '+count+' '+(count===1?"prayer":"prayers")+'">'+collectionIcon("prayer")+'<span>Focused Prayer</span><span class="faith-prayer-session-count" aria-hidden="true">'+count+'</span></button>'+faithDashboardPrayerPeopleDialogHTML()+'</section>';
 }
 function upcomingDates(now){
  var today=new Date(now||Date.now());today.setHours(0,0,0,0);var rows=[];
@@ -752,7 +753,7 @@ function actQueueHTML(p){
  function rhyRowQ(r,dim){
   var sub=tendRhythmMetaLabel(r,null,true);
   var badges=tendQueuePeopleAndCategoryBadges(r,p.id,p.id,"rhythm");
-  return '<div class="actrow'+(dim?" done":"")+'"><div class="pi-main">'+tendRowContent(r.text||"(unnamed rhythm)",String(r.description||"").trim(),sub,"",badges,"",true)+'</div>'+(dim?'<span class="praycount tend-type-metric">Tended \u2713</span>':rhyDoneBtn(p.id+"|"+r.id))+todayQueueMetaBar(sub)+'</div>';
+  return '<div class="actrow'+(dim?" done":"")+'"><div class="pi-main">'+tendRowContent(r.text||"(unnamed rhythm)",String(r.description||"").trim(),sub,"",badges,"",true)+'</div>'+(dim?'<span class="praycount tend-type-metric">Tended \u2713</span>':rhyDoneBtn(p.id+"|"+r.id))+todayQueueMetaBar(sub,true)+'</div>';
  }
  function sparkRowQ(spark){
   var ownerId=spark.profileOwnerId||p.id,sub=(spark.time?fmtHM12(spark.time)+" \u00b7 ":"")+sparkDueTxt(spark),badges=tendQueuePeopleAndCategoryBadges(spark,ownerId,p.id,"spark");
@@ -888,7 +889,7 @@ function personProfile(pid){
  var relIn=REL_OPTIONS.indexOf(p.relation);
  var m='<div class="modal'+(window._psModalOpen?" open":"")+'" id="personSettingsModal"><div class="box person-settings-box" role="dialog" aria-modal="true" aria-labelledby="personSettingsTitle"><div class="settings-head"><h3 id="personSettingsTitle">Person settings - '+esc(p.name)+'</h3><button type="button" class="iconbtn" data-psettingsclose="1" title="Done" aria-label="Close person settings">\u2715</button></div><div class="person-settings-content">';
  m+='<section class="person-settings-section"><h4 class="settings-section-title">Person</h4>';
- m+='<div class="field person-photo-field"><label>Photo</label><div class="person-photo-controls">'+personAvatar(p,56)+'<input type="file" accept="image/*" data-pphoto="'+pid+'" aria-label="Upload photo for '+esc(p.name)+'">'+(p.photo?'<button type="button" class="btn mini danger" data-pphorm="'+pid+'">Remove photo</button>':'')+'</div><div class="hint person-photo-help">Crops to a circle for their card.</div></div>';
+ m+='<div class="field person-photo-field"><label>Photo</label><div class="person-photo-controls">'+personAvatar(p,56)+'<input type="file" accept="image/*" data-pphoto="'+pid+'" aria-label="Upload photo for '+esc(p.name)+'">'+(p.photo?'<button type="button" class="btn mini danger" data-pphorm="'+pid+'">Remove photo</button>':'')+'</div><div class="hint person-photo-help">Crops to a circle for their card.</div>'+(p.photo?'':'<label for="personAvatarStyle-'+esc(pid)+'">Illustration style</label><select id="personAvatarStyle-'+esc(pid)+'" data-pfield="avatarStyle" data-pid="'+esc(pid)+'">'+[["neutral","Neutral"],["masculine","Masculine"],["feminine","Feminine"]].map(function(o){return '<option value="'+o[0]+'"'+((p.avatarStyle||"neutral")===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("")+'</select><div class="hint person-photo-help">Used only when no photo is uploaded.</div>')+'</div>';
  m+='<div class="field"><label for="personRelation-'+esc(pid)+'">Relationship</label><select id="personRelation-'+esc(pid)+'" data-pfield="relation" data-pid="'+pid+'"><option value="">- not set -</option>';
  if(p.relation&&relIn<0)m+='<option value="'+esc(p.relation)+'" selected>'+esc(p.relation)+' (custom)</option>';
  m+=REL_OPTIONS.map(function(o){return '<option value="'+o+'"'+(relIn>=0&&REL_OPTIONS[relIn]===o?" selected":"")+'>'+o+'</option>';}).join("");
