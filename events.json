@@ -1,5 +1,5 @@
 {
-  "synced": "2026-10-11T20:25:46.385Z",
+  "synced": "2026-10-11T21:50:34.131Z",
   "source": "iCloud published feed",
   "events": [
     {
@@ -295,6 +295,14 @@
       "s": "2026-12-31T14:00:00.000Z",
       "e": "2026-12-31T15:00:00.000Z",
       "allDay": false,
+      "cal": "Home",
+      "notes": ""
+    },
+    {
+      "t": "Addi bridal shower",
+      "s": "2027-01-09T00:00:00",
+      "e": "2027-01-10T00:00:00",
+      "allDay": true,
       "cal": "Home",
       "notes": ""
     },
