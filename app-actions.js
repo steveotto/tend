@@ -40,28 +40,21 @@ function renderPreservingSparkPosition(row,viewerId){
  requestAnimationFrame(function(){requestAnimationFrame(function(){var target=null;if(anchorKey)target=Array.prototype.slice.call(document.querySelectorAll("[data-spark-row]")).find(function(item){return item.getAttribute("data-spark-row")===anchorKey;});if(target&&anchorTop!==null){window.scrollBy(0,target.getBoundingClientRect().top-anchorTop);return;}var add=Array.prototype.slice.call(document.querySelectorAll("[data-sparkaddopen]")).find(function(item){return item.getAttribute("data-sparkaddopen")===viewerId;});if(add&&addTop!==null)window.scrollBy(0,add.getBoundingClientRect().top-addTop);});});
 }
 var tendDialogDraft=null;
+var tendTimePicker=null;
+var sparkCompletionDraft=null;
+var sparkTimePicker=null;
 function tendDialogHTML(){
- function stepper(segment,label,direction){var title=direction>0?"Increase ":"Decrease ";return '<button type="button" class="tend-time-step" tabindex="-1" data-tend-step="'+segment+'" data-step-direction="'+direction+'" aria-label="'+title+label+'"><svg viewBox="0 0 12 8" aria-hidden="true"><path d="'+(direction>0?"m1 7 5-5 5 5":"m1 1 5 5 5-5")+'"/></svg></button>';}
- return '<dialog id="tendDialog" class="tend-dialog" aria-labelledby="tendHeading"><div class="tend-form"><button type="button" class="iconbtn tend-close" data-tend-cancel aria-label="Close">×</button><span class="focus-eyebrow">Tend</span><h2 id="tendHeading">When did you tend it?</h2><p id="tendTitle"></p><label>Date<input type="date" id="tendDate" required></label><label>Time<span class="tend-time-control"><input type="time" id="tendTime" step="60" tabindex="-1" aria-hidden="true" hidden><span class="tend-time-segment"><input type="text" id="tendTimeHour" inputmode="numeric" maxlength="2" autocomplete="off" aria-label="Hour" aria-describedby="tendTimeHelp"><span class="tend-time-steppers">'+stepper("hour","hour",1)+stepper("hour","hour",-1)+'</span></span><span class="tend-time-separator" aria-hidden="true">:</span><span class="tend-time-segment"><input type="text" id="tendTimeMinute" inputmode="numeric" maxlength="2" autocomplete="off" aria-label="Minute" aria-describedby="tendTimeHelp"><span class="tend-time-steppers">'+stepper("minute","minute",1)+stepper("minute","minute",-1)+'</span></span><select id="tendTimePeriod" aria-label="AM or PM"><option value="AM">AM</option><option value="PM">PM</option></select></span></label><div class="tend-actions"><button type="button" class="btn ghost" data-tend-cancel>Cancel</button><button type="button" class="btn" data-tend-save>Save</button></div></div></dialog>';
+ return '<dialog id="tendDialog" class="tend-dialog" aria-labelledby="tendHeading"><div class="tend-form"><button type="button" class="iconbtn tend-close" data-tend-cancel aria-label="Close">×</button><span class="focus-eyebrow">Tend</span><h2 id="tendHeading">When did you tend it?</h2><p id="tendTitle"></p><label>Date<span class="tend-date-control"><input type="date" id="tendDate" required><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="16" rx="2"></rect><path d="M7.5 3v4M16.5 3v4M3.5 9h17"></path></svg></span></label><div class="tend-time-field"><span>Time</span><input type="time" id="tendTime" step="60" tabindex="-1" aria-hidden="true" hidden><div id="tendTimeWheel" class="time-wheel-picker" data-accent="rhythm"></div></div><div class="tend-actions"><button type="button" class="btn ghost" data-tend-cancel>Cancel</button><button type="button" class="btn" data-tend-save>Save</button></div></div></dialog>';
 }
-function setTendTime(value){
- var parts=String(value||"").match(/^(\d{2}):(\d{2})$/),hourField=document.getElementById("tendTimeHour"),minuteField=document.getElementById("tendTimeMinute"),period=document.getElementById("tendTimePeriod"),nativeTime=document.getElementById("tendTime");
- if(!parts||!hourField||!minuteField||!period||!nativeTime)return;
- var hour=+parts[1];hourField.value=String(hour%12||12).padStart(2,"0");minuteField.value=parts[2];period.value=hour<12?"AM":"PM";nativeTime.value=parts[1]+":"+parts[2];
-}
-function normalizeTendTimeSegment(field){if(!field||!field.value)return;var bounds=field.id==="tendTimeHour"?[1,12]:[0,59],value=Number(field.value);if(!Number.isFinite(value))return;value=Math.max(bounds[0],Math.min(bounds[1],value));field.value=String(value).padStart(2,"0");}
-function syncTendTime(){
- var hourField=document.getElementById("tendTimeHour"),minuteField=document.getElementById("tendTimeMinute"),period=document.getElementById("tendTimePeriod"),nativeTime=document.getElementById("tendTime");
- if(!hourField||!minuteField||!period||!nativeTime)return false;
- var hour=Number(hourField.value),minute=Number(minuteField.value);
- if(!/^\d{1,2}$/.test(hourField.value)||hour<1||hour>12){nativeTime.value="";return false;}
- if(!/^\d{1,2}$/.test(minuteField.value)||minute<0||minute>59){nativeTime.value="";return false;}
- var hour24=hour%12+(period.value==="PM"?12:0);nativeTime.value=String(hour24).padStart(2,"0")+":"+String(minute).padStart(2,"0");return true;
-}
-function stepTendTime(segment,direction){
- var field=document.getElementById(segment==="hour"?"tendTimeHour":"tendTimeMinute"),min=segment==="hour"?1:0,max=segment==="hour"?12:59;
- normalizeTendTimeSegment(field);var current=field&&field.value?Number(field.value):(segment==="hour"?1:0),next=current+direction;
- if(next>max)next=min;if(next<min)next=max;field.value=String(next).padStart(2,"0");syncTendTime();field.focus();field.select();
+function mountTendTimePicker(dialog,value,accent){
+ var host=dialog.querySelector(".time-wheel-picker"),nativeTime=dialog.querySelector('input[type="time"]');
+ if(!host||!nativeTime||!window.TimeWheelPicker)throw new Error("Time wheel picker is unavailable");
+ nativeTime.value=value;
+ var existing=host._timeWheelPicker;
+ if(existing)existing.destroy();
+ var picker=window.TimeWheelPicker.mount(host,{value:value,minuteStep:1,use12HourFormat:true,accent:accent,onChange:function(next){nativeTime.value=next;}});
+ host._timeWheelPicker=picker;
+ return picker;
 }
 function openTendDialog(button){
  var kind=button.getAttribute("data-tend-open"),personId=button.getAttribute("data-person-id"),rhythmId=button.getAttribute("data-rhythm-id"),areaId=button.getAttribute("data-area-id")||button.getAttribute("data-rhythm-area"),title="",rhythm=null;
@@ -70,19 +63,20 @@ function openTendDialog(button){
  else if(kind==="area-rhythm"){rhythm=(S.areaRhythms||[]).find(function(item){return item.id===rhythmId&&Array.isArray(item.areas)&&item.areas.indexOf(areaId)!==-1;});if(!rhythm)return;title=rhythm.text||"Rhythm";}
  else return;
  var dialog=document.getElementById("tendDialog");
- if(!dialog){var wrapper=document.createElement("div");wrapper.innerHTML=tendDialogHTML();dialog=wrapper.firstElementChild;dialog.addEventListener("close",function(){tendDialogDraft=null;dialog.remove();});document.body.appendChild(dialog);}
+ if(!dialog){var wrapper=document.createElement("div");wrapper.innerHTML=tendDialogHTML();dialog=wrapper.firstElementChild;dialog.addEventListener("close",function(){if(dialog.open)return;tendDialogDraft=null;if(tendTimePicker)tendTimePicker.destroy();tendTimePicker=null;dialog.remove();});document.body.appendChild(dialog);}
  tendDialogDraft={kind:kind,personId:personId,rhythmId:rhythmId,areaId:areaId};
  dialog.querySelector("#tendHeading").textContent="When did you tend it?";
  dialog.querySelector("#tendTitle").textContent=title;
  dialog.querySelector("#tendDate").value=todayStr();
- setTendTime(nowHM());
+ tendTimePicker=mountTendTimePicker(dialog,nowHM(),"rhythm");
  tendShowModal(dialog);
- dialog.querySelector("#tendDate").focus();
+ dialog.querySelector('[data-wheel="hour"]').focus({preventScroll:true});
 }
 function saveTendDialog(){
  var dialog=document.getElementById("tendDialog"),draft=tendDialogDraft,date=dialog&&dialog.querySelector("#tendDate"),time=dialog&&dialog.querySelector("#tendTime");
  if(!draft||!date||!date.value){flash("Choose a date");if(date)date.focus();return;}
- if(!syncTendTime()){flash("Enter a valid hour and minute");var hourField=document.getElementById("tendTimeHour"),minuteField=document.getElementById("tendTimeMinute");if(!/^\d{1,2}$/.test(hourField.value)||+hourField.value<1||+hourField.value>12)hourField.focus();else minuteField.focus();return;}
+ if(!tendTimePicker||!time){flash("Choose a valid time");return;}
+ time.value=tendTimePicker.getValue();
  var timestamp=new Date(date.value+"T"+time.value+":00").getTime();
  if(!Number.isFinite(timestamp)){flash("Enter a valid date and time");return;}
  if(draft.kind==="person-rhythm"){
@@ -105,23 +99,53 @@ function saveTendDialog(){
  dialog.close();
  if(typeof focusRefreshDialog==="function")focusRefreshDialog();
 }
+function sparkCompletionDialogHTML(){
+ return '<dialog id="sparkCompletionDialog" class="tend-dialog spark-completion-dialog" aria-labelledby="sparkCompletionHeading"><div class="tend-form"><button type="button" class="iconbtn tend-close" data-spark-cancel aria-label="Close">×</button><span class="focus-eyebrow spark-completion-eyebrow">Spark</span><h2 id="sparkCompletionHeading">When did you do it?</h2><p id="sparkCompletionTitle"></p><label>Date<span class="tend-date-control"><input type="date" id="sparkCompletionDate" required><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="16" rx="2"></rect><path d="M7.5 3v4M16.5 3v4M3.5 9h17"></path></svg></span></label><div class="tend-time-field"><span>Time</span><input type="time" id="sparkCompletionTime" step="60" tabindex="-1" aria-hidden="true" hidden><div id="sparkCompletionTimeWheel" class="time-wheel-picker" data-accent="spark"></div></div><div class="tend-actions"><button type="button" class="btn ghost" data-spark-cancel>Cancel</button><button type="button" class="btn spark-completion-save" data-spark-save>Save</button></div></div></dialog>';
+}
+function openSparkCompletionDialog(button){
+ var sparkKey=button.getAttribute("data-sparkdo").split("|"),ownerId=sparkKey[0],sparkId=sparkKey[1],viewerId=sparkKey[2]||ownerId,owner=S.people.find(function(person){return person.id===ownerId;}),faithOwner=ownerId==="faith",spark=faithOwner?S.ideas.find(function(item){return item.id===sparkId&&(item.category==="faith"||item.area==="faith"||item.faithSection);}):owner&&(owner.sparks||[]).find(function(item){return item.id===sparkId;}),viewer=S.people.find(function(person){return person.id===viewerId;});
+ if(!spark||!viewer)return;
+ var dialog=document.getElementById("sparkCompletionDialog");
+ if(!dialog){
+  var wrapper=document.createElement("div");wrapper.innerHTML=sparkCompletionDialogHTML();dialog=wrapper.firstElementChild;
+  dialog.addEventListener("close",function(){if(dialog.open)return;sparkCompletionDraft=null;if(sparkTimePicker)sparkTimePicker.destroy();sparkTimePicker=null;dialog.remove();});
+  document.body.appendChild(dialog);
+ }
+ sparkCompletionDraft={ownerId:ownerId,sparkId:sparkId,viewerId:viewerId,dashboardFreeSpark:button.hasAttribute("data-dashboard-free-spark"),faithOwner:faithOwner};
+ dialog.querySelector("#sparkCompletionTitle").textContent=spark.text||"Spark";
+ dialog.querySelector("#sparkCompletionDate").value=todayStr();
+ sparkTimePicker=mountTendTimePicker(dialog,nowHM(),"spark");
+ tendShowModal(dialog);
+ dialog.querySelector('[data-wheel="hour"]').focus({preventScroll:true});
+}
+function saveSparkCompletionDialog(){
+ var dialog=document.getElementById("sparkCompletionDialog"),draft=sparkCompletionDraft,date=dialog&&dialog.querySelector("#sparkCompletionDate"),time=dialog&&dialog.querySelector("#sparkCompletionTime");
+ if(!draft||!date||!date.value){flash("Choose a date");if(date)date.focus();return;}
+ if(!sparkTimePicker||!time){flash("Choose a valid time");return;}
+ time.value=sparkTimePicker.getValue();
+ var completedAt=new Date(date.value+"T"+time.value+":00").getTime();
+ if(!Number.isFinite(completedAt)){flash("Choose a valid date and time");return;}
+ var owner=S.people.find(function(person){return person.id===draft.ownerId;}),spark=draft.faithOwner?S.ideas.find(function(item){return item.id===draft.sparkId&&(item.category==="faith"||item.area==="faith"||item.faithSection);}):owner&&(owner.sparks||[]).find(function(item){return item.id===draft.sparkId;}),viewer=S.people.find(function(person){return person.id===draft.viewerId;});
+ if(!spark||!viewer){flash("This Spark is no longer available");dialog.close();return;}
+ dialog.close();
+ spark.done=true;spark.doneTs=completedAt;
+ if(draft.faithOwner){spark.completedTs=completedAt;spark.completedDate=date.value;}
+ actDoneAdd(viewer.id,spark.id);
+ var sparkPeople=(owner?[owner.id]:[]).concat(Array.isArray(spark.sharedWith)?spark.sharedWith:[],viewer.id).filter(function(id,index,ids){return id&&ids.indexOf(id)===index&&S.people.some(function(person){return person.id===id;});});
+ logEvent(viewer.area,viewer.id,"quality",spark.text,spark.details||"Spark landed",completedAt,null,{origin:"spark",sparkId:spark.id,sparkOwnerId:draft.faithOwner?"faith":owner.id,personIds:sparkPeople});
+ if(draft.dashboardFreeSpark){var remainingSparks=dashboardFreeMomentSparkQueue();dashboardSparkCarouselIndex=Math.max(0,Math.min(remainingSparks.length-1,dashboardSparkCarouselIndex));renderPreservingScroll();}
+ flash("Spark landed - connection logged");
+}
 document.addEventListener("click",function(event){
- var target=event.target,button=target&&target.closest&&target.closest("[data-tend-open],[data-tend-save],[data-tend-cancel],[data-tend-step]");
+ var target=event.target,button=target&&target.closest&&target.closest("[data-tend-open],[data-tend-save],[data-tend-cancel],[data-spark-save],[data-spark-cancel]");
  if(!button)return;
  event.preventDefault();event.stopImmediatePropagation();
  if(button.matches("[data-tend-open]"))openTendDialog(button);
  else if(button.matches("[data-tend-save]"))saveTendDialog();
  else if(button.matches("[data-tend-cancel]")){var dialog=document.getElementById("tendDialog");tendDialogDraft=null;if(dialog)dialog.close();}
- else if(button.matches("[data-tend-step]"))stepTendTime(button.getAttribute("data-tend-step"),+button.getAttribute("data-step-direction"));
+ else if(button.matches("[data-spark-save]"))saveSparkCompletionDialog();
+ else if(button.matches("[data-spark-cancel]")){var sparkDialog=document.getElementById("sparkCompletionDialog");if(sparkDialog)sparkDialog.close();}
 },true);
-document.addEventListener("input",function(event){var field=event.target;if(!field||!field.matches||!field.matches("#tendTimeHour,#tendTimeMinute"))return;field.value=field.value.replace(/\D/g,"").slice(0,2);syncTendTime();});
-document.addEventListener("focusout",function(event){var field=event.target;if(!field||!field.matches||!field.matches("#tendTimeHour,#tendTimeMinute"))return;normalizeTendTimeSegment(field);syncTendTime();});
-document.addEventListener("change",function(event){if(event.target&&event.target.id==="tendTimePeriod")syncTendTime();});
-document.addEventListener("keydown",function(event){
- var field=event.target;if(!field||!field.matches||!field.matches("#tendTimeHour,#tendTimeMinute"))return;
- if(event.key==="ArrowUp"||event.key==="ArrowDown"){event.preventDefault();stepTendTime(field.id==="tendTimeHour"?"hour":"minute",event.key==="ArrowUp"?1:-1);}
- else if(event.key==="Enter"){event.preventDefault();normalizeTendTimeSegment(field);syncTendTime();var next=field.id==="tendTimeHour"?document.getElementById("tendTimeMinute"):document.getElementById("tendTimePeriod");next.focus();if(next.select)next.select();}
-});
 window.openModal=function(){var sel=el("logArea"),selp=el("logPerson"),selk=el("logKind");sel.innerHTML=AREA_IDS.map(function(a){return '<option value="'+a+'">'+S.areas[a].name+'</option>';}).join("");selp.innerHTML='<option value="">- no specific person -</option>'+S.people.map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+'</option>';}).join("");selk.innerHTML=Object.keys(KINDS).map(function(k){return '<option value="'+k+'">'+KINDS[k].label+'</option>';}).join("");el("logNote").value="";el("logModal").classList.add("open");};
 window.closeModal=function(){el("logModal").classList.remove("open");};
 window.submitLog=function(){logEvent(el("logArea").value,el("logPerson").value||null,el("logKind").value,el("logNote").value.trim());window.closeModal();};
@@ -225,14 +249,7 @@ function bind(){
    else{rhythmDraft={pid:ra,text:"",category:"connection",freq:"weekly",tod:"anytime",durUnit:"min",durVal:0};render();}
    return;}
   if(b=t.closest("[data-sparkdo]")){
-   var dashboardFreeSpark=b.hasAttribute("data-dashboard-free-spark"),spd=b.getAttribute("data-sparkdo").split("|"),spp=S.people.find(function(x){return x.id===spd[0];}),faithSparkOwner=spd[0]==="faith",ss=faithSparkOwner?S.ideas.find(function(x){return x.id===spd[1]&&(x.category==="faith"||x.area==="faith"||x.faithSection);}):spp&&(spp.sparks||[]).find(function(x){return x.id===spd[1];}),sparkViewer=S.people.find(function(x){return x.id===(spd[2]||spd[0]);});
-   if(ss&&sparkViewer){
-    var completedAt=Date.now();ss.done=true;ss.doneTs=completedAt;if(faithSparkOwner){ss.completedTs=completedAt;ss.completedDate=todayStr();}actDoneAdd(sparkViewer.id,ss.id);
-    var sparkPeople=(spp?[spp.id]:[]).concat(Array.isArray(ss.sharedWith)?ss.sharedWith:[],sparkViewer.id).filter(function(id,index,ids){return id&&ids.indexOf(id)===index&&S.people.some(function(person){return person.id===id;});});
-    logEvent(sparkViewer.area,sparkViewer.id,"quality",ss.text,ss.details||"Spark landed",completedAt,null,{origin:"spark",sparkId:ss.id,sparkOwnerId:faithSparkOwner?"faith":spp.id,personIds:sparkPeople});
-    if(dashboardFreeSpark){var remainingSparks=dashboardFreeMomentSparkQueue();dashboardSparkCarouselIndex=Math.max(0,Math.min(remainingSparks.length-1,dashboardSparkCarouselIndex));renderPreservingScroll();}
-    flash("Spark landed - connection logged");
-   }
+   openSparkCompletionDialog(b);
    return;
   }
   if(b=t.closest("[data-sparkaddopen]")){sparkDraftOpenFor=b.getAttribute("data-sparkaddopen");delete tendItemAssociationDrafts[tendAssociationKey("spark",sparkDraftOpenFor,"new")];sparkAddDrafts[sparkDraftOpenFor]={sharedWith:[],areas:[]};render();var sparkTitle=document.querySelector('[data-spnewtext="'+sparkDraftOpenFor+'"]');if(sparkTitle)sparkTitle.focus();return;}
