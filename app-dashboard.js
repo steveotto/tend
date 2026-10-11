@@ -59,7 +59,7 @@ document.addEventListener('click',function(event){
 });
 function settingsPanel(key){return '<section class="profile-tab-panel settings-panel" id="settings-panel-'+key+'" role="tabpanel" aria-labelledby="settings-tab-'+key+'"'+(settingsTab===key?'':' hidden')+'>';}
 function renderSettings(){
- var out='<div class="sectiontitle" style="margin-top:6px"><h2>Settings</h2><span class="hint">people, time, focus, sync</span></div>';
+ var out=tendSectionHeaderHTML({title:"Settings",subtitle:"people, time, focus, sync",style:"margin-top:6px"});
  out+='<div class="profile-tabs" role="tablist" aria-label="Settings">'+[['general','General'],['times','Daily time sections'],['dates','Key dates'],['holidays','Major holidays']].map(function(t){return '<button role="tab" id="settings-tab-'+t[0]+'" aria-controls="settings-panel-'+t[0]+'" aria-selected="'+(settingsTab===t[0])+'" data-settingstab="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div>';
  out+=settingsPanel('times')+dayBlockSettingsHTML()+'</section>'+settingsPanel('dates')+keyDatesSettingsHTML()+'</section>'+settingsPanel('holidays')+holidaySettingsHTML()+'</section>'+settingsPanel('general');
  /* meters */

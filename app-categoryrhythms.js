@@ -47,13 +47,13 @@
  };
  var baseFaithRhythmRow=window.faithRhythmRowHTML;
  window.faithRhythmRowHTML=function(record){
-  return baseFaithRhythmRow(record).replace("</b>","</b>"+areaBadges(record));
+  return baseFaithRhythmRow(record);
  };
  var basePersonRhythmRow=window.rhythmRow;
- window.rhythmRow=function(person,record){
-  var html=basePersonRhythmRow(person,record);
-  if(editRhythmId===record.id)return html;
-  return html.replace("</b>","</b>"+areaBadges(record));
+ window.rhythmRow=function(person,record,options){
+  options=Object.assign({},options||{});
+  if(arguments.length>2)options.additionalPeopleBadgesHTML=(options.additionalPeopleBadgesHTML||"")+'<button type="button" class="rhythm-person-badge" data-openperson="'+esc(person.id)+'" aria-label="Open '+esc(person.name)+'">'+personAvatar(person,22)+'<span>'+esc(person.name.trim().split(/\s+/)[0])+'</span></button>';
+  return basePersonRhythmRow(person,record,options);
  };
 
  var baseAreaScore=window.areaScore;
@@ -79,14 +79,17 @@
  function categoryRhythmRow(item,id){
   var record=item.record;
   if(item.person){
-   var html=window.rhythmRow(item.person,record);
-   html=html.replace(/data-tend-open="person-rhythm"/,function(match){return match+' data-rhythm-area="'+esc(id)+'"';});
-   html=html.replace("</strong>",'</strong><button type="button" class="rhythm-person-badge" data-openperson="'+esc(item.person.id)+'" aria-label="Open '+esc(item.person.name)+'">'+personAvatar(item.person,22)+'<span>'+esc(item.person.name.trim().split(/\s+/)[0])+'</span></button>');
-   return html;
+   return window.rhythmRow(item.person,record,{tendAttributes:{"data-rhythm-area":id}});
   }
   if(areaRhythmEditId===record.id){var editRecord=areaRhythmDraft&&areaRhythmDraft.areaId===id&&areaRhythmDraft.record.id===record.id?areaRhythmDraft.record:record;return categoryRhythmFormHTML(id,editRecord,record.id);}
-  var score=rhythmScore(record),badges=areaBadges(record),meta=tendRhythmMetaLabel(record,null,true);
-  return '<div class="rhyrow"><span class="rhythm-health"><span class="sm-dot '+scoreClass(score)+'" aria-hidden="true"></span><span>'+score+'%</span></span><div class="gr-main">'+tendRowContent(record.text||"(unnamed rhythm)",record.description||"",meta,badges)+'</div><button type="button" class="btn mini" data-tend-open="area-rhythm" data-area-id="'+esc(id)+'" data-rhythm-id="'+esc(record.id)+'">Tend</button><button type="button" class="iconbtn rhythm-history-trigger" data-rhyhistory="area-rhythm|'+esc(id)+'|'+esc(record.id)+'" aria-label="View history for '+esc(record.text)+'" title="View rhythm history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button type="button" class="iconbtn" data-area-rhythm-edit="'+esc(id)+'|'+esc(record.id)+'" aria-label="Edit '+esc(record.text)+'" title="Edit">✎</button><button type="button" class="iconbtn" data-area-rhythm-delete="'+esc(id)+'|'+esc(record.id)+'" aria-label="Delete '+esc(record.text)+'" title="Delete">×</button></div>';
+  var score=rhythmScore(record),metadata=window.tendRhythmCardMetadata(record);
+  return tendRhythmCardHTML(record,{title:record.text||"(unnamed rhythm)",description:record.description,score:Number.isFinite(score)?score:null,scoreClass:scoreClass(score),categoryBadgesHTML:areaBadges(record),
+   frequency:metadata.frequency,time:metadata.time,lastTended:metadata.lastTended,frequencyIconHTML:metadata.frequencyIconHTML,timeIconHTML:metadata.timeIconHTML,lastIconHTML:metadata.lastIconHTML,
+   tendAttributes:{"data-tend-open":"area-rhythm","data-area-id":id,"data-rhythm-id":record.id},
+   editAttributes:{"data-area-rhythm-edit":id+"|"+record.id},
+   historyAttributes:{"data-rhyhistory":"area-rhythm|"+id+"|"+record.id},
+   removeAttributes:{"data-area-rhythm-delete":id+"|"+record.id},removeLabel:"Delete "+(record.text||"rhythm"),removeTitle:"Delete rhythm"
+  });
  }
  window.faithLinkedRhythmCount=function(group){return categoryRhythms("faith").filter(function(item){return (item.record.faithGroup||"Prayer")===group&&!item.record.disabled&&!rhythmEnded(item.record);}).length;};
  window.faithLinkedRhythmRows=function(group){return categoryRhythms("faith").filter(function(item){return (item.record.faithGroup||"Prayer")===group&&!item.record.disabled&&!rhythmEnded(item.record);}).sort(function(a,b){return String(a.record.text||"").localeCompare(String(b.record.text||""));}).map(function(item){return categoryRhythmRow(item,"faith");}).join("");};
@@ -114,7 +117,7 @@
      var meta=tendRhythmMetaLabel(r,null,true);
      if(p){
       var badges=typeof window.planPills==="function"?window.planPills({personId:p.id,rhythm:p.id+"|"+r.id,hideTypeBadge:true}):rhythmPeopleBadges(r,p.id)+(typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(r):"");
-      out+='<div class="actrow"><span class="act-ic" style="background:'+personHealthColor(score)+'"></span><div class="pi-main">'+tendRowContent(r.text||"(unnamed rhythm)",String(r.description||"").trim(),meta,badges)+'</div>'+(typeof window.planPills==="function"?"":tag)+tend+'</div>';
+      out+='<div class="actrow"><span class="act-ic" style="background:'+personHealthColor(score)+'"></span><div class="pi-main">'+tendRhythmCardContentHTML(r,{title:r.text||"(unnamed rhythm)",description:String(r.description||"").trim(),meta:meta,badges:badges})+'</div>'+(typeof window.planPills==="function"?"":tag)+tend+'</div>';
      }else out+='<div class="actrow"><span class="act-ic" style="background:'+personHealthColor(score)+'"></span><div class="pi-main"><div class="pi-label">'+esc(r.text||"(unnamed rhythm)")+'</div><div class="pi-sub">'+esc(meta)+'</div></div>'+tag+tend+'</div>';
     });
    }else out+='<div class="empty">No rhythms due today.</div>';

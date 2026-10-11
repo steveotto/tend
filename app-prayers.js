@@ -66,7 +66,7 @@ function prayerItemHTML(p,profile){var faith=profile==="faith",person=S.people.f
  var categories=tendPrayerCategoryBadges(p);
  var participantBadges=tendAssociationPeopleBadges(p,ownerId,profile?viewerId:null,"prayer");
  var badges=(!person&&p.faithOwner==="me"&&!profile?'<span class="prayer-person">'+(settings().profilePhoto?personAvatar({name:"Me",photo:settings().profilePhoto},24):"")+'Me</span>':'')+(!profile?'<span class="pill pry">'+collectionIcon("prayer")+' Prayer</span>':"")+participantBadges+categories;
- var identity=tendRowContent(p.text,p.details||"",prayerScheduleLabel(p)+' · Last prayed '+prayerLastPrayedLabel(p)+' · Prayed '+count+' '+(count===1?'time':'times')+' · Added '+prayerDate(p.added)+(p.answered?' · Answered '+prayerDate(p.answeredDate):'')+(p.archived?' · Archived '+prayerDate(p.archivedDate):''),profile?"":badges,profile?badges:"");
+ var identity=tendPrayerCardContentHTML(p,{meta:prayerScheduleLabel(p)+' · Last prayed '+prayerLastPrayedLabel(p)+' · Prayed '+count+' '+(count===1?'time':'times')+' · Added '+prayerDate(p.added)+(p.answered?' · Answered '+prayerDate(p.answeredDate):'')+(p.archived?' · Archived '+prayerDate(p.archivedDate):''),badges:profile?"":badges,peopleBadges:profile?badges:""});
  var details="",meta="";
  var editAction='<button type="button" class="iconbtn prayer-edit-trigger profile-prayer-edit" data-prayeredit="'+esc(p.id)+'" aria-label="Edit '+esc(p.text)+'" title="Edit prayer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l4.2-.8L20 7.4 16.6 4 4.8 15.8Z"/></svg></button>';
  if(profile&&!faith){
@@ -97,7 +97,7 @@ window.openPersonPrayerPast=function(key){
  dialog.addEventListener("click",function(event){if(event.target.closest("[data-prayer-past-close]")||event.target.closest("[data-prayerunans]")||event.target.closest("[data-prayeredit]"))dialog.close();});
  dialog.addEventListener("close",function(){dialog.remove();});document.body.appendChild(dialog);tendShowModal(dialog);
 };
-window.renderPrayer=function(){var out='<div class="sectiontitle" style="margin-top:6px"><h2>Prayer</h2><span class="hint">carry these people before God</span></div>';
+window.renderPrayer=function(){var out=tendSectionHeaderHTML({title:"Prayer",subtitle:"carry these people before God"});
  out+='<div class="card prayer-compose"><button type="button" class="btn" id="prayerFormOpen">+ Add prayer</button></div>';
  if(prayerComposerOpen)out+='<dialog class="profile-editor-dialog prayer-edit-dialog" data-editor-modal aria-labelledby="prayer-compose-title"><div class="profile-editor-body"><h3 id="prayer-compose-title">Add Prayer</h3>'+prayerEditor({freq:"selectdays",weekdays:[new Date().getDay()],tod:"anytime",added:todayStr()},"global")+'</div></dialog>';
  PRAYER_CATS.forEach(function(cat){var items=S.prayers.filter(function(p){return p.category===cat&&!p.answered&&!p.archived;});if(items.length)out+='<div class="card prayer-cat"><div class="subhead">'+esc(cat)+'</div>'+items.map(function(p){return prayerItemHTML(p,false);}).join('')+'</div>';});

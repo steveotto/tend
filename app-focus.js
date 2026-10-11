@@ -31,7 +31,7 @@ function focusDialogHTML(blockId){var data=focusData(blockId);if(!data)return ''
    var meta=rhythm?tendRhythmMetaLabel(rhythm,null,true):[item.subtitle,item.blockLabel].filter(Boolean).join(' · ');
    if(rhythm){var last=rhythmLast(rhythm),history=last?rhythmCardLastTended(last).label:'Never';history=history.replace(/^(\d+)w ago$/,'$1 wk ago');meta=meta.replace(/Last tended [^·]*/,history).replace('Not yet tended','Never');}
    var badges=rhythm&&person?tendQueuePeopleAndCategoryBadges(rhythm,person.id,person.id,"rhythm"):"";
-   out+='<div class="focus-item focus-rhythm-item"><div class="pi-main">'+tendRowContent(item.title,description,"","",badges,"",true)+'</div><button type="button" class="btn mini focus-action" data-tend-open="person-rhythm" data-person-id="'+esc(item.personId)+'" data-rhythm-id="'+esc(item.rhythmId)+'">Tend</button>'+todayQueueMetaBar(meta)+'</div>';
+   out+='<div class="focus-item focus-rhythm-item"><div class="pi-main">'+tendRhythmCardContentHTML({text:item.title,description:description},{title:item.title,description:description,peopleBadges:badges,showNoDetails:true})+'</div><button type="button" class="btn mini focus-action" data-tend-open="person-rhythm" data-person-id="'+esc(item.personId)+'" data-rhythm-id="'+esc(item.rhythmId)+'">Tend</button>'+todayQueueMetaBar(meta)+'</div>';
    return;
   }
   var label=item.exact?focusClock(item.time):item.blockLabel||'Scheduled';

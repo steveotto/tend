@@ -31,6 +31,7 @@
   ["customType","customDow","customOrd","scheduleDow","category","dur","durVal","durUnit","rule"].forEach(function(k){delete r[k];});
   return r;
  }
+ window.tendNormalizeRhythmEditRecord=ensureRhythm;
  function migrateAllRhythms(){
   try{
    var before=JSON.stringify(S.people.map(function(p){return p.rhythms||[];}));
@@ -68,6 +69,17 @@
   return '<div class="rhythm-schedule-grid"><label class="careplan-field">Frequency<select '+A("freq")+'>'+Object.keys(RHYTHM_FREQS).map(function(k){return '<option value="'+k+'"'+(r.freq===k?' selected':'')+'>'+RHYTHM_FREQS[k].label+'</option>';}).join('')+'</select></label><label class="careplan-field">Time of day<select '+A("tod")+'>'+Object.keys(TODS).map(function(k){return '<option value="'+k+'"'+((r.tod||"anytime")===k?' selected':'')+'>'+esc(TODS[k])+'</option>';}).join('')+'</select></label></div>'
   +'<div class="rhy-recur">'+rhythmRecurrenceHTML(r,A)+'</div>';
  };
+ window.tendRhythmEditModalHTML=function(record,options){
+  options=options||{};
+  var carePlan=options.mode==="careplan",idf=String(options.idf||""),key=String(options.key||""),ownerId=String(options.ownerId||""),viewerId=String(options.viewerId||ownerId);
+  var A=function(field){return carePlan?'data-cpf="'+(field==="freq"?"frequency":field)+'"':'data-rfield="'+esc(idf+"|"+field)+'"';};
+  var schedule=carePlan?'<div class="rhythm-schedule-grid"><label class="careplan-field">Frequency<select '+A("freq")+'>'+Object.keys(RHYTHM_FREQS).map(function(freq){return '<option value="'+freq+'"'+(record.freq===freq?' selected':'')+'>'+RHYTHM_FREQS[freq].label+'</option>';}).join('')+'</select></label><label class="careplan-field">Time of day<select '+A("tod")+'>'+Object.keys(TODS).map(function(time){return '<option value="'+time+'"'+((record.tod||"anytime")===time?' selected':'')+'>'+esc(TODS[time])+'</option>';}).join('')+'</select></label></div><div class="rhy-recur">'+rhythmRecurrenceHTML(record,A)+'</div>':window.personRhythmScheduleHTML(record,idf);
+  if(carePlan){
+   var personOptions=S.people.map(function(person){return '<option value="'+esc(person.id)+'"'+(options.personId===person.id?' selected':'')+'>'+esc(person.name)+'</option>';}).join('');
+   return '<dialog class="profile-editor-dialog" data-editor-modal aria-label="Edit rhythm"><div class="profile-editor-body careplan-edit careplan-rhythm-edit" data-cpform="'+esc(key)+'"><div class="careplan-edit-head"><span class="careplan-kind careplan-kind-rhythm">Rhythm</span><strong>Edit rhythm</strong></div><label class="careplan-field">Title<input '+A("title")+' value="'+esc(record.text||"")+'"></label><label class="careplan-field">Description (optional)<textarea '+A("description")+' placeholder="Add context or details">'+esc(record.description||"")+'</textarea></label>'+schedule+'<label class="careplan-field">Person<select '+A("person")+'>'+personOptions+'</select></label><div class="careplan-actions"><button type="button" class="btn mini" data-cpsave="'+esc(key)+'">Save</button><button type="button" class="btn mini ghost" data-cpcancel="'+esc(key)+'" data-editor-cancel>Cancel</button><button type="button" class="btn mini ghost careplan-delete" data-cpdelete="'+esc(key)+'">Delete</button></div></div></dialog>';
+  }
+  return '<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="rhythm-editor-title"><div class="profile-editor-body"><h3 id="rhythm-editor-title" tabindex="-1">Edit Rhythm</h3><div class="rhyedit"><div class="addrow" style="margin-top:2px"><input '+A("text")+' value="'+esc(record.text||"")+'" placeholder="What is the rhythm?"></div><label class="careplan-field rhythm-description-field">Description (optional)<textarea '+A("description")+' placeholder="Add context or details">'+esc(record.description||"")+'</textarea></label>'+schedule+rhythmPickerControlsHTML(ownerId,record,idf)+'<div class="profile-editor-actions rhythm-editor-actions"><div class="rhythm-editor-primary-actions"><button class="btn mini" data-rhyeditsave="'+esc(idf)+'">Save</button><button class="btn mini ghost" data-rhyeditcancel="1" data-editor-cancel>Cancel</button></div><button class="btn mini danger" data-rhydel="'+esc(idf)+'">'+(currentPerson!==ownerId?"Remove":"Delete")+'</button></div></div></div></dialog>';
+ };
  /* ---- style: heights, widths, disabled look ---- */
  try{
   var st=document.createElement("style");
@@ -85,6 +97,7 @@
   var frequencies=kind==='rhythm'?Object.keys(RHYTHM_FREQS).map(function(k){return [k,RHYTHM_FREQS[k].label];}):Object.keys(FREQS).map(function(k){return [k,FREQS[k].label];});
   var times=[['anytime','No timeframe assigned'],['allday','All day']].concat(dayBlocks().map(function(b){return [b.id,b.name];}));
   if(kind==='spark')return '<dialog class="profile-editor-dialog" data-editor-modal aria-label="Edit Spark schedule"><div class="profile-editor-body careplan-edit" data-cpform="'+esc(key)+'"><div class="careplan-edit-head"><span class="careplan-kind careplan-kind-spark">Spark</span><strong>Edit Spark schedule</strong></div><label class="careplan-field">Time of day<select data-cpf="tod">'+carePlanOptions(times,r.tod||'anytime')+'</select></label><div class="careplan-edit-grid"><label class="careplan-field">Date<input type="date" data-cpf="by" value="'+esc(r.by||'')+'"></label><label class="careplan-field">Time<input type="time" data-cpf="time" value="'+esc(r.time||'')+'"></label></div><div class="careplan-actions"><button type="button" class="btn mini" data-cpsave="'+esc(key)+'">Save</button><button type="button" class="btn mini ghost" data-cpcancel="'+esc(key)+'" data-editor-cancel>Cancel</button></div></div></dialog>';
+  if(kind==='rhythm')return window.tendRhythmEditModalHTML(r,{mode:'careplan',key:key,personId:item.person.id});
   if(kind!=='rhythm')frequencies.unshift(['','No frequency']);
   var peopleOptions=[['','No person']].concat(S.people.map(function(p){return [p.id,p.name];}));
   var out='<dialog class="profile-editor-dialog" data-editor-modal aria-label="Edit '+(kind==='rhythm'?'rhythm':'prayer')+'"><div class="profile-editor-body careplan-edit'+(kind==='rhythm'?' careplan-rhythm-edit':'')+'" data-cpform="'+esc(key)+'"><div class="careplan-edit-head"><span class="careplan-kind careplan-kind-'+kind+'">'+(kind==='rhythm'?'Rhythm':'Prayer')+'</span><strong>Edit '+(kind==='rhythm'?'rhythm':'prayer')+'</strong></div><label class="careplan-field">Title<input data-cpf="title" value="'+esc(r.text||'')+'"></label>';
@@ -103,26 +116,15 @@
   var found=carePlanFind(key),r=found.record;if(!r)return;
   var field=function(name){return form.querySelector('[data-cpf="'+name+'"]');};
   if(found.kind==='spark'){var by=field('by').value;r.tod=field('tod').value;r.by=by||null;r.time=by&&field('time').value?field('time').value:null;carePlanEdit=null;save();render();flash('Spark schedule updated');return;}
-  var title=field('title').value.trim();if(!title){flash('Add a title');field('title').focus();return;}
-  var endToggle=found.kind==='rhythm'?field('endDateEnabled'):null,un=found.kind==='rhythm'?field('until'):null;
-  if(endToggle&&endToggle.checked&&(!un||!un.value)){flash('Choose an end date');if(un)un.focus();return;}
-  r.text=title;r.tod=field('tod').value;
   if(found.kind==='rhythm'){
-   r.description=field('description').value.trim();
-   r.freq=field('frequency').value;
-   r.weekdays=Array.prototype.slice.call(form.querySelectorAll('[data-cpf="weekdays"]:checked')).map(function(x){return +x.value;});if(!r.weekdays.length)r.weekdays=[new Date().getDay()];if(r.freq!=="selectdays"&&r.weekdays.length>1)r.weekdays=[r.weekdays[0]];
-   var mm=form.querySelector('[data-cpf="monthlyMode"]:checked');if(mm)r.monthlyMode=mm.value;
-   ['ord','ordWeekday','month','monthThe','every'].forEach(function(k){var f2=field(k);{var dst=k==="monthThe"?"month":k;r[dst]=+f2.value||1;}});
-   ['dayOfMonth','monthDay','qmonth'].forEach(function(k){var f2=field(k);if(f2&&f2.value!=='')r[k]=+f2.value||1;});
-   var uf=field('unit');if(uf)r.unit=uf.value;
-   r.until=endToggle&&endToggle.checked?un.value:null;r.endDateEnabled=!!r.until;
-   var sf=field('start');if(sf)r.start=sf.value?sf.value:null;
-   ensureRhythm(r);
+   var rhythmValidation=window.tendValidateRhythmEditForm(form,'careplan');
+   if(rhythmValidation){flash(rhythmValidation.message==='endDate'?'Choose an end date':'Add a title');if(rhythmValidation.field)rhythmValidation.field.focus();return;}
+   window.tendApplyRhythmEditForm(r,form,'careplan');
    var newPerson=S.people.find(function(p){return p.id===field('person').value;});
    if(newPerson&&newPerson!==found.person){found.person.rhythms=found.person.rhythms.filter(function(x){return x!==r;});newPerson.rhythms=newPerson.rhythms||[];newPerson.rhythms.push(r);}
   }
-  if(found.kind==='prayer'){r.details=field('details').value.trim();r.freq=field('frequency').value||null;r.scheduleDow=r.freq&&scheduleHasWeekday(r.freq)&&field('scheduleDow')&&field('scheduleDow').value!==''?+field('scheduleDow').value:null;r.personId=field('person').value||null;var status=field('status').value;r.answered=status==='answered';r.archived=status==='archived';}
-  carePlanEdit=null;save();render();flash('Updated in Care Plan');
+  if(found.kind==='prayer'){var title=field('title').value.trim();if(!title){flash('Add a title');field('title').focus();return;}r.text=title;r.tod=field('tod').value;r.details=field('details').value.trim();r.freq=field('frequency').value||null;r.scheduleDow=r.freq&&scheduleHasWeekday(r.freq)&&field('scheduleDow')&&field('scheduleDow').value!==''?+field('scheduleDow').value:null;r.personId=field('person').value||null;var status=field('status').value;r.answered=status==='answered';r.archived=status==='archived';}
+  carePlanEdit=null;carePlanRhythmDraft=null;save();render();flash('Updated in Care Plan');
  };
  /* ---- person profile pills: same inputs as personScore, robust replace ---- */
  var _ppBase=window.personProfile;
@@ -163,9 +165,11 @@
    if(fm)Array.prototype.slice.call(fm.querySelectorAll('[data-cpf="weekdays"]')).forEach(function(x){if(x!==t)x.checked=false;});
   }
   if(!t||!t.matches||!t.matches('[data-cpf="monthlyMode"]'))return;
-  var form=t.closest("[data-cpform]");if(!form)return;
-  var found=carePlanFind(form.getAttribute("data-cpform"));
-  if(found&&found.record){found.record.monthlyMode=t.value;render();}
+  var form=t.closest("[data-cpform]");if(!form||!form.classList.contains("careplan-rhythm-edit")||!window.carePlanRhythmDraft)return;
+  window.tendApplyRhythmEditForm(window.carePlanRhythmDraft,form,"careplan");
+  window.carePlanRhythmDraft.monthlyMode=t.value;
+  render();
+  var restored=document.querySelector('[data-cpform="'+carePlanEdit+'"] [data-cpf="monthlyMode"]:checked');if(restored)restored.focus();
  });
  /* ---- weekday pills: single-day enforcement at window-capture.
     WHY WINDOW: r2's document-capture weekday handler (wd.push, multi-select)
@@ -190,6 +194,7 @@
   if(isCp){
    var fm2=t.closest("[data-cpform]");
    if(fm2&&t.checked&&t.closest('[data-schedule-days="single"]'))Array.prototype.slice.call(fm2.querySelectorAll('[data-cpf="weekdays"]')).forEach(function(x){if(x!==t)x.checked=false;});
+   if(fm2&&fm2.classList.contains("careplan-rhythm-edit")&&window.carePlanRhythmDraft)window.tendApplyRhythmEditForm(window.carePlanRhythmDraft,fm2,"careplan");
    e.stopImmediatePropagation();return;
   }
   var rf=t.getAttribute("data-rfield").split("|"),rr2=null;

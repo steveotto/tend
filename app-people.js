@@ -174,7 +174,7 @@ window.renderPeople=renderPeople=function(){
  var HINT='rhythms, sparks, prayers - tending the people you love';
  if(currentPerson)return _renderPeople();
  var f=pfilters();
- var out='<div class="sectiontitle people-section-title" style="margin-top:6px"><h2>People</h2><span class="hint">'+HINT+'</span></div>';
+ var out=tendSectionHeaderHTML({title:"People",subtitle:HINT,className:"people-section-title",style:"margin-top:6px"});
  out+='<div class="pc-toolbar"><div class="pc-toggles">'+["marriage","parenting","friendships"].map(function(k){
   return '<button type="button" class="pc-toggle'+(f[k]?" on":"")+'" data-pfilter="'+k+'" aria-pressed="'+(!!f[k])+'"><span class="pc-dot"></span>'+CAT_LABEL[k]+'</button>';
  }).join("")+'</div><button type="button" class="btn" data-addperson>+ Add person</button></div>';
@@ -237,49 +237,6 @@ function peopleColorsSettingsHTML(){
  }).join("")+
  '<button class="btn ghost" id="catColorReset" type="button">Reset to defaults</button></div>';
 }
-
-/* ---------- prayer list (person profile) - was lost in the profile-tabs refactor ---------- */
-function prayerRowHTML(pr,pid){
- if(window._ppEditId===pr.id){
-  var prayerOwner=pr.profileOwnerId||pr.personId||"global";
-  return '<div class="preq pp-row"><div class="ptext" style="flex:1">'+
-  '<input data-ppfield="'+pr.id+'|text" value="'+esc(pr.text)+'" style="width:100%;margin-bottom:6px">'+
-  '<textarea data-ppfield="'+pr.id+'|details" placeholder="Details (optional)" style="width:100%;min-height:50px">'+esc(pr.details||"")+'</textarea>'+
-  '<div class="pp-opts"><label class="pp-option">Frequency<select data-ppfield="'+pr.id+'|freq" aria-label="Prayer frequency">'+Object.keys(FREQS).map(function(k){return '<option value="'+k+'"'+(pr.freq===k?' selected':'')+'>'+FREQS[k].label+'</option>';}).join("")+'<option value="none"'+(pr.freq?'':' selected')+'>No schedule</option></select></label><label class="pp-option">Time<select data-ppfield="'+pr.id+'|tod" aria-label="Prayer time of day">'+Object.keys(TODS).map(function(k){return '<option value="'+k+'"'+((pr.tod||'anytime')===k?' selected':'')+'>'+esc(TODS[k])+'</option>';}).join("")+'</select></label><label class="pp-option" data-schedule-day'+(scheduleHasWeekday(pr.freq)?'':' hidden')+'>Day of week<select data-ppfield="'+pr.id+'|scheduleDow">'+scheduleDayOptions(pr.scheduleDow)+'</select></label></div>'+
-  tendAssociationControlsHTML("prayer",prayerOwner,pr.id,pr)+
-  '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn mini" data-ppsave="'+pr.id+'">Save</button><button class="btn mini ghost" data-ppcancel="1">Cancel</button><button class="btn mini danger" data-prayerdel="'+pr.id+'">'+(pr.profileViewingId&&pr.profileViewingId!==prayerOwner?"Remove":"Delete")+'</button></div>'+
-  '</div></div>';
- }
- var times=pr.prayed||0;
- var prayerBadges=tendAssociationPeopleBadges(pr,pr.profileOwnerId||pr.personId||"global",pr.profileViewingId||null,"prayer")+tendPrayerCategoryBadges(pr);
- return '<div class="preq pp-row"><div class="ptext" style="flex:1">'+
- '<b class="tend-type-title">'+esc(pr.text)+'</b> <span class="pc-chip pray">Prayed '+(times===1?"once":times+" times")+'</span>'+
- (pr.details?'<div class="tend-type-description" style="margin-top:3px">'+esc(pr.details)+'</div>':'')+
- (prayerBadges?'<div class="tend-type-badges">'+prayerBadges+'</div>':'')+
- '<div class="prayer-schedule-summary tend-type-description">'+esc(pr.freq&&FREQS[pr.freq]?FREQS[pr.freq].label:'No schedule')+(scheduleDayLabel(pr)?' · '+esc(scheduleDayLabel(pr)):'')+' · '+esc(TODS[pr.tod]||TODS.anytime||'Anytime')+'</div></div>'+
- '<div class="pp-btns">'+
- '<button class="btn mini" data-prayquick="'+pid+'" data-prayref="'+pr.id+'">Pray</button>'+
- '<button class="btn mini ghost pp-answered" data-prayerans="'+pr.id+'" title="Mark prayer answered"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m7 12 3 3 7-7"/></svg>Answered</button>'+
- '<button class="pp-icon pp-history" data-prayerhistory="'+pr.id+'" title="View prayer history" aria-label="View history for '+esc(pr.text)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button>'+
- '<button class="pp-icon" data-ppedit="'+pr.id+'" title="Edit prayer" aria-label="Edit prayer">\u270E</button></div></div>';
-}
-function prayerList(prayers){
- prayers=prayers||[];
- if(!prayers.length)return '<div class="empty" style="margin-top:10px">No prayers yet - add one above.</div>';
- var act=prayers.filter(function(x){return !x.answered&&!x.archived;});
- var done=prayers.filter(function(x){return x.answered||x.archived;});
- var pid=(prayers[0]&&(prayers[0].profileViewingId||prayers[0].personId))||"";
- var out=act.map(function(pr){return prayerRowHTML(pr,pr.profileViewingId||pid);}).join("");
- if(done.length){
-  out+='<div class="subhead" style="margin-top:14px;color:var(--forest)">Answered \u2713</div>';
-  done.forEach(function(pr){
-   var badges=tendAssociationPeopleBadges(pr,pr.profileOwnerId||pr.personId||"global",pr.profileViewingId||null,"prayer")+tendPrayerCategoryBadges(pr);
-   out+='<div class="preq answered"><div class="ptext"><span class="tend-type-title">'+esc(pr.text)+'</span>'+(pr.answered&&pr.answeredDate?'<div class="tend-type-description">answered '+esc(pr.answeredDate)+'</div>':'')+(badges?'<div class="tend-type-badges">'+badges+'</div>':'')+'</div><button class="pp-icon pp-history" data-prayerhistory="'+pr.id+'" title="View prayer history" aria-label="View history for '+esc(pr.text)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5 M13 16V6 M18 16V9"/></svg></button><button class="del" data-prayerunans="'+pr.id+'" title="restore">\u21BA</button></div>';
-  });
- }
- return out;
-}
-window.prayerList=prayerList; /* views1 personProfile calls this bare */
 
 /* ---------- tending a prayer rhythm counts as PRAYER, never a connection ---------- */
 var _logEvent=logEvent;
