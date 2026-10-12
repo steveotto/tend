@@ -556,11 +556,12 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .person-profile-page #profile-panel-notes .person-note-meta{display:inline-flex;align-items:center;gap:6px;text-align:right}
 .person-profile-page #profile-panel-notes .person-note-meta .plan-detail-icon{width:15px;height:15px;flex:none}
 .person-profile-page #profile-panel-connection{padding:0;border:0;background:transparent;box-shadow:none}
-.person-profile-page #profile-panel-connection .profile-panel-toolbar{align-items:flex-end;justify-content:flex-end;gap:10px;margin-bottom:12px}
-.person-profile-page #profile-panel-connection .profile-panel-toolbar>.profile-tab-intro{margin-right:auto}
-.person-profile-page #profile-panel-connection .profile-panel-actions{justify-content:flex-end}
-.person-profile-page #profile-panel-connection .profile-panel-actions>[data-rippleopen]{order:1}
-.person-profile-page #profile-panel-connection .profile-panel-actions>[data-connection-history]{order:2}
+.person-profile-page #profile-panel-connection .connection-profile-toolbar{align-items:center;flex-direction:row;justify-content:space-between;gap:12px;margin-bottom:12px}
+.person-profile-page #profile-panel-connection .connection-history-chart-trigger{box-sizing:border-box;display:inline-flex;flex:none;align-items:center;justify-content:center;width:44px;height:44px;min-width:44px;min-height:44px;padding:0;border:1px solid var(--forest);border-radius:10px;background:transparent;color:var(--forest);cursor:pointer}
+.person-profile-page #profile-panel-connection .connection-history-chart-trigger:hover{background:var(--mist)}
+.person-profile-page #profile-panel-connection .connection-history-chart-trigger:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+.person-profile-page #profile-panel-connection .connection-history-chart-trigger .profile-action-icon{width:20px;height:20px}
+.person-profile-page #profile-panel-connection .connection-history-view-all{display:flex;width:max-content;margin:16px auto 4px}
 .person-profile-page #profile-panel-connection .connection-list{gap:12px}
 .person-profile-page #profile-panel-connection .connection-card{gap:9px}
 .person-profile-page #profile-panel-connection .connection-card__type{margin-right:auto}
@@ -597,7 +598,7 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .connection-history-load-more{align-self:center;margin:4px 0 0}
 .connection-history-chart-view .history-stat{margin:0}
 .connection-history-chart-view .history-stat>span{display:block;margin:4px 0 0;color:var(--ink-soft)}
-.connection-history-chart-view .history-scroll{flex:none;max-width:100%;overflow-x:auto;overflow-y:hidden;margin:0;padding:8px 0 16px;touch-action:pan-x;overscroll-behavior-x:contain}
+.connection-history-chart-view .history-scroll{flex:none;max-width:100%;overflow-x:auto;overflow-y:hidden;margin:0;padding:8px 8px 16px 0;touch-action:pan-x;overscroll-behavior-x:contain}
 .connection-history-chart-view .history-bars{justify-content:flex-start}
 .connection-history-chart-view .connection-history-column{transition:background .15s,box-shadow .15s}
 .connection-history-chart-view .connection-history-column.is-selected{background:var(--mist);box-shadow:0 0 0 2px var(--forest)}
@@ -611,8 +612,6 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .person-profile-page .prayer-past .profile-prayer-row,.person-profile-page .prayer-past-list .profile-prayer-row{margin-bottom:14px}
 .person-profile-page .prayer-past .profile-prayer-row:last-child,.person-profile-page .prayer-past-list .profile-prayer-row:last-child{margin-bottom:0}
 @media(max-width:760px){
- .person-profile-page #profile-panel-connection .profile-panel-toolbar{align-items:flex-start;flex-direction:column}
- .person-profile-page #profile-panel-connection .profile-panel-actions{width:100%;justify-content:flex-end}
  .person-profile-page .profile-prayer-row{grid-template-columns:minmax(0,1fr) 86px;gap:8px}
  .person-profile-page .profile-prayer-row{padding:14px}
  .person-profile-page #profile-panel-notes .person-note-row{gap:8px;padding:14px}
@@ -3219,6 +3218,9 @@ html .person-profile-page .person-free-moment-heading h2{font-size:var(--tend-ty
 .person-profile-page .person-health-summary-score.red{color:#F04531}
 .person-profile-page .person-health-summary-score.neutral{color:var(--ink-soft)}
 .person-profile-page .person-health-summary-label{color:var(--ink-soft);font-size:var(--tend-type-metadata);font-weight:600;line-height:1.3;overflow-wrap:anywhere}
+@media(max-width:600px){
+ html[data-mobile-text-size-level="larger"] .person-profile-page #person-health-summary-connection .person-health-summary-label{font-size:13px;letter-spacing:-.03em;white-space:nowrap}
+}
 .person-profile-page .person-health-summary:focus-visible{position:relative;z-index:1;outline:2px solid var(--forest);outline-offset:1px;border-radius:9px}
 .person-profile-page .person-health-detail{margin-top:10px;padding:12px 14px;border-radius:12px;background:var(--canvas)}
 .person-profile-page .person-health-detail[hidden],
