@@ -5,9 +5,12 @@
 (function(){
 /* ---------- styles ---------- */
 var css=document.createElement("style");css.textContent=[
-".pc-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px}",
-".pc-toolbar>[data-addperson]{margin-left:auto}",
-".pc-toggles{display:flex;gap:8px;flex-wrap:wrap}",
+".pc-add-person{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:8px 13px;border:1px solid var(--forest);border-radius:10px;background:transparent;color:var(--forest);font-size:14px;font-weight:600;white-space:nowrap}",
+".btn.mini.pc-add-person{box-sizing:border-box;justify-self:end;width:max-content;height:44px;min-height:44px;padding:8px 13px;font-size:14px;line-height:1.2}",
+".pc-add-person:hover{border-color:var(--forest);background:var(--mist)}",
+".pc-add-person:focus-visible{outline:2px solid var(--forest);outline-offset:2px}",
+".pc-toolbar{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px}",
+".pc-toggles{display:flex;justify-content:center;gap:8px;flex-wrap:wrap}",
 ".pc-toggle{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 14px;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-faint);cursor:pointer;transition:all .15s}",
 ".pc-toggle .pc-dot{width:8px;height:8px;border-radius:50%;background:#C8CEC9;flex:none;transition:background .15s}",
 ".pc-toggle.on{color:var(--ink);border-color:var(--forest);background:rgba(103,197,163,.15)}",
@@ -68,7 +71,7 @@ var css=document.createElement("style");css.textContent=[
 ].join("");document.head.appendChild(css);
 
 /* ---------- categories ---------- */
-var CAT_LABEL={marriage:"Marriage",parenting:"Parenting",friendships:"Friendships"};
+var CAT_LABEL={marriage:"Marriage",parenting:"Parenting",friendships:"Friends"};
 var CAT_AREA={marriage:"marriage",parenting:"parenting",friendships:"friendships"};
 var MARRIAGE_WORDS=["spouse","wife","husband","partner"];
 var FAMILY_WORDS=["son","daughter","father","dad","mother","mom","brother","sister","in-law","in law","grandchild","grandson","granddaughter","nephew","niece","bonus","family"];
@@ -175,10 +178,10 @@ window.renderPeople=renderPeople=function(){
  var HINT='rhythms, sparks, prayers - tending the people you love';
  if(currentPerson)return _renderPeople();
  var f=pfilters();
- var out=tendSectionHeaderHTML({title:"People",subtitle:HINT,className:"people-section-title",style:"margin-top:6px"});
+ var out=tendSectionHeaderHTML({title:"People",subtitle:HINT,className:"people-section-title",style:"margin-top:6px",trailingHTML:'<button type="button" class="btn mini ghost pc-add-person" data-addperson>+ Add person</button>'});
  out+='<div class="pc-toolbar"><div class="pc-toggles">'+["marriage","parenting","friendships"].map(function(k){
   return '<button type="button" class="pc-toggle'+(f[k]?" on":"")+'" data-pfilter="'+k+'" aria-pressed="'+(!!f[k])+'"><span class="pc-dot"></span>'+CAT_LABEL[k]+'</button>';
- }).join("")+'</div><button type="button" class="btn" data-addperson>+ Add person</button></div>';
+ }).join("")+'</div></div>';
  var shown=0;
  out+='<div class="grid">';
  S.people.forEach(function(p){
@@ -233,7 +236,7 @@ function peopleColorsSettingsHTML(){
  var c=catColors();
  return '<div class="card settings-card"><div class="subhead">People colors</div>'+
  '<p class="settings-help">Colors the relationship dots on People cards, the filter dots, and the avatar rings on health-meter badges.</p>'+
- [["marriage","Marriage"],["parenting","Parenting"],["friendships","Friendships"]].map(function(x){
+ [["marriage","Marriage"],["parenting","Parenting"],["friendships","Friends"]].map(function(x){
   return '<label class="cat-color-row"><input type="color" data-catcolor="'+x[0]+'" value="'+c[x[0]]+'" title="'+x[1]+' color"><span>'+x[1]+'</span></label>';
  }).join("")+
  '<button class="btn ghost" id="catColorReset" type="button">Reset to defaults</button></div>';

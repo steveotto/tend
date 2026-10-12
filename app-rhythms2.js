@@ -273,11 +273,12 @@ window.rhythmRow=function(p,r,cardOptions){
   if(!rhythmEditDraft||rhythmEditDraft.id!==r.id){rhythmEditDraft=JSON.parse(JSON.stringify(r));delete rhythmEditDraft.profileOwnerId;}
   return window.tendRhythmEditModalHTML(rhythmEditDraft,{mode:"profile",idf:idf,ownerId:ownerId,viewerId:p.id});
  }
- var metadata=window.tendRhythmCardMetadata(r),people=cardOptions.peopleBadgesHTML!==undefined?cardOptions.peopleBadgesHTML:rhythmPeopleBadges(r,p.id),categories=typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(r):"",extraPeople=cardOptions.additionalPeopleBadgesHTML||"";
+ var metadata=window.tendRhythmCardMetadata(r),frequency=Object.assign({},metadata.frequency),people=cardOptions.peopleBadgesHTML!==undefined?cardOptions.peopleBadgesHTML:rhythmPeopleBadges(r,p.id),categories=typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(r):"",extraPeople=cardOptions.additionalPeopleBadgesHTML||"";
+ if(cardOptions.frequencyLabel){frequency.label=cardOptions.frequencyLabel;frequency.narrow=cardOptions.frequencyLabel;}
  var faithShared=r.sharedFaithRhythm===true;
  var tendAttributes=Object.assign(faithShared&&typeof faithTendAction==="function"?{"data-tend-open":"faith-rhythm","data-rhythm-id":r.id}:{"data-tend-open":"person-rhythm","data-person-id":ownerId,"data-rhythm-id":r.id},cardOptions.tendAttributes||{});
  var editAttributes=Object.assign(faithShared?{"data-faith-rhythm-profile-edit":r.id}:{"data-rhyedit":idf},cardOptions.editAttributes||{});
- return tendRhythmCardHTML(r,{title:r.text||"(unnamed rhythm)",description:r.description,score:hasScore?sc:null,scoreClass:scoreClass(hasScore?sc:null),peopleBadgesHTML:people+extraPeople,categoryBadgesHTML:categories,frequency:metadata.frequency,time:metadata.time,lastTended:metadata.lastTended,frequencyIconHTML:metadata.frequencyIconHTML,timeIconHTML:metadata.timeIconHTML,lastIconHTML:metadata.lastIconHTML,
+ return tendRhythmCardHTML(r,{title:r.text||"(unnamed rhythm)",description:r.description,score:hasScore?sc:null,scoreClass:scoreClass(hasScore?sc:null),peopleBadgesHTML:people+extraPeople,categoryBadgesHTML:categories,frequency:frequency,time:metadata.time,lastTended:metadata.lastTended,frequencyIconHTML:metadata.frequencyIconHTML,timeIconHTML:metadata.timeIconHTML,lastIconHTML:metadata.lastIconHTML,
   tendAttributes:tendAttributes,
   editAttributes:editAttributes,
   historyAttributes:cardOptions.historyAttributes||{"data-rhyhistory":idf},
