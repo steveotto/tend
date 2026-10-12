@@ -54,7 +54,7 @@ function tendTodayWithPersonHTML(options){
  var queueLabel=waiting?waiting+" in queue":"all tended \u2713";
  var header=tendSectionHeaderHTML({title:title,className:"today-with-person-heading",trailingHTML:'<span class="qpill'+(waiting?"":" clear")+'">'+queueLabel+'</span>'});
  var content=options.itemsHTML||'<div class="empty" style="margin-top:8px">'+esc(options.emptyMessage||"Nothing waiting - these next steps are all tended.")+'</div>';
- return header+'<div class="card act today-with-person" style="margin-bottom:14px">'+content+'</div>';
+ return header+'<div class="today-with-person" style="margin-bottom:14px">'+content+'</div>';
 }
 function tendRecordCardContentHTML(kind,record,options){
  record=record||{};options=options||{};
@@ -80,7 +80,7 @@ function tendRhythmCardHTML(record,options){
  var score=Number.isFinite(options.score)?options.score:null,scoreText=score===null?"—":score+"%",scoreClass=String(options.scoreClass||"neutral");
  var editAction=options.editAttributes?'<button type="button" class="rhythm-card__edit"'+attrs(options.editAttributes)+' aria-label="Edit '+esc(title)+'" title="Edit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l4.2-.8L20 7.4 16.6 4 4.8 15.8Z"/></svg></button>':"";
  var tendAction='<button type="button" class="btn mini rhythm-card__tend"'+attrs(options.tendAttributes)+' title="Record a moment of care">Tend</button>';
- var chartAction='<button type="button" class="rhythm-card__score '+esc(scoreClass)+'"'+attrs(options.historyAttributes)+' aria-label="Rhythm health '+(score===null?"unknown":score+"%")+'. View chart." title="View rhythm health chart"><span>'+scoreText+'</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17M8 16v-5m5 5V6m5 10V9"/></svg></button>';
+ var chartAction=options.showScore===false?"":'<button type="button" class="rhythm-card__score '+esc(scoreClass)+'"'+attrs(options.historyAttributes)+' aria-label="Rhythm health '+(score===null?"unknown":score+"%")+'. View chart." title="View rhythm health chart"><span>'+scoreText+'</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17M8 16v-5m5 5V6m5 10V9"/></svg></button>';
  var people=options.peopleBadgesHTML||"",categories=options.categoryBadgesHTML||"",remove=options.removeAttributes?'<button type="button" class="rhythm-card__remove"'+attrs(options.removeAttributes)+' aria-label="'+esc(options.removeLabel||"Remove "+title)+'" title="'+esc(options.removeTitle||"Remove")+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m3 3v7m6-7v7"/></svg></button>':"";
  var frequency=options.frequency||{},time=options.time||{},last=options.lastTended||{};
  return '<article class="rhythm-card card">'

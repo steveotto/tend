@@ -9,8 +9,12 @@ const vm = require("node:vm");
 const source = fs.readFileSync(path.join(__dirname, "..", "app-shared-components.js"), "utf8");
 const faithSource = fs.readFileSync(path.join(__dirname, "..", "app-faith.js"), "utf8");
 const homeRhythmSource = fs.readFileSync(path.join(__dirname, "..", "app-views1.js"), "utf8");
+const actionsSource = fs.readFileSync(path.join(__dirname, "..", "app-actions.js"), "utf8");
+const connectionHistorySource = fs.readFileSync(path.join(__dirname, "..", "connection-history.js"), "utf8");
+const indexSource = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 const prayerSource = fs.readFileSync(path.join(__dirname, "..", "app-prayers.js"), "utf8");
 const personRhythmSource = fs.readFileSync(path.join(__dirname, "..", "app-rhythms2.js"), "utf8");
+const personOverviewSource = fs.readFileSync(path.join(__dirname, "..", "app-rhythms3.js"), "utf8");
 const categoryRhythmSource = fs.readFileSync(path.join(__dirname, "..", "app-categoryrhythms.js"), "utf8");
 const styles = fs.readFileSync(path.join(__dirname, "..", "tend.css"), "utf8");
 
@@ -74,10 +78,26 @@ test("Home, Person, and category rhythm cards share one renderer and card struct
   assert.match(card, /Weekly · Fri/);
   assert.match(card, /Evening/);
   assert.match(card, /Never/);
+  const todayCard = components.tendRhythmCardHTML(record, {
+    showScore: false,
+    frequency: { full: "Weekly on Friday", label: "Weekly · Fri", narrow: "Wk · Fri" },
+    time: { full: "Evening", label: "Evening", narrow: "PM" },
+    lastTended: { full: "Never tended", label: "Never" },
+    tendAttributes: { "data-tend-open": "person-rhythm", "data-person-id": "amy", "data-rhythm-id": "shared-walk" }
+  });
+  assert.match(todayCard, /class="rhythm-card card"/);
+  assert.match(todayCard, /class="btn mini rhythm-card__tend" data-tend-open="person-rhythm"/);
+  assert.doesNotMatch(todayCard, /rhythm-card__edit|rhythm-card__score/);
   assert.match(source, /function tendRhythmCardHTML\(/);
+  assert.match(source, /var chartAction=options\.showScore===false\?"":/);
   assert.equal((source.match(/<article class="rhythm-card card">/g) || []).length, 1);
   assert.match(homeRhythmSource, /function planRhythmCardHTML\(it\)/);
   assert.match(homeRhythmSource, /return tendRhythmCardHTML\(record,/);
+  const todayRhythmSource = homeRhythmSource.match(/function rhyRowQ\(r,dim\)\{[\s\S]*?\n \}/)[0];
+  assert.match(todayRhythmSource, /var metadata=window\.tendRhythmCardMetadata\(r\),badges=tendQueuePeopleAndCategoryBadges\(r,p\.id,p\.id,"rhythm"\)/);
+  assert.match(todayRhythmSource, /return tendRhythmCardHTML\(r,\{/);
+  assert.match(todayRhythmSource, /peopleBadgesHTML:badges/);
+  assert.match(todayRhythmSource, /showScore:false/);
   assert.match(personRhythmSource, /return tendRhythmCardHTML\(r,/);
   assert.match(faithSource, /return tendRhythmCardHTML\(r,/);
   assert.match(categoryRhythmSource, /return tendRhythmCardHTML\(record,/);
@@ -154,6 +174,8 @@ test("Home and Person Spark cards use one shared renderer and preserve card acti
   assert.match(styles, /\.spark-card \.sparkbtn\{border:1px solid/);
   assert.match(styles, /\.spark-card \.spark-card__title-line\{display:block;flex:0 1 auto/);
   assert.match(styles, /\.spark-card \.plan-item-copy \.plan-item-heading \.spark-card__title-line \.tend-type-title\{display:inline/);
+  assert.match(styles, /\.spark-card \.plan-item-heading>\.plan-item-action\{grid-column:2;grid-row:1;align-self:start;height:max-content\}/);
+  assert.match(styles, /\.spark-card \.plan-item-heading>\.plan-item-action>\.btn\{align-self:flex-start;height:auto\}/);
   assert.match(styles, /\.spark-card \.plan-people\{display:flex;align-items:center;gap:6px;min-width:0;width:auto\}/);
   assert.match(styles, /\.spark-card \.plan-item-category-row\{display:flex;align-items:center;gap:6px;flex:none;min-width:0;margin-left:0\}/);
   assert.match(styles, /\.home-dashboard \.spark-card \.plan-item-category-row \.rhythm-area-badge\{[\s\S]*?width:20px!important;[\s\S]*?height:20px!important/);
@@ -180,6 +202,194 @@ test("Person prayer section follows the profile card treatment with a shared-sty
   assert.match(styles, /\.person-profile-page #profile-panel-prayer\{padding:0;border:0;background:transparent;box-shadow:none\}/);
   assert.match(styles, /\.person-profile-page \.profile-prayer-row\{[^}]*grid-template-areas:\"content actions\" \"meta meta\"/);
   assert.match(styles, /#profile-panel-prayer \.profile-prayer-add\{border-color:var\(--forest\);background:transparent;color:var\(--forest\)\}/);
+});
+
+test("Person Notes section uses the shared toolbar and card-row treatment", () => {
+  assert.match(homeRhythmSource, /profilePanelStart\("notes"\)\+'<div class="profile-panel-toolbar profile-rhythm-toolbar"/);
+  assert.match(homeRhythmSource, /class="btn mini ghost profile-rhythm-add" data-profilenoteopen=/);
+  assert.match(homeRhythmSource, /<span>Add note<\/span>/);
+  assert.match(homeRhythmSource, /function personNoteCardHTML\(note,person,options\)/);
+  assert.match(homeRhythmSource, /var edit='<button type="button" class="iconbtn person-note-edit" data-fuedit=/);
+  assert.match(homeRhythmSource, /class="person-note-title-line"><strong class="tend-type-title">'\+esc\(profileNoteTitleText\(note\)\)\+'<\/strong>&nbsp;'\+edit/);
+  assert.match(homeRhythmSource, /class="btn mini '\+\(completed\?"ghost":"note-done"\)[\s\S]*?class="person-note-associations"/);
+  assert.match(homeRhythmSource, /class="person-note-footer"><span class="person-note-type-column"/);
+  assert.match(homeRhythmSource, /class="person-note-meta tend-type-meta">'\+planMetaIcon\("occurred"\)/);
+  assert.match(homeRhythmSource, /var stamp=f\.createdAt\|\|f\.ts\?when\(f\.createdAt\|\|f\.ts\):f\.due\?"Due "\+f\.due:""/);
+  assert.doesNotMatch(homeRhythmSource, /"Added "\+when\(f\.createdAt/);
+  assert.doesNotMatch(homeRhythmSource.match(/function personNoteCardHTML\([\s\S]*?\n\}/)[0], /data-fudel=/);
+  assert.match(styles, /#profile-panel-notes\{padding:0;border:0;background:transparent;box-shadow:none\}/);
+  assert.match(styles, /#profile-panel-notes \.person-note-heading\{display:flex;align-items:flex-start;justify-content:space-between/);
+  assert.match(styles, /#profile-panel-notes \.person-note-title-line\{display:block/);
+  assert.match(styles, /#profile-panel-notes \.person-note-associations\{display:flex;flex-wrap:wrap/);
+  assert.match(styles, /#profile-panel-notes \.person-note-row\{[^}]*border:1px solid var\(--line\)[^}]*border-radius:16px/);
+  assert.match(styles, /#profile-panel-notes \.person-note-footer\{[^}]*border-top:1px solid var\(--line\)/);
+  assert.match(styles, /#profile-panel-notes \.person-note-footer\{display:flex;align-items:center;justify-content:space-between/);
+});
+
+test("Completed Note history reuses NoteCard with completion metadata and a scrollable list", () => {
+  assert.match(homeRhythmSource, /personNoteCardHTML\(note,person,\{completed:true,metadata:note\.completedDate\?"Completed "\+when\(note\.completedDate\):"",actionLabel:"Reopen"\}\)/);
+  assert.match(homeRhythmSource, /class="note-history-header"/);
+  assert.match(homeRhythmSource, /notes\.map\(function\(note\)\{return personNoteCardHTML\(note,person,/);
+  assert.match(homeRhythmSource, /data-fudone="'\+esc\(note\.id\)\+'/);
+  assert.match(homeRhythmSource, /data-fuedit="'\+esc\(note\.id\)\+'/);
+  assert.match(styles, /\.note-history-dialog\{display:flex;flex-direction:column;[^}]*overflow:hidden/);
+  assert.match(styles, /\.rhythm-history-dialog\.note-history-dialog\{display:flex;flex-direction:column;overflow:hidden;padding:0\}/);
+  assert.match(styles, /\.note-history-header\{flex:none/);
+  assert.match(styles, /\.note-history-modal-list\{display:flex;flex:1 1 auto;flex-direction:column;gap:12px;min-height:0;max-height:none;overflow-y:auto/);
+  assert.match(styles, /\.note-history-modal-list>\.person-note-row\{[^}]*display:flex;flex:none;flex-direction:column/);
+  assert.match(styles, /\.note-history-modal-list \.person-note-title-line \.tend-type-title\{[^}]*overflow-wrap:anywhere;white-space:normal/);
+  assert.match(styles, /\.note-history-modal-list \.person-note-footer\{display:flex;align-items:center;justify-content:space-between/);
+});
+
+test("Person profile panels fit their content and keep the clicked control in place", () => {
+  assert.match(homeRhythmSource, /function sizeProfileTabPanels\(root\)\{[\s\S]*?panel\.style\.minHeight="";panel\.style\.marginBottom="";[\s\S]*?\}/);
+  assert.doesNotMatch(homeRhythmSource.match(/function sizeProfileTabPanels\(root\)\{([\s\S]*?)\n\}/)[1], /maxHeight|offsetHeight|marginBottom=spare/);
+  assert.match(homeRhythmSource, /function tendCaptureProfileScrollAnchor\(target\)/);
+  assert.match(homeRhythmSource, /function tendRestoreProfileScrollAnchor\(anchor\)/);
+  assert.match(homeRhythmSource, /window\.scrollBy\(0,target\.getBoundingClientRect\(\)\.top-anchor\.top\)/);
+  assert.match(homeRhythmSource, /else window\.scrollTo\(anchor\.position\.x,anchor\.position\.y\)/);
+  assert.match(actionsSource, /else if\(profileAnchor\)\{requestAnimationFrame\(function\(\)\{requestAnimationFrame\(function\(\)\{tendRestoreProfileScrollAnchor\(profileAnchor\)/);
+});
+
+test("Person management tabs prioritize health categories with mobile item and score rows", () => {
+  assert.match(homeRhythmSource, /\[\["rhythms","Rhythms"\],\["sparks","Sparks"\],\["prayer","Prayer"\],\["connection","Connections"\],\["notes","Notes"\]\]/);
+  assert.match(homeRhythmSource, /var tabHealth=\{rhythms:avg\(sortedPersonRhythms\(p\)\.map\(rhythmScore\)\),connection:connectionScore\(p\),prayer:prayerMeterScore\(p\)\}/);
+  assert.match(homeRhythmSource, /class="profile-tab-mobile-details"><span class="profile-tab-item-count" aria-label="'\+counts\[item\[0\]\]\+' items"/);
+  assert.ok(homeRhythmSource.includes('class="profile-tab-health-score \'+healthTone+\'">\'+healthText'));
+  assert.match(styles, /grid-template-areas:"rhythms rhythms connection connection prayer prayer" "sparks sparks sparks notes notes notes"/);
+  assert.match(styles, /\.person-profile-page \.profile-tabs button\[data-profiletab="rhythms"\],\s*\.person-profile-page \.profile-tabs button\[data-profiletab="connection"\],\s*\.person-profile-page \.profile-tabs button\[data-profiletab="prayer"\]\{display:grid;grid-template-columns:minmax\(0,1fr\);grid-template-rows:1fr 1fr;justify-items:stretch;min-height:96px/);
+  assert.match(styles, /\.person-profile-page \.profile-tabs \.profile-tab-health-score\.green\{color:#12B76A\}/);
+  assert.match(styles, /\.person-profile-page \.profile-tabs \.profile-tab-health-score\.yellow\{color:#F08C00\}/);
+  assert.match(styles, /\.person-profile-page \.profile-tabs \.profile-tab-health-score\.red\{color:#F04531\}/);
+});
+
+test("Person profile overview keeps health details accessible and scoped above Today", () => {
+  assert.match(homeRhythmSource, /personAvatar\(p,76\)/);
+  assert.match(styles, /\.person-profile-page \.person-profile-header \.person-identity h3\{[^}]*font-size:calc\(var\(--tend-type-section-header\) \+ \.25rem\)!important/);
+  assert.match(styles, /\.person-profile-page \.person-profile-header \.person-identity \.rel\{[^}]*font-size:calc\(var\(--tend-type-description\) \+ \.05rem\)!important;font-weight:600/);
+  assert.match(styles, /html\[data-mobile-text-size-level="larger"\] \.person-profile-page\{--person-profile-avatar-size:108px\}/);
+  assert.match(homeRhythmSource, /person-profile-options-list[\s\S]*?data-psettings="1"[\s\S]*?data-closeperson="1"/);
+  assert.match(homeRhythmSource, /person-profile-badges/);
+  assert.match(homeRhythmSource, /aria-label="Birthday: '\+esc\(bd\.label\)\+'"/);
+  assert.match(homeRhythmSource, /aria-label="Anniversary: '\+esc\(an2\.label\)\+'"/);
+  assert.match(homeRhythmSource, /<span aria-hidden="true">\\uD83C\\uDF82<\/span><span>'\+esc\(bd\.label\)/);
+  assert.match(homeRhythmSource, /<span aria-hidden="true">\\u2665<\/span><span>'\+esc\(an2\.label\)/);
+  assert.match(styles, /\.person-profile-page \.person-profile-badges\{display:grid;grid-template-columns:repeat\(3,minmax\(0,max-content\)\)/);
+  assert.match(homeRhythmSource, /personHealthMeter\(scoreAvailable\?scoreValue:null,p\.name,true\)/);
+  assert.ok(homeRhythmSource.indexOf("out+=actQueueHTML(p)") > homeRhythmSource.indexOf("personHealthMeter(scoreAvailable?scoreValue:null,p.name,true)"));
+  assert.match(personOverviewSource, /var rs=sortedPersonRhythms\(p\)/);
+  assert.match(personOverviewSource, /var latestRhythmEvent=null;[\s\S]*?rs\.forEach\(function\(rhythm\)\{[\s\S]*?var event=rhythmLast\(rhythm\)/);
+  assert.match(personOverviewSource, /var latestRhythmText=latestRhythmEvent\?"Last tended: "\+when\(latestRhythmEvent\.event\.ts\):"Last tended: Never"/);
+  assert.ok(personOverviewSource.indexOf("esc(latestRhythmText)") < personOverviewSource.indexOf("rs.length?rs.length"));
+  assert.match(personOverviewSource, /person-health-summaries/);
+  assert.match(personOverviewSource, /var tone=display==="\\u2014"\?"neutral":scoreClass\(Number\(value\)\)/);
+  assert.match(personOverviewSource, /person-health-summary-score '\+tone/);
+  assert.match(styles, /\.person-profile-page \.person-health-summary-score\.green\{color:#12B76A\}/);
+  assert.match(styles, /\.person-profile-page \.person-health-summary-score\.yellow\{color:#F08C00\}/);
+  assert.match(styles, /\.person-profile-page \.person-health-summary-score\.red\{color:#F04531\}/);
+  assert.match(styles, /\.person-profile-page \.prayer-person\.person-badge-clickable\{[^}]*gap:\.5em;padding:\.33em \.83em \.33em \.33em;font-size:var\(--tend-type-person-badge\)!important/);
+  assert.match(styles, /\.person-profile-page \.prayer-person\.person-badge-clickable \.avatar\{width:1\.6em!important;height:1\.6em!important/);
+  assert.match(styles, /\.person-profile-page \.prayer-person\.person-badge-clickable,\s*\.person-free-moment \.prayer-person\.person-badge-clickable,\s*\.profile-tab-panel \.prayer-person\.person-badge-clickable\{[^}]*padding:\.33em \.83em \.33em \.33em;border:0;font-size:var\(--tend-type-person-badge\)!important;line-height:1\.2\}/);
+  assert.match(styles, /\.person-profile-page \.prayer-person\.person-badge-clickable \.avatar,\s*\.person-free-moment \.prayer-person\.person-badge-clickable \.avatar,\s*\.profile-tab-panel \.prayer-person\.person-badge-clickable \.avatar\{width:1\.6em!important;height:1\.6em!important/);
+  assert.match(styles, /\.person-free-moment \.spark-card \.plan-item-meta-people \.prayer-person\.person-badge-clickable,\s*\.profile-tab-panel \.spark-card \.plan-item-meta-people \.prayer-person\.person-badge-clickable\{gap:\.5em;padding:\.33em \.83em \.33em \.33em\}/);
+  assert.match(styles, /\.person-free-moment \.spark-card \.plan-item-meta-people \.prayer-person\.person-badge-clickable \.avatar,\s*\.profile-tab-panel \.spark-card \.plan-item-meta-people \.prayer-person\.person-badge-clickable \.avatar\{width:1\.6em!important;height:1\.6em!important/);
+  assert.match(personOverviewSource, /aria-expanded="false"/);
+  assert.match(personOverviewSource, /data-person-health-detail="rhythms"/);
+  assert.match(personOverviewSource, /data-person-health-detail="connection"/);
+  assert.match(personOverviewSource, /data-person-health-detail="prayer"/);
+  assert.match(personOverviewSource, /class="person-health-detail-heading"[\s\S]*?data-meter-tab="rhythms" aria-label="View rhythms" title="View rhythms">'\+collectionIcon\("rhythms"\)/);
+  assert.doesNotMatch(personOverviewSource.match(/data-person-health-detail="rhythms"[\s\S]*?<\/section>/)[0], />View rhythms<\/button>/);
+  assert.match(personOverviewSource, /data-person-health-detail="connection"[\s\S]*?esc\(lastConnection\)[\s\S]*?esc\(connectionTarget\)[\s\S]*?data-meter-tab="connection" aria-label="View connections"/);
+  assert.match(personOverviewSource, /var lastConnection=pTouch\.last\?"Last connection: "\+when\(pTouch\.last\.ts\)/);
+  assert.match(personOverviewSource, /data-person-health-detail="connection"[\s\S]*?data-meter-tab="connection" aria-label="View connections" title="View connections">'\+collectionIcon\("connection"\)/);
+  assert.match(personOverviewSource, /data-person-health-detail="prayer"[\s\S]*?esc\(lastPrayer\)[\s\S]*?esc\(prayerCount\)[\s\S]*?data-meter-tab="prayer" aria-label="View prayers"/);
+  assert.match(personOverviewSource, /data-person-health-detail="prayer"[\s\S]*?data-meter-tab="prayer" aria-label="View prayers" title="View prayers">'\+collectionIcon\("prayer"\)/);
+  assert.doesNotMatch(personOverviewSource.match(/data-person-health-detail="connection"[\s\S]*?<\/section>/)[0], />View connections<\/button>/);
+  assert.doesNotMatch(personOverviewSource.match(/data-person-health-detail="prayer"[\s\S]*?<\/section>/)[0], />View prayers<\/button>/);
+  assert.match(personOverviewSource, /data-meter-tab="rhythms"/);
+  assert.match(personOverviewSource, /data-meter-tab="connection"/);
+  assert.match(personOverviewSource, /data-meter-tab="prayer"/);
+  assert.match(actionsSource, /data-person-health-summary[\s\S]*?data-active-summary/);
+  assert.match(styles, /\.person-profile-page \.person-profile \.person-health-bar\.solid\{height:8px;margin:20px 0 12px;box-shadow:none;background:#E9EFEB;overflow:hidden\}/);
+  assert.match(homeRhythmSource, /tendPrayerSectionHTML\("Pray for "\+p\.name,"", \{headerClassName:"today-with-person-heading person-prayer-heading"\}\)/);
+  const personFreeMomentSource = homeRhythmSource.match(/function personFreeMomentHTML\(person\)\{[\s\S]*?\n\}/)[0];
+  assert.ok(personFreeMomentSource.includes('footerHTML=\'<span class="dashboard-spark-deadline">\'+esc(current.deadline)+\'</span>\''));
+  assert.ok(personFreeMomentSource.includes('class="dashboard-spark-carousel-count" aria-live="polite">\'+(index+1)+\' of \'+sparkQueue.length'));
+  assert.doesNotMatch(personFreeMomentSource, /footerHTML='<span>'\+\(index\+1\)\+' of '\+sparkQueue\.length/);
+  assert.doesNotMatch(personFreeMomentSource, /profile-view-all-sparks|data-person-sparks-view-all/);
+  assert.match(styles, /\.home-dashboard \.dashboard-spark-carousel-count,\s*\.person-profile-page \.dashboard-spark-carousel-count\{/);
+  assert.match(homeRhythmSource, /class="person-profile-divider" aria-hidden="true"><\/div>'\+tendSectionHeaderHTML\(\{title:"Intentional with "\+p\.name/);
+  assert.match(styles, /html \.person-profile-page \.person-prayer-heading h2,[\s\S]*?html \.person-profile-page \.person-free-moment-heading h2\{font-size:var\(--tend-type-description\)!important/);
+  assert.match(styles, /\.person-profile-page \.person-profile-divider\{width:100%;height:1px;margin:20px 0 0;background:var\(--line\)\}/);
+  assert.match(styles, /\.person-profile-page \.person-profile-divider\+\.profile-settings-heading\{margin-top:24px\}/);
+  assert.match(styles, /\.person-profile-page \.person-health-summary\{[^}]*border-left:1px solid var\(--line\)/);
+  assert.match(styles, /@media\(max-width:580px\)\{[\s\S]*?\.person-profile-page \.person-health-summaries\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+});
+
+test("Person Connections preview and both history views share ConnectionCard", () => {
+  assert.equal((homeRhythmSource.match(/function connectionCardHTML\(/g) || []).length, 1);
+  assert.match(homeRhythmSource, /var connections=connectionHistoryEvents\(pid\)/);
+  assert.match(homeRhythmSource, /connections\.slice\(0,5\)\.map\(function\(event\)\{return connectionCardHTML\(event,pid\);\}\)/);
+  assert.match(homeRhythmSource, /data-connection-history-list="'\+esc\(pid\)\+'">View all history \('\+connections\.length/);
+  assert.match(connectionHistorySource, /visible\.map\(function\(event\)\{return connectionCardHTML\(event,personId\);\}\)/);
+  assert.match(connectionHistorySource, /dayEvents\.map\(function\(event\)\{return connectionCardHTML\(event,personId\);\}\)/);
+  assert.match(homeRhythmSource, /function connectionCardLastTended\(event\)[\s\S]*?var last=\{ts:Number\(event\.ts\)\}/);
+  assert.doesNotMatch(homeRhythmSource.match(/function connectionCardHTML\([\s\S]*?\n\}/)[0], /tendRhythmMetaLabel/);
+  assert.match(connectionHistorySource, /function openConnectionHistory\(personId,initialView\)/);
+  assert.match(actionsSource, /openConnectionHistory\(b\.getAttribute\("data-connection-history-list"\),"list"\)/);
+  assert.doesNotMatch(connectionHistorySource, /function openConnectionList\(/);
+  assert.match(connectionHistorySource, /data-connection-history-view="list"/);
+  assert.match(connectionHistorySource, /data-connection-history-view="chart"/);
+  assert.match(connectionHistorySource, /data-connection-history-load-more/);
+  assert.match(connectionHistorySource, /No connections on this date\./);
+  assert.doesNotMatch(homeRhythmSource, /function rippleLine\(/);
+  assert.doesNotMatch(indexSource, /connection-list\.js/);
+  assert.match(styles, /\.connection-card\{[^}]*display:flex;flex-direction:column/);
+  assert.match(styles, /\.connection-card__heading\.rhythm-card__title-line\{display:grid;grid-template-columns:minmax\(0,1fr\) auto auto/);
+  assert.match(styles, /\.connection-card__heading>\.tend-type-title\{grid-column:1;grid-row:1;min-width:0;overflow-wrap:anywhere/);
+  assert.match(styles, /\.connection-card__type\{grid-column:3;grid-row:1;display:flex;align-items:flex-start;justify-self:end/);
+  assert.match(styles, /\.connection-history-view\{display:flex;flex:1 1 auto;flex-direction:column;gap:14px;min-height:0;overflow-y:auto/);
+  assert.match(styles, /\.connection-history-chart-view \.history-scroll\{flex:none;max-width:100%;overflow-x:auto;overflow-y:hidden/);
+  assert.match(styles, /\.connection-history-column\.is-selected/);
+  assert.match(actionsSource, /function logEvent\([\s\S]*?refreshConnectionDialogs\(\);render\(\)/);
+  assert.match(actionsSource, /function deleteEvent\([\s\S]*?refreshConnectionDialogs\(\)/);
+  assert.match(connectionHistorySource, /No connections yet\. Log a shared moment to start your history\./);
+  assert.match(homeRhythmSource, /function connectionCardLastTended\(event\)[\s\S]*?tendRhythmCardLastTended\(last\)/);
+  const connectionCard = homeRhythmSource.match(/function connectionCardHTML\([\s\S]*?\n\}/)[0];
+  assert.match(connectionCard, /class="connection-card__heading rhythm-card__title-line"/);
+  assert.match(connectionCard, /class="rhythm-card__edit" data-evedit=/);
+  assert.doesNotMatch(connectionCard, /data-evdel=/);
+  assert.ok(connectionCard.includes('class="connection-card__type">\'+typeBadge+\'</div></div>'));
+  assert.match(connectionCard, /class="connection-card__footer rhythm-card__meta"/);
+  assert.match(connectionCard, /scheduleItem\("frequency"/);
+  assert.match(connectionCard, /scheduleItem\("time"/);
+  assert.match(connectionCard, /rhythm-card__meta-item rhythm-card__last/);
+  assert.match(styles, /\.person-profile-page #profile-panel-connection\{padding:0;border:0;background:transparent;box-shadow:none\}/);
+  assert.match(styles, /\.person-profile-page #profile-panel-connection \.profile-panel-actions\{justify-content:flex-end\}/);
+});
+
+test("Connection history source keeps repeated events and scopes people using existing rules", () => {
+  const events = [
+    { id: "older", personId: "amy", ts: new Date(2026, 9, 10, 10).getTime(), isConnection: true },
+    { id: "repeat-a", personId: "amy", ts: new Date(2026, 9, 12, 8).getTime(), rhythmId: "walk", isConnection: true },
+    { id: "other-person", personId: "hannah", ts: new Date(2026, 9, 12, 9).getTime(), isConnection: true },
+    { id: "repeat-b", personId: "amy", ts: new Date(2026, 9, 12, 11).getTime(), rhythmId: "walk", isConnection: true },
+    { id: "shared", personId: "hannah", personIds: ["amy"], ts: new Date(2026, 9, 11, 11).getTime(), isConnection: true }
+  ];
+  const context = {
+    S: { events },
+    eventHasPerson: (event, personId) => event.personId === personId || event.personIds?.includes(personId),
+    connectionEvent: event => event.isConnection,
+    personCadenceDays: () => 7
+  };
+  vm.createContext(context);
+  vm.runInContext(connectionHistorySource, context);
+  const recent = context.connectionHistoryEvents("amy");
+  assert.deepEqual(Array.from(recent, event => event.id), ["repeat-b", "repeat-a", "shared", "older"]);
+  const data = context.connectionHistoryData({ id: "amy", connectCadence: "weekly" }, new Date(2026, 9, 12, 12));
+  assert.equal(data.events.length, 4);
+  assert.equal(data.total, 4);
+  assert.equal(data.bins.reduce((sum, bin) => sum + bin.count, 0), 4);
 });
 
 test("Prayer action dropdown options are unshaded until hovered", () => {
@@ -210,6 +420,9 @@ test("shared section and card components escape text and preserve semantic layou
   assert.match(todayWithPerson, /Today with &lt;Jake&gt;/);
   assert.match(todayWithPerson, /2 in queue/);
   assert.match(todayWithPerson, /Queue item/);
+  assert.match(todayWithPerson, /<div class="today-with-person" style="margin-bottom:14px">/);
+  assert.doesNotMatch(todayWithPerson, /class="card act today-with-person"/);
+  assert.doesNotMatch(styles, /\.card\.act\.today-with-person\{/);
   assert.doesNotMatch(todayWithPerson, /Nothing waiting/);
   const emptyTodayWithPerson = components.tendTodayWithPersonHTML({
     personName: "Alex",

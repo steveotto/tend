@@ -112,28 +112,32 @@ function navKind(){return currentArea?"area":"tab";}
 function sizeProfileTabPanels(root){
  var panels=Array.prototype.slice.call(root.querySelectorAll(".profile-tab-panel"));if(!panels.length)return;
  panels.forEach(function(panel){panel.style.minHeight="";panel.style.marginBottom="";});
- var active=panels.find(function(panel){return !panel.hidden;})||panels[0],width=active.getBoundingClientRect().width,maxHeight=0;
- panels.forEach(function(panel){
-  var wasHidden=panel.hidden,style=panel.style,oldPosition=style.position,oldVisibility=style.visibility,oldDisplay=style.display,oldWidth=style.width,oldLeft=style.left,oldTop=style.top;
-  panel.hidden=false;style.position="absolute";style.visibility="hidden";style.display="block";style.width=width+"px";style.left="-10000px";style.top="0";
-  maxHeight=Math.max(maxHeight,panel.offsetHeight);
-  panel.hidden=wasHidden;style.position=oldPosition;style.visibility=oldVisibility;style.display=oldDisplay;style.width=oldWidth;style.left=oldLeft;style.top=oldTop;
- });
- panels.forEach(function(panel){
-  var wasHidden=panel.hidden,style=panel.style,oldPosition=style.position,oldVisibility=style.visibility,oldDisplay=style.display,oldWidth=style.width,oldLeft=style.left,oldTop=style.top;
-  panel.hidden=false;style.position="absolute";style.visibility="hidden";style.display="block";style.width=width+"px";style.left="-10000px";style.top="0";
-  var spare=Math.max(0,maxHeight-panel.offsetHeight);
-  panel.hidden=wasHidden;style.position=oldPosition;style.visibility=oldVisibility;style.display=oldDisplay;style.width=oldWidth;style.left=oldLeft;style.top=oldTop;
-  panel.style.marginBottom=spare+"px";
- });
 }
+var tendPendingProfileScrollAnchor=null;
+function tendCaptureProfileScrollAnchor(target){
+ var profile=target&&target.closest(".person-profile-page");if(!profile||(!target.closest(".profile-tab-panel")&&!target.closest(".profile-tabs-row")))return null;
+ var attributes=target.attributes||[],key=null;
+ for(var i=0;i<attributes.length;i++){if(/^data-[a-z0-9-]+$/i.test(attributes[i].name)){key=attributes[i].name;break;}}
+ return {key:key,value:key?target.getAttribute(key):null,top:target.getBoundingClientRect().top,position:{x:window.scrollX,y:window.scrollY}};
+}
+function tendRestoreProfileScrollAnchor(anchor){
+ if(!anchor)return;
+ var target=null;
+ if(anchor.key){var candidates=document.querySelectorAll("["+anchor.key+"]");for(var i=0;i<candidates.length;i++){if(candidates[i].getAttribute(anchor.key)===anchor.value){target=candidates[i];break;}}}
+ if(target)window.scrollBy(0,target.getBoundingClientRect().top-anchor.top);
+ else window.scrollTo(anchor.position.x,anchor.position.y);
+}
+document.addEventListener("click",function(event){
+ var target=event.target&&event.target.closest&&event.target.closest("button,[role=tab]");
+ if(target){var anchor=tendCaptureProfileScrollAnchor(target);if(anchor){tendPendingProfileScrollAnchor=anchor;requestAnimationFrame(function(){if(tendPendingProfileScrollAnchor===anchor)tendPendingProfileScrollAnchor=null;});}}
+},true);
 window.addEventListener("resize",function(){if(tab==="people"&&currentPerson)sizeProfileTabPanels(el("view"));if(typeof layoutPlanPeopleBadges==="function")requestAnimationFrame(function(){layoutPlanPeopleBadges(el("view"));});});
 var tendRenderScrollSnapshot=null;
 function tendRestorePageScroll(position){requestAnimationFrame(function(){window.scrollTo(position.x,position.y);});}
 function tendShowModal(dialog){if(!dialog||dialog.open)return;var snapshot=tendRenderScrollSnapshot,position=snapshot?snapshot.position:{x:window.scrollX,y:window.scrollY};if(!snapshot||snapshot.preserve)dialog.addEventListener("close",function(){tendRestorePageScroll(position);},{once:true});dialog.showModal();if(!snapshot||snapshot.preserve)tendRestorePageScroll(position);}
 function tendRenderRouteKey(){var faith=S&&S.faithConfig,group=faith&&faith.selectedGroup;return JSON.stringify([tab,currentArea,currentPerson,currentPerson&&profileTabs[currentPerson],openDetail,group,faith&&faith.prayerView,faith&&faith.practiceTabs&&faith.practiceTabs[group],typeof faithPrayerSession!=="undefined"&&faithPrayerSession?"session":null,typeof settingsTab!=="undefined"?settingsTab:null]);}
 var tendLastRenderRouteKey=null;
-function render(){var existingPersonSettingsModal=el("personSettingsModal");if(existingPersonSettingsModal&&existingPersonSettingsModal.parentElement===document.body)existingPersonSettingsModal.remove();var routeKey=tendRenderRouteKey(),preserve=routeKey===tendLastRenderRouteKey,scrollPosition={x:window.scrollX,y:window.scrollY},previousSnapshot=tendRenderScrollSnapshot;tendRenderScrollSnapshot={position:scrollPosition,preserve:preserve};renderNav();var syncFooter=el("syncDot");if(syncFooter)syncFooter.hidden=!(tab==="today"&&!currentArea);var v=el("view");
+function render(){var existingPersonSettingsModal=el("personSettingsModal");if(existingPersonSettingsModal&&existingPersonSettingsModal.parentElement===document.body)existingPersonSettingsModal.remove();var routeKey=tendRenderRouteKey(),preserve=routeKey===tendLastRenderRouteKey,scrollPosition={x:window.scrollX,y:window.scrollY},scrollAnchor=tendPendingProfileScrollAnchor,previousSnapshot=tendRenderScrollSnapshot;tendPendingProfileScrollAnchor=null;tendRenderScrollSnapshot={position:scrollPosition,preserve:preserve};renderNav();var syncFooter=el("syncDot");if(syncFooter)syncFooter.hidden=!(tab==="today"&&!currentArea);var v=el("view");
  if(navKind()==="area"&&currentArea)v.innerHTML=currentArea==="faith"&&typeof renderFaithPage==="function"?renderFaithPage():renderArea(currentArea);
  else if(tab==="today")v.innerHTML=renderToday();
  else if(tab==="people")v.innerHTML=renderPeople();
@@ -148,7 +152,7 @@ function render(){var existingPersonSettingsModal=el("personSettingsModal");if(e
  if(typeof bind==="function")bind();
  var activePanel=currentPerson&&v.querySelector('.profile-tab-panel:not([hidden])'),editorDialog=activePanel&&activePanel.querySelector('dialog[data-profile-editor],dialog[data-editor-modal]');if(!editorDialog)editorDialog=v.querySelector('dialog[data-editor-modal]');if(editorDialog){if(!editorDialog.open)tendShowModal(editorDialog);editorDialog.addEventListener("cancel",function(event){var cancel=editorDialog.querySelector("[data-editor-cancel]");if(cancel){event.preventDefault();cancel.click();}});}
  var rhythmPickerDialog=v.querySelector("dialog[data-rhythm-picker-dialog]");if(rhythmPickerDialog&&!rhythmPickerDialog.open){tendShowModal(rhythmPickerDialog);var rhythmPickerTitle=rhythmPickerDialog.querySelector("#rhythm-picker-title");if(rhythmPickerTitle)rhythmPickerTitle.focus({preventScroll:true});}
- if(tab==="today"&&!currentArea&&el("calStrip")&&typeof loadCalendars==="function")loadCalendars();if(tab==="today"&&!currentArea&&typeof loadNowWeather==="function")loadNowWeather();tendRenderScrollSnapshot=previousSnapshot;var renderedRouteKey=tendRenderRouteKey();tendLastRenderRouteKey=renderedRouteKey;if(preserve&&routeKey===renderedRouteKey)tendRestorePageScroll(scrollPosition);}
+ if(tab==="today"&&!currentArea&&el("calStrip")&&typeof loadCalendars==="function")loadCalendars();if(tab==="today"&&!currentArea&&typeof loadNowWeather==="function")loadNowWeather();tendRenderScrollSnapshot=previousSnapshot;var renderedRouteKey=tendRenderRouteKey();tendLastRenderRouteKey=renderedRouteKey;if(preserve&&routeKey===renderedRouteKey){if(scrollAnchor)requestAnimationFrame(function(){requestAnimationFrame(function(){tendRestoreProfileScrollAnchor(scrollAnchor);});});else tendRestorePageScroll(scrollPosition);}}
 /* ============ overall meter ============ */
 function overallScore(){return avg(AREA_IDS.map(areaScore))||50;}
 function areaMenuHTML(){
@@ -454,8 +458,9 @@ function personHealthColor(score){
  return "rgb("+start.map(function(channel,i){return Math.round(channel+(end[i]-channel)*fraction);}).join(",")+")";
 }
 function personHealthMeter(score,name,solid){
- var value=Math.max(0,Math.min(100,Number(score)||0));
- return '<div class="bar-ov person-health-bar'+(solid?' solid':'')+'" role="meter" aria-label="'+esc(name)+' tending health" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+value+'" aria-valuetext="'+value+' out of 100: '+esc(scoreLabel(value))+'">'+(solid?'<span class="person-health-fill" style="width:'+value+'%;background:'+personHealthColor(value)+'" aria-hidden="true"></span>':'<i class="ov-marker" style="left:clamp(10px, '+value+'%, calc(100% - 10px))" aria-hidden="true"></i>')+'</div>';
+ var available=score!==null&&score!==undefined&&Number.isFinite(Number(score)),value=available?Math.max(0,Math.min(100,Number(score))):0;
+ var valueText=available?value+' out of 100: '+esc(scoreLabel(value)):'Unavailable';
+ return '<div class="bar-ov person-health-bar'+(solid?' solid':'')+'" role="meter" aria-label="'+esc(name)+' tending health" aria-valuemin="0" aria-valuemax="100"'+(available?' aria-valuenow="'+value+'"':'')+' aria-valuetext="'+valueText+'">'+(solid?'<span class="person-health-fill" style="width:'+value+'%;background:'+personHealthColor(available?value:null)+'" aria-hidden="true"></span>':'<i class="ov-marker" style="left:clamp(10px, '+value+'%, calc(100% - 10px))" aria-hidden="true"></i>')+'</div>';
 }
 function renderPeople(){
  var HINT='rhythms, sparks, prayers - tending the people you love';
@@ -711,13 +716,22 @@ function profileNoteTitleText(note){return String(note.title||note.text||"");}
 function profileNoteDetails(note){return String(note.details||"");}
 function followupAssociationOwner(note){return note&&note.kind==="faith-note"?"faith":note&&(note.personId||"global");}
 function personNoteRecords(person){return S.followups.filter(function(note){return note.personId===person.id||(Array.isArray(note.sharedWith)&&note.sharedWith.indexOf(person.id)!==-1);});}
+function personNoteCardHTML(note,person,options){
+ options=options||{};var completed=!!options.completed,stamp=options.metadata||"",actionLabel=options.actionLabel||(completed?"Reopen":"Done");
+ var ownerId=note.kind==="faith-note"?"faith":note.personId||person.id,badges=tendAssociationPeopleBadges(note,ownerId,person.id,"notes")+tendAssociationCategoryBadges(note);
+ var edit='<button type="button" class="iconbtn person-note-edit" data-fuedit="'+esc(note.id)+'" aria-label="Edit note" title="Edit">'+profileActionIcon("edit")+'</button>';
+ var done='<button type="button" class="btn mini '+(completed?"ghost":"note-done")+'" data-fudone="'+esc(note.id)+'" aria-label="'+esc(actionLabel+" note")+'">'+esc(actionLabel)+'</button>';
+ return '<article class="person-note-row'+(completed?' is-done':'')+'"><div class="person-note-heading"><div class="person-note-title-line"><strong class="tend-type-title">'+esc(profileNoteTitleText(note))+'</strong>&nbsp;'+edit+'</div>'+done+'</div>'
+  +(profileNoteDetails(note)?'<div class="person-note-description tend-type-description">'+esc(profileNoteDetails(note))+'</div>':"")
+  +(badges?'<div class="person-note-associations">'+badges+'</div>':"")
+  +'<div class="person-note-footer"><span class="person-note-type-column">'+esc(noteKindLabel(note.kind))+'</span>'+(stamp?'<span class="person-note-meta tend-type-meta">'+planMetaIcon("occurred")+'<span>'+esc(stamp)+'</span></span>':"")+'</div></article>';
+}
 function notesChecklist(p,addAction){
  var items=personNoteRecords(p);
  function row(f){
   if(editingFollowupId===f.id){var associationOwner=followupAssociationOwner(f)||p.id;return '<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="note-editor-title"><div class="profile-editor-body"><h3 id="note-editor-title">Edit Note</h3>'+(f.kind==="faith-note"?'<div class="profile-note-type"><span>Type</span><strong>Prayer</strong></div>':'<label class="profile-note-type">Type<select data-fu-kind>'+noteKindOptions(f.kind==="encouragement"?"encouragement":f.kind==="followup"?"followup":f.kind==="prayernote"?"prayer":"general")+'</select></label>')+'<label class="profile-note-type">Title<input id="followupEditTitle" aria-label="Note title" value="'+esc(profileNoteTitleText(f))+'"></label><label class="profile-note-type">Details<textarea id="followupEditDetails" aria-label="Note details" placeholder="Add details (optional)">'+esc(profileNoteDetails(f))+'</textarea></label>'+tendAssociationControlsHTML("followup",associationOwner,f.id,f)+'<div class="profile-editor-actions"><button class="btn mini" data-fusave="'+f.id+'">Save Note</button><button class="btn mini ghost" data-fucancel="1" data-editor-cancel>Cancel</button><button class="btn mini danger" data-fudel="'+f.id+'">Delete Note</button></div></div></dialog>';}
-  var stamp=f.createdAt||f.ts?"Added "+when(f.createdAt||f.ts):f.due?"Due "+f.due:"";
-  var ownerId=f.kind==="faith-note"?"faith":f.personId||p.id,badges=tendAssociationPeopleBadges(f,ownerId,p.id,"notes")+tendAssociationCategoryBadges(f);
-  return '<div class="person-note-row'+(f.done?' is-done':'')+'"><span class="person-note-type-column">'+esc(noteKindLabel(f.kind))+'</span>'+tendRowContent(profileNoteTitleText(f),profileNoteDetails(f),stamp,"",badges)+'<div class="person-note-actions">'+(f.done?'<button class="btn mini ghost" data-fudone="'+f.id+'" aria-label="Reopen note">Reopen</button>':'<button class="btn mini note-done" data-fudone="'+f.id+'" aria-label="Complete note">Done</button>')+'<button type="button" class="iconbtn" data-fuedit="'+esc(f.id)+'" aria-label="Edit note" title="Edit">'+profileActionIcon("edit")+'</button><button type="button" class="iconbtn" data-fudel="'+esc(f.id)+'" aria-label="Delete note" title="Delete">'+profileActionIcon("remove")+'</button></div></div>';
+  var stamp=f.createdAt||f.ts?when(f.createdAt||f.ts):f.due?"Due "+f.due:"";
+  return personNoteCardHTML(f,p,{completed:f.done,metadata:stamp});
  }
  var active=items.filter(function(f){return !f.done;}),done=items.filter(function(f){return f.done;});
  return (active.length?active.map(row).join(""):'<div class="empty">No notes yet - add something to remember.</div>')+(done.length?'<button type="button" class="recent-moments-toggle" data-note-history="'+esc(p.id)+'">Show history ('+done.length+')</button>':'')+(addAction||"");
@@ -725,14 +739,8 @@ function notesChecklist(p,addAction){
 function openPersonNoteHistory(personId){
  var person=S.people.find(function(item){return item.id===personId;});if(!person)return;
  var notes=personNoteRecords(person).filter(function(note){return note.done;}).sort(function(a,b){return (b.completedDate||b.createdAt||b.ts||0)>(a.completedDate||a.createdAt||a.ts||0)?1:-1;});
- function row(note){
-  var stamp=note.createdAt||note.ts?"Added "+when(note.createdAt||note.ts):note.due?"Due "+note.due:"";
-  if(note.completedDate)stamp+=(stamp?" · ":"")+"Completed "+when(note.completedDate);
-  var ownerId=note.kind==="faith-note"?"faith":note.personId||person.id,badges=tendAssociationPeopleBadges(note,ownerId,person.id,"notes")+tendAssociationCategoryBadges(note);
-  return '<div class="person-note-row is-done"><span class="person-note-type-column">'+esc(noteKindLabel(note.kind))+'</span>'+tendRowContent(profileNoteTitleText(note),profileNoteDetails(note),stamp,"",badges)+'<div class="person-note-actions"><button class="btn mini ghost" data-fudone="'+esc(note.id)+'" aria-label="Reopen note">Reopen</button><button type="button" class="iconbtn" data-fuedit="'+esc(note.id)+'" aria-label="Edit note" title="Edit">'+profileActionIcon("edit")+'</button><button type="button" class="iconbtn" data-fudel="'+esc(note.id)+'" aria-label="Delete note" title="Delete">'+profileActionIcon("remove")+'</button></div></div>';
- }
  var dialog=document.createElement("dialog");dialog.className="rhythm-history-dialog note-history-dialog";dialog.setAttribute("aria-labelledby","noteHistoryTitle");
- dialog.innerHTML='<div class="history-person"><span class="history-person-avatar">'+personAvatar(person,42)+'</span><strong>'+esc(person.name)+'</strong></div><div class="history-heading"><div><h2 id="noteHistoryTitle">Completed notes</h2><p class="history-rhythm-details">'+notes.length+' completed note'+(notes.length===1?"":"s")+'</p></div><button class="iconbtn" data-note-history-close aria-label="Close note history">✕</button></div><div class="notes-history-list note-history-modal-list">'+(notes.length?notes.map(row).join(""):'<div class="empty">No completed notes yet.</div>')+'</div>';
+ dialog.innerHTML='<div class="note-history-header"><div class="history-person"><span class="history-person-avatar">'+personAvatar(person,42)+'</span><strong>'+esc(person.name)+'</strong></div><div class="history-heading"><div><h2 id="noteHistoryTitle">Completed notes</h2><p class="history-rhythm-details">'+notes.length+' completed note'+(notes.length===1?"":"s")+'</p></div><button class="iconbtn" data-note-history-close aria-label="Close note history">✕</button></div></div><div class="notes-history-list note-history-modal-list">'+(notes.length?notes.map(function(note){return personNoteCardHTML(note,person,{completed:true,metadata:note.completedDate?"Completed "+when(note.completedDate):"",actionLabel:"Reopen"});}).join(""):'<div class="empty">No completed notes yet.</div>')+'</div>';
  dialog.addEventListener("click",function(event){
   if(event.target.closest("[data-note-history-close]")){dialog.close();return;}
   if(event.target.closest("[data-fudone],[data-fuedit],[data-fudel]"))dialog.close();
@@ -759,9 +767,10 @@ function actQueueHTML(p){
   rows.push({html:html,frequency:queueFrequency(item,type),time:time<0?dayOrder.length:time,order:rowOrder++});
  }
  function rhyRowQ(r,dim){
-  var sub=tendRhythmMetaLabel(r,null,true);
-  var badges=tendQueuePeopleAndCategoryBadges(r,p.id,p.id,"rhythm");
-  return '<div class="actrow'+(dim?" done":"")+'"><div class="pi-main">'+tendRhythmCardContentHTML(r,{title:r.text||"(unnamed rhythm)",description:String(r.description||"").trim(),peopleBadges:badges,showNoDetails:true})+'</div>'+(dim?'<span class="praycount tend-type-metric">Tended \u2713</span>':rhyDoneBtn(p.id+"|"+r.id))+todayQueueMetaBar(sub,true)+'</div>';
+  var metadata=window.tendRhythmCardMetadata(r),badges=tendQueuePeopleAndCategoryBadges(r,p.id,p.id,"rhythm");
+  return tendRhythmCardHTML(r,{title:r.text||"(unnamed rhythm)",description:r.description,peopleBadgesHTML:badges,
+   frequency:metadata.frequency,time:metadata.time,lastTended:metadata.lastTended,frequencyIconHTML:metadata.frequencyIconHTML,timeIconHTML:metadata.timeIconHTML,lastIconHTML:metadata.lastIconHTML,
+   tendAttributes:{"data-tend-open":"person-rhythm","data-person-id":p.id,"data-rhythm-id":r.id},showScore:false});
  }
  function sparkRowQ(spark){
   var ownerId=spark.profileOwnerId||p.id,sub=(spark.time?fmtHM12(spark.time)+" \u00b7 ":"")+sparkDueTxt(spark),badges=tendQueuePeopleAndCategoryBadges(spark,ownerId,p.id,"spark");
@@ -771,7 +780,7 @@ function actQueueHTML(p){
  dueSparks.forEach(function(spark){queueRow(sparkRowQ(spark),spark,"spark");});
  rows.sort(function(a,b){return a.frequency<b.frequency?-1:a.frequency>b.frequency?1:a.time-b.time||a.order-b.order;});
  var out=tendTodayWithPersonHTML({personName:p.name,waitingCount:waiting,itemsHTML:rows.map(function(row){return row.html;}).join("")});
- out+=tendPrayerSectionHTML("Pray for "+p.name,"", {headerClassName:"today-with-person-heading"});
+ out+=tendPrayerSectionHTML("Pray for "+p.name,"", {headerClassName:"today-with-person-heading person-prayer-heading"});
  if(typeof window.personFocusedPrayerHTML==="function")out+=window.personFocusedPrayerHTML(p);
  if(typeof faithPrayerSession!=="undefined"&&faithPrayerSession&&faithPrayerSession.source==="person"&&faithPrayerSession.personId===p.id)out+=faithPrayerSessionHTML();
  out+=personFreeMomentHTML(p);
@@ -794,14 +803,16 @@ function personProfile(pid){
  var ll=p.loveLanguage||"";
  var first=esc(p.name.split(" ")[0]);
  var bd=bdayInfo(p.birthday);
- /* Profile identity sits above the card; profile details remain in the card. */
- var header='<div class="person-profile-head person-profile-header"><div class="person-identity">'+personAvatar(p,52)+'<div><h3>'+esc(p.name)+'</h3><div class="rel">'+esc(p.relation||"")+'</div></div></div><div class="profile-head-actions"><button type="button" class="pbtn" data-psettings="1" title="Person settings" aria-label="Person settings">\u2699</button><button type="button" class="pbtn" data-closeperson="1" title="Close" aria-label="Close person profile">\u2715</button></div></div>';
+ /* Keep person-specific actions together without mixing in global app controls. */
+ var header='<div class="person-profile-head person-profile-header"><div class="person-identity">'+personAvatar(p,76)+'<div><h3 class="tend-type-title">'+esc(p.name)+'</h3><div class="rel">'+esc(p.relation||"")+'</div></div></div><details class="person-profile-options"><summary aria-label="Person options" title="Person options"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></summary><div class="person-profile-options-list"><button type="button" data-psettings="1">Person settings</button><button type="button" data-closeperson="1">Close profile</button></div></details></div>';
+ var badges='<div class="person-profile-badges">';
+ if(ll&&LL_LANGUAGES[ll])badges+='<span class="person-profile-badge">'+(typeof window.llIconHTML==="function"?window.llIconHTML(p):"")+esc(LL_LANGUAGES[ll])+'</span>';
+ if(bd)badges+='<span class="person-profile-badge" aria-label="Birthday: '+esc(bd.label)+'"><span aria-hidden="true">\uD83C\uDF82</span><span>'+esc(bd.label)+'</span></span>';
+ if(p.anniversary){var an2=annivInfo(p.anniversary);if(an2)badges+='<span class="person-profile-badge" aria-label="Anniversary: '+esc(an2.label)+'"><span aria-hidden="true">\u2665</span><span>'+esc(an2.label)+'</span></span>';}
+ badges+='</div>';
+ var scoreAvailable=sc!==null&&sc!==undefined&&Number.isFinite(Number(sc)),scoreValue=scoreAvailable?Math.max(0,Math.min(100,Number(sc))):null;
  var out='<div class="card detail open person-profile" id="personPanel">';
- out+='<div class="person-health-heading dashboard-overall-heading"><h3>Overall health</h3><span class="ov-score '+c+'">'+sc+'</span></div>'+personHealthMeter(sc,p.name)+'<div class="meta person-profile-health-status"><span class="statusword '+c+'">'+scoreLabel(sc)+'</span></div><div class="chips">';
- out+=ll?'<span class="chip info">'+(typeof window.llIconHTML==="function"?window.llIconHTML(p):"")+esc(LL_LANGUAGES[ll])+'</span>':'<span class="chip info">no love language set</span>';
- out+=bd?'<span class="chip'+(bd.days<=14?" warn":" info")+'">\uD83C\uDF82 Birthday: '+esc(bd.label)+'</span>':'<span class="chip info">no birthday set</span>';
- if(p.anniversary){var an2=annivInfo(p.anniversary);if(an2)out+='<span class="chip info">\u2665 Anniversary: '+esc(an2.label)+'</span>';}
- out+='</div>';
+ out+='<div class="person-health-heading dashboard-overall-heading"><h3>Overall health</h3><span class="ov-score">'+(scoreAvailable?esc(sc):"\u2014")+'</span></div>'+personHealthMeter(scoreAvailable?scoreValue:null,p.name,true)+'<div class="meta person-profile-health-status"><span>'+esc(scoreAvailable?scoreLabel(scoreValue):"Health score unavailable")+'</span></div>';
  if(crs.length||prs.length){
   var rm=crs.length?avg(crs.map(rhythmScore)):null,rmCls=rm===null?"":scoreClass(rm);
   out+='<div class="pmeters three"><div class="pmeter"><div class="pm-lab"><span>Rhythms</span><span class="pm-val '+rmCls+'">'+(rm===null?"-":rm)+'</span></div><div class="bar"><i class="'+rmCls+'" style="width:'+(rm||0)+'%"></i></div><div class="pm-note">'+(crs.length?crs.length+" connection rhythms":"none yet")+'</div></div>';
@@ -844,14 +855,15 @@ function personProfile(pid){
  out+='</div></dialog>';
  }
  activeProfileTab=profileTabs[pid]||"rhythms";
- var connections=evs.filter(connectionEvent);
+ var connections=connectionHistoryEvents(pid);
  var counts={rhythms:sortedPersonRhythms(p).length,connection:connections.length,sparks:sortedPersonSparks(p).length,prayer:prayers.filter(function(x){return !x.answered&&!x.archived;}).length,notes:personNoteRecords(p).filter(function(f){return !f.done;}).length};
- out+=tendSectionHeaderHTML({title:"Manage with "+p.name,className:"profile-settings-heading"})+'<div class="profile-tabs-row"><div class="profile-tabs" role="tablist" aria-label="Manage with '+esc(p.name)+'">'+[["rhythms","Rhythms"],["connection","Connections"],["sparks","Sparks"],["prayer","Prayer"],["notes","Notes"]].map(function(item){var selected=activeProfileTab===item[0];return '<button type="button" role="tab" id="profile-tab-'+item[0]+'" aria-controls="profile-panel-'+item[0]+'" aria-selected="'+selected+'" tabindex="'+(selected?"0":"-1")+'" data-profiletab="'+item[0]+'">'+collectionIcon(item[0])+'<span class="profile-tab-label">'+item[1]+'</span><span class="tab-count">'+counts[item[0]]+'</span></button>';}).join('')+'</div></div>';
+ var tabHealth={rhythms:avg(sortedPersonRhythms(p).map(rhythmScore)),connection:connectionScore(p),prayer:prayerMeterScore(p)};
+ out+='<div class="person-profile-divider" aria-hidden="true"></div>'+tendSectionHeaderHTML({title:"Intentional with "+p.name,className:"profile-settings-heading"})+'<div class="profile-tabs-row"><div class="profile-tabs" role="tablist" aria-label="Intentional with '+esc(p.name)+'">'+[["rhythms","Rhythms"],["sparks","Sparks"],["prayer","Prayer"],["connection","Connections"],["notes","Notes"]].map(function(item){var selected=activeProfileTab===item[0],health=tabHealth[item[0]],healthText=health===null||health===undefined||!Number.isFinite(Number(health))?"\u2014":String(health)+"%",healthTone=healthText==="\u2014"?"neutral":scoreClass(Number(health));return '<button type="button" role="tab" id="profile-tab-'+item[0]+'" aria-controls="profile-panel-'+item[0]+'" aria-selected="'+selected+'" tabindex="'+(selected?"0":"-1")+'" data-profiletab="'+item[0]+'"><span class="profile-tab-heading">'+collectionIcon(item[0])+'<span class="profile-tab-label">'+item[1]+'</span></span><span class="tab-count">'+counts[item[0]]+'</span><span class="profile-tab-mobile-details"><span class="profile-tab-item-count" aria-label="'+counts[item[0]]+' items"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4" cy="6" r=".7"/><circle cx="4" cy="12" r=".7"/><circle cx="4" cy="18" r=".7"/></svg><span>'+counts[item[0]]+'</span></span><span class="profile-tab-health-score '+healthTone+'">'+healthText+'</span></span></button>';}).join('')+'</div></div>';
  out+=profilePanelStart("connection")+'<div class="profile-panel-toolbar"><p class="profile-tab-intro">Shared moments add up and keep your connection strong.</p><div class="profile-panel-actions"><button type="button" class="btn mini ghost" data-rippleopen="1">'+profileActionIcon("log")+'Log connection</button><button type="button" class="btn mini ghost profile-secondary-action" data-connection-history="'+esc(pid)+'">'+profileActionIcon("chart")+'History</button></div></div>';
  if(connections.length){
-  out+='<div class="connection-list">'+connections.slice(0,5).map(rippleLine).join("")+'</div>';
-  if(connections.length>5)out+='<button type="button" class="recent-moments-toggle" data-connection-list-view-all="'+esc(pid)+'">View All ('+connections.length+')</button>';
+  out+='<div class="connection-list">'+connections.slice(0,5).map(function(event){return connectionCardHTML(event,pid);}).join("")+'</div>';
  }else out+='<div class="empty">No connections logged yet.</div>';
+ out+='<button type="button" class="recent-moments-toggle" data-connection-history-list="'+esc(pid)+'">View all history ('+connections.length+')</button>';
  out+='</section>';
  out+=profilePanelStart("rhythms")+'<div class="profile-panel-toolbar profile-rhythm-toolbar"><p class="profile-tab-intro">Recurring practices that help you stay connected.</p><button type="button" class="btn mini ghost profile-rhythm-add" data-rhyadd="'+esc(pid)+'">'+profileActionIcon("log")+'<span>Add rhythm</span></button></div><div class="profile-rhythm-list">';
  var profileRhythms=sortedPersonRhythms(p);
@@ -883,7 +895,7 @@ function personProfile(pid){
  out+=profilePanelStart("prayer")+'<div class="profile-panel-toolbar profile-rhythm-toolbar"><p class="profile-tab-intro">Prayer requests to remember and bring before God.</p><button type="button" class="btn mini ghost profile-rhythm-add profile-prayer-add" data-personprayeropen="'+esc(pid)+'">'+profileActionIcon("log")+'<span>Add prayer</span></button></div>'+prayerList(prayers,true);
  if(addingPrayer)out+='<dialog class="profile-editor-dialog" data-profile-editor="prayer" aria-labelledby="profile-editor-title"><div class="profile-editor-body"><h3 id="profile-editor-title">Add Prayer</h3>'+personPrayerAddFields(pid)+'</div></dialog>';
  out+='</section>';
- out+=profilePanelStart("notes")+'<div class="profile-panel-toolbar"><p class="profile-tab-intro">Keep useful thoughts, encouragement, prayer, and follow-ups together.</p><button type="button" class="btn mini ghost" data-profilenoteopen="'+esc(pid)+'">'+profileActionIcon("log")+'Add note</button></div>';
+ out+=profilePanelStart("notes")+'<div class="profile-panel-toolbar profile-rhythm-toolbar"><p class="profile-tab-intro">Keep useful thoughts, encouragement, prayer, and follow-ups together.</p><button type="button" class="btn mini ghost profile-rhythm-add" data-profilenoteopen="'+esc(pid)+'">'+profileActionIcon("log")+'<span>Add note</span></button></div>';
  out+='<div class="person-notes">'+notesChecklist(p,"")+'</div>';
  if(noteDraftOpenFor===pid){var noteDraft=noteAddDrafts[pid]||(noteAddDrafts[pid]={personId:pid,sharedWith:[],areas:[]});out+='<dialog class="profile-editor-dialog" data-profile-editor="note" aria-labelledby="profile-editor-title"><div class="profile-editor-body"><h3 id="profile-editor-title">Add Note</h3><label class="profile-note-type">Type<select id="profileNoteKind">'+noteKindOptions("general")+'</select></label><label class="profile-note-type">Title<input id="profileNoteTitle" placeholder="A short title"></label><label class="profile-note-type">Details<textarea id="profileNoteDetails" placeholder="Add details (optional)"></textarea></label>'+tendAssociationControlsHTML("followup",pid,"new",noteDraft)+'<div class="profile-editor-actions"><button class="btn mini" data-profilenotesave="'+pid+'">Save Note</button><button class="btn mini ghost" data-profilenotecancel="1" data-editor-cancel>Cancel</button></div></div></dialog>';}
  out+='</section>';
@@ -906,7 +918,7 @@ function personProfile(pid){
  m+='</div></section>';
  m+='</div></div>';
  out+=m;
- return '<div class="person-profile-page">'+header+out+'</div>';}
+ return '<div class="person-profile-page">'+header+badges+out+'</div>';}
 function renderChecklists(){
  if(!S.checklists||!S.checklists.length)return "";
  var out="";
@@ -947,21 +959,27 @@ function connectionCategoryIds(e){
  if(e.origin==="spark"||e.note==="Spark landed"){var sparkData=connectionSpark(e);return sparkData.spark&&Array.isArray(sparkData.spark.areas)?sparkData.spark.areas:[];}
  var rhythm=e.rhythmId&&connectionRhythm(e);return rhythm&&typeof window.tendRhythmCategoryIds==="function"?window.tendRhythmCategoryIds(rhythm):[];
 }
-function rippleLine(e){
- var title=(e.title&&e.title.indexOf("Time with")!==0)?e.title.replace(/^Prayer: /,""):"";
- var isSpark=e.origin==="spark"||e.note==="Spark landed";
- var typeBadge=e.rhythmId?'<span class="pill rhy">'+collectionIcon("rhythms")+' Rhythm</span>':(isSpark?'<span class="pill spk">'+collectionIcon("sparks")+' Spark</span>':'<span class="pill touch">'+esc(typeLabel(e))+'</span>');
- var rhythm=e.rhythmId&&connectionRhythm(e),details=e.note&&e.note!=="Spark landed"?e.note:rhythm&&rhythm.description||"",rhythmMeta="";
- if(rhythm)title=rhythm.text||title;
- if(rhythm){
-  rhythmMeta=tendRhythmMetaLabel(rhythm,e.ts,false);
+function connectionCardLastTended(event){
+ var last={ts:Number(event.ts)};
+ return typeof window.tendRhythmCardLastTended==="function"?window.tendRhythmCardLastTended(last):{full:when(last.ts),label:when(last.ts)};
+}
+function connectionCardHTML(event,personId){
+ var isSpark=event.origin==="spark"||event.note==="Spark landed",rhythm=event.rhythmId&&connectionRhythm(event);
+ var title=event.rhythmId?(rhythm&&rhythm.text||event.title||"Connection"):(event.title&&event.title.indexOf("Time with")!==0?event.title.replace(/^Prayer: /,""):"Connection");
+ var details=event.note&&event.note!=="Spark landed"?event.note:rhythm&&rhythm.description||"";
+ var typeBadge=event.rhythmId?'<span class="pill rhy">'+collectionIcon("rhythms")+' Rhythm</span>':(isSpark?'<span class="pill spk">'+collectionIcon("sparks")+' Spark</span>':'<span class="pill touch">'+esc(typeLabel(event))+'</span>');
+ var schedule= rhythm&&typeof window.tendRhythmCardMetadata==="function"?window.tendRhythmCardMetadata(rhythm):null;
+ var people=connectionParticipantIds(event).filter(function(id,index,ids){return id&&id!==(personId||event.personId)&&ids.indexOf(id)===index;}).map(function(id){var person=S.people.find(function(item){return item.id===id;});return person?'<button type="button" class="prayer-person person-badge-clickable" data-personbadge="'+esc(person.id)+'|connection" aria-label="Open '+esc(person.name)+' connection">'+personAvatar(person,24)+esc(person.name)+'</button>':"";}).join("");
+ var categories=people+(typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges({areas:connectionCategoryIds(event)}):"");
+ var timestamp=new Date(Number(event.ts)),datetime=Number.isFinite(timestamp.getTime())?timestamp.toISOString():"",last=connectionCardLastTended(event);
+ function scheduleItem(kind,value,full,narrow){
+  if(!value)return "";
+  var icon=kind==="frequency"?planMetaIcon("frequency"):planMetaIcon("time"),aria=kind==="frequency"?"Frequency: ":"Preferred time: ";
+  return '<span class="rhythm-card__meta-item" aria-label="'+esc(aria+(full||value))+'">'+icon+'<span class="rhythm-card__meta-text"><span class="rhythm-card__meta-wide">'+esc(value)+'</span><span class="rhythm-card__meta-narrow">'+esc(narrow||value)+'</span></span></span>';
  }
- var timestamp=rhythmMeta||when(e.ts)+(daysSince(e.ts)===0&&!e.allDay?" "+fmtHM(e.ts):"");
- timestamp=timestamp.replace(/^today\b/,"Today");
- var connectionPeople=connectionParticipantIds(e);
- var otherParticipants=connectionPeople.filter(function(id,index,ids){return id&&id!==(currentPerson||e.personId)&&ids.indexOf(id)===index;}).map(function(id){var person=S.people.find(function(item){return item.id===id;});return person?'<button type="button" class="prayer-person person-badge-clickable" data-personbadge="'+esc(person.id)+'|connection" aria-label="Open '+esc(person.name)+' connection">'+personAvatar(person,24)+esc(person.name)+'</button>':"";}).join("");
- var connectionCategories=connectionCategoryIds(e),categories=otherParticipants+(typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges({areas:connectionCategories}):"");
- return '<div class="logline moment-row"><div class="moment-type">'+typeBadge+'</div><div class="gr-main">'+tendRowContent(title||"Connection",details,timestamp,"",categories)+'</div><span class="entry-actions"><button type="button" class="iconbtn" data-evedit="'+esc(e.id)+'" title="Edit connection" aria-label="Edit connection">'+profileActionIcon("edit")+'</button><button type="button" class="iconbtn" data-evdel="'+esc(e.id)+'" title="Delete connection" aria-label="Delete connection">'+profileActionIcon("remove")+'</button></span></div>';
+ var footer=(schedule?scheduleItem("frequency",schedule.frequency.label,schedule.frequency.full,schedule.frequency.narrow)+scheduleItem("time",schedule.time.label,schedule.time.full,schedule.time.narrow):"")
+  +'<span class="rhythm-card__meta-item rhythm-card__last" aria-label="'+esc(last.full||last.label)+'">'+planMetaIcon("occurred")+'<time'+(datetime?' datetime="'+datetime+'"':"")+'>'+esc(last.label||"Never")+'</time></span>';
+ return '<article class="connection-card" data-connection-card="'+esc(event.id)+'"><div class="connection-card__heading rhythm-card__title-line"><strong class="tend-type-title">'+esc(title||"Connection")+'</strong><button type="button" class="rhythm-card__edit" data-evedit="'+esc(event.id)+'" aria-label="Edit '+esc(title||"Connection")+'" title="Edit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l4.2-.8L20 7.4 16.6 4 4.8 15.8Z"/></svg></button><div class="connection-card__type">'+typeBadge+'</div></div>'+(details?'<p class="connection-card__description tend-type-description">'+esc(details)+'</p>':"")+(categories?'<div class="connection-card__associations">'+categories+'</div>':"")+'<footer class="connection-card__footer rhythm-card__meta" aria-label="Connection schedule and history">'+footer+'</footer></article>';
 }
 /* ============ free moment + spark chip ============ */
 function sparkChip(p){var s=sortedPersonSparks(p)[0];if(!s)return "";return '<div class="pf-next" style="color:var(--forest)">\u2726 '+esc(s.text)+' \u00b7 '+esc(sparkDueTxt(s))+'</div>';}
@@ -995,9 +1013,9 @@ function personFreeMomentHTML(person){
  personSparkCarouselIndexes[personId]=index;
  var current=sparkQueue[index],
      action='<button type="button" class="btn mini sparkbtn" data-sparkdo="'+esc(current.spark)+'">Do it</button>',
-     footerHTML='<span>'+(index+1)+' of '+sparkQueue.length+'</span><span class="dashboard-spark-deadline">'+esc(current.deadline)+'</span>',
+     footerHTML='<span class="dashboard-spark-deadline">'+esc(current.deadline)+'</span>',
      card=freeMomentSparkCardHTML(current,{actionHTML:action,footerHTML:footerHTML,className:"dashboard-free-moment-card person-free-moment-card",cardAttributes:{"data-person-free-spark-card":personId}});
- return tendSectionHeaderHTML({title:"Free moment with "+person.name+"?",className:"dashboard-free-moment-heading person-free-moment-heading",trailingHTML:'<button type="button" class="profile-view-all-sparks" data-person-sparks-view-all="'+esc(personId)+'">View all '+profileActionIcon("view")+'</button>'})+'<div class="dashboard-free-moment dashboard-free-moment-carousel person-free-moment"><div class="dashboard-free-moment-stage">'+card+'</div><nav class="dashboard-free-moment-controls" aria-label="'+esc(person.name)+' Spark carousel"><button type="button" class="dashboard-free-moment-arrow" data-person-spark-carousel-person="'+esc(personId)+'" data-person-spark-carousel-step="-1" aria-label="Previous Spark"'+(index===0?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6 9 12 15 18"/></svg></button><button type="button" class="dashboard-free-moment-arrow" data-person-spark-carousel-person="'+esc(personId)+'" data-person-spark-carousel-step="1" aria-label="Next Spark"'+(index===sparkQueue.length-1?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6 15 12 9 18"/></svg></button></nav></div>';
+ return tendSectionHeaderHTML({title:"Free moment with "+person.name+"?",className:"dashboard-free-moment-heading person-free-moment-heading"})+'<div class="dashboard-free-moment dashboard-free-moment-carousel person-free-moment"><div class="dashboard-free-moment-stage">'+card+'</div><nav class="dashboard-free-moment-controls" aria-label="'+esc(person.name)+' Spark carousel"><button type="button" class="dashboard-free-moment-arrow" data-person-spark-carousel-person="'+esc(personId)+'" data-person-spark-carousel-step="-1" aria-label="Previous Spark"'+(index===0?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6 9 12 15 18"/></svg></button><span class="dashboard-spark-carousel-count" aria-live="polite">'+(index+1)+' of '+sparkQueue.length+'</span><button type="button" class="dashboard-free-moment-arrow" data-person-spark-carousel-person="'+esc(personId)+'" data-person-spark-carousel-step="1" aria-label="Next Spark"'+(index===sparkQueue.length-1?" disabled":"")+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6 15 12 9 18"/></svg></button></nav></div>';
 }
 function freeMomentHTML(){
  var sparkQueue=dashboardFreeMomentSparkQueue();

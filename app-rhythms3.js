@@ -132,30 +132,37 @@
   var html=_ppBase(pid);
   var p=S.people.find(function(x){return x.id===pid;});if(!p)return html;
   migrateAllRhythms();
-  var rs=personRhythms(p),pInfo=typeof personPrayerScheduleInfo==='function'?personPrayerScheduleInfo(p):personPrayerInfo(p);
-  var pScore=prayerMeterScore(p),pCls=scoreClass(pScore),pScoreText=pScore===null?'—':pScore;
-  var pills;
-  if(rs.length){
-   var rm=avg(rs.map(rhythmScore)),rmCls=scoreClass(rm);
-   var pTouch=personConnInfo(p),tScore=connectionScore(p),tCls=scoreClass(tScore);
-   pills='<div class="pmeters three"><div class="pmeter"><div class="pm-lab"><span>Rhythms</span><span class="pm-val tend-type-metric '+rmCls+'">'+(rm===null?'—':rm)+'</span></div><div class="bar"><i class="'+rmCls+'" style="width:'+(rm===null?0:rm)+'%"></i></div><div class="pm-note">'+rs.length+" rhythm"+(rs.length===1?"":"s")+'</div></div>'
-   +'<div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val tend-type-metric '+tCls+'">'+tScore+'</span></div><div class="bar"><i class="'+tCls+'" style="width:'+tScore+'%"></i></div><div class="pm-note">'+(pTouch.last?("Last: "+when(pTouch.last.ts)):"No connections yet")+' · Target: '+esc(personCadenceTargetLabel(p))+'</div></div>'
-   +'<div class="pmeter"><div class="pm-lab"><span>Prayer</span><span class="pm-val tend-type-metric '+pCls+'">'+pScoreText+'</span></div><div class="bar"><i class="'+pCls+'" style="width:'+(pScore===null?0:pScore)+'%"></i></div><div class="pm-note">'+(pInfo.last?("Last: "+when(pInfo.last.ts)):"No prayers logged")+'</div></div></div>';
-  }else{
-   var cInfo=personConnInfo(p),cScore=connectionScore(p),cCls=scoreClass(cScore);
-   pills='<div class="pmeters three"><div class="pmeter"><div class="pm-lab"><span>Rhythms</span><span class="pm-val tend-type-metric neutral">—</span></div><div class="bar"><i style="width:0%"></i></div><div class="pm-note">No rhythms yet</div></div>'
-   +'<div class="pmeter"><div class="pm-lab"><span>Connection</span><span class="pm-val tend-type-metric '+cCls+'">'+cScore+'</span></div><div class="bar"><i class="'+cCls+'" style="width:'+cScore+'%"></i></div><div class="pm-note">'+(cInfo.last?("Last: "+when(cInfo.last.ts)):"No connections yet")+' · Target: '+esc(personCadenceTargetLabel(p))+'</div></div>'
-   +'<div class="pmeter"><div class="pm-lab"><span>Prayer</span><span class="pm-val tend-type-metric '+pCls+'">'+pScoreText+'</span></div><div class="bar"><i class="'+pCls+'" style="width:'+(pScore===null?0:pScore)+'%"></i></div><div class="pm-note">'+(pInfo.last?("Last: "+when(pInfo.last.ts)):"No prayers logged")+'</div></div></div>';
+  var rs=sortedPersonRhythms(p),pInfo=typeof personPrayerScheduleInfo==='function'?personPrayerScheduleInfo(p):personPrayerInfo(p);
+  var pScore=prayerMeterScore(p),rm=rs.length?avg(rs.map(rhythmScore)):null,pTouch=personConnInfo(p),tScore=connectionScore(p);
+  var activePrayerCount=personPrayerRecords(p).filter(function(item){return !item.answered&&!item.archived;}).length;
+  function summaryButton(key,label,value){
+   var display=value===null||value===undefined||!Number.isFinite(Number(value))?"\u2014":String(value);
+   var tone=display==="\u2014"?"neutral":scoreClass(Number(value));
+   return '<button type="button" class="person-health-summary" id="person-health-summary-'+key+'" data-person-health-summary="'+key+'" aria-label="'+esc(label+' score '+display)+'" aria-controls="person-health-detail" aria-expanded="false"><span class="person-health-summary-score '+tone+'">'+esc(display)+'</span><span class="person-health-summary-label">'+esc(label)+'</span></button>';
   }
+  var pills='<div class="person-health-summaries" role="group" aria-label="Relationship health summaries">'
+   +summaryButton("rhythms","Rhythms",rm)+summaryButton("connection","Connection",tScore)+summaryButton("prayer","Prayer",pScore)+'</div>';
+  var lastConnection=pTouch.last?"Last connection: "+when(pTouch.last.ts):"No connections yet";
+  var lastPrayer=pInfo.last?"Last prayed: "+when(pInfo.last.ts):"No prayers logged";
+  var latestRhythmEvent=null;
+  rs.forEach(function(rhythm){
+   var event=rhythmLast(rhythm);
+   if(event&&(!latestRhythmEvent||Number(event.ts)>Number(latestRhythmEvent.ts)))latestRhythmEvent={rhythm:rhythm,event:event};
+  });
+  var latestRhythmText=latestRhythmEvent?"Last tended: "+when(latestRhythmEvent.event.ts):"Last tended: Never";
+  var connectionTarget="Target: "+personCadenceTargetLabel(p);
+  var prayerCount=activePrayerCount+" active prayer request"+(activePrayerCount===1?"":"s");
+  pills+='<div class="person-health-detail" id="person-health-detail" hidden aria-live="polite">'
+   +'<section class="person-health-detail-content" data-person-health-detail="rhythms" hidden><div class="person-health-detail-heading"><div><h4>Rhythms</h4><p>'+esc(latestRhythmText)+'</p><p>'+(rs.length?rs.length+" rhythm"+(rs.length===1?"":"s"):"No rhythms yet")+'</p></div><button type="button" class="person-health-detail-icon" data-meter-tab="rhythms" aria-label="View rhythms" title="View rhythms">'+collectionIcon("rhythms")+'</button></div></section>'
+   +'<section class="person-health-detail-content" data-person-health-detail="connection" hidden><div class="person-health-detail-heading"><div><h4>Connection</h4><p>'+esc(lastConnection)+'</p><p>'+esc(connectionTarget)+'</p></div><button type="button" class="person-health-detail-icon" data-meter-tab="connection" aria-label="View connections" title="View connections">'+collectionIcon("connection")+'</button></div></section>'
+   +'<section class="person-health-detail-content" data-person-health-detail="prayer" hidden><div class="person-health-detail-heading"><div><h4>Prayer</h4><p>'+esc(lastPrayer)+'</p><p>'+esc(prayerCount)+'</p></div><button type="button" class="person-health-detail-icon" data-meter-tab="prayer" aria-label="View prayers" title="View prayers">'+collectionIcon("prayer")+'</button></div></section>'
+   +'</div>';
   var i=html.indexOf('<div class="pmeters');
   if(i<0)return html;
   var tagRe=/<\/?div\b[^>]*>/g;tagRe.lastIndex=i;
   var depth=0,m2,end=-1;
   while((m2=tagRe.exec(html))){if(m2[0].charAt(1)===String.fromCharCode(47)){depth--;}else{depth++;}if(depth===0){end=m2.index+m2[0].length;break;}}
   if(end<0)return html;
-  var meterTargets=["rhythms","connection","prayer"];
-  var meterIndex=0;
-  pills=pills.replace(/<div class="pmeter">/g,function(){var target=meterTargets[meterIndex++];return '<div class="pmeter pmeter-link" role="button" tabindex="0" data-meter-tab="'+target+'" aria-label="Open '+target+' for '+esc(p.name)+'">';});
   return html.slice(0,i)+pills+html.slice(end);
  };
  document.addEventListener("change",function(e){

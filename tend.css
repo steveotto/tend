@@ -454,7 +454,6 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 
 .recent-moments-toggle{display:inline-flex;align-items:center;min-height:44px;margin:4px 0 6px;padding:8px 0;border:0;background:transparent;color:var(--forest);font:inherit;font-size:14px;font-weight:500;text-align:left;cursor:pointer}
 .recent-moments-toggle:focus-visible{outline:2px solid var(--forest);outline-offset:2px;border-radius:4px}
-.connection-list-dialog{width:min(760px,94vw)}.connection-list-modal{max-height:min(60vh,560px);overflow-y:auto;overscroll-behavior:contain;padding-right:5px;scrollbar-width:thin;scrollbar-color:var(--ink-faint) var(--mist)}.connection-list-modal::-webkit-scrollbar{width:8px}.connection-list-modal::-webkit-scrollbar-track{background:var(--mist);border-radius:8px}.connection-list-modal::-webkit-scrollbar-thumb{background:var(--ink-faint);border:2px solid var(--mist);border-radius:8px}
 .prayer-history-links{display:flex;align-items:center;gap:20px;flex-wrap:wrap}.prayer-past-dialog{width:min(760px,94vw)}.prayer-past-list{max-height:min(60vh,560px);overflow-y:auto;overscroll-behavior:contain;padding-right:5px;scrollbar-width:thin;scrollbar-color:var(--ink-faint) var(--mist)}.prayer-past-list::-webkit-scrollbar{width:8px}.prayer-past-list::-webkit-scrollbar-track{background:var(--mist);border-radius:8px}.prayer-past-list::-webkit-scrollbar-thumb{background:var(--ink-faint);border:2px solid var(--mist);border-radius:8px}
 
 .nudge-list{list-style:none;margin:0;padding:0;min-width:0;display:grid;gap:8px}
@@ -541,11 +540,84 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .person-profile-page .profile-prayer-row .prayer-action-options button{border:0;background:transparent;color:var(--action-prayer-text,#705A8D)}
 .person-profile-page .profile-prayer-row .prayer-action-options button:hover,
 .person-profile-page .profile-prayer-row .prayer-action-options button:focus-visible{background:var(--action-prayer-hover,#E6DCEE);color:var(--action-prayer-text,#705A8D)}
+.person-profile-page #profile-panel-notes{padding:0;border:0;background:transparent;box-shadow:none}
+.person-profile-page #profile-panel-notes .profile-panel-toolbar{margin-bottom:10px}
+.person-profile-page #profile-panel-notes .person-notes{display:grid;gap:12px;min-width:0}
+.person-profile-page #profile-panel-notes .person-note-row{box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:10px;min-width:0;margin:0;padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--card);box-shadow:0 1px 2px rgba(32,39,35,.04),0 10px 28px -22px rgba(32,39,35,.3)}
+.person-profile-page #profile-panel-notes .person-note-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;min-width:0}
+.person-profile-page #profile-panel-notes .person-note-title-line{display:block;min-width:0}
+.person-profile-page #profile-panel-notes .person-note-title-line .tend-type-title{display:inline!important;min-width:0;overflow-wrap:anywhere}
+.person-profile-page #profile-panel-notes .person-note-edit{display:inline-flex;vertical-align:middle;width:34px;min-width:34px;height:34px;min-height:34px}
+.person-profile-page #profile-panel-notes .person-note-heading>.note-done{flex:none;min-height:40px}
+.person-profile-page #profile-panel-notes .person-note-description,.person-profile-page #profile-panel-notes .person-note-meta{min-width:0;overflow-wrap:anywhere}
+.person-profile-page #profile-panel-notes .person-note-associations{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
+.person-profile-page #profile-panel-notes .person-note-type-column{justify-self:start;max-width:100%;overflow-wrap:anywhere}
+.person-profile-page #profile-panel-notes .person-note-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;margin-top:2px;padding-top:10px;border-top:1px solid var(--line)}
+.person-profile-page #profile-panel-notes .person-note-meta{display:inline-flex;align-items:center;gap:6px;text-align:right}
+.person-profile-page #profile-panel-notes .person-note-meta .plan-detail-icon{width:15px;height:15px;flex:none}
+.person-profile-page #profile-panel-connection{padding:0;border:0;background:transparent;box-shadow:none}
+.person-profile-page #profile-panel-connection .profile-panel-toolbar{align-items:flex-end;justify-content:flex-end;gap:10px;margin-bottom:12px}
+.person-profile-page #profile-panel-connection .profile-panel-toolbar>.profile-tab-intro{margin-right:auto}
+.person-profile-page #profile-panel-connection .profile-panel-actions{justify-content:flex-end}
+.person-profile-page #profile-panel-connection .profile-panel-actions>[data-rippleopen]{order:1}
+.person-profile-page #profile-panel-connection .profile-panel-actions>[data-connection-history]{order:2}
+.person-profile-page #profile-panel-connection .connection-list{gap:12px}
+.person-profile-page #profile-panel-connection .connection-card{gap:9px}
+.person-profile-page #profile-panel-connection .connection-card__type{margin-right:auto}
+.person-profile-page #profile-panel-notes .person-note-row.is-done .person-note-description,
+.person-profile-page #profile-panel-notes .person-note-row.is-done .person-note-meta{opacity:.65}
+.connection-list{display:grid;gap:12px;min-width:0}
+.connection-card{box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;gap:9px;min-width:0;margin:0;padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--card);box-shadow:0 1px 2px rgba(32,39,35,.04),0 10px 28px -22px rgba(32,39,35,.3)}
+.connection-card__heading.rhythm-card__title-line{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:start;gap:0 8px;min-width:0}
+.connection-card__heading>.tend-type-title{grid-column:1;grid-row:1;min-width:0;overflow-wrap:anywhere;white-space:normal}
+.connection-card__heading .rhythm-card__edit{flex:none}
+.connection-card__heading>.rhythm-card__edit{grid-column:2;grid-row:1;margin-left:0}
+.connection-card__type{grid-column:3;grid-row:1;display:flex;align-items:flex-start;justify-self:end;min-width:0}
+.connection-card__type .pill{display:inline-flex;align-items:center;gap:5px;margin:0}
+.connection-card__type .collection-icon{width:14px;height:14px}
+.connection-card__description{min-width:0;margin:0;overflow-wrap:anywhere;white-space:pre-wrap}
+.connection-card__associations{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0}
+.connection-card__secondary{min-width:0;overflow-wrap:anywhere}
+.connection-history-dialog{display:flex;flex-direction:column;width:min(760px,94vw);max-height:90vh;overflow:hidden;padding:0}
+.connection-history-header{flex:none;padding:24px 28px 0}
+.connection-history-header .history-person{margin-bottom:14px}
+.connection-history-header .history-heading{align-items:flex-start}
+.connection-history-header .history-heading h2{font-size:24px}
+.connection-history-header .history-heading .iconbtn{flex:none}
+.connection-history-tabs{display:flex;gap:6px;margin-top:18px;border-bottom:1px solid var(--line)}
+.connection-history-tabs [role=tab]{min-height:42px;padding:8px 14px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--ink-soft);font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.connection-history-tabs [role=tab][aria-selected=true]{border-bottom-color:var(--forest);color:var(--forest-deep)}
+.connection-history-tabs [role=tab]:focus-visible{outline:2px solid var(--forest);outline-offset:1px}
+.connection-history-view{display:flex;flex:1 1 auto;flex-direction:column;gap:14px;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:18px 28px 24px;scrollbar-width:thin;scrollbar-color:var(--ink-faint) var(--mist)}
+.connection-history-view[hidden]{display:none}
+.connection-history-view::-webkit-scrollbar{width:8px}.connection-history-view::-webkit-scrollbar-track{background:var(--mist);border-radius:8px}.connection-history-view::-webkit-scrollbar-thumb{background:var(--ink-faint);border:2px solid var(--mist);border-radius:8px}
+.connection-history-list-count{margin:0}
+.connection-history-date-group{display:grid;gap:9px;min-width:0}
+.connection-history-date-group h3{margin:4px 0 0;font-family:var(--sans);font-size:var(--tend-type-section-header);font-weight:700;line-height:1.25}
+.connection-history-load-more{align-self:center;margin:4px 0 0}
+.connection-history-chart-view .history-stat{margin:0}
+.connection-history-chart-view .history-stat>span{display:block;margin:4px 0 0;color:var(--ink-soft)}
+.connection-history-chart-view .history-scroll{flex:none;max-width:100%;overflow-x:auto;overflow-y:hidden;margin:0;padding:8px 0 16px;touch-action:pan-x;overscroll-behavior-x:contain}
+.connection-history-chart-view .history-bars{justify-content:flex-start}
+.connection-history-chart-view .connection-history-column{transition:background .15s,box-shadow .15s}
+.connection-history-chart-view .connection-history-column.is-selected{background:var(--mist);box-shadow:0 0 0 2px var(--forest)}
+.connection-history-chart-view .connection-history-column.is-selected .prayer-history-count{background:var(--forest)}
+.connection-history-chart-view .history-scroll-hint{margin:0}
+.connection-history-day-detail{display:grid;gap:12px}
+.connection-history-day-heading{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px 12px}
+.connection-history-day-heading h3{margin:0;font-family:var(--sans);font-size:var(--tend-type-section-header);font-weight:700;line-height:1.25;overflow-wrap:anywhere}
+.connection-history-day-heading>span{color:var(--ink-soft);font-size:var(--tend-type-metadata)}
+.connection-history-view .history-empty{margin:0}
 .person-profile-page .prayer-past .profile-prayer-row,.person-profile-page .prayer-past-list .profile-prayer-row{margin-bottom:14px}
 .person-profile-page .prayer-past .profile-prayer-row:last-child,.person-profile-page .prayer-past-list .profile-prayer-row:last-child{margin-bottom:0}
 @media(max-width:760px){
+ .person-profile-page #profile-panel-connection .profile-panel-toolbar{align-items:flex-start;flex-direction:column}
+ .person-profile-page #profile-panel-connection .profile-panel-actions{width:100%;justify-content:flex-end}
  .person-profile-page .profile-prayer-row{grid-template-columns:minmax(0,1fr) 86px;gap:8px}
  .person-profile-page .profile-prayer-row{padding:14px}
+ .person-profile-page #profile-panel-notes .person-note-row{gap:8px;padding:14px}
+ .person-profile-page #profile-panel-notes .person-note-heading{gap:8px}
+ .person-profile-page #profile-panel-notes .person-note-heading>.note-done{min-height:38px;padding:6px 12px}
 }
 
 .connection-cadence-field{margin-top:24px;margin-bottom:24px}
@@ -623,7 +695,6 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .pbtn{width:36px;height:36px;border:1px solid var(--line);border-radius:10px;background:#fff;display:grid;place-items:center;font-size:15px;color:var(--ink-soft);transition:all .15s;padding:0}
 .pbtn:hover{border-color:var(--mint);color:var(--ink)}
 .card.act{border:1.5px solid var(--mint);box-shadow:0 0 0 3px rgba(103,197,163,.18)}
-.card.act.today-with-person{border:1px solid var(--line);box-shadow:none;padding:18px 20px}
 .qhead{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;margin-bottom:6px}
 .qpill{font-size:10.5px;font-weight:700;color:#8A6D1F;background:#F7EED3;border-radius:99px;padding:2px 9px;letter-spacing:.03em;white-space:nowrap}
 .qpill.clear{background:var(--mist);color:var(--forest-deep)}
@@ -701,6 +772,8 @@ details.moor .moor-body{padding:2px 18px 14px}
 .profile-tab-panel[hidden]{display:none}
 .person-profile-page .profile-tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr));align-items:stretch;gap:8px}
 .person-profile-page .profile-tabs button,.person-profile-page .profile-tabs button[aria-selected="true"],.person-profile-page .profile-tabs button:not([aria-selected="true"]){box-sizing:border-box;display:flex;flex:initial;width:100%;min-width:0;min-height:48px;justify-content:flex-start;padding:8px 12px;border-radius:12px;transition:background .15s,border-color .15s,color .15s}
+.person-profile-page .profile-tabs button .profile-tab-heading{display:inline-flex;align-items:center;gap:8px;min-width:0}
+.person-profile-page .profile-tabs button .profile-tab-mobile-details{display:none}
 .person-profile-page .profile-tabs button:not([aria-selected="true"]) .profile-tab-label{position:static;width:auto;height:auto;overflow:visible;clip:auto;white-space:normal}
 .person-profile-page .profile-tabs button[aria-selected="true"]{background:var(--mist);border-color:var(--forest);color:var(--forest-deep)}
 .person-profile-page .profile-tabs button .collection-icon{width:19px;height:19px}
@@ -739,9 +812,6 @@ details.moor .moor-body{padding:2px 18px 14px}
 .profile-tab-panel .preq{border-bottom:1px solid var(--line)}
 .profile-tab-panel .preq:last-child{border-bottom:0}
 .profile-tab-panel .person-free-moment-heading{display:flex;align-items:center;justify-content:space-between;flex-direction:row;gap:12px}
-.person-profile-page .profile-view-all-sparks{min-height:38px;padding:6px 4px;border:0;background:transparent;color:var(--forest-deep);font:inherit;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap}
-.person-profile-page .profile-view-all-sparks:hover{text-decoration:underline}
-.person-profile-page .profile-view-all-sparks:focus-visible{outline:2px solid var(--forest);outline-offset:2px;border-radius:5px}
 .moment-row{display:grid;grid-template-columns:100px minmax(0,1fr) auto;align-items:start;gap:12px;padding:10px 0}
 .moment-row .moment-type{display:flex;align-items:flex-start;padding-top:1px}
 .moment-row .moment-type .pill{margin:0}
@@ -762,7 +832,34 @@ details.moor .moor-body{padding:2px 18px 14px}
 @media(max-width:680px){
  .profile-head-actions{gap:6px}
  .profile-head-actions .profile-header-log{min-height:38px;padding:6px 10px}
- .person-profile-page .profile-tabs{grid-template-columns:repeat(auto-fit,minmax(min(100%,132px),1fr));gap:7px}
+ .person-profile-page .profile-tabs{grid-template-columns:repeat(6,minmax(0,1fr));grid-template-areas:"rhythms rhythms connection connection prayer prayer" "sparks sparks sparks notes notes notes";gap:7px}
+ .person-profile-page .profile-tabs [data-profiletab="rhythms"]{grid-area:rhythms}
+ .person-profile-page .profile-tabs [data-profiletab="connection"]{grid-area:connection}
+ .person-profile-page .profile-tabs [data-profiletab="prayer"]{grid-area:prayer}
+ .person-profile-page .profile-tabs [data-profiletab="sparks"]{grid-area:sparks}
+ .person-profile-page .profile-tabs [data-profiletab="notes"]{grid-area:notes}
+ .person-profile-page .profile-tabs button[data-profiletab="rhythms"],
+ .person-profile-page .profile-tabs button[data-profiletab="connection"],
+ .person-profile-page .profile-tabs button[data-profiletab="prayer"]{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:1fr 1fr;justify-items:stretch;min-height:96px;padding:8px 10px}
+ .person-profile-page .profile-tabs button[data-profiletab="rhythms"] .profile-tab-heading,
+ .person-profile-page .profile-tabs button[data-profiletab="connection"] .profile-tab-heading,
+ .person-profile-page .profile-tabs button[data-profiletab="prayer"] .profile-tab-heading{justify-self:center;gap:6px}
+ .person-profile-page .profile-tabs button .profile-tab-heading .collection-icon{width:19px;height:19px}
+ .person-profile-page .profile-tabs button[data-profiletab="rhythms"] .tab-count,
+ .person-profile-page .profile-tabs button[data-profiletab="connection"] .tab-count,
+ .person-profile-page .profile-tabs button[data-profiletab="prayer"] .tab-count{display:none}
+ .person-profile-page .profile-tabs button[data-profiletab="rhythms"] .profile-tab-mobile-details,
+ .person-profile-page .profile-tabs button[data-profiletab="connection"] .profile-tab-mobile-details,
+ .person-profile-page .profile-tabs button[data-profiletab="prayer"] .profile-tab-mobile-details{display:flex;align-items:center;justify-content:space-between;gap:8px;grid-column:1;justify-self:stretch;min-width:0;width:100%}
+ .person-profile-page .profile-tabs .profile-tab-item-count{display:inline-flex;align-items:center;gap:5px;min-width:0;color:var(--ink-soft);font-size:12px;font-weight:650;font-variant-numeric:tabular-nums}
+ .person-profile-page .profile-tabs .profile-tab-item-count svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+ .person-profile-page .profile-tabs .profile-tab-health-score{color:var(--ink-soft);font-size:var(--tend-type-person-badge);font-weight:750;font-variant-numeric:tabular-nums}
+ .person-profile-page .profile-tabs .profile-tab-health-score.green{color:#12B76A}
+ .person-profile-page .profile-tabs .profile-tab-health-score.yellow{color:#F08C00}
+ .person-profile-page .profile-tabs .profile-tab-health-score.red{color:#F04531}
+ .person-profile-page .profile-tabs .profile-tab-health-score.neutral{color:var(--ink-faint)}
+ .person-profile-page .profile-tabs button[data-profiletab="sparks"],
+ .person-profile-page .profile-tabs button[data-profiletab="notes"]{min-height:48px}
  .profile-panel-toolbar{align-items:flex-start;flex-direction:column}
  .profile-panel-actions{width:100%;justify-content:flex-start}
  .profile-panel-toolbar>.btn{align-self:flex-start}
@@ -802,7 +899,24 @@ details.moor .moor-body{padding:2px 18px 14px}
 .person-note-type-column{width:max-content;max-width:100%;padding:4px 9px;border-radius:99px;background:var(--mist);color:var(--forest-deep);font-size:11px;font-weight:700;white-space:nowrap}
 .person-note-actions{display:flex;align-items:center;gap:4px;margin-left:auto}
 .person-note-row.is-done .tend-row-content{opacity:.65}
-.note-history-dialog{width:min(760px,94vw)}.note-history-modal-list{max-height:min(60vh,560px);overflow-y:auto;overscroll-behavior:contain;padding-right:5px;scrollbar-width:thin;scrollbar-color:var(--ink-faint) var(--mist)}.note-history-modal-list::-webkit-scrollbar{width:8px}.note-history-modal-list::-webkit-scrollbar-track{background:var(--mist);border-radius:8px}.note-history-modal-list::-webkit-scrollbar-thumb{background:var(--ink-faint);border:2px solid var(--mist);border-radius:8px}
+.note-history-dialog{display:flex;flex-direction:column;width:min(760px,94vw);max-height:90vh;overflow:hidden;padding:0}
+.note-history-header{flex:none;padding:24px 28px 0}
+.note-history-header .history-person{margin-bottom:14px}
+.note-history-modal-list{display:flex;flex:1 1 auto;flex-direction:column;gap:12px;min-height:0;max-height:none;overflow-y:auto;overscroll-behavior:contain;padding:14px 28px 24px;scrollbar-width:thin;scrollbar-color:var(--ink-faint) var(--mist)}
+.note-history-modal-list::-webkit-scrollbar{width:8px}.note-history-modal-list::-webkit-scrollbar-track{background:var(--mist);border-radius:8px}.note-history-modal-list::-webkit-scrollbar-thumb{background:var(--ink-faint);border:2px solid var(--mist);border-radius:8px}
+.note-history-modal-list>.person-note-row{box-sizing:border-box;display:flex;flex:none;flex-direction:column;align-items:stretch;gap:10px;min-width:0;margin:0;padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--card);box-shadow:0 1px 2px rgba(32,39,35,.04),0 10px 28px -22px rgba(32,39,35,.3)}
+.note-history-modal-list .person-note-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;min-width:0}
+.note-history-modal-list .person-note-title-line{display:block;min-width:0;overflow-wrap:anywhere}
+.note-history-modal-list .person-note-title-line .tend-type-title{display:inline!important;min-width:0;overflow-wrap:anywhere;white-space:normal}
+.note-history-modal-list .person-note-edit{display:inline-flex;vertical-align:middle;width:34px;min-width:34px;height:34px;min-height:34px}
+.note-history-modal-list .person-note-heading>.btn{flex:none}
+.note-history-modal-list .person-note-description,.note-history-modal-list .person-note-meta{min-width:0;overflow-wrap:anywhere;white-space:normal}
+.note-history-modal-list .person-note-associations{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
+.note-history-modal-list .person-note-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;margin-top:2px;padding-top:10px;border-top:1px solid var(--line)}
+.note-history-modal-list .person-note-meta{display:inline-flex;align-items:center;gap:6px}
+.note-history-modal-list .person-note-meta .plan-detail-icon{width:15px;height:15px;flex:none}
+.note-history-modal-list>.person-note-row:last-child{border-bottom:1px solid var(--line)}
+@media(max-width:540px){.note-history-header{padding:18px 18px 0}.note-history-modal-list{padding:12px 18px 18px}.note-history-modal-list>.person-note-row{gap:8px;padding:14px}}
 .person-note-actions .note-done{background:var(--forest);border-color:var(--forest);color:#fff}
 .person-note-actions .note-done:hover{background:var(--forest-deep);border-color:var(--forest-deep);color:#fff}
 .notes-history-list>.person-note-row:last-child{border-bottom:0}
@@ -1025,8 +1139,10 @@ details.moor .moor-body{padding:2px 18px 14px}
 
 .rhythm-history-trigger{color:var(--forest);min-width:36px;min-height:44px}
 .rhythm-history-trigger svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.connection-history-toolbar{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.connection-history-toolbar .profile-tab-intro{flex:1;min-width:0}.connection-history-column{appearance:none;border:0;background:transparent;font:inherit;cursor:pointer}.connection-history-column:hover{background:var(--mist)}.connection-history-column:focus-visible{outline:2px solid var(--forest);outline-offset:1px}.connection-history-count{margin-top:0}.history-scroll:focus,.history-scroll:focus-visible{outline:none}.connection-day-dialog{width:min(620px,92vw);max-height:80vh}.connection-day-dialog .history-heading{align-items:center}.connection-day-list{max-height:55vh;overflow-y:auto;overscroll-behavior:contain;padding-right:5px}
+.connection-history-column{appearance:none;border:0;background:transparent;font:inherit;cursor:pointer}.connection-history-column:hover{background:var(--mist)}.connection-history-column:focus-visible{outline:2px solid var(--forest);outline-offset:1px}.connection-history-count{margin-top:0}.history-scroll:focus,.history-scroll:focus-visible{outline:none}
 .rhythm-history-dialog{width:min(640px,94vw);max-height:90vh;overflow:auto;margin:auto;padding:28px;border:1px solid var(--line);border-radius:20px;background:var(--canvas);color:var(--ink)}
+.rhythm-history-dialog.connection-history-dialog{display:flex;flex-direction:column;overflow:hidden;padding:0}
+.rhythm-history-dialog.note-history-dialog{display:flex;flex-direction:column;overflow:hidden;padding:0}
 .rhythm-history-dialog::backdrop{background:#17251e88}
 .history-person{display:flex;align-items:center;gap:10px;margin-bottom:14px;color:var(--ink-soft);font-size:14px}.history-person .avatar{width:42px;height:42px}.history-person strong{font-weight:600}
 .history-heading{display:flex;justify-content:space-between;align-items:start;gap:16px}.history-heading h2{font-size:24px;margin:0}.history-rhythm-details{margin-top:5px;color:var(--ink-soft);font-size:13px}.connection-cadence-label{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:8px 0 0;color:var(--ink-soft);font-size:13px}.connection-cadence-badge{display:inline-flex;align-items:center;min-height:26px;padding:3px 10px;border:1px solid var(--mint);border-radius:999px;background:var(--mist);color:var(--forest-deep);font-size:12px;font-weight:600;line-height:1.2}.history-rhythm-description{margin-top:5px;color:var(--ink-faint);font-size:13px}.history-eyebrow{font-size:13px;color:var(--ink-soft)}
@@ -1046,6 +1162,7 @@ details.moor .moor-body{padding:2px 18px 14px}
 .history-occurrence time{font-size:12px;color:var(--ink-soft)}
 .history-occurrence-delete{flex:none}
 @media(max-width:540px){.rhythm-history-dialog{padding:18px}.history-heading h2{font-size:20px}.history-track{height:140px}.rhyrow{flex-wrap:wrap}.rhyrow .gr-main{min-width:150px}}
+@media(max-width:540px){.rhythm-history-dialog.connection-history-dialog{padding:0}.connection-history-header{padding:18px 18px 0}.connection-history-view{padding:14px 18px 18px}.connection-card{gap:8px;padding:14px}.connection-card__heading{gap:8px}.connection-card__actions{gap:0}.connection-history-header .history-heading h2{font-size:20px}}
 
 
 .plan-more{margin-top:12px;border-top:1px solid var(--line)}.plan-more>summary{color:var(--forest-deep);font-size:13px;cursor:pointer;padding:12px 0}
@@ -1343,7 +1460,8 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  .spark-card .plan-item-heading>.tend-type-title{grid-column:1;grid-row:1;min-width:0;margin-right:.5rem}
  .spark-card .plan-item-heading>.spark-card__title-line{grid-column:1;grid-row:1;min-width:0;margin-right:.5rem}
  .spark-card .spark-card__title-edit>button{width:32px;min-width:32px;height:32px;min-height:32px;padding:6px}
- .spark-card .plan-item-heading>.plan-item-action{grid-column:2;grid-row:1}
+ .spark-card .plan-item-heading>.plan-item-action{grid-column:2;grid-row:1;align-self:start;height:max-content}
+ .spark-card .plan-item-heading>.plan-item-action>.btn{align-self:flex-start;height:auto}
  .spark-card .plan-item-description{grid-column:1/-1;grid-row:2}
  .spark-card .plan-item-meta-people .avatar{width:24px!important;height:24px!important}
  html[data-mobile-text-size="large"] .spark-card .plan-item-meta-people .prayer-person{gap:4px;padding:3px 7px 3px 3px;font-size:11px}
@@ -1422,7 +1540,8 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .dashboard-free-moment-card.slide-to-left{animation:dashboard-spark-slide-to-left .46s cubic-bezier(.65,0,.78,.28) both}
 .home-dashboard .dashboard-free-moment-card.slide-to-right{animation:dashboard-spark-slide-to-right .46s cubic-bezier(.65,0,.78,.28) both}
 .home-dashboard .dashboard-free-moment-controls{display:flex;justify-content:center;gap:10px}
-.home-dashboard .dashboard-spark-carousel-count{
+.home-dashboard .dashboard-spark-carousel-count,
+.person-profile-page .dashboard-spark-carousel-count{
  min-width:3.5em;
  align-self:center;
  color:var(--ink-faint);
@@ -2601,6 +2720,7 @@ html:not([data-mobile-text-size-level="large"]):not([data-mobile-text-size-level
 .person-profile-page .profile-tabs button[aria-selected="true"] .tab-count{background:#dcece3;color:var(--forest-deep)}
 .person-profile-page #profile-panel-rhythms{padding:0;border:0;background:transparent;box-shadow:none}
 .person-profile-page #profile-panel-prayer{padding:0;border:0;background:transparent;box-shadow:none}
+.person-profile-page #profile-panel-notes{padding:0;border:0;background:transparent;box-shadow:none}
 .person-profile-page .profile-rhythm-toolbar{align-items:center;gap:12px;margin:0 0 10px}
 .person-profile-page .profile-rhythm-toolbar .profile-tab-intro{flex:1;color:var(--ink-faint);font-size:13px;line-height:1.45}
 .person-profile-page .profile-rhythm-add{display:inline-flex;flex:none;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:8px 13px;border:1px solid var(--forest);border-radius:10px;background:transparent;color:var(--forest);font-size:14px;font-weight:600;white-space:nowrap}
@@ -3052,3 +3172,102 @@ html[data-mobile-text-size] .home-dashboard .upitem .cal-ic-top{
  background:var(--action-prayer-text);
  color:#fff
 }
+
+/* Person profile identity and relationship-health overview. */
+.person-profile-page{--person-profile-avatar-size:84px}
+.person-profile-page .person-profile-header{align-items:center;gap:18px;margin:8px 0 14px;padding:0;border:0}
+.person-profile-page .person-identity{gap:18px}
+.person-profile-page .person-profile-header .person-identity .avatar{width:var(--person-profile-avatar-size)!important;height:var(--person-profile-avatar-size)!important}
+.person-profile-page .person-profile-header .person-identity h3{margin:0;color:var(--ink);font-family:var(--sans);font-size:calc(var(--tend-type-section-header) + .25rem)!important;font-weight:700;line-height:1.15}
+.person-profile-page .person-profile-header .person-identity .rel{margin-top:6px;color:var(--ink);font-size:calc(var(--tend-type-description) + .05rem)!important;font-weight:600;line-height:1.35;opacity:.78}
+html .person-profile-page .person-prayer-heading h2,
+html .person-profile-page .person-free-moment-heading h2{font-size:var(--tend-type-description)!important;line-height:1.35}
+.person-profile-page .person-profile-divider{width:100%;height:1px;margin:20px 0 0;background:var(--line)}
+.person-profile-page .person-profile-divider+.profile-settings-heading{margin-top:24px}
+.person-profile-page .person-profile-options{position:relative;flex:none}
+.person-profile-page .person-profile-options>summary{display:grid;place-items:center;box-sizing:border-box;width:44px;height:44px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink-soft);list-style:none;cursor:pointer}
+.person-profile-page .person-profile-options>summary::-webkit-details-marker{display:none}
+.person-profile-page .person-profile-options>summary svg{width:21px;height:21px;fill:currentColor}
+.person-profile-page .person-profile-options>summary:hover,
+.person-profile-page .person-profile-options[open]>summary{border-color:var(--forest);background:var(--mist);color:var(--forest)}
+.person-profile-page .person-profile-options>summary:focus-visible,
+.person-profile-page .person-profile-options-list button:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+.person-profile-page .person-profile-options-list{position:absolute;z-index:20;top:calc(100% + 6px);right:0;display:grid;gap:2px;box-sizing:border-box;width:max-content;min-width:184px;padding:6px;border:1px solid var(--line);border-radius:12px;background:var(--card);box-shadow:0 8px 24px rgba(32,39,35,.14)}
+.person-profile-page .person-profile-options-list button{min-height:42px;padding:8px 11px;border:0;border-radius:8px;background:transparent;color:var(--ink);font:inherit;font-size:var(--tend-type-button-label);text-align:left;cursor:pointer}
+.person-profile-page .person-profile-options-list button:hover{background:var(--mist);color:var(--forest)}
+.person-profile-page .person-profile-badges{display:grid;grid-template-columns:repeat(3,minmax(0,max-content));align-items:center;gap:8px;margin:0 0 14px}
+.person-profile-page .person-profile-badge{display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:5px 11px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink-soft);font-size:var(--tend-type-metadata);line-height:1.35}
+.person-profile-page .person-profile-badge .ll-ic{display:inline-flex;align-items:center;margin:0}
+.person-profile-page .person-profile-badge .ll-ic svg{width:19px;height:19px}
+.person-profile-page .person-profile{box-sizing:border-box;margin:0 0 14px;padding:18px;border:1px solid var(--line);border-radius:18px;background:var(--card);box-shadow:0 1px 2px rgba(32,39,35,.04),0 10px 28px -22px rgba(32,39,35,.3)}
+.person-profile-page .person-profile .person-health-heading{align-items:center;margin:0;padding:0;border:0}
+.person-profile-page .person-profile .person-health-heading h3{margin:0;color:var(--ink);font-family:var(--sans);font-size:var(--tend-type-title);font-weight:650}
+.person-profile-page .person-profile .person-health-heading .ov-score{color:var(--ink);font-size:var(--tend-type-overall-score);font-variant-numeric:tabular-nums;line-height:1}
+.person-profile-page .person-profile .person-health-bar.solid{height:8px;margin:20px 0 12px;box-shadow:none;background:#E9EFEB;overflow:hidden}
+.person-profile-page .person-profile-health-status{margin:0;color:var(--ink-soft);font-size:var(--tend-type-metadata);line-height:1.4}
+.person-profile-page .person-health-summaries{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch;margin-top:14px}
+.person-profile-page .person-health-summary{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-width:0;min-height:68px;padding:6px 10px;border:0;border-left:1px solid var(--line);border-radius:0;background:transparent;color:var(--ink);font:inherit;text-align:center;cursor:pointer}
+.person-profile-page .person-health-summary::before{position:absolute;z-index:0;inset:4px 3px;border-radius:8px;background:transparent;content:"";transition:background .15s}
+.person-profile-page .person-health-summary:first-child{border-left:0}
+.person-profile-page .person-health-summary:hover::before,
+.person-profile-page .person-health-summary.is-active::before{background:var(--mist)}
+.person-profile-page .person-health-summary-score,
+.person-profile-page .person-health-summary-label{position:relative;z-index:1}
+.person-profile-page .person-health-summary-score{color:var(--ink);font-family:var(--sans);font-size:var(--tend-type-title);font-weight:750;font-variant-numeric:tabular-nums;line-height:1.15}
+.person-profile-page .person-health-summary-score.green{color:#12B76A}
+.person-profile-page .person-health-summary-score.yellow{color:#F08C00}
+.person-profile-page .person-health-summary-score.red{color:#F04531}
+.person-profile-page .person-health-summary-score.neutral{color:var(--ink-soft)}
+.person-profile-page .person-health-summary-label{color:var(--ink-soft);font-size:var(--tend-type-metadata);font-weight:600;line-height:1.3;overflow-wrap:anywhere}
+.person-profile-page .person-health-summary:focus-visible{position:relative;z-index:1;outline:2px solid var(--forest);outline-offset:1px;border-radius:9px}
+.person-profile-page .person-health-detail{margin-top:10px;padding:12px 14px;border-radius:12px;background:var(--canvas)}
+.person-profile-page .person-health-detail[hidden],
+.person-profile-page .person-health-detail-content[hidden]{display:none}
+.person-profile-page .person-health-detail-content h4{margin:0;color:var(--ink);font-family:var(--sans);font-size:var(--tend-type-metadata);font-weight:700}
+.person-profile-page .person-health-detail-content p{margin:4px 0 8px;color:var(--ink-soft);font-size:var(--tend-type-metadata);line-height:1.5;overflow-wrap:anywhere}
+.person-profile-page .person-health-detail-link{min-height:36px;padding:4px 0;border:0;background:transparent;color:var(--forest);font:inherit;font-size:var(--tend-type-metadata);font-weight:650;text-align:left;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.person-profile-page .person-health-detail-link:focus-visible{outline:2px solid var(--forest);outline-offset:2px;border-radius:4px}
+.person-profile-page .person-health-detail-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.person-profile-page .person-health-detail-heading p{margin:4px 0 0}
+.person-profile-page .person-health-detail-icon{display:grid;place-items:center;flex:none;width:40px;height:40px;padding:0;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--forest);cursor:pointer}
+.person-profile-page .person-health-detail-icon:hover{background:var(--mist)}
+.person-profile-page .person-health-detail-icon svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.person-profile-page .person-health-detail-icon:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+.person-profile-page .prayer-person.person-badge-clickable{box-sizing:border-box;display:inline-flex;align-items:center;gap:.5em;padding:.33em .83em .33em .33em;font-size:var(--tend-type-person-badge)!important;line-height:1.2}
+.person-profile-page .prayer-person.person-badge-clickable .avatar{width:1.6em!important;height:1.6em!important;flex:none;border:0!important}
+@media(max-width:580px){
+ .person-profile-page{--person-profile-avatar-size:72px}
+}
+@media(max-width:580px) and (min-width:401px){
+ html[data-mobile-text-size-level="large"] .person-profile-page{--person-profile-avatar-size:82px}
+ html[data-mobile-text-size-level="larger"] .person-profile-page{--person-profile-avatar-size:92px}
+}
+@media(max-width:400px){
+ .person-profile-page{--person-profile-avatar-size:66px}
+ .person-profile-page .person-health-summaries{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .person-profile-page .person-health-summary:nth-child(3){border-left:0}
+ .person-profile-page .person-health-summary{min-height:64px;padding:6px}
+}
+@media(max-width:360px){
+ .person-profile-page .person-profile-header{gap:8px}
+ .person-profile-page .person-identity{gap:10px}
+ .person-profile-page .person-profile{padding:14px}
+}
+@media(max-width:400px){
+ html[data-mobile-text-size-level="large"] .person-profile-page{--person-profile-avatar-size:76px}
+ html[data-mobile-text-size-level="larger"] .person-profile-page{--person-profile-avatar-size:86px}
+}
+@media(min-width:581px){
+ html[data-mobile-text-size-level="large"] .person-profile-page{--person-profile-avatar-size:96px}
+ html[data-mobile-text-size-level="larger"] .person-profile-page{--person-profile-avatar-size:108px}
+}
+.person-profile-page .prayer-person.person-badge-clickable,
+.person-free-moment .prayer-person.person-badge-clickable,
+.profile-tab-panel .prayer-person.person-badge-clickable{box-sizing:border-box;display:inline-flex;align-items:center;gap:.5em;padding:.33em .83em .33em .33em;border:0;font-size:var(--tend-type-person-badge)!important;line-height:1.2}
+.person-profile-page .prayer-person.person-badge-clickable .avatar,
+.person-free-moment .prayer-person.person-badge-clickable .avatar,
+.profile-tab-panel .prayer-person.person-badge-clickable .avatar{width:1.6em!important;height:1.6em!important;flex:none;border:0!important}
+.person-free-moment .spark-card .plan-item-meta-people .prayer-person.person-badge-clickable,
+.profile-tab-panel .spark-card .plan-item-meta-people .prayer-person.person-badge-clickable{gap:.5em;padding:.33em .83em .33em .33em}
+.person-free-moment .spark-card .plan-item-meta-people .prayer-person.person-badge-clickable .avatar,
+.profile-tab-panel .spark-card .plan-item-meta-people .prayer-person.person-badge-clickable .avatar{width:1.6em!important;height:1.6em!important}
