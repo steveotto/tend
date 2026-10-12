@@ -346,7 +346,7 @@ window.personFocusedPrayerHTML=function(person){
 function tendFilterButtonHTML(options){
  options=options||{};
  var label=String(options.label||"Filter"),className=["tend-filter-button",options.className].filter(Boolean).join(" "),attributes=Object.keys(options.attributes||{}).filter(function(name){return /^(data|aria)-[a-z0-9-]+$/.test(name);}).map(function(name){return " "+name+'="'+esc(options.attributes[name])+'"';}).join("");
- return '<button type="button" class="'+esc(className)+'"'+attributes+(options.haspopup?' aria-haspopup="'+esc(options.haspopup)+'"':"")+(options.controls?' aria-controls="'+esc(options.controls)+'"':"")+' aria-label="'+esc(options.ariaLabel||label)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 5h17l-6.5 7.2v5.3l-4 2v-7.3z"/></svg><span>'+esc(label)+'</span></button>';
+ return '<button type="button" class="'+esc(className)+'"'+attributes+(options.haspopup?' aria-haspopup="'+esc(options.haspopup)+'"':"")+(options.controls?' aria-controls="'+esc(options.controls)+'"':"")+' aria-label="'+esc(options.ariaLabel||label)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 5h17l-6.5 7.2v5.3l-4 2v-7.3z"/></svg></button>';
 }
 function faithDashboardPrayerPeopleHTML(){
  var people=S.people.slice().sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""));}),selected=dashboardPrayerPeople,selectedCount=selected===null?people.length+1:selected.length,pickerData=faithPrayerTimeframePickerData(dashboardPrayerTimeMode,selected),timeLabel=pickerData.label;

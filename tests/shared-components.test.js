@@ -8,6 +8,8 @@ const vm = require("node:vm");
 
 const source = fs.readFileSync(path.join(__dirname, "..", "app-shared-components.js"), "utf8");
 const faithSource = fs.readFileSync(path.join(__dirname, "..", "app-faith.js"), "utf8");
+const focusSource = fs.readFileSync(path.join(__dirname, "..", "app-focus.js"), "utf8");
+const peopleSource = fs.readFileSync(path.join(__dirname, "..", "app-people.js"), "utf8");
 const homeRhythmSource = fs.readFileSync(path.join(__dirname, "..", "app-views1.js"), "utf8");
 const actionsSource = fs.readFileSync(path.join(__dirname, "..", "app-actions.js"), "utf8");
 const connectionHistorySource = fs.readFileSync(path.join(__dirname, "..", "connection-history.js"), "utf8");
@@ -167,6 +169,7 @@ test("Home and Person Spark cards use one shared renderer and preserve card acti
   assert.equal((homeRhythmSource.match(/freeMomentSparkCardHTML\(current,/g) || []).length, 2);
   assert.match(homeRhythmSource, /out\+=tendSparkCardHTML\(s,/);
   assert.match(homeRhythmSource, /headingEditHTML:editAction/);
+  assert.match(homeRhythmSource, /profile-spark-completion-note">Completed Sparks show under Connections\.<\/p>/);
   assert.doesNotMatch(homeRhythmSource, /<div class="spark-card/);
   assert.doesNotMatch(homeRhythmSource, /class="profile-spark-top"/);
   assert.doesNotMatch(homeRhythmSource, /class="planitem dashboard-free-moment-card"/);
@@ -182,6 +185,7 @@ test("Home and Person Spark cards use one shared renderer and preserve card acti
   assert.match(styles, /\.home-dashboard \.spark-card \.plan-item-category-row \.rhythm-area-badge svg\{[\s\S]*?width:12px!important;[\s\S]*?height:12px!important/);
   assert.match(styles, /\.home-dashboard \.current-plan-items>\.rhythm-card\{margin-bottom:14px\}/);
   assert.doesNotMatch(styles, /\.person-profile-page \.profile-spark-row\.card/);
+  assert.match(styles, /\.person-profile-page \.profile-spark-completion-note\{margin:12px 0 0;color:var\(--ink-faint\);font-size:12px;line-height:1\.4;text-align:center\}/);
   assert.doesNotMatch(styles, /\.person-profile-page \.person-free-moment-card \.tend-type-title/);
 });
 
@@ -199,13 +203,23 @@ test("Person prayer section follows the profile card treatment with a shared-sty
   assert.doesNotMatch(prayerSource.match(/function prayerProfileMetaHTML\(p\)\{([\s\S]*?)\n\}/)[1], /Prayed .* times|Added /);
   assert.match(prayerSource, /class=\"rhythm-card__edit prayer-edit-trigger\" data-prayeredit=/);
   assert.match(prayerSource, /prayerProfileMetaHTML\(p\)/);
+  assert.match(prayerSource, /class=\"prayer-history-section profile-prayer-history\"><div class=\"prayer-history-links\">/);
+  assert.match(prayerSource, /class=\"btn mini ghost profile-rhythm-add\" data-prayer-past-view=/);
+  assert.match(prayerSource, />Answered \('\+answered\.length\+'\)/);
+  assert.match(prayerSource, />Archived \('\+archived\.length\+'\)/);
   assert.match(styles, /\.person-profile-page #profile-panel-prayer\{padding:0;border:0;background:transparent;box-shadow:none\}/);
+  assert.match(styles, /\.person-profile-page #profile-panel-prayer \.profile-prayer-history\{margin-top:16px;padding-top:0;border-top:0\}/);
+  assert.match(styles, /\.person-profile-page #profile-panel-prayer \.profile-prayer-history \.prayer-history-links\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\);align-items:center;justify-items:center;gap:12px\}/);
+  assert.match(styles, /\.person-profile-page #profile-panel-prayer \.profile-prayer-history \.profile-rhythm-add\{margin:0\}/);
   assert.match(styles, /\.person-profile-page \.profile-prayer-row\{[^}]*grid-template-areas:\"content actions\" \"meta meta\"/);
   assert.match(styles, /#profile-panel-prayer \.profile-prayer-add\{border-color:var\(--forest\);background:transparent;color:var\(--forest\)\}/);
+  assert.match(prayerSource, /profile\?'<div class="profile-empty-state">No active prayer requests<\/div>'/);
+  assert.match(prayerSource, /if\(profile\)out='<div class="profile-prayer-list">'\+out\+'<\/div>'/);
 });
 
 test("Person Notes section uses the shared toolbar and card-row treatment", () => {
   assert.match(homeRhythmSource, /profilePanelStart\("notes"\)\+'<div class="profile-panel-toolbar profile-rhythm-toolbar"/);
+  assert.match(homeRhythmSource, /Thoughts, encouragement, and follow-ups to remember\./);
   assert.match(homeRhythmSource, /class="btn mini ghost profile-rhythm-add" data-profilenoteopen=/);
   assert.match(homeRhythmSource, /<span>Add note<\/span>/);
   assert.match(homeRhythmSource, /function personNoteCardHTML\(note,person,options\)/);
@@ -215,6 +229,8 @@ test("Person Notes section uses the shared toolbar and card-row treatment", () =
   assert.match(homeRhythmSource, /class="person-note-footer"><span class="person-note-type-column"/);
   assert.match(homeRhythmSource, /class="person-note-meta tend-type-meta">'\+planMetaIcon\("occurred"\)/);
   assert.match(homeRhythmSource, /var stamp=f\.createdAt\|\|f\.ts\?when\(f\.createdAt\|\|f\.ts\):f\.due\?"Due "\+f\.due:""/);
+  assert.match(homeRhythmSource, /class="btn mini ghost profile-rhythm-add person-note-history-button" data-note-history="'\+esc\(p\.id\)\+'">Completed \('\+done\.length\+'\)/);
+  assert.match(homeRhythmSource, /'<div class="profile-empty-state">No notes yet<\/div>'/);
   assert.doesNotMatch(homeRhythmSource, /"Added "\+when\(f\.createdAt/);
   assert.doesNotMatch(homeRhythmSource.match(/function personNoteCardHTML\([\s\S]*?\n\}/)[0], /data-fudel=/);
   assert.match(styles, /#profile-panel-notes\{padding:0;border:0;background:transparent;box-shadow:none\}/);
@@ -224,6 +240,7 @@ test("Person Notes section uses the shared toolbar and card-row treatment", () =
   assert.match(styles, /#profile-panel-notes \.person-note-row\{[^}]*border:1px solid var\(--line\)[^}]*border-radius:16px/);
   assert.match(styles, /#profile-panel-notes \.person-note-footer\{[^}]*border-top:1px solid var\(--line\)/);
   assert.match(styles, /#profile-panel-notes \.person-note-footer\{display:flex;align-items:center;justify-content:space-between/);
+  assert.match(styles, /\.person-profile-page #profile-panel-notes \.person-note-history-button\{display:flex;width:max-content;margin:16px auto 4px\}/);
 });
 
 test("Completed Note history reuses NoteCard with completion metadata and a scrollable list", () => {
@@ -288,7 +305,8 @@ test("Person profile overview keeps health details accessible and scoped above T
   assert.match(styles, /\.person-profile-page \.person-health-summary-score\.green\{color:#12B76A\}/);
   assert.match(styles, /\.person-profile-page \.person-health-summary-score\.yellow\{color:#F08C00\}/);
   assert.match(styles, /\.person-profile-page \.person-health-summary-score\.red\{color:#F04531\}/);
-  assert.match(styles, /html\[data-mobile-text-size-level="larger"\] \.person-profile-page #person-health-summary-connection \.person-health-summary-label\{font-size:13px;letter-spacing:-\.03em;white-space:nowrap\}/);
+  assert.match(styles, /html\[data-mobile-text-size-level="larger"\] \.person-profile-page \.person-health-summary\{padding-right:4px;padding-left:4px\}/);
+  assert.match(styles, /html\[data-mobile-text-size-level="larger"\] \.person-profile-page \.person-health-summary-label\{font-size:14px;letter-spacing:-\.03em;white-space:nowrap\}/);
   assert.match(styles, /\.person-profile-page \.prayer-person\.person-badge-clickable\{[^}]*gap:\.5em;padding:\.33em \.83em \.33em \.33em;font-size:var\(--tend-type-person-badge\)!important/);
   assert.match(styles, /\.person-profile-page \.prayer-person\.person-badge-clickable \.avatar\{width:1\.6em!important;height:1\.6em!important/);
   assert.match(styles, /\.person-profile-page \.prayer-person\.person-badge-clickable,\s*\.person-free-moment \.prayer-person\.person-badge-clickable,\s*\.profile-tab-panel \.prayer-person\.person-badge-clickable\{[^}]*padding:\.33em \.83em \.33em \.33em;border:0;font-size:var\(--tend-type-person-badge\)!important;line-height:1\.2\}/);
@@ -332,9 +350,12 @@ test("Person Connections preview and both history views share ConnectionCard", (
   assert.equal((homeRhythmSource.match(/function connectionCardHTML\(/g) || []).length, 1);
   assert.match(homeRhythmSource, /var connections=connectionHistoryEvents\(pid\)/);
   assert.match(homeRhythmSource, /connections\.slice\(0,5\)\.map\(function\(event\)\{return connectionCardHTML\(event,pid\);\}\)/);
+  assert.match(homeRhythmSource, /<div class="connection-list"><div class="profile-empty-state">No connections yet<\/div><\/div>/);
   assert.match(homeRhythmSource, /class="profile-panel-toolbar connection-profile-toolbar"/);
+  assert.match(homeRhythmSource, /connection-profile-intro">Shared moments that keep you connected\.<\/p><div class="profile-panel-toolbar connection-profile-toolbar"/);
   assert.match(homeRhythmSource, /class="connection-history-chart-trigger" data-connection-history=/);
   assert.match(homeRhythmSource, /aria-label="View connection chart"/);
+  assert.match(homeRhythmSource, /class="profile-tab-intro connection-profile-intro">Shared moments that keep you connected\.<\/p>/);
   assert.match(homeRhythmSource, /profileActionIcon\("chart"\)/);
   assert.match(homeRhythmSource, /class="btn mini ghost profile-rhythm-add connection-profile-log" data-rippleopen="1"/);
   assert.match(homeRhythmSource, /<span>Log connection<\/span>/);
@@ -376,10 +397,30 @@ test("Person Connections preview and both history views share ConnectionCard", (
   assert.match(connectionCard, /scheduleItem\("time"/);
   assert.match(connectionCard, /rhythm-card__meta-item rhythm-card__last/);
   assert.match(styles, /\.person-profile-page #profile-panel-connection\{padding:0;border:0;background:transparent;box-shadow:none\}/);
+  assert.match(styles, /\.person-profile-page #profile-panel-connection \.connection-profile-intro\{margin:0 0 10px;color:var\(--ink-faint\);font-size:13px;line-height:1\.45\}/);
   assert.match(styles, /\.person-profile-page #profile-panel-connection \.connection-profile-toolbar\{align-items:center;flex-direction:row;justify-content:space-between/);
   assert.match(styles, /\.person-profile-page #profile-panel-connection \.connection-history-chart-trigger\{[^}]*width:44px;height:44px;min-width:44px;min-height:44px/);
   assert.match(styles, /\.person-profile-page #profile-panel-connection \.connection-history-chart-trigger:focus-visible\{outline:2px solid var\(--forest\);outline-offset:2px\}/);
   assert.match(styles, /\.person-profile-page #profile-panel-connection \.connection-history-view-all\{display:flex;width:max-content;margin:16px auto 4px\}/);
+});
+
+test("Person empty sections use centered card placeholders", () => {
+  assert.match(homeRhythmSource, /else out\+='<div class="profile-empty-state">No rhythms yet<\/div>'/);
+  assert.match(homeRhythmSource, /else out\+='<div class="profile-empty-state">No sparks yet<\/div>'/);
+  assert.match(styles, /\.person-profile-page \.profile-tab-panel \.profile-empty-state,\.person-profile-page \.today-with-person \.profile-empty-state\{box-sizing:border-box;display:flex;align-items:center;justify-content:center;min-height:112px;margin:0;padding:16px;border:1px solid var\(--line\);border-radius:16px;background:var\(--card\);box-shadow:/);
+  assert.match(styles, /\.person-profile-page #profile-panel-rhythms \.profile-empty-state,\.person-profile-page #profile-panel-prayer \.profile-empty-state\{border-radius:20px\}/);
+});
+
+test("Focus rhythm rows reuse the shared card and include the owning person badge", () => {
+  const rhythmRow = focusSource.match(/if\(item\.type==='rhythm'\)\{[\s\S]*?\n   return;\n  \}/)[0];
+  assert.match(rhythmRow, /tendQueuePeopleAndCategoryBadges\(rhythm,person\.id,"","rhythm"\)/);
+  assert.match(rhythmRow, /tendRhythmCardHTML\(rhythm,\{/);
+  assert.match(rhythmRow, /peopleBadgesHTML:badges/);
+  assert.match(rhythmRow, /tendAttributes:\{"data-tend-open":"person-rhythm","data-person-id":person\.id,"data-rhythm-id":rhythm\.id\}/);
+  assert.match(rhythmRow, /showScore:false/);
+  assert.doesNotMatch(rhythmRow, /todayQueueMetaBar|tendRhythmCardContentHTML/);
+  assert.match(styles, /\.focus-dialog \.focus-rhythm-item\{margin:14px 0\}/);
+  assert.match(peopleSource, /"\.pc-toolbar>\[data-addperson\]\{margin-left:auto\}"/);
 });
 
 test("Connection history source keeps repeated events and scopes people using existing rules", () => {
@@ -417,6 +458,13 @@ test("Prayer action dropdown options are unshaded until hovered", () => {
   assert.doesNotMatch(styles, /\.prayer-action-options button\{border:1px solid/);
 });
 
+test("Prayer filter buttons show only the icon with an accessible name", () => {
+  const filterButton = faithSource.match(/function tendFilterButtonHTML\(options\)\{[\s\S]*?\n\}/)[0];
+  assert.match(filterButton, /aria-label=\"'\+esc\(options\.ariaLabel\|\|label\)\+'\"><svg/);
+  assert.match(filterButton, /<\/svg><\/button>/);
+  assert.doesNotMatch(filterButton, /<span>'\+esc\(label\)<\/span>/);
+});
+
 test("shared section and card components escape text and preserve semantic layouts", () => {
   const components = loadComponents();
   const header = components.tendSectionHeaderHTML({
@@ -448,6 +496,8 @@ test("shared section and card components escape text and preserve semantic layou
   });
   assert.match(emptyTodayWithPerson, /all tended/);
   assert.match(emptyTodayWithPerson, /Nothing waiting/);
+  assert.match(emptyTodayWithPerson, /<div class="today-with-person" style="margin-bottom:14px"><div class="profile-empty-state">Nothing waiting<\/div><\/div>/);
+  assert.match(styles, /\.person-profile-page \.profile-tab-panel \.profile-empty-state,\.person-profile-page \.today-with-person \.profile-empty-state\{box-sizing:border-box;display:flex;align-items:center;justify-content:center;min-height:112px/);
 
   const rhythm = components.tendRhythmCardContentHTML(
     { text: "<Walk>", description: "A & B" },
