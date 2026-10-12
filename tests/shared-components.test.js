@@ -101,6 +101,10 @@ test("Home, Person, and category rhythm cards share one renderer and card struct
   assert.match(todayRhythmSource, /peopleBadgesHTML:badges/);
   assert.match(todayRhythmSource, /showScore:false/);
   assert.match(personRhythmSource, /return tendRhythmCardHTML\(r,/);
+  assert.match(personRhythmSource, /var metadata=window\.tendRhythmCardMetadata\(r\),frequency=Object\.assign\(\{\},metadata\.frequency\)/);
+  assert.match(personRhythmSource, /if\(cardOptions\.frequencyLabel\)\{frequency\.label=cardOptions\.frequencyLabel;frequency\.narrow=cardOptions\.frequencyLabel;\}/);
+  assert.match(personRhythmSource, /frequency:frequency,time:metadata\.time/);
+  assert.match(homeRhythmSource, /out\+=rhythmRow\(p,r,\{frequencyLabel:r\.freq==="yearly"\?"Yearly":""\}\)/);
   assert.match(faithSource, /return tendRhythmCardHTML\(r,/);
   assert.match(categoryRhythmSource, /return tendRhythmCardHTML\(record,/);
   assert.match(categoryRhythmSource, /if\(arguments\.length>2\)options\.additionalPeopleBadgesHTML/);
@@ -420,7 +424,19 @@ test("Focus rhythm rows reuse the shared card and include the owning person badg
   assert.match(rhythmRow, /showScore:false/);
   assert.doesNotMatch(rhythmRow, /todayQueueMetaBar|tendRhythmCardContentHTML/);
   assert.match(styles, /\.focus-dialog \.focus-rhythm-item\{margin:14px 0\}/);
-  assert.match(peopleSource, /"\.pc-toolbar>\[data-addperson\]\{margin-left:auto\}"/);
+  assert.match(peopleSource, /class="btn mini ghost pc-add-person" data-addperson>\+ Add person/);
+  assert.match(peopleSource, /"\.btn\.mini\.pc-add-person\{box-sizing:border-box;justify-self:end;width:max-content;height:44px;min-height:44px;padding:8px 13px;font-size:14px;line-height:1\.2\}"/);
+  assert.match(peopleSource, /className:"people-section-title"[\s\S]*?trailingHTML:'<button type="button" class="btn mini ghost pc-add-person" data-addperson>\+ Add person<\/button>'/);
+  assert.match(peopleSource, /out\+='<div class="pc-toolbar"><div class="pc-toggles"/);
+  assert.match(peopleSource, /var CAT_LABEL=\{marriage:"Marriage",parenting:"Parenting",friendships:"Friends"\}/);
+  assert.match(peopleSource, /"\.pc-toolbar\{display:flex;justify-content:center/);
+  assert.match(peopleSource, /"\.pc-toggles\{display:flex;justify-content:center/);
+  assert.match(peopleSource, /"\.pc-add-person\{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:8px 13px;border:1px solid var\(--forest\);border-radius:10px;background:transparent;color:var\(--forest\);font-size:14px;font-weight:600;white-space:nowrap\}"/);
+  assert.match(styles, /\.people-section-title h2\{grid-column:1;grid-row:1\}/);
+  assert.match(styles, /\.people-section-title \.pc-add-person\{grid-column:2;grid-row:1;justify-self:end\}/);
+  assert.match(styles, /\.people-section-title \.hint\{grid-column:1\/-1;grid-row:2\}/);
+  assert.match(styles, /\.people-section-title\{display:grid;grid-template-columns:minmax\(0,1fr\) auto;align-items:center;gap:2px 12px;margin-bottom:20px\}/);
+  assert.match(styles, /\.faith-page-heading\{justify-content:flex-start;align-items:baseline;gap:12px;margin:2px 0 8px\}/);
 });
 
 test("Connection history source keeps repeated events and scopes people using existing rules", () => {
@@ -609,6 +625,7 @@ test("Homepage and Person prayer filters use the same shared dialog component", 
     primaryActionHTML: '<button data-dashboard-prayer-people-pray>Pray</button>',
     closeActionHTML: '<button data-dashboard-prayer-people-close>Done</button>'
   });
+
   const person = components.tendPrayerFilterDialogHTML({
     ...sharedLayout,
     id: "person-dashboard-prayer-dialog",
@@ -632,6 +649,63 @@ test("Homepage and Person prayer filters use the same shared dialog component", 
   assert.doesNotMatch(person, /dashboard-prayer-people-options/);
   assert.equal((faithSource.match(/tendPrayerFilterDialogHTML\(/g) || []).length, 2);
   assert.doesNotMatch(faithSource, /<dialog class="profile-editor-dialog rhythm-picker-dialog dashboard-prayer-people-dialog/);
+});
+
+test("Faith health uses the Person summary layout with expandable rhythm and prayer details", () => {
+  const faithHealth = faithSource.match(/function faithHealthHTML\(\)\{([\s\S]*?)\n\}/)[1];
+  assert.match(faithHealth, /class="person-health-summaries" role="group" aria-label="Faith health summaries"/);
+  assert.match(faithHealth, /summaryButton\("rhythms","Rhythms",rhythmScoreValue\)\+summaryButton\("prayer","Prayer",prayerScoreValue\)/);
+  assert.doesNotMatch(faithHealth, /summaryButton\("connection"/);
+  assert.match(faithHealth, /data-person-health-detail="rhythms"[\s\S]*?esc\(latestRhythmText\)[\s\S]*?esc\(rhythmCount\)[\s\S]*?data-faith-practice-tab="Prayer\|rhythms"/);
+  assert.match(faithHealth, /data-person-health-detail="prayer"[\s\S]*?esc\(latestPrayerText\)[\s\S]*?esc\(prayerCount\)[\s\S]*?data-faith-practice-tab="Prayer\|prayer"/);
+  assert.match(faithHealth, /class="bar-ov person-health-bar solid"/);
+  assert.match(faithSource, /if\(b\.closest\("\.faith-health-card"\)\)config\.selectedGroup=parts\[0\]/);
+  assert.match(styles, /\.faith-health-card \.person-health-summaries\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(actionsSource, /data-person-health-summary[\s\S]*?data-active-summary/);
+});
+
+test("Faith Today renders rhythm cards, focused prayer, and Sparks as separate sections", () => {
+  const today = faithSource.match(/function faithTodayHTML\(\)\{([\s\S]*?)\n\}/)[1];
+  assert.match(today, /return tendRhythmCardHTML\(r,/);
+  assert.match(today, /return tendSparkCardHTML\(s,/);
+  assert.match(today, /data-faith-sparkdone=.*>Do it<\/button>/);
+  assert.match(today, /class="profile-empty-state faith-today-empty">No Sparks waiting\./);
+  assert.match(today, /className:"faith-today-heading",trailingHTML:'<span class="qpill/);
+  assert.doesNotMatch(today, /faith-today-controls/);
+  assert.doesNotMatch(today, /faithActivePrayers\(\)\.filter\(prayerIsDue\)|tendPrayerCardContentHTML/);
+  assert.doesNotMatch(today, /planKindTogglesHTML|planKindVisibilityFor|items hidden by the type filters/);
+  assert.match(today, /tendFocusedPrayerSectionHTML\(\{className:"person-focused-prayer faith-today-prayer"/);
+  assert.ok(today.indexOf('title:"Today in Faith"') < today.indexOf('title:"Pray"'));
+  assert.ok(today.indexOf('title:"Pray"') < today.indexOf('title:"Sparks"'));
+  assert.match(today, /data-dashboard-prayer-start/);
+  assert.match(today, /faithDashboardPrayerPeopleDialogHTML\(\)/);
+  assert.match(faithSource, /out\+=faithSettingsHTML\(\)\+faithHealthHTML\(\)\+faithTodayHTML\(\)/);
+  assert.match(faithSource, /title:"Your practices",subtitle:"Choose an area to tend\."/);
+  assert.match(faithSource, /faithTodayHTML\(\);[\s\S]*title:"Your practices"[\s\S]*faithSectionNavHTML\(selected\)/);
+  assert.match(faithSource, /faith-nav-score '\+level/);
+  assert.match(faithSource, /class="faith-practice-panel" id="faith-practice-panel"/);
+  assert.doesNotMatch(faithSource, /class="card faith-practice-card" id="faith-practice-panel"/);
+  assert.doesNotMatch(faithSource, /faith-practice-focus-label/);
+  assert.match(faithSource, /'\+labels\[tab\]\+'<\/button>/);
+  assert.match(faithSource, /function faithSparksHTML\(group\)[\s\S]*?tendSparkCardHTML\(item/);
+  assert.match(faithSource, /faith-practice-spark-list/);
+  assert.match(faithSource, /data-faith-sparkdone=.*>Do it<\/button>/);
+  assert.match(faithSource, /function faithRhythmsHTML\(group\)[\s\S]*?data-faith-rhythm-add[\s\S]*?faith-practice-rhythm-list/);
+  assert.match(faithSource, /function faithSparksHTML\(group\)[\s\S]*?data-faith-spark-add[\s\S]*?faith-practice-spark-list/);
+  assert.match(styles, /\.faith-practice-tabs\{margin:0 0 18px;padding:0\}/);
+  assert.doesNotMatch(styles, /\.faith-practice-tabs\{[^}]*border-bottom/);
+  assert.match(styles, /\.faith-practice-rhythm-list\{display:grid;gap:14px/);
+  assert.match(styles, /\.faith-add-row\{display:flex;justify-content:flex-end/);
+  assert.match(styles, /\.faith-prayer-time-group\{display:grid;gap:10px/);
+  assert.match(styles, /\.faith-practice-heading\{[^}]*justify-items:start[^}]*text-align:left/);
+  assert.match(styles, /\.faith-practice-tabs\{display:grid;grid-template-columns:repeat\(auto-fit,minmax\(0,1fr\)\)/);
+  assert.match(styles, /\.faith-practice-panel\{min-width:0;padding:0;/);
+  assert.match(styles, /\.faith-section-nav\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(styles, /\.faith-nav-score\.green\{background:#12B76A/);
+  assert.match(homeRhythmSource, /function tendCaptureFaithScrollAnchor/);
+  assert.match(homeRhythmSource, /function tendRestoreFaithScrollAnchor/);
+  assert.match(homeRhythmSource, /tendFaithScrollBuffer\+=extra/);
+  assert.match(homeRhythmSource, /faithScrollAnchor&&currentArea==="faith"/);
 });
 
 test("shared Rhythm form validation covers title and enabled end-date requirements", () => {

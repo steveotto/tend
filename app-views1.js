@@ -114,8 +114,16 @@ function sizeProfileTabPanels(root){
  panels.forEach(function(panel){panel.style.minHeight="";panel.style.marginBottom="";});
 }
 var tendPendingProfileScrollAnchor=null;
+var tendPendingFaithScrollAnchor=null;
+var tendFaithScrollBuffer=0;
 function tendCaptureProfileScrollAnchor(target){
  var profile=target&&target.closest(".person-profile-page");if(!profile||(!target.closest(".profile-tab-panel")&&!target.closest(".profile-tabs-row")))return null;
+ var attributes=target.attributes||[],key=null;
+ for(var i=0;i<attributes.length;i++){if(/^data-[a-z0-9-]+$/i.test(attributes[i].name)){key=attributes[i].name;break;}}
+ return {key:key,value:key?target.getAttribute(key):null,top:target.getBoundingClientRect().top,position:{x:window.scrollX,y:window.scrollY}};
+}
+function tendCaptureFaithScrollAnchor(target){
+ var page=target&&target.closest(".faith-page");if(!page)return null;
  var attributes=target.attributes||[],key=null;
  for(var i=0;i<attributes.length;i++){if(/^data-[a-z0-9-]+$/i.test(attributes[i].name)){key=attributes[i].name;break;}}
  return {key:key,value:key?target.getAttribute(key):null,top:target.getBoundingClientRect().top,position:{x:window.scrollX,y:window.scrollY}};
@@ -127,9 +135,26 @@ function tendRestoreProfileScrollAnchor(anchor){
  if(target)window.scrollBy(0,target.getBoundingClientRect().top-anchor.top);
  else window.scrollTo(anchor.position.x,anchor.position.y);
 }
+function tendRestoreFaithScrollAnchor(anchor){
+ if(!anchor)return;
+ var target=null;
+ if(anchor.key){var candidates=document.querySelectorAll("["+anchor.key+"]");for(var i=0;i<candidates.length;i++){if(candidates[i].getAttribute(anchor.key)===anchor.value){target=candidates[i];break;}}}
+ if(!target){window.scrollTo(anchor.position.x,anchor.position.y);return;}
+ var desiredY=window.scrollY+target.getBoundingClientRect().top-anchor.top,page=document.querySelector(".faith-page");
+ if(page){
+  var maxY=Math.max(0,document.documentElement.scrollHeight-window.innerHeight),extra=Math.max(0,desiredY-maxY);
+  if(extra){tendFaithScrollBuffer+=extra;page.style.paddingBottom=tendFaithScrollBuffer+"px";}
+ }
+ window.scrollTo(anchor.position.x,desiredY);
+}
 document.addEventListener("click",function(event){
  var target=event.target&&event.target.closest&&event.target.closest("button,[role=tab]");
- if(target){var anchor=tendCaptureProfileScrollAnchor(target);if(anchor){tendPendingProfileScrollAnchor=anchor;requestAnimationFrame(function(){if(tendPendingProfileScrollAnchor===anchor)tendPendingProfileScrollAnchor=null;});}}
+ if(target){
+  var anchor=tendCaptureProfileScrollAnchor(target);
+  if(anchor){tendPendingProfileScrollAnchor=anchor;requestAnimationFrame(function(){if(tendPendingProfileScrollAnchor===anchor)tendPendingProfileScrollAnchor=null;});}
+  var faithAnchor=tendCaptureFaithScrollAnchor(target);
+  if(faithAnchor){tendPendingFaithScrollAnchor=faithAnchor;requestAnimationFrame(function(){if(tendPendingFaithScrollAnchor===faithAnchor)tendPendingFaithScrollAnchor=null;});}
+ }
 },true);
 window.addEventListener("resize",function(){if(tab==="people"&&currentPerson)sizeProfileTabPanels(el("view"));if(typeof layoutPlanPeopleBadges==="function")requestAnimationFrame(function(){layoutPlanPeopleBadges(el("view"));});});
 var tendRenderScrollSnapshot=null;
@@ -137,7 +162,7 @@ function tendRestorePageScroll(position){requestAnimationFrame(function(){window
 function tendShowModal(dialog){if(!dialog||dialog.open)return;var snapshot=tendRenderScrollSnapshot,position=snapshot?snapshot.position:{x:window.scrollX,y:window.scrollY};if(!snapshot||snapshot.preserve)dialog.addEventListener("close",function(){tendRestorePageScroll(position);},{once:true});dialog.showModal();if(!snapshot||snapshot.preserve)tendRestorePageScroll(position);}
 function tendRenderRouteKey(){var faith=S&&S.faithConfig,group=faith&&faith.selectedGroup;return JSON.stringify([tab,currentArea,currentPerson,currentPerson&&profileTabs[currentPerson],openDetail,group,faith&&faith.prayerView,faith&&faith.practiceTabs&&faith.practiceTabs[group],typeof faithPrayerSession!=="undefined"&&faithPrayerSession?"session":null,typeof settingsTab!=="undefined"?settingsTab:null]);}
 var tendLastRenderRouteKey=null;
-function render(){var existingPersonSettingsModal=el("personSettingsModal");if(existingPersonSettingsModal&&existingPersonSettingsModal.parentElement===document.body)existingPersonSettingsModal.remove();var routeKey=tendRenderRouteKey(),preserve=routeKey===tendLastRenderRouteKey,scrollPosition={x:window.scrollX,y:window.scrollY},scrollAnchor=tendPendingProfileScrollAnchor,previousSnapshot=tendRenderScrollSnapshot;tendPendingProfileScrollAnchor=null;tendRenderScrollSnapshot={position:scrollPosition,preserve:preserve};renderNav();var syncFooter=el("syncDot");if(syncFooter)syncFooter.hidden=!(tab==="today"&&!currentArea);var v=el("view");
+function render(){var existingPersonSettingsModal=el("personSettingsModal");if(existingPersonSettingsModal&&existingPersonSettingsModal.parentElement===document.body)existingPersonSettingsModal.remove();if(currentArea!=="faith")tendFaithScrollBuffer=0;var routeKey=tendRenderRouteKey(),preserve=routeKey===tendLastRenderRouteKey,scrollPosition={x:window.scrollX,y:window.scrollY},scrollAnchor=tendPendingProfileScrollAnchor,faithScrollAnchor=tendPendingFaithScrollAnchor,previousSnapshot=tendRenderScrollSnapshot;tendPendingProfileScrollAnchor=null;tendPendingFaithScrollAnchor=null;tendRenderScrollSnapshot={position:scrollPosition,preserve:preserve};renderNav();var syncFooter=el("syncDot");if(syncFooter)syncFooter.hidden=!(tab==="today"&&!currentArea);var v=el("view");
  if(navKind()==="area"&&currentArea)v.innerHTML=currentArea==="faith"&&typeof renderFaithPage==="function"?renderFaithPage():renderArea(currentArea);
  else if(tab==="today")v.innerHTML=renderToday();
  else if(tab==="people")v.innerHTML=renderPeople();
@@ -146,13 +171,14 @@ function render(){var existingPersonSettingsModal=el("personSettingsModal");if(e
  else if(tab==="echo")v.innerHTML=renderEcho();
  else if(tab==="offload")v.innerHTML=renderOffload();
  else if(tab==="settings")v.innerHTML=renderSettings();
+ if(currentArea==="faith"){var faithPage=v.querySelector(".faith-page");if(faithPage&&tendFaithScrollBuffer)faithPage.style.paddingBottom=tendFaithScrollBuffer+"px";}
  var personSettingsModal=tab==="people"&&currentPerson?v.querySelector("#personSettingsModal"):null;if(personSettingsModal){document.body.appendChild(personSettingsModal);var relationSelect=personSettingsModal.querySelector('select[data-pfield="relation"]');if(relationSelect&&typeof window.unifyRelSelect==="function")window.unifyRelSelect(relationSelect);}
  sizeProfileTabPanels(v);
  if(typeof layoutPlanPeopleBadges==="function")layoutPlanPeopleBadges(v);
  if(typeof bind==="function")bind();
  var activePanel=currentPerson&&v.querySelector('.profile-tab-panel:not([hidden])'),editorDialog=activePanel&&activePanel.querySelector('dialog[data-profile-editor],dialog[data-editor-modal]');if(!editorDialog)editorDialog=v.querySelector('dialog[data-editor-modal]');if(editorDialog){if(!editorDialog.open)tendShowModal(editorDialog);editorDialog.addEventListener("cancel",function(event){var cancel=editorDialog.querySelector("[data-editor-cancel]");if(cancel){event.preventDefault();cancel.click();}});}
  var rhythmPickerDialog=v.querySelector("dialog[data-rhythm-picker-dialog]");if(rhythmPickerDialog&&!rhythmPickerDialog.open){tendShowModal(rhythmPickerDialog);var rhythmPickerTitle=rhythmPickerDialog.querySelector("#rhythm-picker-title");if(rhythmPickerTitle)rhythmPickerTitle.focus({preventScroll:true});}
- if(tab==="today"&&!currentArea&&el("calStrip")&&typeof loadCalendars==="function")loadCalendars();if(tab==="today"&&!currentArea&&typeof loadNowWeather==="function")loadNowWeather();tendRenderScrollSnapshot=previousSnapshot;var renderedRouteKey=tendRenderRouteKey();tendLastRenderRouteKey=renderedRouteKey;if(preserve&&routeKey===renderedRouteKey){if(scrollAnchor)requestAnimationFrame(function(){requestAnimationFrame(function(){tendRestoreProfileScrollAnchor(scrollAnchor);});});else tendRestorePageScroll(scrollPosition);}}
+ if(tab==="today"&&!currentArea&&el("calStrip")&&typeof loadCalendars==="function")loadCalendars();if(tab==="today"&&!currentArea&&typeof loadNowWeather==="function")loadNowWeather();tendRenderScrollSnapshot=previousSnapshot;var renderedRouteKey=tendRenderRouteKey();tendLastRenderRouteKey=renderedRouteKey;if(faithScrollAnchor&&currentArea==="faith"){requestAnimationFrame(function(){requestAnimationFrame(function(){tendRestoreFaithScrollAnchor(faithScrollAnchor);});});}else if(preserve&&routeKey===renderedRouteKey){if(scrollAnchor)requestAnimationFrame(function(){requestAnimationFrame(function(){tendRestoreProfileScrollAnchor(scrollAnchor);});});else tendRestorePageScroll(scrollPosition);}}
 /* ============ overall meter ============ */
 function overallScore(){return avg(AREA_IDS.map(areaScore))||50;}
 function areaMenuHTML(){
@@ -867,7 +893,7 @@ function personProfile(pid){
  out+='</section>';
  out+=profilePanelStart("rhythms")+'<div class="profile-panel-toolbar profile-rhythm-toolbar"><p class="profile-tab-intro">Recurring practices that help you stay connected.</p><button type="button" class="btn mini ghost profile-rhythm-add" data-rhyadd="'+esc(pid)+'">'+profileActionIcon("log")+'<span>Add rhythm</span></button></div><div class="profile-rhythm-list">';
  var profileRhythms=sortedPersonRhythms(p);
- if(profileRhythms.length){profileRhythms.forEach(function(r){out+=rhythmRow(p,r);});}
+ if(profileRhythms.length){profileRhythms.forEach(function(r){out+=rhythmRow(p,r,{frequencyLabel:r.freq==="yearly"?"Yearly":""});});}
  else out+='<div class="profile-empty-state">No rhythms yet</div>';
  out+='</div>';
  var dO=rhythmDraft&&rhythmDraft.pid===pid;
