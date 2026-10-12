@@ -6,6 +6,7 @@
 /* ---------- styles ---------- */
 var css=document.createElement("style");css.textContent=[
 ".pc-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px}",
+".pc-toolbar>[data-addperson]{margin-left:auto}",
 ".pc-toggles{display:flex;gap:8px;flex-wrap:wrap}",
 ".pc-toggle{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 14px;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-faint);cursor:pointer;transition:all .15s}",
 ".pc-toggle .pc-dot{width:8px;height:8px;border-radius:50%;background:#C8CEC9;flex:none;transition:background .15s}",

@@ -95,12 +95,12 @@ function prayerItemHTML(p,profile){var faith=profile==="faith",person=S.people.f
 }
 window.prayerRow=function(p){return prayerItemHTML(p,false);};
 window.prayerList=function(items,profile){items=items||[];var active=items.filter(function(p){return !p.answered&&!p.archived;});
- var out=active.length?active.map(function(p){return prayerItemHTML(p,!!profile);}).join(''):'<div class="empty">No active prayer requests.</div>';
- if(profile&&active.length)out='<div class="profile-prayer-list">'+out+'</div>';
+ var out=active.length?active.map(function(p){return prayerItemHTML(p,!!profile);}).join(''):profile?'<div class="profile-empty-state">No active prayer requests</div>':'<div class="empty">No active prayer requests.</div>';
+ if(profile)out='<div class="profile-prayer-list">'+out+'</div>';
  var answered=items.filter(function(p){return p.answered;}),archived=items.filter(function(p){return p.archived;});
  if(profile){
   var personId=items.length?(items[0].profileViewingId||items[0].personId):"";
-  if(answered.length||archived.length)out+='<div class="prayer-history-section"><div class="subhead">History</div><div class="prayer-history-links">'+(answered.length?'<button type="button" class="recent-moments-toggle" data-prayer-past-view="'+esc(personId)+'|answered">Answered ('+answered.length+')</button>':'')+(archived.length?'<button type="button" class="recent-moments-toggle" data-prayer-past-view="'+esc(personId)+'|archived">Archived ('+archived.length+')</button>':'')+'</div></div>';
+  if(answered.length||archived.length)out+='<div class="prayer-history-section profile-prayer-history"><div class="prayer-history-links">'+(answered.length?'<button type="button" class="btn mini ghost profile-rhythm-add" data-prayer-past-view="'+esc(personId)+'|answered">Answered ('+answered.length+')</button>':'')+(archived.length?'<button type="button" class="btn mini ghost profile-rhythm-add" data-prayer-past-view="'+esc(personId)+'|archived">Archived ('+archived.length+')</button>':'')+'</div></div>';
  }else if(answered.length||archived.length)out+='<div class="prayer-history-section"><div class="subhead">History</div>'+(answered.length?'<details class="prayer-past"'+(answered.some(function(p){return p.id===editingPrayerId;})?' open':'')+'><summary>Answered ('+answered.length+')</summary>'+answered.map(function(p){return prayerItemHTML(p,!!profile);}).join('')+'</details>':'')+(archived.length?'<details class="prayer-past"'+(archived.some(function(p){return p.id===editingPrayerId;})?' open':'')+'><summary>Archived ('+archived.length+')</summary>'+archived.map(function(p){return prayerItemHTML(p,!!profile);}).join('')+'</details>':'')+'</div>';
  return out;
 };

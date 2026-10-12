@@ -53,7 +53,7 @@ function tendTodayWithPersonHTML(options){
  var waiting=Number(options.waitingCount)||0,title="Today with "+String(options.personName||"");
  var queueLabel=waiting?waiting+" in queue":"all tended \u2713";
  var header=tendSectionHeaderHTML({title:title,className:"today-with-person-heading",trailingHTML:'<span class="qpill'+(waiting?"":" clear")+'">'+queueLabel+'</span>'});
- var content=options.itemsHTML||'<div class="empty" style="margin-top:8px">'+esc(options.emptyMessage||"Nothing waiting - these next steps are all tended.")+'</div>';
+ var content=options.itemsHTML||'<div class="profile-empty-state">'+esc(options.emptyMessage||"Nothing waiting - these next steps are all tended.")+'</div>';
  return header+'<div class="today-with-person" style="margin-bottom:14px">'+content+'</div>';
 }
 function tendRecordCardContentHTML(kind,record,options){
