@@ -272,8 +272,9 @@ test("Person profile overview keeps health details accessible and scoped above T
   assert.match(homeRhythmSource, /person-profile-badges/);
   assert.match(homeRhythmSource, /aria-label="Birthday: '\+esc\(bd\.label\)\+'"/);
   assert.match(homeRhythmSource, /aria-label="Anniversary: '\+esc\(an2\.label\)\+'"/);
-  assert.match(homeRhythmSource, /<span aria-hidden="true">\\uD83C\\uDF82<\/span><span>'\+esc\(bd\.label\)/);
-  assert.match(homeRhythmSource, /<span aria-hidden="true">\\u2665<\/span><span>'\+esc\(an2\.label\)/);
+  assert.match(homeRhythmSource, /<span aria-hidden="true">\\uD83C\\uDF82<\/span><span>'\+esc\(personProfileShortDateLabel\(bd\.label\)\)/);
+  assert.match(homeRhythmSource, /<span aria-hidden="true">\\u2665<\/span><span>'\+esc\(personProfileShortDateLabel\(an2\.label\)\)/);
+  assert.match(homeRhythmSource, /function personProfileShortDateLabel\(label\)/);
   assert.match(styles, /\.person-profile-page \.person-profile-badges\{display:grid;grid-template-columns:repeat\(3,minmax\(0,max-content\)\)/);
   assert.match(homeRhythmSource, /personHealthMeter\(scoreAvailable\?scoreValue:null,p\.name,true\)/);
   assert.ok(homeRhythmSource.indexOf("out+=actQueueHTML(p)") > homeRhythmSource.indexOf("personHealthMeter(scoreAvailable?scoreValue:null,p.name,true)"));
@@ -287,6 +288,7 @@ test("Person profile overview keeps health details accessible and scoped above T
   assert.match(styles, /\.person-profile-page \.person-health-summary-score\.green\{color:#12B76A\}/);
   assert.match(styles, /\.person-profile-page \.person-health-summary-score\.yellow\{color:#F08C00\}/);
   assert.match(styles, /\.person-profile-page \.person-health-summary-score\.red\{color:#F04531\}/);
+  assert.match(styles, /html\[data-mobile-text-size-level="larger"\] \.person-profile-page #person-health-summary-connection \.person-health-summary-label\{font-size:13px;letter-spacing:-\.03em;white-space:nowrap\}/);
   assert.match(styles, /\.person-profile-page \.prayer-person\.person-badge-clickable\{[^}]*gap:\.5em;padding:\.33em \.83em \.33em \.33em;font-size:var\(--tend-type-person-badge\)!important/);
   assert.match(styles, /\.person-profile-page \.prayer-person\.person-badge-clickable \.avatar\{width:1\.6em!important;height:1\.6em!important/);
   assert.match(styles, /\.person-profile-page \.prayer-person\.person-badge-clickable,\s*\.person-free-moment \.prayer-person\.person-badge-clickable,\s*\.profile-tab-panel \.prayer-person\.person-badge-clickable\{[^}]*padding:\.33em \.83em \.33em \.33em;border:0;font-size:var\(--tend-type-person-badge\)!important;line-height:1\.2\}/);
@@ -330,12 +332,21 @@ test("Person Connections preview and both history views share ConnectionCard", (
   assert.equal((homeRhythmSource.match(/function connectionCardHTML\(/g) || []).length, 1);
   assert.match(homeRhythmSource, /var connections=connectionHistoryEvents\(pid\)/);
   assert.match(homeRhythmSource, /connections\.slice\(0,5\)\.map\(function\(event\)\{return connectionCardHTML\(event,pid\);\}\)/);
-  assert.match(homeRhythmSource, /data-connection-history-list="'\+esc\(pid\)\+'">View all history \('\+connections\.length/);
+  assert.match(homeRhythmSource, /class="profile-panel-toolbar connection-profile-toolbar"/);
+  assert.match(homeRhythmSource, /class="connection-history-chart-trigger" data-connection-history=/);
+  assert.match(homeRhythmSource, /aria-label="View connection chart"/);
+  assert.match(homeRhythmSource, /profileActionIcon\("chart"\)/);
+  assert.match(homeRhythmSource, /class="btn mini ghost profile-rhythm-add connection-profile-log" data-rippleopen="1"/);
+  assert.match(homeRhythmSource, /<span>Log connection<\/span>/);
+  assert.match(homeRhythmSource, /if\(connections\.length>5\)/);
+  assert.match(homeRhythmSource, /connection-history-view-all/);
+  assert.match(homeRhythmSource, /View all \('\+connections\.length\+'\)/);
   assert.match(connectionHistorySource, /visible\.map\(function\(event\)\{return connectionCardHTML\(event,personId\);\}\)/);
   assert.match(connectionHistorySource, /dayEvents\.map\(function\(event\)\{return connectionCardHTML\(event,personId\);\}\)/);
   assert.match(homeRhythmSource, /function connectionCardLastTended\(event\)[\s\S]*?var last=\{ts:Number\(event\.ts\)\}/);
   assert.doesNotMatch(homeRhythmSource.match(/function connectionCardHTML\([\s\S]*?\n\}/)[0], /tendRhythmMetaLabel/);
   assert.match(connectionHistorySource, /function openConnectionHistory\(personId,initialView\)/);
+  assert.match(actionsSource, /openConnectionHistory\(b\.getAttribute\("data-connection-history"\),"chart"\)/);
   assert.match(actionsSource, /openConnectionHistory\(b\.getAttribute\("data-connection-history-list"\),"list"\)/);
   assert.doesNotMatch(connectionHistorySource, /function openConnectionList\(/);
   assert.match(connectionHistorySource, /data-connection-history-view="list"/);
@@ -349,8 +360,8 @@ test("Person Connections preview and both history views share ConnectionCard", (
   assert.match(styles, /\.connection-card__heading>\.tend-type-title\{grid-column:1;grid-row:1;min-width:0;overflow-wrap:anywhere/);
   assert.match(styles, /\.connection-card__type\{grid-column:3;grid-row:1;display:flex;align-items:flex-start;justify-self:end/);
   assert.match(styles, /\.connection-history-view\{display:flex;flex:1 1 auto;flex-direction:column;gap:14px;min-height:0;overflow-y:auto/);
-  assert.match(styles, /\.connection-history-chart-view \.history-scroll\{flex:none;max-width:100%;overflow-x:auto;overflow-y:hidden/);
-  assert.match(styles, /\.connection-history-column\.is-selected/);
+  assert.match(styles, /\.connection-history-chart-view \.history-scroll\{flex:none;max-width:100%;overflow-x:auto;overflow-y:hidden;margin:0;padding:8px 8px 16px 0/);
+  assert.match(styles, /\.connection-history-chart-view \.connection-history-column\.is-selected\{background:var\(--mist\);box-shadow:0 0 0 2px var\(--forest\)\}/);
   assert.match(actionsSource, /function logEvent\([\s\S]*?refreshConnectionDialogs\(\);render\(\)/);
   assert.match(actionsSource, /function deleteEvent\([\s\S]*?refreshConnectionDialogs\(\)/);
   assert.match(connectionHistorySource, /No connections yet\. Log a shared moment to start your history\./);
@@ -365,7 +376,10 @@ test("Person Connections preview and both history views share ConnectionCard", (
   assert.match(connectionCard, /scheduleItem\("time"/);
   assert.match(connectionCard, /rhythm-card__meta-item rhythm-card__last/);
   assert.match(styles, /\.person-profile-page #profile-panel-connection\{padding:0;border:0;background:transparent;box-shadow:none\}/);
-  assert.match(styles, /\.person-profile-page #profile-panel-connection \.profile-panel-actions\{justify-content:flex-end\}/);
+  assert.match(styles, /\.person-profile-page #profile-panel-connection \.connection-profile-toolbar\{align-items:center;flex-direction:row;justify-content:space-between/);
+  assert.match(styles, /\.person-profile-page #profile-panel-connection \.connection-history-chart-trigger\{[^}]*width:44px;height:44px;min-width:44px;min-height:44px/);
+  assert.match(styles, /\.person-profile-page #profile-panel-connection \.connection-history-chart-trigger:focus-visible\{outline:2px solid var\(--forest\);outline-offset:2px\}/);
+  assert.match(styles, /\.person-profile-page #profile-panel-connection \.connection-history-view-all\{display:flex;width:max-content;margin:16px auto 4px\}/);
 });
 
 test("Connection history source keeps repeated events and scopes people using existing rules", () => {
@@ -374,7 +388,9 @@ test("Connection history source keeps repeated events and scopes people using ex
     { id: "repeat-a", personId: "amy", ts: new Date(2026, 9, 12, 8).getTime(), rhythmId: "walk", isConnection: true },
     { id: "other-person", personId: "hannah", ts: new Date(2026, 9, 12, 9).getTime(), isConnection: true },
     { id: "repeat-b", personId: "amy", ts: new Date(2026, 9, 12, 11).getTime(), rhythmId: "walk", isConnection: true },
-    { id: "shared", personId: "hannah", personIds: ["amy"], ts: new Date(2026, 9, 11, 11).getTime(), isConnection: true }
+    { id: "shared", personId: "hannah", personIds: ["amy"], ts: new Date(2026, 9, 11, 11).getTime(), isConnection: true },
+    { id: "middle", personId: "amy", ts: new Date(2026, 9, 11, 9).getTime(), isConnection: true },
+    { id: "latest", personId: "amy", ts: new Date(2026, 9, 12, 12).getTime(), isConnection: true }
   ];
   const context = {
     S: { events },
@@ -385,11 +401,12 @@ test("Connection history source keeps repeated events and scopes people using ex
   vm.createContext(context);
   vm.runInContext(connectionHistorySource, context);
   const recent = context.connectionHistoryEvents("amy");
-  assert.deepEqual(Array.from(recent, event => event.id), ["repeat-b", "repeat-a", "shared", "older"]);
+  assert.deepEqual(Array.from(recent, event => event.id), ["latest", "repeat-b", "repeat-a", "shared", "middle", "older"]);
+  assert.deepEqual(Array.from(recent.slice(0, 5), event => event.id), ["latest", "repeat-b", "repeat-a", "shared", "middle"]);
   const data = context.connectionHistoryData({ id: "amy", connectCadence: "weekly" }, new Date(2026, 9, 12, 12));
-  assert.equal(data.events.length, 4);
-  assert.equal(data.total, 4);
-  assert.equal(data.bins.reduce((sum, bin) => sum + bin.count, 0), 4);
+  assert.equal(data.events.length, 6);
+  assert.equal(data.total, 6);
+  assert.equal(data.bins.reduce((sum, bin) => sum + bin.count, 0), 6);
 });
 
 test("Prayer action dropdown options are unshaded until hovered", () => {

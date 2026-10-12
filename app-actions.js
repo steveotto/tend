@@ -186,7 +186,7 @@ function bind(){
   }
   if(b=t.closest('[data-settingstab]')){settingsTab=b.getAttribute('data-settingstab');document.querySelectorAll('[data-settingstab]').forEach(function(x){x.setAttribute('aria-selected',String(x.getAttribute('data-settingstab')===settingsTab));});document.querySelectorAll('.settings-panel').forEach(function(x){x.hidden=x.id!=='settings-panel-'+settingsTab;});return;}
   if(b=t.closest("[data-rhyhistory]")){openRhythmHistory(b.getAttribute("data-rhyhistory"));return;}
-  if(b=t.closest("[data-connection-history]")){openConnectionHistory(b.getAttribute("data-connection-history"));return;}
+  if(b=t.closest("[data-connection-history]")){openConnectionHistory(b.getAttribute("data-connection-history"),"chart");return;}
   if(b=t.closest("[data-connection-history-list]")){openConnectionHistory(b.getAttribute("data-connection-history-list"),"list");return;}
   if(b=t.closest("[data-prayer-past-view]")){openPersonPrayerPast(b.getAttribute("data-prayer-past-view"));return;}
   if(b=t.closest("[data-note-history]")){openPersonNoteHistory(b.getAttribute("data-note-history"));return;}
