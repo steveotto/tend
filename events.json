@@ -1,5 +1,5 @@
 {
-  "synced": "2026-10-13T01:15:34.234Z",
+  "synced": "2026-10-13T02:08:41.415Z",
   "source": "iCloud published feed",
   "events": [
     {
@@ -241,6 +241,14 @@
       "allDay": true,
       "cal": "Home",
       "notes": "[Tend]"
+    },
+    {
+      "t": "DnD",
+      "s": "2026-11-17T00:00:00",
+      "e": "2026-11-18T00:00:00",
+      "allDay": true,
+      "cal": "Home",
+      "notes": ""
     },
     {
       "t": "NO SCHOOL",
