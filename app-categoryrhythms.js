@@ -255,9 +255,9 @@
    currentPerson=null;openDetail=null;editingId=null;editingEvent=null;currentArea=area;tab="today";
    if(area==="faith"){
     var group=badge.getAttribute("data-rhythm-faith-subcategory")||"Prayer";
-     faithMainView="practices";faithMainViewInitialized=true;faithConfig().selectedGroup=group;faithConfig().practiceTabs=faithConfig().practiceTabs||{};faithConfig().practiceTabs[group]="rhythms";
+     faithMainView="practices";faithMainViewInitialized=true;faithShowAllRhythms=false;faithConfig().selectedGroup=group;faithConfig().practiceTabs=faithConfig().practiceTabs||{};faithConfig().practiceTabs[group]="rhythms";
    }
-   render();window.scrollTo(0,0);return;
+   render();if(area==="faith")requestAnimationFrame(function(){requestAnimationFrame(function(){faithScrollToHeading(document.getElementById("faithPracticeTitle"));});});else window.scrollTo(0,0);return;
   }
   var button=event.target&&event.target.closest&&event.target.closest("[data-area-rhythm-new],[data-area-rhythm-edit],[data-area-rhythm-save],[data-area-rhythm-cancel],[data-area-rhythm-delete]");
   if(button){

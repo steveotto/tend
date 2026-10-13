@@ -18,6 +18,7 @@ const prayerSource = fs.readFileSync(path.join(__dirname, "..", "app-prayers.js"
 const personRhythmSource = fs.readFileSync(path.join(__dirname, "..", "app-rhythms2.js"), "utf8");
 const personOverviewSource = fs.readFileSync(path.join(__dirname, "..", "app-rhythms3.js"), "utf8");
 const categoryRhythmSource = fs.readFileSync(path.join(__dirname, "..", "app-categoryrhythms.js"), "utf8");
+const weatherSource = fs.readFileSync(path.join(__dirname, "..", "app-weather.js"), "utf8");
 const styles = fs.readFileSync(path.join(__dirname, "..", "tend.css"), "utf8");
 
 test("People cards use one column until cards have room to fit side by side", () => {
@@ -53,6 +54,159 @@ test("Person health detail card is a full-area keyboard-accessible navigation ta
   assert.match(styles, /\.person-profile-page \.person-health-detail-link\{position:absolute;z-index:2;inset:0;width:100%;height:100%/);
   assert.match(indexSource, /app-actions\.js\?v=20261012-faith-standalone-prayer-requests/);
   assert.match(styles, /\.today-with-person\{display:grid;gap:12px/);
+});
+
+test("Unavailable weather leaves current and forecast weather spaces blank", () => {
+  const nowWeatherHTML = weatherSource.match(/function nowWeatherHTML\(\)\{[\s\S]*?\n\}/)[0];
+  const planWeatherHTML = weatherSource.match(/function planWeatherHTML\(time\)\{[\s\S]*?\n\}/)[0];
+  const context = {
+    nowWeather: { status: "error", report: null },
+    weatherCardHTML: () => "<span>weather</span>",
+    weatherForTime: () => null
+  };
+  vm.createContext(context);
+  assert.equal(vm.runInContext(`${nowWeatherHTML};nowWeatherHTML()`, context), "");
+  assert.equal(vm.runInContext(`${planWeatherHTML};planWeatherHTML("12:00")`, context), "");
+  assert.doesNotMatch(weatherSource, /Weather unavailable|weatherPromptHTML/);
+});
+
+test("Home time views separate Anytime rhythms from stored time blocks", () => {
+  const functionNames = [
+    "dayTimeMinutes", "validateDayBlocks", "dayBlocks", "dayBlockAt", "planBlockName",
+    "dashboardRhythmEligible", "prioritizePlanItems", "planCandidates",
+    "planAnytimeCandidates", "planItemKind", "planNowItems", "planItemStableKey",
+    "planUniqueItems", "planViewGroups", "planViewItemCount", "planViewCountLabel",
+    "blocksViewId", "planNormalizeFocusState", "planNormalizeItemType", "planHomeSelection", "planFocusMenuHTML"
+  ];
+  const extracted = functionNames.map(name => homeRhythmSource.match(new RegExp(`function ${name}\\([^\\n]*\\)\\{[^]*?\\n\\}`, "m"))[0]).join("\n");
+  const blocks = [
+    { id: "early", name: "Early morning", start: "05:30", range: "5:30am – 9:00am" },
+    { id: "morning", name: "Midday focus", start: "09:00", range: "9:00am – 11:30am" },
+    { id: "lunch", name: "Lunch", start: "11:30", range: "11:30am – 1:30pm" },
+    { id: "afternoon", name: "Afternoon", start: "13:30", range: "1:30pm – 4:30pm" },
+    { id: "commute", name: "Way home", start: "16:30", range: "4:30pm – 6:00pm" },
+    { id: "evening", name: "Evening", start: "18:00", range: "6:00pm – 9:30pm" },
+    { id: "bedtime", name: "Bedtime", start: "21:30", range: "9:30pm – 5:30am" }
+  ];
+  const person = {
+    id: "amy",
+    rhythms: [
+      { id: "early-rhythm", text: "Early", tod: "early", eligible: true },
+      { id: "morning-rhythm", text: "Morning", tod: "morning", eligible: true },
+      { id: "afternoon-rhythm", text: "Afternoon", tod: "afternoon", eligible: true },
+      { id: "anytime-rhythm", text: "Anytime", tod: "anytime", eligible: true },
+      { id: "legacy-anytime-rhythm", text: "Flexible", eligible: true },
+      { id: "completed-anytime-rhythm", text: "Completed", tod: "anytime", eligible: false },
+      { id: "all-day-rhythm", text: "All day", tod: "allday", eligible: true }
+    ],
+    sparks: [
+      { id: "early-spark", text: "Early spark", tod: "early", by: "2026-10-13" },
+      { id: "unassigned-spark", text: "Unassigned spark", tod: "anytime", by: "2026-10-13" },
+      { id: "all-day-spark", text: "All day spark", tod: "allday", by: "2026-10-13" }
+    ]
+  };
+  const context = {
+    DEFAULT_DAY_BLOCKS: blocks.map(({ id, name, start }) => ({ id, name, start })),
+    save() {},
+    S: {
+      tasks: [
+        { id: "morning-task", text: "Morning task", tod: "morning", areaId: "home" },
+        { id: "all-day-task", text: "All-day task", tod: "allday", areaId: "home" },
+        { id: "anytime-task", text: "Anytime task", tod: "anytime", areaId: "home" },
+        { id: "legacy-task", text: "Legacy task", areaId: "home" }
+      ],
+      people: [person],
+      areas: { home: { name: "Home" } }
+    },
+    esc: value => String(value),
+    dayBlocks: () => blocks,
+    taskItem: task => ({ taskId: task.id, label: task.text, sub: task.areaId }),
+    sortedPersonSparks: owner => owner.sparks,
+    sparkLive: () => true,
+    sparkBlock: spark => spark.tod && spark.tod !== "anytime" ? spark.tod : null,
+    sparkDueTxt: () => "due today",
+    fmtHM12: () => "",
+    rhythmDaysSince: rhythm => rhythm.eligible ? 7 : 0,
+    rhythmPeriod: () => 7,
+    scheduleDayMatches: () => true,
+    tendRhythmMetaLabel: () => "Weekly",
+    faithActiveRhythms: () => [
+      { id: "faith-lunch", text: "Faith lunch", tod: "lunch", eligible: true },
+      { id: "faith-anytime", text: "Faith anytime", tod: "anytime", eligible: true },
+      { id: "faith-all-day", text: "Faith all day", tod: "allday", eligible: true },
+      { id: "faith-ineligible", text: "Not eligible", tod: "lunch", eligible: false }
+    ],
+    rhythmScheduledToday: rhythm => rhythm.eligible,
+    planItemKind: item => item.rhythm || item.rkey || item.faithRhythm ? "rhythm" : item.spark || item.sparky ? "spark" : item.prayer ? "prayer" : ""
+  };
+  vm.createContext(context);
+  vm.runInContext(`var planFocusState="now",planItemTypeState="scheduled",planHomeSelectionInitialized=false;${extracted};`, context);
+  const nowGroups = vm.runInContext('planViewGroups("now", "morning", dayBlocks())', context);
+  assert.equal(nowGroups.length, 1);
+  assert.equal(nowGroups[0].items.length, 4);
+  assert.equal(vm.runInContext('planViewCountLabel("now", planViewGroups("now", "morning", dayBlocks()))', context), "4 items");
+  assert.equal(vm.runInContext('planViewCountLabel("now", [{id:"scheduled",items:[{}]}])', context), "1 item");
+  assert.equal(vm.runInContext('planViewCountLabel("now", [{id:"scheduled",items:[]}])', context), "No items");
+
+  const afternoonGroups = vm.runInContext('planViewGroups("afternoon", "morning", dayBlocks())', context);
+  assert.deepEqual(Array.from(afternoonGroups[0].items, item => item.label), ["Afternoon"]);
+
+  const todayGroups = vm.runInContext('planViewGroups("everything-today", "morning", dayBlocks())', context);
+  assert.deepEqual(Array.from(todayGroups, group => group.id), ["early", "morning", "lunch", "afternoon"]);
+  const todayItems = todayGroups.flatMap(group => Array.from(group.items, item => item));
+  const keys = todayItems.map(item => vm.runInContext(`planItemStableKey(${JSON.stringify(item)})`, context));
+  assert.equal(new Set(keys).size, keys.length);
+  assert.equal(todayGroups.reduce((total, group) => total + group.items.length, 0), todayItems.length);
+  assert.deepEqual(
+    todayItems.map(item => item.label).filter(label => ["Anytime", "Faith anytime", "All day", "All-day task"].includes(label)),
+    []
+  );
+
+  const anytimeGroups = vm.runInContext('planViewGroups("now", "morning", dayBlocks(), "anytime")', context);
+  assert.deepEqual(Array.from(anytimeGroups[0].items, item => item.label), ["Anytime", "Faith anytime"]);
+  const allDayGroups = vm.runInContext('planViewGroups("now", "morning", dayBlocks(), "all-day")', context);
+  assert.deepEqual(Array.from(allDayGroups[0].items, item => item.label).sort(), ["All-day task", "All day", "All day spark", "Faith all day"].sort());
+  const timeframeMenu = vm.runInContext('planFocusMenuHTML(dayBlocks(), "morning", "now")', context);
+  assert.deepEqual(Array.from(timeframeMenu.matchAll(/data-plan-focus="([^"]+)"/g), match => match[1]), [
+    "now", "everything-today", "early", "morning", "lunch", "afternoon", "commute", "evening", "bedtime"
+  ]);
+  assert.match(timeframeMenu, /4 items/);
+  const todayCount = vm.runInContext('planViewCountLabel("everything-today", planViewGroups("everything-today", "morning", dayBlocks()))', context);
+  assert.ok(timeframeMenu.includes(`Everything today</span><span class="current-plan-time-option-range">Across every time block</span><span class="current-plan-time-option-count">${todayCount}</span>`));
+  assert.equal(vm.runInContext('planHomeSelectionInitialized=false;S.homePlanSelection={view:"anytime"};planHomeSelection(dayBlocks()).itemType', context), "anytime");
+  assert.equal(vm.runInContext('planHomeSelectionInitialized=false;S.homePlanSelection={view:"anytime"};planHomeSelection(dayBlocks()).timeframe', context), "now");
+  assert.equal(vm.runInContext('planHomeSelectionInitialized=false;S.homePlanSelection={view:"allday"};planHomeSelection(dayBlocks()).itemType', context), "all-day");
+  assert.equal(vm.runInContext('planHomeSelectionInitialized=false;S.homePlanSelection={view:"all-day-items"};planHomeSelection(dayBlocks()).itemType', context), "all-day");
+  assert.equal(vm.runInContext('planHomeSelectionInitialized=false;S.homePlanSelection={view:"everything-today"};planHomeSelection(dayBlocks()).itemType', context), "scheduled");
+  assert.equal(vm.runInContext('planHomeSelectionInitialized=false;S.homePlanSelection={timeframe:"evening",itemType:"scheduled"};planHomeSelection(dayBlocks()).timeframe', context), "evening");
+  assert.equal(vm.runInContext('planNormalizeFocusState("allday", dayBlocks())', context), "all-day-items");
+  assert.equal(vm.runInContext('planNormalizeFocusState("everything-today", dayBlocks())', context), "everything-today");
+  assert.equal(vm.runInContext('planNormalizeFocusState("morning", dayBlocks())', context), "morning");
+  assert.equal(vm.runInContext('dayBlockAt(new Date(2026, 9, 13, 5, 29))', context), "bedtime");
+  assert.equal(vm.runInContext('dayBlockAt(new Date(2026, 9, 13, 5, 30))', context), "early");
+  assert.equal(vm.runInContext('dayBlockAt(new Date(2026, 9, 13, 9, 0))', context), "morning");
+  assert.equal(vm.runInContext('dayBlockAt(new Date(2026, 9, 13, 23, 59))', context), "bedtime");
+  assert.match(homeRhythmSource, /option\("everything-today","Everything today","Across every time block"\)/);
+  assert.doesNotMatch(homeRhythmSource.match(/function planFocusMenuHTML[\s\S]*?\n\}/)[0], /Anytime|All-day items|Flexible \/ All-day/);
+  assert.match(homeRhythmSource, /\[\["scheduled","Scheduled"\],\["anytime","Anytime"\],\["all-day","All-day"\]\]/);
+  assert.match(homeRhythmSource, /function planSaveHomeSelection\(\)\{S\.homePlanSelection=\{timeframe:planFocusState,itemType:planItemTypeState\};save\(\);\}/);
+  assert.match(homeRhythmSource, /function planHomeSelection\(blocks\)[\s\S]*legacyView==="anytime"[\s\S]*legacyView==="allday"\|\|legacyView==="all-day-items"/);
+  assert.match(homeRhythmSource, /home-plan-context/);
+  assert.match(homeRhythmSource, /heading=itemType==="scheduled"\?timeframe:'<h2 class="home-plan-view-heading">'\+esc\(title\)/);
+  assert.match(homeRhythmSource, /role="group" aria-label="View"/);
+  assert.match(homeRhythmSource, /role="group" aria-label="Specific time"/);
+  assert.doesNotMatch(homeRhythmSource, /role="group" aria-label="Flexible \/ All-day"/);
+  assert.match(homeRhythmSource, /planFocusState=planNormalizeFocusState\(planFocusState,blocks\)/);
+  assert.match(actionsSource, /planFocusState=planNormalizeFocusState\(selected,blocks\);planSaveHomeSelection\(\)/);
+  assert.match(actionsSource, /planItemTypeState=itemType;planSaveHomeSelection\(\)/);
+  assert.match(actionsSource, /ArrowRight[\s\S]*ArrowLeft[\s\S]*tabs\[next\]\.click\(\)/);
+  assert.match(styles, /\.home-dashboard \.current-plan-time-group\+\.current-plan-time-group\{[^}]*border-top:1px solid var\(--line\)/);
+  assert.match(styles, /\.home-dashboard \.current-plan-time-option-range,.home-dashboard \.current-plan-time-option-count\{[^}]*white-space:normal;overflow-wrap:anywhere/);
+  assert.match(styles, /\.home-dashboard \.current-plan-item-group-items\{display:grid;gap:14px/);
+  assert.match(styles, /\.home-dashboard \.home-plan-type-tabs\{[^}]*margin:0 0 6px/);
+  assert.match(styles, /\.home-dashboard \.home-plan-context\{[^}]*margin:0 0 14px/);
+  assert.doesNotMatch(styles, /@media\(max-width:360px\)\{\.home-dashboard \.current-plan-time-option[\s\S]*?font-size:10px/);
+  assert.match(source, /data-prayer-time-option/);
 });
 
 function escapeHTML(value) {
@@ -342,10 +496,12 @@ test("Faith Notes are consolidated, scoped, deduplicated, and reuse shared note 
   assert.match(faithSource, /visible=showAll\?active:active\.slice\(0,3\)/);
   assert.match(faithSource, /View all notes \("\+active\.length\+"\)/);
   assert.match(faithSource, /data-note-history="faith"/);
-  assert.match(faithSource, /faithViewPanelHTML\("requests",faithPrayerRequestsHTML\(\)\)[\s\S]*faithViewPanelHTML\("notes",faithViewHeaderHTML\("Notes","Thoughts, encouragement, and follow-ups to remember\."/);
+  assert.match(faithSource, /faith-settings-notes[\s\S]*faithNotesHTML\(\)/);
+  assert.doesNotMatch(faithSource, /faithViewPanelHTML\("notes"/);
   assert.match(faithSource, /tendNoteCardHTML\(note,context/);
   assert.match(faithSource, /tendNoteEditorHTML\(note,"faith"\)/);
   assert.match(faithSource, /tendNoteAddEditorHTML\("faith"/);
+  assert.match(homeRhythmSource.match(/function tendNoteAddEditorHTML\(ownerId,draft\)\{([\s\S]*?)\n\}/)[1], /data-profile-editor="note"'\+\(isFaith\?' data-editor-modal':''\)/);
   assert.match(styles, /\.faith-notes-toolbar \.profile-rhythm-add\{display:inline-flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;white-space:nowrap\}/);
   assert.match(styles, /\.faith-notes-toolbar \.profile-rhythm-add \.profile-action-icon\{flex:none\}/);
   assert.match(homeRhythmSource, /return tendNoteCardHTML\(f,p,/);
@@ -358,80 +514,72 @@ test("Faith Notes are consolidated, scoped, deduplicated, and reuse shared note 
   assert.match(styles, /\.faith-notes-expand\{display:flex;width:max-content;max-width:100%;margin:16px auto 4px\}/);
 });
 
-test("Faith Prayer requests are standalone and session counts share the visible filters", () => {
+test("Faith Prayer requests use shared selection for cards, counts, and sessions", () => {
   const practiceContent = faithSource.match(/function faithPracticeContent\(group\)\{([\s\S]*?)\n\}/)[1];
   const requestSection = faithSource.match(/function faithPrayerRequestsHTML\(\)\{([\s\S]*?)\n\}/)[1];
   const focusedPrayerModule = faithSource.match(/function faithFocusedPrayerButtonHTML\(view\)\{([\s\S]*?)\n\}/)[1];
-  const viewRecords = faithSource.match(/function faithPrayerViewRecords\(view\)\{([\s\S]*?)\n\}/)[0];
   const sessionSort = faithSource.match(/function faithPrayerSessionSort\(view\)\{([\s\S]*?)\n\}/)[0];
   const settingsHTML = faithSource.match(/function faithSettingsHTML\(\)\{([\s\S]*?)\n\}/)[1];
-  const context = {
-    active: [
-      { id: "p1", score: 80, tod: "morning", include: true, logs: [] },
-      { id: "p2", score: 90, tod: "noon", include: false, logs: [] },
-      { id: "p3", score: 70, tod: "evening", include: true, logs: [] },
-      { id: "p4", score: 60, tod: "morning", include: true, logs: [] }
-    ],
-    faithPrayerTimeGroups: () => [context.active[3], context.active[2], context.active[0]],
-    faithActivePrayers: () => context.active,
-    faithPrayerAllMatches: prayer => prayer.include,
-    prayerScore: prayer => prayer.score,
-    faithPrayerScoreOrder: (a, b) => a.score - b.score,
-    faithTimeRank: time => ({ morning: 0, noon: 1, evening: 2 })[time] || 0,
-    prayerLogsFor: prayer => prayer.logs,
-    String,
-    Number
-  };
-  vm.createContext(context);
-  const allViewIds = Array.from(vm.runInContext(`${viewRecords}; ${sessionSort}; faithPrayerSessionSort("all")`, context));
-  const todayViewIds = Array.from(vm.runInContext(`faithPrayerSessionSort("today")`, context));
-  assert.deepEqual(allViewIds, ["p4", "p3", "p1"]);
-  assert.deepEqual(todayViewIds, ["p4", "p3", "p1"]);
-  context.active[0].include = false;
-  assert.deepEqual(Array.from(vm.runInContext(`faithPrayerSessionSort("all")`, context)), ["p4", "p3"]);
 
   assert.match(practiceContent, /var tabs=\["rhythms","sparks"\]/);
   assert.doesNotMatch(practiceContent, /faithPrayerHub|faithPrayerTodayHTML|faithPrayerAllHTML/);
+  assert.match(requestSection, /faithViewHeaderHTML\("Prayer","","","faithPrayerTitle"/);
   assert.match(requestSection, /faithViewHeaderHTML\("Prayer requests","People and needs to bring before God\."/);
-  assert.match(requestSection, /faithPrayerRequestHealthHTML\(\)/);
-  assert.match(requestSection, /faithPrayerPeopleFilterHTML\(\)/);
-  assert.match(requestSection, /faithFocusedPrayerButtonHTML\(view\)/);
-  assert.match(faithSource, /function faithPrayerRequestContentHTML\(view,items\)\{[\s\S]*faithPrayerTodayHTML\(visible,true\)[\s\S]*faithPrayerAllHTML\(visible,expandControl,true\)/);
+  assert.match(requestSection, /faithFocusedPrayerButtonHTML\(\)/);
+  assert.match(requestSection, /faithPrayerRequestContentHTML\(items\)[\s\S]*faithPrayerHistoryHTML\(true\)/);
+  assert.match(faithSource, /function faithPrayerRequestContentHTML\(items\)\{[\s\S]*faithPrayerSelectionMode\("faith-requests"\)==="allrequests"[\s\S]*faithPrayerTodayHTML\(visible,true\)/);
   assert.match(faithSource, /function faithPrayerRows\(items,hidePrayerBadge\)\{[\s\S]*prayerItemHTML\(p,"faith",\{hidePrayerBadge:hidePrayerBadge\}\)/);
   assert.match(faithSource, /faithPrayerRows\(closed,hidePrayerBadge\)/);
-  assert.match(requestSection, /<div class="faith-prayer-filters">[\s\S]*Timeframe:[\s\S]*faithPrayerPeopleFilterHTML\(\)[\s\S]*faith-prayer-matching-count[\s\S]*faith-prayer-actions[\s\S]*faithFocusedPrayerButtonHTML\(view\)[\s\S]*data-faith-prayer-add[\s\S]*faith-prayer-content/);
-  assert.match(requestSection, /var matchingLabel=items\.length\+" matching "\+\(items\.length===1\?"request":"requests"\)/);
+  assert.match(requestSection, /faithViewHeaderHTML\("Prayer","","","faithPrayerTitle"[\s\S]*faithFocusedPrayerButtonHTML\(\)[\s\S]*faithViewHeaderHTML\("Prayer requests","People and needs to bring before God\."/);
+  assert.match(requestSection, /faithPrayerTitle[\s\S]*faith-prayer-entry-section[\s\S]*faithFocusedPrayerButtonHTML\(\)[\s\S]*faith-prayer-list-section[\s\S]*faithPrayerRequestsTitle[\s\S]*faith-prayer-hub[\s\S]*addToolbar[\s\S]*faith-prayer-content[\s\S]*faithPrayerHistoryHTML\(true\)/);
+  assert.equal((requestSection.match(/faithViewHeaderHTML\("Prayer"/g) || []).length, 1);
+  assert.equal((requestSection.match(/faithViewHeaderHTML\("Prayer requests"/g) || []).length, 1);
+  assert.doesNotMatch(requestSection, /faithPrayerRequestHealthHTML/);
+  assert.match(faithSource, /function faithPrayerRequestHealthHTML\(\)/);
+  assert.doesNotMatch(requestSection, /faith-prayer-filters|Timeframe:|faithPrayerPeopleFilterHTML|faith-prayer-matching-count|faith-prayer-actions/);
+  assert.doesNotMatch(faithSource, /faithPrayerPeopleFilterHTML|faithPrayerFilterRender|data-faith-prayer-filter-action|data-faith-prayer-view/);
   assert.match(requestSection, /data-faith-prayer-add/);
-  assert.match(faithSource, /function faithFocusedPrayerButtonHTML\(view\)[\s\S]*class="btn mini faith-start-prayer faith-request-focused-button"[\s\S]*data-faith-session-start/);
-  assert.doesNotMatch(focusedPrayerModule, /tendFocusedPrayerSectionHTML/);
-  assert.match(focusedPrayerModule, /data-faith-session-start/);
-  assert.match(focusedPrayerModule, /collectionIcon\("prayer"\)/);
-  assert.match(focusedPrayerModule, /faith-prayer-session-count/);
-  assert.match(faithSource, /<span>People:<\/span><span class="faith-prayer-filter-count">'\+selectedCount\+' selected<\/span>/);
+  assert.match(focusedPrayerModule, /window\.faithPrayerEntryHTML\("faith-requests"\)/);
+  assert.doesNotMatch(faithSource, /data-faith-session-start|faithDashboardPrayerPeopleDialogHTML/);
+  assert.match(faithSource, /function faithPrayerSelectionIds\(context,mode,selectedPeople,groups\)/);
+  assert.match(faithSource, /function faithPrayerSessionBegin\(context,draft\)[\s\S]*if\(!ids\.length\)return false/);
+  assert.match(faithSource, /snapshot:snapshot,index:0/);
+  assert.match(faithSource, /faithPrayerSessionSort\(view\)[\s\S]*faithPrayerViewRecords\(view\)/);
+  assert.match(faithSource, /function faithPrayerViewRecords\(\)\{[\s\S]*faithPrayerSelectionMode\("faith-requests"\)[\s\S]*faithPrayerSelectionIds\("faith-requests",mode,selection\.selected,selection\.groups\)/);
+  assert.match(faithSource, /return view==="today"\?"today":"all"/);
+  assert.match(faithSource, /if\(context==="faith-requests"\)return faithRequestPrayerTimeMode\|\|\(faithSelectedPrayerView\(\)==="today"\?"allday":"allrequests"\)/);
+  assert.match(faithSource, /timeframe:context==="faith-requests"&&mode==="allrequests"\?"All":faithPrayerSelectionLabel\(mode\)/);
+  assert.match(faithSource, /dashboardPrayerTimeMode="now"/);
   assert.match(faithSource, /Prayer health '\+\(score===null\?"unavailable":score\+" percent"\)\+'\, '\+count\+' active prayer/);
   assert.match(faithSource, /var visible=faithPrayerExpanded\?items:items\.slice\(0,3\)/);
   assert.match(faithSource, /View all prayers \("\+items\.length\+"\)/);
-  assert.match(focusedPrayerModule, /count\?"":" disabled"/);
-  assert.match(faithSource, /if\(!sessionIds\.length\)\{event\.stopImmediatePropagation\(\);return;\}/);
-  assert.match(faithSource, /faithViewPanelHTML\("requests",faithPrayerRequestsHTML\(\)\)[\s\S]*faithViewPanelHTML\("notes",faithViewHeaderHTML\("Notes","Thoughts, encouragement, and follow-ups to remember\."/);
-  assert.match(faithSource, /function faithPrayerAllMatches\(p\)\{[\s\S]*?if\(selectedPeople===null\)return true/);
+  assert.match(faithSource, /faithPrayerSession\.prayedIds\.indexOf\(prayer\.id\)<0/);
+  assert.match(faithSource, /Only Prayed records a prayer\./);
+  assert.match(faithSource, /Request '\+\(faithPrayerSession\.index\+1\)\+' of '\+ids\.length/);
+  assert.match(faithSource, /faithViewPanelHTML\("prayer",faithPrayerRequestsHTML\(\)\)[\s\S]*faithViewPanelHTML\("practices",faithPracticeOverviewHTML\(selected\)\+\(faithShowAllRhythms\?faithAllRhythmsHTML\(\):faithPracticeContent\(selected\)\)\)/);
+  assert.match(faithSource, /function faithPrayerAllMatches\(p\)\{[\s\S]*?faithPrayerPeopleMatch\(p,selectedPeople,groups\)/);
   assert.doesNotMatch(faithSource.match(/function faithPrayerAllMatches\(p\)\{([\s\S]*?)\n\}/)[1], /faithSelectedGroup/);
   assert.match(faithSource, /function faithPracticeHealthParts\(\)\{[\s\S]*?avg\(faithActivePrayers\(\)\.map\(function\(p\)\{return prayerScore\(p\);\}\)\)/);
-  assert.match(faithSource, /var FAITH_MAIN_VIEWS=\["today","practices","requests","notes"\]/);
-  assert.match(faithSource, /faithMainView="practices",faithMainViewInitialized=false/);
-  assert.match(faithSource, /legacyTab==="prayer"\?"requests":legacyTab==="notes"\?"notes":"practices"/);
+  assert.match(faithSource, /var FAITH_MAIN_VIEWS=\["today","prayer","practices"\]/);
+  assert.match(faithSource, /faithMainView="today",faithMainViewInitialized=false/);
+  assert.match(faithSource, /legacyTab==="prayer"\|\|legacyTab==="requests"\?"prayer":legacyTab==="practices"\?"practices":"today"/);
   assert.match(faithSource, /faithSetMainView\(FAITH_MAIN_VIEWS\[nextViewIndex\],true\)/);
   assert.match(faithSource, /function faithViewPanelHTML\(view,content\)[\s\S]*?data-faith-view-panel/);
-  assert.match(faithSource, /var practices=[\s\S]*faithSectionNavHTML\(selected\)/);
+  assert.match(faithSource, /function faithPracticeOverviewHTML\(selected\)[\s\S]*faithSectionNavHTML\(selected\)/);
+  assert.match(faithSource, /faithPracticeOverviewHTML\(selected\)/);
   assert.match(faithSource, /faithViewPanelHTML\("today",faithTodayHTML\(\)\)/);
-  assert.match(faithSource, /faithMainView="requests";faithConfig\(\)\.prayerView="today"/);
+  assert.match(faithSource, /faithSetMainView\("prayer",false\)/);
   assert.match(settingsHTML, /FAITH_GROUPS\.map/);
   assert.doesNotMatch(settingsHTML, /Prayer requests/);
   assert.match(styles, /\.faith-prayer-expand\{display:flex;align-items:center;justify-content:center;width:max-content/);
   assert.match(styles, /\.faith-prayer-hub\{height:auto;min-height:0;padding:0\}/);
   assert.match(styles, /\.faith-prayer-content,.faith-prayer-row,.faith-prayer-hub \.faith-profile-prayer-row\{box-sizing:border-box;width:100%;min-width:0\}/);
-  assert.match(styles, /\.faith-prayer-filters\{display:flex;align-items:center;gap:8px;flex-wrap:wrap\}/);
-  assert.match(styles, /\.faith-prayer-actions\{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap/);
+  assert.match(styles, /\.faith-prayer-requests\{display:grid;grid-template-columns:minmax\(0,1fr\);gap:2rem;min-width:0/);
+  assert.match(styles, /\.faith-prayer-entry-section,.faith-prayer-list-section\{display:grid;gap:\.875rem;min-width:0\}/);
+  assert.match(styles, /\.faith-prayer-list-section\{gap:\.75rem\}/);
+  assert.match(styles, /\.faith-prayer-hub\{display:grid;gap:\.75rem;min-width:0\}/);
+  assert.match(styles, /\.faith-prayer-add-toolbar\{display:flex;justify-content:flex-end/);
+  assert.match(styles, /\.faith-view-nav\{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   assert.match(styles, /\.faith-prayer-request-health-meter\{display:block;height:6px/);
   assert.doesNotMatch(requestSection, /faith-request-focused-prayer|tendFocusedPrayerSectionHTML/);
 });
@@ -662,11 +810,17 @@ test("Prayer action dropdown options are unshaded until hovered", () => {
   assert.doesNotMatch(styles, /\.prayer-action-options button\{border:1px solid/);
 });
 
-test("Prayer filter buttons show only the icon with an accessible name", () => {
-  const filterButton = faithSource.match(/function tendFilterButtonHTML\(options\)\{[\s\S]*?\n\}/)[0];
-  assert.match(filterButton, /aria-label=\"'\+esc\(options\.ariaLabel\|\|label\)\+'\"><svg/);
-  assert.match(filterButton, /<\/svg><\/button>/);
-  assert.doesNotMatch(filterButton, /<span>'\+esc\(label\)<\/span>/);
+test("Shared Focused Prayer entry labels selection and starts only eligible queues", () => {
+  const components = loadComponents();
+  const entry = components.tendPrayerEntryHTML({ id: "dashboard", count: 4, peopleCount: 2, timeframe: "Now" });
+  const emptyEntry = components.tendPrayerEntryHTML({ id: "person:amy", count: 0, peopleCount: 1, timeframe: "Morning" });
+  assert.match(entry, /4 requests · Now/);
+  assert.match(entry, /2 people selected/);
+  assert.match(entry, />Customize<\/button>/);
+  assert.match(entry, /data-prayer-session-start="dashboard"/);
+  assert.doesNotMatch(entry, /aria-label="[^"]*filter[^"]*"[^>]*><svg/);
+  assert.match(emptyEntry, /No active requests match this selection/);
+  assert.match(emptyEntry, /data-prayer-session-start="person:amy"[^>]*disabled/);
 });
 
 test("shared section and card components escape text and preserve semantic layouts", () => {
@@ -741,7 +895,7 @@ test("shared section and card components escape text and preserve semantic layou
   assert.match(carePlan, /Alex/);
 });
 
-test("Homepage and Person prayer timeframe dropdowns use the same shared renderer", () => {
+test("Prayer selection uses one shared timeframe option renderer with resolved summaries", () => {
   const components = loadComponents();
   const options = [
     { id: "now", label: "Morning", timeDescription: "9:00am – 11:30am", count: 2, isCurrent: true },
@@ -751,105 +905,213 @@ test("Homepage and Person prayer timeframe dropdowns use the same shared rendere
   const dashboardState = components.tendPrayerTimeframePickerState("now", options, 2);
   const personState = components.tendPrayerTimeframePickerState("now", options.map(option => ({ ...option, count: option.id === "now" ? 1 : 7 })), 5);
   const dashboard = components.tendPrayerTimeframePickerHTML({
-    label: dashboardState.label,
+    mode: "options",
     options: dashboardState.options,
     selectedTimeframeId: dashboardState.selectedTimeframeId,
     allDayCount: dashboardState.allDayCount
   });
   const person = components.tendPrayerTimeframePickerHTML({
-    personId: "person-1",
-    label: personState.label,
+    mode: "options",
     options: personState.options,
     selectedTimeframeId: personState.selectedTimeframeId,
     allDayCount: personState.allDayCount
   });
+  const summary = components.tendPrayerTimeframePickerHTML({
+    label: "Now",
+    resolvedLabel: "Evening · 4:30pm – 9:30pm"
+  });
 
   assert.match(dashboard, /data-prayer-time-option="now"/);
-  assert.match(person, /data-prayer-time-option="now" data-prayer-time-person="person-1"/);
   assert.match(dashboard, /class="prayer-timeframe-picker__option is-current is-selected"/);
   assert.match(person, /class="prayer-timeframe-picker__option is-current is-selected"/);
   assert.match(dashboard, /&lt;Lunch&gt;/);
-  assert.match(person, /Any time today/);
-  const layoutOnly = html => html
-    .replace(/ data-prayer-time-option="[^"]+"(?: data-prayer-time-person="[^"]+")?/g, "")
-    .replace(/<span class="prayer-timeframe-picker__count">.*?<\/span>/g, '<span class="prayer-timeframe-picker__count">COUNT</span>');
-  assert.equal(layoutOnly(dashboard), layoutOnly(person));
+  assert.match(dashboard, /class="prayer-timeframe-picker__option" data-prayer-time-option="allday"/);
+  assert.match(summary, /Change timeframe, currently Now\. Evening · 4:30pm – 9:30pm/);
+  assert.match(summary, /data-prayer-selection-time-open/);
   assert.equal(dashboardState.selectedCount, 2);
   assert.equal(personState.selectedCount, 1);
   assert.equal(dashboardState.label, "Now");
   assert.equal(personState.label, "Now");
-  assert.match(dashboard, /class="prayer-timeframe-picker__option" data-prayer-time-option="allday"/);
+  assert.match(dashboard, /2 requests<\/span>/);
   const eveningState = components.tendPrayerTimeframePickerState("evening", options, 2);
   assert.equal(eveningState.label, "Evening");
   assert.equal(eveningState.selectedCount, 9);
   const allDayState = components.tendPrayerTimeframePickerState("allday", options, 4);
   assert.equal(allDayState.label, "All Day");
   assert.equal(allDayState.selectedCount, 4);
-  assert.equal((faithSource.match(/tendPrayerTimeframePickerHTML\(/g) || []).length, 2);
-  assert.equal((faithSource.match(/if\(b\.matches\("\[data-prayer-time-option\]"\)\)/g) || []).length, 1);
-  assert.doesNotMatch(faithSource, /data-(?:person-)?dashboard-prayer-time-option/);
-  assert.doesNotMatch(faithSource, /current-plan-time-option|prayer-timeframe-picker__(?:option|label|description|count)/);
-  assert.doesNotMatch(styles, /\.dashboard-prayer-people-dialog\s+\.current-plan-time|\.person-dashboard-prayer-dialog\s+\.current-plan-time/);
+  const allRequestsState = components.tendPrayerTimeframePickerState("allrequests", options, 4, 8);
+  assert.equal(allRequestsState.label, "All requests");
+  assert.equal(allRequestsState.selectedCount, 8);
+  assert.equal((source.match(/function tendPrayerTimeframePickerHTML\(/g) || []).length, 1);
+  assert.match(faithSource, /tendPrayerTimeframePickerHTML\(\{label:faithPrayerSelectionLabel/);
+  assert.match(faithSource, /data-prayer-time-option/);
+  assert.doesNotMatch(faithSource, /current-plan-time-option|data-(?:person-)?dashboard-prayer-time-option/);
+  assert.match(styles, /\.prayer-timeframe-picker__option\{/);
   assert.match(styles, /\.prayer-timeframe-picker__option\{/);
 });
 
-test("Homepage and Person prayer filters use the same shared dialog component", () => {
+test("Home, Faith, Prayer, and Person use one shared prayer-selection dialog", () => {
   const components = loadComponents();
   const sharedLayout = {
-    timeframeHTML: components.tendPrayerTimeframePickerHTML({
-      label: "Now",
-      selectedTimeframeId: "now",
-      options: [{ id: "now", label: "Evening", timeDescription: "4:30pm – 9:30pm", count: 3 }],
-      allDayCount: 4
-    }),
+    view: "people",
+    timeframeHTML: components.tendPrayerTimeframePickerHTML({ label: "Now", resolvedLabel: "Evening · 4:30pm – 9:30pm" }),
     count: 3,
-    timeLabel: "Now"
+    groupsHTML: '<button role="checkbox" aria-checked="mixed">Friends</button>',
+    peopleHTML: '<button aria-pressed="true">Amy</button>'
   };
-  const dashboard = components.tendPrayerFilterDialogHTML({
+  const dashboard = components.tendPrayerSelectionDialogHTML({
     ...sharedLayout,
-    title: "People for focused prayer",
-    intro: "Choose whose prayer requests to include.",
-    selectionHTML: '<div class="dashboard-prayer-people-options">People</div>',
-    primaryActionHTML: '<button data-dashboard-prayer-people-pray>Pray</button>',
-    closeActionHTML: '<button data-dashboard-prayer-people-close>Done</button>'
+    timeOptions: [{ id: "now", label: "Evening", timeDescription: "4:30pm – 9:30pm", count: 3 }],
+    allDayCount: 4,
+    peopleHTML: '<button aria-pressed="true">Amy</button>'
   });
 
-  const person = components.tendPrayerFilterDialogHTML({
+  const timeframe = components.tendPrayerSelectionDialogHTML({
     ...sharedLayout,
-    id: "person-dashboard-prayer-dialog",
-    titleId: "person-dashboard-prayer-title",
-    title: "Prayer timeframe for Amy",
-    closeActionHTML: '<button data-person-dashboard-prayer-close="amy">Done</button>'
+    view: "timeframe",
+    timeOptions: [{ id: "now", label: "Evening", timeDescription: "4:30pm – 9:30pm", count: 3 }],
+    selectedTimeframeId: "now",
+    allDayCount: 4,
+    includeAllRequests: true,
+    allRequestsCount: 8
   });
 
-  for (const dialog of [dashboard, person]) {
-    assert.match(dialog, /class="profile-editor-dialog rhythm-picker-dialog dashboard-prayer-people-dialog/);
-    assert.match(dialog, /class="prayer-timeframe-picker"/);
-    assert.match(dialog, /Focused Prayer will include <strong>3 prayer requests<\/strong> · Now/);
-    assert.match(dialog, /profile-editor-actions dashboard-prayer-people-actions/);
+  for (const dialog of [dashboard, timeframe]) {
+    assert.match(dialog, /class="profile-editor-dialog prayer-selection-dialog"/);
+    assert.match(dialog, /data-prayer-selection-body/);
+    assert.match(dialog, /prayer-selection-footer/);
+    assert.match(dialog, /3 requests selected/);
+    assert.match(dialog, /data-prayer-selection-done/);
+    assert.match(dialog, /data-prayer-selection-start/);
   }
-  assert.match(dashboard, /Choose whose prayer requests to include/);
-  assert.match(dashboard, /dashboard-prayer-people-options/);
-  assert.match(dashboard, /data-dashboard-prayer-people-pray/);
-  assert.match(person, /id="person-dashboard-prayer-dialog"/);
-  assert.match(person, /Prayer timeframe for Amy/);
-  assert.match(person, /data-person-dashboard-prayer-close="amy"/);
-  assert.doesNotMatch(person, /dashboard-prayer-people-options/);
-  assert.equal((faithSource.match(/tendPrayerFilterDialogHTML\(/g) || []).length, 2);
-  assert.doesNotMatch(faithSource, /<dialog class="profile-editor-dialog rhythm-picker-dialog dashboard-prayer-people-dialog/);
+  assert.match(dashboard, /Prayer selection/);
+  assert.match(dashboard, /Timeframe/);
+  assert.match(dashboard, /People/);
+  assert.match(dashboard, /Select all/);
+  assert.match(dashboard, /Clear/);
+  assert.match(dashboard, /aria-checked="mixed"/);
+  assert.match(dashboard, /aria-pressed="true"/);
+  assert.match(timeframe, /data-prayer-selection-back/);
+  assert.match(timeframe, /data-prayer-time-option="allrequests"/);
+  assert.match(faithSource, /function faithPrayerSelectionDialogHTML\(context\)/);
+  assert.match(faithSource, /class="prayer-selection-groups" role="group" aria-label="People categories"/);
+  assert.match(faithSource, /var firstName=isMe\?"Me":String\(person\.name\|\|""\)\.trim\(\)\.split\(\/\\s\+\/\)\[0\]/);
+  assert.match(faithSource, /active\?"Deselect ":"Select "/);
+  assert.match(faithSource, /class="prayer-selection-group'\+\(state==="true"\?" is-selected":state==="mixed"\?" is-mixed":""\)/);
+  assert.match(homeRhythmSource, /window\.faithPrayerEntryHTML\("dashboard"\)/);
+  assert.match(prayerSource, /faithPrayerEntryHTML\("prayer"\)/);
+  assert.match(faithSource, /window\.faithPrayerEntryHTML\("person:"\+person\.id\)/);
+  assert.equal((faithSource.match(/tendPrayerSelectionDialogHTML\(/g) || []).length, 1);
+  assert.match(styles, /\.prayer-selection-groups\{display:grid/);
+  assert.match(styles, /\.prayer-selection-group\{[^}]*background:#F1F3F1/);
+  assert.match(styles, /\.prayer-selection-people\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(styles, /\.prayer-selection-person\.is-selected \.prayer-selection-check\{[^}]*color:#fff/);
 });
 
-test("Faith health uses the Person summary layout with expandable rhythm and prayer details", () => {
+test("shared prayer flow uses scoped purple actions and neutral selected-name text", () => {
+  assert.match(styles, /\.prayer-entry-module,[\s\S]*?\.prayer-selection-dialog,[\s\S]*?\.faith-prayer-session\{[\s\S]*?--prayer-primary:#735990/);
+  assert.match(styles, /--prayer-lavender:#F0EAF7/);
+  assert.match(styles, /--prayer-purple-border:#D9CBE9/);
+  assert.match(styles, /--prayer-canvas:#F7F9F7/);
+  assert.match(styles, /--prayer-neutral-border:#DEE7E1/);
+  assert.match(styles, /\.prayer-entry-actions>\[data-prayer-session-start\],[\s\S]*?background:var\(--prayer-primary\);[\s\S]*?color:#fff/);
+  assert.match(styles, /\.faith-prayer-session \.faith-session-actions \.faith-session-prayed\{border-color:var\(--prayer-primary\);background:var\(--prayer-primary\);color:#fff\}/);
+  assert.match(styles, /\.prayer-selection-person\.is-selected\{border-color:var\(--prayer-purple-border\);background:var\(--prayer-lavender\);color:var\(--prayer-ink\)\}/);
+  assert.match(styles, /\.prayer-timeframe-picker__option\.is-selected \.prayer-timeframe-picker__label[\s\S]*?color:var\(--prayer-ink\)/);
+  assert.match(styles, /\.faith-prayer-session \.faith-session-track\{background:var\(--prayer-lavender\)\}/);
+});
+
+test("larger-text Today prayer sessions keep the full-screen mobile bounds", () => {
+  assert.doesNotMatch(styles, /html\[data-mobile-text-size-level="larger"\]\s+\.home-dashboard\s+\.faith-prayer-session\{[^}]*width:\s*86\.9vw/);
+  assert.match(styles, /@media\(max-width:600px\)\{[\s\S]*?\.faith-prayer-session\{inset:0;width:100vw;max-width:100vw;height:100dvh;max-height:100dvh/);
+});
+
+test("Focused Prayer counts honor caller scope, draft people, and timeframe semantics", () => {
+  const functionSource = name => faithSource.match(new RegExp(`function ${name}\\([^\\n]*\\)\\{[^]*?\\n\\}`, "m"))[0];
+  const context = {
+    S: { people: [{ id: "amy", group: "marriage" }, { id: "lee", group: "friendships" }] },
+    active: [
+      { id: "mine", mine: true, scheduled: true, tod: "morning", score: 70 },
+      { id: "amy-morning", personId: "amy", scheduled: true, tod: "morning", score: 30 },
+      { id: "amy-evening", personId: "amy", scheduled: true, tod: "evening", score: 20 },
+      { id: "lee-evening", personId: "lee", scheduled: true, tod: "evening", score: 40 },
+      { id: "unassigned", scheduled: true, tod: "morning", score: 10 },
+      { id: "amy-unscheduled", personId: "amy", scheduled: false, tod: "morning", score: 5 }
+    ],
+    faithActivePrayers: () => context.active,
+    faithPrayerPersonGroup: person => person.group,
+    faithPrayerIsMine: prayer => prayer.mine === true,
+    faithPrayerScheduledToday: prayer => prayer.scheduled,
+    faithPrayerScoreOrder: (a, b) => a.score - b.score,
+    faithDashboardPrayerTimeBlock: mode => mode === "now" ? "morning" : mode === "allday" || mode === "allrequests" ? "all" : mode,
+    dayBlocks: () => [{ id: "morning" }, { id: "evening" }],
+    String,
+    Number
+  };
+  vm.createContext(context);
+  vm.runInContext([
+    functionSource("faithPrayerPeopleMatch"),
+    functionSource("faithDashboardPrayerMatches"),
+    functionSource("faithDashboardPrayerSessionSort"),
+    functionSource("faithPrayerSelectionIds")
+  ].join("\n"), context);
+  assert.deepEqual(Array.from(vm.runInContext('faithPrayerSelectionIds("dashboard","now",["me","amy","lee"],{})', context)), [
+    "unassigned", "amy-morning", "mine"
+  ]);
+  assert.deepEqual(Array.from(vm.runInContext('faithPrayerSelectionIds("person:amy","allday",["amy"],{})', context)), [
+    "amy-unscheduled", "amy-evening", "amy-morning"
+  ]);
+  assert.deepEqual(Array.from(vm.runInContext('faithPrayerSelectionIds("faith-requests","allrequests",["amy"],{marriage:true})', context)), [
+    "amy-unscheduled", "amy-evening", "amy-morning"
+  ]);
+  assert.deepEqual(Array.from(vm.runInContext('faithPrayerSelectionIds("faith-requests","allday",["amy"],{marriage:false})', context)), []);
+});
+
+test("Faith health shows bright-score navigation areas and an all-rhythm destination", () => {
   const faithHealth = faithSource.match(/function faithHealthHTML\(\)\{([\s\S]*?)\n\}/)[1];
   assert.match(faithHealth, /class="person-health-summaries" role="group" aria-label="Faith health summaries"/);
   assert.match(faithHealth, /summaryButton\("rhythms","Rhythms",rhythmScoreValue\)\+summaryButton\("prayer","Prayer",prayerScoreValue\)/);
   assert.doesNotMatch(faithHealth, /summaryButton\("connection"/);
-  assert.match(faithHealth, /data-person-health-detail="rhythms"[\s\S]*?esc\(latestRhythmText\)[\s\S]*?esc\(rhythmCount\)[\s\S]*?data-faith-practice-tab="Prayer\|rhythms"/);
-  assert.match(faithHealth, /data-person-health-detail="prayer"[\s\S]*?esc\(latestPrayerText\)[\s\S]*?esc\(prayerCount\)[\s\S]*?data-faith-prayer-requests="1"/);
+  assert.ok(faithHealth.includes(`data-faith-health-nav="'+key+'"`));
+  assert.ok(faithHealth.includes(`person-health-summary-score '+tone+'`));
+  assert.match(faithHealth, /faithScoreClass\(value\)/);
+  assert.match(faithHealth, /person-health-summary-detail"><span>'\+activityIcon\+'<span>'\+esc\(count\+" active"\)[\s\S]*?calendarIcon\+'<span>'\+esc\(lastDate\)/);
+  assert.match(styles, /\.faith-health-card \.person-health-summary-detail svg\{width:13px;height:13px/);
+  assert.doesNotMatch(faithHealth, /person-health-detail|person-health-detail-icon|Faith rhythms and prayers, tended together/);
   assert.match(faithHealth, /class="bar-ov person-health-bar solid"/);
   assert.match(faithHealth, /faith-health-overview-copy[\s\S]*?class="person-health-status statusword/);
-  assert.match(faithSource, /if\(b\.closest\("\.faith-health-card"\)\)\{config\.selectedGroup=parts\[0\];faithMainView="practices";\}/);
-  assert.match(styles, /\.faith-health-card \.person-health-summaries\{display:flex/);
+  assert.match(faithSource, /function faithAllRhythmsHTML\(\)[\s\S]*faithPracticeGroups\(\)\.filter\(function\(group\)\{return faithPracticeRhythmRecords\(group\)\.length>0;\}\)[\s\S]*faithRhythmsHTML\(group\)/);
+  const practiceOverview = faithSource.match(/function faithPracticeOverviewHTML\(selected\)\{([\s\S]*?)\n\}/)[1];
+  const practiceContent = faithSource.match(/function faithPracticeContent\(group\)\{([\s\S]*?)\n\}/)[1];
+  const allRhythmsContent = faithSource.match(/function faithAllRhythmsHTML\(\)\{([\s\S]*?)\n\}/)[1];
+  assert.doesNotMatch(practiceOverview, /faith-all-rhythms|data-faith-all-rhythms/);
+  assert.match(practiceContent, /faithPracticeHeadingHTML\(group,description,[\s\S]*data-faith-all-rhythms-open[\s\S]*"faithPracticeTitle"\)/);
+  assert.match(practiceContent, /faith-practice-toolbar[\s\S]*?faith-practice-tabs[\s\S]*?\+addAction/);
+  assert.match(allRhythmsContent, /faithPracticeHeadingHTML\("All Faith rhythms","Rhythms across every Faith practice\.",[\s\S]*Back to '\+esc\(selected\)[\s\S]*"faithAllRhythmsTitle"\)/);
+  assert.match(allRhythmsContent, /faithRhythmsHTML\(group\)/);
+  assert.match(allRhythmsContent, /data-faith-all-rhythm-add[\s\S]*?faith-all-rhythms-toolbar/);
+  assert.doesNotMatch(allRhythmsContent, /role="tablist"/);
+  assert.match(faithSource, /aggregateCategoryRequired&&isNew[\s\S]*?Choose a practice[\s\S]*?FAITH_GROUPS\.map/);
+  assert.match(faithSource, /aggregateCategoryRequired&&FAITH_GROUPS\.indexOf\(draft\.faithGroup\)<0/);
+  assert.match(faithSource, /data-faith-all-rhythm-add[\s\S]*?faithGroup:"",aggregateCategoryRequired:true/);
+  assert.match(faithSource, /data-faith-rhythm-group[\s\S]{0,100}faithRhythmDraft\.faithGroup=t\.value/);
+  assert.match(styles, /\.faith-practice-link-row\{display:flex;justify-content:flex-end;[^}]*margin:0 0 24px/);
+  assert.match(styles, /\.faith-practice-divider\{width:100%;height:1px;background:var\(--line\)\}/);
+  assert.match(styles, /\.faith-practice-heading\{display:grid;justify-items:center;gap:8px;[^}]*padding-top:30px;text-align:center\}/);
+  assert.match(styles, /\.faith-all-rhythms-link\{[^}]*text-align:right;overflow-wrap:anywhere/);
+  assert.match(styles, /\.faith-all-rhythms-toolbar\{justify-content:flex-end\}/);
+  assert.match(faithSource, /if\(b\.matches\("\[data-faith-all-rhythms-open\]"\)\)\{faithShowPracticeView\(true,null,"faithAllRhythmsTitle"\)/);
+  assert.match(faithSource, /function faithShowPracticeView\(showAll,group,headingId\)\{[\s\S]*faithMainView="practices"[\s\S]*faithScrollToHeading\(document\.getElementById\(headingId\|\|\(faithShowAllRhythms\?"faithAllRhythmsTitle":"faithPracticeTitle"\)\)\)/);
+  assert.match(faithSource, /faithSetMainView\("prayer",false\)[\s\S]*faithPrayerTitle/);
+  assert.match(faithSource, /faithViewHeaderHTML\("Prayer","","","faithPrayerTitle",true\)/);
+  assert.match(faithSource, /function faithScrollToHeading\(target\)[\s\S]*prefers-reduced-motion: reduce[\s\S]*target\.focus\(\{preventScroll:true\}\)[\s\S]*target\.scrollIntoView/);
+  assert.match(styles, /\.faith-view-header-title#faithPrayerTitle\{scroll-margin-top:160px\}/);
+  assert.match(faithSource, /function faithPracticeHealthParts\(\)[\s\S]*avg\(faithPracticeRhythmRecords\("Prayer"\)\.map/);
+  assert.match(styles, /\.faith-health-card \.person-health-summaries\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(styles, /\.faith-health-card \.person-health-summary-score\.green\{color:#12B76A\}/);
+  assert.match(styles, /\.faith-health-card \.person-health-summary-score\.yellow\{color:#F08C00\}/);
+  assert.match(styles, /\.faith-health-card \.person-health-summary-score\.red\{color:#F04531\}/);
+  assert.match(styles, /\.faith-health-card \.person-health-summaries\{grid-template-columns:minmax\(0,1fr\)\}/);
   assert.match(styles, /\.faith-view-nav \[role=tab\]\[aria-selected=true\]/);
   assert.match(styles, /\.faith-view-panel\[hidden\]\{display:none\}/);
   assert.match(styles, /\.faith-views-content\{display:grid;gap:1\.5rem/);
@@ -858,14 +1120,15 @@ test("Faith health uses the Person summary layout with expandable rhythm and pra
   assert.equal((faithSource.match(/faithViewHeaderHTML\(/g) || []).length, 5);
   assert.match(faithSource, /'<div class="faith-views-content">'\+faithViewNavHTML\(\)/);
   assert.match(actionsSource, /data-person-health-summary[\s\S]*?data-active-summary/);
-  assert.match(homeRhythmSource, /faithMainView=type==="prayers"\?"requests":"practices";faithMainViewInitialized=true/);
-  assert.match(categoryRhythmSource, /faithMainView="practices";faithMainViewInitialized=true/);
+  assert.match(homeRhythmSource, /faithMainView=type==="prayers"\|\|type==="requests"\?"prayer":type==="rhythms"\?"practices":"today";faithMainViewInitialized=true/);
+  assert.match(categoryRhythmSource, /faithMainView="practices";faithMainViewInitialized=true;faithShowAllRhythms=false/);
 });
 
-test("Faith Today renders rhythm cards, focused prayer, and Sparks as separate sections", () => {
+test("Faith Today keeps scheduled rhythms and Sparks without its Prayer entry widget", () => {
   const today = faithSource.match(/function faithTodayHTML\(\)\{([\s\S]*?)\n\}/)[1];
   const practiceContent = faithSource.match(/function faithPracticeContent\(group\)\{([\s\S]*?)\n\}/)[1];
   assert.match(today, /return tendRhythmCardHTML\(r,/);
+  assert.match(today, /categoryBadgesHTML:tendAssociationCategoryBadges\(r\)/);
   assert.match(today, /return tendSparkCardHTML\(s,/);
   assert.match(today, /data-faith-sparkdone=.*>Do it<\/button>/);
   assert.match(today, /class="profile-empty-state faith-today-empty">No Sparks waiting\./);
@@ -875,13 +1138,12 @@ test("Faith Today renders rhythm cards, focused prayer, and Sparks as separate s
   assert.doesNotMatch(today, /faith-today-controls/);
   assert.doesNotMatch(today, /faithActivePrayers\(\)\.filter\(prayerIsDue\)|tendPrayerCardContentHTML/);
   assert.doesNotMatch(today, /planKindTogglesHTML|planKindVisibilityFor|items hidden by the type filters/);
-  assert.match(today, /tendSectionHeaderHTML\(\{title:"Pray",className:"faith-today-subheading"\}\)\+dashboardFocusedPrayerHTML\(\)/);
-  assert.ok(today.indexOf('title:"Today in Faith"') < today.indexOf('title:"Pray"'));
-  assert.ok(today.indexOf('title:"Pray"') < today.indexOf('title:"Sparks"'));
-  assert.match(homeRhythmSource, /function dashboardFocusedPrayerHTML\(\)[\s\S]*data-dashboard-prayer-start[\s\S]*faithDashboardPrayerPeopleDialogHTML\(\)/);
-  assert.match(homeRhythmSource, /function dashboardFocusedPrayerHTML\(\)[\s\S]*tendFocusedPrayerSectionHTML\(\{className:"dashboard-focused-prayer"/);
+  assert.doesNotMatch(today, /dashboardFocusedPrayerHTML|faithPrayerEntryHTML|title:"Pray"/);
+  assert.ok(today.indexOf('title:"Today in Faith"') < today.indexOf('title:"Sparks"'));
+  assert.match(homeRhythmSource, /function dashboardFocusedPrayerHTML\(\)\{[\s\S]*window\.faithPrayerEntryHTML\("dashboard"\)/);
+  assert.doesNotMatch(homeRhythmSource, /faithDashboardPrayerPeopleDialogHTML/);
   assert.match(faithSource, /faithViewHeaderHTML\("Your practices","Choose an area to tend\."/);
-  assert.match(faithSource, /var practices=[\s\S]*faithSectionNavHTML\(selected\)/);
+  assert.match(faithSource, /function faithPracticeOverviewHTML\(selected\)[\s\S]*faithSectionNavHTML\(selected\)/);
   assert.match(faithSource, /faithViewPanelHTML\("today",faithTodayHTML\(\)\)/);
   assert.match(faithSource, /faith-nav-score '\+level/);
   assert.match(faithSource, /aria-label="Health score '\+score\+' percent"[\s\S]*?<span>'\+score\+'<\/span>/);
@@ -909,9 +1171,14 @@ test("Faith Today renders rhythm cards, focused prayer, and Sparks as separate s
   assert.match(styles, /\.faith-practice-toolbar\{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap/);
   assert.match(styles, /\.faith-practice-tabs button\[aria-selected=true\]\{[^}]*background:var\(--card\)/);
   assert.match(styles, /\.faith-practice-rhythm-list\{display:grid;gap:14px/);
-  assert.match(styles, /\.faith-practice-wrap\{padding-top:24px;border-top:1px solid var\(--line\)\}/);
-  assert.match(styles, /\.faith-selected-practice-title\{[^}]*font-family:var\(--tend-font-editorial,Newsreader,Georgia,serif\)[^}]*font-size:calc\(var\(--tend-type-section-header,1\.35rem\)\*\.85\)[^}]*font-weight:500/);
+  assert.match(styles, /\.faith-practice-panel\{min-width:0;padding:0;scroll-margin-top:160px\}/);
+  assert.match(styles, /\.faith-practice-heading \.faith-selected-practice-title\{[^}]*font-family:var\(--tend-font-editorial,Newsreader,Georgia,serif\)[^}]*font-size:calc\(var\(--tend-type-section-header,1\.35rem\)\*1\.1\)[^}]*font-weight:500/);
+  assert.match(styles, /\.faith-practice-heading\{[^}]*text-align:center/);
+  assert.match(styles, /\.faith-practice-panel>\.faith-practice-heading\{width:100%;grid-template-columns:minmax\(0,1fr\)\}/);
+  assert.match(styles, /\.faith-page\{display:grid;gap:16px;padding-top:1\.5rem\}/);
+  assert.match(styles, /\.faith-practice-focus\{width:min\(100%,360px\);min-width:0;margin:0 auto\}/);
   assert.match(styles, /\.faith-practice-focus p\{margin:0;color:var\(--ink-soft\);font-size:var\(--tend-type-description,1\.032rem\);font-weight:400/);
+  assert.match(styles, /\.faith-practice-toolbar\{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:24px 0 14px\}/);
   assert.match(styles, /\.faith-nav-score-unavailable\{background:transparent;color:var\(--ink-soft\)/);
   assert.match(indexSource, /Newsreader:ital,opsz,wght@0,6\.\.72,400;0,6\.\.72,500/);
   assert.match(indexSource, /faith-practice-hierarchy/);
@@ -919,14 +1186,93 @@ test("Faith Today renders rhythm cards, focused prayer, and Sparks as separate s
   assert.match(styles, /\.faith-prayer-content,.faith-prayer-row,.faith-prayer-hub \.faith-profile-prayer-row\{box-sizing:border-box;width:100%;min-width:0\}/);
   assert.match(styles, /\.faith-today-subheading\{margin:28px 0 12px\}/);
   assert.match(styles, /\.faith-page \.dashboard-focused-prayer\{display:grid;grid-template-columns:minmax\(0,1fr\) auto/);
-  assert.match(styles, /\.faith-practice-heading\{[^}]*justify-items:start[^}]*text-align:left/);
-  assert.match(styles, /\.faith-practice-panel\{min-width:0;padding:0;/);
   assert.match(styles, /\.faith-section-nav\{display:grid;grid-template-columns:repeat\(auto-fit,minmax\(min\(100%,190px\),1fr\)\)/);
   assert.match(styles, /\.faith-nav-score\.green\{background:#12B76A/);
   assert.match(homeRhythmSource, /function tendCaptureFaithScrollAnchor/);
   assert.match(homeRhythmSource, /function tendRestoreFaithScrollAnchor/);
   assert.match(homeRhythmSource, /tendFaithScrollBuffer\+=extra/);
   assert.match(homeRhythmSource, /faithScrollAnchor&&currentArea==="faith"/);
+});
+
+test("Faith overview keeps practice content inline in the Practices tab", () => {
+  const extractFunction = name => faithSource.match(new RegExp(`function ${name}\\([^\\n]*\\)\\{[^]*?\\n\\}`, "m"))[0];
+  const groupContext = {
+    FAITH_GROUPS: ["Sabbath", "Prayer", "Fasting", "Solitude", "Generosity", "Community", "Service", "Witness", "Scripture", "Other"],
+    faithPracticeHealth: () => null,
+    faithNavScoreHTML: () => "",
+    faithPracticeCount: () => 0,
+    esc: value => String(value)
+  };
+  vm.createContext(groupContext);
+  const navHTML = vm.runInContext(`${extractFunction("faithSectionNavHTML")};faithSectionNavHTML("Prayer")`, groupContext);
+  const practiceHeadingHTML = vm.runInContext(`${extractFunction("faithPracticeHeadingHTML")};faithPracticeHeadingHTML("Other","","<button>All Faith rhythms →</button>","faithPracticeTitle")`, groupContext);
+  assert.equal((navHTML.match(/data-faith-select=/g) || []).length, 10);
+  assert.match(navHTML, /data-faith-select="Prayer" aria-pressed="true"/);
+  assert.match(practiceHeadingHTML, /faith-practice-link-row[\s\S]*faith-practice-divider[\s\S]*faith-practice-heading[\s\S]*faithPracticeTitle/);
+  assert.doesNotMatch(practiceHeadingHTML, /faith-practice-focus/);
+  const faithRender = extractFunction("renderFaithPage");
+  assert.ok(faithRender.includes('out+=faithSettingsHTML()+faithHealthHTML()+\'<div class="faith-views-content">\'+faithViewNavHTML();'));
+  assert.match(faithSource, /var FAITH_MAIN_VIEWS=\["today","prayer","practices"\]/);
+  assert.match(faithSource, /faithViewPanelHTML\("today",faithTodayHTML\(\)\)[\s\S]*faithViewPanelHTML\("prayer",faithPrayerRequestsHTML\(\)\)[\s\S]*faithViewPanelHTML\("practices",faithPracticeOverviewHTML\(selected\)\+\(faithShowAllRhythms\?faithAllRhythmsHTML\(\):faithPracticeContent\(selected\)\)\)/);
+  assert.equal((faithRender.match(/faithPracticeOverviewHTML\(selected\)/g) || []).length, 1);
+  assert.ok(faithRender.indexOf("faithHealthHTML()") < faithRender.indexOf("faithViewNavHTML()"));
+  assert.ok(faithRender.indexOf("faithViewNavHTML()") < faithRender.indexOf('faithViewPanelHTML("practices"'));
+  assert.doesNotMatch(faithSource, /faithViewPanelHTML\("notes"/);
+  assert.doesNotMatch(faithSource, /faith-practice-detail-sheet|data-faith-practice-sheet/);
+  assert.match(faithSource, /faith-settings-notes[\s\S]*faithNotesHTML\(\)/);
+  assert.match(faithSource, /tendRhythmCardHTML\(r/);
+  assert.match(faithSource, /tendSparkCardHTML\(item/);
+
+  const initialView = extractFunction("faithInitialMainView");
+  for (const [legacy, expected] of [["requests", "prayer"], ["prayer", "prayer"], ["practices", "practices"], ["notes", "today"], ["rhythms", "today"], [undefined, "today"]]) {
+    const config = { selectedGroup: "Witness", practiceTabs: legacy === undefined ? {} : { Witness: legacy } };
+    const context = { FAITH_GROUPS: groupContext.FAITH_GROUPS, faithMainViewInitialized: false, faithMainView: "today", faithConfig: () => config };
+    vm.createContext(context);
+    vm.runInContext(`${initialView};faithInitialMainView("Witness")`, context);
+    assert.equal(context.faithMainView, expected);
+    assert.equal(config.selectedGroup, "Witness");
+  }
+
+  const selectedGroups = groupContext.FAITH_GROUPS;
+  const practiceContext = {
+    FAITH_GROUPS: selectedGroups,
+    config: { selectedGroup: "Sabbath" },
+    faithMainView: "today",
+    faithMainViewInitialized: false,
+    faithShowAllRhythms: false,
+    tendPendingFaithScrollAnchor: {},
+    faithConfig: () => practiceContext.config,
+    render() {},
+    requestAnimationFrame(callback) { callback(); },
+    document: { getElementById: id => ({ id }) },
+    faithScrollToHeading: target => { practiceContext.scrolledTo = target.id; }
+  };
+  vm.createContext(practiceContext);
+  vm.runInContext(extractFunction("faithShowPracticeView"), practiceContext);
+  for (const group of selectedGroups) {
+    practiceContext.scrolledTo = null;
+    vm.runInContext(`faithShowPracticeView(false, ${JSON.stringify(group)})`, practiceContext);
+    assert.equal(practiceContext.config.selectedGroup, group);
+    assert.equal(practiceContext.faithMainView, "practices");
+    assert.equal(practiceContext.faithShowAllRhythms, false);
+    assert.equal(practiceContext.scrolledTo, "faithPracticeTitle");
+  }
+  vm.runInContext('faithShowPracticeView(true, null, "faithAllRhythmsTitle")', practiceContext);
+  assert.equal(practiceContext.faithMainView, "practices");
+  assert.equal(practiceContext.faithShowAllRhythms, true);
+  assert.equal(practiceContext.scrolledTo, "faithAllRhythmsTitle");
+  practiceContext.config.selectedGroup = "Fasting";
+  practiceContext.config.practiceTabs = { Fasting: "sparks" };
+  vm.runInContext('faithShowPracticeView(false, "Fasting")', practiceContext);
+  vm.runInContext('faithShowPracticeView(true, null, "faithAllRhythmsTitle")', practiceContext);
+  vm.runInContext('faithShowPracticeView(false, null, "faithPracticeTitle")', practiceContext);
+  assert.equal(practiceContext.config.selectedGroup, "Fasting");
+  assert.equal(practiceContext.config.practiceTabs.Fasting, "sparks");
+  assert.equal(practiceContext.faithShowAllRhythms, false);
+  assert.match(styles, /\.faith-practice-heading \.faith-selected-practice-title\{[^}]*scroll-margin-top:160px/);
+  assert.match(styles, /@media\(max-width:600px\)\{[\s\S]*?\.faith-section-nav\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(styles, /@media\(max-width:540px\)\{\.faith-practice-tabs button\{min-width:0;white-space:normal\}\}/);
+  assert.doesNotMatch(homeRhythmSource, /faithConfig\(\)\.selectedGroup="Sabbath"/);
 });
 
 test("shared Rhythm form validation covers title and enabled end-date requirements", () => {
