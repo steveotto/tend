@@ -245,7 +245,9 @@ test("Person prayer section follows the profile card treatment with a shared-sty
   assert.match(prayerSource, /prayerProfileMetaHTML\(p\)/);
   assert.match(prayerSource, /prayerProfileMetaHTML\(p,true\)/);
   assert.match(prayerSource, /faith-profile-prayer-row/);
-  assert.match(faithSource, /prayerItemHTML\(p,"faith"\)/);
+  assert.match(faithSource, /prayerItemHTML\(p,"faith",\{hidePrayerBadge:hidePrayerBadge\}\)/);
+  assert.match(prayerSource, /hidePrayerBadge=!!\(options&&options\.hidePrayerBadge\)/);
+  assert.match(prayerSource, /!profile\|\|faith&&!hidePrayerBadge/);
   assert.match(styles, /\.faith-prayer-hub \.faith-prayer-row \.faith-profile-prayer-row\{[^}]*grid-template-areas:"content actions" "meta meta"/);
   assert.match(prayerSource, /class=\"rhythm-card__edit prayer-edit-trigger\" data-prayeredit=/);
   assert.match(prayerSource, /class=\"prayer-history-section profile-prayer-history\"><div class=\"prayer-history-links\">/);
@@ -394,6 +396,9 @@ test("Faith Prayer requests are standalone and session counts share the visible 
   assert.match(requestSection, /faithPrayerRequestHealthHTML\(\)/);
   assert.match(requestSection, /faithPrayerPeopleFilterHTML\(\)/);
   assert.match(requestSection, /faithFocusedPrayerButtonHTML\(view\)/);
+  assert.match(faithSource, /function faithPrayerRequestContentHTML\(view,items\)\{[\s\S]*faithPrayerTodayHTML\(visible,true\)[\s\S]*faithPrayerAllHTML\(visible,expandControl,true\)/);
+  assert.match(faithSource, /function faithPrayerRows\(items,hidePrayerBadge\)\{[\s\S]*prayerItemHTML\(p,"faith",\{hidePrayerBadge:hidePrayerBadge\}\)/);
+  assert.match(faithSource, /faithPrayerRows\(closed,hidePrayerBadge\)/);
   assert.match(requestSection, /<div class="faith-prayer-filters">[\s\S]*Timeframe:[\s\S]*faithPrayerPeopleFilterHTML\(\)[\s\S]*faith-prayer-matching-count[\s\S]*faith-prayer-actions[\s\S]*faithFocusedPrayerButtonHTML\(view\)[\s\S]*data-faith-prayer-add[\s\S]*faith-prayer-content/);
   assert.match(requestSection, /var matchingLabel=items\.length\+" matching "\+\(items\.length===1\?"request":"requests"\)/);
   assert.match(requestSection, /data-faith-prayer-add/);
@@ -874,6 +879,9 @@ test("Faith Today renders rhythm cards, focused prayer, and Sparks as separate s
   assert.match(faithSource, /faithViewPanelHTML\("today",faithTodayHTML\(\)\)/);
   assert.match(faithSource, /faith-nav-score '\+level/);
   assert.match(faithSource, /class="faith-practice-panel" id="faith-practice-panel"/);
+  assert.doesNotMatch(faithSource, /faithPracticeMetersHTML|faith-practice-meters|faith-practice-meter/);
+  assert.match(faithSource, /function faithPracticeHealthParts\(\)/);
+  assert.match(faithSource, /function faithPracticeHealth\(group\)/);
   assert.doesNotMatch(faithSource, /class="card faith-practice-card" id="faith-practice-panel"/);
   assert.doesNotMatch(faithSource, /faith-practice-focus-label/);
   assert.match(faithSource, /'\+labels\[tab\]\+'<\/button>/);

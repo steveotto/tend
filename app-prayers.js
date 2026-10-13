@@ -71,7 +71,7 @@ function prayerProfileMetaHTML(p,includeCounts){
   +'<span class="rhythm-card__meta-item rhythm-card__last" aria-label="Last prayed '+esc(relative.full)+'">'+planMetaIcon("occurred")+'<span>'+esc(relative.label)+'</span></span>'
   +(includeCounts?'<span class="rhythm-card__meta-item" aria-label="Prayed '+(p.prayed||0)+' '+((p.prayed||0)===1?'time':'times')+'">'+planMetaIcon("occurred")+'<span>'+((p.prayed||0)+' '+((p.prayed||0)===1?'time':'times'))+'</span></span><span class="rhythm-card__meta-item" aria-label="Added '+esc(prayerDate(p.added))+'">'+planMetaIcon("occurred")+'<span>Added '+esc(prayerDate(p.added))+'</span></span>':'')+'</footer>';
 }
-function prayerItemHTML(p,profile){var faith=profile==="faith",profileCard=!!profile,person=S.people.find(function(x){return x.id===p.personId;}),count=p.prayed||0,closed=p.answered||p.archived,ownerId=p.profileOwnerId||p.personId||"global",viewerId=p.profileViewingId||p.personId;
+function prayerItemHTML(p,profile,options){var faith=profile==="faith",profileCard=!!profile,hidePrayerBadge=!!(options&&options.hidePrayerBadge),person=S.people.find(function(x){return x.id===p.personId;}),count=p.prayed||0,closed=p.answered||p.archived,ownerId=p.profileOwnerId||p.personId||"global",viewerId=p.profileViewingId||p.personId;
  if(editingPrayerId===p.id)return '<dialog class="profile-editor-dialog prayer-edit-dialog" data-editor-modal aria-label="Edit prayer">'+prayerEditor(p,faith?'faith':profile?'profile':'global')+'</dialog>';
  var sc=prayerScore(p),scoreText=sc===null?'-':sc+'%';
  var prayAttr=profile&&!faith?'data-prayquick="'+esc(viewerId)+'" data-prayref="'+esc(p.id)+'"':'data-pray="'+esc(p.id)+'"';
@@ -80,7 +80,7 @@ function prayerItemHTML(p,profile){var faith=profile==="faith",profileCard=!!pro
  var score=profileCard?'<button type="button" class="rhythm-health profile-prayer-health profile-prayer-chart-action '+scoreClassName+'" data-prayerhistory="'+esc(p.id)+'" aria-label="'+esc(historyLabel)+'" title="View prayer health chart"><span>'+scoreText+'</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17 M8 16v-5m5 5V6m5 10V9"/></svg></button>':'<span class="rhythm-health prayer-health tend-type-metric" title="Prayer health"><span class="sm-dot '+scoreClassName+'" aria-hidden="true"></span><span>'+scoreText+'</span></span>';
  var categories=tendPrayerCategoryBadges(p);
  var participantBadges=tendAssociationPeopleBadges(p,ownerId,profile&&!faith?viewerId:null,"prayer");
- var badges=(!person&&p.faithOwner==="me"&&!profile?'<span class="prayer-person">'+(settings().profilePhoto?personAvatar({name:"Me",photo:settings().profilePhoto},24):"")+'Me</span>':'')+(!profile||faith?'<span class="pill pry">'+collectionIcon("prayer")+' Prayer</span>':"")+participantBadges+categories;
+ var badges=(!person&&p.faithOwner==="me"&&!profile?'<span class="prayer-person">'+(settings().profilePhoto?personAvatar({name:"Me",photo:settings().profilePhoto},24):"")+'Me</span>':'')+(!profile||faith&&!hidePrayerBadge?'<span class="pill pry">'+collectionIcon("prayer")+' Prayer</span>':"")+participantBadges+categories;
  var prayerMeta=prayerScheduleLabel(p)+' · Last prayed '+prayerLastPrayedLabel(p)+' · Prayed '+count+' '+(count===1?'time':'times')+' · Added '+prayerDate(p.added)+(p.answered?' · Answered '+prayerDate(p.answeredDate):'')+(p.archived?' · Archived '+prayerDate(p.archivedDate):'');
  var identity=tendPrayerCardContentHTML(p,{meta:profileCard?"":prayerMeta,badges:profileCard&&!faith?"":badges,peopleBadges:profileCard&&!faith?badges:""});
  var details="",meta="";
