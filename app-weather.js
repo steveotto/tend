@@ -39,15 +39,11 @@ function weatherCardHTML(report){
  var description=report.description||weatherDescription(report.code,report.isDay);
  return '<span class="weather-card '+weatherTheme(report.code,report.isDay)+'" role="img" aria-label="'+esc(description)+', '+Math.round(report.temperature)+' degrees"><svg viewBox="0 0 24 24" aria-hidden="true">'+weatherIcon(report.code,report.isDay)+'</svg><span class="weather-card-reading"><strong>'+Math.round(report.temperature)+'<sup>°</sup></strong><span>'+esc(description)+'</span></span></span>';
 }
-function weatherPromptHTML(){
- var label=nowWeather.status==="loading"?"Loading weather":nowWeather.status==="error"?"Weather unavailable":"Weather";
- return '<button type="button" class="weather-card weather-card-prompt" data-weather-retry'+(nowWeather.status==="loading"?' disabled':'')+'><span class="now-weather-prompt-icon" aria-hidden="true">☼</span><span>'+label+(nowWeather.status==="error"?' · Retry':'')+'</span></button>';
-}
 function nowWeatherHTML(){
  if(nowWeather.status==="ready"&&nowWeather.report){
   return weatherCardHTML(nowWeather.report);
  }
- return nowWeather.status==="error"?weatherPromptHTML():"";
+ return "";
 }
 function renderNowWeather(){
  var widget=document.getElementById("nowWeather");
@@ -71,7 +67,7 @@ function weatherForTime(time){
 function planWeatherHTML(time){
  if(nowWeather.status==="idle"||nowWeather.status==="loading")return "";
  var forecast=weatherForTime(time);
- if(!forecast)return nowWeather.status==="error"?weatherPromptHTML():"";
+ if(!forecast)return "";
  return weatherCardHTML(forecast);
 }
 function renderPlanWeather(){

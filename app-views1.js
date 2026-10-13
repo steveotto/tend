@@ -107,7 +107,7 @@ document.addEventListener("click",function(event){
 });
 document.addEventListener("input",function(event){if(event.target&&event.target.id==="tendSearch")tendSearchUpdate();});
 document.addEventListener("keydown",function(event){if(event.target&&event.target.id==="tendSearch"&&event.key==="Escape"){event.target.value="";tendSearchUpdate();event.target.blur();document.body.classList.remove("mobile-search-open");var toggle=document.querySelector("[data-mobile-search-toggle]");if(toggle){toggle.setAttribute("aria-expanded","false");toggle.focus();}}});
-document.addEventListener("click",function(event){var button=event.target.closest("[data-search-clear],[data-search-result]");if(!button)return;if(button.matches("[data-search-clear]")){var input=el("tendSearch");if(input){input.value="";tendSearchUpdate();input.focus();}return;}var type=button.getAttribute("data-search-result"),personId=button.getAttribute("data-search-person");if(type==="people"&&personId){profileTabs[personId]="rhythms";openPersonTab(personId);}else if(personId){profileTabs[personId]=type==="rhythms"?"rhythms":type==="sparks"?"sparks":"prayer";openPersonTab(personId);}else if(button.hasAttribute("data-search-faith")){currentArea="faith";tab="today";faithMainView=type==="prayers"?"requests":"practices";faithMainViewInitialized=true;faithConfig().selectedGroup="Sabbath";render();}var input=el("tendSearch");if(input){input.value="";tendSearchUpdate();}document.body.classList.remove("mobile-search-open");var toggle=document.querySelector("[data-mobile-search-toggle]");if(toggle)toggle.setAttribute("aria-expanded","false");event.stopImmediatePropagation();});
+document.addEventListener("click",function(event){var button=event.target.closest("[data-search-clear],[data-search-result]");if(!button)return;if(button.matches("[data-search-clear]")){var input=el("tendSearch");if(input){input.value="";tendSearchUpdate();input.focus();}return;}var type=button.getAttribute("data-search-result"),personId=button.getAttribute("data-search-person");if(type==="people"&&personId){profileTabs[personId]="rhythms";openPersonTab(personId);}else if(personId){profileTabs[personId]=type==="rhythms"?"rhythms":type==="sparks"?"sparks":"prayer";openPersonTab(personId);}else if(button.hasAttribute("data-search-faith")){currentArea="faith";tab="today";faithMainView=type==="prayers"||type==="requests"?"prayer":type==="rhythms"?"practices":"today";faithMainViewInitialized=true;faithShowAllRhythms=false;if(type==="rhythms"){var faithRhythm=S.rhythms.find(function(item){return item.id===button.getAttribute("data-search-id");});if(faithRhythm&&FAITH_GROUPS.indexOf(faithRhythm.faithGroup)>=0)faithConfig().selectedGroup=faithRhythm.faithGroup;}render();if(type==="rhythms")requestAnimationFrame(function(){requestAnimationFrame(function(){faithScrollToHeading(document.getElementById("faithPracticeTitle"));});});else if(type==="prayers"||type==="requests")requestAnimationFrame(function(){faithScrollToHeading(document.getElementById("faithPrayerTitle"));});}var input=el("tendSearch");if(input){input.value="";tendSearchUpdate();}document.body.classList.remove("mobile-search-open");var toggle=document.querySelector("[data-mobile-search-toggle]");if(toggle)toggle.setAttribute("aria-expanded","false");event.stopImmediatePropagation();});
 function navKind(){return currentArea?"area":"tab";}
 function sizeProfileTabPanels(root){
  var panels=Array.prototype.slice.call(root.querySelectorAll(".profile-tab-panel"));if(!panels.length)return;
@@ -222,6 +222,7 @@ function dayBlocks(){var saved=S.settings&&S.settings.dayBlocks;return !validate
 function dayBlockAt(date){var minute=date.getHours()*60+date.getMinutes(),blocks=dayBlocks(),id=blocks[blocks.length-1].id;blocks.forEach(function(b){if(minute>=dayTimeMinutes(b.start))id=b.id;});return id;}
 function dayTimeLabel(time){var parts=time.split(":"),hour=+parts[0];return (hour%12||12)+":"+parts[1]+(hour<12?"am":"pm");}
 function planBlocksDef(){var blocks=dayBlocks(),current=dayBlockAt(new Date());return blocks.map(function(b,i){return {id:b.id,name:b.name,range:dayTimeLabel(b.start)+" – "+dayTimeLabel(blocks[(i+1)%blocks.length].start),cur:b.id===current};});}
+function planBlockName(block){var defaults={early:"Early morning",morning:"Morning",lunch:"Lunch",afternoon:"Afternoon",commute:"Way home",evening:"Evening",bedtime:"Bedtime"},original=DEFAULT_DAY_BLOCKS.filter(function(item){return item.id===block.id;})[0];return original&&block.name===original.name?defaults[block.id]:block.name;}
 function dayBlockSettingsHTML(){return '<div class="card" style="margin-bottom:14px"><div class="subhead">Daily time sections</div><p class="settings-help">Rename your sections and choose when each starts. Each ends when the next begins; the last continues overnight. These settings apply throughout Tend.</p><div class="day-settings-grid"><span>Name</span><span>Starts</span><span>Ends</span>'+dayBlocks().map(function(b,i,blocks){return '<input aria-label="Section '+(i+1)+' name" data-block-name="'+b.id+'" value="'+esc(b.name)+'"><input type="time" aria-label="Section '+(i+1)+' start time" data-block-start="'+b.id+'" value="'+b.start+'"><span data-block-end="'+b.id+'">'+dayTimeLabel(blocks[(i+1)%blocks.length].start)+(i===blocks.length-1?' (next day)':'')+'</span>';}).join('')+'</div><p id="dayBlocksError" role="alert" class="day-settings-error"></p><button class="btn" id="saveDayBlocks">Save time sections</button></div>';}
 function rhythmScheduledToday(r,date){
  date=date||new Date();
@@ -358,26 +359,88 @@ function prioritizePlanItems(items){
  var ranked=items.slice().sort(function(a,b){
   return Number(!!b.scheduled)-Number(!!a.scheduled)||Number(!!b.prayer)-Number(!!a.prayer)||Number(!!b.calendarDay)-Number(!!a.calendarDay)||Number(!!b.rhythm)-Number(!!a.rhythm)||(a.period||Infinity)-(b.period||Infinity)||(b.waitDays||0)-(a.waitDays||0);
  });
- var visible=[],more=[],people={};
- ranked.forEach(function(it){
-  if(it.prayer||(visible.length<4&&(!it.personId||!people[it.personId]))){visible.push(it);if(it.personId&&!it.prayer)people[it.personId]=true;}
-  else more.push(it);
- });
- return {visible:visible,more:more};
+ return {visible:ranked,more:[]};
 }
 function planCandidates(bid,curBid){
  var out=[],seenSparks=Object.create(null);
- S.tasks.forEach(function(t){if(!t.done&&((t.tod&&t.tod!=="anytime")?t.tod===bid:bid===curBid))out.push(taskItem(t));});
+ S.tasks.forEach(function(t){if(t.done)return;if(t.tod==="anytime")return;if(t.tod==="allday"){if(bid==="allday")out.push(taskItem(t));return;}if((t.tod?t.tod===bid:bid===curBid))out.push(taskItem(t));});
  S.people.forEach(function(person){
-  (person.rhythms||[]).forEach(function(r){var blk=(r.tod&&r.tod!=="anytime")?r.tod:curBid;if(blk!==bid||!dashboardRhythmEligible(r))return;out.push({scheduled:!!r.tod&&r.tod!=="anytime",calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),rhythm:person.id+"|"+r.id,personId:person.id,label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,false)});});
-  sortedPersonSparks(person).forEach(function(spark){if(!spark.by||!sparkLive(spark))return;if((sparkBlock(spark)||curBid)!==bid)return;var key=(spark.profileOwnerId||person.id)+"|"+spark.id;if(seenSparks[key])return;seenSparks[key]=true;out.push({spark:key,personId:person.id,label:spark.text,description:spark.details||"",sub:(spark.time?fmtHM12(spark.time)+" \u00b7 ":"")+sparkDueTxt(spark)});});
+  (person.rhythms||[]).forEach(function(r){var tod=r.tod||curBid;if(tod==="anytime"||tod!==bid||!dashboardRhythmEligible(r))return;out.push({scheduled:!!r.tod,calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),rhythm:person.id+"|"+r.id,personId:person.id,label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,false)});});
+  sortedPersonSparks(person).forEach(function(spark){if(!spark.by||!sparkLive(spark)||spark.tod==="anytime")return;if((sparkBlock(spark)||curBid)!==bid)return;var key=(spark.profileOwnerId||person.id)+"|"+spark.id;if(seenSparks[key])return;seenSparks[key]=true;out.push({spark:key,personId:person.id,label:spark.text,description:spark.details||"",sub:(spark.time?fmtHM12(spark.time)+" \u00b7 ":"")+sparkDueTxt(spark)});});
  });
  if(typeof faithActiveRhythms==="function"&&typeof rhythmScheduledToday==="function"){
   faithActiveRhythms().forEach(function(r){if(r.tod!==bid||!rhythmScheduledToday(r))return;out.push({scheduled:true,calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),faithRhythm:r.id,faithGroup:r.faithGroup,area:"faith",label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,false)});});
  }
  return out;
 }
-var planFocusState="now";var planKindVisibility={};
+function planAnytimeCandidates(){
+ var out=[];
+ S.people.forEach(function(person){
+  (person.rhythms||[]).forEach(function(r){if(r.tod!=="anytime"||!dashboardRhythmEligible(r))return;out.push({scheduled:false,calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),rhythm:person.id+"|"+r.id,personId:person.id,label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,false)});});
+ });
+ if(typeof faithActiveRhythms==="function"&&typeof rhythmScheduledToday==="function"){
+  faithActiveRhythms().forEach(function(r){if(r.tod!=="anytime"||!rhythmScheduledToday(r))return;out.push({scheduled:false,calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),faithRhythm:r.id,faithGroup:r.faithGroup,area:"faith",label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,false)});});
+ }
+ return planUniqueItems(out);
+}
+function planItemStableKey(item){
+ if(item.taskId)return "task:"+item.taskId;
+ if(item.rhythm)return "rhythm:"+item.rhythm;
+ if(item.faithRhythm)return "faith-rhythm:"+item.faithRhythm;
+ if(item.spark)return "spark:"+item.spark;
+ return null;
+}
+function planUniqueItems(items){
+ var seen=Object.create(null),unique=items.filter(function(item){var key=planItemStableKey(item);if(!key)return true;if(seen[key])return false;seen[key]=true;return true;});
+ return prioritizePlanItems(unique).visible;
+}
+function planViewGroups(viewId,currentId,blocks,itemType){
+ itemType=planNormalizeItemType(itemType);
+ if(itemType==="anytime")return [{id:"anytime",title:"",items:planAnytimeCandidates()}];
+ if(itemType==="all-day")return [{id:"all-day-items",title:"",items:planUniqueItems(planCandidates("allday",currentId))}];
+ if(viewId==="allday")viewId="all-day-items";
+ if(viewId==="everything-today"){
+  var seen=Object.create(null);
+  function uniqueGroup(items){return items.filter(function(item){var key=planItemStableKey(item);if(!key)return true;if(seen[key])return false;seen[key]=true;return true;});}
+  var groups=blocks.map(function(block){return {id:block.id,title:planBlockName(block),items:prioritizePlanItems(uniqueGroup(planCandidates(block.id,currentId))).visible};});
+  return groups.filter(function(group){return group.items.length>0;});
+ }
+ if(viewId==="anytime")return [{id:"anytime",title:"",items:planAnytimeCandidates()}];
+ if(viewId==="all-day-items")return [{id:"all-day-items",title:"",items:planUniqueItems(planCandidates("allday",currentId))}];
+ var selectedBlock=blocks.filter(function(block){return block.id===viewId;})[0];
+ if(selectedBlock)return [{id:"scheduled",title:"",items:planUniqueItems(planCandidates(selectedBlock.id,currentId))}];
+ return [{id:"scheduled",title:"",items:planUniqueItems(planNowItems(planCandidates(currentId,currentId)))}];
+}
+function planViewItemCount(groups){return groups.reduce(function(total,group){return total+group.items.length;},0);}
+function planViewCountLabel(viewId,groups){
+ var total=planViewItemCount(groups);
+ function itemWord(count){return count===1?"item":"items";}
+ return total?total+" "+itemWord(total):"No items";
+}
+function blocksViewId(viewId){return dayBlocks().some(function(block){return block.id===viewId;});}
+function planNormalizeFocusState(viewId,blocks){
+ if(viewId==="allday")return "all-day-items";
+ if(viewId==="now"||viewId==="everything-today"||viewId==="anytime"||viewId==="all-day-items"||(blocks||dayBlocks()).some(function(block){return block.id===viewId;}))return viewId;
+ return "now";
+}
+function planNormalizeItemType(itemType){return ["scheduled","anytime","all-day"].indexOf(itemType)>=0?itemType:"scheduled";}
+var planFocusState="now";var planItemTypeState="scheduled";var planHomeSelectionInitialized=false;var planKindVisibility={};
+function planHomeSelection(blocks){
+ if(!planHomeSelectionInitialized){
+  planItemTypeState="scheduled";
+  var stored=S.homePlanSelection,saved=stored&&typeof stored==="object"?stored:{},legacyView=(typeof stored==="string"?stored:saved.view||saved.timeframe)||S.homePlanFocus,migrated=!!legacyView;
+  if(saved.itemType||saved.segment)planItemTypeState=planNormalizeItemType(saved.itemType||saved.segment);
+  else if(legacyView==="anytime"){planItemTypeState="anytime";legacyView="now";migrated=true;}
+  else if(legacyView==="allday"||legacyView==="all-day-items"){planItemTypeState="all-day";legacyView="now";migrated=true;}
+  planFocusState=planNormalizeFocusState(legacyView||"now",blocks);
+  if(planFocusState==="anytime"){planItemTypeState="anytime";planFocusState="now";migrated=true;}
+  else if(planFocusState==="all-day-items"){planItemTypeState="all-day";planFocusState="now";migrated=true;}
+  planHomeSelectionInitialized=true;
+  if(migrated){S.homePlanSelection={timeframe:planFocusState,itemType:planItemTypeState};save();}
+ }
+ return {timeframe:planFocusState,itemType:planNormalizeItemType(planItemTypeState)};
+}
+function planSaveHomeSelection(){S.homePlanSelection={timeframe:planFocusState,itemType:planItemTypeState};save();}
 function planKindVisibilityFor(scope){
  if(!planKindVisibility[scope])planKindVisibility[scope]={rhythm:true,spark:true};
  return planKindVisibility[scope];
@@ -388,16 +451,18 @@ function planKindTogglesHTML(scope,label){
  var visibility=planKindVisibilityFor(scope);
  return '<span class="plan-kind-toggles" role="group" aria-label="'+esc(label||"Show or hide item types")+'">'+[["rhythm","Rhythm","rhythms"],["spark","Spark","sparks"]].map(function(type){var active=visibility[type[0]]!==false,buttonLabel=(active?"Hide ":"Show ")+type[1]+" items";return '<button type="button" class="plan-kind-toggle plan-kind-'+type[0]+(active?"":" is-muted")+'" data-plan-kind-toggle="'+esc(scope)+'" data-kind="'+type[0]+'" aria-label="'+buttonLabel+'" title="'+buttonLabel+'" aria-pressed="'+active+'">'+collectionIcon(type[2])+'</button>';}).join("")+'</span>';
 }
-function planItemCountHTML(count){
- var itemLabel=count===1?"item":"items";
- return '<span class="current-plan-item-count" aria-label="'+count+' '+itemLabel+'"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3h8M5.5 8h8M5.5 13h8M2.5 3h.01M2.5 8h.01M2.5 13h.01"/></svg>'+count+' '+itemLabel+'</span>';
-}
 function planFocusMenuHTML(blocks,currentId,selectedId){
  var current=blocks.filter(function(item){return item.id===currentId;})[0]||blocks[0];
- var selected=selectedId==="now"?"Now":selectedId==="allday"?"All Day":(blocks.filter(function(item){return item.id===selectedId;})[0]||current).name;
- var options=blocks.map(function(item){return {id:item.id,name:item.name,range:item.range,isNow:item.id===currentId};});
- options.push({id:"allday",name:"All Day",range:"Any time today",isAllDay:true});
- return '<details class="current-plan-time-menu"><summary class="current-plan-time-picker" aria-label="Choose a time frame, currently '+esc(selected)+'"><span>'+esc(selected)+'</span><span class="current-plan-time-chevron" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4.5L12.5 6"/></svg></span></summary><div class="current-plan-time-options" role="group" aria-label="Time frames">'+options.map(function(item){var isSelected=(selectedId==="now"&&item.isNow)||selectedId===item.id,candidates=planCandidates(item.id,currentId),count=prioritizePlanItems(item.isNow?planNowItems(candidates):candidates).visible.length,itemLabel=count===1?"item":"items";return '<button type="button" class="current-plan-time-option'+(item.isNow?' is-current':'')+(isSelected?' is-selected':'')+'" data-plan-focus="'+(item.isNow?"now":esc(item.id))+'" aria-pressed="'+isSelected+'"><span class="current-plan-time-option-name">'+esc(item.name)+'</span><span class="current-plan-time-option-range">'+esc(item.range)+'</span><span class="current-plan-time-option-count">'+count+' '+itemLabel+'</span></button>';}).join("")+'</div></details>';
+ selectedId=planNormalizeFocusState(selectedId,blocks);
+ var selected=selectedId==="now"?"Now":selectedId==="everything-today"?"Everything today":planBlockName(blocks.filter(function(item){return item.id===selectedId;})[0]||current);
+ function option(id,name,range){
+  var groups=planViewGroups(id,currentId,blocks,"scheduled"),countLabel=planViewCountLabel(id,groups);
+  return '<button type="button" class="current-plan-time-option'+(id==="now"?' is-current':'')+(selectedId===id?' is-selected':'')+'" data-plan-focus="'+esc(id)+'" aria-pressed="'+(selectedId===id)+'"><span class="current-plan-time-option-name">'+esc(name)+'</span><span class="current-plan-time-option-range">'+esc(range)+'</span><span class="current-plan-time-option-count">'+esc(countLabel)+'</span></button>';
+ }
+ var views='<div class="current-plan-time-group" role="group" aria-label="View"><span class="current-plan-time-group-label">View</span>'+option("now","Now",current.range)+option("everything-today","Everything today","Across every time block")+'</div>';
+ var specific='<div class="current-plan-time-group" role="group" aria-label="Specific time"><span class="current-plan-time-group-label">Specific time</span>'+
+  blocks.map(function(item){return option(item.id,planBlockName(item),item.range);}).join("")+'</div>';
+ return '<details class="current-plan-time-menu"><summary class="current-plan-time-picker" aria-label="Choose a time frame, currently '+esc(selected)+'"><span>'+esc(selected)+'</span><span class="current-plan-time-chevron" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4.5L12.5 6"/></svg></span></summary><div class="current-plan-time-options" role="group" aria-label="Timeframes">'+views+specific+'</div></details>';
 }
 function planMetaIcon(kind){
  var paths={frequency:'<path d="M20 7a8 8 0 0 0-14-2L3 8m0-5v5h5 M4 17a8 8 0 0 0 14 2l3-3m0 5v-5h-5"/>',time:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',occurred:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18m-13 5 2 2 4-4"/>'};
@@ -427,16 +492,18 @@ function todayQueueMetaBar(meta,isRhythm){
  if(!frequency.length&&!time.length&&!history.length&&!other.length)return "";
  return '<div class="plan-item-meta">'+frequency.map(function(part){return entry(part,"schedule","frequency");}).join("")+time.map(function(part){return entry(part,"time","time");}).join("")+other.map(function(part){return entry(part,"detail","");}).join("")+history.map(function(part){return entry(part,"history","occurred");}).join("")+'</div>';
 }
-function planBlockCard(b,curId,isCur,isAllDay,focusBlocks){
- isAllDay=!!isAllDay;
- var allItems=planCandidates(b.id,curId);if(isCur)allItems=planNowItems(allItems);var items=allItems;
- var queue=prioritizePlanItems(items);
- var block=dayBlocks().find(function(item){return item.id===b.id;}),blockStart=block?block.start:"";
+function planBlockCard(viewId,curId,focusBlocks){
+ var selection=planHomeSelection(focusBlocks),itemType=selection.itemType;
+ viewId=planNormalizeFocusState(viewId,focusBlocks);
+ var groups=planViewGroups(viewId,curId,focusBlocks,itemType),count=planViewItemCount(groups),isNow=viewId==="now",block=focusBlocks.filter(function(item){return item.id===viewId;})[0],current=focusBlocks.filter(function(item){return item.id===curId;})[0]||focusBlocks[0];
+ var title=itemType==="anytime"?"Anytime":itemType==="all-day"?"All-day items":viewId==="now"?"Now":viewId==="everything-today"?"Everything today":planBlockName(block||current);
+ var subtitle=itemType==="anytime"?"No preferred time":itemType==="all-day"?"Assigned All day":viewId==="everything-today"?"Across every time block":isNow?planBlockName(current)+" · "+current.range:block.range;
+ var weather=isNow?nowWeatherHTML():block&&typeof planWeatherHTML==="function"?planWeatherHTML(dayBlocks().filter(function(item){return item.id===viewId;})[0].start):"";
  function header(){
-  var label=isCur?"Now":isAllDay?"All Day":b.name,weather=isCur?nowWeatherHTML():isAllDay?nowWeatherHTML():(typeof planWeatherHTML==="function"?planWeatherHTML(blockStart):""),
-   heading=planFocusMenuHTML(focusBlocks,curId,planFocusState),
-   period=isCur?'<span class="plan-block-name">'+esc(b.name)+'</span><span class="current-plan-range">'+esc(b.range)+'</span>':isAllDay?'<span class="current-plan-range current-plan-all-day-range">Any time today</span>':'<span class="current-plan-range">'+esc(b.range)+'</span>';
-  return '<div class="current-plan-summary'+(weather?" has-weather":"")+'"><div class="current-plan-topline"><div class="current-plan-heading-controls">'+heading+planItemCountHTML(queue.visible.length)+'</div></div><div class="current-plan-details"><div class="current-plan-period">'+period+'</div></div><div class="current-plan-weather" id="nowWeather" data-plan-weather-time="'+(isCur||isAllDay?"":esc(blockStart))+'">'+weather+'</div></div>';
+  var timeframe=planFocusMenuHTML(focusBlocks,curId,viewId),heading=itemType==="scheduled"?timeframe:'<h2 class="home-plan-view-heading">'+esc(title)+'</h2>',countLabel=planViewCountLabel(viewId,groups);
+  var weatherSlot=isNow||block?'<div class="current-plan-weather" id="nowWeather" data-plan-weather-time="'+(block&&!isNow?esc(dayBlocks().filter(function(item){return item.id===viewId;})[0].start):"")+'">'+weather+'</div>':"";
+  var segments='<div class="faith-practice-tabs home-plan-type-tabs" role="tablist" aria-label="Home item type">'+[["scheduled","Scheduled"],["anytime","Anytime"],["all-day","All-day"]].map(function(pair){var selected=itemType===pair[0];return '<button type="button" role="tab" id="home-plan-type-'+pair[0]+'" aria-controls="home-plan-items" data-plan-item-type="'+pair[0]+'" aria-selected="'+selected+'" tabindex="'+(selected?"0":"-1")+'">'+pair[1]+'</button>';}).join("")+'</div>';
+  return '<div class="current-plan-summary'+(weather?" has-weather":"")+'"><div class="current-plan-topline"><div class="current-plan-heading-controls">'+heading+'<span class="current-plan-item-count" aria-label="'+esc(countLabel)+'"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3h8M5.5 8h8M5.5 13h8M2.5 3h.01M2.5 8h.01M2.5 13h.01"/></svg>'+esc(countLabel)+'</span></div></div>'+weatherSlot+'</div>'+segments+'<div class="home-plan-context">'+esc(subtitle)+'</div>';
  }
  function itemHTML(it){
   if(it.rhythm||it.faithRhythm){var rhythmCard=planRhythmCardHTML(it);if(rhythmCard)return rhythmCard;}
@@ -444,18 +511,17 @@ function planBlockCard(b,curId,isCur,isAllDay,focusBlocks){
   var meta=planItemMetaBar(it.sub,!!(it.rhythm||it.faithRhythm));
   return '<div class="planitem"><div class="pi-main">'+planItemCopy(it,btn)+'</div>'+planItemTopRow(it)+planItemFooter(it,meta,it.sub)+'</div>';
  }
- var body=queue.visible.length?queue.visible.map(itemHTML).join(""):'<div class="empty plan-empty-card">Nothing queued - all items tended.</div>';
- return '<section id="plan-'+b.id+'" data-plan-block="'+b.id+'" class="card planblock current'+(isAllDay?' all-day':'')+'">'+header()+'<div class="current-plan-items">'+body+'</div></section>';
+ var nonempty=groups.filter(function(group){return group.items.length>0;}),emptyMessage=itemType==="anytime"?"No eligible Anytime rhythms.":itemType==="all-day"?"No eligible All-day items.":"Nothing queued - all items tended.",body=nonempty.length?nonempty.map(function(group){return '<section class="current-plan-item-group"'+(group.title?' aria-label="'+esc(group.title)+'"':"")+'>'+(group.title?'<h3 class="current-plan-item-group-title">'+esc(group.title)+'</h3>':"")+'<div class="current-plan-item-group-items">'+group.items.map(itemHTML).join("")+'</div></section>';}).join(""):'<div class="empty plan-empty-card">'+esc(emptyMessage)+'</div>';
+ return '<section id="plan-'+esc(itemType==="scheduled"?viewId:itemType==="anytime"?"anytime":"all-day-items")+'" data-plan-block="'+esc(itemType==="scheduled"?viewId:itemType==="anytime"?"anytime":"all-day-items")+'" class="card planblock current'+(itemType==="all-day"?' all-day':'')+'">'+header()+'<div class="current-plan-items" id="home-plan-items" role="tabpanel" aria-labelledby="home-plan-type-'+itemType+'">'+body+'</div></section>';
 }
 function planHTML(){
  var blocks=planBlocksDef();
  var current=blocks.filter(function(x){return x.cur;})[0]||blocks[0],curId=current.id;
- var selected=planFocusState==="allday"?{id:"allday",name:"All Day",range:"Any time today"}:blocks.filter(function(block){return block.id===planFocusState&&block.id!==curId;})[0],focus=planFocusState==="now"||!selected?current:selected;
- if(!selected&&planFocusState!=="now")planFocusState="now";
- return planBlockCard(focus,curId,focus.id===curId,focus.id==="allday",blocks);}
+ planHomeSelection(blocks);
+ planFocusState=planNormalizeFocusState(planFocusState,blocks);
+ return planBlockCard(planFocusState,curId,blocks);}
 function dashboardFocusedPrayerHTML(){
- var timeBlock=faithDashboardPrayerTimeBlock(dashboardPrayerTimeMode),people=dashboardPrayerPeople,count=faithDashboardPrayerSessionSort(timeBlock,people).length;
- return tendFocusedPrayerSectionHTML({className:"dashboard-focused-prayer",ariaLabel:"Focused prayer",controlsHTML:faithDashboardPrayerPeopleHTML(),actionHTML:'<button type="button" class="btn mini faith-start-prayer" data-dashboard-prayer-start="1" aria-label="Start focused prayer for '+count+' '+(count===1?"prayer":"prayers")+'">'+collectionIcon("prayer")+'<span>Focused Prayer</span><span class="faith-prayer-session-count" aria-hidden="true">'+count+'</span></button>',dialogHTML:faithDashboardPrayerPeopleDialogHTML()});
+ return window.faithPrayerEntryHTML("dashboard");
 }
 function upcomingDates(now){
  var today=new Date(now||Date.now());today.setHours(0,0,0,0);var rows=[];
@@ -765,7 +831,7 @@ function tendNoteEditorHTML(note,ownerId){
 }
 function tendNoteAddEditorHTML(ownerId,draft){
  var isFaith=ownerId==="faith";
- return '<dialog class="profile-editor-dialog" data-profile-editor="note" aria-labelledby="profile-editor-title"><div class="profile-editor-body"><h3 id="profile-editor-title">Add Note</h3>'+(isFaith?'<div class="profile-note-type"><span>Type</span><strong>Prayer</strong></div>':'<label class="profile-note-type">Type<select id="profileNoteKind">'+noteKindOptions("general")+'</select></label>')+'<label class="profile-note-type">Title<input id="profileNoteTitle" placeholder="A short title"></label><label class="profile-note-type">Details<textarea id="profileNoteDetails" placeholder="Add details (optional)"></textarea></label>'+tendAssociationControlsHTML("followup",ownerId,"new",draft)+'<div class="profile-editor-actions"><button class="btn mini" data-profilenotesave="'+esc(ownerId)+'">Save Note</button><button class="btn mini ghost" data-profilenotecancel="1" data-editor-cancel>Cancel</button></div></div></dialog>';
+ return '<dialog class="profile-editor-dialog" data-profile-editor="note"'+(isFaith?' data-editor-modal':'')+' aria-labelledby="profile-editor-title"><div class="profile-editor-body"><h3 id="profile-editor-title">Add Note</h3>'+(isFaith?'<div class="profile-note-type"><span>Type</span><strong>Prayer</strong></div>':'<label class="profile-note-type">Type<select id="profileNoteKind">'+noteKindOptions("general")+'</select></label>')+'<label class="profile-note-type">Title<input id="profileNoteTitle" placeholder="A short title"></label><label class="profile-note-type">Details<textarea id="profileNoteDetails" placeholder="Add details (optional)"></textarea></label>'+tendAssociationControlsHTML("followup",ownerId,"new",draft)+'<div class="profile-editor-actions"><button class="btn mini" data-profilenotesave="'+esc(ownerId)+'">Save Note</button><button class="btn mini ghost" data-profilenotecancel="1" data-editor-cancel>Cancel</button></div></div></dialog>';
 }
 function notesChecklist(p,addAction){
  var items=personNoteRecords(p);

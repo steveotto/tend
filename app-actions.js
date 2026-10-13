@@ -170,6 +170,17 @@ function bind(){
    render();
   }
  },true);
+ document.addEventListener("keydown",function(e){
+  var active=e.target&&e.target.closest&&e.target.closest('[role="tab"][data-plan-item-type]');
+  if(!active)return;
+  var tabs=Array.from(active.closest('[role="tablist"]').querySelectorAll('[role="tab"][data-plan-item-type]')),index=tabs.indexOf(active),next;
+  if(e.key==="ArrowRight")next=(index+1)%tabs.length;
+  else if(e.key==="ArrowLeft")next=(index+tabs.length-1)%tabs.length;
+  else if(e.key==="Home")next=0;
+  else if(e.key==="End")next=tabs.length-1;
+  else return;
+  e.preventDefault();tabs[next].click();
+ },true);
  document.addEventListener("click",function(e){
   var t=e.target,b;
   var openPlanTimeMenu=document.querySelector(".current-plan-time-menu[open]");
@@ -202,7 +213,8 @@ function bind(){
   if(b=t.closest("[data-rippleidea]")){var pid=b.getAttribute("data-rippleidea");rippleIdeaOffsets[pid]=(rippleIdeaOffsets[pid]||0)+1;var person=S.people.find(function(p){return p.id===pid;});if(person)el("rippleIdea").textContent=rippleIdea(person);return;}
   if(b=t.closest("[data-rippleopen]")){window._rippleModalOpen=true;render();var rippleType=el("plogType");if(rippleType)rippleType.focus();return;}
   if(b=t.closest("[data-plan-kind-toggle]")){e.preventDefault();e.stopPropagation();var scope=b.getAttribute("data-plan-kind-toggle"),kind=b.getAttribute("data-kind"),visibility=planKindVisibilityFor(scope);if(Object.prototype.hasOwnProperty.call(visibility,kind)){visibility[kind]=visibility[kind]===false;render();}return;}
-  if(b=t.closest("[data-plan-focus]")){e.preventDefault();var blocks=planBlocksDef(),current=blocks.filter(function(block){return block.cur;})[0]||blocks[0],selected=b.getAttribute("data-plan-focus");planFocusState=selected==="now"||selected==="allday"||blocks.some(function(block){return block.id===selected&&block.id!==current.id;})?selected:"now";render();return;}
+  if(b=t.closest("[data-plan-focus]")){e.preventDefault();var blocks=planBlocksDef(),selected=b.getAttribute("data-plan-focus");planFocusState=planNormalizeFocusState(selected,blocks);planSaveHomeSelection();render();var focused=document.querySelector(".current-plan-time-menu summary");if(focused)focused.focus({preventScroll:true});return;}
+  if(b=t.closest("[data-plan-item-type]")){e.preventDefault();var itemType=b.getAttribute("data-plan-item-type");if(["scheduled","anytime","all-day"].indexOf(itemType)>=0){planItemTypeState=itemType;planSaveHomeSelection();render();var segment=document.querySelector('[data-plan-item-type="'+itemType+'"]');if(segment)segment.focus({preventScroll:true});}return;}
   if(b=t.closest("[data-areanav]")){currentArea=b.getAttribute("data-areanav");if(currentArea==="faith")faithConfig().selectedGroup="Sabbath";openDetail=null;editingId=null;editingEvent=null;activityComposerOpen=false;taskDraftArea=null;render();window.scrollTo(0,0);return;}
   if(b=t.closest("[data-utilnav]")){tab=b.getAttribute("data-utilnav");if(tab==="settings")settingsTab="profile";document.body.classList.remove("mobile-search-open");var mobileSearchToggle=document.querySelector("[data-mobile-search-toggle]");if(mobileSearchToggle)mobileSearchToggle.setAttribute("aria-expanded","false");window._psModalOpen=false;window._personPrayerDraftFor=null;currentArea=null;openDetail=null;editingId=null;editingEvent=null;activityComposerOpen=false;taskDraftArea=null;currentPerson=null;editingConn=null;editRhythmId=null;rhythmEditDraft=null;editSparkId=null;sparkEditDraft=null;sparkDraftOpenFor=null;noteDraftOpenFor=null;rhythmDraft=null;render();window.scrollTo(0,0);return;}
   if(b=t.closest("[data-areago]")){currentArea=b.getAttribute("data-areago");if(currentArea==="faith")faithConfig().selectedGroup="Sabbath";openDetail=null;editingId=null;editingEvent=null;render();window.scrollTo(0,0);return;}

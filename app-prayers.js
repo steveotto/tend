@@ -122,6 +122,8 @@ window.openPersonPrayerPast=function(key){
 };
 window.renderPrayer=function(){var out=tendPrayerSectionHTML("Prayer","",{subtitle:"carry these people before God"});
  out+='<div class="card prayer-compose"><button type="button" class="btn" id="prayerFormOpen">+ Add prayer</button></div>';
+ if(typeof window.faithPrayerEntryHTML==="function")out+=window.faithPrayerEntryHTML("prayer");
+ if(typeof faithPrayerSession!=="undefined"&&faithPrayerSession&&faithPrayerSession.source==="prayer")out+=faithPrayerSessionHTML();
  if(prayerComposerOpen)out+='<dialog class="profile-editor-dialog prayer-edit-dialog" data-editor-modal aria-labelledby="prayer-compose-title"><div class="profile-editor-body"><h3 id="prayer-compose-title">Add Prayer</h3>'+prayerEditor({freq:"selectdays",weekdays:[new Date().getDay()],tod:"anytime",added:todayStr()},"global")+'</div></dialog>';
  PRAYER_CATS.forEach(function(cat){var items=S.prayers.filter(function(p){return p.category===cat&&!p.answered&&!p.archived;});if(items.length)out+='<div class="card prayer-cat"><div class="subhead">'+esc(cat)+'</div>'+items.map(function(p){return prayerItemHTML(p,false);}).join('')+'</div>';});
  var closed=S.prayers.filter(function(p){return p.answered||p.archived;});if(closed.length)out+='<div class="card prayer-cat"><div class="subhead">History</div>'+window.prayerList(closed,false)+'</div>';

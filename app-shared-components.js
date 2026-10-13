@@ -9,44 +9,45 @@ function tendPrayerSectionHTML(title,content,options){
  options=options||{};
  return tendSectionHeaderHTML({title:title,className:options.headerClassName,subtitle:options.subtitle,metadata:options.metadata,trailingHTML:options.trailingHTML,iconHTML:options.iconHTML,titleId:options.titleId})+content;
 }
-function tendFocusedPrayerSectionHTML(options){
+function tendPrayerEntryHTML(options){
  options=options||{};
- return '<section class="'+esc(["dashboard-focused-prayer",options.className||""].join(" ").trim())+'" aria-label="'+esc(options.ariaLabel||"Focused prayer")+'"><div class="dashboard-prayer-controls">'+(options.controlsHTML||"")+'</div>'+(options.actionHTML||"")+(options.dialogHTML||"")+'</section>';
+ var id=String(options.id||"dashboard"),count=Number(options.count)||0,peopleCount=Number(options.peopleCount)||0,timeframe=String(options.timeframe||"Now");
+ return '<section class="prayer-entry-module" aria-label="Focused Prayer"><div class="prayer-entry-summary"><strong>'+count+' '+(count===1?"request":"requests")+' · '+esc(timeframe)+'</strong><span>'+peopleCount+' '+(peopleCount===1?"person":"people")+' selected</span>'+(count?"":'<span class="prayer-entry-empty">No active requests match this selection.</span>')+'</div><div class="prayer-entry-actions"><button type="button" class="btn mini ghost" data-prayer-selection-open="'+esc(id)+'">Customize</button><button type="button" class="btn mini faith-start-prayer" data-prayer-session-start="'+esc(id)+'" aria-label="Start focused prayer for '+count+' '+(count===1?"request":"requests")+'"'+(count?"":" disabled")+'><span>Focused Prayer · '+count+'</span></button></div>'+(options.dialogHTML||"")+'</section>';
 }
 function tendPrayerTimeframePickerHTML(options){
  options=options||{};
- var personId=options.personId===undefined?"":String(options.personId);
  function optionHTML(item){
   var count=Number(item.count)||0;
   var selected=String(item.id)===String(options.selectedTimeframeId);
-  return '<button type="button" class="prayer-timeframe-picker__option'+(item.isCurrent?" is-current":"")+(selected?" is-selected":"")+'" data-prayer-time-option="'+esc(item.id)+'"'+(personId?' data-prayer-time-person="'+esc(personId)+'"':"")+' aria-pressed="'+selected+'"><span class="prayer-timeframe-picker__label">'+esc(item.label)+'</span><span class="prayer-timeframe-picker__description">'+esc(item.timeDescription)+'</span><span class="prayer-timeframe-picker__count">'+count+' '+(count===1?"prayer":"prayers")+'</span></button>';
+  return '<button type="button" class="prayer-timeframe-picker__option'+(item.isCurrent?" is-current":"")+(selected?" is-selected":"")+'" data-prayer-time-option="'+esc(item.id)+'" aria-pressed="'+selected+'"><span class="prayer-timeframe-picker__label">'+esc(item.label)+'</span><span class="prayer-timeframe-picker__description">'+esc(item.timeDescription)+'</span><span class="prayer-timeframe-picker__count">'+count+' '+(count===1?"request":"requests")+'</span></button>';
  }
- var items=(options.options||[]).map(optionHTML);
- items.push(optionHTML({id:"allday",label:"All Day",timeDescription:"Any time today",count:options.allDayCount}));
+ if(options.mode==="options"){
+  var optionsHTML=(options.options||[]).map(optionHTML);
+  optionsHTML.push(optionHTML({id:"allday",label:"All Day",timeDescription:"Any time today",count:options.allDayCount}));
+  if(options.includeAllRequests)optionsHTML.push(optionHTML({id:"allrequests",label:"All requests",timeDescription:"Any active request, regardless of schedule",count:options.allRequestsCount}));
+  return '<div class="prayer-timeframe-picker__options" role="group" aria-label="Prayer timeframes">'+optionsHTML.join("")+'</div>';
+ }
  var label=String(options.label||"Now");
- return '<div class="prayer-timeframe-picker"><details class="prayer-timeframe-picker__menu"><summary class="prayer-timeframe-picker__trigger" aria-label="Choose timeframe, currently '+esc(label)+'"><span>'+esc(label)+'</span><span class="prayer-timeframe-picker__chevron" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4.5L12.5 6"/></svg></span></summary><div class="prayer-timeframe-picker__options" role="group" aria-label="Prayer timeframes">'+items.join("")+'</div></details></div>';
+ return '<button type="button" class="prayer-timeframe-picker__trigger" data-prayer-selection-time-open aria-label="Change timeframe, currently '+esc(label)+'. '+esc(options.resolvedLabel||"")+'"><span class="prayer-timeframe-picker__summary"><strong>'+esc(label)+'</strong><span>'+esc(options.resolvedLabel||"")+'</span></span><span class="prayer-timeframe-picker__chevron" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4.5L12.5 6"/></svg></span></button>';
 }
-function tendPrayerTimeframePickerState(mode,options,allDayCount){
+function tendPrayerTimeframePickerState(mode,options,allDayCount,allRequestsCount){
  options=options||[];
- var selectedId=mode==="all"||mode==="allday"?"allday":mode==="now"||options.some(function(item){return item.id===mode;})?mode:"now";
+ var selectedId=mode==="all"||mode==="allday"?"allday":mode==="allrequests"?"allrequests":mode==="now"||options.some(function(item){return item.id===mode;})?mode:"now";
  var selectedOption=options.find(function(item){return item.id===selectedId;});
  return {
   options:options,
   selectedTimeframeId:selectedId,
-  selectedCount:selectedId==="allday"?Number(allDayCount)||0:selectedOption?Number(selectedOption.count)||0:0,
+  selectedCount:selectedId==="allday"?Number(allDayCount)||0:selectedId==="allrequests"?Number(allRequestsCount)||0:selectedOption?Number(selectedOption.count)||0:0,
   allDayCount:Number(allDayCount)||0,
-  label:selectedId==="now"?"Now":selectedId==="allday"?"All Day":selectedOption?selectedOption.label:"Now"
+  allRequestsCount:Number(allRequestsCount)||0,
+  label:selectedId==="now"?"Now":selectedId==="allday"?"All Day":selectedId==="allrequests"?"All requests":selectedOption?selectedOption.label:"Now"
  };
 }
-function tendPrayerFilterDialogHTML(options){
+function tendPrayerSelectionDialogHTML(options){
  options=options||{};
- var id=String(options.id||"dashboard-prayer-people-dialog"),titleId=String(options.titleId||"dashboard-prayer-people-title"),intro=options.intro?'<p class="profile-tab-intro">'+esc(options.intro)+'</p>':"",selection=options.selectionHTML||"",primary=options.primaryActionHTML||"",close=options.closeActionHTML||"";
- var classes="profile-editor-dialog rhythm-picker-dialog dashboard-prayer-people-dialog";
- return '<dialog class="'+classes+'" id="'+esc(id)+'" data-editor-modal aria-labelledby="'+esc(titleId)+'"><div class="profile-editor-body"><h3 id="'+esc(titleId)+'" tabindex="-1">'+esc(options.title||"Prayer timeframe")+'</h3>'+(options.timeframeHTML||"")+intro+tendPrayerIncludedSummaryHTML(options.count,options.timeLabel)+selection+'<div class="profile-editor-actions dashboard-prayer-people-actions">'+primary+close+'</div></div></dialog>';
-}
-function tendPrayerIncludedSummaryHTML(count,label){
- count=Number(count)||0;
- return '<p class="dashboard-prayer-people-count" aria-live="polite">Focused Prayer will include <strong>'+count+' '+(count===1?"prayer request":"prayer requests")+'</strong> · '+esc(label||"Now")+'</p>';
+ var id=String(options.id||"prayer-selection-dialog"),titleId=String(options.titleId||"prayer-selection-title"),isTimeframe=options.view==="timeframe",close='<button type="button" class="prayer-selection-close" data-prayer-selection-close data-editor-cancel aria-label="Close prayer selection">×</button>';
+ var body=isTimeframe?'<div class="prayer-selection-time-view"><button type="button" class="btn mini ghost prayer-selection-back" data-prayer-selection-back>Back</button><h4>Timeframe</h4>'+tendPrayerTimeframePickerHTML({mode:"options",options:options.timeOptions,selectedTimeframeId:options.selectedTimeframeId,allDayCount:options.allDayCount,allRequestsCount:options.allRequestsCount,includeAllRequests:options.includeAllRequests})+(Number(options.count)?"":'<p class="prayer-selection-empty" aria-live="polite">No active requests match these selections.</p>')+'</div>':'<div class="prayer-selection-people-view"><section class="prayer-selection-section"><h4>Timeframe</h4>'+(options.timeframeHTML||"")+'</section><section class="prayer-selection-section"><div class="prayer-selection-people-heading"><h4>People</h4><div class="prayer-selection-bulk"><button type="button" class="btn mini ghost" data-prayer-selection-people="all">Select all</button><button type="button" class="btn mini ghost" data-prayer-selection-people="clear">Clear</button></div></div>'+(options.groupsHTML||"")+'<div class="prayer-selection-people">'+(options.peopleHTML||"")+'</div></section>'+(Number(options.count)?"":'<p class="prayer-selection-empty" aria-live="polite">No active requests match these selections.</p>')+'</div>';
+ return '<dialog class="profile-editor-dialog prayer-selection-dialog" id="'+esc(id)+'" data-editor-modal aria-labelledby="'+esc(titleId)+'"><header class="prayer-selection-header"><h3 id="'+esc(titleId)+'" tabindex="-1">'+(isTimeframe?"Timeframe":"Prayer selection")+'</h3>'+close+'</header><div class="prayer-selection-body" data-prayer-selection-body>'+body+'</div><footer class="prayer-selection-footer"><p class="prayer-selection-count" aria-live="polite">'+Number(options.count||0)+' '+(Number(options.count)===1?"request":"requests")+' selected</p><div class="prayer-selection-footer-actions"><button type="button" class="btn mini ghost" data-prayer-selection-done>Done</button><button type="button" class="btn mini faith-start-prayer" data-prayer-selection-start'+(Number(options.count)?"":" disabled")+'>Start prayer</button></div></footer></dialog>';
 }
 function tendTodayWithPersonHTML(options){
  options=options||{};
