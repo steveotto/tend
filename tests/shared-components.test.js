@@ -342,7 +342,7 @@ test("Faith Notes are consolidated, scoped, deduplicated, and reuse shared note 
   assert.match(faithSource, /visible=showAll\?active:active\.slice\(0,3\)/);
   assert.match(faithSource, /View all notes \("\+active\.length\+"\)/);
   assert.match(faithSource, /data-note-history="faith"/);
-  assert.match(faithSource, /faithViewPanelHTML\("requests",faithPrayerRequestsHTML\(\)\)[\s\S]*faithViewPanelHTML\("notes",faithNotesHTML\(\)\)/);
+  assert.match(faithSource, /faithViewPanelHTML\("requests",faithPrayerRequestsHTML\(\)\)[\s\S]*faithViewPanelHTML\("notes",faithViewHeaderHTML\("Notes","Thoughts, encouragement, and follow-ups to remember\."/);
   assert.match(faithSource, /tendNoteCardHTML\(note,context/);
   assert.match(faithSource, /tendNoteEditorHTML\(note,"faith"\)/);
   assert.match(faithSource, /tendNoteAddEditorHTML\("faith"/);
@@ -392,7 +392,7 @@ test("Faith Prayer requests are standalone and session counts share the visible 
 
   assert.match(practiceContent, /var tabs=\["rhythms","sparks"\]/);
   assert.doesNotMatch(practiceContent, /faithPrayerHub|faithPrayerTodayHTML|faithPrayerAllHTML/);
-  assert.match(requestSection, /tendPrayerSectionHTML\("Prayer requests","",\{titleId:"faithPrayerRequestsTitle",subtitle:"People and needs to bring before God\."/);
+  assert.match(requestSection, /faithViewHeaderHTML\("Prayer requests","People and needs to bring before God\."/);
   assert.match(requestSection, /faithPrayerRequestHealthHTML\(\)/);
   assert.match(requestSection, /faithPrayerPeopleFilterHTML\(\)/);
   assert.match(requestSection, /faithFocusedPrayerButtonHTML\(view\)/);
@@ -413,7 +413,7 @@ test("Faith Prayer requests are standalone and session counts share the visible 
   assert.match(faithSource, /View all prayers \("\+items\.length\+"\)/);
   assert.match(focusedPrayerModule, /count\?"":" disabled"/);
   assert.match(faithSource, /if\(!sessionIds\.length\)\{event\.stopImmediatePropagation\(\);return;\}/);
-  assert.match(faithSource, /faithViewPanelHTML\("requests",faithPrayerRequestsHTML\(\)\)[\s\S]*faithViewPanelHTML\("notes",faithNotesHTML\(\)\)/);
+  assert.match(faithSource, /faithViewPanelHTML\("requests",faithPrayerRequestsHTML\(\)\)[\s\S]*faithViewPanelHTML\("notes",faithViewHeaderHTML\("Notes","Thoughts, encouragement, and follow-ups to remember\."/);
   assert.match(faithSource, /function faithPrayerAllMatches\(p\)\{[\s\S]*?if\(selectedPeople===null\)return true/);
   assert.doesNotMatch(faithSource.match(/function faithPrayerAllMatches\(p\)\{([\s\S]*?)\n\}/)[1], /faithSelectedGroup/);
   assert.match(faithSource, /function faithPracticeHealthParts\(\)\{[\s\S]*?avg\(faithActivePrayers\(\)\.map\(function\(p\)\{return prayerScore\(p\);\}\)\)/);
@@ -428,7 +428,7 @@ test("Faith Prayer requests are standalone and session counts share the visible 
   assert.match(settingsHTML, /FAITH_GROUPS\.map/);
   assert.doesNotMatch(settingsHTML, /Prayer requests/);
   assert.match(styles, /\.faith-prayer-expand\{display:flex;align-items:center;justify-content:center;width:max-content/);
-  assert.match(styles, /\.faith-prayer-hub\{height:auto;min-height:0;padding:calc\(var\(--tend-space-unit,8px\)\*2\) 0 0\}/);
+  assert.match(styles, /\.faith-prayer-hub\{height:auto;min-height:0;padding:0\}/);
   assert.match(styles, /\.faith-prayer-content,.faith-prayer-row,.faith-prayer-hub \.faith-profile-prayer-row\{box-sizing:border-box;width:100%;min-width:0\}/);
   assert.match(styles, /\.faith-prayer-filters\{display:flex;align-items:center;gap:8px;flex-wrap:wrap\}/);
   assert.match(styles, /\.faith-prayer-actions\{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap/);
@@ -852,6 +852,11 @@ test("Faith health uses the Person summary layout with expandable rhythm and pra
   assert.match(styles, /\.faith-health-card \.person-health-summaries\{display:flex/);
   assert.match(styles, /\.faith-view-nav \[role=tab\]\[aria-selected=true\]/);
   assert.match(styles, /\.faith-view-panel\[hidden\]\{display:none\}/);
+  assert.match(styles, /\.faith-views-content\{display:grid;gap:1\.5rem/);
+  assert.match(styles, /\.faith-view-header-title\{[^}]*font-size:var\(--tend-type-section-header\)/);
+  assert.match(styles, /\.faith-view-header-description\{[^}]*font-size:var\(--tend-type-metadata\)/);
+  assert.equal((faithSource.match(/faithViewHeaderHTML\(/g) || []).length, 5);
+  assert.match(faithSource, /'<div class="faith-views-content">'\+faithViewNavHTML\(\)/);
   assert.match(actionsSource, /data-person-health-summary[\s\S]*?data-active-summary/);
   assert.match(homeRhythmSource, /faithMainView=type==="prayers"\?"requests":"practices";faithMainViewInitialized=true/);
   assert.match(categoryRhythmSource, /faithMainView="practices";faithMainViewInitialized=true/);
@@ -859,11 +864,12 @@ test("Faith health uses the Person summary layout with expandable rhythm and pra
 
 test("Faith Today renders rhythm cards, focused prayer, and Sparks as separate sections", () => {
   const today = faithSource.match(/function faithTodayHTML\(\)\{([\s\S]*?)\n\}/)[1];
+  const practiceContent = faithSource.match(/function faithPracticeContent\(group\)\{([\s\S]*?)\n\}/)[1];
   assert.match(today, /return tendRhythmCardHTML\(r,/);
   assert.match(today, /return tendSparkCardHTML\(s,/);
   assert.match(today, /data-faith-sparkdone=.*>Do it<\/button>/);
   assert.match(today, /class="profile-empty-state faith-today-empty">No Sparks waiting\./);
-  assert.match(today, /className:"faith-today-heading",trailingHTML:'<span class="qpill/);
+  assert.match(today, /faithViewHeaderHTML\("Today in Faith","",'<span class="qpill/);
   assert.match(today, /visibleRhythms=faithTodayExpanded\?rhythms:rhythms\.slice\(0,3\)/);
   assert.match(today, /View all for today \("\+scheduledCount\+"\)/);
   assert.doesNotMatch(today, /faith-today-controls/);
@@ -874,10 +880,11 @@ test("Faith Today renders rhythm cards, focused prayer, and Sparks as separate s
   assert.ok(today.indexOf('title:"Pray"') < today.indexOf('title:"Sparks"'));
   assert.match(homeRhythmSource, /function dashboardFocusedPrayerHTML\(\)[\s\S]*data-dashboard-prayer-start[\s\S]*faithDashboardPrayerPeopleDialogHTML\(\)/);
   assert.match(homeRhythmSource, /function dashboardFocusedPrayerHTML\(\)[\s\S]*tendFocusedPrayerSectionHTML\(\{className:"dashboard-focused-prayer"/);
-  assert.match(faithSource, /title:"Your practices",subtitle:"Choose an area to tend\."/);
+  assert.match(faithSource, /faithViewHeaderHTML\("Your practices","Choose an area to tend\."/);
   assert.match(faithSource, /var practices=[\s\S]*faithSectionNavHTML\(selected\)/);
   assert.match(faithSource, /faithViewPanelHTML\("today",faithTodayHTML\(\)\)/);
   assert.match(faithSource, /faith-nav-score '\+level/);
+  assert.match(faithSource, /aria-label="Health score '\+score\+' percent"[\s\S]*?<span>'\+score\+'<\/span>/);
   assert.match(faithSource, /class="faith-practice-panel" id="faith-practice-panel"/);
   assert.doesNotMatch(faithSource, /faithPracticeMetersHTML|faith-practice-meters|faith-practice-meter/);
   assert.match(faithSource, /function faithPracticeHealthParts\(\)/);
@@ -888,18 +895,31 @@ test("Faith Today renders rhythm cards, focused prayer, and Sparks as separate s
   assert.match(faithSource, /function faithSparksHTML\(group\)[\s\S]*?tendSparkCardHTML\(item/);
   assert.match(faithSource, /faith-practice-spark-list/);
   assert.match(faithSource, /data-faith-sparkdone=.*>Do it<\/button>/);
-  assert.match(faithSource, /function faithRhythmsHTML\(group\)[\s\S]*?data-faith-rhythm-add[\s\S]*?faith-practice-rhythm-list/);
-  assert.match(faithSource, /function faithSparksHTML\(group\)[\s\S]*?data-faith-spark-add[\s\S]*?faith-practice-spark-list/);
-  assert.match(styles, /\.faith-practice-tabs\{margin:0 0 18px;padding:0\}/);
-  assert.doesNotMatch(styles, /\.faith-practice-tabs\{[^}]*border-bottom/);
+  assert.match(faithSource, /function faithRhythmsHTML\(group\)[\s\S]*?faith-practice-rhythm-list/);
+  assert.doesNotMatch(faithSource.match(/function faithRhythmsHTML\(group\)\{([\s\S]*?)\n\}/)[1], /data-faith-rhythm-add/);
+  assert.match(faithSource, /function faithSparksHTML\(group\)[\s\S]*?faith-practice-spark-list/);
+  assert.doesNotMatch(faithSource.match(/function faithSparksHTML\(group\)\{([\s\S]*?)\n\}/)[1], /data-faith-spark-add/);
+  assert.match(practiceContent, /faithRhythmsHTML\(group\):faithSparksHTML\(group\)/);
+  assert.match(practiceContent, /data-faith-rhythm-add=.*\+ Add rhythm/);
+  assert.match(practiceContent, /data-faith-spark-add=.*\+ Add spark/);
+  assert.match(practiceContent, /role="tablist"[\s\S]*role="tab"[\s\S]*aria-selected="'\+\(tab===selected\)[\s\S]*tabindex="'\+\(tab===selected\?"0":"-1"\)/);
+  assert.match(faithSource, /faithSection:sparkGroup/);
+  assert.match(faithSource, /tabs\[nextIndex\]\.click\(\)/);
+  assert.match(faithSource, /aria-label="Health score unavailable"/);
+  assert.match(styles, /\.faith-practice-toolbar\{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap/);
+  assert.match(styles, /\.faith-practice-tabs button\[aria-selected=true\]\{[^}]*background:var\(--card\)/);
   assert.match(styles, /\.faith-practice-rhythm-list\{display:grid;gap:14px/);
-  assert.match(styles, /\.faith-add-row\{display:flex;justify-content:flex-end/);
+  assert.match(styles, /\.faith-practice-wrap\{padding-top:24px;border-top:1px solid var\(--line\)\}/);
+  assert.match(styles, /\.faith-selected-practice-title\{[^}]*font-family:var\(--tend-font-editorial,Newsreader,Georgia,serif\)[^}]*font-size:calc\(var\(--tend-type-section-header,1\.35rem\)\*\.85\)[^}]*font-weight:500/);
+  assert.match(styles, /\.faith-practice-focus p\{margin:0;color:var\(--ink-soft\);font-size:var\(--tend-type-description,1\.032rem\);font-weight:400/);
+  assert.match(styles, /\.faith-nav-score-unavailable\{background:transparent;color:var\(--ink-soft\)/);
+  assert.match(indexSource, /Newsreader:ital,opsz,wght@0,6\.\.72,400;0,6\.\.72,500/);
+  assert.match(indexSource, /faith-practice-hierarchy/);
   assert.match(styles, /\.faith-prayer-time-group\{display:grid;gap:10px/);
   assert.match(styles, /\.faith-prayer-content,.faith-prayer-row,.faith-prayer-hub \.faith-profile-prayer-row\{box-sizing:border-box;width:100%;min-width:0\}/);
   assert.match(styles, /\.faith-today-subheading\{margin:28px 0 12px\}/);
   assert.match(styles, /\.faith-page \.dashboard-focused-prayer\{display:grid;grid-template-columns:minmax\(0,1fr\) auto/);
   assert.match(styles, /\.faith-practice-heading\{[^}]*justify-items:start[^}]*text-align:left/);
-  assert.match(styles, /\.faith-practice-tabs\{display:grid;grid-template-columns:repeat\(auto-fit,minmax\(0,1fr\)\)/);
   assert.match(styles, /\.faith-practice-panel\{min-width:0;padding:0;/);
   assert.match(styles, /\.faith-section-nav\{display:grid;grid-template-columns:repeat\(auto-fit,minmax\(min\(100%,190px\),1fr\)\)/);
   assert.match(styles, /\.faith-nav-score\.green\{background:#12B76A/);
