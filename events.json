@@ -1,15 +1,7 @@
 {
-  "synced": "2026-10-12T20:21:32.201Z",
+  "synced": "2026-10-13T00:51:21.041Z",
   "source": "iCloud published feed",
   "events": [
-    {
-      "t": "Worship in the Pines",
-      "s": "2026-09-11T00:00:00",
-      "e": "2026-09-13T00:00:00",
-      "allDay": true,
-      "cal": "Home",
-      "notes": ""
-    },
     {
       "t": "Cancel Plugins for WP",
       "s": "2026-09-16T00:00:00",
@@ -190,6 +182,14 @@
       "t": "Alexander",
       "s": "2026-10-14T16:00:00.000Z",
       "e": "2026-10-14T18:00:00.000Z",
+      "allDay": false,
+      "cal": "Home",
+      "notes": ""
+    },
+    {
+      "t": "Interview",
+      "s": "2026-10-15T19:15:00.000Z",
+      "e": "2026-10-15T20:15:00.000Z",
       "allDay": false,
       "cal": "Home",
       "notes": ""
