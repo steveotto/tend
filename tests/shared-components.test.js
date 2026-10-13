@@ -390,16 +390,20 @@ test("Faith Prayer requests are standalone and session counts share the visible 
 
   assert.match(practiceContent, /var tabs=\["rhythms","sparks"\]/);
   assert.doesNotMatch(practiceContent, /faithPrayerHub|faithPrayerTodayHTML|faithPrayerAllHTML/);
-  assert.match(requestSection, /tendPrayerSectionHTML\("Prayer requests","",\{titleId:"faithPrayerRequestsTitle",subtitle:"Prayer requests to remember and bring before God\."/);
+  assert.match(requestSection, /tendPrayerSectionHTML\("Prayer requests","",\{titleId:"faithPrayerRequestsTitle",subtitle:"People and needs to bring before God\."/);
   assert.match(requestSection, /faithPrayerRequestHealthHTML\(\)/);
   assert.match(requestSection, /faithPrayerPeopleFilterHTML\(\)/);
   assert.match(requestSection, /faithFocusedPrayerButtonHTML\(view\)/);
-  assert.match(requestSection, /<\/div>'\+faithFocusedPrayerButtonHTML\(view\)\+'<div class="faith-prayer-content"/);
+  assert.match(requestSection, /<div class="faith-prayer-filters">[\s\S]*Timeframe:[\s\S]*faithPrayerPeopleFilterHTML\(\)[\s\S]*faith-prayer-matching-count[\s\S]*faith-prayer-actions[\s\S]*faithFocusedPrayerButtonHTML\(view\)[\s\S]*data-faith-prayer-add[\s\S]*faith-prayer-content/);
+  assert.match(requestSection, /var matchingLabel=items\.length\+" matching "\+\(items\.length===1\?"request":"requests"\)/);
   assert.match(requestSection, /data-faith-prayer-add/);
-  assert.match(faithSource, /function faithFocusedPrayerButtonHTML\(view\)[\s\S]*tendFocusedPrayerSectionHTML\(\{className:"faith-request-focused-prayer"/);
+  assert.match(faithSource, /function faithFocusedPrayerButtonHTML\(view\)[\s\S]*class="btn mini faith-start-prayer faith-request-focused-button"[\s\S]*data-faith-session-start/);
+  assert.doesNotMatch(focusedPrayerModule, /tendFocusedPrayerSectionHTML/);
   assert.match(focusedPrayerModule, /data-faith-session-start/);
   assert.match(focusedPrayerModule, /collectionIcon\("prayer"\)/);
   assert.match(focusedPrayerModule, /faith-prayer-session-count/);
+  assert.match(faithSource, /<span>People:<\/span><span class="faith-prayer-filter-count">'\+selectedCount\+' selected<\/span>/);
+  assert.match(faithSource, /Prayer health '\+\(score===null\?"unavailable":score\+" percent"\)\+'\, '\+count\+' active prayer/);
   assert.match(faithSource, /var visible=faithPrayerExpanded\?items:items\.slice\(0,3\)/);
   assert.match(faithSource, /View all prayers \("\+items\.length\+"\)/);
   assert.match(focusedPrayerModule, /count\?"":" disabled"/);
@@ -418,9 +422,13 @@ test("Faith Prayer requests are standalone and session counts share the visible 
   assert.match(faithSource, /faithMainView="requests";faithConfig\(\)\.prayerView="today"/);
   assert.match(settingsHTML, /FAITH_GROUPS\.map/);
   assert.doesNotMatch(settingsHTML, /Prayer requests/);
-  assert.match(styles, /\.faith-prayer-expand\{display:flex;width:max-content;max-width:100%;margin:16px auto 4px\}/);
-  assert.match(styles, /\.faith-prayer-hub\{height:auto;min-height:0;padding:22px 0\}/);
+  assert.match(styles, /\.faith-prayer-expand\{display:flex;align-items:center;justify-content:center;width:max-content/);
+  assert.match(styles, /\.faith-prayer-hub\{height:auto;min-height:0;padding:calc\(var\(--tend-space-unit,8px\)\*2\) 0 0\}/);
   assert.match(styles, /\.faith-prayer-content,.faith-prayer-row,.faith-prayer-hub \.faith-profile-prayer-row\{box-sizing:border-box;width:100%;min-width:0\}/);
+  assert.match(styles, /\.faith-prayer-filters\{display:flex;align-items:center;gap:8px;flex-wrap:wrap\}/);
+  assert.match(styles, /\.faith-prayer-actions\{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap/);
+  assert.match(styles, /\.faith-prayer-request-health-meter\{display:block;height:6px/);
+  assert.doesNotMatch(requestSection, /faith-request-focused-prayer|tendFocusedPrayerSectionHTML/);
 });
 
 test("Completed Note history reuses NoteCard with completion metadata and a scrollable list", () => {
