@@ -66,7 +66,7 @@ function defaultFaithConfig(){return{
  disabledGroups:[],
  groupDescriptions:{
   Scripture:"Build a steady practice of reading and reflecting on Scripture.",
-  Prayer:"A place to hold your active requests and make room for focused prayer.",
+  Prayer:"Build a steady rhythm of prayer and make room to listen.",
   Solitude:"Make room for quiet, reflection, and listening.",
   Sabbath:"A weekly invitation to pause, delight, and reconnect with God.",
   Community:"Strengthen belonging through shared worship and life together.",

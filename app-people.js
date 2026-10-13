@@ -21,6 +21,8 @@ var css=document.createElement("style");css.textContent=[
 ".pc-identity{display:flex;justify-content:space-between;align-items:center;gap:12px}",
 ".pc-person{display:flex;align-items:center;gap:10px;min-width:0}",
 ".pc-person h3{margin:0;line-height:1.25}",
+".pc-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))}",
+".pc-grid>.person-card{min-width:0}",
 ".pc-relation{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:400;color:var(--ink-faint)}",
 ".pc-relation-dot{width:7px;height:7px;border-radius:50%;background:var(--pc-accent,var(--forest));flex:none}",
 ".pc-status{font-size:12px;font-weight:600;margin-top:2px}",
@@ -183,7 +185,7 @@ window.renderPeople=renderPeople=function(){
   return '<button type="button" class="pc-toggle'+(f[k]?" on":"")+'" data-pfilter="'+k+'" aria-pressed="'+(!!f[k])+'"><span class="pc-dot"></span>'+CAT_LABEL[k]+'</button>';
  }).join("")+'</div></div>';
  var shown=0;
- out+='<div class="grid">';
+ out+='<div class="grid pc-grid">';
  S.people.forEach(function(p){
   var cat=personCategory(p);
   if(cat==="friendships")p=Object.assign({},p,{name:String(p.name||"").trim().split(/\s+/)[0]||p.name});

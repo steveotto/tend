@@ -255,7 +255,7 @@
    currentPerson=null;openDetail=null;editingId=null;editingEvent=null;currentArea=area;tab="today";
    if(area==="faith"){
     var group=badge.getAttribute("data-rhythm-faith-subcategory")||"Prayer";
-    faithConfig().selectedGroup=group;faithConfig().practiceTabs=faithConfig().practiceTabs||{};faithConfig().practiceTabs[group]="rhythms";
+     faithMainView="practices";faithMainViewInitialized=true;faithConfig().selectedGroup=group;faithConfig().practiceTabs=faithConfig().practiceTabs||{};faithConfig().practiceTabs[group]="rhythms";
    }
    render();window.scrollTo(0,0);return;
   }
