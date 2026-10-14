@@ -132,6 +132,7 @@
  }
  var baseRenderArea=window.renderArea;
  window.renderArea=function(id){
+  if(id==="health"&&typeof renderFitnessPage==="function")return renderFitnessPage();
   var html=baseRenderArea(id);
   if(!CATEGORY_AREA_SET[id])return html;
   var marker='<div class="card" style="margin-bottom:14px"><div class="subhead">Tasks</div>';

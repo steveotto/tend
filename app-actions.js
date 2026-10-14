@@ -58,6 +58,7 @@ function mountTendTimePicker(dialog,value,accent){
 }
 function openTendDialog(button){
  var kind=button.getAttribute("data-tend-open"),personId=button.getAttribute("data-person-id"),rhythmId=button.getAttribute("data-rhythm-id"),areaId=button.getAttribute("data-area-id")||button.getAttribute("data-rhythm-area"),title="",rhythm=null;
+ if(kind==="fitness-rhythm"){if(typeof fitnessOpenRhythm==="function")fitnessOpenRhythm(rhythmId);return;}
  if(kind==="person-rhythm"){var person=S.people.find(function(item){return item.id===personId;});rhythm=person&&(person.rhythms||[]).find(function(item){return item.id===rhythmId;});if(!person||!rhythm)return;title=rhythm.text||"Rhythm";}
  else if(kind==="faith-rhythm"){rhythm=typeof faithFindRhythm==="function"?faithFindRhythm(rhythmId):null;if(!rhythm)return;title=rhythm.text||"Faith rhythm";}
  else if(kind==="area-rhythm"){rhythm=(S.areaRhythms||[]).find(function(item){return item.id===rhythmId&&Array.isArray(item.areas)&&item.areas.indexOf(areaId)!==-1;});if(!rhythm)return;title=rhythm.text||"Rhythm";}

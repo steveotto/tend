@@ -71,6 +71,10 @@ function tendRhythmCardContentHTML(record,options){
 }
 function tendRhythmCardHTML(record,options){
  record=record||{};options=options||{};
+ if(options.fitnessVariantHTML!==undefined){
+  var variantClass=String(options.fitnessVariantClass||"").replace(/[^a-z0-9_-]/gi,"");
+  return '<article class="rhythm-card card fitness-today-rhythm-card'+(variantClass?" "+variantClass:"")+'">'+options.fitnessVariantHTML+'</article>';
+ }
  function attrs(values){
   return Object.keys(values||{}).map(function(name){
    if(!/^[a-z][a-z0-9-]*$/i.test(name))return "";

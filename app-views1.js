@@ -171,6 +171,7 @@ function render(){var existingPersonSettingsModal=el("personSettingsModal");if(e
  else if(tab==="echo")v.innerHTML=renderEcho();
  else if(tab==="offload")v.innerHTML=renderOffload();
  else if(tab==="settings")v.innerHTML=renderSettings();
+ if(typeof fitnessRenderDialogPortal==="function")fitnessRenderDialogPortal();
  if(currentArea==="faith"){var faithPage=v.querySelector(".faith-page");if(faithPage&&tendFaithScrollBuffer)faithPage.style.paddingBottom=tendFaithScrollBuffer+"px";}
  var personSettingsModal=tab==="people"&&currentPerson?v.querySelector("#personSettingsModal"):null;if(personSettingsModal){document.body.appendChild(personSettingsModal);var relationSelect=personSettingsModal.querySelector('select[data-pfield="relation"]');if(relationSelect&&typeof window.unifyRelSelect==="function")window.unifyRelSelect(relationSelect);}
  sizeProfileTabPanels(v);
@@ -331,15 +332,19 @@ function planRhythmCardHTML(it){
   record=owner&&(owner.rhythms||[]).find(function(item){return item.id===ids[1];});
  }else if(it.faithRhythm){
   ownerId="faith";record=typeof faithFindRhythm==="function"?faithFindRhythm(it.faithRhythm):null;
+ }else if(it.fitnessRhythm){
+  record=(S.fitness&&S.fitness.rhythms||[]).find(function(item){return item.id===it.fitnessRhythm;});
+  if(record&&typeof window.fitnessTodayRhythmCardHTML==="function")return window.fitnessTodayRhythmCardHTML(record,!!it.fitnessCompleted);
+  if(record&&typeof fitnessRhythmDetails==="function")record=Object.assign({},record,{areas:Array.isArray(record.areas)?record.areas:["health"],description:fitnessRhythmDetails(record,fitnessStoreSnapshot(),fitnessPageScores(fitnessStoreSnapshot(),todayStr()))});
  }
  if(!record)return "";
  var score=rhythmScore(record),metadata=window.tendRhythmCardMetadata(record);
  return tendRhythmCardHTML(record,{title:record.text||"(unnamed rhythm)",description:record.description,score:Number.isFinite(score)?score:null,scoreClass:scoreClass(score),
-  peopleBadgesHTML:planRhythmCardBadges(it),categoryBadgesHTML:"",
+  peopleBadgesHTML:planRhythmCardBadges(it),categoryBadgesHTML:it.fitnessRhythm&&typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges({areas:["health"]}):"",
   frequency:metadata.frequency,time:metadata.time,lastTended:metadata.lastTended,frequencyIconHTML:metadata.frequencyIconHTML,timeIconHTML:metadata.timeIconHTML,lastIconHTML:metadata.lastIconHTML,
-  tendAttributes:it.rhythm?{"data-tend-open":"person-rhythm","data-person-id":ownerId,"data-rhythm-id":String(it.rhythm).split("|")[1]}:{"data-tend-open":"faith-rhythm","data-rhythm-id":it.faithRhythm},
-  editAttributes:it.rhythm?{"data-plan-edit-rhythm":it.rhythm}:null,
-  historyAttributes:it.rhythm?{"data-rhyhistory":it.rhythm}:{"data-faith-rhythm-history":it.faithRhythm}
+  tendAttributes:it.fitnessRhythm?{"data-tend-open":"fitness-rhythm","data-rhythm-id":it.fitnessRhythm}:it.rhythm?{"data-tend-open":"person-rhythm","data-person-id":ownerId,"data-rhythm-id":String(it.rhythm).split("|")[1]}:{"data-tend-open":"faith-rhythm","data-rhythm-id":it.faithRhythm},
+  editAttributes:it.fitnessRhythm?{"data-fitness-rhythm-edit":it.fitnessRhythm}:it.rhythm?{"data-plan-edit-rhythm":it.rhythm}:null,
+  historyAttributes:it.fitnessRhythm?{"data-rhyhistory":"fitness|"+it.fitnessRhythm}:it.rhythm?{"data-rhyhistory":it.rhythm}:{"data-faith-rhythm-history":it.faithRhythm}
  });
 }
 function planItemFooter(it,meta,sub){
@@ -371,6 +376,7 @@ function planCandidates(bid,curBid){
  if(typeof faithActiveRhythms==="function"&&typeof rhythmScheduledToday==="function"){
   faithActiveRhythms().forEach(function(r){if(r.tod!==bid||!rhythmScheduledToday(r))return;out.push({scheduled:true,calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),faithRhythm:r.id,faithGroup:r.faithGroup,area:"faith",label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,false)});});
  }
+ (S.fitness&&S.fitness.rhythms||[]).forEach(function(r){var today=todayStr();if(r.paused||(r.tod||"anytime")!==bid||!fitnessRhythmScheduled(r,today))return;var data=fitnessStoreSnapshot(),details=fitnessRhythmDetails(r,data,fitnessPageScores(data,today));out.push({scheduled:!!r.tod,calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),fitnessRhythm:r.id,fitnessCompleted:fitnessRhythmCompletionToday(r,today),label:r.text,description:details,sub:details});});
  return out;
 }
 function planAnytimeCandidates(){
@@ -381,12 +387,14 @@ function planAnytimeCandidates(){
  if(typeof faithActiveRhythms==="function"&&typeof rhythmScheduledToday==="function"){
   faithActiveRhythms().forEach(function(r){if(r.tod!=="anytime"||!rhythmScheduledToday(r))return;out.push({scheduled:false,calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),faithRhythm:r.id,faithGroup:r.faithGroup,area:"faith",label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,false)});});
  }
+ (S.fitness&&S.fitness.rhythms||[]).forEach(function(r){var today=todayStr();if(r.paused||(r.tod||"anytime")!=="anytime"||!fitnessRhythmScheduled(r,today))return;var data=fitnessStoreSnapshot(),details=fitnessRhythmDetails(r,data,fitnessPageScores(data,today));out.push({scheduled:false,calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),fitnessRhythm:r.id,fitnessCompleted:fitnessRhythmCompletionToday(r,today),label:r.text,description:details,sub:details});});
  return planUniqueItems(out);
 }
 function planItemStableKey(item){
  if(item.taskId)return "task:"+item.taskId;
  if(item.rhythm)return "rhythm:"+item.rhythm;
  if(item.faithRhythm)return "faith-rhythm:"+item.faithRhythm;
+ if(item.fitnessRhythm)return "fitness-rhythm:"+item.fitnessRhythm;
  if(item.spark)return "spark:"+item.spark;
  return null;
 }
@@ -506,9 +514,9 @@ function planBlockCard(viewId,curId,focusBlocks){
   return '<div class="current-plan-summary'+(weather?" has-weather":"")+'"><div class="current-plan-topline"><div class="current-plan-heading-controls">'+heading+'</div></div>'+weatherSlot+'</div>'+segments+'<div class="home-plan-context-row"><div class="home-plan-context">'+esc(subtitle)+'</div><span class="current-plan-item-count" aria-label="'+esc(countLabel)+'"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3h8M5.5 8h8M5.5 13h8M2.5 3h.01M2.5 8h.01M2.5 13h.01"/></svg>'+esc(countLabel)+'</span></div>';
  }
  function itemHTML(it){
-  if(it.rhythm||it.faithRhythm){var rhythmCard=planRhythmCardHTML(it);if(rhythmCard)return rhythmCard;}
-  var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.faithRhythm?'<button type="button" class="btn mini" data-tend-open="faith-rhythm" data-rhythm-id="'+esc(it.faithRhythm)+'">Tend</button>':(it.prayer?'<button type="button" class="btn mini" data-pray="'+esc(it.prayer)+'">Pray</button>':(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>')));
-  var meta=planItemMetaBar(it.sub,!!(it.rhythm||it.faithRhythm));
+  if(it.rhythm||it.faithRhythm||it.fitnessRhythm){var rhythmCard=planRhythmCardHTML(it);if(rhythmCard)return rhythmCard;}
+  var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.faithRhythm?'<button type="button" class="btn mini" data-tend-open="faith-rhythm" data-rhythm-id="'+esc(it.faithRhythm)+'">Tend</button>':(it.fitnessRhythm?'<button type="button" class="btn mini" data-tend-open="fitness-rhythm" data-rhythm-id="'+esc(it.fitnessRhythm)+'">Tend</button>':(it.prayer?'<button type="button" class="btn mini" data-pray="'+esc(it.prayer)+'">Pray</button>':(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>'))));
+  var meta=planItemMetaBar(it.sub,!!(it.rhythm||it.faithRhythm||it.fitnessRhythm));
   return '<div class="planitem"><div class="pi-main">'+planItemCopy(it,btn)+'</div>'+planItemTopRow(it)+planItemFooter(it,meta,it.sub)+'</div>';
  }
  var nonempty=groups.filter(function(group){return group.items.length>0;}),emptyMessage=itemType==="anytime"?"No eligible Anytime rhythms.":itemType==="all-day"?"No eligible All-day items.":"Nothing queued - all items tended.",body=nonempty.length?nonempty.map(function(group){return '<section class="current-plan-item-group"'+(group.title?' aria-label="'+esc(group.title)+'"':"")+'>'+(group.title?'<h3 class="current-plan-item-group-title">'+esc(group.title)+'</h3>':"")+'<div class="current-plan-item-group-items">'+group.items.map(itemHTML).join("")+'</div></section>';}).join(""):'<div class="empty plan-empty-card">'+esc(emptyMessage)+'</div>';
@@ -1144,6 +1152,7 @@ function freeMomentHTML(){
 }
 /* ============ area subpages ============ */
 function renderArea(id){
+ if(id==="health"&&typeof renderFitnessPage==="function")return renderFitnessPage();
  var v=areaScore(id),c=scoreClass(v);
  var kids=S.people.filter(function(p){return p.area===id;});
  var out=tendSectionHeaderHTML({title:S.areas[id].name,metadata:scoreLabel(v),style:"margin-top:2px"});
