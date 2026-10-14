@@ -12,6 +12,7 @@ const viewSource = fs.readFileSync(path.join(root, "app-views1.js"), "utf8");
 const upcomingSource = fs.readFileSync(path.join(root, "app-upcoming.js"), "utf8");
 const dashboardSource = fs.readFileSync(path.join(root, "app-dashboard.js"), "utf8");
 const indexSource = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const stylesSource = fs.readFileSync(path.join(root, "tend.css"), "utf8");
 
 function makeStorage(initialState) {
   const values = new Map();
@@ -113,4 +114,41 @@ test("the public iCloud feed is gone while optional user-configured calendars re
   assert.equal(fs.existsSync(path.join(root, "events.json")), false);
   assert.equal(fs.existsSync(path.join(root, "tend-events.json")), false);
   assert.equal(fs.existsSync(path.join(root, ".github/workflows/calendar.yml")), false);
+});
+
+test("Friendship area cards show first names and share the Parenting page width", () => {
+  const renderer = upcomingSource.match(/function renderArea\(id\)\{[\s\S]*?return out\+'<\/main>';\}/);
+  assert.ok(renderer, "area renderer should exist");
+  const context = {
+    S: {
+      areas: { friendships: { name: "Friendship" } },
+      people: [
+        { id: "amy", name: "Amy Johnson", area: "friendships" },
+        { id: "sam", name: "Sam Lee", area: "friendships" }
+      ],
+      tasks: []
+    },
+    areaHasActivity: () => false,
+    esc: value => String(value),
+    tendCategoryPageHeaderHTML: () => "",
+    tendCategoryHealthSummaryHTML: options => options.contentHTML,
+    personScore: () => 80,
+    scoreClass: () => "green",
+    personAvatar: () => "",
+    areaHistoryHTML: () => "",
+    taskDraftArea: null,
+    editingId: null,
+    activityComposerOpen: false
+  };
+  vm.createContext(context);
+  vm.runInContext(renderer[0], context);
+  const markup = context.renderArea("friendships");
+  assert.match(markup, /class="category-page area-page area-page--friendships"/);
+  assert.match(markup, />Amy<\/span>/);
+  assert.match(markup, />Sam<\/span>/);
+  assert.doesNotMatch(markup, /Amy Johnson|Sam Lee/);
+  assert.equal(context.S.people[0].name, "Amy Johnson", "the stored full name remains unchanged");
+  assert.equal(context.S.people[1].name, "Sam Lee", "the stored full name remains unchanged");
+  assert.match(stylesSource, /\.area-page\{[^}]*max-width:760px/);
+  assert.match(stylesSource, /\.area-page \.area-people-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
 });

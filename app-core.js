@@ -139,7 +139,7 @@ var AREA_ICONS={faith:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" str
 var tab="today",openDetail=null,currentPerson=null;
 function el(id){return document.getElementById(id);}
 function meterBar(v,cls){return '<div class="bar"><i class="'+cls+'" style="width:'+(Number.isFinite(v)?v:0)+'%"></i></div>';}
-function personChip(k){var ps=personScore(k);var c=scoreClass(ps);return '<span class="submeter" data-person="'+k.id+'" title="'+scoreLabel(ps)+'"><span class="sm-dot '+c+'"></span><span class="sm-name">'+esc(k.name)+'</span><span class="sm-bar"><i class="'+c+'" style="width:'+ps+'%"></i></span><span class="sm-num">'+ps+'</span></span>';}
+function personChip(k){var ps=personScore(k);var c=scoreClass(ps);return '<span class="submeter" data-person="'+k.id+'" title="'+scoreLabel(ps)+'"><span class="sm-dot '+c+'"></span><span class="sm-name">'+esc(k.name)+'</span><span class="sm-bar"><i class="'+c+'" style="width:'+ps+'%"></i></span><span class="sm-num '+c+'" aria-label="Health score '+ps+' out of 100">'+ps+'</span></span>';}
 
 
 function generatedPersonAvatar(p,sz){

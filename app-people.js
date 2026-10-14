@@ -177,10 +177,9 @@ function apCreate(){
 /* ---------- renderPeople override (card grid only) ---------- */
 var _renderPeople=renderPeople;
 window.renderPeople=renderPeople=function(){
- var HINT='rhythms, sparks, prayers - tending the people you love';
  if(currentPerson)return _renderPeople();
  var f=pfilters();
- var out=tendSectionHeaderHTML({title:"People",subtitle:HINT,className:"people-section-title",style:"margin-top:6px",trailingHTML:'<button type="button" class="btn mini ghost pc-add-person" data-addperson>+ Add person</button>'});
+ var out='<main class="category-page people-page">'+tendCategoryPageHeaderHTML("People","people-section-title")+'<div class="category-page-actions"><button type="button" class="btn mini ghost pc-add-person" data-addperson>+ Add person</button></div>';
  out+='<div class="pc-toolbar"><div class="pc-toggles">'+["marriage","parenting","friendships"].map(function(k){
   return '<button type="button" class="pc-toggle'+(f[k]?" on":"")+'" data-pfilter="'+k+'" aria-pressed="'+(!!f[k])+'"><span class="pc-dot"></span>'+CAT_LABEL[k]+'</button>';
  }).join("")+'</div></div>';
@@ -205,7 +204,7 @@ window.renderPeople=renderPeople=function(){
  out+='</div>';
  if(!shown)out+='<div class="empty">No people shown - toggle a category back on, or add someone new.</div>';
  out+=addPersonModalHTML();
- return out;
+ return out+'</main>';
 };
 
 /* ---------- health-meter person badges: avatar + name + color-coded score ---------- */

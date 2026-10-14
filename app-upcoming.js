@@ -250,12 +250,11 @@ function areaHistoryHTML(id){
  return out+'</div>';
 }
 function renderArea(id){
- var v=areaScore(id),c=scoreClass(v);
+ var v=areaHasActivity(id)?areaScore(id):null;
  var kids=S.people.filter(function(p){return p.area===id;});
- var out=tendSectionHeaderHTML({title:S.areas[id].name,metadata:scoreLabel(v),style:"margin-top:2px"});
- out+='<div class="card" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:18px;font-weight:500">Health meter</h3><span class="ov-score '+c+'">'+v+'</span></div><div class="bar-ov"><i class="ov-marker" style="left:'+v+'%"></i></div><div class="meta" style="margin-top:6px"><span class="statusword '+c+'">'+scoreLabel(v)+'</span></div>';
- if(kids.length)out+='<div class="menu-grid" style="margin-top:14px">'+kids.map(function(p2){var ps=personScore(p2),pc=scoreClass(ps);return '<button class="menu-area" data-openperson="'+p2.id+'"><span class="pm-av">'+personAvatar(p2,22)+'</span><span class="ma-name">'+esc(p2.name)+'</span><span class="ma-score '+pc+'">'+ps+'</span></button>';}).join("")+'</div>';
- out+='</div>';
+ var out='<main class="category-page area-page area-page--'+esc(id)+'">'+tendCategoryPageHeaderHTML(S.areas[id].name);
+ var peopleHTML=kids.length?'<div class="menu-grid area-people-grid">'+kids.map(function(p2){var ps=personScore(p2),pc=scoreClass(ps),displayName=id==="friendships"?(String(p2.name||"").trim().split(/\s+/)[0]||p2.name):p2.name;return '<button class="menu-area" data-openperson="'+p2.id+'"><span class="pm-av">'+personAvatar(p2,22)+'</span><span class="ma-name">'+esc(displayName)+'</span><span class="ma-score '+pc+'" aria-label="Health score '+ps+' out of 100">'+ps+'</span></button>';}).join("")+'</div>':"";
+ out+=tendCategoryHealthSummaryHTML({title:"Overall "+S.areas[id].name+" health",score:v,status:v===null?"No activity yet":scoreLabel(v),className:"area-health-summary",contentHTML:peopleHTML});
  out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Tasks</div><ul class="tasks">';
  S.tasks.filter(function(t){return t.areaId===id;}).forEach(function(t){out+='<li class="'+(t.done?"done":"")+'"><input type="checkbox" class="cb" data-task="'+t.id+'"'+(t.done?" checked":"")+'><span class="txt">'+esc(t.text)+'</span><button class="del" data-taskdel="'+t.id+'">\u00D7</button></li>';});
  out+='</ul><button type="button" class="btn mini ghost" data-task-open="'+id+'">+ Add task</button></div>';
@@ -267,4 +266,4 @@ function renderArea(id){
  '<div class="addrow"><textarea id="logTalk" placeholder="What do you want to remember?">'+(editingEvent?esc(editingEvent.note||""):"")+'</textarea></div>'+
  '<div class="profile-editor-actions"><button class="btn" id="logSubmit">'+(editingId?"Save activity":"Save activity")+'</button><button class="btn ghost" id="logCancel" data-editor-cancel>Cancel</button>'+(editingId?'<button class="btn mini danger" style="margin-left:auto" data-edel="'+esc(editingId)+'">Delete activity</button>':'')+'</div></div></dialog>';
  out+=areaHistoryHTML(id);
- return out;}
+ return out+'</main>';}

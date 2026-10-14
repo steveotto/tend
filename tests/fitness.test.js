@@ -22,7 +22,10 @@ const actionColorsSource = fs.readFileSync(path.join(root, "app-planpills.js"), 
 const stylesSource = fs.readFileSync(path.join(root, "tend.css"), "utf8");
 
 function scoringContext() {
-  const context = {};
+  const context = {
+    settings: () => ({ greenAt: 80, yellowAt: 50 }),
+    scoreClass: score => score >= 80 ? "green" : score >= 50 ? "yellow" : "red"
+  };
   vm.createContext(context);
   vm.runInContext(scoringSource, context);
   return context;
@@ -273,7 +276,7 @@ test("weight pace score is capped and deducts five percentage points per day beh
   };
   const contentFor = today => vm.runInContext(`fitnessWeightContent(__weightData,{weight:fitnessWeightProgress(__weightData.settings,__weightData.weighIns,"${today}")},"${today}")`, appContext);
   const content = contentFor("2026-10-14");
-  assert.match(content, /<strong>81%<\/strong><span>3\.9 days behind<\/span>/);
+  assert.match(content, /<strong aria-label="On-track score 81 out of 100">81<\/strong><span>3\.9 days behind<\/span>/);
   assert.match(content, /0\.9 lb behind today's target/);
   assert.match(content, /Today’s Target/);
   assert.match(content, /Latest Weight/);
@@ -284,9 +287,9 @@ test("weight pace score is capped and deducts five percentage points per day beh
   assert.match(content, /13 of 91 days/);
   assert.match(content, /78<\/strong>/);
   appContext.__weightData.weighIns = [{ id: "target", date: "2026-10-14", weight: 185-20/91*13 }];
-  assert.match(contentFor("2026-10-14"), /<strong>100%<\/strong><span>On today's target<\/span>/);
+  assert.match(contentFor("2026-10-14"), /<strong aria-label="On-track score 100 out of 100">100<\/strong><span>On today's target<\/span>/);
   appContext.__weightData.weighIns = [{ id: "ahead", date: "2026-10-14", weight: 180 }];
-  assert.match(contentFor("2026-10-14"), /<strong>100%<\/strong><span>Ahead of today's target<\/span>/);
+  assert.match(contentFor("2026-10-14"), /<strong aria-label="On-track score 100 out of 100">100<\/strong><span>Ahead of today's target<\/span>/);
   assert.match(contentFor("2026-10-14"), /2\.1 lb ahead of today's target/);
   appContext.__weightData.weighIns = [{ id: "stale", date: "2026-10-13", weight: 183 }];
   assert.match(contentFor("2026-10-14"), /Estimate uses your last recorded weigh-in from Oct 13, 2026/);
@@ -744,7 +747,8 @@ test("Health & Fitness is the existing Health area and its goals, forms, and dat
   assert.match(indexSource, /app-fitness-data\.js/);
   assert.match(indexSource, /app-fitness-scoring\.js/);
   assert.match(indexSource, /app-fitness\.js/);
-  assert.match(appSource, /role="tablist" aria-label="Health and Fitness sections"/);
+  assert.match(appSource, /FITNESS_TABS=\[\["strength","Strength"\],\["cardio","Cardio"\],\["weight","Body Weight"\]\]/);
+  assert.match(appSource, /function fitnessPanelHTML\(name,content\)\{[\s\S]*?role="region"/);
   assert.match(appSource, /data-fitness-form="goals"/);
   assert.match(appSource, /data-fitness-form="'\+kind\+'/);
   assert.match(appSource, /kind==="workout"/);
@@ -755,11 +759,15 @@ test("Health & Fitness is the existing Health area and its goals, forms, and dat
   assert.match(dataSource, /fitnessStoreReplaceState\(imported\)/);
 });
 
-test("Fitness summary and Overview use the compact Tend presentation", () => {
+test("Fitness summary follows Faith health styling and section navigation has no duplicate tabs", () => {
   const context = {
-    document: { addEventListener() {} },
+    document: { addEventListener() {}, querySelector() { return { focus() {} }; } },
     window: { addEventListener() {} },
     S: { events: [] },
+    render() {},
+    scoreClass(score) { return score >= 80 ? "green" : score >= 50 ? "yellow" : "red"; },
+    scoreLabel(score) { return score >= 80 ? "Healthy" : score >= 50 ? "Slipping - tend it soon" : "Needs attention now"; },
+    personHealthColor(score) { return score === null ? "#CBD5D0" : "rgb(255,90,69)"; },
     todayStr() { return "2026-10-15"; },
     esc(value) { return String(value).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]); }
   };
@@ -778,18 +786,114 @@ test("Fitness summary and Overview use the compact Tend presentation", () => {
   const scores = vm.runInContext('fitnessPageScores(__data,"2026-10-15")', context);
   context.__scores = scores;
   const summary = vm.runInContext("fitnessSummaryHTML(__scores)", context);
-  const overview = vm.runInContext('fitnessOverview(__data,__scores,"2026-10-15")', context);
-  assert.match(fitnessAppSource, /tendSectionHeaderHTML\(\{title:"Health & Fitness",subtitle:"Small practices, tended over time\."/);
-  assert.match(summary, /Overall fitness consistency/);
-  assert.match(summary, /class="fitness-summary-progress"/);
-  assert.match(summary, /<strong>—<\/strong>/);
+  context.__strengthGoals = vm.runInContext('fitnessGoalsDialog(__data,"strength")', context);
+  context.__cardioGoals = vm.runInContext('fitnessGoalsDialog(__data,"cardio")', context);
+  context.__weightGoals = vm.runInContext('fitnessGoalsDialog(__data,"weight")', context);
+  const activePanel = vm.runInContext('fitnessPanelHTML("strength","Training content")', context);
+  const inactivePanel = vm.runInContext('fitnessPanelHTML("cardio","Cardio content")', context);
+  assert.match(fitnessAppSource, /tendCategoryPageHeaderHTML\("Health & Fitness","fitness-page-heading"\)/);
+  assert.match(summary, /Overall Health &amp; Fitness consistency/);
+  assert.match(summary, /category-health-card fitness-summary-card/);
+  assert.match(summary, /health-summary-breakdown/);
+  assert.match(summary, /health-summary-score red/);
+  assert.match(summary, /class="health-summary-item is-action"/);
+  assert.match(summary, /aria-label="View Strength details/);
+  assert.match(summary, /data-fitness-tab="strength"/);
+  assert.match(summary, /data-fitness-tab="cardio"/);
+  assert.match(summary, /data-fitness-tab="weight"/);
+  assert.match(summary, /Weekly goal completion/);
+  assert.match(summary, /class="category-health-score red"/);
+  assert.doesNotMatch(summary, /How scores work/);
+  assert.match(context.__strengthGoals, /Strength goals/);
+  assert.match(context.__strengthGoals, /Set how often you train each muscle and its preferred rest days\./);
+  assert.match(context.__strengthGoals, /How rest days work/);
+  assert.match(context.__strengthGoals, /Rest days are full days between workouts\. One rest day means training Monday allows the next workout Wednesday\. Abs may use zero rest days\./);
+  assert.match(context.__strengthGoals, /name="interval-chest"[^>]*aria-describedby="fitness-strength-error-chest"/);
+  assert.match(context.__strengthGoals, /name="rest-chest"[^>]*aria-describedby="fitness-strength-error-chest"/);
+  assert.match(context.__strengthGoals, /Chest training interval in days/);
+  assert.match(context.__strengthGoals, /Chest preferred rest days/);
+  assert.match(context.__strengthGoals, /aria-label="Close Strength goals"/);
+  assert.match(context.__strengthGoals, /data-editor-cancel/);
+  const muscleOrder = ["Shoulders", "Chest", "Back", "Biceps", "Triceps", "Abs", "Quads", "Hamstrings", "Calves"];
+  const rowPositions = muscleOrder.map(name => context.__strengthGoals.indexOf(`role="rowheader">${name}</span>`));
+  assert.ok(rowPositions.every(position => position >= 0));
+  assert.deepEqual(rowPositions, [...rowPositions].sort((a, b) => a - b));
+  assert.match(stylesSource, /\.fitness-strength-table-head,\.fitness-strength-row\{display:grid;grid-template-columns:minmax\(100px,1\.15fr\) minmax\(100px,1fr\) minmax\(100px,1fr\)/);
+  assert.match(stylesSource, /\.fitness-strength-goals-dialog \.fitness-goals-settings\{min-height:0;overflow:auto/);
+  assert.match(stylesSource, /\.fitness-strength-goals-dialog \.fitness-goals-actions\{[^}]*border-top:1px solid/);
+  assert.doesNotMatch(context.__strengthGoals, /weeklyRunTarget|startWeight/);
+  assert.match(context.__cardioGoals, /name="weeklyRunTarget"/);
+  assert.doesNotMatch(context.__cardioGoals, /interval-chest|startWeight/);
+  assert.match(context.__weightGoals, /name="startWeight"/);
+  assert.doesNotMatch(context.__weightGoals, /interval-chest|weeklyRunTarget/);
+  assert.match(summary, /class="category-health-fill red"/);
+  assert.match(stylesSource, /\.category-health-fill\.red\{background:#FF5A45\}/);
+  assert.match(activePanel, /role="region" aria-label="Strength" id="fitness-panel-strength"/);
+  assert.doesNotMatch(activePanel, / hidden/);
+  assert.match(inactivePanel, /id="fitness-panel-cardio" hidden/);
+  vm.runInContext('fitnessShowTab("cardio")', context);
+  assert.equal(context.fitnessCurrentTab, "cardio");
   assert.doesNotMatch(summary, /Your progress|Consistency &amp; goal progress|physical health/);
-  assert.match(overview, /Chest Day/);
-  assert.match(overview, /data-fitness-log-saved-workout="chest-day"/);
-  assert.match(overview, />Workout<\/button>/);
-  assert.match(overview, /Runs 1 of 2 · Miles 3 of 10/);
-  assert.match(overview, /data-fitness-tab="strength"/);
-  assert.doesNotMatch(overview, /fitness-body-svg|fitness-weight-chart|fitness-week-strip|Manage rhythms/);
+  assert.doesNotMatch(fitnessAppSource, /fitnessTabsHTML|fitnessOverview|fitnessHistoryPanel|fitnessPanelHTML\("(overview|history)"/);
+  assert.match(fitnessAppSource, /function fitnessPanelHTML\(name,content\)\{[\s\S]*?role="region"/);
+  assert.doesNotMatch(fitnessAppSource.match(/function renderFitnessPage\(\)\{[\s\S]*?\n\}/)[0], /fitnessTabsHTML/);
+  assert.match(fitnessAppSource, /function fitnessGoalsButtonHTML\(section\)[\s\S]*data-fitness-goal-section=/);
+  assert.match(fitnessAppSource.match(/function fitnessBodyMapHTML\(scores,instance\)\{[\s\S]*?\n\}/)[0], /fitnessGoalsButtonHTML\("strength"\)/);
+  assert.match(fitnessAppSource.match(/function fitnessCardioPanel\(data,scores,today\)\{[\s\S]*?\n\}/)[0], /fitnessCardHTML\("Weekly cardio"[\s\S]*actionHTML:fitnessGoalsButtonHTML\("cardio"\)/);
+  assert.match(fitnessAppSource.match(/function fitnessWeightPanel\(data,scores,today\)\{[\s\S]*?\n\}/)[0], /fitnessCardHTML\("Body weight progress"[\s\S]*actionHTML:fitnessGoalsButtonHTML\("weight"\)/);
+  assert.doesNotMatch(fitnessAppSource.match(/function fitnessStrengthPanel\(scores\)\{[\s\S]*?\n\}/)[0], /fitnessGoalsButtonHTML/);
+  assert.doesNotMatch(fitnessAppSource.match(/function fitnessCardioPanel\(data,scores,today\)\{[\s\S]*?\n\}/)[0], /tabs\+fitnessGoalsButtonHTML/);
+  assert.doesNotMatch(fitnessAppSource.match(/function fitnessWeightPanel\(data,scores,today\)\{[\s\S]*?\n\}/)[0], /tabs\+fitnessGoalsButtonHTML/);
+  assert.match(stylesSource, /\.fitness-strength-heading h2\{[^}]*font-size:var\(--tend-type-card-title,16px\)/);
+  assert.match(fitnessAppSource, /function fitnessGoalsDialog\(data,section\)[\s\S]*if\(section==="strength"\)[\s\S]*else if\(section==="cardio"\)[\s\S]*title="Weight goals"/);
+  assert.match(fitnessAppSource, /fitness-section-bottom-action[\s\S]*data-fitness-open="run"/);
+  assert.match(fitnessAppSource, /fitness-section-bottom-action[\s\S]*data-fitness-open="weighin"/);
+  assert.doesNotMatch(fitnessAppSource.match(/function renderFitnessPage\(\)\{[\s\S]*?\n\}/)[0], /fitness-goals-button|data-fitness-open="goals"/);
+});
+
+test("Strength goals validate each muscle row and save only valid interval and rest settings", () => {
+  const context = { document: { addEventListener() {} }, render() {}, flash() {} };
+  vm.createContext(context);
+  vm.runInContext(scoringSource, context);
+  vm.runInContext(fitnessAppSource, context);
+  const rows = {};
+  const elements = {};
+  for (const { id } of vm.runInContext("FITNESS_MUSCLES", context)) {
+    elements[`interval-${id}`] = { value: "7", setAttribute(name, value) { this[name] = value; }, removeAttribute(name) { delete this[name]; }, focus() { this.focused = true; } };
+    elements[`rest-${id}`] = { value: id === "abs" ? "0" : "1", setAttribute(name, value) { this[name] = value; }, removeAttribute(name) { delete this[name]; }, focus() {} };
+    const error = { textContent: "" };
+    rows[id] = { querySelector() { return error; }, error };
+  }
+  const form = {
+    elements,
+    getAttribute() { return "strength"; },
+    querySelector(selector) {
+      const match = selector.match(/data-strength-goal-row="([^"]+)"/);
+      if (match) return rows[match[1]];
+      return Object.values(elements).find(input => input["aria-invalid"] === "true") || null;
+    }
+  };
+  context.__form = form;
+  let savedPatch = null;
+  context.fitnessStoreUpdateSettings = patch => { savedPatch = patch; };
+  elements["interval-chest"].value = "1";
+  elements["rest-chest"].value = "1";
+  vm.runInContext("fitnessHandleGoals(__form)", context);
+  assert.equal(savedPatch, null);
+  assert.equal(rows.chest.error.textContent, "Training interval must exceed preferred rest days.");
+  assert.equal(elements["interval-chest"]["aria-invalid"], "true");
+
+  elements["interval-chest"].value = "4";
+  elements["rest-abs"].value = "";
+  vm.runInContext("fitnessHandleGoals(__form)", context);
+  assert.equal(savedPatch, null);
+  assert.equal(rows.abs.error.textContent, "Enter 0 to 364 rest days.");
+  elements["rest-abs"].value = "0";
+  vm.runInContext("fitnessHandleGoals(__form)", context);
+  assert.equal(savedPatch.muscleIntervals.chest, 4);
+  assert.equal(savedPatch.preferredRestDays.abs, 0);
+  assert.equal(rows.chest.error.textContent, "");
+  assert.equal(context.fitnessDialog, null);
 });
 
 test("Health & Fitness action color drives fitness cards and matching Log buttons", () => {
@@ -819,6 +923,8 @@ test("Health & Fitness action color drives fitness cards and matching Log button
     const context = {
       document: { addEventListener() {} },
       window: { confirm() { return false; } },
+      settings: () => ({ greenAt: 80, yellowAt: 50 }),
+      scoreClass: score => score >= 80 ? "green" : score >= 50 ? "yellow" : "red",
       esc(value) {
         return String(value).replace(/[&<>"']/g, char => ({
           "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -854,9 +960,9 @@ test("Health & Fitness action color drives fitness cards and matching Log button
     const mapped = vm.runInContext('fitnessMapSVG("front",__scores.muscles)', context);
     assert.match(mapped, /viewBox="0 0 220 350"/);
     assert.match(mapped, /preserveAspectRatio="xMidYMid meet"/);
-    assert.match(mapped, /data-muscle="chest" data-fitness-muscle="chest" d="M81 89Q96 80 108 87L107 129Q86 137 76 122Z M139 89Q124 80 112 87L113 129Q134 137 144 122Z" fill="#e4c184"/);
+    assert.match(mapped, /data-muscle="chest" data-fitness-muscle="chest" d="M81 89Q96 80 108 87L107 129Q86 137 76 122Z M139 89Q124 80 112 87L113 129Q134 137 144 122Z" fill="#(?:12B76A|FFC133|FF5A45)"/);
     assert.match(mapped, /data-muscle="biceps" data-fitness-muscle="biceps" d="M52 116L71 112L66 145L57 162L44 153Z M168 116L149 112L154 145L163 162L176 153Z" fill="#e1e7dd"/);
-    assert.match(mapped, /<text x="110" y="108" data-label="chest">90%<\/text>/);
+    assert.match(mapped, /<text x="110" y="108" data-label="chest">90<\/text>/);
   });
 
   test("muscle selection outlines the matching map regions and keeps score fills intact", () => {
@@ -864,6 +970,8 @@ test("Health & Fitness action color drives fitness cards and matching Log button
     const context = {
       document: { addEventListener() {} },
       window: { confirm() { return false; } },
+      settings: () => ({ greenAt: 80, yellowAt: 50 }),
+      scoreClass: score => score >= 80 ? "green" : score >= 50 ? "yellow" : "red",
       esc(value) {
         return String(value).replace(/[&<>"']/g, char => ({
           "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -903,7 +1011,7 @@ test("Health & Fitness action color drives fitness cards and matching Log button
       const svg = vm.runInContext(`fitnessMapSVG("${view}",__scores.muscles)`, context);
       const region = svg.match(new RegExp(`<path class="muscle" data-muscle="${id}"[^>]+`))[0];
       assert.match(region, /aria-pressed="true"/);
-      if (id === "chest") assert.match(region, /fill="#e4c184"/);
+      if (id === "chest") assert.match(region, /fill="#(?:12B76A|FFC133|FF5A45)"/);
       if (id !== "chest") assert.match(region, /fill="#e1e7dd"/);
 
       vm.runInContext("fitnessEditingInterval=true", context);
@@ -974,8 +1082,8 @@ test("Health & Fitness action color drives fitness cards and matching Log button
       assert.match(svg, /<ellipse cx="110" cy="36" rx="23" ry="28" \/>/);
       assert.match(svg, /stroke:#fff;stroke-width:2/);
     }
-    assert.match(front, /<text x="110" y="108" data-label="chest">70%<\/text>/);
-    assert.match(front, /<text x="89" y="239" data-label="quads">100%<\/text>/);
-    assert.match(back, /<text x="110" y="142" data-label="back">100%<\/text>/);
-    assert.match(back, /<text x="88" y="243" data-label="hamstrings">80%<\/text>/);
+    assert.match(front, /<text x="110" y="108" data-label="chest">70<\/text>/);
+    assert.match(front, /<text x="89" y="239" data-label="quads">100<\/text>/);
+    assert.match(back, /<text x="110" y="142" data-label="back">100<\/text>/);
+    assert.match(back, /<text x="88" y="243" data-label="hamstrings">80<\/text>/);
   });
