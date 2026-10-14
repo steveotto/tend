@@ -60,7 +60,8 @@ nav.tabs button.active{background:var(--card);color:var(--forest);box-shadow:0 1
 .submeter .sm-name{font-size:14px;font-weight:600;color:#17251E}
 .submeter .sm-bar{width:52px;height:4px;background:rgba(32,39,35,.12);border-radius:99px;overflow:hidden;display:inline-block}
 .submeter .sm-bar i{display:block;height:100%;border-radius:99px}
-.submeter .sm-num{font-size:11px;font-weight:600;color:#51605A;font-variant-numeric:tabular-nums}
+.submeter .sm-num{font-size:11px;font-weight:700;color:#51605A;font-variant-numeric:tabular-nums}
+.submeter .sm-num.green{color:#087443}.submeter .sm-num.yellow{color:#985600}.submeter .sm-num.red{color:#C33222}
 .statusword.green{color:#12B76A;font-weight:600} .statusword.yellow{color:#C77E00;font-weight:600} .statusword.red{color:#FF5A45;font-weight:600}
 .uprow{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
 .upitem{display:inline-flex;align-items:center;gap:9px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 16px;font-size:15px;cursor:pointer}
@@ -115,6 +116,16 @@ ul.tasks li.done .txt{color:var(--ink-faint);text-decoration:line-through}
 .sectiontitle{display:flex;align-items:baseline;gap:12px;margin:32px 0 12px}
 .sectiontitle h2{font-size:22px;font-weight:500}
 .sectiontitle .hint{font-size:12.5px;color:var(--ink-faint);font-style:normal;font-weight:400;font-family:var(--sans)}
+.category-page,.faith-page,.fitness-page{display:grid;gap:16px;min-width:0;padding-top:16px}
+.category-page-heading{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;align-items:start;gap:2px;margin:0}
+.category-page-heading h2{grid-column:1;grid-row:1;margin:0;color:var(--ink);font-family:var(--sans);font-size:var(--tend-type-section-header);font-weight:700;line-height:1.25}
+.category-page-heading .hint{grid-column:1;grid-row:2;min-width:0;color:var(--ink-soft);font-family:var(--sans);font-size:var(--tend-type-metadata);font-style:normal;font-weight:400;line-height:1.4}
+.category-page-actions{display:flex;justify-content:flex-end;margin:-4px 0 0}
+.category-page>.card{margin-bottom:0!important}
+.area-page{box-sizing:border-box;width:100%;max-width:760px;margin-right:auto;margin-left:auto}
+.area-page .area-people-grid{grid-template-columns:repeat(2,minmax(0,1fr));min-width:0}
+.area-page .menu-area{box-sizing:border-box;min-width:0}
+.area-page .ma-name{min-width:0;overflow-wrap:anywhere}
 .notewrap textarea{width:100%;min-height:88px;border:1px solid var(--line);border-radius:12px;background:var(--canvas);padding:12px 14px;font-size:15.5px;line-height:1.55;resize:vertical}
 .notewrap textarea:focus{outline:none;border-color:var(--mint);box-shadow:0 0 0 3px rgba(103,197,163,.18)}
 .notewrap{position:relative}
@@ -191,7 +202,7 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .menu-area-icon svg{display:block;width:100%;height:100%}
 .menu-area:hover{border-color:var(--mint);transform:translateY(-1px)}
 .menu-area .ma-score{margin-left:auto;font-size:15px;font-variant-numeric:tabular-nums}
-.ma-score.green{color:#12B76A}.ma-score.yellow{color:#C77E00}.ma-score.red{color:#F04531}
+.ma-score.green{color:#087443}.ma-score.yellow{color:#985600}.ma-score.red{color:#C33222}
 .planblock{margin-bottom:12px;padding:18px 20px}
 .planblock.current{border-color:var(--mint);box-shadow:0 0 0 3px rgba(103,197,163,.15)}
 .planitem{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px dashed var(--line)}
@@ -519,8 +530,8 @@ nav.tabs button.active{color:var(--forest);background:transparent;border-bottom-
 .person-profile-page .profile-prayer-row>.profile-prayer-actions>.profile-prayer-health{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:5px;width:86px;min-width:86px;min-height:42px;padding:7px 10px;border:0;border-radius:10px;font-family:inherit;font-size:13px;font-weight:700;line-height:1.2;cursor:pointer}
 .person-profile-page .profile-prayer-row .profile-prayer-health svg{width:13px;height:13px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .person-profile-page .profile-prayer-row .profile-prayer-health.green{background:#12B76A;color:#fff}
-.person-profile-page .profile-prayer-row .profile-prayer-health.yellow{background:#F08C00;color:#fff}
-.person-profile-page .profile-prayer-row .profile-prayer-health.red{background:#F04531;color:#fff}
+.person-profile-page .profile-prayer-row .profile-prayer-health.yellow{background:#FFC133;color:#3F351B}
+.person-profile-page .profile-prayer-row .profile-prayer-health.red{background:#FF5A45;color:#fff}
 .person-profile-page .profile-prayer-row .profile-prayer-health.neutral{background:#ECEFEC;color:#89938D}
 .person-profile-page .profile-prayer-row .profile-prayer-health:hover{filter:brightness(.96)}
 .person-profile-page .profile-prayer-row .profile-prayer-health:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
@@ -861,9 +872,9 @@ details.moor .moor-body{padding:2px 18px 14px}
  .person-profile-page .profile-tabs .profile-tab-item-count{display:inline-flex;align-items:center;gap:5px;min-width:0;color:var(--ink-soft);font-size:12px;font-weight:650;font-variant-numeric:tabular-nums}
  .person-profile-page .profile-tabs .profile-tab-item-count svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
  .person-profile-page .profile-tabs .profile-tab-health-score{color:var(--ink-soft);font-size:var(--tend-type-person-badge);font-weight:750;font-variant-numeric:tabular-nums}
- .person-profile-page .profile-tabs .profile-tab-health-score.green{color:#12B76A}
- .person-profile-page .profile-tabs .profile-tab-health-score.yellow{color:#F08C00}
- .person-profile-page .profile-tabs .profile-tab-health-score.red{color:#F04531}
+ .person-profile-page .profile-tabs .profile-tab-health-score.green{color:#087443}
+ .person-profile-page .profile-tabs .profile-tab-health-score.yellow{color:#985600}
+ .person-profile-page .profile-tabs .profile-tab-health-score.red{color:#C33222}
  .person-profile-page .profile-tabs .profile-tab-health-score.neutral{color:var(--ink-faint)}
  .person-profile-page .profile-tabs button[data-profiletab="sparks"],
  .person-profile-page .profile-tabs button[data-profiletab="notes"]{min-height:48px}
@@ -962,42 +973,13 @@ details.moor .moor-body{padding:2px 18px 14px}
 .person-prayer-schedule select{min-height:42px;min-width:0;width:100%;padding:8px 30px 8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
 .person-prayer-form-actions{display:flex;gap:8px;flex-wrap:wrap}
 .profile-add-action{margin-top:10px}
-.faith-page{display:grid;gap:16px;padding-top:1.5rem}
-.faith-page-heading,.faith-health-head,.faith-settings-heading,.faith-practice-heading,.faith-presence-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}
-.faith-page-heading{justify-content:flex-start;align-items:baseline;gap:12px;margin:2px 0 8px}
-.faith-page-heading .faith-sections-toggle{margin-left:auto;align-self:center}
+.faith-health-head,.faith-settings-heading,.faith-practice-heading,.faith-presence-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}
 .faith-health-head p,.faith-settings-heading p,.faith-practice-heading p{color:var(--ink-soft);font-size:14px}
-.faith-sections-toggle{flex:none}
-.faith-page-heading .faith-sections-toggle{min-height:34px;padding:5px 10px;font-size:12px;line-height:1.2;border-radius:9px}
 .faith-health-card,.faith-practice-card{padding:22px}
 .faith-health-card{padding:16px 20px}
 .faith-health-head h2,.faith-settings-heading h2,.faith-practice-heading h2{font-size:19px;font-weight:650}
 .faith-health-head{align-items:baseline}
 .faith-health-head h2{font-size:17px;font-weight:500}
-.faith-health-card{--canvas:#FBFCFB;--ink:#17251E;--ink-soft:#51605A;--ink-faint:rgba(94,107,99,.66);--forest:#1E9C68;--mint:#3FC68F;--mist:#E3F6ED;--line:#DEE8E1;--forest-deep:#137A4F;color:#17251E}
-.faith-health-card .person-health-heading{align-items:center;margin-top:0;padding-top:0;border-top:0}
-.faith-health-card .faith-health-overview-copy{min-width:0}
-.faith-health-card .person-health-heading h4{font-size:var(--tend-type-section-header);line-height:1.25}
-.faith-health-card .person-health-heading p{margin-top:3px}
-.faith-health-card .person-profile-score{font-size:calc(var(--tend-type-overall-score)*.85);font-variant-numeric:tabular-nums;line-height:1}
-.faith-health-card .person-health-bar.solid{height:6px;margin:12px 0 6px;box-shadow:none;background:#E9EFEB;overflow:hidden}
-.faith-health-card .person-health-status{margin:5px 0 0;font-size:var(--tend-type-metadata)}
-.faith-health-card .person-health-summaries{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;margin-top:8px}
-.faith-health-card .person-health-summary{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:6px;box-sizing:border-box;min-width:0;min-height:96px;padding:10px 12px;border:0;border-left:1px solid var(--line);border-radius:0;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
-.faith-health-card .person-health-summary:first-child{border-left:0}
-.faith-health-card .person-health-summary:hover{background:#F7F9F7}
-.faith-health-card .person-health-summary-score{color:var(--ink);font-family:var(--sans);font-size:var(--tend-type-title);font-weight:750;font-variant-numeric:tabular-nums;line-height:1.15}
-.faith-health-card .person-health-summary-score.green{color:#12B76A}
-.faith-health-card .person-health-summary-score.yellow{color:#F08C00}
-.faith-health-card .person-health-summary-score.red{color:#F04531}
-.faith-health-card .person-health-summary-score.neutral{color:var(--ink-soft)}
-.faith-health-card .person-health-summary-label{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;color:var(--ink);font-size:var(--tend-type-metadata);font-weight:600;line-height:1.3;overflow-wrap:anywhere}
-.faith-health-card .faith-health-summary-chevron{flex:none;color:var(--ink-soft);font-size:1.25em;font-weight:500;line-height:1}
-.faith-health-card .person-health-summary-detail{color:var(--ink-soft);font-size:var(--tend-type-metadata);font-weight:400;line-height:1.4;overflow-wrap:anywhere}
-.faith-health-card .person-health-summary-detail{display:grid;gap:2px}
-.faith-health-card .person-health-summary-detail>span{display:flex;align-items:center;gap:5px;min-width:0}
-.faith-health-card .person-health-summary-detail svg{width:13px;height:13px;flex:none;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.4}
-.faith-health-card .person-health-summary:focus-visible{position:relative;z-index:1;outline:2px solid var(--forest);outline-offset:1px;border-radius:9px}
 .faith-all-rhythms{display:grid;gap:16px;min-width:0}
 .faith-view-header-title:focus-visible{outline:2px solid var(--forest);outline-offset:4px;border-radius:3px}
 .faith-all-rhythm-group{display:grid;gap:8px;min-width:0}
@@ -1119,8 +1101,8 @@ details.moor .moor-body{padding:2px 18px 14px}
 .faith-prayer-hub .faith-profile-prayer-row>.profile-prayer-actions>.profile-prayer-health{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:5px;width:86px;min-width:86px;min-height:42px;padding:7px 10px;border:0;border-radius:10px;font-family:inherit;font-size:13px;font-weight:700;line-height:1.2;cursor:pointer}
 .faith-prayer-hub .faith-profile-prayer-row .profile-prayer-health svg{width:13px;height:13px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .faith-prayer-hub .faith-profile-prayer-row .profile-prayer-health.green{background:#12B76A;color:#fff}
-.faith-prayer-hub .faith-profile-prayer-row .profile-prayer-health.yellow{background:#F08C00;color:#fff}
-.faith-prayer-hub .faith-profile-prayer-row .profile-prayer-health.red{background:#F04531;color:#fff}
+.faith-prayer-hub .faith-profile-prayer-row .profile-prayer-health.yellow{background:#FFC133;color:#3F351B}
+.faith-prayer-hub .faith-profile-prayer-row .profile-prayer-health.red{background:#FF5A45;color:#fff}
 .faith-prayer-hub .faith-profile-prayer-row .profile-prayer-health.neutral{background:#ECEFEC;color:#89938D}
 .faith-prayer-hub .faith-profile-prayer-row .profile-prayer-health:hover{filter:brightness(.96)}
 .faith-prayer-hub .faith-profile-prayer-row .profile-prayer-health:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
@@ -1173,9 +1155,15 @@ details.moor .moor-body{padding:2px 18px 14px}
 .faith-prayer-request-health-heading strong{font-size:var(--tend-type-card-title,15px);font-weight:650}
 .faith-prayer-request-health-heading>span:first-child>span{color:var(--ink-soft);font-size:var(--tend-type-metadata,13px)}
 .faith-prayer-request-health-score{flex:none;color:var(--forest);font-size:var(--tend-type-section-header,19px);font-weight:700;font-variant-numeric:tabular-nums}
+.faith-prayer-request-health-score.green{color:#087443}
+.faith-prayer-request-health-score.yellow{color:#985600}
+.faith-prayer-request-health-score.red{color:#C33222}
 .faith-prayer-request-health-score.neutral{color:var(--ink-faint)}
 .faith-prayer-request-health-meter{display:block;height:6px;overflow:hidden;border-radius:99px;background:var(--mist)}
 .faith-prayer-request-health-meter>span{display:block;height:100%;border-radius:inherit;background:var(--forest)}
+.faith-prayer-request-health-meter>span.green{background:#12B76A}
+.faith-prayer-request-health-meter>span.yellow{background:#FFC133}
+.faith-prayer-request-health-meter>span.red{background:#FF5A45}
 .faith-prayer-request-health-meter>span.neutral{background:var(--line)}
 .faith-prayer-expand{display:flex;align-items:center;justify-content:center;width:max-content;max-width:100%;margin:0 auto 4px}
 .faith-prayer-hub .faith-start-prayer:disabled{cursor:not-allowed;opacity:.55}
@@ -1203,8 +1191,7 @@ details.moor .moor-body{padding:2px 18px 14px}
 .faith-settings-list input{width:17px;height:17px;accent-color:var(--forest)}
 .faith-no-sections{min-height:0}
 @media(max-width:740px){.faith-browser{grid-template-columns:1fr}.faith-section-nav{grid-template-columns:repeat(2,minmax(0,1fr));height:auto}.faith-section-nav button{min-width:0}.faith-practice-card{min-height:0}}
-@media(max-width:540px){.faith-health-card,.faith-practice-card,.faith-general-section{padding:16px}.faith-page-heading{flex-wrap:wrap}.faith-page-heading .faith-sections-toggle{margin-left:auto}.faith-item-row{align-items:flex-start;flex-wrap:wrap}.faith-item-copy{flex-basis:calc(100% - 36px)}.faith-item-actions{margin-left:auto}.faith-settings-list{grid-template-columns:1fr}.faith-edit-grid{grid-template-columns:1fr}.faith-practice-heading{gap:8px}.faith-session-heading{align-items:center;flex-direction:column;text-align:center}.faith-session-heading h1{font-size:21px}.faith-session-card{min-height:280px;padding:24px 16px}.faith-session-actions{gap:6px}.faith-session-actions .btn{min-width:72px}.faith-session-prayed{min-width:105px!important}.faith-start-prayer{width:100%}}
-@media(max-width:380px){.faith-health-card{padding:14px}.faith-health-card .person-health-summaries{grid-template-columns:minmax(0,1fr)}.faith-health-card .person-health-summary{min-height:0;padding:10px 8px;border-left:0}.faith-health-card .person-health-summary+.person-health-summary{border-top:1px solid var(--line)}}
+@media(max-width:540px){.faith-health-card,.faith-practice-card,.faith-general-section{padding:16px}.faith-item-row{align-items:flex-start;flex-wrap:wrap}.faith-item-copy{flex-basis:calc(100% - 36px)}.faith-item-actions{margin-left:auto}.faith-settings-list{grid-template-columns:1fr}.faith-edit-grid{grid-template-columns:1fr}.faith-practice-heading{gap:8px}.faith-session-heading{align-items:center;flex-direction:column;text-align:center}.faith-session-heading h1{font-size:21px}.faith-session-card{min-height:280px;padding:24px 16px}.faith-session-actions{gap:6px}.faith-session-actions .btn{min-width:72px}.faith-session-prayed{min-width:105px!important}.faith-start-prayer{width:100%}}
 .faith-page .faith-today-prayer .faith-start-prayer{width:auto}
 .profile-tab-intro{margin:2px 0 14px;color:var(--ink-soft);font-size:13px;line-height:1.5}
 .profile-note-type{display:grid;gap:6px;margin-bottom:12px;color:var(--ink-soft);font-size:13px}
@@ -2099,23 +2086,42 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
 @media(max-width:650px){.careplan-filterbar{align-items:flex-start}.careplan-filter-heading{width:100%}.careplan-filter-list{width:100%}.careplan-filter-reset{margin-left:auto}}
 
 /* Health & Fitness */
-.fitness-page{display:grid;gap:16px;padding-top:1.5rem;min-width:0}
-.fitness-page-heading{align-items:baseline;gap:8px 12px;min-width:0;margin:2px 0 4px}
-.fitness-page-heading h2{flex:none}
-.fitness-page-heading .hint{min-width:0;color:var(--ink-soft)}
-.fitness-page-heading .fitness-goals-button{margin-left:auto}
-.fitness-goals-button{flex:none;min-height:34px}
-.fitness-summary-card{padding:16px 20px}
-.fitness-summary-card .person-health-summaries{grid-template-columns:repeat(3,minmax(0,1fr))}
-.fitness-summary-card .person-health-summary.fitness-summary-link{min-height:84px;margin:0 4px;padding:8px 9px;border:1px solid #DEE8E1;border-radius:10px;background:#F8FBF9;transition:background .15s,border-color .15s,box-shadow .15s}
-.fitness-summary-card .person-health-summary.fitness-summary-link:hover{border-color:#A8DEC4;background:#F0F8F3;box-shadow:0 1px 4px rgba(16,37,29,.08)}
-.fitness-summary-card .person-health-summary.fitness-summary-link:active{background:#E3F6ED}
-.fitness-summary-card .person-health-summary.fitness-summary-link:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
-.fitness-summary-card .person-health-summary-detail{font-size:11px}
-.fitness-summary-card .fitness-score-help{margin-top:7px}
-.fitness-score-help{margin-top:6px;color:var(--ink-soft);font-size:11px}
-.fitness-score-help summary{width:max-content;max-width:100%;cursor:pointer}
-.fitness-score-help p{max-width:720px;margin-top:6px;line-height:1.5}
+.fitness-page-heading{min-width:0}
+.fitness-section-bottom-action{display:flex;justify-content:flex-end;margin-top:12px}
+.category-health-card{box-sizing:border-box;min-width:0;padding:16px 20px;border-radius:16px;background:#FBFCFB;color:#17251E}
+.category-health-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;min-width:0}
+.category-health-copy{min-width:0;flex:1}
+.category-health-copy h3{margin:0;color:#17251E;font-family:var(--sans);font-size:var(--tend-type-section-header,19px);font-weight:650;line-height:1.25;overflow-wrap:anywhere}
+.category-health-status{margin:4px 0 0;color:var(--ink-soft);font-size:var(--tend-type-metadata,13px);line-height:1.4}
+.category-health-status.green{color:#087443}
+.category-health-status.yellow{color:#985600}
+.category-health-status.red{color:#C33222}
+.category-health-score{flex:none;color:#17251E;font-family:var(--sans);font-size:var(--tend-type-overall-score,40px);font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+.category-health-score.green,.health-summary-score.green{color:#087443}
+.category-health-score.yellow,.health-summary-score.yellow{color:#985600}
+.category-health-score.red,.health-summary-score.red{color:#C33222}
+.category-health-score.neutral,.health-summary-score.neutral{color:#78847D}
+.category-health-meter{box-sizing:border-box;width:100%;height:7px;margin:12px 0 6px;overflow:hidden;border-radius:99px;background:#E9EFEB}
+.category-health-fill{display:block;height:100%;border-radius:inherit}
+.category-health-fill.green{background:#12B76A}
+.category-health-fill.yellow{background:#FFC133}
+.category-health-fill.red{background:#FF5A45}
+.category-health-fill.neutral{background:#BCC7C0}
+.health-summary-breakdown{display:grid;grid-template-columns:repeat(var(--health-summary-columns,2),minmax(0,1fr));align-items:stretch;margin-top:8px}
+.health-summary-item{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:6px;box-sizing:border-box;min-width:0;min-height:84px;padding:10px 12px;border:0;border-left:1px solid #DEE8E1;border-radius:0;background:transparent;color:#17251E;font:inherit;text-align:left}
+.health-summary-item.is-action{cursor:pointer}
+.health-summary-item:first-child{border-left:0}
+.health-summary-item.is-action:hover{background:#F7F9F7}
+.health-summary-item.is-action:focus-visible{position:relative;z-index:1;outline:2px solid var(--forest);outline-offset:1px;border-radius:9px}
+.health-summary-score{color:#17251E;font-family:var(--sans);font-size:var(--tend-type-title,18px);font-weight:750;font-variant-numeric:tabular-nums;line-height:1.15}
+.health-summary-label{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;color:#17251E;font-size:var(--tend-type-metadata,13px);font-weight:600;line-height:1.3;overflow-wrap:anywhere}
+.health-summary-chevron{flex:none;color:#51605A;font-size:1.25em;font-weight:500;line-height:1}
+.health-summary-detail{display:grid;gap:2px;color:#51605A;font-size:var(--tend-type-metadata,13px);font-weight:400;line-height:1.4;overflow-wrap:anywhere}
+.health-summary-detail>span{display:flex;align-items:center;gap:5px;min-width:0}
+.health-summary-detail svg{width:13px;height:13px;flex:none;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.4}
+@media(max-width:380px){.health-summary-breakdown{grid-template-columns:minmax(0,1fr)}.health-summary-item{min-height:0;padding:10px 8px;border-left:0}.health-summary-item+.health-summary-item{border-top:1px solid #DEE8E1}}
+.area-health-summary .category-health-meter{margin-bottom:0}
+.area-health-summary .area-people-grid{margin-top:12px;padding-top:12px;border-top:1px solid #DEE8E1}
 .fitness-map-toolbar button:focus-visible,.fitness-muscle-row:focus-visible,.fitness-map-region:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
 .fitness-panel[hidden]{display:none}
 .fitness-panel{min-width:0}
@@ -2129,21 +2135,21 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
 .fitness-meter{display:grid;gap:6px;margin:12px 0}
 .fitness-meter-label{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px;font-weight:600}
 .fitness-score-text{font-variant-numeric:tabular-nums}
-.fitness-score-text.green,.fitness-muscle-value strong.green,.fitness-muscle-detail h3 strong.green{color:#287B57}
-.fitness-score-text.amber,.fitness-muscle-value strong.amber,.fitness-muscle-detail h3 strong.amber{color:#A96C0B}
-.fitness-score-text.coral,.fitness-muscle-value strong.coral,.fitness-muscle-detail h3 strong.coral{color:#B8645D}
+.fitness-score-text.green,.fitness-muscle-value strong.green,.fitness-muscle-detail h3 strong.green{color:#087443}
+.fitness-score-text.amber,.fitness-muscle-value strong.amber,.fitness-muscle-detail h3 strong.amber{color:#985600}
+.fitness-score-text.coral,.fitness-muscle-value strong.coral,.fitness-muscle-detail h3 strong.coral{color:#C33222}
 .fitness-score-text.neutral,.fitness-muscle-value strong.neutral,.fitness-muscle-detail h3 strong.neutral{color:#78847D}
 .fitness-meter-track{height:7px;overflow:hidden;border-radius:99px;background:#E9EFEB}
 .fitness-meter-track>span{display:block;height:100%;border-radius:inherit;transition:width .2s ease}
-.fitness-meter-track>span.green{background:#318768}
-.fitness-meter-track>span.amber{background:#D2A047}
-.fitness-meter-track>span.coral{background:#C77971}
+.fitness-meter-track>span.green{background:#12B76A}
+.fitness-meter-track>span.amber{background:#FFC133}
+.fitness-meter-track>span.coral{background:#FF5A45}
 .fitness-meter-track>span.neutral{background:#BCC7C0}
 .fitness-meter>small{color:var(--ink-soft);font-size:11px}
 .fitness-strength-card{padding:18px}
 .fitness-strength-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
 .fitness-strength-heading>div{min-width:0}
-.fitness-strength-heading h2{margin:0;color:var(--ink);font-size:var(--tend-type-section-header,19px);font-weight:700;line-height:1.25}
+.fitness-strength-heading h2{margin:0;color:var(--ink);font-size:var(--tend-type-card-title,16px);font-weight:650;line-height:1.3}
 .fitness-strength-heading p{margin:0;color:var(--ink-soft);font-size:13px}
 .fitness-attention-pill{flex:none;padding:7px 11px;border-radius:999px;background:#EAF2EC;color:#315E46;font-size:12px;font-weight:650;white-space:nowrap}
 .fitness-map-and-list{display:grid;grid-template-columns:minmax(0,48fr) minmax(0,52fr);align-items:stretch;gap:16px;min-width:0}
@@ -2168,28 +2174,28 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
 .fitness-muscle-row-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
 .fitness-muscle-row-heading>strong:first-child{min-width:0;font-size:13px;font-weight:700;line-height:1.2;overflow-wrap:anywhere}
 .fitness-muscle-value{flex:none;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
-.fitness-muscle-value.green,.fitness-muscle-detail h3 strong.green{color:#3F7151}
-.fitness-muscle-value.amber,.fitness-muscle-detail h3 strong.amber{color:#8A6220}
-.fitness-muscle-value.coral,.fitness-muscle-detail h3 strong.coral{color:#9C5747}
+.fitness-muscle-value.green,.fitness-muscle-detail h3 strong.green{color:#087443}
+.fitness-muscle-value.amber,.fitness-muscle-detail h3 strong.amber{color:#985600}
+.fitness-muscle-value.coral,.fitness-muscle-detail h3 strong.coral{color:#C33222}
 .fitness-muscle-value.neutral,.fitness-muscle-detail h3 strong.neutral{color:#78847D}
 .fitness-muscle-status{color:var(--ink-soft);font-size:10.5px;line-height:1.2}
 .fitness-muscle-progress{display:block;width:100%;height:4px;overflow:hidden;border-radius:99px;background:#E8EDE9}
 .fitness-muscle-progress>span{display:block;height:100%;border-radius:inherit}
-.fitness-muscle-progress>span.green{background:#81B296}
-.fitness-muscle-progress>span.amber{background:#E4C184}
-.fitness-muscle-progress>span.coral{background:#D88F77}
+.fitness-muscle-progress>span.green{background:#12B76A}
+.fitness-muscle-progress>span.amber{background:#FFC133}
+.fitness-muscle-progress>span.coral{background:#FF5A45}
 .fitness-muscle-progress>span.neutral{background:#BCC7C0}
 .fitness-score-dot{width:9px;height:9px;flex:none;border-radius:50%}
-.fitness-score-dot.green{background:#318768}
-.fitness-score-dot.amber{background:#D2A047}
-.fitness-score-dot.coral{background:#C77971}
+.fitness-score-dot.green{background:#12B76A}
+.fitness-score-dot.amber{background:#FFC133}
+.fitness-score-dot.coral{background:#FF5A45}
 .fitness-score-dot.neutral{background:#BCC7C0}
 .fitness-muscle-legend{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px 18px;margin-top:13px}
 .fitness-muscle-legend>span{display:inline-flex;align-items:center;gap:6px;color:var(--ink-soft);font-size:10.5px;line-height:1.4}
 .fitness-muscle-legend i{width:9px;height:9px;flex:none;border-radius:50%}
-.fitness-muscle-legend i.green{background:#81B296}
-.fitness-muscle-legend i.amber{background:#E4C184}
-.fitness-muscle-legend i.coral{background:#D88F77}
+.fitness-muscle-legend i.green{background:#12B76A}
+.fitness-muscle-legend i.amber{background:#FFC133}
+.fitness-muscle-legend i.coral{background:#FF5A45}
 .fitness-muscle-detail{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;padding:12px 14px;border:1px solid #DFE8E1;border-radius:12px;background:#F0F5F1}
 .fitness-muscle-detail-copy{min-width:0}
 .fitness-muscle-detail h3{margin:2px 0;font-size:15px;font-weight:650}
@@ -2318,10 +2324,7 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
 .fitness-dialog .fitness-goal-fieldset{display:grid;gap:9px;padding:12px;border:1px solid var(--line);border-radius:12px}
 .fitness-dialog .fitness-goal-fieldset,.fitness-dialog .fitness-muscle-checks fieldset{border-color:#D6E0D9}
 .fitness-goal-fieldset legend{padding:0 5px;color:#24352D;font-size:13px;font-weight:650}
-.fitness-interval-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.fitness-interval-grid label,.fitness-goal-fieldset>label{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#52645A;font-size:11px}
-.fitness-interval-grid label span{display:flex;align-items:center;gap:4px;flex:none}
-.fitness-interval-grid input{width:62px!important;min-height:38px!important;padding:5px!important;text-align:center}
+.fitness-goal-fieldset>label{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#52645A;font-size:11px}
 .fitness-goal-fieldset>label input,.fitness-goal-fieldset>label select{max-width:180px;margin-left:auto}
 .fitness-weight-goal-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .fitness-muscle-checks{display:grid;gap:8px}
@@ -2337,6 +2340,37 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
 .fitness-dialog .profile-editor-actions .btn:not(.ghost):hover{border-color:var(--action-fitness-border,#B9CDBF);background:var(--action-fitness-hover,#DCE9E0);color:var(--action-fitness-text,#315B42)}
 .fitness-dialog .profile-editor-actions .btn:not(.ghost):active{background:var(--action-fitness-active,#CFDFD4)}
 .fitness-dialog .profile-editor-actions .btn:not(.ghost):focus-visible{outline:2px solid var(--action-fitness-focus,#315B42);outline-offset:2px}
+.fitness-goals-dialog form{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-right:3px}
+.fitness-goals-dialog .profile-editor-actions{position:sticky;bottom:0;padding:10px 0 2px;background:linear-gradient(#fff 78%,rgba(255,255,255,0))}
+.fitness-strength-goals-dialog{box-sizing:border-box;width:min(760px,calc(100vw - 32px));height:min(96dvh,760px);max-height:calc(100dvh - 24px);overflow:hidden;padding:0;border-color:#D6E0D9;background:#fff;color:#24352D;color-scheme:light}
+.fitness-strength-goals-dialog .fitness-goals-layout{display:grid;grid-template-rows:auto minmax(0,1fr);height:100%;min-height:0}
+.fitness-strength-goals-dialog .fitness-goals-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:20px 24px 12px}
+.fitness-strength-goals-dialog h2{margin:0;color:#24352D;font-size:22px;line-height:1.25}
+.fitness-strength-goals-dialog h2:focus{outline:none}
+.fitness-strength-goals-dialog .fitness-dialog-intro{margin:5px 0 0;color:#52645A;font-size:var(--tend-type-metadata,13px);line-height:1.4}
+.fitness-strength-goals-dialog .fitness-goals-close{display:grid;place-items:center;flex:none;width:44px;height:44px;min-width:44px;min-height:44px;margin:-5px -7px 0 0;border:1px solid #D6E0D9;border-radius:50%;background:#fff;color:#52645A;font:inherit;font-size:24px;line-height:1;cursor:pointer}
+.fitness-strength-goals-dialog .fitness-goals-close:hover{background:#F5F8F5;color:#24352D}
+.fitness-strength-goals-dialog .fitness-goals-close:focus-visible{outline:2px solid #315B42;outline-offset:2px}
+.fitness-strength-goals-dialog form{display:grid;grid-template-rows:minmax(0,1fr) auto;min-height:0;overflow:hidden;padding:0}
+.fitness-strength-goals-dialog .fitness-goals-settings{min-height:0;overflow:auto;overscroll-behavior:contain;padding:0 24px 8px;scroll-padding-block:12px}
+.fitness-strength-goals-dialog .fitness-rest-help{margin:0 0 10px;border-bottom:1px solid #E2E9E4;color:#52645A}
+.fitness-strength-goals-dialog .fitness-rest-help summary{display:flex;align-items:center;min-height:40px;color:#315B42;font-size:var(--tend-type-metadata,13px);font-weight:600;cursor:pointer}
+.fitness-strength-goals-dialog .fitness-rest-help p{margin:0 0 10px;color:#52645A;font-size:var(--tend-type-metadata,13px);line-height:1.45}
+.fitness-strength-table{min-width:0;color:#24352D}
+.fitness-strength-table-head,.fitness-strength-row{display:grid;grid-template-columns:minmax(100px,1.15fr) minmax(100px,1fr) minmax(100px,1fr);align-items:center;column-gap:12px}
+.fitness-strength-table-head{min-height:38px;border-bottom:1px solid #D6E0D9;color:#52645A;font-size:var(--tend-type-metadata,13px);font-weight:600}
+.fitness-strength-row{padding:1px 0;border-bottom:1px solid #E2E9E4}
+.fitness-strength-row:last-child{border-bottom:0}
+.fitness-strength-muscle{font-size:14px;font-weight:600}
+.fitness-strength-row label{display:block;min-width:0}
+.fitness-strength-goals-dialog .sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.fitness-strength-goals-dialog .fitness-strength-row input{box-sizing:border-box;width:100%;min-height:44px;padding:7px 10px;border-color:#D6E0D9;border-radius:9px;background:#F8FAF8;color:#24352D;font-size:16px;text-align:center}
+.fitness-strength-goals-dialog .fitness-strength-row input[aria-invalid="true"]{border-color:#B3402E}
+.fitness-strength-row-error{display:none;grid-column:1/-1;margin:0;padding:0 0 3px;color:#B3402E;font-size:var(--tend-type-metadata,13px);line-height:1.35}
+.fitness-strength-row-error:not(:empty){display:block}
+.fitness-strength-goals-dialog .fitness-goals-actions{position:static;justify-content:flex-end;align-items:center;gap:8px;margin:0;padding:12px 24px 16px;border-top:1px solid #E2E9E4;background:#fff}
+.fitness-strength-goals-dialog .fitness-goals-actions .btn{min-height:44px}
+.fitness-strength-goals-dialog .fitness-goals-actions .btn.ghost{background:#fff}
 .fitness-inline-link{padding:0;border:0;background:transparent;color:#286C4D;font:inherit;text-decoration:underline;cursor:pointer}
 .fitness-workout-select-label{display:grid;gap:5px;color:#52645A;font-size:12px;font-weight:650}
 .fitness-workout-selected{padding:9px 10px;border-radius:10px;background:#F4F7F4;color:#263B30;font-size:12px}
@@ -2370,11 +2404,7 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
  .fitness-strength-layout,.fitness-detail-layout{grid-template-columns:minmax(0,1fr)}
 }
 @media(max-width:600px){
- .fitness-page{gap:12px;padding-top:1rem}
- .fitness-page-heading{align-items:baseline}
- .fitness-page-heading .hint{flex:1 1 180px;font-size:var(--tend-type-metadata)}
- .fitness-goals-button{min-height:34px;padding:5px 10px}
- .fitness-summary-card{padding:15px}
+ .fitness-page{gap:12px}
  .fitness-card{padding:15px}
  .fitness-strength-card{padding:15px}
  .fitness-strength-heading{align-items:flex-start;gap:8px;margin-bottom:13px}
@@ -2401,18 +2431,43 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
  .fitness-weight-timeline>div{padding:7px 5px}
  .fitness-weight-timeline span,.fitness-weight-timeline em{font-size:10px}
  .fitness-weight-timeline strong{font-size:11px}
- .fitness-interval-grid{grid-template-columns:minmax(0,1fr)}
  .fitness-schedule-field{padding:10px}
  .fitness-today-rhythm-card{padding:10px!important}
  .fitness-today-rhythm-row{gap:8px}
  .fitness-today-rhythm-row>strong,.fitness-today-workout-heading>strong{font-size:13px}
  .fitness-today-workout-heading{gap:6px}
  .fitness-dialog{padding:17px}
+ .fitness-strength-goals-dialog{width:calc(100vw - 20px);height:min(86dvh,760px);max-height:calc(100dvh - 20px);padding:0}
+ .fitness-strength-goals-dialog .fitness-goals-header{gap:10px;padding:14px 14px 10px}
+ .fitness-strength-goals-dialog .fitness-goals-settings{padding:0 14px 10px}
+ .fitness-strength-table-head,.fitness-strength-row{grid-template-columns:minmax(72px,.9fr) minmax(76px,1fr) minmax(76px,1fr);column-gap:8px}
+ .fitness-strength-table-head{font-size:12px}
+ .fitness-strength-row{padding:2px 0}
+ .fitness-strength-muscle{font-size:13px}
+ .fitness-strength-goals-dialog .fitness-goals-actions{padding:10px 14px 12px}
 }
 @media(max-width:380px){
- .fitness-page-heading .hint{flex-basis:150px}
  .fitness-weight-goal-fields{grid-template-columns:minmax(0,1fr)}
- .fitness-interval-grid{grid-template-columns:minmax(0,1fr)}
+ .fitness-strength-table-head,.fitness-strength-row{grid-template-columns:minmax(66px,.85fr) minmax(70px,1fr) minmax(70px,1fr);column-gap:6px}
+ .fitness-strength-goals-dialog .fitness-strength-row input{padding:6px}
+}
+@media(max-width:650px){
+ html[data-mobile-text-size="large"] .fitness-strength-goals-dialog h2{font-size:25px}
+ html[data-mobile-text-size="large"] .fitness-strength-goals-dialog .fitness-dialog-intro,
+ html[data-mobile-text-size="large"] .fitness-strength-goals-dialog .fitness-rest-help summary,
+ html[data-mobile-text-size="large"] .fitness-strength-goals-dialog .fitness-rest-help p{font-size:16px}
+ html[data-mobile-text-size="large"] .fitness-strength-table-head{font-size:14px}
+ html[data-mobile-text-size="large"] .fitness-strength-muscle{font-size:16px}
+ html[data-mobile-text-size="large"] .fitness-strength-goals-dialog .fitness-strength-row input{font-size:18px}
+ html[data-mobile-text-size="large"] .fitness-strength-row-error{font-size:15px}
+ html[data-mobile-text-size-level="larger"] .fitness-strength-goals-dialog h2{font-size:28px}
+ html[data-mobile-text-size-level="larger"] .fitness-strength-goals-dialog .fitness-dialog-intro,
+ html[data-mobile-text-size-level="larger"] .fitness-strength-goals-dialog .fitness-rest-help summary,
+ html[data-mobile-text-size-level="larger"] .fitness-strength-goals-dialog .fitness-rest-help p{font-size:18px}
+ html[data-mobile-text-size-level="larger"] .fitness-strength-table-head{font-size:16px}
+ html[data-mobile-text-size-level="larger"] .fitness-strength-muscle{font-size:18px}
+ html[data-mobile-text-size-level="larger"] .fitness-strength-goals-dialog .fitness-strength-row input{font-size:20px}
+ html[data-mobile-text-size-level="larger"] .fitness-strength-row-error{font-size:17px}
 }
 @media(max-width:360px){
  .fitness-map-and-list{grid-template-columns:minmax(0,1fr)}
@@ -2478,8 +2533,8 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
  .home-dashboard .menu-area>.sm-dot{display:none}
  .home-dashboard .menu-area .ma-score{box-sizing:border-box;display:inline-flex;flex:0 0 48px;align-items:center;justify-content:center;width:48px;min-width:48px;height:25px;margin-left:auto;padding:0 5px;border-radius:7px;background:#738078;color:#fff;font-size:12px;font-weight:700}
  .home-dashboard .menu-area .ma-score.green{background:#12B76A;color:#fff}
- .home-dashboard .menu-area .ma-score.yellow{background:#C77E00;color:#fff}
- .home-dashboard .menu-area .ma-score.red{background:#F04531;color:#fff}
+ .home-dashboard .menu-area .ma-score.yellow{background:#FFC133;color:#3F351B}
+ .home-dashboard .menu-area .ma-score.red{background:#FF5A45;color:#fff}
 }
 @media(max-width:600px){
  html[data-mobile-text-size="large"] .home-dashboard .menu-area{gap:8px}
@@ -2776,27 +2831,6 @@ html[data-mobile-text-size-level="larger"]{
  margin-top:var(--tend-dashboard-section-gap);
  margin-bottom:var(--tend-dashboard-content-gap)
 }
-.people-section-title h2{
- flex:none;
- color:var(--ink);
- font-family:var(--sans);
- font-size:var(--tend-type-section-header)!important;
- font-weight:700!important;
- line-height:1.25!important;
- overflow-wrap:anywhere
-}
-.people-section-title .hint{
- color:var(--ink-faint);
- font-family:var(--sans);
- font-size:var(--tend-type-metadata)!important;
- font-weight:400!important;
- line-height:1.4;
- overflow-wrap:anywhere
-}
-.people-section-title{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 12px;margin-bottom:20px}
-.people-section-title h2{grid-column:1;grid-row:1}
-.people-section-title .pc-add-person{grid-column:2;grid-row:1;justify-self:end}
-.people-section-title .hint{grid-column:1/-1;grid-row:2}
 .pc-toolbar .pc-toggle{
  min-height:44px;
  padding:.45em 1em;
@@ -3224,8 +3258,8 @@ html:not([data-mobile-text-size-level="large"]):not([data-mobile-text-size-level
 .rhythm-card__score:hover{filter:brightness(.96)}
 .rhythm-card__score svg{width:13px;height:13px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .rhythm-card__score.green{background:#12B76A;color:#fff}
-.rhythm-card__score.yellow{background:#F08C00;color:#fff}
-.rhythm-card__score.red{background:#F04531;color:#fff}
+.rhythm-card__score.yellow{background:#FFC133;color:#3F351B}
+.rhythm-card__score.red{background:#FF5A45;color:#fff}
 .rhythm-card__badges{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0;margin-top:6px}
 .rhythm-card__badges .plan-item-top-meta{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0;width:100%;margin:0}
 .rhythm-card .rhythm-card__badges .prayer-person{flex:none;gap:.5em;padding:.33em .83em .33em .33em;border:0;font-size:var(--tend-type-person-badge)!important}
@@ -3688,9 +3722,9 @@ html .person-profile-page .person-free-moment-heading h2{font-size:var(--tend-ty
 .person-profile-page .person-health-summary-score,
 .person-profile-page .person-health-summary-label{position:relative;z-index:1}
 .person-profile-page .person-health-summary-score{color:var(--ink);font-family:var(--sans);font-size:var(--tend-type-title);font-weight:750;font-variant-numeric:tabular-nums;line-height:1.15}
-.person-profile-page .person-health-summary-score.green{color:#12B76A}
-.person-profile-page .person-health-summary-score.yellow{color:#F08C00}
-.person-profile-page .person-health-summary-score.red{color:#F04531}
+.person-profile-page .person-health-summary-score.green{color:#087443}
+.person-profile-page .person-health-summary-score.yellow{color:#985600}
+.person-profile-page .person-health-summary-score.red{color:#C33222}
 .person-profile-page .person-health-summary-score.neutral{color:var(--ink-soft)}
 .person-profile-page .person-health-summary-label{color:var(--ink-soft);font-size:var(--tend-type-metadata);font-weight:600;line-height:1.3;overflow-wrap:anywhere}
 @media(max-width:600px){

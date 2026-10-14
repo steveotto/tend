@@ -1,7 +1,7 @@
 "use strict";
 /* ============ Faith practice page ============ */
 var FAITH_GROUPS=["Sabbath","Prayer","Fasting","Solitude","Generosity","Community","Service","Witness","Scripture","Other"];
-var faithRhythmDraft=null,faithSparkDraft=null,faithSparkEditId=null,faithSparkOwnerId="faith",faithNotesExpanded=false,faithNotesDestinationOpen=false,faithPrayerDraftOpen=false,faithPrayerExpanded=false,faithTodayExpanded=false,faithMainView="practices",faithMainViewInitialized=false,faithShowAllRhythms=false,faithSettingsOpen=false,faithPrayerSession=null,dashboardPrayerPeople=null,dashboardPrayerTimeMode="now",personDashboardPrayerTimeModes={},personDashboardPrayerPeople={},prayerSelectionDraft=null,prayerPageTimeMode="now",prayerPagePeople=null,faithRequestPrayerTimeMode=null;
+var faithRhythmDraft=null,faithSparkDraft=null,faithSparkEditId=null,faithSparkOwnerId="faith",faithNotesExpanded=false,faithNotesDestinationOpen=false,faithPrayerDraftOpen=false,faithPrayerExpanded=false,faithTodayExpanded=false,faithMainView="practices",faithMainViewInitialized=false,faithShowAllRhythms=false,faithPrayerSession=null,dashboardPrayerPeople=null,dashboardPrayerTimeMode="now",personDashboardPrayerTimeModes={},personDashboardPrayerPeople={},prayerSelectionDraft=null,prayerPageTimeMode="now",prayerPagePeople=null,faithRequestPrayerTimeMode=null;
 var FAITH_MAIN_VIEWS=["practices","today","prayer"];
 var faithGroupDescriptions={
  Sabbath:"A weekly invitation to pause, delight, and reconnect with God.",
@@ -120,7 +120,7 @@ function faithScoreClass(score){return Number.isFinite(score)?scoreClass(score):
 function faithNavScoreHTML(score){
  if(!Number.isFinite(score))return '<span class="faith-nav-score faith-nav-score-unavailable" aria-label="Health score unavailable">—</span>';
  var level=faithScoreClass(score);
- return '<span class="rhythm-health faith-nav-score '+level+'" aria-label="Health score '+score+' percent"><span class="sm-dot '+level+'" aria-hidden="true"></span><span>'+score+'</span></span>';
+ return '<span class="rhythm-health faith-nav-score '+level+'" aria-label="Health score '+score+' out of 100"><span class="sm-dot '+level+'" aria-hidden="true"></span><span>'+score+'</span></span>';
 }
 function faithPracticeHealthParts(){
  var rhythms=avg(faithPracticeRhythmRecords("Prayer").map(function(r){return rhythmScore(r);}));
@@ -138,7 +138,7 @@ function faithPracticeHealth(group){
 function faithPrayerRequestHealthHTML(){
  var parts=faithPracticeHealthParts(),prayers=faithActivePrayers();
  var score=parts.prayers,scoreText=faithScoreText(score),scoreClass=faithScoreClass(score),count=prayers.length;
- return '<button type="button" class="faith-prayer-request-health" data-faith-prayer-requests="1" aria-label="Prayer health '+(score===null?"unavailable":score+" percent")+', '+count+' active prayer'+(count===1?"":"s")+'"><span class="faith-prayer-request-health-heading"><span><strong>Prayer health</strong><span>'+count+' prayer'+(count===1?"":"s")+'</span></span><span class="faith-prayer-request-health-score '+scoreClass+'">'+scoreText+'</span></span><span class="faith-prayer-request-health-meter" role="meter" aria-label="Prayer health" aria-valuemin="0" aria-valuemax="100"'+(score===null?' aria-valuetext="No score available"':' aria-valuenow="'+score+'" aria-valuetext="'+score+' out of 100"')+'><span class="'+scoreClass+'" style="width:'+(score===null?0:score)+'%"></span></span></button>';
+ return '<button type="button" class="faith-prayer-request-health" data-faith-prayer-requests="1" aria-label="Prayer health '+(score===null?"unavailable":score+" out of 100")+', '+count+' active prayer'+(count===1?"":"s")+'"><span class="faith-prayer-request-health-heading"><span><strong>Prayer health</strong><span>'+count+' prayer'+(count===1?"":"s")+'</span></span><span class="faith-prayer-request-health-score '+scoreClass+'">'+scoreText+'</span></span><span class="faith-prayer-request-health-meter" role="meter" aria-label="Prayer health" aria-valuemin="0" aria-valuemax="100"'+(score===null?' aria-valuetext="No score available"':' aria-valuenow="'+score+'" aria-valuetext="'+score+' out of 100"')+'><span class="'+scoreClass+'" style="width:'+(score===null?0:score)+'%"></span></span></button>';
 }
 function faithTimeRank(tod){if(tod==="allday")return -1;var blocks=dayBlocks(),index=blocks.findIndex(function(block){return block.id===tod;});return index<0?blocks.length:index;}
 function faithPracticeCount(group){return faithRhythms(group).length+(typeof window.faithLinkedRhythmCount==="function"?window.faithLinkedRhythmCount(group):0);}
@@ -233,16 +233,15 @@ function faithHealthHTML(){
  var latestPrayerText=latestPrayer?"Last prayed: "+prayerLastPrayedLabel(latestPrayer.prayer):"Last prayed: Never";
  var latestRhythmDate=latestRhythmEvent?when(latestRhythmEvent.ts):"Never";
  var latestPrayerDate=latestPrayer?prayerLastPrayedLabel(latestPrayer.prayer):"Never";
- function summaryButton(key,label,value){
-  var display=faithScoreText(value),tone=Number.isFinite(value)?faithScoreClass(value):"neutral",count=key==="rhythms"?rhythms.length:prayers.length,countLabel=key==="rhythms"?"active rhythm":"active prayer",lastText=key==="rhythms"?latestRhythmText:latestPrayerText,lastDate=key==="rhythms"?latestRhythmDate:latestPrayerDate,activityIcon=key==="rhythms"?'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.2 5.2A5.5 5.5 0 0 0 3 4.1L2 5.2m0 0V2.7m0 2.5h2.5M2.8 10.8A5.5 5.5 0 0 0 13 11.9l1-1.1m0 0v2.5m0-2.5h-2.5"/></svg>':'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13.5s-5.5-3.2-5.5-7A3 3 0 0 1 8 5.2a3 3 0 0 1 5.5 1.3c0 3.8-5.5 7-5.5 7Z"/></svg>',calendarIcon='<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.2" y="3.5" width="11.6" height="10" rx="1.5"/><path d="M5 2v3m6-3v3M2.5 6.5h11"/></svg>',accessibleLabel=label+", health score "+(Number.isFinite(value)?display:"unavailable")+", "+count+" "+countLabel+(count===1?"":"s")+", "+lastText;
-  return '<button type="button" class="person-health-summary" data-faith-health-nav="'+key+'" aria-label="'+esc(accessibleLabel)+'"><span class="person-health-summary-score '+tone+'">'+esc(display)+'</span><span class="person-health-summary-label"><span>'+label+'</span><span class="faith-health-summary-chevron" aria-hidden="true">›</span></span><span class="person-health-summary-detail"><span>'+activityIcon+'<span>'+esc(count+" active")+'</span></span><span>'+calendarIcon+'<span>'+esc(lastDate)+'</span></span></span></button>';
+ function summaryItem(key,label,value){
+  var count=key==="rhythms"?rhythms.length:prayers.length,countLabel=key==="rhythms"?"active rhythm":"active prayer",lastText=key==="rhythms"?latestRhythmText:latestPrayerText,lastDate=key==="rhythms"?latestRhythmDate:latestPrayerDate,activityIcon=key==="rhythms"?'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.2 5.2A5.5 5.5 0 0 0 3 4.1L2 5.2m0 0V2.7m0 2.5h2.5M2.8 10.8A5.5 5.5 0 0 0 13 11.9l1-1.1m0 0v2.5m0-2.5h-2.5"/></svg>':'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13.5s-5.5-3.2-5.5-7A3 3 0 0 1 8 5.2a3 3 0 0 1 5.5 1.3c0 3.8-5.5 7-5.5 7Z"/></svg>',calendarIcon='<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.2" y="3.5" width="11.6" height="10" rx="1.5"/><path d="M5 2v3m6-3v3M2.5 6.5h11"/></svg>';
+  return {label:label,score:value,actionAttributes:{"data-faith-health-nav":key},ariaLabel:label+", health score "+(Number.isFinite(value)?faithScoreText(value)+" out of 100":"unavailable")+", "+count+" "+countLabel+(count===1?"":"s")+", "+lastText,detailHTML:'<span>'+activityIcon+'<span>'+esc(count+" active")+'</span></span><span>'+calendarIcon+'<span>'+esc(lastDate)+'</span></span>'};
  }
- var summaries='<div class="person-health-summaries" role="group" aria-label="Faith health summaries">'
-  +summaryButton("rhythms","Rhythms",rhythmScoreValue)+summaryButton("prayer","Prayer",prayerScoreValue)+'</div>';
- return '<section class="card faith-health-card" aria-labelledby="faithHealthTitle"><div class="person-health-heading"><div class="faith-health-overview-copy"><h4 id="faithHealthTitle">Overall Faith health</h4><div class="person-health-status statusword '+level+'">'+(overall===null?"No active Faith health scores":esc(scoreLabel(overall)))+'</div></div><span class="person-profile-score">'+faithScoreText(overall)+'</span></div><div class="bar-ov person-health-bar solid" role="meter" aria-label="Overall Faith health" aria-valuemin="0" aria-valuemax="100"'+(overall===null?' aria-valuetext="No active Faith health scores"':' aria-valuenow="'+overall+'" aria-valuetext="'+overall+' out of 100: '+esc(scoreLabel(overall))+'"')+'><span class="person-health-fill" style="width:'+(overall===null?0:overall)+'%;background:'+personHealthColor(overall)+'" aria-hidden="true"></span></div>'+summaries+'</section>';
+ var summaries=tendScoreBreakdownHTML([summaryItem("rhythms","Rhythms",rhythmScoreValue),summaryItem("prayer","Prayer",prayerScoreValue)],{columns:2,label:"Faith health summaries"});
+ return tendCategoryHealthSummaryHTML({title:"Overall Faith health",titleId:"faithHealthTitle",score:overall,status:overall===null?"No active Faith health scores":scoreLabel(overall),className:"faith-health-card",breakdownHTML:summaries});
 }
 function faithSettingsHTML(){
- return faithSettingsOpen?'<section class="faith-sections-settings" id="faith-sections-settings" aria-labelledby="faithSectionsTitle"><div class="faith-settings-heading"><div><h2 id="faithSectionsTitle">Sections</h2><p>Choose which practice sections appear on this page.</p></div><button type="button" class="iconbtn" data-faith-settings-close="1" aria-label="Close section settings">×</button></div><div class="faith-settings-list">'+FAITH_GROUPS.map(function(group){return '<label><input type="checkbox" data-faith-enabled="'+esc(group)+'"'+(faithGroupEnabled(group)?" checked":"")+'><span>'+esc(group)+'</span></label>';}).join("")+'</div><details class="faith-settings-notes"'+(faithNotesDestinationOpen?" open":"")+'><summary id="faithNotesTitle">View Faith notes</summary>'+faithNotesHTML()+'</details></section>':'';
+ return '<section class="faith-sections-settings" aria-labelledby="faithSectionsTitle"><div class="faith-settings-heading"><div><h2 id="faithSectionsTitle">Faith sections</h2><p>Choose which practice sections appear on the Faith page.</p></div></div><div class="faith-settings-list">'+FAITH_GROUPS.map(function(group){return '<label><input type="checkbox" data-faith-enabled="'+esc(group)+'"'+(faithGroupEnabled(group)?" checked":"")+'><span>'+esc(group)+'</span></label>';}).join("")+'</div><details class="faith-settings-notes"'+(faithNotesDestinationOpen?" open":"")+'><summary id="faithNotesTitle">View Faith notes</summary>'+faithNotesHTML()+'</details></section>';
 }
 function faithSectionNavHTML(selected){
  return '<nav class="faith-section-nav" aria-label="Faith practices">'+FAITH_GROUPS.map(function(group){
@@ -557,9 +556,9 @@ function renderFaithPage(){
  var selected=faithSelectedGroup(),config=faithConfig();
  if(FAITH_GROUPS.indexOf(selected)<0){selected=FAITH_GROUPS[0];config.selectedGroup=selected;}
  faithInitialMainView(selected);
- var out='<main class="faith-page">'+tendSectionHeaderHTML({title:"Faith",subtitle:"Small practices, tended over time.",className:"faith-page-heading",tagName:"header",trailingHTML:'<button type="button" class="btn ghost faith-sections-toggle" data-faith-settings="1" aria-expanded="'+faithSettingsOpen+'" aria-controls="faith-sections-settings">⚙ Sections</button>'});
+ var out='<main class="faith-page">'+tendCategoryPageHeaderHTML("Faith","faith-page-heading");
  var practiceEditor=faithRhythmDraft?faithRhythmEditorHTML(faithRhythmDraft):faithSparkDraft?faithSparkEditorHTML(faithSparkDraft):"";
- out+=faithSettingsHTML()+faithHealthHTML()+'<div class="faith-views-content">'+faithViewNavHTML();
+ out+=faithHealthHTML()+'<div class="faith-views-content">'+faithViewNavHTML();
  out+=faithViewPanelHTML("practices",faithPracticeOverviewHTML(selected)+(faithShowAllRhythms?faithAllRhythmsHTML():faithPracticeContent(selected)));
  out+=faithViewPanelHTML("today",faithTodayHTML());
  out+=faithViewPanelHTML("prayer",faithPrayerRequestsHTML());
@@ -672,8 +671,6 @@ document.addEventListener("click",function(event){
  }
  var b=t.closest&&t.closest("button");if(!b)return;
  if(b.matches("[data-faith-view-select]")){faithSetMainView(b.getAttribute("data-faith-view-select"),true);event.stopImmediatePropagation();return;}
- if(b.matches("[data-faith-settings]")){faithSettingsOpen=!faithSettingsOpen;render();event.stopImmediatePropagation();return;}
- if(b.matches("[data-faith-settings-close]")){faithSettingsOpen=false;render();event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-health-nav]")){
   var healthDestination=b.getAttribute("data-faith-health-nav");
   if(healthDestination==="rhythms"){

@@ -5,6 +5,32 @@ function tendSectionHeaderHTML(options){
  var title=String(options.title||""),classes=["sectiontitle",options.className||""].filter(Boolean).join(" "),titleId=options.titleId?' id="'+esc(options.titleId)+'"':"",subtitle=options.subtitle?'<span class="hint">'+esc(options.subtitle)+'</span>':"",metadata=options.metadata?'<span class="hint">'+esc(options.metadata)+'</span>':"",icon=options.iconHTML?'<span class="sectiontitle-icon" aria-hidden="true">'+options.iconHTML+'</span>':"",trailing=options.trailingHTML||"",tag=options.tagName==="header"?"header":"div",style=options.style?' style="'+esc(options.style)+'"':"";
  return '<'+tag+' class="'+esc(classes)+'"'+style+'>'+icon+'<h2'+titleId+'>'+esc(title)+'</h2>'+subtitle+metadata+trailing+'</'+tag+'>';
 }
+function tendCategoryPageHeaderHTML(title,className){
+ return tendSectionHeaderHTML({title:title,subtitle:"Structure beats good intentions",className:["category-page-heading",className||""].filter(Boolean).join(" "),tagName:"header"});
+}
+function tendHealthScoreText(score){
+ return Number.isFinite(score)?String(Math.round(score)):"—";
+}
+function tendHealthScoreColor(score){
+ if(!Number.isFinite(score))return "#BCC7C0";
+ var tone=scoreClass(score);
+ return tone==="green"?"#12B76A":tone==="yellow"?"#FFC133":"#FF5A45";
+}
+function tendScoreBreakdownHTML(items,options){
+ options=options||{};
+ var columns=Math.max(1,Number(options.columns)||items.length||1);
+ var content=(items||[]).map(function(item){
+  var score=Number.isFinite(item.score)?item.score:null,tone=score===null?"neutral":scoreClass(score),display=tendHealthScoreText(score),tag=item.actionAttributes?"button":"div",attributes=Object.keys(item.actionAttributes||{}).map(function(name){if(!/^data-[a-z0-9-]+$/i.test(name))return "";return " "+name+'="'+esc(item.actionAttributes[name])+'"';}).join(""),label=String(item.label||""),description=item.detailHTML!==undefined?item.detailHTML:item.detail?'<span>'+esc(item.detail)+'</span>':"",chevron=item.actionAttributes?'<span class="health-summary-chevron" aria-hidden="true">›</span>':"";
+  var aria=item.ariaLabel||label+", health score "+(score===null?"unavailable":display+" out of 100");
+  return '<'+tag+(tag==="button"?' type="button"':"")+' class="health-summary-item'+(item.actionAttributes?" is-action":"")+'"'+attributes+(item.actionAttributes?' aria-label="'+esc(aria)+'"':"")+'><span class="health-summary-score '+tone+'">'+esc(display)+'</span><span class="health-summary-label">'+esc(label)+chevron+'</span>'+(description?'<span class="health-summary-detail">'+description+'</span>':"")+'</'+tag+'>';
+ }).join("");
+ return '<div class="health-summary-breakdown" style="--health-summary-columns:'+columns+'" role="group" aria-label="'+esc(options.label||"Health breakdown")+'">'+content+'</div>';
+}
+function tendCategoryHealthSummaryHTML(options){
+ options=options||{};
+ var score=Number.isFinite(options.score)?options.score:null,tone=score===null?"neutral":scoreClass(score),display=tendHealthScoreText(score),title=String(options.title||"Overall health"),status=String(options.status||(score===null?"No activity yet":scoreLabel(score))),fill=options.fillHTML!==undefined?options.fillHTML:'<span class="category-health-fill '+tone+'" style="width:'+(score===null?0:Math.max(0,Math.min(100,score)))+'%" aria-hidden="true"></span>',lower=options.breakdownHTML||options.contentHTML||"";
+ return '<section class="card category-health-card '+esc(options.className||"")+'" aria-labelledby="'+esc(options.titleId||"categoryHealthTitle")+'"><div class="category-health-heading"><div class="category-health-copy"><h3 id="'+esc(options.titleId||"categoryHealthTitle")+'">'+esc(title)+'</h3><p class="category-health-status statusword '+tone+'">'+esc(status)+'</p></div><span class="category-health-score '+tone+'">'+esc(display)+'</span></div><div class="category-health-meter" role="meter" aria-label="'+esc(title)+'" aria-valuemin="0" aria-valuemax="100"'+(score===null?' aria-valuetext="'+esc(status)+'"':' aria-valuenow="'+score+'" aria-valuetext="'+display+' out of 100: '+esc(status)+'"')+'>'+fill+'</div>'+lower+'</section>';
+}
 function tendPrayerSectionHTML(title,content,options){
  options=options||{};
  return tendSectionHeaderHTML({title:title,className:options.headerClassName,subtitle:options.subtitle,metadata:options.metadata,trailingHTML:options.trailingHTML,iconHTML:options.iconHTML,titleId:options.titleId})+content;
@@ -82,10 +108,10 @@ function tendRhythmCardHTML(record,options){
   }).join("");
  }
  var title=String(options.title||record.text||"(unnamed rhythm)"),description=String(options.description!==undefined?options.description:record.description||"").trim();
- var score=Number.isFinite(options.score)?options.score:null,scoreText=score===null?"—":score+"%",scoreClass=String(options.scoreClass||"neutral");
+ var score=Number.isFinite(options.score)?options.score:null,scoreText=tendHealthScoreText(score),scoreClass=String(options.scoreClass||"neutral");
  var editAction=options.editAttributes?'<button type="button" class="rhythm-card__edit"'+attrs(options.editAttributes)+' aria-label="Edit '+esc(title)+'" title="Edit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l4.2-.8L20 7.4 16.6 4 4.8 15.8Z"/></svg></button>':"";
  var actionClass=String(options.actionClassName||"").replace(/[^a-z0-9_-]/gi,""),tendAction='<button type="button" class="btn mini rhythm-card__tend'+(actionClass?" "+actionClass:"")+'"'+(options.actionDisabled?' disabled aria-disabled="true"':"")+attrs(options.tendAttributes)+' title="'+esc(options.actionTitle||"Record a moment of care")+'">'+esc(options.actionLabel||"Tend")+'</button>';
- var chartAction=options.showScore===false?"":'<button type="button" class="rhythm-card__score '+esc(scoreClass)+'"'+attrs(options.historyAttributes)+' aria-label="Rhythm health '+(score===null?"unknown":score+"%")+'. View chart." title="View rhythm health chart"><span>'+scoreText+'</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17M8 16v-5m5 5V6m5 10V9"/></svg></button>';
+ var chartAction=options.showScore===false?"":'<button type="button" class="rhythm-card__score '+esc(scoreClass)+'"'+attrs(options.historyAttributes)+' aria-label="Rhythm health '+(score===null?"unknown":scoreText+" out of 100")+'. View chart." title="View rhythm health chart"><span>'+scoreText+'</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17M8 16v-5m5 5V6m5 10V9"/></svg></button>';
  var people=options.peopleBadgesHTML||"",categories=options.categoryBadgesHTML||"",remove=options.removeAttributes?'<button type="button" class="rhythm-card__remove"'+attrs(options.removeAttributes)+' aria-label="'+esc(options.removeLabel||"Remove "+title)+'" title="'+esc(options.removeTitle||"Remove")+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m3 3v7m6-7v7"/></svg></button>':"";
  var frequency=options.frequency||{},time=options.time||{},last=options.lastTended||{};
  var cardClass=String(options.cardClassName||"").replace(/[^a-z0-9_-]/gi,"");

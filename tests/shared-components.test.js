@@ -18,6 +18,7 @@ const prayerSource = fs.readFileSync(path.join(__dirname, "..", "app-prayers.js"
 const personRhythmSource = fs.readFileSync(path.join(__dirname, "..", "app-rhythms2.js"), "utf8");
 const personOverviewSource = fs.readFileSync(path.join(__dirname, "..", "app-rhythms3.js"), "utf8");
 const categoryRhythmSource = fs.readFileSync(path.join(__dirname, "..", "app-categoryrhythms.js"), "utf8");
+const settingsTabsSource = fs.readFileSync(path.join(__dirname, "..", "app-settingstabs.js"), "utf8");
 const weatherSource = fs.readFileSync(path.join(__dirname, "..", "app-weather.js"), "utf8");
 const styles = fs.readFileSync(path.join(__dirname, "..", "tend.css"), "utf8");
 
@@ -229,6 +230,8 @@ function escapeHTML(value) {
 function loadComponents(normalize = record => record) {
   const context = {
     esc: escapeHTML,
+    scoreClass: score => score >= 80 ? "green" : score >= 50 ? "yellow" : "red",
+    scoreLabel: score => score >= 80 ? "Healthy" : score >= 50 ? "Slipping" : "Needs attention",
     window: { tendNormalizeRhythmEditRecord: normalize }
   };
   vm.createContext(context);
@@ -286,6 +289,26 @@ test("Home, Person, and category rhythm cards share one renderer and card struct
   assert.match(todayCard, /class="rhythm-card card"/);
   assert.match(todayCard, /class="btn mini rhythm-card__tend" data-tend-open="person-rhythm"/);
   assert.doesNotMatch(todayCard, /rhythm-card__edit|rhythm-card__score/);
+  const scoredCard = components.tendRhythmCardHTML(record, {
+    score: 81,
+    scoreClass: "green",
+    historyAttributes: { "data-rhyhistory": "amy|shared-walk" }
+  });
+  assert.match(scoredCard, /aria-label="Rhythm health 81 out of 100\. View chart\."/);
+  assert.match(scoredCard, /<span>81<\/span>/);
+  assert.doesNotMatch(scoredCard, /81%/);
+  const summary = components.tendCategoryHealthSummaryHTML({
+    title: "Overall Faith health",
+    score: 81,
+    status: "Healthy",
+    breakdownHTML: components.tendScoreBreakdownHTML([{ label: "Rhythms", score: 81, actionAttributes: { "data-faith-health-nav": "rhythms" } }])
+  });
+  assert.match(summary, /category-health-score green">81<\/span>/);
+  assert.match(summary, /aria-valuetext="81 out of 100: Healthy"/);
+  assert.match(summary, /type="button" class="health-summary-item is-action"/);
+  assert.doesNotMatch(summary, />81%/);
+  assert.equal(components.tendHealthScoreColor(81), "#12B76A");
+  assert.equal(components.tendHealthScoreColor(null), "#BCC7C0");
   assert.match(source, /function tendRhythmCardHTML\(/);
   assert.match(source, /var chartAction=options\.showScore===false\?"":/);
   assert.match(source, /return '<article class="rhythm-card card'\+\(cardClass\?" "\+cardClass:""\)\+'">'/);
@@ -557,7 +580,7 @@ test("Faith Prayer requests use shared selection for cards, counts, and sessions
   assert.match(faithSource, /if\(context==="faith-requests"\)return faithRequestPrayerTimeMode\|\|\(faithSelectedPrayerView\(\)==="today"\?"allday":"allrequests"\)/);
   assert.match(faithSource, /timeframe:context==="faith-requests"&&mode==="allrequests"\?"All":faithPrayerSelectionLabel\(mode\)/);
   assert.match(faithSource, /dashboardPrayerTimeMode="now"/);
-  assert.match(faithSource, /Prayer health '\+\(score===null\?"unavailable":score\+" percent"\)\+'\, '\+count\+' active prayer/);
+  assert.match(faithSource, /Prayer health '\+\(score===null\?"unavailable":score\+" out of 100"\)\+'\, '\+count\+' active prayer/);
   assert.match(faithSource, /var visible=faithPrayerExpanded\?items:items\.slice\(0,3\)/);
   assert.match(faithSource, /View all prayers \("\+items\.length\+"\)/);
   assert.match(faithSource, /faithPrayerSession\.prayedIds\.indexOf\(prayer\.id\)<0/);
@@ -620,12 +643,12 @@ test("Person management tabs prioritize health categories with mobile item and s
   assert.match(homeRhythmSource, /\[\["rhythms","Rhythms"\],\["sparks","Sparks"\],\["prayer","Prayer"\],\["connection","Connections"\],\["notes","Notes"\]\]/);
   assert.match(homeRhythmSource, /var tabHealth=\{rhythms:avg\(sortedPersonRhythms\(p\)\.map\(rhythmScore\)\),connection:connectionScore\(p\),prayer:prayerMeterScore\(p\)\}/);
   assert.match(homeRhythmSource, /class="profile-tab-mobile-details"><span class="profile-tab-item-count" aria-label="'\+counts\[item\[0\]\]\+' items"/);
-  assert.ok(homeRhythmSource.includes('class="profile-tab-health-score \'+healthTone+\'">\'+healthText'));
+  assert.ok(homeRhythmSource.includes('class="profile-tab-health-score \'+healthTone+\'" aria-label="Health score \'+(healthText==="—"?"unavailable":healthText+" out of 100")'));
   assert.match(styles, /grid-template-areas:"rhythms rhythms connection connection prayer prayer" "sparks sparks sparks notes notes notes"/);
   assert.match(styles, /\.person-profile-page \.profile-tabs button\[data-profiletab="rhythms"\],\s*\.person-profile-page \.profile-tabs button\[data-profiletab="connection"\],\s*\.person-profile-page \.profile-tabs button\[data-profiletab="prayer"\]\{display:grid;grid-template-columns:minmax\(0,1fr\);grid-template-rows:1fr 1fr;justify-items:stretch;min-height:96px/);
-  assert.match(styles, /\.person-profile-page \.profile-tabs \.profile-tab-health-score\.green\{color:#12B76A\}/);
-  assert.match(styles, /\.person-profile-page \.profile-tabs \.profile-tab-health-score\.yellow\{color:#F08C00\}/);
-  assert.match(styles, /\.person-profile-page \.profile-tabs \.profile-tab-health-score\.red\{color:#F04531\}/);
+  assert.match(styles, /\.person-profile-page \.profile-tabs \.profile-tab-health-score\.green\{color:#087443\}/);
+  assert.match(styles, /\.person-profile-page \.profile-tabs \.profile-tab-health-score\.yellow\{color:#985600\}/);
+  assert.match(styles, /\.person-profile-page \.profile-tabs \.profile-tab-health-score\.red\{color:#C33222\}/);
 });
 
 test("Person profile overview keeps health details accessible and scoped above Today", () => {
@@ -650,9 +673,9 @@ test("Person profile overview keeps health details accessible and scoped above T
   assert.match(personOverviewSource, /person-health-summaries/);
   assert.match(personOverviewSource, /var tone=display==="\\u2014"\?"neutral":scoreClass\(Number\(value\)\)/);
   assert.match(personOverviewSource, /person-health-summary-score '\+tone/);
-  assert.match(styles, /\.person-profile-page \.person-health-summary-score\.green\{color:#12B76A\}/);
-  assert.match(styles, /\.person-profile-page \.person-health-summary-score\.yellow\{color:#F08C00\}/);
-  assert.match(styles, /\.person-profile-page \.person-health-summary-score\.red\{color:#F04531\}/);
+  assert.match(styles, /\.person-profile-page \.person-health-summary-score\.green\{color:#087443\}/);
+  assert.match(styles, /\.person-profile-page \.person-health-summary-score\.yellow\{color:#985600\}/);
+  assert.match(styles, /\.person-profile-page \.person-health-summary-score\.red\{color:#C33222\}/);
   assert.match(styles, /html\[data-mobile-text-size-level="larger"\] \.person-profile-page \.person-health-summary\{padding-right:4px;padding-left:4px\}/);
   assert.match(styles, /html\[data-mobile-text-size-level="larger"\] \.person-profile-page \.person-health-summary-label\{font-size:14px;letter-spacing:-\.03em;white-space:nowrap\}/);
   assert.match(styles, /\.person-profile-page \.prayer-person\.person-badge-clickable\{[^}]*gap:\.5em;padding:\.33em \.83em \.33em \.33em;font-size:var\(--tend-type-person-badge\)!important/);
@@ -769,17 +792,18 @@ test("Focus rhythm rows reuse the shared card and include the owning person badg
   assert.match(styles, /\.focus-dialog \.focus-rhythm-item\{margin:14px 0\}/);
   assert.match(peopleSource, /class="btn mini ghost pc-add-person" data-addperson>\+ Add person/);
   assert.match(peopleSource, /"\.btn\.mini\.pc-add-person\{box-sizing:border-box;justify-self:end;width:max-content;height:44px;min-height:44px;padding:8px 13px;font-size:14px;line-height:1\.2\}"/);
-  assert.match(peopleSource, /className:"people-section-title"[\s\S]*?trailingHTML:'<button type="button" class="btn mini ghost pc-add-person" data-addperson>\+ Add person<\/button>'/);
+  assert.match(peopleSource, /tendCategoryPageHeaderHTML\("People","people-section-title"\)\+'<div class="category-page-actions"><button type="button" class="btn mini ghost pc-add-person" data-addperson>\+ Add person<\/button><\/div>'/);
+  assert.match(peopleSource, /tendCategoryPageHeaderHTML\("People","people-section-title"\)\+'<div class="category-page-actions"[\s\S]*?out\+='<div class="pc-toolbar"/);
   assert.match(peopleSource, /out\+='<div class="pc-toolbar"><div class="pc-toggles"/);
   assert.match(peopleSource, /var CAT_LABEL=\{marriage:"Marriage",parenting:"Parenting",friendships:"Friends"\}/);
   assert.match(peopleSource, /"\.pc-toolbar\{display:flex;justify-content:center/);
   assert.match(peopleSource, /"\.pc-toggles\{display:flex;justify-content:center/);
   assert.match(peopleSource, /"\.pc-add-person\{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:8px 13px;border:1px solid var\(--forest\);border-radius:10px;background:transparent;color:var\(--forest\);font-size:14px;font-weight:600;white-space:nowrap\}"/);
-  assert.match(styles, /\.people-section-title h2\{grid-column:1;grid-row:1\}/);
-  assert.match(styles, /\.people-section-title \.pc-add-person\{grid-column:2;grid-row:1;justify-self:end\}/);
-  assert.match(styles, /\.people-section-title \.hint\{grid-column:1\/-1;grid-row:2\}/);
-  assert.match(styles, /\.people-section-title\{display:grid;grid-template-columns:minmax\(0,1fr\) auto;align-items:center;gap:2px 12px;margin-bottom:20px\}/);
-  assert.match(styles, /\.faith-page-heading\{justify-content:flex-start;align-items:baseline;gap:12px;margin:2px 0 8px\}/);
+  assert.match(styles, /\.category-page-heading\{display:grid;grid-template-columns:minmax\(0,1fr\);grid-template-rows:auto auto;align-items:start;gap:2px;margin:0\}/);
+  assert.match(styles, /\.category-page-heading h2\{grid-column:1;grid-row:1;margin:0;color:var\(--ink\);font-family:var\(--sans\);font-size:var\(--tend-type-section-header\);font-weight:700;line-height:1\.25\}/);
+  assert.match(styles, /\.category-page-heading \.hint\{grid-column:1;grid-row:2;min-width:0;color:var\(--ink-soft\);font-family:var\(--sans\);font-size:var\(--tend-type-metadata\)/);
+  assert.match(styles, /\.category-page,\.faith-page,\.fitness-page\{display:grid;gap:16px;min-width:0;padding-top:16px\}/);
+  assert.doesNotMatch(styles, /\.faith-page-heading\{[^}]*display:flex/);
 });
 
 test("Connection history source keeps repeated events and scopes people using existing rules", () => {
@@ -842,6 +866,10 @@ test("shared section and card components escape text and preserve semantic layou
   assert.match(header, /Subtitle/);
   assert.match(header, /Metadata/);
   assert.match(header, /aria-label="Add"/);
+  const categoryHeader = components.tendCategoryPageHeaderHTML("Marriage");
+  assert.match(categoryHeader, /class="sectiontitle category-page-heading"/);
+  assert.match(categoryHeader, /<h2>Marriage<\/h2>/);
+  assert.match(categoryHeader, /Structure beats good intentions/);
   const todayWithPerson = components.tendTodayWithPersonHTML({
     personName: "<Jake>",
     waitingCount: 2,
@@ -1076,17 +1104,14 @@ test("Focused Prayer counts honor caller scope, draft people, and timeframe sema
 
 test("Faith health shows bright-score navigation areas and an all-rhythm destination", () => {
   const faithHealth = faithSource.match(/function faithHealthHTML\(\)\{([\s\S]*?)\n\}/)[1];
-  assert.match(faithHealth, /class="person-health-summaries" role="group" aria-label="Faith health summaries"/);
-  assert.match(faithHealth, /summaryButton\("rhythms","Rhythms",rhythmScoreValue\)\+summaryButton\("prayer","Prayer",prayerScoreValue\)/);
-  assert.doesNotMatch(faithHealth, /summaryButton\("connection"/);
-  assert.ok(faithHealth.includes(`data-faith-health-nav="'+key+'"`));
-  assert.ok(faithHealth.includes(`person-health-summary-score '+tone+'`));
-  assert.match(faithHealth, /faithScoreClass\(value\)/);
-  assert.match(faithHealth, /person-health-summary-detail"><span>'\+activityIcon\+'<span>'\+esc\(count\+" active"\)[\s\S]*?calendarIcon\+'<span>'\+esc\(lastDate\)/);
-  assert.match(styles, /\.faith-health-card \.person-health-summary-detail svg\{width:13px;height:13px/);
+  assert.match(faithHealth, /tendScoreBreakdownHTML\(\[summaryItem\("rhythms","Rhythms",rhythmScoreValue\),summaryItem\("prayer","Prayer",prayerScoreValue\)\],\{columns:2,label:"Faith health summaries"\}\)/);
+  assert.match(faithHealth, /title:"Overall Faith health"/);
+  assert.match(faithHealth, /className:"faith-health-card",breakdownHTML:summaries/);
+  assert.match(faithHealth, /ariaLabel:label\+", health score "\+/);
+  assert.match(faithHealth, /score:value,actionAttributes:/);
+  assert.match(faithHealth, /detailHTML:'<span>'\+activityIcon\+'<span>'\+esc\(count\+" active"\)[\s\S]*?calendarIcon\+'<span>'\+esc\(lastDate\)/);
+  assert.match(styles, /\.health-summary-detail svg\{width:13px;height:13px/);
   assert.doesNotMatch(faithHealth, /person-health-detail|person-health-detail-icon|Faith rhythms and prayers, tended together/);
-  assert.match(faithHealth, /class="bar-ov person-health-bar solid"/);
-  assert.match(faithHealth, /faith-health-overview-copy[\s\S]*?class="person-health-status statusword/);
   assert.match(faithSource, /function faithAllRhythmsHTML\(\)[\s\S]*faithPracticeGroups\(\)\.filter\(function\(group\)\{return faithPracticeRhythmRecords\(group\)\.length>0;\}\)[\s\S]*faithRhythmsHTML\(group\)/);
   const practiceOverview = faithSource.match(/function faithPracticeOverviewHTML\(selected\)\{([\s\S]*?)\n\}/)[1];
   const practiceContent = faithSource.match(/function faithPracticeContent\(group\)\{([\s\S]*?)\n\}/)[1];
@@ -1114,11 +1139,12 @@ test("Faith health shows bright-score navigation areas and an all-rhythm destina
   assert.match(faithSource, /function faithScrollToHeading\(target\)[\s\S]*prefers-reduced-motion: reduce[\s\S]*target\.focus\(\{preventScroll:true\}\)[\s\S]*target\.scrollIntoView/);
   assert.match(styles, /\.faith-view-header-title#faithPrayerTitle\{scroll-margin-top:160px\}/);
   assert.match(faithSource, /function faithPracticeHealthParts\(\)[\s\S]*avg\(faithPracticeRhythmRecords\("Prayer"\)\.map/);
-  assert.match(styles, /\.faith-health-card \.person-health-summaries\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
-  assert.match(styles, /\.faith-health-card \.person-health-summary-score\.green\{color:#12B76A\}/);
-  assert.match(styles, /\.faith-health-card \.person-health-summary-score\.yellow\{color:#F08C00\}/);
-  assert.match(styles, /\.faith-health-card \.person-health-summary-score\.red\{color:#F04531\}/);
-  assert.match(styles, /\.faith-health-card \.person-health-summaries\{grid-template-columns:minmax\(0,1fr\)\}/);
+  assert.match(styles, /\.category-health-card\{[^}]*padding:16px 20px/);
+  assert.match(styles, /\.category-health-score\.green,\.health-summary-score\.green\{color:#087443\}/);
+  assert.match(styles, /\.category-health-score\.yellow,\.health-summary-score\.yellow\{color:#985600\}/);
+  assert.match(styles, /\.category-health-score\.red,\.health-summary-score\.red\{color:#C33222\}/);
+  assert.match(styles, /\.health-summary-breakdown\{[^}]*grid-template-columns:repeat\(var\(--health-summary-columns,2\),minmax\(0,1fr\)\)/);
+  assert.match(styles, /@media\(max-width:380px\)\{\.health-summary-breakdown\{grid-template-columns:minmax\(0,1fr\)/);
   assert.match(styles, /\.faith-view-nav \[role=tab\]\[aria-selected=true\]/);
   assert.match(styles, /\.faith-view-panel\[hidden\]\{display:none\}/);
   assert.match(styles, /\.faith-views-content\{display:grid;gap:1\.5rem/);
@@ -1153,7 +1179,7 @@ test("Faith Today keeps scheduled rhythms and Sparks without its Prayer entry wi
   assert.match(faithSource, /function faithPracticeOverviewHTML\(selected\)[\s\S]*faithSectionNavHTML\(selected\)/);
   assert.match(faithSource, /faithViewPanelHTML\("today",faithTodayHTML\(\)\)/);
   assert.match(faithSource, /faith-nav-score '\+level/);
-  assert.match(faithSource, /aria-label="Health score '\+score\+' percent"[\s\S]*?<span>'\+score\+'<\/span>/);
+  assert.match(faithSource, /aria-label="Health score '\+score\+' out of 100"[\s\S]*?<span>'\+score\+'<\/span>/);
   assert.match(faithSource, /class="faith-practice-panel" id="faith-practice-panel"/);
   assert.doesNotMatch(faithSource, /faithPracticeMetersHTML|faith-practice-meters|faith-practice-meter/);
   assert.match(faithSource, /function faithPracticeHealthParts\(\)/);
@@ -1182,13 +1208,13 @@ test("Faith Today keeps scheduled rhythms and Sparks without its Prayer entry wi
   assert.match(styles, /\.faith-practice-heading \.faith-selected-practice-title\{[^}]*font-family:var\(--tend-font-editorial,Newsreader,Georgia,serif\)[^}]*font-size:calc\(var\(--tend-type-section-header,1\.35rem\)\*1\.1\)[^}]*font-weight:500/);
   assert.match(styles, /\.faith-practice-heading\{[^}]*text-align:center/);
   assert.match(styles, /\.faith-practice-panel>\.faith-practice-heading\{width:100%;grid-template-columns:minmax\(0,1fr\)\}/);
-  assert.match(styles, /\.faith-page\{display:grid;gap:16px;padding-top:1\.5rem\}/);
+  assert.doesNotMatch(styles, /\.(?:category-page|faith-page|fitness-page)\{padding-top:0\}/);
   assert.match(styles, /\.faith-practice-focus\{width:min\(100%,360px\);min-width:0;margin:0 auto\}/);
   assert.match(styles, /\.faith-practice-focus p\{margin:0;color:var\(--ink-soft\);font-size:var\(--tend-type-description,1\.032rem\);font-weight:400/);
   assert.match(styles, /\.faith-practice-toolbar\{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:24px 0 14px\}/);
   assert.match(styles, /\.faith-nav-score-unavailable\{background:transparent;color:var\(--ink-soft\)/);
   assert.match(indexSource, /Newsreader:ital,opsz,wght@0,6\.\.72,400;0,6\.\.72,500/);
-  assert.match(indexSource, /health-fitness/);
+  assert.match(indexSource, /app-categoryrhythms\.js\?v=20261016-category-health-scores/);
   assert.match(styles, /\.faith-prayer-time-group\{display:grid;gap:10px/);
   assert.match(styles, /\.faith-prayer-content,.faith-prayer-row,.faith-prayer-hub \.faith-profile-prayer-row\{box-sizing:border-box;width:100%;min-width:0\}/);
   assert.match(styles, /\.faith-today-subheading\{margin:28px 0 12px\}/);
@@ -1218,7 +1244,12 @@ test("Faith overview keeps practice content inline in the Practices tab", () => 
   assert.match(practiceHeadingHTML, /faith-practice-link-row[\s\S]*faith-practice-divider[\s\S]*faith-practice-heading[\s\S]*faithPracticeTitle/);
   assert.doesNotMatch(practiceHeadingHTML, /faith-practice-focus/);
   const faithRender = extractFunction("renderFaithPage");
-  assert.ok(faithRender.includes('out+=faithSettingsHTML()+faithHealthHTML()+\'<div class="faith-views-content">\'+faithViewNavHTML();'));
+  assert.match(faithRender, /tendCategoryPageHeaderHTML\("Faith","faith-page-heading"\)/);
+  assert.ok(faithRender.includes('out+=faithHealthHTML()+\'<div class="faith-views-content">\'+faithViewNavHTML();'));
+  assert.doesNotMatch(faithRender, /faithSettingsHTML|data-faith-settings/);
+  assert.match(settingsTabsSource, /\['faith','Faith'\]/);
+  assert.match(settingsTabsSource, /settingsPanel\('faith'\)\+\(typeof faithSettingsHTML==='function'\?faithSettingsHTML\(\):''\)/);
+  assert.match(faithSource, /data-faith-enabled=/);
   assert.match(faithSource, /var FAITH_MAIN_VIEWS=\["practices","today","prayer"\]/);
   assert.match(faithSource, /faithViewPanelHTML\("practices",faithPracticeOverviewHTML\(selected\)\+\(faithShowAllRhythms\?faithAllRhythmsHTML\(\):faithPracticeContent\(selected\)\)\)[\s\S]*faithViewPanelHTML\("today",faithTodayHTML\(\)\)[\s\S]*faithViewPanelHTML\("prayer",faithPrayerRequestsHTML\(\)\)/);
   assert.equal((faithRender.match(/faithPracticeOverviewHTML\(selected\)/g) || []).length, 1);

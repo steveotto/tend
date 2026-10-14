@@ -135,8 +135,8 @@
      var meta=tendRhythmMetaLabel(r,null,true);
      if(p){
       var badges=typeof window.planPills==="function"?window.planPills({personId:p.id,rhythm:p.id+"|"+r.id,hideTypeBadge:true}):rhythmPeopleBadges(r,p.id)+(typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(r):"");
-      out+='<div class="actrow"><span class="act-ic" style="background:'+personHealthColor(score)+'"></span><div class="pi-main">'+tendRhythmCardContentHTML(r,{title:r.text||"(unnamed rhythm)",description:String(r.description||"").trim(),meta:meta,badges:badges})+'</div>'+(typeof window.planPills==="function"?"":tag)+tend+'</div>';
-     }else out+='<div class="actrow"><span class="act-ic" style="background:'+personHealthColor(score)+'"></span><div class="pi-main"><div class="pi-label">'+esc(r.text||"(unnamed rhythm)")+'</div><div class="pi-sub">'+esc(meta)+'</div></div>'+tag+tend+'</div>';
+      out+='<div class="actrow"><span class="act-ic" style="background:'+(typeof tendHealthScoreColor==="function"?tendHealthScoreColor(score):personHealthColor(score))+'"></span><div class="pi-main">'+tendRhythmCardContentHTML(r,{title:r.text||"(unnamed rhythm)",description:String(r.description||"").trim(),meta:meta,badges:badges})+'</div>'+(typeof window.planPills==="function"?"":tag)+tend+'</div>';
+     }else out+='<div class="actrow"><span class="act-ic" style="background:'+(typeof tendHealthScoreColor==="function"?tendHealthScoreColor(score):personHealthColor(score))+'"></span><div class="pi-main"><div class="pi-label">'+esc(r.text||"(unnamed rhythm)")+'</div><div class="pi-sub">'+esc(meta)+'</div></div>'+tag+tend+'</div>';
     });
    }else out+='<div class="empty">No rhythms due today.</div>';
    out+='</section>';
