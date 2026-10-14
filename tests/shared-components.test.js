@@ -203,7 +203,14 @@ test("Home time views separate Anytime rhythms from stored time blocks", () => {
   assert.match(styles, /\.home-dashboard \.current-plan-time-group\+\.current-plan-time-group\{[^}]*border-top:1px solid var\(--line\)/);
   assert.match(styles, /\.home-dashboard \.current-plan-time-option-range,.home-dashboard \.current-plan-time-option-count\{[^}]*white-space:normal;overflow-wrap:anywhere/);
   assert.match(styles, /\.home-dashboard \.current-plan-item-group-items\{display:grid;gap:14px/);
-  assert.match(styles, /\.home-dashboard \.home-plan-type-tabs\{[^}]*margin:0 0 6px/);
+  assert.match(styles, /\.home-dashboard \.home-plan-type-tabs\{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)[^}]*gap:5px[^}]*margin:0 auto 14px[^}]*padding:5px[^}]*border:1px solid #D8E1DA[^}]*border-radius:15px[^}]*background:#E7ECE8/);
+  assert.match(styles, /\.home-dashboard \.home-plan-type-tabs button\{[^}]*min-height:48px[^}]*border-radius:10px[^}]*color:#526259[^}]*font-size:var\(--tend-type-button-label\)[^}]*font-weight:600/);
+  assert.match(styles, /\.home-dashboard \.home-plan-type-tabs button\[aria-selected=true\]\{[^}]*background:var\(--tend-forest,#246B52\)[^}]*color:#fff/);
+  assert.match(styles, /\.home-dashboard \.home-plan-type-tabs button:focus-visible\{[^}]*outline:2px solid var\(--tend-forest,#246B52\)/);
+  assert.match(styles, /\.home-dashboard \.home-plan-view-heading\{display:flex;align-items:center;box-sizing:border-box;min-width:0;min-height:44px/);
+  assert.match(homeRhythmSource, /home-plan-context-row[\s\S]*class="home-plan-context"[\s\S]*current-plan-item-count/);
+  assert.match(styles, /\.home-dashboard \.home-plan-context-row\{display:flex;align-items:baseline;justify-content:space-between;gap:12px;min-width:0;margin:0 0 14px\}/);
+  assert.match(styles, /\.home-dashboard \.planblock \.current-plan-time-picker\{[^}]*min-width:max-content[^}]*white-space:nowrap/);
   assert.match(styles, /\.home-dashboard \.home-plan-context\{[^}]*margin:0 0 14px/);
   assert.doesNotMatch(styles, /@media\(max-width:360px\)\{\.home-dashboard \.current-plan-time-option[\s\S]*?font-size:10px/);
   assert.match(source, /data-prayer-time-option/);
