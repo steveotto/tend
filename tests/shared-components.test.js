@@ -288,7 +288,7 @@ test("Home, Person, and category rhythm cards share one renderer and card struct
   assert.doesNotMatch(todayCard, /rhythm-card__edit|rhythm-card__score/);
   assert.match(source, /function tendRhythmCardHTML\(/);
   assert.match(source, /var chartAction=options\.showScore===false\?"":/);
-  assert.equal((source.match(/<article class="rhythm-card card">/g) || []).length, 1);
+  assert.match(source, /return '<article class="rhythm-card card'\+\(cardClass\?" "\+cardClass:""\)\+'">'/);
   assert.match(homeRhythmSource, /function planRhythmCardHTML\(it\)/);
   assert.match(homeRhythmSource, /return tendRhythmCardHTML\(record,/);
   const todayRhythmSource = homeRhythmSource.match(/function rhyRowQ\(r,dim\)\{[\s\S]*?\n \}/)[0];

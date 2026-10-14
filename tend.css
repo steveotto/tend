@@ -2237,6 +2237,18 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
 .fitness-strength-tabs [role=tab][aria-selected=true]{background:#fff;color:var(--forest-deep);box-shadow:0 1px 3px rgba(32,39,35,.1)}
 .fitness-strength-tabs [role=tab]:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
 .fitness-section-tabs [role=tab]{white-space:normal;line-height:1.25}
+.rhythm-card--fitness .rhythm-card__tend.fitness-action-color{border-color:var(--action-fitness-border,#B9CDBF);background:var(--action-fitness-background,#E9F2EC);color:var(--action-fitness-text,#315B42)}
+.rhythm-card--fitness .rhythm-card__tend.fitness-action-color:hover{border-color:var(--action-fitness-border,#B9CDBF);background:var(--action-fitness-hover,#DCE9E0);color:var(--action-fitness-text,#315B42)}
+.rhythm-card--fitness .rhythm-card__tend.fitness-action-color:active{background:var(--action-fitness-active,#CFDFD4)}
+.rhythm-card--fitness .rhythm-card__tend.fitness-action-color:focus-visible{outline:2px solid var(--action-fitness-focus,#315B42);outline-offset:2px}
+.rhythm-card--fitness .rhythm-card__tend.fitness-action-color:disabled{opacity:.72;cursor:default}
+.rhythm-card--fitness .fitness-rhythm-summary{margin-top:8px;padding:8px 10px;border-left:3px solid var(--action-fitness-border,#B9CDBF);border-radius:0 8px 8px 0;background:var(--action-fitness-background,#E9F2EC);color:var(--ink);font-size:12px;line-height:1.45}
+.rhythm-picker-subcategory{display:grid;grid-template-columns:minmax(0,1fr) minmax(140px,220px);align-items:center;gap:10px;padding:2px 0;font-size:12px;color:var(--ink-soft)}
+.rhythm-picker-subcategory select{min-height:34px;padding:5px 9px;border:1px solid var(--line);border-radius:8px;background:var(--canvas);color:var(--ink);font:inherit}
+.fitness-rhythm-managed-card{display:grid;gap:5px}
+.fitness-rhythm-list{display:grid;gap:12px}
+.fitness-rhythm-managed-card .fitness-rhythm-entry-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;min-height:30px;padding:0 3px 3px}
+.fitness-rhythm-managed-card .fitness-rhythm-status{margin-right:auto;color:var(--ink-soft);font-size:11px}
 .fitness-rhythm-list-section{min-width:0;padding:4px 0}
 .fitness-rhythm-list-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:2px 0 10px}
 .fitness-rhythm-list-heading h2{margin:0;font-size:17px}
@@ -2341,6 +2353,8 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
 .fitness-workout-select-label{display:grid;gap:5px;color:#52645A;font-size:12px;font-weight:650}
 .fitness-workout-selected{padding:9px 10px;border-radius:10px;background:#F4F7F4;color:#263B30;font-size:12px}
 .fitness-workout-selected>strong{display:block}
+.fitness-workout-people{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:8px}
+.fitness-workout-people .rhythm-picker-trigger{min-height:30px}
 .fitness-today-rhythm-card{margin:0 0 10px!important;padding:10px 13px!important;border-radius:14px!important;box-shadow:none!important}
 .fitness-today-rhythm-card--weighin{border-color:var(--action-fitness-border,#B9CDBF)!important;background:var(--action-fitness-background,#E9F2EC)!important}
 .fitness-today-rhythm-card--cardio{border-color:var(--action-fitness-border,#B9CDBF)!important;background:color-mix(in srgb,var(--action-fitness-background,#E9F2EC) 72%,#F1F5F7)!important}
@@ -2445,6 +2459,7 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
 .fitness-saved-muscle-summary input{display:none}
 @media(max-width:540px){
  .fitness-section-tabs [role=tab]{padding:7px 4px;font-size:11px}
+ .rhythm-picker-subcategory{grid-template-columns:1fr;gap:5px}
  .fitness-rhythm-list-heading{align-items:flex-start}
  .fitness-rhythm-entry{flex-direction:column}
  .fitness-rhythm-entry-actions{width:100%;justify-content:flex-start}

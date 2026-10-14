@@ -322,6 +322,66 @@ test("legacy Tend states gain fitness defaults without changing existing state o
   assert.equal(saved.fitness.rhythms[0].workoutId, "abs-id");
 });
 
+test("legacy Fitness rhythms migrate once into shared rhythms without losing settings or history", () => {
+  let saveCount = 0;
+  const legacyWorkout = {
+    id: "sunday-strength",
+    text: "Sunday workout",
+    type: "workout",
+    description: "Evening session",
+    freq: "weekly",
+    weekdays: [0],
+    tod: "evening",
+    strengthMode: "specific",
+    workoutId: "push-pull",
+    sharedWith: ["person-1"]
+  };
+  const existing = {
+    id: "sunday-strength",
+    areas: ["marriage"],
+    history: [{ date: "2026-10-11" }]
+  };
+  const context = {
+    S: {
+      areaRhythms: [existing],
+      fitness: { rhythms: [legacyWorkout, { id: "unrelated", type: "other" }] },
+      events: [{ id: "completion", rhythmId: "sunday-strength", fitnessLogId: "log-1" }],
+      people: []
+    },
+    window: {
+      ensureShape(state) { return state; },
+      personRhythmScheduleHTML() {},
+      faithRhythmRowHTML() {},
+      rhythmRow() {},
+      areaScore() {},
+      tendSearchMatches() { return { rhythms: [] }; },
+      addEventListener() {}
+    },
+    document: {
+      createElement() { return { textContent: "" }; },
+      head: { appendChild() {} }
+    },
+    save() { saveCount += 1; }
+  };
+  vm.createContext(context);
+  vm.runInContext(categorySource, context);
+  const migrated = context.S.areaRhythms.filter(item => item.id === "sunday-strength");
+  assert.equal(migrated.length, 1);
+  assert.equal(migrated[0].fitnessType, "workout");
+  assert.equal(Object.hasOwn(migrated[0], "type"), false);
+  assert.equal(migrated[0].strengthMode, "specific");
+  assert.equal(migrated[0].workoutId, "push-pull");
+  assert.equal(migrated[0].freq, "weekly");
+  assert.deepEqual(Array.from(migrated[0].weekdays), [0]);
+  assert.equal(migrated[0].tod, "evening");
+  assert.deepEqual(Array.from(migrated[0].sharedWith), ["person-1"]);
+  assert.deepEqual(Array.from(migrated[0].areas), ["marriage", "health"]);
+  assert.equal(migrated[0].history[0].date, "2026-10-11");
+  assert.equal(context.S.events[0].fitnessLogId, "log-1");
+  assert.deepEqual(context.S.fitness.rhythms.map(item => item.id), ["unrelated"]);
+  assert.equal(saveCount, 1);
+});
+
 test("fitness persistence adapter upserts, edits, deletes, imports, and saves through Tend state", () => {
   const getFunction = name => coreSource.match(new RegExp(`function ${name}\\([^\\n]*\\)\\{[^\\n]*\\}`))[0];
   let saveCount = 0;
@@ -357,8 +417,9 @@ test("fitness rhythm logs link one scheduled occurrence and edits or deletes sta
   const context = {
     S: {
       events: [],
+      areaRhythms: [{ id: "abs-morning", text: "Early morning Abs", fitnessType: "workout", areas: ["health"], strengthMode: "specific", workoutId: "abs-id" }],
       fitness: {
-        rhythms: [{ id: "abs-morning", text: "Early morning Abs", type: "workout", strengthMode: "specific", workoutId: "abs-id" }],
+        rhythms: [],
         workouts: [], runs: [], weighIns: [], savedWorkouts: []
       }
     },
@@ -396,7 +457,7 @@ test("fitness rhythms reuse shared recurrence, Today cards, and occurrence histo
   assert.match(viewSource, /fitnessRhythm:r\.id/);
   assert.ok(viewSource.includes('if(item.fitnessRhythm)return "fitness-rhythm:"+item.fitnessRhythm;'));
   assert.match(appSource, /Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday/);
-  assert.ok(historySource.includes('isFitness?(S.fitness&&S.fitness.rhythms'));
+  assert.ok(historySource.includes('isFitness?fitnessRhythmRecords().find'));
 });
 
 test("Fitness rhythm weekdays use explicit local weekday labels and occurrence keys", () => {
@@ -430,15 +491,24 @@ test("Fitness rhythm weekdays use explicit local weekday labels and occurrence k
   assert.match(historySource, /fitnessLogId/);
 });
 
-test("Fitness Today cards use compact shared rhythm variants and refresh rest-aware workout choices", () => {
+test("Fitness Today cards extend the shared rhythm card with current strength guidance", () => {
   let fitnessData;
+  const window = {
+    addEventListener() {},
+    scheduleDayMatches() { return true; },
+    tendRhythmCardMetadata() { return { frequency: { full: "Daily", label: "Daily", narrow: "Daily" }, time: { full: "Evening", label: "Evening", narrow: "PM" }, lastTended: { full: "Never tended", label: "Never" }, frequencyIconHTML: "", timeIconHTML: "", lastIconHTML: "" }; },
+    tendCategoryBadges() { return ""; }
+  };
   const context = {
     document: { addEventListener() {} },
-    window: { addEventListener() {}, scheduleDayMatches() { return true; } },
+    window,
     S: { events: [] },
     todayStr() { return "2026-10-14"; },
     esc(value) { return String(value).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]); },
-    fitnessStoreSnapshot() { return JSON.parse(JSON.stringify(fitnessData)); }
+    fitnessStoreSnapshot() { return JSON.parse(JSON.stringify(fitnessData)); },
+    rhythmScore() { return 100; },
+    scoreClass() { return "green"; },
+    tendAssociationPeopleBadges() { return ""; }
   };
   vm.createContext(context);
   vm.runInContext(scoringSource, context);
@@ -464,27 +534,33 @@ test("Fitness Today cards use compact shared rhythm variants and refresh rest-aw
   context.S.fitness = data;
   fitnessData = data;
   const weigh = vm.runInContext('fitnessTodayRhythmCardHTML({id:"weigh",type:"weighin",text:"Morning weight"},false)', context);
-  assert.match(weigh, /fitness-today-rhythm-card--weighin/);
-  assert.match(weigh, /Weigh-In/);
-  assert.match(weigh, />Log<\/button>/);
-  assert.doesNotMatch(weigh, /rhythm-card__meta|health|%|Morning weight/);
+  assert.match(weigh, /class="rhythm-card card rhythm-card--fitness"/);
+  assert.match(weigh, /Morning weight/);
+  assert.match(weigh, />Weigh-In<\/button>/);
+  assert.match(weigh, /rhythm-card__meta/);
+  assert.match(weigh, /\+ Add Person/);
+  assert.match(weigh, /\+ Add Category/);
   const cardio = vm.runInContext('fitnessTodayRhythmCardHTML({id:"run",type:"cardio",text:"Run"},false)', context);
-  assert.match(cardio, /fitness-today-rhythm-card--cardio/);
+  assert.match(cardio, /class="rhythm-card card rhythm-card--fitness"/);
   assert.match(cardio, /Run/);
-  assert.doesNotMatch(cardio, /rhythm-card__meta|rhythm-card__score/);
+  assert.match(cardio, /rhythm-card__meta|rhythm-card__score/);
+  assert.match(cardio, />Log Run<\/button>/);
   const recommended = vm.runInContext('fitnessTodayRhythmCardHTML({id:"strength",type:"workout",text:"Evening workout",strengthMode:"recommended"},false)', context);
   assert.match(recommended, /Arms/);
-  assert.match(recommended, /Recommended/);
-  assert.match(recommended, /Your biceps and triceps need the most attention/);
-  assert.match(recommended, /Choose what you actually did/);
+  assert.match(recommended, /Recommended: Arms/);
+  assert.match(recommended, /Focus on biceps and triceps/);
+  assert.match(recommended, /rhythm-card__edit/);
+  assert.match(recommended, /rhythm-card__score/);
+  assert.match(recommended, />Workout<\/button>/);
   assert.doesNotMatch(recommended, /Back Day/);
-  assert.doesNotMatch(recommended, /rhythm-card__meta|rhythm-card__score/);
+  assert.match(recommended, /rhythm-card__meta/);
   const planned = vm.runInContext('fitnessTodayRhythmCardHTML({id:"specific",type:"workout",text:"Early morning Abs",strengthMode:"specific",workoutId:"arms"},false)', context);
-  assert.match(planned, /Planned/);
-  assert.doesNotMatch(planned, /Recommended/);
+  assert.match(planned, /Planned workout: Arms/);
+  assert.match(planned, /Biceps, Triceps/);
+  assert.doesNotMatch(planned, /Recommended:/);
   const completed = vm.runInContext('fitnessTodayRhythmCardHTML({id:"weigh",type:"weighin",text:"Morning weight"},true)', context);
   assert.match(completed, /✓ Logged/);
-  assert.doesNotMatch(completed, /data-tend-open/);
+  assert.match(completed, /disabled aria-disabled="true"/);
 
   context.fitnessDialog = {
     kind: "workout",
@@ -497,7 +573,7 @@ test("Fitness Today cards use compact shared rhythm variants and refresh rest-aw
   assert.match(modal, /Arms · Recommended/);
   assert.match(modal, /Back Day · Back resting/);
   assert.match(modal, /disabled title="Back resting/);
-  assert.match(modal, /Custom workout…/);
+  assert.match(modal, /Custom workout/);
   assert.match(modal, /Save Log/);
   context.fitnessDialog.workoutChoiceId = "custom";
   const customModal = vm.runInContext("fitnessRecordDialog(__data)", context);
@@ -511,7 +587,21 @@ test("Fitness Today cards use compact shared rhythm variants and refresh rest-aw
   context.fitnessDialog.rhythmContext = null;
   context.fitnessDialog.workoutChoiceId = null;
   const directCustomModal = vm.runInContext("fitnessRecordDialog(__data)", context);
+  assert.ok(directCustomModal.indexOf('name="date"') < directCustomModal.indexOf('name="workoutChoice"'));
+  assert.match(directCustomModal, /name="workoutChoice"/);
+  assert.match(directCustomModal, /name="muscleIds" value="shoulders"/);
   assert.match(directCustomModal, /name="workoutName"/);
+  context.fitnessDialog.workoutChoiceId = "arms";
+  const savedChoiceModal = vm.runInContext("fitnessRecordDialog(__data)", context);
+  assert.match(savedChoiceModal, /value="arms" selected/);
+  assert.match(savedChoiceModal, /Arms includes/);
+  assert.doesNotMatch(savedChoiceModal, /name="muscleIds" value="shoulders"/);
+  context.fitnessDialog.kind = "savedWorkout";
+  context.fitnessDialog.workoutDraft = { id: "draft", name: "", muscleIds: [], sharedWith: [] };
+  const savedWorkoutEditor = vm.runInContext("fitnessRecordDialog(__data)", context);
+  assert.match(savedWorkoutEditor, /\+ Add Person/);
+  context.fitnessDialog.kind = "workout";
+  context.fitnessDialog.workoutChoiceId = null;
   data.workouts.push({ id: "custom-log", date: "2026-10-14", muscleIds: ["chest"], workoutName: "Push Day" });
   context.fitnessDialog.id = "custom-log";
   const editCustomModal = vm.runInContext("fitnessRecordDialog(__data)", context);
@@ -590,18 +680,33 @@ test("Fitness rhythms are managed in type-filtered section subtabs", () => {
 });
 
 test("Fitness rhythm lists filter by structured type and show explicit weekday timing", () => {
+  let currentData;
+  const window = {
+    addEventListener() {},
+    tendRhythmCardMetadata(rhythm) {
+      const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const selected = (rhythm.weekdays || []).map(day => weekdays[day]).join(", ");
+      const frequency = rhythm.freq === "daily" ? "Daily" : selected ? "Weekly · " + selected : "Weekly";
+      const time = rhythm.tod === "anytime" ? "Anytime" : "Evening";
+      return { frequency: { full: frequency, label: frequency, narrow: frequency }, time: { full: time, label: time, narrow: time === "Evening" ? "PM" : time }, lastTended: { full: "Never tended", label: "Never" }, frequencyIconHTML: "", timeIconHTML: "", lastIconHTML: "" };
+    },
+    tendCategoryBadges() { return ""; }
+  };
   const context = {
     document: { addEventListener() {} },
-    window: { addEventListener() {} },
+    window,
+    S: { events: [] },
     TODS: { evening: "Evening" },
     todayStr() { return "2026-10-12"; },
     esc(value) { return String(value); },
-    fitnessPageScores() { return { muscles: [] }; },
-    fitnessRhythmDetails(rhythm) { return rhythm.text + " details"; },
-    rhythmFreqLabel() { return "Weekly"; }
+    fitnessStoreSnapshot() { return currentData; },
+    rhythmScore() { return 100; },
+    scoreClass() { return "green"; },
+    tendAssociationPeopleBadges() { return ""; }
   };
   vm.createContext(context);
   vm.runInContext(scoringSource, context);
+  vm.runInContext(sharedSource, context);
   vm.runInContext(fitnessAppSource, context);
   context.__data = {
     rhythms: [
@@ -615,16 +720,19 @@ test("Fitness rhythm lists filter by structured type and show explicit weekday t
     runs: [],
     weighIns: []
   };
+  currentData = context.__data;
   const strength = vm.runInContext('fitnessRhythmListHTML(__data,"workout")', context);
   const cardio = vm.runInContext('fitnessRhythmListHTML(__data,"cardio")', context);
   const weight = vm.runInContext('fitnessRhythmListHTML(__data,"weighin")', context);
-  assert.match(strength, /Monday, Tuesday, Thursday, Friday · Evening/);
-  assert.match(strength, /Recommended Workout/);
+  assert.match(strength, /Weekly · Mon, Tue, Thu, Fri/);
+  assert.match(strength, /Preferred time: Evening/);
+  assert.match(strength, /No eligible recommended workout/);
   assert.doesNotMatch(strength, />Run</);
   assert.match(cardio, />Paused</);
   assert.match(cardio, />Resume</);
   assert.doesNotMatch(cardio, />Weigh-In</);
-  assert.match(weight, /Daily · Any time/);
+  assert.match(weight, /Daily/);
+  assert.match(weight, /Preferred time: Anytime/);
   assert.doesNotMatch(weight, /Weekday workout/);
 });
 
@@ -664,9 +772,8 @@ test("Health & Fitness action color drives fitness cards and matching Log button
   assert.ok(properties["--action-fitness-background"]);
   assert.ok(properties["--action-fitness-border"]);
   assert.match(settingsSource, /fitness:\["Health & Fitness","Log"\]/);
-  assert.match(stylesSource, /button\.btn\.mini\.fitness-today-rhythm-action\[data-tend-open\]/);
-  assert.match(stylesSource, /\.fitness-today-rhythm-card--weighin\{border-color:var\(--action-fitness-border/);
-  assert.match(stylesSource, /\.fitness-today-rhythm-action\{box-sizing:border-box;flex:none;width:76px;min-width:76px;min-height:42px/);
+  assert.match(stylesSource, /\.rhythm-card--fitness \.rhythm-card__tend\.fitness-action-color\{border-color:var\(--action-fitness-border/);
+  assert.match(stylesSource, /\.rhythm-card--fitness \.fitness-rhythm-summary/);
 });
 
   test("strength map always shows all nine ordered muscles while anatomical regions switch views", () => {

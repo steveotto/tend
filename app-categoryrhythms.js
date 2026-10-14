@@ -9,9 +9,26 @@
  window.ensureShape=function(state){
   var shaped=baseEnsureShape(state);
   if(!Array.isArray(shaped.areaRhythms))shaped.areaRhythms=[];
+  var fitness=shaped.fitness&&shaped.fitness.rhythms;
+  if(Array.isArray(fitness)&&fitness.length){
+   fitness.forEach(function(legacy){
+    var kind=legacy.fitnessType||legacy.type;
+    if(["workout","cardio","weighin"].indexOf(kind)<0)return;
+    var existing=shaped.areaRhythms.find(function(item){return item.id===legacy.id;});
+    var record=Object.assign({},legacy,existing||{});
+    record.fitnessType=kind;
+    record.areas=Array.from(new Set((Array.isArray(existing&&existing.areas)?existing.areas:[]).concat(Array.isArray(legacy.areas)?legacy.areas:[],["health"])));
+    delete record.type;
+    if(!Array.isArray(record.sharedWith))record.sharedWith=[];
+    if(existing)Object.assign(existing,record);else shaped.areaRhythms.push(record);
+   });
+   shaped.fitness.rhythms=fitness.filter(function(legacy){return ["workout","cardio","weighin"].indexOf(legacy.fitnessType||legacy.type)<0;});
+  }
   return shaped;
  };
+ var hadLegacyFitnessRhythms=!!(S.fitness&&Array.isArray(S.fitness.rhythms)&&S.fitness.rhythms.some(function(record){return ["workout","cardio","weighin"].indexOf(record&& (record.fitnessType||record.type))>=0;}));
  S=window.ensureShape(S);
+ if(hadLegacyFitnessRhythms)save();
  var areaRhythmDraft=null,areaRhythmEditId=null;
  var faithPickerPrevious=null;
 
@@ -29,14 +46,14 @@
    return option+'</div>';
   }).join("")+'</fieldset>';
  }
- function categoryLabel(id,record){return id==="faith"?"Faith - "+(record&&record.faithGroup||"Prayer"):CATEGORY_AREA_LABELS[id]||(S.areas[id]&&S.areas[id].name)||id;}
+ function categoryLabel(id,record){if(id==="faith")return "Faith - "+(record&&record.faithGroup||"Prayer");if(id==="health"&&record&&record.healthSubcategory){var labels={strength:"Strength",cardio:"Cardio",weight:"Weight"};return "Health & Fitness · "+(labels[record.healthSubcategory]||record.healthSubcategory);}return CATEGORY_AREA_LABELS[id]||(S.areas[id]&&S.areas[id].name)||id;}
  window.tendRhythmCategoryIds=areaIds;
  function areaBadges(r){
   var ids=areaIds(r);
   if(!ids.length)return "";
   return '<span class="rhythm-area-badges" aria-label="Categories: '+esc(ids.map(function(id){return categoryLabel(id,r);}).join(", "))+'">'+ids.map(function(id){
    var name=categoryLabel(id,r);
-   return '<button type="button" class="rhythm-area-badge" data-rhythm-area-badge="'+esc(id)+'" data-category-tooltip="'+esc(name)+'"'+(id==="faith"?' data-rhythm-faith-subcategory="'+esc(r.faithGroup||"Prayer")+'"':'')+' title="'+esc(name)+'" aria-label="Open '+esc(name)+'">'+(AREA_ICONS[id]||"")+'</button>';
+   return '<button type="button" class="rhythm-area-badge" data-rhythm-area-badge="'+esc(id)+'" data-category-tooltip="'+esc(name)+'"'+(id==="faith"?' data-rhythm-faith-subcategory="'+esc(r.faithGroup||"Prayer")+'"':'')+(id==="health"&&r.healthSubcategory?' data-rhythm-health-subcategory="'+esc(r.healthSubcategory)+'"':'')+' title="'+esc(name)+'" aria-label="Open '+esc(name)+'">'+(AREA_ICONS[id]||"")+'</button>';
   }).join("")+'</span>';
  }
  window.tendCategoryBadges=areaBadges;
@@ -78,6 +95,7 @@
  function categoryRhythmDue(item){return !rhythmEnded(item.record)&&todayRhythmEligible(item.record);}
  function categoryRhythmRow(item,id){
   var record=item.record;
+  if(record.fitnessType&&typeof fitnessSharedRhythmCardHTML==="function")return fitnessSharedRhythmCardHTML(record,{categoryId:id});
   if(item.person){
    return window.rhythmRow(item.person,record,{tendAttributes:{"data-rhythm-area":id}});
   }
@@ -254,6 +272,7 @@
    event.preventDefault();event.stopImmediatePropagation();
    var area=badge.getAttribute("data-rhythm-area-badge");
    currentPerson=null;openDetail=null;editingId=null;editingEvent=null;currentArea=area;tab="today";
+   if(area==="health"&&badge.getAttribute("data-rhythm-health-subcategory")&&typeof fitnessShowTab==="function"){var section=badge.getAttribute("data-rhythm-health-subcategory");fitnessCurrentTab=section==="strength"?"strength":section==="cardio"?"cardio":"weight";if(section==="strength")fitnessStrengthSubtab="rhythms";else if(section==="cardio")fitnessCardioSubtab="rhythms";else fitnessWeightSubtab="rhythms";}
    if(area==="faith"){
     var group=badge.getAttribute("data-rhythm-faith-subcategory")||"Prayer";
      faithMainView="practices";faithMainViewInitialized=true;faithShowAllRhythms=false;faithConfig().selectedGroup=group;faithConfig().practiceTabs=faithConfig().practiceTabs||{};faithConfig().practiceTabs[group]="rhythms";

@@ -35,6 +35,7 @@ function fitnessRhythmMuscles(workout){
  return workout?workout.muscleIds.map(function(id){var item=FITNESS_MUSCLES.find(function(muscle){return muscle.id===id;});return item?item.name:id;}):[];
 }
 function fitnessRhythmDetails(rhythm,data,scores){
+ rhythm=Object.assign({},rhythm,{type:rhythm.type||rhythm.fitnessType});
  if(rhythm.type==="weighin"){
   var latest=data.weighIns.slice().sort(function(a,b){return b.date.localeCompare(a.date);})[0];
   return latest?"Latest: "+fitnessNumber(latest.weight)+" "+(data.settings.weightUnit||"lb")+" · "+fitnessDateLabel(latest.date):"No weigh-in recorded.";
@@ -57,24 +58,32 @@ function fitnessActivityIcon(type){
  var paths={weighin:'<path d="M5 4h14l2 16H3L5 4Z"/><path d="M8 8a4 4 0 0 1 8 0m-4 0 2-2"/>',cardio:'<circle cx="15" cy="5" r="2"/><path d="m12 9 3 2 3 4m-6-6-3 4-4 1m7-1-1 5m-2-7-3 5m7 2 4 2"/>',workout:'<path d="M6 9v6m12-6v6M3 10v4m18-4v4M6 12h12"/>',done:'<path d="m5 12 4 4L19 6"/>'};
  return '<svg class="fitness-today-rhythm-icon" viewBox="0 0 24 24" aria-hidden="true">'+paths[type||"workout"]+'</svg>';
 }
-function fitnessTodayRhythmCardContent(rhythm,completed){
- var type=rhythm.type==="weighin"?"weighin":rhythm.type==="cardio"?"cardio":"workout",data=fitnessStoreSnapshot(),scores=fitnessPageScores(data,todayStr()),action=completed?'<span class="fitness-today-rhythm-logged" aria-label="Logged today">✓ Logged</span>':'<button type="button" class="btn mini fitness-today-rhythm-action" data-tend-open="fitness-rhythm" data-rhythm-id="'+esc(rhythm.id)+'">'+(type==="workout"?"Workout":"Log")+'</button>';
- if(type!=="workout")return '<div class="fitness-today-rhythm-row">'+fitnessActivityIcon(type)+'<strong>'+esc(type==="weighin"?"Weigh-In":rhythm.text||"Run")+'</strong>'+action+'</div>';
- var mode=rhythm.strengthMode||"custom",planned=mode==="specific"?data.savedWorkouts.find(function(item){return item.id===rhythm.workoutId;}):null,recommendations=mode==="recommended"?fitnessRankSavedWorkouts(scores.muscles,data.savedWorkouts||[]):[],best=recommendations[0],featured=planned||best,blocked=planned?fitnessWorkoutBlockedMuscles(planned,scores.muscles):[],tag=mode==="specific"?"Planned":mode==="recommended"?"Recommended":"Custom",muscleIds=featured?featured.muscleIds:[],overdueIds=best&&mode==="recommended"?best.overdue.map(function(item){return item.id;}):[],names=featured?fitnessRhythmMuscles(featured):[],reason=mode==="specific"?(planned?blocked.length?"Unavailable: "+blocked.map(function(item){return item.name+" "+item.status.toLowerCase();}).join(", ")+". Choose an eligible alternative or Custom Workout.":"Saved workout · unchanged":"Workout unavailable"):mode==="recommended"?(best?"Your "+best.overdue.map(function(item){return item.name.toLowerCase();}).join(" and ")+" need the most attention.":"No eligible recommendation. Choose a saved or custom workout."):"Choose what you actually did.",chips=names.map(function(name,index){var id=muscleIds[index],score=scores.muscles.find(function(item){return item.id===id;});return '<span class="fitness-today-muscle-chip'+(overdueIds.indexOf(id)>=0?" is-overdue":"")+(score&&!score.eligible?" is-resting":"")+'">'+esc(name)+(score&&!score.eligible?'<small>'+esc(score.status)+'</small>':"")+'</span>';}).join("");
- if(mode==="recommended"&&best){var focusNames=best.overdue.map(function(item){return item.name.toLowerCase();});reason="Your "+focusNames.join(" and ")+(focusNames.length===1?" needs":" need")+" the most attention.";}
- if(mode==="specific"&&!planned)chips="";
- return '<div class="fitness-today-workout"><div class="fitness-today-workout-heading">'+fitnessActivityIcon("workout")+'<strong>'+esc(rhythm.text||"Strength Workout")+'</strong><span class="fitness-today-workout-mode">'+tag+'</span>'+action+'</div><div class="fitness-today-workout-feature">'+(featured?esc(featured.name):mode==="specific"?"Workout unavailable":mode==="recommended"?"No eligible recommendation":"Choose your muscle groups")+'</div><p>'+esc(reason)+'</p>'+(chips?'<div class="fitness-today-muscle-chips">'+chips+'</div>':"")+'<small>Choose what you actually did.</small></div>';
+function fitnessRhythmSummaryHTML(rhythm,data,scores){
+ var type=rhythm.type||rhythm.fitnessType;
+ if(type!=="workout")return "";
+ var mode=rhythm.strengthMode||"custom",workout=mode==="specific"?(data.savedWorkouts||[]).find(function(item){return item.id===rhythm.workoutId;}):null,recommendation=mode==="recommended"?fitnessRankSavedWorkouts(scores.muscles,data.savedWorkouts||[])[0]:null,blocked=workout?fitnessWorkoutBlockedMuscles(workout,scores.muscles):[],label=mode==="specific"?"Planned workout: ":mode==="recommended"?"Recommended: ":"",name=workout?workout.name:recommendation?recommendation.name:"",missing=mode==="specific"&&!workout,message=mode==="custom"?"Custom workout · choose muscle groups when logging.":mode==="specific"?(workout?label+name+(blocked.length?" · Unavailable today: "+blocked.map(function(item){return item.name;}).join(", "):" · "+fitnessRhythmMuscles(workout).join(", ")):"Workout unavailable."):recommendation?label+name+(recommendation.overdue&&recommendation.overdue.length?" · Focus on "+recommendation.overdue.map(function(item){return item.name.toLowerCase();}).join(" and "):""):"No eligible recommended workout. Choose Custom Workout when logging.";
+ return '<div class="rhythm-card__extension fitness-rhythm-summary">'+esc(message)+(missing?' <button type="button" class="fitness-inline-link" data-fitness-rhythm-edit="'+esc(rhythm.id)+'">Edit Rhythm</button>':"")+'</div>';
 }
 function fitnessTodayRhythmCardHTML(rhythm,completed){
- var type=rhythm.type==="weighin"?"weighin":rhythm.type==="cardio"?"cardio":"workout";
- return tendRhythmCardHTML(rhythm,{fitnessVariantClass:"fitness-today-rhythm-card--"+type,fitnessVariantHTML:fitnessTodayRhythmCardContent(rhythm,completed)});
+ return fitnessSharedRhythmCardHTML(rhythm,{completed:completed});
 }
+function fitnessSharedRhythmCardHTML(source,options){
+ options=options||{};
+ var rhythm=Object.assign({},source,{type:source.type||source.fitnessType}),type=rhythm.type,data=fitnessStoreSnapshot(),scores=fitnessPageScores(data,todayStr()),metadata=window.tendRhythmCardMetadata(rhythm),completed=options.completed!==undefined?options.completed:fitnessRhythmCompletionToday(rhythm,todayStr()),actionLabel=completed?"✓ Logged":type==="workout"?"Workout":type==="cardio"?"Log Run":"Weigh-In",actionData={"data-tend-open":"fitness-rhythm","data-rhythm-id":rhythm.id},editData={"data-fitness-rhythm-edit":rhythm.id},historyData={"data-rhyhistory":"fitness|"+rhythm.id},pickerId="fitness|"+rhythm.id,people=(typeof tendAssociationPeopleBadges==="function"?tendAssociationPeopleBadges(rhythm,"fitness",null,"rhythm"):"")+'<button type="button" class="rhythm-picker-trigger" data-rhythm-picker-open="people|'+esc(pickerId)+'">+ Add Person</button>',categories=(typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(rhythm):"")+'<button type="button" class="rhythm-picker-trigger" data-rhythm-picker-open="categories|'+esc(pickerId)+'">+ Add Category</button>',extension=fitnessRhythmSummaryHTML(rhythm,data,scores);
+ var card=tendRhythmCardHTML(rhythm,{title:rhythm.text||"(unnamed rhythm)",description:rhythm.description,score:rhythmScore(rhythm),scoreClass:scoreClass(rhythmScore(rhythm)),peopleBadgesHTML:people,categoryBadgesHTML:categories,
+  frequency:metadata.frequency,time:metadata.time,lastTended:metadata.lastTended,frequencyIconHTML:metadata.frequencyIconHTML,timeIconHTML:metadata.timeIconHTML,lastIconHTML:metadata.lastIconHTML,
+  actionLabel:actionLabel,actionTitle:type==="workout"?"Log a workout":type==="cardio"?"Log a run":"Log a weigh-in",actionClassName:"fitness-action-color",actionDisabled:completed||!!rhythm.paused,
+  cardClassName:"rhythm-card--fitness",extensionHTML:extension,tendAttributes:actionData,editAttributes:editData,historyAttributes:historyData
+ });
+ var picker=typeof rhythmPickerDraft!=="undefined"&&rhythmPickerDraft&&rhythmPickerDraft.ownerId==="fitness"&&rhythmPickerDraft.rhythmId===String(rhythm.id)&&typeof rhythmPickerModalHTML==="function"?rhythmPickerModalHTML():"";
+ return card+picker;
+}
+if(typeof window!=="undefined")window.fitnessSharedRhythmCardHTML=fitnessSharedRhythmCardHTML;
 if(typeof window!=="undefined")window.fitnessTodayRhythmCardHTML=fitnessTodayRhythmCardHTML;
 function fitnessRhythmListHTML(data,type){
  var scores=fitnessPageScores(data,todayStr()),rhythms=(data.rhythms||[]).filter(function(rhythm){return rhythm.type===type;}),empty={workout:"No strength rhythms yet. Add a strength rhythm.",cardio:"No cardio rhythms yet. Add a cardio rhythm.",weighin:"No weigh-in rhythms yet. Add a weigh-in rhythm."},labels={workout:"Strength rhythms",cardio:"Cardio rhythms",weighin:"Weigh-in rhythms"};
  return '<section class="fitness-rhythm-list-section"><div class="fitness-rhythm-list-heading"><div><h2>'+labels[type]+'</h2><p>Rhythms appear in Today when scheduled and complete after a fitness log is saved.</p></div><button type="button" class="btn mini" data-fitness-rhythm-new="'+type+'">+ Add Rhythm</button></div>'+(rhythms.length?'<div class="fitness-rhythm-list">'+rhythms.map(function(rhythm){
-  var timing=fitnessRhythmTiming(rhythm),details=fitnessRhythmDetails(rhythm,data,scores),mode=rhythm.type==="workout"?(rhythm.strengthMode==="specific"?"Specific Workout":rhythm.strengthMode==="recommended"?"Recommended Workout":"Custom Workout"):"",workout=rhythm.type==="workout"&&rhythm.strengthMode==="specific"?(data.savedWorkouts||[]).find(function(item){return item.id===rhythm.workoutId;}):null,status=rhythm.paused?"Paused":"Active";
-  return '<article class="fitness-rhythm-entry'+(rhythm.paused?" is-paused":"")+'"><div class="fitness-rhythm-entry-copy"><h3>'+esc(rhythm.text)+'</h3><p>'+esc(timing)+' · <span class="fitness-rhythm-status">'+status+'</span></p>'+(mode?'<small><strong>'+mode+'</strong>'+(rhythm.strengthMode==="specific"?" · "+esc(workout?workout.name:"Workout unavailable"):"")+'</small>':"")+'<small>'+esc(details)+'</small></div><div class="fitness-rhythm-entry-actions"><button type="button" class="btn mini ghost" data-fitness-rhythm-edit="'+esc(rhythm.id)+'">Edit Rhythm</button><button type="button" class="btn mini ghost" data-fitness-rhythm-pause="'+esc(rhythm.id)+'">'+(rhythm.paused?"Resume":"Pause")+'</button><button type="button" class="btn mini ghost" data-fitness-rhythm-delete="'+esc(rhythm.id)+'">Delete</button></div></article>';
+  return '<div class="fitness-rhythm-managed-card">'+fitnessSharedRhythmCardHTML(rhythm)+'<div class="fitness-rhythm-entry-actions"><span class="fitness-rhythm-status">'+(rhythm.paused?"Paused":"Active")+'</span><button type="button" class="btn mini ghost" data-fitness-rhythm-pause="'+esc(rhythm.id)+'">'+(rhythm.paused?"Resume":"Pause")+'</button><button type="button" class="btn mini ghost" data-fitness-rhythm-delete="'+esc(rhythm.id)+'">Delete Rhythm</button></div></div>';
  }).join("")+'</div>':'<p class="fitness-empty">'+empty[type]+'</p>')+'</section>';
 }
 function fitnessRhythmTiming(rhythm){
@@ -88,7 +97,9 @@ function fitnessRhythmScheduleHTML(record,idf){
 function fitnessRhythmDialogHTML(){
  if(!fitnessRhythmEditor||fitnessRhythmEditorSuspended)return "";
  var record=fitnessRhythmEditor.record,id=record.id||"draft",idf="fitness-rhythm|"+id,workouts=fitnessStoreSnapshot().savedWorkouts;
- return '<dialog class="profile-editor-dialog fitness-dialog fitness-rhythm-editor" data-editor-modal aria-labelledby="fitnessRhythmTitle"><div class="profile-editor-body"><h2 id="fitnessRhythmTitle">'+(id==="draft"?"Add Rhythm":"Edit Rhythm")+'</h2><form data-fitness-rhythm-form data-rhythm-id="'+esc(id)+'"><label>Rhythm name<input type="text" name="text" maxlength="80" value="'+esc(record.text||"")+'" required></label><label>Fitness activity<select name="type"><option value="weighin"'+(record.type==="weighin"?" selected":"")+'>Weigh-In</option><option value="workout"'+(record.type==="workout"?" selected":"")+'>Strength Workout</option><option value="cardio"'+(record.type==="cardio"?" selected":"")+'>Cardio</option></select></label>'+(record.type==="workout"?'<label>Workout mode<select name="strengthMode"><option value="specific"'+(record.strengthMode==="specific"?" selected":"")+'>Specific workout</option><option value="recommended"'+(record.strengthMode==="recommended"?" selected":"")+'>Recommended workout</option><option value="custom"'+(record.strengthMode==="custom"?" selected":"")+'>Custom workout</option></select></label>'+(record.strengthMode==="specific"?'<label>Saved workout<select name="workoutId"><option value="">Select a workout</option>'+workouts.map(function(item){return '<option value="'+esc(item.id)+'"'+(record.workoutId===item.id?" selected":"")+'>'+esc(item.name)+' · '+esc(fitnessRhythmMuscles(item).join(", "))+'</option>';}).join("")+'</select></label>'+(workouts.length?"":'<p class="fitness-dialog-intro">No saved workouts yet. <button type="button" class="btn mini ghost" data-fitness-go-workouts>Go to Strength → Make your workouts</button> Your rhythm settings will be saved while you create one.</p>')+'<p class="fitness-dialog-intro">Specific workouts use the saved workout ID, so changes to its muscle groups carry through. Daily Abs requires Abs to have 0 preferred rest days.</p>':""):"")+'<label>Description (optional)<textarea name="description" rows="2" maxlength="500">'+esc(record.description||"")+'</textarea></label>'+fitnessRhythmScheduleHTML(record,idf)+'<div class="fitness-form-error" aria-live="polite"></div><div class="profile-editor-actions"><button type="submit" class="btn mini">Save Rhythm</button><button type="button" class="btn mini ghost" data-fitness-rhythm-close data-editor-cancel>Cancel</button>'+(id==="draft"?"":'<button type="button" class="btn mini danger" data-fitness-rhythm-delete="'+esc(id)+'">Delete Rhythm</button>')+'</div></form></div></dialog>';
+ var workoutOptions=workouts.map(function(item){return '<option value="'+esc(item.id)+'"'+(record.workoutId===item.id?" selected":"")+'>'+esc(item.name)+' · '+esc(fitnessRhythmMuscles(item).join(", "))+'</option>';}).join("");
+ var modeFields=record.type==="workout"?'<label>Workout mode<select name="strengthMode"><option value="specific"'+(record.strengthMode==="specific"?" selected":"")+'>Specific Workout</option><option value="recommended"'+(record.strengthMode==="recommended"?" selected":"")+'>Recommended Workout</option><option value="custom"'+(record.strengthMode==="custom"?" selected":"")+'>Custom Workout</option></select></label>'+(record.strengthMode==="specific"?'<label>Saved workout<select name="workoutId"><option value="">Select a workout</option>'+workoutOptions+'</select></label>'+(workouts.length?"":'<p class="fitness-dialog-intro">No saved workouts yet. <button type="button" class="btn mini ghost" data-fitness-go-workouts>Go to Strength → Make your workouts</button> Your rhythm settings will be saved while you create one.</p>')+'<p class="fitness-dialog-intro">Specific workouts use a stable saved-workout ID, so edits carry through. Daily Abs requires Abs to have 0 preferred rest days.</p>':""):"";
+ return '<dialog class="profile-editor-dialog fitness-dialog fitness-rhythm-editor" data-editor-modal aria-labelledby="fitnessRhythmTitle"><div class="profile-editor-body"><h2 id="fitnessRhythmTitle">'+(id==="draft"?"Add Rhythm":"Edit Rhythm")+'</h2><form data-fitness-rhythm-form data-rhythm-id="'+esc(id)+'"><label>Rhythm name<input type="text" name="text" maxlength="80" value="'+esc(record.text||"")+'" required></label><label>Description (optional)<textarea name="description" rows="2" maxlength="500">'+esc(record.description||"")+'</textarea></label>'+fitnessRhythmScheduleHTML(record,idf)+rhythmPickerControlsHTML("fitness",record,"fitness|"+id)+'<label>Fitness activity<select name="type"><option value="weighin"'+(record.type==="weighin"?" selected":"")+'>Weigh-In</option><option value="workout"'+(record.type==="workout"?" selected":"")+'>Strength Workout</option><option value="cardio"'+(record.type==="cardio"?" selected":"")+'>Cardio</option></select></label>'+modeFields+'<div class="fitness-form-error" aria-live="polite"></div><div class="profile-editor-actions"><button type="submit" class="btn mini">Save Rhythm</button><button type="button" class="btn mini ghost" data-fitness-rhythm-close data-editor-cancel>Cancel</button>'+(id==="draft"?"":'<button type="button" class="btn mini danger" data-fitness-rhythm-delete="'+esc(id)+'">Delete Rhythm</button>')+'</div></form></div></dialog>';
 }
 function fitnessSummaryHTML(scores){
  var overview=scores.overall===null?'<p class="fitness-empty">Start by setting a goal or logging an activity. Scores appear as your data builds.</p>':'<p class="fitness-summary-note">Consistency and goal progress—not a measure of physical health.</p>';
@@ -126,7 +137,8 @@ function fitnessSavedWorkoutsHTML(data,scores){
  var workouts=data.savedWorkouts||[];
  return '<section class="card fitness-card fitness-workout-library"><div class="fitness-card-heading"><h2>Saved workouts</h2><div><button type="button" class="btn mini" data-fitness-open="savedWorkout">+ Create workout</button></div></div>'+(fitnessRhythmEditorSuspended?'<p class="fitness-rhythm-resume-note">Your new rhythm settings are saved while you make a workout. <button type="button" class="btn mini" data-fitness-resume-rhythm>Continue editing rhythm</button></p>':"")+(workouts.length?'<div class="fitness-saved-workouts">'+workouts.map(function(workout){
   var names=workout.muscleIds.map(function(id){var muscle=FITNESS_MUSCLES.find(function(item){return item.id===id;});return muscle?muscle.name:id;}),blocked=workout.muscleIds.some(function(id){var muscle=scores.muscles.find(function(item){return item.id===id;});return !muscle||!muscle.eligible;});
-  return '<article class="fitness-saved-workout"><div><h3>'+esc(workout.name)+'</h3><p>'+esc(names.join(", "))+'</p></div><div class="fitness-saved-workout-actions"><button type="button" class="btn mini" data-fitness-log-saved-workout="'+esc(workout.id)+'"'+(blocked?' disabled title="One or more muscles are resting today."':"")+'>Log workout</button><button type="button" class="btn mini ghost" data-fitness-edit-saved-workout="'+esc(workout.id)+'">Edit</button><button type="button" class="btn mini ghost" data-fitness-delete-saved-workout="'+esc(workout.id)+'">Delete</button></div></article>';
+  var people=typeof tendAssociationPeopleBadges==="function"?tendAssociationPeopleBadges(workout,"",null,"saved-workout"):"";
+  return '<article class="fitness-saved-workout"><div><h3>'+esc(workout.name)+'</h3><p>'+esc(names.join(", "))+'</p>'+(people?'<div class="fitness-workout-people">'+people+'</div>':"")+'</div><div class="fitness-saved-workout-actions"><button type="button" class="btn mini" data-fitness-log-saved-workout="'+esc(workout.id)+'"'+(blocked?' disabled title="One or more muscles are resting today."':"")+'>Log workout</button><button type="button" class="btn mini ghost" data-fitness-edit-saved-workout="'+esc(workout.id)+'">Edit</button><button type="button" class="btn mini ghost" data-fitness-delete-saved-workout="'+esc(workout.id)+'">Delete</button></div></article>';
  }).join("")+'</div>':'<p class="fitness-empty">No saved workouts yet. Create one to quickly log your usual muscle groups.</p>')+'</section>';
 }
 function fitnessMuscleMarkup(muscle,score,selected){
@@ -260,26 +272,30 @@ function fitnessMuscleCheckboxes(selectedIds,scores){
 function fitnessWorkoutBlockedMuscles(workout,scores){
  return (workout&&workout.muscleIds||[]).map(function(id){return (scores||[]).find(function(item){return item.id===id;});}).filter(function(item){return !item||!item.eligible;});
 }
-function fitnessRhythmWorkoutFields(data,scores){
- var context=fitnessDialog.rhythmContext||{},recommendations=fitnessRankSavedWorkouts(scores,data.savedWorkouts||[]),best=recommendations[0],selectedId=fitnessDialog.workoutChoiceId;
- if(!selectedId)selectedId=context.initialWorkoutId||"custom";
+function fitnessWorkoutLogFields(data,scores){
+ var context=fitnessDialog.rhythmContext||{},recommendations=fitnessRankSavedWorkouts(scores,data.savedWorkouts||[]),best=recommendations[0],selectedId=fitnessDialog.workoutChoiceId||context.initialWorkoutId||fitnessDialog.initialWorkoutId||"custom";
  if(selectedId!=="custom"&&!data.savedWorkouts.some(function(item){return item.id===selectedId;}))selectedId="custom";
  var selectedRoutine=(data.savedWorkouts||[]).find(function(item){return item.id===selectedId;});
  if(selectedRoutine&&fitnessWorkoutBlockedMuscles(selectedRoutine,scores).length)selectedId="custom";
  var recommended=best?'<option value="'+esc(best.id)+'"'+(selectedId===best.id?" selected":"")+'> '+esc(best.name)+' · Recommended</option>':"",options=(data.savedWorkouts||[]).filter(function(item){return !best||item.id!==best.id;}).map(function(workout){var blocked=fitnessWorkoutBlockedMuscles(workout,scores),reason=blocked.map(function(item){return item?item.name+" "+item.status.toLowerCase():"Unavailable";}).join(", ");return '<option value="'+esc(workout.id)+'"'+(selectedId===workout.id?" selected":"")+(blocked.length?' disabled title="'+esc(reason)+'"':"")+'>'+esc(workout.name)+(blocked.length?" · "+esc(reason):"")+'</option>';}).join("");
  var selected=selectedId!=="custom"?(data.savedWorkouts||[]).find(function(item){return item.id===selectedId;}):null,configured=(data.savedWorkouts||[]).find(function(item){return item.id===context.configuredWorkoutId;}),unavailable=context.configuredWorkoutId&&!configured,configuredBlocked=configured&&fitnessWorkoutBlockedMuscles(configured,scores),muscles=selected?'<div class="fitness-workout-selected"><strong>'+esc(selected.name)+' includes</strong><div class="fitness-saved-muscle-summary">'+fitnessRhythmMuscles(selected).map(function(name,index){return '<span>'+esc(name)+'</span><input type="hidden" name="muscleIds" value="'+esc(selected.muscleIds[index])+'">';}).join("")+'</div><input type="hidden" name="savedWorkoutId" value="'+esc(selected.id)+'"><input type="hidden" name="workoutName" value="'+esc(selected.name)+'"></div>':fitnessMuscleCheckboxes(fitnessDialog.muscleIds||[],scores)+'<label>Workout name (optional)<input type="text" name="workoutName" maxlength="80" value="'+esc(fitnessDialog.workoutName||"")+'" placeholder="Name this custom workout"></label>';
  var unavailableNotice=unavailable?'<p class="fitness-dialog-intro">The configured workout is unavailable. Choose another workout or custom muscles, or <button type="button" class="fitness-inline-link" data-fitness-rhythm-edit="'+esc(context.rhythmId)+'">Edit Rhythm</button>.</p>':configuredBlocked&&configuredBlocked.length?'<p class="fitness-dialog-intro">Planned workout unavailable today: '+esc(configuredBlocked.map(function(item){return item.name+" · "+item.status.replace(/\.$/,"");}).join(", "))+'. The planned workout is unchanged; choose an eligible workout or custom muscles.</p>':"";
- return '<label class="fitness-workout-select-label">Workout<select name="workoutChoice">'+recommended+options+'<option value="custom"'+(selectedId==="custom"?" selected":"")+' >Custom workout…</option></select></label>'+unavailableNotice+muscles;
+ return '<label class="fitness-workout-select-label">Workout<select name="workoutChoice">'+recommended+options+'<option value="custom"'+(selectedId==="custom"?" selected":"")+' >Custom workout</option></select></label>'+unavailableNotice+muscles;
+}
+function fitnessWorkoutPeopleControlsHTML(workout){
+ var people=typeof tendAssociationPeopleBadges==="function"?tendAssociationPeopleBadges(workout,"",null,"saved-workout"):"",pickerId="fitness-workout|"+workout.id;
+ return '<div class="fitness-workout-people">'+people+'<button type="button" class="rhythm-picker-trigger" data-rhythm-picker-open="people|'+esc(pickerId)+'">+ Add Person</button></div>';
 }
 function fitnessRecordDialog(data){
  if(!fitnessDialog)return "";
  var kind=fitnessDialog.kind,id=fitnessDialog.id,collection=kind==="workout"?"workouts":kind==="run"?"runs":kind==="weighin"?"weighIns":"savedWorkouts",record=id?(data[collection]||[]).find(function(item){return item.id===id;}):null,date=record?record.date:fitnessDialog.date||todayStr(),notes=record?record.notes||"":fitnessDialog.notes||"",heading=kind==="savedWorkout"?(record?"Edit saved workout":"Create workout"):kind==="workout"?(record?"Edit workout":"Log a workout"):kind==="run"?(record?"Edit run":"Log a run"):(record?"Edit weigh-in":"Add a weigh-in"),fields="";
- if(kind==="savedWorkout")fields='<label>Workout name<input type="text" name="name" maxlength="80" value="'+esc(record?record.name:"")+'" required></label>'+fitnessMuscleCheckboxes(record?record.muscleIds:[],[]);
- if(kind==="workout"){var workoutData=JSON.parse(JSON.stringify(data));if(record)workoutData.workouts=workoutData.workouts.filter(function(item){return item.id!==record.id;});var available=fitnessMuscleScores(workoutData,fitnessDialog.date||todayStr()),rhythmContext=fitnessDialog.rhythmContext;fields=rhythmContext?fitnessRhythmWorkoutFields(workoutData,available):fitnessMuscleCheckboxes(record?record.muscleIds:fitnessDialog.muscleIds||[],available)+(record&&!record.savedWorkoutId||!record?'<label>Workout name (optional)<input type="text" name="workoutName" maxlength="80" value="'+esc(record&&record.workoutName||fitnessDialog.workoutName||"")+'" placeholder="Name this custom workout"></label>':"");}
+ if(kind==="savedWorkout"){if(!record)record=fitnessDialog.workoutDraft||(fitnessDialog.workoutDraft={id:"draft",name:"",muscleIds:[],sharedWith:[]});if(!Array.isArray(record.sharedWith))record.sharedWith=[];fields='<label>Workout name<input type="text" name="name" maxlength="80" value="'+esc(record.name||"")+'" required></label>'+fitnessMuscleCheckboxes(record.muscleIds||[],[])+fitnessWorkoutPeopleControlsHTML(record);}
+ if(kind==="workout"){if(record){fitnessDialog.initialWorkoutId=record.savedWorkoutId||"custom";fitnessDialog.muscleIds=record.muscleIds||[];fitnessDialog.workoutName=record.workoutName||"";}var workoutData=JSON.parse(JSON.stringify(data));if(record)workoutData.workouts=workoutData.workouts.filter(function(item){return item.id!==record.id;});var available=fitnessMuscleScores(workoutData,fitnessDialog.date||todayStr());fields=fitnessWorkoutLogFields(workoutData,available);}
  if(kind==="run")fields+='<label>Distance (miles)<input type="number" name="distance" min="0.1" max="1000" step="0.1" value="'+esc(record?record.distance:"")+'" required></label>';
  if(kind==="weighin")fields+='<label>Weight ('+esc(data.settings.weightUnit||"lb")+')<input type="number" name="weight" min="0.1" max="2000" step="0.1" value="'+esc(record?record.weight:"")+'" required></label>';
  var context=fitnessDialog.rhythmContext,linkedRhythmId=context&&context.rhythmId||"",formAttrs=' data-fitness-rhythm-id="'+esc(linkedRhythmId)+'" data-fitness-occurrence="'+esc(context&&context.occurrence||"")+'"';
- return '<dialog class="profile-editor-dialog fitness-dialog" data-editor-modal aria-labelledby="fitnessRecordTitle"><div class="profile-editor-body"><h2 id="fitnessRecordTitle">'+(context&&kind==="workout"?"Log your workout":heading)+'</h2><form data-fitness-form="'+kind+'" data-fitness-id="'+esc(id||"")+'"'+(kind==="savedWorkout"?"":formAttrs)+'>'+(kind==="savedWorkout"?"":'<label>Date<input type="date" name="date" value="'+esc(date)+'" max="'+todayStr()+'" required></label>')+fields+(kind==="savedWorkout"?"":'<label>Notes (optional)<textarea name="notes" rows="3" maxlength="1000">'+esc(notes)+'</textarea></label>')+(kind==="savedWorkout"||context?"":fitnessRhythmAssociationOptions(kind,data,record))+'<div class="fitness-form-error" aria-live="polite"></div><div class="profile-editor-actions"><button type="submit" class="btn mini">'+(record?"Save changes":context&&kind==="workout"?"Save Log":"Save")+'</button><button type="button" class="btn mini ghost" data-fitness-close data-editor-cancel>Cancel</button></div></form></div></dialog>';
+ var picker=kind==="savedWorkout"&&typeof rhythmPickerDraft!=="undefined"&&rhythmPickerDraft&&rhythmPickerDraft.ownerId==="fitness-workout"&&rhythmPickerDraft.rhythmId===String(record&&record.id||"draft")&&typeof rhythmPickerModalHTML==="function"?rhythmPickerModalHTML():"";
+ return '<dialog class="profile-editor-dialog fitness-dialog" data-editor-modal aria-labelledby="fitnessRecordTitle"><div class="profile-editor-body"><h2 id="fitnessRecordTitle">'+(context&&kind==="workout"?"Log your workout":heading)+'</h2><form data-fitness-form="'+kind+'" data-fitness-id="'+esc(id||"")+'"'+(kind==="savedWorkout"?"":formAttrs)+'>'+(kind==="savedWorkout"?"":'<label>Date<input type="date" name="date" value="'+esc(date)+'" max="'+todayStr()+'" required></label>')+fields+(kind==="savedWorkout"?"":'<label>Notes (optional)<textarea name="notes" rows="3" maxlength="1000">'+esc(notes)+'</textarea></label>')+(kind==="savedWorkout"||context?"":fitnessRhythmAssociationOptions(kind,data,record))+'<div class="fitness-form-error" aria-live="polite"></div><div class="profile-editor-actions"><button type="submit" class="btn mini">'+(record?"Save changes":context&&kind==="workout"?"Save Log":"Save")+'</button><button type="button" class="btn mini ghost" data-fitness-close data-editor-cancel>Cancel</button></div></form></div></dialog>'+picker;
 }
 function fitnessSettingsDialogHTML(data){
  return fitnessDialog?(fitnessDialog.kind==="goals"?fitnessGoalsDialog(data):fitnessRecordDialog(data)):fitnessRhythmDialogHTML();
@@ -293,6 +309,8 @@ function fitnessRenderDialogPortal(){
  if(!dialog)return;
  dialog.addEventListener("cancel",function(event){var cancel=dialog.querySelector("[data-editor-cancel]");if(cancel){event.preventDefault();cancel.click();}});
  if(!dialog.open){if(typeof tendShowModal==="function")tendShowModal(dialog);else dialog.showModal();}
+ var picker=portal.querySelector("dialog[data-rhythm-picker-dialog]");
+ if(picker&&!picker.open){if(typeof tendShowModal==="function")tendShowModal(picker);else picker.showModal();}
 }
 function renderFitnessPage(){
  var data=fitnessStoreSnapshot(),today=todayStr(),scores=fitnessPageScores(data,today),out='<main class="fitness-page"><header class="fitness-page-heading"><div><span class="fitness-eyebrow">Small steps, steady progress</span><h1>Health &amp; Fitness</h1><p>A stronger you, one small practice at a time.</p></div><button type="button" class="btn ghost fitness-goals-button" data-fitness-open="goals">Goals</button></header>'+fitnessSummaryHTML(scores)+fitnessTabsHTML();
@@ -305,9 +323,9 @@ function fitnessShowTab(id,button){
  fitnessCurrentTab=id;render();
  var next=document.querySelector('[data-fitness-tab="'+id+'"]');if(next)next.focus({preventScroll:true});
 }
-function fitnessOpen(kind,id,muscles,context){
+function fitnessOpen(kind,id,muscles,context,initialWorkoutId){
  if(!fitnessRhythmEditorSuspended)fitnessRhythmEditor=null;
- fitnessDialog={kind:kind,id:id||null,muscleIds:Array.isArray(muscles)?muscles:[],rhythmContext:context||null};render();
+ fitnessDialog={kind:kind,id:id||null,muscleIds:Array.isArray(muscles)?muscles:[],rhythmContext:context||null,initialWorkoutId:initialWorkoutId||null};if(kind==="savedWorkout"&&!id)fitnessDialog.workoutDraft={id:"draft",name:"",muscleIds:[],sharedWith:[]};render();
  var heading=document.getElementById(kind==="goals"?"fitnessGoalsTitle":"fitnessRecordTitle");if(heading)heading.focus({preventScroll:true});
 }
 function fitnessClose(){
@@ -333,7 +351,9 @@ function fitnessRhythmAssociationOptions(kind,data,record){
  return '<label>Associate with a Fitness rhythm (optional)<select name="rhythmId"><option value="">Do not associate</option>'+choices.map(function(rhythm){return '<option value="'+esc(rhythm.id)+'"'+(rhythm.id===current?" selected":"")+'>'+esc(rhythm.text)+'</option>';}).join("")+'</select><small>Only a matching rhythm set for today can be completed by this log.</small></label>';
 }
 function fitnessRhythmDraft(type,record){
- return Object.assign({id:record&&record.id||"draft",text:"",description:"",type:type||"weighin",areas:["health"],freq:"weekly",weekdays:[new Date().getDay()],tod:"anytime",every:1,unit:"weeks",strengthMode:"recommended",workoutId:"",paused:false},record||{});
+ type=type||record&&record.fitnessType||record&&record.type||"weighin";
+ var subcategory=type==="workout"?"strength":type==="cardio"?"cardio":"weight";
+ return Object.assign({id:record&&record.id||"draft",text:"",description:"",type:type,areas:["health"],healthSubcategory:subcategory,freq:"weekly",weekdays:[new Date().getDay()],tod:"anytime",every:1,unit:"weeks",strengthMode:"recommended",workoutId:"",paused:false,sharedWith:[]},record||{});
 }
 function fitnessOpenRhythmEditor(id,type){
  var data=fitnessStoreSnapshot(),record=id&&(data.rhythms||[]).find(function(item){return item.id===id;});
@@ -356,13 +376,15 @@ function fitnessSaveRhythm(form){
  record.text=form.elements.text.value.trim();record.description=form.elements.description.value.trim();record.type=form.elements.type.value;
  if(!record.text){fitnessSetRhythmError(form,"Enter a name for this rhythm.");return;}
  if(["weighin","workout","cardio"].indexOf(record.type)<0){fitnessSetRhythmError(form,"Choose a supported Fitness activity.");return;}
+ record.areas=Array.isArray(record.areas)?Array.from(new Set(record.areas.concat("health"))):["health"];
+ if(["strength","cardio","weight"].indexOf(record.healthSubcategory)<0)record.healthSubcategory=record.type==="workout"?"strength":record.type==="cardio"?"cardio":"weight";
+ record.fitnessType=record.type;
  if(record.type==="workout"){
   record.strengthMode=form.elements.strengthMode.value;
   if(["specific","recommended","custom"].indexOf(record.strengthMode)<0){fitnessSetRhythmError(form,"Choose a workout mode.");return;}
   record.workoutId=record.strengthMode==="specific"?form.elements.workoutId.value:"";
   if(record.strengthMode==="specific"&&!fitnessStoreSnapshot().savedWorkouts.some(function(item){return item.id===record.workoutId;})){fitnessSetRhythmError(form,"Select an available saved workout. Daily Abs requires Abs to have 0 preferred rest days.");return;}
  }else{delete record.strengthMode;delete record.workoutId;}
- record.areas=["health"];
  if(record.freq==="weekly"&&(!Array.isArray(record.weekdays)||!record.weekdays.length)){fitnessSetRhythmError(form,"Select at least one weekday.");return;}
  if(record.freq==="custom"&&(!Number.isInteger(+record.every)||+record.every<1)){fitnessSetRhythmError(form,"Choose a valid repeat interval.");return;}
  if(id==="draft")record.id=uid();
@@ -395,7 +417,10 @@ document.addEventListener("input",function(event){
 });
 document.addEventListener("change",function(event){
  var form=event.target&&event.target.closest&&event.target.closest("[data-fitness-rhythm-form]");
- if(!form||!fitnessRhythmEditor)return;
+ if(!fitnessRhythmEditor)return;
+ var subcategory=event.target&&event.target.closest&&event.target.closest("[data-rhythm-health-subcategory]");
+ if(subcategory){fitnessRhythmEditor.record.healthSubcategory=subcategory.value;return;}
+ if(!form)return;
  if(event.target.name==="type"){
   fitnessRhythmEditor.record.type=event.target.value;
   if(event.target.value==="workout"&&!fitnessRhythmEditor.record.strengthMode)fitnessRhythmEditor.record.strengthMode="recommended";
@@ -434,7 +459,8 @@ function fitnessHandleRecord(form,kind){
   if(!name){fitnessSetError(form,"Enter a name for this workout.");return;}
   muscleIds=Array.from(new Set(muscleIds)).filter(function(value){return FITNESS_MUSCLES.some(function(item){return item.id===value;});});
   if(!muscleIds.length){fitnessSetError(form,"Choose at least one muscle group.");return;}
-  fitnessStoreUpsert("savedWorkouts",{id:id,name:name,muscleIds:muscleIds});fitnessDialog=null;render();flash("Workout saved");return;
+  var existingWorkout=data.savedWorkouts.find(function(item){return item.id===id;}),sharedWith=existingWorkout&&existingWorkout.sharedWith||fitnessDialog.workoutDraft&&fitnessDialog.workoutDraft.sharedWith||[];
+  fitnessStoreUpsert("savedWorkouts",{id:id,name:name,muscleIds:muscleIds,sharedWith:sharedWith});fitnessDialog=null;render();flash("Workout saved");return;
  }
  if(!fitnessValidDate(date)||date>today){fitnessSetError(form,"Choose a valid date that is today or earlier.");return;}
  var collection=kind==="workout"?"workouts":kind==="run"?"runs":"weighIns",previous=(data[collection]||[]).find(function(item){return item.id===id;}),record=Object.assign({},previous||{},{id:id,date:date,notes:notes}),contextRhythmId=form.getAttribute("data-fitness-rhythm-id")||"",associationField=fields.rhythmId,associationId=contextRhythmId||associationField&&associationField.value||"",occurrence=contextRhythmId?form.getAttribute("data-fitness-occurrence"):associationId?(previous&&previous.rhythmId===associationId&&previous.rhythmOccurrence||today):null;
@@ -492,7 +518,7 @@ document.addEventListener("click",function(event){
  if(button.hasAttribute("data-fitness-edit-interval")){var editPanel=button.closest(".fitness-panel"),editPanelId=editPanel&&editPanel.id;fitnessEditingInterval=!fitnessEditingInterval;render();requestAnimationFrame(function(){var editRoot=editPanelId?document.getElementById(editPanelId):document,editor=editRoot&&(fitnessEditingInterval?editRoot.querySelector("[data-fitness-interval]"):editRoot.querySelector("[data-fitness-edit-interval]"));if(editor)editor.focus({preventScroll:true});});return;}
  if(button.hasAttribute("data-fitness-open")){var muscles=(button.getAttribute("data-fitness-muscles")||"").split(",").filter(Boolean);fitnessOpen(button.getAttribute("data-fitness-open"),button.getAttribute("data-fitness-open")==="savedWorkout"?button.getAttribute("data-fitness-id"):null,muscles);return;}
  if(button.hasAttribute("data-fitness-custom-workout")){fitnessOpen("workout");return;}
- if(button.hasAttribute("data-fitness-log-saved-workout")){var saved=fitnessStoreSnapshot().savedWorkouts.find(function(item){return item.id===button.getAttribute("data-fitness-log-saved-workout");});if(saved)fitnessOpen("workout",null,saved.muscleIds);return;}
+ if(button.hasAttribute("data-fitness-log-saved-workout")){var saved=fitnessStoreSnapshot().savedWorkouts.find(function(item){return item.id===button.getAttribute("data-fitness-log-saved-workout");});if(saved)fitnessOpen("workout",null,saved.muscleIds,null,saved.id);return;}
  if(button.hasAttribute("data-fitness-edit-saved-workout")){fitnessOpen("savedWorkout",button.getAttribute("data-fitness-edit-saved-workout"));return;}
  if(button.hasAttribute("data-fitness-delete-saved-workout")){if(!window.confirm("Delete this saved workout?"))return;fitnessStoreDelete("savedWorkouts",button.getAttribute("data-fitness-delete-saved-workout"));render();flash("Saved workout deleted");return;}
  if(button.hasAttribute("data-fitness-close")){fitnessClose();return;}
@@ -516,9 +542,11 @@ document.addEventListener("keydown",function(event){
 });
 document.addEventListener("change",function(event){
  var workoutChoice=event.target&&event.target.closest&&event.target.closest('.fitness-dialog select[name="workoutChoice"]');
- if(workoutChoice&&fitnessDialog&&fitnessDialog.kind==="workout"&&fitnessDialog.rhythmContext){
-  var workoutForm=workoutChoice.form,previousChoice=fitnessDialog.workoutChoiceId||fitnessDialog.rhythmContext.initialWorkoutId||"custom";fitnessDialog.date=workoutForm.elements.date.value;fitnessDialog.notes=workoutForm.elements.notes.value;fitnessDialog.workoutName=workoutForm.elements.workoutName&&workoutForm.elements.workoutName.value||fitnessDialog.workoutName||"";
-  if(previousChoice==="custom")fitnessDialog.muscleIds=Array.from(workoutForm.querySelectorAll('input[name="muscleIds"]:checked')).map(function(input){return input.value;});
+ if(workoutChoice&&fitnessDialog&&fitnessDialog.kind==="workout"){
+  var workoutForm=workoutChoice.form,previousChoice=fitnessDialog.workoutChoiceId||fitnessDialog.rhythmContext&&fitnessDialog.rhythmContext.initialWorkoutId||fitnessDialog.initialWorkoutId||"custom";fitnessDialog.date=workoutForm.elements.date.value;fitnessDialog.notes=workoutForm.elements.notes.value;fitnessDialog.workoutName=workoutForm.elements.workoutName&&workoutForm.elements.workoutName.value||fitnessDialog.workoutName||"";
+  if(previousChoice==="custom"){fitnessDialog.muscleIds=Array.from(workoutForm.querySelectorAll('input[name="muscleIds"]:checked')).map(function(input){return input.value;});}
+  else if(workoutChoice.value==="custom"){fitnessDialog.muscleIds=[];fitnessDialog.workoutName="";}
+  else fitnessDialog.workoutName="";
   fitnessDialog.workoutChoiceId=workoutChoice.value;
   render();var updatedChoice=document.querySelector('.fitness-dialog select[name="workoutChoice"]');if(updatedChoice)updatedChoice.focus({preventScroll:true});return;
  }
@@ -526,7 +554,7 @@ document.addEventListener("change",function(event){
  if(dateInput&&fitnessDialog&&fitnessDialog.kind==="workout"){
   var openForm=dateInput.form;
   fitnessDialog.date=dateInput.value;
-  if((fitnessDialog.workoutChoiceId||fitnessDialog.rhythmContext&&fitnessDialog.rhythmContext.initialWorkoutId||"custom")==="custom")fitnessDialog.muscleIds=Array.from(openForm.querySelectorAll('input[name="muscleIds"]:checked')).map(function(checkbox){return checkbox.value;});
+  if((fitnessDialog.workoutChoiceId||fitnessDialog.rhythmContext&&fitnessDialog.rhythmContext.initialWorkoutId||fitnessDialog.initialWorkoutId||"custom")==="custom"){fitnessDialog.muscleIds=Array.from(openForm.querySelectorAll('input[name="muscleIds"]:checked')).map(function(checkbox){return checkbox.value;});fitnessDialog.workoutName=openForm.elements.workoutName&&openForm.elements.workoutName.value||"";}
   render();var updatedDate=document.querySelector('.fitness-dialog input[name="date"]');if(updatedDate)updatedDate.focus({preventScroll:true});return;
  }
  var input=event.target&&event.target.closest&&event.target.closest("[data-fitness-interval],[data-fitness-rest-days]");

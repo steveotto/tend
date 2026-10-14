@@ -2,7 +2,11 @@
 /* Fitness persistence adapter: records remain part of Tend's regular state and save/sync lifecycle. */
 function fitnessStoreSnapshot(){
  var data=ensureFitnessShape({fitness:S.fitness||{}}).fitness;
+ data.rhythms=(S.areaRhythms||[]).filter(function(record){return ["workout","cardio","weighin"].indexOf(record.fitnessType)>=0;}).map(function(record){return Object.assign({},record,{type:record.fitnessType});});
  return JSON.parse(JSON.stringify(data));
+}
+function fitnessRhythmRecords(){
+ return (S.areaRhythms||[]).filter(function(record){return ["workout","cardio","weighin"].indexOf(record.fitnessType)>=0;});
 }
 function fitnessStoreUpdateSettings(patch){
  var data=ensureFitnessShape({fitness:S.fitness||{}}).fitness;
@@ -13,23 +17,28 @@ function fitnessSyncRhythmCompletion(record){
  if(!Array.isArray(S.events))S.events=[];
  S.events=S.events.filter(function(event){return event.fitnessLogId!==record.id;});
  if(!record.rhythmId)return;
- var rhythm=(S.fitness.rhythms||[]).find(function(item){return item.id===record.rhythmId;});
+ var rhythm=fitnessRhythmRecords().find(function(item){return item.id===record.rhythmId;});
  if(!rhythm||!fitnessValidDate(record.rhythmOccurrence))return;
  var time=new Date(record.rhythmOccurrence+"T12:00:00").getTime();
  S.events.push({id:"fitness-rhythm-"+record.id,ts:time,areaId:"health",personId:null,type:"quality",kind:"quality",title:rhythm.text,note:"Fitness log",rhythmId:rhythm.id,fitnessLogId:record.id,rhythmOccurrence:record.rhythmOccurrence,fitnessType:record.fitnessType||"workout",weight:3});
 }
 function fitnessStoreUpsert(collection,record){
  if(["savedWorkouts","workouts","runs","weighIns","rhythms"].indexOf(collection)<0)throw new Error("Unknown fitness record collection");
- var data=ensureFitnessShape({fitness:S.fitness||{}}).fitness,records=data[collection],index=records.findIndex(function(item){return item.id===record.id;});
- if(index<0)records.push(record);else records[index]=record;
+ var data=ensureFitnessShape({fitness:S.fitness||{}}).fitness,records=collection==="rhythms"?(S.areaRhythms||(S.areaRhythms=[])):data[collection],index=records.findIndex(function(item){return item.id===record.id;});
+ if(collection==="rhythms"){
+  var normalized=Object.assign({},record,{fitnessType:record.fitnessType||record.type,areas:Array.from(new Set((record.areas||[]).concat("health"))),sharedWith:Array.isArray(record.sharedWith)?record.sharedWith:[]});
+  delete normalized.type;
+  if(index<0)records.push(normalized);else records[index]=Object.assign(records[index],normalized);
+  data.rhythms=[];
+ }else if(index<0)records.push(record);else records[index]=record;
  if(["workouts","runs","weighIns"].indexOf(collection)>=0)fitnessSyncRhythmCompletion(record);
  S.fitness=data;save();
 }
 function fitnessStoreDelete(collection,id){
  if(["savedWorkouts","workouts","runs","weighIns","rhythms"].indexOf(collection)<0)throw new Error("Unknown fitness record collection");
- var data=ensureFitnessShape({fitness:S.fitness||{}}).fitness,before=data[collection].length;
- data[collection]=data[collection].filter(function(item){return item.id!==id;});
- if(before===data[collection].length)return false;
+ var data=ensureFitnessShape({fitness:S.fitness||{}}).fitness,records=collection==="rhythms"?(S.areaRhythms||[]):data[collection],before=records.length;
+ if(collection==="rhythms")S.areaRhythms=records.filter(function(item){return item.id!==id;});else data[collection]=records.filter(function(item){return item.id!==id;});
+ if(before===(collection==="rhythms"?S.areaRhythms:data[collection]).length)return false;
  if(["workouts","runs","weighIns"].indexOf(collection)>=0)S.events=S.events.filter(function(event){return event.fitnessLogId!==id;});
  S.fitness=data;save();return true;
 }
