@@ -41,7 +41,7 @@ function calendarEditorHTML(){
  return '<dialog class="profile-editor-dialog" data-editor-modal aria-label="'+(draft.id?'Edit':'Add')+' calendar"><div class="profile-editor-body"><h3>'+(draft.id?'Edit':'Add')+' calendar</h3><label class="field">Name<input id="calendarEditorName" value="'+esc(draft.name||'')+'" placeholder="Calendar name"></label><label class="field">Calendar link<input id="calendarEditorUrl" value="'+esc(draft.url||'')+'" placeholder="webcal:// or https:// calendar link"></label><label class="field">Color<input id="calendarEditorColor" type="color" value="'+calendarColor(draft.color)+'"></label><div class="profile-editor-actions"><button type="button" class="btn mini" data-calendar-editor-save>Save</button><button type="button" class="btn mini ghost" data-calendar-editor-cancel data-editor-cancel>Cancel</button>'+(draft.id?'<button type="button" class="btn mini danger" style="margin-left:auto" data-calendar-editor-delete>Delete</button>':'')+'</div></div></dialog>';
 }
 function refreshCalendarSettings(){
- localStorage.removeItem('tend:cal2');
+ if(window.clearTendCalendarCache)window.clearTendCalendarCache();else localStorage.removeItem('tend:cal2');
  if(window.TEND_LOAD_CALENDAR)window.TEND_LOAD_CALENDAR();
 }
 document.addEventListener('click',function(event){
@@ -143,7 +143,8 @@ document.addEventListener('change',function(event){
 function renderSettings(){
  if(settingsTab==='general'||settingsTab==='peoplecolors'||settingsTab==='goals')settingsTab='peoplemeters';
  if(settingsTab==='times'||settingsTab==='dates'||settingsTab==='holidays'||settingsTab==='calendars')settingsTab='schedule';
- var tabs=[['profile','My profile'],['display','Display'],['peoplemeters','People & meters'],['badges','Action colors'],['schedule','Time & dates'],['weather','Weather'],['focus','Focus'],['plan','Plan'],['offload','Offload'],['sync','Sync']];
+ if(settingsTab==='sync')settingsTab='account';
+ var tabs=[['profile','My profile'],['display','Display'],['peoplemeters','People & meters'],['badges','Action colors'],['schedule','Time & dates'],['weather','Weather'],['focus','Focus'],['plan','Plan'],['offload','Offload'],['account','Account & sync']];
  var out=tendSectionHeaderHTML({title:"Settings",subtitle:"Make Tend work for you",className:"settings-title"});
  out+='<p class="settings-intro">Choose a section below to update your preferences.</p>';
  out+='<div class="profile-tabs settings-tabs" role="tablist" aria-label="Settings">'+tabs.map(function(t){return '<button type="button" role="tab" id="settings-tab-'+t[0]+'" aria-controls="settings-panel-'+t[0]+'" aria-selected="'+(settingsTab===t[0])+'" data-settingstab="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div>';
@@ -171,15 +172,7 @@ function renderSettings(){
  out+=settingsPanel('focus')+focusSettingsHTML()+'</section>';
  out+=settingsPanel('plan')+(typeof renderCarePlan==='function'?renderCarePlan():'')+'</section>';
  out+=settingsPanel('offload')+(typeof renderOffload==='function'?renderOffload():'')+'</section>';
- out+=settingsPanel('sync');
- var st=window.SYNCcfg||{};
- out+='<div class="card settings-card"><div class="subhead">Sync your data</div><p class="settings-help">Connect to your private data repository to back up and sync Tend between devices. These settings are stored on this device.</p>'+
- '<div class="field"><label for="syncOwner">Repository owner</label><input id="syncOwner" autocomplete="off" value="'+esc(st.owner||"")+'"></div>'+
- '<div class="field"><label for="syncRepo">Repository name</label><input id="syncRepo" autocomplete="off" value="'+esc(st.repo||"")+'"></div>'+
- '<div class="field"><label for="syncToken">Personal access token</label><input id="syncToken" type="password" autocomplete="off" placeholder="Fine-grained token scoped to your data repository" value="'+esc(st.token||"")+'"></div>'+
- '<div class="settings-actions"><button type="button" class="btn ghost" id="syncSave">Save connection</button><button type="button" class="btn ghost" id="syncExport">Export backup</button><button type="button" class="btn ghost" id="syncImport">Import backup</button><input id="syncImportFile" type="file" accept="application/json,.json" hidden></div>'+
- '<div class="settings-sync-actions"><button type="button" class="btn" id="syncReloadLatest" title="Fetch the newest version of Tend and reload this page">&#10227; Reload latest</button><button type="button" class="btn" id="syncPush">Push now</button><button type="button" class="btn ghost" id="syncPull">Pull now</button><button type="button" class="btn ghost" id="syncForcePull" title="Replace all local data with the cloud copy">Force pull (cloud wins)</button></div>'+
- '<div id="syncVersionLine" class="settings-version-line"></div></div></section>';
+ out+=settingsPanel('account')+(typeof tendAccountSettingsHTML==='function'?tendAccountSettingsHTML():'')+'</section>';
  return out;
 }
 function meterThresholdPreviewHTML(green,yellow,baseline){

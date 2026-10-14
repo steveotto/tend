@@ -60,8 +60,8 @@ document.addEventListener("change",function(event){
  reader.onload=function(){
   var imported;
   try{imported=JSON.parse(String(reader.result||""));}catch(error){flash("That backup file is not valid JSON");input.value="";return;}
-  if(!window.confirm("Replace all Tend data on this device with the backup?")){input.value="";return;}
-  try{fitnessStoreReplaceState(imported);flash("Backup imported");render();}
+  if(!window.confirm(window.TEND_CLOUD_MODE?"Replace all Tend data in this account with this backup? Tend downloads the current cloud data first.":"Replace all Tend data on this device with the backup?")){input.value="";return;}
+  try{if(window.TEND_CLOUD_MODE&&window.TendAuth){window.TendAuth.replaceAccountState(imported).then(function(){flash("Backup imported");render();}).catch(function(error){console.error(error);flash(error.message||"Could not import that backup");});}else{fitnessStoreReplaceState(imported);flash("Backup imported");render();}}
   catch(error){console.error(error);flash(error.message||"Could not import that backup");}
   input.value="";
  };

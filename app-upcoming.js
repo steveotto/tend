@@ -241,7 +241,7 @@ window.refreshCalendarNow=function(){
   fetch("events.json?t="+Date.now()+"&r="+Math.random()).then(function(r){return r.ok?r.json():null;}).then(function(j){
    if(j&&j.synced&&j.synced!==window._calPollBefore){
     clearInterval(iv);
-    try{localStorage.removeItem("tend:cal2");}catch(e){}
+    try{if(window.clearTendCalendarCache)window.clearTendCalendarCache();else localStorage.removeItem("tend:cal2");}catch(e){}
     window._calLoading=false;
     if(typeof loadCalendars==="function")loadCalendars();
     flash("Calendar refreshed");
