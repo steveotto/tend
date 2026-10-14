@@ -181,19 +181,20 @@ function render(){var existingPersonSettingsModal=el("personSettingsModal");if(e
  var rhythmPickerDialog=v.querySelector("dialog[data-rhythm-picker-dialog]");if(rhythmPickerDialog&&!rhythmPickerDialog.open){tendShowModal(rhythmPickerDialog);var rhythmPickerTitle=rhythmPickerDialog.querySelector("#rhythm-picker-title");if(rhythmPickerTitle)rhythmPickerTitle.focus({preventScroll:true});}
  if(tab==="today"&&!currentArea&&el("calStrip")&&typeof loadCalendars==="function")loadCalendars();if(tab==="today"&&!currentArea&&typeof loadNowWeather==="function")loadNowWeather();tendRenderScrollSnapshot=previousSnapshot;var renderedRouteKey=tendRenderRouteKey();tendLastRenderRouteKey=renderedRouteKey;if(faithScrollAnchor&&currentArea==="faith"){requestAnimationFrame(function(){requestAnimationFrame(function(){tendRestoreFaithScrollAnchor(faithScrollAnchor);});});}else if(preserve&&routeKey===renderedRouteKey){if(scrollAnchor)requestAnimationFrame(function(){requestAnimationFrame(function(){tendRestoreProfileScrollAnchor(scrollAnchor);});});else tendRestorePageScroll(scrollPosition);}}
 /* ============ overall meter ============ */
-function overallScore(){return avg(AREA_IDS.map(areaScore))||50;}
+function overallScore(){return AREA_IDS.some(areaHasActivity)?avg(AREA_IDS.map(areaScore)):null;}
 function areaMenuHTML(){
  return '<div class="menu-grid">'+AREA_IDS.map(function(id){
-  var v=areaScore(id),c=scoreClass(v);
-  return '<button class="menu-area" data-areago="'+id+'"><span class="sm-dot '+c+'"></span><span class="menu-area-icon" aria-hidden="true">'+(AREA_ICONS[id]||"")+'</span><span class="ma-name">'+S.areas[id].name+'</span><span class="ma-score '+c+'">'+v+'</span></button>';
+  var v=displayAreaScore(id),c=scoreClass(v);
+  return '<button class="menu-area" data-areago="'+id+'"><span class="sm-dot '+c+'"></span><span class="menu-area-icon" aria-hidden="true">'+(AREA_ICONS[id]||"")+'</span><span class="ma-name">'+S.areas[id].name+'</span><span class="ma-score '+c+'">'+(v===null?"—":v)+'</span></button>';
  }).join("")+'</div>';}
+function dashboardGreeting(greeting){var name=window.TendAuth&&typeof window.TendAuth.displayName==="function"?window.TendAuth.displayName().trim():"";return greeting+(name?", "+esc(name):"");}
 function renderToday(){
  var d=new Date(),h=d.getHours();
  var days=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];var mos=["January","February","March","April","May","June","July","August","September","October","November","December"];
  var greet=h<12?"Good morning":(h<18?"Good afternoon":"Good evening");
  var ov=overallScore(),oc=scoreClass(ov);
- var out='<main class="home-dashboard">'+tendSectionHeaderHTML({title:greet+', Steve',metadata:days[d.getDay()]+", "+mos[d.getMonth()]+" "+d.getDate(),className:"dashboard-greeting"});
- out+='<div class="card overall-card"><div class="dashboard-overall-heading"><h3>Overall health</h3><span class="ov-score '+oc+'">'+ov+'</span></div><div class="bar-ov"><i class="ov-marker" style="left:'+ov+'%"></i></div>'+'<div class="meta"><span class="statusword '+oc+'">'+scoreLabel(ov)+'</span></div>'+areaMenuHTML()+'</div>';
+ var out='<main class="home-dashboard">'+tendSectionHeaderHTML({title:dashboardGreeting(greet),metadata:days[d.getDay()]+", "+mos[d.getMonth()]+" "+d.getDate(),className:"dashboard-greeting"});
+ out+='<div class="card overall-card"><div class="dashboard-overall-heading"><h3>Overall health</h3><span class="ov-score '+oc+'">'+(ov===null?"—":ov)+'</span></div><div class="bar-ov"><i class="ov-marker"'+(ov===null?' hidden':' style="left:'+ov+'%"')+'></i></div>'+'<div class="meta">'+(ov===null?'':'<span class="statusword '+oc+'">'+scoreLabel(ov)+'</span>')+'</div>'+areaMenuHTML()+'</div>';
  out+=tendSectionHeaderHTML({title:"On your calendar",className:"calendar-sectiontitle"})+'<div class="card calendar-card"><div id="calStrip"><div class="empty">'+((S.calendars||[]).length?"Loading calendars...":"No calendars connected - add one in Settings.")+'</div></div></div><div id="calendarSyncSlot" class="calendar-sync-slot"></div>';
  out+=planHTML();
  out+=tendPrayerSectionHTML("Prayer",dashboardFocusedPrayerHTML());
@@ -1161,10 +1162,10 @@ function freeMomentHTML(){
 /* ============ area subpages ============ */
 function renderArea(id){
  if(id==="health"&&typeof renderFitnessPage==="function")return renderFitnessPage();
- var v=areaScore(id),c=scoreClass(v);
+ var v=displayAreaScore(id),c=scoreClass(v);
  var kids=S.people.filter(function(p){return p.area===id;});
- var out=tendSectionHeaderHTML({title:S.areas[id].name,metadata:scoreLabel(v),style:"margin-top:2px"});
- out+='<div class="card" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:17px;font-weight:500">Health meter</h3><span class="score '+c+'">'+v+'</span></div>'+meterBar(v,c);
+ var out=tendSectionHeaderHTML({title:S.areas[id].name,metadata:v===null?"No activity yet":scoreLabel(v),style:"margin-top:2px"});
+ out+='<div class="card" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:17px;font-weight:500">Health meter</h3><span class="score '+c+'">'+(v===null?"—":v)+'</span></div>'+meterBar(v,c);
  if(kids.length)out+='<div class="people-row">'+kids.map(personChip).join("")+'</div>';
  out+='</div>';
  out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Tasks</div><ul class="tasks">';

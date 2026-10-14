@@ -137,15 +137,7 @@ function loadCalendars(force){
  var cached=null;try{cached=JSON.parse(localStorage.getItem(calendarCacheKey)||"null");}catch(e){}
  if(!force&&cached&&Date.now()-cached.at<900000&&cached.n===cals.length){window._calLoading=false;window._calSync=cached.synced||cached.at;renderCalStrip(cached.events);return;}
  if(strip)strip.innerHTML='<div class="empty">Loading calendars...</div>';
- function toEv(x){var m=null;cals.forEach(function(c2){if(x.cal&&c2.name===x.cal)m=c2;});if(!m)m=cals[0];return {t:x.t,s:Date.parse(x.s),e:Date.parse(x.e||x.s),cal:x.cal||m.name,color:m.color||"#4C9AFF",allDay:x.allDay};}
- fetch("events.json?t="+Date.now()).then(function(r){if(!r.ok)throw new Error("nofeed");return r.json();}).then(function(data){
-  if(!data||!data.events||!data.events.length)throw new Error("empty");
-  window._calLoading=false;window._calSync=data.synced||Date.now();
-  var evs=data.events.map(toEv);evs.sort(function(a,b){return a.s-b.s;});
-  localStorage.setItem(calendarCacheKey,JSON.stringify({at:Date.now(),synced:window._calSync,events:evs,n:cals.length}));
-  renderCalStrip(evs);
- }).catch(function(){
-  var jobs=cals.map(function(ca){
+ var jobs=cals.map(function(ca){
    return fetchICS(calUrl(ca.url)).then(function(t){
     var evs=parseICS(t).map(function(e){return {t:e.title,s:e.start.getTime(),e:(e.end?e.end.getTime():e.start.getTime()+3600000),cal:ca.name,color:ca.color||"#4C9AFF"};});
     return evs;
@@ -160,7 +152,6 @@ function loadCalendars(force){
    if(!errs.length){window._calSync=Date.now();localStorage.setItem(calendarCacheKey,JSON.stringify({at:window._calSync,synced:window._calSync,events:evs,n:cals.length}));}
    renderCalStrip(evs,errs);
   });
- });
 }
 function fmtT(ms){var d=new Date(ms);var h=d.getHours(),m=d.getMinutes(),ap=h<12?"am":"pm";h=h%12||12;return h+(m?":"+String(m).padStart(2,"0"):"")+ap;}
 function fmtD(ms){var d=new Date(ms);return d.toLocaleDateString(undefined,{month:"short",day:"numeric"});}

@@ -130,7 +130,6 @@ personScore=function(p){
  if(ps!==null){total+=0.3*ps;weight+=0.3;}
  return Math.round(clamp(total/weight,0,100));
 };
-defaultRhythms=function(){return[{id:uid(),text:"Pray together",freq:"daily",tod:"early"},{id:uid(),text:"Afternoon walk around the block",freq:"daily",tod:"afternoon"},{id:uid(),text:"Date night",freq:"weekly",weekdays:[5],tod:"evening"},{id:uid(),text:"Overnight getaway",freq:"quarterly",tod:"anytime"}];};
 rhythmScheduledToday=function(r,date){
  date=date||new Date();
  if(rhythmDaysSince(r)===0)return false;
@@ -338,21 +337,6 @@ carePlanSave=function(key,form){
  }
  if(found.kind==='prayer'){r.details=field('details').value.trim();r.freq=field('frequency').value||null;r.scheduleDow=r.freq&&scheduleHasWeekday(r.freq)&&field('scheduleDow')&&field('scheduleDow').value!==''?+field('scheduleDow').value:null;r.personId=field('person').value||null;var status=field('status').value;r.answered=status==='answered';r.archived=status==='archived';}
  carePlanEdit=null;save();render();flash('Updated in Care Plan');
-};
-
-/* ---- scheduled-planned line: rhythms appear once (no category doubling) ---- */
-nextDateLine=function(pid){
- var base=_nextDateLine(pid);
- var p=S.people.find(function(q){return q.id===pid;});
- if(!p)return base;
- personRhythms(p).forEach(function(r){
-  var s=window.rhythmScheduled(r,p);
-  if(s){
-   var days=Math.max(0,Math.round((s.t-new Date())/86400000));
-   base+='<div class="pf-next planned">'+esc(r.text)+' \u00B7 planned for '+MOS_SHORT[s.t.getMonth()]+' '+s.t.getDate()+(days===0?" \u00B7 today":" \u00B7 in "+days+" days")+'</div>';
-  }
- });
- return base;
 };
 
 /* ---- person profile pills: Rhythms = all rhythms, Prayer = prayer events ---- */

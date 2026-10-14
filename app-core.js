@@ -9,53 +9,6 @@ function typeLabel(e){if(e.rippleLabel)return e.rippleLabel==="One-on-One"?"In P
 function typeWeight(e){return e.type&&ETYPES[e.type]?ETYPES[e.type].w:(KINDS[e.kind]?KINDS[e.kind].w:3);}
 var DEFAULT_SETTINGS={greenAt:80,yellowAt:50,baseline:50,mobileTextSize:"normal",actionColors:{rhythm:"#246B52",spark:"#D4A43A",prayer:"#8B78A6",fitness:"#3D7357"}};
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
-function defaultKeyDates(){return[
- {id:"kd-leah",personId:"leah",label:"Leah's birthday",month:9,day:28},
- {id:"kd-hannah",personId:"hannah",label:"Hannah's birthday",month:2,day:13},
- {id:"kd-jake",personId:"jacob",label:"Jake's birthday",month:6,day:23},
- {id:"kd-wedding",personId:"jacob",label:"Jake & Addi's wedding",month:3,day:13},
- {id:"kd-thanks",label:"Thanksgiving",month:11,day:26},
- {id:"kd-shepherds",label:"Shepherd's Table (Christmas Eve)",month:12,day:24},
- {id:"kd-christmas",label:"Christmas",month:12,day:25}
-];}
-function defaultChecklists(){return[
- {id:"cl-wedding",linkId:"kd-wedding",title:"Jake & Addi's wedding - father of the groom",items:[
-  {id:uid(),text:"Set a recurring monthly one-on-one with Jake through March",done:false},
-  {id:uid(),text:"Have the contribution conversation with Amy (what we're giving)",done:false},
-  {id:uid(),text:"Talk with Addi's parents - coordinate the weekend",done:false},
-  {id:uid(),text:"Offer Jake premarital conversations: money, faith practices, conflict, in-laws",done:false},
-  {id:uid(),text:"Plan a father-son overnight before March",done:false},
-  {id:uid(),text:"Help Jake shortlist photographers - track outreach in Echoblocks",done:false},
-  {id:uid(),text:"Suit fitting scheduled (by mid-February)",done:false},
-  {id:uid(),text:"Draft father-of-the-groom toast by Feb 1; rehearse by Mar 1",done:false},
-  {id:uid(),text:"Choose a scripture or blessing for the toast",done:false},
-  {id:uid(),text:"Confirm rehearsal dinner role and any toast",done:false},
-  {id:uid(),text:"Week of: gift ready, suit pickup, write a letter to Jake",done:false},
-  {id:uid(),text:"Day of: pray over Jake before the ceremony",done:false}
- ]},
- {id:"cl-christmas",linkId:"kd-christmas",title:"Christmas",items:[
-  {id:uid(),text:"Brainstorm gifts with Amy: Amy, Hannah, Jake, Leah, Lucas, Addi",done:false},
-  {id:uid(),text:"Set per-person gift budget",done:false},
-  {id:uid(),text:"All gifts bought/ordered by Dec 15",done:false},
-  {id:uid(),text:"Plan Shepherd's Table menu and invitations (Dec 24)",done:false}
- ]},
- {id:"cl-thanks",linkId:"kd-thanks",title:"Thanksgiving",items:[
-  {id:uid(),text:"Decide hosting plan and menu",done:false},
-  {id:uid(),text:"Coordinate who brings what",done:false}
- ]}
-];}
-function defaultRhythms(){return[{id:uid(),text:"Pray together",category:"prayer",freq:"daily",tod:"early",dur:"15 min"},{id:uid(),text:"Afternoon walk around the block",category:"connection",freq:"daily",tod:"afternoon",dur:"30 min"},{id:uid(),text:"Date night",category:"connection",freq:"custom",customType:"weekly",customDow:5,tod:"evening",dur:"2 hrs"},{id:uid(),text:"Overnight getaway",category:"connection",freq:"quarterly",tod:"anytime",dur:"Weekend"}];}
-function defaultSparks(){return[{id:uid(),text:"Watch the movie Jake mentioned",by:todayStr(),tod:"evening",done:false}];}
-function defaultFaithRhythms(){return[
- {id:uid(),text:"Scripture reading",category:"faith",group:"Scripture",freq:"daily",tod:"early",takeNotes:true,description:"Immersing yourself in the Bible to know and love God more.",disabled:false},
- {id:uid(),text:"Solitude & silence",category:"faith",group:"Solitude",freq:"weekly",tod:"anytime",takeNotes:true,description:"Withdrawing from noise and people to be alone with God.",disabled:false},
- {id:uid(),text:"Sabbath",category:"faith",group:"Sabbath",freq:"weekly",tod:"anytime",scheduleDow:0,description:"A full day of rest, delight, and presence with God and others.",disabled:false},
- {id:uid(),text:"Community gathering",category:"faith",group:"Community",freq:"weekly",tod:"anytime",description:"Meeting with the people of God for worship, teaching, and life together.",disabled:false},
- {id:uid(),text:"Fasting",category:"faith",group:"Fasting",freq:"weekly",tod:"anytime",description:"Voluntarily abstaining from food to create space for God.",disabled:false},
- {id:uid(),text:"Generosity practice",category:"faith",group:"Generosity",freq:"monthly",tod:"anytime",description:"Giving away money, time, or resources as an act of worship.",disabled:false},
- {id:uid(),text:"Serve someone",category:"faith",group:"Service",freq:"weekly",tod:"anytime",description:"Using your gifts and time to serve others in love.",disabled:false},
- {id:uid(),text:"Share your story",category:"faith",group:"Witness",freq:"monthly",tod:"anytime",description:"Telling others about Jesus through word and deed.",disabled:false}
-];}
 function defaultCategories(){return{
  connection:{label:"People",icon:"👤"},
  faith:{label:"Faith",icon:"+"},
@@ -82,25 +35,15 @@ function todayStr(){var d=new Date();return d.getFullYear()+"-"+String(d.getMont
 function rhythmEnded(r){return !!(r&&r.until&&todayStr()>r.until);}
 function nowHM(){var d=new Date();return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");}
 function fmtHM(ts){var d=new Date(ts);var h=d.getHours(),m=String(d.getMinutes()).padStart(2,"0");var ap=h>=12?"pm":"am";h=h%12||12;return h+":"+m+ap;}
-function defaultState(){return{version:2,
- people:[{id:"amy",name:"Amy",relation:"Spouse",area:"marriage",rhythms:defaultRhythms()},{id:"hannah",name:"Hannah",relation:"Daughter",area:"parenting"},{id:"jacob",name:"Jake",relation:"Son",area:"parenting",sparks:defaultSparks()},{id:"leah",name:"Leah",relation:"Daughter",area:"parenting"},{id:"lucas",name:"Lucas",relation:"Bonus son",area:"parenting"},{id:"addi",name:"Addi",relation:"Bonus daughter",area:"parenting"}],
- events:[],tasks:[],followups:[],prayers:[],ideas:[],echoes:[{id:uid(),title:"Photographers - Jake & Addi's wedding",note:"Contacts to reach out to. Status: to contact / contacted / met / booked / passed.",items:[]}],keyDates:defaultKeyDates(),checklists:defaultChecklists(),settings:JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),rhythms:defaultFaithRhythms(),categories:defaultCategories(),faithConfig:defaultFaithConfig(),
- calendars:[{id:"cal-home",name:"Home",url:"https://p106-caldav.icloud.com/published/2/MjcyMTgwNTc5MjcyMTgwNfAweM4Mnge_B7jsSIKiQGrhnfAemrtl8LYeoKtz2A0MTFihcXWvdiyB4fotJ9jrIRWeawSqJWitMgtfFaZ1XRxvE-3phMRdiHY_izguI0iXG6szeG4SjHgOO6Uvy8Rgbw",color:"#4C9AFF"}],
- areas:{faith:{name:"Faith"},marriage:{name:"Marriage"},parenting:{name:"Parenting"},health:{name:"Health & Fitness"},finances:{name:"Finances"},friendships:{name:"Friendships"}},fitness:defaultFitnessState()};}
+function defaultState(){return emptyAccountState();}
 function emptyAccountState(){return{version:2,people:[],events:[],tasks:[],followups:[],prayers:[],ideas:[],echoes:[],keyDates:[],checklists:[],settings:JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),rhythms:[],categories:defaultCategories(),faithConfig:defaultFaithConfig(),calendars:[],areas:{faith:{name:"Faith"},marriage:{name:"Marriage"},parenting:{name:"Parenting"},health:{name:"Health & Fitness"},finances:{name:"Finances"},friendships:{name:"Friendships"}},fitness:defaultFitnessState()};}
 function load(){if(window.TEND_CLOUD_MODE)return emptyAccountState();try{var s=localStorage.getItem(LS_STATE);if(!s)return defaultState();var original=JSON.parse(s),needsGoalCleanup=!!original&&(Object.prototype.hasOwnProperty.call(original,"goals")||(Array.isArray(original.events)&&original.events.some(function(event){return !!event.goalId;}))),st=ensureShape(original);st.version=2;
 if(st.areas&&st.areas.fitness){st.areas.health={name:"Health & Fitness"};delete st.areas.fitness;(st.events||[]).forEach(function(x){if(x.areaId==="fitness")x.areaId="health";});(st.tasks||[]).forEach(function(x){if(x.areaId==="fitness")x.areaId="health";});}
  if(!st.areas.finances)st.areas.finances={name:"Finances"};
- var wantPeople=[{id:"amy",name:"Amy",relation:"wife"},{id:"hannah",name:"Hannah",relation:"daughter"},{id:"jacob",name:"Jake",relation:"son"},{id:"leah",name:"Leah",relation:"daughter"},{id:"lucas",name:"Lucas",relation:"son-in-law"},{id:"addi",name:"Addi",relation:"future daughter-in-law"}];
- wantPeople.forEach(function(p){var ex=st.people&&st.people.find(function(x){return x.id===p.id;});if(ex){if(p.id==="jacob")ex.name="Jake";ex.area=ex.area||"parenting";}else{st.people.push({id:p.id,name:p.name,relation:p.relation,area:p.id==="amy"?"marriage":"parenting"});}});
- var _am=st.people.find(function(x){return x.id==="amy";});if(_am&&!_am.rhythms)_am.rhythms=defaultRhythms();
-var _jk=st.people.find(function(x){return x.id==="jacob";});if(_jk&&!(_jk.sparks&&_jk.sparks.length))_jk.sparks=defaultSparks();
- st.keyDates=st.keyDates&&st.keyDates.length?st.keyDates:defaultKeyDates();
- st.checklists=st.checklists&&st.checklists.length?st.checklists:defaultChecklists();
- st.ideas=st.ideas||[];st.echoes=st.echoes&&st.echoes.length?st.echoes:defaultState().echoes;
+ st.ideas=st.ideas||[];
  if(needsGoalCleanup)localStorage.setItem(LS_STATE,JSON.stringify(st));return st;}catch(e){return defaultState();}}
 function ensureFitnessShape(st){var defaults=defaultFitnessState(),fitness=st.fitness&&typeof st.fitness==="object"&&!Array.isArray(st.fitness)?st.fitness:{};st.fitness=Object.assign({},defaults,fitness);st.fitness.version=2;st.fitness.settings=Object.assign({},defaults.settings,fitness.settings||{});st.fitness.settings.muscleIntervals=Object.assign({},defaults.settings.muscleIntervals,fitness.settings&&fitness.settings.muscleIntervals||{});st.fitness.settings.preferredRestDays=Object.assign({},defaults.settings.preferredRestDays,fitness.settings&&fitness.settings.preferredRestDays||{});["rhythms","savedWorkouts","workouts","runs","weighIns"].forEach(function(key){if(!Array.isArray(st.fitness[key]))st.fitness[key]=[];});st.fitness.rhythms=st.fitness.rhythms.filter(function(rhythm){return rhythm&&typeof rhythm.id==="string"&&typeof rhythm.text==="string";});st.fitness.savedWorkouts=st.fitness.savedWorkouts.filter(function(workout){return workout&&typeof workout.id==="string"&&typeof workout.name==="string"&&Array.isArray(workout.muscleIds);}).map(function(workout){return Object.assign({},workout,{muscleIds:Array.from(new Set(workout.muscleIds.filter(function(id){return Object.prototype.hasOwnProperty.call(defaults.settings.muscleIntervals,id);}))) });});return st;}
-function ensureShape(st){st=st||{};["events","tasks","followups","prayers","ideas","echoes","keyDates","checklists"].forEach(function(k){if(!Array.isArray(st[k]))st[k]=[];});var hadGoals=!!(Array.isArray(st.goals)&&st.goals.length)||(Array.isArray(st.events)&&st.events.some(function(event){return !!event.goalId;}));if(hadGoals&&typeof window!=="undefined")window._goalDataPurged=true;delete st.goals;st.events=st.events.filter(function(event){return !event.goalId;});if(!Array.isArray(st.calendars)||(!st.calendars.length&&!window.TEND_CLOUD_MODE))st.calendars=window.TEND_CLOUD_MODE?[]:defaultState().calendars;if(!st.people||(!st.people.length&&!window.TEND_CLOUD_MODE))st.people=window.TEND_CLOUD_MODE?[]:defaultState().people;if(!st.areas)st.areas=window.TEND_CLOUD_MODE?emptyAccountState().areas:defaultState().areas;if(!st.settings)st.settings=JSON.parse(JSON.stringify(DEFAULT_SETTINGS));if(!Array.isArray(st.rhythms))st.rhythms=defaultFaithRhythms();if(!st.categories)st.categories=defaultCategories();var faithDefaults=defaultFaithConfig();if(!st.faithConfig)st.faithConfig=faithDefaults;else{if(!Array.isArray(st.faithConfig.disabledGroups))st.faithConfig.disabledGroups=[];st.faithConfig.groupDescriptions=Object.assign({},faithDefaults.groupDescriptions,st.faithConfig.groupDescriptions||{});}ensureFitnessShape(st);st.people.forEach(function(p){if(p.encouragementNote&&p.encouragementNote.trim()&&!p.encouragementChecklistMigrated){var id="enc-legacy-"+p.id;if(!st.followups.some(function(f){return f.id===id;}))st.followups.push({id:id,personId:p.id,kind:"encouragement",text:p.encouragementNote,done:false});p.encouragementChecklistMigrated=true;}if(!p.prayerNotesChecklistMigrated){[["howToPray","prayer-request-note"],["prayerFocus","prayer-focus-note"]].forEach(function(pair){var text=p[pair[0]],id="prayer-note-"+pair[0]+"-"+p.id;if(text&&text.trim()&&!st.followups.some(function(f){return f.id===id;}))st.followups.push({id:id,personId:p.id,kind:pair[1],text:text,done:false});});p.prayerNotesChecklistMigrated=true;}});return st;}
+function ensureShape(st){st=st||{};["events","tasks","followups","prayers","ideas","echoes","keyDates","checklists"].forEach(function(k){if(!Array.isArray(st[k]))st[k]=[];});var hadGoals=!!(Array.isArray(st.goals)&&st.goals.length)||(Array.isArray(st.events)&&st.events.some(function(event){return !!event.goalId;}));if(hadGoals&&typeof window!=="undefined")window._goalDataPurged=true;delete st.goals;st.events=st.events.filter(function(event){return !event.goalId;});if(!Array.isArray(st.calendars))st.calendars=[];if(!Array.isArray(st.people))st.people=[];if(!st.areas)st.areas=emptyAccountState().areas;if(!st.settings)st.settings=JSON.parse(JSON.stringify(DEFAULT_SETTINGS));if(!Array.isArray(st.rhythms))st.rhythms=[];if(!st.categories)st.categories=defaultCategories();var faithDefaults=defaultFaithConfig();if(!st.faithConfig)st.faithConfig=faithDefaults;else{if(!Array.isArray(st.faithConfig.disabledGroups))st.faithConfig.disabledGroups=[];st.faithConfig.groupDescriptions=Object.assign({},faithDefaults.groupDescriptions,st.faithConfig.groupDescriptions||{});}ensureFitnessShape(st);st.people.forEach(function(p){if(p.encouragementNote&&p.encouragementNote.trim()&&!p.encouragementChecklistMigrated){var id="enc-legacy-"+p.id;if(!st.followups.some(function(f){return f.id===id;}))st.followups.push({id:id,personId:p.id,kind:"encouragement",text:p.encouragementNote,done:false});p.encouragementChecklistMigrated=true;}if(!p.prayerNotesChecklistMigrated){[["howToPray","prayer-request-note"],["prayerFocus","prayer-focus-note"]].forEach(function(pair){var text=p[pair[0]],id="prayer-note-"+pair[0]+"-"+p.id;if(text&&text.trim()&&!st.followups.some(function(f){return f.id===id;}))st.followups.push({id:id,personId:p.id,kind:pair[1],text:text,done:false});});p.prayerNotesChecklistMigrated=true;}});return st;}
 var S=load();
 var saveTimer=null,pushTimer=null;
 function save(){if(window.TEND_CLOUD_MODE){if(!window.TendCloudPersistence||!window.TendCloudPersistence.isReady())return;window._tendDirty=true;window.TendCloudPersistence.queue(S);return;}localStorage.setItem(LS_STATE,JSON.stringify(S));window._tendDirty=true;clearTimeout(saveTimer);saveTimer=setTimeout(function(){flash("Saved");},150);if(window.SYNCcfg&&SYNCcfg.auto&&SYNCcfg.token&&typeof schedulePush==="function")schedulePush();}
@@ -131,6 +74,11 @@ function areaScore(id){
  if(rhythmAverage!==null)return rhythmAverage;
  return rawScore(eventsFor(id));
 }
+function areaHasActivity(id){
+ if(eventsFor(id).length>0||S.rhythms.some(function(r){return r.category===id&&!r.disabled;}))return true;
+ return id==="health"&&!!S.fitness&&["rhythms","savedWorkouts","workouts","runs","weighIns"].some(function(key){return S.fitness[key].length>0;});
+}
+function displayAreaScore(id){return areaHasActivity(id)?areaScore(id):null;}
 /* ============ person score: connection-first ============ */
 function personCadenceDays(p){var cc=p.connectCadence||"weekly";if(cc==="daily")return 1;if(cc==="twicewk")return 3.5;if(cc==="weekly")return 7;if(cc==="biweekly")return 14;if(cc==="monthly")return 30;return p.cadenceDays||30;}
 function personCadenceLabel(p){var cc=p.connectCadence||"weekly";return {daily:"daily",twicewk:"twice weekly",weekly:"weekly",biweekly:"every 2 weeks",monthly:"monthly"}[cc]||("every "+(p.cadenceDays||30)+" days");}
@@ -190,7 +138,7 @@ var AREA_IDS=["faith","marriage","parenting","health","finances","friendships"];
 var AREA_ICONS={faith:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16M7 9h10"/></svg>',marriage:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.6-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.4-7 10-7 10z"/></svg>',parenting:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7v9h-6v-6h-4v6H4z"/></svg>',health:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2-5 4 10 2-5h6"/></svg>',finances:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 7.5v9M14.8 9.6c-.6-.8-1.6-1.1-2.8-1.1-1.6 0-2.7.7-2.7 1.9 0 2.5 5.6 1.3 5.6 3.8 0 1.2-1.2 1.9-2.9 1.9-1.3 0-2.4-.4-3-1.2"/></svg>',friendships:'<svg viewBox="0 0 24 24" fill="none" stroke="#3FC68F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9.5" r="2.4"/><path d="M16.2 15.6a4.6 4.6 0 0 1 4.3 3.9"/></svg>'};
 var tab="today",openDetail=null,currentPerson=null;
 function el(id){return document.getElementById(id);}
-function meterBar(v,cls){return '<div class="bar"><i class="'+cls+'" style="width:'+v+'%"></i></div>';}
+function meterBar(v,cls){return '<div class="bar"><i class="'+cls+'" style="width:'+(Number.isFinite(v)?v:0)+'%"></i></div>';}
 function personChip(k){var ps=personScore(k);var c=scoreClass(ps);return '<span class="submeter" data-person="'+k.id+'" title="'+scoreLabel(ps)+'"><span class="sm-dot '+c+'"></span><span class="sm-name">'+esc(k.name)+'</span><span class="sm-bar"><i class="'+c+'" style="width:'+ps+'%"></i></span><span class="sm-num">'+ps+'</span></span>';}
 
 

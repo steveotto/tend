@@ -68,20 +68,6 @@ window.kdSettingsV2=function(){
   });
   out+='<p class="settings-help" style="margin-top:10px">Profile birthdays and anniversaries are managed on each person\'s profile - they show up in Coming up automatically.</p>';
  }
- var tev=(window.TEND_EVENTS||[]).map(function(ev){var v=String(ev.date||'').split('-');return v.length===3?{ev:ev,y:+v[0],m:+v[1],d:+v[2]}:null;}).filter(Boolean).filter(function(x){var t0=new Date();t0.setHours(0,0,0,0);return new Date(x.y,x.m-1,x.d)>=t0;}).sort(function(a,b){return a.y-b.y||a.m-b.m||a.d-b.d;});
- if(tev.length){
-  out+='<div class="kd-derived-head">From calendar \u00b7 read-only</div>';
-  tev.forEach(function(x){
-   out+='<div class="kd-grid kd-derived">'
-    +'<span class="kd-ro">'+esc(x.ev.title||'Tend event')+'</span>'
-    +'<span class="kd-date"><span class="kd-ro-date">'+MOS_FULL[x.m-1]+' '+x.d+'</span></span>'
-    +'<span class="kd-ro-year">\u2014</span>'
-    +'<span class="kd-next">'+kdNextTxt({month:x.m,day:x.d,year:x.y})+'</span>'
-    +'<span class="kd-people-cell"></span>'
-    +'<span></span></div>';
-  });
-  out+='<p class="settings-help" style="margin-top:10px">Calendar events tagged "Tend" in their notes (synced by Littlebird) show up in Coming up automatically.</p>';
- }
  out+='</div>';
  return out;
 };
@@ -108,9 +94,6 @@ window.kdSettingsV2=function(){
   ".updays{margin-left:auto;flex:none;align-self:center}";
  document.head.appendChild(style);
 })();
-/* tend-tagged calendar events (tend-events.json, fed by the GitHub Action) */
-window.TEND_EVENTS=[];
-try{fetch("tend-events.json?bust="+Date.now()).then(function(r){return r.ok?r.json():null;}).then(function(j){if(j&&Array.isArray(j.events)&&j.events.length){window.TEND_EVENTS=j.events;if(typeof render==="function")render();}}).catch(function(){});}catch(e){}
 var MOS_SHORT=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 var DOW_SHORT=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 function upcomingDates(now){
@@ -128,7 +111,6 @@ function upcomingDates(now){
  S.keyDates.forEach(function(k){var who=kdPeopleIds(k).map(function(id){var p=S.people.find(function(q){return q.id===id;});return p?p.name:null;}).filter(Boolean);add((who.length?who.join(' + ')+' \u00b7 ':'')+k.label,+k.month,+k.day,' data-upitem="'+esc(k.id)+'"',kdHasYear(k)?+k.year:null);});
  var HOLS=(typeof majorHolidays!=="undefined"&&majorHolidays)?majorHolidays:[];
  HOLS.forEach(function(h){if(typeof holidayEnabled==="function"&&!holidayEnabled(h.id))return;[today.getFullYear(),today.getFullYear()+1].forEach(function(y){var date=h.date(y),days=Math.round((date-today)/86400000);if(days>=0&&days<=30)rows.push({label:h.name,days:days,date:date,attrs:''});});});
- (window.TEND_EVENTS||[]).forEach(function(ev){var v=String(ev.date||'').split('-');if(v.length!==3)return;var date=new Date(+v[0],+v[1]-1,+v[2]);var days=Math.round((date-today)/86400000);if(days>=0&&days<=30)rows.push({label:ev.title||'Tend event',days:days,date:date,attrs:''});});
  return rows.filter(function(row){return row.days>0;}).sort(function(a,b){return a.days-b.days||a.label.localeCompare(b.label);});
 }
 function calIconHTML(date){
@@ -219,38 +201,6 @@ document.addEventListener("change",function(e){
 
 document.addEventListener("input",function(e){var t=e.target;if(t&&t.id==="kdNewLabel"){var b2=document.getElementById("kdAddInline");if(b2)b2.disabled=!t.value.trim();}});
 document.addEventListener("keydown",function(e){var t=e.target;if(t&&t.id==="kdNewLabel"&&e.key==="Enter"){var b2=document.getElementById("kdAddInline");if(b2&&!b2.disabled)b2.click();}});
-/* ============ calendar: Refresh from iCloud now ============ */
-setInterval(function(){var sb=document.getElementById("calSaveAll");if(!sb)return;if(!document.getElementById("calRefreshNow")){var rb=document.createElement("button");rb.id="calRefreshNow";rb.className="btn ghost";rb.type="button";rb.title="Trigger the iCloud calendar sync now, then refresh the dashboard when fresh events land";rb.textContent="Refresh from iCloud now";sb.parentNode.insertBefore(rb,sb.nextSibling);}},500);
-window._calPollBefore=null;
-window.refreshCalendarNow=function(){
- var tk=(window.SYNCcfg&&SYNCcfg.token)||"";
- if(!tk){flash("Save your GitHub token in the Sync tab first");return;}
- var host=location.hostname.split(".")[0];
- var parts=location.pathname.split("/").filter(Boolean);
- var owner=host,repo=parts[0]||"tend";
- var H={"Authorization":"Bearer "+tk,"Accept":"application/vnd.github+json"};
- var api="https://api.github.com/repos/"+owner+"/"+repo;
- fetch("events.json?t="+Date.now()).then(function(r){return r.ok?r.json():null;}).then(function(j){window._calPollBefore=j&&j.synced?j.synced:null;}).catch(function(){});
- fetch(api+"/actions/workflows/calendar.yml/dispatches",{method:"POST",headers:H,body:JSON.stringify({ref:"main"})}).then(function(r){
-  if(r.status===204){flash("Sync triggered - watching for fresh events...");return null;}
-  return fetch(api+"/contents/.calendar-trigger?ref=main",{headers:H}).then(function(g){return g.status===200?g.json():null;}).then(function(j){var b={message:"trigger calendar sync",content:btoa("trigger "+Date.now()),branch:"main"};if(j&&j.sha)b.sha=j.sha;return fetch(api+"/contents/.calendar-trigger",{method:"PUT",headers:H,body:JSON.stringify(b)});}).then(function(r2){flash(r2.ok?"Sync triggered via commit - watching for fresh events...":"Could not trigger ("+r2.status+") - token may not cover this repo");});
- }).catch(function(){flash("Trigger failed - network error");});
- var tries=0;
- var iv=setInterval(function(){
-  tries++;
-  fetch("events.json?t="+Date.now()+"&r="+Math.random()).then(function(r){return r.ok?r.json():null;}).then(function(j){
-   if(j&&j.synced&&j.synced!==window._calPollBefore){
-    clearInterval(iv);
-    try{if(window.clearTendCalendarCache)window.clearTendCalendarCache();else localStorage.removeItem("tend:cal2");}catch(e){}
-    window._calLoading=false;
-    if(typeof loadCalendars==="function")loadCalendars();
-    flash("Calendar refreshed");
-   }
-  }).catch(function(){});
-  if(tries>=24)clearInterval(iv);
- },7500);
-};
-document.addEventListener("click",function(e){var t=e.target;if(t&&t.closest&&t.closest("#calRefreshNow")){e.preventDefault();window.refreshCalendarNow();}});
 /* ============ love language icons ============ */
 var LL_ICONS={
  wa:{t:"Words of affirmation",svg:'<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#34A853" d="M12 3C6.9 3 3 6.4 3 10.6c0 2.3 1.2 4.3 3.1 5.7-.1.9-.6 2.3-1.8 3.7 2.2-.3 3.9-1.1 5-1.9.9.2 1.8.3 2.7.3 5.1 0 9-3.4 9-7.8S17.1 3 12 3z"/><path d="M8 9h8M8 12.5h5.5" stroke="#fff" stroke-width="1.7" stroke-linecap="round" fill="none"/></svg>'},
