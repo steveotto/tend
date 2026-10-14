@@ -31,12 +31,13 @@ function applyBadgeColors(){
  var colors=badgeColorSettings(),root=document.documentElement;
  Object.keys(colors).forEach(function(key){root.style.setProperty("--badge-"+key+"-color",colors[key]);});
 }
-var DEFAULT_ACTION_COLORS={rhythm:"#246B52",spark:"#D4A43A",prayer:"#8B78A6"};
-var LEGACY_ACTION_PALETTE_COLORS={rhythm:"#246B52",spark:"#67C5A3",prayer:"#5E6B63"};
+var DEFAULT_ACTION_COLORS={rhythm:"#246B52",spark:"#D4A43A",prayer:"#8B78A6",fitness:"#3D7357"};
+var LEGACY_ACTION_PALETTE_COLORS={rhythm:"#246B52",spark:"#67C5A3",prayer:"#5E6B63",fitness:"#3D7357"};
 var CALIBRATED_ACTION_PALETTES={
  rhythm:{background:"#E3F6ED",border:"#B8E1CA",text:"#1C5844",hover:"#D2EEDD",active:"#C4E8D4",focus:"#1C5844"},
  spark:{background:"#FFF3C4",border:"#E8CF74",text:"#735B16",hover:"#FCE9A2",active:"#F7DF82",focus:"#735B16"},
- prayer:{background:"#F0EAF5",border:"#D2C5DF",text:"#705A8D",hover:"#E6DCEE",active:"#DCCEE8",focus:"#705A8D"}
+ prayer:{background:"#F0EAF5",border:"#D2C5DF",text:"#705A8D",hover:"#E6DCEE",active:"#DCCEE8",focus:"#705A8D"},
+ fitness:{background:"#E9F2EC",border:"#B9CDBF",text:"#315B42",hover:"#DCE9E0",active:"#CFDFD4",focus:"#315B42"}
 };
 function actionColorSettings(){
  var stored=settings().actionColors||{},legacy=settings().badgeColors||{},colors={};

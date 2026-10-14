@@ -71,6 +71,10 @@ function tendRhythmCardContentHTML(record,options){
 }
 function tendRhythmCardHTML(record,options){
  record=record||{};options=options||{};
+ if(options.fitnessVariantHTML!==undefined){
+  var variantClass=String(options.fitnessVariantClass||"").replace(/[^a-z0-9_-]/gi,"");
+  return '<article class="rhythm-card card fitness-today-rhythm-card'+(variantClass?" "+variantClass:"")+'">'+options.fitnessVariantHTML+'</article>';
+ }
  function attrs(values){
   return Object.keys(values||{}).map(function(name){
    if(!/^[a-z][a-z0-9-]*$/i.test(name))return "";
@@ -80,14 +84,16 @@ function tendRhythmCardHTML(record,options){
  var title=String(options.title||record.text||"(unnamed rhythm)"),description=String(options.description!==undefined?options.description:record.description||"").trim();
  var score=Number.isFinite(options.score)?options.score:null,scoreText=score===null?"—":score+"%",scoreClass=String(options.scoreClass||"neutral");
  var editAction=options.editAttributes?'<button type="button" class="rhythm-card__edit"'+attrs(options.editAttributes)+' aria-label="Edit '+esc(title)+'" title="Edit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l4.2-.8L20 7.4 16.6 4 4.8 15.8Z"/></svg></button>':"";
- var tendAction='<button type="button" class="btn mini rhythm-card__tend"'+attrs(options.tendAttributes)+' title="Record a moment of care">Tend</button>';
+ var actionClass=String(options.actionClassName||"").replace(/[^a-z0-9_-]/gi,""),tendAction='<button type="button" class="btn mini rhythm-card__tend'+(actionClass?" "+actionClass:"")+'"'+(options.actionDisabled?' disabled aria-disabled="true"':"")+attrs(options.tendAttributes)+' title="'+esc(options.actionTitle||"Record a moment of care")+'">'+esc(options.actionLabel||"Tend")+'</button>';
  var chartAction=options.showScore===false?"":'<button type="button" class="rhythm-card__score '+esc(scoreClass)+'"'+attrs(options.historyAttributes)+' aria-label="Rhythm health '+(score===null?"unknown":score+"%")+'. View chart." title="View rhythm health chart"><span>'+scoreText+'</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17M8 16v-5m5 5V6m5 10V9"/></svg></button>';
  var people=options.peopleBadgesHTML||"",categories=options.categoryBadgesHTML||"",remove=options.removeAttributes?'<button type="button" class="rhythm-card__remove"'+attrs(options.removeAttributes)+' aria-label="'+esc(options.removeLabel||"Remove "+title)+'" title="'+esc(options.removeTitle||"Remove")+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m3 3v7m6-7v7"/></svg></button>':"";
  var frequency=options.frequency||{},time=options.time||{},last=options.lastTended||{};
- return '<article class="rhythm-card card">'
+ var cardClass=String(options.cardClassName||"").replace(/[^a-z0-9_-]/gi,"");
+ return '<article class="rhythm-card card'+(cardClass?" "+cardClass:"")+'">'
   +'<div class="rhythm-card__main"><div class="rhythm-card__top"><div class="rhythm-card__heading"><div class="rhythm-card__title-line"><strong class="tend-type-title">'+esc(title)+'</strong>'+editAction+'</div>'
   +(description?'<div class="tend-type-description">'+esc(description)+'</div>':'<div class="tend-type-description no-details">No details...</div>')
   +'</div><div class="rhythm-card__actions">'+tendAction+chartAction+'</div></div>'
+  +(options.extensionHTML||"")
   +(people||categories||remove?'<div class="rhythm-card__badges">'+people+categories+remove+'</div>':"")
   +'</div><footer class="rhythm-card__meta" aria-label="Rhythm schedule and history">'
   +'<span class="rhythm-card__meta-item" aria-label="Frequency: '+esc(frequency.full||frequency.label||"")+'">'+(options.frequencyIconHTML||"")+'<span class="rhythm-card__meta-text"><span class="rhythm-card__meta-wide">'+esc(frequency.label||"")+'</span><span class="rhythm-card__meta-narrow">'+esc(frequency.narrow||frequency.label||"")+'</span></span></span>'

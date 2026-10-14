@@ -171,6 +171,7 @@ function render(){var existingPersonSettingsModal=el("personSettingsModal");if(e
  else if(tab==="echo")v.innerHTML=renderEcho();
  else if(tab==="offload")v.innerHTML=renderOffload();
  else if(tab==="settings")v.innerHTML=renderSettings();
+ if(typeof fitnessRenderDialogPortal==="function")fitnessRenderDialogPortal();
  if(currentArea==="faith"){var faithPage=v.querySelector(".faith-page");if(faithPage&&tendFaithScrollBuffer)faithPage.style.paddingBottom=tendFaithScrollBuffer+"px";}
  var personSettingsModal=tab==="people"&&currentPerson?v.querySelector("#personSettingsModal"):null;if(personSettingsModal){document.body.appendChild(personSettingsModal);var relationSelect=personSettingsModal.querySelector('select[data-pfield="relation"]');if(relationSelect&&typeof window.unifyRelSelect==="function")window.unifyRelSelect(relationSelect);}
  sizeProfileTabPanels(v);
@@ -331,15 +332,18 @@ function planRhythmCardHTML(it){
   record=owner&&(owner.rhythms||[]).find(function(item){return item.id===ids[1];});
  }else if(it.faithRhythm){
   ownerId="faith";record=typeof faithFindRhythm==="function"?faithFindRhythm(it.faithRhythm):null;
+ }else if(it.fitnessRhythm){
+  record=fitnessRhythmRecords().find(function(item){return item.id===it.fitnessRhythm;});
+  if(record&&typeof window.fitnessSharedRhythmCardHTML==="function")return window.fitnessSharedRhythmCardHTML(record,{completed:!!it.fitnessCompleted});
  }
  if(!record)return "";
  var score=rhythmScore(record),metadata=window.tendRhythmCardMetadata(record);
  return tendRhythmCardHTML(record,{title:record.text||"(unnamed rhythm)",description:record.description,score:Number.isFinite(score)?score:null,scoreClass:scoreClass(score),
-  peopleBadgesHTML:planRhythmCardBadges(it),categoryBadgesHTML:"",
+  peopleBadgesHTML:planRhythmCardBadges(it),categoryBadgesHTML:it.fitnessRhythm&&typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges({areas:["health"]}):"",
   frequency:metadata.frequency,time:metadata.time,lastTended:metadata.lastTended,frequencyIconHTML:metadata.frequencyIconHTML,timeIconHTML:metadata.timeIconHTML,lastIconHTML:metadata.lastIconHTML,
-  tendAttributes:it.rhythm?{"data-tend-open":"person-rhythm","data-person-id":ownerId,"data-rhythm-id":String(it.rhythm).split("|")[1]}:{"data-tend-open":"faith-rhythm","data-rhythm-id":it.faithRhythm},
-  editAttributes:it.rhythm?{"data-plan-edit-rhythm":it.rhythm}:null,
-  historyAttributes:it.rhythm?{"data-rhyhistory":it.rhythm}:{"data-faith-rhythm-history":it.faithRhythm}
+  tendAttributes:it.fitnessRhythm?{"data-tend-open":"fitness-rhythm","data-rhythm-id":it.fitnessRhythm}:it.rhythm?{"data-tend-open":"person-rhythm","data-person-id":ownerId,"data-rhythm-id":String(it.rhythm).split("|")[1]}:{"data-tend-open":"faith-rhythm","data-rhythm-id":it.faithRhythm},
+  editAttributes:it.fitnessRhythm?{"data-fitness-rhythm-edit":it.fitnessRhythm}:it.rhythm?{"data-plan-edit-rhythm":it.rhythm}:null,
+  historyAttributes:it.fitnessRhythm?{"data-rhyhistory":"fitness|"+it.fitnessRhythm}:it.rhythm?{"data-rhyhistory":it.rhythm}:{"data-faith-rhythm-history":it.faithRhythm}
  });
 }
 function planItemFooter(it,meta,sub){
@@ -371,6 +375,7 @@ function planCandidates(bid,curBid){
  if(typeof faithActiveRhythms==="function"&&typeof rhythmScheduledToday==="function"){
   faithActiveRhythms().forEach(function(r){if(r.tod!==bid||!rhythmScheduledToday(r))return;out.push({scheduled:true,calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),faithRhythm:r.id,faithGroup:r.faithGroup,area:"faith",label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,false)});});
  }
+ (typeof fitnessRhythmRecords==="function"?fitnessRhythmRecords():[]).forEach(function(source){var r=Object.assign({},source,{type:source.fitnessType}),today=todayStr();if(r.paused||(r.tod||"anytime")!==bid||!fitnessRhythmScheduled(r,today))return;out.push({scheduled:!!r.tod,calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),fitnessRhythm:r.id,fitnessCompleted:fitnessRhythmCompletionToday(r,today),label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,false)});});
  return out;
 }
 function planAnytimeCandidates(){
@@ -381,12 +386,14 @@ function planAnytimeCandidates(){
  if(typeof faithActiveRhythms==="function"&&typeof rhythmScheduledToday==="function"){
   faithActiveRhythms().forEach(function(r){if(r.tod!=="anytime"||!rhythmScheduledToday(r))return;out.push({scheduled:false,calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),faithRhythm:r.id,faithGroup:r.faithGroup,area:"faith",label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,false)});});
  }
+ (typeof fitnessRhythmRecords==="function"?fitnessRhythmRecords():[]).forEach(function(source){var r=Object.assign({},source,{type:source.fitnessType}),today=todayStr();if(r.paused||(r.tod||"anytime")!=="anytime"||!fitnessRhythmScheduled(r,today))return;out.push({scheduled:false,calendarDay:r.freq==="custom",period:rhythmPeriod(r),waitDays:rhythmDaysSince(r),fitnessRhythm:r.id,fitnessCompleted:fitnessRhythmCompletionToday(r,today),label:r.text,description:r.description||"",sub:tendRhythmMetaLabel(r,null,false)});});
  return planUniqueItems(out);
 }
 function planItemStableKey(item){
  if(item.taskId)return "task:"+item.taskId;
  if(item.rhythm)return "rhythm:"+item.rhythm;
  if(item.faithRhythm)return "faith-rhythm:"+item.faithRhythm;
+ if(item.fitnessRhythm)return "fitness-rhythm:"+item.fitnessRhythm;
  if(item.spark)return "spark:"+item.spark;
  return null;
 }
@@ -506,9 +513,9 @@ function planBlockCard(viewId,curId,focusBlocks){
   return '<div class="current-plan-summary'+(weather?" has-weather":"")+'"><div class="current-plan-topline"><div class="current-plan-heading-controls">'+heading+'</div></div>'+weatherSlot+'</div>'+segments+'<div class="home-plan-context-row"><div class="home-plan-context">'+esc(subtitle)+'</div><span class="current-plan-item-count" aria-label="'+esc(countLabel)+'"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3h8M5.5 8h8M5.5 13h8M2.5 3h.01M2.5 8h.01M2.5 13h.01"/></svg>'+esc(countLabel)+'</span></div>';
  }
  function itemHTML(it){
-  if(it.rhythm||it.faithRhythm){var rhythmCard=planRhythmCardHTML(it);if(rhythmCard)return rhythmCard;}
-  var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.faithRhythm?'<button type="button" class="btn mini" data-tend-open="faith-rhythm" data-rhythm-id="'+esc(it.faithRhythm)+'">Tend</button>':(it.prayer?'<button type="button" class="btn mini" data-pray="'+esc(it.prayer)+'">Pray</button>':(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>')));
-  var meta=planItemMetaBar(it.sub,!!(it.rhythm||it.faithRhythm));
+  if(it.rhythm||it.faithRhythm||it.fitnessRhythm){var rhythmCard=planRhythmCardHTML(it);if(rhythmCard)return rhythmCard;}
+  var btn=it.rhythm?rhyDoneBtn(it.rhythm):(it.faithRhythm?'<button type="button" class="btn mini" data-tend-open="faith-rhythm" data-rhythm-id="'+esc(it.faithRhythm)+'">Tend</button>':(it.fitnessRhythm?'<button type="button" class="btn mini" data-tend-open="fitness-rhythm" data-rhythm-id="'+esc(it.fitnessRhythm)+'">Tend</button>':(it.prayer?'<button type="button" class="btn mini" data-pray="'+esc(it.prayer)+'">Pray</button>':(it.spark?'<button class="btn mini sparkbtn" data-sparkdo="'+it.spark+'">Do it</button>':'<button class="btn mini" data-plandone="'+encodeURIComponent(JSON.stringify(it.log))+'" data-taskid="'+(it.taskId||"")+'">Done</button>'))));
+  var meta=planItemMetaBar(it.sub,!!(it.rhythm||it.faithRhythm||it.fitnessRhythm));
   return '<div class="planitem"><div class="pi-main">'+planItemCopy(it,btn)+'</div>'+planItemTopRow(it)+planItemFooter(it,meta,it.sub)+'</div>';
  }
  var nonempty=groups.filter(function(group){return group.items.length>0;}),emptyMessage=itemType==="anytime"?"No eligible Anytime rhythms.":itemType==="all-day"?"No eligible All-day items.":"Nothing queued - all items tended.",body=nonempty.length?nonempty.map(function(group){return '<section class="current-plan-item-group"'+(group.title?' aria-label="'+esc(group.title)+'"':"")+'>'+(group.title?'<h3 class="current-plan-item-group-title">'+esc(group.title)+'</h3>':"")+'<div class="current-plan-item-group-items">'+group.items.map(itemHTML).join("")+'</div></section>';}).join(""):'<div class="empty plan-empty-card">'+esc(emptyMessage)+'</div>';
@@ -739,15 +746,24 @@ function tendAssociationCommit(type,ownerId,itemId,record){
 }
 function rhythmPickerRecord(ownerId,rid){
  if(ownerId==="faith")return faithRhythmDraft&&(rid==="draft"?!faithRhythmDraft.id:faithRhythmDraft.id===rid)?faithRhythmDraft:null;
+ if(ownerId==="fitness-workout"){
+  if(rid==="draft"&&typeof fitnessDialog!=="undefined"&&fitnessDialog&&fitnessDialog.kind==="savedWorkout")return fitnessDialog.workoutDraft||(fitnessDialog.workoutDraft={id:"draft",name:"",muscleIds:[],sharedWith:[]});
+  return (S.fitness&&S.fitness.savedWorkouts||[]).find(function(record){return record.id===rid;})||null;
+ }
+ if(ownerId==="fitness"){
+  if(fitnessRhythmEditor&&String(fitnessRhythmEditor.record.id||"draft")===rid)return fitnessRhythmEditor.record;
+  return (S.areaRhythms||[]).find(function(record){return record.id===rid&&["workout","cardio","weighin"].indexOf(record.fitnessType)>=0;})||null;
+ }
  return rid==="draft"?(rhythmDraft&&rhythmDraft.pid===ownerId?rhythmDraft:null):(rhythmEditDraft&&rhythmEditDraft.id===rid?rhythmEditDraft:null);
 }
 function rhythmPickerControlsHTML(ownerId,r,idf,excludeFaith){
  var categories=typeof window.tendRhythmCategoryIds==="function"?window.tendRhythmCategoryIds(r):(r.areas||[]);
  if(excludeFaith)categories=categories.filter(function(id){return id!=="faith";});
  var categoryNames={faith:"Faith",marriage:"Marriage",parenting:"Parenting",health:"Health & Fitness",finances:"Finances",friendships:"Friendships"};
- var categoryChips=categories.map(function(id){return '<span class="rhythm-picker-chip category-selected">'+(AREA_ICONS[id]||"")+esc(categoryNames[id]||id)+'</span>';}).join("");
+ var categoryChips=categories.map(function(id){var label=id==="health"&&ownerId==="fitness"&&r.healthSubcategory?categoryNames[id]+" · "+({strength:"Strength",cardio:"Cardio",weight:"Weight"}[r.healthSubcategory]||""):categoryNames[id]||id;return '<span class="rhythm-picker-chip category-selected">'+(AREA_ICONS[id]||"")+esc(label)+'</span>';}).join("");
  var peopleChips=(r.sharedWith||[]).map(function(id){var person=S.people.find(function(x){return x.id===id;});return person?'<span class="rhythm-picker-person">'+personAvatar(person,22)+esc(person.name)+'</span>':"";}).join("");
- return '<div class="rhythm-picker-controls"><div class="rhythm-picker-row"><button type="button" class="rhythm-picker-trigger" data-rhythm-picker-open="categories|'+esc(idf)+'">Add categories</button>'+categoryChips+'</div><div class="rhythm-picker-row"><button type="button" class="rhythm-picker-trigger" data-rhythm-picker-open="people|'+esc(idf)+'">Add people</button>'+peopleChips+'</div></div>';
+ var fitnessCategory=ownerId==="fitness"&&categories.indexOf("health")!==-1?'<label class="rhythm-picker-subcategory">Health &amp; Fitness subcategory<select data-rhythm-health-subcategory="'+esc(idf)+'"><option value="strength"'+(r.healthSubcategory==="strength"?" selected":"")+'>Strength</option><option value="cardio"'+(r.healthSubcategory==="cardio"?" selected":"")+'>Cardio</option><option value="weight"'+(r.healthSubcategory==="weight"?" selected":"")+'>Weight</option></select></label>':"";
+ return '<div class="rhythm-picker-controls"><div class="rhythm-picker-row"><button type="button" class="rhythm-picker-trigger" data-rhythm-picker-open="categories|'+esc(idf)+'">Add categories</button>'+categoryChips+'</div>'+fitnessCategory+'<div class="rhythm-picker-row"><button type="button" class="rhythm-picker-trigger" data-rhythm-picker-open="people|'+esc(idf)+'">Add people</button>'+peopleChips+'</div></div>';
 }
 function rhythmPickerModalHTML(){
  var picker=rhythmPickerDraft;if(!picker)return "";
@@ -1144,6 +1160,7 @@ function freeMomentHTML(){
 }
 /* ============ area subpages ============ */
 function renderArea(id){
+ if(id==="health"&&typeof renderFitnessPage==="function")return renderFitnessPage();
  var v=areaScore(id),c=scoreClass(v);
  var kids=S.people.filter(function(p){return p.area===id;});
  var out=tendSectionHeaderHTML({title:S.areas[id].name,metadata:scoreLabel(v),style:"margin-top:2px"});

@@ -52,7 +52,7 @@ test("Person health detail card is a full-area keyboard-accessible navigation ta
   assert.match(personOverviewSource, /<span class="person-health-detail-icon" aria-hidden="true">/);
   assert.match(styles, /\.person-profile-page \.person-health-detail\{position:relative\}/);
   assert.match(styles, /\.person-profile-page \.person-health-detail-link\{position:absolute;z-index:2;inset:0;width:100%;height:100%/);
-  assert.match(indexSource, /app-actions\.js\?v=20261012-faith-standalone-prayer-requests/);
+  assert.match(indexSource, /app-actions\.js\?v=20261015-fitness-rhythms/);
   assert.match(styles, /\.today-with-person\{display:grid;gap:12px/);
 });
 
@@ -288,7 +288,7 @@ test("Home, Person, and category rhythm cards share one renderer and card struct
   assert.doesNotMatch(todayCard, /rhythm-card__edit|rhythm-card__score/);
   assert.match(source, /function tendRhythmCardHTML\(/);
   assert.match(source, /var chartAction=options\.showScore===false\?"":/);
-  assert.equal((source.match(/<article class="rhythm-card card">/g) || []).length, 1);
+  assert.match(source, /return '<article class="rhythm-card card'\+\(cardClass\?" "\+cardClass:""\)\+'">'/);
   assert.match(homeRhythmSource, /function planRhythmCardHTML\(it\)/);
   assert.match(homeRhythmSource, /return tendRhythmCardHTML\(record,/);
   const todayRhythmSource = homeRhythmSource.match(/function rhyRowQ\(r,dim\)\{[\s\S]*?\n \}/)[0];
@@ -563,13 +563,13 @@ test("Faith Prayer requests use shared selection for cards, counts, and sessions
   assert.match(faithSource, /faithPrayerSession\.prayedIds\.indexOf\(prayer\.id\)<0/);
   assert.match(faithSource, /Only Prayed records a prayer\./);
   assert.match(faithSource, /Request '\+\(faithPrayerSession\.index\+1\)\+' of '\+ids\.length/);
-  assert.match(faithSource, /faithViewPanelHTML\("prayer",faithPrayerRequestsHTML\(\)\)[\s\S]*faithViewPanelHTML\("practices",faithPracticeOverviewHTML\(selected\)\+\(faithShowAllRhythms\?faithAllRhythmsHTML\(\):faithPracticeContent\(selected\)\)\)/);
+  assert.match(faithSource, /faithViewPanelHTML\("practices",faithPracticeOverviewHTML\(selected\)\+\(faithShowAllRhythms\?faithAllRhythmsHTML\(\):faithPracticeContent\(selected\)\)\)[\s\S]*faithViewPanelHTML\("today",faithTodayHTML\(\)\)[\s\S]*faithViewPanelHTML\("prayer",faithPrayerRequestsHTML\(\)\)/);
   assert.match(faithSource, /function faithPrayerAllMatches\(p\)\{[\s\S]*?faithPrayerPeopleMatch\(p,selectedPeople,groups\)/);
   assert.doesNotMatch(faithSource.match(/function faithPrayerAllMatches\(p\)\{([\s\S]*?)\n\}/)[1], /faithSelectedGroup/);
   assert.match(faithSource, /function faithPracticeHealthParts\(\)\{[\s\S]*?avg\(faithActivePrayers\(\)\.map\(function\(p\)\{return prayerScore\(p\);\}\)\)/);
-  assert.match(faithSource, /var FAITH_MAIN_VIEWS=\["today","prayer","practices"\]/);
-  assert.match(faithSource, /faithMainView="today",faithMainViewInitialized=false/);
-  assert.match(faithSource, /legacyTab==="prayer"\|\|legacyTab==="requests"\?"prayer":legacyTab==="practices"\?"practices":"today"/);
+  assert.match(faithSource, /var FAITH_MAIN_VIEWS=\["practices","today","prayer"\]/);
+  assert.match(faithSource, /faithMainView="practices",faithMainViewInitialized=false/);
+  assert.match(faithSource, /legacyTab==="prayer"\|\|legacyTab==="requests"\?"prayer":legacyTab==="today"\?"today":"practices"/);
   assert.match(faithSource, /faithSetMainView\(FAITH_MAIN_VIEWS\[nextViewIndex\],true\)/);
   assert.match(faithSource, /function faithViewPanelHTML\(view,content\)[\s\S]*?data-faith-view-panel/);
   assert.match(faithSource, /function faithPracticeOverviewHTML\(selected\)[\s\S]*faithSectionNavHTML\(selected\)/);
@@ -1188,7 +1188,7 @@ test("Faith Today keeps scheduled rhythms and Sparks without its Prayer entry wi
   assert.match(styles, /\.faith-practice-toolbar\{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:24px 0 14px\}/);
   assert.match(styles, /\.faith-nav-score-unavailable\{background:transparent;color:var\(--ink-soft\)/);
   assert.match(indexSource, /Newsreader:ital,opsz,wght@0,6\.\.72,400;0,6\.\.72,500/);
-  assert.match(indexSource, /faith-practice-hierarchy/);
+  assert.match(indexSource, /health-fitness/);
   assert.match(styles, /\.faith-prayer-time-group\{display:grid;gap:10px/);
   assert.match(styles, /\.faith-prayer-content,.faith-prayer-row,.faith-prayer-hub \.faith-profile-prayer-row\{box-sizing:border-box;width:100%;min-width:0\}/);
   assert.match(styles, /\.faith-today-subheading\{margin:28px 0 12px\}/);
@@ -1219,8 +1219,8 @@ test("Faith overview keeps practice content inline in the Practices tab", () => 
   assert.doesNotMatch(practiceHeadingHTML, /faith-practice-focus/);
   const faithRender = extractFunction("renderFaithPage");
   assert.ok(faithRender.includes('out+=faithSettingsHTML()+faithHealthHTML()+\'<div class="faith-views-content">\'+faithViewNavHTML();'));
-  assert.match(faithSource, /var FAITH_MAIN_VIEWS=\["today","prayer","practices"\]/);
-  assert.match(faithSource, /faithViewPanelHTML\("today",faithTodayHTML\(\)\)[\s\S]*faithViewPanelHTML\("prayer",faithPrayerRequestsHTML\(\)\)[\s\S]*faithViewPanelHTML\("practices",faithPracticeOverviewHTML\(selected\)\+\(faithShowAllRhythms\?faithAllRhythmsHTML\(\):faithPracticeContent\(selected\)\)\)/);
+  assert.match(faithSource, /var FAITH_MAIN_VIEWS=\["practices","today","prayer"\]/);
+  assert.match(faithSource, /faithViewPanelHTML\("practices",faithPracticeOverviewHTML\(selected\)\+\(faithShowAllRhythms\?faithAllRhythmsHTML\(\):faithPracticeContent\(selected\)\)\)[\s\S]*faithViewPanelHTML\("today",faithTodayHTML\(\)\)[\s\S]*faithViewPanelHTML\("prayer",faithPrayerRequestsHTML\(\)\)/);
   assert.equal((faithRender.match(/faithPracticeOverviewHTML\(selected\)/g) || []).length, 1);
   assert.ok(faithRender.indexOf("faithHealthHTML()") < faithRender.indexOf("faithViewNavHTML()"));
   assert.ok(faithRender.indexOf("faithViewNavHTML()") < faithRender.indexOf('faithViewPanelHTML("practices"'));
@@ -1231,9 +1231,9 @@ test("Faith overview keeps practice content inline in the Practices tab", () => 
   assert.match(faithSource, /tendSparkCardHTML\(item/);
 
   const initialView = extractFunction("faithInitialMainView");
-  for (const [legacy, expected] of [["requests", "prayer"], ["prayer", "prayer"], ["practices", "practices"], ["notes", "today"], ["rhythms", "today"], [undefined, "today"]]) {
+  for (const [legacy, expected] of [["requests", "prayer"], ["prayer", "prayer"], ["practices", "practices"], ["today", "today"], ["notes", "practices"], ["rhythms", "practices"], [undefined, "practices"]]) {
     const config = { selectedGroup: "Witness", practiceTabs: legacy === undefined ? {} : { Witness: legacy } };
-    const context = { FAITH_GROUPS: groupContext.FAITH_GROUPS, faithMainViewInitialized: false, faithMainView: "today", faithConfig: () => config };
+    const context = { FAITH_GROUPS: groupContext.FAITH_GROUPS, faithMainViewInitialized: false, faithMainView: "practices", faithConfig: () => config };
     vm.createContext(context);
     vm.runInContext(`${initialView};faithInitialMainView("Witness")`, context);
     assert.equal(context.faithMainView, expected);

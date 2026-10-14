@@ -55,7 +55,8 @@ function rhythmHistoryData(person,rhythm,now){
  return {unit:unit,bins:bins,total:bins.reduce(function(total,bin){return total+bin.count;},0),range:unit==="day"&&selectedDays?rangeDays:bins.length,selectedDays:selectedDays,scheduledDays:selectedWeekdays};
 }
 function openRhythmHistory(key,showOccurrences){
- var ids=key.split('|'),isFaith=ids[0]==="faith",isArea=ids[0]==="area-rhythm",person=isFaith?{id:"faith",name:"Faith"}:isArea?{id:"area-rhythm:"+ids[1],name:S.areas[ids[1]]?S.areas[ids[1]].name:"Category"}:S.people.find(function(p){return p.id===ids[0];}),rhythm=isFaith?S.rhythms.find(function(r){return r.id===ids[1]&&r.category==="faith";}):isArea?(S.areaRhythms||[]).find(function(r){return r.id===ids[2]&&Array.isArray(r.areas)&&r.areas.indexOf(ids[1])!==-1;}):person&&(person.rhythms||[]).find(function(r){return r.id===ids[1];});if(!rhythm)return;
+ var ids=key.split('|'),isFaith=ids[0]==="faith",isArea=ids[0]==="area-rhythm",isFitness=ids[0]==="fitness",person=isFaith?{id:"faith",name:"Faith"}:isArea?{id:"area-rhythm:"+ids[1],name:S.areas[ids[1]]?S.areas[ids[1]].name:"Category"}:isFitness?{id:"health",name:"Health & Fitness"}:S.people.find(function(p){return p.id===ids[0];}),rhythm=isFaith?S.rhythms.find(function(r){return r.id===ids[1]&&r.category==="faith";}):isArea?(S.areaRhythms||[]).find(function(r){return r.id===ids[2]&&Array.isArray(r.areas)&&r.areas.indexOf(ids[1])!==-1;}):isFitness?fitnessRhythmRecords().find(function(r){return r.id===ids[1];}):person&&(person.rhythms||[]).find(function(r){return r.id===ids[1];});if(!rhythm)return;
+ if(isFitness)rhythm=Object.assign({},rhythm,{type:rhythm.fitnessType});
  var previous=document.getElementById('rhythmHistoryDialog');if(previous)previous.remove();
  var data=rhythmHistoryData(person,rhythm),details=rhythmFreqLabel(rhythm)+(rhythm.tod&&rhythm.tod!=="anytime"?" · "+(TODS[rhythm.tod]||rhythm.tod):"");
  var events=S.events.filter(function(event){return event.rhythmId===rhythm.id&&Number.isFinite(event.ts);}).sort(function(a,b){return b.ts-a.ts;});
@@ -68,7 +69,9 @@ function openRhythmHistory(key,showOccurrences){
   var remove=e.target.closest('[data-history-delete]');if(!remove)return;
   var eventId=remove.getAttribute('data-history-delete'),event=S.events.find(function(item){return item.id===eventId&&item.rhythmId===rhythm.id;});
   if(!event)return;
-  S.events=S.events.filter(function(item){return item!==event;});save();dialog.close();render();openRhythmHistory(key,true);flash('Tend removed from history');
+  if(event.fitnessLogId){var logId=event.fitnessLogId,collection=["workouts","runs","weighIns"].find(function(name){return (S.fitness[name]||[]).some(function(item){return item.id===logId;});});if(collection)fitnessStoreDelete(collection,logId);else{S.events=S.events.filter(function(item){return item!==event;});save();}}
+  else{S.events=S.events.filter(function(item){return item!==event;});save();}
+  dialog.close();render();openRhythmHistory(key,true);flash('Tend removed from history');
  });
  dialog.addEventListener('close',function(){dialog.remove();});document.body.appendChild(dialog);tendShowModal(dialog);var scroll=dialog.querySelector('.history-scroll');scroll.scrollLeft=scroll.scrollWidth;var hint=dialog.querySelector('.history-scroll-hint');if(hint)hint.hidden=scroll.scrollWidth<=scroll.clientWidth+1;
 }

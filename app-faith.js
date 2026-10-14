@@ -1,8 +1,8 @@
 "use strict";
 /* ============ Faith practice page ============ */
 var FAITH_GROUPS=["Sabbath","Prayer","Fasting","Solitude","Generosity","Community","Service","Witness","Scripture","Other"];
-var faithRhythmDraft=null,faithSparkDraft=null,faithSparkEditId=null,faithSparkOwnerId="faith",faithNotesExpanded=false,faithNotesDestinationOpen=false,faithPrayerDraftOpen=false,faithPrayerExpanded=false,faithTodayExpanded=false,faithMainView="today",faithMainViewInitialized=false,faithShowAllRhythms=false,faithSettingsOpen=false,faithPrayerSession=null,dashboardPrayerPeople=null,dashboardPrayerTimeMode="now",personDashboardPrayerTimeModes={},personDashboardPrayerPeople={},prayerSelectionDraft=null,prayerPageTimeMode="now",prayerPagePeople=null,faithRequestPrayerTimeMode=null;
-var FAITH_MAIN_VIEWS=["today","prayer","practices"];
+var faithRhythmDraft=null,faithSparkDraft=null,faithSparkEditId=null,faithSparkOwnerId="faith",faithNotesExpanded=false,faithNotesDestinationOpen=false,faithPrayerDraftOpen=false,faithPrayerExpanded=false,faithTodayExpanded=false,faithMainView="practices",faithMainViewInitialized=false,faithShowAllRhythms=false,faithSettingsOpen=false,faithPrayerSession=null,dashboardPrayerPeople=null,dashboardPrayerTimeMode="now",personDashboardPrayerTimeModes={},personDashboardPrayerPeople={},prayerSelectionDraft=null,prayerPageTimeMode="now",prayerPagePeople=null,faithRequestPrayerTimeMode=null;
+var FAITH_MAIN_VIEWS=["practices","today","prayer"];
 var faithGroupDescriptions={
  Sabbath:"A weekly invitation to pause, delight, and reconnect with God.",
  Prayer:"Build a steady rhythm of prayer and make room to listen.",
@@ -147,7 +147,7 @@ function faithInitialMainView(group){
  if(faithMainViewInitialized)return;
  faithMainViewInitialized=true;
  var legacyTab=(faithConfig().practiceTabs||{})[group];
- faithMainView=legacyTab==="prayer"||legacyTab==="requests"?"prayer":legacyTab==="practices"?"practices":"today";
+ faithMainView=legacyTab==="prayer"||legacyTab==="requests"?"prayer":legacyTab==="today"?"today":"practices";
 }
 function faithSetMainView(view,focus){
  if(FAITH_MAIN_VIEWS.indexOf(view)<0)return;
@@ -560,9 +560,9 @@ function renderFaithPage(){
  var out='<main class="faith-page">'+tendSectionHeaderHTML({title:"Faith",subtitle:"Small practices, tended over time.",className:"faith-page-heading",tagName:"header",trailingHTML:'<button type="button" class="btn ghost faith-sections-toggle" data-faith-settings="1" aria-expanded="'+faithSettingsOpen+'" aria-controls="faith-sections-settings">⚙ Sections</button>'});
  var practiceEditor=faithRhythmDraft?faithRhythmEditorHTML(faithRhythmDraft):faithSparkDraft?faithSparkEditorHTML(faithSparkDraft):"";
  out+=faithSettingsHTML()+faithHealthHTML()+'<div class="faith-views-content">'+faithViewNavHTML();
+ out+=faithViewPanelHTML("practices",faithPracticeOverviewHTML(selected)+(faithShowAllRhythms?faithAllRhythmsHTML():faithPracticeContent(selected)));
  out+=faithViewPanelHTML("today",faithTodayHTML());
  out+=faithViewPanelHTML("prayer",faithPrayerRequestsHTML());
- out+=faithViewPanelHTML("practices",faithPracticeOverviewHTML(selected)+(faithShowAllRhythms?faithAllRhythmsHTML():faithPracticeContent(selected)));
  out+='</div>'+practiceEditor+'</main>';
  return out;
 }
