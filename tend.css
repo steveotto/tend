@@ -1585,7 +1585,7 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .current-plan-topline{grid-column:1;grid-row:1;min-width:0;min-height:24px;justify-content:flex-start}
 .home-dashboard .current-plan-heading-controls{display:flex;align-items:center;gap:8px;min-width:0}
 .home-dashboard .current-plan-time-menu{position:relative;z-index:20;display:inline-block;min-width:0}
-.home-dashboard .planblock .current-plan-time-picker{position:relative;display:inline-flex;align-items:center;min-width:0;gap:12px;margin-left:12px;padding:4px 0;border:0;border-radius:0;background:transparent!important;color:var(--ink)!important;font-size:22px;font-weight:700;line-height:1.35;cursor:pointer;list-style:none}
+.home-dashboard .planblock .current-plan-time-picker{position:relative;display:inline-flex;align-items:center;min-width:max-content;gap:12px;margin-left:12px;padding:4px 0;border:0;border-radius:0;background:transparent!important;color:var(--ink)!important;font-size:22px;font-weight:700;line-height:1.35;white-space:nowrap;cursor:pointer;list-style:none}
 .home-dashboard .current-plan-time-chevron{display:grid;width:28px;height:28px;place-items:center;flex:none;border-radius:8px;background:#E2E6E4;color:var(--ink)}
 .home-dashboard .current-plan-time-chevron svg{display:block;width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .home-dashboard .current-plan-time-picker::-webkit-details-marker{display:none}
@@ -1605,11 +1605,19 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
 .home-dashboard .current-plan-time-option-range{grid-area:range}
 .home-dashboard .current-plan-time-option-count{grid-area:count;justify-self:end;max-width:145px;text-align:right}
 .home-dashboard .current-plan-time-option-range,.home-dashboard .current-plan-time-option-count{min-width:0;color:var(--ink-soft);font-size:12px;white-space:normal;overflow-wrap:anywhere}
-.home-dashboard .home-plan-type-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));box-sizing:border-box;width:min(100%,480px);margin:0 0 6px}
-.home-dashboard .home-plan-type-tabs button{min-width:0;min-height:44px;padding:8px 6px;white-space:normal;overflow-wrap:anywhere}
-.home-dashboard .home-plan-view-heading{min-width:0;margin:0;padding:4px 0;color:var(--ink);font-size:22px;font-weight:700;line-height:1.35;overflow-wrap:anywhere}
+.home-dashboard .home-plan-type-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));box-sizing:border-box;width:min(100%,480px);gap:5px;margin:0 auto 14px;padding:5px;border:1px solid #D8E1DA;border-radius:15px;background:#E7ECE8}
+.home-dashboard .home-plan-type-tabs button{box-sizing:border-box;min-width:0;min-height:48px;padding:8px 6px;border:1px solid transparent;border-radius:10px;background:transparent;color:#526259;font-family:var(--sans);font-size:var(--tend-type-button-label);font-weight:600;line-height:1.25;text-align:center;white-space:normal;overflow-wrap:anywhere;cursor:pointer}
+.home-dashboard .home-plan-type-tabs button[aria-selected=true]{border-color:transparent;background:var(--tend-forest,#246B52);color:#fff;box-shadow:0 1px 2px rgba(32,39,35,.12)}
+.home-dashboard .home-plan-type-tabs button:not([aria-selected=true]):not(:disabled):hover{background:rgba(255,255,255,.55);color:#526259}
+.home-dashboard .home-plan-type-tabs button:active{filter:brightness(.96)}
+.home-dashboard .home-plan-type-tabs button:disabled{cursor:not-allowed;opacity:.55}
+.home-dashboard .home-plan-type-tabs button:focus-visible{position:relative;z-index:1;outline:2px solid var(--tend-forest,#246B52);outline-offset:2px}
+.home-dashboard .home-plan-view-heading{display:flex;align-items:center;box-sizing:border-box;min-width:0;min-height:44px;margin:0;padding:0;color:var(--ink);font-size:22px;font-weight:700;line-height:1.35;overflow-wrap:anywhere}
 .home-dashboard .home-plan-context{min-width:0;margin:0 0 14px;color:var(--ink-soft);font-size:var(--tend-type-metadata);line-height:1.4;overflow-wrap:anywhere}
 .home-dashboard .current-plan-item-count{min-width:0;max-width:60%;white-space:normal;overflow-wrap:anywhere;text-align:right}
+.home-dashboard .home-plan-context-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;min-width:0;margin:0 0 14px}
+.home-dashboard .home-plan-context-row .home-plan-context{min-width:0;margin:0;flex:1 1 auto}
+.home-dashboard .home-plan-context-row .current-plan-item-count{flex:0 1 auto;max-width:min(60%,240px);text-align:right}
 .home-dashboard .current-plan-item-group{display:grid;gap:8px;min-width:0;margin:0 0 18px}
 .home-dashboard .current-plan-item-group:last-child{margin-bottom:0}
 .home-dashboard .current-plan-item-group-title{margin:0;color:var(--ink);font-size:var(--tend-type-title);font-weight:650;line-height:1.3;overflow-wrap:anywhere}
