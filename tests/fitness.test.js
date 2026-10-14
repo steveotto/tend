@@ -744,7 +744,8 @@ test("Health & Fitness is the existing Health area and its goals, forms, and dat
   assert.match(indexSource, /app-fitness-data\.js/);
   assert.match(indexSource, /app-fitness-scoring\.js/);
   assert.match(indexSource, /app-fitness\.js/);
-  assert.match(appSource, /role="tablist" aria-label="Health and Fitness sections"/);
+  assert.match(appSource, /FITNESS_TABS=\[\["strength","Strength"\],\["cardio","Cardio"\],\["weight","Body Weight"\]\]/);
+  assert.match(appSource, /function fitnessPanelHTML\(name,content\)\{[\s\S]*?role="region"/);
   assert.match(appSource, /data-fitness-form="goals"/);
   assert.match(appSource, /data-fitness-form="'\+kind\+'/);
   assert.match(appSource, /kind==="workout"/);
@@ -755,11 +756,15 @@ test("Health & Fitness is the existing Health area and its goals, forms, and dat
   assert.match(dataSource, /fitnessStoreReplaceState\(imported\)/);
 });
 
-test("Fitness summary and Overview use the compact Tend presentation", () => {
+test("Fitness summary follows Faith health styling and section navigation has no duplicate tabs", () => {
   const context = {
-    document: { addEventListener() {} },
+    document: { addEventListener() {}, querySelector() { return { focus() {} }; } },
     window: { addEventListener() {} },
     S: { events: [] },
+    render() {},
+    scoreClass(score) { return score >= 80 ? "green" : score >= 50 ? "yellow" : "red"; },
+    scoreLabel(score) { return score >= 80 ? "Healthy" : score >= 50 ? "Slipping - tend it soon" : "Needs attention now"; },
+    personHealthColor(score) { return score === null ? "#CBD5D0" : "rgb(255,90,69)"; },
     todayStr() { return "2026-10-15"; },
     esc(value) { return String(value).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]); }
   };
@@ -778,18 +783,30 @@ test("Fitness summary and Overview use the compact Tend presentation", () => {
   const scores = vm.runInContext('fitnessPageScores(__data,"2026-10-15")', context);
   context.__scores = scores;
   const summary = vm.runInContext("fitnessSummaryHTML(__scores)", context);
-  const overview = vm.runInContext('fitnessOverview(__data,__scores,"2026-10-15")', context);
+  const activePanel = vm.runInContext('fitnessPanelHTML("strength","Training content")', context);
+  const inactivePanel = vm.runInContext('fitnessPanelHTML("cardio","Cardio content")', context);
   assert.match(fitnessAppSource, /tendSectionHeaderHTML\(\{title:"Health & Fitness",subtitle:"Small practices, tended over time\."/);
   assert.match(summary, /Overall fitness consistency/);
-  assert.match(summary, /class="fitness-summary-progress"/);
-  assert.match(summary, /<strong>—<\/strong>/);
+  assert.match(summary, /faith-health-card fitness-summary-card/);
+  assert.match(summary, /person-health-summaries/);
+  assert.match(summary, /person-health-summary-score red/);
+  assert.match(summary, /class="person-health-summary fitness-summary-link"/);
+  assert.match(summary, /aria-label="View Strength details/);
+  assert.match(summary, /data-fitness-tab="strength"/);
+  assert.match(summary, /data-fitness-tab="cardio"/);
+  assert.match(summary, /data-fitness-tab="weight"/);
+  assert.match(summary, /Weekly goal completion/);
+  assert.match(summary, /class="person-profile-score"/);
+  assert.match(summary, /background:rgb\(255,90,69\)/);
+  assert.match(activePanel, /role="region" aria-label="Strength" id="fitness-panel-strength"/);
+  assert.doesNotMatch(activePanel, / hidden/);
+  assert.match(inactivePanel, /id="fitness-panel-cardio" hidden/);
+  vm.runInContext('fitnessShowTab("cardio")', context);
+  assert.equal(context.fitnessCurrentTab, "cardio");
   assert.doesNotMatch(summary, /Your progress|Consistency &amp; goal progress|physical health/);
-  assert.match(overview, /Chest Day/);
-  assert.match(overview, /data-fitness-log-saved-workout="chest-day"/);
-  assert.match(overview, />Workout<\/button>/);
-  assert.match(overview, /Runs 1 of 2 · Miles 3 of 10/);
-  assert.match(overview, /data-fitness-tab="strength"/);
-  assert.doesNotMatch(overview, /fitness-body-svg|fitness-weight-chart|fitness-week-strip|Manage rhythms/);
+  assert.doesNotMatch(fitnessAppSource, /fitnessTabsHTML|fitnessOverview|fitnessHistoryPanel|fitnessPanelHTML\("(overview|history)"/);
+  assert.match(fitnessAppSource, /function fitnessPanelHTML\(name,content\)\{[\s\S]*?role="region"/);
+  assert.doesNotMatch(fitnessAppSource.match(/function renderFitnessPage\(\)\{[\s\S]*?\n\}/)[0], /fitnessTabsHTML/);
 });
 
 test("Health & Fitness action color drives fitness cards and matching Log buttons", () => {
