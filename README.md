@@ -10,4 +10,8 @@ Structure beats good intention.
 - `logo-data.js` - the supplied brand logo, inlined
 - `brand/` - brand source-of-truth docs; see `brand/BRAND-RULES.md`
 
-Data syncs via the private `tend-data` repo. Live at https://steveotto.github.io/tend/
+Live at https://steveotto.github.io/tend/
+
+## Account sync
+
+Tend's browser client is configured for private email/password accounts with Supabase. The service is not live until the SQL migration and dashboard setup in [docs/supabase-setup.md](docs/supabase-setup.md) are complete. The GitHub Pages app remains static; do not put database passwords, service-role keys, or secret keys in browser code.

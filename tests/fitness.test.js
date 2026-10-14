@@ -17,6 +17,7 @@ const viewSource = fs.readFileSync(path.join(root, "app-views1.js"), "utf8");
 const categorySource = fs.readFileSync(path.join(root, "app-categoryrhythms.js"), "utf8");
 const indexSource = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const settingsSource = fs.readFileSync(path.join(root, "app-settingstabs.js"), "utf8");
+const authSource = fs.readFileSync(path.join(root, "app-auth.js"), "utf8");
 const actionColorsSource = fs.readFileSync(path.join(root, "app-planpills.js"), "utf8");
 const stylesSource = fs.readFileSync(path.join(root, "tend.css"), "utf8");
 
@@ -749,8 +750,8 @@ test("Health & Fitness is the existing Health area and its goals, forms, and dat
   assert.match(appSource, /kind==="workout"/);
   assert.match(appSource, /class="muscle" data-muscle=/);
   assert.match(dataSource, /S\.fitness=data;save\(\)/);
-  assert.match(settingsSource, /id="syncExport"/);
-  assert.match(settingsSource, /id="syncImport"/);
+  assert.match(authSource, /id="syncExport"/);
+  assert.match(authSource, /id="syncImport"/);
   assert.match(dataSource, /fitnessStoreReplaceState\(imported\)/);
 });
 

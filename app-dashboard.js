@@ -133,7 +133,8 @@ function loadCalendars(force){
  var cals=(S.calendars||[]).filter(function(c){return calUrl(c.url);});
  if(!cals.length){window._calLoading=false;if(strip)strip.innerHTML='<div class="empty">No calendars connected - add one in Settings.</div>';return;}
  if(window._calLoading)return;window._calLoading=true;
- var cached=null;try{cached=JSON.parse(localStorage.getItem("tend:cal2")||"null");}catch(e){}
+ var calendarCacheKey=window.tendCalendarCacheKey?window.tendCalendarCacheKey():"tend:cal2";
+ var cached=null;try{cached=JSON.parse(localStorage.getItem(calendarCacheKey)||"null");}catch(e){}
  if(!force&&cached&&Date.now()-cached.at<900000&&cached.n===cals.length){window._calLoading=false;window._calSync=cached.synced||cached.at;renderCalStrip(cached.events);return;}
  if(strip)strip.innerHTML='<div class="empty">Loading calendars...</div>';
  function toEv(x){var m=null;cals.forEach(function(c2){if(x.cal&&c2.name===x.cal)m=c2;});if(!m)m=cals[0];return {t:x.t,s:Date.parse(x.s),e:Date.parse(x.e||x.s),cal:x.cal||m.name,color:m.color||"#4C9AFF",allDay:x.allDay};}
@@ -141,7 +142,7 @@ function loadCalendars(force){
   if(!data||!data.events||!data.events.length)throw new Error("empty");
   window._calLoading=false;window._calSync=data.synced||Date.now();
   var evs=data.events.map(toEv);evs.sort(function(a,b){return a.s-b.s;});
-  localStorage.setItem("tend:cal2",JSON.stringify({at:Date.now(),synced:window._calSync,events:evs,n:cals.length}));
+  localStorage.setItem(calendarCacheKey,JSON.stringify({at:Date.now(),synced:window._calSync,events:evs,n:cals.length}));
   renderCalStrip(evs);
  }).catch(function(){
   var jobs=cals.map(function(ca){
@@ -156,7 +157,7 @@ function loadCalendars(force){
    evs.sort(function(a,b){return a.s-b.s;});
    window._calLoading=false;
    if(errs.length&&cals.length===errs.length){renderCalStrip([],errs);return;}
-   if(!errs.length){window._calSync=Date.now();localStorage.setItem("tend:cal2",JSON.stringify({at:window._calSync,synced:window._calSync,events:evs,n:cals.length}));}
+   if(!errs.length){window._calSync=Date.now();localStorage.setItem(calendarCacheKey,JSON.stringify({at:window._calSync,synced:window._calSync,events:evs,n:cals.length}));}
    renderCalStrip(evs,errs);
   });
  });

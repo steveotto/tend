@@ -1,11 +1,12 @@
 "use strict";
 /* ============ GitHub sync ============ */
 var SYNCcfg=(function(){try{return JSON.parse(localStorage.getItem(LS_SYNC))||{auto:true};}catch(e){return {auto:true};}})();
+if(window.TEND_CLOUD_MODE)SYNCcfg.auto=false;
 window.SYNCcfg=SYNCcfg;
-var TEND_VERSION="v0.1.5";window.TEND_VERSION=TEND_VERSION;
+var TEND_VERSION="v0.1.6";window.TEND_VERSION=TEND_VERSION;
 window._tendDirty=false;
 function ghHeaders(){return {"Authorization":"Bearer "+SYNCcfg.token,"Accept":"application/vnd.github+json"};}
-function updateSyncDot(){var dot=el("syncDot"),lbl=el("syncLabel");if(!SYNCcfg.token){dot.className="syncdot sync-footer";lbl.textContent="local only";}else{dot.className="syncdot sync-footer on";lbl.textContent="synced";}}
+function updateSyncDot(){var dot=el("syncDot"),lbl=el("syncLabel");if(window.TEND_CLOUD_MODE&&window.TendCloudPersistence){var cloudStatus=TendCloudPersistence.getStatus();dot.className="syncdot sync-footer"+(cloudStatus==="Saved"?" on":cloudStatus==="Needs attention"?" err":"");lbl.textContent=cloudStatus;return;}if(!SYNCcfg.token){dot.className="syncdot sync-footer";lbl.textContent="local only";}else{dot.className="syncdot sync-footer on";lbl.textContent="synced";}}
 function updateSyncErr(){var dot=el("syncDot");dot.className="syncdot sync-footer err";el("syncLabel").textContent="sync error";}
 function renderSyncPreservingScroll(){var x=window.scrollX,y=window.scrollY;render();requestAnimationFrame(function(){requestAnimationFrame(function(){window.scrollTo(x,y);});});}
 function schedulePush(){clearTimeout(pushTimer);pushTimer=setTimeout(pushNow,4000);}
@@ -13,21 +14,41 @@ function pushPurgedGoalData(){if(!window._goalDataPurged)return;window._goalData
 function addPersonDraftOpen(){var modal=document.getElementById("addPersonModal");return !!(modal&&modal.classList.contains("open"));}
 function pushNow(){
  if(!SYNCcfg.token||!SYNCcfg.owner||!SYNCcfg.repo){flash("Configure sync first");return;}
+ if(window.TEND_CLOUD_MODE&&window.TendCloudPersistence){
+  if(!confirm("Manually copy this signed-in account's data to the configured GitHub repository?"))return;
+  window.TendCloudPersistence.beginLegacyTransfer().then(function(snapshot){
+   return pushStateToGitHub(snapshot).finally(function(){window.TendCloudPersistence.endLegacyTransfer();});
+  }).catch(function(error){console.error(error);flash(error.message||"Could not start GitHub recovery");});
+  return;
+ }
+ pushStateToGitHub(S);
+}
+function pushStateToGitHub(state){
  var url="https://api.github.com/repos/"+SYNCcfg.owner+"/"+SYNCcfg.repo+"/contents/state.json";
  fetch(url,{headers:ghHeaders()}).then(function(r){
   if(r.status===200)return r.json();if(r.status===404)return {sha:null};throw new Error("repo check failed ("+r.status+")");
  }).then(function(j){
-  var body={message:"Tend sync "+new Date().toISOString(),content:btoa(unescape(encodeURIComponent(JSON.stringify(S,null,2)))),branch:"main"};
+  var uploadState=window.TEND_CLOUD_MODE&&window.TendCloudPersistence?TendCloudPersistence.sanitize(state):state;
+  var body={message:"Tend sync "+new Date().toISOString(),content:btoa(unescape(encodeURIComponent(JSON.stringify(uploadState,null,2)))),branch:"main"};
   if(j&&j.sha)body.sha=j.sha;
   return fetch(url,{method:"PUT",headers:ghHeaders(),body:JSON.stringify(body)});
  }).then(function(r){
   if(!r.ok)throw new Error("push failed ("+r.status+")");
-  SYNCcfg.lastSync=Date.now();window._tendDirty=false;window._goalDataPurged=false;localStorage.setItem(LS_SYNC,JSON.stringify(SYNCcfg));updateSyncDot();flash("Synced to GitHub");if(tab==="sync")renderSyncPreservingScroll();
- }).catch(function(e){console.error(e);updateSyncErr();flash(e.message);});}
+  SYNCcfg.lastSync=Date.now();if(!window.TEND_CLOUD_MODE)window._tendDirty=false;window._goalDataPurged=false;localStorage.setItem(LS_SYNC,JSON.stringify(SYNCcfg));updateSyncDot();flash("Synced to GitHub");if(tab==="settings")renderSyncPreservingScroll();
+ }).catch(function(e){console.error(e);if(window.TEND_CLOUD_MODE)updateSyncDot();else updateSyncErr();flash(e.message);});}
 function pullNow(explicit){
  if(!explicit&&addPersonDraftOpen())return;
  if(!SYNCcfg.token||!SYNCcfg.owner||!SYNCcfg.repo){if(explicit)flash("Configure sync first");return;}
  var url="https://api.github.com/repos/"+SYNCcfg.owner+"/"+SYNCcfg.repo+"/contents/state.json";
+ if(window.TEND_CLOUD_MODE&&explicit){
+  fetch(url,{headers:ghHeaders()}).then(function(r){if(!r.ok)throw new Error("pull failed ("+r.status+")");return r.json();}).then(function(j){
+   var recovered=JSON.parse(decodeURIComponent(escape(atob(j.content))));
+   if(!recovered||typeof recovered!=="object"||Array.isArray(recovered))throw new Error("The GitHub backup is not a Tend state document.");
+   if(!confirm("Import the GitHub recovery copy into this signed-in account? This replaces the current account data; Tend downloads a backup of the current cloud data first. The source GitHub copy will not be changed."))return;
+   return window.TendAuth.replaceAccountState(recovered).then(function(){SYNCcfg.lastSync=Date.now();localStorage.setItem(LS_SYNC,JSON.stringify(SYNCcfg));flash("GitHub recovery copy imported");});
+  }).catch(function(e){console.error(e);flash(e.message||"Could not import the GitHub recovery copy");});
+  return;
+ }
  fetch(url,{headers:ghHeaders()}).then(function(r){
   if(r.status===404){if(explicit)flash("No data in repo yet - push first");return null;}
   if(!r.ok)throw new Error("pull failed ("+r.status+")");return r.json();
@@ -39,8 +60,9 @@ function pullNow(explicit){
   else if(explicit){pushPurgedGoalData();flash("Cloud is older/smaller than local - kept local. Use Force pull (cloud wins) to overwrite.");return;}
   pushPurgedGoalData();
   SYNCcfg.lastSync=Date.now();localStorage.setItem(LS_SYNC,JSON.stringify(SYNCcfg));updateSyncDot();flash("Pulled from GitHub");renderSyncPreservingScroll();
- }).catch(function(e){console.error(e);updateSyncErr();if(explicit)flash(e.message);});}
+ }).catch(function(e){console.error(e);if(window.TEND_CLOUD_MODE)updateSyncDot();else updateSyncErr();if(explicit)flash(e.message);});}
 function forcePullNow(){
+ if(window.TEND_CLOUD_MODE){pullNow(true);return;}
  if(!SYNCcfg.token||!SYNCcfg.owner||!SYNCcfg.repo){flash("Configure sync first");return;}
  if(!confirm("Replace ALL data on this device with the cloud copy? This overwrites local changes."))return;
  var url="https://api.github.com/repos/"+SYNCcfg.owner+"/"+SYNCcfg.repo+"/contents/state.json";
@@ -81,7 +103,7 @@ window.forceRefreshApp=forceRefreshApp;
 document.addEventListener("click",function(e){var t=e.target;if(t&&t.closest&&t.closest("#syncReloadLatest")){e.preventDefault();forceRefreshApp();}});
 el("headDate").textContent=(function(){var d=new Date();var m=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];return d.getDate()+" "+m[d.getMonth()]+" "+d.getFullYear();})();
 updateSyncDot();
-if(SYNCcfg.token)pullNow(false);
+if(SYNCcfg.token&&!window.TEND_CLOUD_MODE)pullNow(false);
 function bootTend(){if(typeof render==="function"){if(document.readyState==="complete"){render();}else{window.addEventListener("load",function(){render();});}}else{setTimeout(bootTend,400);}}
-bootTend();
-window.addEventListener("focus",function(){if(SYNCcfg.token)pullNow(false);});
+if(!window.TEND_CLOUD_MODE)bootTend();
+window.addEventListener("focus",function(){if(SYNCcfg.token&&!window.TEND_CLOUD_MODE)pullNow(false);});

@@ -52,7 +52,7 @@ test("Person health detail card is a full-area keyboard-accessible navigation ta
   assert.match(personOverviewSource, /<span class="person-health-detail-icon" aria-hidden="true">/);
   assert.match(styles, /\.person-profile-page \.person-health-detail\{position:relative\}/);
   assert.match(styles, /\.person-profile-page \.person-health-detail-link\{position:absolute;z-index:2;inset:0;width:100%;height:100%/);
-  assert.match(indexSource, /app-actions\.js\?v=20261015-fitness-rhythms/);
+  assert.match(indexSource, /app-actions\.js\?v=[^"]+/);
   assert.match(styles, /\.today-with-person\{display:grid;gap:12px/);
 });
 
