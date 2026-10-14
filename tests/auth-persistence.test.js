@@ -308,6 +308,7 @@ test("auth UI supports email signup, login, recovery, reset, and logout with Sup
   vm.runInContext(authSource, context);
   await new Promise(resolve => setTimeout(resolve, 5));
   assert.equal(cloud.ready, true, "an existing Supabase session should restore the private account before the app is shown");
+  assert.equal(window.TendAuth.displayName(), "Person");
   assert.equal(authCalls.some(call => call[0] === "getSession"), true);
   const submit = async (id, values) => {
     const form = {

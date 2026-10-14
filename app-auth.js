@@ -495,6 +495,7 @@
     replaceAccountState: replaceCurrentState,
     importLegacy: importLegacy,
     refresh: refreshFromCloudIfSafe,
+    displayName: function () { return profileName; },
     signOut: signOut
   };
   document.addEventListener("submit", handleSubmit);

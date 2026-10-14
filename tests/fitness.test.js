@@ -661,7 +661,7 @@ test("opening a Fitness rhythm keeps the current Today route and opens only its 
 
 test("Fitness rhythms are managed in type-filtered section subtabs", () => {
   assert.doesNotMatch(fitnessAppSource, /\["schedules","Schedules"\]/);
-  assert.match(fitnessAppSource, /\["training","Training"\],\["workouts","Make your workouts"\],\["rhythms","Rhythms"\]/);
+  assert.match(fitnessAppSource, /\["training","Training"\],\["workouts","Workouts"\],\["rhythms","Rhythms"\]/);
   assert.match(fitnessAppSource, /\["progress","Progress"\],\["rhythms","Rhythms"\]/);
   assert.match(fitnessAppSource, /fitnessRhythmListHTML\(data,"workout"\)/);
   assert.match(fitnessAppSource, /fitnessRhythmListHTML\(data,"cardio"\)/);
@@ -672,9 +672,9 @@ test("Fitness rhythms are managed in type-filtered section subtabs", () => {
   assert.match(fitnessAppSource, /data-fitness-rhythm-pause/);
   assert.match(fitnessAppSource, /id==="schedules"\|\|id==="rhythms"/);
   assert.match(viewSource, /if\(r\.paused\|\|/);
-  assert.match(fitnessAppSource, /data-fitness-custom-workout>Log custom workout<\/button>/);
+  assert.match(fitnessAppSource, /data-fitness-custom-workout>Workout<\/button>/);
   assert.match(fitnessAppSource, /Add Rhythm/);
-  assert.match(fitnessAppSource, /Go to Strength → Make your workouts/);
+  assert.match(fitnessAppSource, /Go to Strength → Workouts/);
   assert.match(fitnessAppSource, /Continue editing rhythm/);
   assert.match(fitnessAppSource, /Edit Rhythm/);
   assert.match(fitnessAppSource, /<label>Rhythm name/);
@@ -755,6 +755,43 @@ test("Health & Fitness is the existing Health area and its goals, forms, and dat
   assert.match(dataSource, /fitnessStoreReplaceState\(imported\)/);
 });
 
+test("Fitness summary and Overview use the compact Tend presentation", () => {
+  const context = {
+    document: { addEventListener() {} },
+    window: { addEventListener() {} },
+    S: { events: [] },
+    todayStr() { return "2026-10-15"; },
+    esc(value) { return String(value).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]); }
+  };
+  vm.createContext(context);
+  vm.runInContext(scoringSource, context);
+  vm.runInContext(sharedSource, context);
+  vm.runInContext(fitnessAppSource, context);
+  const data = {
+    settings: { muscleIntervals: { chest: 7 }, weeklyRunTarget: 2, weeklyMileTarget: 10, weightUnit: "lb" },
+    workouts: [{ id: "old-chest", date: "2026-10-01", muscleIds: ["chest"] }],
+    savedWorkouts: [{ id: "chest-day", name: "Chest Day", muscleIds: ["chest"] }],
+    runs: [{ id: "run", date: "2026-10-14", distance: 3 }],
+    weighIns: []
+  };
+  context.__data = data;
+  const scores = vm.runInContext('fitnessPageScores(__data,"2026-10-15")', context);
+  context.__scores = scores;
+  const summary = vm.runInContext("fitnessSummaryHTML(__scores)", context);
+  const overview = vm.runInContext('fitnessOverview(__data,__scores,"2026-10-15")', context);
+  assert.match(fitnessAppSource, /tendSectionHeaderHTML\(\{title:"Health & Fitness",subtitle:"Small practices, tended over time\."/);
+  assert.match(summary, /Overall fitness consistency/);
+  assert.match(summary, /class="fitness-summary-progress"/);
+  assert.match(summary, /<strong>—<\/strong>/);
+  assert.doesNotMatch(summary, /Your progress|Consistency &amp; goal progress|physical health/);
+  assert.match(overview, /Chest Day/);
+  assert.match(overview, /data-fitness-log-saved-workout="chest-day"/);
+  assert.match(overview, />Workout<\/button>/);
+  assert.match(overview, /Runs 1 of 2 · Miles 3 of 10/);
+  assert.match(overview, /data-fitness-tab="strength"/);
+  assert.doesNotMatch(overview, /fitness-body-svg|fitness-weight-chart|fitness-week-strip|Manage rhythms/);
+});
+
 test("Health & Fitness action color drives fitness cards and matching Log buttons", () => {
   const properties = {};
   const context = {
@@ -807,7 +844,7 @@ test("Health & Fitness action color drives fitness cards and matching Log button
     const front = vm.runInContext('fitnessBodyMapHTML(__scores,"Preview")', context);
     assert.deepEqual(listIds(front), expectedList);
     assert.deepEqual(regionIds(front), ["shoulders", "chest", "biceps", "abs", "quads", "calves"]);
-    assert.match(front, />1 need attention</);
+    assert.match(front, /Tap a muscle to see its training settings\./);
     assert.match(front, /data-fitness-muscle="chest" aria-pressed="true"/);
 
     const back = vm.runInContext('fitnessBodyView="back";fitnessBodyMapHTML(__scores,"Preview")', context);
@@ -857,6 +894,11 @@ test("Health & Fitness action color drives fitness cards and matching Log button
       assert.deepEqual(selectedRegions, [id], `${id} should outline its matching SVG path in ${view}`);
       assert.deepEqual(selectedRows, [id], `${id} should be the only selected list row`);
       assert.match(html, new RegExp(`<h3>${names[id]} <strong`), `${id} should match the detail panel`);
+      assert.match(html, /Train every \d+ days/);
+      assert.match(html, /Preferred rest: \d+ full days/);
+      assert.match(html, /Last trained:/);
+      assert.match(html, /Edit training settings/);
+      assert.doesNotMatch(html, /Selected muscle|Edit schedule/);
 
       const svg = vm.runInContext(`fitnessMapSVG("${view}",__scores.muscles)`, context);
       const region = svg.match(new RegExp(`<path class="muscle" data-muscle="${id}"[^>]+`))[0];
@@ -903,7 +945,7 @@ test("Health & Fitness action color drives fitness cards and matching Log button
     assert.equal(context.fitnessSelectedMuscleId, null);
     const scores = { muscles: runScore(context, "fitnessMuscleScores", { settings: {}, workouts: [] }, "2026-10-13") };
     const emptySelection = vm.runInContext('fitnessBodyMapHTML(__scores,"Empty")', Object.assign(context, { __scores: scores }));
-    assert.match(emptySelection, /Select a muscle to see its rhythm\./);
+    assert.match(emptySelection, /Select a muscle to see its training settings\./);
     assert.doesNotMatch(emptySelection, /class="fitness-muscle-row is-selected"/);
     assert.doesNotMatch(emptySelection, /data-fitness-interval=/);
     assert.equal(select("triceps"), true);
