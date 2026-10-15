@@ -335,12 +335,13 @@ function planRhythmCardHTML(it){
   ownerId="faith";record=typeof faithFindRhythm==="function"?faithFindRhythm(it.faithRhythm):null;
  }else if(it.fitnessRhythm){
   record=fitnessRhythmRecords().find(function(item){return item.id===it.fitnessRhythm;});
-  if(record&&typeof window.fitnessSharedRhythmCardHTML==="function")return window.fitnessSharedRhythmCardHTML(record,{completed:!!it.fitnessCompleted});
+  if(record&&typeof window.fitnessSharedRhythmCardHTML==="function")return window.fitnessSharedRhythmCardHTML(record,{completed:!!it.fitnessCompleted,todayCompact:true});
  }
  if(!record)return "";
- var score=rhythmScore(record),metadata=window.tendRhythmCardMetadata(record);
- return tendRhythmCardHTML(record,{title:record.text||"(unnamed rhythm)",description:record.description,score:Number.isFinite(score)?score:null,scoreClass:scoreClass(score),
-  peopleBadgesHTML:planRhythmCardBadges(it),categoryBadgesHTML:it.fitnessRhythm&&typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges({areas:["health"]}):"",
+ var score=rhythmScore(record),metadata=window.tendRhythmCardMetadata(record),owner=it.rhythm?S.people.find(function(person){return person.id===ownerId;}):null,last=rhythmLast(record),status=last?rhythmDueTxt(record):"Not yet tended",detailsId="today-rhythm-details-"+String(it.rhythm||it.faithRhythm||it.fitnessRhythm||record.id).replace(/[^a-z0-9_-]/gi,"-");
+ return tendRhythmCardHTML(record,{todayCompact:true,compactPrimary:"details",detailsLabel:"Open",detailsId:detailsId,compactStatus:status,compactSupportingText:owner?owner.name:"",
+  title:record.text||"(unnamed rhythm)",description:record.description,score:Number.isFinite(score)?score:null,scoreClass:scoreClass(score),
+  peopleBadgesHTML:planRhythmCardBadges(it),categoryBadgesHTML:"",
   frequency:metadata.frequency,time:metadata.time,lastTended:metadata.lastTended,frequencyIconHTML:metadata.frequencyIconHTML,timeIconHTML:metadata.timeIconHTML,lastIconHTML:metadata.lastIconHTML,
   tendAttributes:it.fitnessRhythm?{"data-tend-open":"fitness-rhythm","data-rhythm-id":it.fitnessRhythm}:it.rhythm?{"data-tend-open":"person-rhythm","data-person-id":ownerId,"data-rhythm-id":String(it.rhythm).split("|")[1]}:{"data-tend-open":"faith-rhythm","data-rhythm-id":it.faithRhythm},
   editAttributes:it.fitnessRhythm?{"data-fitness-rhythm-edit":it.fitnessRhythm}:it.rhythm?{"data-plan-edit-rhythm":it.rhythm}:null,

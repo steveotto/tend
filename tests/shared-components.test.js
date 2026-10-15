@@ -266,6 +266,31 @@ test("Home, Person, and category rhythm cards share one renderer and card struct
     historyAttributes: { "data-rhyhistory": "amy|shared-walk" }
   });
 
+  test("Today rhythm details expand and collapse without invoking a completion action", () => {
+    const toggleSource = actionsSource.match(/function tendToggleTodayRhythmDetails\(button\)\{[\s\S]*?\n\}/)[0];
+    const panel = { hidden: true };
+    const values = { "aria-controls": "details-panel", "aria-expanded": "false", "data-rhythm-details-title": "Evening walk", "data-rhythm-details-label": "Open" };
+    const button = {
+      textContent: "Open",
+      getAttribute(name) { return values[name] || null; },
+      setAttribute(name, value) { values[name] = value; }
+    };
+    const context = { document: { getElementById(id) { return id === "details-panel" ? panel : null; } } };
+    vm.createContext(context);
+    vm.runInContext(toggleSource, context);
+    context.__button = button;
+    vm.runInContext("tendToggleTodayRhythmDetails(__button)", context);
+    assert.equal(panel.hidden, false);
+    assert.equal(values["aria-expanded"], "true");
+    assert.equal(button.textContent, "Close details");
+    assert.equal(values["aria-label"], "Close details for Evening walk");
+    vm.runInContext("tendToggleTodayRhythmDetails(__button)", context);
+    assert.equal(panel.hidden, true);
+    assert.equal(values["aria-expanded"], "false");
+    assert.equal(button.textContent, "Open");
+    assert.equal(values["aria-label"], "Open details for Evening walk");
+  });
+
   assert.match(card, /class="rhythm-card card"/);
   assert.match(card, /&lt;Evening walk&gt;/);
   assert.match(card, /Talk &amp; reconnect/);
@@ -289,6 +314,29 @@ test("Home, Person, and category rhythm cards share one renderer and card struct
   assert.match(todayCard, /class="rhythm-card card"/);
   assert.match(todayCard, /class="btn mini rhythm-card__tend" data-tend-open="person-rhythm"/);
   assert.doesNotMatch(todayCard, /rhythm-card__edit|rhythm-card__score/);
+  const compactTodayCard = components.tendRhythmCardHTML(record, {
+    todayCompact: true,
+    compactPrimary: "details",
+    compactStatus: "Due today",
+    compactSupportingText: "Amy",
+    detailsLabel: "Open",
+    detailsId: "today-rhythm-amy-shared-walk",
+    description: "Talk & reconnect",
+    peopleBadgesHTML: '<button class="person-badge">Amy</button>',
+    categoryBadgesHTML: '<span class="category-icon">Marriage</span>',
+    frequency: { full: "Weekly on Friday", label: "Weekly · Fri", narrow: "Wk · Fri" },
+    time: { full: "Evening", label: "Evening" },
+    tendAttributes: { "data-tend-open": "person-rhythm", "data-person-id": "amy", "data-rhythm-id": "shared-walk" }
+  });
+  assert.match(compactTodayCard, /class="today-rhythm-card/);
+  assert.match(compactTodayCard, /aria-expanded="false">Open<\/button>/);
+  assert.match(compactTodayCard, /Due today/);
+  assert.match(compactTodayCard, /Amy/);
+  assert.match(compactTodayCard, /id="today-rhythm-amy-shared-walk-panel"[^>]*hidden/);
+  assert.match(compactTodayCard, /Talk &amp; reconnect/);
+  assert.match(compactTodayCard, /Weekly · Fri/);
+  assert.match(compactTodayCard, /class="btn mini rhythm-card__tend" data-tend-open="person-rhythm"/);
+  assert.doesNotMatch(compactTodayCard, /class="rhythm-card__edit"/);
   const scoredCard = components.tendRhythmCardHTML(record, {
     score: 81,
     scoreClass: "green",

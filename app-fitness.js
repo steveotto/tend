@@ -64,12 +64,25 @@ function fitnessRhythmSummaryHTML(rhythm,data,scores){
  var mode=rhythm.strengthMode||"custom",workout=mode==="specific"?(data.savedWorkouts||[]).find(function(item){return item.id===rhythm.workoutId;}):null,recommendation=mode==="recommended"?fitnessRankSavedWorkouts(scores.muscles,data.savedWorkouts||[])[0]:null,blocked=workout?fitnessWorkoutBlockedMuscles(workout,scores.muscles):[],label=mode==="specific"?"Planned workout: ":mode==="recommended"?"Recommended: ":"",name=workout?workout.name:recommendation?recommendation.name:"",missing=mode==="specific"&&!workout,message=mode==="custom"?"Custom workout · choose muscle groups when logging.":mode==="specific"?(workout?label+name+(blocked.length?" · Unavailable today: "+blocked.map(function(item){return item.name;}).join(", "):" · "+fitnessRhythmMuscles(workout).join(", ")):"Workout unavailable."):recommendation?label+name+(recommendation.overdue&&recommendation.overdue.length?" · Focus on "+recommendation.overdue.map(function(item){return item.name.toLowerCase();}).join(" and "):""):"No eligible recommended workout. Choose Custom Workout when logging.";
  return '<div class="rhythm-card__extension fitness-rhythm-summary">'+esc(message)+(missing?' <button type="button" class="fitness-inline-link" data-fitness-rhythm-edit="'+esc(rhythm.id)+'">Edit Rhythm</button>':"")+'</div>';
 }
+function fitnessRhythmCompactText(rhythm,data,scores){
+ if(rhythm.type!=="workout")return rhythm.type==="cardio"?"Cardio activity":"Weight check-in";
+ var mode=rhythm.strengthMode||"custom";
+ if(mode==="specific"){
+  var workout=(data.savedWorkouts||[]).find(function(item){return item.id===rhythm.workoutId;});
+  return workout?"Planned: "+workout.name:"Workout unavailable";
+ }
+ if(mode==="recommended"){
+  var recommendation=fitnessRankSavedWorkouts(scores.muscles,data.savedWorkouts||[])[0];
+  return recommendation?"Recommended: "+recommendation.name:"No eligible workout";
+ }
+ return "Custom workout";
+}
 function fitnessTodayRhythmCardHTML(rhythm,completed){
- return fitnessSharedRhythmCardHTML(rhythm,{completed:completed});
+ return fitnessSharedRhythmCardHTML(rhythm,{completed:completed,todayCompact:true});
 }
 function fitnessSharedRhythmCardHTML(source,options){
  options=options||{};
- var rhythm=Object.assign({},source,{type:source.type||source.fitnessType}),type=rhythm.type,data=fitnessStoreSnapshot(),scores=fitnessPageScores(data,todayStr()),metadata=window.tendRhythmCardMetadata(rhythm),completed=options.completed!==undefined?options.completed:fitnessRhythmCompletionToday(rhythm,todayStr()),actionLabel=completed?"✓ Logged":type==="workout"?"Workout":type==="cardio"?"Log Run":"Weigh-In",actionData={"data-tend-open":"fitness-rhythm","data-rhythm-id":rhythm.id},editData={"data-fitness-rhythm-edit":rhythm.id},historyData={"data-rhyhistory":"fitness|"+rhythm.id},pickerId="fitness|"+rhythm.id,people=(typeof tendAssociationPeopleBadges==="function"?tendAssociationPeopleBadges(rhythm,"fitness",null,"rhythm"):"")+'<button type="button" class="rhythm-picker-trigger" data-rhythm-picker-open="people|'+esc(pickerId)+'">+ Add Person</button>',categories=(typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(rhythm):"")+'<button type="button" class="rhythm-picker-trigger" data-rhythm-picker-open="categories|'+esc(pickerId)+'">+ Add Category</button>',extension=fitnessRhythmSummaryHTML(rhythm,data,scores);
+ var rhythm=Object.assign({},source,{type:source.type||source.fitnessType}),type=rhythm.type,data=fitnessStoreSnapshot(),scores=fitnessPageScores(data,todayStr()),metadata=window.tendRhythmCardMetadata(rhythm),completed=options.completed!==undefined?options.completed:fitnessRhythmCompletionToday(rhythm,todayStr()),actionLabel=completed?"✓ Logged":type==="workout"?"Log workout":type==="cardio"?"Log cardio":"Log weight",actionData={"data-tend-open":"fitness-rhythm","data-rhythm-id":rhythm.id},editData={"data-fitness-rhythm-edit":rhythm.id},historyData={"data-rhyhistory":"fitness|"+rhythm.id},pickerId="fitness|"+rhythm.id,people=(typeof tendAssociationPeopleBadges==="function"?tendAssociationPeopleBadges(rhythm,"fitness",null,"rhythm"):"")+'<button type="button" class="rhythm-picker-trigger" data-rhythm-picker-open="people|'+esc(pickerId)+'">+ Add Person</button>',categories=(typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(rhythm):"")+'<button type="button" class="rhythm-picker-trigger" data-rhythm-picker-open="categories|'+esc(pickerId)+'">+ Add Category</button>',extension=fitnessRhythmSummaryHTML(rhythm,data,scores),support=fitnessRhythmCompactText(rhythm,data,scores),detailsId="today-rhythm-details-fitness-"+String(rhythm.id).replace(/[^a-z0-9_-]/gi,"-");
  var card=tendRhythmCardHTML(rhythm,{title:rhythm.text||"(unnamed rhythm)",description:rhythm.description,score:rhythmScore(rhythm),scoreClass:scoreClass(rhythmScore(rhythm)),peopleBadgesHTML:people,categoryBadgesHTML:categories,
   frequency:metadata.frequency,time:metadata.time,lastTended:metadata.lastTended,frequencyIconHTML:metadata.frequencyIconHTML,timeIconHTML:metadata.timeIconHTML,lastIconHTML:metadata.lastIconHTML,
   actionLabel:actionLabel,actionTitle:type==="workout"?"Log a workout":type==="cardio"?"Log a run":"Log a weigh-in",actionClassName:"fitness-action-color",actionDisabled:completed||!!rhythm.paused,
@@ -79,6 +92,7 @@ function fitnessSharedRhythmCardHTML(source,options){
  return card+picker;
 }
 if(typeof window!=="undefined")window.fitnessSharedRhythmCardHTML=fitnessSharedRhythmCardHTML;
+  todayCompact:options.todayCompact===true,detailsLabel:"Details",detailsId:detailsId,compactStatus:options.todayCompact===true?(completed?"Logged today":rhythm.paused?"Paused":typeof rhythmDueTxt==="function"?rhythmDueTxt(rhythm):"Scheduled today"):"",compactSupportingText:support,
 if(typeof window!=="undefined")window.fitnessTodayRhythmCardHTML=fitnessTodayRhythmCardHTML;
 function fitnessRhythmListHTML(data,type){
  var scores=fitnessPageScores(data,todayStr()),rhythms=(data.rhythms||[]).filter(function(rhythm){return rhythm.type===type;}),empty={workout:"No strength rhythms yet. Add a strength rhythm.",cardio:"No cardio rhythms yet. Add a cardio rhythm.",weighin:"No weigh-in rhythms yet. Add a weigh-in rhythm."},labels={workout:"Strength rhythms",cardio:"Cardio rhythms",weighin:"Weigh-in rhythms"};

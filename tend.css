@@ -3277,11 +3277,36 @@ html:not([data-mobile-text-size-level="large"]):not([data-mobile-text-size-level
 .rhythm-card__remove{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;width:40px;min-width:40px;height:40px;min-height:40px;margin-left:auto;padding:0;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--ink-soft);cursor:pointer}
 .rhythm-card__remove:hover{border-color:var(--forest);background:var(--mist);color:var(--forest-deep)}
 .person-profile-page #profile-panel-sparks{padding:0;border:0;background:transparent;box-shadow:none}
+.today-rhythm-card{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px 16px;padding:12px 16px;border-radius:16px}
+.today-rhythm-card__heading{display:grid;gap:3px;min-width:0}
+.today-rhythm-card__heading .tend-type-title{display:block;min-width:0;overflow-wrap:anywhere}
+.today-rhythm-card__support,.today-rhythm-card__status{margin:0;color:var(--ink-soft);font-family:var(--sans);font-size:var(--tend-item-description-size);line-height:1.35;overflow-wrap:anywhere}
+.today-rhythm-card__status{font-size:var(--tend-type-metadata)}
+.today-rhythm-card__actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px;min-width:0}
+.today-rhythm-card__actions>.rhythm-card__tend{min-width:84px;min-height:38px;padding:6px 12px}
+.today-rhythm-card__details-toggle{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;min-width:72px;min-height:36px;padding:6px 10px;border:1px solid var(--action-rhythm-border,#B8E1CA);border-radius:9px;background:var(--action-rhythm-background,#E3F6ED);color:var(--action-rhythm-text,#1C5844);font:600 var(--tend-type-button-label)/1.2 var(--sans);cursor:pointer}
+.today-rhythm-card__details-toggle:focus-visible{outline:2px solid var(--action-rhythm-focus,#1C5844);outline-offset:2px}
+.today-rhythm-card__details-toggle[aria-expanded=true]{background:var(--action-rhythm-hover,#D2EEDD)}
+.today-rhythm-card__details-content{grid-column:1/-1;min-width:0;padding-top:10px;border-top:1px solid var(--line)}
+.today-rhythm-card__description{margin:0 0 8px;color:var(--ink-soft);font-size:var(--tend-item-description-size);line-height:1.5;overflow-wrap:anywhere}
+.today-rhythm-card__details-content .rhythm-card__badges{margin:0 0 8px}
+.today-rhythm-card__details-content .rhythm-card__meta{margin-top:8px;padding-top:8px}
+.today-rhythm-card__details-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px}
+.today-rhythm-card__details-actions .rhythm-card__edit,.today-rhythm-card__details-actions .rhythm-card__remove{margin-left:0}
+.today-rhythm-card__details-actions .rhythm-card__score{min-width:44px;width:auto;min-height:36px}
+.rhythm-card--fitness.today-rhythm-card .today-rhythm-card__actions>.rhythm-card__tend{border-color:var(--action-fitness-border,#B9CDBF);background:var(--action-fitness-background,#E9F2EC);color:var(--action-fitness-text,#315B42)}
+.rhythm-card--fitness.today-rhythm-card .today-rhythm-card__actions>.rhythm-card__tend:hover{background:var(--action-fitness-hover,#DCE9E0)}
+.rhythm-card--fitness.today-rhythm-card .today-rhythm-card__details-toggle{border-color:var(--action-fitness-border,#B9CDBF);background:var(--action-fitness-background,#E9F2EC);color:var(--action-fitness-text,#315B42)}
+.rhythm-card--fitness.today-rhythm-card .today-rhythm-card__details-toggle:focus-visible{outline-color:var(--action-fitness-focus,#315B42)}
 .person-profile-page .profile-spark-list{display:grid;gap:14px;min-width:0}
 .person-profile-page .profile-spark-completion-note{margin:12px 0 0;color:var(--ink-faint);font-size:12px;line-height:1.4;text-align:center}
 @media(max-width:600px){
  .rhythm-card{padding:14px}
  .rhythm-card__meta{gap:6px 8px}
+ .today-rhythm-card{grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:11px 12px;border-radius:14px}
+ .today-rhythm-card__actions{gap:5px}
+ .today-rhythm-card__actions>.rhythm-card__tend{min-width:78px;min-height:38px;padding:6px 9px}
+ .today-rhythm-card__details-toggle{min-width:64px;min-height:36px;padding:5px 8px}
  .rhythm-card__meta-item{gap:3px}
  .rhythm-card__meta-item .plan-detail-icon{width:12px;height:12px}
  .rhythm-card__last{margin-left:auto}

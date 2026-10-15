@@ -138,14 +138,22 @@ function saveSparkCompletionDialog(){
  flash("Spark landed - connection logged");
 }
 document.addEventListener("click",function(event){
- var target=event.target,button=target&&target.closest&&target.closest("[data-tend-open],[data-tend-save],[data-tend-cancel],[data-spark-save],[data-spark-cancel]");
+var target=event.target,button=target&&target.closest&&target.closest("[data-rhythm-details-toggle],[data-tend-open],[data-tend-save],[data-tend-cancel],[data-spark-save],[data-spark-cancel]");
  if(!button)return;
  event.preventDefault();event.stopImmediatePropagation();
- if(button.matches("[data-tend-open]"))openTendDialog(button);
+if(button.matches("[data-rhythm-details-toggle]"))tendToggleTodayRhythmDetails(button);
+else if(button.matches("[data-tend-open]"))openTendDialog(button);
  else if(button.matches("[data-tend-save]"))saveTendDialog();
  else if(button.matches("[data-tend-cancel]")){var dialog=document.getElementById("tendDialog");tendDialogDraft=null;if(dialog)dialog.close();}
  else if(button.matches("[data-spark-save]"))saveSparkCompletionDialog();
  else if(button.matches("[data-spark-cancel]")){var sparkDialog=document.getElementById("sparkCompletionDialog");if(sparkDialog)sparkDialog.close();}
+},true);
+document.addEventListener("keydown",function(event){
+ if(event.key!=="Escape"||event.target&&event.target.closest&&event.target.closest("dialog[open]"))return;
+ var panel=event.target&&event.target.closest&&event.target.closest(".today-rhythm-card__details-content:not([hidden])");
+ if(!panel)return;
+ var toggle=panel.id&&document.querySelector('[data-rhythm-details-toggle][aria-controls="'+panel.id+'"]');
+ if(toggle){event.preventDefault();tendToggleTodayRhythmDetails(toggle);toggle.focus();}
 },true);
 window.openModal=function(){var sel=el("logArea"),selp=el("logPerson"),selk=el("logKind");sel.innerHTML=AREA_IDS.map(function(a){return '<option value="'+a+'">'+S.areas[a].name+'</option>';}).join("");selp.innerHTML='<option value="">- no specific person -</option>'+S.people.map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+'</option>';}).join("");selk.innerHTML=Object.keys(KINDS).map(function(k){return '<option value="'+k+'">'+KINDS[k].label+'</option>';}).join("");el("logNote").value="";el("logModal").classList.add("open");};
 window.closeModal=function(){el("logModal").classList.remove("open");};
@@ -155,6 +163,15 @@ function downloadICS(title){var d=new Date();d.setDate(d.getDate()+1);d.setHours
 function saveEncNote(pid,ta){var p=S.people.find(function(x){return x.id===pid;});if(p){p.encouragementNote=ta.value;save();var h=document.querySelector('[data-enchint="'+pid+'"]');if(h){h.classList.add("show");setTimeout(function(){h.classList.remove("show");},900);}}}
 function savePersonNote(pid,field,ta){var p=S.people.find(function(x){return x.id===pid;});if(p){p[field]=ta.value;save();var h=document.getElementById("prayerSaveHint");if(h){h.classList.add("show");clearTimeout(savePersonNote._t);savePersonNote._t=setTimeout(function(){h.classList.remove("show");},900);}}}
 
+function tendToggleTodayRhythmDetails(button){
+ var panelId=button.getAttribute("aria-controls"),panel=panelId&&document.getElementById(panelId);
+ if(!panel)return;
+ var expanded=button.getAttribute("aria-expanded")==="true",title=button.getAttribute("data-rhythm-details-title")||"rhythm",label=button.getAttribute("data-rhythm-details-label")||"Details";
+ button.setAttribute("aria-expanded",String(!expanded));
+ button.textContent=expanded?label:"Close details";
+ button.setAttribute("aria-label",(expanded?"Open details for ":"Close details for ")+title);
+ panel.hidden=expanded;
+}
 function bind(){
  if(window._tendDelegated)return;
  window._tendDelegated=true;
