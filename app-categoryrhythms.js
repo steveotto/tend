@@ -75,7 +75,7 @@
 
  var baseAreaScore=window.areaScore;
  window.areaScore=function(id){
-  if(id==="faith"||!CATEGORY_AREA_SET[id])return baseAreaScore(id);
+  if(id==="faith"||id==="health"||!CATEGORY_AREA_SET[id])return baseAreaScore(id);
   var rhythms=categoryRhythms(id),rhythmAverage=avg(rhythms.map(function(item){return rhythmScore(item.record);}));
   if(rhythmAverage!==null)return rhythmAverage;
   return rawScore(eventsFor(id));

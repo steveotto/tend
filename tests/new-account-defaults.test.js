@@ -10,6 +10,7 @@ const root = path.join(__dirname, "..");
 const coreSource = fs.readFileSync(path.join(root, "app-core.js"), "utf8");
 const viewSource = fs.readFileSync(path.join(root, "app-views1.js"), "utf8");
 const upcomingSource = fs.readFileSync(path.join(root, "app-upcoming.js"), "utf8");
+const categoryRhythmSource = fs.readFileSync(path.join(root, "app-categoryrhythms.js"), "utf8");
 const dashboardSource = fs.readFileSync(path.join(root, "app-dashboard.js"), "utf8");
 const indexSource = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const stylesSource = fs.readFileSync(path.join(root, "tend.css"), "utf8");
@@ -53,6 +54,25 @@ test("a new local account has no seeded personal records or connected calendar",
   assert.equal(context.displayAreaScore("marriage"), null, "an inactive area's score is unset in the UI");
   context.S.fitness.runs.push({ id: "run-1" });
   assert.equal(context.areaHasActivity("health"), true, "fitness logs count as Health & Fitness activity");
+});
+
+test("saved workout normalization preserves invalid muscle data for safe recommendation rejection", () => {
+  const context = coreHarness({
+    fitness: {
+      savedWorkouts: [
+        { id: "unknown", name: "Unknown group", muscleIds: ["chest", "mystery"] },
+        { id: "malformed", name: "Malformed group", muscleIds: ["back", null] }
+      ]
+    }
+  });
+  const workouts = JSON.parse(JSON.stringify(context.S.fitness.savedWorkouts));
+  assert.equal(workouts[0].invalidMuscleIds, true);
+  assert.deepEqual(workouts[0].muscleIds, ["chest", "mystery"]);
+  assert.equal(workouts[1].invalidMuscleIds, true);
+  assert.deepEqual(workouts[1].muscleIds, ["back"]);
+  context.__state = context.S;
+  vm.runInContext("ensureFitnessShape(__state)", context);
+  assert.equal(context.S.fitness.savedWorkouts[1].invalidMuscleIds, true, "invalid markers survive subsequent state normalization");
 });
 
 test("normalizing an empty or existing local state does not add people, dates, or calendars", () => {
@@ -104,6 +124,53 @@ test("overall score stays unset until an area has activity, then retains the exi
   assert.equal(context.overallScore(), null);
   state.active = true;
   assert.equal(context.overallScore(), 65);
+});
+
+test("Health & Fitness area score uses the Fitness page's overall score", () => {
+  const areaFunctions = [
+    coreSource.match(/function areaScore\(id\)\{[\s\S]*?\n\}/)[0],
+    coreSource.match(/function areaHasActivity\(id\)\{[\s\S]*?\n\}/)[0],
+    coreSource.match(/function displayAreaScore\(id\)\{[^}]+\}/)[0]
+  ].join("\n");
+  const context = {
+    S: {
+      events: [{ areaId: "health", title: "Legacy health activity" }],
+      rhythms: [{ category: "health", text: "Fitness rhythm" }],
+      fitness: { workouts: [{ id: "workout" }] }
+    },
+    fitnessStoreSnapshot: () => ({ marker: "fitness-data" }),
+    fitnessPageScores: (data, today) => {
+      assert.equal(data.marker, "fitness-data");
+      assert.match(today, /^\d{4}-\d{2}-\d{2}$/);
+      return { overall: context.fitnessScore };
+    },
+    todayStr: () => "2026-10-14",
+    areaHasActivity: () => true,
+    avg: () => 50,
+    rhythmScore: () => 25,
+    rawScore: () => 50,
+    eventsFor: () => [],
+    fitnessScore: 60
+  };
+  vm.createContext(context);
+  vm.runInContext(areaFunctions, context);
+  assert.equal(context.areaScore("health"), 60);
+  assert.equal(context.displayAreaScore("health"), 60);
+  context.fitnessScore = null;
+  assert.equal(context.displayAreaScore("health"), null, "an unavailable fitness score remains unset");
+  assert.equal(context.areaScore("marriage"), 50, "other category scoring remains unchanged");
+});
+
+test("category rhythm overrides preserve the unified Health & Fitness score", () => {
+  const override = categoryRhythmSource.match(/var baseAreaScore=window\.areaScore;[\s\S]*?\n };/);
+  assert.ok(override, "category score override should exist");
+  const context = {
+    CATEGORY_AREA_SET: { health: true },
+    window: { areaScore: id => id === "health" ? 60 : 50 }
+  };
+  vm.createContext(context);
+  vm.runInContext(override[0], context);
+  assert.equal(context.window.areaScore("health"), 60, "Health & Fitness must use the Fitness page score");
 });
 
 test("the public iCloud feed is gone while optional user-configured calendars remain supported", () => {

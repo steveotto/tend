@@ -32,7 +32,7 @@ function fitnessRhythmScheduled(rhythm,date){
  return typeof window.scheduleDayMatches==="function"?window.scheduleDayMatches(rhythm,day):false;
 }
 function fitnessRhythmMuscles(workout){
- return workout?workout.muscleIds.map(function(id){var item=FITNESS_MUSCLES.find(function(muscle){return muscle.id===id;});return item?item.name:id;}):[];
+ return workout&&Array.isArray(workout.muscleIds)?workout.muscleIds.map(function(id){var item=FITNESS_MUSCLES.find(function(muscle){return muscle.id===id;});return item?item.name:id;}):[];
 }
 function fitnessRhythmDetails(rhythm,data,scores){
  rhythm=Object.assign({},rhythm,{type:rhythm.type||rhythm.fitnessType});
@@ -50,7 +50,7 @@ function fitnessRhythmDetails(rhythm,data,scores){
  }
  if(rhythm.strengthMode==="recommended"){
   var best=fitnessRankSavedWorkouts(scores.muscles,data.savedWorkouts)[0];
-  return best?"Best eligible: "+best.name:"No eligible recommended workout; log a custom workout instead.";
+  return best?"Best eligible: "+best.name+" · "+best.reason:"No saved workout is eligible right now; you can still log a custom workout.";
  }
  return "Custom workout · choose muscle groups when logging.";
 }
@@ -59,20 +59,43 @@ function fitnessActivityIcon(type){
  return '<svg class="fitness-today-rhythm-icon" viewBox="0 0 24 24" aria-hidden="true">'+paths[type||"workout"]+'</svg>';
 }
 function fitnessRhythmSummaryHTML(rhythm,data,scores){
- var type=rhythm.type||rhythm.fitnessType;
- if(type!=="workout")return "";
- var mode=rhythm.strengthMode||"custom",workout=mode==="specific"?(data.savedWorkouts||[]).find(function(item){return item.id===rhythm.workoutId;}):null,recommendation=mode==="recommended"?fitnessRankSavedWorkouts(scores.muscles,data.savedWorkouts||[])[0]:null,blocked=workout?fitnessWorkoutBlockedMuscles(workout,scores.muscles):[],label=mode==="specific"?"Planned workout: ":mode==="recommended"?"Recommended: ":"",name=workout?workout.name:recommendation?recommendation.name:"",missing=mode==="specific"&&!workout,message=mode==="custom"?"Custom workout · choose muscle groups when logging.":mode==="specific"?(workout?label+name+(blocked.length?" · Unavailable today: "+blocked.map(function(item){return item.name;}).join(", "):" · "+fitnessRhythmMuscles(workout).join(", ")):"Workout unavailable."):recommendation?label+name+(recommendation.overdue&&recommendation.overdue.length?" · Focus on "+recommendation.overdue.map(function(item){return item.name.toLowerCase();}).join(" and "):""):"No eligible recommended workout. Choose Custom Workout when logging.";
+ var message=fitnessRhythmSummaryText(rhythm,data,scores);
+ if(!message)return "";
+ var missing=(rhythm.strengthMode||"custom")==="specific"&&!(data.savedWorkouts||[]).some(function(item){return item.id===rhythm.workoutId;});
  return '<div class="rhythm-card__extension fitness-rhythm-summary">'+esc(message)+(missing?' <button type="button" class="fitness-inline-link" data-fitness-rhythm-edit="'+esc(rhythm.id)+'">Edit Rhythm</button>':"")+'</div>';
 }
+function fitnessRhythmSummaryText(rhythm,data,scores){
+ var type=rhythm.type||rhythm.fitnessType;
+ if(type!=="workout")return "";
+ var mode=rhythm.strengthMode||"custom",workout=mode==="specific"?(data.savedWorkouts||[]).find(function(item){return item.id===rhythm.workoutId;}):null,recommendation=mode==="recommended"?fitnessRankSavedWorkouts(scores.muscles,data.savedWorkouts||[])[0]:null,blocked=workout?fitnessWorkoutBlockedMuscles(workout,scores.muscles):[],label=mode==="specific"?"Planned workout: ":mode==="recommended"?"Recommended: ":"",name=workout?workout.name:recommendation?recommendation.name:"";
+ return mode==="custom"?"Custom workout · choose muscle groups when logging.":mode==="specific"?(workout?label+name+(blocked.length?" · Unavailable today: "+blocked.map(function(item){return item.name;}).join(", "):" · "+fitnessRhythmMuscles(workout).join(", ")):"Workout unavailable."):recommendation?label+name+" · "+recommendation.reason:"No saved workout is eligible right now. You can still log a custom workout.";
+}
+function fitnessRhythmCompactText(rhythm,data,scores){
+ if(rhythm.type!=="workout")return rhythm.type==="cardio"?"Cardio activity":"Weight check-in";
+ var mode=rhythm.strengthMode||"custom";
+ if(mode==="specific"){
+  var workout=(data.savedWorkouts||[]).find(function(item){return item.id===rhythm.workoutId;});
+  return workout?"Planned: "+workout.name:"Workout unavailable";
+ }
+ if(mode==="recommended"){
+  var recommendation=fitnessRankSavedWorkouts(scores.muscles,data.savedWorkouts||[])[0];
+  return recommendation?"Recommended: "+recommendation.name:"No eligible workout";
+ }
+ return "Custom workout";
+}
 function fitnessTodayRhythmCardHTML(rhythm,completed){
- return fitnessSharedRhythmCardHTML(rhythm,{completed:completed});
+ return fitnessSharedRhythmCardHTML(rhythm,{completed:completed,todayCompact:true});
 }
 function fitnessSharedRhythmCardHTML(source,options){
  options=options||{};
- var rhythm=Object.assign({},source,{type:source.type||source.fitnessType}),type=rhythm.type,data=fitnessStoreSnapshot(),scores=fitnessPageScores(data,todayStr()),metadata=window.tendRhythmCardMetadata(rhythm),completed=options.completed!==undefined?options.completed:fitnessRhythmCompletionToday(rhythm,todayStr()),actionLabel=completed?"✓ Logged":type==="workout"?"Workout":type==="cardio"?"Log Run":"Weigh-In",actionData={"data-tend-open":"fitness-rhythm","data-rhythm-id":rhythm.id},editData={"data-fitness-rhythm-edit":rhythm.id},historyData={"data-rhyhistory":"fitness|"+rhythm.id},pickerId="fitness|"+rhythm.id,people=(typeof tendAssociationPeopleBadges==="function"?tendAssociationPeopleBadges(rhythm,"fitness",null,"rhythm"):"")+'<button type="button" class="rhythm-picker-trigger" data-rhythm-picker-open="people|'+esc(pickerId)+'">+ Add Person</button>',categories=(typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(rhythm):"")+'<button type="button" class="rhythm-picker-trigger" data-rhythm-picker-open="categories|'+esc(pickerId)+'">+ Add Category</button>',extension=fitnessRhythmSummaryHTML(rhythm,data,scores);
+ var rhythm=Object.assign({},source,{type:source.type||source.fitnessType}),type=rhythm.type,data=fitnessStoreSnapshot(),scores=fitnessPageScores(data,todayStr()),metadata=window.tendRhythmCardMetadata(rhythm),completed=options.completed!==undefined?options.completed:fitnessRhythmCompletionToday(rhythm,todayStr()),actionLabel=completed?"✓ Logged":type==="workout"?"Log workout":type==="cardio"?"Log cardio":"Log weight",actionData={"data-tend-open":"fitness-rhythm","data-rhythm-id":rhythm.id},editData={"data-fitness-rhythm-edit":rhythm.id},historyData={"data-rhyhistory":"fitness|"+rhythm.id},pickerId="fitness|"+rhythm.id,people=(typeof tendAssociationPeopleBadges==="function"?tendAssociationPeopleBadges(rhythm,"fitness",null,"rhythm"):"")+'<button type="button" class="rhythm-picker-trigger" data-rhythm-picker-open="people|'+esc(pickerId)+'">+ Add Person</button>',categories=(typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(rhythm):"")+'<button type="button" class="rhythm-picker-trigger" data-rhythm-picker-open="categories|'+esc(pickerId)+'">+ Add Category</button>',detailPeople=typeof tendAssociationPeopleBadges==="function"?tendAssociationPeopleBadges(rhythm,"fitness",null,"rhythm"):"",detailCategories=typeof window.tendCategoryBadges==="function"?window.tendCategoryBadges(rhythm):"",extension=fitnessRhythmSummaryHTML(rhythm,data,scores),support=fitnessRhythmCompactText(rhythm,data,scores),detailsId="today-rhythm-details-fitness-"+String(rhythm.id).replace(/[^a-z0-9_-]/gi,"-"),compactStatus=completed?"Logged today":rhythm.paused?"Paused":metadata.lastTended.full==="Never tended"?"Not yet tended":typeof rhythmDueTxt==="function"?rhythmDueTxt(rhythm):"Scheduled today";
+ if(compactStatus==="ready to tend again")compactStatus="Overdue";
+ if(compactStatus)compactStatus=compactStatus.charAt(0).toUpperCase()+compactStatus.slice(1);
  var card=tendRhythmCardHTML(rhythm,{title:rhythm.text||"(unnamed rhythm)",description:rhythm.description,score:rhythmScore(rhythm),scoreClass:scoreClass(rhythmScore(rhythm)),peopleBadgesHTML:people,categoryBadgesHTML:categories,
   frequency:metadata.frequency,time:metadata.time,lastTended:metadata.lastTended,frequencyIconHTML:metadata.frequencyIconHTML,timeIconHTML:metadata.timeIconHTML,lastIconHTML:metadata.lastIconHTML,
   actionLabel:actionLabel,actionTitle:type==="workout"?"Log a workout":type==="cardio"?"Log a run":"Log a weigh-in",actionClassName:"fitness-action-color",actionDisabled:completed||!!rhythm.paused,
+  todayCompact:options.todayCompact===true,detailsLabel:"Open",detailsId:detailsId,compactStatus:options.todayCompact===true?compactStatus:"",compactSupportingText:support,
+  todayDetails:{peopleHTML:detailPeople,categoryHTML:detailCategories},
   cardClassName:"rhythm-card--fitness",extensionHTML:extension,tendAttributes:actionData,editAttributes:editData,historyAttributes:historyData
  });
  var picker=typeof rhythmPickerDraft!=="undefined"&&rhythmPickerDraft&&rhythmPickerDraft.ownerId==="fitness"&&rhythmPickerDraft.rhythmId===String(rhythm.id)&&typeof rhythmPickerModalHTML==="function"?rhythmPickerModalHTML():"";
@@ -117,22 +140,22 @@ function fitnessStrengthTabsHTML(){
  return fitnessSectionTabsHTML("strength",fitnessStrengthSubtab,[["training","Training"],["workouts","Workouts"],["rhythms","Rhythms"]]);
 }
 function fitnessWorkoutRecommendations(data,scores){
- var recommendations=fitnessRankSavedWorkouts(scores.muscles,data.savedWorkouts||[]);
+ var savedWorkouts=Array.isArray(data.savedWorkouts)?data.savedWorkouts:[],recommendations=fitnessRankSavedWorkouts(scores.muscles,savedWorkouts);
  if(!recommendations.length){
-  var overdue=scores.muscles.some(function(muscle){return Number.isFinite(muscle.score)&&muscle.score<100&&muscle.eligible;});
-  return '<div class="fitness-recommendation-empty">'+(overdue?"No saved workouts are currently eligible for the overdue muscle groups.":"No eligible saved workouts address an overdue muscle group yet.")+'</div><button type="button" class="btn mini ghost" data-fitness-custom-workout>Workout</button>';
+  var workouts=savedWorkouts,resting=workouts.some(function(workout){return fitnessWorkoutBlockedMuscles(workout,scores.muscles).length>0;}),invalid=workouts.some(function(workout){return !workout||workout.invalidMuscleIds===true||!Array.isArray(workout.muscleIds)||!workout.muscleIds.length||workout.muscleIds.some(function(id){return !FITNESS_MUSCLES.some(function(muscle){return muscle.id===id;});});});
+  var message=!workouts.length?"Save a workout to get recommendations, or log a custom workout.":invalid?"A saved workout has incomplete muscle-group data and cannot be recommended. Edit it or log a custom workout.":resting?"No saved workout is eligible right now because an included muscle is resting or its training history needs review. You can still log a custom workout.":"No saved workout currently targets muscle groups that need training. You can still log a custom workout.";
+  return '<div class="fitness-recommendation-empty">'+message+'</div><button type="button" class="btn mini ghost" data-fitness-custom-workout>Custom Workout</button>';
  }
  return '<div class="fitness-recommendation-list">'+recommendations.map(function(item){
-  var overdue=item.overdue.map(function(muscle){return esc(muscle.name)+" · "+muscle.daysOverdue+"d overdue";}).join(", ");
-  return '<article class="fitness-recommendation"><div><h3>'+esc(item.name)+'</h3><strong>'+fitnessNumber(item.priorityImpact)+'% priority impact</strong><p>'+overdue+'</p><small>Expected strength-score increase: +'+fitnessNumber(item.expectedStrengthIncrease)+' points</small></div><button type="button" class="btn mini" data-fitness-log-saved-workout="'+esc(item.id)+'">Workout</button></article>';
- }).join("")+'</div><button type="button" class="btn mini ghost" data-fitness-custom-workout>Workout</button>';
+  return '<article class="fitness-recommendation"><div><h3>'+esc(item.name)+'</h3><p>'+esc(item.reason)+'</p></div><button type="button" class="btn mini" data-fitness-log-saved-workout="'+esc(item.id)+'">Workout</button></article>';
+ }).join("")+'</div><button type="button" class="btn mini ghost" data-fitness-custom-workout>Custom Workout</button>';
 }
 function fitnessSavedWorkoutsHTML(data,scores){
  var workouts=data.savedWorkouts||[];
  return '<section class="card fitness-card fitness-workout-library"><div class="fitness-card-heading"><h2>Saved workouts</h2><div><button type="button" class="btn mini ghost" data-fitness-open="savedWorkout">+ Add Workout</button></div></div>'+(fitnessRhythmEditorSuspended?'<p class="fitness-rhythm-resume-note">Your new rhythm settings are saved while you make a workout. <button type="button" class="btn mini" data-fitness-resume-rhythm>Continue editing rhythm</button></p>':"")+(workouts.length?'<div class="fitness-saved-workouts">'+workouts.map(function(workout){
-  var names=workout.muscleIds.map(function(id){var muscle=FITNESS_MUSCLES.find(function(item){return item.id===id;});return muscle?muscle.name:id;}),blocked=workout.muscleIds.some(function(id){var muscle=scores.muscles.find(function(item){return item.id===id;});return !muscle||!muscle.eligible;});
+  var muscleIds=Array.isArray(workout.muscleIds)?workout.muscleIds:[],names=muscleIds.map(function(id){var muscle=FITNESS_MUSCLES.find(function(item){return item.id===id;});return muscle?muscle.name:id;}),blocked=fitnessWorkoutBlockedMuscles(workout,scores.muscles).length>0,invalid=workout.invalidMuscleIds===true||!muscleIds.length||muscleIds.some(function(id){return !FITNESS_MUSCLES.some(function(muscle){return muscle.id===id;});});
   var people=typeof tendAssociationPeopleBadges==="function"?tendAssociationPeopleBadges(workout,"",null,"saved-workout"):"";
-  return '<article class="fitness-saved-workout"><div><h3>'+esc(workout.name)+'</h3><p>'+esc(names.join(", "))+'</p>'+(people?'<div class="fitness-workout-people">'+people+'</div>':"")+'</div><div class="fitness-saved-workout-actions"><button type="button" class="btn mini" data-fitness-log-saved-workout="'+esc(workout.id)+'"'+(blocked?' disabled title="One or more muscles are resting today."':"")+'>Workout</button><button type="button" class="btn mini ghost" data-fitness-edit-saved-workout="'+esc(workout.id)+'">Edit</button><button type="button" class="btn mini ghost" data-fitness-delete-saved-workout="'+esc(workout.id)+'">Delete</button></div></article>';
+  return '<article class="fitness-saved-workout"><div><h3>'+esc(workout.name)+'</h3><p>'+esc(names.join(", "))+'</p>'+(invalid?'<p class="fitness-workout-rest-note">This workout has unknown or incomplete muscle-group data and cannot be logged as saved.</p>':blocked?'<p class="fitness-workout-rest-note">Some groups are recovering; you can still log a workout you completed.</p>':"")+(people?'<div class="fitness-workout-people">'+people+'</div>':"")+'</div><div class="fitness-saved-workout-actions"><button type="button" class="btn mini" data-fitness-log-saved-workout="'+esc(workout.id)+'"'+(invalid?' disabled title="This workout has invalid muscle-group data."':"")+'>Workout</button><button type="button" class="btn mini ghost" data-fitness-edit-saved-workout="'+esc(workout.id)+'">Edit</button><button type="button" class="btn mini ghost" data-fitness-delete-saved-workout="'+esc(workout.id)+'">Delete</button></div></article>';
  }).join("")+'</div>':'<p class="fitness-empty">No saved workouts yet. Create one to quickly log your usual muscle groups.</p>')+'</section>';
 }
 function fitnessMuscleMarkup(muscle,score,selected){
@@ -270,19 +293,19 @@ function fitnessGoalsDialog(data,section){
 }
 function fitnessMuscleCheckboxes(selectedIds,scores){
  scores=scores||[];
- return '<div class="fitness-muscle-checks">'+["Upper body","Core","Lower body"].map(function(group){return '<fieldset><legend>'+group+'</legend>'+FITNESS_MUSCLES.filter(function(muscle){return muscle.group===group;}).map(function(muscle){var score=scores.find(function(item){return item.id===muscle.id;}),blocked=!!(score&&!score.eligible),restText=blocked?score.status:"";return '<label class="'+(blocked?"is-resting":"")+'"><input type="checkbox" name="muscleIds" value="'+muscle.id+'"'+(selectedIds.indexOf(muscle.id)>=0&&!blocked?" checked":"")+(blocked?' disabled title="'+esc(restText)+'"':"")+'><span>'+esc(muscle.name)+(blocked?'<small>'+esc(restText)+'</small>':"")+'</span></label>';}).join("")+'</fieldset>';}).join("")+'</div>';
+ return '<div class="fitness-muscle-checks">'+["Upper body","Core","Lower body"].map(function(group){return '<fieldset><legend>'+group+'</legend>'+FITNESS_MUSCLES.filter(function(muscle){return muscle.group===group;}).map(function(muscle){var score=scores.find(function(item){return item.id===muscle.id;}),blocked=!!(score&&!score.eligible),restText=blocked?score.status:"";return '<label class="'+(blocked?"is-resting":"")+'"><input type="checkbox" name="muscleIds" value="'+muscle.id+'"'+(selectedIds.indexOf(muscle.id)>=0?" checked":"")+'><span>'+esc(muscle.name)+(blocked?'<small>'+esc(restText)+' · Still selectable when logging an actual workout</small>':"")+'</span></label>';}).join("")+'</fieldset>';}).join("")+'</div>';
 }
 function fitnessWorkoutBlockedMuscles(workout,scores){
- return (workout&&workout.muscleIds||[]).map(function(id){return (scores||[]).find(function(item){return item.id===id;});}).filter(function(item){return !item||!item.eligible;});
+ var muscleIds=workout&&Array.isArray(workout.muscleIds)?Array.from(new Set(workout.muscleIds)):[],unknown=!!(workout&&workout.invalidMuscleIds===true)||!muscleIds.length||muscleIds.some(function(id){return typeof id!=="string"||!FITNESS_MUSCLES.some(function(muscle){return muscle.id===id;});});
+ if(unknown)return [null];
+ return muscleIds.map(function(id){return (scores||[]).find(function(item){return item.id===id;});}).filter(function(item){return !item||!item.eligible;});
 }
 function fitnessWorkoutLogFields(data,scores){
  var context=fitnessDialog.rhythmContext||{},recommendations=fitnessRankSavedWorkouts(scores,data.savedWorkouts||[]),best=recommendations[0],selectedId=fitnessDialog.workoutChoiceId||context.initialWorkoutId||fitnessDialog.initialWorkoutId||"custom";
  if(selectedId!=="custom"&&!data.savedWorkouts.some(function(item){return item.id===selectedId;}))selectedId="custom";
- var selectedRoutine=(data.savedWorkouts||[]).find(function(item){return item.id===selectedId;});
- if(selectedRoutine&&fitnessWorkoutBlockedMuscles(selectedRoutine,scores).length)selectedId="custom";
- var recommended=best?'<option value="'+esc(best.id)+'"'+(selectedId===best.id?" selected":"")+'> '+esc(best.name)+' · Recommended</option>':"",options=(data.savedWorkouts||[]).filter(function(item){return !best||item.id!==best.id;}).map(function(workout){var blocked=fitnessWorkoutBlockedMuscles(workout,scores),reason=blocked.map(function(item){return item?item.name+" "+item.status.toLowerCase():"Unavailable";}).join(", ");return '<option value="'+esc(workout.id)+'"'+(selectedId===workout.id?" selected":"")+(blocked.length?' disabled title="'+esc(reason)+'"':"")+'>'+esc(workout.name)+(blocked.length?" · "+esc(reason):"")+'</option>';}).join("");
+ var recommended=best?'<option value="'+esc(best.id)+'"'+(selectedId===best.id?" selected":"")+'> '+esc(best.name)+' · Recommended</option>':"",options=(data.savedWorkouts||[]).filter(function(item){return !best||item.id!==best.id;}).map(function(workout){var blocked=fitnessWorkoutBlockedMuscles(workout,scores),invalid=!!(workout.invalidMuscleIds)||blocked.some(function(item){return !item;}) ,reason=blocked.map(function(item){return item?item.name+" "+item.status.toLowerCase():"Unavailable";}).join(", ");return '<option value="'+esc(workout.id)+'"'+(selectedId===workout.id?" selected":"")+(invalid?' disabled title="This saved workout has invalid muscle-group data."':"")+'>'+esc(workout.name)+(blocked.length?" · "+esc(reason)+(invalid?" (edit workout)":" (log actual workout)"):"")+'</option>';}).join("");
  var selected=selectedId!=="custom"?(data.savedWorkouts||[]).find(function(item){return item.id===selectedId;}):null,configured=(data.savedWorkouts||[]).find(function(item){return item.id===context.configuredWorkoutId;}),unavailable=context.configuredWorkoutId&&!configured,configuredBlocked=configured&&fitnessWorkoutBlockedMuscles(configured,scores),muscles=selected?'<div class="fitness-workout-selected"><strong>'+esc(selected.name)+' includes</strong><div class="fitness-saved-muscle-summary">'+fitnessRhythmMuscles(selected).map(function(name,index){return '<span>'+esc(name)+'</span><input type="hidden" name="muscleIds" value="'+esc(selected.muscleIds[index])+'">';}).join("")+'</div><input type="hidden" name="savedWorkoutId" value="'+esc(selected.id)+'"><input type="hidden" name="workoutName" value="'+esc(selected.name)+'"></div>':fitnessMuscleCheckboxes(fitnessDialog.muscleIds||[],scores)+'<label>Workout name (optional)<input type="text" name="workoutName" maxlength="80" value="'+esc(fitnessDialog.workoutName||"")+'" placeholder="Name this custom workout"></label>';
- var unavailableNotice=unavailable?'<p class="fitness-dialog-intro">The configured workout is unavailable. Choose another workout or custom muscles, or <button type="button" class="fitness-inline-link" data-fitness-rhythm-edit="'+esc(context.rhythmId)+'">Edit Rhythm</button>.</p>':configuredBlocked&&configuredBlocked.length?'<p class="fitness-dialog-intro">Planned workout unavailable today: '+esc(configuredBlocked.map(function(item){return item.name+" · "+item.status.replace(/\.$/,"");}).join(", "))+'. The planned workout is unchanged; choose an eligible workout or custom muscles.</p>':"";
+ var unavailableNotice=unavailable?'<p class="fitness-dialog-intro">The configured workout is unavailable. Choose another workout or custom muscles, or <button type="button" class="fitness-inline-link" data-fitness-rhythm-edit="'+esc(context.rhythmId)+'">Edit Rhythm</button>.</p>':configuredBlocked&&configuredBlocked.length?'<p class="fitness-dialog-intro">Some planned muscle groups are recovering. You can still log the workout you completed.</p>':"";
  return '<label class="fitness-workout-select-label">Workout<select name="workoutChoice">'+recommended+options+'<option value="custom"'+(selectedId==="custom"?" selected":"")+' >Custom workout</option></select></label>'+unavailableNotice+muscles;
 }
 function fitnessWorkoutPeopleControlsHTML(workout){
@@ -349,7 +372,7 @@ function fitnessOpenRhythm(id){
  if(rhythm.type==="weighin"){fitnessOpen("weighin",null,[],context);return;}
  if(rhythm.type==="cardio"){fitnessOpen("run",null,[],context);return;}
  var data=fitnessStoreSnapshot(),scores=fitnessPageScores(data,todayStr()),recommendations=fitnessRankSavedWorkouts(scores.muscles,data.savedWorkouts||[]),configured=rhythm.strengthMode==="specific"&&data.savedWorkouts.find(function(item){return item.id===rhythm.workoutId;}),initial=null;
- if(configured&&!fitnessWorkoutBlockedMuscles(configured,scores.muscles).length)initial=configured;
+ if(configured)initial=configured;
  else if(rhythm.strengthMode==="recommended"&&recommendations.length)initial=data.savedWorkouts.find(function(item){return item.id===recommendations[0].id;})||null;
  context.strengthMode=rhythm.strengthMode||"custom";context.configuredWorkoutId=rhythm.strengthMode==="specific"?rhythm.workoutId:"";context.initialWorkoutId=initial?initial.id:"custom";
  fitnessOpen("workout",null,[],context);
@@ -497,14 +520,9 @@ function fitnessHandleRecord(form,kind){
   if(choice&&choice!=="custom"&&!selectedWorkout){fitnessSetError(form,"That saved workout is no longer available. Choose another workout or Custom workout.");return;}
   if(choice&&choice!=="custom"){
    if(!selectedMusclesMatch){fitnessSetError(form,"Choose the complete muscle group list for "+selectedWorkout.name+".");return;}
-   var savedBlocked=fitnessWorkoutBlockedMuscles(selectedWorkout,fitnessMuscleScores(data,contextRhythmId||associationId?occurrence:date));
-   if(savedBlocked.length){fitnessSetError(form,savedBlocked.map(function(item){return item.name+" is "+item.status.toLowerCase();}).join(" "));return;}
    record.savedWorkoutId=selectedWorkout.id;record.workoutName=selectedWorkout.name;
   }else if(selectedMusclesMatch){record.savedWorkoutId=selectedWorkout.id;record.workoutName=selectedWorkout.name;}
   else{delete record.savedWorkoutId;var customWorkoutName=fields.workoutName?fields.workoutName.value.trim():"";if(customWorkoutName)record.workoutName=customWorkoutName;else delete record.workoutName;}
-  var restData=JSON.parse(JSON.stringify(data));if(form.getAttribute("data-fitness-id"))restData.workouts=restData.workouts.filter(function(item){return item.id!==form.getAttribute("data-fitness-id");});
-  var eligibility=fitnessMuscleScores(restData,contextRhythmId||associationId?occurrence:date),blocked=record.muscleIds.map(function(muscleId){return eligibility.find(function(item){return item.id===muscleId;});}).filter(function(item){return item&&!item.eligible;});
-  if(blocked.length){fitnessSetError(form,blocked.map(function(item){return item.name+" is "+item.status.toLowerCase();}).join(" "));return;}
  }else if(kind==="run"){
   record.distance=Number(fields.distance.value);if(!Number.isFinite(record.distance)||record.distance<=0){fitnessSetError(form,"Enter a distance greater than zero.");return;}
  }else{
