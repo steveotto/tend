@@ -97,6 +97,12 @@ test("preferred rest days use calendar boundaries independently of consistency s
   assert.equal(runScore(context, "fitnessMuscleScores", data, "2026-10-12").find(item => item.id === "abs").eligible, true);
   assert.equal(runScore(context, "fitnessMuscleScores", data, "2026-10-13").find(item => item.id === "abs").eligible, true);
   assert.equal(runScore(context, "fitnessMuscleScores", { settings: {}, workouts: [] }, "2026-10-13").find(item => item.id === "chest").eligible, true);
+  const invalidNonAbsRest = runScore(context, "fitnessMuscleScores", {
+    settings: { preferredRestDays: { chest: 0 } },
+    workouts: [{ id: "chest", date: "2026-10-12", muscleIds: ["chest"] }]
+  }, "2026-10-13").find(item => item.id === "chest");
+  assert.equal(invalidNonAbsRest.preferredRestDays, 1);
+  assert.equal(invalidNonAbsRest.eligible, false);
 });
 function fitnessDateDiff(from, to) {
   return Math.round((Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / 86400000);
@@ -181,27 +187,135 @@ test("overall score averages only available component scores and suggestions han
   });
 });
 
-test("saved-workout recommendations exclude resting workouts and rank focused overdue coverage", () => {
+test("saved-workout recommendations rank average normalized need and include never-trained muscles", () => {
   const context = scoringContext();
-  const scores = [
-    { id: "biceps", name: "Biceps", score: 80, eligible: true, daysSince: 5, intervalDays: 3 },
-    { id: "triceps", name: "Triceps", score: 80, eligible: true, daysSince: 5, intervalDays: 3 },
-    { id: "back", name: "Back", score: 90, eligible: false, daysSince: 1, intervalDays: 7 },
-    { id: "shoulders", name: "Shoulders", score: 60, eligible: true, daysSince: 9, intervalDays: 5 },
-    { id: "abs", name: "Abs", score: 60, eligible: true, daysSince: 9, intervalDays: 5 }
-  ];
+  const intervals = { shoulders: 7, chest: 7, back: 7, biceps: 7, triceps: 7, abs: 7, quads: 7, hamstrings: 7, calves: 7 };
+  const restDays = { shoulders: 1, chest: 1, back: 1, biceps: 1, triceps: 1, abs: 0, quads: 1, hamstrings: 1, calves: 1 };
   const plans = [
     { id: "arms", name: "Arms", muscleIds: ["biceps", "triceps"] },
-    { id: "back-day", name: "Back Day", muscleIds: ["back", "biceps"] },
-    { id: "upper", name: "Upper Body", muscleIds: ["back", "biceps", "triceps"] },
-    { id: "shoulders-core", name: "Shoulders & Core", muscleIds: ["shoulders", "abs"] }
+    { id: "legs", name: "Legs", muscleIds: ["quads", "hamstrings", "calves"] }
   ];
-  const ranked = runScore(context, "fitnessRankSavedWorkouts", scores, plans);
-  assert.deepEqual(ranked.map(item => item.name), ["Shoulders & Core", "Arms"]);
-  assert.equal(ranked[0].expectedStrengthIncrease, 16);
-  assert.deepEqual(ranked[1].overdue.map(item => [item.name, item.daysOverdue]), [["Biceps", 2], ["Triceps", 2]]);
-  assert.equal(runScore(context, "fitnessRankSavedWorkouts", scores, []).length, 0);
-  assert.deepEqual(runScore(context, "fitnessRankSavedWorkouts", scores.map(item => ({ ...item, score: 100 })), plans), []);
+  const history = ["biceps", "triceps"].map(muscleId => ({ id: muscleId, date: "2026-10-13", muscleIds: [muscleId] }));
+  const data = { settings: { muscleIntervals: intervals, preferredRestDays: restDays }, workouts: history };
+  const scores = runScore(context, "fitnessMuscleScores", data, "2026-10-28");
+  assert.equal(scores.find(item => item.id === "biceps").score, 20);
+  assert.equal(scores.find(item => item.id === "quads").historyState, "never-trained");
+  assert.deepEqual(runScore(context, "fitnessRankSavedWorkouts", scores, plans).map(item => item.name), ["Legs", "Arms"]);
+  assert.match(runScore(context, "fitnessRankSavedWorkouts", scores, plans)[0].reason, /three muscle groups that haven't been trained yet/);
+
+  const neverTrained = runScore(context, "fitnessMuscleScores", { settings: { muscleIntervals: intervals, preferredRestDays: restDays }, workouts: [] }, "2026-10-28");
+  assert.deepEqual(runScore(context, "fitnessRankSavedWorkouts", neverTrained, plans).map(item => item.name), ["Arms", "Legs"]);
+
+  const averageScores = [
+    { id: "quads", name: "Quads", score: 50, eligible: true, historyState: "trained" },
+    { id: "hamstrings", name: "Hamstrings", score: 50, eligible: true, historyState: "trained" },
+    { id: "calves", name: "Calves", score: 50, eligible: true, historyState: "trained" },
+    { id: "chest", name: "Chest", score: 10, eligible: true, historyState: "trained" }
+  ];
+  assert.deepEqual(runScore(context, "fitnessRankSavedWorkouts", averageScores, [
+    { id: "legs", name: "Legs", muscleIds: ["quads", "hamstrings", "calves"] },
+    { id: "chest", name: "Chest", muscleIds: ["chest"] }
+  ]).map(item => item.name), ["Chest", "Legs"]);
+});
+
+test("recommendations exclude any resting target and keep calendar-day recovery boundaries", () => {
+  const context = scoringContext();
+  const settings = { muscleIntervals: { back: 7, biceps: 7, triceps: 7 }, preferredRestDays: { back: 1, biceps: 1, triceps: 1 } };
+  const scores = runScore(context, "fitnessMuscleScores", { settings, workouts: [{ id: "back", date: "2026-10-13", muscleIds: ["back"] }] }, "2026-10-14");
+  const plans = [
+    { id: "arms", name: "Arms", muscleIds: ["biceps", "triceps"] },
+    { id: "back-biceps", name: "Back & Biceps", muscleIds: ["back", "biceps"] },
+    { id: "upper", name: "Upper Body", muscleIds: ["back", "biceps", "triceps"] }
+  ];
+  assert.equal(scores.find(item => item.id === "back").eligible, false);
+  assert.deepEqual(runScore(context, "fitnessRankSavedWorkouts", scores, plans).map(item => item.name), ["Arms"]);
+  const rested = runScore(context, "fitnessMuscleScores", { settings, workouts: [{ id: "back", date: "2026-10-12", muscleIds: ["back"] }] }, "2026-10-13").find(item => item.id === "back");
+  const recovered = runScore(context, "fitnessMuscleScores", { settings, workouts: [{ id: "back", date: "2026-10-12", muscleIds: ["back"] }] }, "2026-10-14").find(item => item.id === "back");
+  assert.equal(rested.eligible, false);
+  assert.equal(rested.restDaysRemaining, 1);
+  assert.equal(recovered.eligible, true);
+  assert.equal(recovered.restDaysRemaining, 0);
+});
+
+test("a resting muscle remains selectable and can be saved in an actual manual workout", () => {
+  let storedWorkout = null;
+  const context = {
+    S: { events: [] },
+    document: { addEventListener() {} },
+    window: {},
+    esc: value => String(value),
+    fitnessStoreSnapshot: () => ({
+      settings: { muscleIntervals: { back: 7 }, preferredRestDays: { back: 1 } },
+      workouts: [{ id: "yesterday", date: "2026-10-13", muscleIds: ["back"] }],
+      savedWorkouts: []
+    }),
+    fitnessStoreUpsert(collection, record) { assert.equal(collection, "workouts"); storedWorkout = record; },
+    todayStr: () => "2026-10-14",
+    uid: () => "manual-log",
+    render() {},
+    flash() {},
+    fitnessSetError(_form, message) { throw new Error(message); }
+  };
+  vm.createContext(context);
+  vm.runInContext(scoringSource, context);
+  vm.runInContext(fitnessAppSource, context);
+  const form = {
+    dataset: {},
+    elements: { date: { value: "2026-10-14" }, notes: { value: "" }, workoutChoice: { value: "custom" }, workoutName: { value: "Back Day" } },
+    getAttribute: () => null,
+    querySelectorAll: () => [{ type: "checkbox", checked: true, value: "back" }]
+  };
+  vm.runInContext('fitnessHandleRecord(__form,"workout")', Object.assign(context, { __form: form }));
+  assert.deepEqual(Array.from(storedWorkout.muscleIds), ["back"]);
+  assert.equal(storedWorkout.workoutName, "Back Day");
+  const library = vm.runInContext('fitnessSavedWorkoutsHTML({savedWorkouts:[{id:"back-day",name:"Back Day",muscleIds:["back"]}]},{muscles:[{id:"back",name:"Back",eligible:false,status:"Resting"}]})', context);
+  assert.match(library, /data-fitness-log-saved-workout="back-day"/);
+  assert.doesNotMatch(library, /data-fitness-log-saved-workout="back-day" disabled/);
+  assert.match(library, /you can still log a workout you completed/);
+  const emptyState = vm.runInContext('fitnessWorkoutRecommendations({savedWorkouts:[{id:"back-day",name:"Back Day",muscleIds:["back"]}]},{muscles:[{id:"back",name:"Back",eligible:false,status:"Resting"}]})', context);
+  assert.match(emptyState, /No saved workout is eligible right now because an included muscle is resting/);
+  assert.match(emptyState, /data-fitness-custom-workout>Custom Workout/);
+});
+
+test("recommendation ranking uses stable ties without another cadence penalty", () => {
+  const context = scoringContext();
+  const scores = runScore(context, "fitnessMuscleScores", {
+    settings: {
+      muscleIntervals: { chest: 3, shoulders: 10 },
+      preferredRestDays: { chest: 1, shoulders: 3 }
+    },
+    workouts: [
+      { id: "chest-history", date: "2026-10-23", muscleIds: ["chest"] },
+      { id: "shoulders-history", date: "2026-10-16", muscleIds: ["shoulders"] }
+    ]
+  }, "2026-10-28").filter(item => item.id === "chest" || item.id === "shoulders");
+  assert.deepEqual(scores.map(item => item.score), [80, 80]);
+  assert.deepEqual(scores.map(item => item.eligible), [true, true]);
+  const ranked = runScore(context, "fitnessRankSavedWorkouts", scores, [
+    { id: "zeta", name: "Zeta", muscleIds: ["chest"] },
+    { id: "alpha", name: "Alpha", muscleIds: ["shoulders"] }
+  ]);
+  assert.deepEqual(ranked.map(item => item.name), ["Alpha", "Zeta"]);
+});
+
+test("invalid, duplicate, unknown, empty, and identical workout data is handled safely", () => {
+  const context = scoringContext();
+  const scores = runScore(context, "fitnessMuscleScores", { settings: {}, workouts: [{ id: "bad", date: "not-a-date", muscleIds: ["chest"] }] }, "2026-10-14");
+  const chest = scores.find(item => item.id === "chest");
+  assert.equal(chest.historyState, "invalid");
+  assert.equal(chest.eligible, false);
+  assert.equal(runScore(context, "fitnessRankSavedWorkouts", scores, [{ id: "corrupt", name: "Corrupt", muscleIds: ["chest"] }]).length, 0);
+
+  const available = scores.map(item => item.id === "chest" ? { ...item, historyState: "never-trained", eligible: true } : item);
+  const ranked = runScore(context, "fitnessRankSavedWorkouts", available, [
+    { id: "same", name: "Chest", muscleIds: ["chest", "chest"] },
+    { id: "copy", name: "Chest copy", muscleIds: ["chest"] },
+    { id: "unknown", name: "Unknown", muscleIds: ["mystery"] },
+    { id: "empty", name: "Empty", muscleIds: [] },
+    { id: "bad-shape", name: "Bad shape", muscleIds: "chest" }
+  ]);
+  assert.deepEqual(ranked.map(item => item.id), ["same"]);
+  assert.deepEqual(ranked[0].muscleIds, ["chest"]);
 });
 
 test("weight pace score is capped and deducts five percentage points per day behind", () => {
@@ -306,7 +420,7 @@ test("weight pace score is capped and deducts five percentage points per day beh
 });
 
 test("legacy Tend states gain fitness defaults without changing existing state or imported fitness records", () => {
-  const getFunction = name => coreSource.match(new RegExp(`function ${name}\\([^\\n]*\\)\\{[^\\n]*\\}`))[0];
+  const getFunction = name => name === "ensureFitnessShape" ? coreSource.match(/function ensureFitnessShape\(st\)\{[\s\S]*?^\}/m)[0] : coreSource.match(new RegExp(`function ${name}\\([^\\n]*\\)\\{[^\\n]*\\}`))[0];
   const context = {};
   vm.createContext(context);
   vm.runInContext(`${getFunction("defaultFitnessState")};${getFunction("ensureFitnessShape")}`, context);
@@ -387,7 +501,7 @@ test("legacy Fitness rhythms migrate once into shared rhythms without losing set
 });
 
 test("fitness persistence adapter upserts, edits, deletes, imports, and saves through Tend state", () => {
-  const getFunction = name => coreSource.match(new RegExp(`function ${name}\\([^\\n]*\\)\\{[^\\n]*\\}`))[0];
+  const getFunction = name => name === "ensureFitnessShape" ? coreSource.match(/function ensureFitnessShape\(st\)\{[\s\S]*?^\}/m)[0] : coreSource.match(new RegExp(`function ${name}\\([^\\n]*\\)\\{[^\\n]*\\}`))[0];
   let saveCount = 0;
   const context = {
     S: { fitness: { workouts: [], runs: [], weighIns: [] } },
@@ -434,7 +548,7 @@ test("fitness rhythm logs link one scheduled occurrence and edits or deletes sta
     console
   };
   vm.createContext(context);
-  const getFunction = name => coreSource.match(new RegExp(`function ${name}\\([^\\n]*\\)\\{[^\\n]*\\}`))[0];
+  const getFunction = name => name === "ensureFitnessShape" ? coreSource.match(/function ensureFitnessShape\(st\)\{[\s\S]*?^\}/m)[0] : coreSource.match(new RegExp(`function ${name}\\([^\\n]*\\)\\{[^\\n]*\\}`))[0];
   vm.runInContext(`${getFunction("defaultFitnessState")};${getFunction("ensureFitnessShape")};function ensureShape(value){return ensureFitnessShape(value)};${dataSource}`, context);
   vm.runInContext('fitnessStoreUpsert("workouts",{id:"log-1",date:"2026-10-15",muscleIds:["abs"],rhythmId:"abs-morning",rhythmOccurrence:"2026-10-15",fitnessType:"workout"});', context);
   let state = JSON.parse(JSON.stringify(context.S));
@@ -538,28 +652,28 @@ test("Fitness Today cards extend the shared rhythm card with current strength gu
   context.S.fitness = data;
   fitnessData = data;
   const weigh = vm.runInContext('fitnessTodayRhythmCardHTML({id:"weigh",type:"weighin",text:"Morning weight"},false)', context);
-  assert.match(weigh, /class="rhythm-card card rhythm-card--fitness"/);
+  assert.match(weigh, /class="rhythm-card card today-rhythm-card rhythm-card--fitness"/);
   assert.match(weigh, /Morning weight/);
-  assert.match(weigh, />Weigh-In<\/button>/);
-  assert.match(weigh, /rhythm-card__meta/);
-  assert.match(weigh, /\+ Add Person/);
-  assert.match(weigh, /\+ Add Category/);
+  assert.match(weigh, />Log weight<\/button>/);
+  assert.match(weigh, /today-rhythm-card__details-toggle/);
+  assert.match(weigh, /aria-expanded="false"/);
+  assert.match(weigh, /<dialog class="today-rhythm-details-dialog" id="today-rhythm-details-fitness-weigh-dialog"/);
+  assert.match(weigh, /Last tended|Not yet tended/);
+  assert.doesNotMatch(weigh, /<dialog[^>]* open/);
   const cardio = vm.runInContext('fitnessTodayRhythmCardHTML({id:"run",type:"cardio",text:"Run"},false)', context);
-  assert.match(cardio, /class="rhythm-card card rhythm-card--fitness"/);
+  assert.match(cardio, /class="rhythm-card card today-rhythm-card rhythm-card--fitness"/);
   assert.match(cardio, /Run/);
-  assert.match(cardio, /rhythm-card__meta|rhythm-card__score/);
-  assert.match(cardio, />Log Run<\/button>/);
+  assert.match(cardio, />Log cardio<\/button>/);
   const recommended = vm.runInContext('fitnessTodayRhythmCardHTML({id:"strength",type:"workout",text:"Evening workout",strengthMode:"recommended"},false)', context);
   assert.match(recommended, /Arms/);
   assert.match(recommended, /Recommended: Arms/);
-  assert.match(recommended, /Focus on biceps and triceps/);
-  assert.match(recommended, /rhythm-card__edit/);
-  assert.match(recommended, /rhythm-card__score/);
-  assert.match(recommended, />Workout<\/button>/);
+  assert.match(recommended, /<p class="today-rhythm-card__support">Recommended: Arms<\/p>/);
+  assert.match(recommended, />Log workout<\/button>/);
   assert.doesNotMatch(recommended, /Back Day/);
-  assert.match(recommended, /rhythm-card__meta/);
+  assert.match(recommended, /<dialog class="today-rhythm-details-dialog" id="today-rhythm-details-fitness-strength-dialog"/);
+  assert.match(recommended, />Edit<\/button>/);
   const planned = vm.runInContext('fitnessTodayRhythmCardHTML({id:"specific",type:"workout",text:"Early morning Abs",strengthMode:"specific",workoutId:"arms"},false)', context);
-  assert.match(planned, /Planned workout: Arms/);
+  assert.match(planned, /<p class="today-rhythm-card__support">Planned: Arms<\/p>/);
   assert.match(planned, /Biceps, Triceps/);
   assert.doesNotMatch(planned, /Recommended:/);
   const completed = vm.runInContext('fitnessTodayRhythmCardHTML({id:"weigh",type:"weighin",text:"Morning weight"},true)', context);
@@ -576,7 +690,7 @@ test("Fitness Today cards extend the shared rhythm card with current strength gu
   assert.match(modal, /name="workoutChoice"/);
   assert.match(modal, /Arms · Recommended/);
   assert.match(modal, /Back Day · Back resting/);
-  assert.match(modal, /disabled title="Back resting/);
+  assert.doesNotMatch(modal, /option value="back-day"[^>]*disabled/);
   assert.match(modal, /Custom workout/);
   assert.match(modal, /Save Log/);
   context.fitnessDialog.workoutChoiceId = "custom";
@@ -585,7 +699,9 @@ test("Fitness Today cards extend the shared rhythm card with current strength gu
     assert.match(customModal, new RegExp(muscle));
   }
   assert.match(customModal, /Resting · ready in 1 day/);
-  assert.match(customModal, /name="muscleIds" value="back" disabled/);
+  assert.match(customModal, /name="muscleIds" value="back"[^>]*>/);
+  assert.match(customModal, /Still selectable when logging an actual workout/);
+  assert.doesNotMatch(customModal, /name="muscleIds" value="back"[^>]*disabled/);
   assert.match(customModal, /Workout name \(optional\)/);
   assert.match(customModal, /placeholder="Name this custom workout"/);
   context.fitnessDialog.rhythmContext = null;
@@ -615,10 +731,10 @@ test("Fitness Today cards extend the shared rhythm card with current strength gu
   context.fitnessDialog.rhythmContext = { rhythmId: "specific", occurrence: "2026-10-14", strengthMode: "specific", configuredWorkoutId: "arms", initialWorkoutId: "arms" };
   const specificModal = vm.runInContext("fitnessRecordDialog(__data)", context);
   assert.match(specificModal, /value="arms" selected/);
-  context.fitnessDialog.rhythmContext = { rhythmId: "specific", occurrence: "2026-10-14", strengthMode: "specific", configuredWorkoutId: "back-day", initialWorkoutId: "custom" };
+  context.fitnessDialog.rhythmContext = { rhythmId: "specific", occurrence: "2026-10-14", strengthMode: "specific", configuredWorkoutId: "back-day", initialWorkoutId: "back-day" };
   const restingSpecificModal = vm.runInContext("fitnessRecordDialog(__data)", context);
-  assert.match(restingSpecificModal, /Planned workout unavailable today/);
-  assert.match(restingSpecificModal, /<option value="back-day" disabled/);
+  assert.match(restingSpecificModal, /Some planned muscle groups are recovering. You can still log the workout you completed/);
+  assert.match(restingSpecificModal, /<option value="back-day" selected/);
   context.fitnessDialog.rhythmContext = { rhythmId: "specific", occurrence: "2026-10-14", strengthMode: "specific", configuredWorkoutId: "deleted", initialWorkoutId: "custom" };
   const unavailableModal = vm.runInContext("fitnessRecordDialog(__data)", context);
   assert.match(unavailableModal, /configured workout is unavailable/);
@@ -675,7 +791,7 @@ test("Fitness rhythms are managed in type-filtered section subtabs", () => {
   assert.match(fitnessAppSource, /data-fitness-rhythm-pause/);
   assert.match(fitnessAppSource, /id==="schedules"\|\|id==="rhythms"/);
   assert.match(viewSource, /if\(r\.paused\|\|/);
-  assert.match(fitnessAppSource, /data-fitness-custom-workout>Workout<\/button>/);
+  assert.match(fitnessAppSource, /data-fitness-custom-workout>Custom Workout<\/button>/);
   assert.match(fitnessAppSource, /Add Rhythm/);
   assert.match(fitnessAppSource, /Go to Strength → Workouts/);
   assert.match(fitnessAppSource, /Continue editing rhythm/);
@@ -730,7 +846,7 @@ test("Fitness rhythm lists filter by structured type and show explicit weekday t
   const weight = vm.runInContext('fitnessRhythmListHTML(__data,"weighin")', context);
   assert.match(strength, /Weekly · Mon, Tue, Thu, Fri/);
   assert.match(strength, /Preferred time: Evening/);
-  assert.match(strength, /No eligible recommended workout/);
+  assert.match(strength, /No saved workout is eligible right now\. You can still log a custom workout/);
   assert.doesNotMatch(strength, />Run</);
   assert.match(cardio, />Paused</);
   assert.match(cardio, />Resume</);

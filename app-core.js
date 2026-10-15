@@ -42,7 +42,21 @@ if(st.areas&&st.areas.fitness){st.areas.health={name:"Health & Fitness"};delete 
  if(!st.areas.finances)st.areas.finances={name:"Finances"};
  st.ideas=st.ideas||[];
  if(needsGoalCleanup)localStorage.setItem(LS_STATE,JSON.stringify(st));return st;}catch(e){return defaultState();}}
-function ensureFitnessShape(st){var defaults=defaultFitnessState(),fitness=st.fitness&&typeof st.fitness==="object"&&!Array.isArray(st.fitness)?st.fitness:{};st.fitness=Object.assign({},defaults,fitness);st.fitness.version=2;st.fitness.settings=Object.assign({},defaults.settings,fitness.settings||{});st.fitness.settings.muscleIntervals=Object.assign({},defaults.settings.muscleIntervals,fitness.settings&&fitness.settings.muscleIntervals||{});st.fitness.settings.preferredRestDays=Object.assign({},defaults.settings.preferredRestDays,fitness.settings&&fitness.settings.preferredRestDays||{});["rhythms","savedWorkouts","workouts","runs","weighIns"].forEach(function(key){if(!Array.isArray(st.fitness[key]))st.fitness[key]=[];});st.fitness.rhythms=st.fitness.rhythms.filter(function(rhythm){return rhythm&&typeof rhythm.id==="string"&&typeof rhythm.text==="string";});st.fitness.savedWorkouts=st.fitness.savedWorkouts.filter(function(workout){return workout&&typeof workout.id==="string"&&typeof workout.name==="string"&&Array.isArray(workout.muscleIds);}).map(function(workout){return Object.assign({},workout,{muscleIds:Array.from(new Set(workout.muscleIds.filter(function(id){return Object.prototype.hasOwnProperty.call(defaults.settings.muscleIntervals,id);}))) });});return st;}
+function ensureFitnessShape(st){
+ var defaults=defaultFitnessState(),fitness=st.fitness&&typeof st.fitness==="object"&&!Array.isArray(st.fitness)?st.fitness:{};
+ st.fitness=Object.assign({},defaults,fitness);st.fitness.version=2;
+ st.fitness.settings=Object.assign({},defaults.settings,fitness.settings||{});
+ st.fitness.settings.muscleIntervals=Object.assign({},defaults.settings.muscleIntervals,fitness.settings&&fitness.settings.muscleIntervals||{});
+ st.fitness.settings.preferredRestDays=Object.assign({},defaults.settings.preferredRestDays,fitness.settings&&fitness.settings.preferredRestDays||{});
+ ["rhythms","savedWorkouts","workouts","runs","weighIns"].forEach(function(key){if(!Array.isArray(st.fitness[key]))st.fitness[key]=[];});
+ st.fitness.rhythms=st.fitness.rhythms.filter(function(rhythm){return rhythm&&typeof rhythm.id==="string"&&typeof rhythm.text==="string";});
+ st.fitness.savedWorkouts=st.fitness.savedWorkouts.filter(function(workout){return workout&&typeof workout.id==="string"&&typeof workout.name==="string"&&Array.isArray(workout.muscleIds);}).map(function(workout){
+  var invalidMuscleIds=workout.invalidMuscleIds===true||workout.muscleIds.some(function(id){return typeof id!=="string"||!Object.prototype.hasOwnProperty.call(defaults.settings.muscleIntervals,id);});
+  var muscleIds=workout.muscleIds.filter(function(id){return typeof id==="string";});
+  return Object.assign({},workout,{invalidMuscleIds:invalidMuscleIds,muscleIds:Array.from(new Set(muscleIds))});
+ });
+ return st;
+}
 function ensureShape(st){st=st||{};["events","tasks","followups","prayers","ideas","echoes","keyDates","checklists"].forEach(function(k){if(!Array.isArray(st[k]))st[k]=[];});var hadGoals=!!(Array.isArray(st.goals)&&st.goals.length)||(Array.isArray(st.events)&&st.events.some(function(event){return !!event.goalId;}));if(hadGoals&&typeof window!=="undefined")window._goalDataPurged=true;delete st.goals;st.events=st.events.filter(function(event){return !event.goalId;});if(!Array.isArray(st.calendars))st.calendars=[];if(!Array.isArray(st.people))st.people=[];if(!st.areas)st.areas=emptyAccountState().areas;if(!st.settings)st.settings=JSON.parse(JSON.stringify(DEFAULT_SETTINGS));if(!Array.isArray(st.rhythms))st.rhythms=[];if(!st.categories)st.categories=defaultCategories();var faithDefaults=defaultFaithConfig();if(!st.faithConfig)st.faithConfig=faithDefaults;else{if(!Array.isArray(st.faithConfig.disabledGroups))st.faithConfig.disabledGroups=[];st.faithConfig.groupDescriptions=Object.assign({},faithDefaults.groupDescriptions,st.faithConfig.groupDescriptions||{});}ensureFitnessShape(st);st.people.forEach(function(p){if(p.encouragementNote&&p.encouragementNote.trim()&&!p.encouragementChecklistMigrated){var id="enc-legacy-"+p.id;if(!st.followups.some(function(f){return f.id===id;}))st.followups.push({id:id,personId:p.id,kind:"encouragement",text:p.encouragementNote,done:false});p.encouragementChecklistMigrated=true;}if(!p.prayerNotesChecklistMigrated){[["howToPray","prayer-request-note"],["prayerFocus","prayer-focus-note"]].forEach(function(pair){var text=p[pair[0]],id="prayer-note-"+pair[0]+"-"+p.id;if(text&&text.trim()&&!st.followups.some(function(f){return f.id===id;}))st.followups.push({id:id,personId:p.id,kind:pair[1],text:text,done:false});});p.prayerNotesChecklistMigrated=true;}});return st;}
 var S=load();
 var saveTimer=null,pushTimer=null;
@@ -69,6 +83,7 @@ function eventsFor(areaId,personId){return S.events.filter(function(e){return e.
 function avg(arr){arr=arr.filter(function(v){return Number.isFinite(v);});if(!arr.length)return null;return Math.round(arr.reduce(function(a,b){return a+b;},0)/arr.length);}
 function areaScore(id){
  if(id==="faith"&&typeof faithScores==="function"){var faith=faithScores().overall;return faith===null?0:faith;}
+ if(id==="health"&&typeof fitnessPageScores==="function"&&typeof fitnessStoreSnapshot==="function")return fitnessPageScores(fitnessStoreSnapshot(),todayStr()).overall;
  var rhythms=S.rhythms.filter(function(r){return r.category===id&&!r.disabled;});
  var rhythmAverage=avg(rhythms.map(rhythmScore));
  if(rhythmAverage!==null)return rhythmAverage;
@@ -78,7 +93,7 @@ function areaHasActivity(id){
  if(eventsFor(id).length>0||S.rhythms.some(function(r){return r.category===id&&!r.disabled;}))return true;
  return id==="health"&&!!S.fitness&&["rhythms","savedWorkouts","workouts","runs","weighIns"].some(function(key){return S.fitness[key].length>0;});
 }
-function displayAreaScore(id){return areaHasActivity(id)?areaScore(id):null;}
+function displayAreaScore(id){if(id==="health"&&typeof fitnessPageScores==="function"&&typeof fitnessStoreSnapshot==="function")return areaScore(id);return areaHasActivity(id)?areaScore(id):null;}
 /* ============ person score: connection-first ============ */
 function personCadenceDays(p){var cc=p.connectCadence||"weekly";if(cc==="daily")return 1;if(cc==="twicewk")return 3.5;if(cc==="weekly")return 7;if(cc==="biweekly")return 14;if(cc==="monthly")return 30;return p.cadenceDays||30;}
 function personCadenceLabel(p){var cc=p.connectCadence||"weekly";return {daily:"daily",twicewk:"twice weekly",weekly:"weekly",biweekly:"every 2 weeks",monthly:"monthly"}[cc]||("every "+(p.cadenceDays||30)+" days");}

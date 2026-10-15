@@ -42,11 +42,15 @@ function fitnessWeekStart(today){
 function fitnessMuscleScores(data,today){
  var settings=data&&data.settings||{},intervals=settings.muscleIntervals||{},restDays=settings.preferredRestDays||{},workouts=data&&Array.isArray(data.workouts)?data.workouts:[];
  return FITNESS_MUSCLES.map(function(muscle){
-  var trainedDates=workouts.filter(function(workout){return fitnessValidDate(workout.date)&&workout.date<=today&&Array.isArray(workout.muscleIds)&&workout.muscleIds.indexOf(muscle.id)>=0;}).map(function(workout){return workout.date;}).sort();
-  var lastTrained=trainedDates.length?trainedDates[trainedDates.length-1]:null,interval=Number(intervals[muscle.id]),intervalDays=Number.isInteger(interval)&&interval>0?interval:null,rest=Number(restDays[muscle.id]),preferredRestDays=Number.isInteger(rest)&&rest>=0?rest:muscle.id==="abs"?0:1;
-  if(!lastTrained||intervalDays===null)return {id:muscle.id,name:muscle.name,group:muscle.group,intervalDays:intervalDays,preferredRestDays:preferredRestDays,lastTrained:lastTrained,daysSince:null,daysUntilDue:null,restDaysRemaining:0,eligible:true,score:null,status:"Not logged yet.",consistencyStatus:"Not logged yet."};
-  var daysSince=Math.max(0,fitnessDateDifference(lastTrained,today)),daysUntilDue=intervalDays-daysSince,score=Math.max(0,100-10*Math.max(0,daysSince-intervalDays)),restDaysRemaining=preferredRestDays===0?0:Math.max(0,preferredRestDays+1-daysSince),eligible=restDaysRemaining===0,consistencyStatus=daysUntilDue>0?"Due in "+daysUntilDue+" "+(daysUntilDue===1?"day.":"days."):daysUntilDue===0?"Due today.":Math.abs(daysUntilDue)+" "+(Math.abs(daysUntilDue)===1?"day":"days")+" overdue.";
-  return {id:muscle.id,name:muscle.name,group:muscle.group,intervalDays:intervalDays,preferredRestDays:preferredRestDays,lastTrained:lastTrained,daysSince:daysSince,daysUntilDue:daysUntilDue,restDaysRemaining:restDaysRemaining,eligible:eligible,score:score,status:eligible?consistencyStatus:"Resting · ready in "+restDaysRemaining+" "+(restDaysRemaining===1?"day.":"days."),consistencyStatus:consistencyStatus};
+  var matchingWorkouts=workouts.filter(function(workout){return workout&&Array.isArray(workout.muscleIds)&&workout.muscleIds.indexOf(muscle.id)>=0;}),corruptHistory=matchingWorkouts.some(function(workout){return !fitnessValidDate(workout.date);}),trainedDates=matchingWorkouts.filter(function(workout){return fitnessValidDate(workout.date)&&workout.date<=today;}).map(function(workout){return workout.date;}).sort();
+  var lastTrained=trainedDates.length?trainedDates[trainedDates.length-1]:null,interval=Number(intervals[muscle.id]),intervalDays=Number.isInteger(interval)&&interval>0?interval:null,rest=Number(restDays[muscle.id]),preferredRestDays=Number.isInteger(rest)&&rest>=(muscle.id==="abs"?0:1)?rest:muscle.id==="abs"?0:1;
+  if(!lastTrained){
+   var neverStatus=corruptHistory?"Training history unavailable.":"Not logged yet.";
+   return {id:muscle.id,name:muscle.name,group:muscle.group,intervalDays:intervalDays,preferredRestDays:preferredRestDays,lastTrained:null,daysSince:null,daysUntilDue:null,restDaysRemaining:0,eligible:!corruptHistory,historyState:corruptHistory?"invalid":"never-trained",score:null,status:neverStatus,consistencyStatus:neverStatus};
+  }
+  var daysSince=Math.max(0,fitnessDateDifference(lastTrained,today)),daysUntilDue=intervalDays===null?null:intervalDays-daysSince,score=intervalDays===null?null:Math.max(0,100-10*Math.max(0,daysSince-intervalDays)),restDaysRemaining=preferredRestDays===0?0:Math.max(0,preferredRestDays+1-daysSince),eligible=restDaysRemaining===0&&!corruptHistory,consistencyStatus=intervalDays===null?"Training interval unavailable.":daysUntilDue>0?"Due in "+daysUntilDue+" "+(daysUntilDue===1?"day.":"days."):daysUntilDue===0?"Due today.":Math.abs(daysUntilDue)+" "+(Math.abs(daysUntilDue)===1?"day":"days")+" overdue.";
+  var status=corruptHistory?"Training history unavailable.":!eligible?"Resting · ready in "+restDaysRemaining+" "+(restDaysRemaining===1?"day.":"days."):consistencyStatus;
+  return {id:muscle.id,name:muscle.name,group:muscle.group,intervalDays:intervalDays,preferredRestDays:preferredRestDays,lastTrained:lastTrained,daysSince:daysSince,daysUntilDue:daysUntilDue,restDaysRemaining:restDaysRemaining,eligible:eligible,historyState:corruptHistory?"invalid":"trained",score:score,status:status,consistencyStatus:consistencyStatus};
  });
 }
 function fitnessStrengthScore(scores){
@@ -58,16 +62,37 @@ function fitnessOverallScore(strength,cardio,weight){
  return available.length?Math.round(available.reduce(function(total,value){return total+value;},0)/available.length):null;
 }
 function fitnessRankSavedWorkouts(scores,savedWorkouts){
- var tracked=(scores||[]).filter(function(item){return Number.isFinite(item.score);}),totalDeficit=tracked.reduce(function(total,item){return total+100-item.score;},0);
- if(!totalDeficit)return [];
- return (savedWorkouts||[]).map(function(workout){
-  var muscleIds=Array.isArray(workout.muscleIds)?Array.from(new Set(workout.muscleIds)):[],muscles=muscleIds.map(function(id){return (scores||[]).find(function(item){return item.id===id;});}).filter(Boolean);
-  if(!muscles.length||muscles.some(function(item){return !item.eligible;}))return null;
-  var overdue=muscles.filter(function(item){return Number.isFinite(item.score)&&item.score<100;}),coveredDeficit=overdue.reduce(function(total,item){return total+100-item.score;},0);
-  if(!coveredDeficit)return null;
-  var focusRatio=overdue.length/muscles.length,priorityImpact=100*(coveredDeficit/totalDeficit)*focusRatio;
-  return {id:workout.id,name:workout.name,muscleIds:muscleIds,overdue:overdue.map(function(item){return {id:item.id,name:item.name,daysOverdue:Math.max(0,item.daysSince-item.intervalDays)};}),priorityImpact:priorityImpact,expectedStrengthIncrease:coveredDeficit/tracked.length};
- }).filter(Boolean).sort(function(a,b){return b.priorityImpact-a.priorityImpact||a.name.localeCompare(b.name);}).slice(0,2);
+ var scoreList=Array.isArray(scores)?scores:[],scoreById=Object.create(null);
+ scoreList.forEach(function(item){if(item&&typeof item.id==="string")scoreById[item.id]=item;});
+ var ranked=(Array.isArray(savedWorkouts)?savedWorkouts:[]).map(function(workout){
+  if(!workout||workout.invalidMuscleIds===true||typeof workout.id!=="string"||!workout.id.trim()||typeof workout.name!=="string"||!workout.name.trim()||!Array.isArray(workout.muscleIds))return null;
+  var muscleIds=Array.from(new Set(workout.muscleIds));
+  if(!muscleIds.length||muscleIds.some(function(id){return typeof id!=="string"||!scoreById[id];}))return null;
+  var muscles=muscleIds.map(function(id){return scoreById[id];});
+  if(muscles.some(function(item){return item.eligible!==true||item.historyState==="invalid";}))return null;
+  var needs=muscles.map(function(item){
+   if(item.historyState==="never-trained"||item.lastTrained===null&&item.score===null)return 100;
+   if(!Number.isFinite(item.score)||item.score<0||item.score>100)return null;
+   return 100-item.score;
+  });
+  if(needs.some(function(need){return need===null;}))return null;
+  var averageNeed=needs.reduce(function(total,need){return total+need;},0)/needs.length;
+  if(averageNeed<=0)return null;
+  var neverTrained=muscles.filter(function(item){return item.historyState==="never-trained"||item.lastTrained===null&&item.score===null;}).length;
+  var countWords=["zero","one","two","three","four","five","six","seven","eight","nine"],neverText=countWords[neverTrained]||String(neverTrained),muscleText=countWords[muscles.length]||String(muscles.length),reason=neverTrained?("Targets "+neverText+" muscle group"+(neverTrained===1?"":"s")+" that "+(neverTrained===1?"hasn't":"haven't")+" been trained yet."):("Targets "+muscleText+" muscle group"+(muscles.length===1?"":"s")+" with the lowest current consistency.");
+  return {id:workout.id,name:workout.name.trim(),muscleIds:muscleIds,muscles:muscles.map(function(item){return {id:item.id,name:item.name};}),averageNeed:averageNeed,reason:reason,combination:muscleIds.slice().sort().join("|")};
+ }).filter(Boolean);
+ ranked.sort(function(a,b){
+  if(b.averageNeed!==a.averageNeed)return b.averageNeed-a.averageNeed;
+  // Cadence is already reflected in coverage; ties use stable name then ID order, never a second cadence penalty.
+  var aName=a.name.toLowerCase(),bName=b.name.toLowerCase();
+  return (aName<bName?-1:aName>bName?1:0)||(a.id<b.id?-1:a.id>b.id?1:0);
+ });
+ var seenIds=Object.create(null),seenCombinations=Object.create(null);
+ return ranked.filter(function(item){
+  if(seenIds[item.id]||seenCombinations[item.combination])return false;
+  seenIds[item.id]=true;seenCombinations[item.combination]=true;return true;
+ }).slice(0,2).map(function(item){delete item.combination;return item;});
 }
 function fitnessCardioProgress(data,today){
  var settings=data&&data.settings||{},runs=data&&Array.isArray(data.runs)?data.runs:[],weekStart=fitnessWeekStart(today),weekEnd=fitnessShiftDate(weekStart,6);

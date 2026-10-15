@@ -266,29 +266,98 @@ test("Home, Person, and category rhythm cards share one renderer and card struct
     historyAttributes: { "data-rhyhistory": "amy|shared-walk" }
   });
 
-  test("Today rhythm details expand and collapse without invoking a completion action", () => {
-    const toggleSource = actionsSource.match(/function tendToggleTodayRhythmDetails\(button\)\{[\s\S]*?\n\}/)[0];
-    const panel = { hidden: true };
-    const values = { "aria-controls": "details-panel", "aria-expanded": "false", "data-rhythm-details-title": "Evening walk", "data-rhythm-details-label": "Open" };
-    const button = {
-      textContent: "Open",
-      getAttribute(name) { return values[name] || null; },
-      setAttribute(name, value) { values[name] = value; }
+  test("Today rhythm details use a modal and restore focus when dismissed", () => {
+    const openSource = actionsSource.match(/function tendOpenTodayRhythmDetails\(button\)\{[\s\S]*?\n\}/)[0];
+    const bindSource = actionsSource.match(/function tendBindTodayRhythmClose\(panel,button\)\{[\s\S]*?\n\}/)[0];
+    const listeners = {};
+    let titleFocused = false, buttonFocused = false;
+    const title = { focus() { titleFocused = true; } };
+    const dialog = {
+      open: false,
+      _todayRhythmBackdropHandler: null,
+      querySelector(selector) { return selector === "[data-today-rhythm-dialog-title]" ? title : null; },
+      addEventListener(name, handler, options) { (listeners[name] ||= []).push({ handler, once: options && options.once }); },
+      showModal() { this.open = true; },
+      close() {
+        this.open = false;
+        listeners.close.filter(item => item.once).forEach(item => item.handler());
+      }
     };
-    const context = { document: { getElementById(id) { return id === "details-panel" ? panel : null; } } };
+    const values = { "aria-controls": "details-dialog", "aria-expanded": "false", "data-rhythm-details-title": "Evening walk" };
+    const button = {
+      isConnected: true,
+      getAttribute(name) { return values[name] || null; },
+      setAttribute(name, value) { values[name] = value; },
+      focus() { buttonFocused = true; }
+    };
+    const context = {
+      document: { getElementById(id) { return id === "details-dialog" ? dialog : null; } },
+      tendShowModal(element) { element.showModal(); }
+    };
     vm.createContext(context);
-    vm.runInContext(toggleSource, context);
+    vm.runInContext(bindSource + "\n" + openSource, context);
     context.__button = button;
-    vm.runInContext("tendToggleTodayRhythmDetails(__button)", context);
-    assert.equal(panel.hidden, false);
+    vm.runInContext("tendOpenTodayRhythmDetails(__button)", context);
+    assert.equal(dialog.open, true);
+    assert.equal(titleFocused, true);
     assert.equal(values["aria-expanded"], "true");
-    assert.equal(button.textContent, "Close details");
     assert.equal(values["aria-label"], "Close details for Evening walk");
-    vm.runInContext("tendToggleTodayRhythmDetails(__button)", context);
-    assert.equal(panel.hidden, true);
+    dialog.close();
+    assert.equal(dialog.open, false);
     assert.equal(values["aria-expanded"], "false");
-    assert.equal(button.textContent, "Open");
     assert.equal(values["aria-label"], "Open details for Evening walk");
+    assert.equal(buttonFocused, true);
+  });
+
+  test("Today rhythm chart returns to its originating details dialog", () => {
+    const chartSource = actionsSource.match(/function tendOpenTodayRhythmChart\(panel,chartButton\)\{[\s\S]*?\n\}/)[0];
+    const bindSource = actionsSource.match(/function tendBindTodayRhythmClose\(panel,button\)\{[\s\S]*?\n\}/)[0];
+    const listeners = {};
+    let chartKey = null, chartFocused = false;
+    const panel = {
+      open: true,
+      isConnected: true,
+      addEventListener(name, handler, options) { (listeners[name] ||= []).push({ handler, once: options && options.once }); },
+      close() {
+        this.open = false;
+        listeners.close.slice().forEach(item => item.handler());
+        listeners.close = listeners.close.filter(item => !item.once);
+      },
+      showModal() { this.open = true; }
+    };
+    const opener = { setAttribute() {}, getAttribute() { return "Evening walk"; } };
+    const chartValues = { "data-rhyhistory": "amy|shared-walk", "data-faith-rhythm-history": "faith-rhythm-1" };
+    const chartButton = {
+      getAttribute(name) { return chartValues[name] || null; },
+      isConnected: true,
+      focus() { chartFocused = true; }
+    };
+    const context = {
+      window: { setTimeout(callback) { callback(); } },
+      openRhythmHistory(key, occurrences, onClose) { chartKey = key; context.closeChart = onClose; },
+      tendShowModal(dialog) { dialog.showModal(); },
+      __panel: panel,
+      __opener: opener,
+      __chartButton: chartButton
+    };
+    vm.createContext(context);
+    vm.runInContext(bindSource + "\n" + chartSource, context);
+    vm.runInContext("__panel._todayRhythmOpener=__opener; tendBindTodayRhythmClose(__panel,__opener); tendOpenTodayRhythmChart(__panel,__chartButton)", context);
+    assert.equal(panel.open, false);
+    assert.equal(panel._todayRhythmChartTransition, true);
+    assert.equal(chartKey, "amy|shared-walk");
+    context.closeChart();
+    assert.equal(panel.open, true);
+    assert.equal(panel._todayRhythmChartTransition, false);
+    assert.equal(chartFocused, true);
+    vm.runInContext("tendOpenTodayRhythmChart(__panel,__chartButton)", context);
+    assert.equal(chartKey, "amy|shared-walk");
+    context.closeChart();
+    chartValues["data-rhyhistory"] = null;
+    vm.runInContext("tendOpenTodayRhythmChart(__panel,__chartButton)", context);
+    assert.equal(chartKey, "faith|faith-rhythm-1");
+    context.closeChart();
+    assert.equal(panel.open, true);
   });
 
   assert.match(card, /class="rhythm-card card"/);
@@ -325,18 +394,53 @@ test("Home, Person, and category rhythm cards share one renderer and card struct
     peopleBadgesHTML: '<button class="person-badge">Amy</button>',
     categoryBadgesHTML: '<span class="category-icon">Marriage</span>',
     frequency: { full: "Weekly on Friday", label: "Weekly · Fri", narrow: "Wk · Fri" },
-    time: { full: "Evening", label: "Evening" },
-    tendAttributes: { "data-tend-open": "person-rhythm", "data-person-id": "amy", "data-rhythm-id": "shared-walk" }
+    time: { full: "Evening", label: "Evening", narrow: "PM" },
+    lastTended: { full: "Last tended 2 weeks ago", label: "2w ago" },
+    frequencyIconHTML: '<svg class="plan-detail-icon frequency-icon" aria-hidden="true"></svg>',
+    timeIconHTML: '<svg class="plan-detail-icon time-icon" aria-hidden="true"></svg>',
+    lastIconHTML: '<svg class="plan-detail-icon occurred-icon" aria-hidden="true"></svg>',
+    todayDetails: {
+      peopleHTML: '<button class="prayer-person person-badge-clickable"><span class="avatar">A</span>Amy</button><button class="prayer-person person-badge-clickable"><span class="avatar">S</span>Sam</button>',
+      categoryHTML: '<span class="rhythm-area-badges" aria-label="Categories: Marriage"><button class="rhythm-area-badge" aria-label="Open Marriage"><svg></svg></button></span>'
+    },
+    tendAttributes: { "data-tend-open": "person-rhythm", "data-person-id": "amy", "data-rhythm-id": "shared-walk" },
+    historyAttributes: { "data-rhyhistory": "amy|shared-walk" },
+    score: 81,
+    scoreClass: "green"
   });
   assert.match(compactTodayCard, /class="today-rhythm-card/);
-  assert.match(compactTodayCard, /aria-expanded="false">Open<\/button>/);
+  assert.match(compactTodayCard, /aria-haspopup="dialog" aria-expanded="false">Open<\/button>/);
   assert.match(compactTodayCard, /Due today/);
   assert.match(compactTodayCard, /Amy/);
-  assert.match(compactTodayCard, /id="today-rhythm-amy-shared-walk-panel"[^>]*hidden/);
+  assert.match(compactTodayCard, /<dialog class="today-rhythm-details-dialog" id="today-rhythm-amy-shared-walk-dialog"/);
+  assert.match(compactTodayCard, /aria-labelledby="today-rhythm-amy-shared-walk-title"/);
   assert.match(compactTodayCard, /Talk &amp; reconnect/);
-  assert.match(compactTodayCard, /Weekly · Fri/);
-  assert.match(compactTodayCard, /class="btn mini rhythm-card__tend" data-tend-open="person-rhythm"/);
+  assert.match(compactTodayCard, /class="tend-type-title" id="today-rhythm-amy-shared-walk-title"/);
+  assert.match(compactTodayCard, /class="rhythm-card__badges"><button class="prayer-person person-badge-clickable"><span class="avatar">A<\/span>Amy<\/button><button class="prayer-person person-badge-clickable"><span class="avatar">S<\/span>Sam<\/button><span class="rhythm-area-badges" aria-label="Categories: Marriage">/);
+  assert.match(compactTodayCard, /aria-label="Frequency: Weekly on Friday"/);
+  assert.match(compactTodayCard, /frequency-icon/);
+  assert.match(compactTodayCard, /aria-label="Preferred time: Evening"/);
+  assert.match(compactTodayCard, /aria-label="Last tended 2 weeks ago"/);
+  assert.match(compactTodayCard, /class="rhythm-card__score green" data-rhyhistory="amy\|shared-walk" aria-label="Rhythm health 81 out of 100\. View chart\."/);
+  assert.match(compactTodayCard, /<span>81<\/span>/);
+  assert.doesNotMatch(compactTodayCard, /81%|>Schedule<|>History</);
   assert.doesNotMatch(compactTodayCard, /class="rhythm-card__edit"/);
+  const sparseLongTitleCard = components.tendRhythmCardHTML(
+    Object.assign({}, record, { text: "A".repeat(120), description: "" }),
+    {
+      todayCompact: true,
+      compactPrimary: "details",
+      detailsId: "today-rhythm-long-title",
+      editAttributes: { "data-faith-rhythm-edit": "faith-rhythm-1" },
+      todayDetails: {
+        peopleHTML: '<span class="person">Amy</span><span class="person">Sam</span>'
+      }
+    }
+  );
+  assert.match(sparseLongTitleCard, new RegExp("A{120}"));
+  assert.match(sparseLongTitleCard, /class="rhythm-card__badges"><span class="person">Amy<\/span><span class="person">Sam<\/span>/);
+  assert.match(sparseLongTitleCard, /data-faith-rhythm-edit="faith-rhythm-1">Edit<\/button>/);
+  assert.doesNotMatch(sparseLongTitleCard, /today-rhythm-details__description|No details\.\.\.|>Schedule<|>History</);
   const scoredCard = components.tendRhythmCardHTML(record, {
     score: 81,
     scoreClass: "green",
@@ -1262,7 +1366,8 @@ test("Faith Today keeps scheduled rhythms and Sparks without its Prayer entry wi
   assert.match(styles, /\.faith-practice-toolbar\{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:24px 0 14px\}/);
   assert.match(styles, /\.faith-nav-score-unavailable\{background:transparent;color:var\(--ink-soft\)/);
   assert.match(indexSource, /Newsreader:ital,opsz,wght@0,6\.\.72,400;0,6\.\.72,500/);
-  assert.match(indexSource, /app-categoryrhythms\.js\?v=20261016-category-health-scores/);
+  assert.match(indexSource, /app-core\.js\?v=20261016-fitness-score-sync-strength-data/);
+  assert.match(indexSource, /app-categoryrhythms\.js\?v=20261016-fitness-score-sync/);
   assert.match(styles, /\.faith-prayer-time-group\{display:grid;gap:10px/);
   assert.match(styles, /\.faith-prayer-content,.faith-prayer-row,.faith-prayer-hub \.faith-profile-prayer-row\{box-sizing:border-box;width:100%;min-width:0\}/);
   assert.match(styles, /\.faith-today-subheading\{margin:28px 0 12px\}/);
