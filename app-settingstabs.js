@@ -1,5 +1,6 @@
 "use strict";
 /* ============ settings tabs override: focused, task-based settings groups ============ */
+var settingsTab="general",settingsDialogOpen=null,settingsDialogReturn=null,settingsDialogOpener=null;
 var calendarEditorDraft=null;
 function applyMobileDashboardTextSize(){
  var savedSize=settings().mobileTextSize,size=savedSize==="large"||savedSize==="larger"?savedSize:"normal";
@@ -9,10 +10,10 @@ function applyMobileDashboardTextSize(){
 applyMobileDashboardTextSize();
 function mobileDisplaySettingsHTML(){
  var savedSize=settings().mobileTextSize,selected=savedSize==="large"||savedSize==="larger"?savedSize:"normal";
- return settingsPanel('display')+'<div class="card settings-card"><div class="subhead">Today dashboard display</div><p class="settings-help">Choose the text size for the Today dashboard on phones, tablets, and desktop. Other pages are unchanged.</p><div class="setrow"><label for="mobileTextSize">Text size</label><select id="mobileTextSize" data-mobile-text-size><option value="normal"'+(selected==="normal"?' selected':'')+'>Small</option><option value="large"'+(selected==="large"?' selected':'')+'>Medium</option><option value="larger"'+(selected==="larger"?' selected':'')+'>Large</option></select></div></div></section>';
+ return '<label class="settings-inline-row"><span><strong>Text size</strong><small>Today dashboard</small></span><select id="mobileTextSize" data-mobile-text-size aria-label="Today dashboard text size"><option value="normal"'+(selected==="normal"?' selected':'')+'>Small</option><option value="large"'+(selected==="large"?' selected':'')+'>Medium</option><option value="larger"'+(selected==="larger"?' selected':'')+'>Large</option></select></label>';
 }
 function weatherSettingsHTML(){
- return settingsPanel('weather')+'<div class="card settings-card"><div class="subhead">Weather</div><p class="settings-help">Tend asks your browser for your current location first. Allow location access for this site to get local weather. If location is unavailable or denied, Tend uses this fallback location instead.</p><label class="field" for="weatherFallbackLocation">Fallback location<input id="weatherFallbackLocation" type="text" autocomplete="address-level2" value="'+esc(settings().weatherFallbackLocation||"")+'" placeholder="City, state or postal code"></label><p class="settings-help">Enter a city, town, or postal code. Weather is provided by Open-Meteo; your location is used only to request the forecast.</p><div class="settings-actions"><button type="button" class="btn" data-weather-settings-save>Save weather settings</button></div></div></section>';
+ return '<div class="card settings-card"><p class="settings-help">Tend tries your device location first. This fallback is used only when location is unavailable or denied.</p><label class="field" for="weatherFallbackLocation">Fallback location<input id="weatherFallbackLocation" type="text" autocomplete="address-level2" value="'+esc(settings().weatherFallbackLocation||"")+'" placeholder="City, state or postal code"></label><div class="settings-actions"><button type="button" class="btn" data-weather-settings-save>Save</button></div></div>';
 }
 document.addEventListener('change',function(event){
  var input=event.target.closest&&event.target.closest('[data-mobile-text-size]');
@@ -27,10 +28,13 @@ document.addEventListener('click',function(event){
  if(!input)return;
  settings().weatherFallbackLocation=input.value.trim();
  nowWeather.requestId++;nowWeather.status='idle';nowWeather.position=null;nowWeather.report=null;
- save();flash(settings().weatherFallbackLocation?'Weather settings saved':'Weather fallback cleared');
+ if(window.tendCloseSettingsDialog)window.tendCloseSettingsDialog();
+ save();render();if(window.tendRestoreSettingsDialogFocus)window.tendRestoreSettingsDialogFocus();flash(settings().weatherFallbackLocation?'Weather settings saved':'Weather fallback cleared');
 });
 function openCalendarEditor(id){
  var calendar=id?S.calendars.find(function(item){return item.id===id;}):null;
+ settingsDialogReturn=settingsDialogOpen;
+ settingsDialogOpen=null;
  calendarEditorDraft=calendar?JSON.parse(JSON.stringify(calendar)):{id:null,name:'',url:'',color:'#4C9AFF'};
  render();
 }
@@ -44,20 +48,26 @@ function refreshCalendarSettings(){
  if(window.clearTendCalendarCache)window.clearTendCalendarCache();else localStorage.removeItem('tend:cal2');
  if(window.TEND_LOAD_CALENDAR)window.TEND_LOAD_CALENDAR();
 }
+function finishCalendarEditor(){
+ calendarEditorDraft=null;
+ settingsDialogOpen=settingsDialogReturn;
+ settingsDialogReturn=null;
+ render();
+}
 document.addEventListener('click',function(event){
  var button=event.target.closest&&event.target.closest('[data-calendar-editor-add],[data-calendar-editor-edit],[data-calendar-editor-save],[data-calendar-editor-cancel],[data-calendar-editor-delete]');
  if(!button)return;
  if(button.hasAttribute('data-calendar-editor-add')){openCalendarEditor();return;}
  if(button.hasAttribute('data-calendar-editor-edit')){openCalendarEditor(button.getAttribute('data-calendar-editor-edit'));return;}
- if(button.hasAttribute('data-calendar-editor-cancel')){calendarEditorDraft=null;render();return;}
- if(button.hasAttribute('data-calendar-editor-delete')){var deleteId=calendarEditorDraft&&calendarEditorDraft.id;if(deleteId){S.calendars=S.calendars.filter(function(item){return item.id!==deleteId;});calendarEditorDraft=null;save();refreshCalendarSettings();render();flash('Calendar removed');}return;}
+ if(button.hasAttribute('data-calendar-editor-cancel')){finishCalendarEditor();return;}
+ if(button.hasAttribute('data-calendar-editor-delete')){var deleteId=calendarEditorDraft&&calendarEditorDraft.id;if(deleteId){S.calendars=S.calendars.filter(function(item){return item.id!==deleteId;});finishCalendarEditor();save();refreshCalendarSettings();flash('Calendar removed');}return;}
  if(button.hasAttribute('data-calendar-editor-save')){
   var name=document.getElementById('calendarEditorName'),url=document.getElementById('calendarEditorUrl'),color=document.getElementById('calendarEditorColor'),draft=calendarEditorDraft;
   if(!draft||!name||!url||!color)return;
   var record=draft.id?S.calendars.find(function(item){return item.id===draft.id;}):null;
   if(!record){record={id:uid()};S.calendars.push(record);}
   record.name=name.value.trim();record.url=url.value.trim();record.color=color.value;
-  calendarEditorDraft=null;save();refreshCalendarSettings();render();flash(draft.id?'Calendar updated':'Calendar added');
+  var wasEdit=!!draft.id;finishCalendarEditor();save();refreshCalendarSettings();flash(wasEdit?'Calendar updated':'Calendar added');
  }
 });
 function actionColorsSettingsHTML(){
@@ -75,7 +85,7 @@ function openActionColorPicker(key){
 }
 function myProfileSettingsHTML(){
  var photo=settings().profilePhoto||null;
- return settingsPanel('profile')+'<div class="card settings-card"><div class="subhead">My profile</div><p class="settings-help">Add a photo to personalize the places where Tend shows you as “Me”. Your photo is saved with your Tend data.</p><div class="person-photo-controls">'+personAvatar({name:"Me",photo:photo},72)+'<input type="file" accept="image/*" data-profile-photo aria-label="Upload your profile photo">'+(photo?'<button type="button" class="btn mini danger" data-profile-photo-remove>Remove photo</button>':'')+'</div><p class="settings-help">Images are cropped to a square and compressed before saving.</p></div></section>';
+ return '<div class="settings-profile-photo">'+personAvatar({name:"Me",photo:photo},40)+'<label class="btn mini ghost">Change photo<input type="file" accept="image/*" data-profile-photo aria-label="Upload your profile photo"></label>'+(photo?'<button type="button" class="btn mini ghost" data-profile-photo-remove>Remove</button>':'')+'</div>';
 }
 document.addEventListener('click',function(event){
  var button=event.target.closest&&event.target.closest('[data-profile-photo-remove]');
@@ -141,41 +151,118 @@ document.addEventListener('change',function(event){
  flash('Action color saved');
 });
 function renderSettings(){
- if(settingsTab==='general'||settingsTab==='peoplecolors'||settingsTab==='goals')settingsTab='peoplemeters';
- if(settingsTab==='times'||settingsTab==='dates'||settingsTab==='holidays'||settingsTab==='calendars')settingsTab='schedule';
- if(settingsTab==='sync')settingsTab='account';
- var tabs=[['profile','My profile'],['display','Display'],['faith','Faith'],['peoplemeters','People & meters'],['badges','Action colors'],['schedule','Time & dates'],['weather','Weather'],['focus','Focus'],['plan','Plan'],['offload','Offload'],['account','Account & sync']];
- var out=tendSectionHeaderHTML({title:"Settings",subtitle:"Make Tend work for you",className:"settings-title"});
- out+='<p class="settings-intro">Choose a section below to update your preferences.</p>';
- out+='<div class="profile-tabs settings-tabs" role="tablist" aria-label="Settings">'+tabs.map(function(t){return '<button type="button" role="tab" id="settings-tab-'+t[0]+'" aria-controls="settings-panel-'+t[0]+'" aria-selected="'+(settingsTab===t[0])+'" data-settingstab="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div>';
- out+=myProfileSettingsHTML();
- out+=mobileDisplaySettingsHTML();
- out+=settingsPanel('faith')+(typeof faithSettingsHTML==='function'?faithSettingsHTML():'')+'</section>';
- out+=settingsPanel('peoplemeters')+
-  '<div class="settings-group-grid">'+
-  (typeof peopleColorsSettingsHTML==='function'?peopleColorsSettingsHTML():'')+
-  '<div class="card settings-card"><div class="subhead">Meters</div><p class="settings-help">These thresholds change score colors, not the scores themselves. They are used across the dashboard and area, people, rhythm, and prayer meters.</p>'+
-  '<div class="meter-threshold-preview" id="meterThresholdPreview">'+meterThresholdPreviewHTML(settings().greenAt,settings().yellowAt,settings().baseline)+'</div>'+
-  '<div class="setrow"><label for="setGreen">Green at or above</label><input type="number" id="setGreen" min="50" max="100" value="'+settings().greenAt+'"></div>'+
-  '<div class="setrow"><label for="setYellow">Yellow at or above <span class="settings-field-note">(red is below)</span></label><input type="number" id="setYellow" min="10" max="80" value="'+settings().yellowAt+'"></div>'+
-  '<div class="setrow meter-baseline-row"><label for="setBase">Starting score for inactive areas</label><input type="number" id="setBase" min="0" max="100" value="'+settings().baseline+'"></div>'+
-  '<p class="settings-help meter-baseline-help">This baseline starts activity-based area scores when there are no recent events and no active rhythms. Faith uses its active practice scores; people, rhythms, and prayers use their own scoring.</p>'+
-  '<button class="btn" id="setSave">Save meter settings</button></div></div></section>';
- out+=settingsPanel('badges')+actionColorsSettingsHTML()+'</section>';
- out+=settingsPanel('schedule')+dayBlockSettingsHTML()+keyDatesSettingsHTML()+holidaySettingsHTML();
- out+='<div class="card settings-card"><div class="subhead">Connected calendars</div><p class="settings-help">Add a public iCloud calendar to show its events on your Tend dashboard. On iCloud.com, open Calendar, choose the share icon beside a calendar, enable Public Calendar, and copy its link.</p>';
- (S.calendars||[]).forEach(function(ca){
-  out+='<div class="settings-calendar-row"><span class="settings-calendar-swatch" style="background:'+calendarColor(ca.color)+'"></span><div><strong>'+esc(ca.name||'Unnamed calendar')+'</strong><span>'+esc(ca.url||'No calendar link yet')+'</span></div><button type="button" class="btn mini ghost" data-calendar-editor-edit="'+esc(ca.id)+'">Edit</button></div>';
- });
- if(!S.calendars.length)out+='<div class="empty">No calendars connected yet.</div>';
- out+='<div class="settings-actions"><button type="button" class="btn ghost" data-calendar-editor-add>Add calendar</button></div>'+calendarEditorHTML()+'</div></section>';
- out+=weatherSettingsHTML();
- out+=settingsPanel('focus')+focusSettingsHTML()+'</section>';
- out+=settingsPanel('plan')+(typeof renderCarePlan==='function'?renderCarePlan():'')+'</section>';
- out+=settingsPanel('offload')+(typeof renderOffload==='function'?renderOffload():'')+'</section>';
- out+=settingsPanel('account')+(typeof tendAccountSettingsHTML==='function'?tendAccountSettingsHTML():'')+'</section>';
+ var tabs=[["general","General"],["appearance","Appearance"],["connections","Connections"],["data","Data"]];
+ function row(label,value,key,extra){
+  return '<button type="button" class="settings-row" data-settings-open="'+key+'"><span><strong>'+label+'</strong><small>'+value+'</small></span><span class="settings-row-chevron" aria-hidden="true">›</span></button>';
+ }
+ function group(title,content){
+  return '<section class="settings-group"><h2>'+title+'</h2><div class="settings-list">'+content+'</div></section>';
+ }
+ function panel(key,title,content){
+  return '<section id="settings-panel-'+key+'" class="settings-panel" role="tabpanel" aria-labelledby="settings-tab-'+key+'"'+(settingsTab===key?'':' hidden')+'><h2 class="settings-panel-title">'+title+'</h2>'+content+'</section>';
+ }
+ function dialog(title,content,explicit){
+  return '<dialog class="profile-editor-dialog settings-dialog" data-editor-modal aria-label="'+title+'"><div class="profile-editor-body"><div class="settings-dialog-heading"><h2>'+title+'</h2><button type="button" class="settings-dialog-close" data-settings-dialog-close data-editor-cancel aria-label="Close '+title+'">×</button></div><div class="settings-dialog-content">'+content+'</div><div class="settings-dialog-footer"><button type="button" class="btn mini ghost" data-settings-dialog-close data-editor-cancel>'+(explicit?'Cancel':'Done')+'</button></div></div></dialog>';
+ }
+ function metersHTML(){
+  return '<div class="card settings-card"><p class="settings-help">These thresholds change score colors, not scores.</p><div class="meter-threshold-preview" id="meterThresholdPreview">'+meterThresholdPreviewHTML(settings().greenAt,settings().yellowAt,settings().baseline)+'</div>'+
+   '<div class="setrow"><label for="setGreen">Green at or above</label><input type="number" id="setGreen" min="50" max="100" value="'+settings().greenAt+'"></div>'+
+   '<div class="setrow"><label for="setYellow">Yellow at or above</label><input type="number" id="setYellow" min="10" max="80" value="'+settings().yellowAt+'"></div>'+
+   '<div class="setrow meter-baseline-row"><label for="setBase">Starting score for inactive areas</label><input type="number" id="setBase" min="0" max="100" value="'+settings().baseline+'"></div>'+
+   '<p class="settings-help">The baseline applies when activity-based areas have no recent events or active rhythms.</p><button class="btn" id="setSave">Save</button></div>';
+ }
+ function calendarHTML(){
+  var html='<div class="card settings-card"><p class="settings-help">Add a public iCloud calendar to show its events on your Tend dashboard.</p>';
+  (S.calendars||[]).forEach(function(calendar){
+   html+='<div class="settings-calendar-row"><span class="settings-calendar-swatch" style="background:'+calendarColor(calendar.color)+'"></span><div><strong>'+esc(calendar.name||'Unnamed calendar')+'</strong><span>'+esc(calendar.url||'No calendar link yet')+'</span></div><button type="button" class="btn mini ghost" data-calendar-editor-edit="'+esc(calendar.id)+'">Edit</button></div>';
+  });
+  if(!(S.calendars||[]).length)html+='<div class="empty">No calendars connected yet.</div>';
+  return html+'<div class="settings-actions"><button type="button" class="btn mini ghost" data-calendar-editor-add>Add calendar</button></div></div>';
+ }
+ var displayName=window.TendAuth&&typeof window.TendAuth.displayName==="function"?window.TendAuth.displayName():"";
+ var activeHolidays=typeof majorHolidays==="undefined"?0:majorHolidays.filter(function(item){return holidayEnabled(item.id);}).length;
+ var focusCount=typeof focusBlocks==="function"?focusBlocks().length:0;
+ var legacyRecovery=typeof tendLegacyRecoverySettingsHTML==="function"?tendLegacyRecoverySettingsHTML():"";
+ var backup=typeof tendAccountDataSettingsHTML==="function"?tendAccountDataSettingsHTML("backup"):"";
+ var recovery=typeof tendAccountDataSettingsHTML==="function"?tendAccountDataSettingsHTML("recovery"):"";
+ var general=group("Account & profile",
+  '<button type="button" class="settings-row" data-me-open><span><strong>Profile</strong><small>'+esc(displayName||"Add your display name in Me")+'</small></span><span class="settings-row-chevron" aria-hidden="true">›</span></button>'+
+  (typeof tendAccountSettingsHTML==="function"?tendAccountSettingsHTML():'')+
+  '<div class="settings-row-static"><span><strong>Profile photo</strong><small>Shown where Tend represents you.</small></span>'+myProfileSettingsHTML()+'</div>')+
+  group("Daily use",row("Focus",focusCount+" time sections selected","general-focus")+row("Daily time sections","Rename sections and adjust their start times","general-time"))+
+  '<nav class="settings-destinations" aria-label="More Tend tools"><span>Open a dedicated page</span><button type="button" class="btn mini ghost" data-utilnav="careplan">Plan</button><button type="button" class="btn mini ghost" data-utilnav="offload">Offload</button></nav>';
+ var appearance=group("Display",mobileDisplaySettingsHTML()+row("Colors","Actions, people and Faith badges","appearance-colors")+row("Meters","Score color thresholds: "+settings().greenAt+" green · "+settings().yellowAt+" yellow","appearance-meters"))+
+  (typeof faithSettingsHTML==="function"?group("Faith",row("Faith presentation","Section visibility and badge color","appearance-faith")):"");
+ var connections=group("Calendar & integrations",
+  row("Calendar feeds",(S.calendars||[]).length+" configured","connections-calendars")+
+  row("Weather","Fallback: "+(settings().weatherFallbackLocation?esc(settings().weatherFallbackLocation):"device location when allowed"),"connections-weather")+
+  row("Key dates",(S.keyDates||[]).length+" configured","connections-keydates")+
+  row("Holidays",activeHolidays+" selected","connections-holidays")+
+  (legacyRecovery?'<details class="settings-advanced"><summary>Advanced · optional GitHub recovery</summary><div class="settings-advanced-content">'+legacyRecovery+'</div></details>':''));
+ var dataContent=backup+(recovery?'<section class="settings-data-recovery"><h3>Recovery</h3>'+recovery+'</section>':'');
+ var data=group("Data & privacy",dataContent||'<p class="settings-empty">No account data tools are available.</p>');
+ var dialogContent="";
+ if(settingsDialogOpen==="general-focus")dialogContent=dialog("Focus",typeof focusSettingsHTML==="function"?focusSettingsHTML():"",false);
+ else if(settingsDialogOpen==="general-time"){
+  dialogContent=dialog("Daily time sections",dayBlockSettingsHTML(),true);
+ }
+ else if(settingsDialogOpen==="appearance-colors")dialogContent=dialog("Colors",actionColorsSettingsHTML()+(typeof peopleColorsSettingsHTML==="function"?peopleColorsSettingsHTML():""),false);
+ else if(settingsDialogOpen==="appearance-meters")dialogContent=dialog("Meters",metersHTML(),true);
+ else if(settingsDialogOpen==="appearance-faith")dialogContent=dialog("Faith presentation",typeof faithSettingsHTML==="function"?faithSettingsHTML():"",false);
+ else if(settingsDialogOpen==="connections-calendars")dialogContent=dialog("Calendar feeds",calendarHTML(),false);
+ else if(settingsDialogOpen==="connections-weather")dialogContent=dialog("Weather",weatherSettingsHTML(),true);
+ else if(settingsDialogOpen==="connections-keydates")dialogContent=dialog("Key dates",typeof keyDatesSettingsHTML==="function"?keyDatesSettingsHTML(false):"",false);
+ else if(settingsDialogOpen==="connections-holidays")dialogContent=dialog("Holidays",typeof holidaySettingsHTML==="function"?holidaySettingsHTML():"",false);
+ var out='<main class="settings-page">'+tendSectionHeaderHTML({title:"Settings",subtitle:"",className:"settings-title"})+
+  '<div class="settings-tablist" role="tablist" aria-label="Settings sections">'+tabs.map(function(item){return '<button type="button" role="tab" id="settings-tab-'+item[0]+'" aria-controls="settings-panel-'+item[0]+'" aria-selected="'+(settingsTab===item[0])+'" tabindex="'+(settingsTab===item[0]?'0':'-1')+'" data-settings-tab="'+item[0]+'">'+item[1]+'</button>';}).join("")+'</div>'+
+  panel("general","General",general)+panel("appearance","Appearance",appearance)+panel("connections","Connections",connections)+panel("data","Data",data)+dialogContent+'</main>';
+ if(calendarEditorDraft)out+=calendarEditorHTML();
+ if(typeof keyDateEditorDraft!=="undefined"&&keyDateEditorDraft)out+=keyDateEditorHTML();
  return out;
 }
+function closeTendSettingsDialog(){
+ settingsDialogOpen=null;
+}
+window.tendCloseSettingsDialog=closeTendSettingsDialog;
+window.tendRestoreSettingsDialogFocus=function(){
+ var focusKey=settingsDialogOpener,focusTarget=focusKey&&document.querySelector('[data-settings-open="'+focusKey+'"]');
+ if(focusTarget)focusTarget.focus();
+};
+document.addEventListener("click",function(event){
+ var tabButton=event.target.closest&&event.target.closest("[data-settings-tab]");
+ if(tabButton){
+  settingsTab=tabButton.getAttribute("data-settings-tab");
+  render();
+  var selected=document.getElementById("settings-tab-"+settingsTab);if(selected)selected.focus();
+  return;
+ }
+ var opener=event.target.closest&&event.target.closest("[data-settings-open]");
+ if(opener){
+  settingsDialogOpener=opener.getAttribute("data-settings-open");
+  settingsDialogOpen=settingsDialogOpener;
+  render();
+  return;
+ }
+ if(event.target.closest&&event.target.closest("[data-settings-dialog-close]")){
+  var focusKey=settingsDialogOpener;
+  settingsDialogOpen=null;
+  render();
+  var focusTarget=focusKey&&document.querySelector('[data-settings-open="'+focusKey+'"]');if(focusTarget)focusTarget.focus();
+ }
+});
+document.addEventListener("keydown",function(event){
+ var active=event.target.closest&&event.target.closest('[role="tab"][data-settings-tab]');
+ if(!active)return;
+ var index=settingsTab==="general"?0:settingsTab==="appearance"?1:settingsTab==="connections"?2:3;
+ if(event.key==="ArrowRight"||event.key==="ArrowDown")index=(index+1)%4;
+ else if(event.key==="ArrowLeft"||event.key==="ArrowUp")index=(index+3)%4;
+ else if(event.key==="Home")index=0;
+ else if(event.key==="End")index=3;
+ else return;
+ event.preventDefault();
+ var next=["general","appearance","connections","data"][index];settingsTab=next;render();
+ var button=document.getElementById("settings-tab-"+next);if(button)button.focus();
+});
 function meterThresholdPreviewHTML(green,yellow,baseline){
  green=Number(green);yellow=Number(yellow);baseline=Number(baseline);
  if(!Number.isFinite(green))green=80;if(!Number.isFinite(yellow))yellow=50;if(!Number.isFinite(baseline))baseline=50;

@@ -19,7 +19,7 @@ const prayerSource = fs.readFileSync(path.join(__dirname, "..", "app-prayers.js"
 const personRhythmSource = fs.readFileSync(path.join(__dirname, "..", "app-rhythms2.js"), "utf8");
 const personOverviewSource = fs.readFileSync(path.join(__dirname, "..", "app-rhythms3.js"), "utf8");
 const categoryRhythmSource = fs.readFileSync(path.join(__dirname, "..", "app-categoryrhythms.js"), "utf8");
-const settingsTabsSource = fs.readFileSync(path.join(__dirname, "..", "app-settingstabs.js"), "utf8");
+const settingsLayoutSource = fs.readFileSync(path.join(__dirname, "..", "app-settingstabs.js"), "utf8");
 const weatherSource = fs.readFileSync(path.join(__dirname, "..", "app-weather.js"), "utf8");
 const styles = fs.readFileSync(path.join(__dirname, "..", "tend.css"), "utf8");
 
@@ -121,8 +121,13 @@ test("Home time views separate Anytime rhythms from stored time blocks", () => {
         { id: "legacy-task", text: "Legacy task", areaId: "home" }
       ],
       people: [person],
+      areaRhythms: [
+        { id: "personal-area-anytime", text: "Personal area rhythm", personal: true, areas: ["health"], tod: "anytime", eligible: true },
+        { id: "legacy-area-anytime", text: "Legacy area rhythm", areas: ["health"], tod: "anytime", eligible: true }
+      ],
       areas: { home: { name: "Home" } }
     },
+    window: { tendRhythmCategoryIds: rhythm => rhythm.areas },
     esc: value => String(value),
     dayBlocks: () => blocks,
     taskItem: task => ({ taskId: task.id, label: task.text, sub: task.areaId }),
@@ -133,6 +138,7 @@ test("Home time views separate Anytime rhythms from stored time blocks", () => {
     fmtHM12: () => "",
     rhythmDaysSince: rhythm => rhythm.eligible ? 7 : 0,
     rhythmPeriod: () => 7,
+    rhythmEnded: () => false,
     scheduleDayMatches: () => true,
     tendRhythmMetaLabel: () => "Weekly",
     faithActiveRhythms: () => [
@@ -168,7 +174,8 @@ test("Home time views separate Anytime rhythms from stored time blocks", () => {
   );
 
   const anytimeGroups = vm.runInContext('planViewGroups("now", "morning", dayBlocks(), "anytime")', context);
-  assert.deepEqual(Array.from(anytimeGroups[0].items, item => item.label), ["Anytime", "Faith anytime"]);
+  assert.deepEqual(Array.from(anytimeGroups[0].items, item => item.label), ["Anytime", "Faith anytime", "Personal area rhythm"]);
+  assert.equal(vm.runInContext('planItemStableKey(planAnytimeCandidates().find(item => item.areaRhythm === "personal-area-anytime"))', context), "area-rhythm:personal-area-anytime");
   const allDayGroups = vm.runInContext('planViewGroups("now", "morning", dayBlocks(), "all-day")', context);
   assert.deepEqual(Array.from(allDayGroups[0].items, item => item.label).sort(), ["All-day task", "All day", "All day spark", "Faith all day"].sort());
   const timeframeMenu = vm.runInContext('planFocusMenuHTML(dayBlocks(), "morning", "now")', context);
@@ -1620,7 +1627,7 @@ test("Faith Today keeps scheduled rhythms and Sparks without its Prayer entry wi
   assert.match(styles, /\.faith-nav-score-unavailable\{background:transparent;color:var\(--ink-soft\)/);
   assert.match(indexSource, /Newsreader:ital,opsz,wght@0,6\.\.72,400;0,6\.\.72,500/);
   assert.match(indexSource, /app-core\.js\?v=20261016-fitness-score-sync-strength-data/);
-  assert.match(indexSource, /app-categoryrhythms\.js\?v=20261017-rhythm-ordering/);
+  assert.match(indexSource, /app-categoryrhythms\.js\?v=0\.9\.1/);
   assert.match(styles, /\.faith-prayer-time-group\{display:grid;gap:10px/);
   assert.match(styles, /\.faith-prayer-content,.faith-prayer-row,.faith-prayer-hub \.faith-profile-prayer-row\{box-sizing:border-box;width:100%;min-width:0\}/);
   assert.match(styles, /\.faith-today-subheading\{margin:28px 0 12px\}/);
@@ -1653,8 +1660,8 @@ test("Faith overview keeps practice content inline in the Practices tab", () => 
   assert.match(faithRender, /tendCategoryPageHeaderHTML\("Faith","faith-page-heading"\)/);
   assert.ok(faithRender.includes('out+=faithHealthHTML()+\'<div class="faith-views-content">\'+faithViewNavHTML();'));
   assert.doesNotMatch(faithRender, /faithSettingsHTML|data-faith-settings/);
-  assert.match(settingsTabsSource, /\['faith','Faith'\]/);
-  assert.match(settingsTabsSource, /settingsPanel\('faith'\)\+\(typeof faithSettingsHTML==='function'\?faithSettingsHTML\(\):''\)/);
+  assert.match(settingsLayoutSource, /var appearance=group\("Display"[\s\S]*typeof faithSettingsHTML==="function"\?group\("Faith"/);
+  assert.match(settingsLayoutSource, /role="tablist"[\s\S]*role="tab"[\s\S]*data-settings-tab=/);
   assert.match(faithSource, /data-faith-enabled=/);
   assert.match(faithSource, /var FAITH_MAIN_VIEWS=\["practices","today","prayer"\]/);
   assert.match(faithSource, /faithViewPanelHTML\("practices",faithPracticeOverviewHTML\(selected\)\+\(faithShowAllRhythms\?faithAllRhythmsHTML\(\):faithPracticeContent\(selected\)\)\)[\s\S]*faithViewPanelHTML\("today",faithTodayHTML\(\)\)[\s\S]*faithViewPanelHTML\("prayer",faithPrayerRequestsHTML\(\)\)/);

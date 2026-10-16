@@ -40,6 +40,27 @@ test("rhythm order is context-specific and leaves unranked items in their defaul
       }
     }
   });
+
+  test("Me order persists independently from Today, person, and category order", () => {
+    const context = createContext({
+      state: {
+        rhythmOrder: {
+          me: ["area:walk", "person:amy:read"],
+          "today:morning": ["today-id"],
+          "person:amy": ["person:amy:read"],
+          "category:health": ["area:walk"]
+        }
+      }
+    });
+    assert.equal(
+      context.tendRhythmOrderPersist("me", ["area:walk", "person:amy:read"], ["area:walk", "person:amy:read"], ["person:amy:read", "area:walk"]),
+      true
+    );
+    assert.deepEqual(Array.from(context.S.rhythmOrder.me), ["person:amy:read", "area:walk"]);
+    assert.deepEqual(Array.from(context.S.rhythmOrder["today:morning"]), ["today-id"]);
+    assert.deepEqual(Array.from(context.S.rhythmOrder["person:amy"]), ["person:amy:read"]);
+    assert.deepEqual(Array.from(context.S.rhythmOrder["category:health"]), ["area:walk"]);
+  });
   const items = [{ id: "a" }, { id: "b" }, { id: "c" }];
 
   assert.deepEqual(

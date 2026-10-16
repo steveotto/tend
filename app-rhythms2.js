@@ -26,7 +26,7 @@
 var RHYTHM_FREQS={daily:{label:"Daily"},weekly:{label:"Weekly"},monthly:{label:"Monthly"},quarterly:{label:"Quarterly"},yearly:{label:"Yearly"},custom:{label:"Custom"}};
 var R_MOS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 var R_ORDS=["1st","2nd","3rd","4th","last"];
-var RHYTHM_FIELD_LIST=["description","weekdays","monthlyMode","dayOfMonth","ord","ordWeekday","month","monthDay","every","unit","until"];
+var RHYTHM_FIELD_LIST=["description","weekdays","monthlyMode","dayOfMonth","ord","ordWeekday","month","monthDay","every","unit","until","personal"];
 
 /* ---- migration: legacy category/duration-era rhythms -> v2, in place ---- */
 function ensureRhythm(r){
@@ -372,6 +372,7 @@ document.addEventListener("change",function(e){
  if(!rr)return;
  var fld=rf[2];
  if(fld==="text"){rr.text=t.value;e.stopImmediatePropagation();return;}
+ if(fld==="personal"){rr.personal=t.checked;e.stopImmediatePropagation();return;}
  if(fld==="weekdays"){var wd=rr.weekdays||[],v=+t.value,i2=wd.indexOf(v);if(t.checked){if(i2<0)wd.push(v);}else if(i2>=0)wd.splice(i2,1);rr.weekdays=wd;render();e.stopImmediatePropagation();return;}
  if(fld==="freq"){
   rr.freq=t.value;
@@ -383,7 +384,7 @@ document.addEventListener("change",function(e){
  }
  if(fld==="unit"){rr.unit=t.value;if(t.value==="weeks"&&!rr.weekdays)rr.weekdays=[];render();e.stopImmediatePropagation();return;}
  if(fld==="every"||fld==="dayOfMonth"||fld==="ord"||fld==="ordWeekday"||fld==="month"||fld==="monthThe"||fld==="monthDay"){var dst=fld==="monthThe"?"month":fld;rr[dst]=+t.value||1;render();e.stopImmediatePropagation();return;}
- rr[fld]=t.value;render();e.stopImmediatePropagation();
+ rr[fld]=t.type==="checkbox"?t.checked:t.value;render();e.stopImmediatePropagation();
 },true);
 document.addEventListener("click",function(e){
  if(!e.target||!e.target.closest)return;

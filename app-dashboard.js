@@ -1,6 +1,5 @@
 "use strict";
-/* ============ settings (with sync) + iCloud calendar ============ */
-var settingsTab='peoplemeters';
+/* ============ calendar settings and key dates ============ */
 function holidayFixed(month,day){return function(y){return new Date(y,month-1,day);};}
 function holidayWeekday(month,weekday,n){return function(y){var d=new Date(y,month-1,1);return new Date(y,month-1,1+(weekday-d.getDay()+7)%7+7*(n-1));};}
 var majorHolidays=[
@@ -30,22 +29,22 @@ function keyDateEditorHTML(){
  var draft=keyDateEditorDraft,months=["January","February","March","April","May","June","July","August","September","October","November","December"];
  return '<dialog class="profile-editor-dialog" data-editor-modal aria-label="'+(draft.id?'Edit':'Add')+' key date"><div class="profile-editor-body"><h3>'+(draft.id?'Edit':'Add')+' key date</h3><label class="field">Name<input id="keyDateEditorLabel" value="'+esc(draft.label||'')+'" placeholder="Key date name"></label><div class="key-date-editor-date"><label class="field">Month<select id="keyDateEditorMonth">'+months.map(function(month,index){return '<option value="'+(index+1)+'"'+(+draft.month===index+1?' selected':'')+'>'+month+'</option>';}).join('')+'</select></label><label class="field">Day<input id="keyDateEditorDay" type="number" min="1" max="31" value="'+(draft.day||1)+'"></label><label class="field">Year <span class="hint">(optional)</span><input id="keyDateEditorYear" type="number" min="1900" max="2100" value="'+(draft.year||'')+'" placeholder="Repeats yearly"></label></div>'+(S.people.length?'<fieldset class="key-date-editor-people"><legend>People</legend>'+S.people.map(function(person){var selected=kdPeopleIds(draft).indexOf(person.id)!==-1;return '<label><input type="checkbox" data-kd-editor-person="'+esc(person.id)+'"'+(selected?' checked':'')+'> '+esc(person.name)+'</label>';}).join('')+'</fieldset>':'')+'<div class="profile-editor-actions"><button type="button" class="btn mini" data-kd-editor-save>Save</button><button type="button" class="btn mini ghost" data-kd-editor-cancel data-editor-cancel>Cancel</button>'+(draft.id?'<button type="button" class="btn mini danger" style="margin-left:auto" data-kd-editor-delete>Delete</button>':'')+'</div></div></dialog>';
 }
-function keyDatesSettingsHTML(){
+function keyDatesSettingsHTML(includeEditor){
  var out='<div class="card"><div class="subhead">Key dates</div><p class="settings-help">Milestones shown in Coming up and on associated people\'s profiles. Add or edit a date to set its name, date, and people.</p><button type="button" class="btn mini" data-kd-editor-add>+ Add key date</button><div class="settings-key-dates">';
  S.keyDates.forEach(function(k){
   var names=kdPeopleIds(k).map(function(id){var person=S.people.find(function(candidate){return candidate.id===id;});return person?person.name:'';}).filter(Boolean);
   out+='<div class="settings-key-date-row"><div><strong>'+esc(k.label)+'</strong><span>'+esc(kdDateTxt(k))+(names.length?' · '+esc(names.join(', ')):'')+'</span></div><button type="button" class="btn mini ghost" data-kd-editor-edit="'+esc(k.id)+'">Edit</button></div>';
  });
  if(!S.keyDates.length)out+='<div class="empty">No key dates yet — add one here or from a person\'s profile.</div>';
- out+='</div>'+keyDateEditorHTML()+'</div>';
+ out+='</div>'+(includeEditor===false?'':keyDateEditorHTML())+'</div>';
  return out;}
 document.addEventListener('click',function(event){
  var button=event.target.closest&&event.target.closest('[data-kd-editor-add],[data-kd-editor-edit],[data-kd-editor-save],[data-kd-editor-cancel],[data-kd-editor-delete]');
  if(!button)return;
- if(button.hasAttribute('data-kd-editor-add')){keyDateEditorDraft={id:null,label:'',month:1,day:1,personIds:[]};render();return;}
- if(button.hasAttribute('data-kd-editor-edit')){var source=S.keyDates.find(function(date){return date.id===button.getAttribute('data-kd-editor-edit');});if(source){keyDateEditorDraft=JSON.parse(JSON.stringify(source));render();}return;}
- if(button.hasAttribute('data-kd-editor-cancel')){keyDateEditorDraft=null;render();return;}
- if(button.hasAttribute('data-kd-editor-delete')){if(keyDateEditorDraft&&keyDateEditorDraft.id){S.keyDates=S.keyDates.filter(function(date){return date.id!==keyDateEditorDraft.id;});keyDateEditorDraft=null;save();render();flash('Key date removed');}return;}
+ if(button.hasAttribute('data-kd-editor-add')){if(typeof settingsDialogOpen!=="undefined"&&settingsDialogOpen==="connections-keydates"){settingsDialogReturn=settingsDialogOpen;settingsDialogOpen=null;}keyDateEditorDraft={id:null,label:'',month:1,day:1,personIds:[]};render();return;}
+ if(button.hasAttribute('data-kd-editor-edit')){var source=S.keyDates.find(function(date){return date.id===button.getAttribute('data-kd-editor-edit');});if(source){if(typeof settingsDialogOpen!=="undefined"&&settingsDialogOpen==="connections-keydates"){settingsDialogReturn=settingsDialogOpen;settingsDialogOpen=null;}keyDateEditorDraft=JSON.parse(JSON.stringify(source));render();}return;}
+ if(button.hasAttribute('data-kd-editor-cancel')){keyDateEditorDraft=null;if(typeof settingsDialogReturn!=="undefined"){settingsDialogOpen=settingsDialogReturn;settingsDialogReturn=null;}render();return;}
+ if(button.hasAttribute('data-kd-editor-delete')){if(keyDateEditorDraft&&keyDateEditorDraft.id){S.keyDates=S.keyDates.filter(function(date){return date.id!==keyDateEditorDraft.id;});keyDateEditorDraft=null;if(typeof settingsDialogReturn!=="undefined"){settingsDialogOpen=settingsDialogReturn;settingsDialogReturn=null;}save();render();flash('Key date removed');}return;}
  if(button.hasAttribute('data-kd-editor-save')){
   var label=document.getElementById('keyDateEditorLabel'),day=document.getElementById('keyDateEditorDay'),year=document.getElementById('keyDateEditorYear'),month=document.getElementById('keyDateEditorMonth');
   if(!label||!label.value.trim()){flash('Add a key date name');if(label)label.focus();return;}
@@ -54,42 +53,9 @@ document.addEventListener('click',function(event){
   if(!record){record={id:uid()};S.keyDates.push(record);}
   record.label=label.value.trim();record.month=+(month&&month.value)||1;record.day=Math.min(31,Math.max(1,+(day&&day.value)||1));record.personIds=selected;record.personId=selected[0]||'';
   if(year&&String(year.value).trim())record.year=Math.min(2100,Math.max(1900,+year.value||1900));else delete record.year;
-  keyDateEditorDraft=null;save();render();flash(date.id?'Key date updated':'Key date added');
+  var wasEdit=!!date.id;keyDateEditorDraft=null;if(typeof settingsDialogReturn!=="undefined"){settingsDialogOpen=settingsDialogReturn;settingsDialogReturn=null;}save();render();flash(wasEdit?'Key date updated':'Key date added');
  }
 });
-function settingsPanel(key){return '<section class="profile-tab-panel settings-panel" id="settings-panel-'+key+'" role="tabpanel" aria-labelledby="settings-tab-'+key+'"'+(settingsTab===key?'':' hidden')+'>';}
-function renderSettings(){
- var out=tendSectionHeaderHTML({title:"Settings",subtitle:"people, time, focus, sync",style:"margin-top:6px"});
- out+='<div class="profile-tabs" role="tablist" aria-label="Settings">'+[['general','General'],['times','Daily time sections'],['dates','Key dates'],['holidays','Major holidays']].map(function(t){return '<button role="tab" id="settings-tab-'+t[0]+'" aria-controls="settings-panel-'+t[0]+'" aria-selected="'+(settingsTab===t[0])+'" data-settingstab="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div>';
- out+=settingsPanel('times')+dayBlockSettingsHTML()+'</section>'+settingsPanel('dates')+keyDatesSettingsHTML()+'</section>'+settingsPanel('holidays')+holidaySettingsHTML()+'</section>'+settingsPanel('general');
- /* meters */
- var s=settings();
- out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Meters</div>'+
- '<div class="setrow"><label>Green starts at</label><input type="number" id="setGreen" value="'+s.greenAt+'"></div>'+
- '<div class="setrow"><label>Yellow starts at</label><input type="number" id="setYellow" value="'+s.yellowAt+'"></div>'+
- '<div class="setrow"><label>Baseline (empty areas)</label><input type="number" id="setBase" value="'+s.baseline+'"></div>'+
- '<button class="btn" id="setSave">Save meter settings</button></div>';
- /* calendars */
- out+='<div class="card" style="margin-bottom:14px"><div class="subhead">Calendars</div>'+
- '<div class="hint" style="margin-bottom:10px">On icloud.com: Calendar &gt; share icon next to a calendar &gt; "Public Calendar" &gt; copy link. Paste it here (webcal:// or https://). Each calendar gets a name and color on the dashboard.</div>';
- (S.calendars||[]).forEach(function(ca){
-  out+='<div class="calrow" data-calrow="'+ca.id+'">'+
-  '<input class="cal-color" type="color" data-calcolor="'+ca.id+'" value="'+(ca.color||"#4C9AFF")+'">'+
-  '<input class="cal-name" placeholder="Name" data-calname="'+ca.id+'" value="'+esc(ca.name||"")+'">'+
-  '<input class="cal-url" placeholder="webcal://icloud.com/..." data-calurl="'+ca.id+'" value="'+esc(ca.url||"")+'">'+
-  '<button class="del" data-caldel="'+ca.id+'" title="remove">\u00D7</button></div>';
- });
- if(!S.calendars.length)out+='<div class="empty">No calendars yet - add one below.</div>';
- out+='<div style="display:flex;gap:8px;margin-top:10px"><button class="btn ghost" id="calAdd">+ Add calendar</button><button class="btn" id="calSaveAll">Save &amp; refresh</button></div></div>';
- out+='</section>';
- /* sync */
- var st=window.SYNCcfg||{};
- out+='<div class="card"><div class="subhead">Sync (GitHub)</div>'+
- '<div class="field"><label>Owner</label><input id="syncOwner" value="'+esc(st.owner||"")+'"></div>'+
- '<div class="field"><label>Repo</label><input id="syncRepo" value="'+esc(st.repo||"")+'"></div>'+
- '<div class="field"><label>Personal access token</label><input id="syncToken" type="password" placeholder="paste a fine-grained token scoped to tend-data" value="'+esc(st.token||"")+'"></div>'+
- '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="syncSave">Save</button><button class="btn ghost" id="syncPull">Pull now</button><button class="btn ghost" id="syncPush">Push now</button><button class="btn ghost" id="syncExport">Export backup</button></div></div>';
- return out;}
 /* ============ calendar ============ */
 function parseICS(txt){
  var evs=[];var lines=txt.split(/\r?\n/);var cur=null;

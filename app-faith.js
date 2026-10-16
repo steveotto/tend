@@ -252,7 +252,7 @@ function faithSectionNavHTML(selected){
 function faithRhythmEditorHTML(r){
  var isNew=!r.id,idf="faith|"+(r.id||"draft");
  var groupPicker=r.aggregateCategoryRequired&&isNew?'<label>Faith practice<select required data-faith-rhythm-group><option value="">Choose a practice</option>'+FAITH_GROUPS.map(function(group){return '<option value="'+esc(group)+'"'+(r.faithGroup===group?' selected':'')+'>'+esc(group)+'</option>';}).join("")+'</select></label>':"";
- return '<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="faith-rhythm-editor-title"><div class="profile-editor-body faith-item-editor" data-faith-rhythm-editor><h3 id="faith-rhythm-editor-title">'+(isNew?"Add Rhythm":"Edit Rhythm")+'</h3><label>Title<input data-faith-title value="'+esc(r.text||"")+'" placeholder="Practice title"></label><label>Description<textarea data-faith-description placeholder="Why this practice matters (optional)">'+esc(r.description||"")+'</textarea></label>'+groupPicker+personRhythmScheduleHTML(r,idf)+rhythmPickerControlsHTML("faith",r,idf,true)+'<div class="faith-item-actions"><button type="button" class="btn mini" data-faith-rhythm-save="'+(isNew?"new":esc(r.id))+'">Save Rhythm</button><button type="button" class="btn mini ghost" data-faith-rhythm-cancel="1" data-editor-cancel>Cancel</button>'+(isNew?"":'<button type="button" class="btn mini danger" data-faith-rhythm-delete="'+esc(r.id)+'">Delete</button>')+'</div></div></dialog>'+rhythmPickerModalHTML();
+ return '<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="faith-rhythm-editor-title"><div class="profile-editor-body faith-item-editor" data-faith-rhythm-editor><h3 id="faith-rhythm-editor-title">'+(isNew?"Add Rhythm":"Edit Rhythm")+'</h3><label>Title<input data-faith-title value="'+esc(r.text||"")+'" placeholder="Practice title"></label><label>Description<textarea data-faith-description placeholder="Why this practice matters (optional)">'+esc(r.description||"")+'</textarea></label><label class="me-personal-toggle"><input type="checkbox" data-faith-personal'+(r.personal?' checked':'')+'> <span>Personal rhythm</span></label>'+groupPicker+personRhythmScheduleHTML(r,idf)+rhythmPickerControlsHTML("faith",r,idf,true)+'<div class="faith-item-actions"><button type="button" class="btn mini" data-faith-rhythm-save="'+(isNew?"new":esc(r.id))+'">Save Rhythm</button><button type="button" class="btn mini ghost" data-faith-rhythm-cancel="1" data-editor-cancel>Cancel</button>'+(isNew?"":'<button type="button" class="btn mini danger" data-faith-rhythm-delete="'+esc(r.id)+'">Delete</button>')+'</div></div></dialog>'+rhythmPickerModalHTML();
 }
 function faithRhythmRowHTML(r){
  if(faithRhythmDraft&&faithRhythmDraft.id===r.id)return faithRhythmEditorHTML(faithRhythmDraft);
@@ -626,11 +626,13 @@ document.addEventListener("input",function(event){
  var t=event.target;
  if(t.matches&&t.matches("[data-faith-title]")&&faithRhythmDraft)faithRhythmDraft.text=t.value;
  if(t.matches&&t.matches("[data-faith-description]")&&faithRhythmDraft)faithRhythmDraft.description=t.value;
+ if(t.matches&&t.matches("[data-faith-personal]")&&faithRhythmDraft)faithRhythmDraft.personal=t.checked;
  if(t.matches&&t.matches("[data-faith-spark-title]")&&faithSparkDraft)faithSparkDraft.text=t.value;
  if(t.matches&&t.matches("[data-faith-spark-details]")&&faithSparkDraft)faithSparkDraft.details=t.value;
 },true);
 document.addEventListener("change",function(event){
  var t=event.target;
+ if(t.matches&&t.matches("[data-faith-personal]")&&faithRhythmDraft){faithRhythmDraft.personal=t.checked;return;}
  if(t.matches&&t.matches("[data-faith-enabled]")){
   var group=t.getAttribute("data-faith-enabled"),disabled=faithConfig().disabledGroups;
   if(t.checked)faithConfig().disabledGroups=disabled.filter(function(value){return value!==group;});

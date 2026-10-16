@@ -221,27 +221,33 @@
       '<p>Your device draft has not been uploaded. The current cloud data remains available. Download the draft, keep the cloud version, or explicitly replace cloud data with the draft.</p>' +
       '<div class="tend-auth-actions"><button type="button" class="btn mini ghost" data-account-download-draft>Download device draft</button>' +
       '<button type="button" class="btn mini ghost" data-account-use-cloud>Use cloud version</button>' +
-      '<button type="button" class="btn mini" data-account-use-draft>Replace cloud with device draft</button></div></div>';
+      '<button type="button" class="btn mini danger" data-account-use-draft>Replace cloud with device draft</button></div></div>';
   }
   window.tendAccountSettingsHTML = function () {
     if (!user) return '<div class="card settings-card"><p>Sign in to manage your account.</p></div>';
     var email = user.email || "";
     var status = cloud.getStatus();
-    var actions = '<div class="settings-actions"><button type="button" class="btn ghost" id="syncExport">Export backup</button><button type="button" class="btn ghost" id="syncImport">Import backup</button><input id="syncImportFile" type="file" accept="application/json,.json" hidden></div>';
-    var legacy = (window.SYNCcfg && window.SYNCcfg.token) ? '<details class="tend-legacy-recovery"><summary>Legacy GitHub recovery</summary><p class="settings-help">GitHub sync is manual only while account sync is enabled. Do not use it as a second automatic sync target.</p>' +
+    return '<div class="settings-row-static"><span><strong>Account</strong><small>' + html(email) + '</small></span></div>' +
+      '<div class="settings-row-static"><span><strong>Account sync</strong><small class="tend-cloud-status" id="cloudAccountStatus" role="status">Status: ' + html(status) + '</small></span>' +
+      (status === "Needs attention" && cloud.hasPendingChanges() && !cloud.isConflicted() ? '<button type="button" class="btn mini ghost" data-account-retry-save>Retry save</button>' : '') + '</div>' +
+      '<div class="settings-row-static settings-signout-row"><span><strong>Sign out</strong></span><button type="button" class="btn mini ghost" data-account-sign-out>Sign out</button></div>';
+  };
+  window.tendAccountDataSettingsHTML = function (mode) {
+    if (!user) return '<div class="card settings-card"><p>Sign in to manage account data.</p></div>';
+    var recovery = accountConflictHTML() + accountMigrationNotice();
+    var actions = '<div class="settings-row-static"><span><strong>Export data</strong><small>Download an account backup.</small></span><button type="button" class="btn mini ghost" id="syncExport">Export</button></div>' +
+      '<div class="settings-row-static"><span><strong>Import data</strong><small>Uses the existing validation and confirmation safeguards.</small></span><button type="button" class="btn mini ghost" id="syncImport">Import</button></div><input id="syncImportFile" type="file" accept="application/json,.json" hidden>';
+    if (mode === "backup") return actions;
+    if (mode === "recovery") return recovery;
+    return actions + (recovery ? '<div class="settings-recovery-content">' + recovery + '</div>' : '');
+  };
+  window.tendLegacyRecoverySettingsHTML = function () {
+    if (!user || !(window.SYNCcfg && SYNCcfg.token)) return "";
+    return '<p class="settings-help">This optional GitHub recovery copy is separate from automatic Tend account sync. Use it only for manual backup or recovery.</p>' +
       '<div class="field"><label for="syncOwner">Repository owner</label><input id="syncOwner" autocomplete="off" value="' + html(SYNCcfg.owner || "") + '"></div>' +
       '<div class="field"><label for="syncRepo">Repository name</label><input id="syncRepo" autocomplete="off" value="' + html(SYNCcfg.repo || "") + '"></div>' +
       '<div class="field"><label for="syncToken">Personal access token</label><input id="syncToken" type="password" autocomplete="off" value="' + html(SYNCcfg.token || "") + '"></div>' +
-      '<div class="settings-actions"><button type="button" class="btn mini ghost" id="syncSave">Save connection</button><button type="button" class="btn mini ghost" id="syncPush">Push now</button><button type="button" class="btn mini ghost" id="syncPull">Pull now</button></div></details>' : "";
-    return '<div class="card settings-card tend-account-card"><div class="subhead">Your account</div>' +
-      '<p class="settings-help">Signed in as <strong>' + html(email) + '</strong></p>' +
-      '<label class="field">Username or display name<input id="tendDisplayName" maxlength="80" value="' + html(profileName) + '" autocomplete="name"></label>' +
-      '<div class="settings-actions"><button type="button" class="btn mini" data-account-profile-save>Save display name</button><button type="button" class="btn mini ghost" data-account-sign-out>Sign out</button></div></div>' +
-      '<div class="card settings-card"><div class="subhead">Automatic sync</div><p class="tend-cloud-status" id="cloudAccountStatus" role="status">Status: ' + html(status) + '</p>' +
-      '<p class="settings-help">Tend saves your account data automatically. Your device keeps a separate per-account offline cache.</p>' +
-      (status === "Needs attention" && cloud.hasPendingChanges() && !cloud.isConflicted() ? '<button type="button" class="btn mini ghost" data-account-retry-save>Retry cloud save</button>' : '') +
-      (cacheNeedsAttention ? '<p class="tend-auth-message error">A damaged local cache was detected and was not imported. Cloud data loaded separately.</p>' : '') +
-      accountConflictHTML() + accountMigrationNotice() + actions + legacy + '</div>';
+      '<div class="settings-actions"><button type="button" class="btn mini ghost" id="syncSave">Save connection</button><button type="button" class="btn mini ghost" id="syncPush">Push now</button><button type="button" class="btn mini ghost" id="syncPull">Pull now</button></div>';
   };
   function showApplication() {
     if (!authReady || !user || !cloud.isReady()) return;
@@ -438,19 +444,38 @@
       errorGate({ title: "Could not create cloud data", body: "No local data was deleted or replaced.", error: errorText(error) });
     }
   }
-  async function saveProfile() {
+  async function updateDisplayName(value) {
     if (!user || !cloud.isReady()) throw new Error("Your account is still loading.");
-    var field = document.getElementById("tendDisplayName");
-    var name = field && field.value.trim();
+    var name = String(value === undefined ? "" : value).trim();
     if (!name) throw new Error("Enter a username or display name.");
     if (name.length > 80) throw new Error("Display names must be 80 characters or fewer.");
-    var authUpdate = await client.auth.updateUser({ data: { display_name: name } });
-    if (authUpdate.error) throw authUpdate.error;
-    var profileUpdate = await client.from("tend_profiles").update({ display_name: name }).eq("user_id", user.id);
+    var profileUpdate = await client.from("tend_profiles").update({ display_name: name }).eq("user_id", user.id).select("display_name").maybeSingle();
     if (profileUpdate.error) throw profileUpdate.error;
+    var savedProfile = profileUpdate.data;
+    if (!savedProfile) {
+      var confirmation = await client.from("tend_profiles").select("display_name").eq("user_id", user.id).maybeSingle();
+      if (confirmation.error) throw confirmation.error;
+      savedProfile = confirmation.data;
+    }
+    if (!savedProfile) {
+      var profileInsert = await client.from("tend_profiles").insert({ user_id: user.id, display_name: name }).select("display_name").maybeSingle();
+      if (profileInsert.error && profileInsert.error.code !== "23505") throw profileInsert.error;
+      if (profileInsert.error) {
+        var retryUpdate = await client.from("tend_profiles").update({ display_name: name }).eq("user_id", user.id).select("display_name").maybeSingle();
+        if (retryUpdate.error) throw retryUpdate.error;
+        savedProfile = retryUpdate.data;
+      } else {
+        savedProfile = profileInsert.data;
+      }
+      if (!savedProfile) {
+        var finalConfirmation = await client.from("tend_profiles").select("display_name").eq("user_id", user.id).maybeSingle();
+        if (finalConfirmation.error) throw finalConfirmation.error;
+        savedProfile = finalConfirmation.data;
+      }
+    }
+    if (!savedProfile || savedProfile.display_name !== name) throw new Error("The profile update was not confirmed by the database.");
     profileName = name;
-    flash("Display name saved");
-    render();
+    return name;
   }
   async function resolveConflict(useCloud) {
     if (useCloud) {
@@ -496,11 +521,12 @@
     importLegacy: importLegacy,
     refresh: refreshFromCloudIfSafe,
     displayName: function () { return profileName; },
+    updateDisplayName: updateDisplayName,
     signOut: signOut
   };
   document.addEventListener("submit", handleSubmit);
   document.addEventListener("click", function (event) {
-    var button = event.target && event.target.closest && event.target.closest("[data-auth-mode],[data-auth-forgot],[data-auth-retry],[data-migration-restore],[data-migration-empty],[data-migration-download],[data-account-import-legacy],[data-account-dismiss-legacy],[data-account-download-draft],[data-account-use-cloud],[data-account-use-draft],[data-account-retry-save],[data-account-profile-save],[data-account-sign-out]");
+    var button = event.target && event.target.closest && event.target.closest("[data-auth-mode],[data-auth-forgot],[data-auth-retry],[data-migration-restore],[data-migration-empty],[data-migration-download],[data-account-import-legacy],[data-account-dismiss-legacy],[data-account-download-draft],[data-account-use-cloud],[data-account-use-draft],[data-account-retry-save],[data-account-sign-out]");
     if (!button) return;
     event.preventDefault();
     Promise.resolve().then(async function () {
@@ -535,7 +561,6 @@
       } else if (button.hasAttribute("data-account-use-cloud")) await resolveConflict(true);
       else if (button.hasAttribute("data-account-use-draft")) await resolveConflict(false);
       else if (button.hasAttribute("data-account-retry-save")) await cloud.flush();
-      else if (button.hasAttribute("data-account-profile-save")) await saveProfile();
       else if (button.hasAttribute("data-account-sign-out")) await signOut();
     }).catch(function (error) {
       console.error("Tend account action failed", error);
@@ -554,7 +579,7 @@
   });
   window.addEventListener("tend-cloud-conflict", function (event) {
     conflictCloudState = event.detail.cloud && event.detail.cloud.state ? prepareState(event.detail.cloud.state) : null;
-    if (user && authReady && tab === "settings" && settingsTab === "account") render();
+    if (user && authReady && tab === "settings") render();
   });
   window.addEventListener("focus", refreshFromCloudIfSafe);
   document.addEventListener("visibilitychange", function () {
