@@ -75,11 +75,11 @@ function fitnessRhythmCompactText(rhythm,data,scores){
  var mode=rhythm.strengthMode||"custom";
  if(mode==="specific"){
   var workout=(data.savedWorkouts||[]).find(function(item){return item.id===rhythm.workoutId;});
-  return workout?"Planned: "+workout.name:"Workout unavailable";
+  return workout?{label:"Planned",value:workout.name}:{label:"Planned",value:"Workout unavailable"};
  }
  if(mode==="recommended"){
   var recommendation=fitnessRankSavedWorkouts(scores.muscles,data.savedWorkouts||[])[0];
-  return recommendation?"Recommended: "+recommendation.name:"No eligible workout";
+  return {label:"Recommended",value:recommendation?recommendation.name:"No eligible workout"};
  }
  return "Custom workout";
 }
@@ -94,7 +94,7 @@ function fitnessSharedRhythmCardHTML(source,options){
  var card=tendRhythmCardHTML(rhythm,{title:rhythm.text||"(unnamed rhythm)",description:rhythm.description,score:rhythmScore(rhythm),scoreClass:scoreClass(rhythmScore(rhythm)),peopleBadgesHTML:people,categoryBadgesHTML:categories,
   frequency:metadata.frequency,time:metadata.time,lastTended:metadata.lastTended,frequencyIconHTML:metadata.frequencyIconHTML,timeIconHTML:metadata.timeIconHTML,lastIconHTML:metadata.lastIconHTML,
   actionLabel:actionLabel,actionTitle:type==="workout"?"Log a workout":type==="cardio"?"Log a run":"Log a weigh-in",actionClassName:"fitness-action-color",actionDisabled:completed||!!rhythm.paused,
-  todayCompact:options.todayCompact===true,detailsLabel:"Open",detailsId:detailsId,compactStatus:options.todayCompact===true?compactStatus:"",compactSupportingText:support,
+  todayCompact:options.todayCompact===true,compactPrimary:options.todayCompact===true?"details":undefined,detailsLabel:"Open",detailsId:detailsId,compactStatus:options.todayCompact===true?compactStatus:"",compactSupportingParts:support&&typeof support==="object"?support:undefined,compactSupportingText:support&&typeof support==="string"?support:"",
   todayDetails:{peopleHTML:detailPeople,categoryHTML:detailCategories},
   cardClassName:"rhythm-card--fitness",extensionHTML:extension,tendAttributes:actionData,editAttributes:editData,historyAttributes:historyData
  });

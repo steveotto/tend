@@ -189,19 +189,20 @@ function areaMenuHTML(){
  }).join("")+'</div>';}
 function dashboardGreeting(greeting){var name=window.TendAuth&&typeof window.TendAuth.displayName==="function"?window.TendAuth.displayName().trim():"";return greeting+(name?", "+esc(name):"");}
 function renderToday(){
+ function todayLayoutSection(className,content){return content?'<div class="today-layout-section '+className+'">'+content+'</div>':"";}
  var d=new Date(),h=d.getHours();
  var days=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];var mos=["January","February","March","April","May","June","July","August","September","October","November","December"];
  var greet=h<12?"Good morning":(h<18?"Good afternoon":"Good evening");
  var ov=overallScore(),oc=scoreClass(ov);
  var out='<main class="home-dashboard">'+tendSectionHeaderHTML({title:dashboardGreeting(greet),metadata:days[d.getDay()]+", "+mos[d.getMonth()]+" "+d.getDate(),className:"dashboard-greeting"});
  out+='<div class="card overall-card"><div class="dashboard-overall-heading"><h3>Overall health</h3><span class="ov-score '+oc+'">'+(ov===null?"—":ov)+'</span></div><div class="bar-ov"><i class="ov-marker"'+(ov===null?' hidden':' style="left:'+ov+'%"')+'></i></div>'+'<div class="meta">'+(ov===null?'':'<span class="statusword '+oc+'">'+scoreLabel(ov)+'</span>')+'</div>'+areaMenuHTML()+'</div>';
- out+=tendSectionHeaderHTML({title:"On your calendar",className:"calendar-sectiontitle"})+'<div class="card calendar-card"><div id="calStrip"><div class="empty">'+((S.calendars||[]).length?"Loading calendars...":"No calendars connected - add one in Settings.")+'</div></div></div><div id="calendarSyncSlot" class="calendar-sync-slot"></div>';
- out+=planHTML();
- out+=tendPrayerSectionHTML("Prayer",dashboardFocusedPrayerHTML());
- out+=freeMomentHTML();
- out+=upcomingHTML();
- out+=renderChecklists();
- if(typeof faithPrayerSession!=="undefined"&&faithPrayerSession)out+=faithPrayerSessionHTML();
+ out+=todayLayoutSection("today-calendar-section",tendSectionHeaderHTML({title:"On your calendar",className:"calendar-sectiontitle"})+'<div class="card calendar-card"><div id="calStrip"><div class="empty">'+((S.calendars||[]).length?"Loading calendars...":"No calendars connected - add one in Settings.")+'</div></div></div><div id="calendarSyncSlot" class="calendar-sync-slot"></div>');
+ out+=todayLayoutSection("today-feed-section",planHTML());
+ out+=todayLayoutSection("today-prayer-section",tendPrayerSectionHTML("Prayer",dashboardFocusedPrayerHTML()));
+ out+=todayLayoutSection("today-free-moment-section",freeMomentHTML());
+ out+=todayLayoutSection("today-upcoming-section",upcomingHTML());
+ out+=todayLayoutSection("today-checklists-section",renderChecklists());
+ if(typeof faithPrayerSession!=="undefined"&&faithPrayerSession)out+=todayLayoutSection("today-prayer-session-section",faithPrayerSessionHTML());
  return out+'</main>';}
 /* ============ time-aware routine plan ============ */
 var DEFAULT_DAY_BLOCKS=[

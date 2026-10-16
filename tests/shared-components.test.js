@@ -11,6 +11,7 @@ const faithSource = fs.readFileSync(path.join(__dirname, "..", "app-faith.js"), 
 const focusSource = fs.readFileSync(path.join(__dirname, "..", "app-focus.js"), "utf8");
 const peopleSource = fs.readFileSync(path.join(__dirname, "..", "app-people.js"), "utf8");
 const homeRhythmSource = fs.readFileSync(path.join(__dirname, "..", "app-views1.js"), "utf8");
+const rhythmMetadataSource = fs.readFileSync(path.join(__dirname, "..", "app-rhythms2.js"), "utf8");
 const actionsSource = fs.readFileSync(path.join(__dirname, "..", "app-actions.js"), "utf8");
 const connectionHistorySource = fs.readFileSync(path.join(__dirname, "..", "connection-history.js"), "utf8");
 const indexSource = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
@@ -242,15 +243,100 @@ function loadComponents(normalize = record => record) {
   return context;
 }
 
+test("Today groups existing feed and Prayer sections without changing its health meter", () => {
+  const renderToday = homeRhythmSource.match(/function renderToday\(\)\{[\s\S]*?\n\}/)[0];
+  assert.match(renderToday, /<div class="card overall-card"><div class="dashboard-overall-heading">/);
+  assert.match(renderToday, /todayLayoutSection\("today-calendar-section"/);
+  assert.match(renderToday, /todayLayoutSection\("today-feed-section",planHTML\(\)\)/);
+  assert.match(renderToday, /todayLayoutSection\("today-prayer-section",tendPrayerSectionHTML\("Prayer",dashboardFocusedPrayerHTML\(\)\)\)/);
+  assert.match(renderToday, /todayLayoutSection\("today-free-moment-section",freeMomentHTML\(\)\)/);
+  assert.match(styles, /\.home-dashboard \.today-feed-section\{[^}]*border-radius:20px/);
+  assert.match(styles, /\.home-dashboard \.today-prayer-section\{[^}]*border-radius:20px/);
+  assert.match(styles, /@media\(max-width:600px\)\{[\s\S]*?\.home-dashboard \.today-feed-section,\.home-dashboard \.today-prayer-section\{padding:12px/);
+  assert.match(styles, /\.home-dashboard \.today-prayer-section \.prayer-entry-actions>\[data-prayer-session-start\]:disabled\{min-width:0/);
+});
+
 test("Today compact people badges disclose responsive counts without duplicating actions", () => {
   const components = loadComponents();
   const badges = ["Amy", "Jordan", "Lee", "Morgan", "Riley"].map(name => `<button>${name}</button>`);
   const markup = components.tendTodayCompactPeopleHTML(badges);
   assert.match(markup, /today-rhythm-card__people-visible"><button>Amy<\/button><button>Jordan<\/button><button>Lee<\/button>/);
-  assert.match(markup, /people-overflow--wide"><summary>\+2 more<\/summary>/);
-  assert.match(markup, /people-overflow--narrow"><summary>\+3 more<\/summary>/);
+  assert.match(markup, /people-overflow--wide"><summary aria-expanded="false"[^>]*><span class="today-rhythm-card__people-more">\+2 more<\/span>/);
+  assert.match(markup, /people-overflow--narrow"><summary aria-expanded="false"[^>]*><span class="today-rhythm-card__people-more">\+3 more<\/span><span class="today-rhythm-card__people-fewer">Show fewer<\/span>/);
+  assert.match(markup, /summary aria-expanded="false" aria-controls="today-rhythm-people-hidden-/);
   assert.doesNotMatch(components.tendTodayCompactPeopleHTML([]), /Linked people/);
+  const manyPeople = components.tendTodayCompactPeopleHTML(Array.from({ length: 14 }, (_, index) => `<button>Person ${index + 1}</button>`));
+  assert.match(manyPeople, /people-overflow--wide"><summary[^]*>\+11 more/);
+  assert.match(manyPeople, /people-overflow--narrow"><summary[^]*>\+12 more/);
   assert.match(styles, /\.today-rhythm-card__people-visible>:nth-child\(3\)\{display:none\}/);
+  assert.match(styles, /\.today-rhythm-card__people-overflow>summary\{[^}]*height:27px;min-height:27px;max-height:27px[^}]*padding:2px 6px/);
+  assert.match(styles, /\.home-dashboard \.today-rhythm-card__people-overflow>summary\{[\s\S]*?height:27px!important;[\s\S]*?min-height:27px!important;[\s\S]*?max-height:27px!important;[\s\S]*?padding:0 6px!important/);
+  assert.match(styles, /\.home-dashboard \.today-rhythm-card__people-fewer\{display:none/);
+  assert.match(styles, /\.today-rhythm-card__people-overflow\[open\]>summary \.today-rhythm-card__people-fewer\{display:inline\}/);
+});
+
+test("Today people overflow keeps aria-expanded synchronized with disclosure state", () => {
+  let toggleHandler;
+  const context = {
+    esc: escapeHTML,
+    scoreClass: score => score >= 80 ? "green" : score >= 50 ? "yellow" : "red",
+    scoreLabel: score => score >= 80 ? "Healthy" : score >= 50 ? "Slipping" : "Needs attention",
+    window: {},
+    document: { addEventListener: (name, handler, capture) => {
+      assert.equal(name, "toggle");
+      assert.equal(capture, true);
+      toggleHandler = handler;
+    } }
+  };
+  vm.createContext(context);
+  vm.runInContext(source, context);
+
+  let expanded;
+  const details = {
+    open: true,
+    matches: selector => selector === "details.today-rhythm-card__people-overflow",
+    querySelector: selector => selector === "summary" ? { setAttribute: (name, value) => {
+      assert.equal(name, "aria-expanded");
+      expanded = value;
+    } } : null
+  };
+  toggleHandler({ target: details });
+  assert.equal(expanded, "true");
+  details.open = false;
+  toggleHandler({ target: details });
+  assert.equal(expanded, "false");
+});
+
+test("Selected weekday details use single-letter labels and retain full accessible names", () => {
+  const weekdayHelpers = [
+    rhythmMetadataSource.match(/function rhythmCardWeekdays\(r\)\{[\s\S]*?\n\}/)[0],
+    rhythmMetadataSource.match(/function rhythmCardFrequency\(r\)\{[\s\S]*?\n\}/)[0]
+  ].join("\n");
+  const context = {
+    DOW: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+    R_ORDS: ["1st", "2nd", "3rd", "4th", "5th"],
+    R_MOS: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    tendRhythmFrequencyLabel: () => "Selected days",
+    rUntilTxt: () => "",
+    rhythmEnded: () => false
+  };
+  vm.createContext(context);
+  vm.runInContext(weekdayHelpers, context);
+  const frequency = vm.runInContext('rhythmCardFrequency({freq:"selectdays",weekdays:[0,1,2,3,4,5,6]})', context);
+  assert.equal(frequency.detailsLabel, "Selected · S, M, T, W, T, F, S");
+  assert.equal(frequency.full, "Selected days on Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday");
+  const components = loadComponents();
+  const card = components.tendRhythmCardHTML({ id: "weekdays", text: "Choose days" }, {
+    todayCompact: true,
+    compactPrimary: "details",
+    showScore: false,
+    frequency,
+    time: {},
+    lastTended: {},
+    historyAttributes: { "data-rhyhistory": "person|weekdays" }
+  });
+  assert.match(card, /aria-label="Frequency: Selected days on Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday" title="Selected days on Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday"/);
+  assert.match(card, /class="rhythm-card__meta-wide">Selected · S, M, T, W, T, F, S/);
 });
 
 test("Today compact person badges show first names for Friends while retaining shared navigation", () => {

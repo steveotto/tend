@@ -148,9 +148,9 @@ function loadCalendars(force){
    res.forEach(function(r){if(r&&r.err){errs.push(r.err);return;}evs=evs.concat(r);});
    evs.sort(function(a,b){return a.s-b.s;});
    window._calLoading=false;
-   if(errs.length&&cals.length===errs.length){renderCalStrip([],errs);return;}
+   if(errs.length&&cals.length===errs.length){renderCalStrip([],errs,cals.length);return;}
    if(!errs.length){window._calSync=Date.now();localStorage.setItem(calendarCacheKey,JSON.stringify({at:window._calSync,synced:window._calSync,events:evs,n:cals.length}));}
-   renderCalStrip(evs,errs);
+   renderCalStrip(evs,errs,cals.length);
   });
 }
 function fmtT(ms){var d=new Date(ms);var h=d.getHours(),m=d.getMinutes(),ap=h<12?"am":"pm";h=h%12||12;return h+(m?":"+String(m).padStart(2,"0"):"")+ap;}
@@ -160,14 +160,14 @@ function rangeTxt(e,t0,t1){
  if(e.allDay){if(startsToday&&!multi)return "All day";return "All day \u00b7 "+fmtD(e.s)+(multi?" \u2013 "+fmtD(e.e):"");}
  if(startsToday&&!multi)return fmtT(e.s)+" \u2013 "+fmtT(e.e);
  return fmtD(e.s)+" "+fmtT(e.s)+" \u2013 "+(multi?fmtD(e.e)+" ":"")+fmtT(e.e);}
-function renderCalStrip(evs,errs){
+function renderCalStrip(evs,errs,totalSources){
  window._tendCalendarEvents=evs||[];
  var strip=el("calStrip");if(!strip)return;
  var out="";
- if(errs&&errs.length)out+='<div class="empty">Could not load: '+esc(errs.join(", "))+' (calendar proxies may be down - try again)</div><button class="btn mini ghost" data-calretry="1" style="margin-top:6px">Retry</button>';
  var t0=new Date();t0.setHours(0,0,0,0);var t1=t0.getTime()+86400000;var now=Date.now();
  var tod=(evs||[]).filter(function(e){return e.s<t1&&e.e>t0;}).sort(function(a,b){return a.s-b.s;});
- if(!tod.length){out+='<div class="calendar-breathing-room"><span class="calendar-breathing-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="16" rx="3"/><path d="M7.5 3v4M16.5 3v4M3.5 9.5h17M8.5 15l2.2 2.2 4.8-4.8"/></svg></span><div><strong>A little room to breathe</strong><p>Your calendar is clear today. Enjoy the open space.</p></div></div>';}
+ if(errs&&errs.length){var partial=Number.isFinite(totalSources)&&errs.length<totalSources;out+='<div class="empty">'+(partial?'Some calendars are unavailable: '+esc(errs.join(", "))+'. Events from available calendars are shown.':'Could not load: '+esc(errs.join(", "))+' (calendar proxies may be down - try again)')+'</div><button class="btn mini ghost" data-calretry="1" style="margin-top:6px">Retry</button>';}
+ if(!tod.length&&!(errs&&errs.length)){out+='<div class="calendar-breathing-room"><span class="calendar-breathing-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="16" rx="3"/><path d="M7.5 3v4M16.5 3v4M3.5 9.5h17M8.5 15l2.2 2.2 4.8-4.8"/></svg></span><div><strong>A little room to breathe</strong><p>Your calendar is clear today. Enjoy the open space.</p></div></div>';}
  else{
   var allDay=tod.filter(function(e){return e.allDay;}),timed=tod.filter(function(e){return !e.allDay;});
   var nextShown=false;
