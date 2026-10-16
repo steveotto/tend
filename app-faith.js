@@ -264,9 +264,18 @@ function faithRhythmRowHTML(r){
  });
 }
 function faithRhythmsHTML(group){
- var rhythms=faithRhythms(group),linked=typeof window.faithLinkedRhythmRows==="function"?window.faithLinkedRhythmRows(group):"",rows=rhythms.map(faithRhythmRowHTML).join("")+linked;
+ var rhythms=faithRhythms(group),entries=rhythms.map(function(record){return {record:record,id:"faith:"+record.id,native:true};});
+ if(typeof window.faithLinkedRhythmItems==="function"){
+  window.faithLinkedRhythmItems(group).sort(function(a,b){return String(a.item.record.text||"").localeCompare(String(b.item.record.text||""));}).forEach(function(linked){entries.push({record:linked.item.record,item:linked.item,id:linked.id});});
+ }
+ var orderContext="faith-practice:"+group;
+ entries=tendRhythmOrderSort(orderContext,entries,function(entry){return entry.id;});
+ var allIds=entries.map(function(entry){return entry.id;}),rows=entries.map(function(entry,index){
+  var html=entry.native?faithRhythmRowHTML(entry.record):window.faithLinkedRhythmHTML(entry.item);
+  return entries.length>=2?tendRhythmOrderItemHTML(orderContext,orderContext,entry.id,entry.record.text,index,entries.length,html):html;
+ }).join("");
  var out="";
- if(rows)out+='<div class="faith-practice-rhythm-list">'+rows+'</div>';
+ if(rows)out+=tendRhythmOrderToolbar(orderContext,entries.length,"faith-practice-rhythm-order-toolbar")+'<div class="faith-practice-rhythm-list"'+tendRhythmOrderListAttributes(orderContext,allIds)+'>'+rows+'</div>';
  else out+='<div class="empty">No rhythms in this practice yet.</div>';
  if(faithRhythmDraft&&!faithRhythmDraft.id&&faithRhythmDraft.faithGroup===group)out+=faithRhythmEditorHTML(faithRhythmDraft);
  return out;
@@ -710,7 +719,7 @@ document.addEventListener("click",function(event){
  if(b.matches("[data-faith-spark-save]")){faithSaveSpark();event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-spark-cancel]")){if(faithSparkDraft&&faithSparkDraft.id)delete tendItemAssociationDrafts[tendAssociationKey("spark",faithSparkOwnerId,faithSparkDraft.id)];faithSparkDraft=null;delete sparkAddDrafts[faithSparkOwnerId];delete tendItemAssociationDrafts[tendAssociationKey("spark",faithSparkOwnerId,"new")];faithSparkEditId=null;faithSparkOwnerId="faith";render();event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-sparkdone]")){var doneKey=b.getAttribute("data-faith-sparkdone").split("|"),doneSpark=faithFindSpark(doneKey[0],doneKey[1]);if(doneSpark)faithCompleteSpark(doneSpark);event.stopImmediatePropagation();return;}
- if(b.matches("[data-faith-spark-delete]")){var deleteKey=b.getAttribute("data-faith-spark-delete").split("|"),deletedSparkId=deleteKey[1];if(deleteKey[0]==="faith")S.ideas=S.ideas.filter(function(item){return item.id!==deletedSparkId;});else{var deleteOwner=S.people.find(function(person){return person.id===deleteKey[0];});if(deleteOwner)deleteOwner.sparks=(deleteOwner.sparks||[]).filter(function(item){return item.id!==deletedSparkId;});}if(faithSparkDraft&&faithSparkDraft.id===deletedSparkId){faithSparkDraft=null;faithSparkEditId=null;faithSparkOwnerId="faith";}delete tendItemAssociationDrafts[tendAssociationKey("spark",deleteKey[0],deletedSparkId)];save();render();event.stopImmediatePropagation();return;}
+ if(b.matches("[data-faith-spark-delete]")){var deleteKey=b.getAttribute("data-faith-spark-delete").split("|"),deletedSparkId=deleteKey[1];if(deleteKey[0]==="faith")S.ideas=S.ideas.filter(function(item){return item.id!==deletedSparkId;});else{var deleteOwner=S.people.find(function(person){return person.id===deleteKey[0];});if(deleteOwner)deleteOwner.sparks=(deleteOwner.sparks||[]).filter(function(item){return item.id!==deletedSparkId;});}if(faithSparkDraft&&faithSparkDraft.id===deletedSparkId){faithSparkDraft=null;faithSparkEditId=null;faithSparkOwnerId="faith";}if(editSparkId===deletedSparkId){editSparkId=null;sparkEditOwnerId=null;sparkEditViewerId=null;sparkEditDraft=null;}delete tendItemAssociationDrafts[tendAssociationKey("spark",deleteKey[0],deletedSparkId)];save();render();event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-spark-reopen]")){var reopenKey=b.getAttribute("data-faith-spark-reopen").split("|"),item=faithFindSpark(reopenKey[0],reopenKey[1]);if(item){item.done=false;item.completedTs=null;item.completedDate=null;save();render();}event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-prayer-add]")){delete prayerAddDrafts.global;delete tendItemAssociationDrafts[tendAssociationKey("prayer","global","new")];faithPrayerDraftOpen=true;render();var title=document.querySelector('[data-prayer-editor="new-global"] [data-prayer-field="title"]');if(title)title.focus();event.stopImmediatePropagation();return;}
  if(b.matches("[data-faith-prayer-cancel]")){delete prayerAddDrafts.global;delete tendItemAssociationDrafts[tendAssociationKey("prayer","global","new")];faithPrayerDraftOpen=false;render();event.stopImmediatePropagation();return;}

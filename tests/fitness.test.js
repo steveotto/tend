@@ -12,6 +12,7 @@ const scoringSource = fs.readFileSync(path.join(root, "app-fitness-scoring.js"),
 const dataSource = fs.readFileSync(path.join(root, "app-fitness-data.js"), "utf8");
 const fitnessAppSource = fs.readFileSync(path.join(root, "app-fitness.js"), "utf8");
 const sharedSource = fs.readFileSync(path.join(root, "app-shared-components.js"), "utf8");
+const orderSource = fs.readFileSync(path.join(root, "app-rhythm-order.js"), "utf8");
 const coreSource = fs.readFileSync(path.join(root, "app-core.js"), "utf8");
 const viewSource = fs.readFileSync(path.join(root, "app-views1.js"), "utf8");
 const categorySource = fs.readFileSync(path.join(root, "app-categoryrhythms.js"), "utf8");
@@ -838,6 +839,7 @@ test("Fitness rhythm lists filter by structured type and show explicit weekday t
     tendAssociationPeopleBadges() { return ""; }
   };
   vm.createContext(context);
+  vm.runInContext(orderSource, context);
   vm.runInContext(scoringSource, context);
   vm.runInContext(sharedSource, context);
   vm.runInContext(fitnessAppSource, context);

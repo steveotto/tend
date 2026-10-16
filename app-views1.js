@@ -20,6 +20,12 @@ function dashboardInitSparkCarousel(){
   });
  });
 }
+function tendRouteForSparkEdit(viewerId){
+ if(!S.people.some(function(person){return person.id===viewerId;}))return false;
+ if(tab==="today"&&!currentArea&&!currentPerson)return false;
+ currentPerson=viewerId;currentArea=null;tab="people";profileTabs[viewerId]="sparks";
+ return true;
+}
 function renderNav(){
  var an=el("areaNav");if(an)an.innerHTML=AREA_IDS.map(function(id){return '<button data-areanav="'+id+'" class="'+(navKind()==="area"&&currentArea===id?"active":"")+'"><span class="nav-ic">'+(AREA_ICONS[id]||"")+'</span><span>'+S.areas[id].name+'</span></button>';}).join("");
  var un=el("utilNav");if(un){var settingsActive=tab==="settings"||tab==="careplan"||tab==="offload";un.innerHTML='<div class="utility-primary"><button type="button" data-utilnav="today" class="utility-primary-button'+(tab==="today"&&navKind()!=="area"?" active":"")+'"><span class="utility-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg></span><span>Today</span></button>'+(typeof focusNavButtonHTML==="function"?focusNavButtonHTML():'')+'<button type="button" data-utilnav="people" class="utility-primary-button'+(tab==="people"&&navKind()!=="area"?" active":"")+'"><span class="utility-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20v-1.5a6.5 6.5 0 0 1 13 0V20zM16 5a3.5 3.5 0 0 0 0 6.8M18 14a5.5 5.5 0 0 1 3.5 5.2V20h-3"/></svg></span><span>People</span></button><button type="button" data-utilnav="settings" class="utility-primary-button'+(settingsActive&&navKind()!=="area"?" active":"")+'" aria-label="More, settings"><span class="utility-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span><span>More</span></button></div><label class="utility-search"><span class="utility-search-icon" aria-hidden="true">⌕</span><input type="search" id="tendSearch" placeholder="Search Tend..." autocomplete="off" aria-label="Search people, rhythms, prayers, and sparks" aria-controls="tendSearchResults" aria-expanded="false"><button type="button" class="utility-search-clear" data-search-clear aria-label="Clear search" hidden>×</button><div class="utility-search-results" id="tendSearchResults" role="region" aria-label="Search results" hidden></div></label>';}
@@ -179,7 +185,7 @@ function render(){var existingPersonSettingsModal=el("personSettingsModal");if(e
  if(typeof bind==="function")bind();
  var activePanel=currentPerson&&v.querySelector('.profile-tab-panel:not([hidden])'),editorDialog=activePanel&&activePanel.querySelector('dialog[data-profile-editor],dialog[data-editor-modal]');if(!editorDialog)editorDialog=v.querySelector('dialog[data-editor-modal]');if(editorDialog){if(!editorDialog.open)tendShowModal(editorDialog);editorDialog.addEventListener("cancel",function(event){var cancel=editorDialog.querySelector("[data-editor-cancel]");if(cancel){event.preventDefault();cancel.click();}});}
  var rhythmPickerDialog=v.querySelector("dialog[data-rhythm-picker-dialog]");if(rhythmPickerDialog&&!rhythmPickerDialog.open){tendShowModal(rhythmPickerDialog);var rhythmPickerTitle=rhythmPickerDialog.querySelector("#rhythm-picker-title");if(rhythmPickerTitle)rhythmPickerTitle.focus({preventScroll:true});}
- if(tab==="today"&&!currentArea&&el("calStrip")&&typeof loadCalendars==="function")loadCalendars();if(tab==="today"&&!currentArea&&typeof loadNowWeather==="function")loadNowWeather();tendRenderScrollSnapshot=previousSnapshot;var renderedRouteKey=tendRenderRouteKey();tendLastRenderRouteKey=renderedRouteKey;if(faithScrollAnchor&&currentArea==="faith"){requestAnimationFrame(function(){requestAnimationFrame(function(){tendRestoreFaithScrollAnchor(faithScrollAnchor);});});}else if(preserve&&routeKey===renderedRouteKey){if(scrollAnchor)requestAnimationFrame(function(){requestAnimationFrame(function(){tendRestoreProfileScrollAnchor(scrollAnchor);});});else tendRestorePageScroll(scrollPosition);}}
+ if(tab==="today"&&!currentArea&&el("calStrip")&&typeof loadCalendars==="function")loadCalendars();if(tab==="today"&&!currentArea&&typeof loadNowWeather==="function")loadNowWeather();var activeArrangeContext=tendRhythmArrangeContext;if(activeArrangeContext&&!Array.prototype.some.call(v.querySelectorAll('[data-rhythm-order-action="toggle"]'),function(button){return button.getAttribute("data-rhythm-order-context")===activeArrangeContext;})){if(tendRhythmDragItem)tendRhythmDragItem.classList.remove("is-dragging");tendRhythmDragItem=null;tendRhythmArrangeContext=null;}tendRenderScrollSnapshot=previousSnapshot;var renderedRouteKey=tendRenderRouteKey();tendLastRenderRouteKey=renderedRouteKey;if(faithScrollAnchor&&currentArea==="faith"){requestAnimationFrame(function(){requestAnimationFrame(function(){tendRestoreFaithScrollAnchor(faithScrollAnchor);});});}else if(preserve&&routeKey===renderedRouteKey){if(scrollAnchor)requestAnimationFrame(function(){requestAnimationFrame(function(){tendRestoreProfileScrollAnchor(scrollAnchor);});});else tendRestorePageScroll(scrollPosition);}}
 /* ============ overall meter ============ */
 function overallScore(){return AREA_IDS.some(areaHasActivity)?avg(AREA_IDS.map(areaScore)):null;}
 function areaMenuHTML(){
@@ -203,6 +209,7 @@ function renderToday(){
  out+=todayLayoutSection("today-upcoming-section",upcomingHTML());
  out+=todayLayoutSection("today-checklists-section",renderChecklists());
  if(typeof faithPrayerSession!=="undefined"&&faithPrayerSession)out+=todayLayoutSection("today-prayer-session-section",faithPrayerSessionHTML());
+ if(tab==="today"&&!currentArea&&!currentPerson&&editSparkId&&sparkEditOwnerId&&sparkEditDraft)out+=tendSparkEditModalHTML(sparkEditOwnerId,sparkEditViewerId||sparkEditOwnerId);
  return out+'</main>';}
 /* ============ time-aware routine plan ============ */
 var DEFAULT_DAY_BLOCKS=[
@@ -239,7 +246,7 @@ function planPersonBadgeHTML(person,rhythmLink,options){
  var name=String(person.name||"").trim(),firstName=name.split(/\s+/)[0],displayName=options.firstNameFriendsOnly?person.area==="friendships"?(firstName||name):name:firstName||name,accessibleName=options.firstNameFriendsOnly?displayName:name,badgeClass=options.todayCompact?" today-rhythm-card__person":"";
  return '<button type="button" class="prayer-person person-badge-clickable'+badgeClass+(rhythmLink?' person-rhythm-link':'')+'" '+(rhythmLink?'data-personrhythms="'+esc(person.id)+'" aria-label="Open '+esc(accessibleName)+' rhythms"':'data-openperson="'+esc(person.id)+'" aria-label="Open '+esc(accessibleName)+' profile"')+'>'+personAvatar(person,24)+esc(displayName)+'</button>';
 }
-function planItemPeople(it){
+function planItemPeople(it,excludePersonId){
  var ids=Array.isArray(it.personIds)?it.personIds.slice():[],kind=planItemKind(it),record=null,ownerId="";
  if(it.personId)ids.push(it.personId);
  if(it.rhythm){var rhythmIds=String(it.rhythm).split("|");ownerId=rhythmIds[0];var owner=S.people.find(function(p){return p.id===ownerId;});record=owner&&(owner.rhythms||[]).find(function(r){return r.id===rhythmIds[1];});}
@@ -249,7 +256,7 @@ function planItemPeople(it){
  if(ownerId)ids.push(ownerId);
  if(record&&Array.isArray(record.personIds))ids=ids.concat(record.personIds);
  if(record&&Array.isArray(record.sharedWith))ids=ids.concat(record.sharedWith);
- ids=ids.filter(function(id,index){return id&&id!==currentPerson&&ids.indexOf(id)===index&&S.people.some(function(person){return person.id===id;});});
+ ids=ids.filter(function(id,index){return id&&id!==excludePersonId&&ids.indexOf(id)===index&&S.people.some(function(person){return person.id===id;});});
  return ids.map(function(id){var person=S.people.find(function(p){return p.id===id;});if(!person)return "";var rhythmLink=(kind==="rhythm"||!!it.faithRhythm)&&person.id!==ownerId;return planPersonBadgeHTML(person,rhythmLink,{});}).join("");
 }
 function planItemKindBadge(it){
@@ -314,8 +321,8 @@ function planItemEditAction(it){
  }
  return "";
 }
-function planItemPeopleRow(it){
- var people=planItemPeople(it);
+function planItemPeopleRow(it,excludePersonId){
+ var people=planItemPeople(it,excludePersonId);
  return people?'<div class="plan-item-meta-people plan-people" data-plan-people><span class="plan-people-visible">'+people+'</span><details class="plan-people-overflow" hidden><summary></summary><span class="plan-people-menu"></span></details></div>':"";
 }
 function planItemTopRow(it,showEdit){
@@ -326,14 +333,14 @@ function freeMomentSparkCardHTML(item,options){
  options=options||{};
  return tendSparkCardHTML(item,{title:item.label,description:item.description,actionHTML:options.actionHTML,headingEditHTML:planItemEditAction(item),topMetaHTML:planItemTopRow(item,false),footerHTML:options.footerHTML,className:options.className,cardAttributes:options.cardAttributes});
 }
-function planRhythmCardBadges(it){
- var people=planItemPeopleRow(it),categories=planCategoryBadges(it);
+function planRhythmCardBadges(it,excludePersonId){
+ var people=planItemPeopleRow(it,excludePersonId),categories=planCategoryBadges(it);
  var categoryRow=categories?'<div class="plan-item-category-row" data-plan-categories><span class="rhythm-area-badges plan-category-visible">'+categories.replace(/^<span class="rhythm-area-badges"[^>]*>|<\/span>$/g,"")+'</span><details class="plan-category-overflow" hidden><summary></summary><span class="plan-category-menu"></span></details></div>':"";
  return people||categoryRow?'<div class="plan-item-top-meta">'+people+categoryRow+'</div>':"";
 }
-function planRhythmDetailsPeople(it,ownerId,record,compact){
+function planRhythmDetailsPeople(it,ownerId,record,compact,excludePersonId){
  var ids=(Array.isArray(it.personIds)?it.personIds.slice():[]).concat(it.personId||"",ownerId||"",record&&Array.isArray(record.personIds)?record.personIds:[],record&&Array.isArray(record.sharedWith)?record.sharedWith:[]);
- ids=ids.filter(function(id,index){return id&&ids.indexOf(id)===index&&S.people.some(function(person){return person.id===id;});});
+ ids=ids.filter(function(id,index){return id&&id!==excludePersonId&&ids.indexOf(id)===index&&S.people.some(function(person){return person.id===id;});});
  return ids.map(function(id){
   var person=S.people.find(function(candidate){return candidate.id===id;});
   if(!person)return "";
@@ -357,15 +364,15 @@ function planRhythmCardHTML(it){
  var score=rhythmScore(record),metadata=window.tendRhythmCardMetadata(record),owner=it.rhythm?S.people.find(function(person){return person.id===ownerId;}):null,last=rhythmLast(record),status=last?rhythmDueTxt(record):"Not yet tended",detailsId="today-rhythm-details-"+String(it.rhythm||it.faithRhythm||it.fitnessRhythm||record.id).replace(/[^a-z0-9_-]/gi,"-");
  if(status==="ready to tend again")status="Overdue";
  if(status)status=status.charAt(0).toUpperCase()+status.slice(1);
- var compactPeople=planRhythmDetailsPeople(it,ownerId,record,true);
- return tendRhythmCardHTML(record,{todayCompact:true,compactPrimary:"details",detailsLabel:"Open",detailsId:detailsId,compactStatus:status,compactPeopleHTML:tendTodayCompactPeopleHTML(compactPeople),
+ var viewerPersonId=it.viewerPersonId||null,compactPeople=planRhythmDetailsPeople(it,ownerId,record,true,viewerPersonId);
+ return tendRhythmCardHTML(record,{todayCompact:true,compactPrimary:"details",detailsLabel:"Open",detailsId:detailsId,compactStatus:status,viewerPersonId:viewerPersonId,compactPeopleHTML:tendTodayCompactPeopleHTML(compactPeople),
   title:record.text||"(unnamed rhythm)",description:record.description,score:Number.isFinite(score)?score:null,scoreClass:scoreClass(score),
-  peopleBadgesHTML:planRhythmCardBadges(it),categoryBadgesHTML:"",
+  peopleBadgesHTML:planRhythmCardBadges(it,viewerPersonId),categoryBadgesHTML:"",
   frequency:metadata.frequency,time:metadata.time,lastTended:metadata.lastTended,frequencyIconHTML:metadata.frequencyIconHTML,timeIconHTML:metadata.timeIconHTML,lastIconHTML:metadata.lastIconHTML,
   tendAttributes:it.fitnessRhythm?{"data-tend-open":"fitness-rhythm","data-rhythm-id":it.fitnessRhythm}:it.rhythm?{"data-tend-open":"person-rhythm","data-person-id":ownerId,"data-rhythm-id":String(it.rhythm).split("|")[1]}:{"data-tend-open":"faith-rhythm","data-rhythm-id":it.faithRhythm},
   editAttributes:it.fitnessRhythm?{"data-fitness-rhythm-edit":it.fitnessRhythm}:it.rhythm?{"data-plan-edit-rhythm":it.rhythm}:{"data-faith-rhythm-edit":it.faithRhythm},
   historyAttributes:it.fitnessRhythm?{"data-rhyhistory":"fitness|"+it.fitnessRhythm}:it.rhythm?{"data-rhyhistory":it.rhythm}:{"data-faith-rhythm-history":it.faithRhythm},
-  todayDetails:{peopleHTML:planRhythmDetailsPeople(it,ownerId,record).join(""),categoryHTML:planCategoryBadges(it)}
+  todayDetails:{peopleHTML:planRhythmDetailsPeople(it,ownerId,record,false,viewerPersonId).join(""),categoryHTML:planCategoryBadges(it)}
  });
 }
 function planItemFooter(it,meta,sub){
@@ -418,6 +425,20 @@ function planItemStableKey(item){
  if(item.fitnessRhythm)return "fitness-rhythm:"+item.fitnessRhythm;
  if(item.spark)return "spark:"+item.spark;
  return null;
+}
+function planRhythmOrderId(item){
+ if(item.rhythm){var parts=String(item.rhythm).split("|");return "person:"+parts[0]+":"+parts[1];}
+ if(item.faithRhythm)return "faith:"+item.faithRhythm;
+ if(item.fitnessRhythm)return "fitness:"+item.fitnessRhythm;
+ return null;
+}
+function planTodayRhythmOrderIds(groupId,currentId){
+ var items=[];
+ S.people.forEach(function(person){(person.rhythms||[]).forEach(function(rhythm){if((rhythm.tod||currentId)!==groupId)return;items.push({scheduled:!!rhythm.tod,calendarDay:rhythm.freq==="custom",period:rhythmPeriod(rhythm),waitDays:rhythmDaysSince(rhythm),rhythm:person.id+"|"+rhythm.id});});});
+ (S.rhythms||[]).forEach(function(rhythm){if(rhythm.category!=="faith"||rhythm.faithGroup==="Prayer"||rhythm.tod!==groupId)return;items.push({scheduled:!!rhythm.tod,calendarDay:rhythm.freq==="custom",period:rhythmPeriod(rhythm),waitDays:rhythmDaysSince(rhythm),faithRhythm:rhythm.id});});
+ (typeof fitnessRhythmRecords==="function"?fitnessRhythmRecords():[]).forEach(function(rhythm){if((rhythm.tod||"anytime")!==groupId)return;items.push({scheduled:!!rhythm.tod,calendarDay:rhythm.freq==="custom",period:rhythmPeriod(rhythm),waitDays:rhythmDaysSince(rhythm),fitnessRhythm:rhythm.id});});
+ var sorted=prioritizePlanItems(items).visible,ids=sorted.map(planRhythmOrderId);
+ return ids.filter(function(id,index){return id&&ids.indexOf(id)===index;});
 }
 function planUniqueItems(items){
  var seen=Object.create(null),unique=items.filter(function(item){var key=planItemStableKey(item);if(!key)return true;if(seen[key])return false;seen[key]=true;return true;});
@@ -525,6 +546,7 @@ function planBlockCard(viewId,curId,focusBlocks){
  var selection=planHomeSelection(focusBlocks),itemType=selection.itemType;
  viewId=planNormalizeFocusState(viewId,focusBlocks);
  var groups=planViewGroups(viewId,curId,focusBlocks,itemType),count=planViewItemCount(groups),isNow=viewId==="now",block=focusBlocks.filter(function(item){return item.id===viewId;})[0],current=focusBlocks.filter(function(item){return item.id===curId;})[0]||focusBlocks[0];
+ var canArrangeToday=groups.some(function(group){return group.items.filter(function(item){return planRhythmOrderId(item)&&!item.exact;}).length>=2;});
  var title=itemType==="anytime"?"Anytime":itemType==="all-day"?"All-day items":viewId==="now"?"Now":viewId==="everything-today"?"Everything today":planBlockName(block||current);
  var subtitle=itemType==="anytime"?"No preferred time":itemType==="all-day"?"Assigned All day":viewId==="everything-today"?"Across every time block":isNow?planBlockName(current)+" · "+current.range:block.range;
  var weather=isNow?nowWeatherHTML():block&&typeof planWeatherHTML==="function"?planWeatherHTML(dayBlocks().filter(function(item){return item.id===viewId;})[0].start):"";
@@ -532,7 +554,7 @@ function planBlockCard(viewId,curId,focusBlocks){
   var timeframe=planFocusMenuHTML(focusBlocks,curId,viewId),heading=itemType==="scheduled"?timeframe:'<h2 class="home-plan-view-heading">'+esc(title)+'</h2>',countLabel=planViewCountLabel(viewId,groups);
   var weatherSlot=isNow||block?'<div class="current-plan-weather" id="nowWeather" data-plan-weather-time="'+(block&&!isNow?esc(dayBlocks().filter(function(item){return item.id===viewId;})[0].start):"")+'">'+weather+'</div>':"";
   var segments='<div class="faith-practice-tabs home-plan-type-tabs" role="tablist" aria-label="Home item type">'+[["scheduled","Scheduled"],["anytime","Anytime"],["all-day","All-day"]].map(function(pair){var selected=itemType===pair[0];return '<button type="button" role="tab" id="home-plan-type-'+pair[0]+'" aria-controls="home-plan-items" data-plan-item-type="'+pair[0]+'" aria-selected="'+selected+'" tabindex="'+(selected?"0":"-1")+'">'+pair[1]+'</button>';}).join("")+'</div>';
-  return '<div class="current-plan-summary'+(weather?" has-weather":"")+'"><div class="current-plan-topline"><div class="current-plan-heading-controls">'+heading+'</div></div>'+weatherSlot+'</div>'+segments+'<div class="home-plan-context-row"><div class="home-plan-context">'+esc(subtitle)+'</div><span class="current-plan-item-count" aria-label="'+esc(countLabel)+'"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3h8M5.5 8h8M5.5 13h8M2.5 3h.01M2.5 8h.01M2.5 13h.01"/></svg>'+esc(countLabel)+'</span></div>';
+  return '<div class="current-plan-summary'+(weather?" has-weather":"")+'"><div class="current-plan-topline"><div class="current-plan-heading-controls">'+heading+'</div></div>'+weatherSlot+'</div>'+segments+'<div class="home-plan-context-row"><div class="home-plan-context">'+esc(subtitle)+'</div><span class="current-plan-item-count" aria-label="'+esc(countLabel)+'"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3h8M5.5 8h8M5.5 13h8M2.5 3h.01M2.5 8h.01M2.5 13h.01"/></svg>'+esc(countLabel)+'</span>'+tendRhythmOrderToolbar("today",canArrangeToday?2:0,"home-rhythm-order-toolbar")+'</div>';
  }
  function itemHTML(it){
   if(it.rhythm||it.faithRhythm||it.fitnessRhythm){var rhythmCard=planRhythmCardHTML(it);if(rhythmCard)return rhythmCard;}
@@ -540,7 +562,16 @@ function planBlockCard(viewId,curId,focusBlocks){
   var meta=planItemMetaBar(it.sub,!!(it.rhythm||it.faithRhythm||it.fitnessRhythm));
   return '<div class="planitem"><div class="pi-main">'+planItemCopy(it,btn)+'</div>'+planItemTopRow(it)+planItemFooter(it,meta,it.sub)+'</div>';
  }
- var nonempty=groups.filter(function(group){return group.items.length>0;}),emptyMessage=itemType==="anytime"?"No eligible Anytime rhythms.":itemType==="all-day"?"No eligible All-day items.":"Nothing queued - all items tended.",body=nonempty.length?nonempty.map(function(group){return '<section class="current-plan-item-group"'+(group.title?' aria-label="'+esc(group.title)+'"':"")+'>'+(group.title?'<h3 class="current-plan-item-group-title">'+esc(group.title)+'</h3>':"")+'<div class="current-plan-item-group-items">'+group.items.map(itemHTML).join("")+'</div></section>';}).join(""):'<div class="empty plan-empty-card">'+esc(emptyMessage)+'</div>';
+ var nonempty=groups.filter(function(group){return group.items.length>0;}),emptyMessage=itemType==="anytime"?"No eligible Anytime rhythms.":itemType==="all-day"?"No eligible All-day items.":"Nothing queued - all items tended.",body=nonempty.length?nonempty.map(function(group){
+  var groupRhythms=group.items.filter(function(item){return planRhythmOrderId(item)&&!item.exact;}),rhythmOrderGroup=group.id==="scheduled"?(viewId==="now"?curId:viewId):group.id==="all-day-items"?"allday":group.id,orderContext="today:"+rhythmOrderGroup,orderedRhythms=tendRhythmOrderSort(orderContext,groupRhythms,planRhythmOrderId),rhythmIndex=0,orderedItems=group.items.map(function(item){return planRhythmOrderId(item)&&!item.exact?orderedRhythms[rhythmIndex++]:item;}),allIds=planTodayRhythmOrderIds(rhythmOrderGroup,curId);
+  var rows=orderedItems.map(function(item){
+   var html=itemHTML(item),id=planRhythmOrderId(item);
+   if(!id||item.exact||groupRhythms.length<2)return html;
+   var index=orderedRhythms.indexOf(item);
+   return tendRhythmOrderItemHTML(orderContext,"today",id,item.label,index,orderedRhythms.length,html);
+  }).join("");
+  return '<section class="current-plan-item-group"'+(group.title?' aria-label="'+esc(group.title)+'"':"")+'>'+(group.title?'<h3 class="current-plan-item-group-title">'+esc(group.title)+'</h3>':"")+'<div class="current-plan-item-group-items"'+(groupRhythms.length>=2?tendRhythmOrderListAttributes(orderContext,allIds,"today"):"")+'>'+rows+'</div></section>';
+ }).join(""):'<div class="empty plan-empty-card">'+esc(emptyMessage)+'</div>';
  return '<section id="plan-'+esc(itemType==="scheduled"?viewId:itemType==="anytime"?"anytime":"all-day-items")+'" data-plan-block="'+esc(itemType==="scheduled"?viewId:itemType==="anytime"?"anytime":"all-day-items")+'" class="card planblock current'+(itemType==="all-day"?' all-day':'')+'">'+header()+'<div class="current-plan-items" id="home-plan-items" role="tabpanel" aria-labelledby="home-plan-type-'+itemType+'">'+body+'</div></section>';
 }
 function planHTML(){
@@ -816,8 +847,7 @@ window.addEventListener("click",function(event){
  var button=event.target&&event.target.closest&&event.target.closest("[data-plan-spark-edit-viewer]");
  if(!button)return;
  var viewerId=button.getAttribute("data-plan-spark-edit-viewer");
- if(!S.people.some(function(person){return person.id===viewerId;}))return;
- currentPerson=viewerId;currentArea=null;tab="people";profileTabs[viewerId]="sparks";
+ tendRouteForSparkEdit(viewerId);
 },true);
 function todayRhythmEligible(r){var days=rhythmDaysSince(r);if(days===999)return true;if(days===0)return false;var period=rhythmPeriod(r);var window=Math.min(Math.ceil(period/2),7);if(days>=period)return true;if(!scheduleDayMatches(r))return false;return days>=Math.max(1,period-window);}
 function rippleIdea(p){
@@ -920,7 +950,7 @@ function actQueueHTML(p){
  }
  function rhyRowQ(r,dim){
   var metadata=window.tendRhythmCardMetadata(r),badges=tendQueuePeopleAndCategoryBadges(r,p.id,p.id,"rhythm");
-  return tendRhythmCardHTML(r,{title:r.text||"(unnamed rhythm)",description:r.description,peopleBadgesHTML:badges,
+  return tendRhythmCardHTML(r,{title:r.text||"(unnamed rhythm)",description:r.description,viewerPersonId:p.id,peopleBadgesHTML:badges,
    frequency:metadata.frequency,time:metadata.time,lastTended:metadata.lastTended,frequencyIconHTML:metadata.frequencyIconHTML,timeIconHTML:metadata.timeIconHTML,lastIconHTML:metadata.lastIconHTML,
    tendAttributes:{"data-tend-open":"person-rhythm","data-person-id":p.id,"data-rhythm-id":r.id},showScore:false});
  }
@@ -1017,9 +1047,13 @@ function personProfile(pid){
  }else out+='<div class="connection-list"><div class="profile-empty-state">No connections yet</div></div>';
  if(connections.length>5)out+='<button type="button" class="btn mini ghost profile-rhythm-add connection-history-view-all" data-connection-history-list="'+esc(pid)+'">View all ('+connections.length+')</button>';
  out+='</section>';
- out+=profilePanelStart("rhythms")+'<div class="profile-panel-toolbar profile-rhythm-toolbar"><p class="profile-tab-intro">Recurring practices that help you stay connected.</p><button type="button" class="btn mini ghost profile-rhythm-add" data-rhyadd="'+esc(pid)+'">'+profileActionIcon("log")+'<span>Add rhythm</span></button></div><div class="profile-rhythm-list">';
- var profileRhythms=sortedPersonRhythms(p);
- if(profileRhythms.length){profileRhythms.forEach(function(r){out+=rhythmRow(p,r,{frequencyLabel:r.freq==="yearly"?"Yearly":""});});}
+ var profileRhythms=sortedPersonRhythms(p),profileOrderContext="person:"+pid;
+ profileRhythms=tendRhythmOrderSort(profileOrderContext,profileRhythms,function(r){return "person:"+(r.profileOwnerId||pid)+":"+r.id;});
+ out+=profilePanelStart("rhythms")+'<div class="profile-panel-toolbar profile-rhythm-toolbar"><p class="profile-tab-intro">Recurring practices that help you stay connected.</p><button type="button" class="btn mini ghost profile-rhythm-add" data-rhyadd="'+esc(pid)+'">'+profileActionIcon("log")+'<span>Add rhythm</span></button>'+tendRhythmOrderToolbar(profileOrderContext,profileRhythms.length,"profile-rhythm-order-toolbar")+'</div><div class="profile-rhythm-list"'+tendRhythmOrderListAttributes(profileOrderContext,profileRhythms.map(function(r){return "person:"+(r.profileOwnerId||pid)+":"+r.id;}))+'>';
+ if(profileRhythms.length){profileRhythms.forEach(function(r,index){
+  var id="person:"+(r.profileOwnerId||pid)+":"+r.id,content=rhythmRow(p,r,{viewerPersonId:pid,frequencyLabel:r.freq==="yearly"?"Yearly":""});
+  out+=profileRhythms.length>=2?tendRhythmOrderItemHTML(profileOrderContext,profileOrderContext,id,r.text,index,profileRhythms.length,content):content;
+ });}
  else out+='<div class="profile-empty-state">No rhythms yet</div>';
  out+='</div>';
  var dO=rhythmDraft&&rhythmDraft.pid===pid;
@@ -1218,7 +1252,7 @@ var LL_NUDGES={qt:"time together - a walk, an errand, a shared meal - speaks lou
 function personProfileShortDateLabel(label){return String(label||"").replace(/^(January|February|March|April|May|June|July|August|September|October|November|December)\b/,function(month){return month.slice(0,3);});}
 function bdayInfo(b){if(!b)return null;var parts=String(b).split("-");if(parts.length<3)return null;var m=+parts[1],d=+parts[2];if(!m||!d)return null;var t=new Date();var today=new Date(t.getFullYear(),t.getMonth(),t.getDate());var next=new Date(t.getFullYear(),m-1,d);if(next<today)next=new Date(t.getFullYear()+1,m-1,d);var du=Math.round((next-today)/86400000);var mos=["January","February","March","April","May","June","July","August","September","October","November","December"];return {label:mos[m-1]+" "+d,days:du};}
 var editingConn=null,editingFollowupId=null;
-var editSparkId=null,sparkEditOwnerId=null,sparkEditDraft=null,sparkDraftOpenFor=null,noteDraftOpenFor=null;
+var editSparkId=null,sparkEditOwnerId=null,sparkEditViewerId=null,sparkEditDraft=null,sparkDraftOpenFor=null,noteDraftOpenFor=null;
 var editRhythmId=null, rhythmEditDraft=null;
 var rhythmDraft=null;
 var tab="today",openDetail=null,currentArea=null,currentPerson=null,profileBadgePerson=null,rhythmPickerDraft=null;
