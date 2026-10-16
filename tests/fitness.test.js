@@ -671,7 +671,7 @@ test("Fitness Today cards extend the shared rhythm card with current strength gu
   assert.match(recommended, />Log workout<\/button>/);
   assert.doesNotMatch(recommended, /Back Day/);
   assert.match(recommended, /<dialog class="today-rhythm-details-dialog" id="today-rhythm-details-fitness-strength-dialog"/);
-  assert.match(recommended, />Edit<\/button>/);
+  assert.match(recommended, /class="rhythm-card__edit" data-fitness-rhythm-edit="strength" aria-label="Edit Evening workout"/);
   const planned = vm.runInContext('fitnessTodayRhythmCardHTML({id:"specific",type:"workout",text:"Early morning Abs",strengthMode:"specific",workoutId:"arms"},false)', context);
   assert.match(planned, /<p class="today-rhythm-card__support">Planned: Arms<\/p>/);
   assert.match(planned, /Biceps, Triceps/);

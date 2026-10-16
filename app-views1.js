@@ -233,6 +233,11 @@ function rhythmScheduledToday(r,date){
  if(r.freq==="custom")return date.getDay()===(r.customDow||0)&&(r.customType!=="monthly"||Math.ceil(date.getDate()/7)===(r.customOrd||1));
  return scheduleDayMatches(r,date)&&(r.freq==="daily"||rhythmDaysSince(r)>=rhythmPeriod(r));
 }
+function planPersonBadgeHTML(person,rhythmLink,options){
+ options=options||{};
+ var name=String(person.name||"").trim(),firstName=name.split(/\s+/)[0],displayName=options.firstNameFriendsOnly?person.area==="friendships"?(firstName||name):name:firstName||name,accessibleName=options.firstNameFriendsOnly?displayName:name,badgeClass=options.todayCompact?" today-rhythm-card__person":"";
+ return '<button type="button" class="prayer-person person-badge-clickable'+badgeClass+(rhythmLink?' person-rhythm-link':'')+'" '+(rhythmLink?'data-personrhythms="'+esc(person.id)+'" aria-label="Open '+esc(accessibleName)+' rhythms"':'data-openperson="'+esc(person.id)+'" aria-label="Open '+esc(accessibleName)+' profile"')+'>'+personAvatar(person,24)+esc(displayName)+'</button>';
+}
 function planItemPeople(it){
  var ids=Array.isArray(it.personIds)?it.personIds.slice():[],kind=planItemKind(it),record=null,ownerId="";
  if(it.personId)ids.push(it.personId);
@@ -244,7 +249,7 @@ function planItemPeople(it){
  if(record&&Array.isArray(record.personIds))ids=ids.concat(record.personIds);
  if(record&&Array.isArray(record.sharedWith))ids=ids.concat(record.sharedWith);
  ids=ids.filter(function(id,index){return id&&id!==currentPerson&&ids.indexOf(id)===index&&S.people.some(function(person){return person.id===id;});});
- return ids.map(function(id){var person=S.people.find(function(p){return p.id===id;});if(!person)return "";var rhythmLink=(kind==="rhythm"||!!it.faithRhythm)&&person.id!==ownerId,firstName=String(person.name||"").trim().split(/\s+/)[0];return '<button type="button" class="prayer-person person-badge-clickable'+(rhythmLink?' person-rhythm-link':'')+'" '+(rhythmLink?'data-personrhythms="'+esc(person.id)+'" aria-label="Open '+esc(person.name)+' rhythms"':'data-openperson="'+esc(person.id)+'" aria-label="Open '+esc(person.name)+' profile"')+'>'+personAvatar(person,24)+esc(firstName||person.name)+'</button>';}).join("");
+ return ids.map(function(id){var person=S.people.find(function(p){return p.id===id;});if(!person)return "";var rhythmLink=(kind==="rhythm"||!!it.faithRhythm)&&person.id!==ownerId;return planPersonBadgeHTML(person,rhythmLink,{});}).join("");
 }
 function planItemKindBadge(it){
  var kind=planItemKind(it);
@@ -325,15 +330,15 @@ function planRhythmCardBadges(it){
  var categoryRow=categories?'<div class="plan-item-category-row" data-plan-categories><span class="rhythm-area-badges plan-category-visible">'+categories.replace(/^<span class="rhythm-area-badges"[^>]*>|<\/span>$/g,"")+'</span><details class="plan-category-overflow" hidden><summary></summary><span class="plan-category-menu"></span></details></div>':"";
  return people||categoryRow?'<div class="plan-item-top-meta">'+people+categoryRow+'</div>':"";
 }
-function planRhythmDetailsPeople(it,ownerId,record){
+function planRhythmDetailsPeople(it,ownerId,record,compact){
  var ids=(Array.isArray(it.personIds)?it.personIds.slice():[]).concat(it.personId||"",ownerId||"",record&&Array.isArray(record.personIds)?record.personIds:[],record&&Array.isArray(record.sharedWith)?record.sharedWith:[]);
  ids=ids.filter(function(id,index){return id&&ids.indexOf(id)===index&&S.people.some(function(person){return person.id===id;});});
  return ids.map(function(id){
   var person=S.people.find(function(candidate){return candidate.id===id;});
   if(!person)return "";
   var rhythmLink=(!!it.rhythm||!!it.faithRhythm)&&person.id!==ownerId;
-  return '<button type="button" class="prayer-person person-badge-clickable'+(rhythmLink?' person-rhythm-link':'')+'" '+(rhythmLink?'data-personrhythms="'+esc(person.id)+'" aria-label="Open '+esc(person.name)+' rhythms"':'data-openperson="'+esc(person.id)+'" aria-label="Open '+esc(person.name)+' profile"')+'>'+personAvatar(person,24)+esc(person.name)+'</button>';
- }).join("");
+  return planPersonBadgeHTML(person,rhythmLink,{firstNameFriendsOnly:compact,todayCompact:compact});
+ });
 }
 function planRhythmCardHTML(it){
  var record=null,ownerId="";
@@ -351,14 +356,15 @@ function planRhythmCardHTML(it){
  var score=rhythmScore(record),metadata=window.tendRhythmCardMetadata(record),owner=it.rhythm?S.people.find(function(person){return person.id===ownerId;}):null,last=rhythmLast(record),status=last?rhythmDueTxt(record):"Not yet tended",detailsId="today-rhythm-details-"+String(it.rhythm||it.faithRhythm||it.fitnessRhythm||record.id).replace(/[^a-z0-9_-]/gi,"-");
  if(status==="ready to tend again")status="Overdue";
  if(status)status=status.charAt(0).toUpperCase()+status.slice(1);
- return tendRhythmCardHTML(record,{todayCompact:true,compactPrimary:"details",detailsLabel:"Open",detailsId:detailsId,compactStatus:status,compactSupportingText:owner?String(owner.name||"").trim().split(/\s+/)[0]:"",
+ var compactPeople=planRhythmDetailsPeople(it,ownerId,record,true);
+ return tendRhythmCardHTML(record,{todayCompact:true,compactPrimary:"details",detailsLabel:"Open",detailsId:detailsId,compactStatus:status,compactPeopleHTML:tendTodayCompactPeopleHTML(compactPeople),
   title:record.text||"(unnamed rhythm)",description:record.description,score:Number.isFinite(score)?score:null,scoreClass:scoreClass(score),
   peopleBadgesHTML:planRhythmCardBadges(it),categoryBadgesHTML:"",
   frequency:metadata.frequency,time:metadata.time,lastTended:metadata.lastTended,frequencyIconHTML:metadata.frequencyIconHTML,timeIconHTML:metadata.timeIconHTML,lastIconHTML:metadata.lastIconHTML,
   tendAttributes:it.fitnessRhythm?{"data-tend-open":"fitness-rhythm","data-rhythm-id":it.fitnessRhythm}:it.rhythm?{"data-tend-open":"person-rhythm","data-person-id":ownerId,"data-rhythm-id":String(it.rhythm).split("|")[1]}:{"data-tend-open":"faith-rhythm","data-rhythm-id":it.faithRhythm},
   editAttributes:it.fitnessRhythm?{"data-fitness-rhythm-edit":it.fitnessRhythm}:it.rhythm?{"data-plan-edit-rhythm":it.rhythm}:{"data-faith-rhythm-edit":it.faithRhythm},
   historyAttributes:it.fitnessRhythm?{"data-rhyhistory":"fitness|"+it.fitnessRhythm}:it.rhythm?{"data-rhyhistory":it.rhythm}:{"data-faith-rhythm-history":it.faithRhythm},
-  todayDetails:{peopleHTML:planRhythmDetailsPeople(it,ownerId,record),categoryHTML:planCategoryBadges(it)}
+  todayDetails:{peopleHTML:planRhythmDetailsPeople(it,ownerId,record).join(""),categoryHTML:planCategoryBadges(it)}
  });
 }
 function planItemFooter(it,meta,sub){
@@ -801,6 +807,7 @@ window.addEventListener("click",function(event){
  if(rhythmButton){
   var parts=rhythmButton.getAttribute("data-plan-edit-rhythm").split("|"),owner=S.people.find(function(person){return person.id===parts[0];}),record=owner&&(owner.rhythms||[]).find(function(item){return item.id===parts[1];});
   if(!owner||!record)return;
+  if(typeof window.tendCaptureRhythmEditOrigin==="function")window.tendCaptureRhythmEditOrigin(rhythmButton);
   event.preventDefault();event.stopImmediatePropagation();
   editRhythmId=record.id;rhythmEditDraft=null;profileTabs[owner.id]="rhythms";currentPerson=owner.id;currentArea=null;tab="people";render();
   return;

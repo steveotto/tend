@@ -137,13 +137,57 @@ function saveSparkCompletionDialog(){
  if(draft.dashboardFreeSpark){var remainingSparks=dashboardFreeMomentSparkQueue();dashboardSparkCarouselIndex=Math.max(0,Math.min(remainingSparks.length-1,dashboardSparkCarouselIndex));renderPreservingScroll();}
  flash("Spark landed - connection logged");
 }
+var tendRhythmEditOrigin=null;
+function tendCaptureRhythmEditOrigin(opener){
+ if(tendRhythmEditOrigin)return tendRhythmEditOrigin;
+ opener=opener&&opener.isConnected?opener:document.activeElement;
+ var control=null,attributes=["data-rhythm-details-toggle","data-rhyedit","data-area-rhythm-edit","data-faith-rhythm-edit","data-faith-rhythm-profile-edit","data-fitness-rhythm-edit"];
+ if(opener&&opener.id)control={id:opener.id};
+ else if(opener&&opener.getAttribute){
+  attributes.some(function(name){var value=opener.getAttribute(name);if(value!==null){control={name:name,value:value};return true;}return false;});
+ }
+ tendRhythmEditOrigin={
+  tab:typeof tab==="undefined"?null:tab,
+  currentArea:typeof currentArea==="undefined"?null:currentArea,
+  currentPerson:typeof currentPerson==="undefined"?null:currentPerson,
+  openDetail:typeof openDetail==="undefined"?null:openDetail,
+  profileBadgePerson:typeof profileBadgePerson==="undefined"?null:profileBadgePerson,
+  profileTab:typeof profileTabs!=="undefined"&&typeof currentPerson!=="undefined"&&currentPerson?profileTabs[currentPerson]:null,
+  scrollX:window.scrollX||0,scrollY:window.scrollY||0,control:control
+ };
+ return tendRhythmEditOrigin;
+}
+function tendFinishRhythmEdit(){
+ var origin=tendRhythmEditOrigin;
+ if(!origin)return false;
+ tendRhythmEditOrigin=null;
+ if(origin.tab!==null)tab=origin.tab;
+ if(typeof currentArea!=="undefined")currentArea=origin.currentArea;
+ if(typeof currentPerson!=="undefined")currentPerson=origin.currentPerson;
+ if(typeof openDetail!=="undefined")openDetail=origin.openDetail;
+ if(typeof profileBadgePerson!=="undefined")profileBadgePerson=origin.profileBadgePerson;
+ if(origin.profileTab&&typeof profileTabs!=="undefined"&&origin.currentPerson)profileTabs[origin.currentPerson]=origin.profileTab;
+ render();
+ window.requestAnimationFrame(function(){
+  window.scrollTo(origin.scrollX,origin.scrollY);
+  var target=origin.control&&origin.control.id?document.getElementById(origin.control.id):null;
+  if(!target&&origin.control&&origin.control.name){
+   Array.prototype.some.call(document.querySelectorAll("["+origin.control.name+"]"),function(element){
+    if(element.getAttribute(origin.control.name)===origin.control.value){target=element;return true;}return false;
+   });
+  }
+  if(!target||!target.isConnected)target=document.querySelector("[data-rhythm-details-toggle],[data-area-rhythm-new],[data-rhyedit],#view h1,#view h2")||document.getElementById("view");
+  if(target){if(target.id==="view"&&!target.hasAttribute("tabindex"))target.setAttribute("tabindex","-1");target.focus({preventScroll:true});}
+ });
+ return true;
+}
 document.addEventListener("click",function(event){
  var target=event.target,button=target&&target.closest&&target.closest("[data-rhythm-details-toggle],[data-today-rhythm-close],[data-tend-open],[data-tend-save],[data-tend-cancel],[data-spark-save],[data-spark-cancel]"),editButton=target&&target.closest&&target.closest("[data-plan-edit-rhythm],[data-fitness-rhythm-edit],[data-faith-rhythm-edit]"),chartButton=target&&target.closest&&target.closest("[data-rhyhistory],[data-faith-rhythm-history]"),detailsDialog=button&&button.closest?button.closest("dialog[data-today-rhythm-details]"):editButton&&editButton.closest?editButton.closest("dialog[data-today-rhythm-details]"):chartButton&&chartButton.closest?chartButton.closest("dialog[data-today-rhythm-details]"):null;
  if(detailsDialog&&detailsDialog.open){
   event.preventDefault();event.stopImmediatePropagation();
   if(button&&button.matches("[data-today-rhythm-close]")){detailsDialog.close();return;}
   if(button&&button.matches("[data-tend-open]")){detailsDialog.close();window.setTimeout(function(){openTendDialog(button);},0);return;}
-  if(editButton){detailsDialog.close();window.setTimeout(function(){if(editButton.isConnected)editButton.click();},0);return;}
+  if(editButton){tendCaptureRhythmEditOrigin(detailsDialog._todayRhythmOpener);detailsDialog.close();window.setTimeout(function(){if(editButton.isConnected)editButton.click();},0);return;}
   if(chartButton){tendOpenTodayRhythmChart(detailsDialog,chartButton);return;}
   if(button&&button.matches("[data-rhythm-details-toggle]")){tendOpenTodayRhythmDetails(button);return;}
  }
@@ -348,9 +392,9 @@ function bind(){
   if(b=t.closest("[data-peditcancel]")){if(editingConn)delete tendItemAssociationDrafts[tendAssociationKey("connection","connection",editingConn)];rhythmEditDraft=null;editRhythmId=null;window._rippleModalOpen=false;editingConn=null;renderPreservingScroll();return;}
   if(b=t.closest("[data-spdel]")){var sdd=b.getAttribute("data-spdel").split("|"),sdp=S.people.find(function(x){return x.id===sdd[0];}),sparkIdToRemove=sdd[1],sparkViewerId=sdd[2]||currentPerson,sparkRow=b.closest("[data-spark-row]");if(sdp){if(sparkViewerId&&sparkViewerId!==sdp.id){var sharedSpark=(sdp.sparks||[]).find(function(item){return item.id===sparkIdToRemove;});if(sharedSpark)sharedSpark.sharedWith=(sharedSpark.sharedWith||[]).filter(function(id){return id!==sparkViewerId;});}else sdp.sparks=(sdp.sparks||[]).filter(function(item){return item.id!==sparkIdToRemove;});}else if(sdd[0]==="faith"){var faithSpark=S.ideas.find(function(item){return item.id===sparkIdToRemove;});if(faithSpark&&sparkViewerId)faithSpark.sharedWith=(faithSpark.sharedWith||[]).filter(function(id){return id!==sparkViewerId;});}if(sdp||sdd[0]==="faith"){editSparkId=null;sparkEditOwnerId=null;sparkEditDraft=null;save();if(sparkRow)renderPreservingSparkPosition(sparkRow,sparkViewerId);else renderPreservingScroll();flash(sparkViewerId&&sparkViewerId!==(sdp&&sdp.id)?"Spark removed":"Spark deleted");}return;}
   if(b=t.closest("[data-spadd]")){var sra=b.getAttribute("data-spadd");var srp=S.people.find(function(x){return x.id===sra;});var sri=document.querySelector('[data-spnewtext="'+sra+'"]');var srx=document.querySelector('[data-spnewdetails="'+sra+'"]');var srd=document.querySelector('[data-spnewdate="'+sra+'"]');var srt=document.querySelector('[data-spnewtime="'+sra+'"]');if(srp&&sri&&sri.value.trim()){var sparkAssociations=tendAssociationValues("spark",sra,"new",sparkAddDrafts[sra]),newPersonSpark={id:uid(),text:sri.value.trim(),details:(srx&&srx.value.trim())?srx.value.trim():null,by:(srd&&srd.value)?srd.value:null,time:(srt&&srt.value)?srt.value:null,tod:"anytime",createdAt:Date.now(),done:false,sharedWith:sparkAssociations.sharedWith.filter(function(id){return id!==sra&&S.people.some(function(person){return person.id===id;});}),areas:sparkAssociations.areas.slice()};tendAssociationCommit("spark",sra,"new",newPersonSpark);srp.sparks=srp.sparks||[];srp.sparks.push(newPersonSpark);delete sparkAddDrafts[sra];delete tendItemAssociationDrafts[tendAssociationKey("spark",sra,"new")];sparkDraftOpenFor=null;save();render();flash("Spark added");}else if(sri){flash("Add a spark first");sri.focus();}return;}
-  if(b=t.closest("[data-rhyeditcancel]")){editRhythmId=null;rhythmEditDraft=null;renderPreservingScroll();return;}
-  if(b=t.closest("[data-rhyeditsave]")){var key=b.getAttribute("data-rhyeditsave").split("|");var person=S.people.find(function(x){return x.id===key[0];});var rhythm=person&&(person.rhythms||[]).find(function(x){return x.id===key[1];});if(rhythm&&rhythmEditDraft&&rhythmEditDraft.id===rhythm.id){var rhythmForm=b.closest(".rhyedit"),rhythmValidation=window.tendValidateRhythmEditForm(rhythmForm,"profile");if(rhythmValidation){flash(rhythmValidation.message==="endDate"?"Choose an end date":"Give this rhythm a name");if(rhythmValidation.field)rhythmValidation.field.focus();return;}window.tendApplyRhythmEditForm(rhythmEditDraft,rhythmForm,"profile");Object.assign(rhythm,rhythmEditDraft);delete rhythm.profileOwnerId;rhythm.sharedWith=(rhythm.sharedWith||[]).filter(function(id){return id!==person.id&&S.people.some(function(p){return p.id===id;});});S.events.forEach(function(event){if(event.rhythmId===rhythm.id)event.title=rhythm.text;});editRhythmId=null;rhythmEditDraft=null;save();renderPreservingScroll();flash("Rhythm saved");}return;}
-  if(b=t.closest("[data-rhyedit]")){rhythmEditDraft=null;var editKey=b.getAttribute("data-rhyedit").split("|");editRhythmId=(editRhythmId===editKey[1])?null:editKey[1];renderPreservingScroll();var rhythmEditorTitle=document.getElementById("rhythm-editor-title");if(rhythmEditorTitle)rhythmEditorTitle.focus({preventScroll:true});return;}
+  if(b=t.closest("[data-rhyeditcancel]")){editRhythmId=null;rhythmEditDraft=null;if(!tendFinishRhythmEdit())renderPreservingScroll();return;}
+  if(b=t.closest("[data-rhyeditsave]")){var key=b.getAttribute("data-rhyeditsave").split("|");var person=S.people.find(function(x){return x.id===key[0];});var rhythm=person&&(person.rhythms||[]).find(function(x){return x.id===key[1];});if(rhythm&&rhythmEditDraft&&rhythmEditDraft.id===rhythm.id){var rhythmForm=b.closest(".rhyedit"),rhythmValidation=window.tendValidateRhythmEditForm(rhythmForm,"profile");if(rhythmValidation){flash(rhythmValidation.message==="endDate"?"Choose an end date":"Give this rhythm a name");if(rhythmValidation.field)rhythmValidation.field.focus();return;}window.tendApplyRhythmEditForm(rhythmEditDraft,rhythmForm,"profile");Object.assign(rhythm,rhythmEditDraft);delete rhythm.profileOwnerId;rhythm.sharedWith=(rhythm.sharedWith||[]).filter(function(id){return id!==person.id&&S.people.some(function(p){return p.id===id;});});S.events.forEach(function(event){if(event.rhythmId===rhythm.id)event.title=rhythm.text;});editRhythmId=null;rhythmEditDraft=null;save();if(!tendFinishRhythmEdit())renderPreservingScroll();flash("Rhythm saved");}return;}
+  if(b=t.closest("[data-rhyedit]")){var editKey=b.getAttribute("data-rhyedit").split("|"),closingRhythmEditor=editRhythmId===editKey[1];if(closingRhythmEditor){rhythmEditDraft=null;editRhythmId=null;if(!tendFinishRhythmEdit())renderPreservingScroll();return;}tendCaptureRhythmEditOrigin(b);rhythmEditDraft=null;editRhythmId=editKey[1];renderPreservingScroll();var rhythmEditorTitle=document.getElementById("rhythm-editor-title");if(rhythmEditorTitle)rhythmEditorTitle.focus({preventScroll:true});return;}
   if(b=t.closest("[data-rhydel]")){var rl=b.getAttribute("data-rhydel").split("|");if(rl[0]==="faith"&&currentPerson){var sharedFaith=S.rhythms.find(function(item){return item.id===rl[1];});if(sharedFaith)sharedFaith.sharedWith=(sharedFaith.sharedWith||[]).filter(function(id){return id!==currentPerson;});}else{var rp3=S.people.find(function(x){return x.id===rl[0];});if(rp3){if(currentPerson!==rp3.id){var sharedRhythm=(rp3.rhythms||[]).find(function(x){return x.id===rl[1];});if(sharedRhythm)sharedRhythm.sharedWith=(sharedRhythm.sharedWith||[]).filter(function(id){return id!==currentPerson;});}else rp3.rhythms=(rp3.rhythms||[]).filter(function(x){return x.id!==rl[1];});}}editRhythmId=null;rhythmEditDraft=null;save();render();flash("Rhythm removed");return;}
   if(b=t.closest("[data-plandone]")){var log={};try{log=JSON.parse(decodeURIComponent(b.getAttribute("data-plandone")));}catch(err){return;}var tid=b.getAttribute("data-taskid");if(tid){var tk=S.tasks.find(function(x){return x.id===tid;});if(tk)tk.done=true;}logEvent(log.area||"faith",null,log.type||"note",log.title||"","");flash("Done. On to the next.");return;}
   if(b=t.closest("[data-upitem]")){var kd=S.keyDates.find(function(k){return k.id===b.getAttribute("data-upitem");});var cl=S.checklists.find(function(c){return c.linkId===kd.id;});if(cl)showChecklist(cl.id);return;}

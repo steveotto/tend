@@ -20,13 +20,28 @@ function tendRhythmCardBadgesHTML(people,categories,remove){
  people=people||"";categories=categories||"";remove=remove||"";
  return people||categories||remove?'<div class="rhythm-card__badges">'+people+categories+remove+'</div>':"";
 }
+function tendTodayCompactPeopleHTML(badges){
+ badges=Array.isArray(badges)?badges:[];
+ if(!badges.length)return "";
+ var visible=badges.slice(0,3).join(""),wideMore=badges.length>3?badges.slice(3):[],narrowMore=badges.length>2?badges.slice(2):[];
+ return '<div class="today-rhythm-card__people" role="group" aria-label="Linked people"><div class="today-rhythm-card__people-visible">'+visible+'</div>'+
+  (wideMore.length?'<details class="today-rhythm-card__people-overflow today-rhythm-card__people-overflow--wide"><summary>+'+wideMore.length+' more</summary><div class="today-rhythm-card__people-hidden">'+wideMore.join("")+'</div></details>':"")+
+  (narrowMore.length?'<details class="today-rhythm-card__people-overflow today-rhythm-card__people-overflow--narrow"><summary>+'+narrowMore.length+' more</summary><div class="today-rhythm-card__people-hidden">'+narrowMore.join("")+'</div></details>':"")+
+  '</div>';
+}
 function tendRhythmCardMetadataHTML(options){
  options=options||{};
  var frequency=options.frequency||{},time=options.time||{},last=options.lastTended||{};
- return '<footer class="rhythm-card__meta" aria-label="Rhythm schedule and history">'
-  +'<span class="rhythm-card__meta-item" aria-label="Frequency: '+esc(frequency.full||frequency.label||"")+'">'+(options.frequencyIconHTML||"")+'<span class="rhythm-card__meta-text"><span class="rhythm-card__meta-wide">'+esc(frequency.label||"")+'</span><span class="rhythm-card__meta-narrow">'+esc(frequency.narrow||frequency.label||"")+'</span></span></span>'
-  +'<span class="rhythm-card__meta-item" aria-label="Preferred time: '+esc(time.full||time.label||"")+'">'+(options.timeIconHTML||"")+'<span class="rhythm-card__meta-text"><span class="rhythm-card__meta-wide">'+esc(time.label||"")+'</span><span class="rhythm-card__meta-narrow">'+esc(time.narrow||time.label||"")+'</span></span></span>'
-  +'<span class="rhythm-card__meta-item rhythm-card__last" aria-label="'+esc(last.full||"Never tended")+'">'+(options.lastIconHTML||"")+'<span>'+esc(last.label||"Never")+'</span></span></footer>';
+ var frequencyHTML='<span class="rhythm-card__meta-item" aria-label="Frequency: '+esc(frequency.full||frequency.label||"")+'">'+(options.frequencyIconHTML||"")+'<span class="rhythm-card__meta-text"><span class="rhythm-card__meta-wide">'+esc(frequency.label||"")+'</span><span class="rhythm-card__meta-narrow">'+esc(frequency.narrow||frequency.label||"")+'</span></span></span>';
+ var timeHTML='<span class="rhythm-card__meta-item" aria-label="Preferred time: '+esc(time.full||time.label||"")+'">'+(options.timeIconHTML||"")+'<span class="rhythm-card__meta-text"><span class="rhythm-card__meta-wide">'+esc(time.label||"")+'</span><span class="rhythm-card__meta-narrow">'+esc(time.narrow||time.label||"")+'</span></span></span>';
+ var lastHTML='<span class="rhythm-card__meta-item rhythm-card__last" aria-label="'+esc(last.full||"Never tended")+'">'+(options.lastIconHTML||"")+'<span>'+esc(last.label||"Never")+'</span></span>';
+ if(options.omitEmpty){
+  if(!frequency.full&&!frequency.label&&!frequency.narrow)frequencyHTML="";
+  if(!time.full&&!time.label&&!time.narrow)timeHTML="";
+  if(!last.full&&!last.label)lastHTML="";
+ }
+ var metadata=frequencyHTML+timeHTML+lastHTML;
+ return metadata?'<footer class="rhythm-card__meta" aria-label="Rhythm schedule and history">'+metadata+'</footer>':"";
 }
 function tendHealthScoreColor(score){
  if(!Number.isFinite(score))return "#BCC7C0";
@@ -133,12 +148,12 @@ function tendRhythmCardHTML(record,options){
  var frequency=options.frequency||{},time=options.time||{},last=options.lastTended||{};
  var cardClass=String(options.cardClassName||"").replace(/[^a-z0-9_-]/gi,"");
  if(options.todayCompact){
-  var detailsId=String(options.detailsId||"today-rhythm-details").replace(/[^a-z0-9_-]/gi,"-"),dialogId=detailsId+"-dialog",titleId=detailsId+"-title",toggleLabel=String(options.detailsLabel||"Open"),compactStatus=String(options.compactStatus||""),supporting=options.compactSupportingText?'<p class="today-rhythm-card__support">'+esc(options.compactSupportingText)+'</p>':"",details=options.todayDetails||{};
-  var detailsBadges=tendRhythmCardBadgesHTML(details.peopleHTML||"",details.categoryHTML||""),detailsDescription=description?'<p class="tend-type-description today-rhythm-details__description">'+esc(description)+'</p>':"",detailsHealth=options.showScore===false?"":'<div class="today-rhythm-details__health">'+chartAction+'</div>',detailsMetadata=tendRhythmCardMetadataHTML({frequency:frequency,time:time,lastTended:last,frequencyIconHTML:options.frequencyIconHTML,timeIconHTML:options.timeIconHTML,lastIconHTML:options.lastIconHTML}),detailsEdit=options.editAttributes?'<button type="button" class="today-rhythm-details__edit"'+attrs(options.editAttributes)+'>Edit</button>':"";
+  var detailsId=String(options.detailsId||"today-rhythm-details").replace(/[^a-z0-9_-]/gi,"-"),dialogId=detailsId+"-dialog",titleId=detailsId+"-title",toggleLabel=String(options.detailsLabel||"Open"),compactStatus=String(options.compactStatus||""),supporting=options.compactSupportingText?'<p class="today-rhythm-card__support">'+esc(options.compactSupportingText)+'</p>':"",compactPeople=options.compactPeopleHTML||"",details=options.todayDetails||{};
+  var detailsBadges=tendRhythmCardBadgesHTML(details.peopleHTML||"",details.categoryHTML||""),detailsDescription=description?'<p class="tend-type-description today-rhythm-details__description">'+esc(description)+'</p>':"",hasHistoryAction=!!(options.historyAttributes&&(options.historyAttributes["data-rhyhistory"]||options.historyAttributes["data-faith-rhythm-history"])),detailsHealth=options.showScore===false||!hasHistoryAction?"":'<div class="today-rhythm-details__health">'+chartAction+'</div>',detailsMetadata=tendRhythmCardMetadataHTML({frequency:frequency,time:time,lastTended:last,frequencyIconHTML:options.frequencyIconHTML,timeIconHTML:options.timeIconHTML,lastIconHTML:options.lastIconHTML,omitEmpty:true});
   var detailsAction='<button type="button" class="today-rhythm-card__details-toggle" id="'+esc(detailsId)+'" data-rhythm-details-toggle data-rhythm-details-title="'+esc(title)+'" aria-controls="'+esc(dialogId)+'" aria-haspopup="dialog" aria-expanded="false">'+esc(toggleLabel)+'</button>';
-  var dialog='<dialog class="today-rhythm-details-dialog" id="'+esc(dialogId)+'" data-today-rhythm-details aria-labelledby="'+esc(titleId)+'"><div class="today-rhythm-details__surface"><header class="today-rhythm-details__header"><h2 class="tend-type-title" id="'+esc(titleId)+'" data-today-rhythm-dialog-title tabindex="-1">'+esc(title)+'</h2><button type="button" class="today-rhythm-details__close" data-today-rhythm-close aria-label="Close details">×</button></header><div class="today-rhythm-details__content">'+detailsDescription+(options.extensionHTML||"")+detailsHealth+detailsBadges+detailsMetadata+'</div><footer class="today-rhythm-details__footer">'+detailsEdit+tendAction+'</footer></div></dialog>';
+  var dialog='<dialog class="today-rhythm-details-dialog" id="'+esc(dialogId)+'" data-today-rhythm-details aria-labelledby="'+esc(titleId)+'"><div class="today-rhythm-details__surface"><header class="today-rhythm-details__header"><div class="today-rhythm-details__title-group"><h2 class="tend-type-title" id="'+esc(titleId)+'" data-today-rhythm-dialog-title tabindex="-1">'+esc(title)+'</h2>'+editAction+'</div><button type="button" class="today-rhythm-details__close" data-today-rhythm-close aria-label="Close details">×</button></header><div class="today-rhythm-details__content"><div class="today-rhythm-details__main"><div class="today-rhythm-details__copy">'+detailsDescription+(options.extensionHTML||"")+(detailsBadges?'<div class="today-rhythm-details__badges">'+detailsBadges+'</div>':"")+'</div><div class="today-rhythm-details__actions">'+tendAction+detailsHealth+'</div></div></div>'+detailsMetadata+'</div></dialog>';
   var primaryAction=options.compactPrimary==="details"?'':tendAction;
-  return '<article class="rhythm-card card today-rhythm-card'+(cardClass?" "+cardClass:"")+'"><div class="today-rhythm-card__heading"><strong class="tend-type-title">'+esc(title)+'</strong>'+supporting+(compactStatus?'<span class="today-rhythm-card__status">'+esc(compactStatus)+'</span>':"")+'</div><div class="today-rhythm-card__actions">'+primaryAction+detailsAction+'</div></article>'+dialog;
+  return '<article class="rhythm-card card today-rhythm-card'+(cardClass?" "+cardClass:"")+'"><div class="today-rhythm-card__heading"><strong class="tend-type-title">'+esc(title)+'</strong>'+compactPeople+supporting+(compactStatus?'<span class="today-rhythm-card__status">'+esc(compactStatus)+'</span>':"")+'</div><div class="today-rhythm-card__actions">'+primaryAction+detailsAction+'</div></article>'+dialog;
  }
  return '<article class="rhythm-card card'+(cardClass?" "+cardClass:"")+'">'
   +'<div class="rhythm-card__main"><div class="rhythm-card__top"><div class="rhythm-card__heading"><div class="rhythm-card__title-line"><strong class="tend-type-title">'+esc(title)+'</strong>'+editAction+'</div>'
