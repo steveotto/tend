@@ -1,5 +1,5 @@
 "use strict";
-/* ============ views: prayer, echo, offload, settings, sync ============ */
+/* ============ views: prayer, echo, and offload ============ */
 var PRAYER_CATS=["Family","Marriage","Kids","Friends","Work & Ministry","Church & Pastors","World & Others","Faith"];
 var editingPrayerId=null;
 function prayerDate(value){if(!value)return "";var d=new Date(value+"T12:00:00");return isNaN(d.getTime())?value:String(d.getDate()).padStart(2,"0")+" "+["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"][d.getMonth()]+" "+d.getFullYear();}
@@ -32,26 +32,4 @@ function renderOffload(){
   out+='</div>';});
  out+='</div>';
  out+='<div class="card" style="margin-top:14px;font-size:13px;color:var(--ink-soft)"><b>Littlebird conversion:</b> tap <b>Littlebird</b> to copy an idea as a prompt, then paste it into your Littlebird chat - e.g. "help me develop this into a plan." Or just tell Littlebird in chat what to turn into tasks.</div>';
- return out;}
-function renderSettings(){
- var st=settings();
- var out=tendSectionHeaderHTML({title:"Settings",style:"margin-top:6px"});
- out+='<div class="grid"><div class="card" style="grid-column:1/-1"><h3 style="font-size:16px;font-weight:600;margin-bottom:10px">Meter thresholds</h3>';
- out+='<div style="font-size:13px;color:var(--ink-soft);margin-bottom:12px">How meters are scored: recent activity and rhythm health inform each score. Area meters average activity across the area. Fresh start = baseline.</div>';
- out+='<div class="setrow"><label>Green at or above</label><input type="number" id="setGreen" min="50" max="100" value="'+st.greenAt+'"></div>';
- out+='<div class="setrow"><label>Yellow at or above (below = red)</label><input type="number" id="setYellow" min="10" max="80" value="'+st.yellowAt+'"></div>';
- out+='<div class="setrow"><label>Fresh-start baseline</label><input type="number" id="setBase" min="0" max="100" value="'+st.baseline+'"></div>';
- out+='<button class="btn" id="setSave">Save thresholds</button></div></div>';
- return out;}
-function syncStatusHTML(){
- if(!SYNCcfg.token)return "Not configured - running locally on this device.";
- return 'Configured for <b>'+esc(SYNCcfg.owner||"?")+"/"+esc(SYNCcfg.repo||"?")+'</b>. Last sync: '+(SYNCcfg.lastSync?new Date(SYNCcfg.lastSync).toLocaleString():"never")+'.';}
-function renderSync(){
- var c=window.SYNCcfg||{auto:true};
- var out=tendSectionHeaderHTML({title:"Sync",style:"margin-top:6px"})+'<div class="grid"><div class="card syncbox" style="grid-column:1/-1">';
- out+='<div class="status">'+syncStatusHTML()+'</div>';
- out+='<div class="field"><label>GitHub username</label><input id="syncOwner" value="'+esc(c.owner||"")+'"></div>';
- out+='<div class="field"><label>Data repo (private)</label><input id="syncRepo" value="'+esc(c.repo||"")+'"></div>';
- out+='<div class="field"><label>Fine-grained token (Contents: read & write, tend-data only)</label><input id="syncToken" type="password" value="'+esc(c.token||"")+'" placeholder="github_pat_..."></div>';
- out+='<div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" id="syncSave">Save settings</button><button class="btn ghost" id="syncPull">Pull now</button><button class="btn ghost" id="syncPush">Push now</button><button class="btn danger" id="syncExport">Download backup</button></div></div></div>';
  return out;}

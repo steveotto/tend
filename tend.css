@@ -4283,6 +4283,46 @@ html .person-profile-page .person-free-moment-heading h2{font-size:var(--tend-ty
 .home-dashboard .home-plan-context-row .current-plan-item-count{flex:0 0 auto;max-width:none;justify-content:flex-start;white-space:nowrap;overflow-wrap:normal;text-align:left}
 .home-dashboard .home-plan-context-row .home-rhythm-order-toolbar{flex:0 0 auto;margin-left:auto}
 .home-dashboard .home-plan-context-row .rhythm-order-toolbar button{width:max-content;white-space:nowrap}
+
+.me-page{max-width:100%;min-width:0}
+.me-page-heading{margin-bottom:8px}
+.me-more-link{display:block;margin:0 0 14px auto;border:0;background:transparent;color:var(--ink-soft);font:600 12px/1.4 var(--sans);padding:6px 2px}
+.me-more-link:hover{color:var(--forest)}
+.me-profile-card{display:flex;align-items:center;gap:16px;min-width:0;margin-bottom:26px;padding:18px 20px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius-card)}
+.me-profile-card>.avatar{flex:none}
+.me-profile-copy{flex:1;min-width:0}
+.me-profile-copy h2{font-size:19px;line-height:1.3;font-weight:600;overflow-wrap:anywhere}
+.me-profile-copy p{margin-top:3px;color:var(--ink-soft);font-size:13px}
+.me-profile-card>.btn{flex:none}
+.me-profile-form h2{font-size:20px;margin-bottom:12px}
+.me-profile-message{min-height:1.4em;color:#A33B2E;font-size:13px}
+.me-rhythms-section{min-width:0;padding:20px;background:#F1F6F2;border-radius:20px}
+.me-rhythms-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.me-rhythms-heading h2{font-size:18px;line-height:1.3}
+.me-rhythms-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.me-rhythm-order-toolbar{flex:none}
+.me-rhythm-list{display:grid;gap:12px;min-width:0}
+.me-rhythm-list>.rhythm-order-item,.me-rhythm-list>.rhythm-card{min-width:0}
+.me-rhythms-empty{padding:20px 4px 6px;color:var(--ink-soft);text-align:center}
+.me-rhythms-empty p{margin-bottom:10px;font-size:14px}
+.me-personal-toggle{display:flex;align-items:center;gap:9px;width:max-content;max-width:100%;margin:12px 0;color:var(--ink);font-size:14px;font-weight:500}
+.me-personal-toggle input{width:18px;height:18px;accent-color:var(--forest);flex:none}
+.me-rhythm-category-note{margin:4px 0 8px;color:var(--ink-soft);font-size:12.5px}
+.settings-me-link{margin:10px 0 0}
+@media(max-width:720px){
+ .me-profile-card{gap:12px;margin-bottom:22px;padding:14px 12px}
+ .me-profile-copy h2{font-size:17px}
+ .me-profile-card>.btn{padding-inline:8px}
+ .me-rhythms-section{padding:12px;border-radius:18px}
+ .me-rhythms-heading{align-items:flex-start;flex-wrap:wrap}
+ .me-rhythms-actions{margin-left:auto}
+ .me-rhythm-order-toolbar{justify-content:flex-end}
+}
+@media(max-width:360px){
+ .me-profile-card{flex-wrap:wrap}
+ .me-profile-card>.btn{margin-left:auto}
+ .me-rhythms-actions{gap:4px}
+}
 .home-dashboard .today-prayer-section .prayer-entry-module{grid-template-columns:minmax(0,1fr);align-items:start}
 .home-dashboard .today-prayer-section .prayer-entry-summary-line strong{font-size:var(--tend-type-metadata,13px);font-weight:650}
 .home-dashboard .today-prayer-section .prayer-entry-actions{justify-content:space-between;flex-wrap:wrap}
@@ -4295,4 +4335,72 @@ html .person-profile-page .person-free-moment-heading h2{font-size:var(--tend-ty
  .home-dashboard .today-prayer-section .prayer-entry-module{grid-template-columns:minmax(0,1fr)}
  .home-dashboard .today-prayer-section .prayer-entry-actions{justify-content:space-between}
  .home-dashboard .today-prayer-section .prayer-entry-actions>.btn{flex:0 0 auto;width:max-content}
+}
+.settings-page{width:min(100%,920px);min-width:0;margin:0 auto 32px}
+.settings-page :is(.card,.settings-section-content,.settings-calendar-row,.settings-actions,.setrow,.field){min-width:0}
+.settings-page :is(input,select,textarea){max-width:100%}
+.settings-section{margin-top:26px}
+.settings-section>h2{margin:0 0 12px;color:var(--ink);font-family:var(--sans);font-size:18px;font-weight:650;line-height:1.35}
+.settings-section-content{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.settings-section-content>.card{margin:0!important}
+.settings-calendar-row>div{min-width:0;overflow-wrap:anywhere}
+.settings-advanced{padding:16px 18px;border:1px solid var(--line);border-radius:16px;background:var(--card)}
+.settings-advanced>summary{color:var(--ink);font-size:14px;font-weight:600;cursor:pointer}
+.settings-advanced>summary:focus-visible,.settings-more-tools .btn:focus-visible{outline:2px solid var(--forest);outline-offset:3px}
+.settings-account-signout{justify-content:flex-end;padding-top:12px;border-top:1px solid var(--line)}
+.settings-more-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:24px 0 0;padding-top:16px;border-top:1px solid var(--line);color:var(--ink-soft);font-size:13px}
+.settings-more-tools>span{flex:1 1 100%}
+@media(max-width:600px){
+ .settings-section{margin-top:22px}
+ .settings-section>h2{font-size:17px}
+ .settings-advanced{padding:14px 12px}
+}
+.settings-page{width:min(100%,760px)}
+.settings-tablist{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,120px),1fr));gap:6px;margin:16px 0 20px}
+.settings-tablist [role=tab]{display:flex;align-items:center;justify-content:center;min-width:0;min-height:42px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink-soft);font:600 13px/1.25 var(--sans);text-align:center;cursor:pointer}
+.settings-tablist [role=tab][aria-selected=true]{border-color:color-mix(in srgb,var(--forest) 30%,var(--line));background:color-mix(in srgb,var(--forest) 7%,var(--card));color:var(--forest)}
+.settings-tablist [role=tab]:focus-visible,.settings-row:focus-visible,.settings-dialog-close:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+.settings-panel[hidden]{display:none}
+.settings-panel-title{margin:0 0 12px;font:650 19px/1.3 var(--sans);color:var(--ink)}
+.settings-group{margin:0 0 20px}
+.settings-group>h2,.settings-data-recovery>h3{margin:0 0 7px;color:var(--ink-soft);font:600 13px/1.4 var(--sans);letter-spacing:.02em}
+.settings-list{overflow:hidden;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+.settings-row,.settings-row-static,.settings-inline-row{display:flex;align-items:center;justify-content:space-between;gap:14px;min-width:0;width:100%;padding:12px 14px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);text-align:left}
+.settings-list>:last-child{border-bottom:0}
+.settings-row{cursor:pointer;font:inherit}
+.settings-row>span:first-child,.settings-row-static>span:first-child,.settings-inline-row>span:first-child{display:grid;gap:2px;min-width:0}
+.settings-row strong,.settings-row-static strong,.settings-inline-row strong{font-size:13px;font-weight:600;line-height:1.35}
+.settings-row small,.settings-row-static small,.settings-inline-row small{color:var(--ink-soft);font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+.settings-row-chevron{flex:none;color:var(--ink-faint);font-size:22px;line-height:1}
+.settings-inline-row select{flex:0 1 132px;min-width:96px;width:auto;padding:7px 26px 7px 9px;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--ink)}
+.settings-profile-photo{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px}
+.settings-profile-photo input[type=file]{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+.settings-signout-row{border-top:1px solid var(--line);color:var(--ink-soft)}
+.settings-destinations{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:18px 0 0;padding-top:14px;border-top:1px solid var(--line)}
+.settings-destinations>span{flex:1 1 100%;color:var(--ink-soft);font-size:12px}
+.settings-destinations .btn{flex:0 0 auto}
+.settings-advanced{margin-top:2px;padding:0;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent}
+.settings-advanced>summary{padding:12px 14px;color:var(--ink-soft);font-size:12px}
+.settings-advanced-content{padding:0 14px 14px}
+.settings-data-recovery{margin-top:18px}
+.settings-recovery-content{padding:12px 14px;border-top:1px solid var(--line)}
+.settings-recovery-content .tend-account-notice{margin:0}
+.settings-dialog{width:min(680px,calc(100vw - 24px));max-width:none;max-height:calc(100dvh - 24px);overflow:hidden;padding:0;border-radius:17px}
+.settings-dialog .profile-editor-body{display:flex;flex-direction:column;max-height:calc(100dvh - 24px);padding:18px}
+.settings-dialog-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.settings-dialog-heading h2{margin:0;color:var(--ink);font:650 18px/1.3 var(--sans)}
+.settings-dialog-close{flex:none;width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:var(--ink-soft);font:24px/1 var(--sans);cursor:pointer}
+.settings-dialog-content{min-height:0;overflow:auto;padding:14px 2px 6px}
+.settings-dialog-content>.card{margin:0 0 10px!important}
+.settings-dialog-content>.card:last-child{margin-bottom:0!important}
+.settings-dialog-footer{display:flex;justify-content:flex-end;padding-top:10px;border-top:1px solid var(--line)}
+.settings-empty{margin:0;color:var(--ink-soft);font-size:13px}
+@media(max-width:520px){
+ .settings-tablist{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+ .settings-row,.settings-row-static,.settings-inline-row{gap:8px;padding:11px 10px}
+ .settings-profile-photo{gap:4px}
+ .settings-profile-photo .btn{padding:6px 8px}
+ .settings-dialog{width:calc(100vw - 20px);max-height:calc(100dvh - 20px);border-radius:14px}
+ .settings-dialog .profile-editor-body{max-height:calc(100dvh - 20px);padding:14px 12px}
+ .settings-dialog-content{padding:10px 0 6px}
 }

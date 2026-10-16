@@ -5,10 +5,29 @@
  var CATEGORY_AREA_LABELS={faith:"Faith",marriage:"Marriage",parenting:"Parenting",health:"Health & Fitness",finances:"Finances",friendships:"Friendships"};
  var FAITH_SUBCATEGORIES=typeof FAITH_GROUPS!=="undefined"?FAITH_GROUPS.slice():["Sabbath","Prayer","Fasting","Solitude","Generosity","Community","Service","Witness","Scripture","Other"];
  var CATEGORY_AREA_SET=CATEGORY_AREAS.reduce(function(out,id){out[id]=true;return out;},{});
+ var MARRIAGE_RHYTHM_TEMPLATES=[
+  {id:"marriage.date-night",title:"Date Night",freq:"weekly",tod:"evening",description:"Enjoy intentional time together beyond responsibilities and logistics."},
+  {id:"marriage.marriage-check-in",title:"Marriage Check-In",freq:"weekly",tod:"anytime",description:"Share appreciation, listen to concerns, and choose one supportive next step."},
+  {id:"marriage.pray-together",title:"Pray Together",freq:"daily",tod:"anytime",description:"Bring gratitude and needs before God together."},
+  {id:"marriage.unhurried-conversation",title:"Unhurried Conversation",freq:"daily",tod:"anytime",description:"Put distractions aside and listen to each other."},
+  {id:"marriage.dream-together",title:"Dream Together",freq:"quarterly",tod:"anytime",description:"Talk about hopes, plans, and the next season of life."},
+  {id:"marriage.overnight-away",title:"Overnight Away",freq:"quarterly",tod:"anytime",description:"Protect time away from the normal routine to reconnect."},
+  {id:"marriage.counseling-check-in",title:"Marriage Counseling Check-In",freq:"yearly",tod:"anytime",description:"Review growth and address concerns proactively with a counselor. Book ahead; complete this rhythm when attending, not when scheduling."},
+  {id:"marriage.week-away-together",title:"Week Away Together",freq:"yearly",tod:"anytime",description:"Protect extended time together for rest, enjoyment, and connection."}
+ ];
+ var marriageSuggestionsOpen=false,marriageLinkTemplateId=null,marriageLinkCandidateId=null;
  var baseEnsureShape=window.ensureShape;
  window.ensureShape=function(state){
   var shaped=baseEnsureShape(state);
   if(!Array.isArray(shaped.areaRhythms))shaped.areaRhythms=[];
+  if(!shaped.marriageRhythmTemplateLinks||typeof shaped.marriageRhythmTemplateLinks!=="object"||Array.isArray(shaped.marriageRhythmTemplateLinks))shaped.marriageRhythmTemplateLinks={};
+  MARRIAGE_RHYTHM_TEMPLATES.forEach(function(template){
+   if(shaped.marriageRhythmTemplateLinks[template.id])return;
+   var linked=null;
+   (shaped.areaRhythms||[]).some(function(record){if(record.sourceTemplateId===template.id){linked=record.id;return true;}return false;});
+   if(!linked)(shaped.people||[]).some(function(person){return(person.rhythms||[]).some(function(record){if(record.sourceTemplateId===template.id){linked=record.id;return true;}return false;});});
+   if(linked)shaped.marriageRhythmTemplateLinks[template.id]=linked;
+  });
   var fitness=shaped.fitness&&shaped.fitness.rhythms;
   if(Array.isArray(fitness)&&fitness.length){
    fitness.forEach(function(legacy){
@@ -92,6 +111,103 @@
   });
   return rows;
  }
+ function marriageTemplateById(templateId){return MARRIAGE_RHYTHM_TEMPLATES.find(function(template){return template.id===templateId;})||null;}
+ function marriageRhythmById(rhythmId){
+  var found=null;
+  (S.areaRhythms||[]).some(function(record){if(record.id===rhythmId){found={record:record,person:null,owner:"area"};return true;}return false;});
+  if(found)return found;
+  (S.people||[]).some(function(person){return(person.rhythms||[]).some(function(record){if(record.id===rhythmId){found={record:record,person:person,owner:"person"};return true;}return false;});});
+  return found;
+ }
+ function marriageTemplateStatus(templateId){
+  var template=marriageTemplateById(templateId);
+  if(!template)return null;
+  var rhythmId=S.marriageRhythmTemplateLinks[templateId];
+  if(!rhythmId)return {status:"available",template:template,record:null,owner:null,inMarriage:false};
+  var linked=marriageRhythmById(rhythmId);
+  if(!linked)return {status:"deleted",template:template,record:null,owner:null,inMarriage:false,rhythmId:rhythmId};
+  var inactive=!!(linked.record.disabled||linked.record.paused||rhythmEnded(linked.record));
+  return {status:inactive?"inactive":"linked",template:template,record:linked.record,owner:linked.person,rhythmOwner:linked.owner,inMarriage:areaIds(linked.record).indexOf("marriage")!==-1,rhythmId:rhythmId};
+ }
+ function marriageTemplateDraft(templateId){
+  var template=marriageTemplateById(templateId);
+  var status=template&&marriageTemplateStatus(templateId).status;
+  if(!template||(status!=="available"&&status!=="deleted"))return null;
+  var spouses=(S.people||[]).filter(function(person){return /^(spouse|wife|husband|partner)$/i.test(String(person.relation||"").trim());});
+  return {id:"draft",text:template.title,description:template.description,sourceTemplateId:template.id,areas:["marriage"],freq:template.freq,tod:template.tod,weekdays:[],monthlyMode:"onDay",dayOfMonth:null,month:null,monthDay:null,qmonth:null,added:null,start:null,personId:spouses.length===1?spouses[0].id:"",sharedWith:[]};
+ }
+ function marriageLinkExistingRhythm(templateId,rhythmId,showInMarriage){
+  var template=marriageTemplateById(templateId),linked=marriageRhythmById(rhythmId);
+  if(!template||!linked||linked.record.fitnessType||linked.record.type==="workout"||linked.record.type==="cardio"||linked.record.type==="weighin")return false;
+  var currentStatus=marriageTemplateStatus(templateId);
+  if(currentStatus&&currentStatus.record)return false;
+  var otherTemplate=MARRIAGE_RHYTHM_TEMPLATES.find(function(item){return item.id!==templateId&&S.marriageRhythmTemplateLinks[item.id]===rhythmId;});
+  if(otherTemplate||(linked.record.sourceTemplateId&&linked.record.sourceTemplateId!==templateId))return false;
+  linked.record.sourceTemplateId=templateId;
+  if(showInMarriage&&areaIds(linked.record).indexOf("marriage")===-1){var areas=Array.isArray(linked.record.areas)?linked.record.areas.slice():[];if(areas.indexOf("marriage")===-1)areas.push("marriage");linked.record.areas=areas;}
+  S.marriageRhythmTemplateLinks[templateId]=rhythmId;
+  save();
+  return true;
+ }
+ function marriageUnlinkTemplate(templateId){
+  if(!marriageTemplateById(templateId)||!S.marriageRhythmTemplateLinks[templateId])return false;
+  var rhythm=marriageRhythmById(S.marriageRhythmTemplateLinks[templateId]);
+  if(rhythm&&rhythm.record.sourceTemplateId===templateId)delete rhythm.record.sourceTemplateId;
+  delete S.marriageRhythmTemplateLinks[templateId];
+  save();
+  return true;
+ }
+ window.tendMarriageSuggestionCatalog=function(){return MARRIAGE_RHYTHM_TEMPLATES.map(function(template){return Object.assign({},template);});};
+ window.tendMarriageTemplateStatus=marriageTemplateStatus;
+ window.tendMarriageTemplateDraft=marriageTemplateDraft;
+ window.tendMarriageLinkExistingRhythm=marriageLinkExistingRhythm;
+ window.tendMarriageUnlinkTemplate=marriageUnlinkTemplate;
+ function marriageLinkCandidates(){
+  var candidates=[],used={};
+  function add(record,person){
+   if(!record||!record.id||record.fitnessType||["workout","cardio","weighin"].indexOf(record.type)!==-1||record.sourceTemplateId||used[record.id])return;
+   if(Object.keys(S.marriageRhythmTemplateLinks).some(function(id){return S.marriageRhythmTemplateLinks[id]===record.id;}))return;
+   used[record.id]=true;candidates.push({record:record,person:person||null});
+  }
+  (S.areaRhythms||[]).forEach(function(record){add(record,null);});
+  (S.people||[]).forEach(function(person){(person.rhythms||[]).forEach(function(record){add(record,person);});});
+  return candidates.sort(function(a,b){return String(a.record.text||"").localeCompare(String(b.record.text||""));});
+ }
+ function marriageRhythmSummary(record){
+  var labels=areaIds(record).map(function(id){return categoryLabel(id,record);});
+  return [typeof window.rhythmFreqLabel==="function"?window.rhythmFreqLabel(record):record.freq||"Frequency not set",record.tod&&record.tod!=="anytime"&&TODS&&TODS[record.tod]?TODS[record.tod]:null,labels.length?labels.join(", "):"No category"].filter(Boolean).join(" · ");
+ }
+ function marriageSuggestionsDialog(){
+  if(!marriageSuggestionsOpen||currentArea!=="marriage")return "";
+  var candidates=marriageLinkCandidates(),candidate=marriageLinkCandidateId&&marriageRhythmById(marriageLinkCandidateId),candidateTemplate=marriageLinkTemplateId&&marriageTemplateById(marriageLinkTemplateId),out='<dialog class="profile-editor-dialog marriage-rhythm-suggestions-dialog" data-editor-modal aria-labelledby="marriage-rhythm-suggestions-title"><div class="profile-editor-body"><header class="marriage-suggestions-header"><div><h2 id="marriage-rhythm-suggestions-title" tabindex="-1">Marriage rhythm suggestions</h2><p>Customize a suggestion or link an existing rhythm. Nothing is added until you save.</p></div><button type="button" class="iconbtn" data-marriage-suggestions-close data-editor-cancel aria-label="Close suggestions">×</button></header><div class="marriage-suggestion-list">';
+  MARRIAGE_RHYTHM_TEMPLATES.forEach(function(template){
+   var info=marriageTemplateStatus(template.id),statusLabel=info.status==="linked"?"Linked":info.status==="inactive"?"Inactive":info.status==="deleted"?"Previously linked rhythm deleted":"Available";
+   if(info.record){
+    statusLabel=info.status==="inactive"?"Inactive":"Linked";
+    if(!info.inMarriage)statusLabel+=" · not shown in Marriage";
+   }
+   out+='<section class="marriage-suggestion-row"><div class="marriage-suggestion-copy"><h3>'+esc(template.title)+'</h3><p>'+esc(template.description)+'</p><div class="marriage-suggestion-meta">'+esc(typeof window.rhythmFreqLabel==="function"?window.rhythmFreqLabel({freq:template.freq}):template.freq)+' · '+esc(template.tod==="evening"&&TODS.evening?TODS.evening:"Flexible time")+' · <span>'+esc(statusLabel)+'</span></div>';
+   if(info.record)out+='<p class="marriage-suggestion-linked">Using “'+esc(info.record.text||"Untitled rhythm")+'” · '+esc(marriageRhythmSummary(info.record))+'</p>';
+   if(info.status==="deleted")out+='<p class="marriage-suggestion-linked">The linked rhythm is no longer present; its history was not changed.</p>';
+   out+='</div><div class="marriage-suggestion-actions">';
+   if(info.status==="available")out+='<button type="button" class="btn mini" data-marriage-suggestion-add="'+esc(template.id)+'" aria-label="Customize '+esc(template.title)+'">Customize</button><button type="button" class="btn mini ghost" data-marriage-link-select="'+esc(template.id)+'" aria-label="Link an existing rhythm to '+esc(template.title)+'">Link existing</button>';
+   else if(info.status==="deleted")out+='<button type="button" class="btn mini" data-marriage-suggestion-add="'+esc(template.id)+'" aria-label="Create a replacement for '+esc(template.title)+'">Create replacement</button><button type="button" class="btn mini ghost" data-marriage-link-select="'+esc(template.id)+'" aria-label="Link another rhythm to '+esc(template.title)+'">Link another</button><button type="button" class="btn mini ghost" data-marriage-template-unlink="'+esc(template.id)+'">Clear deleted link</button>';
+   else out+='<button type="button" class="btn mini ghost" data-marriage-template-unlink="'+esc(template.id)+'">Unlink suggestion</button>';
+   out+='</div>';
+   if(marriageLinkTemplateId===template.id&&candidateTemplate){
+    out+='<div class="marriage-link-panel"><h4>Choose an existing rhythm</h4>';
+    if(!candidates.length)out+='<p>No unlinked rhythms are available to link.</p>';
+    else out+='<ul>'+candidates.map(function(item){return '<li><span><strong>'+esc(item.record.text||"Untitled rhythm")+'</strong><small>'+esc(item.person?"For "+item.person.name:"Area rhythm")+" · "+esc(marriageRhythmSummary(item.record))+'</small></span><button type="button" class="btn mini ghost" data-marriage-link-candidate="'+esc(template.id)+'|'+esc(item.record.id)+'"'+(marriageLinkCandidateId===item.record.id?' aria-pressed="true"':'')+'>'+(marriageLinkCandidateId===item.record.id?"Selected":"Select")+'</button></li>';}).join("")+'</ul>';
+    if(candidate&&candidateTemplate&&marriageLinkTemplateId===candidateTemplate.id){
+     var candidateAreas=areaIds(candidate.record).map(function(id){return categoryLabel(id,candidate.record);});
+     out+='<div class="marriage-link-review"><strong>Review before linking</strong><p>'+esc(candidate.record.text||"Untitled rhythm")+' will keep its title, schedule, person and history. Current categories: '+esc(candidateAreas.join(", ")||"none")+'.</p><label><input type="checkbox" data-marriage-link-show checked> Also show it in Marriage'+(candidateAreas.indexOf("Marriage")===-1?' (adds the Marriage category)':'')+'</label><button type="button" class="btn mini" data-marriage-link-confirm="'+esc(candidateTemplate.id)+'|'+esc(candidate.record.id)+'">Link this rhythm</button></div>';
+    }
+    out+='</div>';
+   }
+   out+='</section>';
+  });
+  return out+'</div></div></dialog>';
+ }
  function categoryRhythmOrderId(item){
   return item.owner==="person"?"person:"+item.person.id+":"+item.record.id:item.record.fitnessType?"fitness:"+item.record.id:"area:"+item.record.id;
  }
@@ -116,10 +232,20 @@
  window.faithLinkedRhythmItems=function(group){return categoryRhythms("faith").filter(function(item){return (item.record.faithGroup||"Prayer")===group&&!item.record.disabled&&!rhythmEnded(item.record);}).map(function(item){return {item:item,id:categoryRhythmOrderId(item)};});};
  window.faithLinkedRhythmHTML=function(item){return categoryRhythmRow(item,"faith");};
  window.faithLinkedRhythmRows=function(group){return window.faithLinkedRhythmItems(group).sort(function(a,b){return String(a.item.record.text||"").localeCompare(String(b.item.record.text||""));}).map(function(entry){return categoryRhythmRow(entry.item,"faith");}).join("");};
- function categoryRhythmFormHTML(id,record,rid){
+ function categoryRhythmFormHTML(id,record,rid,forMe){
   var idf="area-"+id+"|"+rid;
-  return '<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="area-rhythm-editor-title"><div class="profile-editor-body rhyedit area-rhythm-edit" data-area-rhythm-form="'+esc(id)+'|'+esc(rid)+'"><h3 id="area-rhythm-editor-title">'+(rid==="draft"?"Add Rhythm":"Edit Rhythm")+'</h3><label class="careplan-field">Rhythm<input data-crf="text" value="'+esc(record.text||"")+'" placeholder="What is the rhythm?"></label><label class="careplan-field rhythm-description-field">Description (optional)<textarea data-crf="description" placeholder="Add context or details">'+esc(record.description||"")+'</textarea></label>'+window.personRhythmScheduleHTML(record,idf)+'<label class="careplan-field">Person (optional)<select data-crf="personId"><option value="">No person</option>'+S.people.map(function(person){return '<option value="'+esc(person.id)+'"'+(record.personId===person.id?' selected':'')+'>'+esc(person.name)+'</option>';}).join("")+'</select></label><div class="profile-editor-actions"><button type="button" class="btn mini" data-area-rhythm-save="'+esc(id)+'|'+esc(rid)+'">Save Rhythm</button><button type="button" class="btn mini ghost" data-area-rhythm-cancel="1" data-editor-cancel>Cancel</button>'+(rid==="draft"?"":'<button type="button" class="btn mini danger" data-area-rhythm-delete="'+esc(id)+'|'+esc(rid)+'">Delete Rhythm</button>')+'</div></div></dialog>';
+  var templateStart=record.sourceTemplateId&&rid==="draft"?'<label class="careplan-field marriage-template-start">Start date<input type="date" data-rfield="'+esc(idf)+'|start" value="'+esc(record.start||"")+'" required></label>':'';
+  var editableCategories=forMe||!!(record.sourceTemplateId&&rid==="draft");
+  return '<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="area-rhythm-editor-title"><div class="profile-editor-body rhyedit area-rhythm-edit" data-area-rhythm-form="'+esc(id)+'|'+esc(rid)+'"><h3 id="area-rhythm-editor-title">'+(rid==="draft"?"Add Rhythm":"Edit Rhythm")+'</h3><label class="careplan-field">Rhythm<input data-crf="text" value="'+esc(record.text||"")+'" placeholder="What is the rhythm?"></label><label class="careplan-field rhythm-description-field">Description (optional)<textarea data-crf="description" placeholder="Add context or details">'+esc(record.description||"")+'</textarea></label>'+(editableCategories?areaChecks(record,idf)+'<p class="me-rhythm-category-note">'+(forMe?"Choose at least one category for this rhythm.":"Choose where this rhythm appears.")+'</p>':'')+window.personRhythmScheduleHTML(record,idf)+templateStart+'<label class="careplan-field">Person (optional)<select data-crf="personId"><option value="">No person</option>'+S.people.map(function(person){return '<option value="'+esc(person.id)+'"'+(record.personId===person.id?' selected':'')+'>'+esc(person.name)+'</option>';}).join("")+'</select></label><label class="me-personal-toggle"><input type="checkbox" data-crf="personal"'+(record.personal?' checked':'')+'> <span>Personal rhythm</span></label><div class="profile-editor-actions"><button type="button" class="btn mini" data-area-rhythm-save="'+esc(id)+'|'+esc(rid)+'">Save Rhythm</button><button type="button" class="btn mini ghost" data-area-rhythm-cancel="1" data-editor-cancel>Cancel</button>'+(rid==="draft"?"":'<button type="button" class="btn mini danger" data-area-rhythm-delete="'+esc(id)+'|'+esc(rid)+'">Delete Rhythm</button>')+'</div></div></dialog>';
  }
+ window.tendMeRhythmEditorHTML=function(){
+  if(!areaRhythmDraft)return "";
+  return categoryRhythmFormHTML(areaRhythmDraft.areaId,areaRhythmDraft.record,areaRhythmDraft.record.id==="draft"?"draft":areaRhythmDraft.record.id,areaRhythmDraft.areaId==="me");
+ };
+ window.tendStartMeRhythmEditor=function(){
+  areaRhythmDraft={areaId:"me",record:{id:"draft",text:"",description:"",areas:[],personal:true,freq:"weekly",tod:"anytime",weekdays:[new Date().getDay()],every:1,unit:"weeks",added:todayStr(),sharedWith:[]}};
+  areaRhythmEditId=null;
+ };
  function newAreaRhythm(id){
   return {id:"draft",text:"",description:"",areas:[id],faithGroup:id==="faith"?"Prayer":null,freq:"weekly",tod:"anytime",weekdays:[new Date().getDay()],every:1,unit:"weeks",added:todayStr()};
  }
@@ -146,7 +272,7 @@
    }else out+='<div class="empty">No rhythms due today.</div>';
    out+='</section>';
   }
-  out+='<section class="card category-rhythms"><div class="category-rhythms-heading"><div><div class="subhead">Rhythms</div><div class="profile-tab-intro">Recurring practices connected to this category.</div></div><div class="category-rhythm-header-actions">'+tendRhythmOrderToolbar(orderContext,rows.length,"category-rhythm-order-toolbar")+'<button type="button" class="btn mini ghost" data-area-rhythm-new="'+esc(id)+'">+ Add rhythm</button></div></div>';
+  out+='<section class="card category-rhythms"><div class="category-rhythms-heading"><div><div class="subhead">Rhythms</div><div class="profile-tab-intro">Recurring practices connected to this category.</div></div><div class="category-rhythm-header-actions">'+tendRhythmOrderToolbar(orderContext,rows.length,"category-rhythm-order-toolbar")+'<button type="button" class="btn mini ghost" data-area-rhythm-new="'+esc(id)+'">+ Add rhythm</button>'+(id==="marriage"&&rows.length?'<button type="button" class="btn mini ghost" data-marriage-suggestions-open>Explore suggestions</button>':"")+'</div></div>';
   if(areaRhythmDraft&&areaRhythmDraft.areaId===id)out+=categoryRhythmFormForArea(id);
   if(rows.length){
    var defaultRows=rows.slice().sort(function(a,b){return String(a.record.text||"").localeCompare(String(b.record.text||""));}),orderedRows=tendRhythmOrderSort(orderContext,defaultRows,categoryRhythmOrderId),allIds=defaultRows.map(categoryRhythmOrderId);
@@ -157,7 +283,8 @@
    });
    out+='</div>';
   }else if(!(areaRhythmDraft&&areaRhythmDraft.areaId===id))out+='<div class="empty">No rhythms yet.</div>';
-  return out+'</section>';
+  if(id==="marriage"&&!areaRhythmDraft&&rows.length===0)out+='<div class="marriage-suggestions-empty"><p>Start with a shared rhythm that fits your season.</p><button type="button" class="btn mini" data-marriage-suggestions-open>Explore suggested rhythms</button></div>';
+  return out+(id==="marriage"?marriageSuggestionsDialog():"")+'</section>';
  }
  var baseRenderArea=window.renderArea;
  window.renderArea=function(id){
@@ -173,17 +300,17 @@
   if(field==="weekdays"){
    record.weekdays=Array.prototype.slice.call(form.querySelectorAll('[data-rfield$="|weekdays"]:checked')).map(function(input){return +input.value;});
    if(record.freq!=="selectdays"&&record.weekdays.length>1)record.weekdays=[record.weekdays[0]];
-   if(!record.weekdays.length)record.weekdays=[+target.value];
+   if(!record.weekdays.length&&!record.sourceTemplateId)record.weekdays=[+target.value];
    return true;
   }
   if(field==="monthlyMode"){record.monthlyMode=target.value;return true;}
   if(field==="freq"){
    record.freq=target.value;
-   if(target.value==="monthly"||target.value==="quarterly"){record.monthlyMode=record.monthlyMode||"onDay";record.dayOfMonth=record.dayOfMonth||new Date().getDate();if(target.value==="quarterly"&&!record.qmonth)record.qmonth=(new Date().getMonth()%3)+1;}
-   if(target.value==="yearly"){record.monthlyMode=record.monthlyMode||"onDay";record.month=record.month||(new Date().getMonth()+1);record.monthDay=record.monthDay||new Date().getDate();}
-   if(target.value==="custom"){record.every=record.every||1;record.unit=record.unit||"weeks";if(!record.start)record.start=todayStr();}
-   if(target.value==="weekly"&&(!Array.isArray(record.weekdays)||record.weekdays.length!==1))record.weekdays=[new Date().getDay()];
-   if(target.value==="selectdays"&&(!Array.isArray(record.weekdays)||!record.weekdays.length))record.weekdays=[new Date().getDay()];
+   if(target.value==="monthly"||target.value==="quarterly"){record.monthlyMode=record.monthlyMode||"onDay";record.dayOfMonth=record.dayOfMonth||(record.sourceTemplateId?null:new Date().getDate());if(target.value==="quarterly"&&!record.qmonth&&!record.sourceTemplateId)record.qmonth=(new Date().getMonth()%3)+1;}
+   if(target.value==="yearly"){record.monthlyMode=record.monthlyMode||"onDay";record.month=record.month||(record.sourceTemplateId?null:new Date().getMonth()+1);record.monthDay=record.monthDay||(record.sourceTemplateId?null:new Date().getDate());}
+   if(target.value==="custom"){record.every=record.every||1;record.unit=record.unit||"weeks";if(!record.start&&!record.sourceTemplateId)record.start=todayStr();}
+   if(target.value==="weekly"&&(!Array.isArray(record.weekdays)||record.weekdays.length!==1))record.weekdays=record.sourceTemplateId?[]:[new Date().getDay()];
+   if(target.value==="selectdays"&&(!Array.isArray(record.weekdays)||!record.weekdays.length))record.weekdays=record.sourceTemplateId?[]:[new Date().getDay()];
    return true;
   }
   if(field==="unit"){record.unit=target.value;return true;}
@@ -201,9 +328,21 @@
   if(!record)return;
   var text=form.querySelector('[data-crf="text"]').value.trim();
   if(!text){flash("Give this rhythm a name");form.querySelector('[data-crf="text"]').focus();return;}
+  if(record.sourceTemplateId&&rid==="draft"){
+   var start=form.querySelector('[data-rfield$="|start"]'),weekdays=form.querySelectorAll('[data-rfield$="|weekdays"]:checked'),mode=form.querySelector('[data-rfield$="|monthlyMode"]:checked'),selectedMode=mode&&mode.value||record.monthlyMode||"onDay";
+   if(!start||!start.value){flash("Choose a start date");if(start)start.focus();return;}
+   if(record.freq==="weekly"&&!weekdays.length){flash("Choose a weekday");var weekday=form.querySelector('[data-rfield$="|weekdays"]');if(weekday)weekday.focus();return;}
+   if(record.freq==="quarterly"&&(!record.qmonth||selectedMode==="onDay"&&!record.dayOfMonth||selectedMode==="onThe"&&(!record.ord||record.ordWeekday===undefined||record.ordWeekday===null))){flash("Choose the quarterly schedule");return;}
+   if(record.freq==="yearly"&&(!record.month||selectedMode==="onDay"&&!record.monthDay||selectedMode==="onThe"&&(!record.ord||record.ordWeekday===undefined||record.ordWeekday===null))){flash("Choose the yearly schedule");return;}
+  }
   record.text=text;record.description=form.querySelector('[data-crf="description"]').value.trim();
-  record.areas=areaIds(record);if(!record.areas.length)record.areas=[id];
-  if(rid==="draft")record.id=uid();
+  record.personal=!!form.querySelector('[data-crf="personal"]').checked;
+  record.areas=areaIds(record);
+  if(id==="me"&&!record.areas.length){flash("Choose at least one category");var firstArea=form.querySelector('[data-rfield$="|areas"]');if(firstArea)firstArea.focus();return;}
+  if(record.sourceTemplateId&&!record.areas.length){flash("Choose at least one category");var templateArea=form.querySelector('[data-rfield$="|areas"]');if(templateArea)templateArea.focus();return;}
+  if(id!=="me"&&!record.areas.length)record.areas=[id];
+  var suggestionTemplateId=rid==="draft"?record.sourceTemplateId:null;
+  if(rid==="draft"){record.id=uid();record.added=record.added||todayStr();}
   var assigned=S.people.find(function(person){return person.id===form.querySelector('[data-crf="personId"]').value;});
   if(assigned){
    record.added=record.added||todayStr();
@@ -212,6 +351,8 @@
    S.areaRhythms=S.areaRhythms.filter(function(item){return item!==original&&item!==record;});
   }else if(rid==="draft")S.areaRhythms.push(record);
   else if(original)Object.assign(original,record);
+  if(suggestionTemplateId)S.marriageRhythmTemplateLinks[suggestionTemplateId]=record.id;
+  if(suggestionTemplateId)marriageSuggestionsOpen=true;
   areaRhythmDraft=null;areaRhythmEditId=null;save();if(!window.tendFinishRhythmEdit||!window.tendFinishRhythmEdit())render();flash("Rhythm saved");
  }
  function findRhythmOwner(rid){var result=null;S.people.some(function(person){var record=(person.rhythms||[]).find(function(item){return item.id===rid;});if(record){result={person:person,record:record};return true;}return false;});return result;}
@@ -290,12 +431,36 @@
    }
    render();if(area==="faith")requestAnimationFrame(function(){requestAnimationFrame(function(){faithScrollToHeading(document.getElementById("faithPracticeTitle"));});});else window.scrollTo(0,0);return;
   }
+  var marriageAction=event.target&&event.target.closest&&event.target.closest("[data-marriage-suggestions-open],[data-marriage-suggestions-close],[data-marriage-suggestion-add],[data-marriage-link-select],[data-marriage-link-candidate],[data-marriage-link-confirm],[data-marriage-template-unlink]");
+  if(marriageAction){
+   event.preventDefault();event.stopImmediatePropagation();
+   if(marriageAction.hasAttribute("data-marriage-suggestions-open")){marriageSuggestionsOpen=true;marriageLinkTemplateId=null;marriageLinkCandidateId=null;render();requestAnimationFrame(function(){var heading=document.getElementById("marriage-rhythm-suggestions-title");if(heading)heading.focus({preventScroll:true});});return;}
+   if(marriageAction.hasAttribute("data-marriage-suggestions-close")){marriageSuggestionsOpen=false;marriageLinkTemplateId=null;marriageLinkCandidateId=null;render();return;}
+   if(marriageAction.hasAttribute("data-marriage-suggestion-add")){
+    var templateId=marriageAction.getAttribute("data-marriage-suggestion-add"),draft=marriageTemplateDraft(templateId);
+    if(!draft){flash("This suggestion is already linked");return;}
+    if(window.tendCaptureRhythmEditOrigin)window.tendCaptureRhythmEditOrigin(marriageAction);
+    marriageSuggestionsOpen=false;marriageLinkTemplateId=null;marriageLinkCandidateId=null;areaRhythmDraft={areaId:"marriage",record:draft};areaRhythmEditId=null;render();requestAnimationFrame(function(){var title=document.querySelector('[data-area-rhythm-form="marriage|draft"] [data-crf="text"]');if(title)title.focus({preventScroll:true});});return;
+   }
+   if(marriageAction.hasAttribute("data-marriage-link-select")){marriageLinkTemplateId=marriageAction.getAttribute("data-marriage-link-select");marriageLinkCandidateId=null;render();return;}
+   if(marriageAction.hasAttribute("data-marriage-link-candidate")){var candidateKey=marriageAction.getAttribute("data-marriage-link-candidate").split("|");marriageLinkTemplateId=candidateKey[0];marriageLinkCandidateId=candidateKey[1];render();return;}
+   if(marriageAction.hasAttribute("data-marriage-link-confirm")){
+    var linkKey=marriageAction.getAttribute("data-marriage-link-confirm").split("|"),review=marriageAction.closest(".marriage-link-review"),show=review&&review.querySelector("[data-marriage-link-show]");
+    if(!marriageLinkExistingRhythm(linkKey[0],linkKey[1],!!(show&&show.checked))){flash("This rhythm can no longer be linked");return;}
+    marriageLinkTemplateId=null;marriageLinkCandidateId=null;render();flash("Rhythm linked to suggestion");return;
+   }
+   if(marriageAction.hasAttribute("data-marriage-template-unlink")){
+    var unlinkId=marriageAction.getAttribute("data-marriage-template-unlink");
+    if(marriageUnlinkTemplate(unlinkId)){marriageLinkTemplateId=null;marriageLinkCandidateId=null;render();flash("Suggestion unlinked; rhythm and history unchanged");}
+    return;
+   }
+  }
   var button=event.target&&event.target.closest&&event.target.closest("[data-area-rhythm-new],[data-area-rhythm-edit],[data-area-rhythm-save],[data-area-rhythm-cancel],[data-area-rhythm-delete]");
   if(button){
    event.preventDefault();event.stopImmediatePropagation();
    if(button.hasAttribute("data-area-rhythm-new")){var area=button.getAttribute("data-area-rhythm-new"),record=newAreaRhythm(area),faithGroup=button.getAttribute("data-faith-group");if(area==="faith"&&FAITH_SUBCATEGORIES.indexOf(faithGroup)>=0)record.faithGroup=faithGroup;areaRhythmDraft={areaId:area,record:record};areaRhythmEditId=null;render();return;}
-   if(button.hasAttribute("data-area-rhythm-edit")){if(window.tendCaptureRhythmEditOrigin)window.tendCaptureRhythmEditOrigin(button);var edit=button.getAttribute("data-area-rhythm-edit").split("|"),source=categoryRhythmRecord(edit[0],edit[1]);areaRhythmEditId=edit[1];areaRhythmDraft=source?{areaId:edit[0],record:JSON.parse(JSON.stringify(source))}:null;render();return;}
-   if(button.hasAttribute("data-area-rhythm-cancel")){areaRhythmDraft=null;areaRhythmEditId=null;if(!window.tendFinishRhythmEdit||!window.tendFinishRhythmEdit())render();return;}
+   if(button.hasAttribute("data-area-rhythm-edit")){if(window.tendCaptureRhythmEditOrigin)window.tendCaptureRhythmEditOrigin(button);var edit=button.getAttribute("data-area-rhythm-edit").split("|"),source=categoryRhythmRecord(edit[0],edit[1]);if(source&&tab!=="me"&&currentArea!==edit[0]){tab="areas";currentArea=edit[0];currentPerson=null;}areaRhythmEditId=edit[1];areaRhythmDraft=source?{areaId:edit[0],record:JSON.parse(JSON.stringify(source))}:null;render();return;}
+   if(button.hasAttribute("data-area-rhythm-cancel")){if(areaRhythmDraft&&areaRhythmDraft.record.sourceTemplateId&&areaRhythmDraft.record.id==="draft")marriageSuggestionsOpen=true;areaRhythmDraft=null;areaRhythmEditId=null;if(!window.tendFinishRhythmEdit||!window.tendFinishRhythmEdit())render();return;}
    if(button.hasAttribute("data-area-rhythm-save")){var key=button.getAttribute("data-area-rhythm-save").split("|");saveAreaRhythm(key[0],key[1],button.closest("[data-area-rhythm-form]"));return;}
    if(button.hasAttribute("data-area-rhythm-delete")){var remove=button.getAttribute("data-area-rhythm-delete").split("|"),entry=categoryRhythmRecord(remove[0],remove[1]);if(entry){S.areaRhythms=S.areaRhythms.filter(function(record){return record!==entry;});areaRhythmDraft=null;areaRhythmEditId=null;save();render();flash("Rhythm removed");}return;}
   }
@@ -335,5 +500,6 @@
  styles.textContent+=".rhythm-area-checks{display:grid;grid-template-columns:repeat(3,max-content);justify-content:center;align-items:center;gap:8px 12px}.rhythm-area-checks legend{grid-column:1/-1}.rhythm-area-checks .rhythm-faith-option{flex:none}@media(max-width:520px){.rhythm-area-checks{grid-template-columns:repeat(2,max-content);gap:8px}}";
  styles.textContent+=".profile-editor-dialog .rhyedit{border:0;background:transparent;padding:0}.profile-editor-dialog .rhythm-area-checks{box-sizing:border-box;width:100%;margin:8px 0 4px;padding:12px;border:1px solid var(--line);border-radius:12px}";
  styles.textContent+=".profile-editor-dialog .rhythm-area-checks{grid-template-columns:repeat(3,minmax(0,1fr));justify-content:stretch;align-items:stretch}.profile-editor-dialog .rhythm-area-option,.profile-editor-dialog .rhythm-area-option>label{box-sizing:border-box;width:100%;min-width:0}.profile-editor-dialog .rhythm-area-option>label{min-height:34px}@media(max-width:520px){.profile-editor-dialog .rhythm-area-checks{grid-template-columns:repeat(2,minmax(0,1fr))}}";
+ styles.textContent+=".marriage-rhythm-suggestions-dialog .profile-editor-body{width:min(640px,calc(100vw - 32px));max-height:min(82vh,760px);overflow:auto;box-sizing:border-box;gap:12px}.marriage-suggestions-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.marriage-suggestions-header h2,.marriage-suggestions-header p,.marriage-suggestion-row h3,.marriage-suggestion-row p{margin:0}.marriage-suggestions-header p{margin-top:4px;color:var(--ink-soft);font-size:13px}.marriage-suggestion-list{display:grid;gap:0}.marriage-suggestion-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 16px;padding:13px 0;border-top:1px solid var(--line)}.marriage-suggestion-copy{min-width:0}.marriage-suggestion-row h3{font-size:14px}.marriage-suggestion-row p{margin-top:4px;color:var(--ink-soft);font-size:12.5px;line-height:1.45}.marriage-suggestion-meta{margin-top:6px;color:var(--ink-faint);font-size:11.5px}.marriage-suggestion-actions{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:flex-end;gap:6px}.marriage-suggestion-linked{overflow-wrap:anywhere}.marriage-link-panel{grid-column:1/-1;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--mist)}.marriage-link-panel h4{margin:0 0 8px;font-size:13px}.marriage-link-panel ul{display:grid;gap:6px;margin:0;padding:0;list-style:none}.marriage-link-panel li{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;padding:7px 0;border-top:1px solid var(--line)}.marriage-link-panel li>span{display:grid;min-width:0;overflow-wrap:anywhere}.marriage-link-panel small{color:var(--ink-soft)}.marriage-link-review{display:grid;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}.marriage-link-review p{margin:0}.marriage-link-review label{display:flex;align-items:flex-start;gap:7px;font-size:12.5px}.marriage-link-review input{margin-top:3px;accent-color:var(--forest)}.marriage-suggestions-empty{display:grid;justify-items:start;gap:8px;margin-top:12px}.marriage-suggestions-empty p{margin:0;color:var(--ink-soft);font-size:13px}@media(max-width:520px){.marriage-suggestion-row{grid-template-columns:minmax(0,1fr)}.marriage-suggestion-actions{justify-content:flex-start}.marriage-link-panel li{align-items:flex-start;flex-wrap:wrap}.marriage-rhythm-suggestions-dialog .profile-editor-body{padding:16px}}";
  document.head.appendChild(styles);
 })();

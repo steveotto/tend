@@ -232,6 +232,10 @@ test("auth UI supports email signup, login, recovery, reset, and logout with Sup
   const handlers = {};
   const authCalls = [];
   let authListener;
+  let profileSaveError = false;
+  let hideProfileRepresentation = false;
+  let authenticatedUserId = "user-a";
+  const profileRows = new Map([["user-a", { user_id: "user-a", display_name: "Person", created_at: "original-created-at" }]]);
   const user = { id: "user-a", email: "person@example.com", user_metadata: { display_name: "Person" } };
   let session = { user };
   const client = {
@@ -244,9 +248,41 @@ test("auth UI supports email signup, login, recovery, reset, and logout with Sup
       async updateUser(args) { authCalls.push(["updateUser", args]); return { data: { user }, error: null }; },
       async signOut() { authCalls.push(["signOut"]); session = null; return { error: null }; }
     },
-    from() {
+    from(table) {
       return {
-        select() { return { eq() { return { async maybeSingle() { return { data: { display_name: "Person" }, error: null }; } }; } }; }
+        select() {
+          return { eq(column, id) {
+            authCalls.push(["profileSelect", table, column, id]);
+            return { async maybeSingle() {
+              if (table !== "tend_profiles" || column !== "user_id" || id !== authenticatedUserId) return { data: null, error: null };
+              return { data: profileRows.get(id) ? { display_name: profileRows.get(id).display_name } : null, error: null };
+            } };
+          } };
+        },
+        update(values) {
+          authCalls.push(["profileUpdate", table, values]);
+          return { eq(column, id) {
+            authCalls.push(["profileUpdateOwner", column, id]);
+            return { select() { return { async maybeSingle() {
+              if (profileSaveError) return { data: null, error: { message: "Profile is unavailable" } };
+              if (table !== "tend_profiles" || column !== "user_id" || id !== authenticatedUserId) return { data: null, error: null };
+              const existing = profileRows.get(id);
+              if (!existing) return { data: null, error: null };
+              existing.display_name = values.display_name;
+              return { data: hideProfileRepresentation ? null : { display_name: existing.display_name }, error: null };
+            } }; } };
+          } };
+        },
+        insert(values) {
+          authCalls.push(["profileInsert", table, values]);
+          return { select() { return { async maybeSingle() {
+            if (table !== "tend_profiles" || values.user_id !== authenticatedUserId) return { data: null, error: { code: "42501", message: "new row violates row-level security policy" } };
+            if (profileRows.has(values.user_id)) return { data: null, error: { code: "23505", message: "duplicate key" } };
+            const saved = { user_id: values.user_id, display_name: values.display_name };
+            profileRows.set(values.user_id, saved);
+            return { data: hideProfileRepresentation ? null : { display_name: saved.display_name }, error: null };
+          } }; } };
+        }
       };
     }
   };
@@ -296,7 +332,7 @@ test("auth UI supports email signup, login, recovery, reset, and logout with Sup
   function FormData(form) { return { get(name) { return form.values[name]; } }; }
   const context = {
     window, document, navigator: window.navigator, FormData, setTimeout, clearTimeout, console,
-    S: {}, LS_STATE: "tend:state", tab: "today", settingsTab: "account",
+    S: {}, LS_STATE: "tend:state", tab: "today",
     ensureShape(value) { return value; },
     emptyAccountState() { return { people: [], events: [] }; },
     render() {},
@@ -310,6 +346,32 @@ test("auth UI supports email signup, login, recovery, reset, and logout with Sup
   assert.equal(cloud.ready, true, "an existing Supabase session should restore the private account before the app is shown");
   assert.equal(window.TendAuth.displayName(), "Person");
   assert.equal(authCalls.some(call => call[0] === "getSession"), true);
+  assert.equal(await window.TendAuth.updateDisplayName("  New display name  "), "New display name");
+  assert.equal(window.TendAuth.displayName(), "New display name");
+  assert.deepEqual(JSON.parse(JSON.stringify(authCalls.find(call => call[0] === "profileUpdate"))), [
+    "profileUpdate", "tend_profiles", { display_name: "New display name" }
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(authCalls.find(call => call[0] === "profileUpdateOwner"))), ["profileUpdateOwner", "user_id", "user-a"]);
+  assert.equal(profileRows.get("user-a").created_at, "original-created-at", "saving the name must preserve unrelated profile fields");
+  await assert.rejects(window.TendAuth.updateDisplayName("   "), /Enter a username or display name/);
+  profileRows.delete("user-a");
+  assert.equal(await window.TendAuth.updateDisplayName("Created missing profile"), "Created missing profile");
+  assert.equal(profileRows.get("user-a").display_name, "Created missing profile", "a missing legacy profile is created for the authenticated user");
+  const persistedProfile = await client.from("tend_profiles").select("display_name").eq("user_id", "user-a").maybeSingle();
+  assert.equal(persistedProfile.data.display_name, "Created missing profile", "the saved value remains available from the profile read path");
+  hideProfileRepresentation = true;
+  assert.equal(await window.TendAuth.updateDisplayName("Confirmed by read-back"), "Confirmed by read-back");
+  assert.equal(window.TendAuth.displayName(), "Confirmed by read-back", "a representation-free response is confirmed by a user-scoped read");
+  hideProfileRepresentation = false;
+  profileSaveError = true;
+  await assert.rejects(window.TendAuth.updateDisplayName("Unsaved name"), error => error.message === "Profile is unavailable");
+  assert.equal(window.TendAuth.displayName(), "Confirmed by read-back", "a failed profile update must not change the displayed name");
+  profileSaveError = false;
+  profileRows.set("user-b", { user_id: "user-b", display_name: "Other account name" });
+  authenticatedUserId = "user-b";
+  await assert.rejects(window.TendAuth.updateDisplayName("Other account"), error => error.message === "new row violates row-level security policy");
+  assert.equal(profileRows.get("user-b").display_name, "Other account name", "a user mismatch cannot modify another account's profile");
+  assert.equal(profileRows.get("user-a").display_name, "Confirmed by read-back");
   const submit = async (id, values) => {
     const form = {
       id,
@@ -345,7 +407,7 @@ test("auth UI supports email signup, login, recovery, reset, and logout with Sup
   authListener("PASSWORD_RECOVERY", { user });
   await new Promise(resolve => setTimeout(resolve, 5));
   await submit("tendPasswordResetForm", { password: "new-long-password" });
-  assert.deepEqual(JSON.parse(JSON.stringify(authCalls.find(call => call[0] === "updateUser").slice(1))), [{ password: "new-long-password" }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(authCalls.find(call => call[0] === "updateUser" && call[1].password).slice(1))), [{ password: "new-long-password" }]);
   await click("data-account-sign-out");
   assert.equal(authCalls.some(call => call[0] === "signOut"), true);
 });
@@ -358,4 +420,16 @@ test("migration grants and RLS policies enforce ownership and revision-checked w
   assert.match(migrationSource, /grant execute on function public\.tend_save_user_state\(jsonb, bigint, integer\) to authenticated/i);
   assert.match(migrationSource, /current_state\.revision = p_expected_revision/i);
   assert.match(migrationSource, /errcode = '40001'/i);
+  const profileMigration = fs.readFileSync(path.join(root, "supabase/migrations/202610160002_profile_upsert.sql"), "utf8");
+  assert.match(profileMigration, /on public\.tend_profiles for insert to authenticated/i);
+  assert.match(profileMigration, /with check \(user_id = \(select auth\.uid\(\)\)\)/i);
+  assert.match(profileMigration, /grant insert \(user_id, display_name\) on table public\.tend_profiles to authenticated/i);
+  const permissionMigration = fs.readFileSync(path.join(root, "supabase/migrations/202610160003_profile_permissions.sql"), "utf8");
+  assert.match(permissionMigration, /drop policy if exists "Users read their own profile"/i);
+  assert.match(permissionMigration, /on public\.tend_profiles for select to authenticated[\s\S]*using \(user_id = \(select auth\.uid\(\)\)\)/i);
+  assert.match(permissionMigration, /on public\.tend_profiles for update to authenticated[\s\S]*using \(user_id = \(select auth\.uid\(\)\)\)[\s\S]*with check \(user_id = \(select auth\.uid\(\)\)\)/i);
+  assert.match(permissionMigration, /revoke all on table public\.tend_profiles from public, anon, authenticated/i);
+  assert.match(permissionMigration, /grant select \(user_id, display_name\) on table public\.tend_profiles to authenticated/i);
+  assert.match(permissionMigration, /grant update \(display_name\) on table public\.tend_profiles to authenticated/i);
+  assert.match(permissionMigration, /grant insert \(user_id, display_name\) on table public\.tend_profiles to authenticated/i);
 });
