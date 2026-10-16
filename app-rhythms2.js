@@ -183,7 +183,7 @@ function rhythmCardWeekdays(r){
  return days.map(Number).filter(function(value,index,all){return value>=0&&value<7&&all.indexOf(value)===index;}).sort(function(a,b){return a-b;});
 }
 function rhythmCardFrequency(r){
- var freq=r.freq||(r.rule&&r.rule.freq),unit=freq==="custom"?(r.unit||"weeks"):freq,every=Math.max(1,+r.every||1),days=rhythmCardWeekdays(r),weekdayLabels=days.map(function(day){return DOW[day].slice(0,3);}),weekdayText=days.map(function(day){return DOW[day];}),label="Daily",narrow="Daily",full;
+ var freq=r.freq||(r.rule&&r.rule.freq),unit=freq==="custom"?(r.unit||"weeks"):freq,every=Math.max(1,+r.every||1),days=rhythmCardWeekdays(r),weekdayLabels=days.map(function(day){return DOW[day].slice(0,3);}),weekdayText=days.map(function(day){return DOW[day];}),label="Daily",narrow="Daily",full,detailsLabel=null;
  if(freq==="biweekly"){unit="weeks";every=2;}
  if(freq==="annual")unit="yearly";
  if(unit==="weekly"||unit==="weeks"||unit==="selectdays"){
@@ -192,6 +192,7 @@ function rhythmCardFrequency(r){
   else if(unit==="weeks"&&every>1){label="Every "+every+" wk";narrow=every+" wk";}
   else {label="Weekly";narrow="Wk";}
   if(weekdayLabels.length){label+=" · "+weekdayLabels.join(", ");narrow+=" · "+weekdayLabels.join(", ");}
+  detailsLabel=unit==="selectdays"&&weekdayLabels.length?"Selected · "+days.map(function(day){return DOW[day].charAt(0);}).join(", "):null;
   full=unit==="selectdays"?"Selected days"+(weekdayText.length?" on "+weekdayText.join(", "):""):unit==="weeks"&&every>1?"Every "+every+" weeks"+(weekdayText.length?" on "+weekdayText.join(", "):""):"Weekly"+(weekdayText.length?" on "+weekdayText.join(", "):"");
  }else if(unit==="days"){
   label=every===1?"Daily":"Every "+every+" days";
@@ -232,7 +233,7 @@ function rhythmCardFrequency(r){
  if(unit!=="quarterly"&&r.until)full+=rUntilTxt(r);
  full=full.replace(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/g,function(month){return {Jan:"January",Feb:"February",Mar:"March",Apr:"April",May:"May",Jun:"June",Jul:"July",Aug:"August",Sep:"September",Oct:"October",Nov:"November",Dec:"December"}[month];});
  if(rhythmEnded(r)){label+=" · ended";narrow+=" · ended";if(unit!=="quarterly")full+=" · ended";}
- return {full:full,label:label,narrow:narrow};
+ return {full:full,label:label,narrow:narrow,detailsLabel:detailsLabel};
 }
 window.rhythmCardFrequencyLabel=function(r){return rhythmCardFrequency(r).label;};
 function rhythmCardTime(r){
