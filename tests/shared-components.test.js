@@ -31,7 +31,7 @@ test("People cards use one column until cards have room to fit side by side", ()
 test("Person plan cards hide the active person's own people badge", () => {
   const peopleRenderer = [
     homeRhythmSource.match(/function planPersonBadgeHTML\(person,rhythmLink,options\)\{[\s\S]*?\n\}/)[0],
-    homeRhythmSource.match(/function planItemPeople\(it\)\{[\s\S]*?\n\}/)[0]
+    homeRhythmSource.match(/function planItemPeople\(it,excludePersonId\)\{[\s\S]*?\n\}/)[0]
   ].join("\n");
   const context = {
     currentPerson: "jacob",
@@ -45,7 +45,7 @@ test("Person plan cards hide the active person's own people badge", () => {
     it: { spark: "amy|s1|jacob", personId: "jacob" }
   };
   vm.createContext(context);
-  const markup = vm.runInContext(`${peopleRenderer}; planItemPeople(it)`, context);
+  const markup = vm.runInContext(`${peopleRenderer}; planItemPeople(it,"jacob")`, context);
   assert.match(markup, /Amy/);
   assert.doesNotMatch(markup, /Jake|jacob/);
 });
@@ -342,7 +342,7 @@ test("Selected weekday details use single-letter labels and retain full accessib
 test("Today compact person badges show first names for Friends while retaining shared navigation", () => {
   const peopleRenderer = [
     homeRhythmSource.match(/function planPersonBadgeHTML\(person,rhythmLink,options\)\{[\s\S]*?\n\}/)[0],
-    homeRhythmSource.match(/function planRhythmDetailsPeople\(it,ownerId,record,compact\)\{[\s\S]*?\n\}/)[0]
+    homeRhythmSource.match(/function planRhythmDetailsPeople\(it,ownerId,record,compact,excludePersonId\)\{[\s\S]*?\n\}/)[0]
   ].join("\n");
   const context = {
     S: { people: [
@@ -364,6 +364,45 @@ test("Today compact person badges show first names for Friends while retaining s
   assert.doesNotMatch(friendBadge, /Amy Smith/);
   assert.match(familyBadge, /Jordan Lee/);
   assert.match(modalBadges.find(badge => badge.includes("data-openperson=\"amy\"")), /Amy Smith/);
+});
+
+test("Person rhythm badges exclude the viewed person by stable ID before compact overflow", () => {
+  const associationBadges = homeRhythmSource.match(/function tendAssociationPeopleBadges\(record,ownerId,excludeId,section\)\{[\s\S]*?\n\}/)[0];
+  const personBadges = [
+    homeRhythmSource.match(/function planPersonBadgeHTML\(person,rhythmLink,options\)\{[\s\S]*?\n\}/)[0],
+    homeRhythmSource.match(/function planRhythmDetailsPeople\(it,ownerId,record,compact,excludePersonId\)\{[\s\S]*?\n\}/)[0]
+  ].join("\n");
+  const context = {
+    S: { people: [
+      { id: "amy", name: "Amy Smith" },
+      { id: "amy-shared", name: "Amy Smith" },
+      { id: "leah", name: "Leah" },
+      { id: "hannah", name: "Hannah" },
+      { id: "lucas", name: "Lucas" },
+      { id: "jordan", name: "Jordan" }
+    ] },
+    esc: escapeHTML,
+    personAvatar: () => '<span class="avatar">A</span>'
+  };
+  vm.createContext(context);
+  const rows = vm.runInContext(
+    `${associationBadges};${personBadges};
+      var association=tendAssociationPeopleBadges({sharedWith:["amy-shared","leah","hannah","lucas","jordan"]},"amy","amy","rhythm");
+      var one=planRhythmDetailsPeople({rhythm:"amy|r",personIds:["amy"]},"amy",{sharedWith:[]},true,"amy");
+      var many=planRhythmDetailsPeople({rhythm:"amy|r",personIds:["amy","leah","hannah","lucas","jordan"]},"amy",{sharedWith:[]},true,"amy");
+      [association,one,many]`,
+    context
+  );
+  assert.match(rows[0], /Leah/);
+  assert.match(rows[0], /data-personbadge="amy-shared\|rhythm"/);
+  assert.doesNotMatch(rows[0], /data-personbadge="amy\|rhythm"/);
+  assert.equal(rows[1].length, 0);
+  assert.equal(rows[2].length, 4);
+  assert.ok(rows[2].every(badge => !badge.includes("Amy Smith")));
+  const overflow = loadComponents().tendTodayCompactPeopleHTML(rows[2]);
+  assert.match(overflow, /\+1 more/);
+  assert.match(homeRhythmSource, /rhythmRow\(p,r,\{viewerPersonId:pid/);
+  assert.match(homeRhythmSource, /viewerPersonId:p\.id,peopleBadgesHTML:badges/);
 });
 
 test("Today edit origin restores its route, scroll, and opener focus after editor navigation", () => {
@@ -404,6 +443,30 @@ test("Today edit origin restores its route, scroll, and opener focus after edito
   assert.match(actionsSource, /data-rhyeditsave[\s\S]*?tendFinishRhythmEdit/);
   assert.match(faithSource, /faithRhythmDraft=null;save\(\);if\(!window\.tendFinishRhythmEdit/);
   assert.match(categoryRhythmSource, /data-area-rhythm-cancel[\s\S]*?tendFinishRhythmEdit/);
+});
+
+test("Editing a Today Spark opens its editor without navigating to the owner profile", () => {
+  const routeHelper = homeRhythmSource.match(/function tendRouteForSparkEdit\(viewerId\)\{[\s\S]*?\n\}/)[0];
+  const context = {
+    S: { people: [{ id: "hannah" }] },
+    tab: "today",
+    currentArea: null,
+    currentPerson: null,
+    profileTabs: {}
+  };
+  vm.createContext(context);
+  vm.runInContext(routeHelper, context);
+  assert.equal(context.tendRouteForSparkEdit("hannah"), false);
+  assert.equal(context.tab, "today");
+  assert.equal(context.currentPerson, null);
+
+  context.tab = "people";
+  assert.equal(context.tendRouteForSparkEdit("hannah"), true);
+  assert.equal(context.tab, "people");
+  assert.equal(context.currentPerson, "hannah");
+  assert.equal(context.profileTabs.hannah, "sparks");
+  assert.match(homeRhythmSource.match(/function renderToday\(\)\{[\s\S]*?\n\}/)[0], /editSparkId&&sparkEditOwnerId&&sparkEditDraft\)out\+=tendSparkEditModalHTML/);
+  assert.match(actionsSource, /sparkEditViewerId=b\.getAttribute\("data-plan-spark-edit-viewer"\)\|\|currentPerson\|\|sparkOwnerId/);
 });
 
 function fakeForm(fields, checkedWeekdays = []) {
@@ -652,7 +715,7 @@ test("Home, Person, and category rhythm cards share one renderer and card struct
   assert.match(personRhythmSource, /var metadata=window\.tendRhythmCardMetadata\(r\),frequency=Object\.assign\(\{\},metadata\.frequency\)/);
   assert.match(personRhythmSource, /if\(cardOptions\.frequencyLabel\)\{frequency\.label=cardOptions\.frequencyLabel;frequency\.narrow=cardOptions\.frequencyLabel;\}/);
   assert.match(personRhythmSource, /frequency:frequency,time:metadata\.time/);
-  assert.match(homeRhythmSource, /out\+=rhythmRow\(p,r,\{frequencyLabel:r\.freq==="yearly"\?"Yearly":""\}\)/);
+  assert.match(homeRhythmSource, /content=rhythmRow\(p,r,\{viewerPersonId:pid,frequencyLabel:r\.freq==="yearly"\?"Yearly":""\}\)/);
   assert.match(faithSource, /return tendRhythmCardHTML\(r,/);
   assert.match(categoryRhythmSource, /return tendRhythmCardHTML\(record,/);
   assert.match(categoryRhythmSource, /if\(arguments\.length>2\)options\.additionalPeopleBadgesHTML/);
@@ -1174,13 +1237,26 @@ test("Shared Focused Prayer entry labels selection and starts only eligible queu
   const components = loadComponents();
   const entry = components.tendPrayerEntryHTML({ id: "dashboard", count: 4, peopleCount: 2, timeframe: "Now" });
   const emptyEntry = components.tendPrayerEntryHTML({ id: "person:amy", count: 0, peopleCount: 1, timeframe: "Morning" });
-  assert.match(entry, /4 requests · Now/);
-  assert.match(entry, /2 people selected/);
+  const singularEntry = components.tendPrayerEntryHTML({ id: "person:amy", count: 1, peopleCount: 1, timeframe: "Now" });
+  assert.match(entry, /<strong>2 people selected · Now · 4 requests<\/strong>/);
+  assert.match(entry, /prayer-entry-summary-line/);
   assert.match(entry, />Customize<\/button>/);
   assert.match(entry, /data-prayer-session-start="dashboard"/);
   assert.doesNotMatch(entry, /aria-label="[^"]*filter[^"]*"[^>]*><svg/);
   assert.match(emptyEntry, /No active requests match this selection/);
   assert.match(emptyEntry, /data-prayer-session-start="person:amy"[^>]*disabled/);
+  assert.match(singularEntry, /<strong>1 person selected · Now · 1 request<\/strong>/);
+  assert.match(styles, /\.prayer-entry-summary-line\{display:flex;align-items:baseline;justify-content:flex-start;flex-wrap:wrap/);
+  assert.match(styles, /\.home-dashboard \.today-prayer-section \.prayer-entry-actions\{justify-content:space-between;flex-wrap:wrap\}/);
+  assert.match(styles, /\.home-dashboard \.today-prayer-section \.prayer-entry-actions>\[data-prayer-session-start\]\{margin-left:auto\}/);
+});
+
+test("Today time-group headers keep count and Arrange together beneath long ranges", () => {
+  assert.match(homeRhythmSource, /class="home-plan-context-row"[\s\S]*class="home-plan-context"[\s\S]*current-plan-item-count[\s\S]*tendRhythmOrderToolbar/);
+  assert.match(styles, /\.home-dashboard \.home-plan-context-row \.home-plan-context\{flex:1 1 180px;overflow-wrap:normal;word-break:normal\}/);
+  assert.match(styles, /\.home-dashboard \.home-plan-context-row \.current-plan-item-count\{flex:0 0 auto;max-width:none;justify-content:flex-start;white-space:nowrap/);
+  assert.match(styles, /\.home-dashboard \.home-plan-context-row \.home-rhythm-order-toolbar\{flex:0 0 auto;margin-left:auto\}/);
+  assert.match(styles, /@media\(max-width:600px\)\{[\s\S]*?\.home-dashboard \.home-plan-context-row \.home-plan-context\{flex-basis:100%\}/);
 });
 
 test("shared section and card components escape text and preserve semantic layouts", () => {
@@ -1544,7 +1620,7 @@ test("Faith Today keeps scheduled rhythms and Sparks without its Prayer entry wi
   assert.match(styles, /\.faith-nav-score-unavailable\{background:transparent;color:var\(--ink-soft\)/);
   assert.match(indexSource, /Newsreader:ital,opsz,wght@0,6\.\.72,400;0,6\.\.72,500/);
   assert.match(indexSource, /app-core\.js\?v=20261016-fitness-score-sync-strength-data/);
-  assert.match(indexSource, /app-categoryrhythms\.js\?v=20261016-fitness-score-sync/);
+  assert.match(indexSource, /app-categoryrhythms\.js\?v=20261017-rhythm-ordering/);
   assert.match(styles, /\.faith-prayer-time-group\{display:grid;gap:10px/);
   assert.match(styles, /\.faith-prayer-content,.faith-prayer-row,.faith-prayer-hub \.faith-profile-prayer-row\{box-sizing:border-box;width:100%;min-width:0\}/);
   assert.match(styles, /\.faith-today-subheading\{margin:28px 0 12px\}/);

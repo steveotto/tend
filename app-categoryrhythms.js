@@ -92,6 +92,9 @@
   });
   return rows;
  }
+ function categoryRhythmOrderId(item){
+  return item.owner==="person"?"person:"+item.person.id+":"+item.record.id:item.record.fitnessType?"fitness:"+item.record.id:"area:"+item.record.id;
+ }
  function categoryRhythmDue(item){return !rhythmEnded(item.record)&&todayRhythmEligible(item.record);}
  function categoryRhythmRow(item,id){
   var record=item.record;
@@ -110,7 +113,9 @@
   });
  }
  window.faithLinkedRhythmCount=function(group){return categoryRhythms("faith").filter(function(item){return (item.record.faithGroup||"Prayer")===group&&!item.record.disabled&&!rhythmEnded(item.record);}).length;};
- window.faithLinkedRhythmRows=function(group){return categoryRhythms("faith").filter(function(item){return (item.record.faithGroup||"Prayer")===group&&!item.record.disabled&&!rhythmEnded(item.record);}).sort(function(a,b){return String(a.record.text||"").localeCompare(String(b.record.text||""));}).map(function(item){return categoryRhythmRow(item,"faith");}).join("");};
+ window.faithLinkedRhythmItems=function(group){return categoryRhythms("faith").filter(function(item){return (item.record.faithGroup||"Prayer")===group&&!item.record.disabled&&!rhythmEnded(item.record);}).map(function(item){return {item:item,id:categoryRhythmOrderId(item)};});};
+ window.faithLinkedRhythmHTML=function(item){return categoryRhythmRow(item,"faith");};
+ window.faithLinkedRhythmRows=function(group){return window.faithLinkedRhythmItems(group).sort(function(a,b){return String(a.item.record.text||"").localeCompare(String(b.item.record.text||""));}).map(function(entry){return categoryRhythmRow(entry.item,"faith");}).join("");};
  function categoryRhythmFormHTML(id,record,rid){
   var idf="area-"+id+"|"+rid;
   return '<dialog class="profile-editor-dialog" data-editor-modal aria-labelledby="area-rhythm-editor-title"><div class="profile-editor-body rhyedit area-rhythm-edit" data-area-rhythm-form="'+esc(id)+'|'+esc(rid)+'"><h3 id="area-rhythm-editor-title">'+(rid==="draft"?"Add Rhythm":"Edit Rhythm")+'</h3><label class="careplan-field">Rhythm<input data-crf="text" value="'+esc(record.text||"")+'" placeholder="What is the rhythm?"></label><label class="careplan-field rhythm-description-field">Description (optional)<textarea data-crf="description" placeholder="Add context or details">'+esc(record.description||"")+'</textarea></label>'+window.personRhythmScheduleHTML(record,idf)+'<label class="careplan-field">Person (optional)<select data-crf="personId"><option value="">No person</option>'+S.people.map(function(person){return '<option value="'+esc(person.id)+'"'+(record.personId===person.id?' selected':'')+'>'+esc(person.name)+'</option>';}).join("")+'</select></label><div class="profile-editor-actions"><button type="button" class="btn mini" data-area-rhythm-save="'+esc(id)+'|'+esc(rid)+'">Save Rhythm</button><button type="button" class="btn mini ghost" data-area-rhythm-cancel="1" data-editor-cancel>Cancel</button>'+(rid==="draft"?"":'<button type="button" class="btn mini danger" data-area-rhythm-delete="'+esc(id)+'|'+esc(rid)+'">Delete Rhythm</button>')+'</div></div></dialog>';
@@ -125,7 +130,7 @@
  }
  function categoryRhythmSections(id){
   if(!CATEGORY_AREA_SET[id])return "";
-  var rows=categoryRhythms(id),out="";
+  var rows=categoryRhythms(id),out="",orderContext="category:"+id;
   if(id!=="faith"){
    var due=rows.filter(categoryRhythmDue);
    out+='<section class="card category-today-rhythms"><div class="subhead">Today</div>';
@@ -141,10 +146,16 @@
    }else out+='<div class="empty">No rhythms due today.</div>';
    out+='</section>';
   }
-  out+='<section class="card category-rhythms"><div class="category-rhythms-heading"><div><div class="subhead">Rhythms</div><div class="profile-tab-intro">Recurring practices connected to this category.</div></div><button type="button" class="btn mini ghost" data-area-rhythm-new="'+esc(id)+'">+ Add rhythm</button></div>';
+  out+='<section class="card category-rhythms"><div class="category-rhythms-heading"><div><div class="subhead">Rhythms</div><div class="profile-tab-intro">Recurring practices connected to this category.</div></div><div class="category-rhythm-header-actions">'+tendRhythmOrderToolbar(orderContext,rows.length,"category-rhythm-order-toolbar")+'<button type="button" class="btn mini ghost" data-area-rhythm-new="'+esc(id)+'">+ Add rhythm</button></div></div>';
   if(areaRhythmDraft&&areaRhythmDraft.areaId===id)out+=categoryRhythmFormForArea(id);
   if(rows.length){
-   rows.slice().sort(function(a,b){return String(a.record.text||"").localeCompare(String(b.record.text||""));}).forEach(function(item){out+=categoryRhythmRow(item,id);});
+   var defaultRows=rows.slice().sort(function(a,b){return String(a.record.text||"").localeCompare(String(b.record.text||""));}),orderedRows=tendRhythmOrderSort(orderContext,defaultRows,categoryRhythmOrderId),allIds=defaultRows.map(categoryRhythmOrderId);
+   out+='<div class="category-rhythm-order-list"'+tendRhythmOrderListAttributes(orderContext,allIds)+'>';
+   orderedRows.forEach(function(item,index){
+    var row=categoryRhythmRow(item,id),stableId=categoryRhythmOrderId(item);
+    out+=orderedRows.length>=2?tendRhythmOrderItemHTML(orderContext,orderContext,stableId,item.record.text,index,orderedRows.length,row):row;
+   });
+   out+='</div>';
   }else if(!(areaRhythmDraft&&areaRhythmDraft.areaId===id))out+='<div class="empty">No rhythms yet.</div>';
   return out+'</section>';
  }

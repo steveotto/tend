@@ -3868,12 +3868,14 @@ html .person-profile-page .person-free-moment-heading h2{font-size:var(--tend-ty
 /* Shared Focused Prayer entry, selection, and session framing. */
 .prayer-entry-module{box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr);align-items:start;gap:12px;width:100%;min-width:0;padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--card);box-shadow:0 1px 3px rgba(32,39,35,.06)}
 .prayer-entry-summary{display:grid;gap:6px;min-width:0;color:var(--ink-soft);font-size:var(--tend-type-metadata,13px);line-height:1.4}
-.prayer-entry-summary strong{color:var(--ink);font-size:var(--tend-type-section-header,1.2rem);font-weight:650;overflow-wrap:anywhere}
-.prayer-entry-actions{display:flex;align-items:stretch;justify-content:stretch;flex-wrap:nowrap;gap:8px;min-width:0}
+.prayer-entry-summary-line{display:flex;align-items:baseline;justify-content:flex-start;flex-wrap:wrap;gap:4px 12px;min-width:0}
+.prayer-entry-summary strong{color:var(--ink);font-size:inherit;font-weight:650;overflow-wrap:anywhere}
+.prayer-entry-summary-line>span{flex:none;color:var(--ink-soft);font-size:inherit;line-height:inherit;white-space:nowrap}
+.prayer-entry-actions{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;width:100%;min-width:0}
 .prayer-entry-actions>.btn{min-height:44px}
-.prayer-entry-actions>[data-prayer-selection-open]{flex:0 0 auto;min-width:96px;border:1px solid var(--action-prayer-border,#D2C5DF);background:var(--card);color:var(--action-prayer-text,#705A8D)}
+.prayer-entry-actions>[data-prayer-selection-open]{flex:0 0 auto;min-width:96px;margin-right:auto;border:1px solid var(--action-prayer-border,#D2C5DF);background:var(--card);color:var(--action-prayer-text,#705A8D)}
 .prayer-entry-actions>[data-prayer-selection-open]:hover{background:var(--action-prayer-background,#F0EAF5)}
-.prayer-entry-actions>[data-prayer-session-start]{flex:1 1 auto;min-width:0;border:1px solid var(--action-prayer-base,#80629A);background:var(--action-prayer-base,#80629A);color:#fff;font-weight:650}
+.prayer-entry-actions>[data-prayer-session-start]{flex:0 0 auto;width:max-content;max-width:100%;min-width:0;margin-left:auto;border:1px solid var(--action-prayer-base,#80629A);background:var(--action-prayer-base,#80629A);color:#fff;font-weight:650}
 .prayer-entry-actions>[data-prayer-session-start]:hover:not(:disabled){border-color:var(--action-prayer-text,#705A8D);background:var(--action-prayer-text,#705A8D)}
 .prayer-entry-actions>[data-prayer-session-start]:disabled{opacity:.5;cursor:not-allowed}
 .prayer-selection-dialog{box-sizing:border-box;display:none;flex-direction:column;gap:0;width:min(620px,calc(100vw - 2rem));max-width:min(620px,calc(100vw - 2rem));max-height:min(88dvh,820px);margin:auto;padding:0;overflow:hidden;border:1px solid var(--line);border-radius:20px;background:var(--card);color:var(--ink);box-shadow:0 22px 70px rgba(15,30,21,.28)}
@@ -3947,8 +3949,8 @@ html .person-profile-page .person-free-moment-heading h2{font-size:var(--tend-ty
 .prayer-entry-empty{color:var(--ink-soft);font-size:var(--tend-type-metadata,13px)}
 @media(max-width:600px){
  .prayer-entry-module{gap:12px;padding:16px}
- .prayer-entry-actions{justify-content:stretch}
- .prayer-entry-actions>.btn{flex:1 1 auto;justify-content:center;padding-right:10px;padding-left:10px}
+ .prayer-entry-actions{justify-content:space-between}
+ .prayer-entry-actions>.btn{flex:0 0 auto;justify-content:center;padding-right:10px;padding-left:10px}
  .prayer-selection-dialog{inset:0;width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0;border-radius:0;padding-bottom:env(safe-area-inset-bottom,0px)}
  .prayer-selection-header{padding:calc(12px + env(safe-area-inset-top,0px)) 16px 12px}
  .prayer-selection-body{padding:14px 16px}
@@ -3966,8 +3968,6 @@ html .person-profile-page .person-free-moment-heading h2{font-size:var(--tend-ty
 }
 @media(max-width:370px){
  .prayer-selection-people{grid-template-columns:minmax(0,1fr)}
- .prayer-entry-actions{align-items:stretch;flex-direction:column}
- .prayer-entry-actions>.btn{width:100%}
 }
 
 /* Prayer-flow color tokens stay local to the shared entry, picker, and session. */
@@ -4107,6 +4107,33 @@ html .person-profile-page .person-free-moment-heading h2{font-size:var(--tend-ty
 .home-dashboard .today-feed-section .current-plan-summary{background:transparent}
 .home-dashboard .today-feed-section .current-plan-item-group-items{gap:12px}
 .home-dashboard .today-feed-section .plan-empty-card{min-height:0;padding:16px 12px}
+.rhythm-order-toolbar{display:flex;align-items:center;gap:6px;min-width:0}
+.rhythm-order-toolbar button{box-sizing:border-box;min-height:36px;padding:6px 9px;border:1px solid transparent;border-radius:10px;background:transparent;color:var(--ink-soft);font:600 12px/1.25 var(--sans);cursor:pointer}
+.rhythm-order-toolbar button:hover{background:var(--mist);color:var(--ink)}
+.rhythm-order-toolbar button:focus-visible,
+.rhythm-order-controls button:focus-visible{outline:3px solid color-mix(in srgb,var(--mint) 65%,white);outline-offset:2px}
+.rhythm-order-toolbar .rhythm-order-live:empty{display:none}
+.rhythm-order-item{display:grid;gap:6px;min-width:0}
+.rhythm-order-controls{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0}
+.rhythm-order-controls button{box-sizing:border-box;min-height:40px;padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:var(--canvas);color:var(--ink-soft);font:600 12px/1.25 var(--sans);cursor:pointer}
+.rhythm-order-controls button:disabled{opacity:.45;cursor:not-allowed}
+.rhythm-order-controls .rhythm-order-handle{width:40px;padding:0;font-size:20px;line-height:1;cursor:grab}
+.rhythm-order-controls .rhythm-order-handle:active{cursor:grabbing}
+.rhythm-order-move-controls{display:flex;gap:6px}
+.rhythm-order-item.is-dragging{opacity:.55}
+.profile-rhythm-order-toolbar,
+.category-rhythm-order-toolbar,
+.faith-practice-rhythm-order-toolbar,
+.fitness-rhythm-order-toolbar{flex:none}
+.faith-practice-rhythm-order-toolbar{justify-content:flex-end;margin:0 0 8px}
+.category-rhythm-order-list{display:grid;gap:14px;min-width:0}
+.category-rhythm-header-actions,
+.fitness-rhythm-header-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.category-rhythm-header-actions>.rhythm-order-toolbar,
+.fitness-rhythm-header-actions>.rhythm-order-toolbar{flex:none}
+.category-rhythm-header-actions>.btn,
+.fitness-rhythm-header-actions>.btn{flex:none}
+.home-rhythm-order-toolbar{margin-left:auto}
 .home-dashboard .today-prayer-section{box-sizing:border-box;padding:18px 20px;border:1px solid color-mix(in srgb,var(--action-prayer-border,#D2C5DF) 58%,var(--line));border-radius:20px;background:color-mix(in srgb,var(--action-prayer-background,#F0EAF5) 48%,var(--canvas))}
 .home-dashboard .today-prayer-section>.sectiontitle{margin-bottom:8px}
 .home-dashboard .today-prayer-section .prayer-entry-module{grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px 20px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
@@ -4118,6 +4145,14 @@ html .person-profile-page .person-free-moment-heading h2{font-size:var(--tend-ty
 .home-dashboard .today-upcoming-section .uprow{margin-bottom:0}
 .home-dashboard .today-checklists-section>.cl-card:last-child{margin-bottom:0!important}
 @media(max-width:600px){
+ .rhythm-order-controls{justify-content:space-between;gap:6px}
+ .rhythm-order-controls button{min-height:42px}
+ .rhythm-order-move-controls{gap:8px}
+ .rhythm-order-toolbar button{min-height:40px}
+ .home-rhythm-order-toolbar{flex-basis:100%;justify-content:flex-end}
+ .profile-rhythm-order-toolbar{align-self:flex-end}
+ .category-rhythm-header-actions,
+ .fitness-rhythm-header-actions{align-items:flex-end}
  .home-dashboard>.today-layout-section{margin-bottom:22px}
  .home-dashboard .today-layout-section>.sectiontitle{margin-bottom:10px}
  .home-dashboard .today-layout-section>.sectiontitle h2{font-size:16px;line-height:1.35}
@@ -4242,3 +4277,22 @@ html .person-profile-page .person-free-moment-heading h2{font-size:var(--tend-ty
 .tend-legacy-recovery{margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
 .tend-legacy-recovery summary{color:var(--ink-soft);font-size:13px;font-weight:650;cursor:pointer}
 @media(max-width:540px){.tend-auth-open .wrap{padding-inline:12px}.tend-auth-shell{min-height:calc(100dvh - 112px);padding:18px 0}.tend-auth-card{border-radius:17px}.tend-auth-actions{display:grid;grid-template-columns:1fr}.tend-auth-actions .btn{width:100%}}
+
+.home-dashboard .home-plan-context-row{align-items:baseline;flex-wrap:wrap}
+.home-dashboard .home-plan-context-row .home-plan-context{flex:1 1 180px;overflow-wrap:normal;word-break:normal}
+.home-dashboard .home-plan-context-row .current-plan-item-count{flex:0 0 auto;max-width:none;justify-content:flex-start;white-space:nowrap;overflow-wrap:normal;text-align:left}
+.home-dashboard .home-plan-context-row .home-rhythm-order-toolbar{flex:0 0 auto;margin-left:auto}
+.home-dashboard .home-plan-context-row .rhythm-order-toolbar button{width:max-content;white-space:nowrap}
+.home-dashboard .today-prayer-section .prayer-entry-module{grid-template-columns:minmax(0,1fr);align-items:start}
+.home-dashboard .today-prayer-section .prayer-entry-summary-line strong{font-size:var(--tend-type-metadata,13px);font-weight:650}
+.home-dashboard .today-prayer-section .prayer-entry-actions{justify-content:space-between;flex-wrap:wrap}
+.home-dashboard .today-prayer-section .prayer-entry-actions>.btn{flex:0 0 auto;width:max-content;max-width:100%}
+.home-dashboard .today-prayer-section .prayer-entry-actions>[data-prayer-selection-open]{margin-right:auto}
+.home-dashboard .today-prayer-section .prayer-entry-actions>[data-prayer-session-start]{margin-left:auto}
+@media(max-width:600px){
+ .home-dashboard .home-plan-context-row{row-gap:6px}
+ .home-dashboard .home-plan-context-row .home-plan-context{flex-basis:100%}
+ .home-dashboard .today-prayer-section .prayer-entry-module{grid-template-columns:minmax(0,1fr)}
+ .home-dashboard .today-prayer-section .prayer-entry-actions{justify-content:space-between}
+ .home-dashboard .today-prayer-section .prayer-entry-actions>.btn{flex:0 0 auto;width:max-content}
+}
