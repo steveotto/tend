@@ -28,7 +28,10 @@ test("People cards use one column until cards have room to fit side by side", ()
 });
 
 test("Person plan cards hide the active person's own people badge", () => {
-  const peopleRenderer = homeRhythmSource.match(/function planItemPeople\(it\)\{[\s\S]*?\n\}/)[0];
+  const peopleRenderer = [
+    homeRhythmSource.match(/function planPersonBadgeHTML\(person,rhythmLink,options\)\{[\s\S]*?\n\}/)[0],
+    homeRhythmSource.match(/function planItemPeople\(it\)\{[\s\S]*?\n\}/)[0]
+  ].join("\n");
   const context = {
     currentPerson: "jacob",
     S: { people: [
@@ -239,6 +242,84 @@ function loadComponents(normalize = record => record) {
   return context;
 }
 
+test("Today compact people badges disclose responsive counts without duplicating actions", () => {
+  const components = loadComponents();
+  const badges = ["Amy", "Jordan", "Lee", "Morgan", "Riley"].map(name => `<button>${name}</button>`);
+  const markup = components.tendTodayCompactPeopleHTML(badges);
+  assert.match(markup, /today-rhythm-card__people-visible"><button>Amy<\/button><button>Jordan<\/button><button>Lee<\/button>/);
+  assert.match(markup, /people-overflow--wide"><summary>\+2 more<\/summary>/);
+  assert.match(markup, /people-overflow--narrow"><summary>\+3 more<\/summary>/);
+  assert.doesNotMatch(components.tendTodayCompactPeopleHTML([]), /Linked people/);
+  assert.match(styles, /\.today-rhythm-card__people-visible>:nth-child\(3\)\{display:none\}/);
+});
+
+test("Today compact person badges show first names for Friends while retaining shared navigation", () => {
+  const peopleRenderer = [
+    homeRhythmSource.match(/function planPersonBadgeHTML\(person,rhythmLink,options\)\{[\s\S]*?\n\}/)[0],
+    homeRhythmSource.match(/function planRhythmDetailsPeople\(it,ownerId,record,compact\)\{[\s\S]*?\n\}/)[0]
+  ].join("\n");
+  const context = {
+    S: { people: [
+      { id: "amy", name: "Amy Smith", area: "friendships" },
+      { id: "jordan", name: "Jordan Lee", area: "family" }
+    ] },
+    esc: escapeHTML,
+    personAvatar: () => '<span class="avatar">A</span>',
+    __item: { rhythm: "amy|shared", personIds: ["jordan"] },
+    __record: { personIds: ["jordan"] }
+  };
+  vm.createContext(context);
+  const badges = vm.runInContext(`${peopleRenderer}; planRhythmDetailsPeople(__item,"amy",__record,true)`, context);
+  const modalBadges = vm.runInContext(`planRhythmDetailsPeople(__item,"amy",__record,false)`, context);
+  const friendBadge = badges.find(badge => badge.includes("data-openperson=\"amy\""));
+  const familyBadge = badges.find(badge => badge.includes("data-personrhythms=\"jordan\""));
+  assert.match(friendBadge, /aria-label="Open Amy profile"/);
+  assert.match(friendBadge, />[\s\S]*Amy<\/button>$/);
+  assert.doesNotMatch(friendBadge, /Amy Smith/);
+  assert.match(familyBadge, /Jordan Lee/);
+  assert.match(modalBadges.find(badge => badge.includes("data-openperson=\"amy\"")), /Amy Smith/);
+});
+
+test("Today edit origin restores its route, scroll, and opener focus after editor navigation", () => {
+  const captureSource = actionsSource.match(/function tendCaptureRhythmEditOrigin\(opener\)\{[\s\S]*?\n\}/)[0];
+  const finishSource = actionsSource.match(/function tendFinishRhythmEdit\(\)\{[\s\S]*?\n\}/)[0];
+  const focus = { isConnected: true, focused: false, focus() { this.focused = true; } };
+  let rendered = 0, scroll = null;
+  const opener = { id: "today-rhythm-open", isConnected: true, getAttribute() { return null; } };
+  const context = {
+    window: { scrollX: 12, scrollY: 430, requestAnimationFrame(callback) { callback(); }, scrollTo(x, y) { scroll = [x, y]; } },
+    document: {
+      activeElement: opener,
+      getElementById(id) { return id === opener.id ? focus : null; },
+      querySelectorAll() { return []; }
+    },
+    tendRhythmEditOrigin: null,
+    tab: "today",
+    currentArea: null,
+    currentPerson: null,
+    openDetail: null,
+    profileBadgePerson: null,
+    profileTabs: {},
+    render() { rendered++; }
+  };
+  vm.createContext(context);
+  vm.runInContext(captureSource + "\n" + finishSource, context);
+  context.tendCaptureRhythmEditOrigin(opener);
+  context.tab = "people";
+  context.currentPerson = "amy";
+  assert.equal(context.tendFinishRhythmEdit(), true);
+  assert.equal(context.tab, "today");
+  assert.equal(context.currentPerson, null);
+  assert.equal(rendered, 1);
+  assert.deepEqual(scroll, [12, 430]);
+  assert.equal(focus.focused, true);
+  assert.equal(context.tendFinishRhythmEdit(), false);
+  assert.match(actionsSource, /data-rhyeditcancel[\s\S]*?tendFinishRhythmEdit/);
+  assert.match(actionsSource, /data-rhyeditsave[\s\S]*?tendFinishRhythmEdit/);
+  assert.match(faithSource, /faithRhythmDraft=null;save\(\);if\(!window\.tendFinishRhythmEdit/);
+  assert.match(categoryRhythmSource, /data-area-rhythm-cancel[\s\S]*?tendFinishRhythmEdit/);
+});
+
 function fakeForm(fields, checkedWeekdays = []) {
   return {
     querySelector(selector) {
@@ -416,6 +497,7 @@ test("Home, Person, and category rhythm cards share one renderer and card struct
   assert.match(compactTodayCard, /aria-labelledby="today-rhythm-amy-shared-walk-title"/);
   assert.match(compactTodayCard, /Talk &amp; reconnect/);
   assert.match(compactTodayCard, /class="tend-type-title" id="today-rhythm-amy-shared-walk-title"/);
+  assert.match(compactTodayCard, /today-rhythm-details__title-group"><h2[^]*<\/h2><\/div><button type="button" class="today-rhythm-details__close"/);
   assert.match(compactTodayCard, /class="rhythm-card__badges"><button class="prayer-person person-badge-clickable"><span class="avatar">A<\/span>Amy<\/button><button class="prayer-person person-badge-clickable"><span class="avatar">S<\/span>Sam<\/button><span class="rhythm-area-badges" aria-label="Categories: Marriage">/);
   assert.match(compactTodayCard, /aria-label="Frequency: Weekly on Friday"/);
   assert.match(compactTodayCard, /frequency-icon/);
@@ -424,7 +506,9 @@ test("Home, Person, and category rhythm cards share one renderer and card struct
   assert.match(compactTodayCard, /class="rhythm-card__score green" data-rhyhistory="amy\|shared-walk" aria-label="Rhythm health 81 out of 100\. View chart\."/);
   assert.match(compactTodayCard, /<span>81<\/span>/);
   assert.doesNotMatch(compactTodayCard, /81%|>Schedule<|>History</);
-  assert.doesNotMatch(compactTodayCard, /class="rhythm-card__edit"/);
+  assert.match(compactTodayCard, /today-rhythm-details__actions"><button[^]*class="rhythm-card__score green"/);
+  assert.match(compactTodayCard, /today-rhythm-details__surface"><header[^]*<\/header><div class="today-rhythm-details__content"><div class="today-rhythm-details__main"/);
+  assert.doesNotMatch(compactTodayCard, /today-rhythm-details__footer|today-rhythm-details__edit/);
   const sparseLongTitleCard = components.tendRhythmCardHTML(
     Object.assign({}, record, { text: "A".repeat(120), description: "" }),
     {
@@ -439,8 +523,15 @@ test("Home, Person, and category rhythm cards share one renderer and card struct
   );
   assert.match(sparseLongTitleCard, new RegExp("A{120}"));
   assert.match(sparseLongTitleCard, /class="rhythm-card__badges"><span class="person">Amy<\/span><span class="person">Sam<\/span>/);
-  assert.match(sparseLongTitleCard, /data-faith-rhythm-edit="faith-rhythm-1">Edit<\/button>/);
+  assert.match(sparseLongTitleCard, /class="rhythm-card__edit" data-faith-rhythm-edit="faith-rhythm-1" aria-label="Edit A{120}"/);
   assert.doesNotMatch(sparseLongTitleCard, /today-rhythm-details__description|No details\.\.\.|>Schedule<|>History</);
+  assert.doesNotMatch(sparseLongTitleCard, /today-rhythm-details__health|class="rhythm-card__meta"/);
+  const unsupportedChart = components.tendRhythmCardHTML(record, {
+    todayCompact: true,
+    historyAttributes: {},
+    score: 90
+  });
+  assert.doesNotMatch(unsupportedChart, /today-rhythm-details__health|class="rhythm-card__score/);
   const scoredCard = components.tendRhythmCardHTML(record, {
     score: 81,
     scoreClass: "green",

@@ -201,7 +201,7 @@
    S.areaRhythms=S.areaRhythms.filter(function(item){return item!==original&&item!==record;});
   }else if(rid==="draft")S.areaRhythms.push(record);
   else if(original)Object.assign(original,record);
-  areaRhythmDraft=null;areaRhythmEditId=null;save();render();flash("Rhythm saved");
+  areaRhythmDraft=null;areaRhythmEditId=null;save();if(!window.tendFinishRhythmEdit||!window.tendFinishRhythmEdit())render();flash("Rhythm saved");
  }
  function findRhythmOwner(rid){var result=null;S.people.some(function(person){var record=(person.rhythms||[]).find(function(item){return item.id===rid;});if(record){result={person:person,record:record};return true;}return false;});return result;}
  function syncFaithFlyout(fieldset,open){
@@ -283,13 +283,14 @@
   if(button){
    event.preventDefault();event.stopImmediatePropagation();
    if(button.hasAttribute("data-area-rhythm-new")){var area=button.getAttribute("data-area-rhythm-new"),record=newAreaRhythm(area),faithGroup=button.getAttribute("data-faith-group");if(area==="faith"&&FAITH_SUBCATEGORIES.indexOf(faithGroup)>=0)record.faithGroup=faithGroup;areaRhythmDraft={areaId:area,record:record};areaRhythmEditId=null;render();return;}
-   if(button.hasAttribute("data-area-rhythm-edit")){var edit=button.getAttribute("data-area-rhythm-edit").split("|"),source=categoryRhythmRecord(edit[0],edit[1]);areaRhythmEditId=edit[1];areaRhythmDraft=source?{areaId:edit[0],record:JSON.parse(JSON.stringify(source))}:null;render();return;}
-   if(button.hasAttribute("data-area-rhythm-cancel")){areaRhythmDraft=null;areaRhythmEditId=null;render();return;}
+   if(button.hasAttribute("data-area-rhythm-edit")){if(window.tendCaptureRhythmEditOrigin)window.tendCaptureRhythmEditOrigin(button);var edit=button.getAttribute("data-area-rhythm-edit").split("|"),source=categoryRhythmRecord(edit[0],edit[1]);areaRhythmEditId=edit[1];areaRhythmDraft=source?{areaId:edit[0],record:JSON.parse(JSON.stringify(source))}:null;render();return;}
+   if(button.hasAttribute("data-area-rhythm-cancel")){areaRhythmDraft=null;areaRhythmEditId=null;if(!window.tendFinishRhythmEdit||!window.tendFinishRhythmEdit())render();return;}
    if(button.hasAttribute("data-area-rhythm-save")){var key=button.getAttribute("data-area-rhythm-save").split("|");saveAreaRhythm(key[0],key[1],button.closest("[data-area-rhythm-form]"));return;}
    if(button.hasAttribute("data-area-rhythm-delete")){var remove=button.getAttribute("data-area-rhythm-delete").split("|"),entry=categoryRhythmRecord(remove[0],remove[1]);if(entry){S.areaRhythms=S.areaRhythms.filter(function(record){return record!==entry;});areaRhythmDraft=null;areaRhythmEditId=null;save();render();flash("Rhythm removed");}return;}
   }
   var openEdit=event.target&&event.target.closest&&event.target.closest("[data-rhyedit]");
   if(openEdit&&currentArea&&CATEGORY_AREA_SET[currentArea]){
+   if(window.tendCaptureRhythmEditOrigin)window.tendCaptureRhythmEditOrigin(openEdit);
    var owner=findRhythmOwner(openEdit.getAttribute("data-rhyedit"));
    if(owner){editRhythmId=owner.record.id;rhythmEditDraft=null;profileTabs[owner.person.id]="rhythms";currentPerson=owner.person.id;currentArea=null;tab="people";render();event.preventDefault();event.stopImmediatePropagation();}
   }

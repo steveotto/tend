@@ -388,6 +388,7 @@ function fitnessRhythmDraft(type,record){
  return Object.assign({id:record&&record.id||"draft",text:"",description:"",type:type,areas:["health"],healthSubcategory:subcategory,freq:"weekly",weekdays:[new Date().getDay()],tod:"anytime",every:1,unit:"weeks",strengthMode:"recommended",workoutId:"",paused:false,sharedWith:[]},record||{});
 }
 function fitnessOpenRhythmEditor(id,type){
+ if(id&&window.tendCaptureRhythmEditOrigin)window.tendCaptureRhythmEditOrigin(document.activeElement);
  var data=fitnessStoreSnapshot(),record=id&&(data.rhythms||[]).find(function(item){return item.id===id;});
  if(id&&!record){flash("This Fitness rhythm is no longer available");return;}
  type=record?record.type:type||"weighin";
@@ -424,7 +425,7 @@ function fitnessSaveRhythm(form){
  S.events.forEach(function(event){if(event.rhythmId===record.id)event.title=record.text;});
  if(original)Object.assign(original,record);else fitnessStoreUpsert("rhythms",record);
  if(original)fitnessStoreUpsert("rhythms",original);
- fitnessRhythmEditor=null;fitnessRhythmEditorSuspended=false;render();flash("Fitness rhythm saved");
+ fitnessRhythmEditor=null;fitnessRhythmEditorSuspended=false;if(!window.tendFinishRhythmEdit||!window.tendFinishRhythmEdit())render();flash("Fitness rhythm saved");
 }
 if(typeof window!=="undefined"&&window.addEventListener)window.addEventListener("change",function(event){
  var field=event.target&&event.target.getAttribute&&event.target.getAttribute("data-rfield");
@@ -556,7 +557,7 @@ document.addEventListener("click",function(event){
  if(button.hasAttribute("data-fitness-rhythm-edit")){fitnessOpenRhythmEditor(button.getAttribute("data-fitness-rhythm-edit"));return;}
  if(button.hasAttribute("data-fitness-rhythm-delete")){var rhythmDeleteId=button.getAttribute("data-fitness-rhythm-delete");if(!window.confirm("Delete this Fitness rhythm?"))return;fitnessStoreDelete("rhythms",rhythmDeleteId);fitnessRhythmEditor=null;fitnessRhythmEditorSuspended=false;fitnessDialog=null;render();flash("Fitness rhythm deleted");return;}
  if(button.hasAttribute("data-fitness-rhythm-pause")){var rhythmToggle=(fitnessStoreSnapshot().rhythms||[]).find(function(item){return item.id===button.getAttribute("data-fitness-rhythm-pause");});if(!rhythmToggle)return;rhythmToggle.paused=!rhythmToggle.paused;fitnessStoreUpsert("rhythms",rhythmToggle);render();flash(rhythmToggle.paused?"Fitness rhythm paused":"Fitness rhythm resumed");return;}
- if(button.hasAttribute("data-fitness-rhythm-close")){fitnessRhythmEditor=null;fitnessRhythmEditorSuspended=false;render();return;}
+ if(button.hasAttribute("data-fitness-rhythm-close")){fitnessRhythmEditor=null;fitnessRhythmEditorSuspended=false;if(!window.tendFinishRhythmEdit||!window.tendFinishRhythmEdit())render();return;}
  if(button.hasAttribute("data-fitness-tab")){event.preventDefault();fitnessShowTab(button.getAttribute("data-fitness-tab"),button);return;}
  if(button.hasAttribute("data-fitness-section-nav")){var section=button.getAttribute("data-fitness-section-nav");fitnessCurrentTab=section;if(section==="strength")fitnessStrengthSubtab="rhythms";else if(section==="cardio")fitnessCardioSubtab="rhythms";else if(section==="weight")fitnessWeightSubtab="rhythms";render();var sectionTarget=document.querySelector('[data-fitness-section-tab="'+section+'"][data-fitness-subtab="rhythms"]');if(sectionTarget)sectionTarget.focus({preventScroll:true});return;}
  if(button.hasAttribute("data-fitness-section-tab")){var selectedSection=button.getAttribute("data-fitness-section-tab"),selectedSubtab=button.getAttribute("data-fitness-subtab");if(selectedSection==="strength")fitnessStrengthSubtab=selectedSubtab;else if(selectedSection==="cardio")fitnessCardioSubtab=selectedSubtab;else if(selectedSection==="weight")fitnessWeightSubtab=selectedSubtab;render();var activeSubtab=document.querySelector('[data-fitness-section-tab="'+selectedSection+'"][data-fitness-subtab="'+selectedSubtab+'"]');if(activeSubtab)activeSubtab.focus({preventScroll:true});return;}
