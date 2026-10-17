@@ -957,8 +957,8 @@ test("Fitness summary follows Faith health styling and section navigation has no
   assert.doesNotMatch(context.__cardioGoals, /interval-chest|startWeight/);
   assert.match(context.__weightGoals, /name="startWeight"/);
   assert.doesNotMatch(context.__weightGoals, /interval-chest|weeklyRunTarget/);
-  assert.match(summary, /class="category-health-fill red"/);
-  assert.match(stylesSource, /\.category-health-fill\.red\{background:#FF5A45\}/);
+  assert.match(summary, /class="category-health-indicator red" style="left:30%"/);
+  assert.match(stylesSource, /\.category-health-spectrum\{[^}]*linear-gradient\(90deg,#E4513D 0%,#F79009 34%,#FDC94A 68%,#12B76A 100%\)/);
   assert.match(activePanel, /role="region" aria-label="Strength" id="fitness-panel-strength"/);
   assert.doesNotMatch(activePanel, / hidden/);
   assert.match(inactivePanel, /id="fitness-panel-cardio" hidden/);

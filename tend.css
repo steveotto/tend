@@ -1262,11 +1262,27 @@ details.moor .moor-body{padding:2px 18px 14px}
 .history-occurrences summary{color:var(--forest);font-size:13px;font-weight:600;cursor:pointer}
 .history-occurrence-list{display:grid;gap:7px;margin-top:10px}
 .history-occurrence{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
-.history-occurrence>span{display:grid;gap:3px;min-width:0}
+.history-occurrence-main{display:grid;gap:5px;flex:1;min-width:0}
+.history-occurrence-main>span{display:grid;gap:3px;min-width:0}
 .history-occurrence strong{font-size:13px;font-weight:600;overflow-wrap:anywhere}
 .history-occurrence time{font-size:12px;color:var(--ink-soft)}
 .history-occurrence-delete{flex:none}
+.history-completion-note{margin:0;color:var(--ink-soft);font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
+.history-note-editor{font-size:12px}
+.history-note-editor>summary{width:max-content;color:var(--forest);font-weight:600;cursor:pointer}
+.history-note-editor textarea{box-sizing:border-box;width:100%;min-height:64px;margin-top:8px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:var(--canvas);color:var(--ink);font:inherit;font-size:14px;resize:vertical}
+.history-note-editor textarea:focus,.rhythm-completion-note-dialog textarea:focus{outline:2px solid var(--forest);outline-offset:2px}
+.history-note-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:7px}
+.history-note-actions small{margin-right:auto;color:var(--ink-faint)}
+.history-note-indicator{display:inline-block;margin:3px auto 0;padding:1px 5px;border:1px solid var(--line);border-radius:999px;background:var(--mist);color:var(--forest-deep);font-size:9px;font-weight:600;line-height:1.3}
+.rhythm-completion-note-dialog textarea{box-sizing:border-box;width:100%;min-height:100px;padding:11px 12px;border:1px solid var(--line);border-radius:11px;background:var(--card);color:var(--ink);font:inherit;font-size:16px;resize:vertical}
+.rhythm-completion-note-limit{color:var(--ink-faint);font-size:12px}
+.rhythm-completion-note-error{margin:0;color:var(--danger,#a43d32);font-size:13px}
+.rhythm-completion-note-error[hidden]{display:none}
+.tend-dialog.rhythm-completion-note-dialog,.rhythm-history-dialog.rhythm-history-dialog{background:var(--canvas);color:var(--ink)}
+.history-occurrence{background:var(--card)}
 @media(max-width:540px){.rhythm-history-dialog{padding:18px}.history-heading h2{font-size:20px}.history-track{height:140px}.rhyrow{flex-wrap:wrap}.rhyrow .gr-main{min-width:150px}}
+@media(max-width:380px){.rhythm-momentum-card{gap:12px;padding:13px}.rhythm-momentum-main{gap:12px}.rhythm-momentum-ring{width:72px;height:72px}.rhythm-momentum-ring-center strong{font-size:22px}.rhythm-momentum-recent ul{grid-template-columns:repeat(2,minmax(0,1fr))}.marriage-detail-foundation-row>span{min-width:58px}}
 @media(max-width:540px){.rhythm-history-dialog.connection-history-dialog{padding:0}.connection-history-header{padding:18px 18px 0}.connection-history-view{padding:14px 18px 18px}.connection-card{gap:8px;padding:14px}.connection-card__heading{gap:8px}.connection-card__actions{gap:0}.connection-history-header .history-heading h2{font-size:20px}}
 
 
@@ -2103,12 +2119,19 @@ html[data-mobile-text-size="large"] .today-with-person .actrow>.btn.mini{min-hei
 .category-health-score.yellow,.health-summary-score.yellow{color:#985600}
 .category-health-score.red,.health-summary-score.red{color:#C33222}
 .category-health-score.neutral,.health-summary-score.neutral{color:#78847D}
-.category-health-meter{box-sizing:border-box;width:100%;height:7px;margin:12px 0 6px;overflow:hidden;border-radius:99px;background:#E9EFEB}
+.category-health-meter{position:relative;box-sizing:border-box;width:100%;height:9px;margin:12px 0 8px;overflow:visible;border-radius:99px;background:#E9EFEB}
 .category-health-fill{display:block;height:100%;border-radius:inherit}
 .category-health-fill.green{background:#12B76A}
 .category-health-fill.yellow{background:#FFC133}
 .category-health-fill.red{background:#FF5A45}
 .category-health-fill.neutral{background:#BCC7C0}
+.category-health-spectrum{position:absolute;inset:0;border-radius:inherit;background:linear-gradient(90deg,#E4513D 0%,#F79009 34%,#FDC94A 68%,#12B76A 100%)}
+.category-health-spectrum.is-empty{background:#E9EFEB}
+.category-health-indicator{position:absolute;top:50%;box-sizing:border-box;width:15px;height:15px;border:2px solid #fff;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(23,37,30,.34);transform:translate(-50%,-50%)}
+.category-health-indicator:after{position:absolute;inset:3px;border-radius:50%;background:currentColor;content:""}
+.category-health-indicator.green{color:#087443}
+.category-health-indicator.yellow{color:#985600}
+.category-health-indicator.red{color:#C33222}
 .health-summary-breakdown{display:grid;grid-template-columns:repeat(var(--health-summary-columns,2),minmax(0,1fr));align-items:stretch;margin-top:8px}
 .health-summary-item{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:6px;box-sizing:border-box;min-width:0;min-height:84px;padding:10px 12px;border:0;border-left:1px solid #DEE8E1;border-radius:0;background:transparent;color:#17251E;font:inherit;text-align:left}
 .health-summary-item.is-action{cursor:pointer}
@@ -3254,6 +3277,9 @@ html:not([data-mobile-text-size-level="large"]):not([data-mobile-text-size-level
 .rhythm-card__edit:hover{border-color:var(--forest);background:var(--mist);color:var(--forest-deep)}
 .rhythm-card__edit:focus-visible,.rhythm-card__remove:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
 .rhythm-card__edit svg,.rhythm-card__remove svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.rhythm-card__details{min-height:32px;margin-left:auto;padding:4px 9px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--forest);font:600 12px/1.2 var(--sans);cursor:pointer}
+.rhythm-card__details:hover{border-color:var(--forest);background:var(--mist)}
+.rhythm-card__details:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
 .rhythm-card__actions{display:flex;flex:none;flex-direction:column;align-items:flex-end;gap:8px;min-width:76px}
 .rhythm-card.card .rhythm-card__tend{box-sizing:border-box;width:auto;min-width:76px;min-height:42px;padding:7px 14px;border-radius:9px;font-size:var(--tend-type-button-label);font-weight:650}
 .rhythm-card__tend:focus-visible,.rhythm-card__score:focus-visible{outline:2px solid var(--action-rhythm-focus,#1C5844);outline-offset:2px}
@@ -4129,6 +4155,235 @@ html .person-profile-page .person-free-moment-heading h2{font-size:var(--tend-ty
 .category-rhythm-order-list{display:grid;gap:14px;min-width:0}
 .category-rhythm-header-actions,
 .fitness-rhythm-header-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.marriage-page{gap:16px;min-width:0}
+.marriage-page>.sectiontitle{margin-bottom:0}
+.marriage-page>.card{margin-bottom:0!important}
+.marriage-page>.marriage-page-heading{margin:0}
+.marriage-page>.marriage-page-heading h2{font-size:var(--tend-type-section-header,19px);font-weight:700}
+.marriage-page>.marriage-page-heading{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:16px;row-gap:2px}
+.marriage-page-heading>h2{grid-column:1;grid-row:1}
+.marriage-page-heading>.hint{grid-column:1;grid-row:2}
+.marriage-spouse-shortcut{display:inline-flex;align-items:center;justify-content:flex-end;gap:7px;grid-column:2;grid-row:1/span 2;align-self:center;box-sizing:border-box;min-width:44px;min-height:44px;max-width:min(220px,42vw);padding:5px 4px 5px 8px;border:0;border-radius:10px;background:transparent;color:var(--ink);font:600 13px/1.3 var(--sans);text-align:left;cursor:pointer}
+.marriage-spouse-shortcut:hover{background:var(--mist);color:var(--forest-deep)}
+.marriage-spouse-shortcut:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+.marriage-spouse-shortcut>.avatar{flex:none;width:30px;height:30px;border-radius:50%;object-fit:cover}
+.marriage-spouse-shortcut>span:nth-of-type(1){min-width:0;overflow-wrap:anywhere}
+.marriage-spouse-shortcut-chevron{flex:none;color:var(--ink-soft);font-size:19px;font-weight:500;line-height:1}
+.marriage-today-section,.marriage-rhythm-section,.marriage-content-section{display:grid;gap:10px;min-width:0}
+.marriage-daily-card{display:grid;gap:12px;min-width:0;padding:16px 18px;border:1px solid var(--line);border-radius:16px;background:var(--canvas)}
+.marriage-daily-prompt-controls select,.marriage-daily-settings-dialog select{box-sizing:border-box;min-height:38px;max-width:100%;padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:var(--canvas);color:var(--ink);font:inherit}
+.marriage-daily-heading h3{margin:0;color:var(--ink);font:700 16px/1.3 var(--sans);overflow-wrap:anywhere}
+.marriage-daily-card{gap:10px;background:var(--mist)}
+.marriage-daily-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.marriage-daily-heading>div{display:grid;gap:3px}
+.marriage-daily-eyebrow{color:var(--forest);font-size:10px;font-weight:650;letter-spacing:.06em;text-transform:uppercase}
+.marriage-daily-topic{display:flex;align-items:center;gap:9px;min-width:0}
+.marriage-topic-icon{display:inline-flex;flex:none;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;background:var(--canvas);color:var(--forest)}
+.marriage-topic-icon .marriage-icon-disc{width:30px;height:30px}
+.marriage-topic-icon .marriage-icon{width:17px;height:17px}
+.marriage-daily-topic>span:last-child{display:grid;gap:1px;min-width:0}
+.marriage-daily-prompt-label{margin:0;color:var(--ink-soft);font-size:11px}
+.marriage-daily-topic strong{color:var(--ink);font-size:13px;font-weight:650}
+.marriage-daily-prompt-inset{max-width:68ch;padding:12px 14px;border:1px solid color-mix(in srgb,var(--forest) 12%,var(--line));border-radius:12px;background:color-mix(in srgb,var(--canvas) 88%,var(--mist))}
+.marriage-daily-prompt{margin:0;color:var(--ink);font:500 15px/1.5 var(--sans);overflow-wrap:anywhere}
+.marriage-daily-prompt-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.marriage-weekly-goal,.marriage-weekly-focus-card{display:grid;gap:9px;min-width:0;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--canvas)}
+.marriage-weekly-heading{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:4px 12px}
+.marriage-weekly-heading h3,.marriage-weekly-focus-card h3{margin:0;color:var(--ink);font:650 14px/1.35 var(--sans)}
+.marriage-weekly-heading strong{color:var(--ink-soft);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.marriage-weekdays{display:flex;justify-content:space-between;gap:5px;max-width:330px}
+.marriage-weekday{display:grid;place-items:center;width:25px;height:25px;border:1px solid var(--line);border-radius:50%;background:var(--canvas);color:var(--ink-faint);font-size:10px}
+.marriage-weekday.is-complete{border-color:var(--forest);background:var(--forest);color:#fff}
+.marriage-weekday.is-today{outline:2px solid color-mix(in srgb,var(--forest) 28%,transparent);outline-offset:1px}
+.marriage-weekly-goal .marriage-weekdays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;max-width:none}
+.marriage-weekly-goal .marriage-weekday{box-sizing:border-box;width:auto;height:auto;min-height:34px;border-radius:8px;font-size:11px;font-weight:600}
+.marriage-daily-progress-track{height:5px;overflow:hidden;border-radius:99px;background:rgba(32,39,35,.09)}
+.marriage-daily-progress-track span{display:block;height:100%;border-radius:inherit;background:var(--forest);transition:width .2s ease}
+.marriage-weekly-focus-card{background:#FBFCFB}
+.marriage-weekly-focus-card>div{display:flex;align-items:flex-start;gap:9px}
+.marriage-weekly-focus-card p{display:grid;gap:2px;min-width:0;margin:0;color:var(--ink-soft);font-size:12px;line-height:1.4}
+.marriage-weekly-focus-card p strong{color:var(--ink);font-size:13px}
+.marriage-daily-goal-note,.marriage-daily-settings-note{margin:0;color:var(--ink-faint);font-size:11.5px;line-height:1.4}
+.marriage-daily-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.marriage-suggestions-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.marriage-suggestions-header>div{min-width:0}
+.marriage-suggestions-header p,.marriage-rhythm-editor-note{margin:4px 0 0;color:var(--ink-soft);font-size:12px;line-height:1.4}
+.marriage-rhythm-editor-heading,.marriage-link-panel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;min-width:0}
+.marriage-rhythm-editor-heading h3,.marriage-link-panel-heading h4{min-width:0;margin:0;color:var(--ink);font:650 16px/1.35 var(--sans);overflow-wrap:anywhere}
+.marriage-rhythm-editor-heading .iconbtn{flex:none}
+.marriage-link-panel-heading h4{font-size:14px}
+.marriage-link-panel-heading .btn{flex:none}
+.marriage-likely-match{color:var(--forest);font-weight:650}
+.marriage-daily-settings-dialog{width:min(440px,calc(100vw - 28px));max-height:min(80vh,640px);padding:0}
+.marriage-daily-settings-dialog .profile-editor-body{display:grid;gap:12px}
+.marriage-focus-toggle{display:flex;align-items:flex-start;gap:9px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--mist);color:var(--ink)}
+.marriage-focus-toggle input{margin:3px 0 0;accent-color:var(--forest)}
+.marriage-focus-toggle span{display:grid;gap:3px}
+.marriage-focus-toggle strong{font-size:13px}
+.marriage-focus-toggle small{color:var(--ink-soft);font-size:11.5px;line-height:1.4}
+.marriage-today-section>h3,.marriage-section-heading h3{margin:0;color:var(--ink);font:650 16px/1.35 var(--sans)}
+.marriage-section-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 14px;min-width:0}
+.marriage-section-heading>div:first-child{display:grid;gap:3px;min-width:0}
+.marriage-section-heading p{margin:0;color:var(--ink-faint);font-size:13px;line-height:1.4}
+.marriage-view-nav{grid-template-columns:repeat(3,minmax(0,1fr))}
+.marriage-view-panel[hidden]{display:none}
+.marriage-view-panel{display:grid;gap:14px;min-width:0}
+.marriage-suggestions-empty{display:grid;justify-items:start;gap:6px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+.marriage-suggestions-empty h4{margin:0;color:var(--ink);font-size:14px;font-weight:650}
+.marriage-suggestions-empty p{margin:0 0 4px;color:var(--ink-soft);font-size:13px;line-height:1.4}
+.marriage-today-list,.marriage-spark-list{display:grid;gap:10px;min-width:0}
+@media(max-width:560px){.marriage-daily-card{padding:14px}.marriage-daily-prompt-controls select{flex:1 1 140px}.marriage-daily-heading{align-items:flex-start}.marriage-template-row{gap:8px;padding:9px}.marriage-template-main{gap:9px}.marriage-template-add{min-width:58px}}
+@media(max-width:560px){.marriage-empty-rhythms{align-items:flex-start;flex-direction:column}}
+@media(max-width:380px){.marriage-page>.marriage-page-heading{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto}.marriage-page-heading>h2{grid-column:1;grid-row:1}.marriage-page-heading>.hint{grid-column:1;grid-row:2}.marriage-spouse-shortcut{grid-column:1;grid-row:3;justify-self:end;max-width:100%}.marriage-weekdays{gap:3px}.marriage-weekly-goal .marriage-weekdays{gap:3px}.marriage-weekly-goal .marriage-weekday{min-height:32px;font-size:10px}.marriage-daily-prompt-controls{align-items:stretch}.marriage-daily-prompt-controls select,.marriage-daily-prompt-controls button{width:100%}.marriage-suggestions-header{gap:8px}.marriage-link-panel-heading{align-items:flex-start;flex-direction:column}.marriage-link-panel-heading .btn{align-self:flex-start}}
+.marriage-spark-history{padding:10px 0;border-top:1px solid var(--line);color:var(--ink-soft);font-size:13px}
+.marriage-spark-history summary{width:max-content;max-width:100%;cursor:pointer}
+.marriage-spark-history ul{display:grid;gap:6px;margin:10px 0 0;padding:0;list-style:none}
+.marriage-spark-history li{display:flex;justify-content:space-between;gap:10px;min-width:0;color:var(--ink)}
+.marriage-spark-history time{flex:none;color:var(--ink-faint);font-size:12px}
+.marriage-connections-content{display:grid;gap:14px;min-width:0}
+.marriage-icon-disc{display:inline-grid;flex:none;place-items:center;width:42px;height:42px;border:1px solid color-mix(in srgb,var(--forest) 10%,var(--line));border-radius:50%;background:color-mix(in srgb,var(--forest) 8%,var(--canvas));color:var(--forest)}
+.marriage-icon-disc--rhythms{width:36px;height:36px}
+.marriage-icon{display:block;width:21px;height:21px;background:currentColor;-webkit-mask:var(--marriage-icon-mask) center/contain no-repeat;mask:var(--marriage-icon-mask) center/contain no-repeat}
+.marriage-template-list,.marriage-foundation-grid{display:grid;gap:10px;min-width:0}
+.marriage-empty-rhythms{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--canvas)}
+.marriage-empty-rhythms h3{margin:0 0 4px;color:var(--ink);font-size:15px;font-weight:650}
+.marriage-empty-rhythms p{margin:0;color:var(--ink-soft);font-size:13px;line-height:1.45}
+.marriage-empty-rhythms button{flex:none}
+.marriage-recommendation-group,.marriage-foundation-detail,.marriage-rhythm-section,.marriage-foundations-section{display:grid;gap:12px;min-width:0}
+.marriage-recommendation-group>header{display:flex;align-items:baseline;justify-content:space-between;gap:10px;min-width:0}
+.marriage-recommendation-group>header h4,.marriage-recommendation-group>header p{margin:0}
+.marriage-recommendation-group>header h4,.marriage-foundation-grid h4,.marriage-custom-rhythms h4{color:var(--ink);font:650 15px/1.35 var(--sans)}
+.marriage-recommendation-group>header p{margin-top:2px;color:var(--ink-soft);font-size:12.5px}
+.marriage-recommendation-group>header>span{flex:none;color:var(--ink-faint);font-size:11px}
+.marriage-template-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;padding:9px 12px;border:1px solid var(--line);border-radius:15px;background:var(--canvas)}
+.marriage-template-main{display:flex;align-items:center;gap:10px;min-width:0;min-height:38px;padding:0;border:0;border-radius:10px;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.marriage-template-main:focus-visible{outline:2px solid var(--forest);outline-offset:3px}
+.marriage-template-main:hover{color:var(--forest)}
+.marriage-template-main:focus-visible .marriage-icon-disc,.marriage-template-main:hover .marriage-icon-disc{border-color:color-mix(in srgb,var(--forest) 35%,var(--line));background:color-mix(in srgb,var(--forest) 13%,var(--canvas))}
+.marriage-template-copy{display:grid;gap:3px;min-width:0}
+.marriage-template-copy>strong{color:var(--ink);font-size:14px;font-weight:650;line-height:1.3;overflow-wrap:anywhere}
+.marriage-template-copy>span:not(.marriage-foundation-tags){color:var(--ink-soft);font-size:12px;line-height:1.35}
+.marriage-foundation-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}
+.marriage-foundation-tags>span{padding:2px 6px;border-radius:999px;background:color-mix(in srgb,var(--forest) 8%,var(--canvas));color:var(--forest-deep);font-size:10px;line-height:1.4}
+.marriage-foundation-tags>span.is-secondary{background:var(--mist);color:var(--ink-soft)}
+.marriage-template-chevron{flex:none;color:var(--ink-faint);font-size:22px;line-height:1}
+.marriage-template-add{min-width:66px;min-height:34px;padding:5px 11px;white-space:nowrap}
+.marriage-custom-rhythms{display:grid;gap:10px}
+.marriage-custom-rhythms>h4{margin:0}
+.marriage-rhythm-foundation-editor{display:grid;gap:8px;margin:7px 0 12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--mist);color:var(--ink-soft);font-size:12px}
+.marriage-rhythm-foundation-editor summary{width:max-content;max-width:100%;color:var(--forest-deep);font-weight:600;cursor:pointer}
+.marriage-rhythm-foundation-editor>label{display:grid;gap:4px}
+.marriage-rhythm-foundation-editor select{min-height:38px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--canvas);color:var(--ink);font:inherit}
+.marriage-rhythm-foundation-editor fieldset{display:flex;flex-wrap:wrap;gap:6px 12px;margin:0;padding:7px;border:1px solid var(--line);border-radius:9px}
+.marriage-rhythm-foundation-editor legend,.marriage-rhythm-foundation-editor small{color:var(--ink-faint);font-size:11px}
+.marriage-rhythm-foundation-editor fieldset label{display:flex;align-items:center;gap:4px}
+.marriage-rhythm-foundation-editor input{accent-color:var(--forest)}
+.marriage-foundation-card{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:12px;width:100%;min-width:0;padding:13px 14px;border:1px solid var(--line);border-radius:16px;background:var(--canvas);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.marriage-foundation-card:hover{border-color:color-mix(in srgb,var(--forest) 28%,var(--line));background:color-mix(in srgb,var(--forest) 3%,var(--canvas))}
+.marriage-foundation-card:focus-visible,.marriage-back-link:focus-visible,.marriage-foundation-badge:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+.marriage-foundation-card-copy{display:grid;gap:4px;min-width:0}
+.marriage-foundation-card-copy>strong{font-size:14px;font-weight:650}
+.marriage-foundation-card-copy>span:not(.marriage-foundation-progress){color:var(--ink-soft);font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+.marriage-foundation-card-copy>.marriage-foundation-card-meta{color:var(--ink-faint);font-size:11px}
+.marriage-foundation-score{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.marriage-foundation-score.green,.marriage-foundation-detail-score .green{color:#087443}
+.marriage-foundation-score.yellow,.marriage-foundation-detail-score .yellow{color:#985600}
+.marriage-foundation-score.red,.marriage-foundation-detail-score .red{color:#C33222}
+.marriage-foundation-score.neutral,.marriage-foundation-detail-score .neutral{color:#78847D}
+.marriage-foundation-progress{position:relative;display:block;height:6px;overflow:hidden;border-radius:99px;background:#E9EFEB}
+.marriage-foundation-progress>span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#E4513D 0%,#F79009 34%,#FDC94A 68%,#12B76A 100%)}
+.marriage-foundation-progress.is-empty{background:var(--mist)}
+.marriage-foundation-detail>.marriage-back-link,.marriage-back-link{justify-self:start;min-height:40px;padding:4px 8px;border:0;border-radius:8px;background:transparent;color:var(--forest);font:600 13px/1.3 var(--sans);cursor:pointer}
+.marriage-back-link:hover{background:var(--mist)}
+.marriage-detail-heading{display:flex;align-items:center;gap:12px;min-width:0}
+.marriage-detail-heading>div{display:grid;gap:4px;min-width:0}
+.marriage-detail-heading h3,.marriage-detail-heading p{margin:0}
+.marriage-detail-heading h3{color:var(--ink);font:650 18px/1.3 var(--sans);overflow-wrap:anywhere}
+.marriage-detail-heading p{color:var(--ink-soft);font-size:13px;line-height:1.45}
+.marriage-detail-frequency,.marriage-detail-status,.marriage-scoring-note{margin:0;color:var(--ink-soft);font-size:12px;line-height:1.5}
+.marriage-foundation-detail-score{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:6px 12px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--mist)}
+.marriage-foundation-detail-score>strong{grid-row:span 2;font-size:34px;font-variant-numeric:tabular-nums}
+.marriage-foundation-detail-score>span:not(.marriage-foundation-progress){color:var(--ink-soft);font-size:12px}
+.marriage-foundation-detail-score>.marriage-foundation-progress{grid-column:1/-1;width:100%}
+.marriage-foundation-detail-score>small{grid-column:1/-1;color:var(--ink-faint);font-size:11px;line-height:1.4}
+.marriage-foundation-rhythm-list,.marriage-foundation-support,.marriage-foundation-recommendations,.marriage-foundation-why,.marriage-foundation-empty{display:grid;gap:8px;min-width:0}
+.marriage-foundation-rhythm-list h4,.marriage-foundation-support h4,.marriage-foundation-recommendations h4,.marriage-foundation-why h4,.marriage-foundation-empty h4,.marriage-linked-rhythm h4{margin:0;color:var(--ink);font-size:14px;font-weight:650}
+.marriage-foundation-rhythm{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--canvas)}
+.marriage-foundation-rhythm>div{display:grid;gap:3px;min-width:0}
+.marriage-foundation-rhythm span,.marriage-foundation-support p,.marriage-foundation-empty p,.marriage-foundation-why p,.marriage-foundation-why li{color:var(--ink-soft);font-size:12px;line-height:1.45}
+.marriage-foundation-rhythm>strong{flex:none;color:var(--forest-deep);font-size:15px;font-variant-numeric:tabular-nums}
+.marriage-foundation-support p,.marriage-foundation-empty p,.marriage-foundation-why p{margin:0}
+.marriage-foundation-support ul,.marriage-foundation-why ul{display:grid;gap:5px;margin:0;padding-left:20px}
+.marriage-foundation-recommendations>article{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:var(--canvas)}
+.marriage-foundation-recommendations>article>.marriage-icon-disc{width:34px;height:34px}
+.marriage-foundation-recommendations>article .marriage-icon{width:19px;height:19px}
+.marriage-foundation-recommendations>article>span:nth-child(2){display:grid;gap:2px;min-width:0}
+.marriage-foundation-recommendations small{color:var(--ink-faint);font-size:11px}
+.marriage-detail-card{display:grid;gap:13px;min-width:0;padding:14px;border:1px solid var(--line);border-radius:16px;background:var(--canvas)}
+.marriage-detail-card>.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.marriage-detail-rhythm-icon{display:inline-flex;flex:none}
+.marriage-detail-rhythm-icon .marriage-icon-disc{width:30px;height:30px}
+.marriage-detail-rhythm-icon .marriage-icon{width:17px;height:17px}
+.marriage-detail-foundations{display:grid;gap:8px;padding-top:10px;border-top:1px solid var(--line)}
+.marriage-detail-foundation-row{display:flex;align-items:center;flex-wrap:wrap;gap:7px 10px}
+.marriage-detail-foundation-row>span{min-width:66px;color:var(--ink-faint);font-size:12px;font-weight:600}
+.marriage-foundation-badge{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:4px 10px;border:1px solid color-mix(in srgb,var(--forest) 15%,var(--line));border-radius:999px;background:color-mix(in srgb,var(--forest) 8%,var(--canvas));color:var(--forest-deep);font:600 12px/1.2 var(--sans);cursor:pointer}
+.marriage-foundation-badge:hover{border-color:color-mix(in srgb,var(--forest) 38%,var(--line));background:color-mix(in srgb,var(--forest) 13%,var(--canvas))}
+.marriage-foundation-badge .marriage-icon-disc{width:20px;height:20px;border:0;background:transparent}
+.marriage-foundation-badge .marriage-icon{width:15px;height:15px}
+.marriage-linked-rhythm{display:grid;gap:8px}
+.marriage-detail-card .rhythm-card{min-width:0}
+.marriage-detail-card .rhythm-card__title-line{gap:7px}
+.rhythm-momentum-card{position:relative;display:grid;gap:16px;margin:16px 0 10px;padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--ink)}
+.rhythm-momentum-header{display:flex;align-items:center;gap:8px;min-width:0}
+.rhythm-momentum-header h3{margin:0;font-size:17px;font-weight:650}
+.rhythm-momentum-info-trigger{display:grid;place-items:center;width:25px;height:25px;padding:0;border:1.5px solid var(--ink-faint);border-radius:50%;background:transparent;color:var(--ink-soft);font-family:inherit;font-size:14px;font-weight:600;line-height:1;cursor:pointer}
+.rhythm-momentum-info-trigger:hover{background:var(--mist);color:var(--forest)}
+.rhythm-momentum-info-trigger:focus-visible,.rhythm-momentum-info [data-momentum-info-close]:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+.rhythm-momentum-status{margin-left:auto;padding:5px 10px;border-radius:999px;background:var(--mist);color:var(--ink-soft);font-size:11px;font-weight:650;white-space:nowrap}
+.rhythm-momentum-status.green{background:#12B76A18;color:#14804C}
+.rhythm-momentum-status.yellow{background:#FFC13322;color:#875B00}
+.rhythm-momentum-status.red{background:#FF5A451A;color:#AE382B}
+.rhythm-momentum-status.neutral{background:var(--mist);color:var(--ink-faint)}
+.rhythm-momentum-main{display:flex;align-items:center;gap:16px}
+.rhythm-momentum-ring{display:grid;place-items:center;flex:none;width:82px;height:82px;padding:7px;border-radius:50%;background:conic-gradient(var(--momentum-color) var(--momentum-angle),var(--line) 0)}
+.rhythm-momentum-ring-center{display:flex;align-items:center;justify-content:center;flex-direction:column;width:100%;height:100%;border-radius:50%;background:var(--canvas);font-variant-numeric:tabular-nums}
+.rhythm-momentum-ring-center strong{font-size:25px;line-height:1}
+.rhythm-momentum-ring-center small{margin-top:3px;color:var(--ink-faint);font-size:9px}
+.rhythm-momentum-ring-empty{color:var(--ink-faint);font-size:28px}
+.rhythm-momentum-feedback{min-width:0}
+.rhythm-momentum-feedback>strong{color:var(--momentum-color);font-size:16px}
+.rhythm-momentum-feedback>p{margin:5px 0 0;color:var(--ink-soft);font-size:12px;line-height:1.45}
+.rhythm-momentum-recent{display:grid;gap:8px;padding-top:13px;border-top:1px solid var(--line)}
+.rhythm-momentum-recent h4{margin:0;font-size:13px;font-weight:600}
+.rhythm-momentum-recent ul{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:0;padding:0;list-style:none}
+.rhythm-momentum-occurrence{display:flex;align-items:center;justify-content:center;gap:6px;min-width:0;padding:8px 5px;border-radius:10px;background:var(--mist);color:var(--ink-soft);font-size:12px;font-variant-numeric:tabular-nums}
+.rhythm-momentum-occurrence>span{color:var(--ink-faint);font-size:16px;font-weight:700;line-height:1}
+.rhythm-momentum-occurrence.is-completed>span{color:#12B76A}
+.rhythm-momentum-occurrence.is-upcoming>span{color:var(--ink-faint)}
+.rhythm-momentum-footer{padding-top:12px;border-top:1px solid var(--line);color:var(--ink-soft);font-size:12px;font-weight:550}
+.rhythm-momentum-info[hidden]{display:none}
+.rhythm-momentum-info{position:absolute;z-index:5;top:48px;left:12px;right:12px;max-height:min(70vh,480px);overflow:auto;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--canvas);box-shadow:0 12px 32px #14251b30;color:var(--ink)}
+.rhythm-momentum-info>header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.rhythm-momentum-info h4{margin:0;font-size:16px}
+.rhythm-momentum-info>p{margin:12px 0 0;color:var(--ink-soft);font-size:13px;line-height:1.5}
+.rhythm-momentum-info details{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.rhythm-momentum-info details>summary{color:var(--forest);font-size:13px;font-weight:650;cursor:pointer}
+.rhythm-momentum-info dl{display:grid;grid-template-columns:1fr auto;gap:6px 14px;margin:10px 0 0;font-size:12px}
+.rhythm-momentum-info dt{color:var(--ink-soft)}
+.rhythm-momentum-info dd{margin:0;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+.marriage-history-chart-title{margin:14px 0 -12px;color:var(--ink);font-size:14px;font-weight:650}
+.marriage-preserved-content{min-width:0;padding:11px 13px;border:1px solid var(--line);border-radius:13px;background:var(--canvas)}
+.marriage-preserved-content>summary{min-height:25px;color:var(--ink-soft);font-size:13px;font-weight:600;cursor:pointer}
+.marriage-preserved-content[open]{display:grid;gap:12px}
+.marriage-scoring-note{padding:0 2px}
+.marriage-score-definitions{margin:-6px 0 12px;padding:0 2px;color:var(--ink-soft);font-size:12px;line-height:1.5}
+.marriage-score-definitions>summary{width:max-content;max-width:100%;color:var(--forest-deep);font-weight:600;cursor:pointer}
+.marriage-score-definitions dl{display:grid;gap:8px;margin-top:9px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--canvas)}
+.marriage-score-definitions dl>div{display:grid;grid-template-columns:minmax(110px,150px) minmax(0,1fr);gap:4px 12px}
+.marriage-score-definitions dt{color:var(--ink);font-weight:650}
+.marriage-score-definitions dd{margin:0}
+@media(max-width:480px){.marriage-score-definitions dl>div{grid-template-columns:1fr;gap:1px}}
 .category-rhythm-header-actions>.rhythm-order-toolbar,
 .fitness-rhythm-header-actions>.rhythm-order-toolbar{flex:none}
 .category-rhythm-header-actions>.btn,
@@ -4162,6 +4417,7 @@ html .person-profile-page .person-free-moment-heading h2{font-size:var(--tend-ty
  .home-dashboard .today-prayer-section .prayer-entry-actions{justify-content:flex-start}
 }
 @media(max-width:380px){
+ .marriage-view-nav{grid-template-columns:repeat(3,minmax(0,1fr))}
  .home-dashboard .today-feed-section .current-plan-summary.has-weather{grid-template-columns:minmax(0,1fr) 120px;column-gap:6px}
 }
 .home-dashboard .today-rhythm-card__people-overflow>summary{

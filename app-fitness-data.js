@@ -15,12 +15,15 @@ function fitnessStoreUpdateSettings(patch){
 }
 function fitnessSyncRhythmCompletion(record){
  if(!Array.isArray(S.events))S.events=[];
+ var previous=S.events.find(function(event){return event.fitnessLogId===record.id;}),completionNote=previous&&previous.completionNote;
  S.events=S.events.filter(function(event){return event.fitnessLogId!==record.id;});
  if(!record.rhythmId)return;
  var rhythm=fitnessRhythmRecords().find(function(item){return item.id===record.rhythmId;});
  if(!rhythm||!fitnessValidDate(record.rhythmOccurrence))return;
  var time=new Date(record.rhythmOccurrence+"T12:00:00").getTime();
- S.events.push({id:"fitness-rhythm-"+record.id,ts:time,areaId:"health",personId:null,type:"quality",kind:"quality",title:rhythm.text,note:"Fitness log",rhythmId:rhythm.id,fitnessLogId:record.id,rhythmOccurrence:record.rhythmOccurrence,fitnessType:record.fitnessType||"workout",weight:3});
+ var event={id:"fitness-rhythm-"+record.id,ts:time,areaId:"health",personId:null,type:"quality",kind:"quality",title:rhythm.text,note:"Fitness log",rhythmId:rhythm.id,fitnessLogId:record.id,rhythmOccurrence:record.rhythmOccurrence,fitnessType:record.fitnessType||"workout",weight:3};
+ if(completionNote!==undefined)event.completionNote=completionNote;
+ S.events.push(event);
 }
 function fitnessStoreUpsert(collection,record){
  if(["savedWorkouts","workouts","runs","weighIns","rhythms"].indexOf(collection)<0)throw new Error("Unknown fitness record collection");

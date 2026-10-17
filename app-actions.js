@@ -3,7 +3,7 @@
 
 "use strict";
 /* ============ actions & bindings ============ */
-function logEvent(areaId,personId,type,title,note,whenTs,rhythmId,extra){var _ev={id:uid(),ts:(whenTs||Date.now()),areaId:areaId,personId:personId||null,type:type||"inperson",kind:type||"inperson",title:title||"",note:note||"",rhythmId:rhythmId||null,weight:(ETYPES[type]?ETYPES[type].w:3)};if(extra)for(var _k in extra)_ev[_k]=extra[_k];S.events.push(_ev);save();refreshConnectionDialogs();render();}
+function logEvent(areaId,personId,type,title,note,whenTs,rhythmId,extra){var _ev={id:uid(),ts:(whenTs||Date.now()),areaId:areaId,personId:personId||null,type:type||"inperson",kind:type||"inperson",title:title||"",note:note||"",rhythmId:rhythmId||null,weight:(ETYPES[type]?ETYPES[type].w:3)};if(extra)for(var _k in extra)_ev[_k]=extra[_k];S.events.push(_ev);save();refreshConnectionDialogs();render();return _ev;}
 function recordPrayer(prayer,logForPerson,forPersonId){
  if(!prayer||prayer.answered||prayer.archived)return false;
  var prayedAt=Date.now();
@@ -43,6 +43,47 @@ var tendDialogDraft=null;
 var tendTimePicker=null;
 var sparkCompletionDraft=null;
 var sparkTimePicker=null;
+var RHYTHM_COMPLETION_NOTE_MAX_LENGTH=500;
+function tendSaveRhythmCompletionNote(eventId,value,onSaved,onFailed){
+ var completion=(S.events||[]).find(function(event){return event.id===eventId&&event.rhythmId;});
+ if(!completion){onFailed(new Error("This completion is no longer available"));return;}
+ if(window.TEND_CLOUD_MODE&&(!window.TendCloudPersistence||!window.TendCloudPersistence.isReady())){onFailed(new Error("Your account is still loading. Try saving your memory again."));return;}
+ var hadNote=Object.prototype.hasOwnProperty.call(completion,"completionNote"),previous=completion.completionNote,note=String(value||"").slice(0,RHYTHM_COMPLETION_NOTE_MAX_LENGTH).trim();
+ if(note)completion.completionNote=note;else delete completion.completionNote;
+ function restore(){
+  if(hadNote)completion.completionNote=previous;else delete completion.completionNote;
+  try{save();}catch(error){console.error("Could not restore the previous completion memory",error);}
+ }
+ try{save();}catch(error){restore();onFailed(error);return;}
+ if(window.TEND_CLOUD_MODE&&window.TendCloudPersistence){
+  window.TendCloudPersistence.flush().then(function(){
+   if(window.TendCloudPersistence.getStatus()==="Needs attention")throw new Error("Tend could not save this memory to your account.");
+   onSaved(note);
+  }).catch(function(error){restore();onFailed(error);});
+  return;
+ }
+ onSaved(note);
+}
+function openRhythmCompletionNote(eventId){
+ var completion=(S.events||[]).find(function(event){return event.id===eventId&&event.rhythmId;});
+ if(!completion)return false;
+ var focusTarget=Array.prototype.slice.call(document.querySelectorAll("[data-tend-open]")).find(function(button){return button.getAttribute("data-rhythm-id")===completion.rhythmId&&(!completion.personId||button.getAttribute("data-person-id")===completion.personId);})||null;
+ var previous=document.getElementById("rhythmCompletionNoteDialog");if(previous)previous.remove();
+ var dialog=document.createElement("dialog");dialog.id="rhythmCompletionNoteDialog";dialog.className="tend-dialog rhythm-completion-note-dialog";dialog.setAttribute("aria-labelledby","rhythmCompletionNoteHeading");
+ dialog.innerHTML='<div class="tend-form"><button type="button" class="iconbtn tend-close" data-completion-note-skip aria-label="Close">×</button><span class="focus-eyebrow">Memory</span><h2 id="rhythmCompletionNoteHeading">Add a memory</h2><p>What did you do? Anything worth remembering?</p><label for="rhythmCompletionNoteText">Note (optional)</label><textarea id="rhythmCompletionNoteText" maxlength="'+RHYTHM_COMPLETION_NOTE_MAX_LENGTH+'" rows="4" aria-describedby="rhythmCompletionNoteLimit">'+esc(completion.completionNote||"")+'</textarea><small id="rhythmCompletionNoteLimit" class="rhythm-completion-note-limit">Up to '+RHYTHM_COMPLETION_NOTE_MAX_LENGTH+' characters</small><div class="tend-actions"><button type="button" class="btn ghost" data-completion-note-skip>Skip</button><button type="button" class="btn" data-completion-note-save>Save</button></div><p class="rhythm-completion-note-error" role="alert" hidden></p></div>';
+ var saving=false;
+ dialog.addEventListener("click",function(event){
+  if(event.target.closest("[data-completion-note-skip]")){dialog.close();return;}
+  var saveButton=event.target.closest("[data-completion-note-save]");if(!saveButton||saving)return;
+  var noteField=dialog.querySelector("#rhythmCompletionNoteText"),errorMessage=dialog.querySelector(".rhythm-completion-note-error");saving=true;saveButton.disabled=true;
+  tendSaveRhythmCompletionNote(eventId,noteField.value,function(note){saving=false;dialog.close();flash(note?"Memory saved":"Memory cleared");},function(error){saving=false;saveButton.disabled=false;errorMessage.textContent=error.message||"Could not save this memory. Please try again.";errorMessage.hidden=false;noteField.focus();});
+ });
+ dialog.addEventListener("cancel",function(event){event.preventDefault();dialog.close();});
+ dialog.addEventListener("close",function(){dialog.remove();if(focusTarget&&focusTarget.isConnected)focusTarget.focus({preventScroll:true});});
+ document.body.appendChild(dialog);tendShowModal(dialog);
+ dialog.querySelector("#rhythmCompletionNoteText").focus({preventScroll:true});
+ return true;
+}
 function tendDialogHTML(){
  return '<dialog id="tendDialog" class="tend-dialog" aria-labelledby="tendHeading"><div class="tend-form"><button type="button" class="iconbtn tend-close" data-tend-cancel aria-label="Close">×</button><span class="focus-eyebrow">Tend</span><h2 id="tendHeading">When did you tend it?</h2><p id="tendTitle"></p><label>Date<span class="tend-date-control"><input type="date" id="tendDate" required><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="16" rx="2"></rect><path d="M7.5 3v4M16.5 3v4M3.5 9h17"></path></svg></span></label><div class="tend-time-field"><span>Time</span><input type="time" id="tendTime" step="60" tabindex="-1" aria-hidden="true" hidden><div id="tendTimeWheel" class="time-wheel-picker" data-accent="rhythm"></div></div><div class="tend-actions"><button type="button" class="btn ghost" data-tend-cancel>Cancel</button><button type="button" class="btn" data-tend-save>Save</button></div></div></dialog>';
 }
@@ -80,25 +121,27 @@ function saveTendDialog(){
  time.value=tendTimePicker.getValue();
  var timestamp=new Date(date.value+"T"+time.value+":00").getTime();
  if(!Number.isFinite(timestamp)){flash("Enter a valid date and time");return;}
+ var completionEvent=null;
  if(draft.kind==="person-rhythm"){
   var person=S.people.find(function(item){return item.id===draft.personId;}),rhythm=person&&(person.rhythms||[]).find(function(item){return item.id===draft.rhythmId;});
   if(!person||!rhythm){flash("This rhythm is no longer available");dialog.close();return;}
   actDoneAdd(person.id,rhythm.id);
-  logEvent(draft.areaId||person.area,person.id,"quality",rhythm.text,"",timestamp,rhythm.id);
+  completionEvent=logEvent(draft.areaId||person.area,person.id,"quality",rhythm.text,"",timestamp,rhythm.id);
   flash("Rhythm tended ✓");
  }else if(draft.kind==="faith-rhythm"){
   var faithRhythm=typeof faithFindRhythm==="function"?faithFindRhythm(draft.rhythmId):null;
   if(!faithRhythm){flash("This rhythm is no longer available");dialog.close();return;}
-  faithLogRhythm(faithRhythm,timestamp);
+  completionEvent=faithLogRhythm(faithRhythm,timestamp);
  }else if(draft.kind==="area-rhythm"){
   var areaRhythm=(S.areaRhythms||[]).find(function(item){return item.id===draft.rhythmId&&Array.isArray(item.areas)&&item.areas.indexOf(draft.areaId)!==-1;});
   if(!areaRhythm){flash("This rhythm is no longer available");dialog.close();return;}
-  logEvent(draft.areaId,null,"quality",areaRhythm.text,"",timestamp,areaRhythm.id);
+  completionEvent=logEvent(draft.areaId,null,"quality",areaRhythm.text,"",timestamp,areaRhythm.id);
   flash("Rhythm tended ✓");
  }
  tendDialogDraft=null;
  dialog.close();
  if(typeof focusRefreshDialog==="function")focusRefreshDialog();
+ if(completionEvent)openRhythmCompletionNote(completionEvent.id);
 }
 function sparkCompletionDialogHTML(){
  return '<dialog id="sparkCompletionDialog" class="tend-dialog spark-completion-dialog" aria-labelledby="sparkCompletionHeading"><div class="tend-form"><button type="button" class="iconbtn tend-close" data-spark-cancel aria-label="Close">×</button><span class="focus-eyebrow spark-completion-eyebrow">Spark</span><h2 id="sparkCompletionHeading">When did you do it?</h2><p id="sparkCompletionTitle"></p><label>Date<span class="tend-date-control"><input type="date" id="sparkCompletionDate" required><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="16" rx="2"></rect><path d="M7.5 3v4M16.5 3v4M3.5 9h17"></path></svg></span></label><div class="tend-time-field"><span>Time</span><input type="time" id="sparkCompletionTime" step="60" tabindex="-1" aria-hidden="true" hidden><div id="sparkCompletionTimeWheel" class="time-wheel-picker" data-accent="spark"></div></div><div class="tend-actions"><button type="button" class="btn ghost" data-spark-cancel>Cancel</button><button type="button" class="btn spark-completion-save" data-spark-save>Save</button></div></div></dialog>';
@@ -141,7 +184,7 @@ var tendRhythmEditOrigin=null;
 function tendCaptureRhythmEditOrigin(opener){
  if(tendRhythmEditOrigin)return tendRhythmEditOrigin;
  opener=opener&&opener.isConnected?opener:document.activeElement;
- var control=null,attributes=["data-rhythm-details-toggle","data-rhyedit","data-area-rhythm-edit","data-faith-rhythm-edit","data-faith-rhythm-profile-edit","data-fitness-rhythm-edit"];
+ var control=null,attributes=["data-rhythm-details-toggle","data-rhyedit","data-area-rhythm-edit","data-area-rhythm-new","data-marriage-suggestion-add","data-faith-rhythm-edit","data-faith-rhythm-profile-edit","data-fitness-rhythm-edit"];
  if(opener&&opener.id)control={id:opener.id};
  else if(opener&&opener.getAttribute){
   attributes.some(function(name){var value=opener.getAttribute(name);if(value!==null){control={name:name,value:value};return true;}return false;});
@@ -199,6 +242,12 @@ else if(button.matches("[data-tend-open]"))openTendDialog(button);
  else if(button.matches("[data-tend-cancel]")){var dialog=document.getElementById("tendDialog");tendDialogDraft=null;if(dialog)dialog.close();}
  else if(button.matches("[data-spark-save]"))saveSparkCompletionDialog();
  else if(button.matches("[data-spark-cancel]")){var sparkDialog=document.getElementById("sparkCompletionDialog");if(sparkDialog)sparkDialog.close();}
+},true);
+document.addEventListener("click",function(event){
+ var button=event.target&&event.target.closest&&event.target.closest("[data-completion-note-open]");
+ if(!button)return;
+ event.preventDefault();event.stopImmediatePropagation();
+ openRhythmCompletionNote(button.getAttribute("data-completion-note-open"));
 },true);
 window.openModal=function(){var sel=el("logArea"),selp=el("logPerson"),selk=el("logKind");sel.innerHTML=AREA_IDS.map(function(a){return '<option value="'+a+'">'+S.areas[a].name+'</option>';}).join("");selp.innerHTML='<option value="">- no specific person -</option>'+S.people.map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+'</option>';}).join("");selk.innerHTML=Object.keys(KINDS).map(function(k){return '<option value="'+k+'">'+KINDS[k].label+'</option>';}).join("");el("logNote").value="";el("logModal").classList.add("open");};
 window.closeModal=function(){el("logModal").classList.remove("open");};
@@ -299,7 +348,7 @@ function bind(){
    if(detailLink){if(collapse){detailLink.removeAttribute("data-meter-tab");detailLink.setAttribute("aria-label","View section");}else{detailLink.setAttribute("data-meter-tab",key);detailLink.setAttribute("aria-label","View "+(key==="prayer"?"prayers":key));}}
    return;
   }
-  if(b=t.closest("[data-rhyhistory]")){openRhythmHistory(b.getAttribute("data-rhyhistory"));return;}
+  if(b=t.closest("[data-rhyhistory]")){var marriageHistoryKey=b.getAttribute("data-marriage-history");if(marriageHistoryKey)openRhythmHistory(marriageHistoryKey,false,function(){if(b.isConnected)b.focus({preventScroll:true});});else openRhythmHistory(b.getAttribute("data-rhyhistory"));return;}
   if(b=t.closest("[data-connection-history]")){openConnectionHistory(b.getAttribute("data-connection-history"),"chart");return;}
   if(b=t.closest("[data-connection-history-list]")){openConnectionHistory(b.getAttribute("data-connection-history-list"),"list");return;}
   if(b=t.closest("[data-prayer-past-view]")){openPersonPrayerPast(b.getAttribute("data-prayer-past-view"));return;}
