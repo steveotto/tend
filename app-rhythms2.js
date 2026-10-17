@@ -278,7 +278,8 @@ window.rhythmRow=function(p,r,cardOptions){
  var faithShared=r.sharedFaithRhythm===true;
  var tendAttributes=Object.assign(faithShared&&typeof faithTendAction==="function"?{"data-tend-open":"faith-rhythm","data-rhythm-id":r.id}:{"data-tend-open":"person-rhythm","data-person-id":ownerId,"data-rhythm-id":r.id},cardOptions.tendAttributes||{});
  var editAttributes=Object.assign(faithShared?{"data-faith-rhythm-profile-edit":r.id}:{"data-rhyedit":idf},cardOptions.editAttributes||{});
- return tendRhythmCardHTML(r,{title:r.text||"(unnamed rhythm)",description:r.description,score:hasScore?sc:null,scoreClass:scoreClass(hasScore?sc:null),viewerPersonId:viewerPersonId,peopleBadgesHTML:people+extraPeople,categoryBadgesHTML:categories,frequency:frequency,time:metadata.time,lastTended:metadata.lastTended,frequencyIconHTML:metadata.frequencyIconHTML,timeIconHTML:metadata.timeIconHTML,lastIconHTML:metadata.lastIconHTML,
+ var cardScore=Object.prototype.hasOwnProperty.call(cardOptions,"score")?cardOptions.score:hasScore?sc:null;
+ return tendRhythmCardHTML(r,{title:r.text||"(unnamed rhythm)",description:r.description,score:cardScore,scoreClass:scoreClass(cardScore),viewerPersonId:viewerPersonId,peopleBadgesHTML:people+extraPeople,categoryBadgesHTML:categories,frequency:frequency,time:metadata.time,lastTended:metadata.lastTended,frequencyIconHTML:metadata.frequencyIconHTML,timeIconHTML:metadata.timeIconHTML,lastIconHTML:metadata.lastIconHTML,leadingHTML:cardOptions.leadingHTML,detailsAttributes:cardOptions.detailsAttributes,
   tendAttributes:tendAttributes,
   editAttributes:editAttributes,
   historyAttributes:cardOptions.historyAttributes||{"data-rhyhistory":idf},

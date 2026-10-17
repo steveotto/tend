@@ -1,0 +1,92 @@
+[
+  {
+    "id": "connection",
+    "group": "foundations",
+    "path": "foundations/connection.svg",
+    "color": "currentColor"
+  },
+  {
+    "id": "communication",
+    "group": "foundations",
+    "path": "foundations/communication.svg",
+    "color": "currentColor"
+  },
+  {
+    "id": "fun-adventure",
+    "group": "foundations",
+    "path": "foundations/fun-adventure.svg",
+    "color": "currentColor"
+  },
+  {
+    "id": "spiritual-growth",
+    "group": "foundations",
+    "path": "foundations/spiritual-growth.svg",
+    "color": "currentColor"
+  },
+  {
+    "id": "partnership",
+    "group": "foundations",
+    "path": "foundations/partnership.svg",
+    "color": "currentColor"
+  },
+  {
+    "id": "intimacy",
+    "group": "foundations",
+    "path": "foundations/intimacy.svg",
+    "color": "currentColor"
+  },
+  {
+    "id": "daily-connection",
+    "group": "rhythms",
+    "path": "rhythms/daily-connection.svg",
+    "color": "currentColor"
+  },
+  {
+    "id": "pray-together",
+    "group": "rhythms",
+    "path": "rhythms/pray-together.svg",
+    "color": "currentColor"
+  },
+  {
+    "id": "date-night",
+    "group": "rhythms",
+    "path": "rhythms/date-night.svg",
+    "color": "currentColor"
+  },
+  {
+    "id": "marriage-check-in",
+    "group": "rhythms",
+    "path": "rhythms/marriage-check-in.svg",
+    "color": "currentColor"
+  },
+  {
+    "id": "thoughtful-act-of-love",
+    "group": "rhythms",
+    "path": "rhythms/thoughtful-act-of-love.svg",
+    "color": "currentColor"
+  },
+  {
+    "id": "dream-together",
+    "group": "rhythms",
+    "path": "rhythms/dream-together.svg",
+    "color": "currentColor"
+  },
+  {
+    "id": "overnight-away",
+    "group": "rhythms",
+    "path": "rhythms/overnight-away.svg",
+    "color": "currentColor"
+  },
+  {
+    "id": "marriage-enrichment",
+    "group": "rhythms",
+    "path": "rhythms/marriage-enrichment.svg",
+    "color": "currentColor"
+  },
+  {
+    "id": "week-away-together",
+    "group": "rhythms",
+    "path": "rhythms/week-away-together.svg",
+    "color": "currentColor"
+  }
+]

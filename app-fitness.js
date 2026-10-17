@@ -516,7 +516,7 @@ function fitnessHandleRecord(form,kind){
   fitnessStoreUpsert("savedWorkouts",{id:id,name:name,muscleIds:muscleIds,sharedWith:sharedWith});fitnessDialog=null;render();flash("Workout saved");return;
  }
  if(!fitnessValidDate(date)||date>today){fitnessSetError(form,"Choose a valid date that is today or earlier.");return;}
- var collection=kind==="workout"?"workouts":kind==="run"?"runs":"weighIns",previous=(data[collection]||[]).find(function(item){return item.id===id;}),record=Object.assign({},previous||{},{id:id,date:date,notes:notes}),contextRhythmId=form.getAttribute("data-fitness-rhythm-id")||"",associationField=fields.rhythmId,associationId=contextRhythmId||associationField&&associationField.value||"",occurrence=contextRhythmId?form.getAttribute("data-fitness-occurrence"):associationId?(previous&&previous.rhythmId===associationId&&previous.rhythmOccurrence||today):null;
+ var collection=kind==="workout"?"workouts":kind==="run"?"runs":"weighIns",previous=(data[collection]||[]).find(function(item){return item.id===id;}),record=Object.assign({},previous||{},{id:id,date:date,notes:notes}),contextRhythmId=form.getAttribute("data-fitness-rhythm-id")||"",associationField=fields.rhythmId,associationId=contextRhythmId||associationField&&associationField.value||"",occurrence=contextRhythmId?form.getAttribute("data-fitness-occurrence"):associationId?(previous&&previous.rhythmId===associationId&&previous.rhythmOccurrence||today):null,completionNoteEventId=null;
  if(kind==="workout"){
   record.muscleIds=Array.from(form.querySelectorAll('input[name="muscleIds"]')).filter(function(input){return input.type==="hidden"||input.checked;}).map(function(input){return input.value;}).filter(function(value){return FITNESS_MUSCLES.some(function(item){return item.id===value;});});
   if(!record.muscleIds.length){fitnessSetError(form,"Choose at least one muscle group.");return;}
@@ -539,6 +539,7 @@ function fitnessHandleRecord(form,kind){
   if(date!==occurrence){fitnessSetError(form,"The fitness log date must match its scheduled rhythm occurrence.");return;}
   if(!fitnessValidDate(occurrence)||!fitnessRhythmScheduled(rhythm,occurrence)){fitnessSetError(form,"This Fitness rhythm is not set for this occurrence.");return;}
   var linkedEvent=(S.events||[]).find(function(event){return event.fitnessLogId===id&&event.rhythmId===associationId&&event.rhythmOccurrence===occurrence;});
+  if(!previous&&!linkedEvent)completionNoteEventId="fitness-rhythm-"+id;
   if(fitnessRhythmCompletionToday(rhythm,occurrence)&&!linkedEvent){fitnessSetError(form,"This Fitness rhythm occurrence has already been completed.");return;}
   var duplicate=(data[collection]||[]).some(function(item){return item.id!==id&&item.rhythmId===associationId&&item.rhythmOccurrence===occurrence;});
   if(duplicate){fitnessSetError(form,"A fitness log is already linked to this scheduled occurrence.");return;}
@@ -546,6 +547,7 @@ function fitnessHandleRecord(form,kind){
  }else{delete record.rhythmId;delete record.rhythmOccurrence;delete record.fitnessType;}
  form.dataset.submitting="true";fitnessStoreUpsert(collection,record);
  fitnessDialog=null;render();flash(kind==="workout"?"Workout saved":kind==="run"?"Run saved":"Weigh-in saved");
+ if(completionNoteEventId&&typeof openRhythmCompletionNote==="function")openRhythmCompletionNote(completionNoteEventId);
 }
 document.addEventListener("input",function(event){
  var input=event.target&&event.target.closest&&event.target.closest('.fitness-strength-goals-dialog input[name^="interval-"],.fitness-strength-goals-dialog input[name^="rest-"]');

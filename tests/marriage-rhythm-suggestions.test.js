@@ -76,27 +76,42 @@ function createRecurrenceContext() {
   return context;
 }
 
-test("the Marriage catalog has eight stable, title-independent suggestions", () => {
+test("the Marriage catalog has nine stable, title-independent suggestions", () => {
   const { context } = createContext();
   const catalog = JSON.parse(JSON.stringify(context.window.tendMarriageSuggestionCatalog()));
 
   assert.deepEqual(catalog.map(item => item.title), [
+    "Daily Connection",
+    "Pray Together",
     "Date Night",
     "Marriage Check-In",
-    "Pray Together",
-    "Unhurried Conversation",
+    "Thoughtful Act of Love",
     "Dream Together",
     "Overnight Away",
-    "Marriage Counseling Check-In",
+    "Marriage Enrichment",
     "Week Away Together"
   ]);
   assert.deepEqual(catalog.map(item => item.freq), [
-    "weekly", "weekly", "daily", "daily", "quarterly", "quarterly", "yearly", "yearly"
+    "custom", "daily", "weekly", "weekly", "weekly", "quarterly", "quarterly", "yearly", "yearly"
   ]);
-  assert.equal(catalog[0].id, "marriage.date-night");
-  assert.equal(catalog[6].id, "marriage.counseling-check-in");
-  assert.match(catalog[6].description, /complete this rhythm when attending, not when scheduling/);
+  assert.equal(catalog[0].id, "marriage.daily-connection");
+  assert.equal(catalog[2].id, "marriage.date-night");
+  assert.equal(catalog[7].id, "marriage.marriage-enrichment");
   assert.equal(context.S.areaRhythms.length, 0, "opening the catalog does not seed rhythms");
+});
+
+test("Daily Connection drafts are spouse-owned daily rhythms with a stable source identity", () => {
+  const { context } = createContext({
+    people: [{ id: "spouse-1", relation: "Spouse" }]
+  });
+
+  const draft = context.window.tendMarriageTemplateDraft("marriage.daily-connection");
+  assert.equal(draft.id, "draft");
+  assert.equal(draft.sourceTemplateId, "marriage.daily-connection");
+  assert.equal(draft.marriageDailyConnection, true);
+  assert.equal(draft.freq, "custom");
+  assert.equal(draft.start, "2026-10-17");
+  assert.equal(draft.personId, "spouse-1");
 });
 
 test("suggestion drafts keep flexible time and require chosen dates and weekly days", () => {
@@ -195,12 +210,12 @@ test("links retain deleted status until explicitly cleared or replaced", () => {
   const record = { id: "area-1", text: "Conversation", areas: ["marriage"] };
   const { context } = createContext({ areaRhythms: [record], people: [], events: [] });
 
-  assert.equal(context.window.tendMarriageLinkExistingRhythm("marriage.unhurried-conversation", record.id, false), true);
-  assert.equal(context.window.tendMarriageTemplateStatus("marriage.unhurried-conversation").status, "linked");
+  assert.equal(context.window.tendMarriageLinkExistingRhythm("marriage.marriage-check-in", record.id, false), true);
+  assert.equal(context.window.tendMarriageTemplateStatus("marriage.marriage-check-in").status, "linked");
   context.S.areaRhythms = [];
-  assert.equal(context.window.tendMarriageTemplateStatus("marriage.unhurried-conversation").status, "deleted");
-  assert.equal(context.window.tendMarriageUnlinkTemplate("marriage.unhurried-conversation"), true);
-  assert.equal(context.window.tendMarriageTemplateStatus("marriage.unhurried-conversation").status, "available");
+  assert.equal(context.window.tendMarriageTemplateStatus("marriage.marriage-check-in").status, "deleted");
+  assert.equal(context.window.tendMarriageUnlinkTemplate("marriage.marriage-check-in"), true);
+  assert.equal(context.window.tendMarriageTemplateStatus("marriage.marriage-check-in").status, "available");
 });
 
 test("normalizing account state recovers stable template IDs from existing rhythm records", () => {

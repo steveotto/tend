@@ -214,6 +214,7 @@ test("exports and cloud saves strip legacy sync secrets without changing ordinar
   const harness = cloudHarness();
   const state = {
     people: [{ id: "p", name: "Person" }],
+    events: [{ id: "event", rhythmId: "rhythm", ts: 1234, completionNote: "Dinner together" }],
     syncToken: "legacy-sync-secret",
     githubToken: "old-github-secret",
     token: "generic-secret",
@@ -222,10 +223,12 @@ test("exports and cloud saves strip legacy sync secrets without changing ordinar
   const clean = harness.cloud.sanitize(state);
   assert.deepEqual(JSON.parse(JSON.stringify(clean)), {
     people: [{ id: "p", name: "Person" }],
+    events: [{ id: "event", rhythmId: "rhythm", ts: 1234, completionNote: "Dinner together" }],
     settings: { color: "green" }
   });
   await harness.cloud.initializeState("user-a", state);
   assert.equal(Object.hasOwn(harness.rows.get("user-a").state, "githubToken"), false);
+  assert.equal(harness.rows.get("user-a").state.events[0].completionNote, "Dinner together");
 });
 
 test("auth UI supports email signup, login, recovery, reset, and logout with Supabase APIs", async () => {

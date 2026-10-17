@@ -498,6 +498,8 @@ test("Home, Person, and category rhythm cards share one renderer and card struct
     frequency: { full: "Weekly on Friday", label: "Weekly · Fri", narrow: "Wk · Fri" },
     time: { full: "Evening", label: "Evening", narrow: "PM" },
     lastTended: { full: "Never tended", label: "Never" },
+    leadingHTML: '<span class="marriage-detail-rhythm-icon">Date Night icon</span>',
+    detailsAttributes: { "data-marriage-custom-rhythm": "shared-walk" },
     editAttributes: { "data-rhyedit": "amy|shared-walk" },
     tendAttributes: { "data-tend-open": "person-rhythm", "data-person-id": "amy", "data-rhythm-id": "shared-walk" },
     historyAttributes: { "data-rhyhistory": "amy|shared-walk" }
@@ -598,6 +600,8 @@ test("Home, Person, and category rhythm cards share one renderer and card struct
   });
 
   assert.match(card, /class="rhythm-card card"/);
+  assert.match(card, /marriage-detail-rhythm-icon">Date Night icon<\/span><strong class="tend-type-title"/);
+  assert.match(card, /class="rhythm-card__details" data-marriage-custom-rhythm="shared-walk" aria-label="View details for &lt;Evening walk&gt;">Details<\/button>/);
   assert.match(card, /&lt;Evening walk&gt;/);
   assert.match(card, /Talk &amp; reconnect/);
   assert.match(card, /class="rhythm-card__edit" data-rhyedit="amy\|shared-walk"/);
@@ -1627,7 +1631,7 @@ test("Faith Today keeps scheduled rhythms and Sparks without its Prayer entry wi
   assert.match(styles, /\.faith-nav-score-unavailable\{background:transparent;color:var\(--ink-soft\)/);
   assert.match(indexSource, /Newsreader:ital,opsz,wght@0,6\.\.72,400;0,6\.\.72,500/);
   assert.match(indexSource, /app-core\.js\?v=20261016-fitness-score-sync-strength-data/);
-  assert.match(indexSource, /app-categoryrhythms\.js\?v=0\.9\.1/);
+  assert.match(indexSource, /app-categoryrhythms\.js\?v=0\.11\.8/);
   assert.match(styles, /\.faith-prayer-time-group\{display:grid;gap:10px/);
   assert.match(styles, /\.faith-prayer-content,.faith-prayer-row,.faith-prayer-hub \.faith-profile-prayer-row\{box-sizing:border-box;width:100%;min-width:0\}/);
   assert.match(styles, /\.faith-today-subheading\{margin:28px 0 12px\}/);

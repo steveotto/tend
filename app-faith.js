@@ -577,9 +577,9 @@ function renderFaithPage(){
 function faithFindRhythm(id){return S.rhythms.find(function(r){return r.id===id&&(r.category==="faith"||FAITH_GROUPS.indexOf(r.faithGroup)>=0);});}
 function faithLogRhythm(r,ts){
  if(!r)return false;
- logEvent("faith",null,/^pray/i.test(r.text||"")?"prayer":"quality",r.text||"Faith rhythm",r.description||"",ts||Date.now(),r.id,{faithGroup:r.faithGroup});
+ var event=logEvent("faith",null,/^pray/i.test(r.text||"")?"prayer":"quality",r.text||"Faith rhythm",r.description||"",ts||Date.now(),r.id,{faithGroup:r.faithGroup});
  flash("Rhythm tended \u2713");
- return true;
+ return event;
 }
 function faithCompleteSpark(item){
  if(!item||item.done)return;
