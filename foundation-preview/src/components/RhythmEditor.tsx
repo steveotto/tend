@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { areas, syntheticPeople } from '../domain/preview-data.ts';
 import type { RhythmPreview } from '../domain/preview-data.ts';
@@ -26,14 +26,25 @@ const emptyDraft: RhythmDraft = {
 type RhythmEditorProps = {
   rhythm?: RhythmPreview;
   onSave: (draft: RhythmDraft) => RhythmDraftErrors;
+  onArchive?: (id: string) => void;
   onClose: () => void;
 };
 
-export function RhythmEditor({ rhythm, onSave, onClose }: RhythmEditorProps) {
+export function RhythmEditor({ rhythm, onSave, onArchive, onClose }: RhythmEditorProps) {
   const [draft, setDraft] = useState<RhythmDraft>(() =>
     rhythm ? rhythmDraftFrom(rhythm, rhythm.categoryIds ?? []) : emptyDraft
   );
   const [errors, setErrors] = useState<RhythmDraftErrors>({});
+  const [showArchiveConfirmation, setShowArchiveConfirmation] = useState(false);
+  const archiveButtonRef = useRef<HTMLButtonElement>(null);
+  const archiveConfirmButtonRef = useRef<HTMLButtonElement>(null);
+  const wasConfirmingArchiveRef = useRef(false);
+
+  useEffect(() => {
+    if (showArchiveConfirmation) archiveConfirmButtonRef.current?.focus();
+    else if (wasConfirmingArchiveRef.current) archiveButtonRef.current?.focus();
+    wasConfirmingArchiveRef.current = showArchiveConfirmation;
+  }, [showArchiveConfirmation]);
 
   function update<K extends keyof RhythmDraft>(field: K, value: RhythmDraft[K]) {
     setDraft(previous => ({ ...previous, [field]: value }));
@@ -174,11 +185,55 @@ export function RhythmEditor({ rhythm, onSave, onClose }: RhythmEditorProps) {
         {Object.keys(errors).length > 0 && (
           <p className="goal-form-error-summary" role="alert">Review the highlighted Rhythm fields.</p>
         )}
-        <div className="money-goal-dialog__actions">
-          <button type="submit" className="btn mini">{rhythm ? 'Save Rhythm' : 'Add Rhythm'}</button>
-          <button type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>
+        <div className="rhythm-editor__action-row">
+          <div className="money-goal-dialog__actions rhythm-editor__primary-actions">
+            <button type="submit" className="btn mini">{rhythm ? 'Save Rhythm' : 'Add Rhythm'}</button>
+            <button type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>
+          </div>
+          {rhythm && onArchive && (
+            <button
+              ref={archiveButtonRef}
+              type="button"
+              className="rhythm-editor__archive-button"
+              aria-label={`Archive ${rhythm.title}`}
+              onClick={() => setShowArchiveConfirmation(true)}
+            >
+              Archive
+            </button>
+          )}
         </div>
       </form>
+      {showArchiveConfirmation && rhythm && onArchive && (
+        <section
+          className="rhythm-editor__archive-confirmation"
+          role="alertdialog"
+          aria-labelledby="rhythm-archive-confirmation-title"
+          aria-describedby="rhythm-archive-confirmation-description"
+        >
+          <h3 id="rhythm-archive-confirmation-title">Archive {rhythm.title}?</h3>
+          <p id="rhythm-archive-confirmation-description">
+            This Rhythm will leave active Today and category lists. Its identity, associations, and completion history will be retained.
+          </p>
+          <div className="money-goal-dialog__actions">
+            <button
+              ref={archiveConfirmButtonRef}
+              type="button"
+              className="rhythm-editor__archive-confirm"
+              aria-label={`Confirm archive ${rhythm.title}`}
+              onClick={() => onArchive(rhythm.id)}
+            >
+              Archive rhythm
+            </button>
+            <button
+              type="button"
+              className="btn mini ghost"
+              onClick={() => setShowArchiveConfirmation(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </section>
+      )}
     </MoneyGoalDialog>
   );
 }

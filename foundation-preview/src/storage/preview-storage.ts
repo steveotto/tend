@@ -1,9 +1,14 @@
-import { parsePreviewBackup, createPreviewEnvelope } from '../domain/preview-state.ts';
-import { isVersionOnePreviewRaw } from '../domain/preview-state.ts';
+import {
+  parsePreviewBackup,
+  createPreviewEnvelope,
+  isVersionOnePreviewRaw,
+  isVersionTwoPreviewRaw
+} from '../domain/preview-state.ts';
 import type { PreviewData } from '../domain/preview-state.ts';
 
 export const PREVIEW_STORAGE_KEY = 'tend2:synthetic-preview';
 export const PREVIEW_V1_RECOVERY_KEY = 'tend2:synthetic-preview:v1-recovery';
+export const PREVIEW_V2_RECOVERY_KEY = 'tend2:synthetic-preview:v2-recovery';
 
 export type PreviewStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -19,7 +24,7 @@ export type PreviewWriteResult =
   | { kind: 'conflict'; actualRaw: string | null }
   | { kind: 'error'; message: string };
 
-export type V1RecoveryReadResult =
+export type RecoveryCopyReadResult =
   | { kind: 'loaded'; raw: string | null }
   | { kind: 'error'; message: string };
 
@@ -55,14 +60,19 @@ export function writePreview(
     if (actualRaw !== expectedRaw) return { kind: 'conflict', actualRaw };
     const raw = JSON.stringify(createPreviewEnvelope(data));
 
-    if (expectedRaw !== null && isVersionOnePreviewRaw(expectedRaw)) {
-      const archivedRaw = storage.getItem(PREVIEW_V1_RECOVERY_KEY);
+    const sourceRecoveryKey = expectedRaw !== null && isVersionOnePreviewRaw(expectedRaw)
+      ? PREVIEW_V1_RECOVERY_KEY
+      : expectedRaw !== null && isVersionTwoPreviewRaw(expectedRaw)
+        ? PREVIEW_V2_RECOVERY_KEY
+        : null;
+    if (expectedRaw !== null && sourceRecoveryKey !== null) {
+      const archivedRaw = storage.getItem(sourceRecoveryKey);
       if (archivedRaw === null) {
-        storage.setItem(PREVIEW_V1_RECOVERY_KEY, expectedRaw);
+        storage.setItem(sourceRecoveryKey, expectedRaw);
       } else if (archivedRaw !== expectedRaw) {
         return {
           kind: 'error',
-          message: 'The original v1 recovery copy already contains different data. No v2 write was made.'
+          message: `The original ${isVersionOnePreviewRaw(expectedRaw) ? 'v1' : 'v2'} recovery copy already contains different data. No new schema write was made.`
         };
       }
     }
@@ -81,9 +91,17 @@ export function browserPreviewStorage(): PreviewStorage {
   };
 }
 
-export function loadV1RecoveryCopy(storage: PreviewStorage): V1RecoveryReadResult {
+export function loadV1RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
   try {
     return { kind: 'loaded', raw: storage.getItem(PREVIEW_V1_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV2RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V2_RECOVERY_KEY) };
   } catch (error) {
     return { kind: 'error', message: errorMessage(error) };
   }

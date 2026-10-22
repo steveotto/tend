@@ -13,8 +13,10 @@ import {
   browserPreviewStorage,
   loadPreview,
   loadV1RecoveryCopy,
+  loadV2RecoveryCopy,
   PREVIEW_STORAGE_KEY,
   PREVIEW_V1_RECOVERY_KEY,
+  PREVIEW_V2_RECOVERY_KEY,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import type { PreviewData } from '../src/domain/preview-state.ts';
@@ -24,6 +26,8 @@ beforeEach(installMemoryStorage);
 afterEach(() => {
   cleanup();
   window.localStorage.removeItem(PREVIEW_STORAGE_KEY);
+  window.localStorage.removeItem(PREVIEW_V1_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V2_RECOVERY_KEY);
   vi.unstubAllGlobals();
 });
 
@@ -47,6 +51,19 @@ function versionOneRaw(data: PreviewData): string {
     data: {
       goals: envelope.data.goals,
       completedRhythmIds: envelope.data.completedRhythmIds
+    }
+  });
+}
+
+function versionTwoRaw(data: PreviewData): string {
+  const envelope = createPreviewEnvelope(data);
+  return JSON.stringify({
+    format: envelope.format,
+    schemaVersion: 2,
+    data: {
+      goals: envelope.data.goals,
+      completedRhythmIds: envelope.data.completedRhythmIds,
+      savedRhythms: envelope.data.savedRhythms
     }
   });
 }
@@ -83,7 +100,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(parsed.valid).toBe(true);
     if (!parsed.valid) return;
     expect(parsed.envelope.format).toBe('tend.synthetic-preview');
-    expect(parsed.envelope.schemaVersion).toBe(2);
+    expect(parsed.envelope.schemaVersion).toBe(3);
     expect(parsed.envelope.data).toEqual(data);
 
     const { storage } = storageFixture();
@@ -94,7 +111,7 @@ describe('synthetic preview storage adapter and envelope', () => {
   });
 
   it('restores valid empty state without reinitializing sample goals or completions', () => {
-    const empty = { goals: [], completedRhythmIds: [], savedRhythms: [] };
+    const empty = { goals: [], completedRhythmIds: [], savedRhythms: [], archivedRhythmIds: [] };
     const raw = JSON.stringify(createPreviewEnvelope(empty));
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
     const result = loadPreview(storage, '2026-10-21');
@@ -120,8 +137,8 @@ describe('synthetic preview storage adapter and envelope', () => {
     const parsed = parsePreviewBackup(raw, '2026-10-21');
     expect(parsed.valid).toBe(true);
     if (parsed.valid) {
-      expect(parsed.envelope.schemaVersion).toBe(2);
-      expect(parsed.envelope.data).toEqual({ ...data, savedRhythms: [] });
+      expect(parsed.envelope.schemaVersion).toBe(3);
+      expect(parsed.envelope.data).toEqual({ ...data, savedRhythms: [], archivedRhythmIds: [] });
       expect(parsed.envelope.data.goals[0]!.checkIns).toEqual(data.goals[0]!.checkIns);
       expect(parsed.envelope.data.goals[0]!.correctionHistory).toEqual(data.goals[0]!.correctionHistory);
       expect(parsed.envelope.data.completedRhythmIds).toEqual(data.completedRhythmIds);
@@ -136,11 +153,32 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(emptyResult.valid && emptyResult.envelope.data).toEqual({
       goals: [],
       completedRhythmIds: [],
-      savedRhythms: []
+      savedRhythms: [],
+      archivedRhythmIds: []
     });
   });
 
-  it('archives the exact v1 envelope before the first v2 write and never overwrites that recovery copy', () => {
+  it('migrates v2 previews with editable Rhythms and completions while making them active', () => {
+    const data = sampleWithHistory();
+    const savedRhythms: PreviewData['savedRhythms'] = [{
+      id: 'user-rhythm-11111111-1111-4111-8111-111111111111',
+      title: 'Marriage walk',
+      cadence: 'Weekly',
+      timeLabel: 'Evening',
+      personIds: ['sample-person-morgan'],
+      categoryIds: ['marriage']
+    }];
+    const v2Data = { ...data, savedRhythms };
+    const parsed = parsePreviewBackup(versionTwoRaw(v2Data), '2026-10-21');
+    expect(parsed.valid).toBe(true);
+    if (parsed.valid) {
+      expect(parsed.sourceSchemaVersion).toBe(2);
+      expect(parsed.envelope.schemaVersion).toBe(3);
+      expect(parsed.envelope.data).toEqual({ ...v2Data, archivedRhythmIds: [] });
+    }
+  });
+
+  it('archives the exact v1 envelope before the first v3 write and never overwrites that recovery copy', () => {
     const initial = sampleWithHistory();
     const originalRaw = versionOneRaw(initial);
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
@@ -156,7 +194,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(values.get(PREVIEW_V1_RECOVERY_KEY)).toBe(originalRaw);
     const recoveryCopy = values.get(PREVIEW_V1_RECOVERY_KEY);
     const activeV2 = values.get(PREVIEW_STORAGE_KEY)!;
-    expect(JSON.parse(activeV2).schemaVersion).toBe(2);
+    expect(JSON.parse(activeV2).schemaVersion).toBe(3);
     expect(writePreview(storage, { ...updated, completedRhythmIds: [] }, activeV2).kind).toBe('saved');
     expect(values.get(PREVIEW_V1_RECOVERY_KEY)).toBe(recoveryCopy);
 
@@ -169,11 +207,44 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(occupied.values.get(PREVIEW_V1_RECOVERY_KEY)).toBe('{"other":"preserved"}');
   });
 
+  it('preserves exact v2 bytes before migration and blocks conflicting recovery copies', () => {
+    const data = sampleWithHistory();
+    data.savedRhythms = [{
+      id: 'user-rhythm-11111111-1111-4111-8111-111111111111',
+      title: 'Marriage walk',
+      cadence: 'Weekly',
+      timeLabel: 'Evening',
+      personIds: ['sample-person-morgan'],
+      categoryIds: ['marriage']
+    }];
+    const originalRaw = versionTwoRaw(data);
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+
+    expect(writePreview(storage, {
+      ...loaded.data,
+      archivedRhythmIds: [data.savedRhythms[0]!.id]
+    }, originalRaw).kind).toBe('saved');
+    expect(values.get(PREVIEW_V2_RECOVERY_KEY)).toBe(originalRaw);
+    expect(loadV2RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(3);
+
+    const occupied = storageFixture({
+      [PREVIEW_STORAGE_KEY]: originalRaw,
+      [PREVIEW_V2_RECOVERY_KEY]: '{"different":"v2"}'
+    });
+    expect(writePreview(occupied.storage, loaded.data, originalRaw)).toMatchObject({ kind: 'error' });
+    expect(occupied.values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    expect(occupied.values.get(PREVIEW_V2_RECOVERY_KEY)).toBe('{"different":"v2"}');
+  });
+
   it('does not overwrite an unsupported active envelope', () => {
     const unsupportedRaw = JSON.stringify({
       format: 'tend.synthetic-preview',
-      schemaVersion: 3,
-      data: { goals: [], completedRhythmIds: [], savedRhythms: [] }
+      schemaVersion: 4,
+      data: { goals: [], completedRhythmIds: [], savedRhythms: [], archivedRhythmIds: [] }
     });
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: unsupportedRaw });
     expect(loadPreview(storage, '2026-10-21')).toMatchObject({ kind: 'unsupported', raw: unsupportedRaw });
@@ -202,7 +273,7 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('rejects malformed JSON, unsupported versions, malformed records, duplicate IDs, and invalid references', () => {
     expect(parsePreviewBackup('{', '2026-10-21').valid).toBe(false);
     const unsupported = createPreviewEnvelope(sampleWithHistory());
-    expect(validatePreviewEnvelope({ ...unsupported, schemaVersion: 3 }, '2026-10-21')).toMatchObject({
+    expect(validatePreviewEnvelope({ ...unsupported, schemaVersion: 4 }, '2026-10-21')).toMatchObject({
       valid: false,
       kind: 'unsupported'
     });
@@ -218,6 +289,17 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(validatePreviewEnvelope(alteredEnvelope(value => {
       const data = value.data as Record<string, unknown>;
       data.completedRhythmIds = ['not-a-today-example'];
+    }), '2026-10-21').valid).toBe(false);
+    expect(validatePreviewEnvelope(alteredEnvelope(value => {
+      const data = value.data as Record<string, unknown>;
+      data.archivedRhythmIds = ['not-a-today-example'];
+    }), '2026-10-21').valid).toBe(false);
+    expect(validatePreviewEnvelope(alteredEnvelope(value => {
+      const data = value.data as Record<string, unknown>;
+      data.archivedRhythmIds = ['sample-pray-together', 'sample-pray-together'];
+    }), '2026-10-21').valid).toBe(false);
+    expect(validatePreviewEnvelope(alteredEnvelope(value => {
+      delete (value.data as Record<string, unknown>).archivedRhythmIds;
     }), '2026-10-21').valid).toBe(false);
     expect(validatePreviewEnvelope(alteredEnvelope(value => {
       const data = value.data as Record<string, unknown>;
@@ -287,6 +369,7 @@ describe('preview backup controls', () => {
   it('exports the explicit envelope and imports the backup through confirmation', async () => {
     const user = userEvent.setup();
     const data = sampleWithHistory();
+    data.archivedRhythmIds = ['sample-pray-together'];
     const onImport = vi.fn(() => null);
     const { createObjectURL } = setDownloadMocks();
     render(
@@ -307,6 +390,8 @@ describe('preview backup controls', () => {
     const exported = JSON.parse(exportedText) as Record<string, unknown>;
     expect(Object.keys(exported).sort()).toEqual(['data', 'format', 'schemaVersion']);
     expect(exported.format).toBe('tend.synthetic-preview');
+    expect(exported.schemaVersion).toBe(3);
+    expect((exported.data as PreviewData).archivedRhythmIds).toEqual(['sample-pray-together']);
     await user.upload(
       screen.getByLabelText('Import preview backup'),
       new File([exportedText], 'exported.json', { type: 'application/json' })
@@ -314,6 +399,41 @@ describe('preview backup controls', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
     expect(onImport).toHaveBeenCalledWith(data);
+  });
+
+  it('imports v2 backups as active and explains the missing archive state before replacement', async () => {
+    const user = userEvent.setup();
+    const legacyData = sampleWithHistory();
+    legacyData.savedRhythms = [{
+      id: 'user-rhythm-11111111-1111-4111-8111-111111111111',
+      title: 'Earlier saved Rhythm',
+      cadence: 'Weekly',
+      timeLabel: 'Evening',
+      personIds: ['sample-person-morgan'],
+      categoryIds: ['marriage']
+    }];
+    const onImport = vi.fn(() => null);
+    render(
+      <PreviewDataControls
+        data={createSamplePreviewData()}
+        status={{ kind: 'saved' }}
+        currentDate="2026-10-21"
+        onImport={onImport}
+        onReset={() => null}
+        onRetrySave={() => {}}
+        onReloadExternal={() => null}
+        onReplaceExternal={() => null}
+      />
+    );
+    await user.upload(
+      screen.getByLabelText('Import preview backup'),
+      new File([versionTwoRaw(legacyData)], 'v2-backup.json', { type: 'application/json' })
+    );
+    const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
+    expect(within(dialog).getByText(/predates archive status, so its Rhythms will be restored as active/)).toBeTruthy();
+    expect(onImport).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
+    expect(onImport).toHaveBeenCalledWith({ ...legacyData, archivedRhythmIds: [] });
   });
 
   it('imports only after validation and confirmation, and cancellation preserves current state', async () => {

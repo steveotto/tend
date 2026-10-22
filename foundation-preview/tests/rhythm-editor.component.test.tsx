@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { todayRhythms } from '../src/domain/preview-data.ts';
 import {
+  activeTodayRhythms,
+  archiveRhythmId,
+  archivedTodayRhythms,
   isEditableRhythmId,
   resolveTodayRhythms,
   rhythmDraftFrom,
   rhythmsForCategory,
+  restoreRhythmId,
   saveRhythmDraft,
   validateRhythmDraft,
   validateSavedRhythms
@@ -101,5 +105,51 @@ describe('synthetic Rhythm editor domain', () => {
       personIds: fixture.personIds,
       categoryIds: []
     });
+  });
+
+  it('archives fixture overlays without deleting their identity, associations, or completion reference', () => {
+    const fixture = todayRhythms[0]!;
+    const overlay = {
+      id: fixture.id,
+      title: 'Updated prayer rhythm',
+      description: 'Retained while archived.',
+      cadence: 'Weekly' as const,
+      timeLabel: 'Evening' as const,
+      personIds: ['sample-person-avery'] as const,
+      categoryIds: ['marriage'] as const
+    };
+    const savedRhythms = [{
+      ...overlay,
+      personIds: [...overlay.personIds],
+      categoryIds: [...overlay.categoryIds]
+    }];
+    const completions = [fixture.id];
+
+    const archivedIds = archiveRhythmId(savedRhythms, [], fixture.id);
+    expect(archivedIds).toEqual([fixture.id]);
+    expect(archiveRhythmId(savedRhythms, archivedIds!, fixture.id)).toBeUndefined();
+    const resolvedWhileArchived = resolveTodayRhythms(savedRhythms);
+    expect(activeTodayRhythms(resolvedWhileArchived, archivedIds!)).toEqual(
+      resolvedWhileArchived.filter(rhythm => rhythm.id !== fixture.id)
+    );
+    expect(archivedTodayRhythms(resolvedWhileArchived, archivedIds!)[0]).toMatchObject({
+      id: fixture.id,
+      title: overlay.title,
+      personIds: ['sample-person-avery'],
+      categoryIds: ['marriage']
+    });
+    expect(savedRhythms).toHaveLength(1);
+    expect(completions).toEqual([fixture.id]);
+
+    const restoredIds = restoreRhythmId(savedRhythms, archivedIds!, fixture.id);
+    expect(restoredIds).toEqual([]);
+    expect(restoreRhythmId(savedRhythms, restoredIds!, fixture.id)).toBeUndefined();
+    expect(activeTodayRhythms(resolveTodayRhythms(savedRhythms), restoredIds!)[0]).toMatchObject({
+      id: fixture.id,
+      title: overlay.title,
+      personIds: ['sample-person-avery'],
+      categoryIds: ['marriage']
+    });
+    expect(completions).toEqual([fixture.id]);
   });
 });

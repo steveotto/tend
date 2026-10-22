@@ -354,7 +354,21 @@ a:focus-visible {
   border-color: var(--tend-forest);
   background: var(--tend-mist);
   color: var(--tend-forest);
-  font-size: 11px;
+}
+
+.rhythm-archived-badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid #ddc2be;
+  border-radius: 999px;
+  background: #fdf0ee;
+  color: #8b3730;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.3;
 }
 
 .rhythm-cadence {
@@ -888,7 +902,8 @@ a:focus-visible {
   .tend-app-preview .areanav button:focus-visible,
   .tend-app-preview .menu-area:focus-visible,
   .tend-app-preview .today-rhythm-card button:focus-visible,
-  .today-rhythm-details-dialog button:focus-visible {
+  .today-rhythm-details-dialog button:focus-visible,
+  .archived-rhythms-dialog button:focus-visible {
     outline: 2px solid var(--forest);
     outline-offset: 2px;
   }
@@ -1227,6 +1242,250 @@ a:focus-visible {
     .rhythm-editor .goal-field select {
       height: 44px;
       min-height: 44px;
+    }
+
+    .rhythm-editor__action-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .rhythm-editor .rhythm-editor__primary-actions {
+      flex: 0 1 auto;
+      align-items: center;
+      margin: 0;
+    }
+
+    .rhythm-editor__archive-confirmation {
+      margin-top: 14px;
+      padding: 12px;
+      border: 1px solid #ddc2be;
+      border-radius: 10px;
+      background: #fff8f7;
+    }
+
+    .rhythm-editor__archive-confirmation h3 {
+      margin: 0;
+      color: var(--ink);
+      font-size: 15px;
+    }
+
+    .rhythm-editor__archive-confirmation p {
+      margin: 7px 0 0;
+      color: var(--ink-soft);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .rhythm-editor__archive-button,
+    .rhythm-editor__archive-confirm {
+      min-width: 44px;
+      min-height: 44px;
+      padding: 9px 13px;
+      border: 1px solid #ddc2be;
+      border-radius: 10px;
+      background: #fff8f7;
+      color: #8b3730;
+      font: 600 14px/1.25 var(--sans);
+      cursor: pointer;
+    }
+
+    .rhythm-editor__archive-button:hover,
+    .rhythm-editor__archive-confirm:hover {
+      background: #fdf0ee;
+    }
+
+    .rhythm-editor__archive-button:focus-visible,
+    .rhythm-editor__archive-confirm:focus-visible,
+    .today-archived-rhythms-toggle:focus-visible,
+    .archived-rhythms-dialog__restore:focus-visible {
+      outline: 2px solid var(--forest);
+      outline-offset: 2px;
+    }
+
+    .rhythm-editor__archive-button {
+      flex: none;
+      align-self: center;
+      height: 44px;
+      margin: 0 0 0 auto;
+    }
+
+    .rhythm-editor__archive-confirm {
+      background: #a64036;
+      border-color: #a64036;
+      color: #fff;
+    }
+
+    .rhythm-editor__archive-confirm:hover {
+      background: #8b3730;
+    }
+
+    .today-archived-rhythms-toggle {
+      min-width: 44px;
+      min-height: 44px;
+      margin-left: auto;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--card);
+      color: var(--forest-deep);
+      font: 600 13px/1.25 var(--sans);
+      cursor: pointer;
+    }
+
+    .today-archived-rhythms-toggle:hover {
+      background: var(--mist);
+    }
+
+    .archived-rhythms-dialog {
+      display: flex;
+      flex-direction: column;
+      width: min(600px, calc(100vw - 32px));
+      max-height: min(85vh, 820px);
+      margin: auto;
+      padding: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: var(--canvas);
+      color: var(--ink);
+      box-shadow: 0 22px 70px #10251d45;
+    }
+
+    .archived-rhythms-dialog:focus {
+      outline: none;
+    }
+
+    .archived-rhythms-dialog::backdrop {
+      background: #10251d9c;
+    }
+
+    .archived-rhythms-dialog__header {
+      display: flex;
+      flex: none;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .archived-rhythms-dialog__header h2 {
+      min-width: 0;
+      margin: 0;
+      font-size: 21px;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .archived-rhythms-dialog__content {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      padding: 16px;
+    }
+
+    .archived-rhythms-dialog__detail {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .archived-rhythms-dialog__note {
+      margin: 0 0 2px;
+      color: var(--ink-soft);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .archived-rhythms-dialog__back {
+      display: inline-flex;
+      align-items: center;
+      justify-self: start;
+      gap: 7px;
+      min-width: 44px;
+      min-height: 44px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--card);
+      color: var(--forest-deep);
+      font: 600 13px/1.25 var(--sans);
+      cursor: pointer;
+    }
+
+    .archived-rhythms-dialog__back:hover {
+      background: var(--mist);
+    }
+
+    .archived-rhythms-dialog__back:focus-visible {
+      outline: 2px solid var(--forest);
+      outline-offset: 2px;
+    }
+
+    .archived-rhythms-dialog__back svg {
+      flex: none;
+      width: 16px;
+      height: 16px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.8;
+    }
+
+    .archived-rhythms-dialog__list {
+      display: grid;
+      gap: 16px;
+    }
+
+    .archived-rhythms-dialog__item {
+      display: grid;
+      min-width: 0;
+      gap: 8px;
+    }
+
+    .archived-rhythms-dialog__restore {
+      justify-self: end;
+      min-width: 44px;
+      min-height: 44px;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--card);
+      color: var(--forest-deep);
+      font: 600 13px/1.25 var(--sans);
+      cursor: pointer;
+    }
+
+    .archived-rhythms-dialog__restore:hover {
+      background: var(--mist);
+    }
+
+    .archived-rhythms-dialog__empty {
+      padding: 28px 12px;
+      text-align: center;
+    }
+
+    .archived-rhythms-dialog__empty h3 {
+      margin: 0;
+      color: var(--ink);
+      font-size: 17px;
+    }
+
+    .archived-rhythms-dialog__empty p {
+      margin: 8px 0 0;
+      color: var(--ink-soft);
+      line-height: 1.5;
+    }
+
+    .today-rhythm-details__archived-note {
+      margin: 0 var(--rhythm-details-horizontal-padding) 10px;
+      color: var(--ink-soft);
+      font-size: 13px;
+      line-height: 1.45;
     }
 
     .rhythm-editor-options {
@@ -2534,6 +2793,13 @@ a:focus-visible {
   box-shadow: 0 22px 70px #10251d45;
 }
 
+.today-rhythm-details-dialog--embedded {
+  width: 100%;
+  max-height: none;
+  margin: 0;
+  overflow: visible;
+}
+
 .today-rhythm-details-dialog:focus {
   outline: none;
 }
@@ -2557,30 +2823,57 @@ a:focus-visible {
   padding-inline: var(--rhythm-details-horizontal-padding);
 }
 
+.today-rhythm-details__title-group {
+  display: block;
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
 .today-rhythm-details__header h2 {
-  flex: 0 1 auto;
   min-width: 0;
   margin: 0;
+  display: inline;
   overflow-wrap: anywhere;
   font-size: 21px;
   line-height: 1.25;
 }
 
-.today-rhythm-details__edit {
+.today-rhythm-details__edit-icon {
+  display: grid;
   flex: none;
-  min-width: 56px;
+  place-items: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
   min-height: 44px;
-  padding-inline: 10px;
-  border: 1px solid var(--line);
+  margin-left: 5px;
+  padding: 0;
+  border: 0;
   border-radius: 10px;
-  background: var(--canvas);
-  color: var(--forest-deep);
-  font: 600 13px/1.2 var(--sans);
+  background: transparent;
+  color: var(--forest);
+  vertical-align: middle;
   cursor: pointer;
 }
 
-.today-rhythm-details__edit:hover {
-  background: var(--mist);
+.today-rhythm-details__edit-icon:hover {
+  background: color-mix(in srgb, var(--mist) 74%, transparent);
+}
+
+.today-rhythm-details__edit-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.today-rhythm-details__edit-icon:focus-visible {
+  outline: 2px solid var(--forest);
+  outline-offset: 1px;
 }
 
 .today-rhythm-details__close {
@@ -2881,7 +3174,7 @@ a:focus-visible {
     margin-left: auto;
   }
 
-  .today-rhythm-details__edit:focus-visible,
+  .today-rhythm-details__edit-icon:focus-visible,
   .today-rhythm-details__close:focus-visible,
   .rhythm-editor-options input:focus-visible,
   .today-add-rhythm:focus-visible {
@@ -2897,12 +3190,6 @@ a:focus-visible {
     border: 1px solid var(--line);
     border-radius: 14px;
     background: color-mix(in srgb, var(--card) 88%, var(--mist));
-  }
-
-  @media (max-width: 420px) {
-    .rhythm-editor-options__list {
-      grid-template-columns: minmax(0, 1fr);
-    }
   }
 
   .marriage-page-heading > .marriage-spouse-shortcut {
@@ -2929,5 +3216,11 @@ a:focus-visible {
   .rhythm-card--compact .today-rhythm-card__details-toggle {
     grid-column: 2;
     justify-self: start;
+  }
+}
+
+@media (max-width: 420px) {
+  .rhythm-editor-options__list {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

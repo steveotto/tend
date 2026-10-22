@@ -14,6 +14,7 @@ import {
 } from '../domain/money-goals.ts';
 import { rhythmLastTendedLabel, type FoundationPreview, type PersonId, type PersonPreview, type RhythmPreview } from '../domain/preview-data.ts';
 import { PersonBadgeList } from './PersonBadge.tsx';
+import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
 import { RhythmMetadata } from './RhythmMetadata.tsx';
 import { RhythmCompletionActions } from './RhythmCompletionActions.tsx';
 import { TimelineChart } from './TimelineChart.tsx';
@@ -316,7 +317,7 @@ type RhythmCardBaseProps = {
 
 type RhythmCardProps = RhythmCardBaseProps & (
   | { variant?: 'catalogue'; icon?: ReactNode | undefined; onDetails?: (event: MouseEvent<HTMLButtonElement>) => void }
-  | { variant: 'simple'; completed?: boolean; onDetails: (event: MouseEvent<HTMLButtonElement>) => void; onTend?: () => void; onUndo?: () => void }
+  | { variant: 'simple'; completed?: boolean; archived?: boolean; onDetails: (event: MouseEvent<HTMLButtonElement>) => void; onTend?: () => void; onUndo?: () => void }
   | { variant: 'suggestion'; icon?: ReactNode | undefined; onDetails: (event: MouseEvent<HTMLButtonElement>) => void }
 );
 
@@ -370,6 +371,7 @@ export function RhythmCard(props: RhythmCardProps) {
         people={people}
         onPersonSelect={onPersonSelect}
         completed={props.completed === true}
+        archived={props.archived === true}
         onDetails={props.onDetails}
         onTend={props.onTend}
         onUndo={props.onUndo}
@@ -415,6 +417,7 @@ function SimpleRhythmCard({
   people,
   onPersonSelect,
   completed = false,
+  archived = false,
   suggestion = false,
   icon,
   onDetails,
@@ -427,6 +430,7 @@ function SimpleRhythmCard({
   people?: readonly PersonPreview[] | undefined;
   onPersonSelect?: ((personId: PersonId) => void) | undefined;
   completed?: boolean;
+  archived?: boolean;
   suggestion?: boolean;
   icon?: ReactNode | undefined;
   onDetails: (event: MouseEvent<HTMLButtonElement>) => void;
@@ -444,6 +448,7 @@ function SimpleRhythmCard({
           externallyAutomated={externallyAutomated}
           headingId={headingId}
           showDescription={false}
+          archived={archived}
         />
         <RhythmPeople rhythm={rhythm} people={people} onPersonSelect={onPersonSelect} />
       </div>
@@ -515,6 +520,7 @@ function RhythmCardSummary({
   headingId,
   titleClassName,
   descriptionClassName,
+  archived = false,
   showDescription = true
 }: {
   rhythm: RhythmPreview;
@@ -522,12 +528,14 @@ function RhythmCardSummary({
   headingId: string;
   titleClassName?: string;
   descriptionClassName?: string;
+  archived?: boolean;
   showDescription?: boolean;
 }) {
   return (
     <>
       <div className="rhythm-title-row">
         <h3 id={headingId} className={titleClassName}>{rhythm.title}</h3>
+        {archived && <RhythmArchivedBadge />}
         {externallyAutomated && <span className="automation-badge">Automated at bank</span>}
       </div>
       {showDescription && rhythm.description?.trim() && (
