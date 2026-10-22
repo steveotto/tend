@@ -10,6 +10,7 @@ import {
   type PersonId,
   type MarriageExampleId,
   type MarriageFixture,
+  type RhythmPreview,
   rhythmsSupportingFoundation
 } from '../domain/preview-data.ts';
 import { FoundationCard, RhythmCard, ScoreMeter } from './Cards.tsx';
@@ -24,6 +25,10 @@ type MarriageViewProps = {
   onPersonSelect: (personId: PersonId) => void;
   onPartnerProfile: () => void;
   onRhythmDetails: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
+  userRhythms: readonly RhythmPreview[];
+  completedRhythms: ReadonlySet<string>;
+  onTend: (id: string) => void;
+  onUndo: (id: string) => void;
 };
 
 const tabs: { id: MarriageTab; label: string }[] = [
@@ -37,7 +42,11 @@ export function MarriageView({
   onMarriageExampleChange,
   onPersonSelect,
   onPartnerProfile,
-  onRhythmDetails
+  onRhythmDetails,
+  userRhythms,
+  completedRhythms,
+  onTend,
+  onUndo
 }: MarriageViewProps) {
   const [activeTab, setActiveTab] = useState<MarriageTab>('today');
   const [selectedFoundationId, setSelectedFoundationId] = useState<string | null>(null);
@@ -142,7 +151,15 @@ export function MarriageView({
         aria-labelledby="marriage-tab-rhythms"
         hidden={activeTab !== 'rhythms'}
       >
-        <RhythmSuggestions fixture={fixture} onRhythmDetails={onRhythmDetails} onPersonSelect={onPersonSelect} />
+        <RhythmSuggestions
+          fixture={fixture}
+          userRhythms={userRhythms}
+          completedRhythms={completedRhythms}
+          onTend={onTend}
+          onUndo={onUndo}
+          onRhythmDetails={onRhythmDetails}
+          onPersonSelect={onPersonSelect}
+        />
       </section>
 
       <section
@@ -319,10 +336,18 @@ function WeeklyStrip({ fixture }: { fixture: MarriageFixture }) {
 
 function RhythmSuggestions({
   fixture,
+  userRhythms,
+  completedRhythms,
+  onTend,
+  onUndo,
   onRhythmDetails,
   onPersonSelect
 }: {
   fixture: MarriageFixture;
+  userRhythms: readonly RhythmPreview[];
+  completedRhythms: ReadonlySet<string>;
+  onTend: (id: string) => void;
+  onUndo: (id: string) => void;
   onRhythmDetails: MarriageViewProps['onRhythmDetails'];
   onPersonSelect: MarriageViewProps['onPersonSelect'];
 }) {
@@ -336,6 +361,33 @@ function RhythmSuggestions({
         <span className="marriage-sample-tag">Synthetic examples</span>
       </div>
       <p className="marriage-readonly-note">These suggestions are not added or scheduled. Editing and adding Rhythms are unavailable in this preview.</p>
+      {userRhythms.length > 0 && (
+        <section className="marriage-user-rhythms" aria-labelledby="marriage-user-rhythms-title">
+          <div className="marriage-section-heading">
+            <div>
+              <h3 id="marriage-user-rhythms-title">Your Rhythms</h3>
+              <p>Preview Rhythms assigned to Marriage.</p>
+            </div>
+            <span className="marriage-sample-tag">Synthetic</span>
+          </div>
+          <div className="marriage-rhythm-list">
+            {userRhythms.map(rhythm => (
+              <RhythmCard
+                key={rhythm.id}
+                rhythm={rhythm}
+                people={peopleForRhythm(rhythm)}
+                onPersonSelect={onPersonSelect}
+                variant="simple"
+                completed={completedRhythms.has(rhythm.id)}
+                headingId={`marriage-user-rhythm-${rhythm.id}`}
+                onDetails={event => onRhythmDetails(rhythm.id, event)}
+                onTend={() => onTend(rhythm.id)}
+                onUndo={() => onUndo(rhythm.id)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
       {marriageRhythmGroups.map(group => {
         const rhythms = fixture.rhythms.filter(rhythm => rhythm.marriageGroup === group.id);
         return (

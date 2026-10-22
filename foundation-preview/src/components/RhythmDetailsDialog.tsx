@@ -20,6 +20,7 @@ type RhythmDetailsDialogProps = {
   completed?: boolean;
   onTend?: () => void;
   onUndo?: () => void;
+  onEdit?: (event: MouseEvent<HTMLButtonElement>) => void;
   onClose: () => void;
 };
 
@@ -30,6 +31,7 @@ export function RhythmDetailsDialog({
   completed = false,
   onTend,
   onUndo,
+  onEdit,
   onClose
 }: RhythmDetailsDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -107,6 +109,15 @@ export function RhythmDetailsDialog({
             </button>
           )}
           <h2 id="rhythm-details-title">{rhythm.title}</h2>
+          {onEdit && (
+            <button
+              type="button"
+              className="today-rhythm-details__edit"
+              onClick={event => onEdit(event)}
+            >
+              Edit
+            </button>
+          )}
           <button
             type="button"
             className="today-rhythm-details__close"

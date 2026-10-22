@@ -302,6 +302,115 @@ describe('Tend Today preview', () => {
     expect(anytime.getAttribute('tabindex')).toBe('-1');
   });
 
+  it('creates and edits a synthetic Rhythm, preserving its identity and completion across reload', async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<App />);
+    const addButton = screen.getByRole('button', { name: 'Add Rhythm' });
+    await user.click(addButton);
+    const editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+    await user.type(within(editor).getByLabelText('Title'), 'After-lunch walk');
+    await user.type(within(editor).getByLabelText('Description (optional)'), 'A small sample habit.');
+    await user.selectOptions(within(editor).getByLabelText('Cadence'), '3 times a week');
+    await user.selectOptions(within(editor).getByLabelText('Time of day'), 'Afternoon');
+    await user.click(within(editor).getByRole('checkbox', { name: 'Avery Brooks' }));
+    await user.click(within(editor).getByRole('checkbox', { name: 'Marriage' }));
+    await user.click(within(editor).getByRole('button', { name: 'Add Rhythm' }));
+
+    let rhythmCard = screen.getByRole('article', { name: 'After-lunch walk' });
+    expect(within(rhythmCard).getByRole('button', { name: 'Open synthetic profile for Avery Brooks' })).toBeTruthy();
+    expect(document.activeElement).toBe(addButton);
+    await user.click(within(rhythmCard).getByRole('button', { name: 'Tend After-lunch walk' }));
+
+    const detailsOpener = within(rhythmCard).getByRole('button', { name: 'Details for After-lunch walk' });
+    await user.click(detailsOpener);
+    const details = await screen.findByRole('dialog', { name: 'After-lunch walk' });
+    const editButton = within(details).getByRole('button', { name: 'Edit' });
+    await user.click(editButton);
+    const edit = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    const title = within(edit).getByLabelText('Title');
+    await user.clear(title);
+    await user.type(title, 'Walk after lunch');
+    await user.selectOptions(within(edit).getByLabelText('Cadence'), 'Weekly');
+    await user.click(within(edit).getByRole('checkbox', { name: 'Avery Brooks' }));
+    await user.click(within(edit).getByRole('checkbox', { name: 'Morgan Reed' }));
+    await user.click(within(edit).getByRole('button', { name: 'Save Rhythm' }));
+
+    expect(screen.getByRole('dialog', { name: 'Walk after lunch' })).toBe(details);
+    expect(document.activeElement).toBe(editButton);
+    rhythmCard = screen.getByRole('article', { name: 'Walk after lunch' });
+    expect(within(rhythmCard).getByRole('button', { name: 'Tended Walk after lunch' }).matches(':disabled')).toBe(true);
+    expect(within(rhythmCard).getByRole('button', { name: 'Open synthetic profile for Morgan Reed' })).toBeTruthy();
+
+    const savedRaw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
+    expect(savedRaw).not.toBeNull();
+    const saved = parsePreviewBackup(savedRaw!, localDateString(new Date()));
+    expect(saved.valid).toBe(true);
+    if (saved.valid) {
+      expect(saved.envelope.schemaVersion).toBe(2);
+      expect(saved.envelope.data.savedRhythms).toHaveLength(1);
+      expect(saved.envelope.data.savedRhythms[0]).toMatchObject({
+        id: expect.stringMatching(/^user-rhythm-/),
+        title: 'Walk after lunch',
+        cadence: 'Weekly',
+        personIds: ['sample-person-morgan'],
+        categoryIds: ['marriage']
+      });
+      expect(saved.envelope.data.completedRhythmIds).toContain(saved.envelope.data.savedRhythms[0]!.id);
+    }
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Marriage' }));
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    const marriageRhythm = screen.getByRole('article', { name: 'Walk after lunch' });
+    expect(within(marriageRhythm).getByRole('button', { name: 'Tended Walk after lunch' }).matches(':disabled')).toBe(true);
+    const suggestion = screen.getByRole('article', { name: 'Dream Together' });
+    expect(within(suggestion).queryByRole('button', { name: /Tend/ })).toBeNull();
+    expect(within(suggestion).getByRole('button', { name: 'Details for Dream Together' })).toBeTruthy();
+
+    unmount();
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByRole('article', { name: 'Walk after lunch' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Tended Walk after lunch' }).matches(':disabled')).toBe(true);
+    });
+  });
+
+  it('validates Rhythm fields, cancels without saving, and restores focus to Add Rhythm', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const addButton = screen.getByRole('button', { name: 'Add Rhythm' });
+    await user.click(addButton);
+    const editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+    await user.click(within(editor).getByRole('button', { name: 'Add Rhythm' }));
+    expect(within(editor).getByText('Enter a Rhythm title.')).toBeTruthy();
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).not.toContain('user-rhythm-');
+    await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(document.activeElement).toBe(addButton);
+    expect(screen.queryByRole('article', { name: 'Add Rhythm' })).toBeNull();
+  });
+
+  it('edits a completed fixture without changing its stable completion identity', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Tend Pray together' }));
+    const detailsOpener = screen.getByRole('button', { name: 'Details for Pray together' });
+    await user.click(detailsOpener);
+    const details = screen.getByRole('dialog', { name: 'Pray together' });
+    await user.click(within(details).getByRole('button', { name: 'Edit' }));
+    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    await user.selectOptions(within(editor).getByLabelText('Cadence'), 'Weekly');
+    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+    expect(within(details).getByRole('button', { name: 'Tended Pray together' }).matches(':disabled')).toBe(true);
+    expect(screen.getByRole('article', { name: 'Pray together' }).textContent).toContain('Tended today');
+    await waitFor(() => {
+      const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
+      expect(raw).not.toBeNull();
+      if (!raw) return;
+      const parsed = parsePreviewBackup(raw, localDateString(new Date()));
+      expect(parsed.valid && parsed.envelope.data.completedRhythmIds).toContain('sample-pray-together');
+    });
+  });
+
   it('opens Finances examples, adds a direction-validated goal, and records a dated balance', async () => {
     const user = userEvent.setup();
     render(<App />);

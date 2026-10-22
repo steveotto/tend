@@ -8,6 +8,7 @@ import { FinanceGoalsView } from './components/FinanceGoalsView.tsx';
 import { PreviewDataControls } from './components/PreviewDataControls.tsx';
 import type { PreviewPersistenceStatus } from './components/PreviewDataControls.tsx';
 import { PersonProfilePlaceholder } from './components/PersonProfilePlaceholder.tsx';
+import { RhythmEditor } from './components/RhythmEditor.tsx';
 import { TodayView } from './components/TodayView.tsx';
 import {
   marriageRhythms,
@@ -27,9 +28,12 @@ import {
 } from './domain/money-goals.ts';
 import { createSamplePreviewData, parsePreviewBackup } from './domain/preview-state.ts';
 import type { PreviewData } from './domain/preview-state.ts';
+import { isEditableRhythmId, resolveTodayRhythms, rhythmsForCategory, saveRhythmDraft } from './domain/rhythm-editor.ts';
+import type { RhythmDraft, RhythmDraftErrors } from './domain/rhythm-editor.ts';
 import {
   browserPreviewStorage,
   listenForPreviewChanges,
+  loadV1RecoveryCopy,
   loadPreview,
   writePreview
 } from './storage/preview-storage.ts';
@@ -52,6 +56,8 @@ export function App() {
   const [hydrated, setHydrated] = useState(false);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
   const [persistenceStatus, setPersistenceStatus] = useState<PreviewPersistenceStatus>({ kind: 'loading' });
+  const [v1RecoveryCopy, setV1RecoveryCopy] = useState<string | null>(null);
+  const [v1RecoveryError, setV1RecoveryError] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -61,7 +67,9 @@ export function App() {
   const [marriageExampleId, setMarriageExampleId] = useState<MarriageExampleId>('populated');
   const [selectedPersonId, setSelectedPersonId] = useState<PersonId | null>(null);
   const [activeRhythmId, setActiveRhythmId] = useState<string | null>(null);
+  const [rhythmEditor, setRhythmEditor] = useState<{ id: string; rhythm?: (typeof todayRhythms)[number] } | null>(null);
   const dialogOpener = useRef<HTMLButtonElement | null>(null);
+  const rhythmEditorOpener = useRef<HTMLButtonElement | null>(null);
 
   const dateLabel = new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
@@ -70,18 +78,35 @@ export function App() {
   }).format(new Date());
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const editableTodayRhythms = resolveTodayRhythms(previewData.savedRhythms);
+  const userRhythms = editableTodayRhythms.filter(rhythm =>
+    previewData.savedRhythms.some(saved => saved.id === rhythm.id)
+  );
+  const marriageCategoryRhythms = rhythmsForCategory(userRhythms, 'marriage');
   const activeRhythm = [
-    ...todayRhythms,
+    ...editableTodayRhythms,
     ...marriageRhythms
   ].find(rhythm => rhythm.id === activeRhythmId) ?? null;
   const selectedPerson = selectedPersonId === null ? null : personById(selectedPersonId);
-  const activeRhythmIsToday = activeRhythm !== null && todayRhythms.some(rhythm => rhythm.id === activeRhythm.id);
+  const activeRhythmIsToday = activeRhythm !== null && editableTodayRhythms.some(rhythm => rhythm.id === activeRhythm.id);
   const currentDate = localDateString(new Date());
   const initialLoadDate = useRef(currentDate).current;
   const completedRhythms = new Set(previewData.completedRhythmIds);
   const moneyGoals = previewData.goals;
 
+  function refreshV1RecoveryCopy() {
+    const result = loadV1RecoveryCopy(browserPreviewStorage());
+    if (result.kind === 'loaded') {
+      setV1RecoveryCopy(result.raw);
+      setV1RecoveryError(null);
+    } else {
+      setV1RecoveryCopy(null);
+      setV1RecoveryError(result.message);
+    }
+  }
+
   useEffect(() => {
+    refreshV1RecoveryCopy();
     const loaded = loadPreview(browserPreviewStorage(), initialLoadDate);
     if (loaded.kind === 'loaded') {
       expectedRaw.current = loaded.raw;
@@ -110,6 +135,7 @@ export function App() {
       return;
     }
     const saved = writePreview(browserPreviewStorage(), previewData, expectedRaw.current);
+    refreshV1RecoveryCopy();
     if (saved.kind === 'saved') {
       expectedRaw.current = saved.raw;
       setPersistenceStatus({ kind: 'saved' });
@@ -142,6 +168,10 @@ export function App() {
     if (!activeRhythmId) dialogOpener.current?.focus();
   }, [activeRhythmId]);
 
+  useEffect(() => {
+    if (!rhythmEditor) rhythmEditorOpener.current?.focus();
+  }, [rhythmEditor]);
+
   function navigate(next: Destination, personId?: PersonId) {
     setDestination(next);
     setSelectedPersonId(personId ?? null);
@@ -168,9 +198,36 @@ export function App() {
     setActiveRhythmId(id);
   }
 
+  function openRhythmEditor(event: MouseEvent<HTMLButtonElement>, rhythm?: (typeof todayRhythms)[number]) {
+    rhythmEditorOpener.current = event.currentTarget;
+    setRhythmEditor({
+      id: rhythm?.id ?? `user-rhythm-${globalThis.crypto.randomUUID()}`,
+      ...(rhythm ? { rhythm } : {})
+    });
+  }
+
+  function saveRhythm(draft: RhythmDraft): RhythmDraftErrors {
+    if (!rhythmEditor) return { title: 'The Rhythm editor is no longer active.' };
+    const result = saveRhythmDraft(
+      previewData.savedRhythms,
+      draft,
+      rhythmEditor.id,
+      rhythmEditor.rhythm ? 'edit' : 'create'
+    );
+    const savedRhythms = result.savedRhythms;
+    if (!savedRhythms) return result.errors;
+    setPreviewData(previous => ({
+      ...previous,
+      savedRhythms
+    }));
+    setRhythmEditor(null);
+    return result.errors;
+  }
+
   function tend(id: string) {
     setPreviewData(previous => {
-      if (previous.completedRhythmIds.includes(id)) return previous;
+      if (previous.completedRhythmIds.includes(id)
+        || !resolveTodayRhythms(previous.savedRhythms).some(rhythm => rhythm.id === id)) return previous;
       return {
         ...previous,
         completedRhythmIds: [...previous.completedRhythmIds, id]
@@ -181,7 +238,8 @@ export function App() {
   function undoTend(id: string) {
     setPreviewData(previous => {
       const completionIndex = previous.completedRhythmIds.indexOf(id);
-      if (completionIndex === -1) return previous;
+      if (completionIndex === -1
+        || !resolveTodayRhythms(previous.savedRhythms).some(rhythm => rhythm.id === id)) return previous;
       return {
         ...previous,
         completedRhythmIds: [
@@ -221,6 +279,7 @@ export function App() {
 
   function finishWrite(resultData: PreviewData): string | null {
     const written = writePreview(browserPreviewStorage(), resultData, expectedRaw.current);
+    refreshV1RecoveryCopy();
     if (written.kind === 'saved') {
       expectedRaw.current = written.raw;
       externalRaw.current = null;
@@ -270,6 +329,7 @@ export function App() {
 
   function replaceExternal(): string | null {
     const written = writePreview(browserPreviewStorage(), previewData, externalRaw.current);
+    refreshV1RecoveryCopy();
     if (written.kind === 'saved') {
       expectedRaw.current = written.raw;
       externalRaw.current = null;
@@ -291,6 +351,7 @@ export function App() {
     skipNextAutosave.current = true;
     setAutoSaveEnabled(true);
     const written = writePreview(browserPreviewStorage(), previewData, expectedRaw.current);
+    refreshV1RecoveryCopy();
     if (written.kind === 'saved') {
       expectedRaw.current = written.raw;
       setPersistenceStatus({ kind: 'saved' });
@@ -326,6 +387,7 @@ export function App() {
               greeting={greeting}
               dateLabel={dateLabel}
               completedRhythms={completedRhythms}
+              rhythms={editableTodayRhythms}
               search={search}
               marriageExampleId={marriageExampleId}
               onNavigate={navigate}
@@ -334,6 +396,7 @@ export function App() {
               onDetails={openDetails}
               onTend={tend}
               onUndo={undoTend}
+              onAddRhythm={event => openRhythmEditor(event)}
             />
           )
           : destination === 'marriage'
@@ -343,10 +406,14 @@ export function App() {
                 onMarriageExampleChange={setMarriageExampleId}
                 onPersonSelect={personId => navigate('people', personId)}
                 onPartnerProfile={() => navigate('people')}
+                userRhythms={marriageCategoryRhythms}
+                completedRhythms={completedRhythms}
                 onRhythmDetails={(id, event) => {
                   dialogOpener.current = event.currentTarget;
                   setActiveRhythmId(id);
                 }}
+                onTend={tend}
+                onUndo={undoTend}
               />
             )
           : destination === 'finances'
@@ -372,6 +439,8 @@ export function App() {
         onRetrySave={retrySave}
         onReloadExternal={reloadExternal}
         onReplaceExternal={replaceExternal}
+        v1RecoveryCopy={v1RecoveryCopy}
+        v1RecoveryError={v1RecoveryError}
       />
       <footer className="preview-footer">
         <span>Synthetic preview data stays separate from Tend accounts.</span>
@@ -390,10 +459,20 @@ export function App() {
             ? {
                 completed: completedRhythms.has(activeRhythm.id),
                 onTend: () => tend(activeRhythm.id),
-                onUndo: () => undoTend(activeRhythm.id)
+                onUndo: () => undoTend(activeRhythm.id),
+                ...(isEditableRhythmId(activeRhythm.id)
+                  ? { onEdit: event => openRhythmEditor(event, activeRhythm) }
+                  : {})
               }
             : {})}
           onClose={() => setActiveRhythmId(null)}
+        />
+      )}
+      {rhythmEditor && (
+        <RhythmEditor
+          {...(rhythmEditor.rhythm ? { rhythm: rhythmEditor.rhythm } : {})}
+          onSave={saveRhythm}
+          onClose={() => setRhythmEditor(null)}
         />
       )}
     </div>

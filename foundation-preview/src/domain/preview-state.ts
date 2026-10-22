@@ -6,19 +6,31 @@ import {
 } from './money-goals.ts';
 import type { MoneyGoal } from './money-goals.ts';
 import { goals as sampleGoals, todayRhythms } from './preview-data.ts';
+import { validateSavedRhythms } from './rhythm-editor.ts';
+import type { SavedRhythm } from './rhythm-editor.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 1;
+export const PREVIEW_SCHEMA_VERSION = 2;
 
 export type PreviewData = {
   goals: MoneyGoal[];
   completedRhythmIds: string[];
+  savedRhythms: SavedRhythm[];
 };
 
 export type PreviewEnvelope = {
   format: typeof PREVIEW_BACKUP_FORMAT;
   schemaVersion: typeof PREVIEW_SCHEMA_VERSION;
   data: PreviewData;
+};
+
+type PreviewEnvelopeV1 = {
+  format: typeof PREVIEW_BACKUP_FORMAT;
+  schemaVersion: 1;
+  data: {
+    goals: MoneyGoal[];
+    completedRhythmIds: string[];
+  };
 };
 
 export type PreviewValidationResult =
@@ -31,7 +43,8 @@ const goalKeys = [
 ];
 const checkInKeys = ['id', 'effectiveDate', 'balanceMinor', 'note'];
 const correctionKeys = ['effectiveDate', 'previousBalanceMinor', 'previousNote', 'replacedAt'];
-const dataKeys = ['goals', 'completedRhythmIds'];
+const dataKeysV1 = ['goals', 'completedRhythmIds'];
+const dataKeysV2 = ['goals', 'completedRhythmIds', 'savedRhythms'];
 const envelopeKeys = ['format', 'schemaVersion', 'data'];
 const supportedRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 
@@ -42,7 +55,8 @@ export function createSamplePreviewData(): PreviewData {
       checkIns: goal.checkIns.map(checkIn => ({ ...checkIn })),
       correctionHistory: goal.correctionHistory.map(correction => ({ ...correction }))
     })),
-    completedRhythmIds: []
+    completedRhythmIds: [],
+    savedRhythms: []
   };
 }
 
@@ -147,7 +161,16 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
           correctionHistory
         };
       }),
-      completedRhythmIds: [...data.completedRhythmIds]
+      completedRhythmIds: [...data.completedRhythmIds],
+      savedRhythms: data.savedRhythms.map(rhythm => ({
+        id: rhythm.id,
+        title: rhythm.title,
+        ...(rhythm.description === undefined ? {} : { description: rhythm.description }),
+        cadence: rhythm.cadence,
+        timeLabel: rhythm.timeLabel,
+        personIds: [...rhythm.personIds],
+        categoryIds: [...rhythm.categoryIds]
+      }))
     }
   };
 }
@@ -159,12 +182,17 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   if (!isRecord(value) || !hasOnlyKeys(value, envelopeKeys)) {
     return { valid: false, kind: 'invalid', message: 'The backup envelope has an invalid structure.' };
   }
-  if (value.format !== PREVIEW_BACKUP_FORMAT || value.schemaVersion !== PREVIEW_SCHEMA_VERSION) {
+  if (value.format !== PREVIEW_BACKUP_FORMAT || (value.schemaVersion !== 1 && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
-  if (!isRecord(value.data) || !hasOnlyKeys(value.data, dataKeys)
+  const isV1 = value.schemaVersion === 1;
+  const allowedDataKeys = isV1 ? dataKeysV1 : dataKeysV2;
+  if (!isRecord(value.data) || !hasOnlyKeys(value.data, allowedDataKeys)
     || !Array.isArray(value.data.goals) || !Array.isArray(value.data.completedRhythmIds)) {
     return { valid: false, kind: 'invalid', message: 'Preview data must contain goals and completed Rhythm IDs.' };
+  }
+  if (!isV1 && !validateSavedRhythms(value.data.savedRhythms)) {
+    return { valid: false, kind: 'invalid', message: 'Saved Rhythms contain invalid fields or unresolved references.' };
   }
 
   const goalIds = new Set<string>();
@@ -178,19 +206,27 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   }
 
   const completedRhythmIds = new Set<string>();
+  const savedRhythmIds = new Set<string>(
+    isV1 ? [] : (value.data.savedRhythms as SavedRhythm[]).map(rhythm => rhythm.id)
+  );
   for (const rhythmId of value.data.completedRhythmIds) {
-    if (typeof rhythmId !== 'string' || !supportedRhythmIds.has(rhythmId) || completedRhythmIds.has(rhythmId)) {
-      return { valid: false, kind: 'invalid', message: 'Completed Rhythm references must be unique known Today examples.' };
+    if (typeof rhythmId !== 'string'
+      || (!supportedRhythmIds.has(rhythmId) && !savedRhythmIds.has(rhythmId))
+      || completedRhythmIds.has(rhythmId)) {
+      return { valid: false, kind: 'invalid', message: 'Completed Rhythm references must be unique known Today or saved Rhythms.' };
     }
     completedRhythmIds.add(rhythmId);
   }
 
+  const envelopeData = {
+    goals,
+    completedRhythmIds: [...completedRhythmIds],
+    savedRhythms: isV1 ? [] : value.data.savedRhythms as SavedRhythm[]
+  };
+
   return {
     valid: true,
-    envelope: createPreviewEnvelope({
-      goals,
-      completedRhythmIds: [...completedRhythmIds]
-    })
+    envelope: createPreviewEnvelope(envelopeData)
   };
 }
 
@@ -203,3 +239,16 @@ export function parsePreviewBackup(text: string, currentDate: string): PreviewVa
   }
   return validatePreviewEnvelope(value, currentDate);
 }
+
+export function isVersionOnePreviewRaw(raw: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return isRecord(parsed)
+      && parsed.format === PREVIEW_BACKUP_FORMAT
+      && parsed.schemaVersion === 1;
+  } catch {
+    return false;
+  }
+}
+
+export type LegacyPreviewEnvelope = PreviewEnvelopeV1;

@@ -12,7 +12,9 @@ import {
 import {
   browserPreviewStorage,
   loadPreview,
+  loadV1RecoveryCopy,
   PREVIEW_STORAGE_KEY,
+  PREVIEW_V1_RECOVERY_KEY,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import type { PreviewData } from '../src/domain/preview-state.ts';
@@ -35,6 +37,18 @@ function sampleWithHistory(): PreviewData {
   });
   data.completedRhythmIds = ['sample-pray-together'];
   return data;
+}
+
+function versionOneRaw(data: PreviewData): string {
+  const envelope = createPreviewEnvelope(data);
+  return JSON.stringify({
+    format: envelope.format,
+    schemaVersion: 1,
+    data: {
+      goals: envelope.data.goals,
+      completedRhythmIds: envelope.data.completedRhythmIds
+    }
+  });
 }
 
 function storageFixture(initial: Record<string, string> = {}) {
@@ -69,7 +83,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(parsed.valid).toBe(true);
     if (!parsed.valid) return;
     expect(parsed.envelope.format).toBe('tend.synthetic-preview');
-    expect(parsed.envelope.schemaVersion).toBe(1);
+    expect(parsed.envelope.schemaVersion).toBe(2);
     expect(parsed.envelope.data).toEqual(data);
 
     const { storage } = storageFixture();
@@ -80,7 +94,7 @@ describe('synthetic preview storage adapter and envelope', () => {
   });
 
   it('restores valid empty state without reinitializing sample goals or completions', () => {
-    const empty = { goals: [], completedRhythmIds: [] };
+    const empty = { goals: [], completedRhythmIds: [], savedRhythms: [] };
     const raw = JSON.stringify(createPreviewEnvelope(empty));
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
     const result = loadPreview(storage, '2026-10-21');
@@ -98,6 +112,76 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
     expect(writePreview(storage, createSamplePreviewData(), null)).toEqual({ kind: 'conflict', actualRaw: raw });
     expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+  });
+
+  it('migrates a v1 backup in memory while preserving goals, corrections, completions, and valid empty states', () => {
+    const data = sampleWithHistory();
+    const raw = versionOneRaw(data);
+    const parsed = parsePreviewBackup(raw, '2026-10-21');
+    expect(parsed.valid).toBe(true);
+    if (parsed.valid) {
+      expect(parsed.envelope.schemaVersion).toBe(2);
+      expect(parsed.envelope.data).toEqual({ ...data, savedRhythms: [] });
+      expect(parsed.envelope.data.goals[0]!.checkIns).toEqual(data.goals[0]!.checkIns);
+      expect(parsed.envelope.data.goals[0]!.correctionHistory).toEqual(data.goals[0]!.correctionHistory);
+      expect(parsed.envelope.data.completedRhythmIds).toEqual(data.completedRhythmIds);
+    }
+
+    const emptyV1 = JSON.stringify({
+      format: 'tend.synthetic-preview',
+      schemaVersion: 1,
+      data: { goals: [], completedRhythmIds: [] }
+    });
+    const emptyResult = parsePreviewBackup(emptyV1, '2026-10-21');
+    expect(emptyResult.valid && emptyResult.envelope.data).toEqual({
+      goals: [],
+      completedRhythmIds: [],
+      savedRhythms: []
+    });
+  });
+
+  it('archives the exact v1 envelope before the first v2 write and never overwrites that recovery copy', () => {
+    const initial = sampleWithHistory();
+    const originalRaw = versionOneRaw(initial);
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data).toEqual({ ...initial, savedRhythms: [] });
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    expect(loadV1RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: null });
+
+    const updated = { ...loaded.data, completedRhythmIds: ['sample-connect'] };
+    expect(writePreview(storage, updated, originalRaw).kind).toBe('saved');
+    expect(values.get(PREVIEW_V1_RECOVERY_KEY)).toBe(originalRaw);
+    const recoveryCopy = values.get(PREVIEW_V1_RECOVERY_KEY);
+    const activeV2 = values.get(PREVIEW_STORAGE_KEY)!;
+    expect(JSON.parse(activeV2).schemaVersion).toBe(2);
+    expect(writePreview(storage, { ...updated, completedRhythmIds: [] }, activeV2).kind).toBe('saved');
+    expect(values.get(PREVIEW_V1_RECOVERY_KEY)).toBe(recoveryCopy);
+
+    const occupied = storageFixture({
+      [PREVIEW_STORAGE_KEY]: originalRaw,
+      [PREVIEW_V1_RECOVERY_KEY]: '{"other":"preserved"}'
+    });
+    expect(writePreview(occupied.storage, loaded.data, originalRaw)).toMatchObject({ kind: 'error' });
+    expect(occupied.values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    expect(occupied.values.get(PREVIEW_V1_RECOVERY_KEY)).toBe('{"other":"preserved"}');
+  });
+
+  it('does not overwrite an unsupported active envelope', () => {
+    const unsupportedRaw = JSON.stringify({
+      format: 'tend.synthetic-preview',
+      schemaVersion: 3,
+      data: { goals: [], completedRhythmIds: [], savedRhythms: [] }
+    });
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: unsupportedRaw });
+    expect(loadPreview(storage, '2026-10-21')).toMatchObject({ kind: 'unsupported', raw: unsupportedRaw });
+    expect(writePreview(storage, createSamplePreviewData(), null)).toEqual({
+      kind: 'conflict',
+      actualRaw: unsupportedRaw
+    });
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(unsupportedRaw);
   });
 
   it('touches only the isolated preview key, leaving existing Tend storage keys unchanged', () => {
@@ -118,7 +202,7 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('rejects malformed JSON, unsupported versions, malformed records, duplicate IDs, and invalid references', () => {
     expect(parsePreviewBackup('{', '2026-10-21').valid).toBe(false);
     const unsupported = createPreviewEnvelope(sampleWithHistory());
-    expect(validatePreviewEnvelope({ ...unsupported, schemaVersion: 2 }, '2026-10-21')).toMatchObject({
+    expect(validatePreviewEnvelope({ ...unsupported, schemaVersion: 3 }, '2026-10-21')).toMatchObject({
       valid: false,
       kind: 'unsupported'
     });

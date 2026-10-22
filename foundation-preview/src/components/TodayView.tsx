@@ -7,7 +7,7 @@ import {
   todayOverallIllustrativeScore,
   type MarriageExampleId,
   type PersonId,
-  todayRhythms
+  type RhythmPreview
 } from '../domain/preview-data.ts';
 import { AreaIcon } from './AreaIcon.tsx';
 import { CategoryHealthBadge, RhythmCard, ScoreMeter } from './Cards.tsx';
@@ -26,6 +26,7 @@ type TodayViewProps = {
   greeting: string;
   dateLabel: string;
   completedRhythms: ReadonlySet<string>;
+  rhythms: readonly RhythmPreview[];
   search: string;
   marriageExampleId: MarriageExampleId;
   onNavigate: (destination: Destination) => void;
@@ -34,12 +35,14 @@ type TodayViewProps = {
   onDetails: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   onTend: (id: string) => void;
   onUndo: (id: string) => void;
+  onAddRhythm: (event: MouseEvent<HTMLButtonElement>) => void;
 };
 
 export function TodayView({
   greeting,
   dateLabel,
   completedRhythms,
+  rhythms,
   search,
   marriageExampleId,
   onNavigate,
@@ -47,13 +50,14 @@ export function TodayView({
   onPersonSelect,
   onDetails,
   onTend,
-  onUndo
+  onUndo,
+  onAddRhythm
 }: TodayViewProps) {
   const [planType, setPlanType] = useState<PlanType>('scheduled');
   const visibleRhythms = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
-    return query ? todayRhythms.filter(item => item.title.toLocaleLowerCase().includes(query)) : todayRhythms;
-  }, [search]);
+    return query ? rhythms.filter(item => item.title.toLocaleLowerCase().includes(query)) : rhythms;
+  }, [rhythms, search]);
 
   function handlePlanTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let nextIndex: number;
@@ -120,11 +124,15 @@ export function TodayView({
       </section>
 
       <section aria-labelledby="today-plan-heading">
-        <div className="sectiontitle"><h2 id="today-plan-heading">Your plan</h2><span className="hint">Today</span></div>
+        <div className="sectiontitle today-plan-heading">
+          <h2 id="today-plan-heading">Your plan</h2>
+          <span className="hint">Today</span>
+          <button type="button" className="btn mini today-add-rhythm" onClick={onAddRhythm}>Add Rhythm</button>
+        </div>
         <div className="card planblock current">
           <div className="current-plan-summary">
             <div className="plan-block-name">Today</div>
-            <span className="current-plan-item-count" aria-live="polite">{completedRhythms.size} of {todayRhythms.length} tended</span>
+            <span className="current-plan-item-count" aria-live="polite">{completedRhythms.size} of {rhythms.length} tended</span>
           </div>
           <div className="faith-practice-tabs home-plan-type-tabs" role="tablist" aria-label="Plan items">
             {planTypes.map((type, index) => (

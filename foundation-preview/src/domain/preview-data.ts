@@ -56,6 +56,7 @@ export type RhythmPreview = {
   iconId?: string;
   illustrativeScore?: number | null | undefined;
   personIds?: readonly PersonId[];
+  categoryIds?: readonly ('faith' | 'marriage' | 'parenting' | 'health' | 'finances' | 'friendships')[];
 };
 
 export type RhythmCompletion = {

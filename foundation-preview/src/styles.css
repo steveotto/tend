@@ -1219,6 +1219,58 @@ a:focus-visible {
       margin: 0 0 12px;
     }
 
+    .rhythm-editor {
+      display: grid;
+      gap: 2px;
+    }
+
+    .rhythm-editor .goal-field select {
+      height: 44px;
+      min-height: 44px;
+    }
+
+    .rhythm-editor-options {
+      min-width: 0;
+      margin: 0 0 13px;
+      padding: 8px 10px 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+
+    .rhythm-editor-options legend {
+      padding-inline: 4px;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .rhythm-editor-options__list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 4px 10px;
+    }
+
+    .rhythm-editor-choice {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      min-height: 44px;
+      color: var(--ink-soft);
+      font-size: 13px;
+      font-weight: 500;
+      overflow-wrap: anywhere;
+      cursor: pointer;
+    }
+
+    .rhythm-editor-choice input {
+      flex: none;
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      accent-color: var(--forest);
+    }
+
     .check-in-correction-notice {
       padding: 10px 12px;
       border-radius: 9px;
@@ -2506,12 +2558,29 @@ a:focus-visible {
 }
 
 .today-rhythm-details__header h2 {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
   font-size: 21px;
   line-height: 1.25;
+}
+
+.today-rhythm-details__edit {
+  flex: none;
+  min-width: 56px;
+  min-height: 44px;
+  padding-inline: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--canvas);
+  color: var(--forest-deep);
+  font: 600 13px/1.2 var(--sans);
+  cursor: pointer;
+}
+
+.today-rhythm-details__edit:hover {
+  background: var(--mist);
 }
 
 .today-rhythm-details__close {
@@ -2528,6 +2597,7 @@ a:focus-visible {
   background: var(--mist);
   color: var(--ink-soft);
   font-size: 21px;
+  margin-left: auto;
   cursor: pointer;
 }
 
@@ -2799,6 +2869,40 @@ a:focus-visible {
 @media (max-width: 380px) {
   .marriage-page-heading {
     grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .today-plan-heading {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .today-add-rhythm {
+    min-height: 44px;
+    margin-left: auto;
+  }
+
+  .today-rhythm-details__edit:focus-visible,
+  .today-rhythm-details__close:focus-visible,
+  .rhythm-editor-options input:focus-visible,
+  .today-add-rhythm:focus-visible {
+    outline: 2px solid var(--forest);
+    outline-offset: 2px;
+  }
+
+  .marriage-user-rhythms {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--card) 88%, var(--mist));
+  }
+
+  @media (max-width: 420px) {
+    .rhythm-editor-options__list {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 
   .marriage-page-heading > .marriage-spouse-shortcut {

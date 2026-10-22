@@ -28,6 +28,8 @@ type PreviewDataControlsProps = {
   onRetrySave: () => void;
   onReloadExternal: () => string | null;
   onReplaceExternal: () => string | null;
+  v1RecoveryCopy?: string | null;
+  v1RecoveryError?: string | null;
 };
 
 function downloadText(filename: string, content: string, type: string): string | null {
@@ -55,7 +57,9 @@ export function PreviewDataControls({
   onReset,
   onRetrySave,
   onReloadExternal,
-  onReplaceExternal
+  onReplaceExternal,
+  v1RecoveryCopy = null,
+  v1RecoveryError = null
 }: PreviewDataControlsProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -143,6 +147,19 @@ export function PreviewDataControls({
       </div>
       <div className="preview-data-controls__actions">
         <button type="button" className="btn mini ghost" onClick={exportCurrent} disabled={status.kind === 'loading'}>Export preview backup</button>
+        {v1RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v1-recovery.json',
+              v1RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v1 recovery backup downloaded.')}
+          >
+            Download original v1 recovery backup
+          </button>
+        )}
         <label className="btn mini ghost preview-data-controls__file-button">
           Import preview backup
           <input
@@ -180,6 +197,7 @@ export function PreviewDataControls({
           </>
         )}
       </div>
+      {v1RecoveryError && <p className="preview-data-controls__help" role="alert">The original v1 recovery copy could not be read: {v1RecoveryError}</p>}
       {message && <p className="preview-data-controls__message" role="status">{message}</p>}
       {pendingAction && (
         <MoneyGoalDialog

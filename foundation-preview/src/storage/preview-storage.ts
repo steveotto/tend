@@ -1,7 +1,9 @@
 import { parsePreviewBackup, createPreviewEnvelope } from '../domain/preview-state.ts';
+import { isVersionOnePreviewRaw } from '../domain/preview-state.ts';
 import type { PreviewData } from '../domain/preview-state.ts';
 
 export const PREVIEW_STORAGE_KEY = 'tend2:synthetic-preview';
+export const PREVIEW_V1_RECOVERY_KEY = 'tend2:synthetic-preview:v1-recovery';
 
 export type PreviewStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -15,6 +17,10 @@ export type PreviewLoadResult =
 export type PreviewWriteResult =
   | { kind: 'saved'; raw: string }
   | { kind: 'conflict'; actualRaw: string | null }
+  | { kind: 'error'; message: string };
+
+export type V1RecoveryReadResult =
+  | { kind: 'loaded'; raw: string | null }
   | { kind: 'error'; message: string };
 
 function errorMessage(error: unknown): string {
@@ -48,6 +54,19 @@ export function writePreview(
     const actualRaw = storage.getItem(PREVIEW_STORAGE_KEY);
     if (actualRaw !== expectedRaw) return { kind: 'conflict', actualRaw };
     const raw = JSON.stringify(createPreviewEnvelope(data));
+
+    if (expectedRaw !== null && isVersionOnePreviewRaw(expectedRaw)) {
+      const archivedRaw = storage.getItem(PREVIEW_V1_RECOVERY_KEY);
+      if (archivedRaw === null) {
+        storage.setItem(PREVIEW_V1_RECOVERY_KEY, expectedRaw);
+      } else if (archivedRaw !== expectedRaw) {
+        return {
+          kind: 'error',
+          message: 'The original v1 recovery copy already contains different data. No v2 write was made.'
+        };
+      }
+    }
+
     storage.setItem(PREVIEW_STORAGE_KEY, raw);
     return { kind: 'saved', raw };
   } catch (error) {
@@ -60,6 +79,14 @@ export function browserPreviewStorage(): PreviewStorage {
     getItem: key => window.localStorage.getItem(key),
     setItem: (key, value) => window.localStorage.setItem(key, value)
   };
+}
+
+export function loadV1RecoveryCopy(storage: PreviewStorage): V1RecoveryReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V1_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
 }
 
 export function listenForPreviewChanges(listener: (newValue: string | null) => void): () => void {
