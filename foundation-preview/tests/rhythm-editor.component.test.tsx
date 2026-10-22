@@ -31,7 +31,7 @@ describe('synthetic Rhythm editor domain', () => {
       ...validDraft,
       title: '  ',
       description: 'x'.repeat(1001),
-      cadence: 'Monthly',
+      cadence: '',
       timeLabel: 'Overnight',
       personIds: ['not-a-synthetic-person'],
       categoryIds: ['not-a-category']
@@ -49,7 +49,11 @@ describe('synthetic Rhythm editor domain', () => {
     const id = 'user-rhythm-11111111-1111-4111-8111-111111111111';
     const result = saveRhythmDraft([], { ...validDraft }, id, 'create');
     expect(result.errors).toEqual({});
-    expect(result.savedRhythms?.[0]).toEqual({ id, ...validDraft });
+    expect(result.savedRhythms?.[0]).toEqual({
+      id,
+      ...validDraft,
+      timeOfDay: 'afternoon'
+    });
     expect(isEditableRhythmId(id)).toBe(true);
     const resolved = resolveTodayRhythms(result.savedRhythms ?? []);
     expect(resolved.at(-1)).toMatchObject({
@@ -82,6 +86,33 @@ describe('synthetic Rhythm editor domain', () => {
     expect(resolved[0]?.illustrativeScore).toBe(fixture.illustrativeScore);
   });
 
+  it('preserves v4 schedule and Personal metadata while editing through the unchanged form fields', () => {
+    const id = 'user-rhythm-11111111-1111-4111-8111-111111111111';
+    const existing = {
+      id,
+      title: 'Structured weekly',
+      cadence: 'Weekly',
+      timeLabel: 'Morning' as const,
+      timeOfDay: 'morning' as const,
+      schedule: { frequency: 'weekly' as const, weekdays: [1, 3] as (1 | 3)[] },
+      personal: true,
+      personIds: ['sample-person-avery' as const],
+      categoryIds: ['marriage' as const]
+    };
+    const result = saveRhythmDraft([existing], {
+      ...validDraft,
+      title: 'Updated title'
+    }, id, 'edit');
+    expect(result.errors).toEqual({});
+    expect(result.savedRhythms?.[0]).toMatchObject({
+      id,
+      title: 'Updated title',
+      schedule: existing.schedule,
+      personal: true,
+      timeOfDay: 'afternoon'
+    });
+  });
+
   it('refuses duplicate custom IDs, missing edit targets, and immutable Marriage examples', () => {
     const id = 'user-rhythm-11111111-1111-4111-8111-111111111111';
     const created = saveRhythmDraft([], { ...validDraft }, id, 'create').savedRhythms!;
@@ -103,8 +134,70 @@ describe('synthetic Rhythm editor domain', () => {
       cadence: fixture.cadence,
       timeLabel: fixture.timeLabel,
       personIds: fixture.personIds,
-      categoryIds: []
+      categoryIds: [],
+      scheduleEditing: false
     });
+  });
+
+  it('preserves descriptive cadence when unrelated fields are saved', () => {
+    const fixture = todayRhythms[1]!;
+    const originalCadence = fixture.cadence!;
+    const draft = {
+      ...rhythmDraftFrom(fixture),
+      title: 'Updated title only',
+      timeLabel: 'Evening'
+    };
+
+    const result = saveRhythmDraft([], draft, fixture.id, 'edit');
+    expect(result.errors).toEqual({});
+    expect(result.savedRhythms?.[0]).toMatchObject({
+      id: fixture.id,
+      title: 'Updated title only',
+      cadence: originalCadence,
+      timeLabel: 'Evening'
+    });
+    expect(result.savedRhythms?.[0]?.schedule).toBeUndefined();
+  });
+
+  it('keeps supported v4 descriptive labels editable without converting them', () => {
+    const id = 'user-rhythm-11111111-1111-4111-8111-111111111111';
+    const existing = {
+      id,
+      title: 'Unstructured legacy cadence',
+      cadence: 'Every other week',
+      timeLabel: 'Morning' as const,
+      timeOfDay: 'morning' as const,
+      personIds: [],
+      categoryIds: []
+    };
+    const draft = {
+      title: 'Updated descriptive rhythm',
+      description: '',
+      cadence: existing.cadence,
+      timeLabel: 'Morning',
+      personIds: [],
+      categoryIds: [],
+      scheduleEditing: false
+    };
+    const result = saveRhythmDraft([existing], draft, id, 'edit');
+
+    expect(result.errors).toEqual({});
+    expect(result.savedRhythms?.[0]).toMatchObject({
+      cadence: 'Every other week'
+    });
+    expect(result.savedRhythms?.[0]?.schedule).toBeUndefined();
+  });
+
+  it('requires an explicit valid schedule when schedule editing is enabled', () => {
+    expect(validateRhythmDraft({
+      ...validDraft,
+      scheduleEditing: true
+    })).toMatchObject({ schedule: expect.any(String) });
+    expect(validateRhythmDraft({
+      ...validDraft,
+      scheduleEditing: true,
+      schedule: { frequency: 'weekly', weekdays: [] } as never
+    })).toMatchObject({ schedule: expect.any(String) });
   });
 
   it('archives fixture overlays without deleting their identity, associations, or completion reference', () => {

@@ -45,7 +45,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    include: ['tests/**/*.component.test.tsx'],
+    include: ['tests/**/*.component.test.tsx', 'tests/**/*.domain.test.ts'],
     restoreMocks: true
   }
 });

@@ -4,6 +4,7 @@ import type {
   RhythmAutomation
 } from '../../../src/domain/capabilities.ts';
 import type { MoneyGoal } from './money-goals.ts';
+import type { RhythmSchedule, RhythmTimeValue } from './rhythm-schedule.ts';
 
 export type FoundationPreview = {
   id: string;
@@ -28,6 +29,13 @@ export type PersonPreview = {
 };
 
 export type PersonId = 'sample-person-avery' | 'sample-person-morgan' | 'sample-person-jordan';
+export type PersonPickerGroupId = 'marriage' | 'parenting' | 'friends';
+
+export type PersonPickerGroup = {
+  id: PersonPickerGroupId;
+  label: string;
+  memberIds: readonly PersonId[];
+};
 
 const syntheticPeopleById = {
   'sample-person-avery': { id: 'sample-person-avery', displayName: 'Avery Brooks' },
@@ -36,6 +44,12 @@ const syntheticPeopleById = {
 } satisfies Record<PersonId, PersonPreview>;
 
 export const syntheticPeople = Object.values(syntheticPeopleById);
+
+export const syntheticPersonPickerGroups: readonly PersonPickerGroup[] = [
+  { id: 'marriage', label: 'Marriage', memberIds: ['sample-person-avery', 'sample-person-morgan'] },
+  { id: 'parenting', label: 'Parenting', memberIds: ['sample-person-morgan', 'sample-person-jordan'] },
+  { id: 'friends', label: 'Friends', memberIds: ['sample-person-avery', 'sample-person-jordan'] }
+];
 
 export function personById(id: PersonId): PersonPreview {
   return syntheticPeopleById[id];
@@ -57,6 +71,9 @@ export type RhythmPreview = {
   illustrativeScore?: number | null | undefined;
   personIds?: readonly PersonId[];
   categoryIds?: readonly ('faith' | 'marriage' | 'parenting' | 'health' | 'finances' | 'friendships')[];
+  schedule?: RhythmSchedule;
+  timeOfDay?: RhythmTimeValue;
+  personal?: boolean;
 };
 
 export type RhythmCompletion = {

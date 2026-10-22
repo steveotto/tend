@@ -313,13 +313,29 @@ describe('Tend Today preview', () => {
     expect(within(editor).queryByRole('button', { name: /Archive/ })).toBeNull();
     await user.type(within(editor).getByLabelText('Title'), 'After-lunch walk');
     await user.type(within(editor).getByLabelText('Description (optional)'), 'A small sample habit.');
-    await user.selectOptions(within(editor).getByLabelText('Cadence'), '3 times a week');
-    await user.selectOptions(within(editor).getByLabelText('Time of day'), 'Afternoon');
-    await user.click(within(editor).getByRole('checkbox', { name: 'Avery Brooks' }));
-    await user.click(within(editor).getByRole('checkbox', { name: 'Marriage' }));
+    await user.click(within(editor).getByRole('combobox', { name: 'Frequency: Daily' }));
+    await user.click(within(editor).getByRole('option', { name: 'Weekly' }));
+    await user.click(within(editor).getByRole('checkbox', { name: 'Monday' }));
+    await user.click(within(editor).getByRole('checkbox', { name: 'Wednesday' }));
+    await user.click(within(editor).getByRole('combobox', { name: 'Time of day: Anytime' }));
+    await user.click(within(editor).getByRole('option', { name: 'Afternoon' }));
+    await user.click(within(editor).getByRole('checkbox', { name: 'Personal' }));
+    await user.click(within(editor).getByRole('button', { name: 'Add people' }));
+    await user.click(within(editor).getByRole('button', { name: 'Select Marriage people' }));
+    expect(within(editor).getByRole('button', { name: 'Avery Brooks' }).getAttribute('aria-pressed')).toBe('true');
+    expect(within(editor).getByRole('button', { name: 'Morgan Reed' }).getAttribute('aria-pressed')).toBe('true');
+    await user.click(within(editor).getByRole('button', { name: 'Done' }));
+    await user.click(within(editor).getByRole('button', { name: 'Add categories' }));
+    await user.click(within(editor).getByRole('button', { name: 'Marriage' }));
+    await user.click(within(editor).getByRole('button', { name: 'Done' }));
+    expect(within(editor).getByRole('button', { name: 'Add categories' })).toBeTruthy();
+    expect(within(editor).getByRole('button', { name: 'Add people' })).toBeTruthy();
+    expect(within(editor).getByRole('group', { name: 'Category associations' })).toBeTruthy();
+    expect(within(editor).getByRole('group', { name: 'People associations' })).toBeTruthy();
     await user.click(within(editor).getByRole('button', { name: 'Add Rhythm' }));
 
     let rhythmCard = screen.getByRole('article', { name: 'After-lunch walk' });
+    expect(within(rhythmCard).getByText('Personal', { exact: true })).toBeTruthy();
     expect(within(rhythmCard).getByRole('button', { name: 'Open synthetic profile for Avery Brooks' })).toBeTruthy();
     expect(document.activeElement).toBe(addButton);
     await user.click(within(rhythmCard).getByRole('button', { name: 'Tend After-lunch walk' }));
@@ -327,6 +343,7 @@ describe('Tend Today preview', () => {
     const detailsOpener = within(rhythmCard).getByRole('button', { name: 'Details for After-lunch walk' });
     await user.click(detailsOpener);
     const details = await screen.findByRole('dialog', { name: 'After-lunch walk' });
+    expect(within(details).getByText('Personal', { exact: true })).toBeTruthy();
     const editButton = within(details).getByRole('button', { name: 'Edit After-lunch walk' });
     editButton.focus();
     await user.keyboard('{Enter}');
@@ -334,30 +351,34 @@ describe('Tend Today preview', () => {
     const title = within(edit).getByLabelText('Title');
     await user.clear(title);
     await user.type(title, 'Walk after lunch');
-    await user.selectOptions(within(edit).getByLabelText('Cadence'), 'Weekly');
-    await user.click(within(edit).getByRole('checkbox', { name: 'Avery Brooks' }));
-    await user.click(within(edit).getByRole('checkbox', { name: 'Morgan Reed' }));
+    await user.click(within(edit).getByRole('button', { name: 'Add people' }));
+    await user.click(within(edit).getByRole('button', { name: 'Jordan Bell' }));
+    await user.click(within(edit).getByRole('button', { name: 'Done' }));
     await user.click(within(edit).getByRole('button', { name: 'Save Rhythm' }));
 
     expect(screen.getByRole('dialog', { name: 'Walk after lunch' })).toBe(details);
     expect(document.activeElement).toBe(editButton);
     rhythmCard = screen.getByRole('article', { name: 'Walk after lunch' });
     expect(within(rhythmCard).getByRole('button', { name: 'Tended Walk after lunch' }).matches(':disabled')).toBe(true);
+    expect(within(rhythmCard).getByRole('button', { name: 'Open synthetic profile for Avery Brooks' })).toBeTruthy();
     expect(within(rhythmCard).getByRole('button', { name: 'Open synthetic profile for Morgan Reed' })).toBeTruthy();
+    expect(within(rhythmCard).getByRole('button', { name: 'Open synthetic profile for Jordan Bell' })).toBeTruthy();
 
     const savedRaw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
     expect(savedRaw).not.toBeNull();
     const saved = parsePreviewBackup(savedRaw!, localDateString(new Date()));
     expect(saved.valid).toBe(true);
     if (saved.valid) {
-      expect(saved.envelope.schemaVersion).toBe(3);
+      expect(saved.envelope.schemaVersion).toBe(4);
       expect(saved.envelope.data.savedRhythms).toHaveLength(1);
       expect(saved.envelope.data.savedRhythms[0]).toMatchObject({
         id: expect.stringMatching(/^user-rhythm-/),
         title: 'Walk after lunch',
-        cadence: 'Weekly',
-        personIds: ['sample-person-morgan'],
-        categoryIds: ['marriage']
+        cadence: 'Every week on Monday and Wednesday.',
+        personIds: ['sample-person-avery', 'sample-person-morgan', 'sample-person-jordan'],
+        categoryIds: ['marriage'],
+        schedule: { frequency: 'weekly', weekdays: [1, 3] },
+        personal: true
       });
       expect(saved.envelope.data.completedRhythmIds).toContain(saved.envelope.data.savedRhythms[0]!.id);
     }
@@ -376,6 +397,24 @@ describe('Tend Today preview', () => {
       expect(screen.getByRole('article', { name: 'Walk after lunch' })).toBeTruthy();
       expect(screen.getByRole('button', { name: 'Tended Walk after lunch' }).matches(':disabled')).toBe(true);
     });
+    const reloadedCard = screen.getByRole('article', { name: 'Walk after lunch' });
+    await user.click(within(reloadedCard).getByRole('button', { name: 'Details for Walk after lunch' }));
+    const reloadedDetails = screen.getByRole('dialog', { name: 'Walk after lunch' });
+    expect(within(reloadedDetails).getByText('Every week on Monday and Wednesday.')).toBeTruthy();
+    expect(within(reloadedDetails).getByText('Personal', { exact: true })).toBeTruthy();
+    expect(within(reloadedCard).getByRole('button', { name: 'Open synthetic profile for Morgan Reed' })).toBeTruthy();
+    expect(within(reloadedCard).getByRole('button', { name: 'Open synthetic profile for Jordan Bell' })).toBeTruthy();
+    await user.click(within(reloadedDetails).getByRole('button', { name: 'Edit Walk after lunch' }));
+    const reloadedEditor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    expect(within(reloadedEditor).getByRole('button', { name: 'Add categories' })).toBeTruthy();
+    expect(within(reloadedEditor).getByRole('button', { name: 'Add people' })).toBeTruthy();
+    await user.click(within(reloadedEditor).getByRole('button', { name: 'Add people' }));
+    expect(within(reloadedEditor).getByRole('button', { name: 'Select Marriage people' }).getAttribute('aria-pressed')).toBe('true');
+    await user.click(within(reloadedEditor).getByRole('button', { name: 'Cancel' }));
+    await user.click(within(reloadedEditor).getByRole('button', { name: 'Add categories' }));
+    expect(within(reloadedEditor).getByRole('button', { name: 'Marriage' }).getAttribute('aria-pressed')).toBe('true');
+    await user.click(within(reloadedEditor).getByRole('button', { name: 'Cancel' }));
+    await user.click(within(reloadedEditor).getByRole('button', { name: 'Cancel' }));
   });
 
   it('validates Rhythm fields, cancels without saving, and restores focus to Add Rhythm', async () => {
@@ -402,7 +441,8 @@ describe('Tend Today preview', () => {
     const details = screen.getByRole('dialog', { name: 'Pray together' });
     await user.click(within(details).getByRole('button', { name: 'Edit Pray together' }));
     const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
-    await user.selectOptions(within(editor).getByLabelText('Cadence'), 'Weekly');
+    expect(within(editor).getByText('Current cadence')).toBeTruthy();
+    expect(within(editor).getByText('Daily')).toBeTruthy();
     await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
     expect(within(details).getByRole('button', { name: 'Tended Pray together' }).matches(':disabled')).toBe(true);
     expect(screen.getByRole('article', { name: 'Pray together' }).textContent).toContain('Tended today');
@@ -412,6 +452,8 @@ describe('Tend Today preview', () => {
       if (!raw) return;
       const parsed = parsePreviewBackup(raw, localDateString(new Date()));
       expect(parsed.valid && parsed.envelope.data.completedRhythmIds).toContain('sample-pray-together');
+      expect(parsed.valid && parsed.envelope.data.savedRhythms[0]?.cadence).toBe('Daily');
+      expect(parsed.valid && parsed.envelope.data.savedRhythms[0]?.schedule).toBeUndefined();
     });
   });
 
@@ -427,10 +469,18 @@ describe('Tend Today preview', () => {
     const title = within(editor).getByLabelText('Title');
     await user.clear(title);
     await user.type(title, 'Updated prayer rhythm');
-    await user.click(within(editor).getByRole('checkbox', { name: 'Marriage' }));
+    await user.click(within(editor).getByRole('button', { name: 'Add categories' }));
+    await user.click(within(editor).getByRole('button', { name: 'Marriage' }));
+    await user.click(within(editor).getByRole('button', { name: 'Done' }));
+    await user.click(within(editor).getByRole('checkbox', { name: 'Personal' }));
+    await user.click(within(editor).getByRole('button', { name: 'Change schedule' }));
+    await user.click(within(editor).getByRole('combobox', { name: 'Frequency: Choose a frequency' }));
+    await user.click(within(editor).getByRole('option', { name: 'Weekly' }));
+    await user.click(within(editor).getByRole('checkbox', { name: 'Monday' }));
     await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
 
     expect(screen.getByRole('dialog', { name: 'Updated prayer rhythm' })).toBe(details);
+    expect(within(details).getByText('Every week on Monday.')).toBeTruthy();
     await user.click(within(details).getByRole('button', { name: 'Edit Updated prayer rhythm' }));
     editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
     const unsavedTitle = within(editor).getByLabelText('Title');
@@ -462,7 +512,10 @@ describe('Tend Today preview', () => {
         id: 'sample-pray-together',
         title: 'Updated prayer rhythm',
         personIds: ['sample-person-avery', 'sample-person-morgan'],
-        categoryIds: ['marriage']
+        categoryIds: ['marriage'],
+        cadence: 'Every week on Monday.',
+        schedule: { frequency: 'weekly', weekdays: [1] },
+        personal: true
       });
       expect(parsed.valid && parsed.envelope.data.archivedRhythmIds).toEqual([]);
     });
@@ -486,7 +539,10 @@ describe('Tend Today preview', () => {
         id: 'sample-pray-together',
         title: 'Updated prayer rhythm',
         personIds: ['sample-person-avery', 'sample-person-morgan'],
-        categoryIds: ['marriage']
+        categoryIds: ['marriage'],
+        cadence: 'Every week on Monday.',
+        schedule: { frequency: 'weekly', weekdays: [1] },
+        personal: true
       });
       expect(parsed.valid && parsed.envelope.data.completedRhythmIds).toContain('sample-pray-together');
       expect(parsed.valid && parsed.envelope.data.archivedRhythmIds).toEqual(['sample-pray-together']);
@@ -514,12 +570,13 @@ describe('Tend Today preview', () => {
     expect(within(archiveDialog).getByRole('status').textContent).toBe('Archived · identity and history are retained.');
     expect(within(archivedDetails).getByRole('heading', { name: 'Updated prayer rhythm' })).toBeTruthy();
     expect(within(archivedDetails).getByText('Archived', { exact: true })).toBeTruthy();
+    expect(within(archivedDetails).getByText('Personal', { exact: true })).toBeTruthy();
     expect(within(archivedDetails).getByText('Take a quiet moment to pray together and begin the day connected.')).toBeTruthy();
     expect(within(archivedDetails).getByRole('button', { name: 'Open synthetic profile for Avery Brooks' })).toBeTruthy();
     expect(within(archivedDetails).getByRole('button', {
       name: 'View history for Updated prayer rhythm; illustrative score unavailable'
     })).toBeTruthy();
-    expect(within(archivedDetails).getByText('Daily')).toBeTruthy();
+    expect(within(archivedDetails).getByText('Every week on Monday.')).toBeTruthy();
     expect(within(archivedDetails).queryByRole('button', { name: /^Edit / })).toBeNull();
     expect(within(archivedDetails).queryByRole('button', { name: 'Tend Updated prayer rhythm' })).toBeNull();
     expect(within(archivedDetails).queryByRole('button', { name: /Undo completion/ })).toBeNull();
@@ -547,9 +604,14 @@ describe('Tend Today preview', () => {
     await user.keyboard('{Enter}');
     expect(within(archiveDialog).getByRole('heading', { name: 'No archived Rhythms' })).toBeTruthy();
     expect(document.activeElement).toBe(within(archiveDialog).getByRole('heading', { name: 'No archived Rhythms' }));
-    expect(screen.getByRole('article', { name: 'Updated prayer rhythm' })).toBeTruthy();
+    const restoredCard = screen.getByRole('article', { name: 'Updated prayer rhythm' });
+    expect(restoredCard).toBeTruthy();
     expect(within(screen.getByRole('article', { name: 'Updated prayer rhythm' })).queryByText('Archived', { exact: true })).toBeNull();
     expect(screen.getByText('1 of 3 tended')).toBeTruthy();
+    await user.click(within(restoredCard).getByRole('button', { name: 'Details for Updated prayer rhythm' }));
+    const restoredDetails = screen.getByRole('dialog', { name: 'Updated prayer rhythm' });
+    expect(within(restoredDetails).getByText('Every week on Monday.')).toBeTruthy();
+    await user.click(within(restoredDetails).getByRole('button', { name: 'Close details' }));
     await waitFor(() => {
       const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
       expect(raw).not.toBeNull();

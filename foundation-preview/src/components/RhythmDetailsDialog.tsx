@@ -11,6 +11,7 @@ import {
 import { MarriageIcon } from './MarriageIcon.tsx';
 import { PersonBadgeList } from './PersonBadge.tsx';
 import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
+import { RhythmPersonalBadge } from './RhythmPersonalBadge.tsx';
 import { RhythmMetadata } from './RhythmMetadata.tsx';
 import { RhythmCompletionActions } from './RhythmCompletionActions.tsx';
 
@@ -117,10 +118,13 @@ export function RhythmDetailsDialog({
                 aria-label={`Edit ${rhythm.title}`}
                 onClick={event => onEdit(event)}
               >
-                <MetadataIcon kind="edit" />
+                <span className="today-rhythm-details__edit-visual" aria-hidden="true">
+                  <MetadataIcon kind="edit" />
+                </span>
               </button>
             )}
             {archived && <RhythmArchivedBadge />}
+            {rhythm.personal && <RhythmPersonalBadge />}
           </div>
           {!embedded && (
             <button

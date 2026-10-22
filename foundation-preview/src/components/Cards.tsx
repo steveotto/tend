@@ -15,6 +15,7 @@ import {
 import { rhythmLastTendedLabel, type FoundationPreview, type PersonId, type PersonPreview, type RhythmPreview } from '../domain/preview-data.ts';
 import { PersonBadgeList } from './PersonBadge.tsx';
 import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
+import { RhythmPersonalBadge } from './RhythmPersonalBadge.tsx';
 import { RhythmMetadata } from './RhythmMetadata.tsx';
 import { RhythmCompletionActions } from './RhythmCompletionActions.tsx';
 import { TimelineChart } from './TimelineChart.tsx';
@@ -536,6 +537,7 @@ function RhythmCardSummary({
       <div className="rhythm-title-row">
         <h3 id={headingId} className={titleClassName}>{rhythm.title}</h3>
         {archived && <RhythmArchivedBadge />}
+        {rhythm.personal && <RhythmPersonalBadge />}
         {externallyAutomated && <span className="automation-badge">Automated at bank</span>}
       </div>
       {showDescription && rhythm.description?.trim() && (

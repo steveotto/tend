@@ -1,5 +1,12 @@
 import { areas, syntheticPeople, todayRhythms } from './preview-data.ts';
 import type { PersonId, RhythmPreview } from './preview-data.ts';
+import {
+  rhythmTimeOptions,
+  rhythmTimeValueFromLabel,
+  rhythmScheduleSummary,
+  validateRhythmSchedule
+} from './rhythm-schedule.ts';
+import type { RhythmSchedule, RhythmTimeLabel, RhythmTimeValue } from './rhythm-schedule.ts';
 
 export const rhythmCadences = [
   'Daily',
@@ -19,10 +26,13 @@ export type SavedRhythm = {
   id: string;
   title: string;
   description?: string;
-  cadence: RhythmCadence;
-  timeLabel: RhythmTime;
+  cadence: string;
+  timeLabel: RhythmTime | RhythmTimeLabel;
   personIds: PersonId[];
   categoryIds: RhythmCategoryId[];
+  timeOfDay?: RhythmTimeValue;
+  schedule?: RhythmSchedule;
+  personal?: boolean;
 };
 
 export type RhythmDraft = {
@@ -32,14 +42,18 @@ export type RhythmDraft = {
   timeLabel: string;
   personIds: PersonId[];
   categoryIds: RhythmCategoryId[];
+  schedule?: RhythmSchedule;
+  scheduleEditing?: boolean;
+  personal?: boolean;
 };
 
-export type RhythmDraftErrors = Partial<Record<keyof RhythmDraft, string>>;
+export type RhythmDraftErrors = Partial<Record<keyof RhythmDraft | 'schedule', string>>;
 
 const existingEditableIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 const personIds = new Set(syntheticPeople.map(person => person.id));
 const categoryIds = new Set(areas.map(area => area.id));
 const savedRhythmKeys = ['id', 'title', 'description', 'cadence', 'timeLabel', 'personIds', 'categoryIds'];
+const savedRhythmV4Keys = [...savedRhythmKeys, 'timeOfDay', 'schedule', 'personal'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -81,6 +95,35 @@ export function validateSavedRhythms(value: unknown): value is SavedRhythm[] {
   return true;
 }
 
+export function validateSavedRhythmsV4(value: unknown): value is SavedRhythm[] {
+  if (!Array.isArray(value)) return false;
+  const ids = new Set<string>();
+  const labels = new Set<string>(rhythmTimeOptions.map(option => option.label));
+  for (const record of value) {
+    if (!isRecord(record) || !hasOnlyKeys(record, savedRhythmV4Keys)) return false;
+    if (typeof record.cadence !== 'string' || record.cadence.trim().length === 0 || record.cadence.length > 160) return false;
+    if (typeof record.timeLabel !== 'string' || !labels.has(record.timeLabel)) return false;
+    if (rhythmTimeValueFromLabel(record.timeLabel) !== record.timeOfDay) return false;
+    if (record.personal !== undefined && typeof record.personal !== 'boolean') return false;
+    if (record.schedule !== undefined && !validateRhythmSchedule(record.schedule).valid) return false;
+
+    const legacyCompatibleRecord = {
+      id: record.id,
+      title: record.title,
+      ...(record.description === undefined ? {} : { description: record.description }),
+      cadence: rhythmCadences.includes(record.cadence as RhythmCadence) ? record.cadence : 'Daily',
+      timeLabel: rhythmTimes.includes(record.timeLabel as RhythmTime) ? record.timeLabel : 'Anytime',
+      personIds: record.personIds,
+      categoryIds: record.categoryIds
+    };
+    if (!validateSavedRhythms([legacyCompatibleRecord])) return false;
+    const id = record.id as string;
+    if (ids.has(id)) return false;
+    ids.add(id);
+  }
+  return true;
+}
+
 export function rhythmDraftFrom(rhythm: RhythmPreview, categoryIds: readonly RhythmCategoryId[] = []): RhythmDraft {
   return {
     title: rhythm.title,
@@ -88,7 +131,10 @@ export function rhythmDraftFrom(rhythm: RhythmPreview, categoryIds: readonly Rhy
     cadence: rhythm.cadence ?? 'Daily',
     timeLabel: rhythm.timeLabel ?? 'Anytime',
     personIds: [...(rhythm.personIds ?? [])],
-    categoryIds: [...categoryIds]
+    categoryIds: [...categoryIds],
+    ...(rhythm.schedule === undefined ? {} : { schedule: rhythm.schedule }),
+    scheduleEditing: rhythm.schedule !== undefined,
+    ...(rhythm.personal === undefined ? {} : { personal: rhythm.personal })
   };
 }
 
@@ -97,10 +143,15 @@ export function validateRhythmDraft(draft: RhythmDraft): RhythmDraftErrors {
   if (!draft.title.trim()) errors.title = 'Enter a Rhythm title.';
   else if (draft.title.trim().length > 80) errors.title = 'Use 80 characters or fewer.';
   if (draft.description.length > 1000) errors.description = 'Use 1,000 characters or fewer.';
-  if (!rhythmCadences.some(cadence => cadence === draft.cadence)) {
+  if (typeof draft.cadence !== 'string' || draft.cadence.trim().length === 0 || draft.cadence.length > 160) {
     errors.cadence = 'Choose a supported cadence.';
   }
-  if (!rhythmTimes.some(time => time === draft.timeLabel)) errors.timeLabel = 'Choose a time of day.';
+  if (rhythmTimeValueFromLabel(draft.timeLabel) === undefined) errors.timeLabel = 'Choose a time of day.';
+  if (draft.scheduleEditing && draft.schedule === undefined) {
+    errors.schedule = 'Complete the schedule details before saving.';
+  } else if (draft.schedule !== undefined && !validateRhythmSchedule(draft.schedule).valid) {
+    errors.schedule = 'Choose a valid schedule.';
+  }
   if (!isUniqueKnownValues<PersonId>(draft.personIds, personIds)) {
     errors.personIds = 'Choose each available synthetic person at most once.';
   }
@@ -130,14 +181,28 @@ export function saveRhythmDraft(
   }
   if (Object.keys(errors).length > 0) return { errors };
 
+  const existing = savedRhythms.find(rhythm => rhythm.id === id);
+  const timeOfDay = rhythmTimeValueFromLabel(draft.timeLabel);
+  const scheduleChanged = draft.schedule !== undefined && draft.schedule !== existing?.schedule;
+  const cadence = draft.schedule
+    ? scheduleChanged || existing === undefined
+      ? rhythmScheduleSummary(draft.schedule)
+      : existing.cadence
+    : existing?.cadence ?? draft.cadence;
+  const schedule = draft.schedule ?? existing?.schedule;
   const saved: SavedRhythm = {
     id,
     title: draft.title.trim(),
     ...(draft.description.length === 0 ? {} : { description: draft.description }),
-    cadence: draft.cadence as RhythmCadence,
-    timeLabel: draft.timeLabel as RhythmTime,
+    cadence,
+    timeLabel: draft.timeLabel as RhythmTimeLabel,
     personIds: [...draft.personIds],
-    categoryIds: [...draft.categoryIds]
+    categoryIds: [...draft.categoryIds],
+    ...(schedule === undefined ? {} : { schedule }),
+    ...(draft.personal === undefined
+      ? existing?.personal === undefined ? {} : { personal: existing.personal }
+      : { personal: draft.personal }),
+    ...(timeOfDay === undefined ? {} : { timeOfDay })
   };
   return {
     savedRhythms: [
@@ -160,7 +225,9 @@ export function resolveTodayRhythms(savedRhythms: readonly SavedRhythm[]): Rhyth
       cadence: saved.cadence,
       timeLabel: saved.timeLabel,
       personIds: saved.personIds,
-      categoryIds: saved.categoryIds
+      categoryIds: saved.categoryIds,
+      ...(saved.schedule === undefined ? {} : { schedule: saved.schedule }),
+      ...(saved.personal === undefined ? {} : { personal: saved.personal })
     };
   });
 
@@ -175,7 +242,9 @@ export function resolveTodayRhythms(savedRhythms: readonly SavedRhythm[]): Rhyth
       automation: 'manual' as const,
       status: 'Due today' as const,
       personIds: rhythm.personIds,
-      categoryIds: rhythm.categoryIds
+      categoryIds: rhythm.categoryIds,
+      ...(rhythm.schedule === undefined ? {} : { schedule: rhythm.schedule }),
+      ...(rhythm.personal === undefined ? {} : { personal: rhythm.personal })
     }));
 
   return [...editable, ...custom];

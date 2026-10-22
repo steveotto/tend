@@ -44,6 +44,7 @@ import {
   listenForPreviewChanges,
   loadV2RecoveryCopy,
   loadV1RecoveryCopy,
+  loadV3RecoveryCopy,
   loadPreview,
   writePreview
 } from './storage/preview-storage.ts';
@@ -70,6 +71,8 @@ export function App() {
   const [v1RecoveryError, setV1RecoveryError] = useState<string | null>(null);
   const [v2RecoveryCopy, setV2RecoveryCopy] = useState<string | null>(null);
   const [v2RecoveryError, setV2RecoveryError] = useState<string | null>(null);
+  const [v3RecoveryCopy, setV3RecoveryCopy] = useState<string | null>(null);
+  const [v3RecoveryError, setV3RecoveryError] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -133,9 +136,21 @@ export function App() {
     }
   }
 
+  function refreshV3RecoveryCopy() {
+    const result = loadV3RecoveryCopy(browserPreviewStorage());
+    if (result.kind === 'loaded') {
+      setV3RecoveryCopy(result.raw);
+      setV3RecoveryError(null);
+    } else {
+      setV3RecoveryCopy(null);
+      setV3RecoveryError(result.message);
+    }
+  }
+
   useEffect(() => {
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
+    refreshV3RecoveryCopy();
     const loaded = loadPreview(browserPreviewStorage(), initialLoadDate);
     if (loaded.kind === 'loaded') {
       expectedRaw.current = loaded.raw;
@@ -163,9 +178,10 @@ export function App() {
       skipNextAutosave.current = false;
       return;
     }
-    const saved = writePreview(browserPreviewStorage(), previewData, expectedRaw.current);
+    const saved = writePreview(browserPreviewStorage(), previewData, expectedRaw.current, { currentDate });
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
+    refreshV3RecoveryCopy();
     if (saved.kind === 'saved') {
       expectedRaw.current = saved.raw;
       setPersistenceStatus({ kind: 'saved' });
@@ -339,10 +355,14 @@ export function App() {
     return result.errors;
   }
 
-  function finishWrite(resultData: PreviewData): string | null {
-    const written = writePreview(browserPreviewStorage(), resultData, expectedRaw.current);
+  function finishWrite(resultData: PreviewData, allowUnrecoverableReplacement = false): string | null {
+    const written = writePreview(browserPreviewStorage(), resultData, expectedRaw.current, {
+      allowUnrecoverableReplacement,
+      currentDate
+    });
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
+    refreshV3RecoveryCopy();
     if (written.kind === 'saved') {
       expectedRaw.current = written.raw;
       externalRaw.current = null;
@@ -391,9 +411,13 @@ export function App() {
   }
 
   function replaceExternal(): string | null {
-    const written = writePreview(browserPreviewStorage(), previewData, externalRaw.current);
+    const written = writePreview(browserPreviewStorage(), previewData, externalRaw.current, {
+      allowUnrecoverableReplacement: true,
+      currentDate
+    });
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
+    refreshV3RecoveryCopy();
     if (written.kind === 'saved') {
       expectedRaw.current = written.raw;
       externalRaw.current = null;
@@ -414,9 +438,10 @@ export function App() {
   function retrySave() {
     skipNextAutosave.current = true;
     setAutoSaveEnabled(true);
-    const written = writePreview(browserPreviewStorage(), previewData, expectedRaw.current);
+    const written = writePreview(browserPreviewStorage(), previewData, expectedRaw.current, { currentDate });
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
+    refreshV3RecoveryCopy();
     if (written.kind === 'saved') {
       expectedRaw.current = written.raw;
       setPersistenceStatus({ kind: 'saved' });
@@ -501,8 +526,8 @@ export function App() {
         data={previewData}
         status={persistenceStatus}
         currentDate={currentDate}
-        onImport={data => finishWrite(data)}
-        onReset={() => finishWrite(createSamplePreviewData())}
+        onImport={data => finishWrite(data, true)}
+        onReset={() => finishWrite(createSamplePreviewData(), true)}
         onRetrySave={retrySave}
         onReloadExternal={reloadExternal}
         onReplaceExternal={replaceExternal}
@@ -510,6 +535,8 @@ export function App() {
         v1RecoveryError={v1RecoveryError}
         v2RecoveryCopy={v2RecoveryCopy}
         v2RecoveryError={v2RecoveryError}
+        v3RecoveryCopy={v3RecoveryCopy}
+        v3RecoveryError={v3RecoveryError}
       />
       <footer className="preview-footer">
         <span>Synthetic preview data stays separate from Tend accounts.</span>

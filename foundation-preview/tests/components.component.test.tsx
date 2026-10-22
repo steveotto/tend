@@ -242,6 +242,59 @@ describe('shared preview components', () => {
     expect(dialog.querySelectorAll('.rhythm-metadata-footer > span')).toHaveLength(1);
   });
 
+  it('keeps the quiet edit control beside short and long titles while Close stays separate', () => {
+    const onEdit = vi.fn();
+    const rhythm = {
+      id: 'details-header-rhythm',
+      title: 'Short title',
+      automation: 'manual' as const,
+      status: 'Due today' as const
+    };
+    const { rerender } = render(
+      <RhythmDetailsDialog rhythm={rhythm} onEdit={onEdit} onClose={() => undefined} />
+    );
+
+    for (const title of [
+      'Pray together',
+      'A deliberately long title to see how wrapping does and make sure it still looks'
+    ]) {
+      const titledRhythm = { ...rhythm, title };
+      rerender(
+        <RhythmDetailsDialog rhythm={titledRhythm} onEdit={onEdit} onClose={() => undefined} />
+      );
+
+      const dialog = screen.getByRole('dialog', { name: title });
+      const heading = within(dialog).getByRole('heading', { name: title });
+      const editButton = within(dialog).getByRole('button', { name: `Edit ${title}` });
+      const closeButton = within(dialog).getByRole('button', { name: 'Close details' });
+      const header = heading.closest('header');
+
+      expect(editButton.previousElementSibling).toBe(heading);
+      expect(editButton.parentElement).toBe(heading.parentElement);
+      expect(editButton.querySelector('.today-rhythm-details__edit-visual')?.getAttribute('aria-hidden')).toBe('true');
+      expect(editButton.querySelector('.today-rhythm-details__edit-visual svg')).toBeTruthy();
+      expect(closeButton.parentElement).toBe(header);
+      expect(closeButton).not.toBe(editButton.parentElement);
+    }
+  });
+
+  it('keeps the shared edit control keyboard-focusable', async () => {
+    const user = userEvent.setup();
+    const rhythm = {
+      id: 'keyboard-details-header-rhythm',
+      title: 'Pray together',
+      automation: 'manual' as const,
+      status: 'Due today' as const
+    };
+    render(<RhythmDetailsDialog rhythm={rhythm} onEdit={() => undefined} onClose={() => undefined} />);
+
+    const editButton = screen.getByRole('button', { name: 'Edit Pray together' });
+    await user.tab();
+
+    expect(document.activeElement).toBe(editButton);
+    expect(editButton.matches(':focus-visible')).toBe(true);
+  });
+
   it('keeps sample Marriage details read-only and exposes associated categories through the history view', async () => {
     const user = userEvent.setup();
     const rhythm = marriageRhythms.find(item => item.id === 'sample-marriage-prayer')!;

@@ -32,6 +32,8 @@ type PreviewDataControlsProps = {
   v1RecoveryError?: string | null;
   v2RecoveryCopy?: string | null;
   v2RecoveryError?: string | null;
+  v3RecoveryCopy?: string | null;
+  v3RecoveryError?: string | null;
 };
 
 function downloadText(filename: string, content: string, type: string): string | null {
@@ -63,7 +65,9 @@ export function PreviewDataControls({
   v1RecoveryCopy = null,
   v1RecoveryError = null,
   v2RecoveryCopy = null,
-  v2RecoveryError = null
+  v2RecoveryError = null,
+  v3RecoveryCopy = null,
+  v3RecoveryError = null
 }: PreviewDataControlsProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -99,7 +103,7 @@ export function PreviewDataControls({
       setPendingAction({
         kind: 'import',
         data: result.envelope.data,
-        hasArchiveStatus: result.sourceSchemaVersion === 3
+        hasArchiveStatus: result.sourceSchemaVersion >= 3
       });
     };
     reader.readAsText(file);
@@ -181,6 +185,19 @@ export function PreviewDataControls({
             Download original v2 recovery backup
           </button>
         )}
+        {v3RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v3-recovery.json',
+              v3RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v3 recovery backup downloaded.')}
+          >
+            Download original v3 recovery backup
+          </button>
+        )}
         <label className="btn mini ghost preview-data-controls__file-button">
           Import preview backup
           <input
@@ -220,6 +237,7 @@ export function PreviewDataControls({
       </div>
       {v1RecoveryError && <p className="preview-data-controls__help" role="alert">The original v1 recovery copy could not be read: {v1RecoveryError}</p>}
       {v2RecoveryError && <p className="preview-data-controls__help" role="alert">The original v2 recovery copy could not be read: {v2RecoveryError}</p>}
+      {v3RecoveryError && <p className="preview-data-controls__help" role="alert">The original v3 recovery copy could not be read: {v3RecoveryError}</p>}
       {message && <p className="preview-data-controls__message" role="status">{message}</p>}
       {pendingAction && (
         <MoneyGoalDialog
