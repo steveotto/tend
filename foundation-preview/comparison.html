@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#F7F9F7" />
+    <title>Tend preview · Visual comparison</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 18px; background: #eef2ef; color: #202723; font: 14px/1.45 system-ui,sans-serif; }
+      header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+      h1 { margin: 0; font-size: 18px; }
+      header p { margin: 0; color: #5e6b63; font-size: 12px; }
+      main { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+      section { min-width: 0; }
+      h2 { margin: 0 0 6px; font-size: 13px; }
+      iframe { display: block; width: 100%; height: min(1100px,calc(100vh - 92px)); min-height: 720px; border: 1px solid #dce4de; border-radius: 10px; background: #f7f9f7; }
+      @media (max-width: 640px) { body { padding: 12px; } header { align-items: flex-start; flex-direction: column; } main { grid-template-columns: minmax(0,1fr); } iframe { height: 900px; min-height: 0; } }
+    </style>
+  </head>
+  <body>
+    <header><h1>Tend Today · visual comparison</h1><p>Equivalent synthetic data · static legacy-style reference · no account data or app scripts</p></header>
+    <main>
+      <section><h2>Legacy Tend styles</h2><iframe title="Static synthetic reference using Tend legacy styles" src="/legacy-reference.html"></iframe></section>
+      <section><h2>React app preview</h2><iframe title="React Tend Today preview" src="/app-preview.html"></iframe></section>
+    </main>
+  </body>
+</html>

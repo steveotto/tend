@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Tend legacy styles · isolated sample</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/brand/tend-tokens.css" />
+    <link rel="stylesheet" href="/tend.css" />
+    <link rel="stylesheet" href="./src/styles.css" />
+    <style>
+      .legacy-sample-wrap { padding-bottom: 32px; }
+      .legacy-sample-stamp { margin: 0 0 8px; color: var(--ink-faint); font-size: 10px; text-align: right; }
+      .legacy-sample-nav { display: flex; justify-content: space-between; gap: 12px; }
+      .legacy-sample-nav .utility-primary { gap: 8px; }
+      .legacy-sample-nav .utility-primary-button { cursor: default; }
+      .legacy-sample-areas { display: flex; gap: 6px; overflow-x: auto; }
+      .legacy-sample-areas button { flex: none; }
+      .legacy-sample-actions { display: flex; gap: 6px; }
+      .legacy-sample-actions .rhythm-card__tend { min-width: 84px; min-height: 38px; padding: 6px 12px; border: 1px solid var(--action-rhythm-border,#B8E1CA); border-radius: 9px; background: var(--action-rhythm-background,#E3F6ED); color: var(--action-rhythm-text,#1C5844); font: 600 var(--tend-type-button-label, .9rem)/1.2 var(--sans); }
+      .legacy-sample-actions .today-rhythm-card__details-toggle { min-height: 36px; }
+      .legacy-sample-footer { margin-top: 10px; color: var(--ink-faint); font-size: 11px; }
+      @media (max-width:720px) {
+        .legacy-sample-nav { display: block; }
+        .legacy-sample-nav .utility-primary { flex-wrap: wrap; }
+        .legacy-sample-areas { padding-bottom: 8px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap legacy-sample-wrap">
+      <header class="apphead">
+        <div class="brand">
+          <img src="/brand/tend-logo.png" alt="Tend" style="height:var(--tend-brand-logo-height);width:auto" />
+          <div class="brand-copy">
+            <div class="sub">Wednesday, October 21</div>
+            <div class="brand-tagline">Tend to what matters</div>
+          </div>
+        </div>
+      </header>
+      <div class="sticky-nav">
+        <div class="nav-row nav-row-tools">
+          <nav class="tabs legacy-sample-nav" aria-label="Tools and search">
+            <div class="utility-primary">
+              <button class="utility-primary-button active" type="button" aria-current="page"><span class="utility-nav-icon" aria-hidden="true">⌂</span><span>Today</span></button>
+              <button class="utility-primary-button" type="button"><span class="utility-nav-icon" aria-hidden="true">✦</span><span>Focus</span></button>
+              <button class="utility-primary-button" type="button"><span class="utility-nav-icon" aria-hidden="true">♙</span><span>People</span></button>
+              <button class="utility-primary-button" type="button"><span class="utility-nav-icon" aria-hidden="true">☰</span><span>More</span></button>
+            </div>
+            <label class="utility-search"><span class="utility-search-icon" aria-hidden="true">⌕</span><input type="search" placeholder="Search Tend..." aria-label="Search (sample reference)" /></label>
+          </nav>
+        </div>
+        <div class="nav-row nav-row-areas">
+          <span class="nav-row-label">Areas</span>
+          <nav class="areanav legacy-sample-areas" aria-label="Areas">
+            <button type="button"><span class="nav-ic" aria-hidden="true">✝</span><span>Faith</span></button>
+            <button type="button"><span class="nav-ic" aria-hidden="true">♡</span><span>Marriage</span></button>
+            <button type="button"><span class="nav-ic" aria-hidden="true">⌂</span><span>Parenting</span></button>
+            <button type="button"><span class="nav-ic" aria-hidden="true">⌁</span><span>Health &amp; Fitness</span></button>
+            <button type="button"><span class="nav-ic" aria-hidden="true">$</span><span>Finances</span></button>
+            <button type="button"><span class="nav-ic" aria-hidden="true">♧</span><span>Friendships</span></button>
+          </nav>
+        </div>
+      </div>
+      <div id="view">
+        <main class="home-dashboard">
+          <div class="sectiontitle dashboard-greeting"><h2>Good afternoon</h2><span class="hint">Wednesday, October 21</span></div>
+          <section class="card overall-card" aria-label="Overall health summary">
+            <div class="dashboard-overall-heading"><h3>Overall health</h3><span class="ov-score" aria-label="No score available">—</span></div>
+            <div class="bar-ov" aria-hidden="true"><i class="ov-marker" hidden></i></div>
+            <div class="meta"><span class="sample-status">Sample data</span></div>
+            <div class="menu-grid">
+              <button class="menu-area" type="button"><span class="menu-area-icon" aria-hidden="true">✝</span><span class="ma-name">Faith</span><span class="ma-score">—</span></button>
+              <button class="menu-area" type="button"><span class="menu-area-icon" aria-hidden="true">♡</span><span class="ma-name">Marriage</span><span class="ma-score">—</span></button>
+              <button class="menu-area" type="button"><span class="menu-area-icon" aria-hidden="true">⌂</span><span class="ma-name">Parenting</span><span class="ma-score">—</span></button>
+              <button class="menu-area" type="button"><span class="menu-area-icon" aria-hidden="true">⌁</span><span class="ma-name">Health &amp; Fitness</span><span class="ma-score">—</span></button>
+              <button class="menu-area" type="button"><span class="menu-area-icon" aria-hidden="true">$</span><span class="ma-name">Finances</span><span class="ma-score">—</span></button>
+              <button class="menu-area" type="button"><span class="menu-area-icon" aria-hidden="true">♧</span><span class="ma-name">Friendships</span><span class="ma-score">—</span></button>
+            </div>
+          </section>
+          <section aria-labelledby="legacy-plan-heading">
+            <div class="sectiontitle"><h2 id="legacy-plan-heading">Your plan</h2><span class="hint">Today</span></div>
+            <div class="card planblock current">
+              <div class="current-plan-summary"><div class="plan-block-name">Today</div><span class="current-plan-item-count">0 of 3 tended</span></div>
+              <div class="faith-practice-tabs home-plan-type-tabs" role="tablist" aria-label="Plan items">
+                <button type="button" role="tab" aria-selected="true">Scheduled</button><button type="button" role="tab" aria-selected="false">Anytime</button><button type="button" role="tab" aria-selected="false">All-day</button>
+              </div>
+              <div class="home-plan-context-row"><div class="home-plan-context">Your scheduled Rhythms for today</div></div>
+              <div class="current-plan-items">
+                <div class="current-plan-item-group" aria-label="Scheduled Rhythms">
+                  <article class="rhythm-card card today-rhythm-card" aria-labelledby="legacy-pray-together">
+                    <div class="pi-main"><div class="rhythm-title-row"><h3 id="legacy-pray-together" class="tend-type-title">Pray together</h3></div><p class="tend-type-description">Take a quiet moment to pray together and begin the day connected.</p><span class="rhythm-card__meta">Daily · Morning</span></div>
+                    <div class="today-rhythm-card__actions"><button type="button" class="btn mini rhythm-card__tend" disabled>Tend</button><button type="button" class="today-rhythm-card__details-toggle" disabled>Details</button></div>
+                  </article>
+                  <article class="rhythm-card card today-rhythm-card" aria-labelledby="legacy-daily-connection">
+                    <div class="pi-main"><div class="rhythm-title-row"><h3 id="legacy-daily-connection" class="tend-type-title">Daily connection</h3></div><p class="tend-type-description">Set aside a few minutes to share how your day went.</p><span class="rhythm-card__meta">Daily · Evening</span></div>
+                    <div class="today-rhythm-card__actions"><button type="button" class="btn mini rhythm-card__tend" disabled>Tend</button><button type="button" class="today-rhythm-card__details-toggle" disabled>Details</button></div>
+                  </article>
+                  <article class="rhythm-card card today-rhythm-card" aria-labelledby="legacy-take-a-walk">
+                    <div class="pi-main"><div class="rhythm-title-row"><h3 id="legacy-take-a-walk" class="tend-type-title">Take a walk</h3></div><p class="tend-type-description">Get outside for a short walk and a little fresh air.</p><span class="rhythm-card__meta">3 times a week · Afternoon</span></div>
+                    <div class="today-rhythm-card__actions"><button type="button" class="btn mini rhythm-card__tend" disabled>Tend</button><button type="button" class="today-rhythm-card__details-toggle" disabled>Details</button></div>
+                  </article>
+                </div>
+              </div>
+            </div>
+          </section>
+          <section class="today-calendar-section" aria-labelledby="legacy-calendar-heading">
+            <div class="sectiontitle"><h2 id="legacy-calendar-heading">On your calendar</h2></div>
+            <div class="card calendar-card"><p class="empty">No calendars connected in this preview.</p><button type="button" class="btn mini ghost calendar-settings-button" disabled>Settings</button></div>
+          </section>
+        </main>
+      </div>
+      <footer class="legacy-sample-footer">Static comparison fixture · synthetic content only · no app scripts</footer>
+    </div>
+  </body>
+</html>
