@@ -591,19 +591,51 @@ a:focus-visible {
   }
 
 .home-dashboard .menu-area .ma-score {
-  display: inline;
-  flex: none;
-  width: auto;
-  height: auto;
-  min-width: 0;
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 48px;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 25px;
+  min-width: 48px;
   margin-left: auto;
-  padding: 0;
+  padding: 0 5px;
   border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--ink-faint);
+  border-radius: 7px;
+  background: #738078;
+  color: #fff;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-dashboard .menu-area .ma-score.green {
+  background: #12B76A;
+  color: #fff;
+}
+
+.home-dashboard .menu-area .ma-score.yellow {
+  background: #FFC133;
+  color: #3F351B;
+}
+
+.home-dashboard .menu-area .ma-score.red {
+  background: #FF5A45;
+  color: #fff;
+}
+
+.home-dashboard .menu-area .ma-score.neutral {
+  background: #738078;
+  color: #fff;
+}
+
+.home-dashboard .today-rhythm-card__actions > .rhythm-card__tend {
+  box-sizing: border-box;
+  width: 84px;
+  min-width: 84px;
+  height: 44px;
+  min-height: 44px;
 }
 
   .current-plan-summary {
@@ -717,9 +749,10 @@ a:focus-visible {
 
   .today-rhythm-card__actions > .rhythm-card__tend {
     box-sizing: border-box;
-    width: auto;
+    width: 84px;
     min-width: 84px;
-    min-height: 38px;
+    height: 44px;
+    min-height: 44px;
     padding: 6px 12px;
     border-radius: 9px;
     font-size: var(--tend-type-button-label, .9rem);
@@ -729,27 +762,6 @@ a:focus-visible {
   .today-rhythm-card__actions > .rhythm-card__tend:disabled {
     cursor: default;
     opacity: .8;
-  }
-
-  .today-rhythm-card__details-toggle {
-    box-sizing: border-box;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 72px;
-    min-height: 36px;
-    padding: 6px 10px;
-    border: 1px solid var(--action-rhythm-border, #B8E1CA);
-    border-radius: 9px;
-    background: var(--action-rhythm-background, #E3F6ED);
-    color: var(--action-rhythm-text, #1C5844);
-    font: 600 var(--tend-type-button-label, .9rem)/1.2 var(--sans);
-    cursor: pointer;
-  }
-
-  .today-rhythm-card__details-toggle:disabled {
-    cursor: not-allowed;
-    opacity: .65;
   }
 
   .plan-empty {
@@ -866,76 +878,6 @@ a:focus-visible {
   .preview-data-controls__file-button:focus-within {
     outline: 2px solid var(--forest);
     outline-offset: 2px;
-  }
-
-  .today-rhythm-details-dialog {
-    width: min(520px, calc(100vw - 32px));
-    max-height: min(85vh, 820px);
-    margin: auto;
-    padding: 0;
-    overflow: auto;
-    border: 1px solid var(--line);
-    border-radius: 20px;
-    background: var(--canvas);
-    color: var(--ink);
-    box-shadow: 0 22px 70px #10251d45;
-  }
-
-  .today-rhythm-details-dialog::backdrop {
-    background: #10251d9c;
-  }
-
-  .today-rhythm-details__surface {
-    padding: 22px;
-  }
-
-  .today-rhythm-details__header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .today-rhythm-details__header h2 {
-    margin: 0;
-    font-size: 21px;
-  }
-
-  .today-rhythm-details__close {
-    display: grid;
-    flex: none;
-    place-items: center;
-    width: 40px;
-    height: 40px;
-    border: 1px solid var(--line);
-    border-radius: 50%;
-    background: var(--card);
-    color: var(--ink-soft);
-    font-size: 21px;
-  }
-
-  .today-rhythm-details__content {
-    margin-top: 15px;
-  }
-
-  .today-rhythm-details__description {
-    color: var(--ink-soft);
-  }
-
-  .today-rhythm-details__badges {
-    margin-top: 10px;
-    color: var(--ink-faint);
-    font-size: 12px;
-  }
-
-  .today-rhythm-details__actions {
-    margin-top: 16px;
-  }
-
-  .today-rhythm-details__actions .rhythm-card__tend {
-    min-width: 84px;
-    min-height: 42px;
-    padding: 7px 14px;
   }
 
   .preview-placeholder {
@@ -1315,6 +1257,13 @@ a:focus-visible {
     }
 
   @media (max-width: 600px) {
+    .home-dashboard .today-rhythm-card__actions > .rhythm-card__tend {
+      width: 78px;
+      min-width: 78px;
+      height: 44px;
+      min-height: 44px;
+    }
+
     .rhythm-card.today-rhythm-card {
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 8px;
@@ -1327,13 +1276,9 @@ a:focus-visible {
     }
 
     .today-rhythm-card__actions > .rhythm-card__tend {
+      width: 78px;
       min-width: 78px;
       padding-inline: 9px;
-    }
-
-    .today-rhythm-card__details-toggle {
-      min-width: 64px;
-      padding-inline: 8px;
     }
 
     .home-plan-type-tabs {
@@ -1353,7 +1298,7 @@ a:focus-visible {
   }
 
   .today-rhythm-card__actions {
-    justify-content: flex-start;
+    justify-content: flex-end;
   }
 
   .home-plan-context-row {
@@ -1364,5 +1309,1521 @@ a:focus-visible {
   .calendar-card {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+.tend-app-preview .marriage-page {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.marriage-page-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 2px 12px;
+  margin: 0;
+}
+
+.marriage-heading-copy {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  min-width: 0;
+}
+
+.marriage-page-heading h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--tend-type-section-header, 19px);
+  font-weight: 700;
+}
+
+.marriage-heading-copy p {
+  margin: 2px 0 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.marriage-page-heading .marriage-spouse-shortcut {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.marriage-spouse-shortcut {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  min-width: 0;
+  min-height: 44px;
+  max-width: min(190px, 35vw);
+  padding: 5px 4px 5px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font: 600 13px/1.3 var(--sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+.marriage-spouse-shortcut:hover {
+  background: var(--mist);
+  color: var(--forest-deep);
+}
+
+.marriage-partner-avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--mist);
+  color: var(--forest-deep);
+  font-weight: 700;
+}
+
+.marriage-spouse-shortcut-chevron {
+  flex: none;
+  color: var(--ink-soft);
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.marriage-sample-tag {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--card) 65%, transparent);
+  color: var(--ink-faint);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.marriage-page-heading > .marriage-sample-tag {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+}
+
+.marriage-summary-card {
+  padding: 14px 16px;
+}
+
+.marriage-summary-card .category-health-copy h3 {
+  font-size: 17px;
+}
+
+.marriage-summary-card .category-health-score {
+  font-size: 26px;
+}
+
+.marriage-summary-card .category-health-status {
+  font-size: 11px;
+}
+
+.marriage-summary-card .health-summary-score {
+  font-size: 16px;
+}
+
+.marriage-summary-card .health-summary-label {
+  font-size: 11px;
+}
+
+.marriage-summary-card .health-summary-detail {
+  font-size: 9px;
+  line-height: 1.3;
+}
+
+.marriage-example-selector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.marriage-example-selector select {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 38px;
+  padding: 6px 28px 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+}
+
+.marriage-example-selector select:focus-visible {
+  outline: 2px solid var(--forest);
+  outline-offset: 2px;
+}
+
+.home-dashboard .marriage-example-selector {
+  margin-top: 12px;
+}
+
+.illustrative-score {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.illustrative-score--compact {
+  gap: 2px;
+  font-size: 9px;
+}
+
+.preview-score-meter--compact {
+  height: 4px;
+  min-height: 4px;
+  margin: 2px 0 1px;
+}
+
+.preview-score-meter--compact .preview-score-marker {
+  top: -5px;
+  border-right-width: 4px;
+  border-bottom-width: 6px;
+  border-left-width: 4px;
+}
+
+.foundation-progress {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #E9EFEB;
+}
+
+.foundation-progress__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #E4513D 0%, #F79009 34%, #FDC94A 68%, #12B76A 100%);
+}
+
+.foundation-card__coverage {
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.marriage-weekly-progress {
+  margin: 0 0 8px;
+  color: var(--ink-soft);
+  font-size: 10px;
+}
+
+.marriage-topic-icon .marriage-svg-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.marriage-svg-icon {
+  display: block;
+  width: 22px;
+  height: 22px;
+  background-color: currentColor;
+  -webkit-mask: var(--marriage-icon) center / contain no-repeat;
+  mask: var(--marriage-icon) center / contain no-repeat;
+}
+
+.preview-score-meter {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 9px;
+  margin: 12px 0 8px;
+  overflow: visible;
+  border-radius: 99px;
+  background: #E9EFEB;
+}
+
+.preview-score-meter .category-health-spectrum {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #E4513D 0%, #F79009 34%, #FDC94A 68%, #12B76A 100%);
+}
+
+.preview-score-meter .category-health-spectrum.is-empty {
+  background: #E9EFEB;
+}
+
+.catalogue-score-examples > div {
+  padding-inline: 8px;
+}
+
+.preview-score-meter--marker-below {
+  margin-bottom: 16px;
+}
+
+.preview-score-marker {
+  position: absolute;
+  left: clamp(6px, var(--score), calc(100% - 6px));
+  top: -8px;
+  z-index: 2;
+  width: 0;
+  height: 0;
+  border-right: 6px solid transparent;
+  border-bottom: 9px solid #17251E;
+  border-left: 6px solid transparent;
+  transform: translateX(-50%);
+}
+
+.preview-score-meter--marker-below .preview-score-marker {
+  top: calc(100% + 2px);
+  left: var(--score);
+}
+
+.marriage-summary-card .category-health-meter {
+  margin: 10px 0 5px;
+}
+
+.marriage-summary-card .preview-score-meter--marker-below {
+  margin-bottom: 16px;
+}
+
+.marriage-summary-card .health-summary-breakdown {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 4px;
+}
+
+.marriage-summary-card .health-summary-item {
+  min-height: 0;
+  padding: 8px 10px;
+}
+
+.marriage-summary-card .health-summary-item:first-child {
+  border-left: 0;
+}
+
+.marriage-summary-card .health-summary-score {
+  color: var(--ink-soft);
+}
+
+.marriage-view-nav {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.marriage-view-nav [role="tab"] {
+  overflow-wrap: normal;
+  padding-inline: 4px;
+  font-size: clamp(12px, 3.8vw, 15px);
+  white-space: nowrap;
+}
+
+.marriage-view-nav [role="tab"][aria-selected="true"] {
+  border-color: #D5E4DA;
+  background: #fff;
+  color: var(--forest-deep);
+  box-shadow: 0 1px 2px rgba(32,39,35,.06);
+}
+
+.marriage-view-panel[hidden] {
+  display: none;
+}
+
+.marriage-view-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.marriage-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  min-width: 0;
+}
+
+.marriage-section-heading h3,
+.marriage-section-heading h4 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.marriage-section-heading p {
+  margin: 3px 0 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.marriage-today-section,
+.marriage-rhythm-section,
+.marriage-foundations-section,
+.marriage-recommendation-group {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.marriage-daily-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--mist);
+}
+
+.marriage-daily-heading,
+.marriage-weekly-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.marriage-daily-heading h3,
+.marriage-weekly-heading h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.marriage-daily-eyebrow {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--forest-deep);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.marriage-daily-topic {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.marriage-daily-topic > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+.marriage-daily-topic strong,
+.marriage-daily-prompt-label {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.marriage-topic-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--canvas);
+  color: var(--forest);
+}
+
+.marriage-daily-prompt-inset {
+  max-width: 68ch;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--forest) 12%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--canvas) 88%, var(--mist));
+}
+
+.marriage-daily-prompt {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.marriage-weekly-goal {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--canvas);
+}
+
+.marriage-weekday-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.marriage-weekday {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--canvas);
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.marriage-weekday.is-complete {
+  border-color: var(--forest);
+  background: var(--forest);
+  color: #fff;
+}
+
+.marriage-weekday.is-today {
+  outline: 2px solid color-mix(in srgb, var(--forest) 28%, transparent);
+  outline-offset: 1px;
+}
+
+.marriage-readonly-note {
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.marriage-rhythm-list,
+.marriage-foundation-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.marriage-recommendation-group > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.marriage-recommendation-group > header > span {
+  flex: none;
+  color: var(--ink-faint);
+  font-size: 11px;
+}
+
+.foundation-card--compact {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 13px;
+}
+
+.foundation-card__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid color-mix(in srgb, var(--forest) 18%, var(--line));
+  border-radius: 50%;
+  background: var(--mist);
+  color: var(--forest-deep);
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.rhythm-card--compact > .rhythm-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 11px;
+  background: var(--mist);
+  color: var(--forest-deep);
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.foundation-card--interactive {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.foundation-card--interactive:hover {
+  background: color-mix(in srgb, var(--mist) 35%, transparent);
+}
+
+.foundation-card--interactive:focus-visible {
+  outline: 2px solid var(--forest);
+  outline-offset: 2px;
+}
+
+.foundation-card__content {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.foundation-card__title,
+.rhythm-card--compact .rhythm-title-row h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.foundation-card__description {
+  display: block;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.foundation-card__score {
+  align-self: start;
+  min-width: 2ch;
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.foundation-card__score.green {
+  color: #087443;
+}
+
+.foundation-card__score.yellow {
+  color: #985600;
+}
+
+.foundation-card__score.red {
+  color: #C33222;
+}
+
+.foundation-card__score.neutral {
+  color: #78847D;
+}
+
+.foundation-card__chevron {
+  align-self: start;
+  color: var(--ink-soft);
+  font-size: 27px;
+  line-height: 1;
+}
+
+.marriage-foundation-detail {
+  display: grid;
+  gap: 8px;
+}
+
+.marriage-foundation-detail > .foundation-card--compact {
+  align-items: start;
+}
+
+.marriage-foundation-detail .foundation-card__content {
+  grid-column: 2;
+}
+
+.marriage-foundation-detail .marriage-foundation-support {
+  grid-column: 1 / -1;
+}
+
+.marriage-back-link {
+  justify-self: start;
+  min-height: 38px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--forest-deep);
+  font: 600 12px/1.3 var(--sans);
+  cursor: pointer;
+}
+
+.marriage-back-link:hover {
+  background: var(--mist);
+}
+
+.marriage-foundation-support {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.marriage-foundation-support h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.marriage-foundation-support-group {
+  display: grid;
+  gap: 6px;
+}
+
+.marriage-foundation-support-group h4 {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.marriage-foundation-support > p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.rhythm-card--simple {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 3px;
+  min-width: 0;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--card);
+  box-shadow: 0 1px 2px rgba(32, 39, 35, .05), 0 8px 20px -18px rgba(32, 39, 35, .3);
+}
+
+.rhythm-card__simple-content {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.rhythm-card--simple .rhythm-title-row {
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+
+.rhythm-card--simple .rhythm-title-row h3 {
+  min-width: 0;
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-card--simple .automation-badge {
+  flex: none;
+}
+
+.rhythm-card__actions {
+  display: flex;
+  flex: none;
+  align-self: start;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  width: max-content;
+  min-width: max-content;
+}
+
+.tend-app-preview .rhythm-card--simple .rhythm-card__actions {
+  flex-direction: row;
+  flex-wrap: nowrap;
+}
+
+.tend-app-preview .rhythm-card--simple .rhythm-info-button {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.rhythm-card--simple .rhythm-card__actions > .rhythm-info-button {
+  align-self: flex-start;
+}
+
+.rhythm-card--simple .rhythm-card__tend {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 92px;
+  min-width: 92px;
+  height: 44px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--action-rhythm-border, #B8E1CA);
+  border-radius: 11px;
+  background: var(--action-rhythm-background, #E3F6ED);
+  color: var(--action-rhythm-text, #1C5844);
+  font: 650 var(--tend-type-button-label, .95rem)/1.2 var(--sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.rhythm-card__tend {
+  position: relative;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 92px;
+  min-width: 92px;
+  height: 44px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--action-rhythm-border, #B8E1CA);
+  border-radius: 11px;
+  background: var(--action-rhythm-background, #E3F6ED);
+  color: var(--action-rhythm-text, #1C5844);
+  font: 650 var(--tend-type-button-label, .95rem)/1.2 var(--sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.rhythm-card__tend:disabled {
+  cursor: default;
+  border-color: #D7DAD8;
+  background: #F1F2F1;
+  color: #5E6B63;
+}
+
+.rhythm-metadata-status-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  min-width: 0;
+  min-height: 44px;
+  color: var(--ink-soft);
+}
+
+.rhythm-metadata-status-group > svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.rhythm-metadata-status {
+  min-width: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-metadata-undo {
+  box-sizing: border-box;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--forest);
+  font-size: 0;
+  line-height: 0;
+}
+
+.rhythm-metadata-undo {
+  cursor: pointer;
+}
+
+.rhythm-metadata-undo:hover {
+  background: color-mix(in srgb, var(--mist) 74%, transparent);
+}
+
+.rhythm-metadata-undo:focus-visible {
+  outline: 2px solid var(--forest);
+  outline-offset: 1px;
+}
+
+.rhythm-metadata-undo svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.rhythm-card--simple > .rhythm-metadata-status-group {
+  grid-column: 1 / -1;
+  justify-self: stretch;
+  width: 100%;
+  min-height: 44px;
+  justify-content: flex-end;
+}
+
+.rhythm-card--simple:not(.rhythm-card--suggestion) > .rhythm-card__simple-content {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.rhythm-card--simple:not(.rhythm-card--suggestion) > .rhythm-card__actions {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.rhythm-card--suggestion > .rhythm-card__suggestion-icon {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.rhythm-card--suggestion > .rhythm-card__simple-content {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.rhythm-card--suggestion > .rhythm-card__actions {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.rhythm-card--simple .rhythm-card__tend:focus-visible {
+  outline: 2px solid var(--action-rhythm-focus, #1C5844);
+  outline-offset: 2px;
+}
+
+.rhythm-card--suggestion {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  background: color-mix(in srgb, var(--card) 86%, var(--mist));
+}
+
+.rhythm-card__suggestion-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--mist);
+  color: var(--forest-deep);
+  font-size: 18px;
+}
+
+.rhythm-person-badge-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 3px;
+}
+
+.tend-app-preview .rhythm-person-badge,
+.app-shell .rhythm-person-badge {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tend-secondary);
+  cursor: pointer;
+}
+
+.person-badge-visual {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 3px 8px 3px 4px;
+  border: 1px solid var(--tend-line);
+  border-radius: 999px;
+  background: var(--tend-canvas);
+  color: var(--tend-secondary);
+  font: 500 12px/1.2 var(--tend-font-ui);
+  text-align: left;
+  white-space: normal;
+}
+
+.tend-app-preview .rhythm-person-badge:hover,
+.app-shell .rhythm-person-badge:hover {
+  background: transparent;
+}
+
+.tend-app-preview .rhythm-person-badge:hover .person-badge-visual,
+.app-shell .rhythm-person-badge:hover .person-badge-visual {
+  background: var(--tend-mist);
+}
+
+.tend-app-preview .rhythm-person-badge:focus-visible,
+.app-shell .rhythm-person-badge:focus-visible {
+  outline: 2px solid var(--tend-forest);
+  outline-offset: 2px;
+}
+
+.person-badge-avatar {
+  box-sizing: border-box;
+  display: grid;
+  flex: 0 0 26px;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  overflow: hidden;
+  border: 1px solid var(--tend-line);
+  border-radius: 50%;
+  background: var(--tend-mist);
+  color: var(--tend-forest);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.person-badge-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.person-badge-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-info-button,
+.today-rhythm-card__details-toggle {
+  position: relative;
+  box-sizing: border-box;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.rhythm-info-button::before,
+.today-rhythm-card__details-toggle::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 31px;
+  height: 31px;
+  border: 1px solid #D7DAD8;
+  border-radius: 50%;
+  background: #F1F2F1;
+  content: "";
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.rhythm-info-button:hover:not(:disabled)::before,
+.today-rhythm-card__details-toggle:hover:not(:disabled)::before {
+  background: #E8EAE8;
+}
+
+.rhythm-info-button:active:not(:disabled)::before,
+.today-rhythm-card__details-toggle:active:not(:disabled)::before {
+  background: #DDE0DD;
+}
+
+.rhythm-info-button:disabled {
+  cursor: not-allowed;
+  opacity: .65;
+}
+
+.rhythm-info-icon {
+  position: relative;
+  z-index: 1;
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+  stroke: none;
+  transform: translateX(-.8px);
+}
+
+.rhythm-info-button:focus-visible {
+  outline: 2px solid var(--forest);
+  outline-offset: 2px;
+}
+
+.rhythm-card--compact .rhythm-info-button {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.rhythm-card__tend {
+  min-height: 44px;
+}
+
+.home-dashboard .today-rhythm-card__actions > .rhythm-card__tend.is-completed {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding-inline: 6px;
+  white-space: nowrap;
+}
+
+.rhythm-card__tend-check {
+  flex: none;
+}
+
+.rhythm-sample-role {
+  width: fit-content;
+  color: var(--ink-faint);
+  font-size: 9px;
+  line-height: 1.25;
+}
+
+.marriage-empty-state {
+  padding: 11px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.marriage-empty-state h5 {
+  margin: 0 0 4px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.rhythm-history {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.rhythm-history h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.rhythm-history ol {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.today-rhythm-details-dialog {
+  --rhythm-details-horizontal-padding: 16px;
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(85vh, 820px);
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--canvas);
+  color: var(--ink);
+  box-shadow: 0 22px 70px #10251d45;
+}
+
+.today-rhythm-details-dialog:focus {
+  outline: none;
+}
+
+.today-rhythm-details-dialog::backdrop {
+  background: #10251d9c;
+}
+
+.today-rhythm-details__surface {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 18px 0 0;
+}
+
+.today-rhythm-details__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding-inline: var(--rhythm-details-horizontal-padding);
+}
+
+.today-rhythm-details__header h2 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 21px;
+  line-height: 1.25;
+}
+
+.today-rhythm-details__close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--mist);
+  color: var(--ink-soft);
+  font-size: 21px;
+  cursor: pointer;
+}
+
+.today-rhythm-details__back {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--canvas);
+  color: var(--ink-soft);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.today-rhythm-details__back svg,
+.today-rhythm-details__history-button svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.today-rhythm-details__content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px;
+  align-items: start;
+  gap: 18px;
+  min-width: 0;
+  margin-top: 15px;
+  padding-inline: var(--rhythm-details-horizontal-padding);
+}
+
+.today-rhythm-details__summary {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  min-width: 0;
+}
+
+.today-rhythm-details__description {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: var(--tend-type-description, 1rem);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.today-rhythm-details__foundations {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.today-rhythm-details__foundation {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--mist);
+  color: var(--forest);
+}
+
+.today-rhythm-details__foundation .marriage-svg-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.today-rhythm-details__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 92px;
+}
+
+.today-rhythm-details__history-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 80px;
+  min-width: 80px;
+  height: 44px;
+  min-height: 44px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 11px;
+  background: #738078;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.today-rhythm-details__history-button.green {
+  background: #12B76A;
+  color: #fff;
+}
+
+.today-rhythm-details__history-button.yellow {
+  background: #FFC133;
+  color: #3F351B;
+}
+
+.today-rhythm-details__history-button.red {
+  background: #FF5A45;
+  color: #fff;
+}
+
+.today-rhythm-details__history-button.neutral {
+  background: #738078;
+  color: #fff;
+}
+
+.today-rhythm-details__footer {
+  margin-top: 15px;
+  padding: 12px var(--rhythm-details-horizontal-padding);
+  border-top: 1px solid var(--line);
+}
+
+.rhythm-metadata-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.rhythm-metadata-footer > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-metadata-footer svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.rhythm-metadata-last-tended {
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
+.rhythm-metadata-footer > .rhythm-metadata-last-tended {
+  flex: 0 1 auto;
+  width: auto;
+  text-align: right;
+}
+
+.today-rhythm-details__history {
+  margin-top: 15px;
+  padding-inline: var(--rhythm-details-horizontal-padding);
+}
+
+.today-rhythm-details__history h3 {
+  font-size: 16px;
+}
+
+.today-rhythm-details__history ol {
+  gap: 10px;
+  font-size: 14px;
+}
+
+.today-rhythm-details__history p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+@media (max-width: 420px) {
+  .today-rhythm-details__surface {
+    padding-top: 14px;
+  }
+
+  .today-rhythm-details__content {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  .today-rhythm-details__actions {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .today-rhythm-details__footer {
+    margin-top: 12px;
+  }
+
+  .rhythm-metadata-footer > .rhythm-metadata-last-tended {
+    flex: 0 0 100%;
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+
+  .today-rhythm-details__back {
+    gap: 0;
+    padding-inline: 7px;
+    font-size: 0;
+  }
+}
+
+.tend-app-preview .marriage-page button:focus-visible {
+  outline: 2px solid var(--forest);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .marriage-page-heading {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+  }
+
+  .marriage-heading-copy {
+    grid-row: 1 / span 2;
+  }
+
+  .marriage-page-heading > .marriage-spouse-shortcut {
+    grid-column: 2;
+  }
+
+  .marriage-page-heading > .marriage-sample-tag {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+  }
+
+  .marriage-summary-card .category-health-heading {
+    gap: 8px;
+  }
+
+  .marriage-summary-card .health-summary-item {
+    padding-inline: 7px;
+  }
+
+  .foundation-card--compact {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    gap: 7px 8px;
+    padding: 9px;
+  }
+}
+
+@media (max-width: 380px) {
+  .marriage-page-heading {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .marriage-page-heading > .marriage-spouse-shortcut {
+    max-width: 100%;
+  }
+
+  .marriage-sample-tag {
+    font-size: 9px;
+  }
+
+  .marriage-weekday-strip {
+    gap: 3px;
+  }
+
+  .marriage-weekday {
+    min-height: 29px;
+    font-size: 9px;
+  }
+
+  .rhythm-card--compact {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .rhythm-card--compact .today-rhythm-card__details-toggle {
+    grid-column: 2;
+    justify-self: start;
   }
 }

@@ -1,13 +1,143 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CatalogApp } from '../src/CatalogApp.tsx';
-import { FoundationCard, GoalCard, RhythmCard } from '../src/components/Cards.tsx';
-import { financeFoundation, goals, marriageFoundation, rhythms } from '../src/domain/preview-data.ts';
+import { CategoryHealthBadge, FoundationCard, FoundationProgress, GoalCard, RhythmCard, ScoreMeter } from '../src/components/Cards.tsx';
+import { MarriageIcon } from '../src/components/MarriageIcon.tsx';
+import { PersonBadgeList } from '../src/components/PersonBadge.tsx';
+import { RhythmDetailsDialog } from '../src/components/RhythmDetailsDialog.tsx';
+import {
+  financeFoundation,
+  goals,
+  marriageExampleFixtures,
+  marriageFoundation,
+  marriageFoundations,
+  marriageRhythms,
+  rhythms,
+  syntheticPeople,
+  todayRhythms
+} from '../src/domain/preview-data.ts';
 
 afterEach(cleanup);
 
 describe('shared preview components', () => {
+  it('renders accessible multi-person badges with initials fallback and stable identity', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    const people = [
+      ...syntheticPeople.slice(0, 2),
+      { ...syntheticPeople[2]!, displayName: 'JordanWithAnExceptionallyLongFirstName Bell' }
+    ];
+    render(<PersonBadgeList people={people} rhythmTitle="A shared Rhythm" onSelect={onSelect} />);
+
+    const group = screen.getByRole('group', { name: 'People associated with A shared Rhythm' });
+    const badges = within(group).getAllByRole('button');
+    expect(badges).toHaveLength(3);
+    expect(badges.map(badge => badge.querySelector('.person-badge-name')?.textContent)).toEqual([
+      'Avery',
+      'Morgan',
+      'JordanWithAnExceptionallyLongFirstName'
+    ]);
+    expect(badges[0]?.getAttribute('data-person-id')).toBe('sample-person-avery');
+    expect(badges[0]?.getAttribute('aria-label')).toBe('Open synthetic profile for Avery Brooks');
+    expect(badges[0]?.querySelector('.person-badge-avatar')?.textContent).toBe('AB');
+    expect(badges[2]?.textContent).toContain('JordanWithAnExceptionallyLongFirstName');
+    expect(badges[2]?.textContent).not.toContain('Bell');
+
+    badges[1]!.focus();
+    await user.keyboard('{Enter}');
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith('sample-person-morgan');
+  });
+
+  it('keeps person navigation independent from Info and Tend actions', async () => {
+    const user = userEvent.setup();
+    const onPersonSelect = vi.fn();
+    const onDetails = vi.fn();
+    const onTend = vi.fn();
+    render(
+      <RhythmCard
+        rhythm={todayRhythms[0]!}
+        variant="simple"
+        people={syntheticPeople.slice(0, 2)}
+        onPersonSelect={onPersonSelect}
+        onDetails={onDetails}
+        onTend={onTend}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Open synthetic profile for Avery Brooks' }));
+    expect(onPersonSelect).toHaveBeenCalledExactlyOnceWith('sample-person-avery');
+    expect(onDetails).not.toHaveBeenCalled();
+    expect(onTend).not.toHaveBeenCalled();
+
+    const info = screen.getByRole('button', { name: 'Details for Pray together' });
+    info.focus();
+    await user.keyboard('{Enter}');
+    expect(onDetails).toHaveBeenCalledOnce();
+    expect(onTend).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Tend Pray together' }));
+    expect(onTend).toHaveBeenCalledOnce();
+    expect(onPersonSelect).toHaveBeenCalledOnce();
+  });
+
+  it('prevents duplicate direct completion and shows the completed action state', async () => {
+    const user = userEvent.setup();
+    const onTend = vi.fn();
+    const onUndo = vi.fn();
+    const props = {
+      rhythm: todayRhythms[0]!,
+      variant: 'simple' as const,
+      onDetails: () => undefined,
+      onTend,
+      onUndo
+    };
+    const { rerender } = render(<RhythmCard {...props} />);
+    const tend = screen.getByRole('button', { name: 'Tend Pray together' });
+    expect(screen.queryByRole('button', { name: 'Undo completion for Pray together' })).toBeNull();
+    expect(document.querySelector('.rhythm-metadata-undo-slot')).toBeNull();
+    expect(screen.getByText('Due today').previousElementSibling?.tagName.toLowerCase()).toBe('svg');
+    expect(tend.getAttribute('type')).toBe('button');
+    await user.click(tend);
+    expect(onTend).toHaveBeenCalledOnce();
+
+    rerender(<RhythmCard {...props} completed />);
+    const completed = screen.getByRole('button', { name: 'Tended Pray together' });
+    expect(completed.matches(':disabled')).toBe(true);
+    expect(screen.getByText('Pray together marked tended.').getAttribute('aria-live')).toBe('polite');
+    expect(completed.querySelector('svg')).toBeNull();
+    await user.click(completed);
+    expect(onTend).toHaveBeenCalledOnce();
+
+    const undo = screen.getByRole('button', { name: 'Undo completion for Pray together' });
+    expect(undo.title).toBe('Undo completion for Pray together');
+    expect(undo.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    expect(undo.textContent).toBe('');
+    const statusGroup = document.querySelector('.rhythm-card--simple > .rhythm-metadata-status-group');
+    expect(statusGroup?.children[0]).toBe(undo);
+    expect(statusGroup?.children[1]?.tagName.toLowerCase()).toBe('svg');
+    expect(statusGroup?.children[2]?.textContent).toBe('Tended today');
+    expect(screen.getByText('Tended today').previousElementSibling?.tagName.toLowerCase()).toBe('svg');
+    undo.focus();
+    await user.keyboard('{Enter}');
+    expect(onUndo).toHaveBeenCalledOnce();
+    rerender(<RhythmCard {...props} />);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Tend Pray together' }));
+  });
+
+  it('routes catalogue person badges to the synthetic profile placeholder and back', async () => {
+    const user = userEvent.setup();
+    render(<CatalogApp />);
+    const rhythm = screen.getByRole('article', { name: 'Monthly savings transfer' });
+    const badge = within(rhythm).getByRole('button', { name: 'Open synthetic profile for Avery Brooks' });
+    expect(badge.querySelector('.person-badge-name')?.textContent).toBe('Avery');
+    await user.click(badge);
+    expect(screen.getByRole('heading', { name: 'Avery Brooks' })).toBeTruthy();
+    expect(screen.getByText(/does not connect to an account/)).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Back to Component catalogue' }));
+    expect(screen.getByRole('heading', { name: 'Goals' })).toBeTruthy();
+  });
+
   it('shows an ongoing Marriage foundation without a completion action', () => {
     render(<FoundationCard foundation={marriageFoundation} />);
 
@@ -49,12 +179,13 @@ describe('shared preview components', () => {
     expect(screen.getByText(/Target balance · Dec 31, 2027/)).toBeTruthy();
   });
 
-  it('labels bank automation without implying a completion or balance change', () => {
+  it('keeps catalogue cards descriptive and simple cards composed from Info and optional Tend actions', () => {
     const rhythm = rhythms[0]!;
+    const onDetails = vi.fn();
     const { rerender } = render(<RhythmCard rhythm={rhythm} />);
     const catalogueCard = screen.getByRole('article', { name: rhythm.title });
     expect(within(catalogueCard).getByRole('heading', { name: rhythm.title, level: 3 })).toBeTruthy();
-    expect(within(catalogueCard).getByText(rhythm.description)).toBeTruthy();
+    expect(within(catalogueCard).getByText(rhythm.description!)).toBeTruthy();
     expect(within(catalogueCard).getByText('Automated at bank')).toBeTruthy();
     expect(within(catalogueCard).getByText(/Not confirmed/, { selector: '.rhythm-cadence' })).toBeTruthy();
     expect(within(catalogueCard).queryByRole('button')).toBeNull();
@@ -62,20 +193,111 @@ describe('shared preview components', () => {
     rerender(
       <RhythmCard
         rhythm={rhythm}
-        variant="today"
-        onTend={() => undefined}
-        onDetails={() => undefined}
+        variant="simple"
+        onDetails={onDetails}
       />
     );
-    const todayCard = screen.getByRole('article', { name: rhythm.title });
-    expect(within(todayCard).getByRole('heading', { name: rhythm.title, level: 3 })).toBeTruthy();
-    expect(within(todayCard).getByText(rhythm.description)).toBeTruthy();
-    expect(within(todayCard).getByText('Automated at bank')).toBeTruthy();
-    const todayMetadata = todayCard.querySelector('.rhythm-card__meta')?.textContent ?? '';
-    expect(todayMetadata).toContain(rhythm.cadence);
-    expect(todayMetadata).toContain(rhythm.timeLabel);
-    expect(within(todayCard).getByRole('button', { name: 'Tend' })).toBeTruthy();
-    expect(within(todayCard).getByRole('button', { name: 'Details for Monthly savings transfer' })).toBeTruthy();
+    const simpleCard = screen.getByRole('article', { name: rhythm.title });
+    expect(within(simpleCard).getByRole('heading', { name: rhythm.title, level: 3 })).toBeTruthy();
+    expect(within(simpleCard).queryByText(rhythm.description!)).toBeNull();
+    expect(within(simpleCard).getByText('Not yet tended')).toBeTruthy();
+    const detailsButton = within(simpleCard).getByRole('button', { name: 'Details for Monthly savings transfer' });
+    expect(detailsButton).toBeTruthy();
+    expect(detailsButton.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    expect(detailsButton.querySelector('svg circle')).toBeNull();
+    expect(detailsButton.querySelectorAll('svg path')).toHaveLength(2);
+    expect(within(simpleCard).queryByRole('button', { name: /^Tend/ })).toBeNull();
+
+    rerender(
+      <RhythmCard
+        rhythm={todayRhythms[0]!}
+        variant="simple"
+        completed
+        onDetails={onDetails}
+        onTend={() => undefined}
+      />
+    );
+    expect(screen.getByText('Tended today')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Tended Pray together' }).matches(':disabled')).toBe(true);
+  });
+
+  it('keeps optional details content absent without empty wrappers or no-op actions', () => {
+    const rhythm = {
+      id: 'optional-fields-rhythm',
+      title: 'Optional fields example',
+      automation: 'manual' as const,
+      status: 'Due today' as const
+    };
+    render(<RhythmDetailsDialog rhythm={rhythm} onClose={() => undefined} />);
+
+    const dialog = screen.getByRole('dialog', { name: rhythm.title });
+    expect(within(dialog).queryByText(rhythm.title)).toBeTruthy();
+    expect(within(dialog).queryByText(/quiet moment/)).toBeNull();
+    expect(within(dialog).queryByRole('group', { name: /People associated/ })).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: /^Tend/ })).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: /^Undo/ })).toBeNull();
+    expect(within(dialog).queryByRole('region', { name: /completion history/ })).toBeNull();
+    expect(within(dialog).queryByText('Due today')).toBeTruthy();
+    expect(within(dialog).getByText('Due today').previousElementSibling?.tagName.toLowerCase()).toBe('svg');
+    expect(dialog.querySelectorAll('.rhythm-metadata-footer > span')).toHaveLength(1);
+  });
+
+  it('keeps sample Marriage details read-only and exposes associated categories through the history view', async () => {
+    const user = userEvent.setup();
+    const rhythm = marriageRhythms.find(item => item.id === 'sample-marriage-prayer')!;
+    render(
+      <RhythmDetailsDialog
+        rhythm={rhythm}
+        people={syntheticPeople.slice(0, 2)}
+        onPersonSelect={() => undefined}
+        onClose={() => undefined}
+      />
+    );
+    const dialog = screen.getByRole('dialog', { name: rhythm.title });
+    expect(within(dialog).getByRole('button', { name: 'Open synthetic profile for Avery Brooks' })).toBeTruthy();
+    const categoryGroup = within(dialog).getByRole('group', { name: 'Associated categories' });
+    expect(within(categoryGroup).getAllByRole('img').map(icon => icon.getAttribute('aria-label'))).toEqual([
+      'Connection',
+      'Spiritual Growth'
+    ]);
+    const historyButton = within(dialog).getByRole('button', {
+      name: 'View history for Pray Together; illustrative score 0'
+    });
+    expect(historyButton.textContent).toContain('0');
+    expect(within(dialog).queryByRole('button', { name: /^Tend/ })).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: /^Undo/ })).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: /Edit/ })).toBeNull();
+
+    await user.click(historyButton);
+    expect(within(dialog).getByRole('region', { name: 'Sample completion history for Pray Together' })).toBeTruthy();
+    expect(within(dialog).getByText('No sample completions recorded.')).toBeTruthy();
+    const backButton = within(dialog).getByRole('button', { name: 'Back' });
+    expect(document.activeElement).toBe(backButton);
+    await user.click(backButton);
+    expect(document.activeElement).toBe(within(dialog).getByRole('button', {
+      name: 'View history for Pray Together; illustrative score 0'
+    }));
+    expect(within(dialog).getByText('Bring gratitude and needs before God together.')).toBeTruthy();
+  });
+
+  it('colors the history control using the requested score bands and keeps unavailable neutral', () => {
+    const rhythm = marriageRhythms.find(item => item.id === 'sample-marriage-connection')!;
+    const { rerender } = render(<RhythmDetailsDialog rhythm={rhythm} onClose={() => undefined} />);
+
+    for (const [score, tone] of [[80, 'green'], [79, 'yellow'], [41, 'yellow'], [40, 'red'], [0, 'red'], [null, 'neutral']] as const) {
+      rerender(
+        <RhythmDetailsDialog
+          rhythm={{ ...rhythm, illustrativeScore: score }}
+          onClose={() => undefined}
+        />
+      );
+      const scoreText = score === null ? 'unavailable' : String(score);
+      const button = screen.getByRole('button', {
+        name: `View history for Daily Connection; illustrative score ${scoreText}`
+      });
+      expect(button.classList.contains(tone)).toBe(true);
+      expect(button.textContent).toContain(score === null ? '—' : String(score));
+    }
   });
 
   it('changes only the local fixture through a keyboard-operable milestone action', async () => {
@@ -92,5 +314,179 @@ describe('shared preview components', () => {
     expect(screen.getByText(/Not confirmed/, { selector: '.rhythm-cadence' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Reopen milestone' }));
     expect(screen.getByText('In progress')).toBeTruthy();
+  });
+
+  it('clamps shared score-meter markers to endpoints and omits the marker when unavailable', () => {
+    const { rerender, container } = render(<ScoreMeter label="Synthetic score" score={0} markerPlacement="below" />);
+    let meter = screen.getByRole('meter', { name: 'Synthetic score' });
+    let marker = container.querySelector<HTMLElement>('.preview-score-marker');
+    expect(meter.getAttribute('aria-valuenow')).toBe('0');
+    expect(marker?.style.getPropertyValue('--score')).toBe('0%');
+    expect(meter.classList.contains('preview-score-meter--marker-below')).toBe(true);
+
+    rerender(<ScoreMeter label="Synthetic score" score={50} markerPlacement="below" />);
+    meter = screen.getByRole('meter', { name: 'Synthetic score' });
+    marker = container.querySelector<HTMLElement>('.preview-score-marker');
+    expect(meter.getAttribute('aria-valuenow')).toBe('50');
+    expect(marker?.style.getPropertyValue('--score')).toBe('50%');
+
+    rerender(<ScoreMeter label="Synthetic score" score={100} markerPlacement="below" />);
+    meter = screen.getByRole('meter', { name: 'Synthetic score' });
+    marker = container.querySelector<HTMLElement>('.preview-score-marker');
+    expect(meter.getAttribute('aria-valuenow')).toBe('100');
+    expect(marker?.style.getPropertyValue('--score')).toBe('100%');
+
+    rerender(<ScoreMeter label="Synthetic score" score={150} />);
+    meter = screen.getByRole('meter', { name: 'Synthetic score' });
+    marker = container.querySelector<HTMLElement>('.preview-score-marker');
+    expect(meter.getAttribute('aria-valuenow')).toBe('100');
+    expect(marker?.style.getPropertyValue('--score')).toBe('100%');
+
+    rerender(<ScoreMeter label="Marriage score unavailable" score={null} markerPlacement="below" />);
+    meter = screen.getByRole('meter', { name: 'Marriage score unavailable' });
+    expect(meter.getAttribute('aria-valuenow')).toBeNull();
+    expect(meter.getAttribute('aria-valuetext')).toBe('Score unavailable');
+    expect(container.querySelector('.preview-score-marker')).toBeNull();
+  });
+
+  it('renders Foundation fills proportionally, distinguishes zero from unavailable, and has no triangle', () => {
+    const { rerender, container } = render(
+      <FoundationProgress label="Foundation example score" score={0} />
+    );
+    let meter = screen.getByRole('meter', { name: 'Foundation example score' });
+    let fill = container.querySelector<HTMLElement>('.foundation-progress__fill');
+    expect(meter.getAttribute('aria-valuenow')).toBe('0');
+    expect(fill?.style.width).toBe('0%');
+    expect(container.querySelector('.preview-score-marker')).toBeNull();
+
+    rerender(<FoundationProgress label="Foundation example score" score={46} />);
+    meter = screen.getByRole('meter', { name: 'Foundation example score' });
+    fill = container.querySelector<HTMLElement>('.foundation-progress__fill');
+    expect(meter.getAttribute('aria-valuenow')).toBe('46');
+    expect(fill?.style.width).toBe('46%');
+
+    rerender(<FoundationProgress label="Foundation example score" score={null} />);
+    meter = screen.getByRole('meter', { name: 'Foundation example score' });
+    fill = container.querySelector<HTMLElement>('.foundation-progress__fill');
+    expect(meter.getAttribute('aria-valuenow')).toBeNull();
+    expect(meter.getAttribute('aria-valuetext')).toBe('Score unavailable');
+    expect(fill?.style.width).toBe('0%');
+    expect(container.querySelector('.preview-score-marker')).toBeNull();
+  });
+
+  it('keeps zero and unavailable Foundation row values distinguishable and keyboard-actionable', async () => {
+    const user = userEvent.setup();
+    const foundation = { ...marriageFoundation, id: 'foundation-score-example', name: 'Sample Foundation' };
+    const onSelect = vi.fn();
+    const { rerender, container } = render(
+      <FoundationCard
+        foundation={foundation}
+        variant="compact"
+        illustrativeScore={0}
+        rhythmCoverage={{ scored: 0, total: 2 }}
+        onSelect={onSelect}
+      />
+    );
+    let row = screen.getByRole('button', { name: /Open Sample Foundation foundation details, illustrative score 0 out of 100/ });
+    const zeroScore = row.querySelector('.foundation-card__score');
+    const zeroChevron = row.querySelector('.foundation-card__chevron');
+    expect(zeroScore?.textContent).toBe('0');
+    expect(row.querySelector('.foundation-progress__fill')?.getAttribute('style')).toContain('width: 0%');
+    expect(zeroChevron?.textContent).toBe('›');
+    expect(Boolean(zeroScore && zeroChevron && (zeroScore.compareDocumentPosition(zeroChevron) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
+    expect(row.querySelector('.preview-score-marker')).toBeNull();
+    expect(row.querySelector('button')).toBeNull();
+
+    row.focus();
+    expect(document.activeElement).toBe(row);
+    await user.keyboard('{Enter}');
+    expect(onSelect).toHaveBeenCalledOnce();
+
+    rerender(
+      <FoundationCard
+        foundation={foundation}
+        variant="compact"
+        illustrativeScore={null}
+        rhythmCoverage={{ scored: 0, total: 2 }}
+        onSelect={onSelect}
+      />
+    );
+    row = screen.getByRole('button', { name: /Open Sample Foundation foundation details, score unavailable/ });
+    expect(row.querySelector('.foundation-card__score')?.textContent).toBe('—');
+    expect(row.querySelector('.foundation-progress__fill')?.getAttribute('style')).toContain('width: 0%');
+    expect(row.querySelector('.foundation-card__chevron')?.textContent).toBe('›');
+    expect(container.querySelector('.preview-score-marker')).toBeNull();
+  });
+
+  it('uses a color-coded rounded health badge for available scores and a neutral dash when unavailable', () => {
+    const { rerender, container } = render(<CategoryHealthBadge score={30} />);
+    let badge = container.querySelector('.ma-score');
+    expect(badge?.textContent).toBe('30');
+    expect(badge?.classList.contains('red')).toBe(true);
+
+    rerender(<CategoryHealthBadge score={null} />);
+    badge = container.querySelector('.ma-score');
+    expect(badge?.textContent).toBe('—');
+    expect(badge?.classList.contains('neutral')).toBe(true);
+  });
+
+  it('shows only explicitly synthetic zero, midpoint, and full-scale catalogue meters', () => {
+    render(<CatalogApp />);
+    expect(screen.getByRole('heading', { name: 'Score meter examples · synthetic UI only' })).toBeTruthy();
+    for (const score of [0, 50, 100]) {
+      const meter = screen.getByRole('meter', { name: `Synthetic score meter example: ${score} out of 100` });
+      expect(meter.getAttribute('aria-valuenow')).toBe(String(score));
+      expect(meter.classList.contains('preview-score-meter--marker-below')).toBe(true);
+    }
+    expect(screen.getByText(/no Marriage score is calculated or implied/i)).toBeTruthy();
+  });
+
+  it('maps approved Marriage SVGs by stable identity and uses an inert fallback for unknown icons', () => {
+    const { container, rerender } = render(
+      <MarriageIcon group="foundations" id="connection" className="mapped-icon" />
+    );
+    let icon = container.querySelector<HTMLElement>('.marriage-svg-icon');
+    expect(decodeURIComponent(icon?.style.getPropertyValue('--marriage-icon') ?? '')).toContain("aria-label='Connection'");
+    expect(icon?.getAttribute('aria-hidden')).toBe('true');
+
+    rerender(<MarriageIcon group="rhythms" id="date-night" />);
+    icon = container.querySelector<HTMLElement>('.marriage-svg-icon');
+    expect(decodeURIComponent(icon?.style.getPropertyValue('--marriage-icon') ?? '')).toContain("aria-label='Date Night'");
+    expect(icon?.getAttribute('aria-hidden')).toBe('true');
+
+    rerender(<MarriageIcon group="foundations" id="not-a-known-foundation" />);
+    expect(container.querySelector('.marriage-svg-icon')).toBeNull();
+    expect(container.querySelector('[aria-hidden="true"]')?.textContent).toBe('♡');
+  });
+
+  it('provides approved icon mappings for each retained Marriage Foundation and populated Rhythm', () => {
+    const expectedFoundationLabels = [
+      'Connection', 'Communication', 'Fun & Adventure', 'Spiritual Growth', 'Partnership', 'Intimacy'
+    ];
+    expect(marriageFoundations.map(item => item.name)).toEqual(expectedFoundationLabels);
+    for (const foundation of marriageFoundations) {
+      expect(foundation.iconId).toBe(foundation.id);
+    }
+    const supportedRhythmIcons = marriageRhythms.map(rhythm => rhythm.iconId);
+    expect(supportedRhythmIcons).toEqual(['daily-connection', 'date-night', 'pray-together', 'dream-together']);
+    expect(marriageExampleFixtures.empty.foundations.map(item => item.id)).toEqual(marriageFoundations.map(item => item.id));
+
+    const { container } = render(
+      <>
+        {marriageFoundations.map(foundation => (
+          <MarriageIcon key={foundation.id} group="foundations" id={foundation.iconId ?? foundation.id} />
+        ))}
+        {marriageRhythms.map(rhythm => (
+          <MarriageIcon key={rhythm.id} group="rhythms" id={rhythm.iconId ?? ''} />
+        ))}
+      </>
+    );
+    const mappedIcons = [...container.querySelectorAll<HTMLElement>('.marriage-svg-icon')];
+    expect(mappedIcons).toHaveLength(10);
+    const sources = mappedIcons.map(icon => decodeURIComponent(icon.style.getPropertyValue('--marriage-icon')));
+    for (const label of ['Connection', 'Communication', 'Fun Adventure', 'Spiritual Growth', 'Partnership', 'Intimacy', 'Daily Connection', 'Date Night', 'Pray Together', 'Dream Together']) {
+      expect(sources.some(source => source.includes(`aria-label='${label}'`))).toBe(true);
+    }
+    expect(mappedIcons.every(icon => icon.getAttribute('aria-hidden') === 'true')).toBe(true);
   });
 });

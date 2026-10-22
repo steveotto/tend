@@ -28,7 +28,7 @@ npm ci
 npm run dev -- --port 4173
 ```
 
-Open `http://127.0.0.1:4173/app-preview.html` for the Tend-style Today view, `http://127.0.0.1:4173/preview.html` for the component catalogue, or `http://127.0.0.1:4173/comparison.html` to compare Today against a static legacy-style reference. The comparison fixture uses equivalent synthetic content and loads neither the legacy app scripts nor account data. Its static card markup intentionally mirrors the sample only as a script-free visual reference; it is not a second application renderer. From `foundation-preview/`, run the local checks and static preview build:
+Open `http://127.0.0.1:4173/app-preview.html` for the Tend-style Today view and its read-only Marriage sample (overview, foundations, Rhythms, and dated synthetic completion history), `http://127.0.0.1:4173/preview.html` for the component catalogue, or `http://127.0.0.1:4173/comparison.html` to compare Today against a static legacy-style reference. The comparison fixture uses equivalent synthetic content and loads neither the legacy app scripts nor account data. Its static card markup intentionally mirrors the sample only as a script-free visual reference; it is not a second application renderer. From `foundation-preview/`, run the local checks and static preview build:
 
 ```sh
 npm run typecheck

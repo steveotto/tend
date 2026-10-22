@@ -1,11 +1,32 @@
 import { useState } from 'react';
 import type { FoundationLifecycle } from '../../src/domain/capabilities.ts';
-import { financeFoundation, goals, marriageFoundation, rhythms } from './domain/preview-data.ts';
-import { FoundationCard, GoalCard, RhythmCard } from './components/Cards.tsx';
+import {
+  financeFoundation,
+  goals,
+  marriageFoundation,
+  personById,
+  peopleForRhythm,
+  rhythms,
+  type PersonId
+} from './domain/preview-data.ts';
+import { FoundationCard, GoalCard, RhythmCard, ScoreMeter } from './components/Cards.tsx';
+import { PersonProfilePlaceholder } from './components/PersonProfilePlaceholder.tsx';
 
 export function CatalogApp() {
   const [financeLifecycle, setFinanceLifecycle] = useState<FoundationLifecycle>(financeFoundation.lifecycle);
+  const [selectedPersonId, setSelectedPersonId] = useState<PersonId | null>(null);
   const financeFoundationView = { ...financeFoundation, lifecycle: financeLifecycle };
+  const selectedPerson = selectedPersonId === null ? null : personById(selectedPersonId);
+
+  if (selectedPerson) {
+    return (
+      <PersonProfilePlaceholder
+        person={selectedPerson}
+        backLabel="Component catalogue"
+        onBack={() => setSelectedPersonId(null)}
+      />
+    );
+  }
 
   return (
     <main className="app-shell">
@@ -38,6 +59,22 @@ export function CatalogApp() {
           <span className="section-note">Ongoing foundation</span>
         </div>
         <FoundationCard foundation={marriageFoundation} />
+        <section className="catalogue-score-examples" aria-labelledby="catalogue-score-examples-title">
+          <h3 id="catalogue-score-examples-title">Score meter examples · synthetic UI only</h3>
+          <div>
+            {[0, 50, 100].map(score => (
+              <article key={score}>
+                <span>{score === 50 ? 'Midpoint' : `${score} example`}</span>
+                <ScoreMeter
+                  label={`Synthetic score meter example: ${score} out of 100`}
+                  score={score}
+                  markerPlacement="below"
+                />
+              </article>
+            ))}
+          </div>
+          <p>Illustrative component states only; no Marriage score is calculated or implied.</p>
+        </section>
       </section>
 
       <section className="category-section" aria-labelledby="finances-heading">
@@ -72,7 +109,14 @@ export function CatalogApp() {
           </div>
         </div>
         <div className="rhythm-list">
-          {rhythms.map(rhythm => <RhythmCard rhythm={rhythm} key={rhythm.id} />)}
+          {rhythms.map(rhythm => (
+            <RhythmCard
+              rhythm={rhythm}
+              people={peopleForRhythm(rhythm)}
+              onPersonSelect={setSelectedPersonId}
+              key={rhythm.id}
+            />
+          ))}
         </div>
       </section>
 

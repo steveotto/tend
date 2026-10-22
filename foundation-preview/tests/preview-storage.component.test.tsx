@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../src/App.tsx';
@@ -304,7 +304,10 @@ describe('preview backup controls', () => {
     const openFinances = () => user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Finances' }));
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
-    await user.click(screen.getAllByRole('button', { name: 'Tend' })[0]!);
+    await user.click(screen.getByRole('button', { name: 'Details for Pray together' }));
+    const rhythmDialog = await screen.findByRole('dialog', { name: 'Pray together' });
+    await user.click(within(rhythmDialog).getByRole('button', { name: 'Tend Pray together' }));
+    await waitFor(() => expect(within(rhythmDialog).getByRole('button', { name: 'Tended Pray together' }).matches(':disabled')).toBe(true));
     await openFinances();
     const goal = screen.getByRole('article', { name: 'Starter reserve' });
     await user.click(within(goal).getAllByRole('button', { name: 'Correct' })[0]!);

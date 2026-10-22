@@ -2,12 +2,21 @@ import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { AppNavigation } from './components/AppNavigation.tsx';
 import type { Destination, TextSize } from './components/AppNavigation.tsx';
+import { MarriageView } from './components/MarriageView.tsx';
 import { RhythmDetailsDialog } from './components/RhythmDetailsDialog.tsx';
 import { FinanceGoalsView } from './components/FinanceGoalsView.tsx';
 import { PreviewDataControls } from './components/PreviewDataControls.tsx';
 import type { PreviewPersistenceStatus } from './components/PreviewDataControls.tsx';
+import { PersonProfilePlaceholder } from './components/PersonProfilePlaceholder.tsx';
 import { TodayView } from './components/TodayView.tsx';
-import { todayRhythms } from './domain/preview-data.ts';
+import {
+  marriageRhythms,
+  personById,
+  peopleForRhythm,
+  todayRhythms,
+  type MarriageExampleId,
+  type PersonId
+} from './domain/preview-data.ts';
 import {
   saveCheckIn,
   type CheckInDraft,
@@ -49,6 +58,8 @@ export function App() {
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [textSize, setTextSize] = useState<TextSize>('small');
+  const [marriageExampleId, setMarriageExampleId] = useState<MarriageExampleId>('populated');
+  const [selectedPersonId, setSelectedPersonId] = useState<PersonId | null>(null);
   const [activeRhythmId, setActiveRhythmId] = useState<string | null>(null);
   const dialogOpener = useRef<HTMLButtonElement | null>(null);
 
@@ -59,7 +70,12 @@ export function App() {
   }).format(new Date());
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-  const activeRhythm = todayRhythms.find(rhythm => rhythm.id === activeRhythmId) ?? null;
+  const activeRhythm = [
+    ...todayRhythms,
+    ...marriageRhythms
+  ].find(rhythm => rhythm.id === activeRhythmId) ?? null;
+  const selectedPerson = selectedPersonId === null ? null : personById(selectedPersonId);
+  const activeRhythmIsToday = activeRhythm !== null && todayRhythms.some(rhythm => rhythm.id === activeRhythm.id);
   const currentDate = localDateString(new Date());
   const initialLoadDate = useRef(currentDate).current;
   const completedRhythms = new Set(previewData.completedRhythmIds);
@@ -126,8 +142,9 @@ export function App() {
     if (!activeRhythmId) dialogOpener.current?.focus();
   }, [activeRhythmId]);
 
-  function navigate(next: Destination) {
+  function navigate(next: Destination, personId?: PersonId) {
     setDestination(next);
+    setSelectedPersonId(personId ?? null);
     setSearch('');
     setSearchOpen(false);
     document.body.classList.remove('mobile-search-open');
@@ -157,6 +174,20 @@ export function App() {
       return {
         ...previous,
         completedRhythmIds: [...previous.completedRhythmIds, id]
+      };
+    });
+  }
+
+  function undoTend(id: string) {
+    setPreviewData(previous => {
+      const completionIndex = previous.completedRhythmIds.indexOf(id);
+      if (completionIndex === -1) return previous;
+      return {
+        ...previous,
+        completedRhythmIds: [
+          ...previous.completedRhythmIds.slice(0, completionIndex),
+          ...previous.completedRhythmIds.slice(completionIndex + 1)
+        ]
       };
     });
   }
@@ -296,11 +327,28 @@ export function App() {
               dateLabel={dateLabel}
               completedRhythms={completedRhythms}
               search={search}
+              marriageExampleId={marriageExampleId}
               onNavigate={navigate}
-              onTend={tend}
+              onMarriageExampleChange={setMarriageExampleId}
+              onPersonSelect={personId => navigate('people', personId)}
               onDetails={openDetails}
+              onTend={tend}
+              onUndo={undoTend}
             />
           )
+          : destination === 'marriage'
+            ? (
+              <MarriageView
+                marriageExampleId={marriageExampleId}
+                onMarriageExampleChange={setMarriageExampleId}
+                onPersonSelect={personId => navigate('people', personId)}
+                onPartnerProfile={() => navigate('people')}
+                onRhythmDetails={(id, event) => {
+                  dialogOpener.current = event.currentTarget;
+                  setActiveRhythmId(id);
+                }}
+              />
+            )
           : destination === 'finances'
             ? (
               <FinanceGoalsView
@@ -311,6 +359,8 @@ export function App() {
                 onToday={() => navigate('today')}
               />
             )
+          : destination === 'people' && selectedPerson
+            ? <PersonProfilePlaceholder person={selectedPerson} backLabel="Today" onBack={() => navigate('today')} />
           : <PlaceholderPage destination={destination} onToday={() => navigate('today')} />}
       </div>
       <PreviewDataControls
@@ -330,8 +380,19 @@ export function App() {
       {activeRhythm && (
         <RhythmDetailsDialog
           rhythm={activeRhythm}
-          completed={completedRhythms.has(activeRhythm.id)}
-          onTend={() => tend(activeRhythm.id)}
+          people={peopleForRhythm(activeRhythm)}
+          onPersonSelect={personId => {
+            setActiveRhythmId(null);
+            dialogOpener.current = null;
+            navigate('people', personId);
+          }}
+          {...(activeRhythmIsToday
+            ? {
+                completed: completedRhythms.has(activeRhythm.id),
+                onTend: () => tend(activeRhythm.id),
+                onUndo: () => undoTend(activeRhythm.id)
+              }
+            : {})}
           onClose={() => setActiveRhythmId(null)}
         />
       )}

@@ -28,12 +28,6 @@ export function AppNavigation({
   onSearchToggle,
   onTextSizeChange
 }: AppNavigationProps) {
-  const dateLabel = new Intl.DateTimeFormat('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric'
-  }).format(new Date());
-
   return (
     <>
       <header className="apphead">
@@ -42,7 +36,6 @@ export function AppNavigation({
             <img src="/brand/tend-logo.png" alt="Tend" />
           </a>
           <div className="brand-copy">
-            <div className="sub">{dateLabel}</div>
             <div className="brand-tagline">Tend to what matters</div>
           </div>
         </div>

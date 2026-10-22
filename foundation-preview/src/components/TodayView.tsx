@@ -1,8 +1,17 @@
 import { useMemo, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
-import { areas, todayRhythms } from '../domain/preview-data.ts';
+import {
+  areas,
+  peopleForRhythm,
+  todayAreaScore,
+  todayOverallIllustrativeScore,
+  type MarriageExampleId,
+  type PersonId,
+  todayRhythms
+} from '../domain/preview-data.ts';
 import { AreaIcon } from './AreaIcon.tsx';
-import { RhythmCard } from './Cards.tsx';
+import { CategoryHealthBadge, RhythmCard, ScoreMeter } from './Cards.tsx';
+import { MarriageExampleSelector } from './MarriageExampleSelector.tsx';
 import type { Destination } from './AppNavigation.tsx';
 
 type PlanType = 'scheduled' | 'anytime' | 'all-day';
@@ -18,9 +27,13 @@ type TodayViewProps = {
   dateLabel: string;
   completedRhythms: ReadonlySet<string>;
   search: string;
+  marriageExampleId: MarriageExampleId;
   onNavigate: (destination: Destination) => void;
-  onTend: (id: string) => void;
+  onMarriageExampleChange: (id: MarriageExampleId) => void;
+  onPersonSelect: (personId: PersonId) => void;
   onDetails: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onTend: (id: string) => void;
+  onUndo: (id: string) => void;
 };
 
 export function TodayView({
@@ -28,9 +41,13 @@ export function TodayView({
   dateLabel,
   completedRhythms,
   search,
+  marriageExampleId,
   onNavigate,
+  onMarriageExampleChange,
+  onPersonSelect,
+  onDetails,
   onTend,
-  onDetails
+  onUndo
 }: TodayViewProps) {
   const [planType, setPlanType] = useState<PlanType>('scheduled');
   const visibleRhythms = useMemo(() => {
@@ -71,18 +88,35 @@ export function TodayView({
 
       <section className="card overall-card" aria-label="Overall health summary">
         <div className="dashboard-overall-heading">
-          <h3>Overall health</h3><span className="ov-score" aria-label="No score available">—</span>
+          <h3>Overall health</h3><span className="ov-score" aria-hidden="true">{todayOverallIllustrativeScore}</span>
         </div>
-        <div className="bar-ov" aria-hidden="true"><i className="ov-marker" hidden /></div>
-        <div className="meta"><span className="sample-status">Sample data</span></div>
+        <ScoreMeter
+          label={`Overall health, illustrative sample score ${todayOverallIllustrativeScore} out of 100, not calculated`}
+          score={todayOverallIllustrativeScore}
+          markerPlacement="below"
+        />
+        <div className="meta"><span className="sample-status">Illustrative sample · not calculated</span></div>
         <div className="menu-grid">
-          {areas.map(area => (
-            <button className="menu-area" key={area.id} type="button" onClick={() => onNavigate(area.id)}>
-              <span className="menu-area-icon" aria-hidden="true"><AreaIcon id={area.id} /></span>
-              <span className="ma-name">{area.label}</span><span className="ma-score">—</span>
-            </button>
-          ))}
+          {areas.map(area => {
+            const score = todayAreaScore(area.id, marriageExampleId);
+            return (
+              <button
+                className="menu-area"
+                key={area.id}
+                type="button"
+                aria-description={score === null
+                  ? `${area.label} sample health score unavailable`
+                  : `${area.label} illustrative sample score ${score}, not calculated`}
+                onClick={() => onNavigate(area.id)}
+              >
+                <span className="menu-area-icon" aria-hidden="true"><AreaIcon id={area.id} /></span>
+                <span className="ma-name">{area.label}</span>
+                <CategoryHealthBadge score={score} />
+              </button>
+            );
+          })}
         </div>
+        <MarriageExampleSelector value={marriageExampleId} onChange={onMarriageExampleChange} />
       </section>
 
       <section aria-labelledby="today-plan-heading">
@@ -122,10 +156,13 @@ export function TodayView({
                     <RhythmCard
                       key={rhythm.id}
                       rhythm={rhythm}
-                      variant="today"
+                      people={peopleForRhythm(rhythm)}
+                      onPersonSelect={onPersonSelect}
+                      variant="simple"
                       completed={completedRhythms.has(rhythm.id)}
-                      onTend={() => onTend(rhythm.id)}
                       onDetails={event => onDetails(rhythm.id, event)}
+                      onTend={() => onTend(rhythm.id)}
+                      onUndo={() => onUndo(rhythm.id)}
                     />
                   ))}
                 </div>
