@@ -181,6 +181,42 @@ export function resolveTodayRhythms(savedRhythms: readonly SavedRhythm[]): Rhyth
   return [...editable, ...custom];
 }
 
+export function activeTodayRhythms(
+  rhythms: readonly RhythmPreview[],
+  archivedRhythmIds: readonly string[]
+): RhythmPreview[] {
+  const archived = new Set(archivedRhythmIds);
+  return rhythms.filter(rhythm => !archived.has(rhythm.id));
+}
+
+export function archivedTodayRhythms(
+  rhythms: readonly RhythmPreview[],
+  archivedRhythmIds: readonly string[]
+): RhythmPreview[] {
+  const archived = new Set(archivedRhythmIds);
+  return rhythms.filter(rhythm => archived.has(rhythm.id));
+}
+
+export function archiveRhythmId(
+  savedRhythms: readonly SavedRhythm[],
+  archivedRhythmIds: readonly string[],
+  id: string
+): string[] | undefined {
+  if (!resolveTodayRhythms(savedRhythms).some(rhythm => rhythm.id === id)
+    || archivedRhythmIds.includes(id)) return undefined;
+  return [...archivedRhythmIds, id];
+}
+
+export function restoreRhythmId(
+  savedRhythms: readonly SavedRhythm[],
+  archivedRhythmIds: readonly string[],
+  id: string
+): string[] | undefined {
+  if (!resolveTodayRhythms(savedRhythms).some(rhythm => rhythm.id === id)
+    || !archivedRhythmIds.includes(id)) return undefined;
+  return archivedRhythmIds.filter(archivedId => archivedId !== id);
+}
+
 export function rhythmsForCategory(
   rhythms: readonly RhythmPreview[],
   categoryId: RhythmCategoryId

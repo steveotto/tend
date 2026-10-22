@@ -15,7 +15,7 @@ export type PreviewPersistenceStatus =
   | { kind: 'conflict' };
 
 type PendingAction =
-  | { kind: 'import'; data: PreviewData }
+  | { kind: 'import'; data: PreviewData; hasArchiveStatus: boolean }
   | { kind: 'reset' }
   | { kind: 'replace-external' };
 
@@ -30,6 +30,8 @@ type PreviewDataControlsProps = {
   onReplaceExternal: () => string | null;
   v1RecoveryCopy?: string | null;
   v1RecoveryError?: string | null;
+  v2RecoveryCopy?: string | null;
+  v2RecoveryError?: string | null;
 };
 
 function downloadText(filename: string, content: string, type: string): string | null {
@@ -59,7 +61,9 @@ export function PreviewDataControls({
   onReloadExternal,
   onReplaceExternal,
   v1RecoveryCopy = null,
-  v1RecoveryError = null
+  v1RecoveryError = null,
+  v2RecoveryCopy = null,
+  v2RecoveryError = null
 }: PreviewDataControlsProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -92,7 +96,11 @@ export function PreviewDataControls({
         return;
       }
       setMessage('');
-      setPendingAction({ kind: 'import', data: result.envelope.data });
+      setPendingAction({
+        kind: 'import',
+        data: result.envelope.data,
+        hasArchiveStatus: result.sourceSchemaVersion === 3
+      });
     };
     reader.readAsText(file);
   }
@@ -160,6 +168,19 @@ export function PreviewDataControls({
             Download original v1 recovery backup
           </button>
         )}
+        {v2RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v2-recovery.json',
+              v2RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v2 recovery backup downloaded.')}
+          >
+            Download original v2 recovery backup
+          </button>
+        )}
         <label className="btn mini ghost preview-data-controls__file-button">
           Import preview backup
           <input
@@ -198,12 +219,15 @@ export function PreviewDataControls({
         )}
       </div>
       {v1RecoveryError && <p className="preview-data-controls__help" role="alert">The original v1 recovery copy could not be read: {v1RecoveryError}</p>}
+      {v2RecoveryError && <p className="preview-data-controls__help" role="alert">The original v2 recovery copy could not be read: {v2RecoveryError}</p>}
       {message && <p className="preview-data-controls__message" role="status">{message}</p>}
       {pendingAction && (
         <MoneyGoalDialog
           title={pendingAction.kind === 'import' ? 'Replace preview data?' : pendingAction.kind === 'reset' ? 'Reset sample data?' : 'Replace the other tab?'}
           intro={pendingAction.kind === 'import'
-            ? 'This replaces the current synthetic goals, check-ins, correction history, and Today completions with the validated backup.'
+            ? pendingAction.hasArchiveStatus
+              ? 'This replaces the current synthetic goals, check-ins, correction history, and Rhythm data with the validated backup.'
+              : 'This backup predates archive status, so its Rhythms will be restored as active. It replaces the current preview; download a backup first if needed.'
             : pendingAction.kind === 'reset'
               ? 'This replaces the current synthetic preview state with the original examples, changing only this preview’s saved key.'
               : 'This overwrites the other tab’s saved preview with the data currently shown here.'}

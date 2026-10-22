@@ -1,8 +1,9 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../src/App.tsx';
 import { CatalogApp } from '../src/CatalogApp.tsx';
+import { ArchivedRhythmsDialog } from '../src/components/ArchivedRhythmsDialog.tsx';
 import { localDateString } from '../src/domain/money-goals.ts';
 import {
   marriageExampleFixtures,
@@ -12,7 +13,8 @@ import {
   marriageScoreCoverage,
   marriageWeekDays,
   orderedCompletions,
-  rhythmsSupportingFoundation
+  rhythmsSupportingFoundation,
+  todayRhythms
 } from '../src/domain/preview-data.ts';
 import { parsePreviewBackup } from '../src/domain/preview-state.ts';
 import { PREVIEW_STORAGE_KEY } from '../src/storage/preview-storage.ts';
@@ -308,6 +310,7 @@ describe('Tend Today preview', () => {
     const addButton = screen.getByRole('button', { name: 'Add Rhythm' });
     await user.click(addButton);
     const editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+    expect(within(editor).queryByRole('button', { name: /Archive/ })).toBeNull();
     await user.type(within(editor).getByLabelText('Title'), 'After-lunch walk');
     await user.type(within(editor).getByLabelText('Description (optional)'), 'A small sample habit.');
     await user.selectOptions(within(editor).getByLabelText('Cadence'), '3 times a week');
@@ -324,8 +327,9 @@ describe('Tend Today preview', () => {
     const detailsOpener = within(rhythmCard).getByRole('button', { name: 'Details for After-lunch walk' });
     await user.click(detailsOpener);
     const details = await screen.findByRole('dialog', { name: 'After-lunch walk' });
-    const editButton = within(details).getByRole('button', { name: 'Edit' });
-    await user.click(editButton);
+    const editButton = within(details).getByRole('button', { name: 'Edit After-lunch walk' });
+    editButton.focus();
+    await user.keyboard('{Enter}');
     const edit = screen.getByRole('dialog', { name: 'Edit Rhythm' });
     const title = within(edit).getByLabelText('Title');
     await user.clear(title);
@@ -346,7 +350,7 @@ describe('Tend Today preview', () => {
     const saved = parsePreviewBackup(savedRaw!, localDateString(new Date()));
     expect(saved.valid).toBe(true);
     if (saved.valid) {
-      expect(saved.envelope.schemaVersion).toBe(2);
+      expect(saved.envelope.schemaVersion).toBe(3);
       expect(saved.envelope.data.savedRhythms).toHaveLength(1);
       expect(saved.envelope.data.savedRhythms[0]).toMatchObject({
         id: expect.stringMatching(/^user-rhythm-/),
@@ -396,7 +400,7 @@ describe('Tend Today preview', () => {
     const detailsOpener = screen.getByRole('button', { name: 'Details for Pray together' });
     await user.click(detailsOpener);
     const details = screen.getByRole('dialog', { name: 'Pray together' });
-    await user.click(within(details).getByRole('button', { name: 'Edit' }));
+    await user.click(within(details).getByRole('button', { name: 'Edit Pray together' }));
     const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
     await user.selectOptions(within(editor).getByLabelText('Cadence'), 'Weekly');
     await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
@@ -408,6 +412,219 @@ describe('Tend Today preview', () => {
       if (!raw) return;
       const parsed = parsePreviewBackup(raw, localDateString(new Date()));
       expect(parsed.valid && parsed.envelope.data.completedRhythmIds).toContain('sample-pray-together');
+    });
+  });
+
+  it('archives a saved fixture without saving cancelled edits, then restores its identity and history', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Tend Pray together' }));
+    await user.click(screen.getByRole('button', { name: 'Details for Pray together' }));
+    const details = screen.getByRole('dialog', { name: 'Pray together' });
+    await user.click(within(details).getByRole('button', { name: 'Edit Pray together' }));
+
+    let editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    const title = within(editor).getByLabelText('Title');
+    await user.clear(title);
+    await user.type(title, 'Updated prayer rhythm');
+    await user.click(within(editor).getByRole('checkbox', { name: 'Marriage' }));
+    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+
+    expect(screen.getByRole('dialog', { name: 'Updated prayer rhythm' })).toBe(details);
+    await user.click(within(details).getByRole('button', { name: 'Edit Updated prayer rhythm' }));
+    editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    const unsavedTitle = within(editor).getByLabelText('Title');
+    await user.clear(unsavedTitle);
+    await user.type(unsavedTitle, 'Unsaved title must not be archived');
+    const archiveButton = within(editor).getByRole('button', { name: 'Archive Updated prayer rhythm' });
+    expect(archiveButton.textContent).toBe('Archive');
+    const actionRow = archiveButton.parentElement;
+    expect(actionRow?.querySelector('.rhythm-editor__primary-actions')?.contains(
+      within(editor).getByRole('button', { name: 'Save Rhythm' })
+    )).toBe(true);
+    expect(actionRow?.contains(archiveButton)).toBe(true);
+    archiveButton.focus();
+    await user.keyboard('{Enter}');
+
+    const confirmation = screen.getByRole('alertdialog', { name: 'Archive Updated prayer rhythm?' });
+    expect(within(confirmation).getByText(/leave active Today and category lists/)).toBeTruthy();
+    expect(document.activeElement).toBe(within(confirmation).getByRole('button', { name: 'Confirm archive Updated prayer rhythm' }));
+    await user.click(within(confirmation).getByRole('button', { name: 'Cancel' }));
+    expect(document.activeElement).toBe(archiveButton);
+    expect((within(editor).getByLabelText('Title') as HTMLInputElement).value)
+      .toBe('Unsaved title must not be archived');
+    await waitFor(() => {
+      const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
+      expect(raw).not.toBeNull();
+      if (!raw) return;
+      const parsed = parsePreviewBackup(raw, localDateString(new Date()));
+      expect(parsed.valid && parsed.envelope.data.savedRhythms[0]).toMatchObject({
+        id: 'sample-pray-together',
+        title: 'Updated prayer rhythm',
+        personIds: ['sample-person-avery', 'sample-person-morgan'],
+        categoryIds: ['marriage']
+      });
+      expect(parsed.valid && parsed.envelope.data.archivedRhythmIds).toEqual([]);
+    });
+
+    archiveButton.focus();
+    await user.keyboard('{Enter}');
+    const confirmAgain = screen.getByRole('alertdialog', { name: 'Archive Updated prayer rhythm?' });
+    const confirmArchiveButton = within(confirmAgain).getByRole('button', { name: 'Confirm archive Updated prayer rhythm' });
+    confirmArchiveButton.focus();
+    await user.keyboard('{Enter}');
+    expect(screen.queryByRole('dialog', { name: 'Edit Rhythm' })).toBeNull();
+    expect(within(details).getByRole('status').textContent).toMatch(/Archived/);
+    expect(document.activeElement).toBe(within(details).getByRole('button', { name: 'Close details' }));
+    expect(within(details).queryByRole('button', { name: 'Tend Updated prayer rhythm' })).toBeNull();
+    await waitFor(() => {
+      const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
+      expect(raw).not.toBeNull();
+      if (!raw) return;
+      const parsed = parsePreviewBackup(raw, localDateString(new Date()));
+      expect(parsed.valid && parsed.envelope.data.savedRhythms[0]).toMatchObject({
+        id: 'sample-pray-together',
+        title: 'Updated prayer rhythm',
+        personIds: ['sample-person-avery', 'sample-person-morgan'],
+        categoryIds: ['marriage']
+      });
+      expect(parsed.valid && parsed.envelope.data.completedRhythmIds).toContain('sample-pray-together');
+      expect(parsed.valid && parsed.envelope.data.archivedRhythmIds).toEqual(['sample-pray-together']);
+    });
+
+    await user.click(within(details).getByRole('button', { name: 'Close details' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Marriage' }));
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    expect(screen.queryByRole('article', { name: 'Updated prayer rhythm' })).toBeNull();
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' })).getByRole('button', { name: 'Today' }));
+    const archivedToggle = screen.getByRole('button', { name: 'Archived rhythms (1)' });
+    await user.click(archivedToggle);
+    const archiveDialog = screen.getByRole('dialog', { name: 'Archived rhythms' });
+    const archivedCard = screen.getByRole('article', { name: 'Updated prayer rhythm' });
+    expect(within(archivedCard).getByText('Archived', { exact: true })).toBeTruthy();
+    expect(within(archivedCard).queryByRole('button', { name: /^Tend/ })).toBeNull();
+    expect(within(archivedCard).getByRole('button', { name: 'Details for Updated prayer rhythm' })).toBeTruthy();
+    expect(within(archivedCard).getByRole('button', { name: 'Open synthetic profile for Avery Brooks' })).toBeTruthy();
+    expect(within(archivedCard).queryByRole('button', { name: /Undo completion/ })).toBeNull();
+    const detailsOpener = within(archivedCard).getByRole('button', { name: 'Details for Updated prayer rhythm' });
+    detailsOpener.focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('dialog', { name: 'Archived rhythms' })).toBe(archiveDialog);
+    const archivedDetails = within(archiveDialog).getByRole('region', { name: 'Updated prayer rhythm' });
+    expect(within(archiveDialog).getByRole('status').textContent).toBe('Archived · identity and history are retained.');
+    expect(within(archivedDetails).getByRole('heading', { name: 'Updated prayer rhythm' })).toBeTruthy();
+    expect(within(archivedDetails).getByText('Archived', { exact: true })).toBeTruthy();
+    expect(within(archivedDetails).getByText('Take a quiet moment to pray together and begin the day connected.')).toBeTruthy();
+    expect(within(archivedDetails).getByRole('button', { name: 'Open synthetic profile for Avery Brooks' })).toBeTruthy();
+    expect(within(archivedDetails).getByRole('button', {
+      name: 'View history for Updated prayer rhythm; illustrative score unavailable'
+    })).toBeTruthy();
+    expect(within(archivedDetails).getByText('Daily')).toBeTruthy();
+    expect(within(archivedDetails).queryByRole('button', { name: /^Edit / })).toBeNull();
+    expect(within(archivedDetails).queryByRole('button', { name: 'Tend Updated prayer rhythm' })).toBeNull();
+    expect(within(archivedDetails).queryByRole('button', { name: /Undo completion/ })).toBeNull();
+    expect(within(archivedDetails).queryByRole('button', { name: 'Close details' })).toBeNull();
+    expect(within(archiveDialog).getAllByRole('button', { name: /Close/ })).toHaveLength(1);
+    const archivedHistory = within(archivedDetails).getByRole('button', {
+      name: 'View history for Updated prayer rhythm; illustrative score unavailable'
+    });
+    await user.click(archivedHistory);
+    expect(within(archivedDetails).getByText('History is unavailable for this sample.')).toBeTruthy();
+    await user.click(within(archivedDetails).getByRole('button', { name: 'Back' }));
+    expect(document.activeElement).toBe(within(archivedDetails).getByRole('button', {
+      name: 'View history for Updated prayer rhythm; illustrative score unavailable'
+    }));
+    const backToList = within(archiveDialog).getByRole('button', { name: 'Back to archived rhythms' });
+    expect(archivedDetails.compareDocumentPosition(backToList) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(backToList.parentElement?.classList.contains('today-rhythm-details__surface')).toBe(false);
+    await user.click(backToList);
+    expect(document.activeElement).toBe(detailsOpener);
+
+    const restoreButton = within(archiveDialog).getByRole('button', {
+      name: 'Restore rhythm Updated prayer rhythm'
+    });
+    restoreButton.focus();
+    await user.keyboard('{Enter}');
+    expect(within(archiveDialog).getByRole('heading', { name: 'No archived Rhythms' })).toBeTruthy();
+    expect(document.activeElement).toBe(within(archiveDialog).getByRole('heading', { name: 'No archived Rhythms' }));
+    expect(screen.getByRole('article', { name: 'Updated prayer rhythm' })).toBeTruthy();
+    expect(within(screen.getByRole('article', { name: 'Updated prayer rhythm' })).queryByText('Archived', { exact: true })).toBeNull();
+    expect(screen.getByText('1 of 3 tended')).toBeTruthy();
+    await waitFor(() => {
+      const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
+      expect(raw).not.toBeNull();
+      if (!raw) return;
+      const parsed = parsePreviewBackup(raw, localDateString(new Date()));
+      expect(parsed.valid && parsed.envelope.data.archivedRhythmIds).toEqual([]);
+      expect(parsed.valid && parsed.envelope.data.savedRhythms.filter(rhythm => rhythm.id === 'sample-pray-together')).toHaveLength(1);
+      expect(parsed.valid && parsed.envelope.data.completedRhythmIds).toContain('sample-pray-together');
+    });
+
+    await user.click(within(archiveDialog).getByRole('button', { name: 'Close archived rhythms' }));
+    expect(document.activeElement).toBe(archivedToggle);
+    cleanup();
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByRole('article', { name: 'Updated prayer rhythm' })).toBeTruthy();
+      expect(screen.getByText('1 of 3 tended')).toBeTruthy();
+    });
+    expect(screen.getAllByRole('article', { name: 'Updated prayer rhythm' })).toHaveLength(1);
+  });
+
+  it('opens the empty Archived rhythms modal from the real button by keyboard and returns focus on close and Escape', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const toggle = screen.getByRole('button', { name: 'Archived rhythms (0)' });
+
+    toggle.focus();
+    await user.keyboard('{Enter}');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    const dialog = screen.getByRole('dialog', { name: 'Archived rhythms' });
+    expect(within(dialog).getByRole('heading', { name: 'No archived Rhythms' })).toBeTruthy();
+    expect(within(dialog).getByText('Rhythms you archive will appear here with their history preserved.')).toBeTruthy();
+    expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Close archived rhythms' }));
+
+    await user.keyboard(' ');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('dialog', { name: 'Archived rhythms' })).toBeNull();
+    expect(document.activeElement).toBe(toggle);
+
+    await user.keyboard('{Enter}');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    const reopenedDialog = screen.getByRole('dialog', { name: 'Archived rhythms' });
+    expect(within(reopenedDialog).getByRole('heading', { name: 'No archived Rhythms' })).toBeTruthy();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Archived rhythms' })).toBeNull());
+    expect(document.activeElement).toBe(toggle);
+  });
+
+  it('moves focus to the next Restore control and then the empty-state heading', async () => {
+    const user = userEvent.setup();
+    const [first, second] = todayRhythms;
+    const onRestore = vi.fn();
+    const callbacks = {
+      completedRhythms: new Set<string>(),
+      onPersonSelect: () => {},
+      onRestore,
+      onClose: () => {}
+    };
+    const { rerender } = render(
+      <ArchivedRhythmsDialog rhythms={[first!, second!]} {...callbacks} />
+    );
+
+    await user.click(screen.getByRole('button', { name: `Restore rhythm ${first!.title}` }));
+    expect(onRestore).toHaveBeenCalledWith(first!.id);
+    rerender(<ArchivedRhythmsDialog rhythms={[second!]} {...callbacks} />);
+    await waitFor(() => {
+      expect(document.activeElement).toBe(
+        screen.getByRole('button', { name: `Restore rhythm ${second!.title}` })
+      );
+    });
+
+    await user.click(screen.getByRole('button', { name: `Restore rhythm ${second!.title}` }));
+    rerender(<ArchivedRhythmsDialog rhythms={[]} {...callbacks} />);
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'No archived Rhythms' }));
     });
   });
 

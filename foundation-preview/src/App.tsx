@@ -28,11 +28,21 @@ import {
 } from './domain/money-goals.ts';
 import { createSamplePreviewData, parsePreviewBackup } from './domain/preview-state.ts';
 import type { PreviewData } from './domain/preview-state.ts';
-import { isEditableRhythmId, resolveTodayRhythms, rhythmsForCategory, saveRhythmDraft } from './domain/rhythm-editor.ts';
+import {
+  activeTodayRhythms,
+  archiveRhythmId,
+  archivedTodayRhythms,
+  isEditableRhythmId,
+  resolveTodayRhythms,
+  restoreRhythmId,
+  rhythmsForCategory,
+  saveRhythmDraft
+} from './domain/rhythm-editor.ts';
 import type { RhythmDraft, RhythmDraftErrors } from './domain/rhythm-editor.ts';
 import {
   browserPreviewStorage,
   listenForPreviewChanges,
+  loadV2RecoveryCopy,
   loadV1RecoveryCopy,
   loadPreview,
   writePreview
@@ -58,6 +68,8 @@ export function App() {
   const [persistenceStatus, setPersistenceStatus] = useState<PreviewPersistenceStatus>({ kind: 'loading' });
   const [v1RecoveryCopy, setV1RecoveryCopy] = useState<string | null>(null);
   const [v1RecoveryError, setV1RecoveryError] = useState<string | null>(null);
+  const [v2RecoveryCopy, setV2RecoveryCopy] = useState<string | null>(null);
+  const [v2RecoveryError, setV2RecoveryError] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -70,6 +82,8 @@ export function App() {
   const [rhythmEditor, setRhythmEditor] = useState<{ id: string; rhythm?: (typeof todayRhythms)[number] } | null>(null);
   const dialogOpener = useRef<HTMLButtonElement | null>(null);
   const rhythmEditorOpener = useRef<HTMLButtonElement | null>(null);
+  const wasDetailsOpen = useRef(false);
+  const wasRhythmEditorOpen = useRef(false);
 
   const dateLabel = new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
@@ -78,17 +92,20 @@ export function App() {
   }).format(new Date());
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-  const editableTodayRhythms = resolveTodayRhythms(previewData.savedRhythms);
+  const allTodayRhythms = resolveTodayRhythms(previewData.savedRhythms);
+  const editableTodayRhythms = activeTodayRhythms(allTodayRhythms, previewData.archivedRhythmIds);
+  const archivedRhythms = archivedTodayRhythms(allTodayRhythms, previewData.archivedRhythmIds);
   const userRhythms = editableTodayRhythms.filter(rhythm =>
     previewData.savedRhythms.some(saved => saved.id === rhythm.id)
   );
   const marriageCategoryRhythms = rhythmsForCategory(userRhythms, 'marriage');
   const activeRhythm = [
-    ...editableTodayRhythms,
+    ...allTodayRhythms,
     ...marriageRhythms
   ].find(rhythm => rhythm.id === activeRhythmId) ?? null;
   const selectedPerson = selectedPersonId === null ? null : personById(selectedPersonId);
   const activeRhythmIsToday = activeRhythm !== null && editableTodayRhythms.some(rhythm => rhythm.id === activeRhythm.id);
+  const activeRhythmIsArchived = activeRhythm !== null && previewData.archivedRhythmIds.includes(activeRhythm.id);
   const currentDate = localDateString(new Date());
   const initialLoadDate = useRef(currentDate).current;
   const completedRhythms = new Set(previewData.completedRhythmIds);
@@ -105,8 +122,20 @@ export function App() {
     }
   }
 
+  function refreshV2RecoveryCopy() {
+    const result = loadV2RecoveryCopy(browserPreviewStorage());
+    if (result.kind === 'loaded') {
+      setV2RecoveryCopy(result.raw);
+      setV2RecoveryError(null);
+    } else {
+      setV2RecoveryCopy(null);
+      setV2RecoveryError(result.message);
+    }
+  }
+
   useEffect(() => {
     refreshV1RecoveryCopy();
+    refreshV2RecoveryCopy();
     const loaded = loadPreview(browserPreviewStorage(), initialLoadDate);
     if (loaded.kind === 'loaded') {
       expectedRaw.current = loaded.raw;
@@ -136,6 +165,7 @@ export function App() {
     }
     const saved = writePreview(browserPreviewStorage(), previewData, expectedRaw.current);
     refreshV1RecoveryCopy();
+    refreshV2RecoveryCopy();
     if (saved.kind === 'saved') {
       expectedRaw.current = saved.raw;
       setPersistenceStatus({ kind: 'saved' });
@@ -165,11 +195,24 @@ export function App() {
   }, [textSize]);
 
   useEffect(() => {
-    if (!activeRhythmId) dialogOpener.current?.focus();
+    if (activeRhythmId) {
+      wasDetailsOpen.current = true;
+      return;
+    }
+    if (!wasDetailsOpen.current) return;
+    wasDetailsOpen.current = false;
+    if (dialogOpener.current?.isConnected) dialogOpener.current.focus();
+    else document.querySelector<HTMLButtonElement>('.utility-primary-button[aria-current="page"]')?.focus();
   }, [activeRhythmId]);
 
   useEffect(() => {
-    if (!rhythmEditor) rhythmEditorOpener.current?.focus();
+    if (rhythmEditor) {
+      wasRhythmEditorOpen.current = true;
+      return;
+    }
+    if (!wasRhythmEditorOpen.current) return;
+    wasRhythmEditorOpen.current = false;
+    if (rhythmEditorOpener.current?.isConnected) rhythmEditorOpener.current.focus();
   }, [rhythmEditor]);
 
   function navigate(next: Destination, personId?: PersonId) {
@@ -222,6 +265,25 @@ export function App() {
     }));
     setRhythmEditor(null);
     return result.errors;
+  }
+
+  function archiveRhythm(id: string) {
+    setPreviewData(previous => {
+      const archivedRhythmIds = archiveRhythmId(previous.savedRhythms, previous.archivedRhythmIds, id);
+      return archivedRhythmIds
+        ? { ...previous, archivedRhythmIds }
+        : previous;
+    });
+    setRhythmEditor(null);
+  }
+
+  function restoreRhythm(id: string) {
+    setPreviewData(previous => {
+      const archivedRhythmIds = restoreRhythmId(previous.savedRhythms, previous.archivedRhythmIds, id);
+      return archivedRhythmIds
+        ? { ...previous, archivedRhythmIds }
+        : previous;
+    });
   }
 
   function tend(id: string) {
@@ -280,6 +342,7 @@ export function App() {
   function finishWrite(resultData: PreviewData): string | null {
     const written = writePreview(browserPreviewStorage(), resultData, expectedRaw.current);
     refreshV1RecoveryCopy();
+    refreshV2RecoveryCopy();
     if (written.kind === 'saved') {
       expectedRaw.current = written.raw;
       externalRaw.current = null;
@@ -330,6 +393,7 @@ export function App() {
   function replaceExternal(): string | null {
     const written = writePreview(browserPreviewStorage(), previewData, externalRaw.current);
     refreshV1RecoveryCopy();
+    refreshV2RecoveryCopy();
     if (written.kind === 'saved') {
       expectedRaw.current = written.raw;
       externalRaw.current = null;
@@ -352,6 +416,7 @@ export function App() {
     setAutoSaveEnabled(true);
     const written = writePreview(browserPreviewStorage(), previewData, expectedRaw.current);
     refreshV1RecoveryCopy();
+    refreshV2RecoveryCopy();
     if (written.kind === 'saved') {
       expectedRaw.current = written.raw;
       setPersistenceStatus({ kind: 'saved' });
@@ -388,6 +453,7 @@ export function App() {
               dateLabel={dateLabel}
               completedRhythms={completedRhythms}
               rhythms={editableTodayRhythms}
+              archivedRhythms={archivedRhythms}
               search={search}
               marriageExampleId={marriageExampleId}
               onNavigate={navigate}
@@ -397,6 +463,7 @@ export function App() {
               onTend={tend}
               onUndo={undoTend}
               onAddRhythm={event => openRhythmEditor(event)}
+              onRestoreRhythm={restoreRhythm}
             />
           )
           : destination === 'marriage'
@@ -441,6 +508,8 @@ export function App() {
         onReplaceExternal={replaceExternal}
         v1RecoveryCopy={v1RecoveryCopy}
         v1RecoveryError={v1RecoveryError}
+        v2RecoveryCopy={v2RecoveryCopy}
+        v2RecoveryError={v2RecoveryError}
       />
       <footer className="preview-footer">
         <span>Synthetic preview data stays separate from Tend accounts.</span>
@@ -450,6 +519,7 @@ export function App() {
         <RhythmDetailsDialog
           rhythm={activeRhythm}
           people={peopleForRhythm(activeRhythm)}
+          archived={activeRhythmIsArchived}
           onPersonSelect={personId => {
             setActiveRhythmId(null);
             dialogOpener.current = null;
@@ -464,7 +534,9 @@ export function App() {
                   ? { onEdit: event => openRhythmEditor(event, activeRhythm) }
                   : {})
               }
-            : {})}
+            : {
+                completed: completedRhythms.has(activeRhythm.id)
+              })}
           onClose={() => setActiveRhythmId(null)}
         />
       )}
@@ -472,6 +544,7 @@ export function App() {
         <RhythmEditor
           {...(rhythmEditor.rhythm ? { rhythm: rhythmEditor.rhythm } : {})}
           onSave={saveRhythm}
+          {...(rhythmEditor.rhythm ? { onArchive: archiveRhythm } : {})}
           onClose={() => setRhythmEditor(null)}
         />
       )}
