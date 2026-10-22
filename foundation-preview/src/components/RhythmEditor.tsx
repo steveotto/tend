@@ -1,18 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ChangeEvent, FormEvent } from 'react';
-import { areas, syntheticPeople } from '../domain/preview-data.ts';
+import type { FormEvent } from 'react';
+import { areas, syntheticPeople, syntheticPersonPickerGroups } from '../domain/preview-data.ts';
+import type { PersonPreview } from '../domain/preview-data.ts';
 import type { RhythmPreview } from '../domain/preview-data.ts';
-import {
-  rhythmCadences,
-  rhythmDraftFrom,
-  rhythmTimes
-} from '../domain/rhythm-editor.ts';
-import type {
-  RhythmCategoryId,
-  RhythmDraft,
-  RhythmDraftErrors
-} from '../domain/rhythm-editor.ts';
+import { rhythmDraftFrom } from '../domain/rhythm-editor.ts';
+import type { RhythmDraft, RhythmDraftErrors } from '../domain/rhythm-editor.ts';
+import { rhythmTimeOptions } from '../domain/rhythm-schedule.ts';
+import { RhythmScheduleFields } from './RhythmScheduleFields.tsx';
+import { StyledSelect } from './StyledSelect.tsx';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
+import { BadgeSelectionPicker, toggleBadgeGroup } from './BadgeSelectionPicker.tsx';
+import { AreaIcon } from './AreaIcon.tsx';
+import { PersonBadgeVisual } from './PersonBadge.tsx';
 
 const emptyDraft: RhythmDraft = {
   title: '',
@@ -20,7 +19,10 @@ const emptyDraft: RhythmDraft = {
   cadence: 'Daily',
   timeLabel: 'Anytime',
   personIds: [],
-  categoryIds: []
+  categoryIds: [],
+  schedule: { frequency: 'daily' },
+  scheduleEditing: true,
+  personal: false
 };
 
 type RhythmEditorProps = {
@@ -36,9 +38,24 @@ export function RhythmEditor({ rhythm, onSave, onArchive, onClose }: RhythmEdito
   );
   const [errors, setErrors] = useState<RhythmDraftErrors>({});
   const [showArchiveConfirmation, setShowArchiveConfirmation] = useState(false);
+  const [activePicker, setActivePicker] = useState<'categories' | 'people' | null>(null);
+  const [pickerSelection, setPickerSelection] = useState<string[]>([]);
+  const categoryPickerOpenerRef = useRef<HTMLButtonElement>(null);
+  const peoplePickerOpenerRef = useRef<HTMLButtonElement>(null);
+  const restoreFocusToPickerOpenerRef = useRef(false);
+  const pickerOriginRef = useRef<'categories' | 'people'>('categories');
   const archiveButtonRef = useRef<HTMLButtonElement>(null);
   const archiveConfirmButtonRef = useRef<HTMLButtonElement>(null);
   const wasConfirmingArchiveRef = useRef(false);
+
+  useEffect(() => {
+    if (activePicker === null && restoreFocusToPickerOpenerRef.current) {
+      (pickerOriginRef.current === 'categories'
+        ? categoryPickerOpenerRef.current
+        : peoplePickerOpenerRef.current)?.focus();
+      restoreFocusToPickerOpenerRef.current = false;
+    }
+  }, [activePicker]);
 
   useEffect(() => {
     if (showArchiveConfirmation) archiveConfirmButtonRef.current?.focus();
@@ -51,20 +68,43 @@ export function RhythmEditor({ rhythm, onSave, onArchive, onClose }: RhythmEdito
     setErrors(previous => {
       const next = { ...previous };
       delete next[field];
+      if (field === 'schedule') delete next.schedule;
       return next;
     });
   }
 
-  function togglePerson(personId: (typeof syntheticPeople)[number]['id'], checked: boolean) {
-    update('personIds', checked
-      ? [...draft.personIds, personId]
-      : draft.personIds.filter(id => id !== personId));
+  function openPicker(kind: 'categories' | 'people') {
+    pickerOriginRef.current = kind;
+    setPickerSelection([...(kind === 'categories' ? draft.categoryIds : draft.personIds)]);
+    setActivePicker(kind);
   }
 
-  function toggleCategory(categoryId: RhythmCategoryId, checked: boolean) {
-    update('categoryIds', checked
-      ? [...draft.categoryIds, categoryId]
-      : draft.categoryIds.filter(id => id !== categoryId));
+  function closePicker(apply: boolean) {
+    if (!activePicker) return;
+    restoreFocusToPickerOpenerRef.current = true;
+    if (apply) {
+      if (activePicker === 'categories') {
+        update('categoryIds', pickerSelection as RhythmDraft['categoryIds']);
+      } else {
+        update('personIds', pickerSelection as RhythmDraft['personIds']);
+      }
+    }
+    setActivePicker(null);
+  }
+
+  function togglePickerItem(id: string) {
+    setPickerSelection(current => current.includes(id)
+      ? current.filter(selected => selected !== id)
+      : [...current, id]);
+  }
+
+  function selectPickerGroup(ids: readonly string[]) {
+    setPickerSelection(current => toggleBadgeGroup(current, ids));
+  }
+
+  function handleDialogEscape() {
+    if (activePicker) closePicker(false);
+    else onClose();
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -73,27 +113,76 @@ export function RhythmEditor({ rhythm, onSave, onArchive, onClose }: RhythmEdito
     setErrors(nextErrors);
   }
 
-  function handleSelect<K extends 'cadence' | 'timeLabel'>(
-    field: K,
-    event: ChangeEvent<HTMLSelectElement>
-  ) {
-    update(field, event.currentTarget.value);
-  }
-
   function fieldError(field: keyof RhythmDraft) {
     return errors[field]
       ? <span className="goal-field-error" id={`rhythm-error-${field}`}>{errors[field]}</span>
       : null;
   }
 
+  const timeValue = rhythmTimeOptions.find(option => option.label === draft.timeLabel)?.value ?? '';
+  const hasSchedule = draft.scheduleEditing === true;
+  const showCadenceDescription = !hasSchedule;
+  const selectedCategories = areas
+    .filter(area => draft.categoryIds.includes(area.id));
+  const selectedPeople = syntheticPeople
+    .filter(person => draft.personIds.includes(person.id));
+  const renderCategoryBadge = (area: typeof areas[number]) => (
+    <>
+      <span className="rhythm-association-picker__category-icon" aria-hidden="true"><AreaIcon id={area.id} /></span>
+      <span>{area.label}</span>
+    </>
+  );
+  const timeOfDayField = (
+    <div className="goal-field rhythm-schedule-fields__time">
+      <label>Time of day</label>
+      <StyledSelect
+        label="Time of day"
+        options={rhythmTimeOptions}
+        value={timeValue}
+        describedBy={errors.timeLabel ? 'rhythm-error-timeLabel' : undefined}
+        invalid={Boolean(errors.timeLabel)}
+        onChange={value => {
+          const option = rhythmTimeOptions.find(item => item.value === value);
+          if (option) update('timeLabel', option.label);
+        }}
+      />
+      {fieldError('timeLabel')}
+    </div>
+  );
+
   return (
     <MoneyGoalDialog
       title={rhythm ? 'Edit Rhythm' : 'Add Rhythm'}
-      intro="Synthetic preview only. Cadence is descriptive; this preview does not calculate future occurrences."
-      onClose={onClose}
+      intro="Synthetic preview only. Schedules are stored and displayed, but do not calculate due dates or control completion eligibility."
+      onClose={handleDialogEscape}
     >
+      {activePicker === 'categories' ? (
+        <BadgeSelectionPicker
+          title="Choose categories"
+          items={areas}
+          selectedIds={pickerSelection}
+          getLabel={area => area.label}
+          renderBadge={renderCategoryBadge}
+          onToggle={togglePickerItem}
+          onDone={() => closePicker(true)}
+          onCancel={() => closePicker(false)}
+        />
+      ) : activePicker === 'people' ? (
+        <BadgeSelectionPicker
+          title="Choose people"
+          items={syntheticPeople}
+          selectedIds={pickerSelection}
+          getLabel={person => person.displayName}
+          renderBadge={(person: PersonPreview) => <PersonBadgeVisual person={person} />}
+          groups={syntheticPersonPickerGroups}
+          onToggle={togglePickerItem}
+          onToggleGroup={selectPickerGroup}
+          onDone={() => closePicker(true)}
+          onCancel={() => closePicker(false)}
+        />
+      ) : (
       <form className="rhythm-editor" onSubmit={submit} noValidate>
-        <div className="goal-field">
+        <div className="goal-field rhythm-editor__title-field">
           <label htmlFor="rhythm-title">Title</label>
           <input
             id="rhythm-title"
@@ -106,11 +195,11 @@ export function RhythmEditor({ rhythm, onSave, onArchive, onClose }: RhythmEdito
           />
           {fieldError('title')}
         </div>
-        <div className="goal-field">
+        <div className="goal-field rhythm-editor__description-field">
           <label htmlFor="rhythm-description">Description (optional)</label>
           <textarea
             id="rhythm-description"
-            rows={3}
+            rows={2}
             maxLength={1000}
             value={draft.description}
             aria-invalid={Boolean(errors.description)}
@@ -119,68 +208,96 @@ export function RhythmEditor({ rhythm, onSave, onArchive, onClose }: RhythmEdito
           />
           {fieldError('description')}
         </div>
-        <div className="goal-form-grid">
-          <div className="goal-field">
-            <label htmlFor="rhythm-cadence">Cadence</label>
-            <select
-              id="rhythm-cadence"
-              value={draft.cadence}
-              aria-invalid={Boolean(errors.cadence)}
-              aria-describedby={errors.cadence ? 'rhythm-error-cadence' : undefined}
-              onChange={event => handleSelect('cadence', event)}
-            >
-              {rhythmCadences.map(cadence => <option key={cadence} value={cadence}>{cadence}</option>)}
-            </select>
-            {fieldError('cadence')}
-          </div>
-          <div className="goal-field">
-            <label htmlFor="rhythm-time">Time of day</label>
-            <select
-              id="rhythm-time"
-              value={draft.timeLabel}
-              aria-invalid={Boolean(errors.timeLabel)}
-              aria-describedby={errors.timeLabel ? 'rhythm-error-timeLabel' : undefined}
-              onChange={event => handleSelect('timeLabel', event)}
-            >
-              {rhythmTimes.map(time => <option key={time} value={time}>{time}</option>)}
-            </select>
-            {fieldError('timeLabel')}
-          </div>
-        </div>
 
-        <fieldset className="rhythm-editor-options">
-          <legend>People</legend>
-          <div className="rhythm-editor-options__list">
-            {syntheticPeople.map(person => (
-              <label key={person.id} className="rhythm-editor-choice">
-                <input
-                  type="checkbox"
-                  checked={draft.personIds.includes(person.id)}
-                  onChange={event => togglePerson(person.id, event.currentTarget.checked)}
-                />
-                <span>{person.displayName}</span>
-              </label>
-            ))}
-          </div>
-          {fieldError('personIds')}
-        </fieldset>
+        <label className="rhythm-editor-choice rhythm-editor__personal">
+          <input
+            type="checkbox"
+            checked={draft.personal ?? false}
+            onChange={event => update('personal', event.currentTarget.checked)}
+          />
+          <span>Personal</span>
+        </label>
 
-        <fieldset className="rhythm-editor-options">
-          <legend>Categories</legend>
-          <div className="rhythm-editor-options__list">
-            {areas.map(area => (
-              <label key={area.id} className="rhythm-editor-choice">
-                <input
-                  type="checkbox"
-                  checked={draft.categoryIds.includes(area.id)}
-                  onChange={event => toggleCategory(area.id, event.currentTarget.checked)}
-                />
-                <span>{area.label}</span>
-              </label>
+        {showCadenceDescription ? (
+          <>
+            <section className="rhythm-editor__descriptive-schedule" aria-labelledby="rhythm-current-cadence">
+              <div>
+                <h3 id="rhythm-current-cadence">Current cadence</h3>
+                <p>{draft.cadence}</p>
+              </div>
+              <button
+                type="button"
+                className="rhythm-editor__change-schedule"
+                onClick={() => {
+                  update('scheduleEditing', true);
+                  update('schedule', undefined);
+                }}
+              >
+                Change schedule
+              </button>
+            </section>
+            {timeOfDayField}
+          </>
+        ) : (
+          <>
+            <RhythmScheduleFields
+              schedule={draft.schedule}
+              error={errors.schedule}
+              onChange={schedule => update('schedule', schedule)}
+            >
+              {timeOfDayField}
+            </RhythmScheduleFields>
+            {rhythm && rhythm.schedule === undefined && (
+              <button
+                type="button"
+                className="rhythm-editor__keep-descriptive"
+                onClick={() => {
+                  update('scheduleEditing', false);
+                  update('schedule', undefined);
+                }}
+              >
+                Keep descriptive cadence
+              </button>
+              )}
+          </>
+        )}
+
+        <section className="rhythm-editor__association" aria-label="Associations">
+          <div className="rhythm-editor__association-row" role="group" aria-label="Category associations">
+            <button
+              ref={categoryPickerOpenerRef}
+              type="button"
+              className="rhythm-editor__association-opener"
+              aria-label="Add categories"
+              onClick={() => openPicker('categories')}
+            >
+              <span>Add categories</span>
+            </button>
+            {selectedCategories.map(area => (
+              <span key={area.id} className="rhythm-editor__selected-badge" role="img" aria-label={area.label}>
+                {renderCategoryBadge(area)}
+              </span>
             ))}
+            {fieldError('categoryIds')}
           </div>
-          {fieldError('categoryIds')}
-        </fieldset>
+          <div className="rhythm-editor__association-row" role="group" aria-label="People associations">
+            <button
+              ref={peoplePickerOpenerRef}
+              type="button"
+              className="rhythm-editor__association-opener"
+              aria-label="Add people"
+              onClick={() => openPicker('people')}
+            >
+              <span>Add people</span>
+            </button>
+            {selectedPeople.map(person => (
+              <span key={person.id} className="rhythm-editor__selected-badge" role="img" aria-label={person.displayName}>
+                <PersonBadgeVisual person={person} />
+              </span>
+            ))}
+            {fieldError('personIds')}
+          </div>
+        </section>
 
         {Object.keys(errors).length > 0 && (
           <p className="goal-form-error-summary" role="alert">Review the highlighted Rhythm fields.</p>
@@ -203,6 +320,7 @@ export function RhythmEditor({ rhythm, onSave, onArchive, onClose }: RhythmEdito
           )}
         </div>
       </form>
+      )}
       {showArchiveConfirmation && rhythm && onArchive && (
         <section
           className="rhythm-editor__archive-confirmation"

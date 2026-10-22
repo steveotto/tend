@@ -6,11 +6,13 @@ import {
 } from './money-goals.ts';
 import type { MoneyGoal } from './money-goals.ts';
 import { goals as sampleGoals, todayRhythms } from './preview-data.ts';
-import { validateSavedRhythms } from './rhythm-editor.ts';
+import { validateSavedRhythms, validateSavedRhythmsV4 } from './rhythm-editor.ts';
 import type { SavedRhythm } from './rhythm-editor.ts';
+import { rhythmTimeValueFromLabel, rhythmTimeValueFromLegacyLabel } from './rhythm-schedule.ts';
+import type { RhythmSchedule } from './rhythm-schedule.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 3;
+export const PREVIEW_SCHEMA_VERSION = 4;
 
 export type PreviewData = {
   goals: MoneyGoal[];
@@ -24,6 +26,8 @@ export type PreviewEnvelope = {
   schemaVersion: typeof PREVIEW_SCHEMA_VERSION;
   data: PreviewData;
 };
+
+export type PreviewEnvelopeV4 = PreviewEnvelope;
 
 type PreviewEnvelopeV1 = {
   format: typeof PREVIEW_BACKUP_FORMAT;
@@ -45,7 +49,7 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
 const goalKeys = [
@@ -57,6 +61,7 @@ const correctionKeys = ['effectiveDate', 'previousBalanceMinor', 'previousNote',
 const dataKeysV1 = ['goals', 'completedRhythmIds'];
 const dataKeysV2 = ['goals', 'completedRhythmIds', 'savedRhythms'];
 const dataKeysV3 = ['goals', 'completedRhythmIds', 'savedRhythms', 'archivedRhythmIds'];
+const dataKeysV4 = dataKeysV3;
 const envelopeKeys = ['format', 'schemaVersion', 'data'];
 const supportedRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 
@@ -97,6 +102,14 @@ function isCanonicalTimestamp(value: unknown): value is string {
   if (typeof value !== 'string') return false;
   const timestamp = new Date(value);
   return !Number.isNaN(timestamp.getTime()) && timestamp.toISOString() === value;
+}
+
+function serializedTimeOfDay(rhythm: SavedRhythm) {
+  const value = rhythm.timeOfDay
+    ?? rhythmTimeValueFromLabel(rhythm.timeLabel)
+    ?? rhythmTimeValueFromLegacyLabel(rhythm.timeLabel);
+  if (!value) throw new Error(`No v4 time value is mapped for "${rhythm.timeLabel}".`);
+  return value;
 }
 
 function validateGoal(value: unknown, goalIds: Set<string>, checkInIds: Set<string>, currentDate: string): value is MoneyGoal {
@@ -182,11 +195,19 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
         cadence: rhythm.cadence,
         timeLabel: rhythm.timeLabel,
         personIds: [...rhythm.personIds],
-        categoryIds: [...rhythm.categoryIds]
+        categoryIds: [...rhythm.categoryIds],
+        timeOfDay: serializedTimeOfDay(rhythm),
+        ...(rhythm.schedule === undefined ? {} : { schedule: cloneRhythmSchedule(rhythm.schedule) }),
+        ...(rhythm.personal === undefined ? {} : { personal: rhythm.personal })
       })),
       archivedRhythmIds: [...data.archivedRhythmIds]
     }
   };
+}
+
+function cloneRhythmSchedule(schedule: RhythmSchedule): RhythmSchedule {
+  if ('weekdays' in schedule) return { ...schedule, weekdays: [...schedule.weekdays] };
+  return { ...schedule };
 }
 
 export function validatePreviewEnvelope(value: unknown, currentDate: string): PreviewValidationResult {
@@ -197,17 +218,22 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     return { valid: false, kind: 'invalid', message: 'The backup envelope has an invalid structure.' };
   }
   if (value.format !== PREVIEW_BACKUP_FORMAT
-    || (value.schemaVersion !== 1 && value.schemaVersion !== 2 && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
+    || (value.schemaVersion !== 1 && value.schemaVersion !== 2
+      && value.schemaVersion !== 3 && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
   const isV1 = value.schemaVersion === 1;
   const isV2 = value.schemaVersion === 2;
-  const allowedDataKeys = isV1 ? dataKeysV1 : isV2 ? dataKeysV2 : dataKeysV3;
+  const isV3 = value.schemaVersion === 3;
+  const isV4 = value.schemaVersion === 4;
+  const allowedDataKeys = isV1 ? dataKeysV1 : isV2 ? dataKeysV2 : isV3 ? dataKeysV3 : dataKeysV4;
   if (!isRecord(value.data) || !hasOnlyKeys(value.data, allowedDataKeys)
     || !Array.isArray(value.data.goals) || !Array.isArray(value.data.completedRhythmIds)) {
     return { valid: false, kind: 'invalid', message: 'Preview data must contain goals and completed Rhythm IDs.' };
   }
-  if (!isV1 && !validateSavedRhythms(value.data.savedRhythms)) {
+  if (!isV1 && !(isV4
+    ? validateSavedRhythmsV4(value.data.savedRhythms)
+    : validateSavedRhythms(value.data.savedRhythms))) {
     return { valid: false, kind: 'invalid', message: 'Saved Rhythms contain invalid fields or unresolved references.' };
   }
   if (!isV1 && !isV2 && !Array.isArray(value.data.archivedRhythmIds)) {
@@ -248,10 +274,26 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     archivedRhythmIds.add(rhythmId);
   }
 
+  let savedRhythms: SavedRhythm[];
+  if (isV4) {
+    savedRhythms = value.data.savedRhythms as SavedRhythm[];
+  } else if (isV1) {
+    savedRhythms = [];
+  } else {
+    savedRhythms = [];
+    for (const rhythm of value.data.savedRhythms as SavedRhythm[]) {
+      const timeOfDay = rhythmTimeValueFromLegacyLabel(rhythm.timeLabel);
+      if (!timeOfDay) {
+        return { valid: false, kind: 'invalid', message: `No v4 time value is mapped for "${rhythm.timeLabel}".` };
+      }
+      savedRhythms.push({ ...rhythm, timeOfDay });
+    }
+  }
+
   const envelopeData = {
     goals,
     completedRhythmIds: [...completedRhythmIds],
-    savedRhythms: isV1 ? [] : value.data.savedRhythms as SavedRhythm[],
+    savedRhythms,
     archivedRhythmIds: [...archivedRhythmIds]
   };
 

@@ -15,15 +15,21 @@ export function PersonBadge({
       data-person-id={person.id}
       onClick={() => onSelect(person.id)}
     >
-      <span className="person-badge-visual">
-        <span className="person-badge-avatar" aria-hidden="true">
-          {person.avatarUrl
-            ? <img src={person.avatarUrl} alt="" />
-            : <span>{personInitials(person.displayName)}</span>}
-        </span>
-        <span className="person-badge-name">{personFirstName(person.displayName)}</span>
-      </span>
+      <PersonBadgeVisual person={person} />
     </button>
+  );
+}
+
+export function PersonBadgeVisual({ person }: { person: PersonPreview }) {
+  return (
+    <span className="person-badge-visual">
+      <span className="person-badge-avatar" aria-hidden="true">
+        {person.avatarUrl
+          ? <img src={person.avatarUrl} alt="" />
+          : <span>{personInitials(person.displayName)}</span>}
+      </span>
+      <span className="person-badge-name">{personFirstName(person.displayName)}</span>
+    </span>
   );
 }
 
