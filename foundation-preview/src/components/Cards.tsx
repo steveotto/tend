@@ -19,6 +19,7 @@ import { RhythmPersonalBadge } from './RhythmPersonalBadge.tsx';
 import { RhythmMetadata } from './RhythmMetadata.tsx';
 import { RhythmCompletionActions } from './RhythmCompletionActions.tsx';
 import { TimelineChart } from './TimelineChart.tsx';
+import { scoreTone } from '../domain/score-tone.ts';
 
 type FoundationCardProps = {
   foundation: FoundationPreview;
@@ -34,13 +35,6 @@ type FoundationCardProps = {
   rhythmCoverage?: { scored: number; total: number };
   children?: ReactNode;
 };
-
-function scoreTone(score: number | null): 'green' | 'yellow' | 'red' | 'neutral' {
-  if (score === null) return 'neutral';
-  if (score >= 80) return 'green';
-  if (score >= 50) return 'yellow';
-  return 'red';
-}
 
 export function FoundationCard({
   foundation,
@@ -318,7 +312,7 @@ type RhythmCardBaseProps = {
 
 type RhythmCardProps = RhythmCardBaseProps & (
   | { variant?: 'catalogue'; icon?: ReactNode | undefined; onDetails?: (event: MouseEvent<HTMLButtonElement>) => void }
-  | { variant: 'simple'; completed?: boolean; archived?: boolean; onDetails: (event: MouseEvent<HTMLButtonElement>) => void; onTend?: () => void; onUndo?: () => void }
+  | { variant: 'simple'; completed?: boolean; archived?: boolean; onDetails: (event: MouseEvent<HTMLButtonElement>) => void; onTend?: (event: MouseEvent<HTMLButtonElement>) => void; onUndo?: () => void }
   | { variant: 'suggestion'; icon?: ReactNode | undefined; onDetails: (event: MouseEvent<HTMLButtonElement>) => void }
 );
 
@@ -435,7 +429,7 @@ function SimpleRhythmCard({
   suggestion?: boolean;
   icon?: ReactNode | undefined;
   onDetails: (event: MouseEvent<HTMLButtonElement>) => void;
-  onTend?: (() => void) | undefined;
+  onTend?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
   onUndo?: (() => void) | undefined;
 }) {
   const tendButtonRef = useRef<HTMLButtonElement>(null);

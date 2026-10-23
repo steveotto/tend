@@ -36,18 +36,23 @@ export function PersonBadgeVisual({ person }: { person: PersonPreview }) {
 export function PersonBadgeList({
   people,
   rhythmTitle,
-  onSelect
+  onSelect,
+  itemsOnly = false
 }: {
   people: readonly PersonPreview[];
   rhythmTitle: string;
   onSelect: (personId: PersonId) => void;
+  itemsOnly?: boolean;
 }) {
   if (people.length === 0) return null;
+  const badges = people.map(person => (
+    <PersonBadge key={person.id} person={person} onSelect={onSelect} />
+  ));
+  if (itemsOnly) return <>{badges}</>;
+
   return (
     <div className="rhythm-person-badge-list" role="group" aria-label={`People associated with ${rhythmTitle}`}>
-      {people.map(person => (
-        <PersonBadge key={person.id} person={person} onSelect={onSelect} />
-      ))}
+      {badges}
     </div>
   );
 }

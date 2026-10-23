@@ -1,7 +1,4 @@
-import {
-  createPreviewEnvelope,
-  parsePreviewBackup
-} from '../domain/preview-state.ts';
+import { createPreviewEnvelope, parsePreviewBackup } from '../domain/preview-state.ts';
 import type { PreviewData } from '../domain/preview-state.ts';
 import { migratePreviewToProposedV4 } from '../domain/preview-v4-migration.ts';
 import {
@@ -9,6 +6,8 @@ import {
   PREVIEW_V1_RECOVERY_KEY,
   PREVIEW_V2_RECOVERY_KEY,
   PREVIEW_V3_RECOVERY_KEY,
+  PREVIEW_V4_RECOVERY_KEY,
+  PREVIEW_V5_RECOVERY_KEY,
   preserveProposedV4SourceRecovery,
   proposedV4SourceVersionForRaw
 } from './preview-v4-recovery.ts';
@@ -17,7 +16,9 @@ export {
   PREVIEW_STORAGE_KEY,
   PREVIEW_V1_RECOVERY_KEY,
   PREVIEW_V2_RECOVERY_KEY,
-  PREVIEW_V3_RECOVERY_KEY
+  PREVIEW_V3_RECOVERY_KEY,
+  PREVIEW_V4_RECOVERY_KEY,
+  PREVIEW_V5_RECOVERY_KEY
 };
 
 export type PreviewStorage = Pick<Storage, 'getItem' | 'setItem'>;
@@ -78,7 +79,8 @@ export function writePreview(
 
     if (expectedRaw !== null) {
       const sourceVersion = proposedV4SourceVersionForRaw(expectedRaw);
-      if (sourceVersion === 1 || sourceVersion === 2 || sourceVersion === 3) {
+      if (sourceVersion === 1 || sourceVersion === 2 || sourceVersion === 3
+        || sourceVersion === 4 || sourceVersion === 5) {
         const source = options.currentDate
           ? parsePreviewBackup(expectedRaw, options.currentDate)
           : { valid: false as const };
@@ -101,14 +103,14 @@ export function writePreview(
                   : recovery.message
           };
         }
-      } else if (sourceVersion === 4) {
+      } else if (sourceVersion === 6) {
         const current = options.currentDate
           ? parsePreviewBackup(expectedRaw, options.currentDate)
           : { valid: false as const };
         if (!current.valid && !options.allowUnrecoverableReplacement) {
           return {
             kind: 'error',
-            message: 'The stored v4 value is invalid or cannot be checked. Download its raw recovery before explicitly replacing it.'
+            message: 'The stored v6 value is invalid or cannot be checked. Download its raw recovery before explicitly replacing it.'
           };
         }
       } else if (sourceVersion === null && !options.allowUnrecoverableReplacement) {
@@ -154,6 +156,22 @@ export function loadV2RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadRes
 export function loadV3RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
   try {
     return { kind: 'loaded', raw: storage.getItem(PREVIEW_V3_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV4RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V4_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV5RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V5_RECOVERY_KEY) };
   } catch (error) {
     return { kind: 'error', message: errorMessage(error) };
   }

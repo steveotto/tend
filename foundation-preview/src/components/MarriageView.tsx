@@ -27,7 +27,7 @@ type MarriageViewProps = {
   onRhythmDetails: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   userRhythms: readonly RhythmPreview[];
   completedRhythms: ReadonlySet<string>;
-  onTend: (id: string) => void;
+  onTend: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   onUndo: (id: string) => void;
 };
 
@@ -346,7 +346,7 @@ function RhythmSuggestions({
   fixture: MarriageFixture;
   userRhythms: readonly RhythmPreview[];
   completedRhythms: ReadonlySet<string>;
-  onTend: (id: string) => void;
+  onTend: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   onUndo: (id: string) => void;
   onRhythmDetails: MarriageViewProps['onRhythmDetails'];
   onPersonSelect: MarriageViewProps['onPersonSelect'];
@@ -381,7 +381,7 @@ function RhythmSuggestions({
                 completed={completedRhythms.has(rhythm.id)}
                 headingId={`marriage-user-rhythm-${rhythm.id}`}
                 onDetails={event => onRhythmDetails(rhythm.id, event)}
-                onTend={() => onTend(rhythm.id)}
+                onTend={event => onTend(rhythm.id, event)}
                 onUndo={() => onUndo(rhythm.id)}
               />
             ))}

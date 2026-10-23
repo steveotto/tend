@@ -9,11 +9,13 @@ import {
   type PersonId,
   type RhythmPreview
 } from '../domain/preview-data.ts';
+import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
 import { AreaIcon } from './AreaIcon.tsx';
 import { ArchivedRhythmsDialog } from './ArchivedRhythmsDialog.tsx';
-import { CategoryHealthBadge, RhythmCard, ScoreMeter } from './Cards.tsx';
+import { CategoryHealthBadge, ScoreMeter } from './Cards.tsx';
 import { MarriageExampleSelector } from './MarriageExampleSelector.tsx';
 import type { Destination } from './AppNavigation.tsx';
+import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 
 type PlanType = 'scheduled' | 'anytime' | 'all-day';
 
@@ -34,8 +36,9 @@ type TodayViewProps = {
   onNavigate: (destination: Destination) => void;
   onMarriageExampleChange: (id: MarriageExampleId) => void;
   onPersonSelect: (personId: PersonId) => void;
-  onDetails: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
-  onTend: (id: string) => void;
+  onHistory: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onTend: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onEditRhythm: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
   onUndo: (id: string) => void;
   onAddRhythm: (event: MouseEvent<HTMLButtonElement>) => void;
   onRestoreRhythm: (id: string) => void;
@@ -52,8 +55,9 @@ export function TodayView({
   onNavigate,
   onMarriageExampleChange,
   onPersonSelect,
-  onDetails,
+  onHistory,
   onTend,
+  onEditRhythm,
   onUndo,
   onAddRhythm,
   onRestoreRhythm
@@ -202,16 +206,21 @@ export function TodayView({
               visibleRhythms.length ? (
                 <div className="current-plan-item-group" aria-label="Scheduled Rhythms">
                   {visibleRhythms.map(rhythm => (
-                    <RhythmCard
+                    <RhythmDetailsDialog
                       key={rhythm.id}
                       rhythm={rhythm}
+                      inline
+                      headingId={`today-rhythm-${rhythm.id}-title`}
                       people={peopleForRhythm(rhythm)}
                       onPersonSelect={onPersonSelect}
-                      variant="simple"
                       completed={completedRhythms.has(rhythm.id)}
-                      onDetails={event => onDetails(rhythm.id, event)}
-                      onTend={() => onTend(rhythm.id)}
+                      onTend={event => onTend(rhythm.id, event)}
+                      onHistory={event => onHistory(rhythm.id, event)}
+                      {...(isEditableRhythmId(rhythm.id)
+                        ? { onEdit: event => onEditRhythm(rhythm, event) }
+                        : {})}
                       onUndo={() => onUndo(rhythm.id)}
+                      onClose={() => undefined}
                     />
                   ))}
                 </div>

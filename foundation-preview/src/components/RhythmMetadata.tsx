@@ -36,8 +36,7 @@ export function RhythmMetadata(props: RhythmMetadataProps) {
 
   return (
     <div className="rhythm-metadata-footer">
-      {props.cadence && <span><MetadataIcon kind="recurrence" />{props.cadence}</span>}
-      {props.timeLabel && <span><MetadataIcon kind="time" />{props.timeLabel}</span>}
+      <RhythmScheduleSummary cadence={props.cadence} timeLabel={props.timeLabel} />
       <RhythmStatus
         className="rhythm-metadata-last-tended"
         status={props.lastTended}
@@ -47,6 +46,21 @@ export function RhythmMetadata(props: RhythmMetadataProps) {
         tendButtonRef={props.tendButtonRef}
       />
     </div>
+  );
+}
+
+export function RhythmScheduleSummary({
+  cadence,
+  timeLabel
+}: {
+  cadence?: string | undefined;
+  timeLabel?: string | undefined;
+}) {
+  return (
+    <>
+      {cadence && <span><MetadataIcon kind="recurrence" />{cadence}</span>}
+      {timeLabel && <span><MetadataIcon kind="time" />{timeLabel}</span>}
+    </>
   );
 }
 
