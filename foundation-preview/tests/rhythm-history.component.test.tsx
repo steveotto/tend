@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -18,6 +18,7 @@ import {
 import { scoreTone } from '../src/domain/score-tone.ts';
 import { marriageRhythms, syntheticPeople, todayRhythms } from '../src/domain/preview-data.ts';
 import type { DatedRhythmCompletion } from '../src/domain/rhythm-completion.ts';
+import { addCalendarDays, localDateInTimeZone } from '../src/domain/rhythm-scoring.ts';
 
 afterEach(cleanup);
 
@@ -35,6 +36,33 @@ function savedRecord(id: string, effectiveDate: string, localTime: string, memor
     recordedAt: '2026-10-22T11:00:00.000Z',
     ...(memory === undefined ? {} : { memory })
   };
+}
+
+function scoredTodayFixture() {
+  const asOfDate = localDateInTimeZone(new Date(), 'UTC');
+  const trackingStartDate = addCalendarDays(asOfDate, -30);
+  const schedule = { frequency: 'daily' as const };
+  const scoring = {
+    trackingStartDate,
+    timeZone: 'UTC',
+    scheduleHistory: [{ startDate: trackingStartDate, schedule }]
+  };
+  const records = Array.from({ length: 30 }, (_, index) => ({
+    date: addCalendarDays(trackingStartDate, index)
+  }))
+    .filter((_, index) => index >= 4 && index <= 26)
+    .map(({ date }, index) => ({
+      ...savedRecord(`scored-${index}`, date, '12:00'),
+      recordedAt: `${date}T12:01:00.000Z`
+    }));
+  return {
+    rhythm: { ...todayConnection, schedule, scoring, completionHistory: [] },
+    records
+  };
+}
+
+function shortTestDate(date: string): string {
+  return new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function isDatedRecord(record: DatedRhythmCompletion | import('../src/domain/rhythm-completion.ts').RhythmCompletionRecord): record is DatedRhythmCompletion {
@@ -67,6 +95,56 @@ function EditableHistoryHarness() {
 }
 
 describe('shared Rhythm history', () => {
+  it('refreshes daily scores at scoring-timezone midnight and after returning from suspension', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-24T03:59:00.000Z'));
+    try {
+      const trackingStartDate = '2026-10-20';
+      const schedule = { frequency: 'daily' as const };
+      const rhythm = {
+        ...todayConnection,
+        schedule,
+        scoring: {
+          trackingStartDate,
+          timeZone: 'America/New_York',
+          scheduleHistory: [{ startDate: trackingStartDate, schedule }]
+        },
+        completionHistory: []
+      };
+      const completed = {
+        ...savedRecord('midnight-check', '2026-10-22', '12:00'),
+        timeZone: 'America/New_York'
+      };
+      render(
+        <RhythmHistoryView
+          rhythm={rhythm}
+          datedCompletions={[completed]}
+          completionHistoryAvailable
+        />
+      );
+
+      const expectScores = (health: string, consistency: string, onTrack: string) => {
+        expect(screen.getByRole('meter', { name: 'Health score' }).getAttribute('aria-valuenow')).toBe(health);
+        expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe(consistency);
+        expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe(onTrack);
+      };
+      expectScores('50', '33', '100');
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(120_000);
+      });
+      expectScores('41.25', '25', '90');
+
+      act(() => {
+        vi.setSystemTime(new Date('2026-10-25T04:01:00.000Z'));
+        fireEvent(document, new Event('visibilitychange'));
+      });
+      expectScores('35', '20', '80');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps the full-details recording draft open when saving fails', async () => {
     const user = userEvent.setup();
     const onSaveCompletion = vi.fn(() => 'The preview could not save this completion.');
@@ -228,7 +306,7 @@ describe('shared Rhythm history', () => {
     const { rerender } = render(<RhythmScoreCircle label="Health" score={0} state="scored" />);
     const meter = screen.getByRole('meter', { name: 'Health score' });
     expect(meter.getAttribute('aria-valuenow')).toBe('0');
-    expect(meter.getAttribute('aria-valuetext')).toBe('0 out of 100, illustrative example');
+    expect(meter.getAttribute('aria-valuetext')).toBe('0 out of 100');
     expect(screen.getByText('0')).toBeTruthy();
 
     rerender(<RhythmScoreCircle label="Health" score={null} state="unscored" />);
@@ -249,7 +327,7 @@ describe('shared Rhythm history', () => {
     const { rerender } = render(<HealthScoreMeter score={0} />);
     const zeroMeter = screen.getByRole('meter', { name: 'Health score' });
     expect(zeroMeter.getAttribute('aria-valuenow')).toBe('0');
-    expect(zeroMeter.getAttribute('aria-valuetext')).toBe('0 out of 100, illustrative blend');
+    expect(zeroMeter.getAttribute('aria-valuetext')).toBe('0 out of 100');
     expect(zeroMeter.classList.contains('red')).toBe(true);
     expect(zeroMeter.querySelector('.rhythm-history-view__health-meter-fill')?.getAttribute('style')).toContain('0%');
 
@@ -283,7 +361,7 @@ describe('shared Rhythm history', () => {
     expect(prepareCompletionHistory(undefined)).toEqual({ kind: 'unavailable' });
   });
 
-  it('shows the available Today example with factual counts and newest-first logs', async () => {
+  it('keeps illustrative scores out of ordinary Today views and preserves factual completion history', async () => {
     const user = userEvent.setup();
     render(
       <RhythmHistoryView
@@ -311,7 +389,11 @@ describe('shared Rhythm history', () => {
     expect(within(history).queryByRole('heading', { name: 'Recent opportunities' })).toBeNull();
     expect(within(history).queryByText(/past opportunities completed/)).toBeNull();
     expect(history.querySelector('.rhythm-history-view__opportunity-list, .rhythm-history-view__legend')).toBeNull();
-    expect(within(history).getByText('Illustrative example · not from saved logs · as of Oct 23, 2026.')).toBeTruthy();
+    expect(within(history).queryByText(/Illustrative example/)).toBeNull();
+    expect(screen.getByRole('img', { name: 'Health: Not enough data' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: /Consistency: Unscored/ })).toBeTruthy();
+    expect(screen.getByRole('img', { name: /On Track: Unscored/ })).toBeTruthy();
+    expect(screen.getByText('Scoring for this schedule isn’t available yet.')).toBeTruthy();
     const scoreSection = within(history).getByRole('region', { name: 'Health, Consistency, and On Track scores' });
     const completionSection = within(history).getByRole('region', { name: 'All completion history' });
     expect(scoreSection.compareDocumentPosition(completionSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -369,16 +451,23 @@ describe('shared Rhythm history', () => {
     })).toBeTruthy();
   });
 
-  it('shows the approved Health and On Track breakdowns within their shared details region', async () => {
+  it('shows Health and both breakdowns from one saved daily-occurrence result', async () => {
     const user = userEvent.setup();
-    render(<RhythmHistoryView rhythm={todayConnection} />);
+    const { rhythm, records } = scoredTodayFixture();
+    render(
+      <RhythmHistoryView
+        rhythm={rhythm}
+        datedCompletions={records}
+        completionHistoryAvailable
+      />
+    );
 
     expect(screen.getAllByRole('meter')).toHaveLength(3);
     const healthMeter = screen.getByRole('meter', { name: 'Health score' });
     expect(healthMeter.getAttribute('aria-valuenow')).toBe('75');
-    expect(healthMeter.getAttribute('aria-valuetext')).toBe('75 out of 100, illustrative blend');
+    expect(healthMeter.getAttribute('aria-valuetext')).toBe('75 out of 100');
     expect(screen.getByRole('heading', { name: 'Health' })).toBeTruthy();
-    expect(screen.getByText('75% Consistency · 25% On Track')).toBeTruthy();
+    expect(screen.queryByText('75% Consistency · 25% On Track')).toBeNull();
     expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('77');
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('70');
     expect(screen.getByText('Consistency over the applicable historical window')).toBeTruthy();
@@ -390,6 +479,7 @@ describe('shared Rhythm history', () => {
     expect(details.hidden).toBe(true);
     expect(document.querySelectorAll('.rhythm-history-view__score-card')).toHaveLength(1);
     expect(document.querySelectorAll('.rhythm-history-view__score-summary')).toHaveLength(2);
+    expect(document.querySelectorAll('.rhythm-history-view__score-summary-divider')).toHaveLength(1);
     expect(document.querySelectorAll('.rhythm-history-view__score-info')).toHaveLength(1);
     expect(info.getAttribute('aria-expanded')).toBe('false');
     expect(info.getAttribute('aria-controls')).toBe(details.id);
@@ -401,20 +491,26 @@ describe('shared Rhythm history', () => {
     expect(document.activeElement).toBe(info);
     expect(info.getAttribute('aria-label')).toBe('Hide Consistency and On Track score details');
     expect(screen.getByRole('group', { name: 'Consistency and On Track score details' })).toBe(details);
-    const blendedCalculation = details.querySelector('.rhythm-history-view__blended-calculation')!;
-    expect(blendedCalculation.textContent?.replace(/\s+/g, ' ').trim())
-      .toBe('Health calculation: 76.67 × 75% + 70 × 25% = 75');
+    const healthCalculation = details.querySelector('.rhythm-history-view__health-calculation') as HTMLElement;
+    expect(within(healthCalculation).getByRole('heading', { name: 'How Health is calculated' })).toBeTruthy();
+    expect([...healthCalculation.querySelectorAll('p')].map(line => line.textContent?.replace(/\s+/g, ' ').trim()))
+      .toEqual([
+        'Consistency: 76.67 × 75% = 57.5',
+        'On Track: 70 × 25% = 17.5',
+        'Health: 57.5 + 17.5 = 75'
+      ]);
+    expect(healthCalculation.querySelector('.rhythm-history-view__health-calculation-result strong')?.textContent).toBe('75');
     const healthDetails = details.querySelector('.rhythm-history-view__score-details-column:first-child') as HTMLElement;
     const onTrackDetails = details.querySelector('.rhythm-history-view__score-details-column:last-child') as HTMLElement;
-    expect(within(healthDetails).getByText('30 moments')).toBeTruthy();
-    expect(within(healthDetails).getByText('23 moments')).toBeTruthy();
-    expect(within(healthDetails).getByText('7 moments')).toBeTruthy();
-    expect(within(healthDetails).getByText('Scheduled')).toBeTruthy();
+    expect(within(healthDetails).getByText('30', { exact: true })).toBeTruthy();
+    expect(within(healthDetails).getByText('23', { exact: true })).toBeTruthy();
+    expect(within(healthDetails).getByText('7', { exact: true })).toBeTruthy();
+    expect(within(healthDetails).getByText('Eligible daily occurrences')).toBeTruthy();
     const healthFormula = healthDetails.querySelector('.rhythm-history-view__calculation')!;
     expect(healthFormula.textContent?.replace(/\s+/g, '')).toBe('23÷30×100=77%');
     expect(healthFormula.querySelector('strong')?.textContent).toBe('77%');
     const pattern = within(healthDetails).getByRole('img', {
-      name: 'Thirty eligible daily due moments: 23 completed and 7 not completed.'
+      name: /30 eligible daily occurrences from .* through .*: 23 completed and 7 not completed\./
     });
     expect(pattern.querySelectorAll('.rhythm-history-view__health-pattern-day:not(.rhythm-history-view__health-pattern-day--missed)'))
       .toHaveLength(23);
@@ -423,24 +519,23 @@ describe('shared Rhythm history', () => {
     expect(within(healthDetails).getByText('7 not completed')).toBeTruthy();
 
     expect(within(onTrackDetails).getByText(/Last tended/)).toBeTruthy();
-    expect(within(onTrackDetails).getByText('Oct 19')).toBeTruthy();
+    const lastTendedDate = addCalendarDays(localDateInTimeZone(new Date(), 'UTC'), -4);
+    expect(within(onTrackDetails).getAllByText(new RegExp(shortTestDate(lastTendedDate))).length).toBeGreaterThan(0);
     expect(within(onTrackDetails).getByText('3 days')).toBeTruthy();
     expect(within(onTrackDetails).getByText('10 points')).toBeTruthy();
     const onTrackFormula = onTrackDetails.querySelector('.rhythm-history-view__calculation')!;
     expect(onTrackFormula.textContent?.replace(/\s+/g, '')).toBe('100−30=70');
     expect(onTrackFormula.querySelector('strong')?.textContent).toBe('70');
-    expect(within(onTrackDetails).getAllByRole('listitem').map(item => {
+    const onTrackItems = within(onTrackDetails).getAllByRole('listitem').map(item => {
       const label = item.querySelector('span')?.textContent?.replace(/\s+/g, ' ').trim();
       const score = item.querySelector('strong')?.textContent;
       return `${label} ${score}`;
-    })).toEqual([
-      'Oct 19 · tended 100',
-      'Oct 20 · not tended 90',
-      'Oct 21 · not tended 80',
-      'Oct 22 · not tended 70',
-      'Oct 23 · today in example Still 70'
-    ]);
-    expect(screen.getAllByText('Illustrative example · not from saved logs · as of Oct 23, 2026.')).toHaveLength(1);
+    });
+    expect(onTrackItems).toHaveLength(5);
+    expect(onTrackItems[0]).toMatch(/· tended 100$/);
+    expect(onTrackItems.slice(1, 4).every(item => item.includes('not tended'))).toBe(true);
+    expect(onTrackItems.at(-1)).toMatch(/today · no deduction 70$/);
+    expect(screen.getByText(/Calculated from saved daily completion records/)).toBeTruthy();
     expect(within(healthDetails).queryByText(/eligible due occurrence counts once|overdue time|pre-activation|Foundation-weighted|Health windows are/)).toBeNull();
     expect(within(onTrackDetails).queryByText(/calendar-day span|floors at zero|rules for weekly/)).toBeNull();
     expect(within(healthDetails).queryByText(/76\.7|→/)).toBeNull();
@@ -530,7 +625,8 @@ describe('shared Rhythm history', () => {
     expect(document.activeElement).toBe(disclosure);
   });
 
-  it('distinguishes missing facts and fixtures without deriving or inventing data', () => {
+  it('distinguishes missing facts and fixtures without deriving or inventing data', async () => {
+    const user = userEvent.setup();
     const rhythmWithoutHistory = {
       ...todayConnection,
       id: 'unillustrated-rhythm',
@@ -539,13 +635,19 @@ describe('shared Rhythm history', () => {
     const { rerender } = render(<RhythmHistoryView rhythm={rhythmWithoutHistory} />);
 
     expect(screen.getByRole('img', { name: 'Health: Not enough data' })).toBeTruthy();
-    expect(screen.getByText('Not enough data.')).toBeTruthy();
+    expect(screen.queryByText('Not enough data.')).toBeNull();
     expect(document.querySelector('.rhythm-history-view__health-heading > span')?.textContent).toBe('—');
     expect(document.querySelector('.rhythm-history-view__health-meter')?.classList.contains('neutral')).toBe(true);
     expect(document.querySelector('.rhythm-history-view__health-meter-fill')?.getAttribute('style')).toContain('0%');
     expect(screen.getByText('Dated completion history is unavailable for this Rhythm.')).toBeTruthy();
     expect(screen.queryByText('Your story starts with the first Tend.')).toBeNull();
     expect(screen.queryByRole('list', { name: 'Recorded completion count by date' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Show Consistency and On Track score details' }));
+    const unavailableCalculation = document.querySelector('.rhythm-history-view__health-calculation') as HTMLElement;
+    expect(within(unavailableCalculation).getByRole('heading', { name: 'How Health is calculated' })).toBeTruthy();
+    expect(within(unavailableCalculation).getByText('Not enough data to calculate Health.')).toBeTruthy();
+    expect(unavailableCalculation.querySelectorAll('p')).toHaveLength(1);
+    expect(unavailableCalculation.textContent).not.toMatch(/[×=]/);
     rerender(<RhythmHistoryView rhythm={{ ...rhythmWithoutHistory, completionHistory: [] }} />);
     expect(screen.getByText('Your story starts with the first Tend.')).toBeTruthy();
     expect(screen.queryByText('Dated completion history is unavailable for this Rhythm.')).toBeNull();
@@ -553,6 +655,21 @@ describe('shared Rhythm history', () => {
     expect(screen.queryByRole('heading', { name: 'unillustrated-rhythm' })).toBeNull();
     expect(prepareCompletionHistory(undefined)).toEqual({ kind: 'unavailable' });
     expect(prepareCompletionHistory([])).toEqual({ kind: 'empty', records: [] });
+  });
+
+  it('does not substitute illustrative scores for ordinary Rhythms without confirmed scoring metadata', () => {
+    const structuredDailyWithoutStart = {
+      ...todayConnection,
+      schedule: { frequency: 'daily' as const }
+    };
+    render(<RhythmHistoryView rhythm={structuredDailyWithoutStart} />);
+
+    expect(screen.getByRole('img', { name: 'Health: Not enough data' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: /Consistency: Unscored/ })).toBeTruthy();
+    expect(screen.getByRole('img', { name: /On Track: Unscored/ })).toBeTruthy();
+    expect(screen.getByText('Set a tracking start date to begin scoring this Rhythm.')).toBeTruthy();
+    expect(document.querySelector('.rhythm-history-view__completion-total strong')?.textContent).toBe('3');
+    expect(screen.queryByText('Dated completion history is unavailable for this Rhythm.')).toBeNull();
   });
 
   it('keeps the rhythm title first and omits absent details while allowing long-title wrapping', () => {

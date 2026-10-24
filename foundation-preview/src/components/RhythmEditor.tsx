@@ -13,17 +13,31 @@ import { BadgeSelectionPicker, toggleBadgeGroup } from './BadgeSelectionPicker.t
 import { AreaIcon } from './AreaIcon.tsx';
 import { PersonBadgeVisual } from './PersonBadge.tsx';
 
-const emptyDraft: RhythmDraft = {
-  title: '',
-  description: '',
-  cadence: 'Daily',
-  timeLabel: 'Anytime',
-  personIds: [],
-  categoryIds: [],
-  schedule: { frequency: 'daily' },
-  scheduleEditing: true,
-  personal: false
-};
+function localToday(): string {
+  const date = new Date();
+  return [
+    String(date.getFullYear()).padStart(4, '0'),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0')
+  ].join('-');
+}
+
+function emptyDraft(): RhythmDraft {
+  return {
+    title: '',
+    description: '',
+    cadence: 'Daily',
+    timeLabel: 'Anytime',
+    personIds: [],
+    categoryIds: [],
+    schedule: { frequency: 'daily' },
+    scheduleEditing: true,
+    personal: false,
+    trackingStartConfirmed: true,
+    trackingStartDate: localToday(),
+    scoringTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+  };
+}
 
 type RhythmEditorProps = {
   rhythm?: RhythmPreview;
@@ -34,7 +48,7 @@ type RhythmEditorProps = {
 
 export function RhythmEditor({ rhythm, onSave, onArchive, onClose }: RhythmEditorProps) {
   const [draft, setDraft] = useState<RhythmDraft>(() =>
-    rhythm ? rhythmDraftFrom(rhythm, rhythm.categoryIds ?? []) : emptyDraft
+    rhythm ? rhythmDraftFrom(rhythm, rhythm.categoryIds ?? []) : emptyDraft()
   );
   const [errors, setErrors] = useState<RhythmDraftErrors>({});
   const [showArchiveConfirmation, setShowArchiveConfirmation] = useState(false);
@@ -260,6 +274,49 @@ export function RhythmEditor({ rhythm, onSave, onArchive, onClose }: RhythmEdito
               </button>
               )}
           </>
+        )}
+
+        {(draft.schedule?.frequency === 'daily' || draft.originalScoring) && (
+          <section className="rhythm-editor__scoring" aria-labelledby="rhythm-scoring-title">
+            <h3 id="rhythm-scoring-title">Daily scoring</h3>
+            {draft.originalScoring ? (
+              <p>
+                Tracking started {draft.originalScoring.trackingStartDate} in {draft.originalScoring.timeZone}.
+                Completion dates remain the dates recorded with each log.
+              </p>
+            ) : draft.trackingStartConfirmed ? (
+              <>
+                <div className="goal-field">
+                  <label htmlFor="rhythm-tracking-start">Tracking start date</label>
+                  <input
+                    id="rhythm-tracking-start"
+                    type="date"
+                    value={draft.trackingStartDate ?? ''}
+                    aria-invalid={Boolean(errors.trackingStartDate)}
+                    aria-describedby={errors.trackingStartDate ? 'rhythm-error-trackingStartDate' : undefined}
+                    onChange={event => update('trackingStartDate', event.currentTarget.value)}
+                  />
+                  {fieldError('trackingStartDate')}
+                </div>
+                <p>Scoring time zone: {draft.scoringTimeZone}. This confirmed start does not infer earlier due days.</p>
+              </>
+            ) : (
+              <>
+                <p>Scoring is not active until you confirm when tracking starts.</p>
+                <button
+                  type="button"
+                  className="rhythm-editor__change-schedule"
+                  onClick={() => {
+                    update('trackingStartDate', localToday());
+                    update('scoringTimeZone', Intl.DateTimeFormat().resolvedOptions().timeZone);
+                    update('trackingStartConfirmed', true);
+                  }}
+                >
+                  Set tracking start
+                </button>
+              </>
+            )}
+          </section>
         )}
 
         <section className="rhythm-editor__association" aria-label="Associations">

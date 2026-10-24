@@ -32,6 +32,7 @@ import type { PreviewData } from './domain/preview-state.ts';
 import type { DatedRhythmCompletion, RhythmCompletionRecord } from './domain/rhythm-completion.ts';
 import { deleteDatedCompletion, removeActionCompletion } from './domain/rhythm-completion.ts';
 import { resolveSeedCompletionRecords } from './domain/rhythm-history.ts';
+import { localDateInTimeZone } from './domain/rhythm-scoring.ts';
 import {
   activeTodayRhythms,
   archiveRhythmId,
@@ -51,6 +52,7 @@ import {
   loadV3RecoveryCopy,
   loadV4RecoveryCopy,
   loadV5RecoveryCopy,
+  loadV6RecoveryCopy,
   loadPreview,
   writePreview
 } from './storage/preview-storage.ts';
@@ -90,6 +92,8 @@ export function App() {
   const [v4RecoveryError, setV4RecoveryError] = useState<string | null>(null);
   const [v5RecoveryCopy, setV5RecoveryCopy] = useState<string | null>(null);
   const [v5RecoveryError, setV5RecoveryError] = useState<string | null>(null);
+  const [v6RecoveryCopy, setV6RecoveryCopy] = useState<string | null>(null);
+  const [v6RecoveryError, setV6RecoveryError] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -201,12 +205,24 @@ export function App() {
     }
   }
 
+  function refreshV6RecoveryCopy() {
+    const result = loadV6RecoveryCopy(browserPreviewStorage());
+    if (result.kind === 'loaded') {
+      setV6RecoveryCopy(result.raw);
+      setV6RecoveryError(null);
+    } else {
+      setV6RecoveryCopy(null);
+      setV6RecoveryError(result.message);
+    }
+  }
+
   useEffect(() => {
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
     refreshV4RecoveryCopy();
     refreshV5RecoveryCopy();
+    refreshV6RecoveryCopy();
     const loaded = loadPreview(browserPreviewStorage(), initialLoadDate);
     if (loaded.kind === 'loaded') {
       expectedRaw.current = loaded.raw;
@@ -240,6 +256,7 @@ export function App() {
     refreshV3RecoveryCopy();
     refreshV4RecoveryCopy();
     refreshV5RecoveryCopy();
+    refreshV6RecoveryCopy();
     if (saved.kind === 'saved') {
       expectedRaw.current = saved.raw;
       setPersistenceStatus({ kind: 'saved' });
@@ -351,11 +368,18 @@ export function App() {
 
   function saveRhythm(draft: RhythmDraft): RhythmDraftErrors {
     if (!rhythmEditor) return { title: 'The Rhythm editor is no longer active.' };
+    const scoringTimeZone = rhythmEditor.rhythm?.scoring?.timeZone
+      ?? draft.scoringTimeZone
+      ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     const result = saveRhythmDraft(
       previewData.savedRhythms,
       draft,
       rhythmEditor.id,
-      rhythmEditor.rhythm ? 'edit' : 'create'
+      rhythmEditor.rhythm ? 'edit' : 'create',
+      {
+        currentDate: localDateInTimeZone(new Date(), scoringTimeZone),
+        deviceTimeZone: scoringTimeZone
+      }
     );
     const savedRhythms = result.savedRhythms;
     if (!savedRhythms) return result.errors;
@@ -551,6 +575,7 @@ export function App() {
     refreshV3RecoveryCopy();
     refreshV4RecoveryCopy();
     refreshV5RecoveryCopy();
+    refreshV6RecoveryCopy();
     if (written.kind === 'saved') {
       expectedRaw.current = written.raw;
       externalRaw.current = null;
@@ -608,6 +633,7 @@ export function App() {
     refreshV3RecoveryCopy();
     refreshV4RecoveryCopy();
     refreshV5RecoveryCopy();
+    refreshV6RecoveryCopy();
     if (written.kind === 'saved') {
       expectedRaw.current = written.raw;
       externalRaw.current = null;
@@ -634,6 +660,7 @@ export function App() {
     refreshV3RecoveryCopy();
     refreshV4RecoveryCopy();
     refreshV5RecoveryCopy();
+    refreshV6RecoveryCopy();
     if (written.kind === 'saved') {
       expectedRaw.current = written.raw;
       setPersistenceStatus({ kind: 'saved' });
@@ -735,6 +762,8 @@ export function App() {
         v4RecoveryError={v4RecoveryError}
         v5RecoveryCopy={v5RecoveryCopy}
         v5RecoveryError={v5RecoveryError}
+        v6RecoveryCopy={v6RecoveryCopy}
+        v6RecoveryError={v6RecoveryError}
       />
       <footer className="preview-footer">
         <span>Synthetic preview data stays separate from Tend accounts.</span>
@@ -747,7 +776,6 @@ export function App() {
           initialView={detailsInitialView}
           datedCompletions={previewData.datedRhythmCompletions.filter(item => item.rhythmId === activeRhythm.id)}
           completionHistoryAvailable={activeRhythmIsToday || activeRhythmIsArchived}
-          onSaveCompletion={saveDatedCompletion}
           {...(activeRhythmIsToday && isEditableRhythmId(activeRhythm.id) && !activeRhythmIsArchived
             ? {
                 onUpdateCompletion: updateDatedCompletion,
@@ -764,7 +792,7 @@ export function App() {
           {...(activeRhythmIsToday
             ? {
                 completed: completedRhythms.has(activeRhythm.id),
-                onSaveCompletion: saveDatedCompletion,
+                ...(!activeRhythmIsArchived ? { onSaveCompletion: saveDatedCompletion } : {}),
                 onUndo: () => undoTend(activeRhythm.id),
                 ...(isEditableRhythmId(activeRhythm.id)
                   ? { onEdit: event => openRhythmEditor(event, activeRhythm) }

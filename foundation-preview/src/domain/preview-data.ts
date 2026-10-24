@@ -4,7 +4,7 @@ import type {
   RhythmAutomation
 } from '../../../src/domain/capabilities.ts';
 import type { MoneyGoal } from './money-goals.ts';
-import type { RhythmSchedule, RhythmTimeValue } from './rhythm-schedule.ts';
+import type { RhythmSchedule, RhythmScoringMetadata, RhythmTimeValue } from './rhythm-schedule.ts';
 
 export type FoundationPreview = {
   id: string;
@@ -72,6 +72,7 @@ export type RhythmPreview = {
   personIds?: readonly PersonId[];
   categoryIds?: readonly ('faith' | 'marriage' | 'parenting' | 'health' | 'finances' | 'friendships')[];
   schedule?: RhythmSchedule;
+  scoring?: RhythmScoringMetadata;
   timeOfDay?: RhythmTimeValue;
   personal?: boolean;
 };

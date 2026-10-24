@@ -8,6 +8,7 @@ export type RhythmScoreExample = {
   consistencyOccurrences: readonly {
     date: string;
     status: 'completed' | 'not-completed';
+    recordIds?: readonly string[];
   }[];
   onTrack: {
     pointsPerFullUntendedDay: number;
@@ -36,26 +37,65 @@ export type PreparedRhythmScoreExample = {
   asOfDate: string;
   healthScore: number | null;
   consistency:
-    | (Extract<IllustratedMetric, { kind: 'scored' }> & {
-      eligibleDueCount: number;
-      completedCount: number;
-      notCompletedCount: number;
-      exactPercent: number;
-      occurrences: RhythmScoreExample['consistencyOccurrences'];
-    })
-    | Exclude<IllustratedMetric, { kind: 'scored' }>;
-  onTrack:
-    | (Extract<IllustratedMetric, { kind: 'scored' }> & {
-      lastTendedDate: string;
-      fullOverdueDates: readonly string[];
-      pointsPerFullUntendedDay: number;
-      days: readonly {
-        date: string;
-        status: 'tended' | 'not-tended' | 'as-of';
+    | {
+        kind: 'scored';
         score: number;
-      }[];
-    })
-    | Exclude<IllustratedMetric, { kind: 'scored' }>;
+        eligibleDueCount: number;
+        completedCount: number;
+        notCompletedCount: number;
+        exactPercent: number;
+        occurrences: readonly {
+          date: string;
+          status: 'completed' | 'not-completed';
+          recordIds: readonly string[];
+        }[];
+        evidence: {
+          windowStartDate: string;
+          windowEndDate: string;
+          eligibleDueCount: number;
+          completedCount: number;
+          notCompletedCount: number;
+          occurrences: readonly {
+            date: string;
+            status: 'completed' | 'not-completed';
+            recordIds: readonly string[];
+          }[];
+        };
+      }
+    | {
+        kind: 'unscored';
+        explanation: string;
+      }
+    | { kind: 'unavailable'; explanation: string; };
+  onTrack:
+    | {
+        kind: 'scored';
+        score: number;
+        lastTendedDate: string | null;
+        fullOverdueDates: readonly string[];
+        pointsPerFullUntendedDay: number;
+        days: readonly {
+          date: string;
+          status: 'tended' | 'not-tended' | 'as-of';
+          score: number;
+        }[];
+        evidence: {
+          lastQualifyingCompletionDate: string | null;
+          overdueDates: readonly string[];
+          pointsPerOverdueDate: 10;
+          deduction: number;
+          days: readonly {
+            date: string;
+            status: 'tended' | 'not-tended' | 'today';
+            score: number;
+          }[];
+        };
+      }
+    | {
+        kind: 'unscored';
+        explanation: string;
+      }
+    | { kind: 'unavailable'; explanation: string; };
 };
 
 export const dailyRhythmScoreExample = {
@@ -112,11 +152,14 @@ export const unavailableRhythmScoreExample: PreparedRhythmScoreExample = {
   onTrack: { kind: 'unavailable', explanation: 'An illustrative On Track breakdown is not available for this Rhythm.' }
 };
 
+export const HEALTH_CONSISTENCY_WEIGHT = 0.75;
+export const HEALTH_ON_TRACK_WEIGHT = 0.25;
+
 export function calculateBlendedHealth(consistencyScore: number | null, onTrackScore: number | null): number | null {
   validateScoreInput(consistencyScore, 'Consistency');
   validateScoreInput(onTrackScore, 'On Track');
   if (consistencyScore === null || onTrackScore === null) return null;
-  return consistencyScore * 0.75 + onTrackScore * 0.25;
+  return consistencyScore * HEALTH_CONSISTENCY_WEIGHT + onTrackScore * HEALTH_ON_TRACK_WEIGHT;
 }
 
 function validateScoreInput(score: number | null, metric: string): void {
@@ -163,11 +206,18 @@ export function rhythmScoreExampleFor(rhythmId: string): RhythmScoreExample | un
 }
 
 export function prepareRhythmScoreExample(example: RhythmScoreExample): PreparedRhythmScoreExample {
-  const completedCount = example.consistencyOccurrences.filter(item => item.status === 'completed').length;
-  const eligibleDueCount = example.consistencyOccurrences.length;
+  const consistencyOccurrences = example.consistencyOccurrences.map(item => ({
+    ...item,
+    recordIds: item.recordIds ?? []
+  }));
+  const completedCount = consistencyOccurrences.filter(item => item.status === 'completed').length;
+  const eligibleDueCount = consistencyOccurrences.length;
   const notCompletedCount = eligibleDueCount - completedCount;
   const consistency: PreparedRhythmScoreExample['consistency'] = eligibleDueCount === 0
-    ? { kind: 'unscored', explanation: 'There are no eligible due occurrences in this window, so Consistency is unscored.' }
+    ? {
+        kind: 'unscored',
+        explanation: 'There are no eligible due occurrences in this window, so Consistency is unscored.'
+      }
     : {
         kind: 'scored',
         score: Math.round((completedCount / eligibleDueCount) * 100),
@@ -175,7 +225,15 @@ export function prepareRhythmScoreExample(example: RhythmScoreExample): Prepared
         completedCount,
         notCompletedCount,
         exactPercent: (completedCount / eligibleDueCount) * 100,
-        occurrences: example.consistencyOccurrences
+        occurrences: consistencyOccurrences,
+        evidence: {
+          windowStartDate: consistencyOccurrences[0]?.date ?? example.asOfDate,
+          windowEndDate: consistencyOccurrences.at(-1)?.date ?? example.asOfDate,
+          eligibleDueCount,
+          completedCount,
+          notCompletedCount,
+          occurrences: consistencyOccurrences
+        }
       };
 
   const lastTendedDate = [...example.onTrack.days]
@@ -198,7 +256,11 @@ export function prepareRhythmScoreExample(example: RhythmScoreExample): Prepared
 
   let score = 100;
   const fullOverdueDates: string[] = [];
-  const days = example.onTrack.days.map(item => {
+  const days: readonly {
+    date: string;
+    status: 'tended' | 'not-tended' | 'as-of';
+    score: number;
+  }[] = example.onTrack.days.map(item => {
     if (item.status === 'tended') score = 100;
     if (item.status === 'not-tended' && item.date > lastTendedDate) {
       fullOverdueDates.push(item.date);
@@ -207,13 +269,28 @@ export function prepareRhythmScoreExample(example: RhythmScoreExample): Prepared
     return { ...item, score };
   });
 
-  const onTrack = {
-    kind: 'scored' as const,
+  const onTrack: PreparedRhythmScoreExample['onTrack'] = {
+    kind: 'scored',
     score,
     lastTendedDate,
     fullOverdueDates,
     pointsPerFullUntendedDay: example.onTrack.pointsPerFullUntendedDay,
-    days
+    days: days.map(item => ({
+      date: item.date,
+      status: item.status === 'as-of' ? 'as-of' : item.status,
+      score: item.score
+    })),
+    evidence: {
+      lastQualifyingCompletionDate: lastTendedDate,
+      overdueDates: fullOverdueDates,
+      pointsPerOverdueDate: example.onTrack.pointsPerFullUntendedDay as 10,
+      deduction: example.onTrack.pointsPerFullUntendedDay * fullOverdueDates.length,
+      days: days.map(item => ({
+        date: item.date,
+        status: item.status === 'as-of' ? 'today' : item.status,
+        score: item.score
+      }))
+    }
   };
   return {
     asOfDate: example.asOfDate,

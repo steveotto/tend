@@ -1,15 +1,24 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import type { MouseEvent } from 'react';
 import type { PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
 import { orderedCompletions } from '../domain/preview-data.ts';
 import type { RhythmCompletion } from '../domain/preview-data.ts';
 import type { DatedRhythmCompletion, RhythmCompletionRecord } from '../domain/rhythm-completion.ts';
 import {
   prepareCompletionHistory,
-  prepareRhythmScoreExample,
-  rhythmScoreExampleFor,
-  unavailableRhythmScoreExample
+  HEALTH_CONSISTENCY_WEIGHT,
+  HEALTH_ON_TRACK_WEIGHT
 } from '../domain/rhythm-history.ts';
-import type { PreparedRhythmScoreExample } from '../domain/rhythm-history.ts';
+import {
+  localDateInTimeZone,
+  selectDailyRhythmScore
+} from '../domain/rhythm-scoring.ts';
+import { isValidTimeZone } from '../domain/rhythm-schedule.ts';
+import type {
+  ScoredConsistencyMetric,
+  ScoredOnTrackMetric,
+  UnscoredMetric
+} from '../domain/rhythm-scoring.ts';
 import { scoreTone } from '../domain/score-tone.ts';
 import { PersonBadgeList } from './PersonBadge.tsx';
 import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
@@ -44,7 +53,8 @@ export function RhythmHistoryView({
   datedCompletions = [],
   completionHistoryAvailable = false,
   onUpdateCompletion,
-  onDeleteCompletion
+  onDeleteCompletion,
+  onEditRhythm
 }: {
   rhythm: RhythmPreview;
   people?: readonly PersonPreview[];
@@ -56,16 +66,44 @@ export function RhythmHistoryView({
   completionHistoryAvailable?: boolean;
   onUpdateCompletion?: (record: RhythmCompletionRecord) => string | null;
   onDeleteCompletion?: (completionId: string) => string | null;
+  onEditRhythm?: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
-  const scoreFixture = rhythmScoreExampleFor(rhythm.id);
-  const scoreExample = scoreFixture
-    ? prepareRhythmScoreExample(scoreFixture)
-    : unavailableRhythmScoreExample;
   const historyRecords: readonly RhythmCompletion[] | undefined =
     rhythm.completionHistory === undefined && !completionHistoryAvailable && datedCompletions.length === 0
       ? undefined
       : [...(rhythm.completionHistory ?? []), ...datedCompletions];
   const completions = prepareCompletionHistory(historyRecords);
+  const scoringTimeZone = rhythm.scoring?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const [scoringInstant, setScoringInstant] = useState(() => new Date());
+  useEffect(() => {
+    const refresh = () => setScoringInstant(new Date());
+    const timer = window.setInterval(refresh, 60_000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, []);
+  const asOfTimeZone = isValidTimeZone(scoringTimeZone)
+    ? scoringTimeZone
+    : Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const asOfDate = localDateInTimeZone(scoringInstant, asOfTimeZone);
+  const scoringRecords: RhythmCompletionRecord[] = (historyRecords ?? []).map(record => ({
+    ...record,
+    rhythmId: rhythm.id
+  }));
+  const score = selectDailyRhythmScore({
+    rhythmId: rhythm.id,
+    ...(rhythm.schedule ? { schedule: rhythm.schedule } : {}),
+    ...(rhythm.scoring ? { scoring: rhythm.scoring } : {}),
+    records: scoringRecords,
+    recordsAvailable: completionHistoryAvailable || rhythm.completionHistory !== undefined || datedCompletions.length > 0,
+    archived,
+    asOfDate,
+    timeZone: scoringTimeZone
+  });
   const historyViewRef = useRef<HTMLElement>(null);
   const loggedMomentsSummaryRef = useRef<HTMLElement>(null);
   const editButtonsRef = useRef(new Map<string, HTMLButtonElement>());
@@ -74,6 +112,8 @@ export function RhythmHistoryView({
   const previousEditingIdRef = useRef<string | null>(null);
   const previousDeleteIdRef = useRef<string | null>(null);
   const scoreDetailsId = useId();
+  const sharedUnscoredExplanation = score.consistency.kind === 'unscored' && score.onTrack.kind === 'unscored'
+    && score.consistency.explanation === score.onTrack.explanation;
   const [editingRecord, setEditingRecord] = useState<RhythmCompletionRecord | null>(null);
   const [scoreDetailsExpanded, setScoreDetailsExpanded] = useState(false);
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
@@ -203,24 +243,22 @@ export function RhythmHistoryView({
           <div className="rhythm-history-view__health-summary">
             <div className="rhythm-history-view__health-heading">
               <h3>Health</h3>
-              <span className={scoreExample.healthScore === null ? 'is-unavailable' : undefined}>
-                {scoreExample.healthScore === null ? '—' : Math.round(scoreExample.healthScore)}
+              <span className={score.healthScore === null ? 'is-unavailable' : undefined}>
+                {score.healthScore === null ? '—' : Math.round(score.healthScore)}
               </span>
             </div>
-            <HealthScoreMeter score={scoreExample.healthScore} />
-            <p className="rhythm-history-view__health-caption">
-              {scoreExample.healthScore === null ? 'Not enough data.' : '75% Consistency · 25% On Track'}
-            </p>
+            <HealthScoreMeter score={score.healthScore} />
           </div>
+          <div className="rhythm-history-view__score-summary-divider" aria-hidden="true" />
           <div className="rhythm-history-view__score-grid">
             <RhythmMetricSummary
               name="consistency"
-              metric={scoreExample.consistency}
+              metric={score.consistency}
               copy={metricCopy.consistency}
             />
             <RhythmMetricSummary
               name="onTrack"
-              metric={scoreExample.onTrack}
+              metric={score.onTrack}
               copy={metricCopy.onTrack}
             />
           </div>
@@ -231,37 +269,56 @@ export function RhythmHistoryView({
             aria-label="Consistency and On Track score details"
             hidden={!scoreDetailsExpanded}
           >
-            {scoreExample.consistency.kind === 'scored'
-              && scoreExample.onTrack.kind === 'scored'
-              && scoreExample.healthScore !== null
+            {score.consistency.kind === 'scored'
+              && score.onTrack.kind === 'scored'
+              && score.healthScore !== null
               ? (
-                <p className="rhythm-history-view__blended-calculation">
-                  <span>Health calculation: </span>
-                  {formatScoreInput(scoreExample.consistency.exactPercent)} × 75% + {formatScoreInput(scoreExample.onTrack.score)} × 25% ={' '}
-                  <strong>{Math.round(scoreExample.healthScore)}</strong>
-                </p>
+                <HealthCalculation
+                  consistency={score.consistency.exactPercent}
+                  onTrack={score.onTrack.score}
+                  health={score.healthScore}
+                />
               )
               : (
-                <p className="rhythm-history-view__blended-unavailable">Not enough data to calculate Health.</p>
+                <HealthCalculation />
               )}
-            <div className="rhythm-history-view__score-details-columns">
-            <div className="rhythm-history-view__score-details-column">
-              {scoreExample.consistency.kind === 'scored'
-                ? <ConsistencyScoreBreakdown metric={scoreExample.consistency} />
-                : <UnscoredBreakdown metric={scoreExample.consistency} />}
-            </div>
-            <div className="rhythm-history-view__score-details-column">
-              {scoreExample.onTrack.kind === 'scored'
-                ? <OnTrackScoreBreakdown metric={scoreExample.onTrack} />
-                : <UnscoredBreakdown metric={scoreExample.onTrack} />}
-            </div>
-            </div>
+            {sharedUnscoredExplanation ? null : (
+              <div className="rhythm-history-view__score-details-columns">
+                <div className="rhythm-history-view__score-details-column">
+                  {score.consistency.kind === 'scored'
+                    ? <ConsistencyScoreBreakdown metric={score.consistency} />
+                    : <UnscoredBreakdown metric={score.consistency} />}
+                </div>
+                <div className="rhythm-history-view__score-details-column">
+                  {score.onTrack.kind === 'scored'
+                    ? <OnTrackScoreBreakdown metric={score.onTrack} />
+                    : <UnscoredBreakdown metric={score.onTrack} />}
+                </div>
+              </div>
+            )}
           </div>
         </div>
-        <p className="rhythm-history-view__sample-notice">
-          {scoreFixture
-            ? `Illustrative example · not from saved logs · as of ${formatHistoryDate(scoreExample.asOfDate, false)}, ${new Date(`${scoreExample.asOfDate}T12:00:00`).getFullYear()}.`
-              : 'Illustrative breakdown unavailable for this Rhythm.'}
+        <p className="rhythm-history-view__sample-notice" role="status">
+          {score.kind === 'daily-score'
+            ? score.healthScore !== null
+              ? `Calculated from saved daily completion records · as of ${formatHistoryDate(score.asOfDate, false)}, ${new Date(`${score.asOfDate}T12:00:00`).getFullYear()}.`
+              : score.consistency.kind === 'unscored'
+                ? score.consistency.explanation
+                : score.onTrack.kind === 'unscored'
+                  ? score.onTrack.explanation
+                  : 'Health is unavailable because both metrics must be scored.'
+            : score.kind === 'invalid'
+              ? `Scores unavailable: ${score.reason}`
+              : score.reason.explanation}
+          {score.kind === 'unscored' && score.reason.reasonCode === 'missing-tracking-start' && onEditRhythm && (
+            <button
+              type="button"
+              className="rhythm-history-view__set-tracking"
+              onClick={onEditRhythm}
+            >
+              Set tracking start
+            </button>
+          )}
         </p>
       </section>
 
@@ -383,10 +440,11 @@ export function RhythmHistoryView({
   );
 }
 
-type ScoreMetric = PreparedRhythmScoreExample['consistency'] | PreparedRhythmScoreExample['onTrack'];
-type ScoredConsistencyMetric = Extract<PreparedRhythmScoreExample['consistency'], { kind: 'scored' }>;
-type ScoredOnTrackMetric = Extract<PreparedRhythmScoreExample['onTrack'], { kind: 'scored' }>;
-type UnavailableScoreMetric = Extract<ScoreMetric, { kind: 'unscored' | 'unavailable' }>;
+type ScoreMetric =
+  | ScoredConsistencyMetric
+  | ScoredOnTrackMetric
+  | UnscoredMetric
+  | { kind: 'unavailable'; explanation: string };
 
 function RhythmMetricSummary({
   name,
@@ -405,15 +463,16 @@ function RhythmMetricSummary({
       </header>
       <RhythmScoreCircle
         label={copy.title}
-        score={metric.kind === 'scored' ? metric.score : null}
+        score={metric.kind === 'scored' ? Math.round(metric.score) : null}
         state={metric.kind}
+        {...(metric.kind === 'unscored' ? { explanation: metric.explanation } : {})}
       />
       <p className="rhythm-history-view__short-description">{copy.shortDescription}</p>
     </section>
   );
 }
 
-export function HealthScoreMeter({ score }: { score: number | null }) {
+export function HealthScoreMeter({ score, illustrative = false }: { score: number | null; illustrative?: boolean }) {
   const available = score !== null;
   return (
     <div
@@ -423,7 +482,7 @@ export function HealthScoreMeter({ score }: { score: number | null }) {
       aria-valuemin={available ? 0 : undefined}
       aria-valuemax={available ? 100 : undefined}
       aria-valuenow={score ?? undefined}
-      aria-valuetext={available ? `${Math.round(score)} out of 100, illustrative blend` : undefined}
+      aria-valuetext={available ? `${Math.round(score)} out of 100${illustrative ? ', illustrative blend' : ''}` : undefined}
     >
       <span
         className="rhythm-history-view__health-meter-fill"
@@ -435,20 +494,21 @@ export function HealthScoreMeter({ score }: { score: number | null }) {
 }
 
 function ConsistencyScoreBreakdown({ metric }: { metric: ScoredConsistencyMetric }) {
-  const firstDate = metric.occurrences[0]?.date;
-  const lastDate = metric.occurrences.at(-1)?.date;
+  const evidence = metric.evidence;
+  const firstDate = evidence.occurrences[0]?.date;
+  const lastDate = evidence.occurrences.at(-1)?.date;
   const rows = [
-    { label: 'Looking back', value: '30 days' },
-    { label: 'Scheduled', value: `${metric.eligibleDueCount} moments` },
-    { label: 'Completed', value: `${metric.completedCount} moments` },
-    { label: 'Not completed', value: `${metric.notCompletedCount} moments` }
+    { label: 'Scoring window', value: `${formatHistoryDate(evidence.windowStartDate, false)}–${formatHistoryDate(evidence.windowEndDate, false)}` },
+    { label: 'Eligible daily occurrences', value: String(evidence.eligibleDueCount) },
+    { label: 'Completed', value: String(evidence.completedCount) },
+    { label: 'Not completed', value: String(evidence.notCompletedCount) }
   ];
   return (
     <>
       <BreakdownRows rows={rows} />
       <p className="rhythm-history-view__calculation">
         <span>
-          {metric.completedCount} ÷ {metric.eligibleDueCount} × 100 = <strong>{metric.score}%</strong>
+          {evidence.completedCount} ÷ {evidence.eligibleDueCount} × 100 = <strong>{Math.round(metric.score)}%</strong>
         </span>
       </p>
       <section className="rhythm-history-view__score-details">
@@ -456,9 +516,9 @@ function ConsistencyScoreBreakdown({ metric }: { metric: ScoredConsistencyMetric
         <div
           className="rhythm-history-view__health-pattern"
           role="img"
-          aria-label={`Thirty eligible daily due moments: ${metric.completedCount} completed and ${metric.notCompletedCount} not completed.`}
+          aria-label={`${evidence.eligibleDueCount} eligible daily occurrences from ${evidence.windowStartDate} through ${evidence.windowEndDate}: ${evidence.completedCount} completed and ${evidence.notCompletedCount} not completed.`}
         >
-          {metric.occurrences.map(item => (
+          {evidence.occurrences.map(item => (
             <span
               key={item.date}
               className={item.status === 'completed'
@@ -469,12 +529,12 @@ function ConsistencyScoreBreakdown({ metric }: { metric: ScoredConsistencyMetric
           ))}
         </div>
         <div className="rhythm-history-view__pattern-legend" aria-hidden="true">
-          <span><i className="rhythm-history-view__pattern-key" />{metric.completedCount} completed</span>
-          <span><i className="rhythm-history-view__pattern-key rhythm-history-view__pattern-key--missed" />{metric.notCompletedCount} not completed</span>
+          <span><i className="rhythm-history-view__pattern-key" />{evidence.completedCount} completed</span>
+          <span><i className="rhythm-history-view__pattern-key rhythm-history-view__pattern-key--missed" />{evidence.notCompletedCount} not completed</span>
         </div>
         {firstDate && lastDate && (
           <p className="rhythm-history-view__score-explanation">
-            {formatHistoryDate(firstDate, false)}–{formatHistoryDate(lastDate, false)}. The example’s as-of date is not included as a due occurrence.
+            {formatHistoryDate(firstDate, false)}–{formatHistoryDate(lastDate, false)}. Today is excluded.
           </p>
         )}
       </section>
@@ -483,13 +543,16 @@ function ConsistencyScoreBreakdown({ metric }: { metric: ScoredConsistencyMetric
 }
 
 function OnTrackScoreBreakdown({ metric }: { metric: ScoredOnTrackMetric }) {
-  const fullOverdueDays = metric.fullOverdueDates.length;
-  const startingScore = metric.days.find(item => item.status === 'tended')?.score ?? metric.score;
-  const deductedPoints = fullOverdueDays * metric.pointsPerFullUntendedDay;
+  const evidence = metric.evidence;
+  const fullOverdueDays = evidence.overdueDates.length;
+  const startingScore = 100;
+  const deductedPoints = evidence.deduction;
   const rows = [
-    { label: 'Last tended', value: formatHistoryDate(metric.lastTendedDate, false) },
+    { label: 'Last tended', value: evidence.lastQualifyingCompletionDate
+      ? formatHistoryDate(evidence.lastQualifyingCompletionDate, false)
+      : 'None yet' },
     { label: 'Full overdue days', value: `${fullOverdueDays} days` },
-    { label: 'Daily deduction', value: `${metric.pointsPerFullUntendedDay} points` },
+    { label: 'Daily deduction', value: `${evidence.pointsPerOverdueDate} points` },
     { label: 'Today', value: 'No deduction' }
   ];
   return (
@@ -502,19 +565,21 @@ function OnTrackScoreBreakdown({ metric }: { metric: ScoredOnTrackMetric }) {
       </p>
       <section className="rhythm-history-view__score-details">
         <h4>How it changed</h4>
-        <ol className="rhythm-history-view__score-history" aria-label="Illustrative daily On Track changes">
-          {metric.days.map(item => (
+        <ol className="rhythm-history-view__score-history" aria-label="Daily On Track changes">
+          {evidence.days.map(item => (
             <li key={item.date}>
               <span>
                 {formatHistoryDate(item.date, false)} · {
-                  item.status === 'tended'
-                    ? 'tended'
-                    : item.status === 'as-of'
-                      ? 'today in example'
-                      : 'not tended'
+                  item.status === 'tended' && item.date === evidence.days.at(-1)?.date
+                    ? 'tended today'
+                    : item.status === 'tended'
+                      ? 'tended'
+                      : item.status === 'today'
+                        ? 'today · no deduction'
+                        : 'not tended'
                 }
               </span>
-              <strong>{item.status === 'as-of' ? `Still ${item.score}` : item.score}</strong>
+              <strong>{item.score}</strong>
             </li>
           ))}
         </ol>
@@ -523,7 +588,7 @@ function OnTrackScoreBreakdown({ metric }: { metric: ScoredOnTrackMetric }) {
   );
 }
 
-function UnscoredBreakdown({ metric }: { metric: UnavailableScoreMetric }) {
+function UnscoredBreakdown({ metric }: { metric: UnscoredMetric }) {
   return (
     <section className="rhythm-history-view__score-details">
       <p className="rhythm-history-view__score-explanation">{metric.explanation}</p>
@@ -552,6 +617,41 @@ function formatHistoryDate(value: string, long = true): string {
 
 function formatScoreInput(score: number): string {
   return String(Number(score.toFixed(2)));
+}
+
+function HealthCalculation({
+  consistency,
+  onTrack,
+  health
+}: {
+  consistency?: number | undefined;
+  onTrack?: number | undefined;
+  health?: number | undefined;
+}) {
+  const available = consistency !== undefined && onTrack !== undefined && health !== undefined;
+  return (
+    <section className="rhythm-history-view__health-calculation" aria-label="How Health is calculated">
+      <h4>How Health is calculated</h4>
+      {available ? (
+        <>
+          <p>
+            Consistency: {formatScoreInput(consistency)} × {HEALTH_CONSISTENCY_WEIGHT * 100}% ={' '}
+            {formatScoreInput(consistency * HEALTH_CONSISTENCY_WEIGHT)}
+          </p>
+          <p>
+            On Track: {formatScoreInput(onTrack)} × {HEALTH_ON_TRACK_WEIGHT * 100}% ={' '}
+            {formatScoreInput(onTrack * HEALTH_ON_TRACK_WEIGHT)}
+          </p>
+          <p className="rhythm-history-view__health-calculation-result">
+            Health: {formatScoreInput(consistency * HEALTH_CONSISTENCY_WEIGHT)} +{' '}
+            {formatScoreInput(onTrack * HEALTH_ON_TRACK_WEIGHT)} = <strong>{formatScoreInput(health)}</strong>
+          </p>
+        </>
+      ) : (
+        <p>Not enough data to calculate Health.</p>
+      )}
+    </section>
+  );
 }
 
 function formatLocalTime(value: string): string {

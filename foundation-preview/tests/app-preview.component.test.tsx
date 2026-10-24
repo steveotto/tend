@@ -190,6 +190,10 @@ describe('Tend Today preview', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Close details' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(document.activeElement).toBe(opener);
+
+    const undo = screen.getByRole('button', { name: 'Undo completion for Pray together' });
+    await user.click(undo);
+    expect(screen.getByRole('button', { name: 'Tend Pray together' })).toBe(document.activeElement);
   });
 
   it('cancels a card draft on Escape without saving and restores focus to Tend', async () => {
@@ -660,7 +664,7 @@ describe('Tend Today preview', () => {
     const saved = parsePreviewBackup(savedRaw!, localDateString(new Date()));
     expect(saved.valid).toBe(true);
     if (saved.valid) {
-      expect(saved.envelope.schemaVersion).toBe(6);
+      expect(saved.envelope.schemaVersion).toBe(7);
       expect(saved.envelope.data.savedRhythms).toHaveLength(1);
       expect(saved.envelope.data.savedRhythms[0]).toMatchObject({
         id: expect.stringMatching(/^user-rhythm-/),
@@ -1143,6 +1147,18 @@ describe('Tend Today preview', () => {
     expect(within(dailyConnection).getByRole('button', { name: 'Details for Daily Connection' })).toBeTruthy();
     expect(within(dailyConnection).queryByRole('button', { name: /Tend/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Tend/ })).toBeNull();
+
+    await user.click(within(dailyConnection).getByRole('button', { name: 'Details for Daily Connection' }));
+    const detailDialog = screen.getByRole('dialog', { name: 'Daily Connection' });
+    expect(within(detailDialog).queryByRole('button', { name: /^Tend/ })).toBeNull();
+    expect(within(detailDialog).queryByRole('button', { name: /^Edit Daily Connection/ })).toBeNull();
+    await user.click(within(detailDialog).getByRole('button', {
+      name: 'View scores and history for Daily Connection'
+    }));
+    const history = screen.getByRole('region', { name: 'History for Daily Connection' });
+    expect(within(history).queryByRole('button', { name: /^Edit logged moment/ })).toBeNull();
+    expect(within(history).queryByRole('button', { name: /^Delete logged moment/ })).toBeNull();
+    expect(within(history).queryByRole('button', { name: 'Set tracking start' })).toBeNull();
   });
 
   it('groups read-only sample Rhythm suggestions by cadence and keeps the Today panel unchanged', async () => {
@@ -1296,9 +1312,10 @@ describe('Tend Today preview', () => {
     await user.click(opener);
     const dialog = await screen.findByRole('dialog', { name: 'Daily connection' });
     const history = within(dialog).getByRole('region', { name: 'History for Daily connection' });
-    expect(within(history).getByRole('meter', { name: 'Health score' }).getAttribute('aria-valuenow')).toBe('75');
-    expect(within(history).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('77');
-    expect(within(history).getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('70');
+    expect(within(history).getByRole('img', { name: 'Health: Not enough data' })).toBeTruthy();
+    expect(within(history).getByRole('img', { name: /Consistency: Unscored/ })).toBeTruthy();
+    expect(within(history).getByRole('img', { name: /On Track: Unscored/ })).toBeTruthy();
+    expect(within(history).getByText('Scoring for this schedule isn’t available yet.')).toBeTruthy();
     expect(within(history).getByRole('heading', { name: 'All completion history' })).toBeTruthy();
     expect(history.querySelector('.rhythm-history-view__completion-total > span')?.textContent)
       .toBe('moments tended');

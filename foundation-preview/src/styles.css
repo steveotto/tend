@@ -3539,12 +3539,19 @@ a:focus-visible {
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__footer {
   margin-top: 0;
-  padding: 12px var(--rhythm-details-horizontal-padding);
+  display: flex;
+  min-height: 45px;
+  align-items: center;
+  padding: 0 var(--rhythm-details-horizontal-padding);
   border-top: 1px solid var(--line);
 }
 
+.today-rhythm-details-dialog--inline .rhythm-metadata-footer {
+  min-height: 44px;
+}
+
 .today-rhythm-details-dialog--inline .rhythm-metadata-status-group {
-  min-height: 0;
+  min-height: 44px;
 }
 
 .today-rhythm-details-dialog--inline .rhythm-metadata-footer > .rhythm-metadata-last-tended {
@@ -4000,6 +4007,11 @@ a:focus-visible {
   padding: 18px 16px 0;
 }
 
+.rhythm-history-view__score-summary-divider {
+  margin: 16px 16px 0;
+  border-top: 1px solid var(--tend-line, var(--line));
+}
+
 .rhythm-history-view__health-heading {
   display: flex;
   align-items: baseline;
@@ -4072,7 +4084,7 @@ a:focus-visible {
   align-content: start;
   gap: 10px;
   min-width: 0;
-  padding: 14px 16px 18px;
+  padding: 16px 16px 18px;
 }
 
 .rhythm-history-view__score-details-column {
@@ -4084,19 +4096,37 @@ a:focus-visible {
   display: none;
 }
 
-.rhythm-history-view__blended-calculation,
-.rhythm-history-view__blended-unavailable {
+.rhythm-history-view__health-calculation {
+  display: grid;
+  gap: 5px;
   margin: 0 16px 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--tend-mist, #e5f2eb);
+}
+
+.rhythm-history-view__health-calculation h4 {
+  margin: 0 0 2px;
+  color: var(--tend-ink, var(--ink));
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.rhythm-history-view__health-calculation p {
+  margin: 0;
   color: var(--tend-secondary, var(--ink-soft));
   font-size: 12px;
   line-height: 1.4;
-  text-align: center;
   overflow-wrap: anywhere;
 }
 
-.rhythm-history-view__blended-calculation strong {
+.rhythm-history-view__health-calculation .rhythm-history-view__health-calculation-result {
   color: var(--tend-ink, var(--ink));
-  font-weight: 700;
+  font-weight: 650;
+}
+
+.rhythm-history-view__health-calculation-result strong {
+  font-weight: 750;
 }
 
 .rhythm-history-view__score-heading {

@@ -35,6 +35,18 @@ export type RhythmSchedule =
   | { frequency: 'custom'; unit: 'months'; interval: number; pattern: RhythmPattern; startDate: RhythmLocalDate; endDate?: RhythmLocalDate }
   | { frequency: 'custom'; unit: 'years'; interval: number; month: RhythmMonth; pattern: RhythmPattern; startDate: RhythmLocalDate; endDate?: RhythmLocalDate };
 
+export type RhythmScheduleSegment = {
+  startDate: RhythmLocalDate;
+  endDate?: RhythmLocalDate;
+  schedule: RhythmSchedule;
+};
+
+export type RhythmScoringMetadata = {
+  trackingStartDate: RhythmLocalDate;
+  timeZone: string;
+  scheduleHistory: RhythmScheduleSegment[];
+};
+
 export type RhythmScheduleValidation =
   | { valid: true; schedule: RhythmSchedule }
   | { valid: false; errors: string[] };
@@ -120,6 +132,16 @@ function isValidOptionalEndDate(record: Record<string, unknown>): boolean {
   return true;
 }
 
+export function isValidTimeZone(value: unknown): value is string {
+  if (typeof value !== 'string' || value.trim().length === 0 || value.length > 100) return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value }).format(0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function isRhythmSchedule(value: unknown): value is RhythmSchedule {
   if (!isRecord(value) || typeof value.frequency !== 'string') {
     return false;
@@ -176,6 +198,37 @@ export function validateRhythmSchedule(value: unknown): RhythmScheduleValidation
     valid: false,
     errors: [isRecord(value) ? 'The schedule contains missing, invalid, or unsupported fields.' : 'Choose a supported schedule.']
   };
+}
+
+export function validateRhythmScoringMetadata(value: unknown): value is RhythmScoringMetadata {
+  if (!isRecord(value) || !hasOnlyKeys(value, ['trackingStartDate', 'timeZone', 'scheduleHistory'])
+    || typeof value.trackingStartDate !== 'string' || !isValidDate(value.trackingStartDate)
+    || !isValidTimeZone(value.timeZone) || !Array.isArray(value.scheduleHistory)
+    || value.scheduleHistory.length === 0) return false;
+
+  let expectedStart = value.trackingStartDate;
+  for (let index = 0; index < value.scheduleHistory.length; index += 1) {
+    const segment: unknown = value.scheduleHistory[index];
+    if (!isRecord(segment) || !hasOnlyKeys(segment, ['startDate', 'endDate', 'schedule'])
+      || segment.startDate !== expectedStart || typeof segment.startDate !== 'string'
+      || !isValidDate(segment.startDate) || !validateRhythmSchedule(segment.schedule).valid) return false;
+    const isLast = index === value.scheduleHistory.length - 1;
+    if (isLast !== (segment.endDate === undefined)) return false;
+    if (segment.endDate !== undefined) {
+      if (typeof segment.endDate !== 'string' || !isValidDate(segment.endDate)
+        || segment.endDate < segment.startDate) return false;
+      const [year, month, day] = segment.endDate.split('-').map(Number);
+      const nextDate = new Date(0);
+      nextDate.setUTCFullYear(year!, month! - 1, day! + 1);
+      nextDate.setUTCHours(0, 0, 0, 0);
+      expectedStart = [
+        String(nextDate.getUTCFullYear()).padStart(4, '0'),
+        String(nextDate.getUTCMonth() + 1).padStart(2, '0'),
+        String(nextDate.getUTCDate()).padStart(2, '0')
+      ].join('-');
+    }
+  }
+  return true;
 }
 
 export function rhythmTimeLabel(value: RhythmTimeValue): RhythmTimeLabel {

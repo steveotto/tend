@@ -199,6 +199,7 @@ export function RhythmDetailsDialog({
               completionHistoryAvailable={completionHistoryAvailable}
               {...(onUpdateCompletion ? { onUpdateCompletion } : {})}
               {...(onDeleteCompletion ? { onDeleteCompletion } : {})}
+              {...(onEdit ? { onEditRhythm: onEdit } : {})}
               {...(people ? { people } : {})}
               {...(onPersonSelect ? { onPersonSelect } : {})}
               onClose={onClose}
