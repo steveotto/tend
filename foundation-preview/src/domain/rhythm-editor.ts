@@ -151,7 +151,11 @@ function validateSavedRhythmsWithKeys(
   return true;
 }
 
-export function rhythmDraftFrom(rhythm: RhythmPreview, categoryIds: readonly RhythmCategoryId[] = []): RhythmDraft {
+export function rhythmDraftFrom(
+  rhythm: RhythmPreview,
+  categoryIds: readonly RhythmCategoryId[] = [],
+  suggestedTrackingStartDate?: string
+): RhythmDraft {
   return {
     title: rhythm.title,
     description: rhythm.description ?? '',
@@ -167,6 +171,9 @@ export function rhythmDraftFrom(rhythm: RhythmPreview, categoryIds: readonly Rhy
       scoringTimeZone: rhythm.scoring.timeZone,
       trackingStartConfirmed: true
     }),
+    ...(rhythm.scoring === undefined && suggestedTrackingStartDate && isValidDate(suggestedTrackingStartDate)
+      ? { trackingStartDate: suggestedTrackingStartDate }
+      : {}),
     scheduleEditing: rhythm.schedule !== undefined,
     ...(rhythm.personal === undefined ? {} : { personal: rhythm.personal })
   };
@@ -186,10 +193,7 @@ export function validateRhythmDraft(draft: RhythmDraft): RhythmDraftErrors {
   } else if (draft.schedule !== undefined && !validateRhythmSchedule(draft.schedule).valid) {
     errors.schedule = 'Choose a valid schedule.';
   }
-  if (draft.trackingStartConfirmed && draft.schedule?.frequency === 'daily') {
-    if (draft.schedule?.frequency !== 'daily') {
-      errors.trackingStartDate = 'Tracking can be confirmed only for a structured daily schedule.';
-    }
+  if (draft.trackingStartConfirmed && draft.schedule && draft.schedule.frequency !== 'custom') {
     if (!draft.trackingStartDate || !isValidDate(draft.trackingStartDate)) {
       errors.trackingStartDate = 'Choose a valid tracking start date.';
     }
@@ -225,7 +229,7 @@ export function saveRhythmDraft(
   if (savedRhythms.filter(rhythm => rhythm.id === id).length > 1) {
     errors.title = 'This Rhythm has conflicting saved edits and cannot be changed.';
   }
-  if (draft.trackingStartConfirmed && draft.schedule?.frequency === 'daily'
+  if (draft.trackingStartConfirmed && draft.schedule && draft.schedule.frequency !== 'custom'
     && (!scoringContext || !isValidDate(scoringContext.currentDate)
       || draft.trackingStartDate! > scoringContext.currentDate)) {
     errors.trackingStartDate = 'Tracking must start on or before the current scoring date.';
@@ -237,7 +241,7 @@ export function saveRhythmDraft(
   const originalSchedule = draft.originalSchedule ?? existing?.schedule;
   const scheduleChanged = JSON.stringify(draft.schedule) !== JSON.stringify(originalSchedule);
   let scoring = draft.originalScoring ?? existing?.scoring;
-  if (!scoring && draft.trackingStartConfirmed && draft.schedule?.frequency === 'daily'
+  if (!scoring && draft.trackingStartConfirmed && draft.schedule && draft.schedule.frequency !== 'custom'
     && draft.trackingStartDate && draft.scoringTimeZone) {
     scoring = {
       trackingStartDate: draft.trackingStartDate,

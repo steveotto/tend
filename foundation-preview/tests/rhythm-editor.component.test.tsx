@@ -139,6 +139,39 @@ describe('synthetic Rhythm editor domain', () => {
     });
   });
 
+  it('uses a first recorded date only as an unconfirmed suggestion', () => {
+    const fixture = {
+      ...todayRhythms.find(rhythm => rhythm.cadence === 'Daily')!,
+      schedule: { frequency: 'daily' as const }
+    };
+    const draft = rhythmDraftFrom(fixture, [], '2026-10-20');
+    expect(draft).toMatchObject({
+      schedule: { frequency: 'daily' },
+      trackingStartDate: '2026-10-20'
+    });
+    expect(draft.trackingStartConfirmed).toBeUndefined();
+    expect(draft.originalScoring).toBeUndefined();
+  });
+
+  it('stores confirmed tracking metadata for a supported non-daily schedule', () => {
+    const id = 'user-rhythm-22222222-2222-4222-8222-222222222222';
+    const schedule = { frequency: 'weekly' as const, weekdays: [1, 3] as (1 | 3)[] };
+    const result = saveRhythmDraft([], {
+      ...validDraft,
+      schedule,
+      scheduleEditing: true,
+      trackingStartConfirmed: true,
+      trackingStartDate: '2026-10-19',
+      scoringTimeZone: 'UTC'
+    }, id, 'create', { currentDate: '2026-10-23', deviceTimeZone: 'UTC' });
+    expect(result.errors).toEqual({});
+    expect(result.savedRhythms?.[0]?.scoring).toEqual({
+      trackingStartDate: '2026-10-19',
+      timeZone: 'UTC',
+      scheduleHistory: [{ startDate: '2026-10-19', schedule }]
+    });
+  });
+
   it('preserves descriptive cadence when unrelated fields are saved', () => {
     const fixture = todayRhythms[1]!;
     const originalCadence = fixture.cadence!;

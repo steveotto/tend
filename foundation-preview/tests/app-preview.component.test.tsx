@@ -1314,8 +1314,8 @@ describe('Tend Today preview', () => {
     const history = within(dialog).getByRole('region', { name: 'History for Daily connection' });
     expect(within(history).getByRole('img', { name: 'Health: Not enough data' })).toBeTruthy();
     expect(within(history).getByRole('img', { name: /Consistency: Unscored/ })).toBeTruthy();
-    expect(within(history).getByRole('img', { name: /On Track: Unscored/ })).toBeTruthy();
-    expect(within(history).getByText('Scoring for this schedule isn’t available yet.')).toBeTruthy();
+    expect(within(history).getByRole('meter', { name: 'On Track score' })).toBeTruthy();
+    expect(within(history).getByRole('status').textContent).toContain('Consistency: Confirm when tracking starts');
     expect(within(history).getByRole('heading', { name: 'All completion history' })).toBeTruthy();
     expect(history.querySelector('.rhythm-history-view__completion-total > span')?.textContent)
       .toBe('moments tended');
@@ -1324,6 +1324,12 @@ describe('Tend Today preview', () => {
     expect(within(history).queryByRole('heading', { name: 'Recent opportunities' })).toBeNull();
     expect(within(history).getByRole('heading', { name: 'All completion history' })).toBeTruthy();
     expect(within(history).getByRole('list', { name: 'Recorded completion count by date' })).toBeTruthy();
+
+    await user.click(within(history).getByRole('button', { name: 'Set tracking start' }));
+    const editor = await screen.findByRole('dialog', { name: 'Edit Rhythm' });
+    expect(within(editor).getByText(/First recorded completion: 2026-10-17/)).toBeTruthy();
+    await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit Rhythm' })).toBeNull());
 
     await user.click(within(history).getByRole('button', { name: 'Close details' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());

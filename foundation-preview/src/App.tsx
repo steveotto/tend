@@ -105,7 +105,11 @@ export function App() {
   const [activeRhythmId, setActiveRhythmId] = useState<string | null>(null);
   const [detailsInitialView, setDetailsInitialView] = useState<'details' | 'history'>('details');
   const [completionDialogRhythmId, setCompletionDialogRhythmId] = useState<string | null>(null);
-  const [rhythmEditor, setRhythmEditor] = useState<{ id: string; rhythm?: (typeof todayRhythms)[number] } | null>(null);
+  const [rhythmEditor, setRhythmEditor] = useState<{
+    id: string;
+    rhythm?: (typeof todayRhythms)[number];
+    suggestedTrackingStartDate?: string;
+  } | null>(null);
   const dialogOpener = useRef<HTMLButtonElement | null>(null);
   const completionDialogOpener = useRef<HTMLButtonElement | null>(null);
   const rhythmEditorOpener = useRef<HTMLButtonElement | null>(null);
@@ -358,11 +362,16 @@ export function App() {
     setCompletionDialogRhythmId(id);
   }
 
-  function openRhythmEditor(event: MouseEvent<HTMLButtonElement>, rhythm?: (typeof todayRhythms)[number]) {
+  function openRhythmEditor(
+    event: MouseEvent<HTMLButtonElement>,
+    rhythm?: (typeof todayRhythms)[number],
+    suggestedTrackingStartDate?: string
+  ) {
     rhythmEditorOpener.current = event.currentTarget;
     setRhythmEditor({
       id: rhythm?.id ?? `user-rhythm-${globalThis.crypto.randomUUID()}`,
-      ...(rhythm ? { rhythm } : {})
+      ...(rhythm ? { rhythm } : {}),
+      ...(suggestedTrackingStartDate ? { suggestedTrackingStartDate } : {})
     });
   }
 
@@ -705,7 +714,8 @@ export function App() {
               onPersonSelect={personId => navigate('people', personId)}
               onHistory={openRhythmHistory}
               onTend={openCompletion}
-              onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
+              onEditRhythm={(rhythm, event, suggestedTrackingStartDate) =>
+                openRhythmEditor(event, rhythm, suggestedTrackingStartDate)}
               onUndo={undoTend}
               onAddRhythm={event => openRhythmEditor(event)}
               onRestoreRhythm={restoreRhythm}
@@ -795,7 +805,10 @@ export function App() {
                 ...(!activeRhythmIsArchived ? { onSaveCompletion: saveDatedCompletion } : {}),
                 onUndo: () => undoTend(activeRhythm.id),
                 ...(isEditableRhythmId(activeRhythm.id)
-                  ? { onEdit: event => openRhythmEditor(event, activeRhythm) }
+                  ? {
+                      onEdit: (event, suggestedTrackingStartDate) =>
+                        openRhythmEditor(event, activeRhythm, suggestedTrackingStartDate)
+                    }
                   : {})
               }
             : {
@@ -814,6 +827,9 @@ export function App() {
       {rhythmEditor && (
         <RhythmEditor
           {...(rhythmEditor.rhythm ? { rhythm: rhythmEditor.rhythm } : {})}
+          {...(rhythmEditor.suggestedTrackingStartDate
+            ? { suggestedTrackingStartDate: rhythmEditor.suggestedTrackingStartDate }
+            : {})}
           onSave={saveRhythm}
           {...(rhythmEditor.rhythm ? { onArchive: archiveRhythm } : {})}
           onClose={() => setRhythmEditor(null)}

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RhythmEditor } from '../src/components/RhythmEditor.tsx';
+import { todayRhythms } from '../src/domain/preview-data.ts';
 import type { RhythmDraft } from '../src/domain/rhythm-editor.ts';
 import { saveRhythmDraft, validateRhythmDraft } from '../src/domain/rhythm-editor.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
@@ -22,6 +23,35 @@ async function choose(user: ReturnType<typeof userEvent.setup>, label: string, o
 }
 
 describe('shared structured Rhythm editor', () => {
+  it('requires confirmation for a suggested tracking start date', async () => {
+    const user = userEvent.setup();
+    const rhythm: RhythmPreview = {
+      ...todayRhythms[0]!,
+      schedule: { frequency: 'daily' }
+    };
+    const onSave = vi.fn((_draft: RhythmDraft) => ({}));
+    render(
+      <RhythmEditor
+        rhythm={rhythm}
+        suggestedTrackingStartDate="2026-10-20"
+        onSave={onSave}
+        onClose={vi.fn()}
+      />
+    );
+    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    expect(within(editor).getByText(/First recorded completion: 2026-10-20/)).toBeTruthy();
+    expect((within(editor).getByLabelText('Tracking start date') as HTMLInputElement).value).toBe('2026-10-20');
+    expect(onSave).not.toHaveBeenCalled();
+
+    await user.click(within(editor).getByRole('button', { name: 'Confirm tracking start' }));
+    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      trackingStartConfirmed: true,
+      trackingStartDate: '2026-10-20',
+      scoringTimeZone: expect.any(String)
+    }));
+  });
+
   it('exposes all frequency branches and maps Select Days to the weekly model', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn((_draft: RhythmDraft) => ({}));

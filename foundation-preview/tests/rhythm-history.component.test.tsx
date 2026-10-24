@@ -19,6 +19,7 @@ import { scoreTone } from '../src/domain/score-tone.ts';
 import { marriageRhythms, syntheticPeople, todayRhythms } from '../src/domain/preview-data.ts';
 import type { DatedRhythmCompletion } from '../src/domain/rhythm-completion.ts';
 import { addCalendarDays, localDateInTimeZone } from '../src/domain/rhythm-scoring.ts';
+import { localDateString } from '../src/domain/money-goals.ts';
 
 afterEach(cleanup);
 
@@ -392,8 +393,8 @@ describe('shared Rhythm history', () => {
     expect(within(history).queryByText(/Illustrative example/)).toBeNull();
     expect(screen.getByRole('img', { name: 'Health: Not enough data' })).toBeTruthy();
     expect(screen.getByRole('img', { name: /Consistency: Unscored/ })).toBeTruthy();
-    expect(screen.getByRole('img', { name: /On Track: Unscored/ })).toBeTruthy();
-    expect(screen.getByText('Scoring for this schedule isn’t available yet.')).toBeTruthy();
+    expect(screen.getByRole('meter', { name: 'On Track score' })).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('Consistency: Confirm when tracking starts');
     const scoreSection = within(history).getByRole('region', { name: 'Health, Consistency, and On Track scores' });
     const completionSection = within(history).getByRole('region', { name: 'All completion history' });
     expect(scoreSection.compareDocumentPosition(completionSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -447,7 +448,7 @@ describe('shared Rhythm history', () => {
     expect(summary.querySelector('.rhythm-history-view__completion-span')?.textContent)
       .toBe('across 1 day');
     expect(within(completionSection).getByRole('listitem', {
-      name: 'Friday, October 23, 2026: 1 completion, today'
+      name: `Friday, October 23, 2026: 1 completion${localDateString(new Date()) === '2026-10-23' ? ', today' : ''}`
     })).toBeTruthy();
   });
 
@@ -505,7 +506,7 @@ describe('shared Rhythm history', () => {
     expect(within(healthDetails).getByText('30', { exact: true })).toBeTruthy();
     expect(within(healthDetails).getByText('23', { exact: true })).toBeTruthy();
     expect(within(healthDetails).getByText('7', { exact: true })).toBeTruthy();
-    expect(within(healthDetails).getByText('Eligible daily occurrences')).toBeTruthy();
+    expect(within(healthDetails).getByText('Eligible scheduled occurrences')).toBeTruthy();
     const healthFormula = healthDetails.querySelector('.rhythm-history-view__calculation')!;
     expect(healthFormula.textContent?.replace(/\s+/g, '')).toBe('23÷30×100=77%');
     expect(healthFormula.querySelector('strong')?.textContent).toBe('77%');
@@ -535,11 +536,11 @@ describe('shared Rhythm history', () => {
     expect(onTrackItems[0]).toMatch(/· tended 100$/);
     expect(onTrackItems.slice(1, 4).every(item => item.includes('not tended'))).toBe(true);
     expect(onTrackItems.at(-1)).toMatch(/today · no deduction 70$/);
-    expect(screen.getByText(/Calculated from saved daily completion records/)).toBeTruthy();
+    expect(screen.getByText(/Calculated from saved completion records/)).toBeTruthy();
     expect(within(healthDetails).queryByText(/eligible due occurrence counts once|overdue time|pre-activation|Foundation-weighted|Health windows are/)).toBeNull();
     expect(within(onTrackDetails).queryByText(/calendar-day span|floors at zero|rules for weekly/)).toBeNull();
     expect(within(healthDetails).queryByText(/76\.7|→/)).toBeNull();
-    expect(within(details).getByRole('heading', { name: 'Your 30-day pattern' })).toBeTruthy();
+    expect(within(details).getByRole('heading', { name: 'Your scheduled pattern' })).toBeTruthy();
     expect(within(details).getByRole('heading', { name: 'How it changed' })).toBeTruthy();
   });
 
@@ -565,6 +566,66 @@ describe('shared Rhythm history', () => {
     await user.keyboard(' ');
     expect(details.hidden).toBe(true);
     expect(info.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('keeps daily On Track available without a start and offers an explicit first-log date', async () => {
+    const onEditRhythm = vi.fn();
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const currentDate = localDateInTimeZone(new Date(), timeZone);
+    const firstRecordedDate = addCalendarDays(currentDate, -3);
+    render(
+      <RhythmHistoryView
+        rhythm={{ ...todayConnection, completionHistory: [] }}
+        datedCompletions={[{
+          ...savedRecord('first-recorded', firstRecordedDate, '12:00'),
+          timeZone
+        }]}
+        completionHistoryAvailable
+        onEditRhythm={onEditRhythm}
+      />
+    );
+    expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('80');
+    expect(screen.getByRole('img', { name: /Consistency: Unscored/ })).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('Consistency: Confirm when tracking starts');
+    fireEvent.click(screen.getByRole('button', { name: 'Set tracking start' }));
+    expect(onEditRhythm).toHaveBeenCalledTimes(1);
+    expect(onEditRhythm.mock.calls[0]?.[1]).toBe(firstRecordedDate);
+  });
+
+  it('announces the short confirmed tracking period beside the matching breakdown', async () => {
+    const user = userEvent.setup();
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const currentDate = localDateInTimeZone(new Date(), timeZone);
+    const trackingStartDate = addCalendarDays(currentDate, -3);
+    const schedule = { frequency: 'daily' as const };
+    render(
+      <RhythmHistoryView
+        rhythm={{
+          ...todayConnection,
+          schedule,
+          scoring: {
+            trackingStartDate,
+            timeZone,
+            scheduleHistory: [{ startDate: trackingStartDate, schedule }]
+          },
+          completionHistory: []
+        }}
+        datedCompletions={[
+          savedRecord('short-history-one', trackingStartDate, '12:00'),
+          savedRecord('short-history-two', addCalendarDays(trackingStartDate, 1), '12:00')
+        ].map(record => ({ ...record, timeZone }))}
+        completionHistoryAvailable
+      />
+    );
+
+    expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('67');
+    expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('90');
+    expect(screen.getByRole('meter', { name: 'Health score' }).getAttribute('aria-valuenow')).toBe('72.5');
+    await user.click(screen.getByRole('button', { name: 'Show Consistency and On Track score details' }));
+    const details = screen.getByRole('group', { name: 'Consistency and On Track score details' });
+    expect(within(details).getByText(/Based on 3 days of tracking/)).toBeTruthy();
+    expect(details.querySelector('.rhythm-history-view__calculation')?.textContent?.replace(/\s+/g, ''))
+      .toBe('2÷3×100=67%');
   });
 
   it('orders shared header details and actual associations before schedule metadata', () => {
@@ -645,7 +706,7 @@ describe('shared Rhythm history', () => {
     await user.click(screen.getByRole('button', { name: 'Show Consistency and On Track score details' }));
     const unavailableCalculation = document.querySelector('.rhythm-history-view__health-calculation') as HTMLElement;
     expect(within(unavailableCalculation).getByRole('heading', { name: 'How Health is calculated' })).toBeTruthy();
-    expect(within(unavailableCalculation).getByText('Not enough data to calculate Health.')).toBeTruthy();
+    expect(within(unavailableCalculation).getByText(/Health requires both scores/)).toBeTruthy();
     expect(unavailableCalculation.querySelectorAll('p')).toHaveLength(1);
     expect(unavailableCalculation.textContent).not.toMatch(/[×=]/);
     rerender(<RhythmHistoryView rhythm={{ ...rhythmWithoutHistory, completionHistory: [] }} />);
@@ -666,8 +727,8 @@ describe('shared Rhythm history', () => {
 
     expect(screen.getByRole('img', { name: 'Health: Not enough data' })).toBeTruthy();
     expect(screen.getByRole('img', { name: /Consistency: Unscored/ })).toBeTruthy();
-    expect(screen.getByRole('img', { name: /On Track: Unscored/ })).toBeTruthy();
-    expect(screen.getByText('Set a tracking start date to begin scoring this Rhythm.')).toBeTruthy();
+    expect(screen.getByRole('meter', { name: 'On Track score' })).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('Consistency: Confirm when tracking starts');
     expect(document.querySelector('.rhythm-history-view__completion-total strong')?.textContent).toBe('3');
     expect(screen.queryByText('Dated completion history is unavailable for this Rhythm.')).toBeNull();
   });

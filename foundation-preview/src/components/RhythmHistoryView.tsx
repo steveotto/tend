@@ -66,7 +66,7 @@ export function RhythmHistoryView({
   completionHistoryAvailable?: boolean;
   onUpdateCompletion?: (record: RhythmCompletionRecord) => string | null;
   onDeleteCompletion?: (completionId: string) => string | null;
-  onEditRhythm?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onEditRhythm?: (event: MouseEvent<HTMLButtonElement>, suggestedTrackingStartDate?: string) => void;
 }) {
   const historyRecords: readonly RhythmCompletion[] | undefined =
     rhythm.completionHistory === undefined && !completionHistoryAvailable && datedCompletions.length === 0
@@ -96,6 +96,7 @@ export function RhythmHistoryView({
   }));
   const score = selectDailyRhythmScore({
     rhythmId: rhythm.id,
+    ...(rhythm.cadence ? { cadence: rhythm.cadence } : {}),
     ...(rhythm.schedule ? { schedule: rhythm.schedule } : {}),
     ...(rhythm.scoring ? { scoring: rhythm.scoring } : {}),
     records: scoringRecords,
@@ -280,7 +281,7 @@ export function RhythmHistoryView({
                 />
               )
               : (
-                <HealthCalculation />
+                <HealthCalculation explanation={healthUnavailableExplanation(score.consistency, score.onTrack)} />
               )}
             {sharedUnscoredExplanation ? null : (
               <div className="rhythm-history-view__score-details-columns">
@@ -299,22 +300,25 @@ export function RhythmHistoryView({
           </div>
         </div>
         <p className="rhythm-history-view__sample-notice" role="status">
-          {score.kind === 'daily-score'
+          {score.kind === 'rhythm-score'
             ? score.healthScore !== null
-              ? `Calculated from saved daily completion records · as of ${formatHistoryDate(score.asOfDate, false)}, ${new Date(`${score.asOfDate}T12:00:00`).getFullYear()}.`
-              : score.consistency.kind === 'unscored'
-                ? score.consistency.explanation
-                : score.onTrack.kind === 'unscored'
-                  ? score.onTrack.explanation
-                  : 'Health is unavailable because both metrics must be scored.'
+              ? `Calculated from saved completion records · as of ${formatHistoryDate(score.asOfDate, false)}, ${new Date(`${score.asOfDate}T12:00:00`).getFullYear()}.`
+              : `${score.consistency.kind === 'unscored' ? `Consistency: ${score.consistency.explanation}` : ''}${score.consistency.kind === 'unscored' && score.onTrack.kind === 'unscored' ? ' ' : ''}${score.onTrack.kind === 'unscored' ? `On Track: ${score.onTrack.explanation}` : ''} Health requires both scores.`
             : score.kind === 'invalid'
               ? `Scores unavailable: ${score.reason}`
               : score.reason.explanation}
-          {score.kind === 'unscored' && score.reason.reasonCode === 'missing-tracking-start' && onEditRhythm && (
+          {score.consistency.kind === 'unscored'
+            && score.consistency.reasonCode === 'missing-tracking-start'
+            && onEditRhythm && (
             <button
               type="button"
               className="rhythm-history-view__set-tracking"
-              onClick={onEditRhythm}
+              onClick={event => {
+                const firstRecordedDate = historyRecords
+                  ?.map(record => record.effectiveDate)
+                  .sort()[0];
+                onEditRhythm(event, firstRecordedDate);
+              }}
             >
               Set tracking start
             </button>
@@ -499,7 +503,7 @@ function ConsistencyScoreBreakdown({ metric }: { metric: ScoredConsistencyMetric
   const lastDate = evidence.occurrences.at(-1)?.date;
   const rows = [
     { label: 'Scoring window', value: `${formatHistoryDate(evidence.windowStartDate, false)}–${formatHistoryDate(evidence.windowEndDate, false)}` },
-    { label: 'Eligible daily occurrences', value: String(evidence.eligibleDueCount) },
+    { label: 'Eligible scheduled occurrences', value: String(evidence.eligibleDueCount) },
     { label: 'Completed', value: String(evidence.completedCount) },
     { label: 'Not completed', value: String(evidence.notCompletedCount) }
   ];
@@ -512,11 +516,11 @@ function ConsistencyScoreBreakdown({ metric }: { metric: ScoredConsistencyMetric
         </span>
       </p>
       <section className="rhythm-history-view__score-details">
-        <h4>Your 30-day pattern</h4>
+        <h4>Your scheduled pattern</h4>
         <div
           className="rhythm-history-view__health-pattern"
           role="img"
-          aria-label={`${evidence.eligibleDueCount} eligible daily occurrences from ${evidence.windowStartDate} through ${evidence.windowEndDate}: ${evidence.completedCount} completed and ${evidence.notCompletedCount} not completed.`}
+          aria-label={`${evidence.eligibleDueCount} eligible ${evidence.frequency} occurrences from ${evidence.windowStartDate} through ${evidence.windowEndDate}: ${evidence.completedCount} completed and ${evidence.notCompletedCount} not completed.`}
         >
           {evidence.occurrences.map(item => (
             <span
@@ -534,6 +538,9 @@ function ConsistencyScoreBreakdown({ metric }: { metric: ScoredConsistencyMetric
         </div>
         {firstDate && lastDate && (
           <p className="rhythm-history-view__score-explanation">
+            {evidence.limitedHistoryDays !== null
+              ? `Based on ${evidence.limitedHistoryDays} days of tracking. `
+              : ''}
             {formatHistoryDate(firstDate, false)}–{formatHistoryDate(lastDate, false)}. Today is excluded.
           </p>
         )}
@@ -622,11 +629,13 @@ function formatScoreInput(score: number): string {
 function HealthCalculation({
   consistency,
   onTrack,
-  health
+  health,
+  explanation = 'Health requires both Consistency and On Track scores.'
 }: {
   consistency?: number | undefined;
   onTrack?: number | undefined;
   health?: number | undefined;
+  explanation?: string;
 }) {
   const available = consistency !== undefined && onTrack !== undefined && health !== undefined;
   return (
@@ -648,10 +657,21 @@ function HealthCalculation({
           </p>
         </>
       ) : (
-        <p>Not enough data to calculate Health.</p>
+        <p>{explanation}</p>
       )}
     </section>
   );
+}
+
+function healthUnavailableExplanation(
+  consistency: ScoredConsistencyMetric | UnscoredMetric,
+  onTrack: ScoredOnTrackMetric | UnscoredMetric
+): string {
+  const reasons = [
+    ...(consistency.kind === 'unscored' ? [`Consistency: ${consistency.explanation}`] : []),
+    ...(onTrack.kind === 'unscored' ? [`On Track: ${onTrack.explanation}`] : [])
+  ];
+  return `Health requires both scores. ${reasons.join(' ')}`;
 }
 
 function formatLocalTime(value: string): string {

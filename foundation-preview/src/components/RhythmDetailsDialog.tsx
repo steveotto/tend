@@ -33,7 +33,7 @@ type RhythmDetailsDialogProps = {
   onUpdateCompletion?: (record: RhythmCompletionRecord) => string | null;
   onDeleteCompletion?: (completionId: string) => string | null;
   onUndo?: () => void;
-  onEdit?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onEdit?: (event: MouseEvent<HTMLButtonElement>, suggestedTrackingStartDate?: string) => void;
   archived?: boolean;
   embedded?: boolean;
   onClose: () => void;
