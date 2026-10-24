@@ -129,18 +129,35 @@ describe('shared Rhythm history', () => {
         expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe(consistency);
         expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe(onTrack);
       };
+      const expectChartToday = (date: string) => {
+        const days = [...screen.getByRole('list', {
+          name: 'Recorded completion count by date'
+        }).querySelectorAll('li')];
+        expect(days.at(-1)?.querySelector('time')?.getAttribute('dateTime')).toBe(date);
+        expect(days.at(-1)?.querySelector('time')?.textContent).toBe(
+          `${new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            timeZone: 'UTC'
+          })} · today`
+        );
+        expect(days.at(-1)?.getAttribute('aria-label')).toContain('no completion recorded yet, today');
+      };
       expectScores('50', '33', '100');
+      expectChartToday('2026-10-23');
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(120_000);
       });
       expectScores('41.25', '25', '90');
+      expectChartToday('2026-10-24');
 
       act(() => {
         vi.setSystemTime(new Date('2026-10-25T04:01:00.000Z'));
         fireEvent(document, new Event('visibilitychange'));
       });
       expectScores('35', '20', '80');
+      expectChartToday('2026-10-25');
     } finally {
       vi.useRealTimers();
     }
@@ -352,12 +369,29 @@ describe('shared Rhythm history', () => {
       { date: '2026-03-09', count: 1, recordIds: ['middle'] },
       { date: '2026-03-10', count: 1, recordIds: ['later'] }
     ]);
+    expect(prepareDailyCompletionCounts([
+      { id: 'latest', effectiveDate: '2026-10-20' }
+    ], '2026-10-24')).toEqual([
+      { date: '2026-10-20', count: 1, recordIds: ['latest'] },
+      { date: '2026-10-21', count: 0, recordIds: [] },
+      { date: '2026-10-22', count: 0, recordIds: [] },
+      { date: '2026-10-23', count: 0, recordIds: [] },
+      { date: '2026-10-24', count: 0, recordIds: [] }
+    ]);
+    expect(prepareDailyCompletionCounts([
+      { id: 'dst-start', effectiveDate: '2026-03-07' }
+    ], '2026-03-10').map(item => item.date)).toEqual([
+      '2026-03-07', '2026-03-08', '2026-03-09', '2026-03-10'
+    ]);
   });
 
   it('prepares a single local date and keeps empty and unavailable history distinct', () => {
     expect(prepareDailyCompletionCounts([
       { id: 'one', effectiveDate: '2026-11-01' }
     ])).toEqual([{ date: '2026-11-01', count: 1, recordIds: ['one'] }]);
+    expect(prepareDailyCompletionCounts([
+      { id: 'future', effectiveDate: '2026-11-02' }
+    ], '2026-11-01')).toEqual([]);
     expect(prepareCompletionHistory([])).toEqual({ kind: 'empty', records: [] });
     expect(prepareCompletionHistory(undefined)).toEqual({ kind: 'unavailable' });
   });
@@ -385,8 +419,13 @@ describe('shared Rhythm history', () => {
     expect(completionSummary.querySelector('.rhythm-history-view__completion-total strong')?.textContent).toBe('3');
     expect(completionSummary.querySelector('.rhythm-history-view__completion-total > span')?.textContent)
       .toBe('moments tended');
+    const today = localDateString(new Date());
+    const displayedDates = [];
+    for (let date = '2026-10-17'; date <= today; date = addCalendarDays(date, 1)) {
+      displayedDates.push(date);
+    }
     expect(completionSummary.querySelector('.rhythm-history-view__completion-span')?.textContent)
-      .toBe('across 4 days');
+      .toBe(`across ${displayedDates.length} days`);
     expect(within(history).queryByRole('heading', { name: 'Recent opportunities' })).toBeNull();
     expect(within(history).queryByText(/past opportunities completed/)).toBeNull();
     expect(history.querySelector('.rhythm-history-view__opportunity-list, .rhythm-history-view__legend')).toBeNull();
@@ -402,13 +441,23 @@ describe('shared Rhythm history', () => {
 
     const chart = within(history).getByRole('list', { name: 'Recorded completion count by date' });
     const chartDates = [...chart.querySelectorAll('time')].map(time => time.getAttribute('dateTime'));
-    expect(chartDates).toEqual(['2026-10-17', '2026-10-18', '2026-10-19', '2026-10-20']);
-    expect([...chart.querySelectorAll('li')].map(item => item.getAttribute('aria-label'))).toEqual([
+    expect(chartDates).toEqual(displayedDates);
+    expect([...chart.querySelectorAll('li')].slice(0, 4).map(item => item.getAttribute('aria-label'))).toEqual([
       'Saturday, October 17, 2026: 1 completion',
       'Sunday, October 18, 2026: 1 completion',
       'Monday, October 19, 2026: no recorded completions',
       'Tuesday, October 20, 2026: 1 completion'
     ]);
+    const todayLabel = new Date(`${today}T12:00:00Z`).toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC'
+    });
+    expect([...chart.querySelectorAll('li')].at(-1)?.getAttribute('aria-label'))
+      .toBe(`${todayLabel}: no completion recorded yet, today`);
+    expect(chart.querySelectorAll('.rhythm-history-view__completion-zero').length).toBe(displayedDates.length - 3);
     expect(chart.querySelectorAll('.rhythm-history-view__completion-bar')).toHaveLength(3);
     expect(within(history).getByRole('region', {
       name: 'Completion history chart; scroll horizontally for older dates'
@@ -445,8 +494,10 @@ describe('shared Rhythm history', () => {
     expect(summary.querySelector('.rhythm-history-view__completion-total strong')?.textContent).toBe('1');
     expect(summary.querySelector('.rhythm-history-view__completion-total > span')?.textContent)
       .toBe('moment tended');
+    const chartDays = Math.floor((Date.parse(`${localDateString(new Date())}T00:00:00Z`)
+      - Date.parse('2026-10-23T00:00:00Z')) / 86_400_000) + 1;
     expect(summary.querySelector('.rhythm-history-view__completion-span')?.textContent)
-      .toBe('across 1 day');
+      .toBe(`across ${chartDays} ${chartDays === 1 ? 'day' : 'days'}`);
     expect(within(completionSection).getByRole('listitem', {
       name: `Friday, October 23, 2026: 1 completion${localDateString(new Date()) === '2026-10-23' ? ', today' : ''}`
     })).toBeTruthy();
@@ -842,6 +893,44 @@ describe('shared Rhythm history', () => {
     expect([...chart.querySelectorAll('li')].reduce((total, day) =>
       total + Number(day.getAttribute('aria-label')?.match(/: (\d+)/)?.[1] ?? 0), 0
     )).toBe(4);
+    expect(chart.querySelector('li:last-child time')?.getAttribute('dateTime'))
+      .toBe(localDateString(new Date()));
+    expect(chart.querySelector('li:last-child')?.getAttribute('aria-label'))
+      .toContain('no completion recorded yet, today');
+  });
+
+  it('keeps the chart through today when the latest completion is edited and deleted', async () => {
+    const user = userEvent.setup();
+    render(<EditableHistoryHarness />);
+    await user.click(screen.getByText('Logged moments (5)'));
+
+    const editButton = screen.getByRole('button', {
+      name: /Edit logged moment for Daily connection, Wednesday, October 21, 2026 at 10:10 AM/
+    });
+    await user.click(editButton);
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-10-22' } });
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    let chart = screen.getByRole('list', { name: 'Recorded completion count by date' });
+    expect(chart.querySelector('li:last-child time')?.getAttribute('dateTime'))
+      .toBe(localDateString(new Date()));
+    expect(within(chart).getByRole('listitem', {
+      name: 'Thursday, October 22, 2026: 1 completion'
+    })).toBeTruthy();
+
+    await user.click(screen.getByRole('button', {
+      name: /Delete logged moment for Daily connection, Thursday, October 22, 2026 at 10:10 AM/
+    }));
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete moment' }));
+
+    chart = screen.getByRole('list', { name: 'Recorded completion count by date' });
+    expect(chart.querySelector('li:last-child time')?.getAttribute('dateTime'))
+      .toBe(localDateString(new Date()));
+    expect(chart.querySelector('li:last-child')?.getAttribute('aria-label'))
+      .toContain('no completion recorded yet, today');
+    expect(within(chart).queryByRole('listitem', {
+      name: 'Thursday, October 22, 2026: 1 completion'
+    })).toBeNull();
   });
 
   it('keeps archived history read-only and routes its close action to the outer modal', async () => {

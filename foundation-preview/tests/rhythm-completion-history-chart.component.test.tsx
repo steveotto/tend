@@ -77,6 +77,22 @@ describe('RhythmCompletionHistoryChart', () => {
     expect(screen.queryByText('Scroll horizontally to explore older history.')).toBeNull();
   });
 
+  it('labels an empty current-day marker as not logged yet', () => {
+    render(
+      <RhythmCompletionHistoryChart
+        dailyCounts={[{ date: '2026-10-24', count: 0, recordIds: [] }]}
+        todayDate="2026-10-24"
+      />
+    );
+
+    expect(screen.getByRole('listitem', {
+      name: 'Saturday, October 24, 2026: no completion recorded yet, today'
+    })).toBeTruthy();
+    expect(document.querySelector('.rhythm-history-view__completion-zero')?.textContent).toBe('–');
+    expect(document.querySelector('.rhythm-history-view__completion-zero')?.getAttribute('aria-hidden')).toBe('true');
+    expect(document.querySelector('.rhythm-history-view__chart time')?.textContent).toBe('Oct 24 · today');
+  });
+
   it('starts overflowing histories at the newest dates and does not reset scrolling for same-range updates', () => {
     const original = Array.from({ length: 11 }, (_, index) => ({
       date: `2026-10-${String(index + 1).padStart(2, '0')}`,
@@ -131,17 +147,19 @@ describe('RhythmCompletionHistoryChart', () => {
 });
 
 function formatLongDate(value: string): string {
-  return new Date(`${value}T12:00:00`).toLocaleDateString('en-US', {
+  return new Date(`${value}T12:00:00Z`).toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
-    year: 'numeric'
+    year: 'numeric',
+    timeZone: 'UTC'
   });
 }
 
 function formatShortDate(value: string): string {
-  return new Date(`${value}T12:00:00`).toLocaleDateString('en-US', {
+  return new Date(`${value}T12:00:00Z`).toLocaleDateString('en-US', {
     month: 'short',
-    day: 'numeric'
+    day: 'numeric',
+    timeZone: 'UTC'
   });
 }

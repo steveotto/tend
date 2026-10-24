@@ -72,7 +72,6 @@ export function RhythmHistoryView({
     rhythm.completionHistory === undefined && !completionHistoryAvailable && datedCompletions.length === 0
       ? undefined
       : [...(rhythm.completionHistory ?? []), ...datedCompletions];
-  const completions = prepareCompletionHistory(historyRecords);
   const scoringTimeZone = rhythm.scoring?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const [scoringInstant, setScoringInstant] = useState(() => new Date());
   useEffect(() => {
@@ -90,6 +89,7 @@ export function RhythmHistoryView({
     ? scoringTimeZone
     : Intl.DateTimeFormat().resolvedOptions().timeZone;
   const asOfDate = localDateInTimeZone(scoringInstant, asOfTimeZone);
+  const completions = prepareCompletionHistory(historyRecords, asOfDate);
   const scoringRecords: RhythmCompletionRecord[] = (historyRecords ?? []).map(record => ({
     ...record,
     rhythmId: rhythm.id
@@ -341,6 +341,7 @@ export function RhythmHistoryView({
         )}
         <RhythmCompletionHistoryChart
           dailyCounts={completions.kind === 'recorded' ? completions.dailyCounts : []}
+          todayDate={asOfDate}
         />
         {completions.kind === 'unavailable' && (
           <p className="rhythm-history-view__empty">Dated completion history is unavailable for this Rhythm.</p>

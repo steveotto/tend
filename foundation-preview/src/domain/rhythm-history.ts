@@ -304,7 +304,8 @@ export function prepareRhythmScoreExample(example: RhythmScoreExample): Prepared
 }
 
 export function prepareDailyCompletionCounts(
-  records: readonly RhythmCompletion[]
+  records: readonly RhythmCompletion[],
+  throughDate?: string
 ): readonly DailyCompletionCount[] {
   if (records.length === 0) return [];
 
@@ -317,9 +318,11 @@ export function prepareDailyCompletionCounts(
 
   const dates = [...countsByDate.keys()].sort();
   const firstDate = dates[0]!;
-  const lastDate = dates.at(-1)!;
+  const lastRecordedDate = dates.at(-1)!;
+  const lastDate = throughDate ?? lastRecordedDate;
+  if (lastDate < firstDate) return [];
   const dailyCounts: DailyCompletionCount[] = [];
-  for (let date = firstDate; date <= lastDate; date = nextLocalDate(date)) {
+  for (let date = firstDate; date <= lastDate; date = nextCalendarDate(date)) {
     const recordIds = countsByDate.get(date) ?? [];
     dailyCounts.push({ date, count: recordIds.length, recordIds });
   }
@@ -327,7 +330,8 @@ export function prepareDailyCompletionCounts(
 }
 
 export function prepareCompletionHistory(
-  history: readonly RhythmCompletion[] | undefined
+  history: readonly RhythmCompletion[] | undefined,
+  throughDate?: string
 ): PreparedCompletionHistory {
   if (history === undefined) return { kind: 'unavailable' };
   const records = orderedCompletions(history);
@@ -335,19 +339,19 @@ export function prepareCompletionHistory(
 
   const firstDate = records.at(-1)!.effectiveDate;
   const lastDate = records[0]!.effectiveDate;
-  const dailyCounts = prepareDailyCompletionCounts(records);
+  const dailyCounts = prepareDailyCompletionCounts(records, throughDate);
 
   return { kind: 'recorded', records, count: records.length, firstDate, lastDate, dailyCounts };
 }
 
-function nextLocalDate(value: string): string {
+function nextCalendarDate(value: string): string {
   const [year, month, day] = value.split('-').map(Number);
   const date = new Date(0);
-  date.setFullYear(year!, month! - 1, day! + 1);
-  date.setHours(12, 0, 0, 0);
+  date.setUTCFullYear(year!, month! - 1, day! + 1);
+  date.setUTCHours(0, 0, 0, 0);
   return [
-    String(date.getFullYear()).padStart(4, '0'),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0')
+    String(date.getUTCFullYear()).padStart(4, '0'),
+    String(date.getUTCMonth() + 1).padStart(2, '0'),
+    String(date.getUTCDate()).padStart(2, '0')
   ].join('-');
 }

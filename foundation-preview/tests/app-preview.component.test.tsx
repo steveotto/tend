@@ -33,6 +33,10 @@ async function saveCardCompletion(user: ReturnType<typeof userEvent.setup>, rhyt
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'When did you tend it?' })).toBeNull());
 }
 
+function inclusiveCalendarDays(startDate: string, endDate: string): number {
+  return Math.floor((Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000) + 1;
+}
+
 describe('Tend Today preview', () => {
   it('exposes the exact v5 recovery copy after explicitly replacing v5 preview data', async () => {
     const user = userEvent.setup();
@@ -340,6 +344,10 @@ describe('Tend Today preview', () => {
       return sum + Number(day.getAttribute('aria-label')?.match(/: (\d+)/)?.[1] ?? 0);
     }, 0);
     expect(chartTotal).toBe(4);
+    expect(chart.querySelector('li:last-child time')?.getAttribute('dateTime'))
+      .toBe(localDateString(new Date()));
+    expect(chart.querySelector('li:last-child')?.getAttribute('aria-label'))
+      .toContain('1 completion, today');
     await user.click(within(history).getByText('Logged moments (4)'));
     const loggedMoments = history.querySelectorAll('.rhythm-history-view__logged-moments li');
     expect(loggedMoments).toHaveLength(chartTotal);
@@ -1320,10 +1328,13 @@ describe('Tend Today preview', () => {
     expect(history.querySelector('.rhythm-history-view__completion-total > span')?.textContent)
       .toBe('moments tended');
     expect(history.querySelector('.rhythm-history-view__completion-span')?.textContent)
-      .toBe('across 4 days');
+      .toBe(`across ${inclusiveCalendarDays('2026-10-17', localDateString(new Date()))} days`);
     expect(within(history).queryByRole('heading', { name: 'Recent opportunities' })).toBeNull();
     expect(within(history).getByRole('heading', { name: 'All completion history' })).toBeTruthy();
-    expect(within(history).getByRole('list', { name: 'Recorded completion count by date' })).toBeTruthy();
+    const chart = within(history).getByRole('list', { name: 'Recorded completion count by date' });
+    expect(chart.querySelector('li:last-child time')?.getAttribute('dateTime')).toBe(localDateString(new Date()));
+    expect(chart.querySelector('li:last-child')?.getAttribute('aria-label'))
+      .toContain('no completion recorded yet, today');
 
     await user.click(within(history).getByRole('button', { name: 'Set tracking start' }));
     const editor = await screen.findByRole('dialog', { name: 'Edit Rhythm' });
@@ -1383,7 +1394,7 @@ describe('Tend Today preview', () => {
     expect(historyRegion.querySelector('.rhythm-history-view__completion-total > span')?.textContent)
       .toBe('moments tended');
     expect(historyRegion.querySelector('.rhythm-history-view__completion-span')?.textContent)
-      .toBe('across 4 days');
+      .toBe(`across ${inclusiveCalendarDays('2026-10-17', localDateString(new Date()))} days`);
     const loggedMoments = within(historyRegion).getByText('Logged moments (3)');
     await user.click(loggedMoments);
     const dates = [...historyRegion.querySelectorAll('.rhythm-history-view__logged-moments ol li')]

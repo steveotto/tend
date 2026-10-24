@@ -6,9 +6,11 @@ const PLOT_HEIGHT = 200;
 const CHART_HEIGHT = 224;
 
 export function RhythmCompletionHistoryChart({
-  dailyCounts
+  dailyCounts,
+  todayDate = localDateString(new Date())
 }: {
   dailyCounts: readonly DailyCompletionCount[];
+  todayDate?: string;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const latestDate = dailyCounts.at(-1)?.date;
@@ -50,7 +52,6 @@ export function RhythmCompletionHistoryChart({
   }
 
   const maxCount = Math.max(1, ...dailyCounts.map(item => item.count));
-  const today = localDateString(new Date());
 
   return (
     <div className="rhythm-history-view__chart-section">
@@ -72,13 +73,13 @@ export function RhythmCompletionHistoryChart({
           style={{ height: `${CHART_HEIGHT}px` }}
         >
           {dailyCounts.map(item => {
-            const isToday = item.date === today;
+            const isToday = item.date === todayDate;
             const dateLabel = formatHistoryDate(item.date);
             return (
               <li
                 key={item.date}
                 aria-label={item.count === 0
-                  ? `${dateLabel}: no recorded completions`
+                  ? `${dateLabel}: ${isToday ? 'no completion recorded yet, today' : 'no recorded completions'}`
                   : `${dateLabel}: ${item.count} ${item.count === 1 ? 'completion' : 'completions'}${isToday ? ', today' : ''}`}
               >
                 <div
@@ -118,7 +119,8 @@ export function RhythmCompletionHistoryChart({
 }
 
 function formatHistoryDate(value: string, long = true): string {
-  return new Date(`${value}T12:00:00`).toLocaleDateString('en-US', long
-    ? { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }
-    : { month: 'short', day: 'numeric' });
+  return new Date(`${value}T12:00:00Z`).toLocaleDateString('en-US', {
+    ...(long ? { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' }),
+    timeZone: 'UTC'
+  });
 }
