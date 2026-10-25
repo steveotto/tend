@@ -6,6 +6,7 @@ import {
   type PersonPreview,
   type RhythmPreview
 } from '../domain/preview-data.ts';
+import { localDateInTimeZone } from '../domain/rhythm-occurrences.ts';
 import { PersonBadgeList } from './PersonBadge.tsx';
 import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
 import { RhythmPersonalBadge } from './RhythmPersonalBadge.tsx';
@@ -110,6 +111,10 @@ export function RhythmDetailsDialog({
     || Boolean(rhythm.categoryIds?.length);
   const hasPeople = Boolean(people?.length && onPersonSelect);
   const hasCategories = Boolean(rhythm.categoryIds?.length);
+  const scoringTimeZone = rhythm.scoring?.timeZone
+    ?? rhythm.createdTimeZone
+    ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const asOfDate = localDateInTimeZone(new Date(), scoringTimeZone);
 
   const detailsActions = (
     <div className="today-rhythm-details__actions">
@@ -254,7 +259,7 @@ export function RhythmDetailsDialog({
                   cadence={rhythm.cadence}
                   schedule={rhythm.schedule}
                   timeLabel={rhythm.timeLabel}
-                  lastTended={rhythmLastTendedLabel(rhythm, completed)}
+                  lastTended={rhythmLastTendedLabel(rhythm, completed, asOfDate)}
                   rhythmTitle={rhythm.title}
                   completed={completed}
                   onUndo={onUndo}

@@ -114,6 +114,56 @@ describe('Tend Today preview', () => {
     await user.click(within(importedDialog).getByRole('button', { name: 'Close details' }));
   });
 
+  it('shows a new quarterly Rhythm as not started until a qualifying Tend or ended occurrence exists', async () => {
+    const user = userEvent.setup();
+    const today = localDateString(new Date());
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const rhythmId = 'user-rhythm-30000000-0000-4000-8000-000000000001';
+    const schedule = {
+      frequency: 'quarterly',
+      monthInQuarter: 1,
+      pattern: { kind: 'dayOfMonth', day: 1 }
+    } as const;
+    const data = createSamplePreviewData();
+    data.savedRhythms.push({
+      id: rhythmId,
+      title: 'New quarterly rhythm',
+      cadence: 'The 1st day of the first month of every quarter.',
+      timeLabel: 'Anytime',
+      timeOfDay: 'anytime',
+      personIds: [],
+      categoryIds: [],
+      schedule,
+      scoring: {
+        trackingStartDate: today,
+        timeZone,
+        scheduleHistory: [{ startDate: today, schedule }]
+      },
+      createdLocalDate: today,
+      createdTimeZone: timeZone
+    });
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await user.click(screen.getByRole('button', {
+      name: 'View scores and history for New quarterly rhythm'
+    }));
+    const history = await screen.findByRole('region', { name: 'History for New quarterly rhythm' });
+    expect(within(history).getByRole('img', {
+      name: 'On Track: Unscored because Starts with your first Tend.'
+    })).toBeTruthy();
+    expect(within(history).queryByRole('meter', { name: 'On Track score' })).toBeNull();
+    expect(within(history).getByRole('status').textContent).toContain(
+      'On Track: Starts with your first Tend.'
+    );
+    expect(within(history).getByRole('status').textContent).toContain(
+      'Consistency: No scheduled moments to measure yet.'
+    );
+    expect(within(history).getByText('Your story starts with the first Tend.')).toBeTruthy();
+    expect(within(history).getByText('Logged moments (0)')).toBeTruthy();
+  });
+
   it('keeps Take a walk descriptive cadence literal until a structured schedule is explicitly saved', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -145,7 +195,7 @@ describe('Tend Today preview', () => {
     await user.click(within(editor).getByRole('button', { name: 'Add Rhythm' }));
 
     const card = screen.getByRole('article', { name: 'Quarterly preview habit' });
-    expect(within(card).getByText(/Quarterly\s*·\s*1st month\s*·\s*1st/)).toBeTruthy();
+    expect(within(card).getByText('Quarterly')).toBeTruthy();
     const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
     expect(raw).not.toBeNull();
     const parsed = parsePreviewBackup(raw!, localDateString(new Date()));
@@ -189,7 +239,7 @@ describe('Tend Today preview', () => {
     await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
 
     const updatedCard = screen.getByRole('article', { name: 'Take a walk' });
-    expect(within(updatedCard).getByText(/Quarterly\s*·\s*1st month\s*·\s*1st/)).toBeTruthy();
+    expect(within(updatedCard).getByText('Quarterly')).toBeTruthy();
     expect(within(updatedCard).queryByText('3 times a week')).toBeNull();
 
     const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
@@ -207,7 +257,7 @@ describe('Tend Today preview', () => {
     cleanup();
     render(<App />);
     const reloadedCard = screen.getByRole('article', { name: 'Take a walk' });
-    expect(within(reloadedCard).getByText(/Quarterly\s*·\s*1st month\s*·\s*1st/)).toBeTruthy();
+    expect(within(reloadedCard).getByText('Quarterly')).toBeTruthy();
     expect(within(reloadedCard).queryByText('3 times a week')).toBeNull();
     await user.click(within(reloadedCard).getByRole('button', { name: 'View scores and history for Take a walk' }));
     const history = screen.getByRole('region', { name: 'History for Take a walk' });

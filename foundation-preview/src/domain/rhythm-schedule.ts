@@ -329,7 +329,7 @@ export function formatRhythmSchedule(
         compact = `Monthly · ${compactPatternSummary(schedule.pattern)}`;
         break;
       case 'quarterly':
-        compact = `Quarterly · ${dayOrdinal(schedule.monthInQuarter)} month · ${compactPatternSummary(schedule.pattern)}`;
+        compact = 'Quarterly';
         break;
       case 'yearly':
         compact = schedule.pattern.kind === 'dayOfMonth'

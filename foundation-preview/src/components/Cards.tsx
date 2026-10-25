@@ -13,6 +13,7 @@ import {
   type MoneyGoal
 } from '../domain/money-goals.ts';
 import { rhythmLastTendedLabel, type FoundationPreview, type PersonId, type PersonPreview, type RhythmPreview } from '../domain/preview-data.ts';
+import { localDateInTimeZone } from '../domain/rhythm-occurrences.ts';
 import { PersonBadgeList } from './PersonBadge.tsx';
 import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
 import { RhythmPersonalBadge } from './RhythmPersonalBadge.tsx';
@@ -433,6 +434,10 @@ function SimpleRhythmCard({
   onUndo?: (() => void) | undefined;
 }) {
   const tendButtonRef = useRef<HTMLButtonElement>(null);
+  const timeZone = rhythm.scoring?.timeZone
+    ?? rhythm.createdTimeZone
+    ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const asOfDate = localDateInTimeZone(new Date(), timeZone);
 
   return (
     <article className={`rhythm-card rhythm-card--simple${suggestion ? ' rhythm-card--suggestion' : ''}`} aria-labelledby={headingId}>
@@ -460,7 +465,7 @@ function SimpleRhythmCard({
       </div>
       <RhythmMetadata
         variant="status"
-        status={suggestion ? 'Suggested sample' : rhythmLastTendedLabel(rhythm, completed)}
+        status={suggestion ? 'Suggested sample' : rhythmLastTendedLabel(rhythm, completed, asOfDate)}
         rhythmTitle={rhythm.title}
         completed={completed}
         onUndo={suggestion ? undefined : onUndo}

@@ -272,12 +272,6 @@ export function RhythmHistoryView({
       ) : (
         <>
       <div className="rhythm-history-view__metadata">
-        {(archived || rhythm.personal) && (
-          <div className="rhythm-history-view__badges">
-            {archived && <RhythmArchivedBadge />}
-            {rhythm.personal && <RhythmPersonalBadge />}
-          </div>
-        )}
         {hasDescription && (
           <p className="rhythm-history-view__description">
             {rhythm.description}
@@ -298,6 +292,12 @@ export function RhythmHistoryView({
               presentation="detailed"
             />
           </p>
+        )}
+        {(archived || rhythm.personal) && (
+          <div className="rhythm-history-view__badges">
+            {archived && <RhythmArchivedBadge />}
+            {rhythm.personal && <RhythmPersonalBadge />}
+          </div>
         )}
       </div>
 

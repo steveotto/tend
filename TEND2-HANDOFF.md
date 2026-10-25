@@ -774,3 +774,133 @@ The selector-level proof is the pure `selectRhythmScore` result, not a browser s
 The root cause for the earlier unavailable score was selector gating, not a general quarterly engine failure: the scoring path could return an unscored “ready-for-first-tend” / unsupported state when schedule-history coverage or tracking metadata was absent or invalid. The fix retains the schedule-aware On Track policy and keeps Consistency independent from On Track. The schedule-history model remains the foundation for the future Season work; it is not itself a Season implementation.
 
 **Completed verification in this worktree:** `cd foundation-preview && npm run typecheck` passed; `cd foundation-preview && npm test` passed (reader 7/7, component/domain 271/271, legacy 175/175); `cd foundation-preview && npm run build` passed with the existing `/tend.css` warning; `git --no-pager diff --check` passed. No commit, push, merge, deployment, or preview-data reset was performed. Seasons is intentionally not started in this checkout.
+
+## Safe restart handoff (2026-10-25)
+
+**Worktree and branch status (fresh confirmation):**
+- Repository path: `/Users/ice/dev/copilot-worktrees/steveotto_tend/gh11-tend2-foundation`
+- Branch: `tend2-rhythm-scheduling`
+- HEAD: `0a98cbf`
+- Upstream: `origin/tend2-rhythm-scheduling`
+- Working tree status: not clean; the current uncommitted changes are limited to:
+  - `foundation-preview/src/domain/rhythm-scoring.ts`
+  - `foundation-preview/tests/rhythm-scoring.domain.test.ts`
+- No files were reset, cleaned, stashed, discarded, or switched. No unrelated changes were made during this handoff.
+
+**Work actually completed in the active checkout:**
+- Schedule-aware On Track scoring work remains in progress on this branch, specifically within the rhythm scoring selector and related tests.
+- The current active task is not a new feature; it is the pending follow-up to correct due-status labels, clarify Consistency empty states, add the missing bottom clearance beneath the chart button, and check missing history-header metadata.
+- Seasons remains deferred and not started in this checkout.
+
+**Current uncommitted implementation status:**
+- `foundation-preview/src/domain/rhythm-scoring.ts` is modified and is the active scoring logic under review.
+- `foundation-preview/tests/rhythm-scoring.domain.test.ts` is modified and contains the focused regression coverage for the schedule-aware logic.
+- No new Seasons model, Season UI, migration code, schema change, or command implementation was created in this worktree.
+- No untracked or generated preview artifacts were intentionally added or removed during this handoff.
+
+**Fresh checks actually run for this handoff (not a general validation sweep):**
+- `git --no-pager status -sb` → working tree showed the two modified files above.
+- `git --no-pager branch -vv` → confirmed branch tracking and current branch state.
+- `git --no-pager rev-parse --short HEAD` → current HEAD = `0a98cbf`.
+- `git --no-pager remote -v` → confirmed `origin` points to `https://github.com/steveotto/tend.git`.
+- `curl -I -sS http://127.0.0.1:4173/app-preview.html` → returned `HTTP/1.1 200 OK`.
+- `ps -ef | grep -E 'vite|node.*4173|npm.*preview'` → found a running Vite process on port 4173.
+
+**Results vs older recorded results:**
+- The fresh handoff checks above are the current evidence from this session. They confirm the preview server is running and the repo is on the correct branch with only the two scoring-related files modified.
+- Older recorded results (typecheck/test/build passes from earlier checkpoint notes) remain historical; they were not rerun as part of this handoff-only stop-and-save step.
+
+**Preview URL and server instructions:**
+- Preview URL: `http://127.0.0.1:4173/app-preview.html`
+- Verified server status: the page responded with HTTP 200 and a Vite process is running on port 4173.
+- If the preview needs to be started again after a restart, run:
+  - `cd /Users/ice/dev/copilot-worktrees/steveotto_tend/gh11-tend2-foundation/foundation-preview`
+  - `npm install` (only if dependencies are missing)
+  - `npm run dev -- --host 127.0.0.1 --port 4173`
+- Keep the app on the existing synthetic preview and do not alter live app storage or production data.
+
+**Manual save note:**
+- The `TEND2-HANDOFF.md` file itself was updated in place and saved in the repo. No open editor buffers were identified as needing manual save in this session.
+- If your local editor has any other unsaved buffers, save them before restarting the app or reloading the environment.
+
+**Active pending task (do not start a new feature):**
+- Correct due-status labels to derive from the effective structured schedule rather than a fallback sample pattern.
+- Clarify Consistency empty states so that “No scheduled moments to measure yet” and the valid zero-score state are distinct from unsupported or missing data.
+- Add the missing bottom clearance beneath the chart button in the inline card layout without creating a special-case fix.
+- Check missing history-header metadata and restore the approved rendering order for description / people badges / category badges / frequency time only when fields are actually present.
+- Keep On Track independent from unavailable Consistency and Health states.
+- Do not start Seasons work while this scheduled-scoring/UI cleanup remains active.
+
+**Ready for restart:**
+- The repository is preserved at the current branch and HEAD with the existing uncommitted work intact. This handoff is ready for a safe app restart without reset, discard, or destructive cleanup.
+
+## Due labels, empty Consistency, and inline card spacing (2026-10-25)
+
+**Current checkout:** `/Users/ice/dev/copilot-worktrees/steveotto_tend/gh11-tend2-foundation`, branch `tend2-rhythm-scheduling`, HEAD `0a98cbf`, upstream `origin/tend2-rhythm-scheduling`. Existing scoring source/test edits and the prior handoff edits were preserved. No schema, storage, preview data, commit, push, merge, or deployment changes were made.
+
+**Root causes and fixes:**
+- The no-completion footer used the seed fixture's `rhythm.status` (“Due today”) instead of checking the effective schedule. Recurrence matching now lives in the shared pure `rhythm-occurrences.ts` module and is used by both scoring and `selectNextScheduledOccurrence`. The footer uses the effective schedule, saved schedule-history boundary, tracking start, and scoring timezone. It shows “Due today” only for an occurrence on the current local date, otherwise “Next due <date>”; it preserves a real latest completion label, and uses neutral “Not yet tended” wording for descriptive cadence without defined dates. Invalid saved schedule metadata does not fall back to a sample due label.
+- Consistency used “Ready for your first Tend” when a rhythm had started tracking but no schedule occurrence had come due. Those empty branches now return `no-eligible-occurrences` with “No scheduled moments to measure yet.” A newly created Rhythm with a scheduled occurrence today retains “Ready for your first Tend”; eligible ended occurrences still produce a valid score including zero, and On Track remains calculated independently.
+- Inline action buttons were absolutely positioned in the header and therefore out of flow; with the 44px Tend action and 12px gap, the chart button could extend below the body reserved for content, causing overlap with the footer divider on sparse cards. Actions now share the inline body grid with the summary column. The body’s 16px bottom padding applies after whichever column is taller; the actions remain top-aligned, right-aligned, and retain their sizes and 12px gap.
+- History already passed the runtime rhythm's description, people, categories, schedule, and time values into the scrolling metadata body, with only title and Close in the persistent header. Its metadata order is description → people → categories → frequency/time; archived/Personal badges follow those items. Existing category IDs are not fabricated when absent.
+
+**Actual browser state and acceptance evidence:** the preview server was not listening on port 4173 when checked, so it was started from this worktree's `foundation-preview` directory with `npm run dev -- --port 4173 --strictPort`. The new listener was PID 44869 with cwd `/Users/ice/dev/copilot-worktrees/steveotto_tend/gh11-tend2-foundation/foundation-preview`; `http://127.0.0.1:4173/app-preview.html` returned HTTP 200. The browser preview was reloaded and showed the Today plan.
+
+The actual preview envelope was schema v8 with zero saved Rhythm overrides. “Quarterly verify” was absent, and Take a walk was still the descriptive “3 times a week” sample (not a saved Quarterly rhythm). Its actual history rendered its existing description, Avery/Jordan people badges, “3 times a week,” and Afternoon in the scrolling body; it had no category badge IDs, so none were shown. Its persistent history header contained only “Take a walk” and Close. The Daily Pray together preview continued to show “Due today.”
+
+Because the saved Quarterly rhythm was absent, no claim is made that the user's persisted Quarterly record was browser-verified. Instead, temporary unsaved React fixtures were mounted in the live browser page and removed before reloading; browser storage remained unchanged and the saved override count remained zero. For the synthetic Quarterly schedule `frequency: quarterly`, `monthInQuarter: 1`, `pattern: dayOfMonth 1`, tracking start `2026-10-25`, timezone `UTC`, and as-of date `2026-10-25`, the browser displayed “Next due Jan 1” (the next occurrence is `2027-01-01`). A separate Daily structured fixture on `2026-10-25` displayed “Due today.” On the sparse fixture (no description or badges), measured chart-button-to-footer-divider clearance was 16px; the populated description/people/category fixture measured 36px. Tend-to-chart spacing remained 12px in both. The populated history fixture displayed description, people, categories, and schedule/time in that order.
+
+**Checks from this implementation pass:** `cd foundation-preview && npm run typecheck` passed. Focused Vitest command `npx vitest run tests/rhythm-scoring.domain.test.ts tests/rhythm-occurrences.domain.test.ts tests/components.component.test.tsx tests/rhythm-history.component.test.tsx tests/app-preview.component.test.tsx --reporter=dot` passed, 5 files / 149 tests. `git diff --check` passed. The full configured test suite and production build were not run for this focused task.
+
+**Files changed for this follow-up:** `foundation-preview/src/domain/rhythm-occurrences.ts` (new), `foundation-preview/tests/rhythm-occurrences.domain.test.ts` (new), `foundation-preview/src/domain/rhythm-scoring.ts`, `foundation-preview/src/domain/preview-data.ts`, `foundation-preview/src/components/Cards.tsx`, `foundation-preview/src/components/RhythmDetailsDialog.tsx`, `foundation-preview/src/components/RhythmHistoryView.tsx`, `foundation-preview/src/styles.css`, `foundation-preview/tests/components.component.test.tsx`, `foundation-preview/tests/rhythm-scoring.domain.test.ts`, and this handoff.
+
+Seasons remains deferred and was not started. No live data, legacy files, existing application shell, dependencies, or saved preview records were modified.
+
+## Inline action-position regression correction (2026-10-25)
+
+The preceding spacing fix placed `.today-rhythm-details__actions` inside the body grid. That correctly reserved a column but moved Tend below the title and inset the sparse card's actions. This follow-up restores the approved positioning without changing the card design: inline actions are again absolutely anchored at the top-right of the title header, while the header reserves the 92px action width plus the existing 18px separation. The scrolling body retains a right-side content inset and a 116px minimum block size, matching the 100px Tend/chart stack plus 16px bottom clearance; taller description/association content naturally expands the body. There are no placeholder elements, negative margins, or page-specific offsets. The pencil remains immediately after the title.
+
+Quarterly compact footer text is now simply “Quarterly”; the detailed schedule remains available through the compact label's accessible full-schedule description and appears in history, e.g. “The 1st day of the first month of every quarter.” Other compact frequency labels are unchanged. Take a walk's effective record has no saved structured schedule override: the current preview's `savedRhythms` contains a Quarterly “Simple Rhythm Test” override, but no Take a walk override. The effective Take a walk is still the seeded descriptive “3 times a week” rhythm with no selected weekday structure, so the visible phrase is intentional and no weekday was inferred or data converted.
+
+**Actual browser layout verification:** the strict-port preview remained at `http://127.0.0.1:4173/app-preview.html`. At the loaded preview viewport, browser measurements for Daily connection, Take a walk, and the saved sparse Simple Rhythm Test showed:
+- Tend buttons were 92×44px, Chart buttons 44×44px.
+- Tend top matched each title's top (0px delta); its right edge was 17px inside the card border, matching the right content inset.
+- Chart shared Tend's right edge and began 12px below Tend.
+- Chart-to-footer divider clearance was 66px for Daily connection and Take a walk, and 64px for sparse Simple Rhythm Test, exceeding the required 16px.
+- Simple Rhythm Test had no description or association badges; its action geometry matched the populated cards. No sample record was edited.
+- A temporary isolated long-title fixture (340px outer width, 322px card width) wrapped to 133px title height. Tend remained aligned with the first title line (0px top delta), Chart retained the 12px gap and shared right edge, and footer clearance was 155px. The fixture was unmounted and removed; local storage remained byte-for-byte unchanged.
+- The footer showed “Quarterly” beside “Anytime” and right-aligned “Next due Jan 1”; history showed the full quarterly pattern. The actual history header contained only title and Close. Take a walk still displayed “3 times a week”; the seed is descriptive and has no override.
+
+**Focused regression and checks:** added/updated component tests to assert actions remain in the title header even when description and associations are absent, and compact Quarterly tests now expect only “Quarterly” while detailed history wording stays intact. An initial focused run failed only because two pre-existing app-preview assertions still expected the former verbose compact label; those assertions were updated. Final `cd foundation-preview && npm run typecheck` passed. Final affected Vitest run passed 6 files / 157 tests (`rhythm-schedule.domain`, `rhythm-occurrences.domain`, `components.component`, `rhythm-history.component`, `app-preview.component`, `rhythm-scoring.domain`). `git diff --check` passed. The full suite and production build were not rerun.
+
+Shared reuse: `rhythm-occurrences.ts` supplies the same pure date matcher to scoring and next-due status; `RhythmScheduleSummary` remains the shared compact/detailed formatter for card footers and history; `RhythmDetailsDialog` continues to compose Today/other detail views with shared footer/actions; `RhythmHistoryView` renders the same provided description, people, category, and schedule metadata. Browser measurements verify rendered geometry; component tests cover structure/behavior but do not establish pixel geometry.
+
+## On Track not-started eligibility correction (2026-10-25)
+
+**Rule superseding the earlier 100-before-first-occurrence behavior:** On Track is unavailable until the Rhythm has either one qualifying scheduled completion (including today) or at least one ended eligible scheduled occurrence. With neither, the shared selector returns the existing typed `ready-for-first-tend` state with “Starts with your first Tend.” If there are ended eligible occurrences but no qualifying completion, the existing 10-points-per-miss deduction remains in force. A due-today occurrence stays pending and does not count as an ended miss. This applies across Daily, selected weekdays, Monthly, Quarterly, Yearly, and Custom. Off-schedule logs do not qualify. Consistency logic is unchanged; blended Health remains unavailable unless both Consistency and On Track are scored.
+
+**Cause and implementation:** `selectRhythmScore` initialized the On Track accumulator to 100 and, after processing history, always returned it as scored when tracking start metadata existed. Thus a new Quarterly Rhythm with no past eligible occurrence returned 100 despite no completion or evaluated opportunity. The selector now checks after existing schedule-history validation and occurrence processing: if `lastQualifyingCompletionDate` is null and the ended `missedOccurrenceCount` is zero, it returns `ready-for-first-tend`; otherwise it returns the already-calculated score and evidence. Existing occurrence generation, completion matching, tracking start, timezone, schedule history, deductions, and Consistency are unchanged. There is no persisted score or UI-only gate.
+
+**Browser acceptance on the existing saved preview:** branch `tend2-rhythm-scheduling`, HEAD `0a98cbf4cb807c46cee3494e25f8759c2de2b79e`, upstream `origin/tend2-rhythm-scheduling`; implementation remains uncommitted alongside the prior preserved work. At `http://127.0.0.1:4173/app-preview.html`, the actual `Simple Rhythm Test` record has ID `user-rhythm-eb73bef2-8161-4cc8-9e8a-6db397ed90e2`, Quarterly schedule (first month of every quarter, day 1), tracking start `2026-10-25`, timezone `America/New_York`, and one schedule-history segment beginning `2026-10-25`. The next occurrence is `2027-01-01`; there are zero completion records for this ID and the open history says `Logged moments (0)`. Before the fix, the actual history displayed On Track `100` despite no eligible past occurrence. After code reload and reopening history, the same saved rhythm displayed On Track `—` / `unscored`, with “On Track: Starts with your first Tend.” Consistency remains unscored with “No scheduled moments to measure yet.” and Health remains `—`. The local-storage key set remained only `tend2:synthetic-preview`; the schedule, ID, metadata, and logs were read-only and unchanged.
+
+**Regression tests and fresh checks:** `tests/rhythm-scoring.domain.test.ts` now covers the new future-due Quarterly case, due-today pending behavior, qualifying completion today across all six supported frequencies, one ended miss across all six frequencies (90), an off-schedule log, completion deletion recalculating to not-started, unchanged post-completion miss behavior, Consistency zero for one missed occurrence, and null Health when a metric is unavailable. `tests/app-preview.component.test.tsx` covers rendered unscored semantics, exact explanation, unchanged Consistency empty wording, Health absence, and empty completion history. Final `cd foundation-preview && npm run typecheck` passed. Final `cd foundation-preview && npx vitest run tests/rhythm-scoring.domain.test.ts tests/app-preview.component.test.tsx tests/rhythm-history.component.test.tsx --reporter=dot` passed 3 files / 121 tests. Final `git diff --check` passed after the handoff append. The full configured suite and production build were not run for this focused correction.
+
+## Shared history modal header spacing (2026-10-25)
+
+Adjusted only the dialog-scoped shared history layout in `foundation-preview/src/styles.css`. Removed the bottom border from the persistent `.rhythm-history-view--dialog .rhythm-history-view__rhythm-header`, set the dialog flex container gap to zero (the inherited 14px grid gap was separating header from body), and set dialog scrolling-body top padding to 10px. The body remains its own overflow container, so title and Close remain opaque and fixed outside scrolling content. The scoped `.rhythm-history-view__body--dialog > .rhythm-history-view__score-section` now suppresses only the metadata-to-score divider; its 14px top padding and 16px following spacing remain, and borders inside the Health card and elsewhere are unchanged. No negative margins or global divider overrides were introduced.
+
+**Browser verification:** at `http://127.0.0.1:4173/app-preview.html`, inspected the populated Daily connection history modal without changing its data. The header remained 44px high, Close remained 44×44px, header bottom was y=145 and description began y=155 (10px gap). Header computed background remained opaque `rgb(247, 249, 247)` and its bottom border was absent. The frequency/time row had no bottom border; the Health section began at the row's bottom with its existing 14px top padding. Scrolled the body to its maximum (`scrollTop=121`); the header stayed at y=101–145 while body contents advanced, confirming persistent title/Close and independent scrolling. Metadata remains description → people → schedule (no categories are selected for this rhythm); category ordering remains covered by existing tests. No preview storage writes occurred.
+
+**Checks:** `cd foundation-preview && npx vitest run tests/rhythm-history.component.test.tsx tests/app-preview.component.test.tsx tests/components.component.test.tsx --reporter=dot` passed 3 files / 124 tests. `git diff --check` passed. No scoring, card-layout, or other modal form changes were made; the preceding On Track eligibility fix and all existing uncommitted work remain intact.
+
+## Schedule-aware On Track and shared history checkpoint (2026-10-25)
+
+**Final eligibility behavior:** the pure shared `selectRhythmScore` selector leaves On Track unscored with “Starts with your first Tend” when neither a qualifying scheduled completion nor an ended eligible occurrence exists. A qualifying completion (including today) calculates normally; absent completions with ended eligible misses retain the existing 10-points-per-miss deduction; due today remains pending; and off-schedule records do not qualify. Regression cases cover Daily, selected weekdays, Monthly, Quarterly, Yearly, and Custom, completion removal, and Health null behavior. Consistency was not changed.
+
+**Actual saved-browser result:** in the existing `http://127.0.0.1:4173/app-preview.html` preview, Simple Rhythm Test remains ID `user-rhythm-eb73bef2-8161-4cc8-9e8a-6db397ed90e2`, scheduled for the first day of the first month of each quarter. Its tracking start is `2026-10-25`, scoring timezone `America/New_York`, and the one schedule-history segment starts `2026-10-25`; there are no dated completion records. The next due date is `2027-01-01`. Its history gauge displayed `—` / `unscored` and “Starts with your first Tend”; Consistency displayed “No scheduled moments to measure yet,” and Health remained unavailable. Storage stayed limited to `tend2:synthetic-preview`; no browser data was edited.
+
+**Shared history presentation:** removed the persistent title/Close header divider and metadata-to-score divider, removed the inherited flex gap, and set the scroll-body top inset to 10px. Browser measurements confirmed the opaque fixed 44px header, 44×44px Close target, 10px title-row-to-description gap, and unchanged fixed header while the body scrolled. Metadata continues description → people → categories → schedule/time. The Health card's internal divider/layout, its 14px top padding, and the 16px gap below the score section are retained.
+
+**Final review and checks:** the pending checkpoint files are confined to `TEND2-HANDOFF.md`, shared Rhythm card/history/schedule/occurrence/scoring source, and their focused component/domain tests. Review found no secrets, personal data, browser backup, dependency/lockfile change, generated output, live data, legacy-app edit, or unrelated change. `cd foundation-preview && npm run typecheck` passed. `cd foundation-preview && npm test` passed: reader 7/7, component/domain 282/282 across 16 files, legacy 175/175 (464 total). `cd foundation-preview && npm run build` passed (79 modules transformed) with the existing warning `/tend.css doesn't exist at build time, it will remain unchanged to be resolved at runtime`. `git diff --check` passed before this final handoff entry; the staged/final check is run as part of checkpointing. No known unfinished implementation remains in this scoring/history slice; the full task suite is green.
+
+**Next step:** Seasons model/persistence only. Seasons implementation has not started; the existing schedule-history segments are scoring history, not Seasons functionality. No deployment, live-data, legacy-app, or UI Seasons work is included in this checkpoint.

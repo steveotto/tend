@@ -3581,7 +3581,7 @@ a:focus-visible {
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__content {
   display: block;
-  min-height: 52px;
+  min-height: 116px;
   margin-top: 4px;
   padding: 0 calc(var(--rhythm-details-horizontal-padding) + 92px + 18px) 16px var(--rhythm-details-horizontal-padding);
   overflow: visible;
@@ -3924,6 +3924,7 @@ a:focus-visible {
 .rhythm-history-view--dialog {
   display: flex;
   flex-direction: column;
+  gap: 0;
   min-height: 0;
   max-height: min(calc(85vh - 36px), 784px);
   padding: 0 var(--rhythm-details-horizontal-padding, 16px);
@@ -3945,9 +3946,8 @@ a:focus-visible {
   column-gap: 12px;
   align-items: start;
   flex: 0 0 auto;
-  padding: 0 0 12px;
+  padding: 0;
   background: var(--canvas);
-  border-bottom: 1px solid var(--line);
 }
 
 .rhythm-history-view__body {
@@ -3962,7 +3962,7 @@ a:focus-visible {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 12px 0 16px;
+  padding: 10px 0 16px;
   scrollbar-gutter: stable;
 }
 
@@ -4074,6 +4074,7 @@ a:focus-visible {
 
 .rhythm-history-view__body--dialog > .rhythm-history-view__score-section {
   margin-bottom: 16px;
+  border-top: 0;
 }
 
 .rhythm-history-view__score-card {
