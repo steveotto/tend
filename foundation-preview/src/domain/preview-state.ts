@@ -8,13 +8,18 @@ import type { MoneyGoal } from './money-goals.ts';
 import { goals as sampleGoals, todayRhythms } from './preview-data.ts';
 import type { ActiveRhythmCompletion, DatedRhythmCompletion, RhythmCompletionRecord } from './rhythm-completion.ts';
 import { localDateTimeInZone } from './rhythm-completion.ts';
-import { validateSavedRhythms, validateSavedRhythmsV4, validateSavedRhythmsV7 } from './rhythm-editor.ts';
+import {
+  validateSavedRhythms,
+  validateSavedRhythmsV4,
+  validateSavedRhythmsV7,
+  validateSavedRhythmsV8
+} from './rhythm-editor.ts';
 import type { SavedRhythm } from './rhythm-editor.ts';
 import { rhythmTimeValueFromLabel, rhythmTimeValueFromLegacyLabel } from './rhythm-schedule.ts';
 import type { RhythmSchedule, RhythmScoringMetadata } from './rhythm-schedule.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 7;
+export const PREVIEW_SCHEMA_VERSION = 8;
 
 export type PreviewData = {
   goals: MoneyGoal[];
@@ -55,7 +60,7 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
 const goalKeys = [
@@ -71,6 +76,7 @@ const dataKeysV4 = dataKeysV3;
 const dataKeysV5 = [...dataKeysV4, 'datedRhythmCompletions', 'activeRhythmCompletions'];
 const dataKeysV6 = [...dataKeysV5, 'rhythmCompletionOverrides', 'removedSeedCompletionIds'];
 const dataKeysV7 = dataKeysV6;
+const dataKeysV8 = dataKeysV7;
 const envelopeKeys = ['format', 'schemaVersion', 'data'];
 const supportedRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 const builtInRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
@@ -218,8 +224,13 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
         categoryIds: [...rhythm.categoryIds],
         timeOfDay: serializedTimeOfDay(rhythm),
         ...(rhythm.schedule === undefined ? {} : { schedule: cloneRhythmSchedule(rhythm.schedule) }),
-          ...(rhythm.personal === undefined ? {} : { personal: rhythm.personal }),
-          ...(rhythm.scoring === undefined ? {} : { scoring: cloneRhythmScoring(rhythm.scoring) })
+        ...(rhythm.personal === undefined ? {} : { personal: rhythm.personal }),
+        ...(rhythm.scoring === undefined ? {} : { scoring: cloneRhythmScoring(rhythm.scoring) }),
+        ...(rhythm.createdLocalDate === undefined ? {} : {
+          createdLocalDate: rhythm.createdLocalDate,
+          createdTimeZone: rhythm.createdTimeZone
+        }),
+        ...(rhythm.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: rhythm.dailyBackfillAllowed })
       })),
       archivedRhythmIds: [...data.archivedRhythmIds],
       datedRhythmCompletions: data.datedRhythmCompletions.map(record => ({
@@ -269,7 +280,8 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   if (value.format !== PREVIEW_BACKUP_FORMAT
     || (value.schemaVersion !== 1 && value.schemaVersion !== 2 && value.schemaVersion !== 3
       && value.schemaVersion !== 4 && value.schemaVersion !== 5
-      && value.schemaVersion !== 6 && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
+      && value.schemaVersion !== 6 && value.schemaVersion !== 7
+      && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
   const isV1 = value.schemaVersion === 1;
@@ -279,18 +291,20 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const isV5 = value.schemaVersion === 5;
   const isV6 = value.schemaVersion === 6;
   const isV7 = value.schemaVersion === 7;
+  const isV8 = value.schemaVersion === 8;
   const allowedDataKeys = isV1 ? dataKeysV1 : isV2 ? dataKeysV2
-    : isV3 || isV4 ? dataKeysV3 : isV7 ? dataKeysV7 : isV6 ? dataKeysV6 : dataKeysV5;
+    : isV3 || isV4 ? dataKeysV3 : isV8 ? dataKeysV8 : isV7 ? dataKeysV7 : isV6 ? dataKeysV6 : dataKeysV5;
   if (!isRecord(value.data) || !hasOnlyKeys(value.data, allowedDataKeys)
     || !Array.isArray(value.data.goals) || !Array.isArray(value.data.completedRhythmIds)
     || ((isV5 || isV6 || isV7) && (!Array.isArray(value.data.datedRhythmCompletions)
       || !Array.isArray(value.data.activeRhythmCompletions)))
-    || ((isV6 || isV7) && (!Array.isArray(value.data.rhythmCompletionOverrides)
+    || ((isV6 || isV7 || isV8) && (!Array.isArray(value.data.rhythmCompletionOverrides)
       || !Array.isArray(value.data.removedSeedCompletionIds)))) {
     return { valid: false, kind: 'invalid', message: 'Preview data must contain goals and completed Rhythm IDs.' };
   }
-  if (!isV1 && !((isV4 || isV5 || isV6 || isV7)
-    ? isV7 ? validateSavedRhythmsV7(value.data.savedRhythms) : validateSavedRhythmsV4(value.data.savedRhythms)
+  if (!isV1 && !((isV4 || isV5 || isV6 || isV7 || isV8)
+    ? isV8 ? validateSavedRhythmsV8(value.data.savedRhythms)
+      : isV7 ? validateSavedRhythmsV7(value.data.savedRhythms) : validateSavedRhythmsV4(value.data.savedRhythms)
     : validateSavedRhythms(value.data.savedRhythms))) {
     return { valid: false, kind: 'invalid', message: 'Saved Rhythms contain invalid fields or unresolved references.' };
   }
@@ -333,7 +347,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   }
 
   let savedRhythms: SavedRhythm[];
-  if (isV4 || isV5 || isV6 || isV7) {
+  if (isV4 || isV5 || isV6 || isV7 || isV8) {
     savedRhythms = value.data.savedRhythms as SavedRhythm[];
   } else if (isV1) {
     savedRhythms = [];
@@ -351,7 +365,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const datedRhythmCompletions: DatedRhythmCompletion[] = [];
   const completionIds = new Set<string>();
   const knownRhythmIds = new Set([...builtInRhythmIds, ...savedRhythmIds]);
-  const rawDatedCompletions: unknown[] = isV5 || isV6 || isV7 ? value.data.datedRhythmCompletions as unknown[] : [];
+  const rawDatedCompletions: unknown[] = isV5 || isV6 || isV7 || isV8 ? value.data.datedRhythmCompletions as unknown[] : [];
   for (const rawCompletion of rawDatedCompletions) {
     if (!isRecord(rawCompletion)
       || !hasOnlyKeys(rawCompletion, [
@@ -389,7 +403,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const activeRhythmCompletions: ActiveRhythmCompletion[] = [];
   const activeRhythmIds = new Set<string>();
   const activeCompletionIds = new Set<string>();
-  const rawActiveCompletions: unknown[] = isV5 || isV6 || isV7 ? value.data.activeRhythmCompletions as unknown[] : [];
+  const rawActiveCompletions: unknown[] = isV5 || isV6 || isV7 || isV8 ? value.data.activeRhythmCompletions as unknown[] : [];
   for (const rawAction of rawActiveCompletions) {
     if (!isRecord(rawAction) || !hasOnlyKeys(rawAction, ['rhythmId', 'completionId'])
       || typeof rawAction.rhythmId !== 'string' || !knownRhythmIds.has(rawAction.rhythmId)
@@ -412,7 +426,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
 
   const rhythmCompletionOverrides: RhythmCompletionRecord[] = [];
   const overrideIds = new Set<string>();
-  const rawOverrides: unknown[] = isV6 || isV7 ? value.data.rhythmCompletionOverrides as unknown[] : [];
+  const rawOverrides: unknown[] = isV6 || isV7 || isV8 ? value.data.rhythmCompletionOverrides as unknown[] : [];
   for (const rawOverride of rawOverrides) {
     if (!isRecord(rawOverride) || !hasOnlyKeys(rawOverride, [
       'id', 'rhythmId', 'effectiveDate', 'localTime', 'timeZone', 'completedAt', 'recordedAt', 'memory'
@@ -457,7 +471,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   }
 
   const removedSeedCompletionIds = new Set<string>();
-  const rawRemovedIds: unknown[] = isV6 || isV7 ? value.data.removedSeedCompletionIds as unknown[] : [];
+  const rawRemovedIds: unknown[] = isV6 || isV7 || isV8 ? value.data.removedSeedCompletionIds as unknown[] : [];
   for (const id of rawRemovedIds) {
     if (typeof id !== 'string' || !syntheticCompletionIds.has(id)
       || removedSeedCompletionIds.has(id) || overrideIds.has(id)) {

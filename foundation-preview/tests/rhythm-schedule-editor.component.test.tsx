@@ -23,8 +23,7 @@ async function choose(user: ReturnType<typeof userEvent.setup>, label: string, o
 }
 
 describe('shared structured Rhythm editor', () => {
-  it('requires confirmation for a suggested tracking start date', async () => {
-    const user = userEvent.setup();
+  it('does not block Rhythm editing on a tracking-start confirmation', () => {
     const rhythm: RhythmPreview = {
       ...todayRhythms[0]!,
       schedule: { frequency: 'daily' }
@@ -33,23 +32,14 @@ describe('shared structured Rhythm editor', () => {
     render(
       <RhythmEditor
         rhythm={rhythm}
-        suggestedTrackingStartDate="2026-10-20"
         onSave={onSave}
         onClose={vi.fn()}
       />
     );
     const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
-    expect(within(editor).getByText(/First recorded completion: 2026-10-20/)).toBeTruthy();
-    expect((within(editor).getByLabelText('Tracking start date') as HTMLInputElement).value).toBe('2026-10-20');
+    expect(within(editor).queryByLabelText('Tracking start date')).toBeNull();
+    expect(within(editor).queryByRole('button', { name: 'Confirm tracking start' })).toBeNull();
     expect(onSave).not.toHaveBeenCalled();
-
-    await user.click(within(editor).getByRole('button', { name: 'Confirm tracking start' }));
-    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
-      trackingStartConfirmed: true,
-      trackingStartDate: '2026-10-20',
-      scoringTimeZone: expect.any(String)
-    }));
   });
 
   it('exposes all frequency branches and maps Select Days to the weekly model', async () => {

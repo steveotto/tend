@@ -225,6 +225,8 @@ describe('shared preview components', () => {
     const rhythm = {
       id: 'optional-fields-rhythm',
       title: 'Optional fields example',
+      cadence: 'Daily',
+      timeLabel: 'Morning',
       automation: 'manual' as const,
       status: 'Due today' as const
     };
@@ -239,7 +241,71 @@ describe('shared preview components', () => {
     expect(within(dialog).queryByRole('region', { name: /completion history/ })).toBeNull();
     expect(within(dialog).queryByText('Due today')).toBeTruthy();
     expect(within(dialog).getByText('Due today').previousElementSibling?.tagName.toLowerCase()).toBe('svg');
-    expect(dialog.querySelectorAll('.rhythm-metadata-footer > span')).toHaveLength(1);
+    const footer = dialog.querySelector('.rhythm-metadata-footer')!;
+    const scheduleGroup = footer.querySelector('.rhythm-metadata-schedule-group')!;
+    const statusGroup = footer.querySelector('.rhythm-metadata-last-tended')!;
+    expect(footer.children).toHaveLength(2);
+    expect(footer.firstElementChild).toBe(scheduleGroup);
+    expect(footer.lastElementChild).toBe(statusGroup);
+    expect(scheduleGroup.querySelectorAll(':scope > span')).toHaveLength(2);
+    expect(scheduleGroup.textContent).toContain('Daily');
+    expect(scheduleGroup.textContent).toContain('Morning');
+    expect(statusGroup.textContent).toContain('Due today');
+    expect(statusGroup.querySelector('.rhythm-metadata-status-group')?.children[0]?.tagName.toLowerCase())
+      .toBe('svg');
+  });
+
+  it('keeps Undo directly before the right-aligned footer status group', () => {
+    const rhythm = todayRhythms[0]!;
+    render(
+      <RhythmDetailsDialog
+        rhythm={rhythm}
+        completed
+        onUndo={() => undefined}
+        onClose={() => undefined}
+      />
+    );
+
+    const footer = document.querySelector('.rhythm-metadata-footer')!;
+    const statusCluster = footer.querySelector('.rhythm-metadata-status-cluster') as HTMLElement;
+    const undo = within(statusCluster).getByRole('button', { name: `Undo completion for ${rhythm.title}` });
+    const statusGroup = statusCluster.querySelector('.rhythm-metadata-status-group')!;
+    expect(statusCluster.children[0]).toBe(undo);
+    expect(statusCluster.children[1]).toBe(statusGroup);
+    expect(statusGroup.querySelector('.rhythm-metadata-status')?.textContent).toBe('Tended today');
+  });
+
+  it('uses a compact structured footer label with accessible full details and the shared refresh icon', async () => {
+    const user = userEvent.setup();
+    const rhythm = {
+      ...todayRhythms[0]!,
+      cadence: 'Older descriptive cadence',
+      schedule: {
+        frequency: 'quarterly' as const,
+        monthInQuarter: 2 as const,
+        pattern: { kind: 'dayOfMonth' as const, day: 15 }
+      },
+      timeLabel: 'Afternoon'
+    };
+    render(<RhythmDetailsDialog rhythm={rhythm} onClose={() => undefined} />);
+
+    const footer = document.querySelector('.rhythm-metadata-footer')!;
+    const scheduleGroup = footer.querySelector('.rhythm-metadata-schedule-group')!;
+    const scheduleLabel = scheduleGroup.querySelector('span > span')!;
+    expect(scheduleLabel.textContent).toBe('Quarterly · 2nd month · 15th');
+    const fullScheduleId = scheduleLabel.getAttribute('aria-describedby')!;
+    expect(document.getElementById(fullScheduleId)?.textContent)
+      .toBe('Full schedule: The 15th day of the second month of every quarter.');
+    expect(scheduleGroup.textContent).toContain('Afternoon');
+    const icon = scheduleGroup.querySelector('svg')!;
+    expect(icon.getAttribute('viewBox')).toBe('0 0 24 24');
+    expect(icon.getAttribute('stroke-width')).toBe('1.8');
+    expect(icon.querySelector('path')?.getAttribute('d')).toBe('M3 12a9 9 0 0 1 15.36-6.36L21 8');
+
+    await user.click(screen.getByRole('button', { name: `View scores and history for ${rhythm.title}` }));
+    const history = screen.getByRole('region', { name: `History for ${rhythm.title}` });
+    expect(within(history).getByText('The 15th day of the second month of every quarter.')).toBeTruthy();
+    expect(within(history).getByText('Afternoon')).toBeTruthy();
   });
 
   it('renders shared full details inline with complete action targets and no modal controls', async () => {

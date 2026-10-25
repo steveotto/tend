@@ -40,6 +40,8 @@ type PreviewDataControlsProps = {
   v5RecoveryError?: string | null;
   v6RecoveryCopy?: string | null;
   v6RecoveryError?: string | null;
+  v7RecoveryCopy?: string | null;
+  v7RecoveryError?: string | null;
 };
 
 function downloadText(filename: string, content: string, type: string): string | null {
@@ -79,7 +81,9 @@ export function PreviewDataControls({
   v5RecoveryCopy = null,
   v5RecoveryError = null,
   v6RecoveryCopy = null,
-  v6RecoveryError = null
+  v6RecoveryError = null,
+  v7RecoveryCopy = null,
+  v7RecoveryError = null
 }: PreviewDataControlsProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -249,6 +253,19 @@ export function PreviewDataControls({
             Download original v6 recovery backup
           </button>
         )}
+        {v7RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v7-recovery.json',
+              v7RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v7 recovery backup downloaded.')}
+          >
+            Download original v7 recovery backup
+          </button>
+        )}
         <label className="btn mini ghost preview-data-controls__file-button">
           Import preview backup
           <input
@@ -292,6 +309,7 @@ export function PreviewDataControls({
       {v4RecoveryError && <p className="preview-data-controls__help" role="alert">The original v4 recovery copy could not be read: {v4RecoveryError}</p>}
       {v5RecoveryError && <p className="preview-data-controls__help" role="alert">The original v5 recovery copy could not be read: {v5RecoveryError}</p>}
       {v6RecoveryError && <p className="preview-data-controls__help" role="alert">The original v6 recovery copy could not be read: {v6RecoveryError}</p>}
+      {v7RecoveryError && <p className="preview-data-controls__help" role="alert">The original v7 recovery copy could not be read: {v7RecoveryError}</p>}
       {message && <p className="preview-data-controls__message" role="status">{message}</p>}
       {pendingAction && (
         <MoneyGoalDialog

@@ -30,10 +30,11 @@ type RhythmDetailsDialogProps = {
   datedCompletions?: readonly DatedRhythmCompletion[];
   completionHistoryAvailable?: boolean;
   onSaveCompletion?: (record: RhythmCompletionRecord) => string | null;
+  onLogCompletion?: (record: RhythmCompletionRecord) => string | null;
   onUpdateCompletion?: (record: RhythmCompletionRecord) => string | null;
   onDeleteCompletion?: (completionId: string) => string | null;
   onUndo?: () => void;
-  onEdit?: (event: MouseEvent<HTMLButtonElement>, suggestedTrackingStartDate?: string) => void;
+  onEdit?: (event: MouseEvent<HTMLButtonElement>) => void;
   archived?: boolean;
   embedded?: boolean;
   onClose: () => void;
@@ -47,6 +48,7 @@ export function RhythmDetailsDialog({
   datedCompletions = [],
   completionHistoryAvailable = false,
   onSaveCompletion,
+  onLogCompletion,
   onUpdateCompletion,
   onDeleteCompletion,
   onUndo,
@@ -184,11 +186,10 @@ export function RhythmDetailsDialog({
               dialogLayout
               headingId="rhythm-details-title"
               onSave={record => {
-                const error = onSaveCompletion(record);
-                if (!error) onClose();
-                return error;
+                return onSaveCompletion(record);
               }}
               onCancel={closeCompletion}
+              onSaved={onClose}
             />
           )
           : showHistory
@@ -199,7 +200,7 @@ export function RhythmDetailsDialog({
               completionHistoryAvailable={completionHistoryAvailable}
               {...(onUpdateCompletion ? { onUpdateCompletion } : {})}
               {...(onDeleteCompletion ? { onDeleteCompletion } : {})}
-              {...(onEdit ? { onEditRhythm: onEdit } : {})}
+              {...(onLogCompletion ? { onSaveCompletion: onLogCompletion } : {})}
               {...(people ? { people } : {})}
               {...(onPersonSelect ? { onPersonSelect } : {})}
               onClose={onClose}
@@ -227,6 +228,7 @@ export function RhythmDetailsDialog({
                               people={people}
                               rhythmTitle={rhythm.title}
                               onSelect={onPersonSelect}
+                              collapsedLimit={2}
                               itemsOnly
                             />
                           )}
@@ -249,6 +251,7 @@ export function RhythmDetailsDialog({
                 <RhythmMetadata
                   variant="footer"
                   cadence={rhythm.cadence}
+                  schedule={rhythm.schedule}
                   timeLabel={rhythm.timeLabel}
                   lastTended={rhythmLastTendedLabel(rhythm, completed)}
                   rhythmTitle={rhythm.title}
@@ -288,7 +291,7 @@ export function RhythmDetailsDialog({
   return (
     <dialog
       ref={dialogRef}
-      className="today-rhythm-details-dialog"
+      className={`today-rhythm-details-dialog${showHistory ? ' today-rhythm-details-dialog--history' : ''}`}
       aria-labelledby="rhythm-details-title"
       tabIndex={-1}
       onClick={closeFromEvent}

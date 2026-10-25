@@ -104,7 +104,7 @@ export function RhythmCompletionHistoryChart({
                   )}
                 </div>
                 <time dateTime={item.date}>
-                  {formatHistoryDate(item.date, false)}{isToday ? ' · today' : ''}
+                  {isToday ? 'Today' : formatHistoryDate(item.date, false)}
                 </time>
               </li>
             );

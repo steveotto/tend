@@ -35,6 +35,35 @@ export type ActiveRhythmCompletion = {
   completionId: string;
 };
 
+export type RhythmCompletionState = {
+  completed: boolean;
+  undoable: boolean;
+};
+
+export function rhythmCompletionStateForDate(
+  rhythmId: string,
+  effectiveDate: string,
+  completedRhythmIds: readonly string[],
+  active: readonly ActiveRhythmCompletion[],
+  records: readonly Pick<RhythmCompletionRecord, 'id' | 'rhythmId' | 'effectiveDate'>[]
+): RhythmCompletionState {
+  const action = active.find(item => item.rhythmId === rhythmId);
+  const legacyCompletion = completedRhythmIds.includes(rhythmId) && !action;
+  const completedOnDate = records.some(record =>
+    record.rhythmId === rhythmId && record.effectiveDate === effectiveDate
+  );
+  const actionOnDate = action !== undefined && records.some(record =>
+    record.id === action.completionId
+      && record.rhythmId === rhythmId
+      && record.effectiveDate === effectiveDate
+  );
+
+  return {
+    completed: legacyCompletion || completedOnDate,
+    undoable: legacyCompletion || actionOnDate
+  };
+}
+
 export type CompletionValidationResult =
   | { valid: true; record: DatedRhythmCompletion }
   | { valid: false; errors: Partial<Record<'effectiveDate' | 'time' | 'memory', string>> };
@@ -217,12 +246,11 @@ export function deleteDatedCompletion(
     item.rhythmId === record.rhythmId && item.completionId === completionId
   );
   const remainingRecords = records.filter(item => item.id !== completionId);
-  const hasRemainingRhythmRecords = remainingRecords.some(item => item.rhythmId === record.rhythmId);
 
   return {
     records: remainingRecords,
     active: active.filter(item => item.completionId !== completionId),
-    completedRhythmIds: removedActiveLink && !hasRemainingRhythmRecords
+    completedRhythmIds: removedActiveLink
       ? completedRhythmIds.filter(id => id !== record.rhythmId)
       : [...completedRhythmIds]
   };

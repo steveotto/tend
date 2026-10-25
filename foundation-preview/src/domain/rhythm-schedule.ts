@@ -280,6 +280,29 @@ function weekdayListSummary(selected: readonly RhythmWeekday[]): string {
   return naturalList([...selected].sort((left, right) => left - right).map(weekdayName));
 }
 
+function shortWeekdayName(weekday: RhythmWeekday): string {
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][weekday]!;
+}
+
+function compactPatternSummary(pattern: RhythmPattern): string {
+  if (pattern.kind === 'dayOfMonth') {
+    return pattern.day === 'last' ? 'Last day' : dayOrdinal(pattern.day);
+  }
+  const ordinal = pattern.ordinal === 'last'
+    ? 'Last'
+    : ['First', 'Second', 'Third', 'Fourth'][pattern.ordinal - 1]!;
+  return `${ordinal} ${shortWeekdayName(pattern.weekday)}`;
+}
+
+function compactWeekdaysSummary(selected: readonly RhythmWeekday[]): string {
+  const sorted = [...selected].sort((left, right) => left - right);
+  if (sorted.length === 7) return 'Daily';
+  if (sorted.join(',') === '1,2,3,4,5') return 'Weekdays';
+  if (sorted.join(',') === '0,6') return 'Weekends';
+  if (sorted.length === 1) return `Every ${shortWeekdayName(sorted[0]!)}`;
+  return sorted.map(shortWeekdayName).join(' · ');
+}
+
 function formatLocalDate(value: RhythmLocalDate): string {
   const [year, month, day] = value.split('-').map(Number);
   return new Intl.DateTimeFormat('en-US', {
@@ -289,7 +312,49 @@ function formatLocalDate(value: RhythmLocalDate): string {
   }).format(new Date(year!, month! - 1, day!));
 }
 
-export function rhythmScheduleSummary(schedule: RhythmSchedule): string {
+export function formatRhythmSchedule(
+  schedule: RhythmSchedule,
+  mode: 'compact' | 'detailed' = 'detailed'
+): string {
+  if (mode === 'compact') {
+    let compact: string;
+    switch (schedule.frequency) {
+      case 'daily':
+        compact = 'Daily';
+        break;
+      case 'weekly':
+        compact = compactWeekdaysSummary(schedule.weekdays);
+        break;
+      case 'monthly':
+        compact = `Monthly · ${compactPatternSummary(schedule.pattern)}`;
+        break;
+      case 'quarterly':
+        compact = `Quarterly · ${dayOrdinal(schedule.monthInQuarter)} month · ${compactPatternSummary(schedule.pattern)}`;
+        break;
+      case 'yearly':
+        compact = schedule.pattern.kind === 'dayOfMonth'
+          ? `Yearly · ${monthName(schedule.month).slice(0, 3)} ${schedule.pattern.day === 'last' ? 'Last day' : schedule.pattern.day}`
+          : `Yearly · ${schedule.pattern.ordinal === 'last'
+            ? `Last ${shortWeekdayName(schedule.pattern.weekday)}`
+            : `${dayOrdinal(schedule.pattern.ordinal)} ${shortWeekdayName(schedule.pattern.weekday)}`} · ${monthName(schedule.month).slice(0, 3)}`;
+        break;
+      case 'custom':
+        if (schedule.unit === 'days') {
+          compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'day' : 'days'}`;
+        } else if (schedule.unit === 'weeks') {
+          compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'week' : 'weeks'}`
+            + (schedule.weekdays.length ? ` · ${schedule.weekdays
+              .slice().sort((left, right) => left - right).map(shortWeekdayName).join(' · ')}` : '');
+        } else if (schedule.unit === 'months') {
+          compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'month' : 'months'} · ${compactPatternSummary(schedule.pattern)}`;
+        } else {
+          compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'year' : 'years'} · ${monthName(schedule.month).slice(0, 3)} ${compactPatternSummary(schedule.pattern)}`;
+        }
+        break;
+    }
+    return compact;
+  }
+
   let summary: string;
   switch (schedule.frequency) {
     case 'daily':
@@ -325,6 +390,10 @@ export function rhythmScheduleSummary(schedule: RhythmSchedule): string {
   }
   if (schedule.endDate) summary += `${schedule.frequency === 'custom' ? ' and ending' : ', ending'} ${formatLocalDate(schedule.endDate)}`;
   return `${summary}.`;
+}
+
+export function rhythmScheduleSummary(schedule: RhythmSchedule): string {
+  return formatRhythmSchedule(schedule, 'detailed');
 }
 
 export function rhythmSummary(schedule: RhythmSchedule, timeOfDay: RhythmTimeValue): string {

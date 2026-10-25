@@ -35,7 +35,8 @@ export function RhythmCompletionForm({
   headingId = 'rhythm-details-title',
   initialRecord,
   onSave,
-  onCancel
+  onCancel,
+  onSaved
 }: {
   rhythm: RhythmPreview;
   embedded?: boolean;
@@ -44,6 +45,7 @@ export function RhythmCompletionForm({
   initialRecord?: RhythmCompletionRecord;
   onSave: (record: RhythmCompletionRecord) => string | null;
   onCancel: () => void;
+  onSaved: () => void;
 }) {
   const [draft, setDraft] = useState(() => initialRecord
     ? draftFromRecord(initialRecord)
@@ -97,7 +99,7 @@ export function RhythmCompletionForm({
         setFormError(error);
         return;
       }
-      onCancel();
+      onSaved();
       return;
     }
     if (!timeWasSupplied) {
@@ -135,7 +137,7 @@ export function RhythmCompletionForm({
       setFormError(error);
       return;
     }
-    onCancel();
+    onSaved();
   }
 
   const form = (

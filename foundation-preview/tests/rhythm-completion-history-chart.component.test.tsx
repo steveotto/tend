@@ -63,7 +63,8 @@ describe('RhythmCompletionHistoryChart', () => {
     const today = screen.getByRole('listitem', {
       name: new RegExp(`${formatLongDate(localToday)}: 1 completion, today`)
     });
-    expect(today.querySelector('time')?.textContent).toBe(`${formatShortDate(localToday)} · today`);
+    expect(today.querySelector('time')?.getAttribute('dateTime')).toBe(localToday);
+    expect(today.querySelector('time')?.textContent).toBe('Today');
     expect(screen.queryByText('Scroll horizontally to explore older history.')).toBeNull();
 
     cleanup();
@@ -90,7 +91,8 @@ describe('RhythmCompletionHistoryChart', () => {
     })).toBeTruthy();
     expect(document.querySelector('.rhythm-history-view__completion-zero')?.textContent).toBe('–');
     expect(document.querySelector('.rhythm-history-view__completion-zero')?.getAttribute('aria-hidden')).toBe('true');
-    expect(document.querySelector('.rhythm-history-view__chart time')?.textContent).toBe('Oct 24 · today');
+    expect(document.querySelector('.rhythm-history-view__chart time')?.getAttribute('dateTime')).toBe('2026-10-24');
+    expect(document.querySelector('.rhythm-history-view__chart time')?.textContent).toBe('Today');
   });
 
   it('starts overflowing histories at the newest dates and does not reset scrolling for same-range updates', () => {
@@ -152,14 +154,6 @@ function formatLongDate(value: string): string {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
-    timeZone: 'UTC'
-  });
-}
-
-function formatShortDate(value: string): string {
-  return new Date(`${value}T12:00:00Z`).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
     timeZone: 'UTC'
   });
 }

@@ -73,6 +73,9 @@ export type RhythmPreview = {
   categoryIds?: readonly ('faith' | 'marriage' | 'parenting' | 'health' | 'finances' | 'friendships')[];
   schedule?: RhythmSchedule;
   scoring?: RhythmScoringMetadata;
+  createdLocalDate?: string;
+  createdTimeZone?: string;
+  dailyBackfillAllowed?: boolean;
   timeOfDay?: RhythmTimeValue;
   personal?: boolean;
 };

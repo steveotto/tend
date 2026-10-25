@@ -64,7 +64,13 @@ function scored(inputValue: SelectDailyRhythmScoreInput) {
 
 describe('daily occurrence scoring', () => {
   it('scores empty, partial, duplicate, complete and zero-floor histories from dated evidence', () => {
-    const empty = scored(input({ asOfDate: '2026-10-03', scoring: scoring('2026-10-01'), records: [] }));
+    const empty = scored(input({
+      asOfDate: '2026-10-03',
+      scoring: scoring('2026-10-01'),
+      createdLocalDate: '2026-10-01',
+      createdTimeZone: 'UTC',
+      records: []
+    }));
     expect(empty.consistency).toMatchObject({
       kind: 'scored',
       score: 0,
@@ -73,7 +79,7 @@ describe('daily occurrence scoring', () => {
     expect(empty.onTrack).toMatchObject({
       kind: 'scored',
       score: 80,
-      evidence: { overdueDates: ['2026-10-01', '2026-10-02'], deduction: 20 }
+      evidence: { overdueCount: 2, deduction: 20 }
     });
 
     const partialRecords = [
@@ -85,8 +91,8 @@ describe('daily occurrence scoring', () => {
     const partial = scored(input({ records: partialRecords }));
     expect(partial.consistency).toMatchObject({
       kind: 'scored',
-      exactPercent: 10,
-      evidence: { eligibleDueCount: 30, completedCount: 3, notCompletedCount: 27 }
+      exactPercent: 200 / 29,
+      evidence: { eligibleDueCount: 29, completedCount: 2, notCompletedCount: 27 }
     });
     expect(partial.consistency.kind === 'scored'
       && partial.consistency.evidence.occurrences.find(item => item.date === '2026-09-24'))
@@ -96,7 +102,7 @@ describe('daily occurrence scoring', () => {
       score: 70,
       evidence: {
         lastQualifyingCompletionDate: '2026-10-19',
-        overdueDates: ['2026-10-20', '2026-10-21', '2026-10-22'],
+        overdueCount: 3,
         deduction: 30
       }
     });
@@ -107,23 +113,117 @@ describe('daily occurrence scoring', () => {
     expect(complete.consistency).toMatchObject({
       kind: 'scored',
       score: 100,
-      evidence: { eligibleDueCount: 30, completedCount: 30 }
+      evidence: { eligibleDueCount: 29, completedCount: 29 }
     });
     expect(complete.onTrack).toMatchObject({ kind: 'scored', score: 100 });
 
     const zeroFloor = scored(input({
       asOfDate: '2026-10-23',
       scoring: scoring('2026-10-01'),
+      createdLocalDate: '2026-10-01',
+      createdTimeZone: 'UTC',
       records: []
     }));
     expect(zeroFloor.onTrack).toMatchObject({
       kind: 'scored',
       score: 0,
-      evidence: { overdueDates: Array.from({ length: 22 }, (_, index) => addCalendarDays('2026-10-01', index)), deduction: 220 }
+      evidence: {
+        overdueCount: 22,
+        deduction: 220,
+        days: expect.arrayContaining([{ date: '2026-10-10', status: 'not-tended', score: 0 }]),
+        repeatedZeroScoreSpans: [{ startDate: '2026-10-11', endDate: '2026-10-22', occurrenceCount: 12 }]
+      }
     });
   });
 
-  it('clips Consistency to the tracking start, excludes today, and includes closed schedule dates', () => {
+  it('keeps long zero-score stretches compact and exposes schedule-history boundaries', () => {
+    const longHistory = scored(input({
+      asOfDate: '2026-10-23',
+      scoring: scoring('1900-01-01'),
+      createdLocalDate: '1900-01-01',
+      createdTimeZone: 'UTC',
+      records: []
+    }));
+    expect(longHistory.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 0,
+      evidence: {
+        overdueCount: expect.any(Number),
+        days: expect.any(Array),
+        repeatedZeroScoreSpans: expect.any(Array)
+      }
+    });
+    if (longHistory.onTrack.kind !== 'scored') throw new Error('Expected scored On Track evidence.');
+    expect(longHistory.onTrack.evidence.overdueCount).toBeGreaterThan(40_000);
+    expect(longHistory.onTrack.evidence.days.length).toBe(11);
+    expect(longHistory.onTrack.evidence.repeatedZeroScoreSpans[0]?.occurrenceCount)
+      .toBe(longHistory.onTrack.evidence.overdueCount - 10);
+
+    const boundaryStart = '2026-10-01';
+    const scheduleHistory: RhythmScoringMetadata['scheduleHistory'] = [
+      {
+        startDate: boundaryStart,
+        endDate: '2026-10-14',
+        schedule: { frequency: 'daily', endDate: '2026-10-14' }
+      },
+      { startDate: '2026-10-15', schedule: dailySchedule }
+    ];
+    const acrossBoundary = scored(input({
+      asOfDate: '2026-10-24',
+      scoring: scoring(boundaryStart, scheduleHistory),
+      createdLocalDate: boundaryStart,
+      createdTimeZone: 'UTC',
+      records: []
+    }));
+    expect(acrossBoundary.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 0,
+      evidence: {
+        scheduleChanges: [{ date: '2026-10-15', score: 0 }],
+        repeatedZeroScoreSpans: [
+          { startDate: '2026-10-11', endDate: '2026-10-14', occurrenceCount: 4 },
+          { startDate: '2026-10-15', endDate: '2026-10-23', occurrenceCount: 9 }
+        ]
+      }
+    });
+  });
+
+  it('retains each Daily completion reset outside repeated-zero summaries', () => {
+    const result = scored(input({
+      asOfDate: '2026-10-24',
+      scoring: scoring('2026-10-01'),
+      createdLocalDate: '2026-10-01',
+      createdTimeZone: 'UTC',
+      records: [
+        record('first-reset', '2026-10-01'),
+        record('later-reset', '2026-10-15')
+      ]
+    }));
+    expect(result.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 20,
+      evidence: {
+        lastQualifyingCompletionDate: '2026-10-15',
+        overdueCount: 8,
+        deduction: 80,
+        repeatedZeroScoreSpans: [{
+          startDate: '2026-10-12',
+          endDate: '2026-10-14',
+          occurrenceCount: 3
+        }]
+      }
+    });
+    if (result.onTrack.kind !== 'scored') throw new Error('Expected scored On Track evidence.');
+    expect(result.onTrack.evidence.days.filter(day => day.status === 'tended').map(day => day.date))
+      .toEqual(['2026-10-01', '2026-10-15']);
+    expect(result.onTrack.evidence.days.at(-1)).toEqual({
+      date: '2026-10-24',
+      status: 'today',
+      score: 20
+    });
+  });
+
+  it('clips Consistency to the tracking start and includes a completed today', () => {
     const start = '2026-10-21';
     const endedSegment: RhythmScoringMetadata['scheduleHistory'] = [
       { startDate: start, endDate: '2026-10-22', schedule: dailySchedule },
@@ -133,7 +233,6 @@ describe('daily occurrence scoring', () => {
       asOfDate,
       scoring: scoring(start, endedSegment),
       records: [
-        record('before-start', '2026-10-20'),
         record('first-active', '2026-10-21'),
         record('last-active', '2026-10-22'),
         record('today', '2026-10-23')
@@ -144,10 +243,11 @@ describe('daily occurrence scoring', () => {
       score: 100,
       evidence: {
         windowStartDate: start,
-        windowEndDate: '2026-10-22',
-        eligibleDueCount: 2,
-        completedCount: 2,
-        occurrences: [{ date: '2026-10-21' }, { date: '2026-10-22' }]
+        windowEndDate: '2026-10-23',
+        eligibleDueCount: 3,
+        completedCount: 3,
+        todayIncluded: true,
+        occurrences: [{ date: '2026-10-21' }, { date: '2026-10-22' }, { date: '2026-10-23' }]
       }
     });
     expect(result.onTrack).toMatchObject({ kind: 'scored', score: 100 });
@@ -157,12 +257,9 @@ describe('daily occurrence scoring', () => {
       scoring: scoring(asOfDate),
       records: [record('today-only', asOfDate)]
     }));
-    expect(startedToday.consistency).toMatchObject({
-      kind: 'unscored',
-      reasonCode: 'no-eligible-occurrences'
-    });
+    expect(startedToday.consistency).toMatchObject({ kind: 'scored', score: 100 });
     expect(startedToday.onTrack).toMatchObject({ kind: 'scored', score: 100 });
-    expect(startedToday.healthScore).toBeNull();
+    expect(startedToday.healthScore).toBe(100);
   });
 
   it('applies today’s qualifying completion without a deduction and evaluates backdated edits by effective date', () => {
@@ -172,22 +269,54 @@ describe('daily occurrence scoring', () => {
       score: 100,
       evidence: {
         lastQualifyingCompletionDate: asOfDate,
-        overdueDates: [],
+        overdueCount: 0,
         deduction: 0,
         days: [{ date: asOfDate, status: 'tended', score: 100 }]
       }
     });
 
-    const baseline = scored(input({ records: [record('latest', '2026-10-20')] }));
+    const baseline = scored(input({
+      createdLocalDate: trackingStartDate,
+      createdTimeZone: 'UTC',
+      records: [record('latest', '2026-10-20')]
+    }));
     const withBackdatedAddition = scored(input({
+      createdLocalDate: trackingStartDate,
+      createdTimeZone: 'UTC',
       records: [record('latest', '2026-10-20'), record('backdated', '2026-10-01')]
     }));
-    expect(withBackdatedAddition.onTrack).toEqual(baseline.onTrack);
-    const edited = scored(input({ records: [record('latest', '2026-10-21')] }));
+    expect(withBackdatedAddition.onTrack).toMatchObject({
+      kind: 'scored',
+      score: baseline.onTrack.kind === 'scored' ? baseline.onTrack.score : null,
+      evidence: {
+        lastQualifyingCompletionDate: '2026-10-20',
+        overdueCount: 2,
+        deduction: 20
+      }
+    });
+    if (withBackdatedAddition.onTrack.kind !== 'scored') throw new Error('Expected scored On Track evidence.');
+    expect(withBackdatedAddition.onTrack.evidence.days.find(day => day.date === '2026-10-01')).toEqual({
+      date: '2026-10-01',
+      status: 'tended',
+      score: 100
+    });
+    const edited = scored(input({
+      createdLocalDate: trackingStartDate,
+      createdTimeZone: 'UTC',
+      records: [record('latest', '2026-10-21')]
+    }));
     expect(edited.onTrack).toMatchObject({ kind: 'scored', score: 90 });
-    const deleted = scored(input({ records: [] }));
+    const deleted = scored(input({
+      createdLocalDate: trackingStartDate,
+      createdTimeZone: 'UTC',
+      records: []
+    }));
     expect(deleted.onTrack).toMatchObject({ kind: 'scored', score: 0 });
-    const undoRestored = scored(input({ records: [record('latest', '2026-10-20')] }));
+    const undoRestored = scored(input({
+      createdLocalDate: trackingStartDate,
+      createdTimeZone: 'UTC',
+      records: [record('latest', '2026-10-20')]
+    }));
     expect(undoRestored.onTrack).toEqual(baseline.onTrack);
   });
 
@@ -203,6 +332,8 @@ describe('daily occurrence scoring', () => {
       asOfDate: '2026-10-23',
       timeZone: 'America/Los_Angeles',
       scoring: timezoneScoring,
+      createdLocalDate: '2026-10-21',
+      createdTimeZone: 'America/Los_Angeles',
       records: [record('date-only', '2026-10-22')]
     }));
     expect(result.consistency).toMatchObject({
@@ -220,18 +351,19 @@ describe('daily occurrence scoring', () => {
   });
 
   it('reports missing, unsupported, inactive, invalid and unsupported-history states distinctly', () => {
-    expect(selectDailyRhythmScore(input({ scoring: undefined }))).toMatchObject({
+    expect(selectDailyRhythmScore(input({ scoring: undefined, records: [] }))).toMatchObject({
       kind: 'rhythm-score',
-      consistency: { kind: 'unscored', reasonCode: 'missing-tracking-start' },
-      onTrack: { kind: 'unscored', reasonCode: 'missing-tracking-start' },
+      consistency: { kind: 'unscored', reasonCode: 'ready-for-first-tend' },
+      onTrack: { kind: 'unscored', reasonCode: 'ready-for-first-tend' },
       healthScore: null
     });
     expect(selectDailyRhythmScore(input({
       scoring: undefined,
+      records: [],
       schedule: { frequency: 'weekly', weekdays: [1] } satisfies RhythmSchedule
     }))).toMatchObject({
       kind: 'rhythm-score',
-      consistency: { kind: 'unscored', reasonCode: 'missing-tracking-start' },
+      consistency: { kind: 'unscored', reasonCode: 'ready-for-first-tend' },
       onTrack: { kind: 'unscored', reasonCode: 'unsupported-schedule' }
     });
     expect(selectDailyRhythmScore(input({ archived: true }))).toMatchObject({
@@ -263,6 +395,8 @@ describe('daily occurrence scoring', () => {
     ];
     const acrossUnsupportedHistory = scored(input({
       scoring: scoring(trackingStartDate, history),
+      createdLocalDate: trackingStartDate,
+      createdTimeZone: 'UTC',
       records: [record('recent', '2026-10-20')]
     }));
     expect(acrossUnsupportedHistory.consistency).toMatchObject({
@@ -274,7 +408,7 @@ describe('daily occurrence scoring', () => {
       score: 80,
       evidence: {
         lastQualifyingCompletionDate: '2026-10-20',
-        overdueDates: ['2026-10-21', '2026-10-22'],
+        overdueCount: 2,
         deduction: 20
       }
     });
@@ -282,6 +416,8 @@ describe('daily occurrence scoring', () => {
 
     const noLatestTend = selectDailyRhythmScore(input({
       scoring: scoring(trackingStartDate, history),
+      createdLocalDate: trackingStartDate,
+      createdTimeZone: 'UTC',
       records: []
     }));
     expect(noLatestTend).toMatchObject({
@@ -302,12 +438,14 @@ describe('daily occurrence scoring', () => {
     const reorderedSchedule = { endDate: '2026-11-01', frequency: 'daily' as const };
     const result = scored(input({
       schedule: reorderedSchedule,
-      scoring: scoring(trackingStartDate, [{ startDate: trackingStartDate, schedule: orderedSchedule }])
+      scoring: scoring(trackingStartDate, [{ startDate: trackingStartDate, schedule: orderedSchedule }]),
+      createdLocalDate: trackingStartDate,
+      createdTimeZone: 'UTC'
     }));
     expect(result.consistency.kind).toBe('scored');
   });
 
-  it('scores daily On Track from a dated completion without a tracking start', () => {
+  it('scores both Daily inputs automatically from dated completions without a tracking start', () => {
     const result = scored(input({
       scoring: undefined,
       records: [
@@ -315,23 +453,20 @@ describe('daily occurrence scoring', () => {
         record('backdated', '2026-10-01')
       ]
     }));
-    expect(result.consistency).toMatchObject({
-      kind: 'unscored',
-      reasonCode: 'missing-tracking-start'
-    });
+    expect(result.consistency).toMatchObject({ kind: 'scored', score: expect.any(Number) });
     expect(result.onTrack).toMatchObject({
       kind: 'scored',
       score: 80,
       evidence: {
         lastQualifyingCompletionDate: '2026-10-20',
-        overdueDates: ['2026-10-21', '2026-10-22'],
+        overdueCount: 2,
         deduction: 20
       }
     });
-    expect(result.healthScore).toBeNull();
+    expect(result.healthScore).toBeCloseTo(26.81818181818182);
   });
 
-  it('normalizes only the exact legacy Daily cadence for On Track', () => {
+  it('normalizes only the exact legacy Daily cadence for scoring', () => {
     const legacyDaily = scored(input({
       schedule: undefined,
       scoring: undefined,
@@ -339,10 +474,7 @@ describe('daily occurrence scoring', () => {
       records: [record('legacy-completion', '2026-10-20')]
     }));
     expect(legacyDaily.onTrack).toMatchObject({ kind: 'scored', score: 80 });
-    expect(legacyDaily.consistency).toMatchObject({
-      kind: 'unscored',
-      reasonCode: 'missing-tracking-start'
-    });
+    expect(legacyDaily.consistency.kind).toBe('scored');
     expect(selectDailyRhythmScore(input({
       schedule: undefined,
       scoring: undefined,
@@ -378,18 +510,104 @@ describe('daily occurrence scoring', () => {
     expect(result.healthScore).toBeCloseTo((200 / 3) * 0.75 + 90 * 0.25);
   });
 
-  it('keeps today out of Consistency and scores today-only On Track as 100', () => {
+  it('includes a qualifying today-only completion in Consistency and On Track', () => {
     const result = scored(input({
       asOfDate,
       scoring: scoring(asOfDate),
       records: [record('today-only', asOfDate)]
     }));
-    expect(result.consistency).toMatchObject({
-      kind: 'unscored',
-      reasonCode: 'no-eligible-occurrences'
-    });
+    expect(result.consistency).toMatchObject({ kind: 'scored', score: 100 });
     expect(result.onTrack).toMatchObject({ kind: 'scored', score: 100 });
-    expect(result.healthScore).toBeNull();
+    expect(result.healthScore).toBe(100);
+  });
+
+  it('derives the daily window from creation and the oldest dated completion', () => {
+    const createdTodayWithoutLogs = scored(input({
+      scoring: undefined,
+      records: [],
+      createdLocalDate: asOfDate,
+      createdTimeZone: 'UTC'
+    }));
+    expect(createdTodayWithoutLogs).toMatchObject({
+      consistency: { kind: 'unscored', reasonCode: 'ready-for-first-tend' },
+      onTrack: { kind: 'unscored', reasonCode: 'ready-for-first-tend' },
+      healthScore: null
+    });
+
+    const createdAndTendedToday = scored(input({
+      scoring: undefined,
+      records: [record('today', asOfDate)],
+      createdLocalDate: asOfDate,
+      createdTimeZone: 'UTC'
+    }));
+    expect(createdAndTendedToday).toMatchObject({
+      trackingStartDate: asOfDate,
+      consistency: { kind: 'scored', score: 100, evidence: { eligibleDueCount: 1, completedCount: 1, todayIncluded: true } },
+      onTrack: { kind: 'scored', score: 100 },
+      healthScore: 100
+    });
+
+    const createdYesterday = addCalendarDays(asOfDate, -1);
+    const tendedToday = scored(input({
+      scoring: undefined,
+      records: [record('today', asOfDate)],
+      createdLocalDate: createdYesterday,
+      createdTimeZone: 'UTC'
+    }));
+    expect(tendedToday).toMatchObject({
+      trackingStartDate: createdYesterday,
+      consistency: { kind: 'scored', score: 50, evidence: { eligibleDueCount: 2, completedCount: 1 } },
+      onTrack: { kind: 'scored', score: 100 },
+      healthScore: 62.5
+    });
+
+    const backdated = addCalendarDays(asOfDate, -60);
+    const oldCreationWithBackfill = scored(input({
+      scoring: undefined,
+      records: [record('backfill', backdated), record('today', asOfDate)],
+      createdLocalDate: asOfDate,
+      createdTimeZone: 'UTC'
+    }));
+    expect(oldCreationWithBackfill.trackingStartDate).toBe(backdated);
+    expect(oldCreationWithBackfill.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: {
+        windowStartDate: addCalendarDays(asOfDate, -29),
+        windowEndDate: asOfDate,
+        eligibleDueCount: 30,
+        completedCount: 1,
+        todayIncluded: true,
+        limitedHistoryDays: null
+      }
+    });
+  });
+
+  it('recalculates automatic starts after backdated records are edited or deleted', () => {
+    const created = addCalendarDays(asOfDate, -2);
+    const firstTend = addCalendarDays(asOfDate, -5);
+    const withBackfill = scored(input({
+      scoring: undefined,
+      createdLocalDate: created,
+      createdTimeZone: 'UTC',
+      records: [record('backfill', firstTend), record('recent', addCalendarDays(asOfDate, -1))]
+    }));
+    expect(withBackfill.trackingStartDate).toBe(firstTend);
+    expect(withBackfill.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: { windowStartDate: firstTend, eligibleDueCount: 5, completedCount: 2 }
+    });
+
+    const afterDelete = scored(input({
+      scoring: undefined,
+      createdLocalDate: created,
+      createdTimeZone: 'UTC',
+      records: [record('recent', addCalendarDays(asOfDate, -1))]
+    }));
+    expect(afterDelete.trackingStartDate).toBe(created);
+    expect(afterDelete.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: { windowStartDate: created, eligibleDueCount: 2, completedCount: 1 }
+    });
   });
 
   it('scores supported weekly, monthly, quarterly, and yearly patterns within maximum windows', () => {
@@ -431,6 +649,8 @@ describe('daily occurrence scoring', () => {
       const result = scored(input({
         schedule: testCase.schedule,
         scoring: scoring(testCase.start, segments),
+        createdLocalDate: testCase.start,
+        createdTimeZone: 'UTC',
         records: testCase.records
       }));
       expect(result.consistency).toMatchObject({
@@ -451,7 +671,7 @@ describe('daily occurrence scoring', () => {
       windowStart: string;
       expectedDue: number;
     }[] = [
-      { schedule: dailySchedule, windowStart: '2026-09-23', expectedDue: 30 },
+      { schedule: dailySchedule, windowStart: '2026-09-24', expectedDue: 29 },
       {
         schedule: { frequency: 'weekly', weekdays: [1, 3] },
         windowStart: '2026-09-23',
@@ -485,6 +705,8 @@ describe('daily occurrence scoring', () => {
       const result = scored(input({
         schedule: testCase.schedule,
         scoring: scoring('2020-01-01', segments),
+        createdLocalDate: '2020-01-01',
+        createdTimeZone: 'UTC',
         records: []
       }));
       expect(result.consistency).toMatchObject({
@@ -504,6 +726,8 @@ describe('daily occurrence scoring', () => {
     const result = selectDailyRhythmScore(input({
       schedule,
       scoring: scoring('2026-02-01', [{ startDate: '2026-02-01', schedule }]),
+      createdLocalDate: '2026-02-01',
+      createdTimeZone: 'UTC',
       asOfDate: '2026-03-01',
       records: []
     }));
@@ -513,10 +737,18 @@ describe('daily occurrence scoring', () => {
     });
   });
 
-  it('keeps missing-start On Track unavailable with no logs and flags timezone mismatch', () => {
+  it('keeps On Track ready for a first Tend without metadata and flags timezone mismatch', () => {
     expect(scored(input({ scoring: undefined })).onTrack).toMatchObject({
       kind: 'unscored',
-      reasonCode: 'missing-tracking-start'
+      reasonCode: 'ready-for-first-tend'
+    });
+    expect(scored(input({
+      scoring: scoring(asOfDate),
+      records: []
+    }))).toMatchObject({
+      trackingStartDate: null,
+      consistency: { kind: 'unscored', reasonCode: 'ready-for-first-tend' },
+      onTrack: { kind: 'unscored', reasonCode: 'ready-for-first-tend' }
     });
     expect(scored(input({
       scoring: undefined,

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { MouseEvent } from 'react';
+import { createPortal } from 'react-dom';
 import type { PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
 import { orderedCompletions } from '../domain/preview-data.ts';
 import type { RhythmCompletion } from '../domain/preview-data.ts';
@@ -13,6 +13,10 @@ import {
   localDateInTimeZone,
   selectDailyRhythmScore
 } from '../domain/rhythm-scoring.ts';
+import {
+  latestOnTrackHistoryEntries,
+  onTrackHistoryDisplayEntries
+} from '../domain/rhythm-score-presentation.ts';
 import { isValidTimeZone } from '../domain/rhythm-schedule.ts';
 import type {
   ScoredConsistencyMetric,
@@ -32,14 +36,22 @@ import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
 
 type MetricName = 'consistency' | 'onTrack';
 
+const occurrenceKindByFrequency = {
+  daily: 'eligible day',
+  weekly: 'scheduled day',
+  monthly: 'due date',
+  quarterly: 'due date',
+  yearly: 'due date'
+} as const;
+
 const metricCopy = {
   consistency: {
     title: 'Consistency',
-    shortDescription: 'Consistency over the applicable historical window'
+    shortDescription: 'How often you show up'
   },
   onTrack: {
     title: 'On Track',
-    shortDescription: 'Current follow-through for a daily Rhythm'
+    shortDescription: 'How caught up you are'
   }
 } as const;
 
@@ -52,9 +64,9 @@ export function RhythmHistoryView({
   closeButtonRef,
   datedCompletions = [],
   completionHistoryAvailable = false,
+  onSaveCompletion,
   onUpdateCompletion,
-  onDeleteCompletion,
-  onEditRhythm
+  onDeleteCompletion
 }: {
   rhythm: RhythmPreview;
   people?: readonly PersonPreview[];
@@ -64,15 +76,17 @@ export function RhythmHistoryView({
   closeButtonRef?: { current: HTMLButtonElement | null };
   datedCompletions?: readonly DatedRhythmCompletion[];
   completionHistoryAvailable?: boolean;
+  onSaveCompletion?: (record: RhythmCompletionRecord) => string | null;
   onUpdateCompletion?: (record: RhythmCompletionRecord) => string | null;
   onDeleteCompletion?: (completionId: string) => string | null;
-  onEditRhythm?: (event: MouseEvent<HTMLButtonElement>, suggestedTrackingStartDate?: string) => void;
 }) {
   const historyRecords: readonly RhythmCompletion[] | undefined =
     rhythm.completionHistory === undefined && !completionHistoryAvailable && datedCompletions.length === 0
       ? undefined
       : [...(rhythm.completionHistory ?? []), ...datedCompletions];
-  const scoringTimeZone = rhythm.scoring?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const scoringTimeZone = rhythm.scoring?.timeZone
+    ?? rhythm.createdTimeZone
+    ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const [scoringInstant, setScoringInstant] = useState(() => new Date());
   useEffect(() => {
     const refresh = () => setScoringInstant(new Date());
@@ -99,6 +113,9 @@ export function RhythmHistoryView({
     ...(rhythm.cadence ? { cadence: rhythm.cadence } : {}),
     ...(rhythm.schedule ? { schedule: rhythm.schedule } : {}),
     ...(rhythm.scoring ? { scoring: rhythm.scoring } : {}),
+    ...(rhythm.createdLocalDate ? { createdLocalDate: rhythm.createdLocalDate } : {}),
+    ...(rhythm.createdTimeZone ? { createdTimeZone: rhythm.createdTimeZone } : {}),
+    ...(rhythm.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: rhythm.dailyBackfillAllowed }),
     records: scoringRecords,
     recordsAvailable: completionHistoryAvailable || rhythm.completionHistory !== undefined || datedCompletions.length > 0,
     archived,
@@ -106,16 +123,23 @@ export function RhythmHistoryView({
     timeZone: scoringTimeZone
   });
   const historyViewRef = useRef<HTMLElement>(null);
+  const logMomentDialogRef = useRef<HTMLDialogElement>(null);
   const loggedMomentsSummaryRef = useRef<HTMLElement>(null);
+  const logMomentButtonRef = useRef<HTMLButtonElement>(null);
   const editButtonsRef = useRef(new Map<string, HTMLButtonElement>());
   const deleteButtonsRef = useRef(new Map<string, HTMLButtonElement>());
   const deleteCancelButtonRef = useRef<HTMLButtonElement>(null);
   const previousEditingIdRef = useRef<string | null>(null);
+  const previousLoggingMomentRef = useRef(false);
   const previousDeleteIdRef = useRef<string | null>(null);
   const scoreDetailsId = useId();
+  const healthCalculationId = useId();
   const sharedUnscoredExplanation = score.consistency.kind === 'unscored' && score.onTrack.kind === 'unscored'
     && score.consistency.explanation === score.onTrack.explanation;
   const [editingRecord, setEditingRecord] = useState<RhythmCompletionRecord | null>(null);
+  const [loggingMoment, setLoggingMoment] = useState(false);
+  const [loggedMomentsExpanded, setLoggedMomentsExpanded] = useState(false);
+  const [logAnnouncement, setLogAnnouncement] = useState('');
   const [scoreDetailsExpanded, setScoreDetailsExpanded] = useState(false);
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState('');
@@ -123,9 +147,21 @@ export function RhythmHistoryView({
   const hasDescription = Boolean(rhythm.description?.trim());
   const editableRecordIds = new Set((historyRecords ?? []).map(record => record.id));
 
+  function dismissEditingRecord() {
+    setEditingRecord(null);
+  }
+
+  function dismissLoggingMoment() {
+    setLoggingMoment(false);
+  }
+
   useEffect(() => {
     historyViewRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    setScoreDetailsExpanded(false);
+  }, [rhythm.id]);
 
   useEffect(() => {
     const previousId = previousEditingIdRef.current;
@@ -134,6 +170,24 @@ export function RhythmHistoryView({
     }
     previousEditingIdRef.current = editingRecord?.id ?? null;
   }, [editingRecord]);
+
+  useEffect(() => {
+    if (previousLoggingMomentRef.current && !loggingMoment) {
+      logMomentButtonRef.current?.focus();
+    }
+    previousLoggingMomentRef.current = loggingMoment;
+  }, [loggingMoment]);
+
+  useEffect(() => {
+    if (!loggingMoment) return;
+    const dialog = logMomentDialogRef.current;
+    if (!dialog) return;
+    if (!dialog.open) {
+      if (typeof dialog.showModal === 'function') dialog.showModal();
+      else dialog.setAttribute('open', '');
+    }
+    dialog.querySelector<HTMLElement>('.rhythm-completion-form__heading')?.focus({ preventScroll: true });
+  }, [loggingMoment]);
 
   useEffect(() => {
     const previousId = previousDeleteIdRef.current;
@@ -168,31 +222,19 @@ export function RhythmHistoryView({
   }
 
   return (
+    <>
     <section
       ref={historyViewRef}
       className={`rhythm-history-view${onClose ? ' rhythm-history-view--dialog' : ''}`}
       role="region"
       aria-label={`History for ${rhythm.title}`}
       tabIndex={-1}
+      inert={loggingMoment}
     >
-      {editingRecord ? (
-        <RhythmCompletionForm
-          rhythm={rhythm}
-          embedded
-          initialRecord={editingRecord}
-          onSave={record => onUpdateCompletion
-            ? onUpdateCompletion(record)
-            : 'This logged moment can no longer be edited.'}
-          onCancel={() => setEditingRecord(null)}
-        />
-      ) : (
-        <>
       <header className="rhythm-history-view__rhythm-header">
         <div className="rhythm-history-view__title-row">
           <div className="rhythm-history-view__title-copy">
             <h3 id="rhythm-details-title">{rhythm.title}</h3>
-            {archived && <RhythmArchivedBadge />}
-            {rhythm.personal && <RhythmPersonalBadge />}
           </div>
         </div>
         {onClose && (
@@ -200,11 +242,34 @@ export function RhythmHistoryView({
             ref={closeButtonRef}
             type="button"
             className="today-rhythm-details__close today-rhythm-details__close--history"
-            aria-label="Close details"
-            onClick={onClose}
+            aria-label={editingRecord ? 'Cancel editing logged moment' : 'Close details'}
+            onClick={editingRecord ? dismissEditingRecord : onClose}
           >
             ×
           </button>
+        )}
+      </header>
+      <div className={`rhythm-history-view__body${onClose ? ' rhythm-history-view__body--dialog' : ''}`}>
+      {editingRecord ? (
+        <RhythmCompletionForm
+          rhythm={rhythm}
+          embedded
+          headingId="rhythm-history-completion-title"
+          initialRecord={editingRecord}
+          onSave={record => onUpdateCompletion
+            ? onUpdateCompletion(record)
+            : 'This logged moment can no longer be edited.'}
+          onCancel={dismissEditingRecord}
+          onSaved={dismissEditingRecord}
+        />
+      ) : (
+        <>
+      <div className="rhythm-history-view__metadata">
+        {(archived || rhythm.personal) && (
+          <div className="rhythm-history-view__badges">
+            {archived && <RhythmArchivedBadge />}
+            {rhythm.personal && <RhythmPersonalBadge />}
+          </div>
         )}
         {hasDescription && (
           <p className="rhythm-history-view__description">
@@ -217,12 +282,17 @@ export function RhythmHistoryView({
           </div>
         )}
         <RhythmCategoryBadges rhythm={rhythm} />
-        {(rhythm.cadence || rhythm.timeLabel) && (
+        {(rhythm.cadence || rhythm.schedule || rhythm.timeLabel) && (
           <p className="rhythm-history-view__schedule">
-            <RhythmScheduleSummary cadence={rhythm.cadence} timeLabel={rhythm.timeLabel} />
+            <RhythmScheduleSummary
+              cadence={rhythm.cadence}
+              schedule={rhythm.schedule}
+              timeLabel={rhythm.timeLabel}
+              presentation="detailed"
+            />
           </p>
         )}
-      </header>
+      </div>
 
       <section className="rhythm-history-view__score-section" aria-label="Health, Consistency, and On Track scores">
         <div className="rhythm-history-view__score-card">
@@ -232,7 +302,7 @@ export function RhythmHistoryView({
               className="rhythm-history-view__score-info"
               aria-label={`${scoreDetailsExpanded ? 'Hide' : 'Show'} Consistency and On Track score details`}
               aria-expanded={scoreDetailsExpanded}
-              aria-controls={scoreDetailsId}
+              aria-controls={`${healthCalculationId} ${scoreDetailsId}`}
               onClick={() => setScoreDetailsExpanded(expanded => !expanded)}
             >
               <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -249,6 +319,23 @@ export function RhythmHistoryView({
               </span>
             </div>
             <HealthScoreMeter score={score.healthScore} />
+          </div>
+          <div
+            id={healthCalculationId}
+            className="rhythm-history-view__health-calculation-disclosure"
+            hidden={!scoreDetailsExpanded}
+          >
+            {score.consistency.kind === 'scored'
+              && score.onTrack.kind === 'scored'
+              && score.healthScore !== null
+              ? (
+                <HealthCalculation />
+              )
+              : (
+                <HealthCalculation
+                  explanation={healthUnavailableExplanation(score.consistency, score.onTrack)}
+                />
+              )}
           </div>
           <div className="rhythm-history-view__score-summary-divider" aria-hidden="true" />
           <div className="rhythm-history-view__score-grid">
@@ -270,19 +357,6 @@ export function RhythmHistoryView({
             aria-label="Consistency and On Track score details"
             hidden={!scoreDetailsExpanded}
           >
-            {score.consistency.kind === 'scored'
-              && score.onTrack.kind === 'scored'
-              && score.healthScore !== null
-              ? (
-                <HealthCalculation
-                  consistency={score.consistency.exactPercent}
-                  onTrack={score.onTrack.score}
-                  health={score.healthScore}
-                />
-              )
-              : (
-                <HealthCalculation explanation={healthUnavailableExplanation(score.consistency, score.onTrack)} />
-              )}
             {sharedUnscoredExplanation ? null : (
               <div className="rhythm-history-view__score-details-columns">
                 <div className="rhythm-history-view__score-details-column">
@@ -292,7 +366,7 @@ export function RhythmHistoryView({
                 </div>
                 <div className="rhythm-history-view__score-details-column">
                   {score.onTrack.kind === 'scored'
-                    ? <OnTrackScoreBreakdown metric={score.onTrack} />
+                    ? <OnTrackScoreBreakdown key={rhythm.id} metric={score.onTrack} />
                     : <UnscoredBreakdown metric={score.onTrack} />}
                 </div>
               </div>
@@ -307,22 +381,6 @@ export function RhythmHistoryView({
             : score.kind === 'invalid'
               ? `Scores unavailable: ${score.reason}`
               : score.reason.explanation}
-          {score.consistency.kind === 'unscored'
-            && score.consistency.reasonCode === 'missing-tracking-start'
-            && onEditRhythm && (
-            <button
-              type="button"
-              className="rhythm-history-view__set-tracking"
-              onClick={event => {
-                const firstRecordedDate = historyRecords
-                  ?.map(record => record.effectiveDate)
-                  .sort()[0];
-                onEditRhythm(event, firstRecordedDate);
-              }}
-            >
-              Set tracking start
-            </button>
-          )}
         </p>
       </section>
 
@@ -351,8 +409,28 @@ export function RhythmHistoryView({
             Your story starts with the first Tend.
           </p>
         )}
-        <details className="rhythm-history-view__logged-moments">
+        <details
+          className="rhythm-history-view__logged-moments"
+          open={loggedMomentsExpanded}
+          onToggle={event => setLoggedMomentsExpanded(event.currentTarget.open)}
+        >
           <summary ref={loggedMomentsSummaryRef}>Logged moments ({completions.kind === 'recorded' ? completions.count : 0})</summary>
+          {onSaveCompletion && (
+            <div className="rhythm-history-view__log-moment-row">
+              <button
+                ref={logMomentButtonRef}
+                type="button"
+                className="button button-secondary rhythm-history-view__log-moment"
+                onClick={() => {
+                  setLogAnnouncement('');
+                  setLoggedMomentsExpanded(true);
+                  setLoggingMoment(true);
+                }}
+              >
+                + Log a moment
+              </button>
+            </div>
+          )}
           {completions.kind === 'recorded' ? (
             <ol>
               {completions.records.map(item => (
@@ -437,11 +515,80 @@ export function RhythmHistoryView({
             <p>{completions.kind === 'unavailable' ? 'Dated moments are unavailable.' : 'No logged moments.'}</p>
           )}
         </details>
+        {logAnnouncement && (
+          <p className="visually-hidden" role="status" aria-live="polite">{logAnnouncement}</p>
+        )}
       </section>
-
-        </>
+      {loggingMoment && onSaveCompletion && createPortal(
+        <dialog
+          ref={logMomentDialogRef}
+          className="rhythm-history-view__log-dialog"
+          aria-labelledby="rhythm-history-completion-title"
+          aria-modal="true"
+          onClick={event => {
+            if (event.target === event.currentTarget) dismissLoggingMoment();
+          }}
+          onCancel={event => {
+            event.preventDefault();
+            dismissLoggingMoment();
+          }}
+          onKeyDown={event => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              event.stopPropagation();
+              dismissLoggingMoment();
+              return;
+            }
+            if (event.key !== 'Tab') return;
+            const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
+              'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+            ));
+            if (!focusable.length) {
+              event.preventDefault();
+              event.currentTarget.focus();
+              return;
+            }
+            const first = focusable[0]!;
+            const last = focusable[focusable.length - 1]!;
+            if (event.shiftKey && (document.activeElement === first || !event.currentTarget.contains(document.activeElement))) {
+              event.preventDefault();
+              last.focus();
+            } else if (!event.shiftKey && (document.activeElement === last || !event.currentTarget.contains(document.activeElement))) {
+              event.preventDefault();
+              first.focus();
+            }
+          }}
+        >
+          <header className="rhythm-history-view__log-dialog-header">
+            <button
+              type="button"
+              className="today-rhythm-details__close"
+              aria-label="Cancel logging moment"
+              onClick={dismissLoggingMoment}
+            >
+              ×
+            </button>
+          </header>
+          <RhythmCompletionForm
+            rhythm={rhythm}
+            embedded
+            headingId="rhythm-history-completion-title"
+            onSave={onSaveCompletion}
+            onCancel={dismissLoggingMoment}
+            onSaved={() => {
+              dismissLoggingMoment();
+              setLogAnnouncement('Moment logged.');
+            }}
+          />
+        </dialog>,
+        document.body
       )}
-    </section>
+
+          </>
+        )}
+        </div>
+      </section>
+      </>
   );
 }
 
@@ -503,10 +650,9 @@ function ConsistencyScoreBreakdown({ metric }: { metric: ScoredConsistencyMetric
   const firstDate = evidence.occurrences[0]?.date;
   const lastDate = evidence.occurrences.at(-1)?.date;
   const rows = [
-    { label: 'Scoring window', value: `${formatHistoryDate(evidence.windowStartDate, false)}–${formatHistoryDate(evidence.windowEndDate, false)}` },
-    { label: 'Eligible scheduled occurrences', value: String(evidence.eligibleDueCount) },
+    { label: 'Dates', value: `${formatHistoryDate(evidence.windowStartDate, false)}–${formatHistoryDate(evidence.windowEndDate, false)}` },
     { label: 'Completed', value: String(evidence.completedCount) },
-    { label: 'Not completed', value: String(evidence.notCompletedCount) }
+    { label: 'Scheduled', value: String(evidence.eligibleDueCount) }
   ];
   return (
     <>
@@ -520,16 +666,19 @@ function ConsistencyScoreBreakdown({ metric }: { metric: ScoredConsistencyMetric
         <h4>Your scheduled pattern</h4>
         <div
           className="rhythm-history-view__health-pattern"
-          role="img"
+          role="list"
           aria-label={`${evidence.eligibleDueCount} eligible ${evidence.frequency} occurrences from ${evidence.windowStartDate} through ${evidence.windowEndDate}: ${evidence.completedCount} completed and ${evidence.notCompletedCount} not completed.`}
         >
           {evidence.occurrences.map(item => (
             <span
               key={item.date}
+              role="listitem"
+              aria-label={`${formatHistoryDate(item.date, true)}: ${item.status === 'completed' ? 'completed' : 'not completed'} ${
+                occurrenceKindByFrequency[evidence.frequency]
+              }`}
               className={item.status === 'completed'
                 ? 'rhythm-history-view__health-pattern-day'
                 : 'rhythm-history-view__health-pattern-day rhythm-history-view__health-pattern-day--missed'}
-              aria-hidden="true"
             />
           ))}
         </div>
@@ -540,9 +689,13 @@ function ConsistencyScoreBreakdown({ metric }: { metric: ScoredConsistencyMetric
         {firstDate && lastDate && (
           <p className="rhythm-history-view__score-explanation">
             {evidence.limitedHistoryDays !== null
-              ? `Based on ${evidence.limitedHistoryDays} days of tracking. `
+              ? `Based on ${evidence.limitedHistoryDays} ${evidence.limitedHistoryDays === 1 ? 'day' : 'days'} of tracking. `
               : ''}
-            {formatHistoryDate(firstDate, false)}–{formatHistoryDate(lastDate, false)}. Today is excluded.
+            {formatHistoryDate(firstDate, false)}–{formatHistoryDate(lastDate, false)}. {
+              evidence.frequency === 'daily'
+                ? evidence.todayIncluded ? 'Today’s completed occurrence is included.' : 'Today is pending and excluded.'
+                : 'Today is excluded.'
+            }
           </p>
         )}
       </section>
@@ -552,17 +705,28 @@ function ConsistencyScoreBreakdown({ metric }: { metric: ScoredConsistencyMetric
 
 function OnTrackScoreBreakdown({ metric }: { metric: ScoredOnTrackMetric }) {
   const evidence = metric.evidence;
-  const fullOverdueDays = evidence.overdueDates.length;
+  const historyId = useId();
+  const showEarlierButtonRef = useRef<HTMLButtonElement>(null);
+  const showLessButtonRef = useRef<HTMLButtonElement>(null);
+  const focusAfterDisclosureRef = useRef<'earlier' | 'less' | null>(null);
+  const entries = onTrackHistoryDisplayEntries(evidence);
+  const [visibleEntryCount, setVisibleEntryCount] = useState(5);
+  const isExpanded = visibleEntryCount > 5;
+  const visibleEntries = latestOnTrackHistoryEntries(entries, visibleEntryCount);
   const startingScore = 100;
   const deductedPoints = evidence.deduction;
   const rows = [
     { label: 'Last tended', value: evidence.lastQualifyingCompletionDate
       ? formatHistoryDate(evidence.lastQualifyingCompletionDate, false)
       : 'None yet' },
-    { label: 'Full overdue days', value: `${fullOverdueDays} days` },
-    { label: 'Daily deduction', value: `${evidence.pointsPerOverdueDate} points` },
-    { label: 'Today', value: 'No deduction' }
+    { label: 'Full overdue days', value: `${evidence.overdueCount} days` },
+    { label: 'Daily deduction', value: `${evidence.pointsPerOverdueDate} points` }
   ];
+  useEffect(() => {
+    if (focusAfterDisclosureRef.current === 'earlier') showEarlierButtonRef.current?.focus();
+    if (focusAfterDisclosureRef.current === 'less') showLessButtonRef.current?.focus();
+    focusAfterDisclosureRef.current = null;
+  }, [visibleEntryCount]);
   return (
     <>
       <BreakdownRows rows={rows} />
@@ -573,27 +737,72 @@ function OnTrackScoreBreakdown({ metric }: { metric: ScoredOnTrackMetric }) {
       </p>
       <section className="rhythm-history-view__score-details">
         <h4>How it changed</h4>
-        <ol className="rhythm-history-view__score-history" aria-label="Daily On Track changes">
-          {evidence.days.map(item => (
-            <li key={item.date}>
-              <span>
-                {formatHistoryDate(item.date, false)} · {
-                  item.status === 'tended' && item.date === evidence.days.at(-1)?.date
-                    ? 'tended today'
-                    : item.status === 'tended'
-                      ? 'tended'
-                      : item.status === 'today'
-                        ? 'today · no deduction'
-                        : 'not tended'
-                }
-              </span>
+        <ol id={historyId} className="rhythm-history-view__score-history" aria-label="On Track score changes">
+          {visibleEntries.map(item => (
+            <li key={item.key} className={`rhythm-history-view__score-history-entry--${item.kind}`}>
+              <span>{onTrackHistoryEntryLabel(item, item.kind === 'day'
+                && item.date === evidence.days.at(-1)?.date)}</span>
               <strong>{item.score}</strong>
             </li>
           ))}
         </ol>
+        {(visibleEntryCount < entries.length || isExpanded) && (
+          <div className="rhythm-history-view__score-history-controls">
+            {visibleEntryCount < entries.length && (
+              <button
+                ref={showEarlierButtonRef}
+                type="button"
+                className="rhythm-history-view__score-history-toggle"
+                aria-controls={historyId}
+                aria-expanded={isExpanded}
+                onClick={() => {
+                  const nextCount = Math.min(visibleEntryCount + 5, entries.length);
+                  if (nextCount === entries.length) focusAfterDisclosureRef.current = 'less';
+                  setVisibleEntryCount(nextCount);
+                }}
+              >
+                Show earlier steps
+              </button>
+            )}
+            {isExpanded && (
+              <button
+                ref={showLessButtonRef}
+                type="button"
+                className="rhythm-history-view__score-history-toggle"
+                aria-controls={historyId}
+                aria-expanded={isExpanded}
+                onClick={() => {
+                  focusAfterDisclosureRef.current = 'earlier';
+                  setVisibleEntryCount(5);
+                }}
+              >
+                Show less
+              </button>
+            )}
+          </div>
+        )}
       </section>
     </>
   );
+}
+
+function onTrackHistoryEntryLabel(
+  entry: ReturnType<typeof onTrackHistoryDisplayEntries>[number],
+  isCurrentDay: boolean
+): string {
+  if (entry.kind === 'schedule-change') {
+    return `${formatHistoryDate(entry.date, true)} · schedule changed`;
+  }
+  if (entry.kind === 'zero-score-span') {
+    const unit = entry.occurrenceCount === 1 ? 'scheduled day' : 'earlier scheduled days';
+    return `${entry.occurrenceCount} ${unit} at 0 · ${formatHistoryDate(entry.startDate, false)}–${formatHistoryDate(entry.endDate, false)}`;
+  }
+  const status = entry.status === 'tended'
+    ? isCurrentDay ? 'tended today · current state' : 'tended · reset'
+    : entry.status === 'today'
+      ? 'today · current state'
+      : 'not tended · deduction';
+  return `${formatHistoryDate(entry.date, false)} · ${status}`;
 }
 
 function UnscoredBreakdown({ metric }: { metric: UnscoredMetric }) {
@@ -623,42 +832,50 @@ function formatHistoryDate(value: string, long = true): string {
     : { month: 'short', day: 'numeric' });
 }
 
-function formatScoreInput(score: number): string {
-  return String(Number(score.toFixed(2)));
-}
-
-function HealthCalculation({
-  consistency,
-  onTrack,
-  health,
-  explanation = 'Health requires both Consistency and On Track scores.'
-}: {
-  consistency?: number | undefined;
-  onTrack?: number | undefined;
-  health?: number | undefined;
-  explanation?: string;
-}) {
-  const available = consistency !== undefined && onTrack !== undefined && health !== undefined;
+function HealthCalculation({ explanation }: { explanation?: string }) {
+  const consistencyWeight = HEALTH_CONSISTENCY_WEIGHT * 100;
+  const onTrackWeight = HEALTH_ON_TRACK_WEIGHT * 100;
+  const titleId = useId();
+  const descriptionId = useId();
   return (
-    <section className="rhythm-history-view__health-calculation" aria-label="How Health is calculated">
-      <h4>How Health is calculated</h4>
-      {available ? (
-        <>
-          <p>
-            Consistency: {formatScoreInput(consistency)} × {HEALTH_CONSISTENCY_WEIGHT * 100}% ={' '}
-            {formatScoreInput(consistency * HEALTH_CONSISTENCY_WEIGHT)}
-          </p>
-          <p>
-            On Track: {formatScoreInput(onTrack)} × {HEALTH_ON_TRACK_WEIGHT * 100}% ={' '}
-            {formatScoreInput(onTrack * HEALTH_ON_TRACK_WEIGHT)}
-          </p>
-          <p className="rhythm-history-view__health-calculation-result">
-            Health: {formatScoreInput(consistency * HEALTH_CONSISTENCY_WEIGHT)} +{' '}
-            {formatScoreInput(onTrack * HEALTH_ON_TRACK_WEIGHT)} = <strong>{formatScoreInput(health)}</strong>
-          </p>
-        </>
-      ) : (
-        <p>{explanation}</p>
+    <section
+      className="rhythm-history-view__health-calculation"
+      aria-labelledby={titleId}
+      aria-describedby={descriptionId}
+    >
+      <div className="rhythm-history-view__health-calculation-heading">
+        <h4 id={titleId}>How your Health score is calculated</h4>
+      </div>
+      <p id={descriptionId} className="visually-hidden">
+        Health is weighted {consistencyWeight} percent Consistency and {onTrackWeight} percent On Track.
+        These are fixed formula weights, not this Rhythm&apos;s current scores.
+      </p>
+      <div className="rhythm-history-view__health-weight-panels">
+        <div className="rhythm-history-view__health-weight-panel rhythm-history-view__health-weight-panel--consistency">
+          <div className="rhythm-history-view__health-weight-value">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <rect x="3.5" y="5.5" width="17" height="15" rx="2" />
+              <path d="M8 3.5v4M16 3.5v4M3.5 9.5h17m-11 5 2 2 4-4" />
+            </svg>
+            <strong>{consistencyWeight}%</strong>
+          </div>
+          <span className="rhythm-history-view__health-weight-name">Consistency</span>
+          <span className="rhythm-history-view__health-weight-subtitle">Your longer-term pattern.</span>
+        </div>
+        <div className="rhythm-history-view__health-weight-panel rhythm-history-view__health-weight-panel--on-track">
+          <div className="rhythm-history-view__health-weight-value">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="8" />
+              <path d="M12 7v5l3 2" />
+            </svg>
+            <strong>{onTrackWeight}%</strong>
+          </div>
+          <span className="rhythm-history-view__health-weight-name">On Track</span>
+          <span className="rhythm-history-view__health-weight-subtitle">Up to date</span>
+        </div>
+      </div>
+      {explanation && (
+        <p className="rhythm-history-view__health-unavailable">{explanation}</p>
       )}
     </section>
   );

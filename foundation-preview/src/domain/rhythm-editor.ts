@@ -37,6 +37,9 @@ export type SavedRhythm = {
   schedule?: RhythmSchedule;
   personal?: boolean;
   scoring?: RhythmScoringMetadata;
+  createdLocalDate?: string;
+  createdTimeZone?: string;
+  dailyBackfillAllowed?: boolean;
 };
 
 export type RhythmDraft = {
@@ -51,9 +54,6 @@ export type RhythmDraft = {
   personal?: boolean;
   originalSchedule?: RhythmSchedule;
   originalScoring?: RhythmScoringMetadata;
-  trackingStartConfirmed?: boolean;
-  trackingStartDate?: string;
-  scoringTimeZone?: string;
 };
 
 export type RhythmDraftErrors = Partial<Record<keyof RhythmDraft | 'schedule', string>>;
@@ -64,6 +64,7 @@ const categoryIds = new Set(areas.map(area => area.id));
 const savedRhythmKeys = ['id', 'title', 'description', 'cadence', 'timeLabel', 'personIds', 'categoryIds'];
 const savedRhythmV4Keys = [...savedRhythmKeys, 'timeOfDay', 'schedule', 'personal'];
 const savedRhythmV7Keys = [...savedRhythmV4Keys, 'scoring'];
+const savedRhythmV8Keys = [...savedRhythmV7Keys, 'createdLocalDate', 'createdTimeZone', 'dailyBackfillAllowed'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -113,6 +114,10 @@ export function validateSavedRhythmsV7(value: unknown): value is SavedRhythm[] {
   return validateSavedRhythmsWithKeys(value, savedRhythmV7Keys, true);
 }
 
+export function validateSavedRhythmsV8(value: unknown): value is SavedRhythm[] {
+  return validateSavedRhythmsWithKeys(value, savedRhythmV8Keys, true);
+}
+
 function validateSavedRhythmsWithKeys(
   value: unknown,
   allowedKeys: readonly string[],
@@ -128,6 +133,11 @@ function validateSavedRhythmsWithKeys(
     if (rhythmTimeValueFromLabel(record.timeLabel) !== record.timeOfDay) return false;
     if (record.personal !== undefined && typeof record.personal !== 'boolean') return false;
     if (record.schedule !== undefined && !validateRhythmSchedule(record.schedule).valid) return false;
+    if ((record.createdLocalDate === undefined) !== (record.createdTimeZone === undefined)
+      || record.createdLocalDate !== undefined
+        && (typeof record.createdLocalDate !== 'string' || !isValidDate(record.createdLocalDate)
+          || !isValidTimeZone(record.createdTimeZone))) return false;
+    if (record.dailyBackfillAllowed !== undefined && typeof record.dailyBackfillAllowed !== 'boolean') return false;
     if (record.scoring !== undefined) {
       if (!scoringAllowed || !validateRhythmScoringMetadata(record.scoring)
         || record.schedule === undefined
@@ -153,8 +163,7 @@ function validateSavedRhythmsWithKeys(
 
 export function rhythmDraftFrom(
   rhythm: RhythmPreview,
-  categoryIds: readonly RhythmCategoryId[] = [],
-  suggestedTrackingStartDate?: string
+  categoryIds: readonly RhythmCategoryId[] = []
 ): RhythmDraft {
   return {
     title: rhythm.title,
@@ -166,14 +175,8 @@ export function rhythmDraftFrom(
     ...(rhythm.schedule === undefined ? {} : { schedule: rhythm.schedule }),
     ...(rhythm.schedule === undefined ? {} : { originalSchedule: rhythm.schedule }),
     ...(rhythm.scoring === undefined ? {} : {
-      originalScoring: rhythm.scoring,
-      trackingStartDate: rhythm.scoring.trackingStartDate,
-      scoringTimeZone: rhythm.scoring.timeZone,
-      trackingStartConfirmed: true
+      originalScoring: rhythm.scoring
     }),
-    ...(rhythm.scoring === undefined && suggestedTrackingStartDate && isValidDate(suggestedTrackingStartDate)
-      ? { trackingStartDate: suggestedTrackingStartDate }
-      : {}),
     scheduleEditing: rhythm.schedule !== undefined,
     ...(rhythm.personal === undefined ? {} : { personal: rhythm.personal })
   };
@@ -192,14 +195,6 @@ export function validateRhythmDraft(draft: RhythmDraft): RhythmDraftErrors {
     errors.schedule = 'Complete the schedule details before saving.';
   } else if (draft.schedule !== undefined && !validateRhythmSchedule(draft.schedule).valid) {
     errors.schedule = 'Choose a valid schedule.';
-  }
-  if (draft.trackingStartConfirmed && draft.schedule && draft.schedule.frequency !== 'custom') {
-    if (!draft.trackingStartDate || !isValidDate(draft.trackingStartDate)) {
-      errors.trackingStartDate = 'Choose a valid tracking start date.';
-    }
-    if (!draft.scoringTimeZone || !isValidTimeZone(draft.scoringTimeZone)) {
-      errors.scoringTimeZone = 'A valid scoring time zone is required.';
-    }
   }
   if (!isUniqueKnownValues<PersonId>(draft.personIds, personIds)) {
     errors.personIds = 'Choose each available synthetic person at most once.';
@@ -229,11 +224,6 @@ export function saveRhythmDraft(
   if (savedRhythms.filter(rhythm => rhythm.id === id).length > 1) {
     errors.title = 'This Rhythm has conflicting saved edits and cannot be changed.';
   }
-  if (draft.trackingStartConfirmed && draft.schedule && draft.schedule.frequency !== 'custom'
-    && (!scoringContext || !isValidDate(scoringContext.currentDate)
-      || draft.trackingStartDate! > scoringContext.currentDate)) {
-    errors.trackingStartDate = 'Tracking must start on or before the current scoring date.';
-  }
   if (Object.keys(errors).length > 0) return { errors };
 
   const existing = savedRhythms.find(rhythm => rhythm.id === id);
@@ -241,12 +231,20 @@ export function saveRhythmDraft(
   const originalSchedule = draft.originalSchedule ?? existing?.schedule;
   const scheduleChanged = JSON.stringify(draft.schedule) !== JSON.stringify(originalSchedule);
   let scoring = draft.originalScoring ?? existing?.scoring;
-  if (!scoring && draft.trackingStartConfirmed && draft.schedule && draft.schedule.frequency !== 'custom'
-    && draft.trackingStartDate && draft.scoringTimeZone) {
+  if (mode === 'create' && !scoring && draft.schedule && scoringContext
+    && isValidDate(scoringContext.currentDate) && isValidTimeZone(scoringContext.deviceTimeZone)) {
     scoring = {
-      trackingStartDate: draft.trackingStartDate,
-      timeZone: draft.scoringTimeZone,
-      scheduleHistory: [{ startDate: draft.trackingStartDate, schedule: draft.schedule }]
+      trackingStartDate: scoringContext.currentDate,
+      timeZone: scoringContext.deviceTimeZone,
+      scheduleHistory: [{ startDate: scoringContext.currentDate, schedule: draft.schedule }]
+    };
+  } else if (!scoring && existing && scheduleChanged && draft.schedule
+    && scoringContext && isValidDate(scoringContext.currentDate)
+    && isValidTimeZone(scoringContext.deviceTimeZone)) {
+    scoring = {
+      trackingStartDate: scoringContext.currentDate,
+      timeZone: scoringContext.deviceTimeZone,
+      scheduleHistory: [{ startDate: scoringContext.currentDate, schedule: draft.schedule }]
     };
   } else if (scoring && scheduleChanged && draft.schedule) {
     const currentDate = scoringContext?.currentDate;
@@ -256,7 +254,7 @@ export function saveRhythmDraft(
       return { errors };
     }
     if (currentDate < scoring.trackingStartDate) {
-      errors.schedule = 'A schedule cannot change before its confirmed tracking start.';
+      errors.schedule = 'A schedule cannot change before its saved schedule history starts.';
       return { errors };
     }
     const segments = scoring.scheduleHistory.map(segment => ({ ...segment }));
@@ -294,6 +292,27 @@ export function saveRhythmDraft(
     categoryIds: [...draft.categoryIds],
     ...(schedule === undefined ? {} : { schedule }),
     ...(scoring === undefined ? {} : { scoring }),
+    ...(existing?.createdLocalDate === undefined
+      ? mode === 'create' && scoringContext && isValidDate(scoringContext.currentDate)
+        && isValidTimeZone(scoringContext.deviceTimeZone)
+        ? {
+            createdLocalDate: scoringContext.currentDate,
+            createdTimeZone: scoringContext.deviceTimeZone,
+            dailyBackfillAllowed: true
+          }
+        : {}
+      : {
+          createdLocalDate: existing.createdLocalDate,
+          createdTimeZone: existing.createdTimeZone,
+          ...(existing.dailyBackfillAllowed === undefined
+            ? {}
+            : { dailyBackfillAllowed: existing.dailyBackfillAllowed })
+        }),
+    ...(existing?.createdLocalDate === undefined && mode !== 'create' && scheduleChanged && scoring
+      ? { dailyBackfillAllowed: false }
+      : existing?.dailyBackfillAllowed !== undefined
+        ? { dailyBackfillAllowed: existing.dailyBackfillAllowed }
+        : {}),
     ...(draft.personal === undefined
       ? existing?.personal === undefined ? {} : { personal: existing.personal }
       : { personal: draft.personal }),
@@ -323,6 +342,11 @@ export function resolveTodayRhythms(savedRhythms: readonly SavedRhythm[]): Rhyth
       categoryIds: saved.categoryIds,
       ...(saved.schedule === undefined ? {} : { schedule: saved.schedule }),
       ...(saved.scoring === undefined ? {} : { scoring: saved.scoring }),
+      ...(saved.createdLocalDate === undefined ? {} : {
+        createdLocalDate: saved.createdLocalDate,
+        createdTimeZone: saved.createdTimeZone
+      }),
+      ...(saved.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: saved.dailyBackfillAllowed }),
       ...(saved.personal === undefined ? {} : { personal: saved.personal })
     };
   });
@@ -341,6 +365,11 @@ export function resolveTodayRhythms(savedRhythms: readonly SavedRhythm[]): Rhyth
       categoryIds: rhythm.categoryIds,
       ...(rhythm.schedule === undefined ? {} : { schedule: rhythm.schedule }),
       ...(rhythm.scoring === undefined ? {} : { scoring: rhythm.scoring }),
+      ...(rhythm.createdLocalDate === undefined ? {} : {
+        createdLocalDate: rhythm.createdLocalDate,
+        createdTimeZone: rhythm.createdTimeZone
+      }),
+      ...(rhythm.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: rhythm.dailyBackfillAllowed }),
       ...(rhythm.personal === undefined ? {} : { personal: rhythm.personal })
     }));
 

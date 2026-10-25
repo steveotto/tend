@@ -29,6 +29,7 @@ type TodayViewProps = {
   greeting: string;
   dateLabel: string;
   completedRhythms: ReadonlySet<string>;
+  undoableRhythms: ReadonlySet<string>;
   rhythms: readonly RhythmPreview[];
   archivedRhythms: readonly RhythmPreview[];
   search: string;
@@ -38,7 +39,7 @@ type TodayViewProps = {
   onPersonSelect: (personId: PersonId) => void;
   onHistory: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   onTend: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
-  onEditRhythm: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>, suggestedTrackingStartDate?: string) => void;
+  onEditRhythm: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
   onUndo: (id: string) => void;
   onAddRhythm: (event: MouseEvent<HTMLButtonElement>) => void;
   onRestoreRhythm: (id: string) => void;
@@ -48,6 +49,7 @@ export function TodayView({
   greeting,
   dateLabel,
   completedRhythms,
+  undoableRhythms,
   rhythms,
   archivedRhythms,
   search,
@@ -219,7 +221,7 @@ export function TodayView({
                       {...(isEditableRhythmId(rhythm.id)
                         ? { onEdit: event => onEditRhythm(rhythm, event) }
                         : {})}
-                      onUndo={() => onUndo(rhythm.id)}
+                      {...(undoableRhythms.has(rhythm.id) ? { onUndo: () => onUndo(rhythm.id) } : {})}
                       onClose={() => undefined}
                     />
                   ))}

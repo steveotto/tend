@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatRhythmSchedule,
   rhythmScheduleSummary,
   rhythmSummary,
   rhythmTimeLabel,
@@ -127,6 +128,68 @@ describe('pure structured Rhythm schedule domain', () => {
       startDate: '2026-10-22',
       endDate: '2027-10-22'
     })).toBe('Every 2 weeks on Monday and Thursday, starting October 22, 2026 and ending October 22, 2027.');
+  });
+
+  it('formats every supported schedule pattern compactly without guessing dates', () => {
+    expect(formatRhythmSchedule({ frequency: 'daily' }, 'compact')).toBe('Daily');
+    expect(formatRhythmSchedule({ frequency: 'weekly', weekdays: [4] }, 'compact')).toBe('Every Thu');
+    expect(formatRhythmSchedule({ frequency: 'weekly', weekdays: [5, 1, 3] }, 'compact')).toBe('Mon · Wed · Fri');
+    expect(formatRhythmSchedule({ frequency: 'weekly', weekdays: [1, 2, 3, 4, 5] }, 'compact')).toBe('Weekdays');
+    expect(formatRhythmSchedule({ frequency: 'weekly', weekdays: [6, 0] }, 'compact')).toBe('Weekends');
+    expect(formatRhythmSchedule({ frequency: 'weekly', weekdays: [6, 0, 1, 2, 3, 4, 5] }, 'compact')).toBe('Daily');
+    expect(formatRhythmSchedule({ frequency: 'weekly', weekdays: [2, 1] }, 'compact'))
+    .toBe(formatRhythmSchedule({ frequency: 'weekly', weekdays: [1, 2] }, 'compact'));
+    expect(formatRhythmSchedule({ frequency: 'monthly', pattern: { kind: 'dayOfMonth', day: 15 } }, 'compact'))
+    .toBe('Monthly · 15th');
+    expect(formatRhythmSchedule({ frequency: 'monthly', pattern: { kind: 'dayOfMonth', day: 'last' } }, 'compact'))
+    .toBe('Monthly · Last day');
+    expect(formatRhythmSchedule({
+    frequency: 'monthly',
+    pattern: { kind: 'ordinalWeekday', ordinal: 1, weekday: 4 }
+    }, 'compact')).toBe('Monthly · First Thu');
+    expect(formatRhythmSchedule({
+    frequency: 'quarterly',
+    monthInQuarter: 2,
+    pattern: { kind: 'dayOfMonth', day: 15 }
+    }, 'compact')).toBe('Quarterly · 2nd month · 15th');
+    expect(formatRhythmSchedule({
+    frequency: 'yearly',
+    month: 10,
+    pattern: { kind: 'dayOfMonth', day: 24 }
+    }, 'compact')).toBe('Yearly · Oct 24');
+    expect(formatRhythmSchedule({
+    frequency: 'yearly',
+    month: 10,
+    pattern: { kind: 'ordinalWeekday', ordinal: 'last', weekday: 5 }
+    }, 'compact')).toBe('Yearly · Last Fri · Oct');
+    expect(formatRhythmSchedule({
+    frequency: 'custom',
+    unit: 'days',
+    interval: 2,
+    startDate: '2026-10-22'
+    }, 'compact')).toBe('Every 2 days');
+    expect(formatRhythmSchedule({
+    frequency: 'custom',
+    unit: 'weeks',
+    interval: 2,
+    weekdays: [1, 3],
+    startDate: '2026-10-22'
+    }, 'compact')).toBe('Every 2 weeks · Mon · Wed');
+    expect(formatRhythmSchedule({
+    frequency: 'custom',
+    unit: 'months',
+    interval: 3,
+    pattern: { kind: 'dayOfMonth', day: 'last' },
+    startDate: '2026-10-22'
+    }, 'compact')).toBe('Every 3 months · Last day');
+    expect(formatRhythmSchedule({
+    frequency: 'custom',
+    unit: 'years',
+    interval: 2,
+    month: 10,
+    pattern: { kind: 'ordinalWeekday', ordinal: 1, weekday: 4 },
+    startDate: '2026-10-22'
+    }, 'compact')).toBe('Every 2 years · Oct First Thu');
   });
 
   it('provides reference time choices through stable values and shared labels', () => {

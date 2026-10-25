@@ -17,7 +17,8 @@ import {
   peopleForRhythm,
   todayRhythms,
   type MarriageExampleId,
-  type PersonId
+  type PersonId,
+  type RhythmPreview
 } from './domain/preview-data.ts';
 import {
   saveCheckIn,
@@ -30,7 +31,11 @@ import {
 import { createSamplePreviewData, parsePreviewBackup } from './domain/preview-state.ts';
 import type { PreviewData } from './domain/preview-state.ts';
 import type { DatedRhythmCompletion, RhythmCompletionRecord } from './domain/rhythm-completion.ts';
-import { deleteDatedCompletion, removeActionCompletion } from './domain/rhythm-completion.ts';
+import {
+  deleteDatedCompletion,
+  removeActionCompletion,
+  rhythmCompletionStateForDate
+} from './domain/rhythm-completion.ts';
 import { resolveSeedCompletionRecords } from './domain/rhythm-history.ts';
 import { localDateInTimeZone } from './domain/rhythm-scoring.ts';
 import {
@@ -53,6 +58,7 @@ import {
   loadV4RecoveryCopy,
   loadV5RecoveryCopy,
   loadV6RecoveryCopy,
+  loadV7RecoveryCopy,
   loadPreview,
   writePreview
 } from './storage/preview-storage.ts';
@@ -94,6 +100,8 @@ export function App() {
   const [v5RecoveryError, setV5RecoveryError] = useState<string | null>(null);
   const [v6RecoveryCopy, setV6RecoveryCopy] = useState<string | null>(null);
   const [v6RecoveryError, setV6RecoveryError] = useState<string | null>(null);
+  const [v7RecoveryCopy, setV7RecoveryCopy] = useState<string | null>(null);
+  const [v7RecoveryError, setV7RecoveryError] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -108,7 +116,6 @@ export function App() {
   const [rhythmEditor, setRhythmEditor] = useState<{
     id: string;
     rhythm?: (typeof todayRhythms)[number];
-    suggestedTrackingStartDate?: string;
   } | null>(null);
   const dialogOpener = useRef<HTMLButtonElement | null>(null);
   const completionDialogOpener = useRef<HTMLButtonElement | null>(null);
@@ -123,7 +130,21 @@ export function App() {
   }).format(new Date());
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-  const allTodayRhythms = resolveTodayRhythms(previewData.savedRhythms);
+  function rhythmWithSavedCompletions(rhythm: RhythmPreview): RhythmPreview {
+    const seededRecords = resolveSeedCompletionRecords(
+      rhythm.completionHistory,
+      previewData.rhythmCompletionOverrides,
+      previewData.removedSeedCompletionIds
+    );
+    const datedRecords = previewData.datedRhythmCompletions.filter(item => item.rhythmId === rhythm.id);
+    const completionHistory = seededRecords === undefined && datedRecords.length === 0
+      ? undefined
+      : [...(seededRecords ?? []), ...datedRecords];
+    return completionHistory === undefined
+      ? rhythm
+      : { ...rhythm, completionHistory };
+  }
+  const allTodayRhythms = resolveTodayRhythms(previewData.savedRhythms).map(rhythmWithSavedCompletions);
   const editableTodayRhythms = activeTodayRhythms(allTodayRhythms, previewData.archivedRhythmIds);
   const archivedRhythms = archivedTodayRhythms(allTodayRhythms, previewData.archivedRhythmIds);
   const userRhythms = editableTodayRhythms.filter(rhythm =>
@@ -132,25 +153,37 @@ export function App() {
   const marriageCategoryRhythms = rhythmsForCategory(userRhythms, 'marriage');
   const activeRhythm = [
     ...allTodayRhythms,
-    ...marriageRhythms
+    ...marriageRhythms.map(rhythmWithSavedCompletions)
   ].find(rhythm => rhythm.id === activeRhythmId) ?? null;
   const selectedPerson = selectedPersonId === null ? null : personById(selectedPersonId);
   const activeRhythmIsToday = activeRhythm !== null && editableTodayRhythms.some(rhythm => rhythm.id === activeRhythm.id);
   const activeRhythmIsArchived = activeRhythm !== null && previewData.archivedRhythmIds.includes(activeRhythm.id);
-  const activeRhythmForDetails = activeRhythm ? {
-    ...activeRhythm,
-    completionHistory: resolveSeedCompletionRecords(
-      activeRhythm.completionHistory,
-      previewData.rhythmCompletionOverrides,
-      previewData.removedSeedCompletionIds
-    )
-  } : null;
+  const activeRhythmForDetails = activeRhythm;
   const completionDialogRhythm = completionDialogRhythmId
     ? allTodayRhythms.find(rhythm => rhythm.id === completionDialogRhythmId) ?? null
     : null;
   const currentDate = localDateString(new Date());
   const initialLoadDate = useRef(currentDate).current;
-  const completedRhythms = new Set(previewData.completedRhythmIds);
+  const completionStates = new Map(allTodayRhythms.map(rhythm => {
+    const timeZone = rhythm.scoring?.timeZone
+      ?? rhythm.createdTimeZone
+      ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const effectiveDate = localDateInTimeZone(new Date(), timeZone);
+    const state = rhythmCompletionStateForDate(
+      rhythm.id,
+      effectiveDate,
+      previewData.completedRhythmIds,
+      previewData.activeRhythmCompletions,
+      (rhythm.completionHistory ?? []).map(record => ({ ...record, rhythmId: rhythm.id }))
+    );
+    return [rhythm.id, state] as const;
+  }));
+  const completedRhythms = new Set(
+    [...completionStates].filter(([, state]) => state.completed).map(([id]) => id)
+  );
+  const undoableRhythms = new Set(
+    [...completionStates].filter(([, state]) => state.undoable).map(([id]) => id)
+  );
   const moneyGoals = previewData.goals;
 
   function refreshV1RecoveryCopy() {
@@ -218,6 +251,18 @@ export function App() {
       setV6RecoveryCopy(null);
       setV6RecoveryError(result.message);
     }
+
+  }
+
+  function refreshV7RecoveryCopy() {
+    const result = loadV7RecoveryCopy(browserPreviewStorage());
+    if (result.kind === 'loaded') {
+      setV7RecoveryCopy(result.raw);
+      setV7RecoveryError(null);
+    } else {
+      setV7RecoveryCopy(null);
+      setV7RecoveryError(result.message);
+    }
   }
 
   useEffect(() => {
@@ -227,6 +272,7 @@ export function App() {
     refreshV4RecoveryCopy();
     refreshV5RecoveryCopy();
     refreshV6RecoveryCopy();
+    refreshV7RecoveryCopy();
     const loaded = loadPreview(browserPreviewStorage(), initialLoadDate);
     if (loaded.kind === 'loaded') {
       expectedRaw.current = loaded.raw;
@@ -364,21 +410,19 @@ export function App() {
 
   function openRhythmEditor(
     event: MouseEvent<HTMLButtonElement>,
-    rhythm?: (typeof todayRhythms)[number],
-    suggestedTrackingStartDate?: string
+    rhythm?: (typeof todayRhythms)[number]
   ) {
     rhythmEditorOpener.current = event.currentTarget;
     setRhythmEditor({
       id: rhythm?.id ?? `user-rhythm-${globalThis.crypto.randomUUID()}`,
-      ...(rhythm ? { rhythm } : {}),
-      ...(suggestedTrackingStartDate ? { suggestedTrackingStartDate } : {})
+      ...(rhythm ? { rhythm } : {})
     });
   }
 
   function saveRhythm(draft: RhythmDraft): RhythmDraftErrors {
     if (!rhythmEditor) return { title: 'The Rhythm editor is no longer active.' };
     const scoringTimeZone = rhythmEditor.rhythm?.scoring?.timeZone
-      ?? draft.scoringTimeZone
+      ?? rhythmEditor.rhythm?.createdTimeZone
       ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     const result = saveRhythmDraft(
       previewData.savedRhythms,
@@ -419,27 +463,34 @@ export function App() {
     });
   }
 
-  function saveDatedCompletion(candidate: RhythmCompletionRecord): string | null {
+  function saveDatedCompletion(candidate: RhythmCompletionRecord, source: 'tend' | 'history' = 'tend'): string | null {
     if (!isDatedCompletionRecord(candidate)) {
       return 'A new completion must include its selected local time. No completion was saved.';
     }
     const record = candidate;
+    const isTendAction = source === 'tend';
     if (!isEditableRhythmId(record.rhythmId)
       || !resolveTodayRhythms(previewData.savedRhythms).some(rhythm => rhythm.id === record.rhythmId)
       || previewData.archivedRhythmIds.includes(record.rhythmId)
-      || previewData.completedRhythmIds.includes(record.rhythmId)) {
+      || (isTendAction && completedRhythms.has(record.rhythmId))) {
       return 'This Rhythm cannot be completed right now. No completion was saved.';
     }
     setPreviewData(previous => {
-      if (previous.completedRhythmIds.includes(record.rhythmId)) return previous;
+      if (isTendAction && completedRhythms.has(record.rhythmId)) return previous;
       return {
         ...previous,
-        completedRhythmIds: [...previous.completedRhythmIds, record.rhythmId],
         datedRhythmCompletions: [...previous.datedRhythmCompletions, record],
-        activeRhythmCompletions: [
-          ...previous.activeRhythmCompletions.filter(item => item.rhythmId !== record.rhythmId),
-          { rhythmId: record.rhythmId, completionId: record.id }
-        ]
+        ...(isTendAction
+          ? {
+              completedRhythmIds: previous.completedRhythmIds.includes(record.rhythmId)
+                ? previous.completedRhythmIds
+                : [...previous.completedRhythmIds, record.rhythmId],
+              activeRhythmCompletions: [
+                ...previous.activeRhythmCompletions.filter(item => item.rhythmId !== record.rhythmId),
+                { rhythmId: record.rhythmId, completionId: record.id }
+              ]
+            }
+          : {})
       };
     });
     return null;
@@ -705,6 +756,7 @@ export function App() {
               greeting={greeting}
               dateLabel={dateLabel}
               completedRhythms={completedRhythms}
+              undoableRhythms={undoableRhythms}
               rhythms={editableTodayRhythms}
               archivedRhythms={archivedRhythms}
               search={search}
@@ -714,8 +766,7 @@ export function App() {
               onPersonSelect={personId => navigate('people', personId)}
               onHistory={openRhythmHistory}
               onTend={openCompletion}
-              onEditRhythm={(rhythm, event, suggestedTrackingStartDate) =>
-                openRhythmEditor(event, rhythm, suggestedTrackingStartDate)}
+              onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
               onUndo={undoTend}
               onAddRhythm={event => openRhythmEditor(event)}
               onRestoreRhythm={restoreRhythm}
@@ -730,6 +781,7 @@ export function App() {
                 onPartnerProfile={() => navigate('people')}
                 userRhythms={marriageCategoryRhythms}
                 completedRhythms={completedRhythms}
+                undoableRhythms={undoableRhythms}
                 onRhythmDetails={(id, event) => {
                   dialogOpener.current = event.currentTarget;
                   setDetailsInitialView('details');
@@ -774,6 +826,8 @@ export function App() {
         v5RecoveryError={v5RecoveryError}
         v6RecoveryCopy={v6RecoveryCopy}
         v6RecoveryError={v6RecoveryError}
+        v7RecoveryCopy={v7RecoveryCopy}
+        v7RecoveryError={v7RecoveryError}
       />
       <footer className="preview-footer">
         <span>Synthetic preview data stays separate from Tend accounts.</span>
@@ -784,8 +838,11 @@ export function App() {
           key={activeRhythm.id}
           rhythm={activeRhythmForDetails!}
           initialView={detailsInitialView}
-          datedCompletions={previewData.datedRhythmCompletions.filter(item => item.rhythmId === activeRhythm.id)}
+          datedCompletions={[]}
           completionHistoryAvailable={activeRhythmIsToday || activeRhythmIsArchived}
+          {...(activeRhythmIsToday && isEditableRhythmId(activeRhythm.id) && !activeRhythmIsArchived
+            ? { onLogCompletion: record => saveDatedCompletion(record, 'history') }
+            : {})}
           {...(activeRhythmIsToday && isEditableRhythmId(activeRhythm.id) && !activeRhythmIsArchived
             ? {
                 onUpdateCompletion: updateDatedCompletion,
@@ -803,16 +860,16 @@ export function App() {
             ? {
                 completed: completedRhythms.has(activeRhythm.id),
                 ...(!activeRhythmIsArchived ? { onSaveCompletion: saveDatedCompletion } : {}),
-                onUndo: () => undoTend(activeRhythm.id),
+                ...(undoableRhythms.has(activeRhythm.id) ? { onUndo: () => undoTend(activeRhythm.id) } : {}),
                 ...(isEditableRhythmId(activeRhythm.id)
                   ? {
-                      onEdit: (event, suggestedTrackingStartDate) =>
-                        openRhythmEditor(event, activeRhythm, suggestedTrackingStartDate)
+                      onEdit: event => openRhythmEditor(event, activeRhythm)
                     }
                   : {})
               }
             : {
-                completed: completedRhythms.has(activeRhythm.id)
+                completed: completedRhythms.has(activeRhythm.id),
+                ...(undoableRhythms.has(activeRhythm.id) ? { onUndo: () => undoTend(activeRhythm.id) } : {})
               })}
           onClose={() => setActiveRhythmId(null)}
         />
@@ -827,9 +884,6 @@ export function App() {
       {rhythmEditor && (
         <RhythmEditor
           {...(rhythmEditor.rhythm ? { rhythm: rhythmEditor.rhythm } : {})}
-          {...(rhythmEditor.suggestedTrackingStartDate
-            ? { suggestedTrackingStartDate: rhythmEditor.suggestedTrackingStartDate }
-            : {})}
           onSave={saveRhythm}
           {...(rhythmEditor.rhythm ? { onArchive: archiveRhythm } : {})}
           onClose={() => setRhythmEditor(null)}

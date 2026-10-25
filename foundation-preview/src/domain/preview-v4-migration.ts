@@ -28,13 +28,16 @@ export type PreviewV4MigrationResult =
   | {
       valid: true;
       envelope: PreviewEnvelope;
-      sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+      sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
     }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
 export function migratePreviewToProposedV4(raw: string, currentDate: string): PreviewV4MigrationResult {
   const parsed = parsePreviewBackup(raw, currentDate);
   if (!parsed.valid) return parsed;
+  if (parsed.sourceSchemaVersion === 8) {
+    return { valid: true, envelope: parsed.envelope, sourceSchemaVersion: 8 };
+  }
   if (parsed.sourceSchemaVersion === 7) {
     return { valid: true, envelope: parsed.envelope, sourceSchemaVersion: 7 };
   }

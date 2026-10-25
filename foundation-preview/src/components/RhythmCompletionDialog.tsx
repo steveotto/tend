@@ -27,6 +27,7 @@ export function RhythmCompletionDialog({
         headingId="rhythm-completion-heading"
         onSave={onSave}
         onCancel={onClose}
+        onSaved={onClose}
       />
     </MoneyGoalDialog>
   );

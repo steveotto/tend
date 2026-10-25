@@ -87,7 +87,7 @@ describe('Rhythm completion controls', () => {
   it('defaults to the current local date and time and keeps the draft stable while editing', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-11-01T00:07:00.000Z'));
-    render(<RhythmCompletionForm rhythm={rhythm} onSave={() => null} onCancel={() => undefined} />);
+    render(<RhythmCompletionForm rhythm={rhythm} onSave={() => null} onCancel={() => undefined} onSaved={() => undefined} />);
 
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'When did you tend it?' }));
     expect(document.activeElement).not.toBe(screen.getByLabelText('Date'));
@@ -114,8 +114,9 @@ describe('Rhythm completion controls', () => {
     yesterday.setDate(yesterday.getDate() - 1);
     const onSave = vi.fn<(record: RhythmCompletionRecord) => string | null>(() => null);
     const onCancel = vi.fn();
+    const onSaved = vi.fn();
     const { unmount } = render(
-      <RhythmCompletionForm rhythm={rhythm} onSave={onSave} onCancel={onCancel} />
+      <RhythmCompletionForm rhythm={rhythm} onSave={onSave} onCancel={onCancel} onSaved={onSaved} />
     );
     const periodDial = screen.getByRole('spinbutton', { name: 'AM / PM' });
     expect(periodDial.getAttribute('aria-valuetext')).toBe('AM');
@@ -143,6 +144,7 @@ describe('Rhythm completion controls', () => {
         initialRecord={createdRecord!}
         onSave={editSave}
         onCancel={() => undefined}
+        onSaved={() => undefined}
       />
     );
     const editedPeriodDial = screen.getByRole('spinbutton', { name: 'AM / PM' });
@@ -168,7 +170,10 @@ describe('Rhythm completion controls', () => {
     vi.setSystemTime(new Date('2026-11-01T12:34:00.000Z'));
     const onSave = vi.fn<(record: RhythmCompletionRecord) => string | null>(() => null);
     const onCancel = vi.fn();
-    const { container } = render(<RhythmCompletionForm rhythm={rhythm} onSave={onSave} onCancel={onCancel} />);
+    const onSaved = vi.fn();
+    const { container } = render(
+      <RhythmCompletionForm rhythm={rhythm} onSave={onSave} onCancel={onCancel} onSaved={onSaved} />
+    );
     const form = container.querySelector('form')!;
     fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-10-31' } });
     fireEvent.change(screen.getByLabelText(/Notes/), { target: { value: 'A good conversation.' } });
@@ -176,7 +181,8 @@ describe('Rhythm completion controls', () => {
     fireEvent.submit(form);
 
     expect(onSave).toHaveBeenCalledOnce();
-    expect(onCancel).toHaveBeenCalledOnce();
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(onSaved).toHaveBeenCalledOnce();
     expect(onSave.mock.calls[0]![0]).toMatchObject({
       rhythmId: rhythm.id,
       effectiveDate: '2026-10-31',
@@ -191,7 +197,8 @@ describe('Rhythm completion controls', () => {
     vi.setSystemTime(new Date('2026-11-01T10:30:00.000Z'));
     const onSave = vi.fn(() => null);
     const onCancel = vi.fn();
-    render(<RhythmCompletionForm rhythm={rhythm} onSave={onSave} onCancel={onCancel} />);
+    const onSaved = vi.fn();
+    render(<RhythmCompletionForm rhythm={rhythm} onSave={onSave} onCancel={onCancel} onSaved={onSaved} />);
     const minuteDial = screen.getByRole('spinbutton', { name: 'Minute' });
     minuteDial.focus();
     fireEvent.keyDown(minuteDial, { key: 'ArrowDown' });
@@ -201,6 +208,7 @@ describe('Rhythm completion controls', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onCancel).toHaveBeenCalledOnce();
+    expect(onSaved).not.toHaveBeenCalled();
   });
 
   it('provides an accessible Close action in the shared dialog shell', () => {

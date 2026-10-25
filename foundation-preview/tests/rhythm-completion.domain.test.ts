@@ -4,7 +4,8 @@ import {
   localDateTimeInZone,
   prepareDatedRhythmCompletion,
   prepareUndatedRhythmCompletionEdit,
-  removeActionCompletion
+  removeActionCompletion,
+  rhythmCompletionStateForDate
 } from '../src/domain/rhythm-completion.ts';
 
 const now = new Date('2026-11-01T12:00:00.000Z');
@@ -108,6 +109,36 @@ describe('dated Rhythm completion preparation', () => {
     expect(result.removedRecordId).toBe('linked');
   });
 
+  it('derives completion and Undo only from the effective date while retaining explicit legacy state', () => {
+    const records = [
+      { id: 'backdated-action', rhythmId: 'sample-pray-together', effectiveDate: '2026-10-14' },
+      { id: 'today-log', rhythmId: 'sample-pray-together', effectiveDate: '2026-10-24' }
+    ];
+    const active = [{ rhythmId: 'sample-pray-together', completionId: 'backdated-action' }];
+
+    expect(rhythmCompletionStateForDate(
+      'sample-pray-together',
+      '2026-10-24',
+      ['sample-pray-together'],
+      active,
+      records.slice(0, 1)
+    )).toEqual({ completed: false, undoable: false });
+    expect(rhythmCompletionStateForDate(
+      'sample-pray-together',
+      '2026-10-24',
+      ['sample-pray-together'],
+      active,
+      records
+    )).toEqual({ completed: true, undoable: false });
+    expect(rhythmCompletionStateForDate(
+      'sample-pray-together',
+      '2026-10-24',
+      ['sample-pray-together'],
+      [],
+      []
+    )).toEqual({ completed: true, undoable: true });
+  });
+
   it('deletes only the selected record and keeps Tend state consistent with remaining and legacy records', () => {
     const linked = { ...preparedRecord(), id: 'linked' };
     const unrelated = {
@@ -121,7 +152,7 @@ describe('dated Rhythm completion preparation', () => {
     expect(deleteDatedCompletion([linked, unrelated], active, completed, linked.id)).toEqual({
       records: [unrelated],
       active: [],
-      completedRhythmIds: [linked.rhythmId]
+      completedRhythmIds: []
     });
     expect(deleteDatedCompletion([linked], active, completed, linked.id)).toEqual({
       records: [],
