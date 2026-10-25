@@ -1,5 +1,5 @@
 import { isValidDate } from './money-goals.ts';
-import { rhythmSeasonPaletteTokens } from './rhythm-schedule.ts';
+import { rhythmSeasonPaletteCycleTokens, rhythmSeasonPaletteTokens } from './rhythm-schedule.ts';
 import type {
   RhythmLocalDate,
   RhythmSchedule,
@@ -20,12 +20,20 @@ export function rhythmSeasonPaletteForId(id: string): RhythmScheduleSegment['pal
   return rhythmSeasonPaletteTokens[(hash >>> 0) % rhythmSeasonPaletteTokens.length]!;
 }
 
+export function rhythmSeasonPaletteForOrdinal(ordinal: number): RhythmScheduleSegment['paletteToken'] {
+  if (!Number.isInteger(ordinal) || ordinal < 0) {
+    throw new RangeError('Season palette ordinal must be a non-negative integer.');
+  }
+  return rhythmSeasonPaletteCycleTokens[ordinal % rhythmSeasonPaletteCycleTokens.length]!;
+}
+
 export function createRhythmSeason(
   rhythmId: string,
   startDate: RhythmLocalDate,
   schedule: RhythmSchedule,
   timeOfDay?: RhythmScheduleSegment['timeOfDay'],
-  id?: string
+  id?: string,
+  paletteToken?: RhythmScheduleSegment['paletteToken']
 ): RhythmScheduleSegment {
   const stableId = id ?? rhythmSeasonId(rhythmId, startDate);
   return {
@@ -34,7 +42,7 @@ export function createRhythmSeason(
     startDate,
     schedule,
     ...(timeOfDay === undefined ? {} : { timeOfDay }),
-    paletteToken: rhythmSeasonPaletteForId(stableId)
+    paletteToken: paletteToken ?? rhythmSeasonPaletteForId(stableId)
   };
 }
 

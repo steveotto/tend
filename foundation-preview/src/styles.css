@@ -3962,7 +3962,8 @@ a:focus-visible {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 10px 0 16px;
+  margin-right: calc(-1 * var(--rhythm-details-horizontal-padding, 16px) + 2px);
+  padding: 10px 16px 16px 0;
   scrollbar-gutter: stable;
 }
 
@@ -4023,26 +4024,72 @@ a:focus-visible {
 
 .rhythm-history-view__seasons {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
-.rhythm-history-view__seasons-disclosure {
-  justify-self: start;
-  padding: 4px 0;
-  border: 0;
-  background: transparent;
+.rhythm-history-view__seasons-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+}
+
+.rhythm-history-view__seasons-header > h3 {
+  margin: 0;
   color: var(--tend-ink, var(--ink));
-  font: inherit;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 700;
-  text-align: left;
-  cursor: pointer;
+  line-height: 1.3;
+}
+
+.rhythm-history-view__season-edit:focus-visible,
+.rhythm-history-view__season-expand:focus-visible,
+.rhythm-history-view__unknown-schedule-action:focus-visible {
+  outline: 2px solid var(--tend-accent, #198754);
+  outline-offset: 2px;
+}
+
+.rhythm-history-view__seasons-count {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #f1f4f1;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rhythm-history-view__seasons-info {
+  margin-left: auto;
+}
+
+.rhythm-history-view__seasons-info-copy {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f4f7f4;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__seasons-expanded {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rhythm-history-view__seasons-expanded[hidden] {
+  display: none;
 }
 
 .rhythm-history-view__seasons-content {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -4062,48 +4109,86 @@ a:focus-visible {
   display: flex;
   gap: 3px;
   min-width: 0;
-  height: 10px;
-  overflow: hidden;
-  border-radius: 999px;
+  flex-wrap: wrap;
 }
 
 .rhythm-history-view__season-timeline-segment {
-  flex: 0 1 0;
-  min-width: 3px;
-  border-radius: 999px;
-  background: var(--rhythm-season-color);
+  position: relative;
+  flex: 1 1 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
 }
 
-.rhythm-history-view__season-color--fern { --rhythm-season-color: #587c60; }
-.rhythm-history-view__season-color--sage { --rhythm-season-color: #8a9d65; }
-.rhythm-history-view__season-color--sky { --rhythm-season-color: #5d91ad; }
-.rhythm-history-view__season-color--ocean { --rhythm-season-color: #39778b; }
-.rhythm-history-view__season-color--plum { --rhythm-season-color: #8b6c9e; }
-.rhythm-history-view__season-color--clay { --rhythm-season-color: #b87558; }
+.rhythm-history-view__season-timeline-segment::before {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--rhythm-season-color);
+  content: "";
+  transform: translateY(-50%);
+}
+
+.rhythm-history-view__season-timeline-segment:focus-visible {
+  outline: 3px solid var(--tend-forest, var(--forest));
+  outline-offset: 1px;
+}
+
+.rhythm-history-view__season-visual--fern { --rhythm-season-color: #2F8CFF; }
+.rhythm-history-view__season-visual--sage { --rhythm-season-color: #20B99A; }
+.rhythm-history-view__season-visual--sky { --rhythm-season-color: #FFD039; }
+.rhythm-history-view__season-visual--ocean { --rhythm-season-color: #FF7954; }
+.rhythm-history-view__season-visual--plum { --rhythm-season-color: #A653F5; }
+.rhythm-history-view__season-visual--clay { --rhythm-season-color: #FF7954; }
+.rhythm-history-view__season-visual--unknown { --rhythm-season-color: #a5a9a6; }
 
 .rhythm-history-view__season-card {
   display: grid;
-  gap: 5px;
+  gap: 4px;
   min-width: 0;
   padding: 11px 12px;
-  border: 1px solid var(--tend-line, var(--line));
+  border: 2px solid #d7ddd8;
   border-left: 3px solid var(--rhythm-season-color);
   border-radius: 10px;
+  background: #fff;
+  scroll-margin-block: 12px;
+  transition: box-shadow 160ms ease, border-color 160ms ease;
 }
 
-.rhythm-history-view__season-card-header,
-.rhythm-history-view__earlier-season-heading {
+.rhythm-history-view__season-card--highlighted {
+  border-color: var(--rhythm-season-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rhythm-season-color) 24%, transparent);
+}
+
+.rhythm-history-view__season-card:focus {
+  outline: 2px solid var(--rhythm-season-color);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rhythm-history-view__season-card {
+    transition: none;
+  }
+}
+
+.rhythm-history-view__season-card-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   min-width: 0;
 }
 
-.rhythm-history-view__season-card h4,
-.rhythm-history-view__earlier-seasons > h4,
-.rhythm-history-view__earlier-season h5 {
-  min-width: 0;
+.rhythm-history-view__season-card h4 {
+  flex: 1 1 100px;
+  min-width: 60px;
   margin: 0;
   color: var(--tend-ink, var(--ink));
   font-size: 13px;
@@ -4111,19 +4196,61 @@ a:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.rhythm-history-view__earlier-seasons > h4 {
+  margin: 0 0 2px;
+  color: var(--tend-ink, var(--ink));
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.rhythm-history-view__season-card-actions {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.rhythm-history-view__season-card-metadata {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
 .rhythm-history-view__season-current-badge {
   flex: none;
   padding: 2px 7px;
   border-radius: 999px;
-  background: #edf3ee;
-  color: #526d56;
+  background: color-mix(in srgb, var(--rhythm-season-color) 18%, white);
+  color: #3d433e;
   font-size: 10px;
   font-weight: 700;
 }
 
 .rhythm-history-view__season-edit,
+.rhythm-history-view__season-delete,
 .rhythm-history-view__unknown-schedule-action {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 5px;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tend-ink, var(--ink));
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.rhythm-history-view__season-delete {
+  min-height: 44px;
   padding: 5px 8px;
   border: 1px solid var(--tend-line, var(--line));
   border-radius: 7px;
@@ -4136,6 +4263,18 @@ a:focus-visible {
 
 .rhythm-history-view__unknown-schedule-action {
   justify-self: start;
+  min-width: 44px;
+  padding: 5px 10px;
+}
+
+.rhythm-history-view__season-undo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .rhythm-season-correction {
@@ -4170,15 +4309,13 @@ a:focus-visible {
   line-height: 1.45;
 }
 
-.rhythm-season-correction__transition,
-.rhythm-season-correction__impact {
+.rhythm-season-correction__transition {
   display: grid;
   gap: 8px;
   min-width: 0;
 }
 
-.rhythm-season-correction__transition > p,
-.rhythm-season-correction__impact > div {
+.rhythm-season-correction__transition > p {
   display: grid;
   gap: 3px;
   min-width: 0;
@@ -4190,44 +4327,227 @@ a:focus-visible {
   overflow-wrap: anywhere;
 }
 
-.rhythm-season-correction__impact p {
+.rhythm-season-correction__delete-action {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--tend-line, var(--line));
+}
+
+.rhythm-season-correction__delete {
+  min-height: 44px;
+  border-color: #e5c7c7;
+  background: #fff8f8;
+  color: #8f3434;
+}
+
+.rhythm-season-correction__delete:hover,
+.rhythm-season-correction__delete:focus-visible {
+  border-color: #c98b8b;
+  background: #fff0f0;
+}
+
+.rhythm-season-correction__delete-restriction {
+  padding-top: 10px;
+  border-top: 1px solid var(--tend-line, var(--line));
   color: var(--tend-secondary, var(--ink-soft));
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.rhythm-season-correction__impact {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rhythm-season-correction__impact > h3 {
+  margin: 0;
+  color: var(--tend-ink, var(--ink));
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.rhythm-season-impact__comparison {
+  display: grid;
+  grid-template-columns: minmax(72px, .72fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+  min-width: 0;
+}
+
+.rhythm-season-impact__no-change {
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.rhythm-season-impact__comparison > h4 {
+  margin: 0;
+  padding: 0 9px 2px;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rhythm-season-impact__row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(72px, .72fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+  min-width: 0;
+}
+
+.rhythm-season-impact__metric {
+  align-self: center;
+  margin: 0;
+  color: var(--tend-ink, var(--ink));
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-season-impact__value {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 8px;
+  background: var(--canvas, #fff);
+  overflow-wrap: anywhere;
+}
+
+.rhythm-season-impact__value--after {
+  border-color: #d8eadf;
+  background: #f0f8f3;
+}
+
+.rhythm-season-impact__score {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin: 0;
+  color: var(--tend-ink, var(--ink));
+  white-space: nowrap;
+}
+
+.rhythm-season-impact__score strong,
+.rhythm-season-impact__unavailable > strong {
+  font-size: 19px;
+  line-height: 1.15;
+}
+
+.rhythm-season-impact__score span {
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: 11px;
+}
+
+.rhythm-season-impact__evidence,
+.rhythm-season-impact__unavailable > span,
+.rhythm-season-impact__unavailable > p,
+.rhythm-season-impact__unavailable details,
+.rhythm-season-impact__unavailable details p {
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.rhythm-season-impact__evidence {
+  margin: 0;
+}
+
+.rhythm-season-impact__shared-evidence {
+  grid-column: 2 / 4;
+  margin: 0;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.rhythm-season-impact__unavailable {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rhythm-season-impact__unavailable > strong {
+  color: var(--tend-ink, var(--ink));
+}
+
+.rhythm-season-impact__unavailable > span {
+  font-weight: 600;
+}
+
+.rhythm-season-impact__unavailable > p {
+  margin: 0;
+}
+
+.rhythm-season-impact__unavailable details {
+  min-width: 0;
+}
+
+.rhythm-season-impact__unavailable summary {
+  cursor: pointer;
+}
+
+.rhythm-season-impact__unavailable details p {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-season-impact__responsive-label {
+  display: none;
+}
+
+@media (max-width: 420px) {
+  .rhythm-season-impact__comparison {
+    display: block;
+  }
+
+  .rhythm-season-impact__metric-heading,
+  .rhythm-season-impact__comparison > h4 {
+    display: none;
+  }
+
+  .rhythm-season-impact__row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 8px;
+  }
+
+  .rhythm-season-impact__metric {
+    grid-column: 1 / -1;
+  }
+
+  .rhythm-season-impact__responsive-label {
+    display: block;
+    color: var(--tend-secondary, var(--ink-soft));
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .rhythm-season-impact__value {
+    padding: 7px;
+  }
+
+  .rhythm-season-impact__score strong,
+  .rhythm-season-impact__unavailable > strong {
+    font-size: 17px;
+  }
 }
 
 .rhythm-history-view__earlier-seasons {
   display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.rhythm-history-view__earlier-season {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-  padding: 9px 10px;
-  border: 1px solid var(--tend-line, var(--line));
-  border-radius: 9px;
-}
-
-.rhythm-history-view__earlier-season-heading {
-  align-items: center;
-}
-
-.rhythm-history-view__season-marker {
-  flex: none;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--rhythm-season-color);
-}
-
-.rhythm-history-view__earlier-season-heading > div {
-  flex: 1 1 auto;
+  gap: 0;
   min-width: 0;
 }
 
 .rhythm-history-view__season-expand {
   flex: none;
+  min-width: 44px;
+  min-height: 44px;
   padding: 5px 8px;
   border: 1px solid var(--tend-line, var(--line));
   border-radius: 7px;
@@ -4240,6 +4560,12 @@ a:focus-visible {
 
 .rhythm-history-view__season-note {
   margin-top: 5px;
+}
+
+.rhythm-history-view__seasons-divider {
+  height: 1px;
+  margin-top: 2px;
+  background: var(--tend-line, var(--line));
 }
 
 .rhythm-history-view__metadata .rhythm-person-badge-list {
@@ -4478,14 +4804,15 @@ a:focus-visible {
 .rhythm-history-view__health-weight-panels {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
-  gap: 4px;
+  align-items: stretch;
+  gap: 6px;
   min-width: 0;
 }
 
 .rhythm-history-view__health-weight-panel {
   position: relative;
   min-width: 0;
-  padding: 12px 10px 11px;
+  padding: 12px 8px 11px;
   border-radius: 12px;
 }
 
@@ -4516,7 +4843,7 @@ a:focus-visible {
 .rhythm-history-view__health-weight-value {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 5px;
   margin-bottom: 5px;
 }
 
@@ -4567,11 +4894,6 @@ a:focus-visible {
   line-height: 1.35;
 }
 
-.rhythm-history-view__health-weight-panel--on-track .rhythm-history-view__health-weight-name,
-.rhythm-history-view__health-weight-panel--on-track .rhythm-history-view__health-weight-subtitle {
-  white-space: nowrap;
-}
-
 .rhythm-history-view__health-unavailable {
   margin: 0;
   color: var(--tend-secondary, var(--ink-soft));
@@ -4580,14 +4902,25 @@ a:focus-visible {
   overflow-wrap: anywhere;
 }
 
-@container (max-width: 360px) {
-  .rhythm-history-view__health-weight-panels {
-    grid-template-columns: minmax(0, 1fr);
+@container (max-width: 320px) {
+  .rhythm-history-view__health-weight-panel--on-track {
+    padding-right: 4px;
+    padding-left: 4px;
   }
 
-  .rhythm-history-view__health-weight-panel--on-track .rhythm-history-view__health-weight-name,
-  .rhythm-history-view__health-weight-panel--on-track .rhythm-history-view__health-weight-subtitle {
-    white-space: normal;
+  .rhythm-history-view__health-weight-panel--on-track .rhythm-history-view__health-weight-value {
+    gap: 3px;
+  }
+
+  .rhythm-history-view__health-weight-panel--on-track .rhythm-history-view__health-weight-value svg {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+@container (max-width: 280px) {
+  .rhythm-history-view__health-weight-panels {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -4885,9 +5218,9 @@ a:focus-visible {
 }
 
 .rhythm-history-view__score-history > li {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: baseline;
-  justify-content: space-between;
   gap: 8px;
   padding: 3px 0;
   font-size: 12px;
@@ -4900,9 +5233,9 @@ a:focus-visible {
 }
 
 .rhythm-history-view__score-history > li > strong {
-  flex: none;
   color: var(--tend-ink, var(--ink));
   font-variant-numeric: tabular-nums;
+  text-align: right;
   white-space: nowrap;
 }
 

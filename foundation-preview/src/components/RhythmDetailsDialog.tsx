@@ -16,6 +16,7 @@ import { RhythmHistoryView } from './RhythmHistoryView.tsx';
 import { RhythmCompletionForm } from './RhythmCompletionForm.tsx';
 import type { DatedRhythmCompletion, RhythmCompletionRecord } from '../domain/rhythm-completion.ts';
 import type { RhythmSeasonEditDraft } from '../domain/rhythm-season-edit.ts';
+import type { RhythmSeasonDeletionUndo } from '../domain/rhythm-season-delete.ts';
 import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
 import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
 
@@ -36,6 +37,9 @@ type RhythmDetailsDialogProps = {
   onUpdateCompletion?: (record: RhythmCompletionRecord) => string | null;
   onDeleteCompletion?: (completionId: string) => string | null;
   onEditSeason?: (rhythmId: string, draft: RhythmSeasonEditDraft) => string | null;
+  onDeleteSeason?: (rhythmId: string, seasonId: string) => string | null;
+  seasonDeletionUndo?: RhythmSeasonDeletionUndo | null;
+  onUndoSeasonDeletion?: () => string | null;
   onUndo?: () => void;
   onEdit?: (event: MouseEvent<HTMLButtonElement>) => void;
   archived?: boolean;
@@ -55,6 +59,9 @@ export function RhythmDetailsDialog({
   onUpdateCompletion,
   onDeleteCompletion,
   onEditSeason,
+  onDeleteSeason,
+  seasonDeletionUndo,
+  onUndoSeasonDeletion,
   onUndo,
   onEdit,
   archived = false,
@@ -209,6 +216,9 @@ export function RhythmDetailsDialog({
               {...(onUpdateCompletion ? { onUpdateCompletion } : {})}
               {...(onDeleteCompletion ? { onDeleteCompletion } : {})}
               {...(onEditSeason ? { onEditSeason } : {})}
+              {...(onDeleteSeason ? { onDeleteSeason } : {})}
+              {...(seasonDeletionUndo !== undefined ? { seasonDeletionUndo } : {})}
+              {...(onUndoSeasonDeletion ? { onUndoSeasonDeletion } : {})}
               {...(onLogCompletion ? { onSaveCompletion: onLogCompletion } : {})}
               {...(onEdit ? { onChooseSchedule: onEdit } : {})}
               {...(people ? { people } : {})}

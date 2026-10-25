@@ -52,6 +52,7 @@ export function RhythmEditor({
   const [errors, setErrors] = useState<RhythmDraftErrors>({});
   const [showArchiveConfirmation, setShowArchiveConfirmation] = useState(false);
   const [showScheduleConfirmation, setShowScheduleConfirmation] = useState(false);
+  const [isChangingSchedule, setIsChangingSchedule] = useState(false);
   const [activePicker, setActivePicker] = useState<'categories' | 'people' | null>(null);
   const [pickerSelection, setPickerSelection] = useState<string[]>([]);
   const categoryPickerOpenerRef = useRef<HTMLButtonElement>(null);
@@ -62,6 +63,8 @@ export function RhythmEditor({
   const archiveConfirmButtonRef = useRef<HTMLButtonElement>(null);
   const saveButtonRef = useRef<HTMLButtonElement>(null);
   const wasConfirmingArchiveRef = useRef(false);
+  const savedCurrentSeason = rhythm?.scoring?.scheduleHistory.at(-1);
+  const hasPreservedSeasonHistory = (rhythm?.scoring?.scheduleHistory.length ?? 0) > 1;
 
   useEffect(() => {
     if (activePicker === null && restoreFocusToPickerOpenerRef.current) {
@@ -124,10 +127,12 @@ export function RhythmEditor({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const scheduleChanged = draft.schedule !== undefined && rhythm?.schedule !== undefined
-      ? !rhythmSchedulesEqual(draft.schedule, rhythm.schedule)
-      : draft.schedule !== rhythm?.schedule;
-    if (rhythm?.schedule && hasDatedCompletionHistory && scheduleChanged && draft.schedule) {
+    const originalSchedule = draft.originalSchedule ?? rhythm?.schedule;
+    const scheduleChanged = draft.schedule !== undefined && originalSchedule !== undefined
+      ? !rhythmSchedulesEqual(draft.schedule, originalSchedule)
+      : draft.schedule !== originalSchedule;
+    if (rhythm && (hasDatedCompletionHistory || hasPreservedSeasonHistory)
+      && scheduleChanged && draft.schedule) {
       const nextErrors = validateRhythmDraft(draft);
       setErrors(nextErrors);
       if (Object.keys(nextErrors).length === 0) setShowScheduleConfirmation(true);
@@ -149,6 +154,21 @@ export function RhythmEditor({
 
   function cancelScheduleChange() {
     setShowScheduleConfirmation(false);
+    setIsChangingSchedule(false);
+    setDraft(({ schedule: _schedule, seasonName: _seasonName, ...current }) => ({
+      ...current,
+      ...(rhythm?.schedule ? { schedule: rhythm.schedule } : {}),
+      scheduleEditing: false,
+      ...(savedCurrentSeason?.kind === 'scheduled' && savedCurrentSeason.name
+        ? { seasonName: savedCurrentSeason.name }
+        : {})
+    }));
+    setErrors(current => {
+      const next = { ...current };
+      delete next.schedule;
+      delete next.seasonName;
+      return next;
+    });
     saveButtonRef.current?.focus();
   }
 
@@ -160,7 +180,15 @@ export function RhythmEditor({
 
   const timeValue = rhythmTimeOptions.find(option => option.label === draft.timeLabel)?.value ?? '';
   const hasSchedule = draft.scheduleEditing === true;
-  const showCadenceDescription = !hasSchedule;
+  const showCadenceDescription = !hasSchedule
+    || Boolean(rhythm && (hasDatedCompletionHistory || hasPreservedSeasonHistory) && !isChangingSchedule);
+  const originalSchedule = draft.originalSchedule ?? rhythm?.schedule;
+  const currentScheduleLabel = rhythm?.schedule
+    ? formatRhythmSchedule(rhythm.schedule, 'detailed')
+    : draft.cadence;
+  const originalScheduleLabel = originalSchedule
+    ? formatRhythmSchedule(originalSchedule, 'detailed')
+    : rhythm?.cadence ?? 'Previous schedule unavailable';
   const selectedCategories = areas
     .filter(area => draft.categoryIds.includes(area.id));
   const selectedPeople = syntheticPeople
@@ -262,14 +290,14 @@ export function RhythmEditor({
             <section className="rhythm-editor__descriptive-schedule" aria-labelledby="rhythm-current-cadence">
               <div>
                 <h3 id="rhythm-current-cadence">Current cadence</h3>
-                <p>{draft.cadence}</p>
+                <p>{currentScheduleLabel}</p>
               </div>
               <button
                 type="button"
                 className="rhythm-editor__change-schedule"
                 onClick={() => {
+                  setIsChangingSchedule(true);
                   update('scheduleEditing', true);
-                  update('schedule', undefined);
                 }}
               >
                 Change schedule
@@ -391,7 +419,7 @@ export function RhythmEditor({
           </div>
         </section>
       )}
-      {showScheduleConfirmation && rhythm?.schedule && draft.schedule && (
+      {showScheduleConfirmation && rhythm && draft.schedule && (
         <MoneyGoalDialog
           labelledBy="rhythm-schedule-confirmation-title"
           initialFocusId="rhythm-season-label"
@@ -404,7 +432,7 @@ export function RhythmEditor({
           >
             <h2 id="rhythm-schedule-confirmation-title">Change your schedule</h2>
             <p className="rhythm-editor__schedule-transition">
-              <span>{formatRhythmSchedule(rhythm.schedule, 'detailed')}</span>
+              <span>{originalScheduleLabel}</span>
               <span aria-hidden="true"> → </span>
               <span>{formatRhythmSchedule(draft.schedule, 'detailed')}</span>
             </p>

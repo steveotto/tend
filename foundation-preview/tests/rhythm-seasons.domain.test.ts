@@ -3,6 +3,7 @@ import {
   rhythmSeasonForDate,
   rhythmSeasonInclusiveEndDate,
   rhythmSeasonPaletteForId,
+  rhythmSeasonPaletteForOrdinal,
   createRhythmSeason
 } from '../src/domain/rhythm-seasons.ts';
 import { validateRhythmScoringMetadata } from '../src/domain/rhythm-schedule.ts';
@@ -35,6 +36,14 @@ describe('Rhythm Season schedule history', () => {
     expect(recreated.paletteToken).toBe(first.paletteToken);
     expect(rhythmSeasonPaletteForId(first.id)).toBe(first.paletteToken);
     expect(rhythmSeasonPaletteForId(second.id)).toBe(second.paletteToken);
+  });
+
+  it('cycles the five existing palette tokens by chronological ordinal', () => {
+    const tokens = Array.from({ length: 7 }, (_, ordinal) =>
+      rhythmSeasonPaletteForOrdinal(ordinal));
+    expect(tokens).toEqual(['fern', 'sage', 'sky', 'ocean', 'plum', 'fern', 'sage']);
+    expect(() => rhythmSeasonPaletteForOrdinal(-1)).toThrow(RangeError);
+    expect(() => rhythmSeasonPaletteForOrdinal(1.5)).toThrow(RangeError);
   });
 
   it('strictly validates season identity, ordered boundaries, optional text and schedule snapshots', () => {

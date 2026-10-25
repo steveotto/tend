@@ -17,10 +17,15 @@ import {
 } from '../src/domain/rhythm-history.ts';
 import { scoreTone } from '../src/domain/score-tone.ts';
 import { marriageRhythms, syntheticPeople, todayRhythms } from '../src/domain/preview-data.ts';
+import type { RhythmPreview } from '../src/domain/preview-data.ts';
 import type { DatedRhythmCompletion } from '../src/domain/rhythm-completion.ts';
 import { addCalendarDays, localDateInTimeZone } from '../src/domain/rhythm-scoring.ts';
 import type { RhythmSchedule } from '../src/domain/rhythm-schedule.ts';
-import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
+import {
+  createRhythmSeason,
+  createUnknownRhythmSeason,
+  rhythmSeasonPaletteForOrdinal
+} from '../src/domain/rhythm-seasons.ts';
 import { localDateString } from '../src/domain/money-goals.ts';
 
 afterEach(cleanup);
@@ -39,6 +44,14 @@ function savedRecord(id: string, effectiveDate: string, localTime: string, memor
     recordedAt: '2026-10-22T11:00:00.000Z',
     ...(memory === undefined ? {} : { memory })
   };
+}
+
+function seasonDateLabel(value: string): string {
+  return new Date(`${value}T12:00:00`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  });
 }
 
 function scoredTodayFixture() {
@@ -121,26 +134,235 @@ function EditableHistoryHarness() {
 }
 
 describe('shared Rhythm history', () => {
-  it('keeps an initial schedule out of the Seasons history section', () => {
+  it('shows a collapsed single known Season without an Earlier heading or timeline', async () => {
+    const user = userEvent.setup();
     const startDate = localDateInTimeZone(new Date(), 'UTC');
     const schedule = { frequency: 'daily' as const };
+    const season = createRhythmSeason(todayConnection.id, startDate, schedule);
     render(
       <RhythmHistoryView
         rhythm={{
           ...todayConnection,
           schedule,
+          completionHistory: [],
           scoring: {
             trackingStartDate: startDate,
             timeZone: 'UTC',
-            scheduleHistory: [createRhythmSeason(todayConnection.id, startDate, schedule)]
+            scheduleHistory: [season]
           }
         }}
       />
     );
-    expect(screen.queryByRole('button', { name: 'Seasons (1)' })).toBeNull();
+    const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
+    expect(within(history).getByText('1 season')).toBeTruthy();
+    expect(within(history).getByRole('button', { name: 'Show Seasons' }).getAttribute('aria-expanded'))
+      .toBe('false');
+    expect(within(history).queryByRole('heading', { name: 'Earlier Seasons' })).toBeNull();
+    expect(within(history).queryByRole('group', { name: /schedule history timeline/i })).toBeNull();
+
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+    expect(within(history).getByRole('heading', { name: 'Daily' })).toBeTruthy();
+    expect(within(history).getByText(`${seasonDateLabel(startDate)} – Present`)).toBeTruthy();
+    expect(within(history).queryByRole('heading', { name: 'Earlier Seasons' })).toBeNull();
+    expect(within(history).queryByRole('group', { name: /schedule history timeline/i })).toBeNull();
+    expect(setItem).not.toHaveBeenCalled();
+    setItem.mockRestore();
   });
 
-  it('shows an accessible, collapsed, duration-based Seasons timeline before completion history', async () => {
+  it('shows a display-only current card without inventing a start date and routes its pencil to Edit', async () => {
+    const user = userEvent.setup();
+    const schedule = { frequency: 'daily' as const };
+    const onChooseSchedule = vi.fn();
+    render(
+      <RhythmHistoryView
+        rhythm={{ ...todayConnection, schedule }}
+        onChooseSchedule={onChooseSchedule}
+      />
+    );
+    const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
+    expect(within(history).getByText('1 season')).toBeTruthy();
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+    expect(within(history).getByRole('heading', { name: 'Daily' })).toBeTruthy();
+    expect(within(history).getByText('Start date not recorded')).toBeTruthy();
+    expect(within(history).getByRole('button', { name: 'Edit Daily' })).toBeTruthy();
+    await user.click(within(history).getByRole('button', { name: 'Edit Daily' }));
+    expect(onChooseSchedule).toHaveBeenCalledOnce();
+  });
+
+  it('shows a single structured Season with saved logs and keeps archived schedules read-only', async () => {
+    const user = userEvent.setup();
+    const asOfDate = localDateInTimeZone(new Date(), 'UTC');
+    const schedule = { frequency: 'daily' as const };
+    const season = createRhythmSeason(todayConnection.id, asOfDate, schedule);
+    const rhythm = {
+      ...todayConnection,
+      schedule,
+      completionHistory: [],
+      scoring: {
+        trackingStartDate: asOfDate,
+        timeZone: 'UTC',
+        scheduleHistory: [season]
+      }
+    };
+    const onChooseSchedule = vi.fn();
+    render(
+      <RhythmHistoryView
+        rhythm={rhythm}
+        datedCompletions={[savedRecord('single-season-log', asOfDate, '09:30')]}
+        completionHistoryAvailable
+        onChooseSchedule={onChooseSchedule}
+        archived
+      />
+    );
+    const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
+    expect(within(history).getByText('1 season')).toBeTruthy();
+    expect(within(history).getByText(/Logged moments \(\d+\)/).textContent).toBe('Logged moments (1)');
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+    expect(within(history).getByRole('heading', { name: 'Daily' })).toBeTruthy();
+    expect(within(history).queryByRole('button', { name: 'Edit Daily' })).toBeNull();
+    expect(within(history).queryByRole('button', { name: 'Choose a schedule' })).toBeNull();
+    expect(onChooseSchedule).not.toHaveBeenCalled();
+  });
+
+  it('shows Choose a schedule for descriptive and missing schedules without counting unknown history', async () => {
+    const user = userEvent.setup();
+    const onChooseSchedule = vi.fn();
+    const unknownStart = addCalendarDays(localDateInTimeZone(new Date(), 'UTC'), -10);
+    const cases: RhythmPreview[] = [
+      { ...todayConnection, cadence: '3 times a week' },
+      { ...todayConnection, cadence: 'Daily' },
+      {
+        ...todayConnection,
+        cadence: 'A few times weekly',
+        scoring: {
+          trackingStartDate: unknownStart,
+          timeZone: 'UTC',
+          scheduleHistory: [createUnknownRhythmSeason(todayConnection.id, unknownStart, 'A few times weekly')]
+        }
+      }
+    ];
+    for (const rhythm of cases) {
+      const { unmount } = render(
+        <RhythmHistoryView rhythm={rhythm} onChooseSchedule={onChooseSchedule} archived />
+      );
+      const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
+      expect(within(history).getByText('0 seasons')).toBeTruthy();
+      await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+      expect(within(history).getByText('Choose a schedule to see your current Season.')).toBeTruthy();
+      expect(within(history).queryByRole('button', { name: 'Choose a schedule' })).toBeNull();
+      expect(within(history).queryByRole('button', { name: /^Edit / })).toBeNull();
+      if (rhythm.scoring?.scheduleHistory[0]?.kind === 'unknown') {
+        expect(within(history).getByRole('button', { name: 'Set earlier schedule' }).hasAttribute('disabled'))
+          .toBe(true);
+      }
+      unmount();
+    }
+    expect(onChooseSchedule).not.toHaveBeenCalled();
+  });
+
+  it('offers the schedule chooser in editable history when no structured schedule exists', async () => {
+    const user = userEvent.setup();
+    const onChooseSchedule = vi.fn();
+    render(
+      <RhythmHistoryView
+        rhythm={{ ...todayConnection, cadence: 'Daily' }}
+        onChooseSchedule={onChooseSchedule}
+      />
+    );
+    const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+    await user.click(within(history).getByRole('button', { name: 'Choose a schedule' }));
+    expect(onChooseSchedule).toHaveBeenCalledOnce();
+  });
+
+  it('keeps one-season Seasons available with a singular count and hidden Undo until expanded', async () => {
+    const user = userEvent.setup();
+    const asOfDate = localDateInTimeZone(new Date(), 'UTC');
+    const schedule = { frequency: 'daily' as const };
+    const season = createRhythmSeason(todayConnection.id, asOfDate, schedule);
+    const scoring = {
+      trackingStartDate: asOfDate,
+      timeZone: 'UTC',
+      scheduleHistory: [season]
+    };
+    render(
+      <RhythmHistoryView
+        rhythm={{ ...todayConnection, schedule, scoring }}
+        seasonDeletionUndo={{
+          rhythmId: todayConnection.id,
+          season,
+          index: 1,
+          expectedScoring: scoring,
+          expectedSchedule: schedule,
+          expectedCadence: 'Daily',
+          expectedTimeLabel: 'Anytime',
+          restoreSchedule: schedule,
+          restoreCadence: 'Daily',
+          restoreTimeLabel: 'Anytime'
+        }}
+        onUndoSeasonDeletion={() => null}
+      />
+    );
+    const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
+    expect(within(history).getByRole('heading', { name: 'Seasons' })).toBeTruthy();
+    expect(within(history).getByText('1 season')).toBeTruthy();
+    expect(within(history).getByRole('button', { name: 'Show Seasons' }).getAttribute('aria-expanded'))
+      .toBe('false');
+    expect(within(history).queryByRole('button', { name: 'Undo' })).toBeNull();
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+    expect(within(history).getByRole('button', { name: 'Hide Seasons' }).getAttribute('aria-expanded'))
+      .toBe('true');
+    expect(within(history).getByRole('button', { name: 'Undo' })).toBeTruthy();
+  });
+
+  it('resets Seasons to collapsed when the displayed Rhythm changes or history is reopened', async () => {
+    const user = userEvent.setup();
+    const asOfDate = localDateInTimeZone(new Date(), 'UTC');
+    const firstStart = addCalendarDays(asOfDate, -10);
+    const currentSchedule = { frequency: 'daily' as const };
+    const rhythm = {
+      ...todayConnection,
+      scoring: {
+        trackingStartDate: firstStart,
+        timeZone: 'UTC',
+        scheduleHistory: [
+          createRhythmSeason(todayConnection.id, firstStart, { frequency: 'weekly', weekdays: [1] }),
+          createRhythmSeason(todayConnection.id, asOfDate, currentSchedule)
+        ]
+      }
+    };
+    const { rerender, unmount } = render(<RhythmHistoryView rhythm={rhythm} />);
+    let history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+    expect(within(history).getByRole('button', { name: 'Hide Seasons' })).toBeTruthy();
+
+    const otherRhythm = {
+      ...rhythm,
+      id: 'sample-other-rhythm',
+      title: 'Another Rhythm',
+      scoring: {
+        ...rhythm.scoring,
+        scheduleHistory: [
+          createRhythmSeason('sample-other-rhythm', firstStart, { frequency: 'weekly', weekdays: [1] }),
+          createRhythmSeason('sample-other-rhythm', asOfDate, currentSchedule)
+        ]
+      }
+    };
+    rerender(<RhythmHistoryView rhythm={otherRhythm} />);
+    history = screen.getByRole('region', { name: 'History for Another Rhythm' });
+    expect(within(history).getByRole('button', { name: 'Show Seasons' }).getAttribute('aria-expanded'))
+      .toBe('false');
+    expect(within(history).queryByRole('heading', { name: 'Earlier Seasons' })).toBeNull();
+
+    unmount();
+    render(<RhythmHistoryView rhythm={otherRhythm} />);
+    history = screen.getByRole('region', { name: 'History for Another Rhythm' });
+    expect(within(history).getByRole('button', { name: 'Show Seasons' }).getAttribute('aria-expanded'))
+      .toBe('false');
+  });
+
+  it('shows the expanded Seasons history, accessible info disclosure and clickable duration-based timeline', async () => {
     const user = userEvent.setup();
     const asOfDate = localDateInTimeZone(new Date(), 'UTC');
     const firstStart = addCalendarDays(asOfDate, -297);
@@ -173,41 +395,225 @@ describe('shared Rhythm history', () => {
           ]
         }
       };
-      render(<RhythmHistoryView rhythm={rhythm} archived />);
+      render(<RhythmHistoryView rhythm={rhythm} archived onDeleteSeason={() => null} />);
       const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
-      const disclosure = within(history).getByRole('button', { name: 'Seasons (3)' });
+      const seasonsHeading = within(history).getByRole('heading', { name: 'Seasons' });
+      expect(within(history).queryByRole('button', { name: /Delete Season/ })).toBeNull();
       const completionHeading = within(history).getByRole('heading', { name: 'All completion history' });
-      expect(disclosure.compareDocumentPosition(completionHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(disclosure.getAttribute('aria-expanded')).toBe('false');
-      expect(within(history).getByText('See how your schedule has changed.').closest('[hidden]')).not.toBeNull();
-
-      disclosure.focus();
+      expect(seasonsHeading.compareDocumentPosition(completionHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      const info = within(history).getByRole('button', { name: 'Show Seasons' });
+      expect(info.getAttribute('aria-expanded')).toBe('false');
+      expect(info.getAttribute('aria-controls')).toBeTruthy();
+      const controlledContent = document.getElementById(info.getAttribute('aria-controls')!)!;
+      expect(controlledContent.hidden).toBe(true);
+      expect(controlledContent.querySelector('.rhythm-history-view__seasons-info-copy')?.textContent)
+        .toMatch(/Schedule changes preserve earlier schedules/);
+      expect(controlledContent.querySelector('.rhythm-history-view__seasons-content__intro')).toBeNull();
+      expect(within(history).queryByRole('button', { name: /Go to .*Oct/ })).toBeNull();
+      expect(within(history).queryByRole('button', { name: 'Edit Avery time' })).toBeNull();
+      expect(history.querySelector('.rhythm-history-view__seasons-divider')).not.toBeNull();
+      info.focus();
       await user.keyboard('{Enter}');
-      expect(disclosure.getAttribute('aria-expanded')).toBe('true');
+      expect(document.activeElement).toBe(info);
+      expect(info.getAttribute('aria-expanded')).toBe('true');
+      expect(controlledContent.hidden).toBe(false);
+      expect(within(history).getByText(/correcting earlier schedules can change historical scores/)).toBeTruthy();
       expect(within(history).getByText('See how your schedule has changed.')).toBeTruthy();
       expect(within(history).getByRole('heading', { name: 'Avery time' })).toBeTruthy();
-      expect(within(history).getAllByText('Every week on Monday and Wednesday.')).toHaveLength(3);
+      expect(within(history).getByText('Oct 1, 2026 – Present')).toBeTruthy();
+      expect(within(history).getAllByText('Every week on Monday and Wednesday.')).toHaveLength(2);
       expect(within(history).getByText('Current')).toBeTruthy();
       expect(within(history).getByText('Earlier dates keep their earlier schedule. Your logged moments stay with this rhythm.')).toBeTruthy();
       expect(within(history).getByRole('heading', { name: 'Earlier Seasons' })).toBeTruthy();
+      expect(within(history).getByText('3 seasons')).toBeTruthy();
 
-      const earlierHeadings = within(history).getAllByRole('heading', { level: 5 });
+      const earlierSection = within(history).getByRole('heading', { name: 'Earlier Seasons' }).parentElement!;
+      const earlierHeadings = [...earlierSection.querySelectorAll('.rhythm-history-view__season-card h4')];
       expect(earlierHeadings.map(heading => heading.textContent)).toEqual([
         'Mon · Wed',
         'Daily grounding'
       ]);
+      const currentCard = within(history).getByRole('heading', { name: 'Avery time' }).closest('article')!;
+      const earlierCard = earlierHeadings[0]?.closest('article')!;
+      expect(currentCard.className).toContain('rhythm-history-view__season-card');
+      expect(earlierCard.className).toContain('rhythm-history-view__season-card');
+      expect(currentCard.className)
+        .toContain(`rhythm-history-view__season-visual--${rhythm.scoring.scheduleHistory[2]?.paletteToken}`);
+      expect(earlierCard.className)
+        .toContain(`rhythm-history-view__season-visual--${rhythm.scoring.scheduleHistory[1]?.paletteToken}`);
+      expect(within(earlierSection).queryByText('Current')).toBeNull();
       fireEvent.click(within(history).getByRole('button', { name: 'Show details for Daily grounding' }));
       expect(within(history).getByText('A preserved note.')).toBeTruthy();
+      expect(within(history).queryByRole('button', { name: 'Show details for Mon · Wed' })).toBeNull();
       const timelineSegments = [...history.querySelectorAll<HTMLElement>(
         '.rhythm-history-view__season-timeline-segment'
       )];
       expect(timelineSegments).toHaveLength(3);
       expect(timelineSegments[0]?.getAttribute('aria-label'))
         .toContain(`${shortTestDate(firstStart)} to ${shortTestDate(addCalendarDays(secondStart, -1))}`);
-      expect(timelineSegments[0]?.className).toContain('rhythm-history-view__season-color--');
+      expect(timelineSegments[0]?.className)
+        .toContain(`rhythm-history-view__season-visual--${rhythm.scoring.scheduleHistory[0]?.paletteToken}`);
+      expect(timelineSegments[2]?.className)
+        .toContain(`rhythm-history-view__season-visual--${rhythm.scoring.scheduleHistory[2]?.paletteToken}`);
       expect(timelineSegments.map(segment => Number((segment as HTMLElement).style.flexGrow)))
         .toEqual([90, 183, 25]);
       expect(within(history).queryByRole('button', { name: /Change schedule|Edit Season|Delete Season/ })).toBeNull();
+
+      await user.click(within(history).getByRole('button', { name: 'Hide Seasons' }));
+      expect(controlledContent.hidden).toBe(true);
+      expect(within(history).queryByRole('button', { name: /Go to .*Oct/ })).toBeNull();
+      expect(within(history).getByRole('button', { name: 'Show Seasons' }).getAttribute('aria-expanded'))
+        .toBe('false');
+      await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+      expect(controlledContent.hidden).toBe(false);
+
+      const firstTimelineButton = timelineSegments[0]!;
+      expect(firstTimelineButton.tagName).toBe('BUTTON');
+      expect(firstTimelineButton.getAttribute('aria-label')).toContain('Daily grounding');
+      firstTimelineButton.focus();
+      await user.keyboard('{Enter}');
+      expect(document.activeElement).toBe(earlierHeadings[1]?.closest('article'));
+      expect(earlierHeadings[1]?.closest('article')?.className).toContain('rhythm-history-view__season-card--highlighted');
+      expect(currentCard.className).not.toContain('rhythm-history-view__season-card--highlighted');
+
+      cleanup();
+      render(<RhythmHistoryView rhythm={rhythm} onEditSeason={() => null} />);
+      const editableHistory = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
+      await user.click(within(editableHistory).getByRole('button', { name: 'Show Seasons' }));
+      const editButton = within(editableHistory).getByRole('button', { name: 'Edit Avery time' });
+      expect(editButton.className).toContain('today-rhythm-details__edit-icon');
+      expect(editButton.querySelector('.today-rhythm-details__edit-visual svg')).toBeTruthy();
+  });
+
+  it('uses each Season palette token for its matching card and timeline segment across palette cycles', async () => {
+    const user = userEvent.setup();
+    const asOfDate = localDateInTimeZone(new Date(), 'UTC');
+    const scheduleHistory = Array.from({ length: 7 }, (_, index) => {
+      const startDate = addCalendarDays(asOfDate, index - 6);
+      return createRhythmSeason(
+        todayConnection.id,
+        startDate,
+        { frequency: 'weekly', weekdays: [index as 0 | 1 | 2 | 3 | 4 | 5 | 6] },
+        undefined,
+        undefined,
+        rhythmSeasonPaletteForOrdinal(index)
+      );
+    });
+    render(
+      <RhythmHistoryView
+        rhythm={{
+          ...todayConnection,
+          schedule: scheduleHistory.at(-1)!.schedule,
+          scoring: {
+            trackingStartDate: scheduleHistory[0]!.startDate,
+            timeZone: 'UTC',
+            scheduleHistory
+          }
+        }}
+      />
+    );
+    const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+
+    const timelineSegments = [...history.querySelectorAll<HTMLElement>(
+      '.rhythm-history-view__season-timeline-segment'
+    )];
+    const cards = [...history.querySelectorAll<HTMLElement>('.rhythm-history-view__season-card')];
+    expect(timelineSegments).toHaveLength(7);
+    expect(cards).toHaveLength(7);
+    scheduleHistory.forEach((season, index) => {
+      const visualClass = `rhythm-history-view__season-visual--${season.paletteToken}`;
+      expect(timelineSegments[index]?.classList.contains(visualClass)).toBe(true);
+      expect(cards.find(card => card.getAttribute('aria-labelledby')?.includes(season.id))
+        ?.classList.contains(visualClass)).toBe(true);
+    });
+    expect(scheduleHistory.map(season => season.paletteToken)).toEqual([
+      'fern', 'sage', 'sky', 'ocean', 'plum', 'fern', 'sage'
+    ]);
+  });
+
+  it('shows unknown history as neutral and offers its repair action only in the timeline row', async () => {
+    const user = userEvent.setup();
+    const asOfDate = localDateInTimeZone(new Date(), 'UTC');
+    const currentSchedule = { frequency: 'weekly' as const, weekdays: [1] as (1)[] };
+    const unknownStart = addCalendarDays(asOfDate, -20);
+    const rhythm = {
+      ...todayConnection,
+      schedule: currentSchedule,
+      scoring: {
+        trackingStartDate: asOfDate,
+        timeZone: 'UTC',
+        scheduleHistory: [
+          { ...createUnknownRhythmSeason(todayConnection.id, unknownStart), descriptiveCadence: 'A few times weekly' },
+          createRhythmSeason(todayConnection.id, asOfDate, currentSchedule)
+        ]
+      }
+    };
+    render(<RhythmHistoryView rhythm={rhythm} onEditSeason={() => null} />);
+    const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+    await user.click(within(history).getByRole('button', {
+      name: 'Show details for Earlier schedule needs details'
+    }));
+
+    expect(within(history).getByRole('heading', { name: 'Earlier schedule needs details' })).toBeTruthy();
+    expect(within(history).getByText('Original description: A few times weekly')).toBeTruthy();
+    expect(within(history).getByText(`${seasonDateLabel(unknownStart)} – ${seasonDateLabel(addCalendarDays(asOfDate, -1))}`)).toBeTruthy();
+    expect(within(history).getByRole('button', { name: 'Set earlier schedule' })).toBeTruthy();
+    expect(within(history).getAllByRole('button', { name: 'Set earlier schedule' })).toHaveLength(1);
+    const unknownEntry = within(history).getByRole('heading', { name: 'Earlier schedule needs details' }).closest('article')!;
+    expect(unknownEntry.className).toContain('rhythm-history-view__season-card');
+    expect(unknownEntry.className).toContain('rhythm-history-view__season-visual--unknown');
+    await user.click(within(unknownEntry).getByRole('button', { name: 'Set earlier schedule' }));
+    expect(screen.getByRole('dialog', { name: 'Set earlier schedule' })).toBeTruthy();
+  });
+
+  it('keeps one-day current timeline segments operable and focuses their matching card under reduced motion', async () => {
+    const user = userEvent.setup();
+    const currentDate = localDateInTimeZone(new Date(), 'UTC');
+    const previousDate = addCalendarDays(currentDate, -20);
+    const schedule = { frequency: 'daily' as const };
+    const rhythm = {
+      ...todayConnection,
+      schedule,
+      scoring: {
+        trackingStartDate: previousDate,
+        timeZone: 'UTC',
+        scheduleHistory: [
+          createRhythmSeason(todayConnection.id, previousDate, { frequency: 'weekly', weekdays: [1] }),
+          createRhythmSeason(todayConnection.id, currentDate, schedule)
+        ]
+      }
+    };
+    render(<RhythmHistoryView rhythm={rhythm} />);
+    const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+    const segments = within(history).getAllByRole('button', { name: /Go to .*Oct/ });
+    expect(segments).toHaveLength(2);
+    expect(segments[1]?.getAttribute('aria-label')).toContain(`${shortTestDate(currentDate)} to ${shortTestDate(currentDate)}`);
+    expect((segments[1] as HTMLButtonElement).style.flexGrow).toBe('1');
+
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => true
+    })) as typeof window.matchMedia;
+    try {
+      await user.click(segments[1]!);
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+
+    const currentCard = within(history).getByRole('heading', { name: 'Daily' }).closest('article')!;
+    expect(document.activeElement).toBe(currentCard);
+    expect(currentCard.className).toContain('rhythm-history-view__season-card--highlighted');
+    expect(screen.queryByRole('dialog', { name: 'Edit schedule period' })).toBeNull();
   });
 
   it('refreshes daily scores at scoring-timezone midnight and after returning from suspension', async () => {
@@ -648,7 +1054,7 @@ describe('shared Rhythm history', () => {
     expect(document.querySelectorAll('.rhythm-history-view__score-card')).toHaveLength(1);
     expect(document.querySelectorAll('.rhythm-history-view__score-summary')).toHaveLength(2);
     expect(document.querySelectorAll('.rhythm-history-view__score-summary-divider')).toHaveLength(1);
-    expect(document.querySelectorAll('.rhythm-history-view__score-info')).toHaveLength(1);
+    expect(document.querySelectorAll('.rhythm-history-view__score-card .rhythm-history-view__score-info')).toHaveLength(1);
     expect(info.getAttribute('aria-expanded')).toBe('false');
     expect(info.getAttribute('aria-controls')).toBe(`${healthCalculationDisclosure.id} ${details.id}`);
     expect(getComputedStyle(healthCalculationDisclosure).display).toBe('none');
@@ -734,6 +1140,8 @@ describe('shared Rhythm history', () => {
     const lastTendedDate = addCalendarDays(localDateInTimeZone(new Date(), 'UTC'), -4);
     expect(within(onTrackDetails).getAllByText(new RegExp(shortTestDate(lastTendedDate))).length).toBeGreaterThan(0);
     expect(within(onTrackDetails).getByText('3')).toBeTruthy();
+    expect(within(onTrackDetails).getByText('Per miss')).toBeTruthy();
+    expect(within(onTrackDetails).queryByText('Per missed occurrence')).toBeNull();
     expect(within(onTrackDetails).getByText('10 points')).toBeTruthy();
     const onTrackFormula = onTrackDetails.querySelector('.rhythm-history-view__calculation')!;
     expect(onTrackFormula.textContent?.replace(/\s+/g, '')).toBe('100−30=70');
@@ -745,9 +1153,21 @@ describe('shared Rhythm history', () => {
     });
     expect(onTrackItems).toHaveLength(5);
     expect(within(onTrackDetails).getByRole('button', { name: 'Show earlier steps' })).toBeTruthy();
-    expect(onTrackItems[0]).toMatch(/· tended · reset 100$/);
-    expect(onTrackItems.slice(1, 4).every(item => item.includes('not tended'))).toBe(true);
-    expect(onTrackItems.at(-1)).toMatch(/today · current state 70$/);
+    expect(onTrackItems[0]).toBe(`${shortTestDate(lastTendedDate)} · Tended 100`);
+    expect(onTrackItems.slice(1, 4).every(item => item.includes(' · Missed '))).toBe(true);
+    expect(onTrackItems.at(-1)).toBe(`Today · ${shortTestDate(localDateInTimeZone(new Date(), 'UTC'))} 70`);
+    const completedEntry = within(onTrackDetails).getAllByRole('listitem')[0]!;
+    expect(completedEntry.getAttribute('aria-label')).toMatch(
+      /Qualifying completion on .* reset the missed-occurrence count and On Track score to 100/
+    );
+    const missedEntry = within(onTrackDetails).getAllByRole('listitem')[1]!;
+    expect(missedEntry.getAttribute('aria-label')).toMatch(
+      /Missed scheduled occurrence on .* 10-point deduction applied\. Resulting On Track score: \d+\./
+    );
+    const todayEntry = within(onTrackDetails).getAllByRole('listitem').at(-1)!;
+    expect(todayEntry.getAttribute('aria-label')).toMatch(
+      /Current On Track state as of .* today is pending and is not counted as missed/
+    );
     expect(screen.getByText(/Calculated from saved completion records/)).toBeTruthy();
     expect(within(healthDetails).queryByText(/eligible due occurrence counts once|overdue time|pre-activation|Foundation-weighted|Health windows are/)).toBeNull();
     expect(within(onTrackDetails).queryByText(/calendar-day span|floors at zero|rules for weekly/)).toBeNull();
@@ -849,9 +1269,10 @@ describe('shared Rhythm history', () => {
     expect(earlier.getAttribute('aria-controls')).toBe(timeline.id);
     expect(earlier.getAttribute('aria-expanded')).toBe('false');
     expect(within(timeline).getAllByRole('listitem')).toHaveLength(5);
-    expect(within(timeline).getAllByRole('listitem').at(-1)?.textContent).toContain('current state');
+    expect(within(timeline).getAllByRole('listitem').at(-1)?.querySelector('span')?.textContent)
+      .toBe(`Today · ${shortTestDate(asOfDate)}`);
     expect(within(timeline).getAllByRole('listitem').map(item => item.textContent).join(' '))
-      .toMatch(/earlier occurrences at 0/);
+      .toMatch(/more misses/);
 
     earlier.focus();
     await user.keyboard('{Enter}');
@@ -861,10 +1282,11 @@ describe('shared Rhythm history', () => {
     expect(within(timeline).getAllByRole('listitem').length).toBeLessThanOrEqual(15);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show less' }));
     expect(within(timeline).getAllByRole('listitem').some(item =>
-      item.textContent?.includes('not tended · deduction') && item.querySelector('strong')?.textContent === '0'
+      item.getAttribute('aria-label')?.includes('additional missed occurrences')
+        && item.querySelector('strong')?.textContent === '0'
     )).toBe(true);
     expect(within(timeline).getAllByRole('listitem').some(item =>
-      item.textContent?.includes('earlier occurrences at 0')
+      item.querySelector('span')?.textContent?.includes('more misses ·')
     )).toBe(true);
 
     const showLess = screen.getByRole('button', { name: 'Show less' });
@@ -911,9 +1333,60 @@ describe('shared Rhythm history', () => {
     await user.click(screen.getByRole('button', { name: 'Show Consistency and On Track score details' }));
     const timeline = screen.getByRole('list', { name: 'On Track score changes' });
     expect(within(timeline).getAllByRole('listitem')).toHaveLength(1);
-    expect(within(timeline).getByText(/tended today · current state/)).toBeTruthy();
+    const todayEntry = within(timeline).getByRole('listitem');
+    expect(todayEntry.querySelector('span')?.textContent)
+      .toBe(`${shortTestDate(asOfDate)} · Tended`);
+    expect(todayEntry.getAttribute('aria-label')).toMatch(
+      /Qualifying completion on .* reset the missed-occurrence count and On Track score to 100/
+    );
     expect(screen.queryByRole('button', { name: 'Show earlier steps' })).toBeNull();
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('100');
+  });
+
+  it('labels a pending current date as current state rather than as a missed occurrence', async () => {
+    const user = userEvent.setup();
+    const asOfDate = localDateInTimeZone(new Date(), 'UTC');
+    const rhythm = rhythmForSchedule({ frequency: 'daily' }, addCalendarDays(asOfDate, -1));
+    render(<RhythmHistoryView rhythm={rhythm} completionHistoryAvailable />);
+    await user.click(screen.getByRole('button', { name: 'Show Consistency and On Track score details' }));
+    const timeline = screen.getByRole('list', { name: 'On Track score changes' });
+    const entries = within(timeline).getAllByRole('listitem');
+    expect(entries.map(entry => entry.querySelector('span')?.textContent)).toEqual([
+      `${shortTestDate(addCalendarDays(asOfDate, -1))} · Missed`,
+      `Today · ${shortTestDate(asOfDate)}`
+    ]);
+    expect(entries[0]?.getAttribute('aria-label')).toMatch(/Missed scheduled occurrence on/);
+    expect(entries[1]?.getAttribute('aria-label')).toMatch(/today is pending and is not counted as missed/);
+  });
+
+  it('keeps schedule changes distinct in the compact On Track history', async () => {
+    const user = userEvent.setup();
+    const asOfDate = localDateInTimeZone(new Date(), 'UTC');
+    const trackingStartDate = addCalendarDays(asOfDate, -5);
+    const changeDate = addCalendarDays(asOfDate, -2);
+    const earlierSchedule = { frequency: 'daily' as const };
+    const currentSchedule = { frequency: 'weekly' as const, weekdays: [1] as (1)[] };
+    const rhythm = {
+      ...rhythmForSchedule(currentSchedule, trackingStartDate),
+      scoring: {
+        trackingStartDate,
+        timeZone: 'UTC',
+        scheduleHistory: [
+          createRhythmSeason(todayConnection.id, trackingStartDate, earlierSchedule),
+          createRhythmSeason(todayConnection.id, changeDate, currentSchedule)
+        ]
+      }
+    };
+    render(<RhythmHistoryView rhythm={rhythm} completionHistoryAvailable />);
+    await user.click(screen.getByRole('button', { name: 'Show Consistency and On Track score details' }));
+    const timeline = screen.getByRole('list', { name: 'On Track score changes' });
+    const scheduleChange = within(timeline).getAllByRole('listitem').find(entry =>
+      entry.querySelector('span')?.textContent === `${shortTestDate(changeDate)} · Schedule changed`
+    );
+    expect(scheduleChange).toBeTruthy();
+    expect(scheduleChange?.getAttribute('aria-label')).toMatch(
+      /Schedule changed on .* On Track score at that point: \d+\./
+    );
   });
 
   it('toggles both score breakdowns with the shared Info control by pointer and keyboard', async () => {

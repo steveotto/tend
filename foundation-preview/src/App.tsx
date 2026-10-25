@@ -51,6 +51,11 @@ import {
 import type { RhythmDraft, RhythmDraftErrors } from './domain/rhythm-editor.ts';
 import type { RhythmSeasonEditDraft } from './domain/rhythm-season-edit.ts';
 import { editRhythmSeason } from './domain/rhythm-season-edit.ts';
+import {
+  deleteRhythmSeason,
+  restoreDeletedRhythmSeason
+} from './domain/rhythm-season-delete.ts';
+import type { RhythmSeasonDeletionUndo } from './domain/rhythm-season-delete.ts';
 import { rhythmScheduleSummary, rhythmTimeLabel } from './domain/rhythm-schedule.ts';
 import { rhythmSchedulesEqual } from './domain/rhythm-occurrences.ts';
 import {
@@ -124,6 +129,7 @@ export function App() {
   const [marriageExampleId, setMarriageExampleId] = useState<MarriageExampleId>('populated');
   const [selectedPersonId, setSelectedPersonId] = useState<PersonId | null>(null);
   const [activeRhythmId, setActiveRhythmId] = useState<string | null>(null);
+  const [seasonDeletionUndo, setSeasonDeletionUndo] = useState<RhythmSeasonDeletionUndo | null>(null);
   const [detailsInitialView, setDetailsInitialView] = useState<'details' | 'history'>('details');
   const [completionDialogRhythmId, setCompletionDialogRhythmId] = useState<string | null>(null);
   const [rhythmEditor, setRhythmEditor] = useState<{
@@ -478,6 +484,9 @@ export function App() {
       ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     const hasDatedCompletionHistory = previewData.rhythmHistoryIds.includes(rhythmEditor.id)
       || (rhythmEditor.rhythm?.completionHistory?.length ?? 0) > 0;
+    const earliestDatedCompletionDate = rhythmEditor.rhythm?.completionHistory
+      ?.map(record => record.effectiveDate)
+      .sort()[0];
     const result = saveRhythmDraft(
       previewData.savedRhythms,
       draft,
@@ -486,7 +495,8 @@ export function App() {
       {
         currentDate: localDateInTimeZone(new Date(), scoringTimeZone),
         deviceTimeZone: scoringTimeZone,
-        hasDatedCompletionHistory
+        hasDatedCompletionHistory,
+        ...(earliestDatedCompletionDate ? { earliestDatedCompletionDate } : {})
       }
     );
     const savedRhythms = result.savedRhythms;
@@ -529,6 +539,38 @@ export function App() {
     return result.errors;
   }
 
+  function persistSeasonHistory(nextData: PreviewData, action: string): string | null {
+    const written = writePreview(browserPreviewStorage(), nextData, expectedRaw.current, { currentDate });
+    refreshV1RecoveryCopy();
+    refreshV2RecoveryCopy();
+    refreshV3RecoveryCopy();
+    refreshV4RecoveryCopy();
+    refreshV5RecoveryCopy();
+    refreshV6RecoveryCopy();
+    refreshV7RecoveryCopy();
+    refreshV8RecoveryCopy();
+    refreshV9RecoveryCopy();
+    refreshV10RecoveryCopy();
+    if (written.kind === 'conflict') {
+      externalRaw.current = written.actualRaw;
+      setAutoSaveEnabled(false);
+      setPersistenceStatus({ kind: 'conflict' });
+      return `Preview storage changed in another tab. No ${action} was saved.`;
+    }
+    if (written.kind === 'error') {
+      setAutoSaveEnabled(false);
+      setPersistenceStatus({ kind: 'error', message: written.message });
+      return `Preview could not save this ${action}. ${written.message}`;
+    }
+    expectedRaw.current = written.raw;
+    externalRaw.current = null;
+    skipNextAutosave.current = true;
+    setPreviewData(nextData);
+    setAutoSaveEnabled(true);
+    setPersistenceStatus({ kind: 'saved' });
+    return null;
+  }
+
   function saveSeasonCorrection(rhythmId: string, draft: RhythmSeasonEditDraft): string | null {
     if (!activeRhythmIsToday || activeRhythmIsArchived) {
       return 'This Rhythm is read-only.';
@@ -555,33 +597,93 @@ export function App() {
           })
         });
     const nextData: PreviewData = { ...previewData, savedRhythms };
-    const written = writePreview(browserPreviewStorage(), nextData, expectedRaw.current, { currentDate });
-    refreshV1RecoveryCopy();
-    refreshV2RecoveryCopy();
-    refreshV3RecoveryCopy();
-    refreshV4RecoveryCopy();
-    refreshV5RecoveryCopy();
-    refreshV6RecoveryCopy();
-    refreshV7RecoveryCopy();
-    refreshV8RecoveryCopy();
-    refreshV9RecoveryCopy();
-    if (written.kind === 'conflict') {
-      externalRaw.current = written.actualRaw;
-      setAutoSaveEnabled(false);
-      setPersistenceStatus({ kind: 'conflict' });
-      return 'Preview storage changed in another tab. No schedule changes were saved.';
+    return persistSeasonHistory(nextData, 'schedule correction');
+  }
+
+  function deleteSeason(rhythmId: string, seasonId: string): string | null {
+    if (!activeRhythmIsToday || activeRhythmIsArchived || !isEditableRhythmId(rhythmId)) {
+      return 'This Rhythm is read-only.';
     }
-    if (written.kind === 'error') {
-      setAutoSaveEnabled(false);
-      setPersistenceStatus({ kind: 'error', message: written.message });
-      return `Preview could not save this schedule correction. ${written.message}`;
+    const rhythm = previewData.savedRhythms.find(entry => entry.id === rhythmId);
+    if (!rhythm?.schedule || !rhythm.scoring) {
+      return 'This Rhythm no longer has editable schedule history.';
     }
-    expectedRaw.current = written.raw;
-    externalRaw.current = null;
-    skipNextAutosave.current = true;
-    setPreviewData(nextData);
-    setAutoSaveEnabled(true);
-    setPersistenceStatus({ kind: 'saved' });
+    const result = deleteRhythmSeason(
+      rhythm.schedule,
+      rhythm.scoring,
+      seasonId
+    );
+    if (!result.valid) return result.error;
+
+    const nextCadence = rhythmSchedulesEqual(rhythm.schedule, result.schedule)
+      ? rhythm.cadence
+      : rhythmScheduleSummary(result.schedule);
+    const nextTimeOfDay = result.activeTimeOfDay ?? rhythm.timeOfDay;
+    const nextTimeLabel = result.activeTimeOfDay === undefined
+      ? rhythm.timeLabel
+      : rhythmTimeLabel(result.activeTimeOfDay);
+    const savedRhythms = previewData.savedRhythms.map(entry => entry.id !== rhythmId
+      ? entry
+      : {
+          ...entry,
+          cadence: nextCadence,
+          schedule: result.schedule,
+          scoring: result.scoring,
+          timeLabel: nextTimeLabel,
+          ...(nextTimeOfDay === undefined ? {} : { timeOfDay: nextTimeOfDay })
+        });
+    const nextData: PreviewData = { ...previewData, savedRhythms };
+    const saveError = persistSeasonHistory(nextData, 'Season deletion');
+    if (saveError) return saveError;
+    setSeasonDeletionUndo({
+      rhythmId,
+      season: result.deletedSeason,
+      index: result.index,
+      expectedScoring: result.scoring,
+      expectedSchedule: result.schedule,
+      expectedCadence: nextCadence,
+      expectedTimeLabel: nextTimeLabel,
+      ...(nextTimeOfDay === undefined ? {} : { expectedTimeOfDay: nextTimeOfDay }),
+      restoreSchedule: rhythm.schedule,
+      restoreCadence: rhythm.cadence,
+      restoreTimeLabel: rhythm.timeLabel,
+      ...(rhythm.timeOfDay === undefined ? {} : { restoreTimeOfDay: rhythm.timeOfDay })
+    });
+    return null;
+  }
+
+  function undoSeasonDeletion(): string | null {
+    const undo = seasonDeletionUndo;
+    if (!undo || activeRhythmId !== undo.rhythmId || !activeRhythmIsToday || activeRhythmIsArchived) {
+      return 'This Rhythm is no longer available for Undo.';
+    }
+    const rhythm = previewData.savedRhythms.find(entry => entry.id === undo.rhythmId);
+    if (!rhythm?.schedule || !rhythm.scoring) {
+      return 'This Rhythm no longer has editable schedule history.';
+    }
+    const result = restoreDeletedRhythmSeason(
+      rhythm.id,
+      rhythm.schedule,
+      rhythm.scoring,
+      rhythm.cadence,
+      rhythm.timeLabel,
+      rhythm.timeOfDay,
+      undo
+    );
+    if (!result.valid) return result.error;
+    const savedRhythms = previewData.savedRhythms.map(entry => entry.id !== rhythm.id
+      ? entry
+      : {
+          ...entry,
+          cadence: result.cadence,
+          timeLabel: result.timeLabel,
+          ...(result.timeOfDay === undefined ? {} : { timeOfDay: result.timeOfDay }),
+          schedule: result.schedule,
+          scoring: result.scoring
+        });
+    const saveError = persistSeasonHistory({ ...previewData, savedRhythms }, 'Season Undo');
+    if (saveError) return saveError;
+    setSeasonDeletionUndo(null);
     return null;
   }
 
@@ -1043,6 +1145,13 @@ export function App() {
             : {})}
           {...(activeRhythmIsToday && isEditableRhythmId(activeRhythm.id) && !activeRhythmIsArchived
             ? { onEditSeason: saveSeasonCorrection }
+            : {})}
+          {...(activeRhythmIsToday && isEditableRhythmId(activeRhythm.id) && !activeRhythmIsArchived
+            ? { onDeleteSeason: deleteSeason }
+            : {})}
+          seasonDeletionUndo={seasonDeletionUndo?.rhythmId === activeRhythm.id ? seasonDeletionUndo : null}
+          {...(seasonDeletionUndo?.rhythmId === activeRhythm.id
+            ? { onUndoSeasonDeletion: undoSeasonDeletion }
             : {})}
           people={peopleForRhythm(activeRhythm)}
           archived={activeRhythmIsArchived}

@@ -11,7 +11,11 @@ import {
   isValidTimeZone
 } from './rhythm-schedule.ts';
 import type { RhythmSchedule, RhythmScoringMetadata, RhythmTimeLabel, RhythmTimeValue } from './rhythm-schedule.ts';
-import { createRhythmSeason } from './rhythm-seasons.ts';
+import {
+  createRhythmSeason,
+  createUnknownRhythmSeason,
+  rhythmSeasonPaletteForOrdinal
+} from './rhythm-seasons.ts';
 import { isValidDate } from './money-goals.ts';
 import { rhythmSchedulesEqual } from './rhythm-occurrences.ts';
 
@@ -190,6 +194,9 @@ export function rhythmDraftFrom(
   rhythm: RhythmPreview,
   categoryIds: readonly RhythmCategoryId[] = []
 ): RhythmDraft {
+  const originalSchedule = rhythm.schedule
+    ?? (rhythm.cadence === 'Daily' ? { frequency: 'daily' as const } : undefined);
+  const currentSeason = rhythm.scoring?.scheduleHistory.at(-1);
   return {
     title: rhythm.title,
     description: rhythm.description ?? '',
@@ -198,10 +205,13 @@ export function rhythmDraftFrom(
     personIds: [...(rhythm.personIds ?? [])],
     categoryIds: [...categoryIds],
     ...(rhythm.schedule === undefined ? {} : { schedule: rhythm.schedule }),
-    ...(rhythm.schedule === undefined ? {} : { originalSchedule: rhythm.schedule }),
+    ...(originalSchedule === undefined ? {} : { originalSchedule }),
     ...(rhythm.scoring === undefined ? {} : {
       originalScoring: rhythm.scoring
     }),
+    ...(currentSeason?.kind === 'scheduled' && currentSeason.name
+      ? { seasonName: currentSeason.name }
+      : {}),
     scheduleEditing: rhythm.schedule !== undefined,
     ...(rhythm.personal === undefined ? {} : { personal: rhythm.personal })
   };
@@ -240,6 +250,7 @@ export function saveRhythmDraft(
     currentDate: string;
     deviceTimeZone: string;
     hasDatedCompletionHistory?: boolean;
+    earliestDatedCompletionDate?: string;
   }
 ): { savedRhythms?: SavedRhythm[]; errors: RhythmDraftErrors } {
   const errors = validateRhythmDraft(draft);
@@ -264,22 +275,70 @@ export function saveRhythmDraft(
     : draft.schedule !== originalSchedule;
   const hasDatedCompletionHistory = scoringContext?.hasDatedCompletionHistory ?? false;
   let scoring = draft.originalScoring ?? existing?.scoring;
+  let initializedScheduleHistory = false;
   if (mode === 'create' && !scoring && draft.schedule && scoringContext
     && isValidDate(scoringContext.currentDate) && isValidTimeZone(scoringContext.deviceTimeZone)) {
     scoring = {
       trackingStartDate: scoringContext.currentDate,
       timeZone: scoringContext.deviceTimeZone,
-      scheduleHistory: [createRhythmSeason(id, scoringContext.currentDate, draft.schedule)]
+      scheduleHistory: [
+        createRhythmSeason(
+          id,
+          scoringContext.currentDate,
+          draft.schedule,
+          undefined,
+          undefined,
+          rhythmSeasonPaletteForOrdinal(0)
+        )
+      ]
     };
-  } else if (!scoring && existing && scheduleChanged && draft.schedule
+    initializedScheduleHistory = true;
+  } else if (!scoring && mode === 'edit' && scheduleChanged && draft.schedule
     && scoringContext && isValidDate(scoringContext.currentDate)
     && isValidTimeZone(scoringContext.deviceTimeZone)) {
+    const earliestDatedCompletionDate = scoringContext.earliestDatedCompletionDate;
+    if (earliestDatedCompletionDate !== undefined && !isValidDate(earliestDatedCompletionDate)) {
+      errors.schedule = 'The earliest dated completion is invalid, so schedule history cannot be preserved.';
+      return { errors };
+    }
+    const hasEarlierHistory = hasDatedCompletionHistory
+      && earliestDatedCompletionDate !== undefined
+      && earliestDatedCompletionDate < scoringContext.currentDate;
+    const currentSeasonOrdinal = hasEarlierHistory && originalSchedule ? 1 : 0;
+    const currentSeason = createRhythmSeason(
+      id,
+      scoringContext.currentDate,
+      draft.schedule,
+      undefined,
+      undefined,
+      rhythmSeasonPaletteForOrdinal(currentSeasonOrdinal)
+    );
+    const seasonName = draft.seasonName?.trim();
+    const namedCurrentSeason = seasonName ? { ...currentSeason, name: seasonName } : currentSeason;
     scoring = {
-      trackingStartDate: scoringContext.currentDate,
+      trackingStartDate: hasEarlierHistory
+        ? earliestDatedCompletionDate
+        : scoringContext.currentDate,
       timeZone: scoringContext.deviceTimeZone,
-      scheduleHistory: [createRhythmSeason(id, scoringContext.currentDate, draft.schedule)]
+      scheduleHistory: hasEarlierHistory
+        ? [
+            originalSchedule
+              ? createRhythmSeason(
+                  id,
+                  earliestDatedCompletionDate,
+                  originalSchedule,
+                  undefined,
+                  undefined,
+                  rhythmSeasonPaletteForOrdinal(0)
+                )
+              : createUnknownRhythmSeason(id, earliestDatedCompletionDate),
+            namedCurrentSeason
+          ]
+        : [namedCurrentSeason]
     };
-  } else if (scoring && scheduleChanged && draft.schedule) {
+    initializedScheduleHistory = true;
+  }
+  if (scoring && scheduleChanged && draft.schedule && !initializedScheduleHistory) {
     const currentDate = scoringContext?.currentDate;
     if (!currentDate || !isValidDate(currentDate)
       || !scoringContext || !isValidTimeZone(scoringContext.deviceTimeZone)) {
@@ -306,7 +365,9 @@ export function saveRhythmDraft(
         schedule: draft.schedule
       };
     } else if (currentSegment.startDate === currentDate) {
-      const name = draft.seasonName?.trim();
+      const name = draft.seasonName === undefined
+        ? currentSegment.name
+        : draft.seasonName.trim();
       const { name: _previousName, ...segmentWithoutName } = currentSegment;
       segments[segments.length - 1] = {
         ...segmentWithoutName,
@@ -314,9 +375,34 @@ export function saveRhythmDraft(
         ...(name ? { name } : {})
       };
     } else {
-      const season = createRhythmSeason(id, currentDate, draft.schedule);
+      const knownSeasonCount = segments.filter(segment => segment.kind === 'scheduled').length;
+      const season = createRhythmSeason(
+        id,
+        currentDate,
+        draft.schedule,
+        undefined,
+        undefined,
+        rhythmSeasonPaletteForOrdinal(knownSeasonCount)
+      );
       const name = draft.seasonName?.trim();
       segments.push(name ? { ...season, name } : season);
+    }
+    const earliestDatedCompletionDate = scoringContext.earliestDatedCompletionDate;
+    if (earliestDatedCompletionDate !== undefined && !isValidDate(earliestDatedCompletionDate)) {
+      errors.schedule = 'The earliest dated completion is invalid, so schedule history cannot be preserved.';
+      return { errors };
+    }
+    const firstScheduled = segments.find(segment => segment.kind === 'scheduled');
+    if (earliestDatedCompletionDate && firstScheduled
+      && earliestDatedCompletionDate < firstScheduled.startDate) {
+      const firstSegment = segments[0];
+      if (firstSegment?.kind === 'unknown') {
+        if (earliestDatedCompletionDate < firstSegment.startDate) {
+          segments[0] = { ...firstSegment, startDate: earliestDatedCompletionDate };
+        }
+      } else {
+        segments.unshift(createUnknownRhythmSeason(id, earliestDatedCompletionDate));
+      }
     }
     scoring = { ...scoring, scheduleHistory: segments };
   }

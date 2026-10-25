@@ -6,7 +6,7 @@ import type {
   RhythmTimeValue
 } from './rhythm-schedule.ts';
 import { validateRhythmSchedule, rhythmTimeOptions } from './rhythm-schedule.ts';
-import { createRhythmSeason } from './rhythm-seasons.ts';
+import { createRhythmSeason, rhythmSeasonPaletteForOrdinal } from './rhythm-seasons.ts';
 
 export type RhythmSeasonEditDraft = {
   segmentId: string;
@@ -55,9 +55,18 @@ export function editRhythmSeason(
   const name = draft.name.trim();
   const history: RhythmScheduleHistorySegment[] = [...scoring.scheduleHistory];
   if (selected.kind === 'unknown' && draft.startDate > selected.startDate) {
+    const earlierScheduledCount = history.slice(0, index)
+      .filter(segment => segment.kind === 'scheduled').length;
     history.splice(index, 1,
       selected,
-      createRhythmSeason(rhythmId, draft.startDate, draft.schedule, draft.timeOfDay)
+      createRhythmSeason(
+        rhythmId,
+        draft.startDate,
+        draft.schedule,
+        draft.timeOfDay,
+        undefined,
+        rhythmSeasonPaletteForOrdinal(earlierScheduledCount)
+      )
     );
     const inserted = history[index + 1]!;
     history[index + 1] = {
@@ -66,16 +75,20 @@ export function editRhythmSeason(
       ...(selected.descriptiveCadence ? { contextCadence: selected.descriptiveCadence } : {})
     };
   } else {
+    const earlierScheduledCount = history.slice(0, index)
+      .filter(segment => segment.kind === 'scheduled').length;
     const replacement = createRhythmSeason(
       rhythmId,
       draft.startDate,
       draft.schedule,
       draft.timeOfDay,
-      selected.id
+      selected.id,
+      selected.kind === 'unknown'
+        ? rhythmSeasonPaletteForOrdinal(earlierScheduledCount)
+        : selected.paletteToken
     );
     history[index] = {
       ...replacement,
-      paletteToken: selected.paletteToken,
       ...(name ? { name } : {}),
       ...(selected.kind === 'unknown'
         ? selected.descriptiveCadence ? { contextCadence: selected.descriptiveCadence } : {}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { ChangeEvent } from 'react';
 import { validateRhythmSchedule } from '../domain/rhythm-schedule.ts';
@@ -110,7 +110,9 @@ function formFromSchedule(schedule?: RhythmSchedule): ScheduleFormState {
   };
   if (!schedule) return base;
 
-  const frequency: FrequencyChoice = schedule.frequency;
+  const frequency: FrequencyChoice = schedule.frequency === 'weekly' && schedule.weekdays.length > 1
+    ? 'select-days'
+    : schedule.frequency;
   const schedulePattern = 'pattern' in schedule ? schedule.pattern : undefined;
   return {
     ...base,
@@ -150,6 +152,9 @@ function buildSchedule(form: ScheduleFormState): RhythmSchedule | undefined {
       candidate = { frequency: 'daily', ...dates };
       break;
     case 'weekly':
+      if (form.weekdays.length !== 1) return undefined;
+      candidate = { frequency: 'weekly', weekdays: form.weekdays, ...dates };
+      break;
     case 'select-days':
       candidate = { frequency: 'weekly', weekdays: form.weekdays, ...dates };
       break;
@@ -205,6 +210,7 @@ export function RhythmScheduleFields({
   children: ReactNode;
 }) {
   const [form, setForm] = useState(() => formFromSchedule(schedule));
+  const weekdaysGroupId = useId();
 
   function update<K extends keyof ScheduleFormState>(field: K, value: ScheduleFormState[K]) {
     const next = { ...form, [field]: value };
@@ -213,6 +219,10 @@ export function RhythmScheduleFields({
   }
 
   function toggleWeekday(weekday: RhythmWeekday, checked: boolean) {
+    if (form.frequency === 'weekly') {
+      if (checked) update('weekdays', [weekday]);
+      return;
+    }
     update('weekdays', checked
       ? [...form.weekdays, weekday]
       : form.weekdays.filter(selected => selected !== weekday));
@@ -389,21 +399,33 @@ export function RhythmScheduleFields({
       )}
 
       {showWeekdays && (
-        <div className="rhythm-schedule-fields__weekday-row" role="group" aria-label="Which days?">
+        <div
+          className="rhythm-schedule-fields__weekday-row"
+          role={form.frequency === 'weekly' ? 'radiogroup' : 'group'}
+          aria-label={form.frequency === 'weekly' ? 'Choose one weekday' : 'Which days?'}
+        >
           <span>On</span>
           <div className="rhythm-schedule-fields__weekday-list">
             {weekdays.map(day => (
               <label key={day.value} className="rhythm-schedule-fields__weekday">
                 <input
-                  type="checkbox"
+                  type={form.frequency === 'weekly' ? 'radio' : 'checkbox'}
+                  {...(form.frequency === 'weekly' ? { name: weekdaysGroupId } : {})}
                   aria-label={day.label}
-                  checked={form.weekdays.includes(day.value)}
+                  checked={form.frequency === 'weekly'
+                    ? form.weekdays.length === 1 && form.weekdays[0] === day.value
+                    : form.weekdays.includes(day.value)}
                   onChange={event => toggleWeekday(day.value, event.currentTarget.checked)}
                 />
                 <span aria-hidden="true">{['Su', 'M', 'Tu', 'W', 'Th', 'F', 'Sa'][day.value]}</span>
               </label>
             ))}
           </div>
+          {form.frequency === 'weekly' && form.weekdays.length !== 1 && (
+            <span className="rhythm-schedule-fields__weekday-hint" role="status">
+              Choose one weekday to replace the selected days.
+            </span>
+          )}
         </div>
       )}
 

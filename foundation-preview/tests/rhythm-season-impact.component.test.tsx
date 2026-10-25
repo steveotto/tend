@@ -1,0 +1,135 @@
+import { cleanup, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it } from 'vitest';
+import { RhythmSeasonImpact } from '../src/components/RhythmSeasonImpact.tsx';
+import { selectRhythmScore } from '../src/domain/rhythm-scoring.ts';
+import type { RhythmCompletionRecord } from '../src/domain/rhythm-completion.ts';
+import type { RhythmScoringMetadata } from '../src/domain/rhythm-schedule.ts';
+import type { RhythmScoreResult, UnscoredRhythmSelection } from '../src/domain/rhythm-scoring.ts';
+import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
+
+const rhythmId = 'season-impact-fixture';
+const schedule = { frequency: 'daily' } as const;
+
+function score(records: readonly RhythmCompletionRecord[] = [], recordsAvailable = true): RhythmScoreResult {
+  const scoring: RhythmScoringMetadata = {
+    trackingStartDate: '2026-10-01',
+    timeZone: 'UTC',
+    scheduleHistory: [createRhythmSeason(rhythmId, '2026-10-01', schedule)]
+  };
+  return selectRhythmScore({
+    rhythmId,
+    schedule,
+    scoring,
+    records,
+    recordsAvailable,
+    createdLocalDate: '2026-10-01',
+    createdTimeZone: 'UTC',
+    asOfDate: '2026-10-03',
+    timeZone: 'UTC'
+  });
+}
+
+function completed(id: string, effectiveDate: string): RhythmCompletionRecord {
+  return { id, rhythmId, effectiveDate };
+}
+
+function cell(metric: string, side: 'Before' | 'After') {
+  const comparison = screen.getByRole('group', { name: `${metric} comparison` });
+  return within(comparison).getByRole('group', { name: `${side} ${metric}` });
+}
+
+function visibleScore(target: HTMLElement): string | undefined {
+  return target.querySelector('.rhythm-season-impact__score strong')?.textContent ?? undefined;
+}
+
+afterEach(cleanup);
+
+describe('shared Rhythm season impact comparison', () => {
+  it('compares selector values and reports matching evidence only once', () => {
+    const unchanged = score([completed('one', '2026-10-01')]);
+    render(<RhythmSeasonImpact before={unchanged} after={unchanged} />);
+
+    expect(screen.getByRole('heading', { name: 'Before' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'After' })).toBeTruthy();
+    for (const metric of ['Consistency', 'On Track', 'Health']) {
+      expect(visibleScore(cell(metric, 'Before'))).toBe(
+        visibleScore(cell(metric, 'After'))
+      );
+      expect(cell(metric, 'Before').querySelector('[aria-label="out of 100"]')).toBeTruthy();
+    }
+    expect(screen.getAllByText(/Both · \d+ eligible · \d+ completed/)).toHaveLength(2);
+    expect(cell('Consistency', 'Before').textContent).not.toContain('eligible');
+    expect(cell('Consistency', 'After').textContent).not.toContain('eligible');
+    expect(screen.getAllByText('Before', { selector: '.rhythm-season-impact__responsive-label' })).toHaveLength(3);
+    expect(screen.getAllByText('After', { selector: '.rhythm-season-impact__responsive-label' })).toHaveLength(3);
+  });
+
+  it('shows lower numeric scores without a success or failure judgment and keeps changed evidence distinct', () => {
+    const before = score([completed('first', '2026-10-01'), completed('second', '2026-10-02')]);
+    const after = score();
+    render(<RhythmSeasonImpact before={before} after={after} />);
+
+    expect(visibleScore(cell('Consistency', 'Before'))).toBe('100');
+    expect(visibleScore(cell('Consistency', 'After'))).toBe('0');
+    expect(cell('Consistency', 'Before').textContent).toContain('2 eligible · 2 completed');
+    expect(cell('Consistency', 'After').textContent).toContain('2 eligible · 0 completed');
+    expect(screen.queryByText(/improv|worsen|better|worse/i)).toBeNull();
+  });
+
+  it('shows unavailable-to-numeric and numeric-to-unavailable transitions with concise and expandable reasons', () => {
+    const ready = score([completed('one', '2026-10-01')]);
+    const unavailable = score([], false);
+    render(<RhythmSeasonImpact before={unavailable} after={ready} />);
+
+    const beforeConsistency = cell('Consistency', 'Before');
+    expect(beforeConsistency.textContent).toContain('—');
+    expect(beforeConsistency.textContent).toContain('Unavailable');
+    expect(beforeConsistency.textContent).toContain('Completion history is unavailable.');
+    expect(visibleScore(cell('Consistency', 'After'))).toBeDefined();
+
+    cleanup();
+    render(<RhythmSeasonImpact before={ready} after={unavailable} />);
+    expect(visibleScore(cell('On Track', 'Before'))).toBeDefined();
+    const afterOnTrack = cell('On Track', 'After');
+    expect(afterOnTrack.textContent).toContain('—');
+    expect(afterOnTrack.textContent).toContain('Unavailable');
+    expect(afterOnTrack.textContent).toContain('Completion history is unavailable.');
+  });
+
+  it('keeps the complete long unavailable reason available without pushing values into another metric', async () => {
+    const detail = `A schedule change cannot be reconstructed: ${'the unknown earlier schedule leaves additional relevant dates uncovered. '.repeat(8)}`;
+    const metric = {
+      kind: 'unscored' as const,
+      reasonCode: 'unsupported-history' as const,
+      explanation: detail
+    };
+    const unavailable: UnscoredRhythmSelection = {
+      kind: 'unscored',
+      asOfDate: '2026-10-03',
+      timeZone: 'UTC',
+      reason: metric,
+      consistency: metric,
+      onTrack: metric,
+      healthScore: null
+    };
+    const user = userEvent.setup();
+    render(<RhythmSeasonImpact before={unavailable} after={score()} />);
+
+    const beforeConsistency = cell('Consistency', 'Before');
+    expect(beforeConsistency.textContent).toContain('Schedule history is incomplete.');
+    const disclosure = within(beforeConsistency).getByText('Why unavailable');
+    await user.click(disclosure);
+    expect(beforeConsistency.querySelector('details p')?.textContent).toBe(detail);
+    expect(visibleScore(cell('On Track', 'After'))).toBeDefined();
+  });
+
+  it('renders the invalid-proposal state with an unavailable After value', () => {
+    render(<RhythmSeasonImpact before={score()} />);
+    const afterHealth = cell('Health', 'After');
+    expect(afterHealth.textContent).toContain('—');
+    expect(afterHealth.textContent).toContain('Unavailable');
+    expect(afterHealth.textContent).toContain('Proposed schedule is invalid.');
+    expect(within(afterHealth).getByText('Why unavailable')).toBeTruthy();
+  });
+});
