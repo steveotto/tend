@@ -4,12 +4,13 @@ import type { RhythmCompletionRecord } from '../domain/rhythm-completion.ts';
 import { isValidDate } from '../domain/money-goals.ts';
 import type { RhythmScheduleHistorySegment, RhythmTimeValue } from '../domain/rhythm-schedule.ts';
 import { formatRhythmSchedule, rhythmTimeOptions } from '../domain/rhythm-schedule.ts';
-import type { SelectRhythmScoreInput, RhythmScoreResult } from '../domain/rhythm-scoring.ts';
+import type { SelectRhythmScoreInput } from '../domain/rhythm-scoring.ts';
 import { selectRhythmScore } from '../domain/rhythm-scoring.ts';
 import { editRhythmSeason } from '../domain/rhythm-season-edit.ts';
 import type { RhythmSeasonEditDraft } from '../domain/rhythm-season-edit.ts';
 import { rhythmSeasonInclusiveEndDate } from '../domain/rhythm-seasons.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
+import { RhythmSeasonImpact } from './RhythmSeasonImpact.tsx';
 import { RhythmScheduleFields } from './RhythmScheduleFields.tsx';
 import { StyledSelect } from './StyledSelect.tsx';
 
@@ -20,23 +21,6 @@ function formatDate(date: string): string {
     year: 'numeric',
     timeZone: 'UTC'
   }).format(new Date(`${date}T12:00:00Z`));
-}
-
-function metricSummary(result: RhythmScoreResult, name: 'consistency' | 'onTrack'): string {
-  const metric = result.kind === 'rhythm-score' ? result[name] : result[name];
-  if (metric.kind === 'unscored') return `Unavailable — ${metric.explanation}`;
-  if (metric.kind === 'scored' && 'eligibleDueCount' in metric.evidence) {
-    return `${metric.score.toFixed(0)} / 100 · ${metric.evidence.eligibleDueCount} eligible, ${metric.evidence.completedCount} completed`;
-  }
-  return `${metric.score} / 100`;
-}
-
-function healthSummary(result: RhythmScoreResult): string {
-  if (result.kind === 'invalid') return `Unavailable — ${result.reason}`;
-  if (result.kind === 'unscored') return `Unavailable — ${result.reason.explanation}`;
-  return result.healthScore === null
-    ? 'Unavailable — both Consistency and On Track must be available.'
-    : `${Math.round(result.healthScore)} / 100`;
 }
 
 export function RhythmSeasonCorrectionDialog({
@@ -187,21 +171,7 @@ export function RhythmSeasonCorrectionDialog({
             }}
           />
         </div>
-        <section className="rhythm-season-correction__impact" aria-label="Score impact preview" aria-live="polite">
-          <h3>Before and after</h3>
-          {(['consistency', 'onTrack'] as const).map(metric => (
-            <div key={metric}>
-              <strong>{metric === 'consistency' ? 'Consistency' : 'On Track'}</strong>
-              <p>Before: {metricSummary(before, metric)}</p>
-              <p>After: {after ? metricSummary(after, metric) : 'Unavailable — choose a complete schedule and valid boundary.'}</p>
-            </div>
-          ))}
-          <div>
-            <strong>Health</strong>
-            <p>Before: {healthSummary(before)}</p>
-            <p>After: {after ? healthSummary(after) : 'Unavailable — choose a complete schedule and valid boundary.'}</p>
-          </div>
-        </section>
+        <RhythmSeasonImpact before={before} after={after} />
         {error && <p className="goal-field-error" role="alert">{error}</p>}
         <div className="money-goal-dialog__actions">
           <button type="button" className="btn mini" onClick={confirm}>Confirm schedule correction</button>

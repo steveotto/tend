@@ -173,9 +173,10 @@ describe('shared Rhythm history', () => {
           ]
         }
       };
-      render(<RhythmHistoryView rhythm={rhythm} archived />);
+      render(<RhythmHistoryView rhythm={rhythm} archived onDeleteSeason={() => null} />);
       const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
       const disclosure = within(history).getByRole('button', { name: 'Seasons (3)' });
+      expect(within(history).queryByRole('button', { name: /Delete Season/ })).toBeNull();
       const completionHeading = within(history).getByRole('heading', { name: 'All completion history' });
       expect(disclosure.compareDocumentPosition(completionHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(disclosure.getAttribute('aria-expanded')).toBe('false');

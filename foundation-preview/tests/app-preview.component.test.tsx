@@ -7,6 +7,7 @@ import { ArchivedRhythmsDialog } from '../src/components/ArchivedRhythmsDialog.t
 import { localDateString } from '../src/domain/money-goals.ts';
 import { addCalendarDays } from '../src/domain/rhythm-scoring.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
+import type { DatedRhythmCompletion } from '../src/domain/rhythm-completion.ts';
 import {
   marriageExampleFixtures,
   marriageFoundationCoverage,
@@ -20,7 +21,7 @@ import {
 } from '../src/domain/preview-data.ts';
 import { createPreviewEnvelope, createSamplePreviewData, parsePreviewBackup } from '../src/domain/preview-state.ts';
 import { PREVIEW_STORAGE_KEY, PREVIEW_V5_RECOVERY_KEY } from '../src/storage/preview-storage.ts';
-import { installMemoryStorage } from './memory-storage.ts';
+import { installMemoryStorage, type MemoryStorage } from './memory-storage.ts';
 
 beforeEach(installMemoryStorage);
 afterEach(() => {
@@ -39,7 +40,273 @@ function inclusiveCalendarDays(startDate: string, endDate: string): number {
   return Math.floor((Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000) + 1;
 }
 
+function seasonDeletionFixture() {
+  const today = new Date().toISOString().slice(0, 10);
+  const trackingStartDate = addCalendarDays(today, -30);
+  const rhythmId = 'user-rhythm-60000000-0000-4000-8000-000000000001';
+  const firstSchedule = { frequency: 'daily' as const };
+  const middleSchedule = { frequency: 'weekly' as const, weekdays: [1, 3, 5] as (1 | 3 | 5)[] };
+  const currentSchedule = { frequency: 'weekly' as const, weekdays: [2, 4] as (2 | 4)[] };
+  const first = {
+    ...createRhythmSeason(rhythmId, trackingStartDate, firstSchedule, 'morning', 'season-delete-first'),
+    name: 'First Season',
+    note: 'preserve first note'
+  };
+  const middle = {
+    ...createRhythmSeason(rhythmId, addCalendarDays(today, -20), middleSchedule, 'afternoon', 'season-delete-middle'),
+    name: 'Middle Season',
+    note: 'preserve middle note'
+  };
+  const current = {
+    ...createRhythmSeason(rhythmId, addCalendarDays(today, -10), currentSchedule, 'evening', 'season-delete-current'),
+    name: 'Current Season',
+    note: 'preserve current note'
+  };
+  const data = createSamplePreviewData();
+  data.savedRhythms.push({
+    id: rhythmId,
+    title: 'Season deletion fixture',
+    cadence: 'Every week on Tuesday and Thursday.',
+    timeLabel: 'Evening',
+    timeOfDay: 'evening',
+    personIds: [],
+    categoryIds: [],
+    schedule: currentSchedule,
+    scoring: {
+      trackingStartDate,
+      timeZone: 'UTC',
+      scheduleHistory: [first, middle, current]
+    },
+    createdLocalDate: trackingStartDate,
+    createdTimeZone: 'UTC'
+  });
+  data.rhythmHistoryIds.push(rhythmId);
+  const dates = [
+    addCalendarDays(today, -29),
+    addCalendarDays(today, -18),
+    addCalendarDays(today, -15),
+    addCalendarDays(today, -8),
+    addCalendarDays(today, -3)
+  ];
+  const records: DatedRhythmCompletion[] = dates.map((effectiveDate, index) => ({
+    id: `season-delete-log-${index + 1}`,
+    rhythmId,
+    effectiveDate,
+    localTime: `${String(8 + index).padStart(2, '0')}:15`,
+    timeZone: 'UTC',
+    completedAt: `${effectiveDate}T${String(8 + index).padStart(2, '0')}:15:00.000Z`,
+    recordedAt: `2026-10-25T12:00:0${index}.000Z`,
+    memory: `Saved note ${index + 1}`
+  }));
+  data.datedRhythmCompletions.push(...records);
+  return { data, today, rhythmId, first, middle, current, records };
+}
+
 describe('Tend Today preview', () => {
+  it('reviews and cancels a middle Season deletion, then persists it and safely restores it with Undo', async () => {
+    const user = userEvent.setup();
+    const fixture = seasonDeletionFixture();
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(fixture.data)));
+    const originalRaw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
+    const { unmount } = render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    const card = screen.getByRole('article', { name: 'Season deletion fixture' });
+    await user.click(within(card).getByRole('button', {
+      name: 'View scores and history for Season deletion fixture'
+    }));
+    const details = screen.getByRole('dialog', { name: 'Season deletion fixture' });
+    const history = within(details).getByRole('region', { name: 'History for Season deletion fixture' });
+    await user.click(within(history).getByRole('button', { name: 'Seasons (3)' }));
+    expect(within(history).getByText('The first Season cannot be deleted. Use Edit to correct it.')).toBeTruthy();
+
+    const openDelete = async () => user.click(within(history).getByRole('button', { name: 'Delete Season Middle Season' }));
+    const opener = within(history).getByRole('button', { name: 'Delete Season Middle Season' });
+    await openDelete();
+    let review = screen.getByRole('dialog', { name: 'Remove this season?' });
+    expect(within(review).getByText('2 logged moments in this period will be preserved.')).toBeTruthy();
+    expect(within(review).getByRole('region', { name: 'Score impact preview' })).toBeTruthy();
+    const impact = within(review).getByRole('region', { name: 'Score impact preview' });
+    expect(within(impact).getAllByText(/Before: .*eligible, .*completed/)).toHaveLength(2);
+    expect(within(impact).getAllByText(/After: .*eligible, .*completed/)).toHaveLength(2);
+    const previewAfterValues = new Map(
+      Array.from(impact.querySelectorAll('div'))
+        .filter(block => ['Consistency', 'On Track', 'Health'].includes(
+          block.querySelector('strong')?.textContent ?? ''
+        ))
+        .map(block => {
+          const metric = block.querySelector('strong')?.textContent ?? '';
+          const afterText = block.querySelectorAll('p')[1]?.textContent ?? '';
+          return [metric, afterText.match(/(\d+)\s*\/\s*100/)?.[1] ?? null] as const;
+        })
+    );
+    expect(previewAfterValues.get('Consistency')).not.toBeNull();
+    expect(previewAfterValues.get('On Track')).not.toBeNull();
+    expect(previewAfterValues.get('Health')).not.toBeNull();
+    await user.click(within(review).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Remove this season?' })).toBeNull());
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    expect(document.activeElement).toBe(opener);
+
+    await openDelete();
+    review = screen.getByRole('dialog', { name: 'Remove this season?' });
+    await user.click(within(review).getByRole('button', { name: 'Cancel Season deletion' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Remove this season?' })).toBeNull());
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    expect(document.activeElement).toBe(opener);
+
+    await openDelete();
+    review = screen.getByRole('dialog', { name: 'Remove this season?' });
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Remove this season?' })).toBe(review);
+    expect(screen.getByRole('dialog', { name: 'Season deletion fixture' })).toBe(details);
+    fireEvent(review, new Event('cancel', { cancelable: true }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Remove this season?' })).toBeNull());
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    expect(document.activeElement).toBe(opener);
+
+    await openDelete();
+    review = screen.getByRole('dialog', { name: 'Remove this season?' });
+    await user.click(within(review).getByRole('button', { name: 'Delete season' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Remove this season?' })).toBeNull());
+    const deleted = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, fixture.today);
+    expect(deleted.valid).toBe(true);
+    if (!deleted.valid) return;
+    const deletedRhythm = deleted.envelope.data.savedRhythms.find(item => item.id === fixture.rhythmId)!;
+    expect(deletedRhythm.scoring?.scheduleHistory.map(season => season.id))
+      .toEqual([fixture.first.id, fixture.current.id]);
+    expect(deletedRhythm.scoring?.scheduleHistory[0]).toEqual(fixture.first);
+    expect(deletedRhythm.scoring?.scheduleHistory[1]).toEqual(fixture.current);
+    expect(deleted.envelope.data.datedRhythmCompletions).toEqual(fixture.records);
+    const undoButton = within(history).getByRole('button', { name: 'Undo' });
+    await waitFor(() => expect(document.activeElement).toBe(undoButton));
+    await waitFor(() => {
+      expect(within(history).getByRole('meter', { name: 'Consistency score' })
+        .getAttribute('aria-valuenow')).toBe(previewAfterValues.get('Consistency'));
+      expect(within(history).getByRole('meter', { name: 'On Track score' })
+        .getAttribute('aria-valuenow')).toBe(previewAfterValues.get('On Track'));
+      expect(Math.round(Number(within(history).getByRole('meter', { name: 'Health score' })
+        .getAttribute('aria-valuenow'))).toString()).toBe(previewAfterValues.get('Health'));
+    });
+
+    await user.click(within(history).getAllByRole('button', {
+      name: /Edit logged moment for Season deletion fixture/
+    })[0]!);
+    fireEvent.change(screen.getByLabelText(/Notes/), { target: { value: 'Edited after deletion' } });
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Edit logged moment' })).toBeNull());
+    const logsAfterEdit = fixture.records.map(record => record.id === 'season-delete-log-5'
+      ? { ...record, memory: 'Edited after deletion' }
+      : record);
+    const afterLogEdit = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, fixture.today);
+    expect(afterLogEdit.valid && afterLogEdit.envelope.data.datedRhythmCompletions).toEqual(logsAfterEdit);
+
+    await user.click(within(history).getByRole('button', { name: 'Undo' }));
+    await waitFor(() => {
+      const restored = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, fixture.today);
+      expect(restored.valid && restored.envelope.data.savedRhythms
+        .find(item => item.id === fixture.rhythmId)?.scoring?.scheduleHistory.map(season => season.id))
+        .toEqual([fixture.first.id, fixture.middle.id, fixture.current.id]);
+    });
+    expect(document.activeElement).toBe(within(history).getByRole('button', { name: 'Edit Middle Season' }));
+    const restored = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, fixture.today);
+    expect(restored.valid && restored.envelope.data.datedRhythmCompletions).toEqual(logsAfterEdit);
+    unmount();
+  });
+
+  it('deletes the current Season durably and reloads with its predecessor schedule and time active', async () => {
+    const user = userEvent.setup();
+    const fixture = seasonDeletionFixture();
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(fixture.data)));
+    const { unmount } = render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    const openHistory = async (seasonCount = 3) => {
+      const card = screen.getByRole('article', { name: 'Season deletion fixture' });
+      await user.click(within(card).getByRole('button', {
+        name: 'View scores and history for Season deletion fixture'
+      }));
+      const details = screen.getByRole('dialog', { name: 'Season deletion fixture' });
+      const history = within(details).getByRole('region', { name: 'History for Season deletion fixture' });
+      await user.click(within(history).getByRole('button', { name: `Seasons (${seasonCount})` }));
+      return { details, history };
+    };
+    let { history } = await openHistory();
+    await user.click(within(history).getByRole('button', { name: 'Delete Season Current Season' }));
+    let review = screen.getByRole('dialog', { name: 'Remove this season?' });
+    await user.click(within(review).getByRole('button', { name: 'Delete season' }));
+    await waitFor(() => {
+      const saved = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, fixture.today);
+      expect(saved.valid && saved.envelope.data.savedRhythms.find(item => item.id === fixture.rhythmId))
+        .toMatchObject({
+          schedule: fixture.middle.schedule,
+          timeOfDay: 'afternoon',
+          timeLabel: 'Afternoon'
+        });
+    });
+    const persisted = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, fixture.today);
+    expect(persisted.valid && persisted.envelope.data.datedRhythmCompletions).toEqual(fixture.records);
+    const backupRoundTrip = parsePreviewBackup(
+      JSON.stringify(persisted.valid ? persisted.envelope : {}),
+      fixture.today
+    );
+    expect(backupRoundTrip.valid && backupRoundTrip.envelope.data.savedRhythms
+      .find(item => item.id === fixture.rhythmId)?.scoring?.scheduleHistory.map(season => season.id))
+      .toEqual([fixture.first.id, fixture.middle.id]);
+    expect(backupRoundTrip.valid && backupRoundTrip.envelope.data.datedRhythmCompletions).toEqual(fixture.records);
+    unmount();
+
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    ({ history } = await openHistory(2));
+    expect(within(history).getByRole('heading', { name: 'Middle Season' })).toBeTruthy();
+    expect(within(history).queryByRole('button', { name: 'Undo' })).toBeNull();
+    const afterReload = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, fixture.today);
+    expect(afterReload.valid && afterReload.envelope.data.savedRhythms
+      .find(item => item.id === fixture.rhythmId)?.scoring?.scheduleHistory.map(season => season.id))
+      .toEqual([fixture.first.id, fixture.middle.id]);
+
+    await user.click(within(history).getByRole('button', { name: 'Delete Season Middle Season' }));
+    const finalSeasonReview = screen.getByRole('dialog', { name: 'Remove this season?' });
+    await user.click(within(finalSeasonReview).getByRole('button', { name: 'Delete season' }));
+    const undoButton = within(history).getByRole('button', { name: 'Undo' });
+    expect(undoButton).toBeTruthy();
+    await user.click(undoButton);
+    await waitFor(() => {
+      const restored = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, fixture.today);
+      expect(restored.valid && restored.envelope.data.savedRhythms
+        .find(item => item.id === fixture.rhythmId)?.scoring?.scheduleHistory.map(season => season.id))
+        .toEqual([fixture.first.id, fixture.middle.id]);
+    });
+  });
+
+  it('keeps the deletion review open and the saved history intact after persistence failure', async () => {
+    const user = userEvent.setup();
+    const fixture = seasonDeletionFixture();
+    const storage = window.localStorage as unknown as MemoryStorage;
+    storage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(fixture.data)));
+    const originalRaw = storage.getItem(PREVIEW_STORAGE_KEY);
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    const card = screen.getByRole('article', { name: 'Season deletion fixture' });
+    await user.click(within(card).getByRole('button', {
+      name: 'View scores and history for Season deletion fixture'
+    }));
+    const details = screen.getByRole('dialog', { name: 'Season deletion fixture' });
+    const history = within(details).getByRole('region', { name: 'History for Season deletion fixture' });
+    await user.click(within(history).getByRole('button', { name: 'Seasons (3)' }));
+    await user.click(within(history).getByRole('button', { name: 'Delete Season Middle Season' }));
+    const review = screen.getByRole('dialog', { name: 'Remove this season?' });
+    const originalSetItem = storage.setItem.bind(storage);
+    const failingWrite = vi.spyOn(storage, 'setItem').mockImplementation((key, value) => {
+      if (key === PREVIEW_STORAGE_KEY) throw new Error('controlled storage failure');
+      originalSetItem(key, value);
+    });
+    await user.click(within(review).getByRole('button', { name: 'Delete season' }));
+    expect(within(review).getByRole('alert').textContent).toContain('controlled storage failure');
+    expect(screen.getByRole('dialog', { name: 'Remove this season?' })).toBe(review);
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    failingWrite.mockRestore();
+  });
+
   it('keeps a logged completion through cancelled and confirmed Season creation and reload', async () => {
     const user = userEvent.setup();
     const today = localDateString(new Date());
@@ -180,6 +447,7 @@ describe('Tend Today preview', () => {
     const historyDialog = screen.getByRole('dialog', { name: 'Escape fixture' });
     const history = within(historyDialog).getByRole('region', { name: 'History for Escape fixture' });
     await user.click(within(history).getByRole('button', { name: 'Seasons (2)' }));
+    expect(within(history).queryByRole('button', { name: /Delete Season/ })).toBeNull();
     const opener = within(history).getAllByRole('button', { name: 'Set earlier schedule' }).at(-1)!;
     await user.click(opener);
 

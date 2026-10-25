@@ -7,6 +7,7 @@ import type { RhythmCompletion } from '../domain/preview-data.ts';
 import type { DatedRhythmCompletion, RhythmCompletionRecord } from '../domain/rhythm-completion.ts';
 import type { RhythmScheduleHistorySegment } from '../domain/rhythm-schedule.ts';
 import type { RhythmSeasonEditDraft } from '../domain/rhythm-season-edit.ts';
+import type { RhythmSeasonDeletionUndo } from '../domain/rhythm-season-delete.ts';
 import {
   prepareCompletionHistory,
   HEALTH_CONSISTENCY_WEIGHT,
@@ -39,6 +40,7 @@ import { RhythmCompletionForm } from './RhythmCompletionForm.tsx';
 import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
 import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
 import { RhythmSeasonCorrectionDialog } from './RhythmSeasonCorrectionDialog.tsx';
+import { RhythmSeasonDeleteDialog } from './RhythmSeasonDeleteDialog.tsx';
 
 type MetricName = 'consistency' | 'onTrack';
 
@@ -75,7 +77,10 @@ export function RhythmHistoryView({
   onUpdateCompletion,
   onDeleteCompletion,
   onChooseSchedule,
-  onEditSeason
+  onEditSeason,
+  onDeleteSeason,
+  seasonDeletionUndo,
+  onUndoSeasonDeletion
 }: {
   rhythm: RhythmPreview;
   people?: readonly PersonPreview[];
@@ -90,6 +95,9 @@ export function RhythmHistoryView({
   onDeleteCompletion?: (completionId: string) => string | null;
   onChooseSchedule?: (event: MouseEvent<HTMLButtonElement>) => void;
   onEditSeason?: (rhythmId: string, draft: RhythmSeasonEditDraft) => string | null;
+  onDeleteSeason?: (rhythmId: string, seasonId: string) => string | null;
+  seasonDeletionUndo?: RhythmSeasonDeletionUndo | null;
+  onUndoSeasonDeletion?: () => string | null;
 }) {
   const historyRecords: readonly RhythmCompletion[] | undefined =
     rhythm.completionHistory === undefined && !completionHistoryAvailable && datedCompletions.length === 0
@@ -144,6 +152,9 @@ export function RhythmHistoryView({
   const editButtonsRef = useRef(new Map<string, HTMLButtonElement>());
   const seasonEditButtonsRef = useRef(new Map<string, HTMLButtonElement>());
   const seasonEditOpenerRef = useRef<HTMLButtonElement | null>(null);
+  const seasonActionButtonsRef = useRef(new Map<string, HTMLButtonElement>());
+  const seasonDeleteOpenerRef = useRef<HTMLButtonElement | null>(null);
+  const seasonUndoButtonRef = useRef<HTMLButtonElement>(null);
   const deleteButtonsRef = useRef(new Map<string, HTMLButtonElement>());
   const deleteCancelButtonRef = useRef<HTMLButtonElement>(null);
   const previousEditingIdRef = useRef<string | null>(null);
@@ -155,7 +166,8 @@ export function RhythmHistoryView({
   const [seasonsExpanded, setSeasonsExpanded] = useState(false);
   const [expandedEarlierSeasonIds, setExpandedEarlierSeasonIds] = useState<Set<string>>(() => new Set());
   const scheduleSeasons = rhythm.scoring?.scheduleHistory ?? [];
-  const hasScheduleHistory = scheduleSeasons.length > 1;
+  const availableSeasonUndo = seasonDeletionUndo?.rhythmId === rhythm.id ? seasonDeletionUndo : null;
+  const hasScheduleHistory = scheduleSeasons.length > 1 || Boolean(availableSeasonUndo);
   const unknownSeason = scheduleSeasons.find(season => season.kind === 'unknown');
   const sharedUnscoredExplanation = score.consistency.kind === 'unscored' && score.onTrack.kind === 'unscored'
     && score.consistency.explanation === score.onTrack.explanation;
@@ -165,12 +177,19 @@ export function RhythmHistoryView({
   const [logAnnouncement, setLogAnnouncement] = useState('');
   const [scoreDetailsExpanded, setScoreDetailsExpanded] = useState(false);
   const [editingSeasonId, setEditingSeasonId] = useState<string | null>(null);
+  const [deletingSeasonId, setDeletingSeasonId] = useState<string | null>(null);
+  const [seasonUndoError, setSeasonUndoError] = useState('');
+  const [seasonDeleteStatus, setSeasonDeleteStatus] = useState('');
+  const [focusRestoredSeasonId, setFocusRestoredSeasonId] = useState<string | null>(null);
+  const seasonDeletionSavedRef = useRef(false);
+  const previousDeletingSeasonIdRef = useRef<string | null>(null);
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState('');
   const [focusAfterDeleteId, setFocusAfterDeleteId] = useState<string | null>(null);
   const hasDescription = Boolean(rhythm.description?.trim());
   const editableRecordIds = new Set((historyRecords ?? []).map(record => record.id));
   const editingSeason = scheduleSeasons.find(season => season.id === editingSeasonId);
+  const deletingSeason = scheduleSeasons.find(season => season.id === deletingSeasonId);
 
   function dismissEditingRecord() {
     setEditingRecord(null);
@@ -236,6 +255,26 @@ export function RhythmHistoryView({
     if (!editingSeasonId) seasonEditOpenerRef.current?.focus();
   }, [editingSeasonId]);
 
+  useEffect(() => {
+    if (previousDeletingSeasonIdRef.current && !deletingSeasonId) {
+      if (seasonDeletionSavedRef.current) {
+        seasonUndoButtonRef.current?.focus();
+        seasonDeletionSavedRef.current = false;
+      } else {
+        seasonDeleteOpenerRef.current?.focus();
+      }
+    }
+    previousDeletingSeasonIdRef.current = deletingSeasonId;
+  }, [deletingSeasonId, availableSeasonUndo]);
+
+  useEffect(() => {
+    if (!focusRestoredSeasonId || availableSeasonUndo?.season.id === focusRestoredSeasonId) return;
+    (seasonEditButtonsRef.current.get(focusRestoredSeasonId)
+      ?? seasonActionButtonsRef.current.get(focusRestoredSeasonId)
+      ?? historyViewRef.current)?.focus();
+    setFocusRestoredSeasonId(null);
+  }, [focusRestoredSeasonId, availableSeasonUndo, scheduleSeasons]);
+
   function openSeasonEditor(season: RhythmScheduleHistorySegment, opener: HTMLButtonElement) {
     seasonEditOpenerRef.current = opener;
     setEditingSeasonId(season.id);
@@ -245,6 +284,30 @@ export function RhythmHistoryView({
     if (!unknownSeason) return;
     setSeasonsExpanded(true);
     openSeasonEditor(unknownSeason, event.currentTarget);
+  }
+
+  function confirmSeasonDeletion(rhythmId: string, seasonId: string): string | null {
+    if (!onDeleteSeason) return 'Season deletion is unavailable.';
+    const error = onDeleteSeason(rhythmId, seasonId);
+    if (!error) {
+      seasonDeletionSavedRef.current = true;
+      setSeasonDeleteStatus('Season removed. Logged moments were preserved.');
+      setSeasonUndoError('');
+    }
+    return error;
+  }
+
+  function undoSeasonDeletion() {
+    if (!onUndoSeasonDeletion || !availableSeasonUndo) return;
+    const restoredId = availableSeasonUndo.season.id;
+    const error = onUndoSeasonDeletion();
+    if (error) {
+      setSeasonUndoError(error);
+      return;
+    }
+    setSeasonDeleteStatus('Season restored. Logged moments were preserved.');
+    setSeasonUndoError('');
+    setFocusRestoredSeasonId(restoredId);
   }
 
   function confirmDelete() {
@@ -465,6 +528,12 @@ export function RhythmHistoryView({
                 canEdit={!archived && Boolean(onEditSeason)}
                 editButtonRefs={seasonEditButtonsRef.current}
                 onEditSeason={(season, opener) => openSeasonEditor(season, opener)}
+                canDelete={!archived && Boolean(onDeleteSeason)}
+                actionButtonRefs={seasonActionButtonsRef.current}
+                onDeleteSeason={(season, opener) => {
+                  seasonDeleteOpenerRef.current = opener;
+                  setDeletingSeasonId(season.id);
+                }}
                 onToggleEarlierSeason={id => setExpandedEarlierSeasonIds(current => {
                   const next = new Set(current);
                   if (next.has(id)) next.delete(id);
@@ -473,6 +542,20 @@ export function RhythmHistoryView({
                 })}
               />
             </div>
+            {availableSeasonUndo && onUndoSeasonDeletion && (
+              <div className="rhythm-history-view__season-undo" role="status" aria-live="polite">
+                <span>{seasonDeleteStatus || 'A Season was removed. You can undo this change.'}</span>
+                <button
+                  ref={seasonUndoButtonRef}
+                  type="button"
+                  className="rhythm-history-view__season-edit"
+                  onClick={undoSeasonDeletion}
+                >
+                  Undo
+                </button>
+                {seasonUndoError && <span role="alert">{seasonUndoError}</span>}
+              </div>
+            )}
           </section>
         )}
         {unknownSeason && !archived && onEditSeason && (
@@ -632,6 +715,16 @@ export function RhythmHistoryView({
           onClose={() => setEditingSeasonId(null)}
         />
       )}
+      {deletingSeason?.kind === 'scheduled' && rhythm.scoring && rhythm.schedule && onDeleteSeason && (
+        <RhythmSeasonDeleteDialog
+          rhythm={rhythm}
+          season={deletingSeason}
+          scoringInput={scoringInput}
+          records={scoringRecords}
+          onDelete={confirmSeasonDeletion}
+          onClose={() => setDeletingSeasonId(null)}
+        />
+      )}
       {loggingMoment && onSaveCompletion && createPortal(
         <dialog
           ref={logMomentDialogRef}
@@ -719,7 +812,10 @@ function SeasonsHistory({
   onToggleEarlierSeason,
   canEdit,
   editButtonRefs,
-  onEditSeason
+  onEditSeason,
+  canDelete,
+  actionButtonRefs,
+  onDeleteSeason
 }: {
   seasons: readonly RhythmScheduleHistorySegment[];
   asOfDate: string;
@@ -729,6 +825,9 @@ function SeasonsHistory({
   canEdit: boolean;
   editButtonRefs: Map<string, HTMLButtonElement>;
   onEditSeason: (season: RhythmScheduleHistorySegment, opener: HTMLButtonElement) => void;
+  canDelete: boolean;
+  actionButtonRefs: Map<string, HTMLButtonElement>;
+  onDeleteSeason: (season: RhythmScheduleHistorySegment, opener: HTMLButtonElement) => void;
 }) {
   const currentIndex = seasons.reduce(
     (found, season, index) => season.startDate <= asOfDate ? index : found,
@@ -787,6 +886,20 @@ function SeasonsHistory({
               Edit
             </button>
           )}
+          {canDelete && currentIndex > 0 && seasons[currentIndex - 1]?.kind === 'scheduled' && (
+            <button
+              ref={element => {
+                if (element) actionButtonRefs.set(current.id, element);
+                else actionButtonRefs.delete(current.id);
+              }}
+              type="button"
+              className="rhythm-history-view__season-edit"
+              aria-label={`Delete Season ${currentName || formatRhythmSchedule(current.schedule, 'compact')}`}
+              onClick={event => onDeleteSeason(current, event.currentTarget)}
+            >
+              Delete
+            </button>
+          )}
         </div>
         <p className="rhythm-history-view__season-date-range">
           {formatHistoryDate(current.startDate, false)} – {formatHistoryDate(asOfDate, false)}
@@ -833,6 +946,21 @@ function SeasonsHistory({
                   >
                     {season.kind === 'unknown' ? 'Set earlier schedule' : 'Edit'}
                   </button>
+                  {canDelete && index > 0 && season.kind === 'scheduled'
+                    && seasons[index - 1]?.kind === 'scheduled' && (
+                    <button
+                      ref={element => {
+                        if (element) actionButtonRefs.set(season.id, element);
+                        else actionButtonRefs.delete(season.id);
+                      }}
+                      type="button"
+                      className="rhythm-history-view__season-edit"
+                      aria-label={`Delete Season ${heading}`}
+                      onClick={event => onDeleteSeason(season, event.currentTarget)}
+                    >
+                      Delete
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="rhythm-history-view__season-expand"
@@ -844,6 +972,11 @@ function SeasonsHistory({
                     {expanded ? 'Hide' : 'Details'}
                   </button>
                 </div>
+                {index === 0 && season.kind === 'scheduled' && (
+                  <p className="rhythm-history-view__season-note">
+                    The first Season cannot be deleted. Use Edit to correct it.
+                  </p>
+                )}
                 <div id={detailsId} hidden={!expanded}>
                   {season.kind === 'unknown'
                     ? season.descriptiveCadence && (

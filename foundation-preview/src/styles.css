@@ -4138,6 +4138,16 @@ a:focus-visible {
   justify-self: start;
 }
 
+.rhythm-history-view__season-undo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .rhythm-season-correction {
   display: grid;
   gap: 12px;
