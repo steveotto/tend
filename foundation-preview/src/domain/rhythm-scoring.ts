@@ -14,7 +14,8 @@ import {
   isValidTimeZone,
   validateRhythmScoringMetadata
 } from './rhythm-schedule.ts';
-import type { RhythmSchedule, RhythmScoringMetadata, RhythmScheduleSegment } from './rhythm-schedule.ts';
+import type { RhythmSchedule, RhythmScoringMetadata, RhythmScheduleHistorySegment } from './rhythm-schedule.ts';
+import { rhythmSeasonForDate } from './rhythm-seasons.ts';
 
 export type UnscoredReasonCode =
   | 'ready-for-first-tend'
@@ -293,19 +294,20 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
   if (!input.recordsAvailable) {
     return baseUnscored(input, unscored('history-unavailable', 'Completion history is unavailable, so this Rhythm cannot be scored.'));
   }
-  let segments: readonly RhythmScheduleSegment[] = [];
+  let segments: readonly RhythmScheduleHistorySegment[] = [];
   if (input.scoring) {
     const { timeZone, scheduleHistory } = input.scoring;
     if (!input.schedule || !validateRhythmScoringMetadata(input.scoring)
       || !isValidTimeZone(timeZone) || input.timeZone !== timeZone
-      || scheduleHistory.length === 0 || scheduleHistory[0]?.startDate !== input.scoring.trackingStartDate) {
+      || scheduleHistory.length === 0
+      || scheduleHistory.find(segment => segment.kind === 'scheduled')?.startDate !== input.scoring.trackingStartDate) {
       return invalid(input, 'Scoring metadata or schedule history is malformed.');
     }
     const latestSegment = scheduleHistory.at(-1);
-    if (!latestSegment || latestSegment.endDate !== undefined) {
+    if (!latestSegment) {
       return invalid(input, 'Schedule history has no current segment.');
     }
-    if (!rhythmSchedulesEqual(latestSegment.schedule, schedule)) {
+    if (latestSegment.kind !== 'scheduled' || !rhythmSchedulesEqual(latestSegment.schedule, schedule)) {
       return invalid(input, 'The current schedule does not match the final saved schedule-history segment.');
     }
     segments = scheduleHistory;
@@ -324,11 +326,11 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
 
   const scheduleForDate = (date: string): RhythmSchedule | undefined => {
     if (!input.scoring) return trackingStartDate && date >= trackingStartDate ? schedule : undefined;
-    const historicalSchedule = segments.find(segment => segment.startDate <= date
-      && (segment.endDate === undefined || date <= segment.endDate))?.schedule;
+    const historicalSegment = rhythmSeasonForDate(segments, date);
+    const historicalSchedule = historicalSegment?.kind === 'scheduled' ? historicalSegment.schedule : undefined;
     if (historicalSchedule) return historicalSchedule;
     const firstSegment = segments[0];
-    const canUseUnchangedDailyScheduleBeforeHistory = firstSegment
+    const canUseUnchangedDailyScheduleBeforeHistory = firstSegment?.kind === 'scheduled'
       && segments.length === 1
       && firstSegment.schedule.frequency === 'daily'
       && input.dailyBackfillAllowed !== false
@@ -487,8 +489,10 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
         const scheduleChangedOn = (date: string) => {
           const segmentIndex = segments.findIndex(segment => segment.startDate === date);
           if (segmentIndex <= 0) return false;
-          const previousSchedule = segments[segmentIndex - 1]?.schedule;
-          const currentSegmentSchedule = segments[segmentIndex]?.schedule;
+          const previousSegment = segments[segmentIndex - 1];
+          const currentSegment = segments[segmentIndex];
+          const previousSchedule = previousSegment?.kind === 'scheduled' ? previousSegment.schedule : undefined;
+          const currentSegmentSchedule = currentSegment?.kind === 'scheduled' ? currentSegment.schedule : undefined;
           return previousSchedule !== undefined && currentSegmentSchedule !== undefined
             && !rhythmSchedulesEqual(previousSchedule, currentSegmentSchedule);
         };

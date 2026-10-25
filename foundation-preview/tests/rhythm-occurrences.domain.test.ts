@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { rhythmLastTendedLabel } from '../src/domain/preview-data.ts';
 import { selectNextScheduledOccurrence } from '../src/domain/rhythm-occurrences.ts';
 import type { RhythmSchedule, RhythmScoringMetadata } from '../src/domain/rhythm-schedule.ts';
+import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
 
 describe('next scheduled occurrence selection', () => {
   it('uses the quarterly pattern to label the actual next date and today when due', () => {
@@ -39,7 +40,7 @@ describe('next scheduled occurrence selection', () => {
     const scoring: RhythmScoringMetadata = {
       trackingStartDate: '2026-10-25',
       timeZone: 'UTC',
-      scheduleHistory: [{ startDate: '2026-10-25', schedule }]
+      scheduleHistory: [createRhythmSeason('occurrence-test', '2026-10-25', schedule)]
     };
     expect(selectNextScheduledOccurrence({
       schedule,

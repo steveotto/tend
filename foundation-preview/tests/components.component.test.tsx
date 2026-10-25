@@ -6,6 +6,7 @@ import { CategoryHealthBadge, FoundationCard, FoundationProgress, GoalCard, Rhyt
 import { MarriageIcon } from '../src/components/MarriageIcon.tsx';
 import { PersonBadgeList } from '../src/components/PersonBadge.tsx';
 import { RhythmDetailsDialog } from '../src/components/RhythmDetailsDialog.tsx';
+import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
 import {
   financeFoundation,
   goals,
@@ -275,14 +276,11 @@ describe('shared preview components', () => {
         scoring: {
           trackingStartDate: '2026-10-25',
           timeZone: 'UTC',
-          scheduleHistory: [{
-            startDate: '2026-10-25',
-            schedule: {
+          scheduleHistory: [createRhythmSeason('quarterly-next-due', '2026-10-25', {
               frequency: 'quarterly' as const,
               monthInQuarter: 1 as const,
               pattern: { kind: 'dayOfMonth' as const, day: 1 }
-            }
-          }]
+            })]
         }
       };
       const { rerender } = render(<RhythmDetailsDialog rhythm={quarterly} onClose={() => undefined} />);
@@ -298,7 +296,7 @@ describe('shared preview components', () => {
             schedule: dailySchedule,
             scoring: {
               ...quarterly.scoring,
-              scheduleHistory: [{ startDate: '2026-10-25', schedule: dailySchedule }]
+              scheduleHistory: [createRhythmSeason('quarterly-next-due', '2026-10-25', dailySchedule)]
             }
           }}
           onClose={() => undefined}

@@ -42,6 +42,12 @@ type PreviewDataControlsProps = {
   v6RecoveryError?: string | null;
   v7RecoveryCopy?: string | null;
   v7RecoveryError?: string | null;
+  v8RecoveryCopy?: string | null;
+  v8RecoveryError?: string | null;
+  v9RecoveryCopy?: string | null;
+  v9RecoveryError?: string | null;
+  v10RecoveryCopy?: string | null;
+  v10RecoveryError?: string | null;
 };
 
 function downloadText(filename: string, content: string, type: string): string | null {
@@ -83,7 +89,13 @@ export function PreviewDataControls({
   v6RecoveryCopy = null,
   v6RecoveryError = null,
   v7RecoveryCopy = null,
-  v7RecoveryError = null
+  v7RecoveryError = null,
+  v8RecoveryCopy = null,
+  v8RecoveryError = null,
+  v9RecoveryCopy = null,
+  v9RecoveryError = null,
+  v10RecoveryCopy = null,
+  v10RecoveryError = null
 }: PreviewDataControlsProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -266,6 +278,45 @@ export function PreviewDataControls({
             Download original v7 recovery backup
           </button>
         )}
+        {v8RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v8-recovery.json',
+              v8RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v8 recovery backup downloaded.')}
+          >
+            Download original v8 recovery backup
+          </button>
+        )}
+        {v9RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v9-recovery.json',
+              v9RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v9 recovery backup downloaded.')}
+          >
+            Download original v9 recovery backup
+          </button>
+        )}
+        {v10RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v10-recovery.json',
+              v10RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v10 recovery backup downloaded.')}
+          >
+            Download original v10 recovery backup
+          </button>
+        )}
         <label className="btn mini ghost preview-data-controls__file-button">
           Import preview backup
           <input
@@ -310,6 +361,9 @@ export function PreviewDataControls({
       {v5RecoveryError && <p className="preview-data-controls__help" role="alert">The original v5 recovery copy could not be read: {v5RecoveryError}</p>}
       {v6RecoveryError && <p className="preview-data-controls__help" role="alert">The original v6 recovery copy could not be read: {v6RecoveryError}</p>}
       {v7RecoveryError && <p className="preview-data-controls__help" role="alert">The original v7 recovery copy could not be read: {v7RecoveryError}</p>}
+      {v8RecoveryError && <p className="preview-data-controls__help" role="alert">The original v8 recovery copy could not be read: {v8RecoveryError}</p>}
+      {v9RecoveryError && <p className="preview-data-controls__help" role="alert">The original v9 recovery copy could not be read: {v9RecoveryError}</p>}
+      {v10RecoveryError && <p className="preview-data-controls__help" role="alert">The original v10 recovery copy could not be read: {v10RecoveryError}</p>}
       {message && <p className="preview-data-controls__message" role="status">{message}</p>}
       {pendingAction && (
         <MoneyGoalDialog

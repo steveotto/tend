@@ -23,6 +23,125 @@ async function choose(user: ReturnType<typeof userEvent.setup>, label: string, o
 }
 
 describe('shared structured Rhythm editor', () => {
+  it('confirms scoring-relevant schedule changes after history and preserves the draft on cancellation', async () => {
+    const user = userEvent.setup();
+    const rhythm: RhythmPreview = {
+      ...todayRhythms[0]!,
+      schedule: { frequency: 'daily' }
+    };
+    const onSave = vi.fn((_draft: RhythmDraft) => ({}));
+    render(
+      <RhythmEditor
+        rhythm={rhythm}
+        hasDatedCompletionHistory
+        onSave={onSave}
+        onClose={vi.fn()}
+      />
+    );
+    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    await choose(user, 'Frequency', 'Select Days');
+    await user.click(within(editor).getByRole('checkbox', { name: 'Monday' }));
+    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+
+    let confirmation = screen.getByRole('dialog', { name: 'Change your schedule' });
+    expect(within(confirmation).getByText('Starting today')).toBeTruthy();
+    expect(within(confirmation).getByText('Earlier logs keep their previous schedule.')).toBeTruthy();
+    expect((within(confirmation).getByLabelText('Season label (optional)') as HTMLInputElement).value).toBe('');
+    expect(onSave).not.toHaveBeenCalled();
+    fireEvent(screen.getByRole('dialog', { name: 'Change your schedule' }), new Event('cancel', { cancelable: true }));
+    expect(screen.queryByRole('dialog', { name: 'Change your schedule' })).toBeNull();
+    expect(document.activeElement).toBe(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+    expect((within(editor).getByRole('checkbox', { name: 'Monday' }) as HTMLInputElement).checked).toBe(true);
+
+    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+    confirmation = screen.getByRole('dialog', { name: 'Change your schedule' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Cancel schedule change' }));
+    expect(screen.queryByRole('dialog', { name: 'Change your schedule' })).toBeNull();
+    expect(onSave).not.toHaveBeenCalled();
+
+    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+    confirmation = screen.getByRole('dialog', { name: 'Change your schedule' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Confirm change' }));
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({
+      schedule: { frequency: 'weekly', weekdays: [1] }
+    });
+    expect(onSave.mock.calls[0]?.[0].seasonName).toBeUndefined();
+  });
+
+  it('saves changed schedules without a Season confirmation before any logged history', async () => {
+    const user = userEvent.setup();
+    const rhythm: RhythmPreview = {
+      ...todayRhythms[0]!,
+      schedule: { frequency: 'daily' }
+    };
+    const onSave = vi.fn((_draft: RhythmDraft) => ({}));
+    render(<RhythmEditor rhythm={rhythm} onSave={onSave} onClose={vi.fn()} />);
+    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    await choose(user, 'Frequency', 'Select Days');
+    await user.click(within(editor).getByRole('checkbox', { name: 'Monday' }));
+    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('dialog', { name: 'Change your schedule' })).toBeNull();
+    expect(onSave.mock.calls[0]?.[0].schedule).toEqual({ frequency: 'weekly', weekdays: [1] });
+  });
+
+  it('does not request Season confirmation for an unchanged schedule and cosmetic edit', async () => {
+    const user = userEvent.setup();
+    const rhythm: RhythmPreview = {
+      ...todayRhythms[0]!,
+      schedule: { frequency: 'daily' }
+    };
+    const onSave = vi.fn((_draft: RhythmDraft) => ({}));
+    render(
+      <RhythmEditor
+        rhythm={rhythm}
+        hasDatedCompletionHistory
+        onSave={onSave}
+        onClose={vi.fn()}
+      />
+    );
+    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    fireEvent.change(within(editor).getByLabelText('Title'), { target: { value: 'Renamed rhythm' } });
+    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('dialog', { name: 'Change your schedule' })).toBeNull();
+  });
+
+  it('keeps the confirmed schedule and label draft when the save callback reports a failure', async () => {
+    const user = userEvent.setup();
+    const rhythm: RhythmPreview = {
+      ...todayRhythms[0]!,
+      schedule: { frequency: 'daily' }
+    };
+    const onSave = vi.fn((_draft: RhythmDraft) => ({ schedule: 'The save was rejected.' }));
+    render(
+      <RhythmEditor
+        rhythm={rhythm}
+        hasDatedCompletionHistory
+        onSave={onSave}
+        onClose={vi.fn()}
+      />
+    );
+    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    await choose(user, 'Frequency', 'Select Days');
+    await user.click(within(editor).getByRole('checkbox', { name: 'Tuesday' }));
+    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+    const confirmation = screen.getByRole('dialog', { name: 'Change your schedule' });
+    await user.type(within(confirmation).getByLabelText('Season label (optional)'), 'Morning walks');
+    await user.click(within(confirmation).getByRole('button', { name: 'Confirm change' }));
+
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({
+      seasonName: 'Morning walks',
+      schedule: { frequency: 'weekly', weekdays: [2] }
+    });
+    expect(within(editor).getByText('The save was rejected.')).toBeTruthy();
+    expect((within(editor).getByRole('checkbox', { name: 'Tuesday' }) as HTMLInputElement).checked).toBe(true);
+  });
+
   it('does not block Rhythm editing on a tracking-start confirmation', () => {
     const rhythm: RhythmPreview = {
       ...todayRhythms[0]!,

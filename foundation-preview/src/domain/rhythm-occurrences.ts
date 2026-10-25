@@ -4,7 +4,8 @@ import {
   validateRhythmScoringMetadata,
   validateRhythmSchedule
 } from './rhythm-schedule.ts';
-import type { RhythmSchedule, RhythmScoringMetadata, RhythmScheduleSegment } from './rhythm-schedule.ts';
+import type { RhythmSchedule, RhythmScoringMetadata, RhythmScheduleHistorySegment } from './rhythm-schedule.ts';
+import { rhythmSeasonForDate } from './rhythm-seasons.ts';
 
 export type NextScheduledOccurrence =
   | { kind: 'found'; date: string }
@@ -118,9 +119,9 @@ export function isScheduledDate(schedule: RhythmSchedule, date: string): boolean
     && patternMatches(schedule.pattern, date);
 }
 
-function scheduleAt(segments: readonly RhythmScheduleSegment[], date: string): RhythmSchedule | undefined {
-  return segments.find(segment => segment.startDate <= date
-    && (segment.endDate === undefined || date <= segment.endDate))?.schedule;
+function scheduleAt(segments: readonly RhythmScheduleHistorySegment[], date: string): RhythmSchedule | undefined {
+  const season = rhythmSeasonForDate(segments, date);
+  return season?.kind === 'scheduled' ? season.schedule : undefined;
 }
 
 function searchHorizonDays(schedule: RhythmSchedule): number {
@@ -148,7 +149,7 @@ export function selectNextScheduledOccurrence(input: {
   if (input.scoring) {
     const latest = input.scoring.scheduleHistory.at(-1);
     if (!validateRhythmScoringMetadata(input.scoring) || !isValidTimeZone(input.scoring.timeZone)
-      || !latest || !rhythmSchedulesEqual(latest.schedule, input.schedule)) {
+      || !latest || latest.kind !== 'scheduled' || !rhythmSchedulesEqual(latest.schedule, input.schedule)) {
       return { kind: 'unavailable', reason: 'The saved schedule history is invalid or does not match the current schedule.' };
     }
   }

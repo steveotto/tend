@@ -136,7 +136,7 @@ describe('v4 migration and recovery domain', () => {
     expect(result.valid).toBe(true);
     if (!result.valid) return;
     expect(result.sourceSchemaVersion).toBe(4);
-    expect(result.envelope.schemaVersion).toBe(8);
+    expect(result.envelope.schemaVersion).toBe(11);
     expect(result.envelope.data.datedRhythmCompletions).toEqual([]);
     expect(result.envelope.data.activeRhythmCompletions).toEqual([]);
     expect(result.envelope.data.completedRhythmIds).toEqual(data.completedRhythmIds);
@@ -154,7 +154,7 @@ describe('v4 migration and recovery domain', () => {
 
     const futureRaw = JSON.stringify({
       format: 'tend.synthetic-preview',
-      schemaVersion: 9,
+      schemaVersion: 12,
       data: { unknownFutureValue: true }
     });
     const futureStorage = storageFixture(futureRaw);
@@ -230,8 +230,8 @@ describe('v4 migration and recovery domain', () => {
     expect(stale.values.size).toBe(1);
   });
 
-  it('uses schema v8 for active preview serialization', () => {
-    expect(createPreviewEnvelope(dataWithHistory()).schemaVersion).toBe(8);
+  it('uses schema v11 for active preview serialization', () => {
+    expect(createPreviewEnvelope(dataWithHistory()).schemaVersion).toBe(11);
   });
 
   it('loads v4 backups with legacy day-of-month values 29–31 unchanged', () => {

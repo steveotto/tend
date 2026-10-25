@@ -4021,6 +4021,227 @@ a:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.rhythm-history-view__seasons {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.rhythm-history-view__seasons-disclosure {
+  justify-self: start;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--tend-ink, var(--ink));
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rhythm-history-view__seasons-content {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.rhythm-history-view__seasons-intro,
+.rhythm-history-view__seasons-explanation,
+.rhythm-history-view__season-date-range,
+.rhythm-history-view__season-schedule,
+.rhythm-history-view__season-note {
+  margin: 0;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__seasons-timeline {
+  display: flex;
+  gap: 3px;
+  min-width: 0;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+}
+
+.rhythm-history-view__season-timeline-segment {
+  flex: 0 1 0;
+  min-width: 3px;
+  border-radius: 999px;
+  background: var(--rhythm-season-color);
+}
+
+.rhythm-history-view__season-color--fern { --rhythm-season-color: #587c60; }
+.rhythm-history-view__season-color--sage { --rhythm-season-color: #8a9d65; }
+.rhythm-history-view__season-color--sky { --rhythm-season-color: #5d91ad; }
+.rhythm-history-view__season-color--ocean { --rhythm-season-color: #39778b; }
+.rhythm-history-view__season-color--plum { --rhythm-season-color: #8b6c9e; }
+.rhythm-history-view__season-color--clay { --rhythm-season-color: #b87558; }
+
+.rhythm-history-view__season-card {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--tend-line, var(--line));
+  border-left: 3px solid var(--rhythm-season-color);
+  border-radius: 10px;
+}
+
+.rhythm-history-view__season-card-header,
+.rhythm-history-view__earlier-season-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rhythm-history-view__season-card h4,
+.rhythm-history-view__earlier-seasons > h4,
+.rhythm-history-view__earlier-season h5 {
+  min-width: 0;
+  margin: 0;
+  color: var(--tend-ink, var(--ink));
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__season-current-badge {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #edf3ee;
+  color: #526d56;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.rhythm-history-view__season-edit,
+.rhythm-history-view__unknown-schedule-action {
+  flex: none;
+  padding: 5px 8px;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tend-ink, var(--ink));
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.rhythm-history-view__unknown-schedule-action {
+  justify-self: start;
+}
+
+.rhythm-season-correction {
+  display: grid;
+  gap: 12px;
+  max-width: 560px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-season-correction h2,
+.rhythm-season-correction h3,
+.rhythm-season-correction p {
+  margin: 0;
+}
+
+.rhythm-season-correction__range,
+.rhythm-season-correction__context,
+.rhythm-season-correction__suggestion,
+.rhythm-season-correction__preserved {
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.rhythm-season-correction__warning {
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: #f6f3eb;
+  color: var(--tend-ink, var(--ink));
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.rhythm-season-correction__transition,
+.rhythm-season-correction__impact {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rhythm-season-correction__transition > p,
+.rhythm-season-correction__impact > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-season-correction__impact p {
+  color: var(--tend-secondary, var(--ink-soft));
+}
+
+.rhythm-history-view__earlier-seasons {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rhythm-history-view__earlier-season {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 9px;
+}
+
+.rhythm-history-view__earlier-season-heading {
+  align-items: center;
+}
+
+.rhythm-history-view__season-marker {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--rhythm-season-color);
+}
+
+.rhythm-history-view__earlier-season-heading > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rhythm-history-view__season-expand {
+  flex: none;
+  padding: 5px 8px;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tend-ink, var(--ink));
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.rhythm-history-view__season-note {
+  margin-top: 5px;
+}
+
 .rhythm-history-view__metadata .rhythm-person-badge-list {
   margin-top: 2px;
 }

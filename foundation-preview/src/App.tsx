@@ -49,6 +49,10 @@ import {
   saveRhythmDraft
 } from './domain/rhythm-editor.ts';
 import type { RhythmDraft, RhythmDraftErrors } from './domain/rhythm-editor.ts';
+import type { RhythmSeasonEditDraft } from './domain/rhythm-season-edit.ts';
+import { editRhythmSeason } from './domain/rhythm-season-edit.ts';
+import { rhythmScheduleSummary, rhythmTimeLabel } from './domain/rhythm-schedule.ts';
+import { rhythmSchedulesEqual } from './domain/rhythm-occurrences.ts';
 import {
   browserPreviewStorage,
   listenForPreviewChanges,
@@ -59,6 +63,9 @@ import {
   loadV5RecoveryCopy,
   loadV6RecoveryCopy,
   loadV7RecoveryCopy,
+  loadV8RecoveryCopy,
+  loadV9RecoveryCopy,
+  loadV10RecoveryCopy,
   loadPreview,
   writePreview
 } from './storage/preview-storage.ts';
@@ -102,6 +109,12 @@ export function App() {
   const [v6RecoveryError, setV6RecoveryError] = useState<string | null>(null);
   const [v7RecoveryCopy, setV7RecoveryCopy] = useState<string | null>(null);
   const [v7RecoveryError, setV7RecoveryError] = useState<string | null>(null);
+  const [v8RecoveryCopy, setV8RecoveryCopy] = useState<string | null>(null);
+  const [v8RecoveryError, setV8RecoveryError] = useState<string | null>(null);
+  const [v9RecoveryCopy, setV9RecoveryCopy] = useState<string | null>(null);
+  const [v9RecoveryError, setV9RecoveryError] = useState<string | null>(null);
+  const [v10RecoveryCopy, setV10RecoveryCopy] = useState<string | null>(null);
+  const [v10RecoveryError, setV10RecoveryError] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -265,6 +278,40 @@ export function App() {
     }
   }
 
+  function refreshV8RecoveryCopy() {
+    const result = loadV8RecoveryCopy(browserPreviewStorage());
+    if (result.kind === 'loaded') {
+      setV8RecoveryCopy(result.raw);
+      setV8RecoveryError(null);
+    } else {
+      setV8RecoveryCopy(null);
+      setV8RecoveryError(result.message);
+    }
+  }
+
+  function refreshV9RecoveryCopy() {
+    const result = loadV9RecoveryCopy(browserPreviewStorage());
+    if (result.kind === 'loaded') {
+      setV9RecoveryCopy(result.raw);
+      setV9RecoveryError(null);
+    } else {
+      setV9RecoveryCopy(null);
+      setV9RecoveryError(result.message);
+    }
+    refreshV10RecoveryCopy();
+  }
+
+  function refreshV10RecoveryCopy() {
+    const result = loadV10RecoveryCopy(browserPreviewStorage());
+    if (result.kind === 'loaded') {
+      setV10RecoveryCopy(result.raw);
+      setV10RecoveryError(null);
+    } else {
+      setV10RecoveryCopy(null);
+      setV10RecoveryError(result.message);
+    }
+  }
+
   useEffect(() => {
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
@@ -273,6 +320,8 @@ export function App() {
     refreshV5RecoveryCopy();
     refreshV6RecoveryCopy();
     refreshV7RecoveryCopy();
+    refreshV8RecoveryCopy();
+    refreshV9RecoveryCopy();
     const loaded = loadPreview(browserPreviewStorage(), initialLoadDate);
     if (loaded.kind === 'loaded') {
       expectedRaw.current = loaded.raw;
@@ -307,6 +356,9 @@ export function App() {
     refreshV4RecoveryCopy();
     refreshV5RecoveryCopy();
     refreshV6RecoveryCopy();
+    refreshV7RecoveryCopy();
+    refreshV8RecoveryCopy();
+    refreshV9RecoveryCopy();
     if (saved.kind === 'saved') {
       expectedRaw.current = saved.raw;
       setPersistenceStatus({ kind: 'saved' });
@@ -424,6 +476,8 @@ export function App() {
     const scoringTimeZone = rhythmEditor.rhythm?.scoring?.timeZone
       ?? rhythmEditor.rhythm?.createdTimeZone
       ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const hasDatedCompletionHistory = previewData.rhythmHistoryIds.includes(rhythmEditor.id)
+      || (rhythmEditor.rhythm?.completionHistory?.length ?? 0) > 0;
     const result = saveRhythmDraft(
       previewData.savedRhythms,
       draft,
@@ -431,17 +485,104 @@ export function App() {
       rhythmEditor.rhythm ? 'edit' : 'create',
       {
         currentDate: localDateInTimeZone(new Date(), scoringTimeZone),
-        deviceTimeZone: scoringTimeZone
+        deviceTimeZone: scoringTimeZone,
+        hasDatedCompletionHistory
       }
     );
     const savedRhythms = result.savedRhythms;
     if (!savedRhythms) return result.errors;
-    setPreviewData(previous => ({
-      ...previous,
-      savedRhythms
-    }));
+    const nextData: PreviewData = {
+      ...previewData,
+      savedRhythms,
+      ...(hasDatedCompletionHistory && !previewData.rhythmHistoryIds.includes(rhythmEditor.id)
+        ? { rhythmHistoryIds: [...previewData.rhythmHistoryIds, rhythmEditor.id] }
+        : {})
+    };
+    const written = writePreview(browserPreviewStorage(), nextData, expectedRaw.current, { currentDate });
+    refreshV1RecoveryCopy();
+    refreshV2RecoveryCopy();
+    refreshV3RecoveryCopy();
+    refreshV4RecoveryCopy();
+    refreshV5RecoveryCopy();
+    refreshV6RecoveryCopy();
+    refreshV7RecoveryCopy();
+    refreshV8RecoveryCopy();
+    refreshV9RecoveryCopy();
+    if (written.kind === 'conflict') {
+      externalRaw.current = written.actualRaw;
+      setAutoSaveEnabled(false);
+      setPersistenceStatus({ kind: 'conflict' });
+      return { title: 'Preview storage changed in another tab. No Rhythm changes were saved.' };
+    }
+    if (written.kind === 'error') {
+      setAutoSaveEnabled(false);
+      setPersistenceStatus({ kind: 'error', message: written.message });
+      return { title: `Preview could not save this Rhythm. ${written.message}` };
+    }
+    expectedRaw.current = written.raw;
+    externalRaw.current = null;
+    skipNextAutosave.current = true;
+    setPreviewData(nextData);
+    setAutoSaveEnabled(true);
+    setPersistenceStatus({ kind: 'saved' });
     setRhythmEditor(null);
     return result.errors;
+  }
+
+  function saveSeasonCorrection(rhythmId: string, draft: RhythmSeasonEditDraft): string | null {
+    if (!activeRhythmIsToday || activeRhythmIsArchived) {
+      return 'This Rhythm is read-only.';
+    }
+    const savedRhythm = previewData.savedRhythms.find(rhythm => rhythm.id === rhythmId);
+    if (!savedRhythm?.schedule || !savedRhythm.scoring) {
+      return 'This Rhythm no longer has editable schedule history.';
+    }
+    const result = editRhythmSeason(rhythmId, savedRhythm.schedule, savedRhythm.scoring, draft);
+    if (!result.valid) return result.error;
+
+    const savedRhythms = previewData.savedRhythms.map(rhythm => rhythm.id !== rhythmId
+      ? rhythm
+      : {
+          ...rhythm,
+          ...(rhythm.schedule && rhythmSchedulesEqual(rhythm.schedule, result.schedule)
+            ? {}
+            : { cadence: rhythmScheduleSummary(result.schedule) }),
+          schedule: result.schedule,
+          scoring: result.scoring,
+          ...(result.activeTimeOfDay === undefined ? {} : {
+            timeOfDay: result.activeTimeOfDay,
+            timeLabel: rhythmTimeLabel(result.activeTimeOfDay)
+          })
+        });
+    const nextData: PreviewData = { ...previewData, savedRhythms };
+    const written = writePreview(browserPreviewStorage(), nextData, expectedRaw.current, { currentDate });
+    refreshV1RecoveryCopy();
+    refreshV2RecoveryCopy();
+    refreshV3RecoveryCopy();
+    refreshV4RecoveryCopy();
+    refreshV5RecoveryCopy();
+    refreshV6RecoveryCopy();
+    refreshV7RecoveryCopy();
+    refreshV8RecoveryCopy();
+    refreshV9RecoveryCopy();
+    if (written.kind === 'conflict') {
+      externalRaw.current = written.actualRaw;
+      setAutoSaveEnabled(false);
+      setPersistenceStatus({ kind: 'conflict' });
+      return 'Preview storage changed in another tab. No schedule changes were saved.';
+    }
+    if (written.kind === 'error') {
+      setAutoSaveEnabled(false);
+      setPersistenceStatus({ kind: 'error', message: written.message });
+      return `Preview could not save this schedule correction. ${written.message}`;
+    }
+    expectedRaw.current = written.raw;
+    externalRaw.current = null;
+    skipNextAutosave.current = true;
+    setPreviewData(nextData);
+    setAutoSaveEnabled(true);
+    setPersistenceStatus({ kind: 'saved' });
+    return null;
   }
 
   function archiveRhythm(id: string) {
@@ -480,6 +621,9 @@ export function App() {
       return {
         ...previous,
         datedRhythmCompletions: [...previous.datedRhythmCompletions, record],
+        rhythmHistoryIds: previous.rhythmHistoryIds.includes(record.rhythmId)
+          ? previous.rhythmHistoryIds
+          : [...previous.rhythmHistoryIds, record.rhythmId],
         ...(isTendAction
           ? {
               completedRhythmIds: previous.completedRhythmIds.includes(record.rhythmId)
@@ -533,7 +677,10 @@ export function App() {
       rhythmCompletionOverrides: [
         ...previous.rhythmCompletionOverrides.filter(item => item.id !== record.id),
         { ...record }
-      ]
+      ],
+      rhythmHistoryIds: previous.rhythmHistoryIds.includes(record.rhythmId)
+        ? previous.rhythmHistoryIds
+        : [...previous.rhythmHistoryIds, record.rhythmId]
     }));
     return null;
   }
@@ -555,7 +702,10 @@ export function App() {
         rhythmCompletionOverrides: previous.rhythmCompletionOverrides.filter(item => item.id !== completionId),
         removedSeedCompletionIds: previous.removedSeedCompletionIds.includes(completionId)
           ? previous.removedSeedCompletionIds
-          : [...previous.removedSeedCompletionIds, completionId]
+          : [...previous.removedSeedCompletionIds, completionId],
+        rhythmHistoryIds: previous.rhythmHistoryIds.includes(rhythmId)
+          ? previous.rhythmHistoryIds
+          : [...previous.rhythmHistoryIds, rhythmId]
       }));
       return null;
     }
@@ -616,11 +766,38 @@ export function App() {
     if (!goal) return { balance: 'This example goal is no longer available.' };
     const result = saveCheckIn(goal, draft, new Date().toISOString(), currentDate, correctingCheckIn);
     const updatedGoal = result.goal;
-    if (updatedGoal) {
-      setPreviewData(previous => ({
-        ...previous,
-        goals: previous.goals.map(item => item.id === goalId ? updatedGoal : item)
-      }));
+    if (!updatedGoal) {
+      return result.errors;
+    }
+
+    const nextData: PreviewData = {
+      ...previewData,
+      goals: previewData.goals.map(item => item.id === goalId ? updatedGoal : item)
+    };
+    skipNextAutosave.current = true;
+    setPreviewData(nextData);
+    const written = writePreview(browserPreviewStorage(), nextData, expectedRaw.current, { currentDate });
+    refreshV1RecoveryCopy();
+    refreshV2RecoveryCopy();
+    refreshV3RecoveryCopy();
+    refreshV4RecoveryCopy();
+    refreshV5RecoveryCopy();
+    refreshV6RecoveryCopy();
+    refreshV7RecoveryCopy();
+    refreshV8RecoveryCopy();
+    refreshV9RecoveryCopy();
+    if (written.kind === 'saved') {
+      expectedRaw.current = written.raw;
+      externalRaw.current = null;
+      setAutoSaveEnabled(true);
+      setPersistenceStatus({ kind: 'saved' });
+    } else if (written.kind === 'conflict') {
+      externalRaw.current = written.actualRaw;
+      setAutoSaveEnabled(false);
+      setPersistenceStatus({ kind: 'conflict' });
+    } else {
+      setAutoSaveEnabled(false);
+      setPersistenceStatus({ kind: 'error', message: written.message });
     }
     return result.errors;
   }
@@ -636,6 +813,9 @@ export function App() {
     refreshV4RecoveryCopy();
     refreshV5RecoveryCopy();
     refreshV6RecoveryCopy();
+    refreshV7RecoveryCopy();
+    refreshV8RecoveryCopy();
+    refreshV9RecoveryCopy();
     if (written.kind === 'saved') {
       expectedRaw.current = written.raw;
       externalRaw.current = null;
@@ -694,6 +874,9 @@ export function App() {
     refreshV4RecoveryCopy();
     refreshV5RecoveryCopy();
     refreshV6RecoveryCopy();
+    refreshV7RecoveryCopy();
+    refreshV8RecoveryCopy();
+    refreshV9RecoveryCopy();
     if (written.kind === 'saved') {
       expectedRaw.current = written.raw;
       externalRaw.current = null;
@@ -721,6 +904,9 @@ export function App() {
     refreshV4RecoveryCopy();
     refreshV5RecoveryCopy();
     refreshV6RecoveryCopy();
+    refreshV7RecoveryCopy();
+    refreshV8RecoveryCopy();
+    refreshV9RecoveryCopy();
     if (written.kind === 'saved') {
       expectedRaw.current = written.raw;
       setPersistenceStatus({ kind: 'saved' });
@@ -828,6 +1014,12 @@ export function App() {
         v6RecoveryError={v6RecoveryError}
         v7RecoveryCopy={v7RecoveryCopy}
         v7RecoveryError={v7RecoveryError}
+        v8RecoveryCopy={v8RecoveryCopy}
+        v8RecoveryError={v8RecoveryError}
+        v9RecoveryCopy={v9RecoveryCopy}
+        v9RecoveryError={v9RecoveryError}
+        v10RecoveryCopy={v10RecoveryCopy}
+        v10RecoveryError={v10RecoveryError}
       />
       <footer className="preview-footer">
         <span>Synthetic preview data stays separate from Tend accounts.</span>
@@ -848,6 +1040,9 @@ export function App() {
                 onUpdateCompletion: updateDatedCompletion,
                 onDeleteCompletion: deleteDatedCompletionRecord
               }
+            : {})}
+          {...(activeRhythmIsToday && isEditableRhythmId(activeRhythm.id) && !activeRhythmIsArchived
+            ? { onEditSeason: saveSeasonCorrection }
             : {})}
           people={peopleForRhythm(activeRhythm)}
           archived={activeRhythmIsArchived}
@@ -884,6 +1079,10 @@ export function App() {
       {rhythmEditor && (
         <RhythmEditor
           {...(rhythmEditor.rhythm ? { rhythm: rhythmEditor.rhythm } : {})}
+          hasDatedCompletionHistory={
+            previewData.rhythmHistoryIds.includes(rhythmEditor.id)
+            || (rhythmEditor.rhythm?.completionHistory?.length ?? 0) > 0
+          }
           onSave={saveRhythm}
           {...(rhythmEditor.rhythm ? { onArchive: archiveRhythm } : {})}
           onClose={() => setRhythmEditor(null)}

@@ -7,11 +7,13 @@ import {
 } from '../src/domain/rhythm-scoring.ts';
 import type { SelectDailyRhythmScoreInput } from '../src/domain/rhythm-scoring.ts';
 import type { RhythmSchedule, RhythmScoringMetadata } from '../src/domain/rhythm-schedule.ts';
+import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
 
 const rhythmId = 'daily-test-rhythm';
 const asOfDate = '2026-10-23';
 const trackingStartDate = '2026-09-23';
 const dailySchedule = { frequency: 'daily' } as const;
+type SegmentFixture = { startDate: string; schedule: RhythmSchedule };
 
 function record(id: string, effectiveDate: string, targetId = rhythmId): RhythmCompletionRecord {
   return { id, rhythmId: targetId, effectiveDate };
@@ -19,12 +21,16 @@ function record(id: string, effectiveDate: string, targetId = rhythmId): RhythmC
 
 function scoring(
   startDate = trackingStartDate,
-  scheduleHistory: RhythmScoringMetadata['scheduleHistory'] = [
+  scheduleHistory: SegmentFixture[] = [
     { startDate, schedule: dailySchedule }
   ],
   timeZone = 'UTC'
 ): RhythmScoringMetadata {
-  return { trackingStartDate: startDate, timeZone, scheduleHistory };
+  return {
+    trackingStartDate: startDate,
+    timeZone,
+    scheduleHistory: scheduleHistory.map(segment => createRhythmSeason(rhythmId, segment.startDate, segment.schedule))
+  };
 }
 
 function input(
@@ -160,10 +166,9 @@ describe('daily occurrence scoring', () => {
       .toBe(longHistory.onTrack.evidence.missedOccurrenceCount - 10);
 
     const boundaryStart = '2026-10-01';
-    const scheduleHistory: RhythmScoringMetadata['scheduleHistory'] = [
+    const scheduleHistory: SegmentFixture[] = [
       {
         startDate: boundaryStart,
-        endDate: '2026-10-14',
         schedule: { frequency: 'daily', endDate: '2026-10-14' }
       },
       { startDate: '2026-10-15', schedule: dailySchedule }
@@ -225,8 +230,8 @@ describe('daily occurrence scoring', () => {
 
   it('clips Consistency to the tracking start and includes a completed today', () => {
     const start = '2026-10-21';
-    const endedSegment: RhythmScoringMetadata['scheduleHistory'] = [
-      { startDate: start, endDate: '2026-10-22', schedule: dailySchedule },
+    const endedSegment: SegmentFixture[] = [
+      { startDate: start, schedule: dailySchedule },
       { startDate: '2026-10-23', schedule: dailySchedule }
     ];
     const result = scored(input({
@@ -380,10 +385,9 @@ describe('daily occurrence scoring', () => {
       reason: { reasonCode: 'inactive' }
     });
 
-    const history: RhythmScoringMetadata['scheduleHistory'] = [
+    const history: SegmentFixture[] = [
       {
         startDate: '2026-09-23',
-        endDate: '2026-10-10',
         schedule: {
           frequency: 'custom',
           unit: 'days',
@@ -532,7 +536,7 @@ describe('daily occurrence scoring', () => {
       scoring: {
         trackingStartDate: asOfDate,
         timeZone: 'UTC',
-        scheduleHistory: [{ startDate: asOfDate, schedule }]
+        scheduleHistory: [createRhythmSeason(rhythmId, asOfDate, schedule)]
       },
       createdLocalDate: asOfDate,
       createdTimeZone: 'UTC',
@@ -845,7 +849,7 @@ describe('daily occurrence scoring', () => {
       }
     ];
     for (const testCase of cases) {
-      const segments: RhythmScoringMetadata['scheduleHistory'] = [
+      const segments: SegmentFixture[] = [
         { startDate: testCase.start, schedule: testCase.schedule }
       ];
       const result = scored(input({
@@ -1118,8 +1122,8 @@ describe('daily occurrence scoring', () => {
     const firstSchedule: RhythmSchedule = { frequency: 'weekly', weekdays: [1] };
     const secondSchedule: RhythmSchedule = { frequency: 'weekly', weekdays: [4] };
     const start = '2026-10-19';
-    const history: RhythmScoringMetadata['scheduleHistory'] = [
-      { startDate: start, endDate: '2026-10-21', schedule: firstSchedule },
+    const history: SegmentFixture[] = [
+      { startDate: start, schedule: firstSchedule },
       { startDate: '2026-10-22', schedule: secondSchedule }
     ];
     const result = scored(input({
@@ -1144,7 +1148,7 @@ describe('daily occurrence scoring', () => {
   it('returns a precise unavailable reason when unknown history can still affect the score', () => {
     const schedule: RhythmSchedule = { frequency: 'weekly', weekdays: [4] };
     const scoringStart = '2026-10-05';
-    const history: RhythmScoringMetadata['scheduleHistory'] = [
+    const history: SegmentFixture[] = [
       { startDate: scoringStart, schedule }
     ];
     const uncertain = scored(input({
@@ -1210,7 +1214,7 @@ describe('daily occurrence scoring', () => {
       }
     ];
     for (const testCase of cases) {
-      const segments: RhythmScoringMetadata['scheduleHistory'] = [
+      const segments: SegmentFixture[] = [
         { startDate: '2020-01-01', schedule: testCase.schedule }
       ];
       const result = scored(input({

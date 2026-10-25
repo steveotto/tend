@@ -28,15 +28,16 @@ export type PreviewV4MigrationResult =
   | {
       valid: true;
       envelope: PreviewEnvelope;
-      sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+      sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
     }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
 export function migratePreviewToProposedV4(raw: string, currentDate: string): PreviewV4MigrationResult {
   const parsed = parsePreviewBackup(raw, currentDate);
   if (!parsed.valid) return parsed;
-  if (parsed.sourceSchemaVersion === 8) {
-    return { valid: true, envelope: parsed.envelope, sourceSchemaVersion: 8 };
+  if (parsed.sourceSchemaVersion === 8 || parsed.sourceSchemaVersion === 9
+    || parsed.sourceSchemaVersion === 10 || parsed.sourceSchemaVersion === 11) {
+    return { valid: true, envelope: parsed.envelope, sourceSchemaVersion: parsed.sourceSchemaVersion };
   }
   if (parsed.sourceSchemaVersion === 7) {
     return { valid: true, envelope: parsed.envelope, sourceSchemaVersion: 7 };
@@ -90,7 +91,8 @@ export function migratePreviewToProposedV4(raw: string, currentDate: string): Pr
         datedRhythmCompletions: [],
         activeRhythmCompletions: [],
         rhythmCompletionOverrides: [],
-        removedSeedCompletionIds: []
+        removedSeedCompletionIds: [],
+        rhythmHistoryIds: []
       }
     }
   };
