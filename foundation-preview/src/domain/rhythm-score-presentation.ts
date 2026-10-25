@@ -2,10 +2,10 @@ import type { OnTrackEvidence } from './rhythm-scoring.ts';
 
 export type OnTrackHistoryDisplayEntry =
   | {
-      kind: 'day';
+      kind: 'occurrence';
       key: string;
       date: string;
-      status: 'tended' | 'not-tended' | 'today';
+      status: 'completed' | 'missed' | 'today';
       score: number;
     }
   | {
@@ -31,9 +31,9 @@ export function onTrackHistoryDisplayEntries(evidence: OnTrackEvidence): readonl
       date: item.date,
       score: item.score
     })),
-    ...evidence.days.map(item => ({
-      kind: 'day' as const,
-      key: `day-${item.date}`,
+    ...evidence.occurrences.map(item => ({
+      kind: 'occurrence' as const,
+      key: `occurrence-${item.date}`,
       date: item.date,
       status: item.status,
       score: item.score

@@ -11,10 +11,14 @@ export type RhythmScoreExample = {
     recordIds?: readonly string[];
   }[];
   onTrack: {
-    pointsPerFullUntendedDay: number;
-    days: readonly {
+    pointsPerMissedOccurrence: number;
+    occurrences?: readonly {
       date: string;
-      status: 'tended' | 'not-tended' | 'as-of';
+      status: 'completed' | 'missed' | 'today';
+    }[];
+    days?: readonly {
+      date: string;
+      status: 'completed' | 'missed' | 'today' | 'as-of';
     }[];
   };
 };
@@ -72,21 +76,21 @@ export type PreparedRhythmScoreExample = {
         kind: 'scored';
         score: number;
         lastTendedDate: string | null;
-        fullOverdueDates: readonly string[];
-        pointsPerFullUntendedDay: number;
-        days: readonly {
+        missedOccurrenceCount: number;
+        pointsPerMissedOccurrence: number;
+        occurrences: readonly {
           date: string;
-          status: 'tended' | 'not-tended' | 'as-of';
+          status: 'completed' | 'missed' | 'today';
           score: number;
         }[];
         evidence: {
           lastQualifyingCompletionDate: string | null;
-          overdueDates: readonly string[];
-          pointsPerOverdueDate: 10;
+          missedOccurrenceDates: readonly string[];
+          pointsPerMissedOccurrence: 10;
           deduction: number;
-          days: readonly {
+          occurrences: readonly {
             date: string;
-            status: 'tended' | 'not-tended' | 'today';
+            status: 'completed' | 'missed' | 'today';
             score: number;
           }[];
         };
@@ -134,13 +138,13 @@ export const dailyRhythmScoreExample = {
     { date: '2026-10-22', status: 'not-completed' }
   ],
   onTrack: {
-    pointsPerFullUntendedDay: 10,
-    days: [
-      { date: '2026-10-19', status: 'tended' },
-      { date: '2026-10-20', status: 'not-tended' },
-      { date: '2026-10-21', status: 'not-tended' },
-      { date: '2026-10-22', status: 'not-tended' },
-      { date: '2026-10-23', status: 'as-of' }
+    pointsPerMissedOccurrence: 10,
+    occurrences: [
+      { date: '2026-10-19', status: 'completed' },
+      { date: '2026-10-20', status: 'missed' },
+      { date: '2026-10-21', status: 'missed' },
+      { date: '2026-10-22', status: 'missed' },
+      { date: '2026-10-23', status: 'today' }
     ]
   }
 } as const satisfies RhythmScoreExample;
@@ -236,12 +240,21 @@ export function prepareRhythmScoreExample(example: RhythmScoreExample): Prepared
         }
       };
 
-  const lastTendedDate = [...example.onTrack.days]
+  const rawOccurrences = Array.isArray((example.onTrack as { days?: unknown }).days)
+    ? (example.onTrack as { days: readonly { date: string; status: string }[] }).days
+    : Array.isArray((example.onTrack as { occurrences?: unknown }).occurrences)
+      ? (example.onTrack as { occurrences: readonly { date: string; status: string }[] }).occurrences
+      : [];
+  const timeline = rawOccurrences.map(item => ({
+    ...item,
+    status: item.status === 'as-of' ? 'today' : item.status
+  })) as Array<{ date: string; status: 'completed' | 'missed' | 'today' }>;
+  const lastTendedDate = [...timeline]
     .reverse()
-    .find(item => item.status === 'tended')?.date;
-  const asOfDate = [...example.onTrack.days]
+    .find(item => item.status === 'completed')?.date;
+  const asOfDate = [...timeline]
     .reverse()
-    .find(item => item.status === 'as-of')?.date;
+    .find(item => item.status === 'today')?.date;
   if (!lastTendedDate || !asOfDate) {
     return {
       asOfDate: example.asOfDate,
@@ -249,22 +262,22 @@ export function prepareRhythmScoreExample(example: RhythmScoreExample): Prepared
       consistency,
       onTrack: {
         kind: 'unscored',
-        explanation: 'There is no qualifying completed day in this illustration, so On Track is unscored.'
+        explanation: 'There is no qualifying completed occurrence in this illustration, so On Track is unscored.'
       }
     };
   }
 
   let score = 100;
-  const fullOverdueDates: string[] = [];
-  const days: readonly {
+  const missedOccurrenceDates: string[] = [];
+  const occurrences: readonly {
     date: string;
-    status: 'tended' | 'not-tended' | 'as-of';
+    status: 'completed' | 'missed' | 'today';
     score: number;
-  }[] = example.onTrack.days.map(item => {
-    if (item.status === 'tended') score = 100;
-    if (item.status === 'not-tended' && item.date > lastTendedDate) {
-      fullOverdueDates.push(item.date);
-      score = Math.max(0, score - example.onTrack.pointsPerFullUntendedDay);
+  }[] = timeline.map(item => {
+    if (item.status === 'completed') score = 100;
+    if (item.status === 'missed' && item.date > lastTendedDate) {
+      missedOccurrenceDates.push(item.date);
+      score = Math.max(0, score - example.onTrack.pointsPerMissedOccurrence);
     }
     return { ...item, score };
   });
@@ -273,23 +286,15 @@ export function prepareRhythmScoreExample(example: RhythmScoreExample): Prepared
     kind: 'scored',
     score,
     lastTendedDate,
-    fullOverdueDates,
-    pointsPerFullUntendedDay: example.onTrack.pointsPerFullUntendedDay,
-    days: days.map(item => ({
-      date: item.date,
-      status: item.status === 'as-of' ? 'as-of' : item.status,
-      score: item.score
-    })),
+    missedOccurrenceCount: missedOccurrenceDates.length,
+    pointsPerMissedOccurrence: example.onTrack.pointsPerMissedOccurrence,
+    occurrences,
     evidence: {
       lastQualifyingCompletionDate: lastTendedDate,
-      overdueDates: fullOverdueDates,
-      pointsPerOverdueDate: example.onTrack.pointsPerFullUntendedDay as 10,
-      deduction: example.onTrack.pointsPerFullUntendedDay * fullOverdueDates.length,
-      days: days.map(item => ({
-        date: item.date,
-        status: item.status === 'as-of' ? 'today' : item.status,
-        score: item.score
-      }))
+      missedOccurrenceDates,
+      pointsPerMissedOccurrence: example.onTrack.pointsPerMissedOccurrence as 10,
+      deduction: Math.min(100, example.onTrack.pointsPerMissedOccurrence * missedOccurrenceDates.length),
+      occurrences
     }
   };
   return {

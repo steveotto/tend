@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import type { MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
 import { orderedCompletions } from '../domain/preview-data.ts';
@@ -11,7 +12,7 @@ import {
 } from '../domain/rhythm-history.ts';
 import {
   localDateInTimeZone,
-  selectDailyRhythmScore
+  selectRhythmScore
 } from '../domain/rhythm-scoring.ts';
 import {
   latestOnTrackHistoryEntries,
@@ -41,7 +42,8 @@ const occurrenceKindByFrequency = {
   weekly: 'scheduled day',
   monthly: 'due date',
   quarterly: 'due date',
-  yearly: 'due date'
+  yearly: 'due date',
+  custom: 'scheduled occurrence'
 } as const;
 
 const metricCopy = {
@@ -66,7 +68,8 @@ export function RhythmHistoryView({
   completionHistoryAvailable = false,
   onSaveCompletion,
   onUpdateCompletion,
-  onDeleteCompletion
+  onDeleteCompletion,
+  onChooseSchedule
 }: {
   rhythm: RhythmPreview;
   people?: readonly PersonPreview[];
@@ -79,6 +82,7 @@ export function RhythmHistoryView({
   onSaveCompletion?: (record: RhythmCompletionRecord) => string | null;
   onUpdateCompletion?: (record: RhythmCompletionRecord) => string | null;
   onDeleteCompletion?: (completionId: string) => string | null;
+  onChooseSchedule?: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const historyRecords: readonly RhythmCompletion[] | undefined =
     rhythm.completionHistory === undefined && !completionHistoryAvailable && datedCompletions.length === 0
@@ -108,7 +112,7 @@ export function RhythmHistoryView({
     ...record,
     rhythmId: rhythm.id
   }));
-  const score = selectDailyRhythmScore({
+  const score = selectRhythmScore({
     rhythmId: rhythm.id,
     ...(rhythm.cadence ? { cadence: rhythm.cadence } : {}),
     ...(rhythm.schedule ? { schedule: rhythm.schedule } : {}),
@@ -122,6 +126,9 @@ export function RhythmHistoryView({
     asOfDate,
     timeZone: scoringTimeZone
   });
+  const scheduleConversionHandler = !rhythm.schedule && rhythm.cadence !== 'Daily'
+    ? onChooseSchedule
+    : undefined;
   const historyViewRef = useRef<HTMLElement>(null);
   const logMomentDialogRef = useRef<HTMLDialogElement>(null);
   const loggedMomentsSummaryRef = useRef<HTMLElement>(null);
@@ -357,12 +364,30 @@ export function RhythmHistoryView({
             aria-label="Consistency and On Track score details"
             hidden={!scoreDetailsExpanded}
           >
-            {sharedUnscoredExplanation ? null : (
+            {sharedUnscoredExplanation
+              ? scheduleConversionHandler && score.onTrack.kind === 'unscored'
+                ? (
+                  <div className="rhythm-history-view__score-details-columns">
+                    <div className="rhythm-history-view__score-details-column">
+                      <UnscoredBreakdown
+                        metric={score.onTrack}
+                        onChooseSchedule={scheduleConversionHandler}
+                      />
+                    </div>
+                  </div>
+                )
+                : null
+              : (
               <div className="rhythm-history-view__score-details-columns">
                 <div className="rhythm-history-view__score-details-column">
                   {score.consistency.kind === 'scored'
                     ? <ConsistencyScoreBreakdown metric={score.consistency} />
-                    : <UnscoredBreakdown metric={score.consistency} />}
+                    : (
+                      <UnscoredBreakdown
+                        metric={score.consistency}
+                        {...(scheduleConversionHandler ? { onChooseSchedule: scheduleConversionHandler } : {})}
+                      />
+                    )}
                 </div>
                 <div className="rhythm-history-view__score-details-column">
                   {score.onTrack.kind === 'scored'
@@ -719,8 +744,8 @@ function OnTrackScoreBreakdown({ metric }: { metric: ScoredOnTrackMetric }) {
     { label: 'Last tended', value: evidence.lastQualifyingCompletionDate
       ? formatHistoryDate(evidence.lastQualifyingCompletionDate, false)
       : 'None yet' },
-    { label: 'Full overdue days', value: `${evidence.overdueCount} days` },
-    { label: 'Daily deduction', value: `${evidence.pointsPerOverdueDate} points` }
+    { label: 'Missed occurrences', value: String(evidence.missedOccurrenceCount) },
+    { label: 'Per missed occurrence', value: `${evidence.pointsPerMissedOccurrence} points` }
   ];
   useEffect(() => {
     if (focusAfterDisclosureRef.current === 'earlier') showEarlierButtonRef.current?.focus();
@@ -740,8 +765,8 @@ function OnTrackScoreBreakdown({ metric }: { metric: ScoredOnTrackMetric }) {
         <ol id={historyId} className="rhythm-history-view__score-history" aria-label="On Track score changes">
           {visibleEntries.map(item => (
             <li key={item.key} className={`rhythm-history-view__score-history-entry--${item.kind}`}>
-              <span>{onTrackHistoryEntryLabel(item, item.kind === 'day'
-                && item.date === evidence.days.at(-1)?.date)}</span>
+              <span>{onTrackHistoryEntryLabel(item, item.kind === 'occurrence'
+                && item.date === evidence.occurrences.at(-1)?.date)}</span>
               <strong>{item.score}</strong>
             </li>
           ))}
@@ -788,27 +813,42 @@ function OnTrackScoreBreakdown({ metric }: { metric: ScoredOnTrackMetric }) {
 
 function onTrackHistoryEntryLabel(
   entry: ReturnType<typeof onTrackHistoryDisplayEntries>[number],
-  isCurrentDay: boolean
+  isCurrentState: boolean
 ): string {
   if (entry.kind === 'schedule-change') {
     return `${formatHistoryDate(entry.date, true)} · schedule changed`;
   }
   if (entry.kind === 'zero-score-span') {
-    const unit = entry.occurrenceCount === 1 ? 'scheduled day' : 'earlier scheduled days';
+    const unit = entry.occurrenceCount === 1 ? 'earlier occurrence' : 'earlier occurrences';
     return `${entry.occurrenceCount} ${unit} at 0 · ${formatHistoryDate(entry.startDate, false)}–${formatHistoryDate(entry.endDate, false)}`;
   }
-  const status = entry.status === 'tended'
-    ? isCurrentDay ? 'tended today · current state' : 'tended · reset'
+  const status = entry.status === 'completed'
+    ? isCurrentState ? 'tended today · current state' : 'tended · reset'
     : entry.status === 'today'
       ? 'today · current state'
       : 'not tended · deduction';
   return `${formatHistoryDate(entry.date, false)} · ${status}`;
 }
 
-function UnscoredBreakdown({ metric }: { metric: UnscoredMetric }) {
+function UnscoredBreakdown({
+  metric,
+  onChooseSchedule
+}: {
+  metric: UnscoredMetric;
+  onChooseSchedule?: (event: MouseEvent<HTMLButtonElement>) => void;
+}) {
   return (
     <section className="rhythm-history-view__score-details">
       <p className="rhythm-history-view__score-explanation">{metric.explanation}</p>
+      {onChooseSchedule && (
+        <button
+          type="button"
+          className="rhythm-history-view__score-history-toggle"
+          onClick={onChooseSchedule}
+        >
+          Choose a schedule to calculate On Track
+        </button>
+      )}
     </section>
   );
 }

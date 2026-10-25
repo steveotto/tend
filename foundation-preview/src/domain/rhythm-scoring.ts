@@ -48,9 +48,9 @@ export type ScoredConsistencyMetric = {
   evidence: ConsistencyEvidence;
 };
 
-export type OnTrackDay = {
+export type OnTrackOccurrence = {
   date: string;
-  status: 'tended' | 'not-tended' | 'today';
+  status: 'completed' | 'missed' | 'today';
   score: number;
 };
 
@@ -67,10 +67,10 @@ export type OnTrackScheduleChange = {
 
 export type OnTrackEvidence = {
   lastQualifyingCompletionDate: string | null;
-  overdueCount: number;
-  pointsPerOverdueDate: 10;
+  missedOccurrenceCount: number;
+  pointsPerMissedOccurrence: 10;
   deduction: number;
-  days: readonly OnTrackDay[];
+  occurrences: readonly OnTrackOccurrence[];
   repeatedZeroScoreSpans: readonly OnTrackZeroScoreSpan[];
   scheduleChanges: readonly OnTrackScheduleChange[];
 };
@@ -91,7 +91,7 @@ export type RhythmScoreSelection = {
   healthScore: number | null;
 };
 
-export type UnscoredDailyRhythmSelection = {
+export type UnscoredRhythmSelection = {
   kind: 'unscored';
   asOfDate: string;
   timeZone: string;
@@ -101,7 +101,7 @@ export type UnscoredDailyRhythmSelection = {
   healthScore: null;
 };
 
-export type InvalidDailyRhythmSelection = {
+export type InvalidRhythmSelection = {
   kind: 'invalid';
   asOfDate: string;
   timeZone: string;
@@ -111,12 +111,12 @@ export type InvalidDailyRhythmSelection = {
   healthScore: null;
 };
 
-export type DailyRhythmScoreResult =
+export type RhythmScoreResult =
   | RhythmScoreSelection
-  | UnscoredDailyRhythmSelection
-  | InvalidDailyRhythmSelection;
+  | UnscoredRhythmSelection
+  | InvalidRhythmSelection;
 
-export type SelectDailyRhythmScoreInput = {
+export type SelectRhythmScoreInput = {
   rhythmId: string;
   cadence?: string;
   schedule?: RhythmSchedule;
@@ -131,16 +131,21 @@ export type SelectDailyRhythmScoreInput = {
   timeZone: string;
 };
 
-const dailyDeduction = 10 as const;
+export type UnscoredDailyRhythmSelection = UnscoredRhythmSelection;
+export type InvalidDailyRhythmSelection = InvalidRhythmSelection;
+export type DailyRhythmScoreResult = RhythmScoreResult;
+export type SelectDailyRhythmScoreInput = SelectRhythmScoreInput;
+
+const deductionPerMissedOccurrence = 10 as const;
 
 function unscored(reasonCode: UnscoredReasonCode, explanation: string): UnscoredMetric {
   return { kind: 'unscored', reasonCode, explanation };
 }
 
 function baseUnscored(
-  input: Pick<SelectDailyRhythmScoreInput, 'asOfDate' | 'timeZone'>,
+  input: Pick<SelectRhythmScoreInput, 'asOfDate' | 'timeZone'>,
   reason: UnscoredMetric
-): UnscoredDailyRhythmSelection {
+): UnscoredRhythmSelection {
   return {
     kind: 'unscored',
     asOfDate: input.asOfDate,
@@ -153,9 +158,9 @@ function baseUnscored(
 }
 
 function invalid(
-  input: Pick<SelectDailyRhythmScoreInput, 'asOfDate' | 'timeZone'>,
+  input: Pick<SelectRhythmScoreInput, 'asOfDate' | 'timeZone'>,
   reason: string
-): InvalidDailyRhythmSelection {
+): InvalidRhythmSelection {
   const metric = unscored('unsupported-history', reason);
   return {
     kind: 'invalid',
@@ -214,6 +219,11 @@ function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
+function monthIndex(value: string): number {
+  const { year, month } = dateParts(value);
+  return year * 12 + month - 1;
+}
+
 function addCalendarMonths(value: string, amount: number): string {
   const { year, month, day } = dateParts(value);
   const monthIndex = year * 12 + month - 1 + amount;
@@ -231,7 +241,9 @@ function calendarDaysInclusive(start: string, end: string): number {
   return Math.floor((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000) + 1;
 }
 
-function scheduleSupported(schedule: RhythmSchedule): schedule is Exclude<RhythmSchedule, { frequency: 'custom' }> {
+function consistencyScheduleSupported(
+  schedule: RhythmSchedule
+): schedule is Exclude<RhythmSchedule, { frequency: 'custom' }> {
   return schedule.frequency !== 'custom';
 }
 
@@ -248,10 +260,9 @@ function patternMatches(pattern: Extract<RhythmSchedule, { frequency: 'monthly' 
   return Math.floor((day - 1) / 7) + 1 === pattern.ordinal;
 }
 
-function isScheduledDate(schedule: RhythmSchedule, date: string): boolean | 'unsupported' {
-  if (!scheduleSupported(schedule)) return 'unsupported';
+function isScheduledDate(schedule: RhythmSchedule, date: string): boolean {
   if (schedule.endDate !== undefined && date > schedule.endDate) return false;
-  const { month } = dateParts(date);
+  const { year, month } = dateParts(date);
   if (schedule.frequency === 'daily') return true;
   if (schedule.frequency === 'weekly') {
     const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
@@ -261,7 +272,29 @@ function isScheduledDate(schedule: RhythmSchedule, date: string): boolean | 'uns
   if (schedule.frequency === 'quarterly') {
     return (month - 1) % 3 + 1 === schedule.monthInQuarter && patternMatches(schedule.pattern, date);
   }
-  return month === schedule.month && patternMatches(schedule.pattern, date);
+  if (schedule.frequency === 'yearly') {
+    return month === schedule.month && patternMatches(schedule.pattern, date);
+  }
+  if (date < schedule.startDate) return false;
+  if (schedule.unit === 'days') {
+    return (calendarDaysInclusive(schedule.startDate, date) - 1) % schedule.interval === 0;
+  }
+  if (schedule.unit === 'weeks') {
+    const startWeekday = new Date(`${schedule.startDate}T00:00:00Z`).getUTCDay();
+    const dateWeekday = new Date(`${date}T00:00:00Z`).getUTCDay();
+    const startWeekMonday = addCalendarDays(schedule.startDate, -((startWeekday + 6) % 7));
+    const dateWeekMonday = addCalendarDays(date, -((dateWeekday + 6) % 7));
+    const weekOffset = Math.floor((calendarDaysInclusive(startWeekMonday, dateWeekMonday) - 1) / 7);
+    return weekOffset % schedule.interval === 0
+      && schedule.weekdays.includes(dateWeekday as (typeof schedule.weekdays)[number]);
+  }
+  if (schedule.unit === 'months') {
+    return (monthIndex(date) - monthIndex(schedule.startDate)) % schedule.interval === 0
+      && patternMatches(schedule.pattern, date);
+  }
+  return (year - dateParts(schedule.startDate).year) % schedule.interval === 0
+    && month === schedule.month
+    && patternMatches(schedule.pattern, date);
 }
 
 function maximumWindowStart(schedule: Exclude<RhythmSchedule, { frequency: 'custom' }>, asOfDate: string): string {
@@ -284,7 +317,7 @@ function canonicalValue(value: unknown): string {
   return JSON.stringify(value) ?? '';
 }
 
-function validateInput(input: SelectDailyRhythmScoreInput): string | null {
+function validateInput(input: SelectRhythmScoreInput): string | null {
   if (!input.rhythmId.trim()) return 'The Rhythm identity is missing.';
   if (!isValidDate(input.asOfDate)) return 'The scoring as-of date is invalid.';
   if (!isValidTimeZone(input.timeZone)) return 'The scoring time zone is invalid.';
@@ -318,29 +351,30 @@ function failureForHistory(
     if (!schedule) {
       return unscored('unsupported-history', 'The schedule history does not cover the full scoring window.');
     }
-    if (!scheduleSupported(schedule)) {
-      return unscored('unsupported-history', 'This scoring window includes a custom schedule whose occurrences are not supported.');
+    if (!consistencyScheduleSupported(schedule)) {
+      return unscored('unsupported-history', 'Consistency has no approved lookback policy for Custom intervals.');
     }
   }
   return null;
 }
 
-function dailyFailureForHistory(
+function occurrenceHistoryFailure(
   scheduleForDate: (date: string) => RhythmSchedule | undefined,
   firstDate: string,
   lastDate: string
 ): UnscoredMetric | null {
   for (let date = firstDate; date <= lastDate; date = addCalendarDays(date, 1)) {
-    const schedule = scheduleForDate(date);
-    if (!schedule) return unscored('unsupported-history', 'The schedule history does not cover the current On Track period.');
-    if (schedule.frequency !== 'daily') {
-      return unscored('unsupported-history', 'On Track cannot score across a schedule change away from Daily.');
+    if (!scheduleForDate(date)) {
+      return unscored(
+        'unsupported-history',
+      'The schedule history does not cover part of the On Track period, so missed occurrences cannot be reconstructed.'
+      );
     }
   }
   return null;
 }
 
-export function selectDailyRhythmScore(input: SelectDailyRhythmScoreInput): DailyRhythmScoreResult {
+export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreResult {
   const invalidReason = validateInput(input);
   if (invalidReason) return invalid(input, invalidReason);
 
@@ -352,7 +386,7 @@ export function selectDailyRhythmScore(input: SelectDailyRhythmScoreInput): Dail
     if (input.scoring) return invalid(input, 'Scoring metadata exists without a current supported schedule.');
     return baseUnscored(input, unscored(
       'unsupported-schedule',
-      'This descriptive cadence does not define a supported schedule. Choose a structured schedule; recurrence cannot be inferred from its label.'
+      'Choose a schedule to calculate On Track. Descriptive cadence alone does not define due dates.'
     ));
   }
   if (schedule.endDate !== undefined && schedule.endDate < input.asOfDate) {
@@ -408,8 +442,11 @@ export function selectDailyRhythmScore(input: SelectDailyRhythmScoreInput): Dail
   };
   const yesterday = previousDate(input.asOfDate);
   let consistency: ScoredConsistencyMetric | UnscoredMetric;
-  if (!scheduleSupported(schedule)) {
-    consistency = unscored('unsupported-schedule', 'Consistency for custom interval schedules is not supported yet.');
+  if (!consistencyScheduleSupported(schedule)) {
+    consistency = unscored(
+      'unsupported-schedule',
+      'Consistency for Custom intervals is unavailable because a lookback policy has not been approved.'
+    );
   } else if (!trackingStartDate) {
     consistency = unscored('ready-for-first-tend', 'Ready for your first Tend.');
   } else if (trackingStartDate === input.asOfDate
@@ -444,7 +481,7 @@ export function selectDailyRhythmScore(input: SelectDailyRhythmScoreInput): Dail
           if (record.effectiveDate < windowStartDate
             || record.effectiveDate > windowEndDate) continue;
           const recordSchedule = scheduleForDate(record.effectiveDate);
-          if (!recordSchedule || !scheduleSupported(recordSchedule)) continue;
+          if (!recordSchedule || !consistencyScheduleSupported(recordSchedule)) continue;
           if (isScheduledDate(recordSchedule, record.effectiveDate) !== true) continue;
           const ids = completedRecords.get(record.effectiveDate) ?? [];
           ids.push(record.id);
@@ -453,7 +490,7 @@ export function selectDailyRhythmScore(input: SelectDailyRhythmScoreInput): Dail
         const occurrences: ScheduledOccurrenceState[] = [];
         for (let date = windowStartDate; date <= windowEndDate; date = addCalendarDays(date, 1)) {
           const scheduled = scheduleForDate(date);
-          if (!scheduled || !scheduleSupported(scheduled)) continue;
+          if (!scheduled || !consistencyScheduleSupported(scheduled)) continue;
           if (isScheduledDate(scheduled, date) !== true) continue;
           const recordIds = completedRecords.get(date) ?? [];
           occurrences.push({
@@ -493,68 +530,50 @@ export function selectDailyRhythmScore(input: SelectDailyRhythmScoreInput): Dail
   }
 
   let onTrack: ScoredOnTrackMetric | UnscoredMetric;
-  if (schedule.frequency !== 'daily') {
-    onTrack = unscored('unsupported-schedule', 'On Track scoring is currently available only for daily Rhythms.');
+  const scoringTimeZone = new Intl.DateTimeFormat('en-US', { timeZone: input.timeZone }).resolvedOptions().timeZone;
+  const timezoneMismatch = !input.scoring && datedRecords.some(record => {
+    if (record.rhythmId !== input.rhythmId || record.timeZone === undefined) return false;
+    if (!isValidTimeZone(record.timeZone)) return true;
+    return new Intl.DateTimeFormat('en-US', { timeZone: record.timeZone }).resolvedOptions().timeZone
+      !== scoringTimeZone;
+  });
+  if (timezoneMismatch) {
+    onTrack = unscored(
+      'timezone-uncertain',
+      'On Track is unavailable because completion time zones do not match the Rhythm’s scoring time zone.'
+    );
   } else {
-    const scoringTimeZone = new Intl.DateTimeFormat('en-US', { timeZone: input.timeZone }).resolvedOptions().timeZone;
-    const timezoneMismatch = !input.scoring && datedRecords.some(record => {
-      if (record.rhythmId !== input.rhythmId || record.timeZone === undefined) return false;
-      if (!isValidTimeZone(record.timeZone)) return true;
-      return new Intl.DateTimeFormat('en-US', { timeZone: record.timeZone }).resolvedOptions().timeZone
-        !== scoringTimeZone;
-    });
-    if (timezoneMismatch) {
-      onTrack = unscored(
-        'timezone-uncertain',
-        'On Track is unavailable because completion time zones do not match the Rhythm’s scoring time zone.'
-      );
-    } else {
-      const qualifyingDates = new Set<string>();
-      for (const record of datedRecords) {
-        if (!trackingStartDate) continue;
-        if (record.effectiveDate < trackingStartDate) continue;
-        const recordSchedule = scheduleForDate(record.effectiveDate);
-        if (recordSchedule && scheduleSupported(recordSchedule)
-          && recordSchedule.frequency === 'daily'
-          && isScheduledDate(recordSchedule, record.effectiveDate) === true) {
-          qualifyingDates.add(record.effectiveDate);
-        }
+    const qualifyingDates = new Set<string>();
+    for (const record of datedRecords) {
+      if (!trackingStartDate || record.effectiveDate < trackingStartDate) continue;
+      const recordSchedule = scheduleForDate(record.effectiveDate);
+      if (recordSchedule && isScheduledDate(recordSchedule, record.effectiveDate)) {
+        qualifyingDates.add(record.effectiveDate);
       }
-      const lastQualifyingCompletionDate = [...qualifyingDates].sort().at(-1) ?? null;
-      if (!trackingStartDate) {
-        onTrack = unscored('ready-for-first-tend', 'Ready for your first Tend.');
-      } else if (trackingStartDate === input.asOfDate && !lastQualifyingCompletionDate) {
-        onTrack = unscored('ready-for-first-tend', 'Ready for your first Tend.');
-      } else {
+    }
+    const lastQualifyingCompletionDate = [...qualifyingDates].sort().at(-1) ?? null;
+    if (!trackingStartDate) {
+      onTrack = unscored('ready-for-first-tend', 'Ready for your first Tend.');
+    } else if (trackingStartDate === input.asOfDate && !lastQualifyingCompletionDate) {
+      onTrack = unscored('ready-for-first-tend', 'Ready for your first Tend.');
+    } else {
       const overdueStartDate = lastQualifyingCompletionDate
         ? addCalendarDays(lastQualifyingCompletionDate, 1)
         : trackingStartDate;
-      const currentScheduleFailure = overdueStartDate <= yesterday
-        ? dailyFailureForHistory(scheduleForDate, overdueStartDate, yesterday)
+      const historyFailure = overdueStartDate <= yesterday
+        ? occurrenceHistoryFailure(scheduleForDate, overdueStartDate, yesterday)
         : null;
-      if (currentScheduleFailure) {
-        onTrack = input.scoring && overdueStartDate < (segments[0]?.startDate ?? input.asOfDate)
-          ? unscored('unsupported-history', 'A schedule change leaves earlier dates without a known schedule; On Track cannot reconstruct them.')
-          : currentScheduleFailure;
+      if (historyFailure) {
+        onTrack = historyFailure;
       } else {
-        const completedToday = lastQualifyingCompletionDate === input.asOfDate;
-        let overdueCount = 0;
-        if (!completedToday && overdueStartDate <= yesterday) {
-          for (let date = overdueStartDate; date <= yesterday; date = addCalendarDays(date, 1)) {
-            const daySchedule = scheduleForDate(date);
-            if (daySchedule?.frequency === 'daily' && isScheduledDate(daySchedule, date) === true) {
-              overdueCount += 1;
-            }
-          }
-        }
-        const deduction = overdueCount * dailyDeduction;
-        const score = completedToday ? 100 : Math.max(0, 100 - deduction);
-        const days: OnTrackDay[] = [];
         const repeatedZeroScoreSpans: OnTrackZeroScoreSpan[] = [];
         const scheduleChanges: OnTrackScheduleChange[] = [];
+        const occurrences: OnTrackOccurrence[] = [];
         let zeroScoreSpanStart: string | null = null;
         let zeroScoreSpanEnd: string | null = null;
         let zeroScoreSpanCount = 0;
+        let missedOccurrenceCount = 0;
+        let previousScore = 100;
         const flushZeroScoreSpan = () => {
           if (zeroScoreSpanStart && zeroScoreSpanEnd && zeroScoreSpanCount > 0) {
             repeatedZeroScoreSpans.push({
@@ -573,77 +592,62 @@ export function selectDailyRhythmScore(input: SelectDailyRhythmScoreInput): Dail
           return canonicalValue(segments[segmentIndex - 1]?.schedule)
             !== canonicalValue(segments[segmentIndex]?.schedule);
         };
-        let timelineStartDate = trackingStartDate;
-        if (input.scoring) {
-          for (let index = segments.length - 1; index >= 0; index -= 1) {
-            if (segments[index]?.schedule.frequency !== 'daily') {
-              timelineStartDate = segments[index + 1]?.startDate ?? input.asOfDate;
-              break;
-            }
-          }
-          if (timelineStartDate < trackingStartDate) timelineStartDate = trackingStartDate;
-        }
-        const timelineCompletionDates = new Set(
-          [...qualifyingDates].filter(date => date >= timelineStartDate)
-        );
-        let cumulativeOverdue = 0;
-        let previousScore = 100;
-        for (let date = timelineStartDate; date < input.asOfDate; date = addCalendarDays(date, 1)) {
+
+        for (let date = trackingStartDate; date < input.asOfDate; date = addCalendarDays(date, 1)) {
           const daySchedule = scheduleForDate(date);
           if (scheduleChangedOn(date)) {
             flushZeroScoreSpan();
             scheduleChanges.push({ date, score: previousScore });
           }
-          if (daySchedule?.frequency !== 'daily' || isScheduledDate(daySchedule, date) !== true) {
+          if (!daySchedule || !isScheduledDate(daySchedule, date)) continue;
+          if (qualifyingDates.has(date)) {
             flushZeroScoreSpan();
-            continue;
-          }
-          if (timelineCompletionDates.has(date)) {
-            flushZeroScoreSpan();
-            cumulativeOverdue = 0;
+            missedOccurrenceCount = 0;
             previousScore = 100;
-            days.push({ date, status: 'tended', score: 100 });
+            occurrences.push({ date, status: 'completed', score: previousScore });
             continue;
           }
-          cumulativeOverdue += 1;
-          const nextScore = Math.max(0, 100 - cumulativeOverdue * dailyDeduction);
+          missedOccurrenceCount += 1;
+          const nextScore = Math.max(0, 100 - missedOccurrenceCount * deductionPerMissedOccurrence);
           if (nextScore === 0 && previousScore === 0) {
             zeroScoreSpanStart ??= date;
             zeroScoreSpanEnd = date;
             zeroScoreSpanCount += 1;
           } else {
             flushZeroScoreSpan();
-            days.push({
-              date,
-              status: 'not-tended',
-              score: nextScore
-            });
+            occurrences.push({ date, status: 'missed', score: nextScore });
           }
           previousScore = nextScore;
         }
         flushZeroScoreSpan();
+        const currentSchedule = scheduleForDate(input.asOfDate);
+        const completedToday = qualifyingDates.has(input.asOfDate);
         if (scheduleChangedOn(input.asOfDate)) {
-          scheduleChanges.push({ date: input.asOfDate, score });
+          scheduleChanges.push({ date: input.asOfDate, score: completedToday ? 100 : previousScore });
         }
-        days.push({
-          date: input.asOfDate,
-          status: completedToday ? 'tended' : 'today',
-          score
-        });
+        if (completedToday) {
+          missedOccurrenceCount = 0;
+          previousScore = 100;
+        }
+        const score = previousScore;
+        occurrences.push({ date: input.asOfDate, status: 'today', score });
+        if (currentSchedule && isScheduledDate(currentSchedule, input.asOfDate) && completedToday) {
+          occurrences[occurrences.length - 1] = { date: input.asOfDate, status: 'completed', score };
+        }
+        const deduction = Math.min(100, missedOccurrenceCount * deductionPerMissedOccurrence);
         onTrack = {
           kind: 'scored',
           score,
           evidence: {
             lastQualifyingCompletionDate,
-            overdueCount,
-            pointsPerOverdueDate: dailyDeduction,
+            missedOccurrenceCount,
+            pointsPerMissedOccurrence: deductionPerMissedOccurrence,
             deduction,
-            days,
+            occurrences,
             repeatedZeroScoreSpans,
             scheduleChanges
           }
         };
-      }
       }
     }
   }
@@ -661,5 +665,7 @@ export function selectDailyRhythmScore(input: SelectDailyRhythmScoreInput): Dail
     healthScore
   };
 }
+
+export const selectDailyRhythmScore = selectRhythmScore;
 
 export { HEALTH_CONSISTENCY_WEIGHT, HEALTH_ON_TRACK_WEIGHT };

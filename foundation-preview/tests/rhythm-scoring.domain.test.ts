@@ -79,7 +79,7 @@ describe('daily occurrence scoring', () => {
     expect(empty.onTrack).toMatchObject({
       kind: 'scored',
       score: 80,
-      evidence: { overdueCount: 2, deduction: 20 }
+      evidence: { missedOccurrenceCount: 2, deduction: 20 }
     });
 
     const partialRecords = [
@@ -102,7 +102,7 @@ describe('daily occurrence scoring', () => {
       score: 70,
       evidence: {
         lastQualifyingCompletionDate: '2026-10-19',
-        overdueCount: 3,
+        missedOccurrenceCount: 3,
         deduction: 30
       }
     });
@@ -128,9 +128,9 @@ describe('daily occurrence scoring', () => {
       kind: 'scored',
       score: 0,
       evidence: {
-        overdueCount: 22,
-        deduction: 220,
-        days: expect.arrayContaining([{ date: '2026-10-10', status: 'not-tended', score: 0 }]),
+        missedOccurrenceCount: 22,
+        deduction: 100,
+        occurrences: expect.arrayContaining([{ date: '2026-10-10', status: 'missed', score: 0 }]),
         repeatedZeroScoreSpans: [{ startDate: '2026-10-11', endDate: '2026-10-22', occurrenceCount: 12 }]
       }
     });
@@ -148,16 +148,16 @@ describe('daily occurrence scoring', () => {
       kind: 'scored',
       score: 0,
       evidence: {
-        overdueCount: expect.any(Number),
-        days: expect.any(Array),
+        missedOccurrenceCount: expect.any(Number),
+        occurrences: expect.any(Array),
         repeatedZeroScoreSpans: expect.any(Array)
       }
     });
     if (longHistory.onTrack.kind !== 'scored') throw new Error('Expected scored On Track evidence.');
-    expect(longHistory.onTrack.evidence.overdueCount).toBeGreaterThan(40_000);
-    expect(longHistory.onTrack.evidence.days.length).toBe(11);
+    expect(longHistory.onTrack.evidence.missedOccurrenceCount).toBeGreaterThan(40_000);
+    expect(longHistory.onTrack.evidence.occurrences.length).toBe(11);
     expect(longHistory.onTrack.evidence.repeatedZeroScoreSpans[0]?.occurrenceCount)
-      .toBe(longHistory.onTrack.evidence.overdueCount - 10);
+      .toBe(longHistory.onTrack.evidence.missedOccurrenceCount - 10);
 
     const boundaryStart = '2026-10-01';
     const scheduleHistory: RhythmScoringMetadata['scheduleHistory'] = [
@@ -204,7 +204,7 @@ describe('daily occurrence scoring', () => {
       score: 20,
       evidence: {
         lastQualifyingCompletionDate: '2026-10-15',
-        overdueCount: 8,
+        missedOccurrenceCount: 8,
         deduction: 80,
         repeatedZeroScoreSpans: [{
           startDate: '2026-10-12',
@@ -214,9 +214,9 @@ describe('daily occurrence scoring', () => {
       }
     });
     if (result.onTrack.kind !== 'scored') throw new Error('Expected scored On Track evidence.');
-    expect(result.onTrack.evidence.days.filter(day => day.status === 'tended').map(day => day.date))
+    expect(result.onTrack.evidence.occurrences.filter(day => day.status === 'completed').map(day => day.date))
       .toEqual(['2026-10-01', '2026-10-15']);
-    expect(result.onTrack.evidence.days.at(-1)).toEqual({
+    expect(result.onTrack.evidence.occurrences.at(-1)).toEqual({
       date: '2026-10-24',
       status: 'today',
       score: 20
@@ -269,9 +269,9 @@ describe('daily occurrence scoring', () => {
       score: 100,
       evidence: {
         lastQualifyingCompletionDate: asOfDate,
-        overdueCount: 0,
+        missedOccurrenceCount: 0,
         deduction: 0,
-        days: [{ date: asOfDate, status: 'tended', score: 100 }]
+        occurrences: [{ date: asOfDate, status: 'completed', score: 100 }]
       }
     });
 
@@ -290,14 +290,14 @@ describe('daily occurrence scoring', () => {
       score: baseline.onTrack.kind === 'scored' ? baseline.onTrack.score : null,
       evidence: {
         lastQualifyingCompletionDate: '2026-10-20',
-        overdueCount: 2,
+        missedOccurrenceCount: 2,
         deduction: 20
       }
     });
     if (withBackdatedAddition.onTrack.kind !== 'scored') throw new Error('Expected scored On Track evidence.');
-    expect(withBackdatedAddition.onTrack.evidence.days.find(day => day.date === '2026-10-01')).toEqual({
+    expect(withBackdatedAddition.onTrack.evidence.occurrences.find(day => day.date === '2026-10-01')).toEqual({
       date: '2026-10-01',
-      status: 'tended',
+      status: 'completed',
       score: 100
     });
     const edited = scored(input({
@@ -364,7 +364,7 @@ describe('daily occurrence scoring', () => {
     }))).toMatchObject({
       kind: 'rhythm-score',
       consistency: { kind: 'unscored', reasonCode: 'ready-for-first-tend' },
-      onTrack: { kind: 'unscored', reasonCode: 'unsupported-schedule' }
+      onTrack: { kind: 'unscored', reasonCode: 'ready-for-first-tend' }
     });
     expect(selectDailyRhythmScore(input({ archived: true }))).toMatchObject({
       kind: 'unscored',
@@ -408,7 +408,7 @@ describe('daily occurrence scoring', () => {
       score: 80,
       evidence: {
         lastQualifyingCompletionDate: '2026-10-20',
-        overdueCount: 2,
+        missedOccurrenceCount: 2,
         deduction: 20
       }
     });
@@ -422,7 +422,7 @@ describe('daily occurrence scoring', () => {
     }));
     expect(noLatestTend).toMatchObject({
       kind: 'rhythm-score',
-      onTrack: { kind: 'unscored', reasonCode: 'unsupported-history' }
+      onTrack: { kind: 'scored', score: 0 }
     });
     expect(selectDailyRhythmScore(input({ recordsAvailable: false }))).toMatchObject({
       kind: 'unscored',
@@ -459,7 +459,7 @@ describe('daily occurrence scoring', () => {
       score: 80,
       evidence: {
         lastQualifyingCompletionDate: '2026-10-20',
-        overdueCount: 2,
+        missedOccurrenceCount: 2,
         deduction: 20
       }
     });
@@ -610,35 +610,40 @@ describe('daily occurrence scoring', () => {
     });
   });
 
-  it('scores supported weekly, monthly, quarterly, and yearly patterns within maximum windows', () => {
+  it('scores supported weekly, monthly, quarterly, and yearly patterns by missed occurrence', () => {
     const cases: {
       schedule: RhythmSchedule;
       start: string;
       expectedDue: number;
+      expectedOnTrack: number;
       records: RhythmCompletionRecord[];
     }[] = [
       {
         schedule: { frequency: 'weekly', weekdays: [1, 3, 5] },
         start: '2026-10-19',
         expectedDue: 2,
+        expectedOnTrack: 90,
         records: [record('mon', '2026-10-19')]
       },
       {
         schedule: { frequency: 'monthly', pattern: { kind: 'dayOfMonth', day: 15 } },
         start: '2026-10-01',
         expectedDue: 1,
+        expectedOnTrack: 100,
         records: [record('monthly', '2026-10-15')]
       },
       {
         schedule: { frequency: 'quarterly', monthInQuarter: 1, pattern: { kind: 'dayOfMonth', day: 1 } },
         start: '2026-01-01',
         expectedDue: 4,
+        expectedOnTrack: 100,
         records: [record('quarterly', '2026-01-01'), record('quarterly-oct', '2026-10-01')]
       },
       {
         schedule: { frequency: 'yearly', month: 2, pattern: { kind: 'dayOfMonth', day: 28 } },
         start: '2025-01-01',
         expectedDue: 2,
+        expectedOnTrack: 100,
         records: [record('yearly', '2026-02-28')]
       }
     ];
@@ -660,9 +665,318 @@ describe('daily occurrence scoring', () => {
           completedCount: testCase.records.length
         }
       });
-      expect(result.onTrack).toMatchObject({ kind: 'unscored', reasonCode: 'unsupported-schedule' });
-      expect(result.healthScore).toBeNull();
+      expect(result.onTrack).toMatchObject({ kind: 'scored', score: testCase.expectedOnTrack });
     }
+  });
+
+  it('scores every structured frequency only at actual occurrences and leaves today pending', () => {
+    const cases: {
+      name: string;
+      schedule: RhythmSchedule;
+      start: string;
+      asOfDate: string;
+      records?: RhythmCompletionRecord[];
+      expectedMissed: number;
+      expectedScore: number;
+      expectedLastCompletion?: string | null;
+    }[] = [
+      {
+        name: 'daily after an older completion',
+        schedule: dailySchedule,
+        start: '2026-10-01',
+        asOfDate: '2026-10-24',
+        records: [record('daily-last', '2026-10-20')],
+        expectedMissed: 3,
+        expectedScore: 70,
+        expectedLastCompletion: '2026-10-20'
+      },
+      {
+        name: 'selected weekdays with today still pending',
+        schedule: { frequency: 'weekly', weekdays: [1, 3, 5] },
+        start: '2026-10-19',
+        asOfDate: '2026-10-23',
+        records: [record('selected-monday', '2026-10-19'), record('off-schedule-tuesday', '2026-10-20')],
+        expectedMissed: 1,
+        expectedScore: 90,
+        expectedLastCompletion: '2026-10-19'
+      },
+      {
+        name: 'once-weekly Thursday on an unscheduled Friday',
+        schedule: { frequency: 'weekly', weekdays: [4] },
+        start: '2026-10-08',
+        asOfDate: '2026-10-10',
+        expectedMissed: 1,
+        expectedScore: 90,
+        expectedLastCompletion: null
+      },
+      {
+        name: 'monthly ordinal weekday',
+        schedule: { frequency: 'monthly', pattern: { kind: 'ordinalWeekday', ordinal: 1, weekday: 4 } },
+        start: '2026-10-01',
+        asOfDate: '2026-10-02',
+        expectedMissed: 1,
+        expectedScore: 90,
+        expectedLastCompletion: null
+      },
+      {
+        name: 'monthly last day',
+        schedule: { frequency: 'monthly', pattern: { kind: 'dayOfMonth', day: 'last' } },
+        start: '2026-09-30',
+        asOfDate: '2026-10-01',
+        expectedMissed: 1,
+        expectedScore: 90,
+        expectedLastCompletion: null
+      },
+      {
+        name: 'quarterly occurrence',
+        schedule: { frequency: 'quarterly', monthInQuarter: 1, pattern: { kind: 'dayOfMonth', day: 1 } },
+        start: '2026-10-01',
+        asOfDate: '2026-10-02',
+        expectedMissed: 1,
+        expectedScore: 90,
+        expectedLastCompletion: null
+      },
+      {
+        name: 'quarterly ordinal weekday',
+        schedule: { frequency: 'quarterly', monthInQuarter: 2, pattern: { kind: 'ordinalWeekday', ordinal: 2, weekday: 1 } },
+        start: '2026-02-09',
+        asOfDate: '2026-02-10',
+        expectedMissed: 1,
+        expectedScore: 90,
+        expectedLastCompletion: null
+      },
+      {
+        name: 'yearly occurrence',
+        schedule: { frequency: 'yearly', month: 2, pattern: { kind: 'dayOfMonth', day: 28 } },
+        start: '2026-02-28',
+        asOfDate: '2026-03-01',
+        expectedMissed: 1,
+        expectedScore: 90,
+        expectedLastCompletion: null
+      },
+      {
+        name: 'yearly ordinal weekday',
+        schedule: { frequency: 'yearly', month: 10, pattern: { kind: 'ordinalWeekday', ordinal: 'last', weekday: 4 } },
+        start: '2026-10-29',
+        asOfDate: '2026-10-30',
+        expectedMissed: 1,
+        expectedScore: 90,
+        expectedLastCompletion: null
+      },
+      {
+        name: 'custom day interval',
+        schedule: { frequency: 'custom', unit: 'days', interval: 2, startDate: '2026-10-01' },
+        start: '2026-10-01',
+        asOfDate: '2026-10-08',
+        expectedMissed: 4,
+        expectedScore: 60,
+        expectedLastCompletion: null
+      },
+      {
+        name: 'custom week interval anchored to Monday week',
+        schedule: { frequency: 'custom', unit: 'weeks', interval: 2, weekdays: [1, 3], startDate: '2026-10-19' },
+        start: '2026-10-19',
+        asOfDate: '2026-11-03',
+        expectedMissed: 3,
+        expectedScore: 70,
+        expectedLastCompletion: null
+      },
+      {
+        name: 'custom month interval with Last weekday pattern',
+        schedule: {
+          frequency: 'custom',
+          unit: 'months',
+          interval: 2,
+          pattern: { kind: 'ordinalWeekday', ordinal: 'last', weekday: 5 },
+          startDate: '2026-08-15'
+        },
+        start: '2026-08-15',
+        asOfDate: '2026-12-26',
+        expectedMissed: 3,
+        expectedScore: 70,
+        expectedLastCompletion: null
+      },
+      {
+        name: 'custom month interval with date pattern skips short months',
+        schedule: {
+          frequency: 'custom',
+          unit: 'months',
+          interval: 1,
+          pattern: { kind: 'dayOfMonth', day: 31 },
+          startDate: '2026-01-31'
+        },
+        start: '2026-01-31',
+        asOfDate: '2026-04-01',
+        expectedMissed: 2,
+        expectedScore: 80,
+        expectedLastCompletion: null
+      },
+      {
+        name: 'custom year interval with leap-day pattern',
+        schedule: {
+          frequency: 'custom',
+          unit: 'years',
+          interval: 2,
+          month: 2,
+          pattern: { kind: 'dayOfMonth', day: 29 },
+          startDate: '2024-02-29'
+        },
+        start: '2024-02-29',
+        asOfDate: '2028-03-01',
+        records: [record('leap-day-reset', '2024-02-29')],
+        expectedMissed: 1,
+        expectedScore: 90,
+        expectedLastCompletion: '2024-02-29'
+      },
+      {
+        name: 'custom year interval with Last weekday pattern',
+        schedule: {
+          frequency: 'custom',
+          unit: 'years',
+          interval: 2,
+          month: 10,
+          pattern: { kind: 'ordinalWeekday', ordinal: 'last', weekday: 4 },
+          startDate: '2026-01-01'
+        },
+        start: '2026-01-01',
+        asOfDate: '2030-11-01',
+        expectedMissed: 3,
+        expectedScore: 70,
+        expectedLastCompletion: null
+      }
+    ];
+
+    for (const testCase of cases) {
+      const result = scored(input({
+        schedule: testCase.schedule,
+        scoring: scoring(testCase.start, [{ startDate: testCase.start, schedule: testCase.schedule }]),
+        createdLocalDate: testCase.start,
+        createdTimeZone: 'UTC',
+        asOfDate: testCase.asOfDate,
+        records: testCase.records ?? []
+      }));
+      expect(result.onTrack, testCase.name).toMatchObject({
+        kind: 'scored',
+        score: testCase.expectedScore,
+        evidence: {
+          lastQualifyingCompletionDate: testCase.expectedLastCompletion,
+          missedOccurrenceCount: testCase.expectedMissed,
+          deduction: testCase.expectedMissed * 10
+        }
+      });
+      if (result.onTrack.kind !== 'scored') throw new Error(`${testCase.name} should be scored.`);
+      expect(result.onTrack.evidence.occurrences.at(-1)).toMatchObject({
+        date: testCase.asOfDate,
+        status: 'today',
+        score: testCase.expectedScore
+      });
+    }
+  });
+
+  it('resets on one qualifying occurrence, ignores duplicate and off-schedule logs, and recalculates after edits', () => {
+    const schedule: RhythmSchedule = { frequency: 'weekly', weekdays: [1, 3, 5] };
+    const start = '2026-10-19';
+    const makeResult = (records: RhythmCompletionRecord[]) => scored(input({
+      schedule,
+      scoring: scoring(start, [{ startDate: start, schedule }]),
+      createdLocalDate: start,
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-23',
+      records
+    }));
+
+    const afterWednesdayTend = makeResult([
+      record('monday', '2026-10-19'),
+      record('wednesday-a', '2026-10-21'),
+      record('wednesday-b', '2026-10-21'),
+      record('thursday-off-schedule', '2026-10-22')
+    ]);
+    expect(afterWednesdayTend.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 100,
+      evidence: {
+        lastQualifyingCompletionDate: '2026-10-21',
+        missedOccurrenceCount: 0,
+        deduction: 0
+      }
+    });
+
+    const afterDeletingWednesday = makeResult([
+      record('monday', '2026-10-19'),
+      record('tuesday-off-schedule', '2026-10-20'),
+      record('thursday-off-schedule', '2026-10-22')
+    ]);
+    expect(afterDeletingWednesday.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 90,
+      evidence: {
+        lastQualifyingCompletionDate: '2026-10-19',
+        missedOccurrenceCount: 1,
+        deduction: 10
+      }
+    });
+  });
+
+  it('preserves score evidence across schedule-history transitions without charging unscheduled gaps', () => {
+    const firstSchedule: RhythmSchedule = { frequency: 'weekly', weekdays: [1] };
+    const secondSchedule: RhythmSchedule = { frequency: 'weekly', weekdays: [4] };
+    const start = '2026-10-19';
+    const history: RhythmScoringMetadata['scheduleHistory'] = [
+      { startDate: start, endDate: '2026-10-21', schedule: firstSchedule },
+      { startDate: '2026-10-22', schedule: secondSchedule }
+    ];
+    const result = scored(input({
+      schedule: secondSchedule,
+      scoring: scoring(start, history),
+      createdLocalDate: start,
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-24',
+      records: [record('old-schedule-completion', '2026-10-19')]
+    }));
+    expect(result.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 90,
+      evidence: {
+        lastQualifyingCompletionDate: '2026-10-19',
+        missedOccurrenceCount: 1,
+        scheduleChanges: [{ date: '2026-10-22', score: 100 }]
+      }
+    });
+  });
+
+  it('returns a precise unavailable reason when unknown history can still affect the score', () => {
+    const schedule: RhythmSchedule = { frequency: 'weekly', weekdays: [4] };
+    const scoringStart = '2026-10-05';
+    const history: RhythmScoringMetadata['scheduleHistory'] = [
+      { startDate: scoringStart, schedule }
+    ];
+    const uncertain = scored(input({
+      schedule,
+      scoring: scoring(scoringStart, history),
+      createdLocalDate: scoringStart,
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-10',
+      records: [record('pre-history', '2026-10-01')]
+    }));
+    expect(uncertain.onTrack).toMatchObject({
+      kind: 'unscored',
+      reasonCode: 'unsupported-history',
+      explanation: 'The schedule history does not cover part of the On Track period, so missed occurrences cannot be reconstructed.'
+    });
+
+    const resetAfterUnknown = scored(input({
+      schedule,
+      scoring: scoring(scoringStart, history),
+      createdLocalDate: scoringStart,
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-10',
+      records: [record('pre-history', '2026-10-01'), record('known-reset', '2026-10-08')]
+    }));
+    expect(resetAfterUnknown.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 100,
+      evidence: { lastQualifyingCompletionDate: '2026-10-08', missedOccurrenceCount: 0 }
+    });
   });
 
   it('caps long histories at each frequency maximum lookback', () => {

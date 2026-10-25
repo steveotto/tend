@@ -251,8 +251,8 @@ describe('shared Rhythm history', () => {
         kind: 'scored',
         score: 70,
         lastTendedDate: '2026-10-19',
-        fullOverdueDates: ['2026-10-20', '2026-10-21', '2026-10-22'],
-        pointsPerFullUntendedDay: 10
+        missedOccurrenceCount: 3,
+        pointsPerMissedOccurrence: 10
       }
     });
     if (example.consistency.kind !== 'scored' || example.onTrack.kind !== 'scored') {
@@ -263,12 +263,12 @@ describe('shared Rhythm history', () => {
     expect(example.consistency.occurrences.filter(item => item.status === 'not-completed')).toHaveLength(7);
     expect(example.consistency.occurrences[0]?.date).toBe('2026-09-23');
     expect(example.consistency.occurrences.at(-1)?.date).toBe('2026-10-22');
-    expect(example.onTrack.days.map(item => [item.date, item.status, item.score])).toEqual([
-      ['2026-10-19', 'tended', 100],
-      ['2026-10-20', 'not-tended', 90],
-      ['2026-10-21', 'not-tended', 80],
-      ['2026-10-22', 'not-tended', 70],
-      ['2026-10-23', 'as-of', 70]
+    expect(example.onTrack.occurrences.map(item => [item.date, item.status, item.score])).toEqual([
+      ['2026-10-19', 'completed', 100],
+      ['2026-10-20', 'missed', 90],
+      ['2026-10-21', 'missed', 80],
+      ['2026-10-22', 'missed', 70],
+      ['2026-10-23', 'today', 70]
     ]);
     expect(prepareCompletionHistory(todayConnection.completionHistory)).toMatchObject({
       kind: 'recorded',
@@ -643,7 +643,7 @@ describe('shared Rhythm history', () => {
     expect(within(onTrackDetails).queryByText('No deduction')).toBeNull();
     const lastTendedDate = addCalendarDays(localDateInTimeZone(new Date(), 'UTC'), -4);
     expect(within(onTrackDetails).getAllByText(new RegExp(shortTestDate(lastTendedDate))).length).toBeGreaterThan(0);
-    expect(within(onTrackDetails).getByText('3 days')).toBeTruthy();
+    expect(within(onTrackDetails).getByText('3')).toBeTruthy();
     expect(within(onTrackDetails).getByText('10 points')).toBeTruthy();
     const onTrackFormula = onTrackDetails.querySelector('.rhythm-history-view__calculation')!;
     expect(onTrackFormula.textContent?.replace(/\s+/g, '')).toBe('100−30=70');
@@ -666,7 +666,7 @@ describe('shared Rhythm history', () => {
     expect(within(details).getByRole('heading', { name: 'How it changed' })).toBeTruthy();
   });
 
-  it('renders only eligible occurrence dates for supported frequencies and leaves custom schedules unscored', async () => {
+  it('renders eligible Consistency occurrences and independently scores Custom On Track', async () => {
     const user = userEvent.setup();
     const asOfDate = localDateInTimeZone(new Date(), 'UTC');
     const trackingStartDate = addCalendarDays(asOfDate, -900);
@@ -710,10 +710,36 @@ describe('shared Rhythm history', () => {
       />
     );
     await user.click(screen.getByRole('button', { name: 'Show Consistency and On Track score details' }));
-    expect(screen.getByText('Consistency for custom interval schedules is not supported yet.')).toBeTruthy();
-    expect(screen.getByText('On Track scoring is currently available only for daily Rhythms.')).toBeTruthy();
+    expect(screen.getByText('Consistency for Custom intervals is unavailable because a lookback policy has not been approved.')).toBeTruthy();
+    expect(screen.getByRole('meter', { name: 'On Track score' })).toBeTruthy();
     expect(screen.queryByRole('list', { name: /eligible .* occurrences from/ })).toBeNull();
     expect(screen.queryByText(/÷ .* × 100/)).toBeNull();
+  });
+
+  it('offers an explicit schedule-conversion action for descriptive cadence without inferring weekdays', async () => {
+    const user = userEvent.setup();
+    const onChooseSchedule = vi.fn();
+    const cadenceOnly = {
+      ...todayConnection,
+      cadence: '3 times a week',
+      completionHistory: []
+    };
+    delete cadenceOnly.schedule;
+    delete cadenceOnly.scoring;
+    render(
+      <RhythmHistoryView
+        rhythm={cadenceOnly}
+        completionHistoryAvailable
+        onChooseSchedule={onChooseSchedule}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'Show Consistency and On Track score details' }));
+    expect(document.querySelector('.rhythm-history-view__score-explanation')?.textContent)
+      .toBe('Choose a schedule to calculate On Track. Descriptive cadence alone does not define due dates.');
+    const conversion = screen.getByRole('button', { name: 'Choose a schedule to calculate On Track' });
+    await user.click(conversion);
+    expect(onChooseSchedule).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('meter', { name: 'On Track score' })).toBeNull();
   });
 
   it('bounds On Track history, expands in batches, preserves totals and restores focus when collapsed', async () => {
@@ -735,7 +761,7 @@ describe('shared Rhythm history', () => {
     expect(within(timeline).getAllByRole('listitem')).toHaveLength(5);
     expect(within(timeline).getAllByRole('listitem').at(-1)?.textContent).toContain('current state');
     expect(within(timeline).getAllByRole('listitem').map(item => item.textContent).join(' '))
-      .toMatch(/earlier scheduled days at 0/);
+      .toMatch(/earlier occurrences at 0/);
 
     earlier.focus();
     await user.keyboard('{Enter}');
@@ -748,7 +774,7 @@ describe('shared Rhythm history', () => {
       item.textContent?.includes('not tended · deduction') && item.querySelector('strong')?.textContent === '0'
     )).toBe(true);
     expect(within(timeline).getAllByRole('listitem').some(item =>
-      item.textContent?.includes('earlier scheduled days at 0')
+      item.textContent?.includes('earlier occurrences at 0')
     )).toBe(true);
 
     const showLess = screen.getByRole('button', { name: 'Show less' });

@@ -5,6 +5,7 @@ import { App } from '../src/App.tsx';
 import { CatalogApp } from '../src/CatalogApp.tsx';
 import { ArchivedRhythmsDialog } from '../src/components/ArchivedRhythmsDialog.tsx';
 import { localDateString } from '../src/domain/money-goals.ts';
+import { addCalendarDays } from '../src/domain/rhythm-scoring.ts';
 import {
   marriageExampleFixtures,
   marriageFoundationCoverage,
@@ -38,6 +39,81 @@ function inclusiveCalendarDays(startDate: string, endDate: string): number {
 }
 
 describe('Tend Today preview', () => {
+  it('recomputes structured On Track from exported and reimported dated records after reload', async () => {
+    const user = userEvent.setup();
+    const today = localDateString(new Date());
+    const trackingStartDate = addCalendarDays(today, -2);
+    const completionDate = trackingStartDate;
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const rhythmId = 'user-rhythm-20000000-0000-4000-8000-000000000001';
+    const data = createSamplePreviewData();
+    data.savedRhythms.push({
+      id: rhythmId,
+      title: 'Reload score fixture',
+      cadence: 'Daily',
+      timeLabel: 'Anytime',
+      timeOfDay: 'anytime',
+      personIds: [],
+      categoryIds: [],
+      schedule: { frequency: 'daily' },
+      scoring: {
+        trackingStartDate,
+        timeZone,
+        scheduleHistory: [{ startDate: trackingStartDate, schedule: { frequency: 'daily' } }]
+      },
+      createdLocalDate: trackingStartDate,
+      createdTimeZone: timeZone,
+      dailyBackfillAllowed: false
+    });
+    data.datedRhythmCompletions.push({
+      id: 'reload-score-completion',
+      rhythmId,
+      effectiveDate: completionDate,
+      localTime: '12:00',
+      timeZone,
+      completedAt: new Date(`${completionDate}T12:00:00`).toISOString(),
+      recordedAt: new Date().toISOString()
+    });
+    const exportedBackup = JSON.stringify(createPreviewEnvelope(data));
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, exportedBackup);
+
+    const { unmount } = render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    const openHistory = async () => {
+      const card = screen.getByRole('article', { name: 'Reload score fixture' });
+      await user.click(within(card).getByRole('button', {
+        name: 'View scores and history for Reload score fixture'
+      }));
+      const historyDialog = await screen.findByRole('dialog', { name: 'Reload score fixture' });
+      const history = within(historyDialog).getByRole('region', { name: 'History for Reload score fixture' });
+      await user.click(within(history).getByRole('button', {
+        name: 'Show Consistency and On Track score details'
+      }));
+      expect(within(history).getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow'))
+        .toBe('90');
+      return historyDialog;
+    };
+    const firstDialog = await openHistory();
+    await user.click(within(firstDialog).getByRole('button', { name: 'Close details' }));
+    unmount();
+
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    const reloadedDialog = await openHistory();
+    await user.click(within(reloadedDialog).getByRole('button', { name: 'Close details' }));
+
+    await user.upload(
+      screen.getByLabelText('Import preview backup'),
+      new File([exportedBackup], 'on-track-export.json', { type: 'application/json' })
+    );
+    const importConfirmation = await screen.findByRole('dialog', { name: 'Replace preview data?' });
+    await user.click(within(importConfirmation).getByRole('button', { name: 'Replace with backup' }));
+    await screen.findByText('Preview backup imported.');
+    const importedDialog = await openHistory();
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toContain('reload-score-completion');
+    await user.click(within(importedDialog).getByRole('button', { name: 'Close details' }));
+  });
+
   it('keeps Take a walk descriptive cadence literal until a structured schedule is explicitly saved', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -51,6 +127,91 @@ describe('Tend Today preview', () => {
     expect(within(history).getByText('3 times a week')).toBeTruthy();
     expect(within(history).getByText('Afternoon')).toBeTruthy();
     expect(within(history).queryByText(/Monday|Wednesday|Friday/)).toBeNull();
+  });
+
+  it('saves a Quarterly rhythm through the editor and retains it after reload', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const addButton = screen.getByRole('button', { name: 'Add Rhythm' });
+    await user.click(addButton);
+    const editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+
+    await user.type(within(editor).getByLabelText('Title'), 'Quarterly preview habit');
+    await user.type(within(editor).getByLabelText('Description (optional)'), 'Quarterly test rhythm.');
+    await user.click(within(editor).getByRole('combobox', { name: 'Frequency: Daily' }));
+    await user.click(within(editor).getByRole('option', { name: 'Quarterly' }));
+    await user.click(within(editor).getByRole('combobox', { name: 'Time of day: Anytime' }));
+    await user.click(within(editor).getByRole('option', { name: 'Morning' }));
+    await user.click(within(editor).getByRole('button', { name: 'Add Rhythm' }));
+
+    const card = screen.getByRole('article', { name: 'Quarterly preview habit' });
+    expect(within(card).getByText(/Quarterly\s*·\s*1st month\s*·\s*1st/)).toBeTruthy();
+    const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
+    expect(raw).not.toBeNull();
+    const parsed = parsePreviewBackup(raw!, localDateString(new Date()));
+    expect(parsed.valid).toBe(true);
+    if (parsed.valid) {
+      expect(parsed.envelope.data.savedRhythms).toContainEqual(expect.objectContaining({
+        title: 'Quarterly preview habit',
+        schedule: { frequency: 'quarterly', monthInQuarter: 1, pattern: { kind: 'dayOfMonth', day: 1 } }
+      }));
+    }
+
+    const savedCard = screen.getByRole('article', { name: 'Quarterly preview habit' });
+    await user.click(within(savedCard).getByRole('button', {
+      name: 'View scores and history for Quarterly preview habit'
+    }));
+    const history = screen.getByRole('region', { name: 'History for Quarterly preview habit' });
+    expect(within(history).getByText(/The 1st day of the first month of every quarter\./)).toBeTruthy();
+    expect(within(history).getByText('Morning')).toBeTruthy();
+
+    cleanup();
+    render(<App />);
+    const reloadedCard = screen.getByRole('article', { name: 'Quarterly preview habit' });
+    expect(reloadedCard).toBeTruthy();
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toContain('"frequency":"quarterly"');
+    await user.click(within(reloadedCard).getByRole('button', {
+      name: 'View scores and history for Quarterly preview habit'
+    }));
+    expect(screen.getByRole('dialog', { name: 'Quarterly preview habit' })).toBeTruthy();
+  });
+
+  it('converts Take a walk from descriptive cadence to Quarterly and preserves the saved schedule after reload', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const card = screen.getByRole('article', { name: 'Take a walk' });
+    await user.click(within(card).getByRole('button', { name: 'Edit Take a walk' }));
+    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    await user.click(within(editor).getByRole('button', { name: 'Change schedule' }));
+    await user.click(within(editor).getByRole('combobox', { name: 'Frequency: Choose a frequency' }));
+    await user.click(within(editor).getByRole('option', { name: 'Quarterly' }));
+    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+
+    const updatedCard = screen.getByRole('article', { name: 'Take a walk' });
+    expect(within(updatedCard).getByText(/Quarterly\s*·\s*1st month\s*·\s*1st/)).toBeTruthy();
+    expect(within(updatedCard).queryByText('3 times a week')).toBeNull();
+
+    const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
+    expect(raw).not.toBeNull();
+    const parsed = parsePreviewBackup(raw!, localDateString(new Date()));
+    expect(parsed.valid).toBe(true);
+    if (parsed.valid) {
+      const walk = parsed.envelope.data.savedRhythms.find(rhythm => rhythm.id === 'sample-walk');
+      expect(walk).toMatchObject({
+        cadence: expect.stringContaining('quarter'),
+        schedule: { frequency: 'quarterly', monthInQuarter: 1, pattern: { kind: 'dayOfMonth', day: 1 } }
+      });
+    }
+
+    cleanup();
+    render(<App />);
+    const reloadedCard = screen.getByRole('article', { name: 'Take a walk' });
+    expect(within(reloadedCard).getByText(/Quarterly\s*·\s*1st month\s*·\s*1st/)).toBeTruthy();
+    expect(within(reloadedCard).queryByText('3 times a week')).toBeNull();
+    await user.click(within(reloadedCard).getByRole('button', { name: 'View scores and history for Take a walk' }));
+    const history = screen.getByRole('region', { name: 'History for Take a walk' });
+    expect(within(history).getByText(/Quarterly|1st day of the first month of every quarter/)).toBeTruthy();
   });
 
   it('exposes the exact v5 recovery copy after explicitly replacing v5 preview data', async () => {

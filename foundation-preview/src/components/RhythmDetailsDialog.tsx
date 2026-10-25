@@ -201,6 +201,7 @@ export function RhythmDetailsDialog({
               {...(onUpdateCompletion ? { onUpdateCompletion } : {})}
               {...(onDeleteCompletion ? { onDeleteCompletion } : {})}
               {...(onLogCompletion ? { onSaveCompletion: onLogCompletion } : {})}
+              {...(onEdit ? { onChooseSchedule: onEdit } : {})}
               {...(people ? { people } : {})}
               {...(onPersonSelect ? { onPersonSelect } : {})}
               onClose={onClose}
