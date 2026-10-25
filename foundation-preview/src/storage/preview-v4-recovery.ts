@@ -5,11 +5,19 @@ export const PREVIEW_STORAGE_KEY = 'tend2:synthetic-preview';
 export const PREVIEW_V1_RECOVERY_KEY = 'tend2:synthetic-preview:v1-recovery';
 export const PREVIEW_V2_RECOVERY_KEY = 'tend2:synthetic-preview:v2-recovery';
 export const PREVIEW_V3_RECOVERY_KEY = 'tend2:synthetic-preview:v3-recovery';
+export const PREVIEW_V4_RECOVERY_KEY = 'tend2:synthetic-preview:v4-recovery';
+export const PREVIEW_V5_RECOVERY_KEY = 'tend2:synthetic-preview:v5-recovery';
+export const PREVIEW_V6_RECOVERY_KEY = 'tend2:synthetic-preview:v6-recovery';
+export const PREVIEW_V7_RECOVERY_KEY = 'tend2:synthetic-preview:v7-recovery';
 
 const recoveryKeys = {
   1: PREVIEW_V1_RECOVERY_KEY,
   2: PREVIEW_V2_RECOVERY_KEY,
-  3: PREVIEW_V3_RECOVERY_KEY
+  3: PREVIEW_V3_RECOVERY_KEY,
+  4: PREVIEW_V4_RECOVERY_KEY,
+  5: PREVIEW_V5_RECOVERY_KEY,
+  6: PREVIEW_V6_RECOVERY_KEY,
+  7: PREVIEW_V7_RECOVERY_KEY
 } as const;
 
 export type ProposedRecoveryResult =
@@ -27,14 +35,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export function proposedV4SourceVersionForRaw(raw: string): 1 | 2 | 3 | 4 | null {
+export function proposedV4SourceVersionForRaw(raw: string): 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | null {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!isRecord(parsed)) return null;
     const envelope = parsed;
     if (envelope.format !== PREVIEW_BACKUP_FORMAT) return null;
     return envelope.schemaVersion === 1 || envelope.schemaVersion === 2
-      || envelope.schemaVersion === 3 || envelope.schemaVersion === 4
+      || envelope.schemaVersion === 3 || envelope.schemaVersion === 4 || envelope.schemaVersion === 5
+      || envelope.schemaVersion === 6 || envelope.schemaVersion === 7 || envelope.schemaVersion === 8
       ? envelope.schemaVersion
       : null;
   } catch {
@@ -66,5 +75,8 @@ export function preserveProposedV4SourceRecovery(
 
 export function proposedV4RecoveryKeyForRaw(raw: string): string | null {
   const version = proposedV4SourceVersionForRaw(raw);
-  return version === 1 || version === 2 || version === 3 ? recoveryKeys[version] : null;
+  return version === 1 || version === 2 || version === 3 || version === 4 || version === 5
+    || version === 6 || version === 7
+    ? recoveryKeys[version]
+    : null;
 }

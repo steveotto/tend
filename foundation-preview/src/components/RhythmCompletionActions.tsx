@@ -1,9 +1,10 @@
 import type { RefObject } from 'react';
+import type { MouseEvent } from 'react';
 
 type RhythmCompletionActionsProps = {
   rhythmTitle: string;
   completed: boolean;
-  onTend: () => void;
+  onTend: (event: MouseEvent<HTMLButtonElement>) => void;
   tendButtonRef: RefObject<HTMLButtonElement | null>;
 };
 

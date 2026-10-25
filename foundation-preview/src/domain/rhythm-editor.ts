@@ -4,9 +4,12 @@ import {
   rhythmTimeOptions,
   rhythmTimeValueFromLabel,
   rhythmScheduleSummary,
-  validateRhythmSchedule
+  validateRhythmSchedule,
+  validateRhythmScoringMetadata,
+  isValidTimeZone
 } from './rhythm-schedule.ts';
-import type { RhythmSchedule, RhythmTimeLabel, RhythmTimeValue } from './rhythm-schedule.ts';
+import type { RhythmSchedule, RhythmScoringMetadata, RhythmTimeLabel, RhythmTimeValue } from './rhythm-schedule.ts';
+import { isValidDate } from './money-goals.ts';
 
 export const rhythmCadences = [
   'Daily',
@@ -33,6 +36,10 @@ export type SavedRhythm = {
   timeOfDay?: RhythmTimeValue;
   schedule?: RhythmSchedule;
   personal?: boolean;
+  scoring?: RhythmScoringMetadata;
+  createdLocalDate?: string;
+  createdTimeZone?: string;
+  dailyBackfillAllowed?: boolean;
 };
 
 export type RhythmDraft = {
@@ -45,6 +52,8 @@ export type RhythmDraft = {
   schedule?: RhythmSchedule;
   scheduleEditing?: boolean;
   personal?: boolean;
+  originalSchedule?: RhythmSchedule;
+  originalScoring?: RhythmScoringMetadata;
 };
 
 export type RhythmDraftErrors = Partial<Record<keyof RhythmDraft | 'schedule', string>>;
@@ -54,6 +63,8 @@ const personIds = new Set(syntheticPeople.map(person => person.id));
 const categoryIds = new Set(areas.map(area => area.id));
 const savedRhythmKeys = ['id', 'title', 'description', 'cadence', 'timeLabel', 'personIds', 'categoryIds'];
 const savedRhythmV4Keys = [...savedRhythmKeys, 'timeOfDay', 'schedule', 'personal'];
+const savedRhythmV7Keys = [...savedRhythmV4Keys, 'scoring'];
+const savedRhythmV8Keys = [...savedRhythmV7Keys, 'createdLocalDate', 'createdTimeZone', 'dailyBackfillAllowed'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -96,16 +107,42 @@ export function validateSavedRhythms(value: unknown): value is SavedRhythm[] {
 }
 
 export function validateSavedRhythmsV4(value: unknown): value is SavedRhythm[] {
+  return validateSavedRhythmsWithKeys(value, savedRhythmV4Keys, false);
+}
+
+export function validateSavedRhythmsV7(value: unknown): value is SavedRhythm[] {
+  return validateSavedRhythmsWithKeys(value, savedRhythmV7Keys, true);
+}
+
+export function validateSavedRhythmsV8(value: unknown): value is SavedRhythm[] {
+  return validateSavedRhythmsWithKeys(value, savedRhythmV8Keys, true);
+}
+
+function validateSavedRhythmsWithKeys(
+  value: unknown,
+  allowedKeys: readonly string[],
+  scoringAllowed: boolean
+): value is SavedRhythm[] {
   if (!Array.isArray(value)) return false;
   const ids = new Set<string>();
   const labels = new Set<string>(rhythmTimeOptions.map(option => option.label));
   for (const record of value) {
-    if (!isRecord(record) || !hasOnlyKeys(record, savedRhythmV4Keys)) return false;
+    if (!isRecord(record) || !hasOnlyKeys(record, allowedKeys)) return false;
     if (typeof record.cadence !== 'string' || record.cadence.trim().length === 0 || record.cadence.length > 160) return false;
     if (typeof record.timeLabel !== 'string' || !labels.has(record.timeLabel)) return false;
     if (rhythmTimeValueFromLabel(record.timeLabel) !== record.timeOfDay) return false;
     if (record.personal !== undefined && typeof record.personal !== 'boolean') return false;
     if (record.schedule !== undefined && !validateRhythmSchedule(record.schedule).valid) return false;
+    if ((record.createdLocalDate === undefined) !== (record.createdTimeZone === undefined)
+      || record.createdLocalDate !== undefined
+        && (typeof record.createdLocalDate !== 'string' || !isValidDate(record.createdLocalDate)
+          || !isValidTimeZone(record.createdTimeZone))) return false;
+    if (record.dailyBackfillAllowed !== undefined && typeof record.dailyBackfillAllowed !== 'boolean') return false;
+    if (record.scoring !== undefined) {
+      if (!scoringAllowed || !validateRhythmScoringMetadata(record.scoring)
+        || record.schedule === undefined
+        || JSON.stringify(record.scoring.scheduleHistory.at(-1)?.schedule) !== JSON.stringify(record.schedule)) return false;
+    }
 
     const legacyCompatibleRecord = {
       id: record.id,
@@ -124,7 +161,10 @@ export function validateSavedRhythmsV4(value: unknown): value is SavedRhythm[] {
   return true;
 }
 
-export function rhythmDraftFrom(rhythm: RhythmPreview, categoryIds: readonly RhythmCategoryId[] = []): RhythmDraft {
+export function rhythmDraftFrom(
+  rhythm: RhythmPreview,
+  categoryIds: readonly RhythmCategoryId[] = []
+): RhythmDraft {
   return {
     title: rhythm.title,
     description: rhythm.description ?? '',
@@ -133,6 +173,10 @@ export function rhythmDraftFrom(rhythm: RhythmPreview, categoryIds: readonly Rhy
     personIds: [...(rhythm.personIds ?? [])],
     categoryIds: [...categoryIds],
     ...(rhythm.schedule === undefined ? {} : { schedule: rhythm.schedule }),
+    ...(rhythm.schedule === undefined ? {} : { originalSchedule: rhythm.schedule }),
+    ...(rhythm.scoring === undefined ? {} : {
+      originalScoring: rhythm.scoring
+    }),
     scheduleEditing: rhythm.schedule !== undefined,
     ...(rhythm.personal === undefined ? {} : { personal: rhythm.personal })
   };
@@ -165,7 +209,8 @@ export function saveRhythmDraft(
   savedRhythms: readonly SavedRhythm[],
   draft: RhythmDraft,
   id: string,
-  mode: 'create' | 'edit'
+  mode: 'create' | 'edit',
+  scoringContext?: { currentDate: string; deviceTimeZone: string }
 ): { savedRhythms?: SavedRhythm[]; errors: RhythmDraftErrors } {
   const errors = validateRhythmDraft(draft);
   const hasSavedRecord = savedRhythms.some(rhythm => rhythm.id === id);
@@ -183,7 +228,54 @@ export function saveRhythmDraft(
 
   const existing = savedRhythms.find(rhythm => rhythm.id === id);
   const timeOfDay = rhythmTimeValueFromLabel(draft.timeLabel);
-  const scheduleChanged = draft.schedule !== undefined && draft.schedule !== existing?.schedule;
+  const originalSchedule = draft.originalSchedule ?? existing?.schedule;
+  const scheduleChanged = JSON.stringify(draft.schedule) !== JSON.stringify(originalSchedule);
+  let scoring = draft.originalScoring ?? existing?.scoring;
+  if (mode === 'create' && !scoring && draft.schedule && scoringContext
+    && isValidDate(scoringContext.currentDate) && isValidTimeZone(scoringContext.deviceTimeZone)) {
+    scoring = {
+      trackingStartDate: scoringContext.currentDate,
+      timeZone: scoringContext.deviceTimeZone,
+      scheduleHistory: [{ startDate: scoringContext.currentDate, schedule: draft.schedule }]
+    };
+  } else if (!scoring && existing && scheduleChanged && draft.schedule
+    && scoringContext && isValidDate(scoringContext.currentDate)
+    && isValidTimeZone(scoringContext.deviceTimeZone)) {
+    scoring = {
+      trackingStartDate: scoringContext.currentDate,
+      timeZone: scoringContext.deviceTimeZone,
+      scheduleHistory: [{ startDate: scoringContext.currentDate, schedule: draft.schedule }]
+    };
+  } else if (scoring && scheduleChanged && draft.schedule) {
+    const currentDate = scoringContext?.currentDate;
+    if (!currentDate || !isValidDate(currentDate)
+      || !scoringContext || !isValidTimeZone(scoringContext.deviceTimeZone)) {
+      errors.schedule = 'The current local date and time zone are required to preserve schedule history.';
+      return { errors };
+    }
+    if (currentDate < scoring.trackingStartDate) {
+      errors.schedule = 'A schedule cannot change before its saved schedule history starts.';
+      return { errors };
+    }
+    const segments = scoring.scheduleHistory.map(segment => ({ ...segment }));
+    const currentSegment = segments.at(-1);
+    if (!currentSegment || currentSegment.endDate !== undefined) {
+      errors.schedule = 'The current schedule history cannot be changed safely.';
+      return { errors };
+    }
+    if (currentSegment.startDate === currentDate) {
+      segments[segments.length - 1] = { startDate: currentDate, schedule: draft.schedule };
+    } else {
+      currentSegment.endDate = addOneCalendarDay(currentDate, -1);
+      segments.push({ startDate: currentDate, schedule: draft.schedule });
+    }
+    scoring = { ...scoring, scheduleHistory: segments };
+  }
+  if (scoring && draft.schedule
+    && JSON.stringify(scoring.scheduleHistory.at(-1)?.schedule) !== JSON.stringify(draft.schedule)) {
+    errors.schedule = 'The active schedule does not match its saved schedule history.';
+    return { errors };
+  }
   const cadence = draft.schedule
     ? scheduleChanged || existing === undefined
       ? rhythmScheduleSummary(draft.schedule)
@@ -199,6 +291,28 @@ export function saveRhythmDraft(
     personIds: [...draft.personIds],
     categoryIds: [...draft.categoryIds],
     ...(schedule === undefined ? {} : { schedule }),
+    ...(scoring === undefined ? {} : { scoring }),
+    ...(existing?.createdLocalDate === undefined
+      ? mode === 'create' && scoringContext && isValidDate(scoringContext.currentDate)
+        && isValidTimeZone(scoringContext.deviceTimeZone)
+        ? {
+            createdLocalDate: scoringContext.currentDate,
+            createdTimeZone: scoringContext.deviceTimeZone,
+            dailyBackfillAllowed: true
+          }
+        : {}
+      : {
+          createdLocalDate: existing.createdLocalDate,
+          createdTimeZone: existing.createdTimeZone,
+          ...(existing.dailyBackfillAllowed === undefined
+            ? {}
+            : { dailyBackfillAllowed: existing.dailyBackfillAllowed })
+        }),
+    ...(existing?.createdLocalDate === undefined && mode !== 'create' && scheduleChanged && scoring
+      ? { dailyBackfillAllowed: false }
+      : existing?.dailyBackfillAllowed !== undefined
+        ? { dailyBackfillAllowed: existing.dailyBackfillAllowed }
+        : {}),
     ...(draft.personal === undefined
       ? existing?.personal === undefined ? {} : { personal: existing.personal }
       : { personal: draft.personal }),
@@ -227,6 +341,12 @@ export function resolveTodayRhythms(savedRhythms: readonly SavedRhythm[]): Rhyth
       personIds: saved.personIds,
       categoryIds: saved.categoryIds,
       ...(saved.schedule === undefined ? {} : { schedule: saved.schedule }),
+      ...(saved.scoring === undefined ? {} : { scoring: saved.scoring }),
+      ...(saved.createdLocalDate === undefined ? {} : {
+        createdLocalDate: saved.createdLocalDate,
+        createdTimeZone: saved.createdTimeZone
+      }),
+      ...(saved.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: saved.dailyBackfillAllowed }),
       ...(saved.personal === undefined ? {} : { personal: saved.personal })
     };
   });
@@ -244,10 +364,28 @@ export function resolveTodayRhythms(savedRhythms: readonly SavedRhythm[]): Rhyth
       personIds: rhythm.personIds,
       categoryIds: rhythm.categoryIds,
       ...(rhythm.schedule === undefined ? {} : { schedule: rhythm.schedule }),
+      ...(rhythm.scoring === undefined ? {} : { scoring: rhythm.scoring }),
+      ...(rhythm.createdLocalDate === undefined ? {} : {
+        createdLocalDate: rhythm.createdLocalDate,
+        createdTimeZone: rhythm.createdTimeZone
+      }),
+      ...(rhythm.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: rhythm.dailyBackfillAllowed }),
       ...(rhythm.personal === undefined ? {} : { personal: rhythm.personal })
     }));
 
   return [...editable, ...custom];
+}
+
+function addOneCalendarDay(date: string, offset: number): string {
+  const [year, month, day] = date.split('-').map(Number);
+  const result = new Date(0);
+  result.setUTCFullYear(year!, month! - 1, day! + offset);
+  result.setUTCHours(0, 0, 0, 0);
+  return [
+    String(result.getUTCFullYear()).padStart(4, '0'),
+    String(result.getUTCMonth() + 1).padStart(2, '0'),
+    String(result.getUTCDate()).padStart(2, '0')
+  ].join('-');
 }
 
 export function activeTodayRhythms(

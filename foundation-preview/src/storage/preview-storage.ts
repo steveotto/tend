@@ -1,7 +1,4 @@
-import {
-  createPreviewEnvelope,
-  parsePreviewBackup
-} from '../domain/preview-state.ts';
+import { createPreviewEnvelope, parsePreviewBackup } from '../domain/preview-state.ts';
 import type { PreviewData } from '../domain/preview-state.ts';
 import { migratePreviewToProposedV4 } from '../domain/preview-v4-migration.ts';
 import {
@@ -9,6 +6,10 @@ import {
   PREVIEW_V1_RECOVERY_KEY,
   PREVIEW_V2_RECOVERY_KEY,
   PREVIEW_V3_RECOVERY_KEY,
+  PREVIEW_V4_RECOVERY_KEY,
+  PREVIEW_V5_RECOVERY_KEY,
+  PREVIEW_V6_RECOVERY_KEY,
+  PREVIEW_V7_RECOVERY_KEY,
   preserveProposedV4SourceRecovery,
   proposedV4SourceVersionForRaw
 } from './preview-v4-recovery.ts';
@@ -17,7 +18,11 @@ export {
   PREVIEW_STORAGE_KEY,
   PREVIEW_V1_RECOVERY_KEY,
   PREVIEW_V2_RECOVERY_KEY,
-  PREVIEW_V3_RECOVERY_KEY
+  PREVIEW_V3_RECOVERY_KEY,
+  PREVIEW_V4_RECOVERY_KEY,
+  PREVIEW_V5_RECOVERY_KEY,
+  PREVIEW_V6_RECOVERY_KEY,
+  PREVIEW_V7_RECOVERY_KEY
 };
 
 export type PreviewStorage = Pick<Storage, 'getItem' | 'setItem'>;
@@ -78,16 +83,17 @@ export function writePreview(
 
     if (expectedRaw !== null) {
       const sourceVersion = proposedV4SourceVersionForRaw(expectedRaw);
-      if (sourceVersion === 1 || sourceVersion === 2 || sourceVersion === 3) {
-        const source = options.currentDate
-          ? parsePreviewBackup(expectedRaw, options.currentDate)
-          : { valid: false as const };
-        if (!source.valid && !options.allowUnrecoverableReplacement) {
-          return {
-            kind: 'error',
-            message: 'The stored source value is invalid or cannot be checked. Download its raw recovery before explicitly replacing it.'
-          };
-        }
+      const source = options.currentDate ? parsePreviewBackup(expectedRaw, options.currentDate) : { valid: false as const };
+      if (!source.valid && !options.allowUnrecoverableReplacement) {
+        return {
+          kind: 'error',
+          message: sourceVersion === 8
+            ? 'The active preview data is malformed and cannot be replaced without an explicit raw backup.'
+            : 'The stored source value is invalid or cannot be checked. Download its raw recovery before explicitly replacing it.'
+        };
+      }
+      if (sourceVersion === 1 || sourceVersion === 2 || sourceVersion === 3
+        || sourceVersion === 4 || sourceVersion === 5 || sourceVersion === 6 || sourceVersion === 7) {
         const recovery = preserveProposedV4SourceRecovery(storage, expectedRaw);
         if (recovery.kind !== 'preserved') {
           return {
@@ -99,16 +105,6 @@ export function writePreview(
                 : recovery.kind === 'unsupported'
                   ? recovery.message
                   : recovery.message
-          };
-        }
-      } else if (sourceVersion === 4) {
-        const current = options.currentDate
-          ? parsePreviewBackup(expectedRaw, options.currentDate)
-          : { valid: false as const };
-        if (!current.valid && !options.allowUnrecoverableReplacement) {
-          return {
-            kind: 'error',
-            message: 'The stored v4 value is invalid or cannot be checked. Download its raw recovery before explicitly replacing it.'
           };
         }
       } else if (sourceVersion === null && !options.allowUnrecoverableReplacement) {
@@ -154,6 +150,38 @@ export function loadV2RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadRes
 export function loadV3RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
   try {
     return { kind: 'loaded', raw: storage.getItem(PREVIEW_V3_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV4RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V4_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV5RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V5_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV6RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V6_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV7RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V7_RECOVERY_KEY) };
   } catch (error) {
     return { kind: 'error', message: errorMessage(error) };
   }

@@ -4,7 +4,7 @@ import type {
   RhythmAutomation
 } from '../../../src/domain/capabilities.ts';
 import type { MoneyGoal } from './money-goals.ts';
-import type { RhythmSchedule, RhythmTimeValue } from './rhythm-schedule.ts';
+import type { RhythmSchedule, RhythmScoringMetadata, RhythmTimeValue } from './rhythm-schedule.ts';
 
 export type FoundationPreview = {
   id: string;
@@ -72,6 +72,10 @@ export type RhythmPreview = {
   personIds?: readonly PersonId[];
   categoryIds?: readonly ('faith' | 'marriage' | 'parenting' | 'health' | 'finances' | 'friendships')[];
   schedule?: RhythmSchedule;
+  scoring?: RhythmScoringMetadata;
+  createdLocalDate?: string;
+  createdTimeZone?: string;
+  dailyBackfillAllowed?: boolean;
   timeOfDay?: RhythmTimeValue;
   personal?: boolean;
 };
@@ -79,6 +83,11 @@ export type RhythmPreview = {
 export type RhythmCompletion = {
   id: string;
   effectiveDate: string;
+  localTime?: string;
+  timeZone?: string;
+  completedAt?: string;
+  recordedAt?: string;
+  memory?: string;
 };
 
 export const areas = [
@@ -479,7 +488,12 @@ export const todayRhythms: RhythmPreview[] = [
     automation: 'manual',
     status: 'Due today',
     personIds: ['sample-person-avery', 'sample-person-morgan'],
-    description: 'Set aside a few minutes to share how your day went.'
+    description: 'Set aside a few minutes to share how your day went.',
+    completionHistory: [
+      { id: 'sample-connect-2026-10-20', effectiveDate: '2026-10-20' },
+      { id: 'sample-connect-2026-10-18', effectiveDate: '2026-10-18' },
+      { id: 'sample-connect-2026-10-17', effectiveDate: '2026-10-17' }
+    ]
   },
   {
     id: 'sample-walk',

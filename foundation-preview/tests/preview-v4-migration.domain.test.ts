@@ -8,6 +8,7 @@ import {
   preserveProposedV4SourceRecovery,
   proposedV4RecoveryKeyForRaw
 } from '../src/storage/preview-v4-recovery.ts';
+import { PREVIEW_V4_RECOVERY_KEY } from '../src/storage/preview-v4-recovery.ts';
 
 const currentDate = '2026-10-22';
 const savedRhythmId = 'user-rhythm-11111111-1111-4111-8111-111111111111';
@@ -34,7 +35,7 @@ function dataWithHistory(): PreviewData {
   return data;
 }
 
-function rawAtVersion(data: PreviewData, version: 1 | 2 | 3): string {
+function rawAtVersion(data: PreviewData, version: 1 | 2 | 3 | 4): string {
   const envelope = createPreviewEnvelope(data);
   const versionOneCompletions = data.completedRhythmIds.filter(id => id !== savedRhythmId);
   const legacySavedRhythms = envelope.data.savedRhythms.map(rhythm => ({
@@ -57,7 +58,19 @@ function rawAtVersion(data: PreviewData, version: 1 | 2 | 3): string {
             completedRhythmIds: envelope.data.completedRhythmIds,
             savedRhythms: legacySavedRhythms
           }
-        : { ...envelope.data, savedRhythms: legacySavedRhythms }
+        : version === 3
+          ? {
+              goals: envelope.data.goals,
+              completedRhythmIds: envelope.data.completedRhythmIds,
+              savedRhythms: legacySavedRhythms,
+              archivedRhythmIds: envelope.data.archivedRhythmIds
+            }
+          : {
+              goals: envelope.data.goals,
+              completedRhythmIds: envelope.data.completedRhythmIds,
+              savedRhythms: envelope.data.savedRhythms,
+              archivedRhythmIds: envelope.data.archivedRhythmIds
+            }
   });
 }
 
@@ -117,6 +130,18 @@ describe('v4 migration and recovery domain', () => {
     }
   });
 
+  it('migrates v4 with empty dated history, without inferring timestamps', () => {
+    const data = dataWithHistory();
+    const result = migratePreviewToProposedV4(rawAtVersion(data, 4), currentDate);
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.sourceSchemaVersion).toBe(4);
+    expect(result.envelope.schemaVersion).toBe(8);
+    expect(result.envelope.data.datedRhythmCompletions).toEqual([]);
+    expect(result.envelope.data.activeRhythmCompletions).toEqual([]);
+    expect(result.envelope.data.completedRhythmIds).toEqual(data.completedRhythmIds);
+  });
+
   it('rejects unknown fields and unsupported versions without converting or changing active bytes', () => {
     const validRaw = rawAtVersion(dataWithHistory(), 3);
     const value = JSON.parse(validRaw) as { data: Record<string, unknown> };
@@ -129,7 +154,7 @@ describe('v4 migration and recovery domain', () => {
 
     const futureRaw = JSON.stringify({
       format: 'tend.synthetic-preview',
-      schemaVersion: 5,
+      schemaVersion: 9,
       data: { unknownFutureValue: true }
     });
     const futureStorage = storageFixture(futureRaw);
@@ -154,10 +179,11 @@ describe('v4 migration and recovery domain', () => {
     const expectedKeys = {
       1: 'tend2:synthetic-preview:v1-recovery',
       2: 'tend2:synthetic-preview:v2-recovery',
-      3: PREVIEW_V3_RECOVERY_KEY
+      3: PREVIEW_V3_RECOVERY_KEY,
+      4: PREVIEW_V4_RECOVERY_KEY
     } as const;
 
-    for (const version of [1, 2, 3] as const) {
+    for (const version of [1, 2, 3, 4] as const) {
       const raw = ` \n${rawAtVersion(data, version)}\n`;
       const { storage, values } = storageFixture(raw);
       const result = preserveProposedV4SourceRecovery(storage, raw);
@@ -204,8 +230,8 @@ describe('v4 migration and recovery domain', () => {
     expect(stale.values.size).toBe(1);
   });
 
-  it('uses schema v4 for active preview serialization', () => {
-    expect(createPreviewEnvelope(dataWithHistory()).schemaVersion).toBe(4);
+  it('uses schema v8 for active preview serialization', () => {
+    expect(createPreviewEnvelope(dataWithHistory()).schemaVersion).toBe(8);
   });
 
   it('loads v4 backups with legacy day-of-month values 29–31 unchanged', () => {

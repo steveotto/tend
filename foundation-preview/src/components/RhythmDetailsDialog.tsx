@@ -1,26 +1,38 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import {
-  marriageFoundations,
-  orderedCompletions,
   rhythmLastTendedLabel,
   type PersonId,
   type PersonPreview,
   type RhythmPreview
 } from '../domain/preview-data.ts';
-import { MarriageIcon } from './MarriageIcon.tsx';
 import { PersonBadgeList } from './PersonBadge.tsx';
 import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
 import { RhythmPersonalBadge } from './RhythmPersonalBadge.tsx';
 import { RhythmMetadata } from './RhythmMetadata.tsx';
 import { RhythmCompletionActions } from './RhythmCompletionActions.tsx';
+import { RhythmHistoryView } from './RhythmHistoryView.tsx';
+import { RhythmCompletionForm } from './RhythmCompletionForm.tsx';
+import type { DatedRhythmCompletion, RhythmCompletionRecord } from '../domain/rhythm-completion.ts';
+import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
+import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
 
 type RhythmDetailsDialogProps = {
   rhythm: RhythmPreview;
+  inline?: boolean;
+  initialView?: 'details' | 'history';
+  onTend?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onHistory?: (event: MouseEvent<HTMLButtonElement>) => void;
+  headingId?: string;
   people?: readonly PersonPreview[];
   onPersonSelect?: (personId: PersonId) => void;
   completed?: boolean;
-  onTend?: () => void;
+  datedCompletions?: readonly DatedRhythmCompletion[];
+  completionHistoryAvailable?: boolean;
+  onSaveCompletion?: (record: RhythmCompletionRecord) => string | null;
+  onLogCompletion?: (record: RhythmCompletionRecord) => string | null;
+  onUpdateCompletion?: (record: RhythmCompletionRecord) => string | null;
+  onDeleteCompletion?: (completionId: string) => string | null;
   onUndo?: () => void;
   onEdit?: (event: MouseEvent<HTMLButtonElement>) => void;
   archived?: boolean;
@@ -33,39 +45,34 @@ export function RhythmDetailsDialog({
   people,
   onPersonSelect,
   completed = false,
-  onTend,
+  datedCompletions = [],
+  completionHistoryAvailable = false,
+  onSaveCompletion,
+  onLogCompletion,
+  onUpdateCompletion,
+  onDeleteCompletion,
   onUndo,
   onEdit,
   archived = false,
   embedded = false,
+  inline = false,
+  initialView = 'details',
+  onTend,
+  onHistory,
+  headingId,
   onClose
 }: RhythmDetailsDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const historyButtonRef = useRef<HTMLButtonElement>(null);
-  const historyBackRef = useRef<HTMLButtonElement>(null);
   const tendButtonRef = useRef<HTMLButtonElement>(null);
-  const wasHistoryRef = useRef(false);
+  const wasCompletionRef = useRef(false);
   const wasArchivedRef = useRef(archived);
-  const [showHistory, setShowHistory] = useState(false);
-  const completionHistory = orderedCompletions(rhythm.completionHistory);
-  const foundationIds = [rhythm.primaryFoundationId, ...(rhythm.secondaryFoundationIds ?? [])]
-    .filter((id): id is string => Boolean(id));
-  const associatedFoundations = marriageFoundations.filter(foundation => foundationIds.includes(foundation.id));
-  const hasHistoryControl = archived || rhythm.illustrativeScore !== undefined || rhythm.completionHistory !== undefined;
-  const scoreDescription = rhythm.illustrativeScore == null
-    ? 'unavailable'
-    : String(rhythm.illustrativeScore);
-  const scoreTone = rhythm.illustrativeScore == null
-    ? 'neutral'
-    : rhythm.illustrativeScore >= 80
-      ? 'green'
-      : rhythm.illustrativeScore <= 40
-        ? 'red'
-        : 'yellow';
-
+  const [showHistory, setShowHistory] = useState(initialView === 'history');
+  const [showCompletion, setShowCompletion] = useState(false);
+  const titleId = headingId ?? (inline ? `today-rhythm-${rhythm.id}-title` : 'rhythm-details-title');
   useEffect(() => {
+    if (inline) return;
     if (embedded) {
       titleRef.current?.focus();
       return;
@@ -75,16 +82,19 @@ export function RhythmDetailsDialog({
     if (typeof dialog.showModal === 'function') dialog.showModal();
     else dialog.setAttribute('open', '');
     dialog.focus();
-  }, [embedded]);
+  }, [embedded, inline]);
 
   useEffect(() => {
-    if (showHistory) {
-      historyBackRef.current?.focus();
-    } else if (wasHistoryRef.current) {
-      historyButtonRef.current?.focus();
+    if (!showCompletion && wasCompletionRef.current) {
+      if (completed) closeButtonRef.current?.focus();
+      else tendButtonRef.current?.focus();
     }
-    wasHistoryRef.current = showHistory;
-  }, [showHistory]);
+    wasCompletionRef.current = showCompletion;
+  }, [showCompletion, completed]);
+
+  function closeCompletion() {
+    setShowCompletion(false);
+  }
 
   useEffect(() => {
     if (archived && !wasArchivedRef.current) closeButtonRef.current?.focus();
@@ -95,128 +105,154 @@ export function RhythmDetailsDialog({
     if (event.target === event.currentTarget) onClose();
   }
 
+  const hasSummaryContent = Boolean(rhythm.description?.trim())
+    || Boolean(people?.length && onPersonSelect)
+    || Boolean(rhythm.categoryIds?.length);
+  const hasPeople = Boolean(people?.length && onPersonSelect);
+  const hasCategories = Boolean(rhythm.categoryIds?.length);
+
+  const detailsActions = (
+    <div className="today-rhythm-details__actions">
+      {((inline && onTend) || (!inline && onSaveCompletion)) && !archived && (
+        <RhythmCompletionActions
+          rhythmTitle={rhythm.title}
+          completed={completed}
+          onTend={inline ? onTend! : () => setShowCompletion(true)}
+          tendButtonRef={tendButtonRef}
+        />
+      )}
+      <button
+        type="button"
+        className="today-rhythm-details__history-button"
+        aria-label={`View scores and history for ${rhythm.title}`}
+        onClick={inline ? event => onHistory?.(event) : () => setShowHistory(true)}
+      >
+        <RhythmMetadataIcon kind="history" />
+      </button>
+    </div>
+  );
+
   const surface = (
-    <div className="today-rhythm-details__surface">
-        <header className="today-rhythm-details__header">
-          {showHistory && (
-            <button
-              ref={historyBackRef}
-              type="button"
-              className="today-rhythm-details__back"
-              onClick={() => setShowHistory(false)}
-            >
-              <MetadataIcon kind="back" />
-              Back
-            </button>
+    <div className={`today-rhythm-details__surface${showCompletion ? ' today-rhythm-details__surface--completion' : ''}`}>
+        {!showHistory && (
+        <header className={`today-rhythm-details__header${showCompletion ? ' today-rhythm-details__header--completion' : ''}`}>
+          {!showHistory && !showCompletion && (
+            <div className="today-rhythm-details__title-group">
+              {inline
+                ? <h3 ref={titleRef} id={titleId}>{rhythm.title}</h3>
+                : <h2 ref={titleRef} id={titleId} tabIndex={embedded ? -1 : undefined}>{rhythm.title}</h2>}
+              {(!embedded || inline) && onEdit && (
+                <button
+                  type="button"
+                  className="today-rhythm-details__edit-icon"
+                  aria-label={`Edit ${rhythm.title}`}
+                  onClick={event => onEdit(event)}
+                >
+                  <span className="today-rhythm-details__edit-visual" aria-hidden="true">
+                    <RhythmMetadataIcon kind="edit" />
+                  </span>
+                </button>
+              )}
+              {archived && <RhythmArchivedBadge />}
+              {rhythm.personal && <RhythmPersonalBadge />}
+            </div>
           )}
-          <div className="today-rhythm-details__title-group">
-            <h2 ref={titleRef} id="rhythm-details-title" tabIndex={embedded ? -1 : undefined}>{rhythm.title}</h2>
-            {!embedded && onEdit && (
-              <button
-                type="button"
-                className="today-rhythm-details__edit-icon"
-                aria-label={`Edit ${rhythm.title}`}
-                onClick={event => onEdit(event)}
-              >
-                <span className="today-rhythm-details__edit-visual" aria-hidden="true">
-                  <MetadataIcon kind="edit" />
-                </span>
-              </button>
-            )}
-            {archived && <RhythmArchivedBadge />}
-            {rhythm.personal && <RhythmPersonalBadge />}
-          </div>
-          {!embedded && (
+          {inline && !showCompletion && detailsActions}
+          {!embedded && !inline && (
             <button
               ref={closeButtonRef}
               type="button"
-              className="today-rhythm-details__close"
-              aria-label="Close details"
-              onClick={onClose}
+              className={`today-rhythm-details__close${showCompletion ? ' today-rhythm-details__close--completion' : ''}`}
+              aria-label={showCompletion ? 'Close completion' : 'Close details'}
+              onClick={showCompletion ? closeCompletion : onClose}
             >
               ×
             </button>
           )}
         </header>
+        )}
 
-        {archived && !embedded && (
+        {archived && !embedded && !inline && !showHistory && (
           <p className="today-rhythm-details__archived-note" role="status">
             Archived · not in active lists. This Rhythm’s identity, associations, and completion history are retained.
           </p>
         )}
 
-        {showHistory
+        {showCompletion && onSaveCompletion
           ? (
-            <section className="rhythm-history today-rhythm-details__history" role="region" aria-label={`Sample completion history for ${rhythm.title}`}>
-              <h3>Dated history</h3>
-              {rhythm.completionHistory === undefined
-                ? <p>History is unavailable for this sample.</p>
-                : completionHistory.length > 0
-                  ? (
-                    <ol>
-                      {completionHistory.map(event => (
-                        <li key={event.id}>{formatHistoryDate(event.effectiveDate)}</li>
-                      ))}
-                    </ol>
-                  )
-                  : <p>No sample completions recorded.</p>}
-            </section>
+            <RhythmCompletionForm
+              rhythm={rhythm}
+              embedded
+              dialogLayout
+              headingId="rhythm-details-title"
+              onSave={record => {
+                return onSaveCompletion(record);
+              }}
+              onCancel={closeCompletion}
+              onSaved={onClose}
+            />
+          )
+          : showHistory
+          ? (
+            <RhythmHistoryView
+              rhythm={rhythm}
+              datedCompletions={datedCompletions}
+              completionHistoryAvailable={completionHistoryAvailable}
+              {...(onUpdateCompletion ? { onUpdateCompletion } : {})}
+              {...(onDeleteCompletion ? { onDeleteCompletion } : {})}
+              {...(onLogCompletion ? { onSaveCompletion: onLogCompletion } : {})}
+              {...(onEdit ? { onChooseSchedule: onEdit } : {})}
+              {...(people ? { people } : {})}
+              {...(onPersonSelect ? { onPersonSelect } : {})}
+              onClose={onClose}
+              closeButtonRef={closeButtonRef}
+              archived={archived}
+            />
           )
           : (
             <>
               <div className="today-rhythm-details__content">
-                <div className="today-rhythm-details__summary">
-                  {rhythm.description?.trim() && (
-                    <p className="tend-type-description today-rhythm-details__description">{rhythm.description}</p>
-                  )}
-                  {people && onPersonSelect && (
-                    <PersonBadgeList people={people} rhythmTitle={rhythm.title} onSelect={onPersonSelect} />
-                  )}
-                  {associatedFoundations.length > 0 && (
-                    <div className="today-rhythm-details__foundations" role="group" aria-label="Associated categories">
-                      {associatedFoundations.map(foundation => (
-                        <span
-                          key={foundation.id}
-                          className="today-rhythm-details__foundation"
-                          role="img"
-                          aria-label={foundation.name}
-                          title={foundation.name}
+                {(!inline || hasSummaryContent) && (
+                  <div className="today-rhythm-details__summary">
+                    {rhythm.description?.trim() && (
+                      <p className="tend-type-description today-rhythm-details__description">{rhythm.description}</p>
+                    )}
+                    {inline
+                      ? (hasPeople || hasCategories) && (
+                        <div
+                          className="today-rhythm-details__association-row"
+                          role="group"
+                          aria-label={`Associations for ${rhythm.title}`}
                         >
-                          <MarriageIcon group="foundations" id={foundation.iconId ?? foundation.id} />
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {(onTend || hasHistoryControl) && (
-                  <div className="today-rhythm-details__actions">
-                    {onTend && (
-                      <RhythmCompletionActions
-                        rhythmTitle={rhythm.title}
-                        completed={completed}
-                        onTend={onTend}
-                        tendButtonRef={tendButtonRef}
-                      />
-                    )}
-                    {hasHistoryControl && (
-                      <button
-                        ref={historyButtonRef}
-                        type="button"
-                        className={`today-rhythm-details__history-button ${scoreTone}`}
-                        aria-label={`View history for ${rhythm.title}; illustrative score ${scoreDescription}`}
-                        onClick={() => setShowHistory(true)}
-                      >
-                        <span aria-hidden="true">{rhythm.illustrativeScore ?? '—'}</span>
-                        <MetadataIcon kind="history" />
-                      </button>
-                    )}
+                          {hasPeople && people && onPersonSelect && (
+                            <PersonBadgeList
+                              people={people}
+                              rhythmTitle={rhythm.title}
+                              onSelect={onPersonSelect}
+                              collapsedLimit={2}
+                              itemsOnly
+                            />
+                          )}
+                          {hasCategories && <RhythmCategoryBadges rhythm={rhythm} itemsOnly />}
+                        </div>
+                      )
+                      : (
+                        <>
+                          {people && onPersonSelect && (
+                            <PersonBadgeList people={people} rhythmTitle={rhythm.title} onSelect={onPersonSelect} />
+                          )}
+                          <RhythmCategoryBadges rhythm={rhythm} />
+                        </>
+                      )}
                   </div>
                 )}
+                {!inline && detailsActions}
               </div>
               <footer className="today-rhythm-details__footer">
                 <RhythmMetadata
                   variant="footer"
                   cadence={rhythm.cadence}
+                  schedule={rhythm.schedule}
                   timeLabel={rhythm.timeLabel}
                   lastTended={rhythmLastTendedLabel(rhythm, completed)}
                   rhythmTitle={rhythm.title}
@@ -242,58 +278,38 @@ export function RhythmDetailsDialog({
     );
   }
 
+  if (inline) {
+    return (
+      <article
+        className="today-rhythm-details-dialog today-rhythm-details-dialog--inline"
+        aria-labelledby={titleId}
+      >
+        {surface}
+      </article>
+    );
+  }
+
   return (
     <dialog
       ref={dialogRef}
-      className="today-rhythm-details-dialog"
+      className={`today-rhythm-details-dialog${showHistory ? ' today-rhythm-details-dialog--history' : ''}`}
       aria-labelledby="rhythm-details-title"
       tabIndex={-1}
       onClick={closeFromEvent}
       onCancel={event => {
         event.preventDefault();
-        onClose();
+        if (showCompletion) closeCompletion();
+        else onClose();
       }}
       onKeyDown={event => {
         if (event.key === 'Escape') {
           event.preventDefault();
-          onClose();
+          if (showCompletion) closeCompletion();
+          else onClose();
         }
       }}
     >
       {surface}
     </dialog>
   );
-}
-
-function MetadataIcon({ kind }: { kind: 'back' | 'history' | 'edit' }) {
-  if (kind === 'back') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M19 12H5M11 18l-6-6 6-6" />
-      </svg>
-    );
-  }
-  if (kind === 'edit') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="m4 16.5-.8 4.3 4.3-.8L19.8 7.7a2.2 2.2 0 0 0-3.1-3.1L4 16.5Z" />
-        <path d="m14.9 6.4 3.1 3.1" />
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 19V5M4 19h16" />
-      <path d="m7 15 4-4 3 2 5-6" />
-    </svg>
-  );
-}
-
-function formatHistoryDate(value: string): string {
-  return new Date(`${value}T12:00:00`).toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric'
-  });
 }

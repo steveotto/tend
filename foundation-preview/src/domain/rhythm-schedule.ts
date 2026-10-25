@@ -35,6 +35,18 @@ export type RhythmSchedule =
   | { frequency: 'custom'; unit: 'months'; interval: number; pattern: RhythmPattern; startDate: RhythmLocalDate; endDate?: RhythmLocalDate }
   | { frequency: 'custom'; unit: 'years'; interval: number; month: RhythmMonth; pattern: RhythmPattern; startDate: RhythmLocalDate; endDate?: RhythmLocalDate };
 
+export type RhythmScheduleSegment = {
+  startDate: RhythmLocalDate;
+  endDate?: RhythmLocalDate;
+  schedule: RhythmSchedule;
+};
+
+export type RhythmScoringMetadata = {
+  trackingStartDate: RhythmLocalDate;
+  timeZone: string;
+  scheduleHistory: RhythmScheduleSegment[];
+};
+
 export type RhythmScheduleValidation =
   | { valid: true; schedule: RhythmSchedule }
   | { valid: false; errors: string[] };
@@ -120,6 +132,16 @@ function isValidOptionalEndDate(record: Record<string, unknown>): boolean {
   return true;
 }
 
+export function isValidTimeZone(value: unknown): value is string {
+  if (typeof value !== 'string' || value.trim().length === 0 || value.length > 100) return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value }).format(0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function isRhythmSchedule(value: unknown): value is RhythmSchedule {
   if (!isRecord(value) || typeof value.frequency !== 'string') {
     return false;
@@ -178,6 +200,37 @@ export function validateRhythmSchedule(value: unknown): RhythmScheduleValidation
   };
 }
 
+export function validateRhythmScoringMetadata(value: unknown): value is RhythmScoringMetadata {
+  if (!isRecord(value) || !hasOnlyKeys(value, ['trackingStartDate', 'timeZone', 'scheduleHistory'])
+    || typeof value.trackingStartDate !== 'string' || !isValidDate(value.trackingStartDate)
+    || !isValidTimeZone(value.timeZone) || !Array.isArray(value.scheduleHistory)
+    || value.scheduleHistory.length === 0) return false;
+
+  let expectedStart = value.trackingStartDate;
+  for (let index = 0; index < value.scheduleHistory.length; index += 1) {
+    const segment: unknown = value.scheduleHistory[index];
+    if (!isRecord(segment) || !hasOnlyKeys(segment, ['startDate', 'endDate', 'schedule'])
+      || segment.startDate !== expectedStart || typeof segment.startDate !== 'string'
+      || !isValidDate(segment.startDate) || !validateRhythmSchedule(segment.schedule).valid) return false;
+    const isLast = index === value.scheduleHistory.length - 1;
+    if (isLast !== (segment.endDate === undefined)) return false;
+    if (segment.endDate !== undefined) {
+      if (typeof segment.endDate !== 'string' || !isValidDate(segment.endDate)
+        || segment.endDate < segment.startDate) return false;
+      const [year, month, day] = segment.endDate.split('-').map(Number);
+      const nextDate = new Date(0);
+      nextDate.setUTCFullYear(year!, month! - 1, day! + 1);
+      nextDate.setUTCHours(0, 0, 0, 0);
+      expectedStart = [
+        String(nextDate.getUTCFullYear()).padStart(4, '0'),
+        String(nextDate.getUTCMonth() + 1).padStart(2, '0'),
+        String(nextDate.getUTCDate()).padStart(2, '0')
+      ].join('-');
+    }
+  }
+  return true;
+}
+
 export function rhythmTimeLabel(value: RhythmTimeValue): RhythmTimeLabel {
   return labelByTimeValue[value];
 }
@@ -227,6 +280,29 @@ function weekdayListSummary(selected: readonly RhythmWeekday[]): string {
   return naturalList([...selected].sort((left, right) => left - right).map(weekdayName));
 }
 
+function shortWeekdayName(weekday: RhythmWeekday): string {
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][weekday]!;
+}
+
+function compactPatternSummary(pattern: RhythmPattern): string {
+  if (pattern.kind === 'dayOfMonth') {
+    return pattern.day === 'last' ? 'Last day' : dayOrdinal(pattern.day);
+  }
+  const ordinal = pattern.ordinal === 'last'
+    ? 'Last'
+    : ['First', 'Second', 'Third', 'Fourth'][pattern.ordinal - 1]!;
+  return `${ordinal} ${shortWeekdayName(pattern.weekday)}`;
+}
+
+function compactWeekdaysSummary(selected: readonly RhythmWeekday[]): string {
+  const sorted = [...selected].sort((left, right) => left - right);
+  if (sorted.length === 7) return 'Daily';
+  if (sorted.join(',') === '1,2,3,4,5') return 'Weekdays';
+  if (sorted.join(',') === '0,6') return 'Weekends';
+  if (sorted.length === 1) return `Every ${shortWeekdayName(sorted[0]!)}`;
+  return sorted.map(shortWeekdayName).join(' · ');
+}
+
 function formatLocalDate(value: RhythmLocalDate): string {
   const [year, month, day] = value.split('-').map(Number);
   return new Intl.DateTimeFormat('en-US', {
@@ -236,7 +312,49 @@ function formatLocalDate(value: RhythmLocalDate): string {
   }).format(new Date(year!, month! - 1, day!));
 }
 
-export function rhythmScheduleSummary(schedule: RhythmSchedule): string {
+export function formatRhythmSchedule(
+  schedule: RhythmSchedule,
+  mode: 'compact' | 'detailed' = 'detailed'
+): string {
+  if (mode === 'compact') {
+    let compact: string;
+    switch (schedule.frequency) {
+      case 'daily':
+        compact = 'Daily';
+        break;
+      case 'weekly':
+        compact = compactWeekdaysSummary(schedule.weekdays);
+        break;
+      case 'monthly':
+        compact = `Monthly · ${compactPatternSummary(schedule.pattern)}`;
+        break;
+      case 'quarterly':
+        compact = `Quarterly · ${dayOrdinal(schedule.monthInQuarter)} month · ${compactPatternSummary(schedule.pattern)}`;
+        break;
+      case 'yearly':
+        compact = schedule.pattern.kind === 'dayOfMonth'
+          ? `Yearly · ${monthName(schedule.month).slice(0, 3)} ${schedule.pattern.day === 'last' ? 'Last day' : schedule.pattern.day}`
+          : `Yearly · ${schedule.pattern.ordinal === 'last'
+            ? `Last ${shortWeekdayName(schedule.pattern.weekday)}`
+            : `${dayOrdinal(schedule.pattern.ordinal)} ${shortWeekdayName(schedule.pattern.weekday)}`} · ${monthName(schedule.month).slice(0, 3)}`;
+        break;
+      case 'custom':
+        if (schedule.unit === 'days') {
+          compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'day' : 'days'}`;
+        } else if (schedule.unit === 'weeks') {
+          compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'week' : 'weeks'}`
+            + (schedule.weekdays.length ? ` · ${schedule.weekdays
+              .slice().sort((left, right) => left - right).map(shortWeekdayName).join(' · ')}` : '');
+        } else if (schedule.unit === 'months') {
+          compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'month' : 'months'} · ${compactPatternSummary(schedule.pattern)}`;
+        } else {
+          compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'year' : 'years'} · ${monthName(schedule.month).slice(0, 3)} ${compactPatternSummary(schedule.pattern)}`;
+        }
+        break;
+    }
+    return compact;
+  }
+
   let summary: string;
   switch (schedule.frequency) {
     case 'daily':
@@ -272,6 +390,10 @@ export function rhythmScheduleSummary(schedule: RhythmSchedule): string {
   }
   if (schedule.endDate) summary += `${schedule.frequency === 'custom' ? ' and ending' : ', ending'} ${formatLocalDate(schedule.endDate)}`;
   return `${summary}.`;
+}
+
+export function rhythmScheduleSummary(schedule: RhythmSchedule): string {
+  return formatRhythmSchedule(schedule, 'detailed');
 }
 
 export function rhythmSummary(schedule: RhythmSchedule, timeOfDay: RhythmTimeValue): string {

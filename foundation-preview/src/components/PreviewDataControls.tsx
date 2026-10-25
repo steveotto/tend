@@ -34,6 +34,14 @@ type PreviewDataControlsProps = {
   v2RecoveryError?: string | null;
   v3RecoveryCopy?: string | null;
   v3RecoveryError?: string | null;
+  v4RecoveryCopy?: string | null;
+  v4RecoveryError?: string | null;
+  v5RecoveryCopy?: string | null;
+  v5RecoveryError?: string | null;
+  v6RecoveryCopy?: string | null;
+  v6RecoveryError?: string | null;
+  v7RecoveryCopy?: string | null;
+  v7RecoveryError?: string | null;
 };
 
 function downloadText(filename: string, content: string, type: string): string | null {
@@ -67,7 +75,15 @@ export function PreviewDataControls({
   v2RecoveryCopy = null,
   v2RecoveryError = null,
   v3RecoveryCopy = null,
-  v3RecoveryError = null
+  v3RecoveryError = null,
+  v4RecoveryCopy = null,
+  v4RecoveryError = null,
+  v5RecoveryCopy = null,
+  v5RecoveryError = null,
+  v6RecoveryCopy = null,
+  v6RecoveryError = null,
+  v7RecoveryCopy = null,
+  v7RecoveryError = null
 }: PreviewDataControlsProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -198,6 +214,58 @@ export function PreviewDataControls({
             Download original v3 recovery backup
           </button>
         )}
+        {v4RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v4-recovery.json',
+              v4RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v4 recovery backup downloaded.')}
+          >
+            Download original v4 recovery backup
+          </button>
+        )}
+        {v5RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v5-recovery.json',
+              v5RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v5 recovery backup downloaded.')}
+          >
+            Download original v5 recovery backup
+          </button>
+        )}
+        {v6RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v6-recovery.json',
+              v6RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v6 recovery backup downloaded.')}
+          >
+            Download original v6 recovery backup
+          </button>
+        )}
+        {v7RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v7-recovery.json',
+              v7RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v7 recovery backup downloaded.')}
+          >
+            Download original v7 recovery backup
+          </button>
+        )}
         <label className="btn mini ghost preview-data-controls__file-button">
           Import preview backup
           <input
@@ -238,6 +306,10 @@ export function PreviewDataControls({
       {v1RecoveryError && <p className="preview-data-controls__help" role="alert">The original v1 recovery copy could not be read: {v1RecoveryError}</p>}
       {v2RecoveryError && <p className="preview-data-controls__help" role="alert">The original v2 recovery copy could not be read: {v2RecoveryError}</p>}
       {v3RecoveryError && <p className="preview-data-controls__help" role="alert">The original v3 recovery copy could not be read: {v3RecoveryError}</p>}
+      {v4RecoveryError && <p className="preview-data-controls__help" role="alert">The original v4 recovery copy could not be read: {v4RecoveryError}</p>}
+      {v5RecoveryError && <p className="preview-data-controls__help" role="alert">The original v5 recovery copy could not be read: {v5RecoveryError}</p>}
+      {v6RecoveryError && <p className="preview-data-controls__help" role="alert">The original v6 recovery copy could not be read: {v6RecoveryError}</p>}
+      {v7RecoveryError && <p className="preview-data-controls__help" role="alert">The original v7 recovery copy could not be read: {v7RecoveryError}</p>}
       {message && <p className="preview-data-controls__message" role="status">{message}</p>}
       {pendingAction && (
         <MoneyGoalDialog

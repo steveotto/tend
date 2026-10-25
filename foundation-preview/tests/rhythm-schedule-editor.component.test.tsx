@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RhythmEditor } from '../src/components/RhythmEditor.tsx';
+import { todayRhythms } from '../src/domain/preview-data.ts';
 import type { RhythmDraft } from '../src/domain/rhythm-editor.ts';
 import { saveRhythmDraft, validateRhythmDraft } from '../src/domain/rhythm-editor.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
@@ -22,6 +23,25 @@ async function choose(user: ReturnType<typeof userEvent.setup>, label: string, o
 }
 
 describe('shared structured Rhythm editor', () => {
+  it('does not block Rhythm editing on a tracking-start confirmation', () => {
+    const rhythm: RhythmPreview = {
+      ...todayRhythms[0]!,
+      schedule: { frequency: 'daily' }
+    };
+    const onSave = vi.fn((_draft: RhythmDraft) => ({}));
+    render(
+      <RhythmEditor
+        rhythm={rhythm}
+        onSave={onSave}
+        onClose={vi.fn()}
+      />
+    );
+    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    expect(within(editor).queryByLabelText('Tracking start date')).toBeNull();
+    expect(within(editor).queryByRole('button', { name: 'Confirm tracking start' })).toBeNull();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
   it('exposes all frequency branches and maps Select Days to the weekly model', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn((_draft: RhythmDraft) => ({}));

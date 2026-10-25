@@ -1,5 +1,5 @@
 import { parsePreviewBackup, PREVIEW_SCHEMA_VERSION } from './preview-state.ts';
-import type { PreviewData } from './preview-state.ts';
+import type { PreviewData, PreviewEnvelope } from './preview-state.ts';
 import { rhythmTimeValueFromLabel, rhythmTimeValueFromLegacyLabel } from './rhythm-schedule.ts';
 import type { RhythmTimeLabel, RhythmTimeValue, RhythmSchedule } from './rhythm-schedule.ts';
 import type { SavedRhythm } from './rhythm-editor.ts';
@@ -27,14 +27,26 @@ export type ProposedPreviewEnvelopeV4 = {
 export type PreviewV4MigrationResult =
   | {
       valid: true;
-      envelope: ProposedPreviewEnvelopeV4;
-      sourceSchemaVersion: 1 | 2 | 3 | 4;
+      envelope: PreviewEnvelope;
+      sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
     }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
 export function migratePreviewToProposedV4(raw: string, currentDate: string): PreviewV4MigrationResult {
   const parsed = parsePreviewBackup(raw, currentDate);
   if (!parsed.valid) return parsed;
+  if (parsed.sourceSchemaVersion === 8) {
+    return { valid: true, envelope: parsed.envelope, sourceSchemaVersion: 8 };
+  }
+  if (parsed.sourceSchemaVersion === 7) {
+    return { valid: true, envelope: parsed.envelope, sourceSchemaVersion: 7 };
+  }
+  if (parsed.sourceSchemaVersion === 6) {
+    return { valid: true, envelope: parsed.envelope, sourceSchemaVersion: 6 };
+  }
+  if (parsed.sourceSchemaVersion === 5) {
+    return { valid: true, envelope: parsed.envelope, sourceSchemaVersion: 5 };
+  }
   if (parsed.sourceSchemaVersion === 4) {
     const savedRhythms: ProposedSavedRhythmV4[] = [];
     for (const rhythm of parsed.envelope.data.savedRhythms) {
@@ -74,7 +86,11 @@ export function migratePreviewToProposedV4(raw: string, currentDate: string): Pr
         goals: parsed.envelope.data.goals,
         completedRhythmIds: parsed.envelope.data.completedRhythmIds,
         savedRhythms,
-        archivedRhythmIds: parsed.envelope.data.archivedRhythmIds
+        archivedRhythmIds: parsed.envelope.data.archivedRhythmIds,
+        datedRhythmCompletions: [],
+        activeRhythmCompletions: [],
+        rhythmCompletionOverrides: [],
+        removedSeedCompletionIds: []
       }
     }
   };

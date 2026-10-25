@@ -13,17 +13,19 @@ import { BadgeSelectionPicker, toggleBadgeGroup } from './BadgeSelectionPicker.t
 import { AreaIcon } from './AreaIcon.tsx';
 import { PersonBadgeVisual } from './PersonBadge.tsx';
 
-const emptyDraft: RhythmDraft = {
-  title: '',
-  description: '',
-  cadence: 'Daily',
-  timeLabel: 'Anytime',
-  personIds: [],
-  categoryIds: [],
-  schedule: { frequency: 'daily' },
-  scheduleEditing: true,
-  personal: false
-};
+function emptyDraft(): RhythmDraft {
+  return {
+    title: '',
+    description: '',
+    cadence: 'Daily',
+    timeLabel: 'Anytime',
+    personIds: [],
+    categoryIds: [],
+    schedule: { frequency: 'daily' },
+    scheduleEditing: true,
+    personal: false
+  };
+}
 
 type RhythmEditorProps = {
   rhythm?: RhythmPreview;
@@ -32,9 +34,16 @@ type RhythmEditorProps = {
   onClose: () => void;
 };
 
-export function RhythmEditor({ rhythm, onSave, onArchive, onClose }: RhythmEditorProps) {
+export function RhythmEditor({
+  rhythm,
+  onSave,
+  onArchive,
+  onClose
+}: RhythmEditorProps) {
   const [draft, setDraft] = useState<RhythmDraft>(() =>
-    rhythm ? rhythmDraftFrom(rhythm, rhythm.categoryIds ?? []) : emptyDraft
+    rhythm
+      ? rhythmDraftFrom(rhythm, rhythm.categoryIds ?? [])
+      : emptyDraft()
   );
   const [errors, setErrors] = useState<RhythmDraftErrors>({});
   const [showArchiveConfirmation, setShowArchiveConfirmation] = useState(false);
