@@ -7,11 +7,13 @@ import {
 } from '../src/domain/rhythm-scoring.ts';
 import type { SelectDailyRhythmScoreInput } from '../src/domain/rhythm-scoring.ts';
 import type { RhythmSchedule, RhythmScoringMetadata } from '../src/domain/rhythm-schedule.ts';
+import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
 
 const rhythmId = 'daily-test-rhythm';
 const asOfDate = '2026-10-23';
 const trackingStartDate = '2026-09-23';
 const dailySchedule = { frequency: 'daily' } as const;
+type SegmentFixture = { startDate: string; schedule: RhythmSchedule };
 
 function record(id: string, effectiveDate: string, targetId = rhythmId): RhythmCompletionRecord {
   return { id, rhythmId: targetId, effectiveDate };
@@ -19,12 +21,16 @@ function record(id: string, effectiveDate: string, targetId = rhythmId): RhythmC
 
 function scoring(
   startDate = trackingStartDate,
-  scheduleHistory: RhythmScoringMetadata['scheduleHistory'] = [
+  scheduleHistory: SegmentFixture[] = [
     { startDate, schedule: dailySchedule }
   ],
   timeZone = 'UTC'
 ): RhythmScoringMetadata {
-  return { trackingStartDate: startDate, timeZone, scheduleHistory };
+  return {
+    trackingStartDate: startDate,
+    timeZone,
+    scheduleHistory: scheduleHistory.map(segment => createRhythmSeason(rhythmId, segment.startDate, segment.schedule))
+  };
 }
 
 function input(
@@ -160,10 +166,9 @@ describe('daily occurrence scoring', () => {
       .toBe(longHistory.onTrack.evidence.missedOccurrenceCount - 10);
 
     const boundaryStart = '2026-10-01';
-    const scheduleHistory: RhythmScoringMetadata['scheduleHistory'] = [
+    const scheduleHistory: SegmentFixture[] = [
       {
         startDate: boundaryStart,
-        endDate: '2026-10-14',
         schedule: { frequency: 'daily', endDate: '2026-10-14' }
       },
       { startDate: '2026-10-15', schedule: dailySchedule }
@@ -225,8 +230,8 @@ describe('daily occurrence scoring', () => {
 
   it('clips Consistency to the tracking start and includes a completed today', () => {
     const start = '2026-10-21';
-    const endedSegment: RhythmScoringMetadata['scheduleHistory'] = [
-      { startDate: start, endDate: '2026-10-22', schedule: dailySchedule },
+    const endedSegment: SegmentFixture[] = [
+      { startDate: start, schedule: dailySchedule },
       { startDate: '2026-10-23', schedule: dailySchedule }
     ];
     const result = scored(input({
@@ -380,10 +385,9 @@ describe('daily occurrence scoring', () => {
       reason: { reasonCode: 'inactive' }
     });
 
-    const history: RhythmScoringMetadata['scheduleHistory'] = [
+    const history: SegmentFixture[] = [
       {
         startDate: '2026-09-23',
-        endDate: '2026-10-10',
         schedule: {
           frequency: 'custom',
           unit: 'days',
@@ -521,6 +525,203 @@ describe('daily occurrence scoring', () => {
     expect(result.healthScore).toBe(100);
   });
 
+  it('keeps On Track unavailable before the first eligible occurrence', () => {
+    const schedule: RhythmSchedule = {
+      frequency: 'quarterly',
+      monthInQuarter: 1,
+      pattern: { kind: 'dayOfMonth', day: 1 }
+    };
+    const result = scored(input({
+      schedule,
+      scoring: {
+        trackingStartDate: asOfDate,
+        timeZone: 'UTC',
+        scheduleHistory: [createRhythmSeason(rhythmId, asOfDate, schedule)]
+      },
+      createdLocalDate: asOfDate,
+      createdTimeZone: 'UTC',
+      records: []
+    }));
+    expect(result.consistency).toMatchObject({
+      kind: 'unscored',
+      reasonCode: 'no-eligible-occurrences',
+      explanation: 'No scheduled moments to measure yet.'
+    });
+    expect(result.onTrack).toMatchObject({
+      kind: 'unscored',
+      reasonCode: 'ready-for-first-tend',
+      explanation: 'Starts with your first Tend.'
+    });
+    expect(result.healthScore).toBeNull();
+  });
+
+  it('requires a qualifying completion or an ended eligible occurrence across every supported frequency', () => {
+    const today = '2026-10-23';
+    const cases: { name: string; schedule: RhythmSchedule }[] = [
+      { name: 'Daily', schedule: { frequency: 'daily' } },
+      { name: 'selected weekdays', schedule: { frequency: 'weekly', weekdays: [5] } },
+      { name: 'Monthly', schedule: { frequency: 'monthly', pattern: { kind: 'dayOfMonth', day: 23 } } },
+      {
+        name: 'Quarterly',
+        schedule: { frequency: 'quarterly', monthInQuarter: 1, pattern: { kind: 'dayOfMonth', day: 23 } }
+      },
+      { name: 'Yearly', schedule: { frequency: 'yearly', month: 10, pattern: { kind: 'dayOfMonth', day: 23 } } },
+      { name: 'Custom', schedule: { frequency: 'custom', unit: 'days', interval: 1, startDate: today } }
+    ];
+
+    for (const testCase of cases) {
+      const base = {
+        asOfDate: today,
+        schedule: testCase.schedule,
+        scoring: scoring(today, [{ startDate: today, schedule: testCase.schedule }]),
+        createdLocalDate: today,
+        createdTimeZone: 'UTC'
+      };
+      const withoutCompletion = scored(input({ ...base, records: [] }));
+      expect(withoutCompletion.onTrack, testCase.name).toMatchObject({
+        kind: 'unscored',
+        reasonCode: 'ready-for-first-tend',
+        explanation: 'Starts with your first Tend.'
+      });
+      expect(withoutCompletion.healthScore, testCase.name).toBeNull();
+
+      const completedToday = scored(input({
+        ...base,
+        records: [record(`${testCase.name}-today`, today)]
+      }));
+      expect(completedToday.onTrack, testCase.name).toMatchObject({ kind: 'scored', score: 100 });
+    }
+  });
+
+  it('scores one ended miss without a completion and keeps due-today occurrences pending', () => {
+    const cases: {
+      name: string;
+      schedule: RhythmSchedule;
+      trackingStartDate: string;
+      asOfDate: string;
+    }[] = [
+      { name: 'Daily', schedule: { frequency: 'daily' }, trackingStartDate: '2026-10-22', asOfDate: '2026-10-23' },
+      {
+        name: 'selected weekdays',
+        schedule: { frequency: 'weekly', weekdays: [1] },
+        trackingStartDate: '2026-10-19',
+        asOfDate: '2026-10-20'
+      },
+      {
+        name: 'Monthly',
+        schedule: { frequency: 'monthly', pattern: { kind: 'dayOfMonth', day: 15 } },
+        trackingStartDate: '2026-10-15',
+        asOfDate: '2026-10-16'
+      },
+      {
+        name: 'Quarterly',
+        schedule: { frequency: 'quarterly', monthInQuarter: 1, pattern: { kind: 'dayOfMonth', day: 1 } },
+        trackingStartDate: '2027-01-01',
+        asOfDate: '2027-04-01'
+      },
+      {
+        name: 'Yearly',
+        schedule: { frequency: 'yearly', month: 10, pattern: { kind: 'dayOfMonth', day: 23 } },
+        trackingStartDate: '2026-10-23',
+        asOfDate: '2026-10-24'
+      },
+      {
+        name: 'Custom',
+        schedule: { frequency: 'custom', unit: 'days', interval: 2, startDate: '2026-10-20' },
+        trackingStartDate: '2026-10-20',
+        asOfDate: '2026-10-21'
+      }
+    ];
+
+    for (const testCase of cases) {
+      const result = scored(input({
+        schedule: testCase.schedule,
+        scoring: scoring(testCase.trackingStartDate, [{
+          startDate: testCase.trackingStartDate,
+          schedule: testCase.schedule
+        }]),
+        createdLocalDate: testCase.trackingStartDate,
+        createdTimeZone: 'UTC',
+        asOfDate: testCase.asOfDate,
+        records: []
+      }));
+      expect(result.onTrack, testCase.name).toMatchObject({
+        kind: 'scored',
+        score: 90,
+        evidence: { missedOccurrenceCount: 1, deduction: 10 }
+      });
+    }
+
+    const quarterly: RhythmSchedule = {
+      frequency: 'quarterly',
+      monthInQuarter: 1,
+      pattern: { kind: 'dayOfMonth', day: 1 }
+    };
+    const dueToday = scored(input({
+      schedule: quarterly,
+      scoring: scoring('2027-01-01', [{ startDate: '2027-01-01', schedule: quarterly }]),
+      createdLocalDate: '2027-01-01',
+      createdTimeZone: 'UTC',
+      asOfDate: '2027-01-01',
+      records: []
+    }));
+    expect(dueToday.onTrack).toMatchObject({
+      kind: 'unscored',
+      reasonCode: 'ready-for-first-tend',
+      explanation: 'Starts with your first Tend.'
+    });
+
+    const missedQuarterlyOccurrence = scored(input({
+      schedule: quarterly,
+      scoring: scoring('2027-01-01', [{ startDate: '2027-01-01', schedule: quarterly }]),
+      createdLocalDate: '2027-01-01',
+      createdTimeZone: 'UTC',
+      asOfDate: '2027-04-01',
+      records: []
+    }));
+    expect(missedQuarterlyOccurrence).toMatchObject({
+      consistency: { kind: 'scored', score: 0, evidence: { eligibleDueCount: 1, notCompletedCount: 1 } },
+      onTrack: { kind: 'scored', score: 90, evidence: { missedOccurrenceCount: 1 } },
+      healthScore: 22.5
+    });
+  });
+
+  it('does not unlock On Track with an off-schedule log or after deleting the only qualifying log', () => {
+    const mondaySchedule: RhythmSchedule = { frequency: 'weekly', weekdays: [1] };
+    const offScheduleLog = scored(input({
+      schedule: mondaySchedule,
+      scoring: scoring(asOfDate, [{ startDate: asOfDate, schedule: mondaySchedule }]),
+      createdLocalDate: asOfDate,
+      createdTimeZone: 'UTC',
+      records: [record('off-schedule-today', asOfDate)]
+    }));
+    expect(offScheduleLog.onTrack).toMatchObject({
+      kind: 'unscored',
+      reasonCode: 'ready-for-first-tend',
+      explanation: 'Starts with your first Tend.'
+    });
+
+    const onlyCompletion = scored(input({
+      scoring: undefined,
+      records: [record('only-qualifying-today', asOfDate)]
+    }));
+    expect(onlyCompletion.onTrack).toMatchObject({ kind: 'scored', score: 100 });
+    const afterDeletingCompletion = scored(input({
+      scoring: undefined,
+      records: []
+    }));
+    expect(afterDeletingCompletion).toMatchObject({
+      trackingStartDate: null,
+      consistency: { kind: 'unscored', reasonCode: 'ready-for-first-tend' },
+      onTrack: {
+        kind: 'unscored',
+        reasonCode: 'ready-for-first-tend',
+        explanation: 'Starts with your first Tend.'
+      },
+      healthScore: null
+    });
+  });
+
   it('derives the daily window from creation and the oldest dated completion', () => {
     const createdTodayWithoutLogs = scored(input({
       scoring: undefined,
@@ -648,7 +849,7 @@ describe('daily occurrence scoring', () => {
       }
     ];
     for (const testCase of cases) {
-      const segments: RhythmScoringMetadata['scheduleHistory'] = [
+      const segments: SegmentFixture[] = [
         { startDate: testCase.start, schedule: testCase.schedule }
       ];
       const result = scored(input({
@@ -921,8 +1122,8 @@ describe('daily occurrence scoring', () => {
     const firstSchedule: RhythmSchedule = { frequency: 'weekly', weekdays: [1] };
     const secondSchedule: RhythmSchedule = { frequency: 'weekly', weekdays: [4] };
     const start = '2026-10-19';
-    const history: RhythmScoringMetadata['scheduleHistory'] = [
-      { startDate: start, endDate: '2026-10-21', schedule: firstSchedule },
+    const history: SegmentFixture[] = [
+      { startDate: start, schedule: firstSchedule },
       { startDate: '2026-10-22', schedule: secondSchedule }
     ];
     const result = scored(input({
@@ -947,7 +1148,7 @@ describe('daily occurrence scoring', () => {
   it('returns a precise unavailable reason when unknown history can still affect the score', () => {
     const schedule: RhythmSchedule = { frequency: 'weekly', weekdays: [4] };
     const scoringStart = '2026-10-05';
-    const history: RhythmScoringMetadata['scheduleHistory'] = [
+    const history: SegmentFixture[] = [
       { startDate: scoringStart, schedule }
     ];
     const uncertain = scored(input({
@@ -1013,7 +1214,7 @@ describe('daily occurrence scoring', () => {
       }
     ];
     for (const testCase of cases) {
-      const segments: RhythmScoringMetadata['scheduleHistory'] = [
+      const segments: SegmentFixture[] = [
         { startDate: '2020-01-01', schedule: testCase.schedule }
       ];
       const result = scored(input({
@@ -1047,7 +1248,11 @@ describe('daily occurrence scoring', () => {
     }));
     expect(result).toMatchObject({
       kind: 'rhythm-score',
-      consistency: { kind: 'unscored', reasonCode: 'no-eligible-occurrences' }
+      consistency: {
+        kind: 'unscored',
+        reasonCode: 'no-eligible-occurrences',
+        explanation: 'No scheduled moments to measure yet.'
+      }
     });
   });
 

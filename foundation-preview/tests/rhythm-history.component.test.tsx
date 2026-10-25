@@ -20,6 +20,7 @@ import { marriageRhythms, syntheticPeople, todayRhythms } from '../src/domain/pr
 import type { DatedRhythmCompletion } from '../src/domain/rhythm-completion.ts';
 import { addCalendarDays, localDateInTimeZone } from '../src/domain/rhythm-scoring.ts';
 import type { RhythmSchedule } from '../src/domain/rhythm-schedule.ts';
+import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
 import { localDateString } from '../src/domain/money-goals.ts';
 
 afterEach(cleanup);
@@ -47,7 +48,7 @@ function scoredTodayFixture() {
   const scoring = {
     trackingStartDate,
     timeZone: 'UTC',
-    scheduleHistory: [{ startDate: trackingStartDate, schedule }]
+    scheduleHistory: [createRhythmSeason('history-fixture', trackingStartDate, schedule)]
   };
   const records = Array.from({ length: 30 }, (_, index) => ({
     date: addCalendarDays(trackingStartDate, index)
@@ -80,7 +81,7 @@ function rhythmForSchedule(schedule: RhythmSchedule, trackingStartDate: string) 
     scoring: {
       trackingStartDate,
       timeZone: 'UTC',
-      scheduleHistory: [{ startDate: trackingStartDate, schedule }]
+      scheduleHistory: [createRhythmSeason('history-fixture', trackingStartDate, schedule)]
     },
     completionHistory: []
   };
@@ -120,6 +121,95 @@ function EditableHistoryHarness() {
 }
 
 describe('shared Rhythm history', () => {
+  it('keeps an initial schedule out of the Seasons history section', () => {
+    const startDate = localDateInTimeZone(new Date(), 'UTC');
+    const schedule = { frequency: 'daily' as const };
+    render(
+      <RhythmHistoryView
+        rhythm={{
+          ...todayConnection,
+          schedule,
+          scoring: {
+            trackingStartDate: startDate,
+            timeZone: 'UTC',
+            scheduleHistory: [createRhythmSeason(todayConnection.id, startDate, schedule)]
+          }
+        }}
+      />
+    );
+    expect(screen.queryByRole('button', { name: 'Seasons (1)' })).toBeNull();
+  });
+
+  it('shows an accessible, collapsed, duration-based Seasons timeline before completion history', async () => {
+    const user = userEvent.setup();
+    const asOfDate = localDateInTimeZone(new Date(), 'UTC');
+    const firstStart = addCalendarDays(asOfDate, -297);
+    const secondStart = addCalendarDays(asOfDate, -207);
+    const currentStart = addCalendarDays(asOfDate, -24);
+      const rhythm = {
+        ...todayConnection,
+        schedule: { frequency: 'weekly' as const, weekdays: [1, 3] as (1 | 3)[] },
+        completionHistory: [],
+        scoring: {
+          trackingStartDate: firstStart,
+          timeZone: 'UTC',
+          scheduleHistory: [
+            {
+              ...createRhythmSeason(todayConnection.id, firstStart, { frequency: 'daily' }),
+              name: 'Daily grounding',
+              note: 'A preserved note.'
+            },
+            createRhythmSeason(todayConnection.id, secondStart, {
+              frequency: 'weekly',
+              weekdays: [1, 3]
+            }),
+            {
+              ...createRhythmSeason(todayConnection.id, currentStart, {
+                frequency: 'weekly',
+                weekdays: [1, 3]
+              }),
+              name: 'Avery time'
+            }
+          ]
+        }
+      };
+      render(<RhythmHistoryView rhythm={rhythm} archived />);
+      const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
+      const disclosure = within(history).getByRole('button', { name: 'Seasons (3)' });
+      const completionHeading = within(history).getByRole('heading', { name: 'All completion history' });
+      expect(disclosure.compareDocumentPosition(completionHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(disclosure.getAttribute('aria-expanded')).toBe('false');
+      expect(within(history).getByText('See how your schedule has changed.').closest('[hidden]')).not.toBeNull();
+
+      disclosure.focus();
+      await user.keyboard('{Enter}');
+      expect(disclosure.getAttribute('aria-expanded')).toBe('true');
+      expect(within(history).getByText('See how your schedule has changed.')).toBeTruthy();
+      expect(within(history).getByRole('heading', { name: 'Avery time' })).toBeTruthy();
+      expect(within(history).getAllByText('Every week on Monday and Wednesday.')).toHaveLength(3);
+      expect(within(history).getByText('Current')).toBeTruthy();
+      expect(within(history).getByText('Earlier dates keep their earlier schedule. Your logged moments stay with this rhythm.')).toBeTruthy();
+      expect(within(history).getByRole('heading', { name: 'Earlier Seasons' })).toBeTruthy();
+
+      const earlierHeadings = within(history).getAllByRole('heading', { level: 5 });
+      expect(earlierHeadings.map(heading => heading.textContent)).toEqual([
+        'Mon · Wed',
+        'Daily grounding'
+      ]);
+      fireEvent.click(within(history).getByRole('button', { name: 'Show details for Daily grounding' }));
+      expect(within(history).getByText('A preserved note.')).toBeTruthy();
+      const timelineSegments = [...history.querySelectorAll<HTMLElement>(
+        '.rhythm-history-view__season-timeline-segment'
+      )];
+      expect(timelineSegments).toHaveLength(3);
+      expect(timelineSegments[0]?.getAttribute('aria-label'))
+        .toContain(`${shortTestDate(firstStart)} to ${shortTestDate(addCalendarDays(secondStart, -1))}`);
+      expect(timelineSegments[0]?.className).toContain('rhythm-history-view__season-color--');
+      expect(timelineSegments.map(segment => Number((segment as HTMLElement).style.flexGrow)))
+        .toEqual([90, 183, 25]);
+      expect(within(history).queryByRole('button', { name: /Change schedule|Edit Season|Delete Season/ })).toBeNull();
+  });
+
   it('refreshes daily scores at scoring-timezone midnight and after returning from suspension', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-24T03:59:00.000Z'));
@@ -134,7 +224,7 @@ describe('shared Rhythm history', () => {
         scoring: {
           trackingStartDate,
           timeZone: 'America/New_York',
-          scheduleHistory: [{ startDate: trackingStartDate, schedule }]
+          scheduleHistory: [createRhythmSeason('history-fixture', trackingStartDate, schedule)]
         },
         completionHistory: []
       };
@@ -894,7 +984,7 @@ describe('shared Rhythm history', () => {
           scoring: {
             trackingStartDate,
             timeZone,
-            scheduleHistory: [{ startDate: trackingStartDate, schedule }]
+            scheduleHistory: [createRhythmSeason('history-fixture', trackingStartDate, schedule)]
           },
           completionHistory: []
         }}

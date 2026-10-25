@@ -19,6 +19,8 @@ import {
   loadV5RecoveryCopy,
   loadV6RecoveryCopy,
   loadV7RecoveryCopy,
+  loadV8RecoveryCopy,
+  loadV9RecoveryCopy,
   PREVIEW_STORAGE_KEY,
   PREVIEW_V1_RECOVERY_KEY,
   PREVIEW_V2_RECOVERY_KEY,
@@ -27,10 +29,17 @@ import {
   PREVIEW_V5_RECOVERY_KEY,
   PREVIEW_V6_RECOVERY_KEY,
   PREVIEW_V7_RECOVERY_KEY,
+  PREVIEW_V8_RECOVERY_KEY,
+  PREVIEW_V9_RECOVERY_KEY,
+  PREVIEW_V10_RECOVERY_KEY,
   writePreview
 } from '../src/storage/preview-storage.ts';
+import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
+import { rhythmSeasonInclusiveEndDate } from '../src/domain/rhythm-seasons.ts';
+import { selectDailyRhythmScore } from '../src/domain/rhythm-scoring.ts';
 import type { PreviewData } from '../src/domain/preview-state.ts';
 import { localDateString } from '../src/domain/money-goals.ts';
+import { addCalendarDays } from '../src/domain/rhythm-occurrences.ts';
 import { installMemoryStorage, MemoryStorage } from './memory-storage.ts';
 
 beforeEach(installMemoryStorage);
@@ -44,6 +53,9 @@ afterEach(() => {
   window.localStorage.removeItem(PREVIEW_V5_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V6_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V7_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V8_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V9_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V10_RECOVERY_KEY);
   vi.unstubAllGlobals();
 });
 
@@ -130,11 +142,12 @@ function versionFiveRaw(data: PreviewData): string {
 
 function versionSixRaw(data: PreviewData): string {
   const envelope = createPreviewEnvelope(data);
+  const { rhythmHistoryIds: _rhythmHistoryIds, ...legacyData } = envelope.data;
   return JSON.stringify({
     ...envelope,
     schemaVersion: 6,
     data: {
-      ...envelope.data,
+      ...legacyData,
       savedRhythms: envelope.data.savedRhythms.map(rhythm => {
         const { scoring: _ignored, ...legacyRhythm } = rhythm;
         return legacyRhythm;
@@ -144,7 +157,7 @@ function versionSixRaw(data: PreviewData): string {
 }
 
 function versionSevenRaw(data: PreviewData): string {
-  const envelope = createPreviewEnvelope(data);
+  const envelope = JSON.parse(versionEightRaw(data)) as ReturnType<typeof createPreviewEnvelope>;
   return JSON.stringify({
     ...envelope,
     schemaVersion: 7,
@@ -159,6 +172,69 @@ function versionSevenRaw(data: PreviewData): string {
         } = rhythm;
         return versionSevenRhythm;
       })
+    }
+  });
+}
+
+function versionEightRaw(data: PreviewData): string {
+  const envelope = createPreviewEnvelope(data);
+  const { rhythmHistoryIds: _rhythmHistoryIds, ...legacyData } = envelope.data;
+  return JSON.stringify({
+    ...envelope,
+    schemaVersion: 8,
+    data: {
+      ...legacyData,
+      savedRhythms: envelope.data.savedRhythms.map(rhythm => ({
+        ...rhythm,
+        ...(rhythm.scoring === undefined ? {} : {
+          scoring: {
+            trackingStartDate: rhythm.scoring.trackingStartDate,
+            timeZone: rhythm.scoring.timeZone,
+            scheduleHistory: rhythm.scoring.scheduleHistory
+              .filter((segment): segment is Extract<typeof segment, { kind: 'scheduled' }> => segment.kind === 'scheduled')
+              .map((segment, index, segments) => {
+              const next = segments[index + 1];
+              return {
+                startDate: segment.startDate,
+                ...(next === undefined ? {} : {
+                  endDate: addCalendarDays(next.startDate, -1)
+                }),
+                schedule: segment.schedule
+              };
+            })
+          }
+        })
+      }))
+    }
+  });
+}
+
+function versionNineRaw(data: PreviewData): string {
+  const envelope = createPreviewEnvelope(data);
+  const { rhythmHistoryIds: _rhythmHistoryIds, ...legacyData } = envelope.data;
+  return JSON.stringify({ ...envelope, schemaVersion: 9, data: legacyData });
+}
+
+function versionTenRaw(data: PreviewData): string {
+  const envelope = createPreviewEnvelope(data);
+  return JSON.stringify({
+    ...envelope,
+    schemaVersion: 10,
+    data: {
+      ...envelope.data,
+      savedRhythms: envelope.data.savedRhythms.map(rhythm => ({
+        ...rhythm,
+        ...(rhythm.scoring === undefined ? {} : {
+          scoring: {
+            ...rhythm.scoring,
+            scheduleHistory: rhythm.scoring.scheduleHistory.map(segment => {
+              if (segment.kind === 'unknown') throw new Error('Schema v10 does not support unknown schedule history.');
+              const { timeOfDay: _timeOfDay, ...v10Segment } = segment;
+              return v10Segment;
+            })
+          }
+        })
+      }))
     }
   });
 }
@@ -207,7 +283,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(parsed.valid).toBe(true);
     if (!parsed.valid) return;
     expect(parsed.envelope.format).toBe('tend.synthetic-preview');
-    expect(parsed.envelope.schemaVersion).toBe(8);
+    expect(parsed.envelope.schemaVersion).toBe(11);
     expect(parsed.envelope.data).toEqual(data);
 
     const { storage } = storageFixture();
@@ -232,6 +308,19 @@ describe('synthetic preview storage adapter and envelope', () => {
         monthInQuarter: 1,
         pattern: { kind: 'dayOfMonth', day: 'last' }
       },
+      scoring: {
+        trackingStartDate: '2026-10-01',
+        timeZone: 'UTC',
+        scheduleHistory: [{
+          ...createRhythmSeason(id, '2026-10-01', {
+            frequency: 'quarterly',
+            monthInQuarter: 1,
+            pattern: { kind: 'dayOfMonth', day: 'last' }
+          }),
+          name: 'A user label',
+          note: 'A saved note.'
+        }]
+      },
       personal: false,
       personIds: ['sample-person-avery'],
       categoryIds: ['marriage']
@@ -249,6 +338,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       recordedAt: '2026-10-20T19:46:00.000Z',
       memory: 'A saved memory.'
     });
+    data.rhythmHistoryIds.push('sample-connect');
     data.activeRhythmCompletions.push({
       rhythmId: 'sample-connect',
       completionId: 'dated-connect-2026-10-20'
@@ -278,11 +368,17 @@ describe('synthetic preview storage adapter and envelope', () => {
     await user.click(screen.getByRole('button', { name: 'Export preview backup' }));
     const blob = createObjectURL.mock.calls[0]![0];
     const backup = await blob.text();
-    expect(JSON.parse(backup).schemaVersion).toBe(8);
+    expect(JSON.parse(backup).schemaVersion).toBe(11);
     expect(JSON.parse(backup).data.datedRhythmCompletions).toEqual(data.datedRhythmCompletions);
     expect(JSON.parse(backup).data.activeRhythmCompletions).toEqual(data.activeRhythmCompletions);
     expect(JSON.parse(backup).data.rhythmCompletionOverrides).toEqual(data.rhythmCompletionOverrides);
     expect(JSON.parse(backup).data.removedSeedCompletionIds).toEqual(data.removedSeedCompletionIds);
+    expect(JSON.parse(backup).data.rhythmHistoryIds).toEqual(data.rhythmHistoryIds);
+    expect(JSON.parse(backup).data.savedRhythms[0].scoring.scheduleHistory[0]).toMatchObject({
+      id: `season:${id}:2026-10-01`,
+      name: 'A user label',
+      note: 'A saved note.'
+    });
     await user.upload(
       screen.getByLabelText('Import preview backup'),
       new File([backup], 'v4-structured.json', { type: 'application/json' })
@@ -323,7 +419,8 @@ describe('synthetic preview storage adapter and envelope', () => {
       datedRhythmCompletions: [],
       activeRhythmCompletions: [],
       rhythmCompletionOverrides: [],
-      removedSeedCompletionIds: []
+      removedSeedCompletionIds: [],
+      rhythmHistoryIds: []
     };
     const raw = JSON.stringify(createPreviewEnvelope(empty));
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
@@ -350,7 +447,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     const parsed = parsePreviewBackup(raw, '2026-10-21');
     expect(parsed.valid).toBe(true);
     if (parsed.valid) {
-      expect(parsed.envelope.schemaVersion).toBe(8);
+      expect(parsed.envelope.schemaVersion).toBe(11);
       expect(parsed.envelope.data).toEqual({ ...data, savedRhythms: [], archivedRhythmIds: [] });
       expect(parsed.envelope.data.goals[0]!.checkIns).toEqual(data.goals[0]!.checkIns);
       expect(parsed.envelope.data.goals[0]!.correctionHistory).toEqual(data.goals[0]!.correctionHistory);
@@ -371,7 +468,8 @@ describe('synthetic preview storage adapter and envelope', () => {
       datedRhythmCompletions: [],
       activeRhythmCompletions: [],
       rhythmCompletionOverrides: [],
-      removedSeedCompletionIds: []
+      removedSeedCompletionIds: [],
+      rhythmHistoryIds: []
     });
   });
 
@@ -390,7 +488,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(parsed.valid).toBe(true);
     if (parsed.valid) {
       expect(parsed.sourceSchemaVersion).toBe(2);
-      expect(parsed.envelope.schemaVersion).toBe(8);
+      expect(parsed.envelope.schemaVersion).toBe(11);
       expect(parsed.envelope.data).toEqual({
         ...v2Data,
         savedRhythms: v2Data.savedRhythms.map(rhythm => ({ ...rhythm, timeOfDay: 'evening' })),
@@ -435,7 +533,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(result.kind).toBe('saved');
     expect(values.get(PREVIEW_V3_RECOVERY_KEY)).toBe(originalRaw);
     expect(loadV3RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
-    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(8);
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(11);
   });
 
   it('blocks v3 replacement on recovery conflicts or recovery storage failures', () => {
@@ -478,7 +576,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
     expect(values.get(PREVIEW_V4_RECOVERY_KEY)).toBe(originalRaw);
     expect(loadV4RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
-    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(8);
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(11);
 
     const conflicting = storageFixture({
       [PREVIEW_STORAGE_KEY]: originalRaw,
@@ -504,7 +602,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(failingValues.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
   });
 
-  it('preserves exact v5 bytes before the first v8 replacement and blocks recovery conflicts', () => {
+  it('preserves exact v5 bytes before the first v9 replacement and blocks recovery conflicts', () => {
     const originalRaw = ` \n${versionFiveRaw(sampleWithHistory())}\n`;
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
     const loaded = loadPreview(storage, '2026-10-21');
@@ -518,7 +616,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
     expect(values.get(PREVIEW_V5_RECOVERY_KEY)).toBe(originalRaw);
     expect(loadV5RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
-    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(8);
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(11);
 
     const conflicting = storageFixture({
       [PREVIEW_STORAGE_KEY]: originalRaw,
@@ -544,7 +642,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(failingValues.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
   });
 
-  it('migrates schema v6 in memory and preserves its exact bytes before a v8 replacement', () => {
+  it('migrates schema v6 in memory and preserves its exact bytes before a v9 replacement', () => {
     const originalRaw = ` \n${versionSixRaw(sampleWithHistory())}\n`;
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
     const loaded = loadPreview(storage, '2026-10-21');
@@ -557,11 +655,29 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
     expect(values.get(PREVIEW_V6_RECOVERY_KEY)).toBe(originalRaw);
     expect(loadV6RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
-    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(8);
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(11);
   });
 
-  it('migrates schema v7 read-only and preserves its exact bytes before the first v8 write', () => {
-    const originalRaw = ` \n${versionSevenRaw(sampleWithHistory())}\n`;
+  it('migrates schema v7 read-only and preserves its exact bytes before the first v9 write', () => {
+    const data = sampleWithHistory();
+    const id = 'user-rhythm-77777777-7777-4777-8777-777777777777';
+    const schedule = { frequency: 'daily' as const };
+    data.savedRhythms = [{
+      id,
+      title: 'V7 schedule history',
+      cadence: 'Daily',
+      timeLabel: 'Anytime',
+      timeOfDay: 'anytime',
+      personIds: [],
+      categoryIds: [],
+      schedule,
+      scoring: {
+        trackingStartDate: '2026-10-01',
+        timeZone: 'UTC',
+        scheduleHistory: [createRhythmSeason(id, '2026-10-01', schedule)]
+      }
+    }];
+    const originalRaw = ` \n${versionSevenRaw(data)}\n`;
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
     const loaded = loadPreview(storage, '2026-10-21');
     expect(loaded.kind).toBe('loaded');
@@ -569,11 +685,127 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(loadV7RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: null });
     if (loaded.kind !== 'loaded') return;
     expect(loaded.data.savedRhythms.every(rhythm => rhythm.createdLocalDate === undefined)).toBe(true);
+    expect(loaded.data.savedRhythms[0]!.scoring!.scheduleHistory[0]).toEqual(
+      createRhythmSeason(id, '2026-10-01', schedule)
+    );
 
     expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
     expect(values.get(PREVIEW_V7_RECOVERY_KEY)).toBe(originalRaw);
     expect(loadV7RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
-    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(8);
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(11);
+  });
+
+  it('migrates v8 schedule history to stable Seasons in memory, then preserves exact bytes before write', () => {
+    const data = sampleWithHistory();
+    const id = 'user-rhythm-88888888-8888-4888-8888-888888888888';
+    const daily = { frequency: 'daily' as const };
+    const weekly = { frequency: 'weekly' as const, weekdays: [1, 3] as (1 | 3)[] };
+    data.savedRhythms = [{
+      id,
+      title: 'Schedule history migration',
+      cadence: 'Daily',
+      timeLabel: 'Anytime',
+      timeOfDay: 'anytime',
+      personIds: [],
+      categoryIds: [],
+      schedule: weekly,
+      scoring: {
+        trackingStartDate: '2026-10-01',
+        timeZone: 'America/New_York',
+        scheduleHistory: [
+          createRhythmSeason(id, '2026-10-01', daily),
+          createRhythmSeason(id, '2026-10-10', weekly)
+        ]
+      }
+    }];
+    data.completedRhythmIds.push(id);
+    data.datedRhythmCompletions.push({
+      id: 'v8-migration-completion',
+      rhythmId: id,
+      effectiveDate: '2026-10-02',
+      localTime: '12:00',
+      timeZone: 'America/New_York',
+      completedAt: '2026-10-02T16:00:00.000Z',
+      recordedAt: '2026-10-02T16:01:00.000Z',
+      memory: 'Preserved through the schedule migration.'
+    });
+    data.activeRhythmCompletions.push({ rhythmId: id, completionId: 'v8-migration-completion' });
+    const originalRaw = ` \n${versionEightRaw(data)}\n`;
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
+    expect(loadV8RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: null });
+
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    if (loaded.kind !== 'loaded') return;
+    const seasons = loaded.data.savedRhythms[0]!.scoring!.scheduleHistory;
+    expect(seasons).toHaveLength(2);
+    expect(seasons.map(season => season.startDate)).toEqual(['2026-10-01', '2026-10-10']);
+    expect(seasons.map(season => season.kind === 'scheduled' ? season.schedule : undefined)).toEqual([daily, weekly]);
+    expect(rhythmSeasonInclusiveEndDate(seasons, 0)).toBe('2026-10-09');
+    expect(seasons[0]).toMatchObject({
+      id: `season:${id}:2026-10-01`,
+      paletteToken: expect.any(String)
+    });
+    expect(seasons[0]!.kind === 'scheduled' ? seasons[0]!.name : undefined).toBeUndefined();
+    expect(seasons[0]!.kind === 'scheduled' ? seasons[0]!.note : undefined).toBeUndefined();
+    expect(loaded.data.goals).toEqual(data.goals);
+    expect(loaded.data.completedRhythmIds).toEqual(data.completedRhythmIds);
+    expect(loaded.data.datedRhythmCompletions).toEqual(data.datedRhythmCompletions);
+    expect(loaded.data.activeRhythmCompletions).toEqual(data.activeRhythmCompletions);
+    const scoreInput = {
+      rhythmId: id,
+      schedule: weekly,
+      records: [{ id: 'v8-migration-completion', rhythmId: id, effectiveDate: '2026-10-02' }],
+      recordsAvailable: true,
+      asOfDate: '2026-10-21',
+      timeZone: 'America/New_York',
+      createdLocalDate: '2026-10-01',
+      createdTimeZone: 'America/New_York',
+      dailyBackfillAllowed: false
+    };
+    const originalScoring = data.savedRhythms[0]!.scoring!;
+    expect(selectDailyRhythmScore({
+      ...scoreInput,
+      scoring: loaded.data.savedRhythms[0]!.scoring!
+    })).toEqual(selectDailyRhythmScore({
+      ...scoreInput,
+      scoring: originalScoring
+    }));
+
+    const reloaded = loadPreview(storage, '2026-10-21');
+    expect(reloaded).toMatchObject({ kind: 'loaded', data: loaded.data, raw: originalRaw });
+    expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V8_RECOVERY_KEY)).toBe(originalRaw);
+    expect(loadV8RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
+    const exported = parsePreviewBackup(values.get(PREVIEW_STORAGE_KEY)!, '2026-10-21');
+    expect(exported.valid).toBe(true);
+    if (exported.valid) {
+      expect(exported.envelope.data.savedRhythms[0]!.scoring!.scheduleHistory).toEqual(seasons);
+    }
+
+    const conflicting = storageFixture({
+      [PREVIEW_STORAGE_KEY]: originalRaw,
+      [PREVIEW_V8_RECOVERY_KEY]: '{"different":"source"}'
+    });
+    expect(writePreview(conflicting.storage, loaded.data, originalRaw, {
+      currentDate: '2026-10-21'
+    })).toMatchObject({ kind: 'error' });
+    expect(conflicting.values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    expect(conflicting.values.get(PREVIEW_V8_RECOVERY_KEY)).toBe('{"different":"source"}');
+
+    const failingValues = new Map([[PREVIEW_STORAGE_KEY, originalRaw]]);
+    const failingStorage = {
+      getItem: (key: string) => failingValues.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        if (key === PREVIEW_V8_RECOVERY_KEY) throw new Error('v8 recovery write blocked');
+        failingValues.set(key, value);
+      }
+    };
+    expect(writePreview(failingStorage, loaded.data, originalRaw, {
+      currentDate: '2026-10-21'
+    })).toMatchObject({ kind: 'error', message: 'v8 recovery write blocked' });
+    expect(failingValues.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
   });
 
   it('validates and round-trips seed overrides and removals without allowing invented associations', () => {
@@ -647,7 +879,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(values.get(PREVIEW_V1_RECOVERY_KEY)).toBe(originalRaw);
     const recoveryCopy = values.get(PREVIEW_V1_RECOVERY_KEY);
     const activeV2 = values.get(PREVIEW_STORAGE_KEY)!;
-    expect(JSON.parse(activeV2).schemaVersion).toBe(8);
+    expect(JSON.parse(activeV2).schemaVersion).toBe(11);
     expect(writePreview(storage, { ...updated, completedRhythmIds: [] }, activeV2, {
       currentDate: '2026-10-21'
     }).kind).toBe('saved');
@@ -686,7 +918,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     }, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
     expect(values.get(PREVIEW_V2_RECOVERY_KEY)).toBe(originalRaw);
     expect(loadV2RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
-    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(8);
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(11);
 
     const occupied = storageFixture({
       [PREVIEW_STORAGE_KEY]: originalRaw,
@@ -699,7 +931,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(occupied.values.get(PREVIEW_V2_RECOVERY_KEY)).toBe('{"different":"v2"}');
   });
 
-  it('round-trips schema v8 creation and scoring metadata with prior records and goal history', () => {
+  it('round-trips schema v11 creation and scoring metadata with prior records and goal history', () => {
     const data = sampleWithHistory();
     const id = 'user-rhythm-11111111-1111-4111-8111-111111111111';
     data.savedRhythms = [{
@@ -716,14 +948,11 @@ describe('synthetic preview storage adapter and envelope', () => {
       scoring: {
         trackingStartDate: '2026-10-01',
         timeZone: 'America/New_York',
-        scheduleHistory: [{
-          startDate: '2026-10-01',
-          schedule: {
+        scheduleHistory: [createRhythmSeason(id, '2026-10-01', {
             frequency: 'monthly',
             pattern: { kind: 'ordinalWeekday', ordinal: 2, weekday: 4 },
             endDate: '2028-10-22'
-          }
-        }]
+          })]
       },
       personal: true,
       personIds: ['sample-person-morgan', 'sample-person-avery'],
@@ -749,15 +978,199 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(loaded.data).toEqual(data);
     expect(parsePreviewBackup(saved.raw, '2026-10-21')).toMatchObject({
       valid: true,
-      sourceSchemaVersion: 8,
-      envelope: { schemaVersion: 8 }
+      sourceSchemaVersion: 11,
+      envelope: { schemaVersion: 11 }
     });
+  });
+
+    it('migrates v10 read-only and recovers exact source bytes before the first schema v11 save', () => {
+      const data = sampleWithHistory();
+      const id = 'user-rhythm-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      const daily = { frequency: 'daily' as const };
+      const weekly = { frequency: 'weekly' as const, weekdays: [4] as (4)[] };
+      const first = { ...createRhythmSeason(id, '2026-10-01', daily), name: 'Daily start', note: 'Prior note.' };
+      const current = createRhythmSeason(id, '2026-10-10', weekly);
+      data.savedRhythms = [{
+        id,
+        title: 'Versioned Thursday Rhythm',
+        cadence: 'Weekly',
+        timeLabel: 'Afternoon',
+        timeOfDay: 'afternoon',
+        schedule: weekly,
+        scoring: {
+          trackingStartDate: '2026-10-01',
+          timeZone: 'America/New_York',
+          scheduleHistory: [first, current]
+        },
+        personIds: ['sample-person-morgan'],
+        categoryIds: ['marriage']
+      }];
+      data.datedRhythmCompletions = [{
+        id: 'v10-preserved-log',
+        rhythmId: id,
+        effectiveDate: '2026-10-08',
+        localTime: '17:00',
+        timeZone: 'America/New_York',
+        completedAt: '2026-10-08T21:00:00.000Z',
+        recordedAt: '2026-10-08T21:05:00.000Z',
+        memory: 'Keep this exact note.'
+      }];
+      data.completedRhythmIds = [id];
+      data.activeRhythmCompletions = [{ rhythmId: id, completionId: 'v10-preserved-log' }];
+      data.rhythmHistoryIds = [id];
+
+      const originalRaw = ` \n${versionTenRaw(data)}\n`;
+      const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
+      const setItem = vi.spyOn(storage, 'setItem');
+      const loaded = loadPreview(storage, '2026-10-21');
+
+      expect(loaded.kind).toBe('loaded');
+      expect(values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+      expect(setItem).not.toHaveBeenCalled();
+      if (loaded.kind !== 'loaded') return;
+      expect(loaded.data.savedRhythms[0]!.scoring!.scheduleHistory).toEqual([
+        first,
+        current
+      ]);
+      expect(loaded.data.datedRhythmCompletions).toEqual(data.datedRhythmCompletions);
+      expect(loaded.data.activeRhythmCompletions).toEqual(data.activeRhythmCompletions);
+      expect(loaded.data.rhythmHistoryIds).toEqual([id]);
+
+      expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
+      expect(values.get(PREVIEW_V10_RECOVERY_KEY)).toBe(originalRaw);
+      expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(11);
+    });
+
+    it('blocks v10 replacement on exact-recovery conflicts and failed recovery writes', () => {
+      const originalRaw = versionTenRaw(sampleWithHistory());
+      const conflicting = storageFixture({
+        [PREVIEW_STORAGE_KEY]: originalRaw,
+        [PREVIEW_V10_RECOVERY_KEY]: '{"different":"v10"}'
+      });
+      const conflict = writePreview(conflicting.storage, createSamplePreviewData(), originalRaw, {
+        currentDate: '2026-10-21'
+      });
+      expect(conflict).toMatchObject({ kind: 'error' });
+      expect(conflicting.values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+      expect(conflicting.values.get(PREVIEW_V10_RECOVERY_KEY)).toBe('{"different":"v10"}');
+
+      const values = new Map([[PREVIEW_STORAGE_KEY, originalRaw]]);
+      const failedRecoveryStorage = {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          if (key === PREVIEW_V10_RECOVERY_KEY) throw new Error('v10 recovery write blocked');
+          values.set(key, value);
+        }
+      };
+      expect(writePreview(failedRecoveryStorage, createSamplePreviewData(), originalRaw, {
+        currentDate: '2026-10-21'
+      })).toMatchObject({ kind: 'error', message: 'v10 recovery write blocked' });
+      expect(values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+      expect(values.has(PREVIEW_V10_RECOVERY_KEY)).toBe(false);
+    });
+
+    it('saves through the production localStorage adapter and hydrates a fresh adapter with Season metadata intact', () => {
+      const data = sampleWithHistory();
+      const id = 'user-rhythm-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+      const schedule = { frequency: 'weekly' as const, weekdays: [4] as (4)[] };
+      const season = {
+        ...createRhythmSeason(id, '2026-10-01', schedule, 'evening'),
+        name: 'Thursday walks'
+      };
+      data.savedRhythms = [{
+        id,
+        title: 'Persistent Thursday Rhythm',
+        cadence: 'Weekly',
+        timeLabel: 'Afternoon',
+        timeOfDay: 'afternoon',
+        schedule,
+        scoring: { trackingStartDate: '2026-10-01', timeZone: 'America/New_York', scheduleHistory: [season] },
+        personIds: ['sample-person-morgan'],
+        categoryIds: ['marriage']
+      }];
+      data.datedRhythmCompletions = [{
+        id: 'fresh-adapter-log',
+        rhythmId: id,
+        effectiveDate: '2026-10-08',
+        localTime: '17:00',
+        timeZone: 'America/New_York',
+        completedAt: '2026-10-08T21:00:00.000Z',
+        recordedAt: '2026-10-08T21:05:00.000Z',
+        memory: 'Original note.'
+      }];
+      data.completedRhythmIds = [id];
+      data.activeRhythmCompletions = [{ rhythmId: id, completionId: 'fresh-adapter-log' }];
+      data.rhythmHistoryIds = [id];
+
+      const writerAdapter = browserPreviewStorage();
+      const write = writePreview(writerAdapter, data, null);
+      expect(write.kind).toBe('saved');
+      const freshAdapter = browserPreviewStorage();
+      const reloaded = loadPreview(freshAdapter, '2026-10-21');
+      expect(reloaded.kind).toBe('loaded');
+      if (reloaded.kind !== 'loaded') return;
+      expect(reloaded.data.savedRhythms[0]!.scoring!.scheduleHistory).toEqual([season]);
+      expect(reloaded.data.datedRhythmCompletions).toEqual(data.datedRhythmCompletions);
+      expect(reloaded.data.activeRhythmCompletions).toEqual(data.activeRhythmCompletions);
+      expect(reloaded.data.rhythmHistoryIds).toEqual([id]);
+      const backup = parsePreviewBackup(write.kind === 'saved' ? write.raw : '', '2026-10-21');
+      expect(backup.valid).toBe(true);
+      if (backup.valid) {
+        expect(backup.envelope.schemaVersion).toBe(11);
+        expect(backup.envelope.data.savedRhythms[0]!.scoring!.scheduleHistory).toEqual([season]);
+        expect(backup.envelope.data.datedRhythmCompletions).toEqual(data.datedRhythmCompletions);
+      }
+    });
+  it('migrates v9 markers from evidenced dated logs without writing during hydration and backs up exact bytes', () => {
+    const data = sampleWithHistory();
+    const id = 'user-rhythm-99999999-9999-4999-8999-999999999999';
+    const schedule = { frequency: 'daily' as const };
+    data.savedRhythms = [{
+      id,
+      title: 'History marker migration',
+      cadence: 'Daily',
+      timeLabel: 'Anytime',
+      timeOfDay: 'anytime',
+      personIds: [],
+      categoryIds: [],
+      schedule,
+      scoring: {
+        trackingStartDate: '2026-10-01',
+        timeZone: 'UTC',
+        scheduleHistory: [createRhythmSeason(id, '2026-10-01', schedule)]
+      }
+    }];
+    data.datedRhythmCompletions = [{
+      id: 'migration-marker-record',
+      rhythmId: id,
+      effectiveDate: '2026-10-02',
+      localTime: '12:00',
+      timeZone: 'UTC',
+      completedAt: '2026-10-02T12:00:00.000Z',
+      recordedAt: '2026-10-02T12:01:00.000Z'
+    }];
+    data.completedRhythmIds = [id];
+    data.activeRhythmCompletions = [{ rhythmId: id, completionId: 'migration-marker-record' }];
+    const originalRaw = ` \n${versionNineRaw(data)}\n`;
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
+
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    expect(loadV9RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: null });
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.rhythmHistoryIds).toEqual([id]);
+
+    expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V9_RECOVERY_KEY)).toBe(originalRaw);
+    expect(loadV9RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(11);
   });
 
   it('does not overwrite an unsupported active envelope', () => {
     const unsupportedRaw = JSON.stringify({
       format: 'tend.synthetic-preview',
-      schemaVersion: 9,
+      schemaVersion: 12,
       data: { goals: [], completedRhythmIds: [], savedRhythms: [], archivedRhythmIds: [] }
     });
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: unsupportedRaw });
@@ -815,7 +1228,7 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('rejects malformed JSON, unsupported versions, malformed records, duplicate IDs, and invalid references', () => {
     expect(parsePreviewBackup('{', '2026-10-21').valid).toBe(false);
     const unsupported = createPreviewEnvelope(sampleWithHistory());
-    expect(validatePreviewEnvelope({ ...unsupported, schemaVersion: 9 }, '2026-10-21')).toMatchObject({
+    expect(validatePreviewEnvelope({ ...unsupported, schemaVersion: 12 }, '2026-10-21')).toMatchObject({
       valid: false,
       kind: 'unsupported'
     });
@@ -932,7 +1345,7 @@ describe('preview backup controls', () => {
     const exported = JSON.parse(exportedText) as Record<string, unknown>;
     expect(Object.keys(exported).sort()).toEqual(['data', 'format', 'schemaVersion']);
     expect(exported.format).toBe('tend.synthetic-preview');
-    expect(exported.schemaVersion).toBe(8);
+    expect(exported.schemaVersion).toBe(11);
     expect((exported.data as PreviewData).archivedRhythmIds).toEqual(['sample-pray-together']);
     await user.upload(
       screen.getByLabelText('Import preview backup'),
@@ -1067,6 +1480,7 @@ describe('preview backup controls', () => {
     await user.clear(balance);
     await user.type(balance, '1350.00');
     await user.click(within(correction).getByRole('button', { name: 'Save correction' }));
+    console.log('AFTER CORRECTION RAW', window.localStorage.getItem(PREVIEW_STORAGE_KEY));
     const beforeInvalidImport = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
     await user.upload(
       screen.getByLabelText('Import preview backup'),

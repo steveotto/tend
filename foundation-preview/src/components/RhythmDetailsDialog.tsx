@@ -6,6 +6,7 @@ import {
   type PersonPreview,
   type RhythmPreview
 } from '../domain/preview-data.ts';
+import { localDateInTimeZone } from '../domain/rhythm-occurrences.ts';
 import { PersonBadgeList } from './PersonBadge.tsx';
 import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
 import { RhythmPersonalBadge } from './RhythmPersonalBadge.tsx';
@@ -14,6 +15,7 @@ import { RhythmCompletionActions } from './RhythmCompletionActions.tsx';
 import { RhythmHistoryView } from './RhythmHistoryView.tsx';
 import { RhythmCompletionForm } from './RhythmCompletionForm.tsx';
 import type { DatedRhythmCompletion, RhythmCompletionRecord } from '../domain/rhythm-completion.ts';
+import type { RhythmSeasonEditDraft } from '../domain/rhythm-season-edit.ts';
 import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
 import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
 
@@ -33,6 +35,7 @@ type RhythmDetailsDialogProps = {
   onLogCompletion?: (record: RhythmCompletionRecord) => string | null;
   onUpdateCompletion?: (record: RhythmCompletionRecord) => string | null;
   onDeleteCompletion?: (completionId: string) => string | null;
+  onEditSeason?: (rhythmId: string, draft: RhythmSeasonEditDraft) => string | null;
   onUndo?: () => void;
   onEdit?: (event: MouseEvent<HTMLButtonElement>) => void;
   archived?: boolean;
@@ -51,6 +54,7 @@ export function RhythmDetailsDialog({
   onLogCompletion,
   onUpdateCompletion,
   onDeleteCompletion,
+  onEditSeason,
   onUndo,
   onEdit,
   archived = false,
@@ -110,6 +114,10 @@ export function RhythmDetailsDialog({
     || Boolean(rhythm.categoryIds?.length);
   const hasPeople = Boolean(people?.length && onPersonSelect);
   const hasCategories = Boolean(rhythm.categoryIds?.length);
+  const scoringTimeZone = rhythm.scoring?.timeZone
+    ?? rhythm.createdTimeZone
+    ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const asOfDate = localDateInTimeZone(new Date(), scoringTimeZone);
 
   const detailsActions = (
     <div className="today-rhythm-details__actions">
@@ -200,6 +208,7 @@ export function RhythmDetailsDialog({
               completionHistoryAvailable={completionHistoryAvailable}
               {...(onUpdateCompletion ? { onUpdateCompletion } : {})}
               {...(onDeleteCompletion ? { onDeleteCompletion } : {})}
+              {...(onEditSeason ? { onEditSeason } : {})}
               {...(onLogCompletion ? { onSaveCompletion: onLogCompletion } : {})}
               {...(onEdit ? { onChooseSchedule: onEdit } : {})}
               {...(people ? { people } : {})}
@@ -254,7 +263,7 @@ export function RhythmDetailsDialog({
                   cadence={rhythm.cadence}
                   schedule={rhythm.schedule}
                   timeLabel={rhythm.timeLabel}
-                  lastTended={rhythmLastTendedLabel(rhythm, completed)}
+                  lastTended={rhythmLastTendedLabel(rhythm, completed, asOfDate)}
                   rhythmTitle={rhythm.title}
                   completed={completed}
                   onUndo={onUndo}

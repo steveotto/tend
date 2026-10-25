@@ -6,6 +6,7 @@ import { CatalogApp } from '../src/CatalogApp.tsx';
 import { ArchivedRhythmsDialog } from '../src/components/ArchivedRhythmsDialog.tsx';
 import { localDateString } from '../src/domain/money-goals.ts';
 import { addCalendarDays } from '../src/domain/rhythm-scoring.ts';
+import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
 import {
   marriageExampleFixtures,
   marriageFoundationCoverage,
@@ -39,6 +40,161 @@ function inclusiveCalendarDays(startDate: string, endDate: string): number {
 }
 
 describe('Tend Today preview', () => {
+  it('keeps a logged completion through cancelled and confirmed Season creation and reload', async () => {
+    const user = userEvent.setup();
+    const today = localDateString(new Date());
+    const trackingStartDate = addCalendarDays(today, -30);
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const rhythmId = 'user-rhythm-40000000-0000-4000-8000-000000000001';
+    const schedule = { frequency: 'daily' as const };
+    const data = createSamplePreviewData();
+    data.savedRhythms.push({
+      id: rhythmId,
+      title: 'Season flow test',
+      cadence: 'Daily',
+      timeLabel: 'Anytime',
+      timeOfDay: 'anytime',
+      personIds: [],
+      categoryIds: [],
+      schedule,
+      scoring: {
+        trackingStartDate,
+        timeZone,
+        scheduleHistory: [createRhythmSeason(rhythmId, trackingStartDate, schedule)]
+      },
+      createdLocalDate: trackingStartDate,
+      createdTimeZone: timeZone
+    });
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    const card = screen.getByRole('article', { name: 'Season flow test' });
+    await user.click(within(card).getByRole('button', {
+      name: 'View scores and history for Season flow test'
+    }));
+    const details = screen.getByRole('dialog', { name: 'Season flow test' });
+    const history = within(details).getByRole('region', { name: 'History for Season flow test' });
+    await user.click(within(history).getByText('Logged moments (0)'));
+    await user.click(within(history).getByRole('button', { name: '+ Log a moment' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      const saved = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
+      expect(saved.valid && saved.envelope.data.datedRhythmCompletions).toHaveLength(1);
+    });
+    await user.click(within(details).getByRole('button', { name: 'Close details' }));
+
+    await user.click(within(card).getByRole('button', { name: 'Edit Season flow test' }));
+    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    await user.click(within(editor).getByRole('combobox', { name: 'Frequency: Daily' }));
+    await user.click(within(editor).getByRole('option', { name: 'Select Days' }));
+    await user.click(within(editor).getByRole('checkbox', { name: 'Tuesday' }));
+    const beforeCancel = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
+    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+
+    let confirmation = screen.getByRole('dialog', { name: 'Change your schedule' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Cancel schedule change' }));
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(beforeCancel);
+    expect(screen.getByRole('dialog', { name: 'Edit Rhythm' })).toBe(editor);
+    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+    confirmation = screen.getByRole('dialog', { name: 'Change your schedule' });
+    await user.type(within(confirmation).getByLabelText('Season label (optional)'), 'New cadence');
+    await user.click(within(confirmation).getByRole('button', { name: 'Confirm change' }));
+
+    await waitFor(() => {
+      const saved = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
+      expect(saved.valid && saved.envelope.data.savedRhythms[0]?.scoring?.scheduleHistory).toHaveLength(2);
+    });
+    const saved = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    const rhythm = saved.envelope.data.savedRhythms.find(item => item.title === 'Season flow test')!;
+    expect(saved.envelope.data.rhythmHistoryIds).toContain(rhythm.id);
+    expect(saved.envelope.data.datedRhythmCompletions).toHaveLength(1);
+    expect(rhythm.scoring?.scheduleHistory.map(season => season.kind === 'scheduled' ? season.schedule : undefined)).toEqual([
+      { frequency: 'daily' },
+      { frequency: 'weekly', weekdays: [2] }
+    ]);
+    const currentSeason = rhythm.scoring?.scheduleHistory[1];
+    expect(currentSeason?.kind === 'scheduled' ? currentSeason.name : undefined).toBe('New cadence');
+
+    cleanup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    const reloadedCard = screen.getByRole('article', { name: 'Season flow test' });
+    await user.click(within(reloadedCard).getByRole('button', {
+      name: 'View scores and history for Season flow test'
+    }));
+    const reloadedDialog = screen.getByRole('dialog', { name: 'Season flow test' });
+    const reloadedHistory = within(reloadedDialog).getByRole('region', { name: 'History for Season flow test' });
+    expect(within(reloadedHistory).getByText('Logged moments (1)')).toBeTruthy();
+    await user.click(within(reloadedHistory).getByRole('button', { name: 'Seasons (2)' }));
+    expect(within(reloadedHistory).getByRole('heading', { name: 'New cadence' })).toBeTruthy();
+    expect(within(reloadedHistory).getByRole('heading', { name: 'Daily' })).toBeTruthy();
+    expect(parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()))
+      .valid).toBe(true);
+  });
+
+  it('keeps the history dialog open when Escape dismisses the nested Season correction', async () => {
+    const user = userEvent.setup();
+    const today = localDateString(new Date());
+    const previousDate = addCalendarDays(today, -1);
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const rhythmId = 'user-rhythm-50000000-0000-4000-8000-000000000001';
+    const schedule = { frequency: 'daily' } as const;
+    const data = createSamplePreviewData();
+    data.savedRhythms.push({
+      id: rhythmId,
+      title: 'Escape fixture',
+      cadence: 'Daily',
+      timeLabel: 'Anytime',
+      timeOfDay: 'anytime',
+      personIds: [],
+      categoryIds: [],
+      schedule,
+      scoring: {
+        trackingStartDate: today,
+        timeZone,
+        scheduleHistory: [
+          {
+            kind: 'unknown',
+            id: `season:${rhythmId}:${previousDate}:unknown`,
+            startDate: previousDate,
+            descriptiveCadence: 'Daily',
+            paletteToken: 'plum'
+          },
+          createRhythmSeason(rhythmId, today, schedule)
+        ]
+      },
+      createdLocalDate: today,
+      createdTimeZone: timeZone
+    });
+    const envelope = createPreviewEnvelope(data);
+    const validation = parsePreviewBackup(JSON.stringify(envelope), today);
+    if (!validation.valid) throw new Error(validation.message);
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(envelope));
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+
+    const card = screen.getByRole('article', { name: 'Escape fixture' });
+    await user.click(within(card).getByRole('button', { name: 'View scores and history for Escape fixture' }));
+    const historyDialog = screen.getByRole('dialog', { name: 'Escape fixture' });
+    const history = within(historyDialog).getByRole('region', { name: 'History for Escape fixture' });
+    await user.click(within(history).getByRole('button', { name: 'Seasons (2)' }));
+    const opener = within(history).getAllByRole('button', { name: 'Set earlier schedule' }).at(-1)!;
+    await user.click(opener);
+
+    const correction = screen.getByRole('dialog', { name: 'Set earlier schedule' });
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Escape fixture' })).toBe(historyDialog);
+    expect(screen.getByRole('dialog', { name: 'Set earlier schedule' })).toBe(correction);
+    expect(document.activeElement).not.toBe(opener);
+
+    fireEvent(correction, new Event('cancel', { cancelable: true }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Set earlier schedule' })).toBeNull());
+    expect(screen.getByRole('dialog', { name: 'Escape fixture' })).toBe(historyDialog);
+    expect(document.activeElement).toBe(opener);
+  });
+
   it('recomputes structured On Track from exported and reimported dated records after reload', async () => {
     const user = userEvent.setup();
     const today = localDateString(new Date());
@@ -59,7 +215,7 @@ describe('Tend Today preview', () => {
       scoring: {
         trackingStartDate,
         timeZone,
-        scheduleHistory: [{ startDate: trackingStartDate, schedule: { frequency: 'daily' } }]
+        scheduleHistory: [createRhythmSeason(rhythmId, trackingStartDate, { frequency: 'daily' })]
       },
       createdLocalDate: trackingStartDate,
       createdTimeZone: timeZone,
@@ -74,6 +230,7 @@ describe('Tend Today preview', () => {
       completedAt: new Date(`${completionDate}T12:00:00`).toISOString(),
       recordedAt: new Date().toISOString()
     });
+    data.rhythmHistoryIds.push(rhythmId);
     const exportedBackup = JSON.stringify(createPreviewEnvelope(data));
     window.localStorage.setItem(PREVIEW_STORAGE_KEY, exportedBackup);
 
@@ -114,6 +271,56 @@ describe('Tend Today preview', () => {
     await user.click(within(importedDialog).getByRole('button', { name: 'Close details' }));
   });
 
+  it('shows a new quarterly Rhythm as not started until a qualifying Tend or ended occurrence exists', async () => {
+    const user = userEvent.setup();
+    const today = localDateString(new Date());
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const rhythmId = 'user-rhythm-30000000-0000-4000-8000-000000000001';
+    const schedule = {
+      frequency: 'quarterly',
+      monthInQuarter: 1,
+      pattern: { kind: 'dayOfMonth', day: 1 }
+    } as const;
+    const data = createSamplePreviewData();
+    data.savedRhythms.push({
+      id: rhythmId,
+      title: 'New quarterly rhythm',
+      cadence: 'The 1st day of the first month of every quarter.',
+      timeLabel: 'Anytime',
+      timeOfDay: 'anytime',
+      personIds: [],
+      categoryIds: [],
+      schedule,
+      scoring: {
+        trackingStartDate: today,
+        timeZone,
+        scheduleHistory: [createRhythmSeason(rhythmId, today, schedule)]
+      },
+      createdLocalDate: today,
+      createdTimeZone: timeZone
+    });
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await user.click(screen.getByRole('button', {
+      name: 'View scores and history for New quarterly rhythm'
+    }));
+    const history = await screen.findByRole('region', { name: 'History for New quarterly rhythm' });
+    expect(within(history).getByRole('img', {
+      name: 'On Track: Unscored because Starts with your first Tend.'
+    })).toBeTruthy();
+    expect(within(history).queryByRole('meter', { name: 'On Track score' })).toBeNull();
+    expect(within(history).getByRole('status').textContent).toContain(
+      'On Track: Starts with your first Tend.'
+    );
+    expect(within(history).getByRole('status').textContent).toContain(
+      'Consistency: No scheduled moments to measure yet.'
+    );
+    expect(within(history).getByText('Your story starts with the first Tend.')).toBeTruthy();
+    expect(within(history).getByText('Logged moments (0)')).toBeTruthy();
+  });
+
   it('keeps Take a walk descriptive cadence literal until a structured schedule is explicitly saved', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -145,7 +352,7 @@ describe('Tend Today preview', () => {
     await user.click(within(editor).getByRole('button', { name: 'Add Rhythm' }));
 
     const card = screen.getByRole('article', { name: 'Quarterly preview habit' });
-    expect(within(card).getByText(/Quarterly\s*·\s*1st month\s*·\s*1st/)).toBeTruthy();
+    expect(within(card).getByText('Quarterly')).toBeTruthy();
     const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
     expect(raw).not.toBeNull();
     const parsed = parsePreviewBackup(raw!, localDateString(new Date()));
@@ -189,7 +396,7 @@ describe('Tend Today preview', () => {
     await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
 
     const updatedCard = screen.getByRole('article', { name: 'Take a walk' });
-    expect(within(updatedCard).getByText(/Quarterly\s*·\s*1st month\s*·\s*1st/)).toBeTruthy();
+    expect(within(updatedCard).getByText('Quarterly')).toBeTruthy();
     expect(within(updatedCard).queryByText('3 times a week')).toBeNull();
 
     const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
@@ -207,7 +414,7 @@ describe('Tend Today preview', () => {
     cleanup();
     render(<App />);
     const reloadedCard = screen.getByRole('article', { name: 'Take a walk' });
-    expect(within(reloadedCard).getByText(/Quarterly\s*·\s*1st month\s*·\s*1st/)).toBeTruthy();
+    expect(within(reloadedCard).getByText('Quarterly')).toBeTruthy();
     expect(within(reloadedCard).queryByText('3 times a week')).toBeNull();
     await user.click(within(reloadedCard).getByRole('button', { name: 'View scores and history for Take a walk' }));
     const history = screen.getByRole('region', { name: 'History for Take a walk' });
@@ -1051,7 +1258,7 @@ describe('Tend Today preview', () => {
     const saved = parsePreviewBackup(savedRaw!, localDateString(new Date()));
     expect(saved.valid).toBe(true);
     if (saved.valid) {
-      expect(saved.envelope.schemaVersion).toBe(8);
+      expect(saved.envelope.schemaVersion).toBe(11);
       expect(saved.envelope.data.savedRhythms).toHaveLength(1);
       expect(saved.envelope.data.savedRhythms[0]).toMatchObject({
         id: expect.stringMatching(/^user-rhythm-/),

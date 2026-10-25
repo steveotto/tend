@@ -1,3 +1,17 @@
+import {
+  PREVIEW_STORAGE_KEY,
+  PREVIEW_V1_RECOVERY_KEY,
+  PREVIEW_V2_RECOVERY_KEY,
+  PREVIEW_V3_RECOVERY_KEY,
+  PREVIEW_V4_RECOVERY_KEY,
+  PREVIEW_V5_RECOVERY_KEY,
+  PREVIEW_V6_RECOVERY_KEY,
+  PREVIEW_V7_RECOVERY_KEY,
+  PREVIEW_V8_RECOVERY_KEY,
+  PREVIEW_V9_RECOVERY_KEY,
+  PREVIEW_V10_RECOVERY_KEY
+} from '../src/storage/preview-v4-recovery.ts';
+
 export class MemoryStorage implements Storage {
   private readonly values = new Map<string, string>();
 
@@ -28,6 +42,21 @@ export class MemoryStorage implements Storage {
 
 export function installMemoryStorage(): MemoryStorage {
   const storage = new MemoryStorage();
+  for (const key of [
+    PREVIEW_STORAGE_KEY,
+    PREVIEW_V1_RECOVERY_KEY,
+    PREVIEW_V2_RECOVERY_KEY,
+    PREVIEW_V3_RECOVERY_KEY,
+    PREVIEW_V4_RECOVERY_KEY,
+    PREVIEW_V5_RECOVERY_KEY,
+    PREVIEW_V6_RECOVERY_KEY,
+    PREVIEW_V7_RECOVERY_KEY,
+    PREVIEW_V8_RECOVERY_KEY,
+    PREVIEW_V9_RECOVERY_KEY,
+    PREVIEW_V10_RECOVERY_KEY
+  ]) {
+    storage.removeItem(key);
+  }
   Object.defineProperty(window, 'localStorage', { configurable: true, value: storage });
   return storage;
 }

@@ -5,6 +5,7 @@ import type {
 } from '../../../src/domain/capabilities.ts';
 import type { MoneyGoal } from './money-goals.ts';
 import type { RhythmSchedule, RhythmScoringMetadata, RhythmTimeValue } from './rhythm-schedule.ts';
+import { selectNextScheduledOccurrence } from './rhythm-occurrences.ts';
 
 export type FoundationPreview = {
   id: string;
@@ -395,18 +396,37 @@ export function orderedCompletions(
 }
 
 export function rhythmLastTendedLabel(
-  rhythm: Pick<RhythmPreview, 'completionHistory' | 'status'>,
-  completedToday = false
+  rhythm: Pick<RhythmPreview, 'completionHistory' | 'cadence' | 'schedule' | 'scoring' | 'createdLocalDate'>,
+  completedToday = false,
+  asOfDate?: string
 ): string {
   if (completedToday) return 'Tended today';
-  const latest = orderedCompletions(rhythm.completionHistory)[0];
+  const latest = orderedCompletions(rhythm.completionHistory?.filter(record =>
+    asOfDate === undefined || record.effectiveDate <= asOfDate
+  ))[0];
   if (latest) {
     return `Last tended ${new Date(`${latest.effectiveDate}T12:00:00`).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric'
     })}`;
   }
-  return rhythm.status === 'Due today' ? 'Due today' : 'Not yet tended';
+  const schedule = rhythm.schedule ?? (rhythm.cadence === 'Daily' ? { frequency: 'daily' as const } : undefined);
+  if (!schedule || !asOfDate) return rhythm.scoring ? 'Schedule unavailable' : 'Not yet tended';
+  const next = selectNextScheduledOccurrence({
+    schedule,
+    ...(rhythm.scoring ? { scoring: rhythm.scoring } : {}),
+    ...(rhythm.createdLocalDate ? { trackingStartDate: rhythm.createdLocalDate } : {}),
+    asOfDate
+  });
+  if (next.kind === 'unavailable') return 'Schedule unavailable';
+  if (next.kind === 'none') return 'No upcoming date';
+  if (next.date === asOfDate) return 'Due today';
+  const date = new Date(`${next.date}T12:00:00Z`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC'
+  });
+  return `Next due ${date}`;
 }
 
 export const financeFoundation: FoundationPreview = {

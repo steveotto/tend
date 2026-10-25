@@ -3,9 +3,11 @@ import type { FormEvent } from 'react';
 import { areas, syntheticPeople, syntheticPersonPickerGroups } from '../domain/preview-data.ts';
 import type { PersonPreview } from '../domain/preview-data.ts';
 import type { RhythmPreview } from '../domain/preview-data.ts';
-import { rhythmDraftFrom } from '../domain/rhythm-editor.ts';
+import { rhythmDraftFrom, validateRhythmDraft } from '../domain/rhythm-editor.ts';
 import type { RhythmDraft, RhythmDraftErrors } from '../domain/rhythm-editor.ts';
 import { rhythmTimeOptions } from '../domain/rhythm-schedule.ts';
+import { formatRhythmSchedule } from '../domain/rhythm-schedule.ts';
+import { rhythmSchedulesEqual } from '../domain/rhythm-occurrences.ts';
 import { RhythmScheduleFields } from './RhythmScheduleFields.tsx';
 import { StyledSelect } from './StyledSelect.tsx';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
@@ -29,6 +31,7 @@ function emptyDraft(): RhythmDraft {
 
 type RhythmEditorProps = {
   rhythm?: RhythmPreview;
+  hasDatedCompletionHistory?: boolean;
   onSave: (draft: RhythmDraft) => RhythmDraftErrors;
   onArchive?: (id: string) => void;
   onClose: () => void;
@@ -36,6 +39,7 @@ type RhythmEditorProps = {
 
 export function RhythmEditor({
   rhythm,
+  hasDatedCompletionHistory = false,
   onSave,
   onArchive,
   onClose
@@ -47,6 +51,7 @@ export function RhythmEditor({
   );
   const [errors, setErrors] = useState<RhythmDraftErrors>({});
   const [showArchiveConfirmation, setShowArchiveConfirmation] = useState(false);
+  const [showScheduleConfirmation, setShowScheduleConfirmation] = useState(false);
   const [activePicker, setActivePicker] = useState<'categories' | 'people' | null>(null);
   const [pickerSelection, setPickerSelection] = useState<string[]>([]);
   const categoryPickerOpenerRef = useRef<HTMLButtonElement>(null);
@@ -55,6 +60,7 @@ export function RhythmEditor({
   const pickerOriginRef = useRef<'categories' | 'people'>('categories');
   const archiveButtonRef = useRef<HTMLButtonElement>(null);
   const archiveConfirmButtonRef = useRef<HTMLButtonElement>(null);
+  const saveButtonRef = useRef<HTMLButtonElement>(null);
   const wasConfirmingArchiveRef = useRef(false);
 
   useEffect(() => {
@@ -118,8 +124,32 @@ export function RhythmEditor({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const scheduleChanged = draft.schedule !== undefined && rhythm?.schedule !== undefined
+      ? !rhythmSchedulesEqual(draft.schedule, rhythm.schedule)
+      : draft.schedule !== rhythm?.schedule;
+    if (rhythm?.schedule && hasDatedCompletionHistory && scheduleChanged && draft.schedule) {
+      const nextErrors = validateRhythmDraft(draft);
+      setErrors(nextErrors);
+      if (Object.keys(nextErrors).length === 0) setShowScheduleConfirmation(true);
+      return;
+    }
     const nextErrors = onSave(draft);
     setErrors(nextErrors);
+  }
+
+  function confirmScheduleChange() {
+    const nextErrors = onSave({
+      ...draft,
+      ...(draft.seasonName === undefined ? {} : { seasonName: draft.seasonName.trim() })
+    });
+    setErrors(nextErrors);
+    setShowScheduleConfirmation(false);
+    if (Object.keys(nextErrors).length > 0) saveButtonRef.current?.focus();
+  }
+
+  function cancelScheduleChange() {
+    setShowScheduleConfirmation(false);
+    saveButtonRef.current?.focus();
   }
 
   function fieldError(field: keyof RhythmDraft) {
@@ -313,7 +343,7 @@ export function RhythmEditor({
         )}
         <div className="rhythm-editor__action-row">
           <div className="money-goal-dialog__actions rhythm-editor__primary-actions">
-            <button type="submit" className="btn mini">{rhythm ? 'Save Rhythm' : 'Add Rhythm'}</button>
+            <button ref={saveButtonRef} type="submit" className="btn mini">{rhythm ? 'Save Rhythm' : 'Add Rhythm'}</button>
             <button type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>
           </div>
           {rhythm && onArchive && (
@@ -360,6 +390,41 @@ export function RhythmEditor({
             </button>
           </div>
         </section>
+      )}
+      {showScheduleConfirmation && rhythm?.schedule && draft.schedule && (
+        <MoneyGoalDialog
+          labelledBy="rhythm-schedule-confirmation-title"
+          initialFocusId="rhythm-season-label"
+          closeLabel="Cancel schedule change"
+          onClose={cancelScheduleChange}
+        >
+          <section
+            className="rhythm-editor__schedule-confirmation"
+            aria-labelledby="rhythm-schedule-confirmation-title"
+          >
+            <h2 id="rhythm-schedule-confirmation-title">Change your schedule</h2>
+            <p className="rhythm-editor__schedule-transition">
+              <span>{formatRhythmSchedule(rhythm.schedule, 'detailed')}</span>
+              <span aria-hidden="true"> → </span>
+              <span>{formatRhythmSchedule(draft.schedule, 'detailed')}</span>
+            </p>
+            <p><strong>Starting today</strong></p>
+            <p>Earlier logs keep their previous schedule.</p>
+            <div className="goal-field">
+              <label htmlFor="rhythm-season-label">Season label (optional)</label>
+              <input
+                id="rhythm-season-label"
+                maxLength={80}
+                value={draft.seasonName ?? ''}
+                onChange={event => update('seasonName', event.currentTarget.value)}
+              />
+            </div>
+            <div className="money-goal-dialog__actions">
+              <button type="button" className="btn mini" onClick={confirmScheduleChange}>Confirm change</button>
+              <button type="button" className="btn mini ghost" onClick={cancelScheduleChange}>Cancel</button>
+            </div>
+          </section>
+        </MoneyGoalDialog>
       )}
     </MoneyGoalDialog>
   );

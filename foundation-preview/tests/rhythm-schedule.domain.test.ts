@@ -151,7 +151,7 @@ describe('pure structured Rhythm schedule domain', () => {
     frequency: 'quarterly',
     monthInQuarter: 2,
     pattern: { kind: 'dayOfMonth', day: 15 }
-    }, 'compact')).toBe('Quarterly · 2nd month · 15th');
+    }, 'compact')).toBe('Quarterly');
     expect(formatRhythmSchedule({
     frequency: 'yearly',
     month: 10,

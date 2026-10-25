@@ -14,6 +14,7 @@ import {
   validateSavedRhythms
 } from '../src/domain/rhythm-editor.ts';
 import type { RhythmDraft } from '../src/domain/rhythm-editor.ts';
+import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
 
 const validDraft: RhythmDraft = {
   title: 'Walk after lunch',
@@ -163,13 +164,137 @@ describe('synthetic Rhythm editor domain', () => {
     expect(result.savedRhythms?.[0]?.scoring).toEqual({
       trackingStartDate: '2026-10-23',
       timeZone: 'UTC',
-      scheduleHistory: [{ startDate: '2026-10-23', schedule }]
+      scheduleHistory: [createRhythmSeason(id, '2026-10-23', schedule)]
     });
     expect(result.savedRhythms?.[0]).toMatchObject({
       createdLocalDate: '2026-10-23',
       createdTimeZone: 'UTC',
       dailyBackfillAllowed: true
     });
+  });
+
+  it('updates the initial schedule before dated history without adding a Season', () => {
+    const id = 'user-rhythm-33333333-3333-4333-8333-333333333333';
+    const initialSchedule = { frequency: 'daily' as const };
+    const nextSchedule = { frequency: 'weekly' as const, weekdays: [2, 4] as (2 | 4)[] };
+    const initialSeason = {
+      ...createRhythmSeason(id, '2026-10-01', initialSchedule),
+      name: 'A user label',
+      note: 'Kept as metadata.'
+    };
+    const existing = {
+      id,
+      title: 'Schedule before history',
+      cadence: 'Daily',
+      timeLabel: 'Anytime' as const,
+      timeOfDay: 'anytime' as const,
+      personIds: [],
+      categoryIds: [],
+      schedule: initialSchedule,
+      scoring: {
+        trackingStartDate: '2026-10-01',
+        timeZone: 'UTC',
+        scheduleHistory: [initialSeason]
+      }
+    };
+    const result = saveRhythmDraft([existing], {
+      ...validDraft,
+      originalSchedule: initialSchedule,
+      originalScoring: existing.scoring,
+      schedule: nextSchedule,
+      scheduleEditing: true
+    }, id, 'edit', {
+      currentDate: '2026-10-20',
+      deviceTimeZone: 'UTC',
+      hasDatedCompletionHistory: false
+    });
+
+    expect(result.errors).toEqual({});
+    expect(result.savedRhythms?.[0]?.schedule).toEqual(nextSchedule);
+    expect(result.savedRhythms?.[0]?.scoring?.scheduleHistory).toEqual([
+      { ...initialSeason, schedule: nextSchedule }
+    ]);
+  });
+
+  it('preserves the prior schedule and appends a Season after dated history exists', () => {
+    const id = 'user-rhythm-44444444-4444-4444-8444-444444444444';
+    const initialSchedule = { frequency: 'daily' as const };
+    const nextSchedule = { frequency: 'weekly' as const, weekdays: [2, 4] as (2 | 4)[] };
+    const initialSeason = createRhythmSeason(id, '2026-10-01', initialSchedule);
+    const existing = {
+      id,
+      title: 'Schedule with history',
+      cadence: 'Daily',
+      timeLabel: 'Anytime' as const,
+      timeOfDay: 'anytime' as const,
+      personIds: [],
+      categoryIds: [],
+      schedule: initialSchedule,
+      scoring: {
+        trackingStartDate: '2026-10-01',
+        timeZone: 'UTC',
+        scheduleHistory: [initialSeason]
+      }
+    };
+    const result = saveRhythmDraft([existing], {
+      ...validDraft,
+      originalSchedule: initialSchedule,
+      originalScoring: existing.scoring,
+      schedule: nextSchedule,
+      scheduleEditing: true
+    }, id, 'edit', {
+      currentDate: '2026-10-20',
+      deviceTimeZone: 'UTC',
+      hasDatedCompletionHistory: true
+    });
+
+    expect(result.errors).toEqual({});
+    expect(result.savedRhythms?.[0]?.scoring?.scheduleHistory).toEqual([
+      initialSeason,
+      createRhythmSeason(id, '2026-10-20', nextSchedule)
+    ]);
+  });
+
+  it('replaces same-day schedule changes without duplicating the boundary and ignores cosmetic edits', () => {
+    const id = 'user-rhythm-55555555-5555-4555-8555-555555555555';
+    const schedule = { frequency: 'daily' as const };
+    const initialSeason = createRhythmSeason(id, '2026-10-20', schedule);
+    const existing = {
+      id,
+      title: 'Existing rhythm',
+      cadence: 'Daily',
+      timeLabel: 'Anytime' as const,
+      timeOfDay: 'anytime' as const,
+      personIds: [],
+      categoryIds: [],
+      schedule,
+      scoring: {
+        trackingStartDate: '2026-10-20',
+        timeZone: 'UTC',
+        scheduleHistory: [initialSeason]
+      }
+    };
+    const cosmetic = saveRhythmDraft([existing], {
+      ...validDraft,
+      title: 'Cosmetic title edit',
+      originalSchedule: schedule,
+      originalScoring: existing.scoring,
+      schedule,
+      scheduleEditing: true
+    }, id, 'edit', { currentDate: '2026-10-20', deviceTimeZone: 'UTC', hasDatedCompletionHistory: true });
+    expect(cosmetic.savedRhythms?.[0]?.scoring?.scheduleHistory).toEqual([initialSeason]);
+
+    const changedSchedule = { frequency: 'weekly' as const, weekdays: [2] as 2[] };
+    const sameDay = saveRhythmDraft([existing], {
+      ...validDraft,
+      originalSchedule: schedule,
+      originalScoring: existing.scoring,
+      schedule: changedSchedule,
+      scheduleEditing: true
+    }, id, 'edit', { currentDate: '2026-10-20', deviceTimeZone: 'UTC', hasDatedCompletionHistory: true });
+    expect(sameDay.savedRhythms?.[0]?.scoring?.scheduleHistory).toEqual([
+      { ...initialSeason, schedule: changedSchedule }
+    ]);
   });
 
   it('preserves descriptive cadence when unrelated fields are saved', () => {

@@ -24,6 +24,17 @@ export type RhythmPattern =
 
 type ScheduleDates = { endDate?: RhythmLocalDate };
 
+export const rhythmSeasonPaletteTokens = [
+  'fern',
+  'sage',
+  'sky',
+  'ocean',
+  'plum',
+  'clay'
+] as const;
+
+export type RhythmSeasonPaletteToken = (typeof rhythmSeasonPaletteTokens)[number];
+
 export type RhythmSchedule =
   | ({ frequency: 'daily' } & ScheduleDates)
   | ({ frequency: 'weekly'; weekdays: RhythmWeekday[] } & ScheduleDates)
@@ -36,15 +47,43 @@ export type RhythmSchedule =
   | { frequency: 'custom'; unit: 'years'; interval: number; month: RhythmMonth; pattern: RhythmPattern; startDate: RhythmLocalDate; endDate?: RhythmLocalDate };
 
 export type RhythmScheduleSegment = {
+  kind: 'scheduled';
+  id: string;
+  startDate: RhythmLocalDate;
+  schedule: RhythmSchedule;
+  timeOfDay?: RhythmTimeValue;
+  contextCadence?: string;
+  name?: string;
+  note?: string;
+  paletteToken: RhythmSeasonPaletteToken;
+};
+
+export type UnknownRhythmScheduleSegment = {
+  kind: 'unknown';
+  id: string;
+  startDate: RhythmLocalDate;
+  descriptiveCadence?: string;
+  paletteToken: RhythmSeasonPaletteToken;
+};
+
+export type RhythmScheduleHistorySegment = RhythmScheduleSegment | UnknownRhythmScheduleSegment;
+
+export type RhythmScheduleSegmentV8 = {
   startDate: RhythmLocalDate;
   endDate?: RhythmLocalDate;
   schedule: RhythmSchedule;
 };
 
+export type RhythmScoringMetadataV8 = {
+  trackingStartDate: RhythmLocalDate;
+  timeZone: string;
+  scheduleHistory: RhythmScheduleSegmentV8[];
+};
+
 export type RhythmScoringMetadata = {
   trackingStartDate: RhythmLocalDate;
   timeZone: string;
-  scheduleHistory: RhythmScheduleSegment[];
+  scheduleHistory: RhythmScheduleHistorySegment[];
 };
 
 export type RhythmScheduleValidation =
@@ -206,6 +245,62 @@ export function validateRhythmScoringMetadata(value: unknown): value is RhythmSc
     || !isValidTimeZone(value.timeZone) || !Array.isArray(value.scheduleHistory)
     || value.scheduleHistory.length === 0) return false;
 
+  const seasonIds = new Set<string>();
+  let previousStart = '';
+  for (let index = 0; index < value.scheduleHistory.length; index += 1) {
+    const segment: unknown = value.scheduleHistory[index];
+    if (!isRecord(segment) || !hasOnlyKeys(segment, [
+      'kind', 'id', 'startDate', 'schedule', 'timeOfDay', 'contextCadence', 'descriptiveCadence', 'name', 'note', 'paletteToken'
+    ]) || typeof segment.id !== 'string' || segment.id.trim().length === 0
+      || segment.id.length > 160 || seasonIds.has(segment.id)
+      || typeof segment.startDate !== 'string' || !isValidDate(segment.startDate)
+      || (index > 0 && segment.startDate <= previousStart)
+      || typeof segment.paletteToken !== 'string'
+      || !rhythmSeasonPaletteTokens.includes(segment.paletteToken as RhythmSeasonPaletteToken)) return false;
+    const knownSegment = segment.kind === 'scheduled'
+      && validateRhythmSchedule(segment.schedule).valid
+      && (segment.timeOfDay === undefined || rhythmTimeOptions.some(option => option.value === segment.timeOfDay))
+      && segment.descriptiveCadence === undefined
+      && (segment.contextCadence === undefined
+        || typeof segment.contextCadence === 'string' && segment.contextCadence.length <= 160);
+    const unknownSegment = segment.kind === 'unknown'
+      && segment.schedule === undefined
+      && segment.timeOfDay === undefined
+      && segment.contextCadence === undefined
+      && segment.name === undefined
+      && segment.note === undefined
+      && (segment.descriptiveCadence === undefined
+        || typeof segment.descriptiveCadence === 'string' && segment.descriptiveCadence.length <= 160);
+    if ((!knownSegment && !unknownSegment)
+      || (segment.kind === 'scheduled'
+        && (segment.name !== undefined
+          && (typeof segment.name !== 'string' || segment.name.length > 80)
+          || segment.note !== undefined
+          && (typeof segment.note !== 'string' || segment.note.length > 1000)))) return false;
+    seasonIds.add(segment.id);
+    previousStart = segment.startDate;
+  }
+  const history = value.scheduleHistory as unknown as RhythmScheduleHistorySegment[];
+  const firstKnownIndex = history.findIndex(segment => segment.kind === 'scheduled');
+  if (firstKnownIndex < 0 || history.at(-1)?.kind !== 'scheduled'
+    || (firstKnownIndex === 0
+      ? history[0]?.startDate !== value.trackingStartDate
+      : history[firstKnownIndex]?.startDate !== value.trackingStartDate)) return false;
+  for (let index = 0; index < history.length; index += 1) {
+    const segment = history[index];
+    const next = history[index + 1];
+    if (segment?.kind === 'scheduled' && segment.schedule.endDate !== undefined
+      && next && segment.schedule.endDate >= next.startDate) return false;
+  }
+  return true;
+}
+
+export function validateRhythmScoringMetadataV8(value: unknown): value is RhythmScoringMetadataV8 {
+  if (!isRecord(value) || !hasOnlyKeys(value, ['trackingStartDate', 'timeZone', 'scheduleHistory'])
+    || typeof value.trackingStartDate !== 'string' || !isValidDate(value.trackingStartDate)
+    || !isValidTimeZone(value.timeZone) || !Array.isArray(value.scheduleHistory)
+    || value.scheduleHistory.length === 0) return false;
+
   let expectedStart = value.trackingStartDate;
   for (let index = 0; index < value.scheduleHistory.length; index += 1) {
     const segment: unknown = value.scheduleHistory[index];
@@ -229,6 +324,41 @@ export function validateRhythmScoringMetadata(value: unknown): value is RhythmSc
     }
   }
   return true;
+}
+
+export function validateRhythmScoringMetadataV10(value: unknown): value is RhythmScoringMetadata {
+  if (!isRecord(value) || !hasOnlyKeys(value, ['trackingStartDate', 'timeZone', 'scheduleHistory'])
+    || typeof value.trackingStartDate !== 'string' || !isValidDate(value.trackingStartDate)
+    || !isValidTimeZone(value.timeZone) || !Array.isArray(value.scheduleHistory)
+    || value.scheduleHistory.length === 0) return false;
+
+  const ids = new Set<string>();
+  let previousStart = '';
+  for (let index = 0; index < value.scheduleHistory.length; index += 1) {
+    const segment: unknown = value.scheduleHistory[index];
+    if (!isRecord(segment)) return false;
+    const schedule = segment.schedule;
+    if (!isRecord(segment) || !hasOnlyKeys(segment, [
+      'kind', 'id', 'startDate', 'schedule', 'contextCadence', 'name', 'note', 'paletteToken'
+    ]) || segment.kind !== 'scheduled'
+      || typeof segment.id !== 'string' || !segment.id.trim() || segment.id.length > 160 || ids.has(segment.id)
+      || typeof segment.startDate !== 'string' || !isValidDate(segment.startDate)
+      || (index > 0 && segment.startDate <= previousStart)
+      || !validateRhythmSchedule(schedule).valid
+      || typeof segment.paletteToken !== 'string'
+      || !rhythmSeasonPaletteTokens.includes(segment.paletteToken as RhythmSeasonPaletteToken)
+      || (segment.contextCadence !== undefined
+        && (typeof segment.contextCadence !== 'string' || segment.contextCadence.length > 160))
+      || (segment.name !== undefined && (typeof segment.name !== 'string' || segment.name.length > 80))
+      || (segment.note !== undefined && (typeof segment.note !== 'string' || segment.note.length > 1000))) return false;
+    ids.add(segment.id);
+    previousStart = segment.startDate;
+    if (isRecord(schedule) && typeof schedule.endDate === 'string') {
+      const next: unknown = value.scheduleHistory[index + 1];
+      if (isRecord(next) && typeof next.startDate === 'string' && schedule.endDate >= next.startDate) return false;
+    }
+  }
+  return value.scheduleHistory[0]?.startDate === value.trackingStartDate;
 }
 
 export function rhythmTimeLabel(value: RhythmTimeValue): RhythmTimeLabel {
@@ -329,7 +459,7 @@ export function formatRhythmSchedule(
         compact = `Monthly · ${compactPatternSummary(schedule.pattern)}`;
         break;
       case 'quarterly':
-        compact = `Quarterly · ${dayOrdinal(schedule.monthInQuarter)} month · ${compactPatternSummary(schedule.pattern)}`;
+        compact = 'Quarterly';
         break;
       case 'yearly':
         compact = schedule.pattern.kind === 'dayOfMonth'

@@ -6,6 +6,7 @@ import { CategoryHealthBadge, FoundationCard, FoundationProgress, GoalCard, Rhyt
 import { MarriageIcon } from '../src/components/MarriageIcon.tsx';
 import { PersonBadgeList } from '../src/components/PersonBadge.tsx';
 import { RhythmDetailsDialog } from '../src/components/RhythmDetailsDialog.tsx';
+import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
 import {
   financeFoundation,
   goals,
@@ -255,6 +256,58 @@ describe('shared preview components', () => {
       .toBe('svg');
   });
 
+  it('shows structured next-due and due-today labels from the effective schedule', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-25T12:00:00.000Z'));
+    try {
+      const quarterly = {
+        id: 'quarterly-next-due',
+        title: 'Quarterly verify',
+        cadence: 'Quarterly',
+        automation: 'manual' as const,
+        status: 'Due today' as const,
+        schedule: {
+          frequency: 'quarterly' as const,
+          monthInQuarter: 1 as const,
+          pattern: { kind: 'dayOfMonth' as const, day: 1 }
+        },
+        createdLocalDate: '2026-10-25',
+        createdTimeZone: 'UTC',
+        scoring: {
+          trackingStartDate: '2026-10-25',
+          timeZone: 'UTC',
+          scheduleHistory: [createRhythmSeason('quarterly-next-due', '2026-10-25', {
+              frequency: 'quarterly' as const,
+              monthInQuarter: 1 as const,
+              pattern: { kind: 'dayOfMonth' as const, day: 1 }
+            })]
+        }
+      };
+      const { rerender } = render(<RhythmDetailsDialog rhythm={quarterly} onClose={() => undefined} />);
+      const footer = document.querySelector('.rhythm-metadata-footer') as HTMLElement;
+      expect(within(footer).getByText('Next due Jan 1')).toBeTruthy();
+      expect(within(footer).queryByText('Due today')).toBeNull();
+
+      const dailySchedule = { frequency: 'daily' as const };
+      rerender(
+        <RhythmDetailsDialog
+          rhythm={{
+            ...quarterly,
+            schedule: dailySchedule,
+            scoring: {
+              ...quarterly.scoring,
+              scheduleHistory: [createRhythmSeason('quarterly-next-due', '2026-10-25', dailySchedule)]
+            }
+          }}
+          onClose={() => undefined}
+        />
+      );
+      expect(within(document.querySelector('.rhythm-metadata-footer') as HTMLElement).getByText('Due today')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps Undo directly before the right-aligned footer status group', () => {
     const rhythm = todayRhythms[0]!;
     render(
@@ -292,7 +345,7 @@ describe('shared preview components', () => {
     const footer = document.querySelector('.rhythm-metadata-footer')!;
     const scheduleGroup = footer.querySelector('.rhythm-metadata-schedule-group')!;
     const scheduleLabel = scheduleGroup.querySelector('span > span')!;
-    expect(scheduleLabel.textContent).toBe('Quarterly · 2nd month · 15th');
+    expect(scheduleLabel.textContent).toBe('Quarterly');
     const fullScheduleId = scheduleLabel.getAttribute('aria-describedby')!;
     expect(document.getElementById(fullScheduleId)?.textContent)
       .toBe('Full schedule: The 15th day of the second month of every quarter.');
@@ -334,6 +387,7 @@ describe('shared preview components', () => {
     const actions = card.querySelector('.today-rhythm-details__actions');
     expect(within(card).getByRole('heading', { name: todayRhythms[0]!.title, level: 3 })).toBeTruthy();
     expect(actions?.parentElement).toBe(header);
+    expect(card.querySelector('.today-rhythm-details__content')?.contains(actions)).toBe(false);
     expect(within(card).getByText(todayRhythms[0]!.description!)).toBeTruthy();
     expect(within(card).getByRole('group', { name: `Associations for ${todayRhythms[0]!.title}` })).toBeTruthy();
     expect(within(card).getByRole('button', { name: `Tend ${todayRhythms[0]!.title}` })).toBeTruthy();
@@ -349,6 +403,39 @@ describe('shared preview components', () => {
     expect(onHistory).toHaveBeenCalledOnce();
     expect(onEdit).toHaveBeenCalledOnce();
     expect(onUndo).not.toHaveBeenCalled();
+  });
+
+  it('keeps the action column in the title row when description and associations are absent', () => {
+    const rhythm = {
+      id: 'sparse-layout-test',
+      title: 'Simple Rhythm Test',
+      cadence: 'Quarterly',
+      automation: 'manual' as const,
+      status: 'Due today' as const,
+      schedule: {
+        frequency: 'quarterly' as const,
+        monthInQuarter: 1 as const,
+        pattern: { kind: 'dayOfMonth' as const, day: 1 }
+      }
+    };
+    render(
+      <RhythmDetailsDialog
+        rhythm={rhythm}
+        inline
+        onTend={() => undefined}
+        onClose={() => undefined}
+      />
+    );
+
+    const card = screen.getByRole('article', { name: rhythm.title });
+    const header = card.querySelector('.today-rhythm-details__header');
+    const actions = card.querySelector('.today-rhythm-details__actions');
+    const body = card.querySelector('.today-rhythm-details__content');
+    expect(actions?.parentElement).toBe(header);
+    expect(within(card).getByRole('button', { name: `Tend ${rhythm.title}` })).toBeTruthy();
+    expect(within(card).getByRole('button', { name: `View scores and history for ${rhythm.title}` })).toBeTruthy();
+    expect(body?.querySelector('.today-rhythm-details__summary')).toBeNull();
+    expect(body?.querySelector('.today-rhythm-details__association-row')).toBeNull();
   });
 
   it('wraps long inline copy, omits empty associations, and gives repeated cards unique heading IDs', () => {
