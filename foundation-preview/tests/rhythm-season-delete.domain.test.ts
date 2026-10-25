@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createRhythmSeason, createUnknownRhythmSeason } from '../src/domain/rhythm-seasons.ts';
+import {
+  createRhythmSeason,
+  createUnknownRhythmSeason,
+  rhythmSeasonPaletteForOrdinal
+} from '../src/domain/rhythm-seasons.ts';
 import { deleteRhythmSeason, restoreDeletedRhythmSeason } from '../src/domain/rhythm-season-delete.ts';
 import type { RhythmScoringMetadata } from '../src/domain/rhythm-schedule.ts';
 
@@ -151,5 +155,64 @@ describe('Rhythm Season deletion and scoped Undo', () => {
       undo.expectedTimeOfDay,
       undo
     )).toMatchObject({ valid: false, error: expect.stringContaining('changed after deletion') });
+  });
+
+  it('preserves palette assignments through deletion and Undo after cycling past five Seasons', () => {
+    const scheduleHistory = Array.from({ length: 7 }, (_, index) =>
+      createRhythmSeason(
+        'palette-delete-fixture',
+        `2024-01-0${index + 1}`,
+        { frequency: 'weekly', weekdays: [index as 0 | 1 | 2 | 3 | 4 | 5 | 6] },
+        'morning',
+        undefined,
+        rhythmSeasonPaletteForOrdinal(index)
+      ));
+    const scoring: RhythmScoringMetadata = {
+      trackingStartDate: scheduleHistory[0]!.startDate,
+      timeZone: 'UTC',
+      scheduleHistory
+    };
+    const currentSchedule = scheduleHistory.at(-1)!.schedule;
+    const deletedIndex = 3;
+    const deletion = deleteRhythmSeason(
+      currentSchedule,
+      scoring,
+      scheduleHistory[deletedIndex]!.id
+    );
+
+    expect(deletion.valid).toBe(true);
+    if (!deletion.valid) return;
+    expect(deletion.scoring.scheduleHistory.map(season => season.paletteToken)).toEqual([
+      'fern', 'sage', 'sky', 'plum', 'fern', 'sage'
+    ]);
+    const undo = {
+      rhythmId: 'palette-delete-fixture',
+      season: deletion.deletedSeason,
+      index: deletion.index,
+      expectedScoring: deletion.scoring,
+      expectedSchedule: deletion.schedule,
+      expectedCadence: 'Daily',
+      expectedTimeLabel: 'Morning',
+      expectedTimeOfDay: 'morning' as const,
+      restoreSchedule: currentSchedule,
+      restoreCadence: 'Daily',
+      restoreTimeLabel: 'Morning' as const,
+      restoreTimeOfDay: 'morning' as const
+    };
+    const restored = restoreDeletedRhythmSeason(
+      undo.rhythmId,
+      deletion.schedule,
+      deletion.scoring,
+      undo.expectedCadence,
+      undo.expectedTimeLabel,
+      undo.expectedTimeOfDay,
+      undo
+    );
+
+    expect(restored.valid).toBe(true);
+    if (restored.valid) {
+      expect(restored.scoring.scheduleHistory.map(season => season.paletteToken))
+        .toEqual(['fern', 'sage', 'sky', 'ocean', 'plum', 'fern', 'sage']);
+    }
   });
 });

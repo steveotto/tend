@@ -103,6 +103,73 @@ function seasonDeletionFixture() {
 }
 
 describe('Tend Today preview', () => {
+  it('persists name-only Season corrections, clears names explicitly, and keeps boundaries and logs intact', async () => {
+    const user = userEvent.setup();
+    const fixture = seasonDeletionFixture();
+    const originalSeasons = fixture.data.savedRhythms.find(entry => entry.id === fixture.rhythmId)!.scoring!
+      .scheduleHistory;
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(fixture.data)));
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    const card = screen.getByRole('article', { name: 'Season deletion fixture' });
+    await user.click(within(card).getByRole('button', {
+      name: 'View scores and history for Season deletion fixture'
+    }));
+    let history = within(screen.getByRole('dialog', { name: 'Season deletion fixture' }))
+      .getByRole('region', { name: 'History for Season deletion fixture' });
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+
+    await user.click(within(history).getByRole('button', { name: 'Edit Middle Season' }));
+    let correction = screen.getByRole('dialog', { name: 'Edit schedule period' });
+    await user.clear(within(correction).getByLabelText('Season name (optional)'));
+    await user.type(within(correction).getByLabelText('Season name (optional)'), 'Revised middle');
+    await user.click(within(correction).getByRole('button', { name: 'Confirm schedule correction' }));
+
+    let stored = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
+    expect(stored.valid).toBe(true);
+    if (!stored.valid) return;
+    let rhythm = stored.envelope.data.savedRhythms.find(entry => entry.id === fixture.rhythmId)!;
+    expect(rhythm.scoring?.scheduleHistory.map(season => ({
+      id: season.id,
+      startDate: season.startDate,
+      schedule: season.kind === 'scheduled' ? season.schedule : undefined
+    }))).toEqual(originalSeasons.map(season => ({
+      id: season.id,
+      startDate: season.startDate,
+      schedule: season.kind === 'scheduled' ? season.schedule : undefined
+    })));
+    expect(rhythm.scoring?.scheduleHistory[1]).toMatchObject({ name: 'Revised middle' });
+    expect(stored.envelope.data.datedRhythmCompletions).toEqual(fixture.records);
+
+    await user.click(within(history).getByRole('button', { name: 'Edit Revised middle' }));
+    correction = screen.getByRole('dialog', { name: 'Edit schedule period' });
+    await user.clear(within(correction).getByLabelText('Season name (optional)'));
+    await user.click(within(correction).getByRole('button', { name: 'Confirm schedule correction' }));
+    stored = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
+    expect(stored.valid).toBe(true);
+    if (!stored.valid) return;
+    rhythm = stored.envelope.data.savedRhythms.find(entry => entry.id === fixture.rhythmId)!;
+    expect(rhythm.scoring?.scheduleHistory[1]).not.toHaveProperty('name');
+    expect(rhythm.scoring?.scheduleHistory.map(season => season.id))
+      .toEqual(originalSeasons.map(season => season.id));
+    expect(stored.envelope.data.datedRhythmCompletions).toEqual(fixture.records);
+
+    cleanup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    const reloadedCard = screen.getByRole('article', { name: 'Season deletion fixture' });
+    await user.click(within(reloadedCard).getByRole('button', {
+      name: 'View scores and history for Season deletion fixture'
+    }));
+    history = within(screen.getByRole('dialog', { name: 'Season deletion fixture' }))
+      .getByRole('region', { name: 'History for Season deletion fixture' });
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+    expect(within(history).getByRole('heading', { name: 'Mon · Wed · Fri' })).toBeTruthy();
+    expect(within(history).getByText('Every week on Monday, Wednesday, and Friday.')).toBeTruthy();
+    expect(within(history).queryByRole('heading', { name: 'Revised middle' })).toBeNull();
+    expect(within(history).getByText('Logged moments (5)')).toBeTruthy();
+  });
+
   it('reviews and cancels a middle Season deletion, then persists it and safely restores it with Undo', async () => {
     const user = userEvent.setup();
     const fixture = seasonDeletionFixture();
@@ -116,41 +183,65 @@ describe('Tend Today preview', () => {
     }));
     const details = screen.getByRole('dialog', { name: 'Season deletion fixture' });
     const history = within(details).getByRole('region', { name: 'History for Season deletion fixture' });
-    await user.click(within(history).getByRole('button', { name: 'Seasons (3)' }));
-    expect(within(history).getByText('The first Season cannot be deleted. Use Edit to correct it.')).toBeTruthy();
+    expect(within(history).getByRole('heading', { name: 'Seasons' })).toBeTruthy();
+    expect(within(history).getByText('3 seasons')).toBeTruthy();
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+    expect(within(history).getByRole('button', { name: 'Hide Seasons' }).getAttribute('aria-expanded'))
+      .toBe('true');
+    const firstSeasonEdit = within(history).getByRole('button', { name: 'Edit First Season' });
+    await user.click(firstSeasonEdit);
+    const firstSeasonDialog = screen.getByRole('dialog', { name: 'Edit schedule period' });
+    expect(within(firstSeasonDialog).getByText('The first Season cannot be deleted.')).toBeTruthy();
+    expect(within(firstSeasonDialog).queryByRole('button', { name: 'Delete season' })).toBeNull();
+    await user.click(within(firstSeasonDialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit schedule period' })).toBeNull());
+    expect(document.activeElement).toBe(firstSeasonEdit);
+    expect(within(history).getByRole('button', { name: 'Hide Seasons' }).getAttribute('aria-expanded'))
+      .toBe('true');
 
-    const openDelete = async () => user.click(within(history).getByRole('button', { name: 'Delete Season Middle Season' }));
-    const opener = within(history).getByRole('button', { name: 'Delete Season Middle Season' });
-    await openDelete();
+    const opener = within(history).getByRole('button', { name: 'Edit Middle Season' });
+    const openDelete = async (draftName?: string) => {
+      await user.click(opener);
+      const edit = screen.getByRole('dialog', { name: 'Edit schedule period' });
+      if (draftName) {
+        fireEvent.change(within(edit).getByLabelText('Season name (optional)'), {
+          target: { value: draftName }
+        });
+      }
+      await user.click(within(edit).getByRole('button', { name: 'Delete season' }));
+    };
+    await openDelete('Unsaved deletion draft');
     let review = screen.getByRole('dialog', { name: 'Remove this season?' });
     expect(within(review).getByText('2 logged moments in this period will be preserved.')).toBeTruthy();
     expect(within(review).getByRole('region', { name: 'Score impact preview' })).toBeTruthy();
     const impact = within(review).getByRole('region', { name: 'Score impact preview' });
-    expect(within(impact).getAllByText(/Before: .*eligible, .*completed/)).toHaveLength(2);
-    expect(within(impact).getAllByText(/After: .*eligible, .*completed/)).toHaveLength(2);
-    const previewAfterValues = new Map(
-      Array.from(impact.querySelectorAll('div'))
-        .filter(block => ['Consistency', 'On Track', 'Health'].includes(
-          block.querySelector('strong')?.textContent ?? ''
-        ))
-        .map(block => {
-          const metric = block.querySelector('strong')?.textContent ?? '';
-          const afterText = block.querySelectorAll('p')[1]?.textContent ?? '';
-          return [metric, afterText.match(/(\d+)\s*\/\s*100/)?.[1] ?? null] as const;
-        })
-    );
+    expect(within(impact).getByRole('heading', { name: 'Before' })).toBeTruthy();
+    expect(within(impact).getByRole('heading', { name: 'After' })).toBeTruthy();
+    const previewAfterValues = new Map(['Consistency', 'On Track', 'Health'].map(metric => {
+      const comparison = within(impact).getByRole('group', { name: `${metric} comparison` });
+      const afterCell = within(comparison).getByRole('group', { name: `After ${metric}` });
+      const score = afterCell.querySelector('.rhythm-season-impact__score strong')?.textContent ?? null;
+      return [metric, score] as const;
+    }));
     expect(previewAfterValues.get('Consistency')).not.toBeNull();
     expect(previewAfterValues.get('On Track')).not.toBeNull();
     expect(previewAfterValues.get('Health')).not.toBeNull();
     await user.click(within(review).getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Remove this season?' })).toBeNull());
+    let edit = screen.getByRole('dialog', { name: 'Edit schedule period' });
+    expect(within(edit).getByLabelText('Season name (optional)')).toHaveProperty('value', 'Unsaved deletion draft');
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    await user.click(within(edit).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit schedule period' })).toBeNull());
     expect(document.activeElement).toBe(opener);
 
     await openDelete();
     review = screen.getByRole('dialog', { name: 'Remove this season?' });
     await user.click(within(review).getByRole('button', { name: 'Cancel Season deletion' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Remove this season?' })).toBeNull());
+    edit = screen.getByRole('dialog', { name: 'Edit schedule period' });
+    await user.click(within(edit).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit schedule period' })).toBeNull());
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
     expect(document.activeElement).toBe(opener);
 
@@ -161,6 +252,9 @@ describe('Tend Today preview', () => {
     expect(screen.getByRole('dialog', { name: 'Season deletion fixture' })).toBe(details);
     fireEvent(review, new Event('cancel', { cancelable: true }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Remove this season?' })).toBeNull());
+    edit = screen.getByRole('dialog', { name: 'Edit schedule period' });
+    await user.click(within(edit).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit schedule period' })).toBeNull());
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
     expect(document.activeElement).toBe(opener);
 
@@ -178,6 +272,8 @@ describe('Tend Today preview', () => {
     expect(deletedRhythm.scoring?.scheduleHistory[1]).toEqual(fixture.current);
     expect(deleted.envelope.data.datedRhythmCompletions).toEqual(fixture.records);
     const undoButton = within(history).getByRole('button', { name: 'Undo' });
+    expect(within(history).getByRole('button', { name: 'Hide Seasons' }).getAttribute('aria-expanded'))
+      .toBe('true');
     await waitFor(() => expect(document.activeElement).toBe(undoButton));
     await waitFor(() => {
       expect(within(history).getByRole('meter', { name: 'Consistency score' })
@@ -226,11 +322,14 @@ describe('Tend Today preview', () => {
       }));
       const details = screen.getByRole('dialog', { name: 'Season deletion fixture' });
       const history = within(details).getByRole('region', { name: 'History for Season deletion fixture' });
-      await user.click(within(history).getByRole('button', { name: `Seasons (${seasonCount})` }));
+      expect(within(history).getByText(`${seasonCount} ${seasonCount === 1 ? 'season' : 'seasons'}`)).toBeTruthy();
+      await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
       return { details, history };
     };
     let { history } = await openHistory();
-    await user.click(within(history).getByRole('button', { name: 'Delete Season Current Season' }));
+    await user.click(within(history).getByRole('button', { name: 'Edit Current Season' }));
+    const currentEdit = screen.getByRole('dialog', { name: 'Edit schedule period' });
+    await user.click(within(currentEdit).getByRole('button', { name: 'Delete season' }));
     let review = screen.getByRole('dialog', { name: 'Remove this season?' });
     await user.click(within(review).getByRole('button', { name: 'Delete season' }));
     await waitFor(() => {
@@ -264,7 +363,9 @@ describe('Tend Today preview', () => {
       .find(item => item.id === fixture.rhythmId)?.scoring?.scheduleHistory.map(season => season.id))
       .toEqual([fixture.first.id, fixture.middle.id]);
 
-    await user.click(within(history).getByRole('button', { name: 'Delete Season Middle Season' }));
+    await user.click(within(history).getByRole('button', { name: 'Edit Middle Season' }));
+    const middleEdit = screen.getByRole('dialog', { name: 'Edit schedule period' });
+    await user.click(within(middleEdit).getByRole('button', { name: 'Delete season' }));
     const finalSeasonReview = screen.getByRole('dialog', { name: 'Remove this season?' });
     await user.click(within(finalSeasonReview).getByRole('button', { name: 'Delete season' }));
     const undoButton = within(history).getByRole('button', { name: 'Undo' });
@@ -292,8 +393,10 @@ describe('Tend Today preview', () => {
     }));
     const details = screen.getByRole('dialog', { name: 'Season deletion fixture' });
     const history = within(details).getByRole('region', { name: 'History for Season deletion fixture' });
-    await user.click(within(history).getByRole('button', { name: 'Seasons (3)' }));
-    await user.click(within(history).getByRole('button', { name: 'Delete Season Middle Season' }));
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+    await user.click(within(history).getByRole('button', { name: 'Edit Middle Season' }));
+    const edit = screen.getByRole('dialog', { name: 'Edit schedule period' });
+    await user.click(within(edit).getByRole('button', { name: 'Delete season' }));
     const review = screen.getByRole('dialog', { name: 'Remove this season?' });
     const originalSetItem = storage.setItem.bind(storage);
     const failingWrite = vi.spyOn(storage, 'setItem').mockImplementation((key, value) => {
@@ -352,6 +455,7 @@ describe('Tend Today preview', () => {
 
     await user.click(within(card).getByRole('button', { name: 'Edit Season flow test' }));
     const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    await user.click(within(editor).getByRole('button', { name: 'Change schedule' }));
     await user.click(within(editor).getByRole('combobox', { name: 'Frequency: Daily' }));
     await user.click(within(editor).getByRole('option', { name: 'Select Days' }));
     await user.click(within(editor).getByRole('checkbox', { name: 'Tuesday' }));
@@ -362,6 +466,11 @@ describe('Tend Today preview', () => {
     await user.click(within(confirmation).getByRole('button', { name: 'Cancel schedule change' }));
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(beforeCancel);
     expect(screen.getByRole('dialog', { name: 'Edit Rhythm' })).toBe(editor);
+    expect(within(editor).getByText('Every day.')).toBeTruthy();
+    await user.click(within(editor).getByRole('button', { name: 'Change schedule' }));
+    await user.click(within(editor).getByRole('combobox', { name: 'Frequency: Daily' }));
+    await user.click(within(editor).getByRole('option', { name: 'Select Days' }));
+    await user.click(within(editor).getByRole('checkbox', { name: 'Tuesday' }));
     await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
     confirmation = screen.getByRole('dialog', { name: 'Change your schedule' });
     await user.type(within(confirmation).getByLabelText('Season label (optional)'), 'New cadence');
@@ -393,12 +502,107 @@ describe('Tend Today preview', () => {
     }));
     const reloadedDialog = screen.getByRole('dialog', { name: 'Season flow test' });
     const reloadedHistory = within(reloadedDialog).getByRole('region', { name: 'History for Season flow test' });
+    await user.click(within(reloadedHistory).getByRole('button', { name: 'Show Seasons' }));
     expect(within(reloadedHistory).getByText('Logged moments (1)')).toBeTruthy();
-    await user.click(within(reloadedHistory).getByRole('button', { name: 'Seasons (2)' }));
     expect(within(reloadedHistory).getByRole('heading', { name: 'New cadence' })).toBeTruthy();
     expect(within(reloadedHistory).getByRole('heading', { name: 'Daily' })).toBeTruthy();
     expect(parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()))
       .valid).toBe(true);
+  });
+
+  it('preserves the sample Daily connection history when its schedule first becomes structured', async () => {
+    const user = userEvent.setup();
+    const fixture = todayRhythms.find(rhythm => rhythm.id === 'sample-connect')!;
+    const originalCompletionIds = fixture.completionHistory?.map(record => record.id);
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    const card = screen.getByRole('article', { name: 'Daily connection' });
+    await user.click(within(card).getByRole('button', { name: 'Edit Daily connection' }));
+    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    await user.click(within(editor).getByRole('button', { name: 'Change schedule' }));
+    await user.click(within(editor).getByRole('combobox', { name: /Frequency:/ }));
+    await user.click(within(editor).getByRole('option', { name: 'Select Days' }));
+    for (const day of ['Monday', 'Wednesday', 'Friday']) {
+      const weekday = within(editor).getByRole('checkbox', { name: day });
+      await user.click(weekday);
+      expect((weekday as HTMLInputElement).checked).toBe(true);
+    }
+    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+
+    const confirmation = screen.getByRole('dialog', { name: 'Change your schedule' });
+    expect(within(confirmation).getByText('Every day.')).toBeTruthy();
+    expect(within(confirmation).getByText('Every week on Monday, Wednesday, and Friday.')).toBeTruthy();
+    await user.type(
+      within(confirmation).getByLabelText('Season label (optional)'),
+      'Evening connection'
+    );
+    await user.click(within(confirmation).getByRole('button', { name: 'Confirm change' }));
+
+    await waitFor(() => {
+      const saved = parsePreviewBackup(
+        window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+        localDateString(new Date())
+      );
+      expect(saved.valid && saved.envelope.data.savedRhythms
+        .find(item => item.id === 'sample-connect')?.scoring?.scheduleHistory).toHaveLength(2);
+    });
+    let saved = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    const rhythm = saved.envelope.data.savedRhythms.find(item => item.id === 'sample-connect')!;
+    expect(rhythm.scoring?.trackingStartDate).toBe('2026-10-17');
+    expect(rhythm.scoring?.scheduleHistory.map(season =>
+      season.kind === 'scheduled' ? season.schedule : season.kind
+    )).toEqual([
+      { frequency: 'daily' },
+      { frequency: 'weekly', weekdays: [1, 3, 5] }
+    ]);
+    expect(rhythm.scoring?.scheduleHistory[1]).toMatchObject({ name: 'Evening connection' });
+    expect(saved.envelope.data.datedRhythmCompletions).toHaveLength(0);
+    expect(fixture.completionHistory?.map(record => record.id)).toEqual(originalCompletionIds);
+
+    cleanup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    const reloadedCard = screen.getByRole('article', { name: 'Daily connection' });
+    expect(within(reloadedCard).queryByText('Due today')).toBeNull();
+    await user.click(within(reloadedCard).getByRole('button', {
+      name: 'View scores and history for Daily connection'
+    }));
+    const history = within(screen.getByRole('dialog', { name: 'Daily connection' }))
+      .getByRole('region', { name: 'History for Daily connection' });
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+    expect(within(history).getByRole('meter', { name: 'Health score' }).getAttribute('aria-valuenow'))
+      .toBe('43.125');
+    expect(within(history).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow'))
+      .toBe('38');
+    expect(within(history).getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow'))
+      .toBe('60');
+    expect(within(history).getByText('2 seasons')).toBeTruthy();
+    expect(within(history).getByRole('heading', { name: 'Daily' })).toBeTruthy();
+    expect(within(history).getByRole('heading', { name: 'Evening connection' })).toBeTruthy();
+    expect(within(history).getAllByText('Every week on Monday, Wednesday, and Friday.')).toHaveLength(2);
+    const editNamedSeason = within(history).getByRole('button', { name: 'Edit Evening connection' });
+    await user.click(editNamedSeason);
+    const correction = screen.getByRole('dialog', { name: 'Edit schedule period' });
+    expect(within(correction).getByLabelText('Season name (optional)'))
+      .toHaveProperty('value', 'Evening connection');
+    await user.click(within(correction).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit schedule period' })).toBeNull());
+    expect(within(history).getByText('Logged moments (3)')).toBeTruthy();
+    expect(fixture.completionHistory?.map(record => record.id)).toEqual(originalCompletionIds);
+    saved = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(saved.valid).toBe(true);
+    if (saved.valid) {
+      expect(saved.envelope.data.savedRhythms.find(item => item.id === 'sample-connect')
+        ?.scoring?.scheduleHistory).toHaveLength(2);
+    }
   });
 
   it('keeps the history dialog open when Escape dismisses the nested Season correction', async () => {
@@ -446,12 +650,16 @@ describe('Tend Today preview', () => {
     await user.click(within(card).getByRole('button', { name: 'View scores and history for Escape fixture' }));
     const historyDialog = screen.getByRole('dialog', { name: 'Escape fixture' });
     const history = within(historyDialog).getByRole('region', { name: 'History for Escape fixture' });
-    await user.click(within(history).getByRole('button', { name: 'Seasons (2)' }));
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
     expect(within(history).queryByRole('button', { name: /Delete Season/ })).toBeNull();
-    const opener = within(history).getAllByRole('button', { name: 'Set earlier schedule' }).at(-1)!;
+    const opener = within(history).getByRole('button', { name: 'Set earlier schedule' });
     await user.click(opener);
 
     const correction = screen.getByRole('dialog', { name: 'Set earlier schedule' });
+    const impact = within(correction).getByRole('region', { name: 'Score impact preview' });
+    expect(within(impact).getByRole('heading', { name: 'Before' })).toBeTruthy();
+    expect(within(impact).getByRole('heading', { name: 'After' })).toBeTruthy();
+    expect(within(impact).getByRole('group', { name: 'Consistency comparison' })).toBeTruthy();
     await user.keyboard('{Escape}');
     expect(screen.getByRole('dialog', { name: 'Escape fixture' })).toBe(historyDialog);
     expect(screen.getByRole('dialog', { name: 'Set earlier schedule' })).toBe(correction);
@@ -686,7 +894,8 @@ describe('Tend Today preview', () => {
     expect(within(reloadedCard).queryByText('3 times a week')).toBeNull();
     await user.click(within(reloadedCard).getByRole('button', { name: 'View scores and history for Take a walk' }));
     const history = screen.getByRole('region', { name: 'History for Take a walk' });
-    expect(within(history).getByText(/Quarterly|1st day of the first month of every quarter/)).toBeTruthy();
+    expect(history.querySelector('.rhythm-history-view__schedule')?.textContent)
+      .toContain('1st day of the first month of every quarter');
   });
 
   it('exposes the exact v5 recovery copy after explicitly replacing v5 preview data', async () => {
@@ -1475,7 +1684,7 @@ describe('Tend Today preview', () => {
     await user.type(within(editor).getByLabelText('Title'), 'After-lunch walk');
     await user.type(within(editor).getByLabelText('Description (optional)'), 'A small sample habit.');
     await user.click(within(editor).getByRole('combobox', { name: 'Frequency: Daily' }));
-    await user.click(within(editor).getByRole('option', { name: 'Weekly' }));
+    await user.click(within(editor).getByRole('option', { name: 'Select Days' }));
     await user.click(within(editor).getByRole('checkbox', { name: 'Monday' }));
     await user.click(within(editor).getByRole('checkbox', { name: 'Wednesday' }));
     await user.click(within(editor).getByRole('combobox', { name: 'Time of day: Anytime' }));
@@ -1562,6 +1771,12 @@ describe('Tend Today preview', () => {
     expect(within(reloadedCard).getByRole('button', { name: 'Open synthetic profile for Jordan Bell' })).toBeTruthy();
     await user.click(within(reloadedCard).getByRole('button', { name: 'Edit Walk after lunch' }));
     const reloadedEditor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    expect(within(reloadedEditor).getByText('Every week on Monday and Wednesday.')).toBeTruthy();
+    expect(within(reloadedEditor).queryByRole('combobox', { name: /Frequency:/ })).toBeNull();
+    await user.click(within(reloadedEditor).getByRole('button', { name: 'Change schedule' }));
+    expect(within(reloadedEditor).getByRole('combobox', { name: 'Frequency: Select Days' })).toBeTruthy();
+    expect((within(reloadedEditor).getByRole('checkbox', { name: 'Monday' }) as HTMLInputElement).checked).toBe(true);
+    expect((within(reloadedEditor).getByRole('checkbox', { name: 'Wednesday' }) as HTMLInputElement).checked).toBe(true);
     expect(within(reloadedEditor).getByRole('button', { name: 'Add categories' })).toBeTruthy();
     expect(within(reloadedEditor).getByRole('button', { name: 'Add people' })).toBeTruthy();
     await user.click(within(reloadedEditor).getByRole('button', { name: 'Add people' }));
@@ -1636,9 +1851,11 @@ describe('Tend Today preview', () => {
     await user.click(within(editor).getByRole('button', { name: 'Change schedule' }));
     await user.click(within(editor).getByRole('combobox', { name: 'Frequency: Choose a frequency' }));
     await user.click(within(editor).getByRole('option', { name: 'Weekly' }));
-    await user.click(within(editor).getByRole('checkbox', { name: 'Monday' }));
+    await user.click(within(editor).getByRole('radio', { name: 'Monday' }));
     await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
 
+    await user.click(within(screen.getByRole('dialog', { name: 'Change your schedule' }))
+      .getByRole('button', { name: 'Confirm change' }));
     const updatedCard = screen.getByRole('article', { name: 'Updated prayer rhythm' });
     expect(updatedCard.querySelector('.rhythm-metadata-schedule-group')?.textContent).toContain('Every Mon');
     await user.click(within(updatedCard).getByRole('button', { name: 'Edit Updated prayer rhythm' }));

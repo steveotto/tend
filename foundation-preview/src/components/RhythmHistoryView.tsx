@@ -1,11 +1,14 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { MouseEvent } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
 import { orderedCompletions } from '../domain/preview-data.ts';
 import type { RhythmCompletion } from '../domain/preview-data.ts';
 import type { DatedRhythmCompletion, RhythmCompletionRecord } from '../domain/rhythm-completion.ts';
-import type { RhythmScheduleHistorySegment } from '../domain/rhythm-schedule.ts';
+import type {
+  RhythmScheduleHistorySegment,
+  RhythmScheduleSegment
+} from '../domain/rhythm-schedule.ts';
 import type { RhythmSeasonEditDraft } from '../domain/rhythm-season-edit.ts';
 import type { RhythmSeasonDeletionUndo } from '../domain/rhythm-season-delete.ts';
 import {
@@ -17,8 +20,11 @@ import {
   localDateInTimeZone,
   selectRhythmScore
 } from '../domain/rhythm-scoring.ts';
-import { formatRhythmSchedule } from '../domain/rhythm-schedule.ts';
-import { rhythmSeasonInclusiveEndDate } from '../domain/rhythm-seasons.ts';
+import { formatRhythmSchedule, rhythmTimeOptions } from '../domain/rhythm-schedule.ts';
+import {
+  rhythmSeasonInclusiveEndDate,
+  rhythmSeasonPaletteForId
+} from '../domain/rhythm-seasons.ts';
 import {
   latestOnTrackHistoryEntries,
   onTrackHistoryDisplayEntries
@@ -33,13 +39,14 @@ import { scoreTone } from '../domain/score-tone.ts';
 import { PersonBadgeList } from './PersonBadge.tsx';
 import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
 import { RhythmScheduleSummary } from './RhythmMetadata.tsx';
+import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
 import { RhythmPersonalBadge } from './RhythmPersonalBadge.tsx';
 import { RhythmScoreCircle } from './RhythmScoreCircle.tsx';
 import { RhythmCompletionHistoryChart } from './RhythmCompletionHistoryChart.tsx';
 import { RhythmCompletionForm } from './RhythmCompletionForm.tsx';
-import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
 import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
 import { RhythmSeasonCorrectionDialog } from './RhythmSeasonCorrectionDialog.tsx';
+import type { RhythmSeasonEditDialogDraft } from './RhythmSeasonCorrectionDialog.tsx';
 import { RhythmSeasonDeleteDialog } from './RhythmSeasonDeleteDialog.tsx';
 
 type MetricName = 'consistency' | 'onTrack';
@@ -146,13 +153,14 @@ export function RhythmHistoryView({
     ? onChooseSchedule
     : undefined;
   const historyViewRef = useRef<HTMLElement>(null);
+  const historyBodyRef = useRef<HTMLDivElement>(null);
   const logMomentDialogRef = useRef<HTMLDialogElement>(null);
   const loggedMomentsSummaryRef = useRef<HTMLElement>(null);
   const logMomentButtonRef = useRef<HTMLButtonElement>(null);
   const editButtonsRef = useRef(new Map<string, HTMLButtonElement>());
   const seasonEditButtonsRef = useRef(new Map<string, HTMLButtonElement>());
+  const seasonCardRefs = useRef(new Map<string, HTMLElement>());
   const seasonEditOpenerRef = useRef<HTMLButtonElement | null>(null);
-  const seasonActionButtonsRef = useRef(new Map<string, HTMLButtonElement>());
   const seasonDeleteOpenerRef = useRef<HTMLButtonElement | null>(null);
   const seasonUndoButtonRef = useRef<HTMLButtonElement>(null);
   const deleteButtonsRef = useRef(new Map<string, HTMLButtonElement>());
@@ -163,11 +171,17 @@ export function RhythmHistoryView({
   const scoreDetailsId = useId();
   const healthCalculationId = useId();
   const seasonsDisclosureId = useId();
-  const [seasonsExpanded, setSeasonsExpanded] = useState(false);
+  const seasonsContentId = useId();
+  const [seasonsDisclosure, setSeasonsDisclosure] = useState({
+    rhythmId: rhythm.id,
+    expanded: false
+  });
+  const seasonsInfoExpanded = seasonsDisclosure.rhythmId === rhythm.id && seasonsDisclosure.expanded;
   const [expandedEarlierSeasonIds, setExpandedEarlierSeasonIds] = useState<Set<string>>(() => new Set());
   const scheduleSeasons = rhythm.scoring?.scheduleHistory ?? [];
   const availableSeasonUndo = seasonDeletionUndo?.rhythmId === rhythm.id ? seasonDeletionUndo : null;
-  const hasScheduleHistory = scheduleSeasons.length > 1 || Boolean(availableSeasonUndo);
+  const knownSeasonCount = scheduleSeasons.filter(season => season.kind === 'scheduled').length
+    || (scheduleSeasons.length === 0 && rhythm.schedule ? 1 : 0);
   const unknownSeason = scheduleSeasons.find(season => season.kind === 'unknown');
   const sharedUnscoredExplanation = score.consistency.kind === 'unscored' && score.onTrack.kind === 'unscored'
     && score.consistency.explanation === score.onTrack.explanation;
@@ -177,19 +191,43 @@ export function RhythmHistoryView({
   const [logAnnouncement, setLogAnnouncement] = useState('');
   const [scoreDetailsExpanded, setScoreDetailsExpanded] = useState(false);
   const [editingSeasonId, setEditingSeasonId] = useState<string | null>(null);
+  const [pendingSeasonEditDraft, setPendingSeasonEditDraft] = useState<{
+    seasonId: string;
+    draft: RhythmSeasonEditDialogDraft;
+  } | null>(null);
   const [deletingSeasonId, setDeletingSeasonId] = useState<string | null>(null);
   const [seasonUndoError, setSeasonUndoError] = useState('');
   const [seasonDeleteStatus, setSeasonDeleteStatus] = useState('');
   const [focusRestoredSeasonId, setFocusRestoredSeasonId] = useState<string | null>(null);
   const seasonDeletionSavedRef = useRef(false);
+  const transitioningToDeleteRef = useRef(false);
   const previousDeletingSeasonIdRef = useRef<string | null>(null);
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState('');
   const [focusAfterDeleteId, setFocusAfterDeleteId] = useState<string | null>(null);
+  useEffect(() => {
+    setSeasonsDisclosure({ rhythmId: rhythm.id, expanded: false });
+  }, [rhythm.id]);
   const hasDescription = Boolean(rhythm.description?.trim());
   const editableRecordIds = new Set((historyRecords ?? []).map(record => record.id));
   const editingSeason = scheduleSeasons.find(season => season.id === editingSeasonId);
   const deletingSeason = scheduleSeasons.find(season => season.id === deletingSeasonId);
+  const editingSeasonIndex = editingSeason
+    ? scheduleSeasons.findIndex(season => season.id === editingSeason.id)
+    : -1;
+  const editingSeasonPrevious = editingSeasonIndex > 0 ? scheduleSeasons[editingSeasonIndex - 1] : undefined;
+  const canDeleteEditingSeason = !archived
+    && Boolean(onDeleteSeason)
+    && editingSeason?.kind === 'scheduled'
+    && editingSeasonIndex > 0
+    && editingSeasonPrevious?.kind === 'scheduled';
+  const editingSeasonDeleteRestriction = editingSeasonIndex === 0
+    ? 'The first Season cannot be deleted.'
+    : editingSeason?.kind === 'unknown'
+      ? 'An unknown-history interval cannot be deleted until its schedule is set.'
+      : editingSeasonPrevious?.kind === 'unknown'
+        ? 'This Season cannot be deleted until the earlier schedule is set.'
+        : 'This Season cannot be deleted.';
 
   function dismissEditingRecord() {
     setEditingRecord(null);
@@ -252,25 +290,27 @@ export function RhythmHistoryView({
   }, [deletingRecordId]);
 
   useEffect(() => {
-    if (!editingSeasonId) seasonEditOpenerRef.current?.focus();
-  }, [editingSeasonId]);
+    if (!editingSeasonId) {
+      if (transitioningToDeleteRef.current) transitioningToDeleteRef.current = false;
+      else if (!pendingSeasonEditDraft) seasonEditOpenerRef.current?.focus();
+    }
+  }, [editingSeasonId, pendingSeasonEditDraft]);
 
   useEffect(() => {
     if (previousDeletingSeasonIdRef.current && !deletingSeasonId) {
       if (seasonDeletionSavedRef.current) {
         seasonUndoButtonRef.current?.focus();
         seasonDeletionSavedRef.current = false;
-      } else {
+      } else if (!pendingSeasonEditDraft) {
         seasonDeleteOpenerRef.current?.focus();
       }
     }
     previousDeletingSeasonIdRef.current = deletingSeasonId;
-  }, [deletingSeasonId, availableSeasonUndo]);
+  }, [deletingSeasonId, availableSeasonUndo, pendingSeasonEditDraft]);
 
   useEffect(() => {
     if (!focusRestoredSeasonId || availableSeasonUndo?.season.id === focusRestoredSeasonId) return;
     (seasonEditButtonsRef.current.get(focusRestoredSeasonId)
-      ?? seasonActionButtonsRef.current.get(focusRestoredSeasonId)
       ?? historyViewRef.current)?.focus();
     setFocusRestoredSeasonId(null);
   }, [focusRestoredSeasonId, availableSeasonUndo, scheduleSeasons]);
@@ -280,21 +320,38 @@ export function RhythmHistoryView({
     setEditingSeasonId(season.id);
   }
 
-  function openUnknownSeasonEditor(event: MouseEvent<HTMLButtonElement>) {
-    if (!unknownSeason) return;
-    setSeasonsExpanded(true);
-    openSeasonEditor(unknownSeason, event.currentTarget);
-  }
-
   function confirmSeasonDeletion(rhythmId: string, seasonId: string): string | null {
     if (!onDeleteSeason) return 'Season deletion is unavailable.';
     const error = onDeleteSeason(rhythmId, seasonId);
     if (!error) {
       seasonDeletionSavedRef.current = true;
+      setPendingSeasonEditDraft(null);
       setSeasonDeleteStatus('Season removed. Logged moments were preserved.');
       setSeasonUndoError('');
     }
     return error;
+  }
+
+  function requestSeasonDeletion(seasonId: string, draft: RhythmSeasonEditDialogDraft) {
+    seasonDeleteOpenerRef.current = seasonEditOpenerRef.current;
+    setPendingSeasonEditDraft({ seasonId, draft });
+    transitioningToDeleteRef.current = true;
+    setEditingSeasonId(null);
+    setDeletingSeasonId(seasonId);
+  }
+
+  function closeSeasonEditor() {
+    setEditingSeasonId(null);
+    setPendingSeasonEditDraft(null);
+  }
+
+  function closeSeasonDeleteDialog() {
+    setDeletingSeasonId(null);
+    if (!seasonDeletionSavedRef.current && pendingSeasonEditDraft) {
+      setEditingSeasonId(pendingSeasonEditDraft.seasonId);
+    } else {
+      setPendingSeasonEditDraft(null);
+    }
   }
 
   function undoSeasonDeletion() {
@@ -352,7 +409,10 @@ export function RhythmHistoryView({
           </button>
         )}
       </header>
-      <div className={`rhythm-history-view__body${onClose ? ' rhythm-history-view__body--dialog' : ''}`}>
+      <div
+        ref={historyBodyRef}
+        className={`rhythm-history-view__body${onClose ? ' rhythm-history-view__body--dialog' : ''}`}
+      >
       {editingRecord ? (
         <RhythmCompletionForm
           rhythm={rhythm}
@@ -496,7 +556,7 @@ export function RhythmHistoryView({
         </div>
         <p className="rhythm-history-view__sample-notice" role="status">
           {unknownSeason
-            ? 'Some earlier dates have no known schedule. Set the earlier schedule to review those logs.'
+            ? 'Some earlier dates have no known schedule. Use the action in Seasons to review those logs.'
             : score.kind === 'rhythm-score'
             ? score.healthScore !== null
               ? `Calculated from saved completion records · as of ${formatHistoryDate(score.asOfDate, false)}, ${new Date(`${score.asOfDate}T12:00:00`).getFullYear()}.`
@@ -508,32 +568,50 @@ export function RhythmHistoryView({
       </section>
 
       <section className="rhythm-history-view__completions" aria-labelledby="rhythm-history-completions-title">
-        {hasScheduleHistory && (
-          <section className="rhythm-history-view__seasons">
-            <button
-              type="button"
-              className="rhythm-history-view__seasons-disclosure"
-              aria-expanded={seasonsExpanded}
-              aria-controls={seasonsDisclosureId}
-              onClick={() => setSeasonsExpanded(expanded => !expanded)}
+        <section className="rhythm-history-view__seasons">
+            <header className="rhythm-history-view__seasons-header">
+              <h3 id={seasonsDisclosureId}>Seasons</h3>
+              <span className="rhythm-history-view__seasons-count">
+                {knownSeasonCount} {knownSeasonCount === 1 ? 'season' : 'seasons'}
+              </span>
+              <button
+                type="button"
+                className="rhythm-history-view__score-info rhythm-history-view__seasons-info"
+                aria-label={`${seasonsInfoExpanded ? 'Hide' : 'Show'} Seasons`}
+                aria-expanded={seasonsInfoExpanded}
+                aria-controls={seasonsContentId}
+                onClick={() => setSeasonsDisclosure({
+                  rhythmId: rhythm.id,
+                  expanded: !seasonsInfoExpanded
+                })}
+              >
+                <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <circle cx="8" cy="8" r="6.25" />
+                  <path d="M8 7.1v4M8 4.85h.01" />
+                </svg>
+              </button>
+            </header>
+            <div
+              id={seasonsContentId}
+              className="rhythm-history-view__seasons-expanded"
+              hidden={!seasonsInfoExpanded}
             >
-              Seasons ({scheduleSeasons.length})
-            </button>
-            <div id={seasonsDisclosureId} hidden={!seasonsExpanded}>
+              <p className="rhythm-history-view__seasons-info-copy">
+                Schedule changes preserve earlier schedules, logged moments stay with this rhythm, and correcting earlier schedules can change historical scores.
+              </p>
               <SeasonsHistory
+                rhythm={rhythm}
                 seasons={scheduleSeasons}
                 asOfDate={asOfDate}
+                {...(onChooseSchedule ? { onChooseSchedule } : {})}
+                canChooseSchedule={!archived && Boolean(onChooseSchedule)}
                 idPrefix={seasonsDisclosureId}
+                historyBodyRef={historyBodyRef}
+                seasonCardRefs={seasonCardRefs.current}
                 expandedSeasonIds={expandedEarlierSeasonIds}
                 canEdit={!archived && Boolean(onEditSeason)}
                 editButtonRefs={seasonEditButtonsRef.current}
                 onEditSeason={(season, opener) => openSeasonEditor(season, opener)}
-                canDelete={!archived && Boolean(onDeleteSeason)}
-                actionButtonRefs={seasonActionButtonsRef.current}
-                onDeleteSeason={(season, opener) => {
-                  seasonDeleteOpenerRef.current = opener;
-                  setDeletingSeasonId(season.id);
-                }}
                 onToggleEarlierSeason={id => setExpandedEarlierSeasonIds(current => {
                   const next = new Set(current);
                   if (next.has(id)) next.delete(id);
@@ -541,32 +619,23 @@ export function RhythmHistoryView({
                   return next;
                 })}
               />
+              {availableSeasonUndo && onUndoSeasonDeletion && (
+                <div className="rhythm-history-view__season-undo" role="status" aria-live="polite">
+                  <span>{seasonDeleteStatus || 'A Season was removed. You can undo this change.'}</span>
+                  <button
+                    ref={seasonUndoButtonRef}
+                    type="button"
+                    className="rhythm-history-view__season-edit"
+                    onClick={undoSeasonDeletion}
+                  >
+                    Undo
+                  </button>
+                  {seasonUndoError && <span role="alert">{seasonUndoError}</span>}
+                </div>
+              )}
             </div>
-            {availableSeasonUndo && onUndoSeasonDeletion && (
-              <div className="rhythm-history-view__season-undo" role="status" aria-live="polite">
-                <span>{seasonDeleteStatus || 'A Season was removed. You can undo this change.'}</span>
-                <button
-                  ref={seasonUndoButtonRef}
-                  type="button"
-                  className="rhythm-history-view__season-edit"
-                  onClick={undoSeasonDeletion}
-                >
-                  Undo
-                </button>
-                {seasonUndoError && <span role="alert">{seasonUndoError}</span>}
-              </div>
-            )}
-          </section>
-        )}
-        {unknownSeason && !archived && onEditSeason && (
-          <button
-            type="button"
-            className="rhythm-history-view__unknown-schedule-action"
-            onClick={openUnknownSeasonEditor}
-          >
-            Set earlier schedule
-          </button>
-        )}
+            <div className="rhythm-history-view__seasons-divider" />
+        </section>
         <h3 id="rhythm-history-completions-title">All completion history</h3>
         {completions.kind === 'recorded' && (
           <p className="rhythm-history-view__completion-summary" aria-label={`${completions.count} ${completions.count === 1 ? 'moment' : 'moments'} tended across ${completions.dailyCounts.length} ${completions.dailyCounts.length === 1 ? 'day' : 'days'}`}>
@@ -711,8 +780,18 @@ export function RhythmHistoryView({
             .map(record => record.effectiveDate)
             .filter(date => date >= editingSeason.startDate)
             .sort()[0] ?? rhythm.scoring.trackingStartDate}
+          {...(pendingSeasonEditDraft?.seasonId === editingSeason.id
+            ? { initialDraft: pendingSeasonEditDraft.draft }
+            : {})}
+          canDelete={canDeleteEditingSeason}
+          {...(editingSeasonDeleteRestriction
+            ? { deleteRestriction: editingSeasonDeleteRestriction }
+            : {})}
           onSave={draft => onEditSeason(rhythm.id, draft)}
-          onClose={() => setEditingSeasonId(null)}
+          {...(canDeleteEditingSeason
+            ? { onRequestDelete: (draft: RhythmSeasonEditDialogDraft) => requestSeasonDeletion(editingSeason.id, draft) }
+            : {})}
+          onClose={closeSeasonEditor}
         />
       )}
       {deletingSeason?.kind === 'scheduled' && rhythm.scoring && rhythm.schedule && onDeleteSeason && (
@@ -722,7 +801,7 @@ export function RhythmHistoryView({
           scoringInput={scoringInput}
           records={scoringRecords}
           onDelete={confirmSeasonDeletion}
-          onClose={() => setDeletingSeasonId(null)}
+          onClose={closeSeasonDeleteDialog}
         />
       )}
       {loggingMoment && onSaveCompletion && createPortal(
@@ -805,41 +884,64 @@ type ScoreMetric =
   | { kind: 'unavailable'; explanation: string };
 
 function SeasonsHistory({
+  rhythm,
   seasons,
   asOfDate,
+  onChooseSchedule,
+  canChooseSchedule,
   idPrefix,
+  historyBodyRef,
+  seasonCardRefs,
   expandedSeasonIds,
   onToggleEarlierSeason,
   canEdit,
   editButtonRefs,
-  onEditSeason,
-  canDelete,
-  actionButtonRefs,
-  onDeleteSeason
+  onEditSeason
 }: {
+  rhythm: RhythmPreview;
   seasons: readonly RhythmScheduleHistorySegment[];
   asOfDate: string;
+  onChooseSchedule?: (event: MouseEvent<HTMLButtonElement>) => void;
+  canChooseSchedule: boolean;
   idPrefix: string;
+  historyBodyRef: { current: HTMLDivElement | null };
+  seasonCardRefs: Map<string, HTMLElement>;
   expandedSeasonIds: ReadonlySet<string>;
   onToggleEarlierSeason: (id: string) => void;
   canEdit: boolean;
   editButtonRefs: Map<string, HTMLButtonElement>;
   onEditSeason: (season: RhythmScheduleHistorySegment, opener: HTMLButtonElement) => void;
-  canDelete: boolean;
-  actionButtonRefs: Map<string, HTMLButtonElement>;
-  onDeleteSeason: (season: RhythmScheduleHistorySegment, opener: HTMLButtonElement) => void;
 }) {
+  const [highlightedSeasonId, setHighlightedSeasonId] = useState<string | null>(null);
+  const highlightTimerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (highlightTimerRef.current !== null) window.clearTimeout(highlightTimerRef.current);
+  }, []);
+
   const currentIndex = seasons.reduce(
     (found, season, index) => season.startDate <= asOfDate ? index : found,
     -1
   );
-  if (currentIndex < 1 || seasons[currentIndex]?.kind !== 'scheduled') return null;
-  const current = seasons[currentIndex];
-  const previous = seasons.slice(0, currentIndex).map((season, index) => ({
+  const current = currentIndex >= 0 && seasons[currentIndex]?.kind === 'scheduled'
+    ? seasons[currentIndex]
+    : undefined;
+  const displayCurrent: SeasonCardSchedule | undefined = current ?? (
+    seasons.length === 0 && rhythm.schedule
+      ? {
+          kind: 'scheduled',
+          id: `current-schedule:${rhythm.id}`,
+          schedule: rhythm.schedule,
+          ...(rhythm.timeOfDay ? { timeOfDay: rhythm.timeOfDay } : {}),
+          paletteToken: rhythmSeasonPaletteForId(rhythm.id)
+        }
+      : undefined
+  );
+  const previous = (current ? seasons.slice(0, currentIndex) : seasons).map((season, index) => ({
     season,
     index
   })).reverse();
-  const timeline = seasons.slice(0, currentIndex + 1).map((season, index) => {
+  const timeline = current && seasons.length > 1
+    ? seasons.slice(0, currentIndex + 1).map((season, index) => {
     const endDate = index < currentIndex
       ? rhythmSeasonInclusiveEndDate(seasons, index) ?? season.startDate
       : asOfDate;
@@ -847,69 +949,109 @@ function SeasonsHistory({
       (Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${season.startDate}T00:00:00Z`)) / 86_400_000
     ) + 1);
     return { season, endDate, duration };
-  });
-  const currentName = current.name?.trim();
+    })
+    : [];
+  const currentName = displayCurrent?.name?.trim();
+  const focusSeasonCard = (seasonId: string) => {
+    const body = historyBodyRef.current;
+    const card = seasonCardRefs.get(seasonId);
+    if (!body || !card) return;
+    const bodyBounds = body.getBoundingClientRect();
+    const cardBounds = card.getBoundingClientRect();
+    let scrollDelta = 0;
+    if (cardBounds.top < bodyBounds.top) scrollDelta = cardBounds.top - bodyBounds.top;
+    else if (cardBounds.bottom > bodyBounds.bottom) scrollDelta = cardBounds.bottom - bodyBounds.bottom;
+    if (scrollDelta !== 0) {
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (reduceMotion) body.scrollTop += scrollDelta;
+      else body.scrollTo({ top: body.scrollTop + scrollDelta, behavior: 'smooth' });
+    }
+    card.focus({ preventScroll: true });
+    setHighlightedSeasonId(seasonId);
+    if (highlightTimerRef.current !== null) window.clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = window.setTimeout(() => setHighlightedSeasonId(null), 1400);
+  };
 
   return (
     <div className="rhythm-history-view__seasons-content">
-      <p className="rhythm-history-view__seasons-intro">See how your schedule has changed.</p>
-      <div
-        className="rhythm-history-view__seasons-timeline"
-        role="group"
-        aria-label="Schedule history timeline. Segment lengths show elapsed calendar time, not performance."
-      >
-        {timeline.map(({ season, endDate, duration }) => (
-          <span
-            key={season.id}
-            className={`rhythm-history-view__season-timeline-segment rhythm-history-view__season-color--${season.paletteToken}`}
-            style={{ flexGrow: duration }}
-            role="img"
-            aria-label={`${season.kind === 'unknown' ? 'Earlier schedule needs details' : season.name?.trim() || formatRhythmSchedule(season.schedule, 'compact')}, ${formatHistoryDate(season.startDate, false)} to ${formatHistoryDate(endDate, false)}`}
-          />
-        ))}
-      </div>
-      <article className={`rhythm-history-view__season-card rhythm-history-view__season-color--${current.paletteToken}`}>
-        <div className="rhythm-history-view__season-card-header">
-          <h4>{currentName || formatRhythmSchedule(current.schedule, 'compact')}</h4>
-          <span className="rhythm-history-view__season-current-badge">Current</span>
-          {canEdit && (
+      {!displayCurrent && (
+        <div className="rhythm-history-view__seasons-choose">
+          <p>Choose a schedule to see your current Season.</p>
+          {canChooseSchedule && onChooseSchedule && (
             <button
-              ref={element => {
-                if (element) editButtonRefs.set(current.id, element);
-                else editButtonRefs.delete(current.id);
-              }}
               type="button"
-              className="rhythm-history-view__season-edit"
-              aria-label={`Edit ${currentName || formatRhythmSchedule(current.schedule, 'compact')}`}
-              onClick={event => onEditSeason(current, event.currentTarget)}
+              className="rhythm-history-view__unknown-schedule-action"
+              onClick={onChooseSchedule}
             >
-              Edit
-            </button>
-          )}
-          {canDelete && currentIndex > 0 && seasons[currentIndex - 1]?.kind === 'scheduled' && (
-            <button
-              ref={element => {
-                if (element) actionButtonRefs.set(current.id, element);
-                else actionButtonRefs.delete(current.id);
-              }}
-              type="button"
-              className="rhythm-history-view__season-edit"
-              aria-label={`Delete Season ${currentName || formatRhythmSchedule(current.schedule, 'compact')}`}
-              onClick={event => onDeleteSeason(current, event.currentTarget)}
-            >
-              Delete
+              Choose a schedule
             </button>
           )}
         </div>
-        <p className="rhythm-history-view__season-date-range">
-          {formatHistoryDate(current.startDate, false)} – {formatHistoryDate(asOfDate, false)}
-        </p>
-        {currentName && (
-          <p className="rhythm-history-view__season-schedule">
-            {formatRhythmSchedule(current.schedule, 'detailed')}
-          </p>
-        )}
-      </article>
+      )}
+      {timeline.length > 1 && (
+        <>
+          <p className="rhythm-history-view__seasons-intro">See how your schedule has changed.</p>
+          <div
+            className="rhythm-history-view__seasons-timeline"
+            role="group"
+            aria-label="Schedule history timeline. Segment lengths show elapsed calendar time, not performance."
+          >
+            {timeline.map(({ season, endDate, duration }) => {
+              const label = season.kind === 'unknown'
+                ? 'Earlier schedule needs details'
+                : season.name?.trim() || formatRhythmSchedule(season.schedule, 'compact');
+              const dateRange = `${formatHistoryDate(season.startDate, false)} to ${formatHistoryDate(endDate, false)}`;
+              return (
+                <button
+                  key={season.id}
+                  type="button"
+                  className={`rhythm-history-view__season-timeline-segment ${seasonVisualClass(season.kind, season.paletteToken)}`}
+                  style={{ flexGrow: duration }}
+                  aria-label={`Go to ${label}, ${dateRange}`}
+                  onClick={() => focusSeasonCard(season.id)}
+                />
+              );
+            })}
+          </div>
+        </>
+      )}
+      {displayCurrent && (
+        <SeasonCard
+          seasonKind="scheduled"
+          paletteToken={displayCurrent.paletteToken}
+          seasonId={displayCurrent.id}
+          idPrefix={idPrefix}
+          cardRefs={seasonCardRefs}
+          highlighted={highlightedSeasonId === displayCurrent.id}
+          title={currentName || formatRhythmSchedule(displayCurrent.schedule, 'compact')}
+          dateRange={displayCurrent.startDate
+            ? `${formatSeasonDate(displayCurrent.startDate)} – Present`
+            : 'Start date not recorded'}
+          isCurrent
+          metadata={seasonMetadata(displayCurrent)}
+          actions={(
+            <>
+              {current && canEdit && (
+                <SeasonEditButton
+                  seasonId={current.id}
+                  label={currentName || formatRhythmSchedule(current.schedule, 'compact')}
+                  editButtonRefs={editButtonRefs}
+                  onEditSeason={onEditSeason}
+                  season={current}
+                />
+              )}
+              {!current && canChooseSchedule && onChooseSchedule && (
+                <SeasonEditButton
+                  seasonId={displayCurrent.id}
+                  label={currentName || formatRhythmSchedule(displayCurrent.schedule, 'compact')}
+                  editButtonRefs={editButtonRefs}
+                  onChooseSchedule={onChooseSchedule}
+                />
+              )}
+            </>
+          )}
+        />
+      )}
       {previous.length > 0 && (
         <section className="rhythm-history-view__earlier-seasons">
           <h4>Earlier Seasons</h4>
@@ -920,64 +1062,61 @@ function SeasonsHistory({
               ? 'Earlier schedule needs details'
               : season.name?.trim() || formatRhythmSchedule(season.schedule, 'compact');
             const detailsId = `${idPrefix}-entry-${index}`;
+            const hasDetails = season.kind === 'unknown'
+              ? Boolean(season.descriptiveCadence)
+              : Boolean(season.name?.trim() || season.note);
             return (
-              <article
+              <SeasonCard
                 key={season.id}
-                className={`rhythm-history-view__earlier-season rhythm-history-view__season-color--${season.paletteToken}`}
-              >
-                <div className="rhythm-history-view__earlier-season-heading">
-                  <span className="rhythm-history-view__season-marker" aria-hidden="true" />
-                  <div>
-                    <h5>{heading}</h5>
-                    <p className="rhythm-history-view__season-date-range">
-                      {formatHistoryDate(season.startDate, false)} – {formatHistoryDate(endDate, false)}
-                    </p>
-                  </div>
-                  <button
-                    ref={element => {
-                      if (element) editButtonRefs.set(season.id, element);
-                      else editButtonRefs.delete(season.id);
-                    }}
-                    type="button"
-                    className="rhythm-history-view__season-edit"
-                    disabled={!canEdit}
-                    aria-label={season.kind === 'unknown' ? 'Set earlier schedule' : `Edit ${heading}`}
-                    onClick={event => onEditSeason(season, event.currentTarget)}
-                  >
-                    {season.kind === 'unknown' ? 'Set earlier schedule' : 'Edit'}
-                  </button>
-                  {canDelete && index > 0 && season.kind === 'scheduled'
-                    && seasons[index - 1]?.kind === 'scheduled' && (
-                    <button
-                      ref={element => {
-                        if (element) actionButtonRefs.set(season.id, element);
-                        else actionButtonRefs.delete(season.id);
-                      }}
-                      type="button"
-                      className="rhythm-history-view__season-edit"
-                      aria-label={`Delete Season ${heading}`}
-                      onClick={event => onDeleteSeason(season, event.currentTarget)}
-                    >
-                      Delete
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="rhythm-history-view__season-expand"
-                    aria-expanded={expanded}
-                    aria-controls={detailsId}
-                    aria-label={`${expanded ? 'Hide' : 'Show'} details for ${heading}`}
-                    onClick={() => onToggleEarlierSeason(season.id)}
-                  >
-                    {expanded ? 'Hide' : 'Details'}
-                  </button>
-                </div>
-                {index === 0 && season.kind === 'scheduled' && (
-                  <p className="rhythm-history-view__season-note">
-                    The first Season cannot be deleted. Use Edit to correct it.
-                  </p>
+                seasonKind={season.kind}
+                paletteToken={season.paletteToken}
+                seasonId={season.id}
+                idPrefix={idPrefix}
+                cardRefs={seasonCardRefs}
+                highlighted={highlightedSeasonId === season.id}
+                title={heading}
+                dateRange={`${formatSeasonDate(season.startDate)} – ${formatSeasonDate(endDate)}`}
+                metadata={season.kind === 'scheduled' ? seasonMetadata(season) : undefined}
+                actions={(
+                  <>
+                    {season.kind === 'unknown' ? (
+                      <button
+                        ref={element => {
+                          if (element) editButtonRefs.set(season.id, element);
+                          else editButtonRefs.delete(season.id);
+                        }}
+                        type="button"
+                        className="rhythm-history-view__unknown-schedule-action"
+                        disabled={!canEdit}
+                        onClick={event => onEditSeason(season, event.currentTarget)}
+                      >
+                        Set earlier schedule
+                      </button>
+                    ) : canEdit && (
+                      <SeasonEditButton
+                        seasonId={season.id}
+                        label={heading}
+                        editButtonRefs={editButtonRefs}
+                        onEditSeason={onEditSeason}
+                        season={season}
+                      />
+                    )}
+                    {hasDetails && (
+                      <button
+                        type="button"
+                        className="rhythm-history-view__season-expand"
+                        aria-expanded={expanded}
+                        aria-controls={detailsId}
+                        aria-label={`${expanded ? 'Hide' : 'Show'} details for ${heading}`}
+                        onClick={() => onToggleEarlierSeason(season.id)}
+                      >
+                        {expanded ? 'Hide' : 'Details'}
+                      </button>
+                    )}
+                  </>
                 )}
-                <div id={detailsId} hidden={!expanded}>
+                details={hasDetails && (
+                  <div id={detailsId} hidden={!expanded}>
                   {season.kind === 'unknown'
                     ? season.descriptiveCadence && (
                       <p className="rhythm-history-view__season-schedule">
@@ -992,17 +1131,145 @@ function SeasonsHistory({
                         {season.note && <p className="rhythm-history-view__season-note">{season.note}</p>}
                       </>
                     )}
-                </div>
-              </article>
+                  </div>
+                )}
+              />
             );
           })}
         </section>
       )}
-      <p className="rhythm-history-view__seasons-explanation">
-        Earlier dates keep their earlier schedule. Your logged moments stay with this rhythm.
-      </p>
+      {previous.length > 0 && (
+        <p className="rhythm-history-view__seasons-explanation">
+          Earlier dates keep their earlier schedule. Your logged moments stay with this rhythm.
+        </p>
+      )}
     </div>
   );
+}
+
+type SeasonCardSchedule = Pick<
+  RhythmScheduleSegment,
+  'kind' | 'id' | 'schedule' | 'name' | 'note' | 'timeOfDay' | 'paletteToken'
+> & { startDate?: string };
+
+function seasonVisualClass(
+  kind: RhythmScheduleHistorySegment['kind'],
+  paletteToken: RhythmScheduleHistorySegment['paletteToken']
+): string {
+  if (kind === 'unknown') return 'rhythm-history-view__season-visual--unknown';
+  return `rhythm-history-view__season-visual--${paletteToken}`;
+}
+
+function SeasonCard({
+  seasonKind,
+  paletteToken,
+  seasonId,
+  idPrefix,
+  cardRefs,
+  highlighted,
+  title,
+  dateRange,
+  isCurrent = false,
+  metadata,
+  actions,
+  details,
+  note
+}: {
+  seasonKind: RhythmScheduleHistorySegment['kind'];
+  paletteToken: RhythmScheduleHistorySegment['paletteToken'];
+  seasonId: string;
+  idPrefix: string;
+  cardRefs: Map<string, HTMLElement>;
+  highlighted: boolean;
+  title: string;
+  dateRange: string;
+  isCurrent?: boolean;
+  metadata?: ReactNode;
+  actions?: ReactNode;
+  details?: ReactNode;
+  note?: string;
+}) {
+  const headingId = `${idPrefix}-season-heading-${seasonId}`;
+  return (
+    <article
+      ref={element => {
+        if (element) cardRefs.set(seasonId, element);
+        else cardRefs.delete(seasonId);
+      }}
+      className={`rhythm-history-view__season-card ${seasonVisualClass(seasonKind, paletteToken)}${highlighted ? ' rhythm-history-view__season-card--highlighted' : ''}`}
+      aria-labelledby={headingId}
+      tabIndex={-1}
+    >
+      <div className="rhythm-history-view__season-card-header">
+        <h4 id={headingId}>{title}</h4>
+        {isCurrent && <span className="rhythm-history-view__season-current-badge">Current</span>}
+        {actions && <div className="rhythm-history-view__season-card-actions">{actions}</div>}
+      </div>
+      <p className="rhythm-history-view__season-date-range">{dateRange}</p>
+      {metadata && <div className="rhythm-history-view__season-card-metadata">{metadata}</div>}
+      {note && <p className="rhythm-history-view__season-note">{note}</p>}
+      {details}
+    </article>
+  );
+}
+
+type SeasonEditButtonProps = {
+  seasonId: string;
+  label: string;
+  editButtonRefs: Map<string, HTMLButtonElement>;
+} & (
+  | {
+      season: RhythmScheduleHistorySegment;
+      onEditSeason: (season: RhythmScheduleHistorySegment, opener: HTMLButtonElement) => void;
+      onChooseSchedule?: never;
+    }
+  | {
+      season?: never;
+      onEditSeason?: never;
+      onChooseSchedule: (event: MouseEvent<HTMLButtonElement>) => void;
+    }
+);
+
+function SeasonEditButton(props: SeasonEditButtonProps) {
+  const { seasonId, label, editButtonRefs } = props;
+  return (
+    <button
+      ref={element => {
+        if (element) editButtonRefs.set(seasonId, element);
+        else editButtonRefs.delete(seasonId);
+      }}
+      type="button"
+      className="today-rhythm-details__edit-icon"
+      aria-label={`Edit ${label}`}
+      onClick={event => props.season
+        ? props.onEditSeason(props.season, event.currentTarget)
+        : props.onChooseSchedule(event)}
+    >
+      <span className="today-rhythm-details__edit-visual" aria-hidden="true">
+        <RhythmMetadataIcon kind="edit" />
+      </span>
+    </button>
+  );
+}
+
+function seasonMetadata(season: SeasonCardSchedule): ReactNode {
+  const hasName = Boolean(season.name?.trim());
+  const timeLabel = seasonTimeLabel(season);
+  return (
+    <>
+      {hasName && (
+        <p className="rhythm-history-view__season-schedule">
+          {formatRhythmSchedule(season.schedule, 'detailed')}
+        </p>
+      )}
+      {timeLabel && <p className="rhythm-history-view__season-schedule">{timeLabel}</p>}
+    </>
+  );
+}
+
+function seasonTimeLabel(season: Pick<RhythmScheduleSegment, 'timeOfDay'>): string | undefined {
+  if (!season.timeOfDay) return undefined;
+  return rhythmTimeOptions.find(option => option.value === season.timeOfDay)?.label;
 }
 
 function RhythmMetricSummary({
@@ -1127,7 +1394,7 @@ function OnTrackScoreBreakdown({ metric }: { metric: ScoredOnTrackMetric }) {
       ? formatHistoryDate(evidence.lastQualifyingCompletionDate, false)
       : 'None yet' },
     { label: 'Missed occurrences', value: String(evidence.missedOccurrenceCount) },
-    { label: 'Per missed occurrence', value: `${evidence.pointsPerMissedOccurrence} points` }
+    { label: 'Per miss', value: `${evidence.pointsPerMissedOccurrence} points` }
   ];
   useEffect(() => {
     if (focusAfterDisclosureRef.current === 'earlier') showEarlierButtonRef.current?.focus();
@@ -1146,9 +1413,12 @@ function OnTrackScoreBreakdown({ metric }: { metric: ScoredOnTrackMetric }) {
         <h4>How it changed</h4>
         <ol id={historyId} className="rhythm-history-view__score-history" aria-label="On Track score changes">
           {visibleEntries.map(item => (
-            <li key={item.key} className={`rhythm-history-view__score-history-entry--${item.kind}`}>
-              <span>{onTrackHistoryEntryLabel(item, item.kind === 'occurrence'
-                && item.date === evidence.occurrences.at(-1)?.date)}</span>
+            <li
+              key={item.key}
+              className={`rhythm-history-view__score-history-entry--${item.kind}`}
+              aria-label={onTrackHistoryEntryDescription(item, evidence)}
+            >
+              <span>{onTrackHistoryEntryLabel(item)}</span>
               <strong>{item.score}</strong>
             </li>
           ))}
@@ -1194,22 +1464,39 @@ function OnTrackScoreBreakdown({ metric }: { metric: ScoredOnTrackMetric }) {
 }
 
 function onTrackHistoryEntryLabel(
-  entry: ReturnType<typeof onTrackHistoryDisplayEntries>[number],
-  isCurrentState: boolean
+  entry: ReturnType<typeof onTrackHistoryDisplayEntries>[number]
 ): string {
   if (entry.kind === 'schedule-change') {
-    return `${formatHistoryDate(entry.date, true)} · schedule changed`;
+    return `${formatHistoryDate(entry.date, false)} · Schedule changed`;
   }
   if (entry.kind === 'zero-score-span') {
-    const unit = entry.occurrenceCount === 1 ? 'earlier occurrence' : 'earlier occurrences';
-    return `${entry.occurrenceCount} ${unit} at 0 · ${formatHistoryDate(entry.startDate, false)}–${formatHistoryDate(entry.endDate, false)}`;
+    return `${entry.occurrenceCount} more misses · ${formatHistoryDate(entry.startDate, false)}–${formatHistoryDate(entry.endDate, false)}`;
   }
-  const status = entry.status === 'completed'
-    ? isCurrentState ? 'tended today · current state' : 'tended · reset'
-    : entry.status === 'today'
-      ? 'today · current state'
-      : 'not tended · deduction';
-  return `${formatHistoryDate(entry.date, false)} · ${status}`;
+  if (entry.status === 'today') {
+    return `Today · ${formatHistoryDate(entry.date, false)}`;
+  }
+  return `${formatHistoryDate(entry.date, false)} · ${entry.status === 'completed' ? 'Tended' : 'Missed'}`;
+}
+
+function onTrackHistoryEntryDescription(
+  entry: ReturnType<typeof onTrackHistoryDisplayEntries>[number],
+  evidence: ScoredOnTrackMetric['evidence']
+): string {
+  if (entry.kind === 'schedule-change') {
+    return `Schedule changed on ${formatHistoryDate(entry.date)}. On Track score at that point: ${entry.score}.`;
+  }
+  if (entry.kind === 'zero-score-span') {
+    const unit = entry.occurrenceCount === 1 ? 'additional missed occurrence' : 'additional missed occurrences';
+    return `On Track remained at 0 through ${entry.occurrenceCount} ${unit} from ${formatHistoryDate(entry.startDate)} through ${formatHistoryDate(entry.endDate)}.`;
+  }
+  const date = formatHistoryDate(entry.date);
+  if (entry.status === 'completed') {
+    return `Qualifying completion on ${date} reset the missed-occurrence count and On Track score to 100.`;
+  }
+  if (entry.status === 'missed') {
+    return `Missed scheduled occurrence on ${date}; ${evidence.pointsPerMissedOccurrence}-point deduction applied. Resulting On Track score: ${entry.score}.`;
+  }
+  return `Current On Track state as of ${date}; today is pending and is not counted as missed. Current score: ${entry.score}.`;
 }
 
 function UnscoredBreakdown({
@@ -1252,6 +1539,14 @@ function formatHistoryDate(value: string, long = true): string {
   return new Date(`${value}T12:00:00`).toLocaleDateString('en-US', long
     ? { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }
     : { month: 'short', day: 'numeric' });
+}
+
+function formatSeasonDate(value: string): string {
+  return new Date(`${value}T12:00:00`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  });
 }
 
 function HealthCalculation({ explanation }: { explanation?: string }) {

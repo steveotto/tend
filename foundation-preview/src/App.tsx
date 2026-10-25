@@ -484,6 +484,9 @@ export function App() {
       ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     const hasDatedCompletionHistory = previewData.rhythmHistoryIds.includes(rhythmEditor.id)
       || (rhythmEditor.rhythm?.completionHistory?.length ?? 0) > 0;
+    const earliestDatedCompletionDate = rhythmEditor.rhythm?.completionHistory
+      ?.map(record => record.effectiveDate)
+      .sort()[0];
     const result = saveRhythmDraft(
       previewData.savedRhythms,
       draft,
@@ -492,7 +495,8 @@ export function App() {
       {
         currentDate: localDateInTimeZone(new Date(), scoringTimeZone),
         deviceTimeZone: scoringTimeZone,
-        hasDatedCompletionHistory
+        hasDatedCompletionHistory,
+        ...(earliestDatedCompletionDate ? { earliestDatedCompletionDate } : {})
       }
     );
     const savedRhythms = result.savedRhythms;

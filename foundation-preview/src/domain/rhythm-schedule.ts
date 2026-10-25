@@ -35,6 +35,14 @@ export const rhythmSeasonPaletteTokens = [
 
 export type RhythmSeasonPaletteToken = (typeof rhythmSeasonPaletteTokens)[number];
 
+export const rhythmSeasonPaletteCycleTokens = [
+  'fern',
+  'sage',
+  'sky',
+  'ocean',
+  'plum'
+] as const satisfies readonly RhythmSeasonPaletteToken[];
+
 export type RhythmSchedule =
   | ({ frequency: 'daily' } & ScheduleDates)
   | ({ frequency: 'weekly'; weekdays: RhythmWeekday[] } & ScheduleDates)

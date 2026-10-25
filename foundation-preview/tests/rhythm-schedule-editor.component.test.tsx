@@ -6,6 +6,7 @@ import { todayRhythms } from '../src/domain/preview-data.ts';
 import type { RhythmDraft } from '../src/domain/rhythm-editor.ts';
 import { saveRhythmDraft, validateRhythmDraft } from '../src/domain/rhythm-editor.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
+import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
 
 afterEach(cleanup);
 
@@ -23,7 +24,7 @@ async function choose(user: ReturnType<typeof userEvent.setup>, label: string, o
 }
 
 describe('shared structured Rhythm editor', () => {
-  it('confirms scoring-relevant schedule changes after history and preserves the draft on cancellation', async () => {
+  it('confirms scoring-relevant changes after history and restores the saved cadence on cancellation', async () => {
     const user = userEvent.setup();
     const rhythm: RhythmPreview = {
       ...todayRhythms[0]!,
@@ -39,6 +40,9 @@ describe('shared structured Rhythm editor', () => {
       />
     );
     const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    expect(within(editor).getByText('Every day.')).toBeTruthy();
+    expect(within(editor).queryByRole('combobox', { name: /Frequency:/ })).toBeNull();
+    await user.click(within(editor).getByRole('button', { name: 'Change schedule' }));
     await choose(user, 'Frequency', 'Select Days');
     await user.click(within(editor).getByRole('checkbox', { name: 'Monday' }));
     await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
@@ -51,14 +55,21 @@ describe('shared structured Rhythm editor', () => {
     fireEvent(screen.getByRole('dialog', { name: 'Change your schedule' }), new Event('cancel', { cancelable: true }));
     expect(screen.queryByRole('dialog', { name: 'Change your schedule' })).toBeNull();
     expect(document.activeElement).toBe(within(editor).getByRole('button', { name: 'Save Rhythm' }));
-    expect((within(editor).getByRole('checkbox', { name: 'Monday' }) as HTMLInputElement).checked).toBe(true);
+    expect(within(editor).getByText('Every day.')).toBeTruthy();
+    expect(within(editor).queryByRole('checkbox', { name: 'Monday' })).toBeNull();
 
+    await user.click(within(editor).getByRole('button', { name: 'Change schedule' }));
+    await choose(user, 'Frequency', 'Select Days');
+    await user.click(within(editor).getByRole('checkbox', { name: 'Monday' }));
     await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
     confirmation = screen.getByRole('dialog', { name: 'Change your schedule' });
     await user.click(within(confirmation).getByRole('button', { name: 'Cancel schedule change' }));
     expect(screen.queryByRole('dialog', { name: 'Change your schedule' })).toBeNull();
     expect(onSave).not.toHaveBeenCalled();
 
+    await user.click(within(editor).getByRole('button', { name: 'Change schedule' }));
+    await choose(user, 'Frequency', 'Select Days');
+    await user.click(within(editor).getByRole('checkbox', { name: 'Monday' }));
     await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
     confirmation = screen.getByRole('dialog', { name: 'Change your schedule' });
     await user.click(within(confirmation).getByRole('button', { name: 'Confirm change' }));
@@ -78,6 +89,7 @@ describe('shared structured Rhythm editor', () => {
     const onSave = vi.fn((_draft: RhythmDraft) => ({}));
     render(<RhythmEditor rhythm={rhythm} onSave={onSave} onClose={vi.fn()} />);
     const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    expect(within(editor).getByRole('combobox', { name: 'Frequency: Daily' })).toBeTruthy();
     await choose(user, 'Frequency', 'Select Days');
     await user.click(within(editor).getByRole('checkbox', { name: 'Monday' }));
     await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
@@ -126,6 +138,7 @@ describe('shared structured Rhythm editor', () => {
       />
     );
     const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    await user.click(within(editor).getByRole('button', { name: 'Change schedule' }));
     await choose(user, 'Frequency', 'Select Days');
     await user.click(within(editor).getByRole('checkbox', { name: 'Tuesday' }));
     await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
@@ -140,6 +153,75 @@ describe('shared structured Rhythm editor', () => {
     });
     expect(within(editor).getByText('The save was rejected.')).toBeTruthy();
     expect((within(editor).getByRole('checkbox', { name: 'Tuesday' }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('uses the protected summary for a descriptive cadence with dated logs and restores it on cancellation', async () => {
+    const user = userEvent.setup();
+    const rhythm: RhythmPreview = {
+      ...todayRhythms[2]!,
+      cadence: '3 times a week'
+    };
+    const onSave = vi.fn((_draft: RhythmDraft) => ({}));
+    render(
+      <RhythmEditor rhythm={rhythm} hasDatedCompletionHistory onSave={onSave} onClose={vi.fn()} />
+    );
+    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    expect(within(editor).getByText('3 times a week')).toBeTruthy();
+    expect(within(editor).queryByRole('combobox', { name: /Frequency:/ })).toBeNull();
+
+    await user.click(within(editor).getByRole('button', { name: 'Change schedule' }));
+    await choose(user, 'Frequency', 'Weekly');
+    await user.click(within(editor).getByRole('radio', { name: 'Friday' }));
+    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+    const confirmation = screen.getByRole('dialog', { name: 'Change your schedule' });
+    expect(within(confirmation).getByText('3 times a week')).toBeTruthy();
+    expect(within(confirmation).getByText('Every week on Friday.')).toBeTruthy();
+    await user.click(within(confirmation).getByRole('button', { name: 'Cancel schedule change' }));
+
+    expect(within(editor).getByText('3 times a week')).toBeTruthy();
+    expect(within(editor).queryByRole('radiogroup', { name: 'Choose one weekday' })).toBeNull();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('keeps multi-Season schedule changes protected after the completion records are removed', async () => {
+    const user = userEvent.setup();
+    const rhythmId = 'user-rhythm-123e4567-e89b-42d3-a456-426614174000';
+    const daily = createRhythmSeason(rhythmId, '2026-10-01', { frequency: 'daily' });
+    const current = createRhythmSeason(
+      rhythmId,
+      '2026-10-10',
+      { frequency: 'weekly', weekdays: [3] }
+    );
+    const rhythm: RhythmPreview = {
+      ...todayRhythms[0]!,
+      id: rhythmId,
+      cadence: 'Every week on Wednesday.',
+      schedule: { frequency: 'weekly', weekdays: [3] },
+      scoring: {
+        trackingStartDate: '2026-10-01',
+        timeZone: 'UTC',
+        scheduleHistory: [daily, current]
+      }
+    };
+    const onSave = vi.fn((_draft: RhythmDraft) => ({}));
+    render(<RhythmEditor rhythm={rhythm} onSave={onSave} onClose={vi.fn()} />);
+    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    expect(within(editor).getByText('Every week on Wednesday.')).toBeTruthy();
+    expect(within(editor).queryByRole('combobox', { name: /Frequency:/ })).toBeNull();
+
+    await user.click(within(editor).getByRole('button', { name: 'Change schedule' }));
+    await choose(user, 'Frequency', 'Weekly');
+    await user.click(within(editor).getByRole('radio', { name: 'Friday' }));
+    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+    const confirmation = screen.getByRole('dialog', { name: 'Change your schedule' });
+    await user.type(within(confirmation).getByLabelText('Season label (optional)'), 'After logs');
+    await user.click(within(confirmation).getByRole('button', { name: 'Confirm change' }));
+
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({
+      schedule: { frequency: 'weekly', weekdays: [5] },
+      seasonName: 'After logs'
+    });
   });
 
   it('does not block Rhythm editing on a tracking-start confirmation', () => {
@@ -191,6 +273,45 @@ describe('shared structured Rhythm editor', () => {
       weekdays: [2, 6]
     });
     expect(within(editor).getByRole('combobox', { name: 'Frequency: Select Days' })).toBeTruthy();
+  });
+
+  it('makes Weekly single-choice, preserves Select Days multi-choice, and requires an explicit choice when switching', async () => {
+    const user = userEvent.setup();
+    const rhythm: RhythmPreview = {
+      ...todayRhythms[0]!,
+      schedule: { frequency: 'weekly', weekdays: [1, 3] }
+    };
+    const onSave = vi.fn(validateRhythmDraft);
+    render(<RhythmEditor rhythm={rhythm} onSave={onSave} onClose={vi.fn()} />);
+    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+
+    expect(within(editor).getByRole('combobox', { name: 'Frequency: Select Days' })).toBeTruthy();
+    expect((within(editor).getByRole('checkbox', { name: 'Monday' }) as HTMLInputElement).checked).toBe(true);
+    expect((within(editor).getByRole('checkbox', { name: 'Wednesday' }) as HTMLInputElement).checked).toBe(true);
+
+    await choose(user, 'Frequency', 'Weekly');
+    expect(within(editor).getByRole('radiogroup', { name: 'Choose one weekday' })).toBeTruthy();
+    expect(within(editor).getByText('Choose one weekday to replace the selected days.')).toBeTruthy();
+    expect(within(editor).getAllByRole('radio').every(radio => !(radio as HTMLInputElement).checked)).toBe(true);
+    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(onSave.mock.results[0]?.value.schedule).toBe('Complete the schedule details before saving.');
+    expect(within(editor).getByText('Complete the schedule details before saving.')).toBeTruthy();
+
+    await user.click(within(editor).getByRole('radio', { name: 'Friday' }));
+    expect((within(editor).getByRole('radio', { name: 'Friday' }) as HTMLInputElement).checked).toBe(true);
+    await user.click(within(editor).getByRole('radio', { name: 'Friday' }));
+    expect((within(editor).getByRole('radio', { name: 'Friday' }) as HTMLInputElement).checked).toBe(true);
+    await user.click(within(editor).getByRole('radio', { name: 'Monday' }));
+    expect((within(editor).getByRole('radio', { name: 'Friday' }) as HTMLInputElement).checked).toBe(false);
+    expect((within(editor).getByRole('radio', { name: 'Monday' }) as HTMLInputElement).checked).toBe(true);
+    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+    expect(onSave.mock.calls.at(-1)?.[0].schedule).toEqual({ frequency: 'weekly', weekdays: [1] });
+
+    await choose(user, 'Frequency', 'Select Days');
+    await user.click(within(editor).getByRole('checkbox', { name: 'Friday' }));
+    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+    expect(onSave.mock.calls.at(-1)?.[0].schedule).toEqual({ frequency: 'weekly', weekdays: [1, 5] });
   });
 
   it('builds monthly, quarterly and yearly pattern shapes from their conditional controls', async () => {
@@ -349,7 +470,7 @@ describe('shared structured Rhythm editor', () => {
     await choose(user, 'Frequency', 'Daily');
     expect(within(editor).queryByRole('group', { name: 'Which days?' })).toBeNull();
     await choose(user, 'Frequency', 'Weekly');
-    expect(within(editor).getByRole('group', { name: 'Which days?' })).toBeTruthy();
+    expect(within(editor).getByRole('radiogroup', { name: 'Choose one weekday' })).toBeTruthy();
     await choose(user, 'Frequency', 'Select Days');
     expect(within(editor).getByRole('checkbox', { name: 'Sunday' })).toBeTruthy();
     await choose(user, 'Frequency', 'Monthly');
@@ -523,7 +644,7 @@ describe('shared structured Rhythm editor', () => {
     await user.keyboard('{Enter}');
     expect(within(editor).getByRole('combobox', { name: 'Frequency: Weekly' }).getAttribute('aria-expanded')).toBe('false');
     expect(document.activeElement).toBe(frequency);
-    expect(within(editor).getByRole('checkbox', { name: 'Monday' })).toBeTruthy();
+    expect(within(editor).getByRole('radio', { name: 'Monday' })).toBeTruthy();
     await user.click(within(editor).getByRole('button', { name: 'Add Rhythm' }));
     expect(within(editor).getByText('Complete the schedule details before saving.')).toBeTruthy();
 
