@@ -5,6 +5,7 @@ import type {
 } from '../../../src/domain/capabilities.ts';
 import type { MoneyGoal } from './money-goals.ts';
 import type { RhythmSchedule, RhythmScoringMetadata, RhythmTimeValue } from './rhythm-schedule.ts';
+import { effectiveRhythmSchedule } from './rhythm-schedule.ts';
 import { selectNextScheduledOccurrence } from './rhythm-occurrences.ts';
 
 export type FoundationPreview = {
@@ -410,7 +411,7 @@ export function rhythmLastTendedLabel(
       day: 'numeric'
     })}`;
   }
-  const schedule = rhythm.schedule ?? (rhythm.cadence === 'Daily' ? { frequency: 'daily' as const } : undefined);
+  const schedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
   if (!schedule || !asOfDate) return rhythm.scoring ? 'Schedule unavailable' : 'Not yet tended';
   const next = selectNextScheduledOccurrence({
     schedule,

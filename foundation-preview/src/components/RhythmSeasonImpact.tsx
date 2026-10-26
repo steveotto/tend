@@ -73,21 +73,27 @@ function onTrackValue(metric: ScoredOnTrackMetric): MetricValue {
 
 function ImpactValue({
   value,
-  showEvidence = true
+  showEvidence = true,
+  showUnavailableDetails = true
 }: {
   value: MetricValue;
   showEvidence?: boolean;
+  showUnavailableDetails?: boolean;
 }) {
   if ('explanation' in value) {
     return (
       <div className="rhythm-season-impact__unavailable">
         <strong aria-label="Unavailable score">—</strong>
         <span>Unavailable</span>
-        <p>{value.summary}</p>
-        <details>
-          <summary>Why unavailable</summary>
-          <p>{value.explanation}</p>
-        </details>
+        {showUnavailableDetails && (
+          <>
+            <p>{value.summary}</p>
+            <details>
+              <summary>Why unavailable</summary>
+              <p>{value.explanation}</p>
+            </details>
+          </>
+        )}
       </div>
     );
   }
@@ -96,7 +102,7 @@ function ImpactValue({
     <div className="rhythm-season-impact__available">
       <p className="rhythm-season-impact__score">
         <strong>{value.score}</strong>
-        <span aria-label="out of 100">/ 100</span>
+        <span className="visually-hidden">out of 100</span>
       </p>
       {showEvidence && 'eligible' in value && value.eligible !== undefined
         && value.completed !== undefined && (
@@ -110,10 +116,14 @@ function ImpactValue({
 
 export function RhythmSeasonImpact({
   before,
-  after
+  after,
+  detailsDisclosure = false,
+  hideHeading = false
 }: {
   before: RhythmScoreResult;
   after?: RhythmScoreResult | undefined;
+  detailsDisclosure?: boolean;
+  hideHeading?: boolean;
 }) {
   const afterUnavailable: MetricValue = {
     explanation: 'The proposed schedule change is not valid, so its impact cannot be calculated.',
@@ -139,10 +149,10 @@ export function RhythmSeasonImpact({
       aria-label="Score impact preview"
       aria-live="polite"
     >
-      <h3>Score impact preview</h3>
+      {!hideHeading && <h3>Score impact preview</h3>}
       {noScoreChange && (
         <p className="rhythm-season-impact__no-change">
-          No score change. The selector returns the same scores and evidence for this draft.
+          No score change. The proposed schedule produces the same scores and evidence.
         </p>
       )}
       <div className="rhythm-season-impact__comparison">
@@ -169,18 +179,24 @@ export function RhythmSeasonImpact({
                 role="group"
                 aria-label={`Before ${label}`}
               >
-                <span className="rhythm-season-impact__responsive-label" aria-hidden="true">Before</span>
-                <ImpactValue value={beforeValue} showEvidence={!sameEvidence} />
+                <ImpactValue
+                  value={beforeValue}
+                  showEvidence={!detailsDisclosure && !sameEvidence}
+                  showUnavailableDetails={!detailsDisclosure}
+                />
               </div>
               <div
                 className="rhythm-season-impact__value rhythm-season-impact__value--after"
                 role="group"
                 aria-label={`After ${label}`}
               >
-                <span className="rhythm-season-impact__responsive-label" aria-hidden="true">After</span>
-                <ImpactValue value={afterValue} showEvidence={!sameEvidence} />
+                <ImpactValue
+                  value={afterValue}
+                  showEvidence={!detailsDisclosure && !sameEvidence}
+                  showUnavailableDetails={!detailsDisclosure}
+                />
               </div>
-              {sameEvidence && 'eligible' in beforeValue && beforeValue.eligible !== undefined
+              {!detailsDisclosure && sameEvidence && 'eligible' in beforeValue && beforeValue.eligible !== undefined
                 && beforeValue.completed !== undefined && (
                   <p className="rhythm-season-impact__shared-evidence">
                     Both · {beforeValue.eligible} eligible · {beforeValue.completed} completed
@@ -190,6 +206,45 @@ export function RhythmSeasonImpact({
           );
         })}
       </div>
+      {detailsDisclosure && (
+        <details className="rhythm-season-impact__details">
+          <summary>Score calculation details</summary>
+          <div className="rhythm-season-impact__details-content">
+            {!after && (
+              <p className="rhythm-season-impact__details-note">
+                Proposed schedule is invalid; After scores are unavailable until the required fields are complete.
+              </p>
+            )}
+            {comparisons.map(({ name, label, beforeValue, afterValue }) => {
+              const sameEvidence = 'eligible' in beforeValue && 'eligible' in afterValue
+                && beforeValue.eligible !== undefined && afterValue.eligible !== undefined
+                && beforeValue.completed !== undefined && afterValue.completed !== undefined
+                && beforeValue.eligible === afterValue.eligible
+                && beforeValue.completed === afterValue.completed;
+              return (
+                <div className="rhythm-season-impact__details-row" key={name}>
+                  <strong>{label}</strong>
+                  <p>{sameEvidence
+                    ? `Before and after: ${beforeValue.eligible} eligible · ${beforeValue.completed} completed`
+                    : `Before: ${impactDetails(beforeValue)}`}
+                  </p>
+                  {after && !sameEvidence && (
+                    <p>After: {impactDetails(afterValue)}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </details>
+      )}
     </section>
   );
+}
+
+function impactDetails(value: MetricValue): string {
+  if ('explanation' in value) return `${value.summary} ${value.explanation}`;
+  if ('eligible' in value && value.eligible !== undefined && value.completed !== undefined) {
+    return `${value.eligible} eligible · ${value.completed} completed`;
+  }
+  return 'Derived from the Consistency and On Track scores.';
 }

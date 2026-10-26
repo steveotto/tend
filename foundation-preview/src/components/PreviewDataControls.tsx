@@ -48,6 +48,8 @@ type PreviewDataControlsProps = {
   v9RecoveryError?: string | null;
   v10RecoveryCopy?: string | null;
   v10RecoveryError?: string | null;
+  v11RecoveryCopy?: string | null;
+  v11RecoveryError?: string | null;
 };
 
 function downloadText(filename: string, content: string, type: string): string | null {
@@ -95,7 +97,9 @@ export function PreviewDataControls({
   v9RecoveryCopy = null,
   v9RecoveryError = null,
   v10RecoveryCopy = null,
-  v10RecoveryError = null
+  v10RecoveryError = null,
+  v11RecoveryCopy = null,
+  v11RecoveryError = null
 }: PreviewDataControlsProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -317,6 +321,19 @@ export function PreviewDataControls({
             Download original v10 recovery backup
           </button>
         )}
+        {v11RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v11-recovery.json',
+              v11RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v11 recovery backup downloaded.')}
+          >
+            Download original v11 recovery backup
+          </button>
+        )}
         <label className="btn mini ghost preview-data-controls__file-button">
           Import preview backup
           <input
@@ -364,6 +381,7 @@ export function PreviewDataControls({
       {v8RecoveryError && <p className="preview-data-controls__help" role="alert">The original v8 recovery copy could not be read: {v8RecoveryError}</p>}
       {v9RecoveryError && <p className="preview-data-controls__help" role="alert">The original v9 recovery copy could not be read: {v9RecoveryError}</p>}
       {v10RecoveryError && <p className="preview-data-controls__help" role="alert">The original v10 recovery copy could not be read: {v10RecoveryError}</p>}
+      {v11RecoveryError && <p className="preview-data-controls__help" role="alert">The original v11 recovery copy could not be read: {v11RecoveryError}</p>}
       {message && <p className="preview-data-controls__message" role="status">{message}</p>}
       {pendingAction && (
         <MoneyGoalDialog

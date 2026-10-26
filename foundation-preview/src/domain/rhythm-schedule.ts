@@ -45,7 +45,7 @@ export const rhythmSeasonPaletteCycleTokens = [
 
 export type RhythmSchedule =
   | ({ frequency: 'daily' } & ScheduleDates)
-  | ({ frequency: 'weekly'; weekdays: RhythmWeekday[] } & ScheduleDates)
+  | ({ frequency: 'weekly'; weekdays: RhythmWeekday[]; weeklyMode?: 'select-days' } & ScheduleDates)
   | ({ frequency: 'monthly'; pattern: RhythmPattern } & ScheduleDates)
   | ({ frequency: 'quarterly'; monthInQuarter: 1 | 2 | 3; pattern: RhythmPattern } & ScheduleDates)
   | ({ frequency: 'yearly'; month: RhythmMonth; pattern: RhythmPattern } & ScheduleDates)
@@ -53,6 +53,14 @@ export type RhythmSchedule =
   | { frequency: 'custom'; unit: 'weeks'; interval: number; weekdays: RhythmWeekday[]; startDate: RhythmLocalDate; endDate?: RhythmLocalDate }
   | { frequency: 'custom'; unit: 'months'; interval: number; pattern: RhythmPattern; startDate: RhythmLocalDate; endDate?: RhythmLocalDate }
   | { frequency: 'custom'; unit: 'years'; interval: number; month: RhythmMonth; pattern: RhythmPattern; startDate: RhythmLocalDate; endDate?: RhythmLocalDate };
+
+export function effectiveRhythmSchedule(
+  schedule: RhythmSchedule | undefined,
+  cadence?: string
+): RhythmSchedule | undefined {
+  if (schedule) return schedule;
+  return cadence === 'Daily' ? { frequency: 'daily' } : undefined;
+}
 
 export type RhythmScheduleSegment = {
   kind: 'scheduled';
@@ -189,7 +197,7 @@ export function isValidTimeZone(value: unknown): value is string {
   }
 }
 
-function isRhythmSchedule(value: unknown): value is RhythmSchedule {
+function isRhythmSchedule(value: unknown, allowSingleDaySelectDays = true): value is RhythmSchedule {
   if (!isRecord(value) || typeof value.frequency !== 'string') {
     return false;
   }
@@ -198,8 +206,10 @@ function isRhythmSchedule(value: unknown): value is RhythmSchedule {
   if (value.frequency === 'daily') {
     valid = hasOnlyKeys(value, commonKeys) && isValidOptionalEndDate(value);
   } else if (value.frequency === 'weekly') {
-    valid = hasOnlyKeys(value, [...commonKeys, 'weekdays'])
+    valid = hasOnlyKeys(value, [...commonKeys, 'weekdays', ...(allowSingleDaySelectDays ? ['weeklyMode'] : [])])
       && isWeekdayList(value.weekdays)
+      && (value.weeklyMode === undefined
+        || value.weeklyMode === 'select-days' && value.weekdays.length === 1)
       && isValidOptionalEndDate(value);
   } else if (value.frequency === 'monthly') {
     valid = hasOnlyKeys(value, [...commonKeys, 'pattern'])
@@ -239,15 +249,18 @@ function isRhythmSchedule(value: unknown): value is RhythmSchedule {
   return valid;
 }
 
-export function validateRhythmSchedule(value: unknown): RhythmScheduleValidation {
-  if (isRhythmSchedule(value)) return { valid: true, schedule: value };
+export function validateRhythmSchedule(value: unknown, allowSingleDaySelectDays = true): RhythmScheduleValidation {
+  if (isRhythmSchedule(value, allowSingleDaySelectDays)) return { valid: true, schedule: value };
   return {
     valid: false,
     errors: [isRecord(value) ? 'The schedule contains missing, invalid, or unsupported fields.' : 'Choose a supported schedule.']
   };
 }
 
-export function validateRhythmScoringMetadata(value: unknown): value is RhythmScoringMetadata {
+export function validateRhythmScoringMetadata(
+  value: unknown,
+  allowSingleDaySelectDays = true
+): value is RhythmScoringMetadata {
   if (!isRecord(value) || !hasOnlyKeys(value, ['trackingStartDate', 'timeZone', 'scheduleHistory'])
     || typeof value.trackingStartDate !== 'string' || !isValidDate(value.trackingStartDate)
     || !isValidTimeZone(value.timeZone) || !Array.isArray(value.scheduleHistory)
@@ -266,7 +279,7 @@ export function validateRhythmScoringMetadata(value: unknown): value is RhythmSc
       || typeof segment.paletteToken !== 'string'
       || !rhythmSeasonPaletteTokens.includes(segment.paletteToken as RhythmSeasonPaletteToken)) return false;
     const knownSegment = segment.kind === 'scheduled'
-      && validateRhythmSchedule(segment.schedule).valid
+      && validateRhythmSchedule(segment.schedule, allowSingleDaySelectDays).valid
       && (segment.timeOfDay === undefined || rhythmTimeOptions.some(option => option.value === segment.timeOfDay))
       && segment.descriptiveCadence === undefined
       && (segment.contextCadence === undefined
@@ -314,7 +327,7 @@ export function validateRhythmScoringMetadataV8(value: unknown): value is Rhythm
     const segment: unknown = value.scheduleHistory[index];
     if (!isRecord(segment) || !hasOnlyKeys(segment, ['startDate', 'endDate', 'schedule'])
       || segment.startDate !== expectedStart || typeof segment.startDate !== 'string'
-      || !isValidDate(segment.startDate) || !validateRhythmSchedule(segment.schedule).valid) return false;
+      || !isValidDate(segment.startDate)       || !validateRhythmSchedule(segment.schedule, false).valid) return false;
     const isLast = index === value.scheduleHistory.length - 1;
     if (isLast !== (segment.endDate === undefined)) return false;
     if (segment.endDate !== undefined) {
@@ -352,7 +365,7 @@ export function validateRhythmScoringMetadataV10(value: unknown): value is Rhyth
       || typeof segment.id !== 'string' || !segment.id.trim() || segment.id.length > 160 || ids.has(segment.id)
       || typeof segment.startDate !== 'string' || !isValidDate(segment.startDate)
       || (index > 0 && segment.startDate <= previousStart)
-      || !validateRhythmSchedule(schedule).valid
+      || !validateRhythmSchedule(schedule, false).valid
       || typeof segment.paletteToken !== 'string'
       || !rhythmSeasonPaletteTokens.includes(segment.paletteToken as RhythmSeasonPaletteToken)
       || (segment.contextCadence !== undefined
@@ -367,6 +380,10 @@ export function validateRhythmScoringMetadataV10(value: unknown): value is Rhyth
     }
   }
   return value.scheduleHistory[0]?.startDate === value.trackingStartDate;
+}
+
+export function validateRhythmScoringMetadataV11(value: unknown): value is RhythmScoringMetadata {
+  return validateRhythmScoringMetadata(value, false);
 }
 
 export function rhythmTimeLabel(value: RhythmTimeValue): RhythmTimeLabel {
@@ -461,7 +478,9 @@ export function formatRhythmSchedule(
         compact = 'Daily';
         break;
       case 'weekly':
-        compact = compactWeekdaysSummary(schedule.weekdays);
+        compact = schedule.weeklyMode === 'select-days'
+          ? `Select days · ${schedule.weekdays.map(shortWeekdayName).join(' · ')}`
+          : compactWeekdaysSummary(schedule.weekdays);
         break;
       case 'monthly':
         compact = `Monthly · ${compactPatternSummary(schedule.pattern)}`;
@@ -499,9 +518,11 @@ export function formatRhythmSchedule(
       summary = 'Every day';
       break;
     case 'weekly':
-      summary = schedule.weekdays.length
-        ? `Every week on ${weekdayListSummary(schedule.weekdays)}`
-        : 'Every week';
+      summary = schedule.weeklyMode === 'select-days'
+        ? `Selected days: ${weekdayListSummary(schedule.weekdays)}`
+        : schedule.weekdays.length
+          ? `Every week on ${weekdayListSummary(schedule.weekdays)}`
+          : 'Every week';
       break;
     case 'monthly':
       summary = `The ${patternDescription(schedule.pattern)} of every month`;

@@ -27,6 +27,24 @@ export function rhythmSeasonPaletteForOrdinal(ordinal: number): RhythmScheduleSe
   return rhythmSeasonPaletteCycleTokens[ordinal % rhythmSeasonPaletteCycleTokens.length]!;
 }
 
+export function rhythmSeasonPaletteAssignments(
+  seasons: readonly RhythmScheduleHistorySegment[]
+): ReadonlyMap<string, RhythmScheduleSegment['paletteToken']> {
+  const assignments = new Map<string, RhythmScheduleSegment['paletteToken']>();
+  let ordinal = 0;
+  for (const season of seasons) {
+    if (season.kind !== 'scheduled') continue;
+    const chronologicalPalette = rhythmSeasonPaletteForOrdinal(ordinal);
+    const paletteToken = season.paletteToken === rhythmSeasonPaletteForId(season.id)
+      && season.paletteToken !== chronologicalPalette
+      ? chronologicalPalette
+      : season.paletteToken;
+    assignments.set(season.id, paletteToken);
+    ordinal += 1;
+  }
+  return assignments;
+}
+
 export function createRhythmSeason(
   rhythmId: string,
   startDate: RhythmLocalDate,

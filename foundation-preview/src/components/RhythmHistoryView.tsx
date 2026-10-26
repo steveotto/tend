@@ -10,6 +10,7 @@ import type {
   RhythmScheduleSegment
 } from '../domain/rhythm-schedule.ts';
 import type { RhythmSeasonEditDraft } from '../domain/rhythm-season-edit.ts';
+import type { RhythmSeasonEditTarget } from '../domain/rhythm-season-edit.ts';
 import type { RhythmSeasonDeletionUndo } from '../domain/rhythm-season-delete.ts';
 import {
   prepareCompletionHistory,
@@ -20,10 +21,15 @@ import {
   localDateInTimeZone,
   selectRhythmScore
 } from '../domain/rhythm-scoring.ts';
-import { formatRhythmSchedule, rhythmTimeOptions } from '../domain/rhythm-schedule.ts';
+import {
+  effectiveRhythmSchedule,
+  formatRhythmSchedule,
+  rhythmTimeOptions
+} from '../domain/rhythm-schedule.ts';
 import {
   rhythmSeasonInclusiveEndDate,
-  rhythmSeasonPaletteForId
+  rhythmSeasonPaletteAssignments,
+  rhythmSeasonPaletteForOrdinal
 } from '../domain/rhythm-seasons.ts';
 import {
   latestOnTrackHistoryEntries,
@@ -134,10 +140,11 @@ export function RhythmHistoryView({
     ...record,
     rhythmId: rhythm.id
   }));
+  const effectiveSchedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
   const scoringInput = {
     rhythmId: rhythm.id,
     ...(rhythm.cadence ? { cadence: rhythm.cadence } : {}),
-    ...(rhythm.schedule ? { schedule: rhythm.schedule } : {}),
+    ...(effectiveSchedule ? { schedule: effectiveSchedule } : {}),
     ...(rhythm.scoring ? { scoring: rhythm.scoring } : {}),
     ...(rhythm.createdLocalDate ? { createdLocalDate: rhythm.createdLocalDate } : {}),
     ...(rhythm.createdTimeZone ? { createdTimeZone: rhythm.createdTimeZone } : {}),
@@ -179,9 +186,22 @@ export function RhythmHistoryView({
   const seasonsInfoExpanded = seasonsDisclosure.rhythmId === rhythm.id && seasonsDisclosure.expanded;
   const [expandedEarlierSeasonIds, setExpandedEarlierSeasonIds] = useState<Set<string>>(() => new Set());
   const scheduleSeasons = rhythm.scoring?.scheduleHistory ?? [];
+  const currentHistorySeason = [...scheduleSeasons].reverse().find(season => season.startDate <= asOfDate);
+  const hasCurrentHistoricalSchedule = currentHistorySeason?.kind === 'scheduled';
+  const displayOnlyCurrentSeason: SeasonCardSchedule | undefined = effectiveSchedule && !hasCurrentHistoricalSchedule
+    ? {
+        kind: 'scheduled',
+        id: `current-schedule:${rhythm.id}`,
+        schedule: effectiveSchedule,
+        ...(rhythm.timeOfDay ? { timeOfDay: rhythm.timeOfDay } : {}),
+        paletteToken: rhythmSeasonPaletteForOrdinal(
+          scheduleSeasons.filter(season => season.kind === 'scheduled').length
+        )
+      }
+    : undefined;
   const availableSeasonUndo = seasonDeletionUndo?.rhythmId === rhythm.id ? seasonDeletionUndo : null;
   const knownSeasonCount = scheduleSeasons.filter(season => season.kind === 'scheduled').length
-    || (scheduleSeasons.length === 0 && rhythm.schedule ? 1 : 0);
+    + (effectiveSchedule && !hasCurrentHistoricalSchedule ? 1 : 0);
   const unknownSeason = scheduleSeasons.find(season => season.kind === 'unknown');
   const sharedUnscoredExplanation = score.consistency.kind === 'unscored' && score.onTrack.kind === 'unscored'
     && score.consistency.explanation === score.onTrack.explanation;
@@ -191,6 +211,7 @@ export function RhythmHistoryView({
   const [logAnnouncement, setLogAnnouncement] = useState('');
   const [scoreDetailsExpanded, setScoreDetailsExpanded] = useState(false);
   const [editingSeasonId, setEditingSeasonId] = useState<string | null>(null);
+  const [displayOnlyEditingSeason, setDisplayOnlyEditingSeason] = useState<SeasonCardSchedule | null>(null);
   const [pendingSeasonEditDraft, setPendingSeasonEditDraft] = useState<{
     seasonId: string;
     draft: RhythmSeasonEditDialogDraft;
@@ -210,7 +231,8 @@ export function RhythmHistoryView({
   }, [rhythm.id]);
   const hasDescription = Boolean(rhythm.description?.trim());
   const editableRecordIds = new Set((historyRecords ?? []).map(record => record.id));
-  const editingSeason = scheduleSeasons.find(season => season.id === editingSeasonId);
+  const editingSeason = scheduleSeasons.find(season => season.id === editingSeasonId)
+    ?? (displayOnlyEditingSeason?.id === editingSeasonId ? displayOnlyEditingSeason : undefined);
   const deletingSeason = scheduleSeasons.find(season => season.id === deletingSeasonId);
   const editingSeasonIndex = editingSeason
     ? scheduleSeasons.findIndex(season => season.id === editingSeason.id)
@@ -223,6 +245,8 @@ export function RhythmHistoryView({
     && editingSeasonPrevious?.kind === 'scheduled';
   const editingSeasonDeleteRestriction = editingSeasonIndex === 0
     ? 'The first Season cannot be deleted.'
+    : editingSeasonIndex < 0
+      ? 'Choose a starting date to establish this current Season.'
     : editingSeason?.kind === 'unknown'
       ? 'An unknown-history interval cannot be deleted until its schedule is set.'
       : editingSeasonPrevious?.kind === 'unknown'
@@ -315,8 +339,9 @@ export function RhythmHistoryView({
     setFocusRestoredSeasonId(null);
   }, [focusRestoredSeasonId, availableSeasonUndo, scheduleSeasons]);
 
-  function openSeasonEditor(season: RhythmScheduleHistorySegment, opener: HTMLButtonElement) {
+  function openSeasonEditor(season: RhythmSeasonEditTarget, opener: HTMLButtonElement) {
     seasonEditOpenerRef.current = opener;
+    setDisplayOnlyEditingSeason(season.startDate === undefined ? season : null);
     setEditingSeasonId(season.id);
   }
 
@@ -342,6 +367,7 @@ export function RhythmHistoryView({
 
   function closeSeasonEditor() {
     setEditingSeasonId(null);
+    setDisplayOnlyEditingSeason(null);
     setPendingSeasonEditDraft(null);
   }
 
@@ -597,10 +623,10 @@ export function RhythmHistoryView({
               hidden={!seasonsInfoExpanded}
             >
               <p className="rhythm-history-view__seasons-info-copy">
-                Schedule changes preserve earlier schedules, logged moments stay with this rhythm, and correcting earlier schedules can change historical scores.
+                Seasons keep track of schedule changes. Your logs stay saved and are scored using the schedule for their date.
               </p>
               <SeasonsHistory
-                rhythm={rhythm}
+                {...(displayOnlyCurrentSeason ? { displayOnlyCurrentSeason } : {})}
                 seasons={scheduleSeasons}
                 asOfDate={asOfDate}
                 {...(onChooseSchedule ? { onChooseSchedule } : {})}
@@ -770,16 +796,20 @@ export function RhythmHistoryView({
           <p className="visually-hidden" role="status" aria-live="polite">{logAnnouncement}</p>
         )}
       </section>
-      {editingSeason && rhythm.scoring && rhythm.schedule && onEditSeason && (
+      {editingSeason && effectiveSchedule && onEditSeason && (
         <RhythmSeasonCorrectionDialog
-          rhythm={rhythm}
+          rhythm={{ ...rhythm, schedule: effectiveSchedule }}
           season={editingSeason}
           scoringInput={scoringInput}
           records={scoringRecords}
-          suggestedStartDate={scoringRecords
-            .map(record => record.effectiveDate)
-            .filter(date => date >= editingSeason.startDate)
-            .sort()[0] ?? rhythm.scoring.trackingStartDate}
+          {...(editingSeason.startDate
+            ? {
+                suggestedStartDate: scoringRecords
+                  .map(record => record.effectiveDate)
+                  .filter(date => date >= editingSeason.startDate!)
+                  .sort()[0] ?? editingSeason.startDate
+              }
+            : {})}
           {...(pendingSeasonEditDraft?.seasonId === editingSeason.id
             ? { initialDraft: pendingSeasonEditDraft.draft }
             : {})}
@@ -884,7 +914,7 @@ type ScoreMetric =
   | { kind: 'unavailable'; explanation: string };
 
 function SeasonsHistory({
-  rhythm,
+  displayOnlyCurrentSeason,
   seasons,
   asOfDate,
   onChooseSchedule,
@@ -898,7 +928,7 @@ function SeasonsHistory({
   editButtonRefs,
   onEditSeason
 }: {
-  rhythm: RhythmPreview;
+  displayOnlyCurrentSeason?: SeasonCardSchedule;
   seasons: readonly RhythmScheduleHistorySegment[];
   asOfDate: string;
   onChooseSchedule?: (event: MouseEvent<HTMLButtonElement>) => void;
@@ -910,7 +940,7 @@ function SeasonsHistory({
   onToggleEarlierSeason: (id: string) => void;
   canEdit: boolean;
   editButtonRefs: Map<string, HTMLButtonElement>;
-  onEditSeason: (season: RhythmScheduleHistorySegment, opener: HTMLButtonElement) => void;
+  onEditSeason: (season: RhythmSeasonEditTarget, opener: HTMLButtonElement) => void;
 }) {
   const [highlightedSeasonId, setHighlightedSeasonId] = useState<string | null>(null);
   const highlightTimerRef = useRef<number | null>(null);
@@ -925,17 +955,11 @@ function SeasonsHistory({
   const current = currentIndex >= 0 && seasons[currentIndex]?.kind === 'scheduled'
     ? seasons[currentIndex]
     : undefined;
-  const displayCurrent: SeasonCardSchedule | undefined = current ?? (
-    seasons.length === 0 && rhythm.schedule
-      ? {
-          kind: 'scheduled',
-          id: `current-schedule:${rhythm.id}`,
-          schedule: rhythm.schedule,
-          ...(rhythm.timeOfDay ? { timeOfDay: rhythm.timeOfDay } : {}),
-          paletteToken: rhythmSeasonPaletteForId(rhythm.id)
-        }
-      : undefined
-  );
+  const paletteAssignments = rhythmSeasonPaletteAssignments(seasons);
+  const displayCurrent: SeasonCardSchedule | undefined = current ?? displayOnlyCurrentSeason;
+  const currentDisplay = displayCurrent && current
+    ? { ...displayCurrent, paletteToken: paletteAssignments.get(current.id) ?? current.paletteToken }
+    : displayCurrent;
   const previous = (current ? seasons.slice(0, currentIndex) : seasons).map((season, index) => ({
     season,
     index
@@ -989,72 +1013,67 @@ function SeasonsHistory({
         </div>
       )}
       {timeline.length > 1 && (
-        <>
-          <p className="rhythm-history-view__seasons-intro">See how your schedule has changed.</p>
-          <div
-            className="rhythm-history-view__seasons-timeline"
-            role="group"
-            aria-label="Schedule history timeline. Segment lengths show elapsed calendar time, not performance."
-          >
-            {timeline.map(({ season, endDate, duration }) => {
-              const label = season.kind === 'unknown'
-                ? 'Earlier schedule needs details'
-                : season.name?.trim() || formatRhythmSchedule(season.schedule, 'compact');
-              const dateRange = `${formatHistoryDate(season.startDate, false)} to ${formatHistoryDate(endDate, false)}`;
-              return (
-                <button
-                  key={season.id}
-                  type="button"
-                  className={`rhythm-history-view__season-timeline-segment ${seasonVisualClass(season.kind, season.paletteToken)}`}
-                  style={{ flexGrow: duration }}
-                  aria-label={`Go to ${label}, ${dateRange}`}
-                  onClick={() => focusSeasonCard(season.id)}
-                />
-              );
-            })}
-          </div>
-        </>
+        <div
+          className="rhythm-history-view__seasons-timeline"
+          role="group"
+          aria-label="Schedule history timeline. Segment lengths show elapsed calendar time, not performance."
+        >
+          {timeline.map(({ season, endDate, duration }) => {
+            const label = season.kind === 'unknown'
+              ? 'Earlier schedule needs details'
+              : season.name?.trim() || formatRhythmSchedule(season.schedule, 'compact');
+            const dateRange = `${formatHistoryDate(season.startDate, false)} to ${formatHistoryDate(endDate, false)}`;
+            return (
+              <button
+                key={season.id}
+                type="button"
+                className={`rhythm-history-view__season-timeline-segment ${seasonVisualClass(
+                  season.kind,
+                  paletteAssignments.get(season.id) ?? season.paletteToken
+                )}`}
+                style={{ flexGrow: duration }}
+                aria-label={`Go to ${label}, ${dateRange}`}
+                onClick={() => focusSeasonCard(season.id)}
+              />
+            );
+          })}
+        </div>
       )}
-      {displayCurrent && (
-        <SeasonCard
-          seasonKind="scheduled"
-          paletteToken={displayCurrent.paletteToken}
-          seasonId={displayCurrent.id}
-          idPrefix={idPrefix}
-          cardRefs={seasonCardRefs}
-          highlighted={highlightedSeasonId === displayCurrent.id}
-          title={currentName || formatRhythmSchedule(displayCurrent.schedule, 'compact')}
-          dateRange={displayCurrent.startDate
-            ? `${formatSeasonDate(displayCurrent.startDate)} – Present`
-            : 'Start date not recorded'}
-          isCurrent
-          metadata={seasonMetadata(displayCurrent)}
-          actions={(
-            <>
-              {current && canEdit && (
-                <SeasonEditButton
-                  seasonId={current.id}
-                  label={currentName || formatRhythmSchedule(current.schedule, 'compact')}
-                  editButtonRefs={editButtonRefs}
-                  onEditSeason={onEditSeason}
-                  season={current}
-                />
-              )}
-              {!current && canChooseSchedule && onChooseSchedule && (
-                <SeasonEditButton
-                  seasonId={displayCurrent.id}
-                  label={currentName || formatRhythmSchedule(displayCurrent.schedule, 'compact')}
-                  editButtonRefs={editButtonRefs}
-                  onChooseSchedule={onChooseSchedule}
-                />
-              )}
-            </>
-          )}
-        />
+      {currentDisplay && (
+        <section className="rhythm-history-view__season-group">
+          <h4 className="rhythm-history-view__season-group-title">Current Season</h4>
+          <SeasonCard
+            seasonKind="scheduled"
+            paletteToken={currentDisplay.paletteToken}
+            seasonId={currentDisplay.id}
+            idPrefix={idPrefix}
+            cardRefs={seasonCardRefs}
+            highlighted={highlightedSeasonId === currentDisplay.id}
+            title={currentName || formatRhythmSchedule(currentDisplay.schedule, 'compact')}
+            {...(currentDisplay.startDate
+              ? { dateRange: `${formatSeasonDate(currentDisplay.startDate)} – Present` }
+              : {})}
+            isCurrent
+            metadata={seasonMetadata(currentDisplay)}
+            actions={(
+              <>
+                {canEdit && (
+                  <SeasonEditButton
+                    seasonId={currentDisplay.id}
+                    label={currentName || formatRhythmSchedule(currentDisplay.schedule, 'compact')}
+                    editButtonRefs={editButtonRefs}
+                    onEditSeason={onEditSeason}
+                    season={currentDisplay}
+                  />
+                )}
+              </>
+            )}
+          />
+        </section>
       )}
       {previous.length > 0 && (
-        <section className="rhythm-history-view__earlier-seasons">
-          <h4>Earlier Seasons</h4>
+        <section className="rhythm-history-view__season-group">
+          <h4 className="rhythm-history-view__season-group-title">Earlier Seasons</h4>
           {previous.map(({ season, index }) => {
             const expanded = expandedSeasonIds.has(season.id);
             const endDate = rhythmSeasonInclusiveEndDate(seasons, index) ?? season.startDate;
@@ -1069,7 +1088,7 @@ function SeasonsHistory({
               <SeasonCard
                 key={season.id}
                 seasonKind={season.kind}
-                paletteToken={season.paletteToken}
+                paletteToken={paletteAssignments.get(season.id) ?? season.paletteToken}
                 seasonId={season.id}
                 idPrefix={idPrefix}
                 cardRefs={seasonCardRefs}
@@ -1138,11 +1157,6 @@ function SeasonsHistory({
           })}
         </section>
       )}
-      {previous.length > 0 && (
-        <p className="rhythm-history-view__seasons-explanation">
-          Earlier dates keep their earlier schedule. Your logged moments stay with this rhythm.
-        </p>
-      )}
     </div>
   );
 }
@@ -1150,7 +1164,7 @@ function SeasonsHistory({
 type SeasonCardSchedule = Pick<
   RhythmScheduleSegment,
   'kind' | 'id' | 'schedule' | 'name' | 'note' | 'timeOfDay' | 'paletteToken'
-> & { startDate?: string };
+> & { startDate?: string | undefined };
 
 function seasonVisualClass(
   kind: RhythmScheduleHistorySegment['kind'],
@@ -1182,7 +1196,7 @@ function SeasonCard({
   cardRefs: Map<string, HTMLElement>;
   highlighted: boolean;
   title: string;
-  dateRange: string;
+  dateRange?: string;
   isCurrent?: boolean;
   metadata?: ReactNode;
   actions?: ReactNode;
@@ -1205,7 +1219,7 @@ function SeasonCard({
         {isCurrent && <span className="rhythm-history-view__season-current-badge">Current</span>}
         {actions && <div className="rhythm-history-view__season-card-actions">{actions}</div>}
       </div>
-      <p className="rhythm-history-view__season-date-range">{dateRange}</p>
+      {dateRange && <p className="rhythm-history-view__season-date-range">{dateRange}</p>}
       {metadata && <div className="rhythm-history-view__season-card-metadata">{metadata}</div>}
       {note && <p className="rhythm-history-view__season-note">{note}</p>}
       {details}
@@ -1219,8 +1233,8 @@ type SeasonEditButtonProps = {
   editButtonRefs: Map<string, HTMLButtonElement>;
 } & (
   | {
-      season: RhythmScheduleHistorySegment;
-      onEditSeason: (season: RhythmScheduleHistorySegment, opener: HTMLButtonElement) => void;
+      season: RhythmSeasonEditTarget;
+      onEditSeason: (season: RhythmSeasonEditTarget, opener: HTMLButtonElement) => void;
       onChooseSchedule?: never;
     }
   | {
@@ -1349,7 +1363,9 @@ function ConsistencyScoreBreakdown({ metric }: { metric: ScoredConsistencyMetric
               role="listitem"
               aria-label={`${formatHistoryDate(item.date, true)}: ${item.status === 'completed' ? 'completed' : 'not completed'} ${
                 occurrenceKindByFrequency[evidence.frequency]
-              }`}
+              }${item.periodStartDate && item.eligibleEndDate
+                ? `; eligible period ${formatHistoryDate(item.periodStartDate, true)} through ${formatHistoryDate(item.eligibleEndDate, true)}`
+                : ''}`}
               className={item.status === 'completed'
                 ? 'rhythm-history-view__health-pattern-day'
                 : 'rhythm-history-view__health-pattern-day rhythm-history-view__health-pattern-day--missed'}
@@ -1370,6 +1386,11 @@ function ConsistencyScoreBreakdown({ metric }: { metric: ScoredConsistencyMetric
                 ? evidence.todayIncluded ? 'Today’s completed occurrence is included.' : 'Today is pending and excluded.'
                 : 'Today is excluded.'
             }
+          </p>
+        )}
+        {evidence.occurrences.some(item => item.periodStartDate !== undefined) && (
+          <p className="rhythm-history-view__score-explanation">
+            Any completion in its eligible calendar period counts once; extra logs stay in your history.
           </p>
         )}
       </section>
@@ -1491,9 +1512,15 @@ function onTrackHistoryEntryDescription(
   }
   const date = formatHistoryDate(entry.date);
   if (entry.status === 'completed') {
+    if (entry.periodStartDate && entry.eligibleEndDate && entry.completionDate) {
+      return `Completion on ${formatHistoryDate(entry.completionDate)} satisfied the occurrence due ${date} within its eligible period, ${formatHistoryDate(entry.periodStartDate)}–${formatHistoryDate(entry.eligibleEndDate)}. Extra logs stay in your history.`;
+    }
     return `Qualifying completion on ${date} reset the missed-occurrence count and On Track score to 100.`;
   }
   if (entry.status === 'missed') {
+    if (entry.periodStartDate && entry.eligibleEndDate) {
+      return `No completion was recorded in the eligible period, ${formatHistoryDate(entry.periodStartDate)}–${formatHistoryDate(entry.eligibleEndDate)}. This occurrence ended on ${formatHistoryDate(entry.eligibleEndDate)}; ${evidence.pointsPerMissedOccurrence}-point deduction applied. Resulting On Track score: ${entry.score}.`;
+    }
     return `Missed scheduled occurrence on ${date}; ${evidence.pointsPerMissedOccurrence}-point deduction applied. Resulting On Track score: ${entry.score}.`;
   }
   return `Current On Track state as of ${date}; today is pending and is not counted as missed. Current score: ${entry.score}.`;

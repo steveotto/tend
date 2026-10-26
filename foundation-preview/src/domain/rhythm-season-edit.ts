@@ -2,10 +2,16 @@ import { isValidDate } from './money-goals.ts';
 import type {
   RhythmSchedule,
   RhythmScheduleHistorySegment,
+  RhythmScheduleSegment,
   RhythmScoringMetadata,
   RhythmTimeValue
 } from './rhythm-schedule.ts';
-import { validateRhythmSchedule, rhythmTimeOptions } from './rhythm-schedule.ts';
+import {
+  isValidTimeZone,
+  rhythmTimeOptions,
+  validateRhythmSchedule,
+  validateRhythmScoringMetadata
+} from './rhythm-schedule.ts';
 import { createRhythmSeason, rhythmSeasonPaletteForOrdinal } from './rhythm-seasons.ts';
 
 export type RhythmSeasonEditDraft = {
@@ -15,6 +21,9 @@ export type RhythmSeasonEditDraft = {
   timeOfDay: RhythmTimeValue;
   name: string;
 };
+
+export type RhythmSeasonEditTarget = RhythmScheduleHistorySegment
+  | (Omit<RhythmScheduleSegment, 'startDate'> & { startDate?: undefined });
 
 export type RhythmSeasonEditResult =
   | {
@@ -114,5 +123,75 @@ export function editRhythmSeason(
     scoring: nextScoring,
     schedule: active?.kind === 'scheduled' ? active.schedule : currentSchedule,
     ...(index === scoring.scheduleHistory.length - 1 ? { activeTimeOfDay: draft.timeOfDay } : {})
+  };
+}
+
+export function establishCurrentRhythmSeason(
+  rhythmId: string,
+  currentSchedule: RhythmSchedule,
+  scoring: RhythmScoringMetadata | undefined,
+  timeZone: string,
+  asOfDate: string,
+  draft: RhythmSeasonEditDraft
+): RhythmSeasonEditResult {
+  if (!isValidDate(draft.startDate) || draft.startDate > asOfDate
+    || !validateRhythmSchedule(draft.schedule).valid
+    || !rhythmTimeOptions.some(option => option.value === draft.timeOfDay)
+    || draft.name.length > 80) {
+    return { valid: false, error: 'Choose a valid starting date on or before today and check the schedule, time of day, and optional name.' };
+  }
+  if (!isValidTimeZone(timeZone) || !validateRhythmSchedule(currentSchedule).valid) {
+    return { valid: false, error: 'The current schedule or time zone is unavailable.' };
+  }
+
+  const history = scoring?.scheduleHistory ?? [];
+  const nextIndex = history.findIndex(segment => segment.startDate >= draft.startDate);
+  const index = nextIndex < 0 ? history.length : nextIndex;
+  const previous = history[index - 1];
+  const next = history[index];
+  if (previous && draft.startDate <= previous.startDate) {
+    return { valid: false, error: 'The starting date must be after the preceding schedule period.' };
+  }
+  if (next?.startDate === draft.startDate) {
+    return { valid: false, error: 'A schedule period already starts on this date.' };
+  }
+  if (next && draft.schedule.endDate !== undefined && draft.schedule.endDate >= next.startDate) {
+    return { valid: false, error: 'The schedule end date must be before the next schedule period.' };
+  }
+  if (history.some(segment => segment.id === draft.segmentId)) {
+    return { valid: false, error: 'This schedule period already exists.' };
+  }
+
+  const scheduledBefore = history.slice(0, index)
+    .filter(segment => segment.kind === 'scheduled').length;
+  const season = createRhythmSeason(
+    rhythmId,
+    draft.startDate,
+    draft.schedule,
+    draft.timeOfDay,
+    undefined,
+    rhythmSeasonPaletteForOrdinal(scheduledBefore)
+  );
+  const name = draft.name.trim();
+  const namedSeason = name ? { ...season, name } : season;
+  const scheduleHistory = [...history];
+  scheduleHistory.splice(index, 0, namedSeason);
+  const firstScheduled = scheduleHistory.find(segment => segment.kind === 'scheduled');
+  if (!firstScheduled) return { valid: false, error: 'A known current schedule is required.' };
+
+  const nextScoring: RhythmScoringMetadata = {
+    trackingStartDate: firstScheduled.startDate,
+    timeZone: scoring?.timeZone ?? timeZone,
+    scheduleHistory
+  };
+  if (!validateRhythmScoringMetadata(nextScoring)) {
+    return { valid: false, error: 'This date cannot be added without overlapping existing schedule history.' };
+  }
+  const activeSeason = [...scheduleHistory].reverse().find(segment => segment.startDate <= asOfDate);
+  return {
+    valid: true,
+    scoring: nextScoring,
+    schedule: activeSeason?.kind === 'scheduled' ? activeSeason.schedule : currentSchedule,
+    ...(activeSeason?.kind === 'scheduled' ? { activeTimeOfDay: activeSeason.timeOfDay ?? draft.timeOfDay } : {})
   };
 }

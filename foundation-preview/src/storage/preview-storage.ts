@@ -13,6 +13,7 @@ import {
   PREVIEW_V8_RECOVERY_KEY,
   PREVIEW_V9_RECOVERY_KEY,
   PREVIEW_V10_RECOVERY_KEY,
+  PREVIEW_V11_RECOVERY_KEY,
   preserveProposedV4SourceRecovery,
   proposedV4SourceVersionForRaw
 } from './preview-v4-recovery.ts';
@@ -28,7 +29,8 @@ export {
   PREVIEW_V7_RECOVERY_KEY,
   PREVIEW_V8_RECOVERY_KEY,
   PREVIEW_V9_RECOVERY_KEY,
-  PREVIEW_V10_RECOVERY_KEY
+  PREVIEW_V10_RECOVERY_KEY,
+  PREVIEW_V11_RECOVERY_KEY
 };
 
 export type PreviewStorage = Pick<Storage, 'getItem' | 'setItem'>;
@@ -93,7 +95,7 @@ export function writePreview(
       if (!source.valid && !options.allowUnrecoverableReplacement) {
         return {
           kind: 'error',
-          message: sourceVersion === 9 || sourceVersion === 10
+          message: sourceVersion === 9 || sourceVersion === 10 || sourceVersion === 11
             ? 'The active preview data is malformed and cannot be replaced without an explicit raw backup.'
             : 'The stored source value is invalid or cannot be checked. Download its raw recovery before explicitly replacing it.'
         };
@@ -211,6 +213,14 @@ export function loadV9RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadRes
 export function loadV10RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
   try {
     return { kind: 'loaded', raw: storage.getItem(PREVIEW_V10_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV11RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V11_RECOVERY_KEY) };
   } catch (error) {
     return { kind: 'error', message: errorMessage(error) };
   }

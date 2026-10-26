@@ -605,13 +605,13 @@ describe('daily occurrence scoring', () => {
         name: 'selected weekdays',
         schedule: { frequency: 'weekly', weekdays: [1] },
         trackingStartDate: '2026-10-19',
-        asOfDate: '2026-10-20'
+        asOfDate: '2026-10-26'
       },
       {
         name: 'Monthly',
         schedule: { frequency: 'monthly', pattern: { kind: 'dayOfMonth', day: 15 } },
         trackingStartDate: '2026-10-15',
-        asOfDate: '2026-10-16'
+        asOfDate: '2026-11-01'
       },
       {
         name: 'Quarterly',
@@ -623,7 +623,7 @@ describe('daily occurrence scoring', () => {
         name: 'Yearly',
         schedule: { frequency: 'yearly', month: 10, pattern: { kind: 'dayOfMonth', day: 23 } },
         trackingStartDate: '2026-10-23',
-        asOfDate: '2026-10-24'
+        asOfDate: '2027-01-01'
       },
       {
         name: 'Custom',
@@ -870,6 +870,437 @@ describe('daily occurrence scoring', () => {
     }
   });
 
+  it('credits one period occurrence once for early, on-date, and late completions', () => {
+    const monthly: RhythmSchedule = {
+      frequency: 'monthly',
+      pattern: { kind: 'dayOfMonth', day: 1 }
+    };
+    const monthlyRecords = [
+      record('october-early', '2026-10-17'),
+      record('october-extra-a', '2026-10-18'),
+      record('october-extra-b', '2026-10-20')
+    ];
+    const monthlyResult = scored(input({
+      schedule: monthly,
+      scoring: scoring('2026-10-01', [{ startDate: '2026-10-01', schedule: monthly }]),
+      createdLocalDate: '2026-10-01',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-21',
+      records: monthlyRecords
+    }));
+    expect(monthlyResult.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: {
+        eligibleDueCount: 1,
+        completedCount: 1,
+        occurrences: [{
+          date: '2026-10-01',
+          status: 'completed',
+          recordIds: ['october-early', 'october-extra-a', 'october-extra-b']
+        }]
+      }
+    });
+    expect(monthlyResult.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 100,
+      evidence: {
+        lastQualifyingCompletionDate: '2026-10-17',
+        missedOccurrenceCount: 0
+      }
+    });
+    const afterRemovingFirstMonthlyLog = scored(input({
+      schedule: monthly,
+      scoring: scoring('2026-10-01', [{ startDate: '2026-10-01', schedule: monthly }]),
+      createdLocalDate: '2026-10-01',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-21',
+      records: monthlyRecords.slice(1)
+    }));
+    expect(afterRemovingFirstMonthlyLog.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: {
+        completedCount: 1,
+        occurrences: [{
+          date: '2026-10-01',
+          status: 'completed',
+          recordIds: ['october-extra-a', 'october-extra-b']
+        }]
+      }
+    });
+    expect(afterRemovingFirstMonthlyLog.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 100,
+      evidence: { missedOccurrenceCount: 0 }
+    });
+
+    const earlyMonthly: RhythmSchedule = {
+      frequency: 'monthly',
+      pattern: { kind: 'dayOfMonth', day: 20 }
+    };
+    const early = scored(input({
+      schedule: earlyMonthly,
+      scoring: scoring('2026-10-01', [{ startDate: '2026-10-01', schedule: earlyMonthly }]),
+      createdLocalDate: '2026-10-01',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-21',
+      records: [record('before-due-date', '2026-10-17')]
+    }));
+    expect(early.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: { completedCount: 1, occurrences: [{ date: '2026-10-20', status: 'completed' }] }
+    });
+    expect(early.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 100,
+      evidence: { lastQualifyingCompletionDate: '2026-10-17', missedOccurrenceCount: 0 }
+    });
+
+    const weekly: RhythmSchedule = { frequency: 'weekly', weekdays: [1] };
+    const weeklyLate = scored(input({
+      schedule: weekly,
+      scoring: scoring('2026-10-12', [{ startDate: '2026-10-12', schedule: weekly }]),
+      createdLocalDate: '2026-10-12',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-24',
+      records: [
+        record('previous-week', '2026-10-18'),
+        record('later-weekday', '2026-10-23')
+      ]
+    }));
+    expect(weeklyLate.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: {
+        completedCount: 2,
+        occurrences: expect.arrayContaining([
+          {
+            date: '2026-10-12',
+            status: 'completed',
+            recordIds: ['previous-week'],
+            periodStartDate: '2026-10-12',
+            eligibleEndDate: '2026-10-18'
+          },
+          {
+            date: '2026-10-19',
+            status: 'completed',
+            recordIds: ['later-weekday'],
+            periodStartDate: '2026-10-19',
+            eligibleEndDate: '2026-10-25'
+          }
+        ])
+      }
+    });
+    expect(weeklyLate.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 100,
+      evidence: { lastQualifyingCompletionDate: '2026-10-23', missedOccurrenceCount: 0 }
+    });
+
+    const quarterly: RhythmSchedule = {
+      frequency: 'quarterly',
+      monthInQuarter: 1,
+      pattern: { kind: 'dayOfMonth', day: 1 }
+    };
+    const quarterLate = scored(input({
+      schedule: quarterly,
+      scoring: scoring('2026-10-01', [{ startDate: '2026-10-01', schedule: quarterly }]),
+      createdLocalDate: '2026-10-01',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-11-01',
+      records: [record('quarter-late', '2026-10-30')]
+    }));
+    expect(quarterLate.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: { completedCount: 1, occurrences: [{ date: '2026-10-01', status: 'completed' }] }
+    });
+    expect(quarterLate.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 100,
+      evidence: { lastQualifyingCompletionDate: '2026-10-30', missedOccurrenceCount: 0 }
+    });
+
+    const yearly: RhythmSchedule = {
+      frequency: 'yearly',
+      month: 2,
+      pattern: { kind: 'dayOfMonth', day: 28 }
+    };
+    const yearLate = scored(input({
+      schedule: yearly,
+      scoring: scoring('2026-01-01', [{ startDate: '2026-01-01', schedule: yearly }]),
+      createdLocalDate: '2026-01-01',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-12-02',
+      records: [record('year-late', '2026-12-01')]
+    }));
+    expect(yearLate.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: { completedCount: 1, occurrences: [{ date: '2026-02-28', status: 'completed' }] }
+    });
+    expect(yearLate.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 100,
+      evidence: { lastQualifyingCompletionDate: '2026-12-01', missedOccurrenceCount: 0 }
+    });
+
+    const quarterBoundarySchedule: RhythmSchedule = {
+      frequency: 'quarterly',
+      monthInQuarter: 1,
+      pattern: { kind: 'dayOfMonth', day: 1 }
+    };
+    const quarterBoundary = scored(input({
+      schedule: quarterBoundarySchedule,
+      scoring: scoring('2026-01-01', [{
+        startDate: '2026-01-01',
+        schedule: quarterBoundarySchedule
+      }]),
+      createdLocalDate: '2026-01-01',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-04-01',
+      records: [record('quarter-end', '2026-03-31')]
+    }));
+    expect(quarterBoundary.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: { completedCount: 1, occurrences: [{ date: '2026-01-01', status: 'completed' }] }
+    });
+    expect(quarterBoundary.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 100,
+      evidence: { lastQualifyingCompletionDate: '2026-03-31', missedOccurrenceCount: 0 }
+    });
+
+    const ordinalYearly: RhythmSchedule = {
+      frequency: 'yearly',
+      month: 10,
+      pattern: { kind: 'ordinalWeekday', ordinal: 'last', weekday: 4 }
+    };
+    const ordinalLate = scored(input({
+      schedule: ordinalYearly,
+      scoring: scoring('2026-10-01', [{ startDate: '2026-10-01', schedule: ordinalYearly }]),
+      createdLocalDate: '2026-10-01',
+      createdTimeZone: 'UTC',
+      asOfDate: '2027-01-01',
+      records: [record('ordinal-year-end', '2026-12-31')]
+    }));
+    expect(ordinalLate.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: { completedCount: 1, occurrences: [{ date: '2026-10-29', status: 'completed' }] }
+    });
+    expect(ordinalLate.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 100,
+      evidence: { lastQualifyingCompletionDate: '2026-12-31', missedOccurrenceCount: 0 }
+    });
+
+    const leapYearSchedule: RhythmSchedule = {
+      frequency: 'yearly',
+      month: 2,
+      pattern: { kind: 'dayOfMonth', day: 29 }
+    };
+    const leapYear = scored(input({
+      schedule: leapYearSchedule,
+      scoring: scoring('2024-01-01', [{ startDate: '2024-01-01', schedule: leapYearSchedule }]),
+      createdLocalDate: '2024-01-01',
+      createdTimeZone: 'UTC',
+      asOfDate: '2024-03-02',
+      records: [record('leap-late', '2024-03-01')]
+    }));
+    expect(leapYear.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: { completedCount: 1, occurrences: [{ date: '2024-02-29', status: 'completed' }] }
+    });
+  });
+
+  it('distinguishes a single-day Select Days occurrence from single-weekday Weekly period credit', () => {
+    const weekly: RhythmSchedule = { frequency: 'weekly', weekdays: [1] };
+    const selectDays: RhythmSchedule = {
+      frequency: 'weekly',
+      weekdays: [1],
+      weeklyMode: 'select-days'
+    };
+    const tuesdayLogs = [
+      record('tuesday-a', '2026-10-20'),
+      record('tuesday-b', '2026-10-20')
+    ];
+    const mondayLogs = [
+      record('monday-a', '2026-10-19'),
+      record('monday-b', '2026-10-19')
+    ];
+    const scoreFor = (
+      schedule: RhythmSchedule,
+      records: RhythmCompletionRecord[]
+    ) => scored(input({
+      schedule,
+      scoring: scoring('2026-10-19', [{ startDate: '2026-10-19', schedule }]),
+      createdLocalDate: '2026-10-19',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-25',
+      records
+    }));
+
+    const weeklyTuesday = scoreFor(weekly, tuesdayLogs);
+    expect(weeklyTuesday.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: {
+        eligibleDueCount: 1,
+        completedCount: 1,
+        occurrences: [{ date: '2026-10-19', status: 'completed', recordIds: ['tuesday-a', 'tuesday-b'] }]
+      }
+    });
+    expect(weeklyTuesday.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 100,
+      evidence: { missedOccurrenceCount: 0 }
+    });
+
+    const selectDaysTuesday = scoreFor(selectDays, tuesdayLogs);
+    expect(selectDaysTuesday.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: {
+        eligibleDueCount: 1,
+        completedCount: 0,
+        occurrences: [{ date: '2026-10-19', status: 'not-completed', recordIds: [] }]
+      }
+    });
+    expect(selectDaysTuesday.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 90,
+      evidence: { missedOccurrenceCount: 1 }
+    });
+
+    for (const schedule of [weekly, selectDays]) {
+      const mondayScore = scoreFor(schedule, [...tuesdayLogs, ...mondayLogs]);
+      expect(mondayScore.consistency).toMatchObject({
+        kind: 'scored',
+        evidence: {
+          eligibleDueCount: 1,
+          completedCount: 1,
+          occurrences: [{
+            date: '2026-10-19',
+            status: 'completed',
+            recordIds: schedule === weekly
+              ? ['monday-a', 'monday-b', 'tuesday-a', 'tuesday-b']
+              : ['monday-a', 'monday-b']
+          }]
+        }
+      });
+      expect(mondayScore.onTrack).toMatchObject({
+        kind: 'scored',
+        score: 100,
+        evidence: { missedOccurrenceCount: 0 }
+      });
+    }
+
+    const legacyAmbiguous = scoreFor(
+      { frequency: 'weekly', weekdays: [1] },
+      tuesdayLogs
+    );
+    expect(legacyAmbiguous.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: { completedCount: 1 }
+    });
+  });
+
+  it('does not carry records across period or Season boundaries and clips tracking starts', () => {
+    const monthly: RhythmSchedule = {
+      frequency: 'monthly',
+      pattern: { kind: 'dayOfMonth', day: 1 }
+    };
+    const priorPeriod = scored(input({
+      schedule: monthly,
+      scoring: scoring('2026-09-01', [{ startDate: '2026-09-01', schedule: monthly }]),
+      createdLocalDate: '2026-09-01',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-11-02',
+      records: [record('september-only', '2026-09-30')]
+    }));
+    expect(priorPeriod.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: {
+        occurrences: expect.arrayContaining([
+          {
+            date: '2026-09-01',
+            status: 'completed',
+            recordIds: ['september-only'],
+            periodStartDate: '2026-09-01',
+            eligibleEndDate: '2026-09-30'
+          },
+          {
+            date: '2026-10-01',
+            status: 'not-completed',
+            recordIds: [],
+            periodStartDate: '2026-10-01',
+            eligibleEndDate: '2026-10-31'
+          },
+          {
+            date: '2026-11-01',
+            status: 'not-completed',
+            recordIds: [],
+            periodStartDate: '2026-11-01',
+            eligibleEndDate: '2026-11-30'
+          }
+        ])
+      }
+    });
+    expect(priorPeriod.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 90,
+      evidence: { missedOccurrenceCount: 1 }
+    });
+
+    const startsMidPeriod = scored(input({
+      schedule: monthly,
+      scoring: scoring('2026-10-17', [{ startDate: '2026-10-17', schedule: monthly }]),
+      createdLocalDate: '2026-10-17',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-21',
+      records: [record('after-tracking-start', '2026-10-17')]
+    }));
+    expect(startsMidPeriod.consistency).toMatchObject({
+      kind: 'unscored',
+      reasonCode: 'no-eligible-occurrences'
+    });
+    expect(startsMidPeriod.onTrack).toMatchObject({
+      kind: 'unscored',
+      reasonCode: 'ready-for-first-tend'
+    });
+
+    const oldSeason: RhythmSchedule = {
+      frequency: 'monthly',
+      pattern: { kind: 'dayOfMonth', day: 1 },
+      endDate: '2026-10-14'
+    };
+    const newSeason: RhythmSchedule = {
+      frequency: 'monthly',
+      pattern: { kind: 'dayOfMonth', day: 20 }
+    };
+    const boundary = scored(input({
+      schedule: newSeason,
+      scoring: scoring('2026-10-01', [
+        { startDate: '2026-10-01', schedule: oldSeason },
+        { startDate: '2026-10-15', schedule: newSeason }
+      ]),
+      createdLocalDate: '2026-10-01',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-21',
+      records: [record('new-season-only', '2026-10-17')]
+    }));
+    expect(boundary.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: {
+        eligibleDueCount: 2,
+        completedCount: 1,
+        occurrences: [
+          { date: '2026-10-01', status: 'not-completed', recordIds: [] },
+          { date: '2026-10-20', status: 'completed', recordIds: ['new-season-only'] }
+        ]
+      }
+    });
+    expect(boundary.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 100,
+      evidence: { missedOccurrenceCount: 0, lastQualifyingCompletionDate: '2026-10-17' }
+    });
+  });
+
   it('scores every structured frequency only at actual occurrences and leaves today pending', () => {
     const cases: {
       name: string;
@@ -905,7 +1336,7 @@ describe('daily occurrence scoring', () => {
         name: 'once-weekly Thursday on an unscheduled Friday',
         schedule: { frequency: 'weekly', weekdays: [4] },
         start: '2026-10-08',
-        asOfDate: '2026-10-10',
+        asOfDate: '2026-10-12',
         expectedMissed: 1,
         expectedScore: 90,
         expectedLastCompletion: null
@@ -914,7 +1345,7 @@ describe('daily occurrence scoring', () => {
         name: 'monthly ordinal weekday',
         schedule: { frequency: 'monthly', pattern: { kind: 'ordinalWeekday', ordinal: 1, weekday: 4 } },
         start: '2026-10-01',
-        asOfDate: '2026-10-02',
+        asOfDate: '2026-11-01',
         expectedMissed: 1,
         expectedScore: 90,
         expectedLastCompletion: null
@@ -932,7 +1363,7 @@ describe('daily occurrence scoring', () => {
         name: 'quarterly occurrence',
         schedule: { frequency: 'quarterly', monthInQuarter: 1, pattern: { kind: 'dayOfMonth', day: 1 } },
         start: '2026-10-01',
-        asOfDate: '2026-10-02',
+        asOfDate: '2027-01-01',
         expectedMissed: 1,
         expectedScore: 90,
         expectedLastCompletion: null
@@ -941,7 +1372,7 @@ describe('daily occurrence scoring', () => {
         name: 'quarterly ordinal weekday',
         schedule: { frequency: 'quarterly', monthInQuarter: 2, pattern: { kind: 'ordinalWeekday', ordinal: 2, weekday: 1 } },
         start: '2026-02-09',
-        asOfDate: '2026-02-10',
+        asOfDate: '2026-04-01',
         expectedMissed: 1,
         expectedScore: 90,
         expectedLastCompletion: null
@@ -950,7 +1381,7 @@ describe('daily occurrence scoring', () => {
         name: 'yearly occurrence',
         schedule: { frequency: 'yearly', month: 2, pattern: { kind: 'dayOfMonth', day: 28 } },
         start: '2026-02-28',
-        asOfDate: '2026-03-01',
+        asOfDate: '2027-01-01',
         expectedMissed: 1,
         expectedScore: 90,
         expectedLastCompletion: null
@@ -959,7 +1390,7 @@ describe('daily occurrence scoring', () => {
         name: 'yearly ordinal weekday',
         schedule: { frequency: 'yearly', month: 10, pattern: { kind: 'ordinalWeekday', ordinal: 'last', weekday: 4 } },
         start: '2026-10-29',
-        asOfDate: '2026-10-30',
+        asOfDate: '2027-01-01',
         expectedMissed: 1,
         expectedScore: 90,
         expectedLastCompletion: null
@@ -1136,10 +1567,10 @@ describe('daily occurrence scoring', () => {
     }));
     expect(result.onTrack).toMatchObject({
       kind: 'scored',
-      score: 90,
+      score: 100,
       evidence: {
         lastQualifyingCompletionDate: '2026-10-19',
-        missedOccurrenceCount: 1,
+        missedOccurrenceCount: 0,
         scheduleChanges: [{ date: '2026-10-22', score: 100 }]
       }
     });

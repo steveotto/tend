@@ -12,6 +12,7 @@ export const PREVIEW_V7_RECOVERY_KEY = 'tend2:synthetic-preview:v7-recovery';
 export const PREVIEW_V8_RECOVERY_KEY = 'tend2:synthetic-preview:v8-recovery';
 export const PREVIEW_V9_RECOVERY_KEY = 'tend2:synthetic-preview:v9-recovery';
 export const PREVIEW_V10_RECOVERY_KEY = 'tend2:synthetic-preview:v10-recovery';
+export const PREVIEW_V11_RECOVERY_KEY = 'tend2:synthetic-preview:v11-recovery';
 
 const recoveryKeys = {
   1: PREVIEW_V1_RECOVERY_KEY,
@@ -23,7 +24,8 @@ const recoveryKeys = {
   7: PREVIEW_V7_RECOVERY_KEY,
   8: PREVIEW_V8_RECOVERY_KEY,
   9: PREVIEW_V9_RECOVERY_KEY,
-  10: PREVIEW_V10_RECOVERY_KEY
+  10: PREVIEW_V10_RECOVERY_KEY,
+  11: PREVIEW_V11_RECOVERY_KEY
 } as const;
 
 export type ProposedRecoveryResult =
@@ -41,7 +43,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export function proposedV4SourceVersionForRaw(raw: string): 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | null {
+export function proposedV4SourceVersionForRaw(raw: string): 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | null {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!isRecord(parsed)) return null;
@@ -51,6 +53,7 @@ export function proposedV4SourceVersionForRaw(raw: string): 1 | 2 | 3 | 4 | 5 | 
       || envelope.schemaVersion === 3 || envelope.schemaVersion === 4 || envelope.schemaVersion === 5
       || envelope.schemaVersion === 6 || envelope.schemaVersion === 7 || envelope.schemaVersion === 8
       || envelope.schemaVersion === 9 || envelope.schemaVersion === 10 || envelope.schemaVersion === 11
+      || envelope.schemaVersion === 12
       ? envelope.schemaVersion
       : null;
   } catch {
@@ -84,6 +87,7 @@ export function proposedV4RecoveryKeyForRaw(raw: string): string | null {
   const version = proposedV4SourceVersionForRaw(raw);
   return version === 1 || version === 2 || version === 3 || version === 4 || version === 5
     || version === 6 || version === 7 || version === 8 || version === 9 || version === 10
+    || version === 11
     ? recoveryKeys[version]
     : null;
 }

@@ -56,6 +56,66 @@ export function calendarDaysInclusive(start: string, end: string): number {
   return Math.floor((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000) + 1;
 }
 
+export type RhythmOccurrencePeriod = {
+  startDate: string;
+  endDate: string;
+};
+
+export function rhythmOccurrencePeriod(schedule: RhythmSchedule, dueDate: string): RhythmOccurrencePeriod {
+  if (!isValidDate(dueDate)) throw new RangeError('A valid occurrence date is required.');
+  const { year, month } = dateParts(dueDate);
+  if (isPeriodBasedRhythmSchedule(schedule) && schedule.frequency === 'weekly') {
+    const weekday = new Date(`${dueDate}T00:00:00Z`).getUTCDay();
+    const startDate = addCalendarDays(dueDate, -((weekday + 6) % 7));
+    return { startDate, endDate: addCalendarDays(startDate, 6) };
+  }
+  if (schedule.frequency === 'monthly') {
+    return {
+      startDate: `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01`,
+      endDate: `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(daysInMonth(year, month)).padStart(2, '0')}`
+    };
+  }
+  if (schedule.frequency === 'quarterly') {
+    const firstMonth = Math.floor((month - 1) / 3) * 3 + 1;
+    return {
+      startDate: `${String(year).padStart(4, '0')}-${String(firstMonth).padStart(2, '0')}-01`,
+      endDate: `${String(year).padStart(4, '0')}-${String(firstMonth + 2).padStart(2, '0')}-${String(daysInMonth(year, firstMonth + 2)).padStart(2, '0')}`
+    };
+  }
+  if (schedule.frequency === 'yearly') {
+    return { startDate: `${String(year).padStart(4, '0')}-01-01`, endDate: `${String(year).padStart(4, '0')}-12-31` };
+  }
+  return { startDate: dueDate, endDate: dueDate };
+}
+
+export function isPeriodBasedRhythmSchedule(schedule: RhythmSchedule): boolean {
+  return schedule.frequency === 'monthly' || schedule.frequency === 'quarterly'
+    || schedule.frequency === 'yearly'
+    || schedule.frequency === 'weekly' && schedule.weekdays.length === 1
+      && schedule.weeklyMode !== 'select-days';
+}
+
+export function hasRhythmOccurrenceForCompletion(
+  schedule: RhythmSchedule,
+  completionDate: string,
+  trackingStartDate?: string
+): boolean {
+  if (!isValidDate(completionDate) || schedule.endDate !== undefined && completionDate > schedule.endDate) return false;
+  if (!isPeriodBasedRhythmSchedule(schedule)) return isScheduledDate(schedule, completionDate);
+  const period = rhythmOccurrencePeriod(schedule, completionDate);
+  const startDate = trackingStartDate && trackingStartDate > period.startDate
+    ? trackingStartDate
+    : period.startDate;
+  if (completionDate < startDate) return false;
+  const endDate = schedule.endDate && schedule.endDate < period.endDate
+    ? schedule.endDate
+    : period.endDate;
+  for (let dueDate = startDate; dueDate <= endDate; dueDate = addCalendarDays(dueDate, 1)) {
+    if (isScheduledDate(schedule, dueDate)) return true;
+  }
+  return false;
+}
+
 function canonicalValue(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalValue).join(',')}]`;
   if (typeof value === 'object' && value !== null) {

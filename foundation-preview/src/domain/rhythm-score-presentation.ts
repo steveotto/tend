@@ -7,6 +7,9 @@ export type OnTrackHistoryDisplayEntry =
       date: string;
       status: 'completed' | 'missed' | 'today';
       score: number;
+      completionDate?: string;
+      periodStartDate?: string;
+      eligibleEndDate?: string;
     }
   | {
       kind: 'zero-score-span';
@@ -36,7 +39,16 @@ export function onTrackHistoryDisplayEntries(evidence: OnTrackEvidence): readonl
       key: `occurrence-${item.date}`,
       date: item.date,
       status: item.status,
-      score: item.score
+      score: item.score,
+      ...('periodStartDate' in item && item.periodStartDate !== undefined
+        ? {
+            ...(item.status === 'completed' && 'completionDate' in item && item.completionDate
+              ? { completionDate: item.completionDate }
+              : {}),
+            periodStartDate: item.periodStartDate,
+            eligibleEndDate: item.eligibleEndDate
+          }
+        : {})
     })),
     ...evidence.repeatedZeroScoreSpans.map(item => ({
       kind: 'zero-score-span' as const,

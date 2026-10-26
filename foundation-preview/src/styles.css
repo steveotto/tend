@@ -1303,8 +1303,7 @@ a:focus-visible {
       min-height: 44px;
     }
 
-    .rhythm-editor .goal-field > label,
-    .rhythm-schedule-fields__pattern .goal-field > label {
+    .rhythm-editor .goal-field > label {
       display: block;
     }
 
@@ -1422,20 +1421,61 @@ a:focus-visible {
       font-weight: 600;
     }
 
-    .rhythm-schedule-fields__pattern {
+    .rhythm-schedule-fields__pattern-grid {
       display: grid;
-      gap: 5px;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+      align-items: start;
+      gap: 10px;
       min-width: 0;
     }
 
-    .rhythm-schedule-fields__pattern-picker {
+    .rhythm-schedule-fields__pattern-column {
+      min-width: 0;
+    }
+
+    .rhythm-schedule-fields__pattern-label {
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .rhythm-schedule-fields__pattern-column > .rhythm-select,
+    .rhythm-schedule-fields__pattern-controls > .rhythm-select {
+      min-width: 0;
+    }
+
+    .rhythm-schedule-fields__pattern-column > .rhythm-select,
+    .rhythm-schedule-fields__pattern-controls > .rhythm-select,
+    .rhythm-schedule-fields__ordinal-weekday > .rhythm-select {
+      flex: 1 1 104px;
+      width: 100%;
+    }
+
+    .rhythm-schedule-fields__pattern-column > .rhythm-select .rhythm-select__trigger,
+    .rhythm-schedule-fields__pattern-controls > .rhythm-select .rhythm-select__trigger,
+    .rhythm-schedule-fields__ordinal-weekday > .rhythm-select .rhythm-select__trigger {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .rhythm-schedule-fields__pattern-controls {
       display: flex;
       align-items: center;
       flex-wrap: wrap;
-      gap: 8px;
-      color: var(--ink-soft);
-      font-size: 12px;
+      gap: 5px;
+      min-width: 0;
+      color: var(--ink);
+      font-size: 13px;
       font-weight: 600;
+    }
+
+    .rhythm-schedule-fields__ordinal-weekday {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(96px, 1fr));
+    }
+
+    .rhythm-schedule-fields__pattern-month {
+      justify-content: flex-start;
     }
 
     .rhythm-schedule-fields__line .goal-field,
@@ -1537,10 +1577,30 @@ a:focus-visible {
       outline-offset: 2px;
     }
 
-    .rhythm-schedule-fields__start-date input,
-    .rhythm-schedule-fields__end-date input {
+    .rhythm-schedule-fields__start-date input {
       width: auto;
       min-width: 158px;
+    }
+
+    .rhythm-schedule-fields__end-date-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 12px;
+      min-width: 0;
+    }
+
+    .rhythm-schedule-fields__end-date input {
+      width: 158px;
+      min-width: 0;
+      height: 44px;
+      min-height: 44px;
+      box-sizing: border-box;
+      text-align: center;
+    }
+
+    .rhythm-schedule-fields__end-date input::-webkit-datetime-edit {
+      text-align: center;
     }
 
     .rhythm-schedule-fields__end-toggle {
@@ -4093,8 +4153,6 @@ a:focus-visible {
   min-width: 0;
 }
 
-.rhythm-history-view__seasons-intro,
-.rhythm-history-view__seasons-explanation,
 .rhythm-history-view__season-date-range,
 .rhythm-history-view__season-schedule,
 .rhythm-history-view__season-note {
@@ -4196,7 +4254,7 @@ a:focus-visible {
   overflow-wrap: anywhere;
 }
 
-.rhythm-history-view__earlier-seasons > h4 {
+.rhythm-history-view__season-group-title {
   margin: 0 0 2px;
   color: var(--tend-ink, var(--ink));
   font-size: 13px;
@@ -4285,10 +4343,93 @@ a:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.rhythm-season-correction__header {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rhythm-season-correction__header > p {
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .rhythm-season-correction h2,
 .rhythm-season-correction h3,
 .rhythm-season-correction p {
   margin: 0;
+}
+
+.rhythm-season-correction__step {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rhythm-season-correction__section-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--tend-ink, var(--ink));
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.rhythm-season-correction__section-heading > span {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 50%;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rhythm-season-correction__saved-schedule {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  min-width: 0;
+  padding: 9px 11px;
+  border-left: 3px solid var(--rhythm-season-color);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--rhythm-season-color) 7%, white);
+}
+
+.rhythm-season-correction__saved-calendar {
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  color: var(--rhythm-season-color);
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.rhythm-season-correction__saved-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  color: var(--tend-ink, var(--ink));
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-season-correction__saved-copy > p:last-child {
+  color: var(--tend-secondary, var(--ink-soft));
+}
+
+.rhythm-season-correction__name {
+  width: 100%;
 }
 
 .rhythm-season-correction__range,
@@ -4298,6 +4439,110 @@ a:focus-visible {
   color: var(--tend-secondary, var(--ink-soft));
   font-size: 12px;
   line-height: 1.45;
+}
+
+.rhythm-season-correction__date-field-group {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rhythm-season-correction__date-field-group .goal-field {
+  margin: 0;
+}
+
+.rhythm-season-correction__start-date-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rhythm-season-correction__start-date-label label {
+  margin: 0;
+}
+
+.rhythm-season-correction__hint-trigger {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--tend-secondary, var(--ink-soft));
+  cursor: pointer;
+}
+
+.rhythm-season-correction__hint-trigger:hover {
+  background: var(--surface-muted, #F1F2F1);
+}
+
+.rhythm-season-correction__hint-trigger:focus-visible {
+  outline: 2px solid var(--forest);
+  outline-offset: 2px;
+}
+
+.rhythm-season-correction__hint-trigger svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.rhythm-season-correction__hint {
+  margin: 0;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.money-goal-dialog--compact {
+  width: min(400px, calc(100vw - 28px));
+  max-height: min(70vh, 480px);
+}
+
+.rhythm-season-correction__help-dialog {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+}
+
+.rhythm-season-correction__start-date input[type='date'] {
+  width: 158px;
+  min-width: 158px;
+}
+
+.rhythm-season-correction__affected-dates {
+  display: grid;
+  grid-template-columns: 16px auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--tend-ink, var(--ink));
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.rhythm-season-correction__affected-dates svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: var(--tend-secondary, var(--ink-soft));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.rhythm-season-correction__affected-label {
+  color: var(--tend-secondary, var(--ink-soft));
+}
+
+.rhythm-season-correction__affected-dates strong {
+  min-width: 0;
+  font-weight: 600;
 }
 
 .rhythm-season-correction__warning {
@@ -4324,6 +4569,44 @@ a:focus-visible {
   border-radius: 8px;
   font-size: 12px;
   line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-season-correction__schedule-comparison {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 9px;
+}
+
+.rhythm-season-correction__schedule-side {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-season-correction__schedule-side > span {
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.rhythm-season-correction__schedule-arrow {
+  color: var(--tend-secondary, var(--ink-soft));
+  text-align: center;
+}
+
+.rhythm-season-correction__effective-range {
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: 12px;
+  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
@@ -4388,6 +4671,7 @@ a:focus-visible {
   color: var(--tend-secondary, var(--ink-soft));
   font-size: 11px;
   font-weight: 600;
+  text-align: center;
 }
 
 .rhythm-season-impact__row {
@@ -4410,12 +4694,14 @@ a:focus-visible {
 .rhythm-season-impact__value {
   display: grid;
   align-content: start;
+  justify-items: center;
   gap: 2px;
   min-width: 0;
   padding: 8px 9px;
   border: 1px solid var(--tend-line, var(--line));
   border-radius: 8px;
   background: var(--canvas, #fff);
+  text-align: center;
   overflow-wrap: anywhere;
 }
 
@@ -4425,23 +4711,17 @@ a:focus-visible {
 }
 
 .rhythm-season-impact__score {
-  display: flex;
+  display: grid;
+  justify-items: center;
   align-items: baseline;
-  gap: 4px;
   margin: 0;
   color: var(--tend-ink, var(--ink));
-  white-space: nowrap;
 }
 
 .rhythm-season-impact__score strong,
 .rhythm-season-impact__unavailable > strong {
   font-size: 19px;
   line-height: 1.15;
-}
-
-.rhythm-season-impact__score span {
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: 11px;
 }
 
 .rhythm-season-impact__evidence,
@@ -4464,13 +4744,15 @@ a:focus-visible {
   color: var(--tend-secondary, var(--ink-soft));
   font-size: 10px;
   line-height: 1.4;
+  text-align: center;
 }
 
 .rhythm-season-impact__unavailable {
   display: grid;
-  justify-items: start;
+  justify-items: center;
   gap: 2px;
   min-width: 0;
+  text-align: center;
 }
 
 .rhythm-season-impact__unavailable > strong {
@@ -4498,47 +4780,62 @@ a:focus-visible {
   overflow-wrap: anywhere;
 }
 
-.rhythm-season-impact__responsive-label {
-  display: none;
+.rhythm-season-impact__details {
+  padding-top: 6px;
+  border-top: 1px solid var(--tend-line, var(--line));
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.rhythm-season-impact__details > summary {
+  color: var(--tend-ink, var(--ink));
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rhythm-season-impact__details-content {
+  display: grid;
+  gap: 7px;
+  margin-top: 7px;
+}
+
+.rhythm-season-impact__details-row {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rhythm-season-impact__details-row > p,
+.rhythm-season-impact__details-note {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 420px) {
-  .rhythm-season-impact__comparison {
-    display: block;
+  .rhythm-season-correction__schedule-comparison {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 5px;
   }
 
-  .rhythm-season-impact__metric-heading,
-  .rhythm-season-impact__comparison > h4 {
-    display: none;
+  .rhythm-season-correction__schedule-arrow {
+    transform: rotate(90deg);
   }
 
   .rhythm-season-impact__row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin-top: 8px;
-  }
-
-  .rhythm-season-impact__metric {
-    grid-column: 1 / -1;
-  }
-
-  .rhythm-season-impact__responsive-label {
-    display: block;
-    color: var(--tend-secondary, var(--ink-soft));
-    font-size: 10px;
-    font-weight: 600;
+    grid-template-columns: minmax(68px, .72fr) minmax(0, 1fr) minmax(0, 1fr);
   }
 
   .rhythm-season-impact__value {
     padding: 7px;
   }
 
-  .rhythm-season-impact__score strong,
   .rhythm-season-impact__unavailable > strong {
     font-size: 17px;
   }
 }
 
-.rhythm-history-view__earlier-seasons {
+.rhythm-history-view__season-group {
   display: grid;
   gap: 0;
   min-width: 0;

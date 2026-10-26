@@ -56,13 +56,15 @@ describe('shared Rhythm season impact comparison', () => {
       expect(visibleScore(cell(metric, 'Before'))).toBe(
         visibleScore(cell(metric, 'After'))
       );
-      expect(cell(metric, 'Before').querySelector('[aria-label="out of 100"]')).toBeTruthy();
+      const scoreDescription = cell(metric, 'Before').querySelector('.rhythm-season-impact__score strong');
+      expect(scoreDescription?.nextElementSibling?.textContent).toBe('out of 100');
+      expect(cell(metric, 'Before').querySelector('.rhythm-season-impact__score')?.textContent).not.toContain('/ 100');
     }
     expect(screen.getAllByText(/Both · \d+ eligible · \d+ completed/)).toHaveLength(2);
     expect(cell('Consistency', 'Before').textContent).not.toContain('eligible');
     expect(cell('Consistency', 'After').textContent).not.toContain('eligible');
-    expect(screen.getAllByText('Before', { selector: '.rhythm-season-impact__responsive-label' })).toHaveLength(3);
-    expect(screen.getAllByText('After', { selector: '.rhythm-season-impact__responsive-label' })).toHaveLength(3);
+    expect(screen.getByRole('heading', { name: 'Before' }).tagName).toBe('H4');
+    expect(screen.getByRole('heading', { name: 'After' }).tagName).toBe('H4');
   });
 
   it('shows lower numeric scores without a success or failure judgment and keeps changed evidence distinct', () => {
