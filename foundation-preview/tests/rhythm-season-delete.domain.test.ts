@@ -9,17 +9,38 @@ import type { RhythmScoringMetadata } from '../src/domain/rhythm-schedule.ts';
 
 function fixture() {
   const first = {
-    ...createRhythmSeason('delete-fixture', '2024-01-01', { frequency: 'weekly', weekdays: [1] }, 'morning'),
+    ...createRhythmSeason(
+      'delete-fixture',
+      '2024-01-01',
+      { frequency: 'weekly', weekdays: [1] },
+      'morning',
+      undefined,
+      rhythmSeasonPaletteForOrdinal(0)
+    ),
     name: 'Monday season',
     note: 'first-note'
   };
   const middle = {
-    ...createRhythmSeason('delete-fixture', '2024-02-01', { frequency: 'weekly', weekdays: [2] }, 'afternoon', 'season-middle'),
+    ...createRhythmSeason(
+      'delete-fixture',
+      '2024-02-01',
+      { frequency: 'weekly', weekdays: [2] },
+      'afternoon',
+      'season-middle',
+      rhythmSeasonPaletteForOrdinal(1)
+    ),
     name: 'Tuesday season',
     note: 'middle-note'
   };
   const current = {
-    ...createRhythmSeason('delete-fixture', '2024-03-01', { frequency: 'weekly', weekdays: [3] }, 'evening', 'season-current'),
+    ...createRhythmSeason(
+      'delete-fixture',
+      '2024-03-01',
+      { frequency: 'weekly', weekdays: [3] },
+      'evening',
+      'season-current',
+      rhythmSeasonPaletteForOrdinal(2)
+    ),
     name: 'Wednesday season',
     note: 'current-note'
   };
@@ -163,9 +184,7 @@ describe('Rhythm Season deletion and scoped Undo', () => {
         'palette-delete-fixture',
         `2024-01-0${index + 1}`,
         { frequency: 'weekly', weekdays: [index as 0 | 1 | 2 | 3 | 4 | 5 | 6] },
-        'morning',
-        undefined,
-        rhythmSeasonPaletteForOrdinal(index)
+        'morning'
       ));
     const scoring: RhythmScoringMetadata = {
       trackingStartDate: scheduleHistory[0]!.startDate,

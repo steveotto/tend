@@ -1,6 +1,7 @@
 import type { RhythmSchedule, RhythmScheduleHistorySegment, RhythmScoringMetadata, RhythmTimeLabel, RhythmTimeValue } from './rhythm-schedule.ts';
 import { rhythmTimeOptions, validateRhythmSchedule, validateRhythmScoringMetadata } from './rhythm-schedule.ts';
 import { rhythmSchedulesEqual } from './rhythm-occurrences.ts';
+import { rhythmSeasonPaletteAssignments } from './rhythm-seasons.ts';
 
 export type RhythmSeasonDeletionUndo = {
   rhythmId: string;
@@ -47,19 +48,23 @@ export function deleteRhythmSeason(
   if (!validateRhythmScoringMetadata(scoring) || !validateRhythmSchedule(currentSchedule).valid) {
     return { valid: false, error: 'This Rhythm has invalid schedule history and cannot be changed.' };
   }
-  const latest = scoring.scheduleHistory.at(-1);
+  const paletteAssignments = rhythmSeasonPaletteAssignments(scoring.scheduleHistory);
+  const assignedHistory = scoring.scheduleHistory.map(season => season.kind === 'scheduled'
+    ? { ...season, paletteToken: paletteAssignments.get(season.id)! }
+    : season);
+  const latest = assignedHistory.at(-1);
   if (latest?.kind !== 'scheduled' || !rhythmSchedulesEqual(latest.schedule, currentSchedule)) {
     return { valid: false, error: 'The current schedule does not match its saved history.' };
   }
-  const index = scoring.scheduleHistory.findIndex(season => season.id === seasonId);
+  const index = assignedHistory.findIndex(season => season.id === seasonId);
   if (index < 0) return { valid: false, error: 'This Season is no longer available.' };
   if (index === 0) return { valid: false, error: 'The first Season cannot be deleted. Edit it to correct its schedule.' };
 
-  const selected = scoring.scheduleHistory[index]!;
+  const selected = assignedHistory[index]!;
   if (selected.kind !== 'scheduled') {
     return { valid: false, error: 'Earlier schedule needs details; repair it instead of deleting it.' };
   }
-  const previous = scoring.scheduleHistory[index - 1]!;
+  const previous = assignedHistory[index - 1]!;
   if (previous.kind !== 'scheduled') {
     return { valid: false, error: 'The preceding schedule needs details, so this boundary cannot be removed safely.' };
   }
@@ -67,7 +72,7 @@ export function deleteRhythmSeason(
     return { valid: false, error: 'The preceding schedule has an end date and cannot safely cover this Season.' };
   }
 
-  const scheduleHistory = scoring.scheduleHistory.filter(season => season.id !== seasonId);
+  const scheduleHistory = assignedHistory.filter(season => season.id !== seasonId);
   const nextScoring: RhythmScoringMetadata = { ...scoring, scheduleHistory };
   if (!validateRhythmScoringMetadata(nextScoring)) {
     return { valid: false, error: 'Removing this boundary would make the schedule history invalid.' };
@@ -76,7 +81,7 @@ export function deleteRhythmSeason(
   if (activeSeason?.kind !== 'scheduled') {
     return { valid: false, error: 'A known current schedule is required to remove this Season.' };
   }
-  const activeTimeOfDay = index === scoring.scheduleHistory.length - 1
+  const activeTimeOfDay = index === assignedHistory.length - 1
     ? previous.timeOfDay
     : undefined;
   if (index === scoring.scheduleHistory.length - 1 && activeTimeOfDay === undefined) {

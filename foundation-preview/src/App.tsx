@@ -45,18 +45,23 @@ import {
   isEditableRhythmId,
   resolveTodayRhythms,
   restoreRhythmId,
+  rhythmDraftFrom,
   rhythmsForCategory,
   saveRhythmDraft
 } from './domain/rhythm-editor.ts';
 import type { RhythmDraft, RhythmDraftErrors } from './domain/rhythm-editor.ts';
 import type { RhythmSeasonEditDraft } from './domain/rhythm-season-edit.ts';
-import { editRhythmSeason } from './domain/rhythm-season-edit.ts';
+import { editRhythmSeason, establishCurrentRhythmSeason } from './domain/rhythm-season-edit.ts';
 import {
   deleteRhythmSeason,
   restoreDeletedRhythmSeason
 } from './domain/rhythm-season-delete.ts';
 import type { RhythmSeasonDeletionUndo } from './domain/rhythm-season-delete.ts';
-import { rhythmScheduleSummary, rhythmTimeLabel } from './domain/rhythm-schedule.ts';
+import {
+  effectiveRhythmSchedule,
+  rhythmScheduleSummary,
+  rhythmTimeLabel
+} from './domain/rhythm-schedule.ts';
 import { rhythmSchedulesEqual } from './domain/rhythm-occurrences.ts';
 import {
   browserPreviewStorage,
@@ -71,6 +76,7 @@ import {
   loadV8RecoveryCopy,
   loadV9RecoveryCopy,
   loadV10RecoveryCopy,
+  loadV11RecoveryCopy,
   loadPreview,
   writePreview
 } from './storage/preview-storage.ts';
@@ -120,6 +126,8 @@ export function App() {
   const [v9RecoveryError, setV9RecoveryError] = useState<string | null>(null);
   const [v10RecoveryCopy, setV10RecoveryCopy] = useState<string | null>(null);
   const [v10RecoveryError, setV10RecoveryError] = useState<string | null>(null);
+  const [v11RecoveryCopy, setV11RecoveryCopy] = useState<string | null>(null);
+  const [v11RecoveryError, setV11RecoveryError] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -315,6 +323,18 @@ export function App() {
     } else {
       setV10RecoveryCopy(null);
       setV10RecoveryError(result.message);
+    }
+    refreshV11RecoveryCopy();
+  }
+
+  function refreshV11RecoveryCopy() {
+    const result = loadV11RecoveryCopy(browserPreviewStorage());
+    if (result.kind === 'loaded') {
+      setV11RecoveryCopy(result.raw);
+      setV11RecoveryError(null);
+    } else {
+      setV11RecoveryCopy(null);
+      setV11RecoveryError(result.message);
     }
   }
 
@@ -576,6 +596,59 @@ export function App() {
       return 'This Rhythm is read-only.';
     }
     const savedRhythm = previewData.savedRhythms.find(rhythm => rhythm.id === rhythmId);
+    if (draft.segmentId === `current-schedule:${rhythmId}`) {
+      const rhythm = allTodayRhythms.find(entry => entry.id === rhythmId);
+      const currentSchedule = rhythm && effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
+      if (!rhythm || !currentSchedule) return 'This Rhythm no longer has a known current schedule.';
+      const established = establishCurrentRhythmSeason(
+        rhythmId,
+        currentSchedule,
+        rhythm.scoring,
+        rhythm.scoring?.timeZone ?? rhythm.createdTimeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+        localDateInTimeZone(new Date(), rhythm.scoring?.timeZone ?? rhythm.createdTimeZone
+          ?? Intl.DateTimeFormat().resolvedOptions().timeZone),
+        draft
+      );
+      if (!established.valid) return established.error;
+
+      const sourceRhythms = previewData.savedRhythms.map(entry => {
+        if (entry.id !== rhythmId) return entry;
+        const { scoring: _scoring, ...withoutScoring } = entry;
+        return withoutScoring;
+      });
+      const {
+        originalScoring: _originalScoring,
+        ...baseDraft
+      } = rhythmDraftFrom(rhythm, rhythm.categoryIds ?? []);
+      const saved = saveRhythmDraft(
+        sourceRhythms,
+        {
+          ...baseDraft,
+          schedule: draft.schedule,
+          scheduleEditing: true,
+          originalSchedule: currentSchedule,
+          timeLabel: rhythmTimeLabel(draft.timeOfDay),
+          seasonName: draft.name
+        },
+        rhythmId,
+        'edit'
+      );
+      if (!saved.savedRhythms) return Object.values(saved.errors)[0] ?? 'This Rhythm could not be saved.';
+      const savedRhythms = saved.savedRhythms.map(entry => entry.id !== rhythmId
+        ? entry
+        : {
+            ...entry,
+            cadence: rhythmScheduleSummary(established.schedule),
+            schedule: established.schedule,
+            scoring: established.scoring,
+            timeOfDay: established.activeTimeOfDay ?? draft.timeOfDay,
+            timeLabel: rhythmTimeLabel(established.activeTimeOfDay ?? draft.timeOfDay),
+            ...(rhythm.createdLocalDate === undefined ? {} : { createdLocalDate: rhythm.createdLocalDate }),
+            ...(rhythm.createdTimeZone === undefined ? {} : { createdTimeZone: rhythm.createdTimeZone }),
+            ...(rhythm.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: rhythm.dailyBackfillAllowed })
+          });
+      return persistSeasonHistory({ ...previewData, savedRhythms }, 'current Season boundary');
+    }
     if (!savedRhythm?.schedule || !savedRhythm.scoring) {
       return 'This Rhythm no longer has editable schedule history.';
     }
@@ -1122,6 +1195,8 @@ export function App() {
         v9RecoveryError={v9RecoveryError}
         v10RecoveryCopy={v10RecoveryCopy}
         v10RecoveryError={v10RecoveryError}
+        v11RecoveryCopy={v11RecoveryCopy}
+        v11RecoveryError={v11RecoveryError}
       />
       <footer className="preview-footer">
         <span>Synthetic preview data stays separate from Tend accounts.</span>

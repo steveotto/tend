@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   rhythmSeasonForDate,
   rhythmSeasonInclusiveEndDate,
+  rhythmSeasonPaletteAssignments,
   rhythmSeasonPaletteForId,
   rhythmSeasonPaletteForOrdinal,
   createRhythmSeason
@@ -44,6 +45,27 @@ describe('Rhythm Season schedule history', () => {
     expect(tokens).toEqual(['fern', 'sage', 'sky', 'ocean', 'plum', 'fern', 'sage']);
     expect(() => rhythmSeasonPaletteForOrdinal(-1)).toThrow(RangeError);
     expect(() => rhythmSeasonPaletteForOrdinal(1.5)).toThrow(RangeError);
+  });
+
+  it('corrects legacy hash-assigned Seasons to their chronological colors', () => {
+    const original = createRhythmSeason(
+      'sample-connect',
+      '2026-10-17',
+      { frequency: 'daily' }
+    );
+    const current = {
+      ...createRhythmSeason(
+        'sample-connect',
+        '2026-10-25',
+        { frequency: 'weekly', weekdays: [1, 3, 5] }
+      ),
+      paletteToken: 'sage' as const
+    };
+    const assignments = rhythmSeasonPaletteAssignments([original, current]);
+
+    expect(original.paletteToken).toBe('plum');
+    expect(assignments.get(original.id)).toBe('fern');
+    expect(assignments.get(current.id)).toBe('sage');
   });
 
   it('strictly validates season identity, ordered boundaries, optional text and schedule snapshots', () => {

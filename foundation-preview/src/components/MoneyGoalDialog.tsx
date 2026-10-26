@@ -9,6 +9,7 @@ type MoneyGoalDialogProps = {
   labelledBy?: string;
   initialFocusId?: string;
   stopEscapePropagation?: boolean;
+  dialogClassName?: string;
   surfaceClassName?: string;
   onClose: () => void;
 };
@@ -21,6 +22,7 @@ export function MoneyGoalDialog({
   labelledBy,
   initialFocusId,
   stopEscapePropagation = false,
+  dialogClassName,
   surfaceClassName,
   onClose
 }: MoneyGoalDialogProps) {
@@ -42,7 +44,7 @@ export function MoneyGoalDialog({
   return (
     <dialog
       ref={dialogRef}
-      className="money-goal-dialog"
+      className={['money-goal-dialog', dialogClassName].filter(Boolean).join(' ')}
       aria-labelledby={labelledBy ?? 'money-goal-dialog-title'}
       onCancel={event => {
         event.preventDefault();

@@ -75,7 +75,7 @@ describe('shared structured Rhythm editor', () => {
     await user.click(within(confirmation).getByRole('button', { name: 'Confirm change' }));
     expect(onSave).toHaveBeenCalledOnce();
     expect(onSave.mock.calls[0]?.[0]).toMatchObject({
-      schedule: { frequency: 'weekly', weekdays: [1] }
+      schedule: { frequency: 'weekly', weekdays: [1], weeklyMode: 'select-days' }
     });
     expect(onSave.mock.calls[0]?.[0].seasonName).toBeUndefined();
   });
@@ -96,7 +96,11 @@ describe('shared structured Rhythm editor', () => {
 
     expect(onSave).toHaveBeenCalledOnce();
     expect(screen.queryByRole('dialog', { name: 'Change your schedule' })).toBeNull();
-    expect(onSave.mock.calls[0]?.[0].schedule).toEqual({ frequency: 'weekly', weekdays: [1] });
+    expect(onSave.mock.calls[0]?.[0].schedule).toEqual({
+      frequency: 'weekly',
+      weekdays: [1],
+      weeklyMode: 'select-days'
+    });
   });
 
   it('does not request Season confirmation for an unchanged schedule and cosmetic edit', async () => {
@@ -149,7 +153,7 @@ describe('shared structured Rhythm editor', () => {
     expect(onSave).toHaveBeenCalledOnce();
     expect(onSave.mock.calls[0]?.[0]).toMatchObject({
       seasonName: 'Morning walks',
-      schedule: { frequency: 'weekly', weekdays: [2] }
+      schedule: { frequency: 'weekly', weekdays: [2], weeklyMode: 'select-days' }
     });
     expect(within(editor).getByText('The save was rejected.')).toBeTruthy();
     expect((within(editor).getByRole('checkbox', { name: 'Tuesday' }) as HTMLInputElement).checked).toBe(true);
@@ -275,6 +279,31 @@ describe('shared structured Rhythm editor', () => {
     expect(within(editor).getByRole('combobox', { name: 'Frequency: Select Days' })).toBeTruthy();
   });
 
+  it('retains an explicit one-day Select Days choice when editing and after reloading its saved schedule', async () => {
+    const user = userEvent.setup();
+    const schedule = {
+      frequency: 'weekly' as const,
+      weekdays: [1] as (1)[],
+      weeklyMode: 'select-days' as const
+    };
+    const rhythm: RhythmPreview = { ...todayRhythms[0]!, schedule };
+    const onSave = vi.fn((_draft: RhythmDraft) => ({}));
+    const { unmount } = render(<RhythmEditor rhythm={rhythm} onSave={onSave} onClose={vi.fn()} />);
+    let editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    expect(within(editor).getByRole('combobox', { name: 'Frequency: Select Days' })).toBeTruthy();
+    expect((within(editor).getByRole('checkbox', { name: 'Monday' }) as HTMLInputElement).checked).toBe(true);
+    await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
+    expect(onSave.mock.calls[0]?.[0].schedule).toEqual(schedule);
+
+    unmount();
+    const savedSchedule = onSave.mock.calls[0]![0].schedule;
+    if (!savedSchedule) throw new Error('Expected the editor to save a structured schedule.');
+    render(<RhythmEditor rhythm={{ ...rhythm, schedule: savedSchedule }} onSave={onSave} onClose={vi.fn()} />);
+    editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    expect(within(editor).getByRole('combobox', { name: 'Frequency: Select Days' })).toBeTruthy();
+    expect((within(editor).getByRole('checkbox', { name: 'Monday' }) as HTMLInputElement).checked).toBe(true);
+  });
+
   it('makes Weekly single-choice, preserves Select Days multi-choice, and requires an explicit choice when switching', async () => {
     const user = userEvent.setup();
     const rhythm: RhythmPreview = {
@@ -361,13 +390,38 @@ describe('shared structured Rhythm editor', () => {
     });
   });
 
+  it.each([
+    { frequency: 'Monthly', unit: undefined },
+    { frequency: 'Quarterly', unit: undefined },
+    { frequency: 'Yearly', unit: undefined },
+    { frequency: 'Custom', unit: 'months' },
+    { frequency: 'Custom', unit: 'years' }
+  ])('groups date and ordinal-weekday fields for $frequency $unit patterns', async ({ frequency, unit }) => {
+    const user = userEvent.setup();
+    const editor = renderEditor();
+
+    await choose(user, 'Frequency', frequency);
+    if (unit) await choose(user, 'Repeat interval unit', unit);
+
+    const repeatOn = within(editor).getByRole('group', { name: 'Repeat on' });
+    expect(within(repeatOn).getByRole('combobox', { name: 'Repeat on: A date' })).toBeTruthy();
+    const onDay = within(editor).getByRole('group', { name: 'On day' });
+    expect(within(onDay).getByRole('combobox', { name: 'Date: 1' })).toBeTruthy();
+
+    await choose(user, 'Repeat on', 'A day of the week');
+    const onThe = within(editor).getByRole('group', { name: 'On the' });
+    const ordinalWeekday = within(onThe).getByRole('group', { name: 'Ordinal and weekday' });
+    expect(within(ordinalWeekday).getByRole('combobox', { name: 'Which week?: First' })).toBeTruthy();
+    expect(within(ordinalWeekday).getByRole('combobox', { name: 'Day: Sunday' })).toBeTruthy();
+  });
+
   it('supports each Custom unit, interval, local start/end dates, and its applicable pattern controls', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn((_draft: RhythmDraft) => ({}));
     const editor = renderEditor(onSave);
 
     await choose(user, 'Frequency', 'Custom');
-    expect(within(editor).queryByLabelText('Ending on')).toBeNull();
+    expect(within(editor).queryByLabelText('End date')).toBeNull();
     fireEvent.change(within(editor).getByLabelText('Repeat every'), { target: { value: '3' } });
     fireEvent.change(within(editor).getByLabelText('Starting on'), { target: { value: '2026-11-04' } });
     await user.click(within(editor).getByRole('button', { name: 'Add Rhythm' }));
@@ -392,7 +446,7 @@ describe('shared structured Rhythm editor', () => {
     await choose(user, 'Repeat interval unit', 'months');
     await choose(user, 'Date', '28');
     await user.click(within(editor).getByRole('checkbox', { name: 'Set an end date' }));
-    fireEvent.change(within(editor).getByLabelText('Ending on'), { target: { value: '2026-12-31' } });
+    fireEvent.change(within(editor).getByLabelText('End date'), { target: { value: '2026-12-31' } });
     await user.click(within(editor).getByRole('button', { name: 'Add Rhythm' }));
     expect(onSave.mock.calls.at(-1)?.[0].schedule).toMatchObject({
       frequency: 'custom',
@@ -441,7 +495,12 @@ describe('shared structured Rhythm editor', () => {
     expect(within(editor).getByRole('combobox', { name: 'Repeat on: A day of the week' })).toBeTruthy();
     expect(within(editor).getByRole('combobox', { name: 'Which week?: First' })).toBeTruthy();
     expect((within(editor).getByRole('checkbox', { name: 'Personal' }) as HTMLInputElement).checked).toBe(true);
-    expect(within(editor).getByLabelText('Ending on')).toBeTruthy();
+    const endDate = within(editor).getByLabelText('End date');
+    expect(endDate).toBeTruthy();
+    expect(endDate.closest('.rhythm-schedule-fields__end-date-row')?.contains(
+      within(editor).getByRole('checkbox', { name: 'Set an end date' })
+    )).toBe(true);
+    expect(within(editor).queryByText('Ending on')).toBeNull();
     expect(within(editor).getByRole('button', { name: 'Archive Existing schedule' })).toBeTruthy();
 
     await choose(user, 'Frequency', 'Yearly');
@@ -612,7 +671,7 @@ describe('shared structured Rhythm editor', () => {
     fireEvent.change(within(editor).getByLabelText('Repeat every'), { target: { value: '0' } });
     fireEvent.change(within(editor).getByLabelText('Starting on'), { target: { value: '2026-11-04' } });
     await user.click(within(editor).getByRole('checkbox', { name: 'Set an end date' }));
-    fireEvent.change(within(editor).getByLabelText('Ending on'), { target: { value: '2026-10-04' } });
+    fireEvent.change(within(editor).getByLabelText('End date'), { target: { value: '2026-10-04' } });
     await user.click(within(editor).getByRole('button', { name: 'Add Rhythm' }));
 
     expect(onSave.mock.calls.at(-1)?.[0].schedule).toBeUndefined();

@@ -14,7 +14,8 @@ import {
   validateSavedRhythmsV7,
   validateSavedRhythmsV8,
   validateSavedRhythmsV9,
-  validateSavedRhythmsV11
+  validateSavedRhythmsV11,
+  validateSavedRhythmsV12
 } from './rhythm-editor.ts';
 import { validateSavedRhythmsV10 } from './rhythm-editor.ts';
 import type { SavedRhythm } from './rhythm-editor.ts';
@@ -25,10 +26,14 @@ import type {
   RhythmScoringMetadata,
   RhythmScoringMetadataV8
 } from './rhythm-schedule.ts';
-import { createRhythmSeason, createUnknownRhythmSeason } from './rhythm-seasons.ts';
+import {
+  createRhythmSeason,
+  createUnknownRhythmSeason,
+  rhythmSeasonPaletteForOrdinal
+} from './rhythm-seasons.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 11;
+export const PREVIEW_SCHEMA_VERSION = 12;
 
 export type PreviewData = {
   goals: MoneyGoal[];
@@ -70,7 +75,7 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
 const goalKeys = [
@@ -299,7 +304,8 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
       && value.schemaVersion !== 4 && value.schemaVersion !== 5
       && value.schemaVersion !== 6 && value.schemaVersion !== 7 && value.schemaVersion !== 8
       && value.schemaVersion !== 9
-      && value.schemaVersion !== 10 && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
+      && value.schemaVersion !== 10 && value.schemaVersion !== 11
+      && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
   const isV1 = value.schemaVersion === 1;
@@ -313,24 +319,26 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const isV9 = value.schemaVersion === 9;
   const isV10 = value.schemaVersion === 10;
   const isV11 = value.schemaVersion === 11;
+  const isV12 = value.schemaVersion === 12;
   const allowedDataKeys = isV1 ? dataKeysV1 : isV2 ? dataKeysV2
     : isV3 || isV4 ? dataKeysV3
-      : isV11 ? dataKeysV11 : isV10 ? dataKeysV10
+      : isV11 || isV12 ? dataKeysV11 : isV10 ? dataKeysV10
       : isV8 || isV9 ? dataKeysV8 : isV7 ? dataKeysV7 : isV6 ? dataKeysV6 : dataKeysV5;
   if (!isRecord(value.data) || !hasOnlyKeys(value.data, allowedDataKeys)
     || !Array.isArray(value.data.goals) || !Array.isArray(value.data.completedRhythmIds)
-    || ((isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11)
+    || ((isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12)
       && (!Array.isArray(value.data.datedRhythmCompletions)
       || !Array.isArray(value.data.activeRhythmCompletions)))
-    || ((isV6 || isV7 || isV8 || isV9 || isV10 || isV11) && (!Array.isArray(value.data.rhythmCompletionOverrides)
+    || ((isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12) && (!Array.isArray(value.data.rhythmCompletionOverrides)
       || !Array.isArray(value.data.removedSeedCompletionIds)))) {
     return { valid: false, kind: 'invalid', message: 'Preview data must contain goals and completed Rhythm IDs.' };
   }
-  if ((isV10 || isV11) && !Array.isArray(value.data.rhythmHistoryIds)) {
+  if ((isV10 || isV11 || isV12) && !Array.isArray(value.data.rhythmHistoryIds)) {
     return { valid: false, kind: 'invalid', message: 'Rhythm history references must be a list.' };
   }
-  if (!isV1 && !((isV4 || isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11)
-    ? isV11 ? validateSavedRhythmsV11(value.data.savedRhythms)
+  if (!isV1 && !((isV4 || isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12)
+    ? isV12 ? validateSavedRhythmsV12(value.data.savedRhythms)
+      : isV11 ? validateSavedRhythmsV11(value.data.savedRhythms)
       : isV10 ? validateSavedRhythmsV10(value.data.savedRhythms)
       : isV9 ? validateSavedRhythmsV9(value.data.savedRhythms)
       : isV8 ? validateSavedRhythmsV8(value.data.savedRhythms)
@@ -377,7 +385,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   }
 
   let savedRhythms: SavedRhythm[];
-  if (isV11 || isV10 || isV9) {
+  if (isV12 || isV11 || isV10 || isV9) {
     savedRhythms = value.data.savedRhythms as SavedRhythm[];
   } else if (isV7 || isV8) {
     savedRhythms = (value.data.savedRhythms as SavedRhythm[]).map(rhythm => {
@@ -388,8 +396,15 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
         scoring: {
           trackingStartDate: legacyScoring.trackingStartDate,
           timeZone: legacyScoring.timeZone,
-          scheduleHistory: legacyScoring.scheduleHistory.map(segment =>
-            createRhythmSeason(rhythm.id, segment.startDate, segment.schedule))
+          scheduleHistory: legacyScoring.scheduleHistory.map((segment, ordinal) =>
+            createRhythmSeason(
+              rhythm.id,
+              segment.startDate,
+              segment.schedule,
+              undefined,
+              undefined,
+              rhythmSeasonPaletteForOrdinal(ordinal)
+            ))
         }
       };
     });
@@ -411,7 +426,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const datedRhythmCompletions: DatedRhythmCompletion[] = [];
   const completionIds = new Set<string>();
   const knownRhythmIds = new Set([...builtInRhythmIds, ...savedRhythmIds]);
-  const rawDatedCompletions: unknown[] = isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11
+  const rawDatedCompletions: unknown[] = isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12
     ? value.data.datedRhythmCompletions as unknown[] : [];
   for (const rawCompletion of rawDatedCompletions) {
     if (!isRecord(rawCompletion)
@@ -450,7 +465,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const activeRhythmCompletions: ActiveRhythmCompletion[] = [];
   const activeRhythmIds = new Set<string>();
   const activeCompletionIds = new Set<string>();
-  const rawActiveCompletions: unknown[] = isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11
+  const rawActiveCompletions: unknown[] = isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12
     ? value.data.activeRhythmCompletions as unknown[] : [];
   for (const rawAction of rawActiveCompletions) {
     if (!isRecord(rawAction) || !hasOnlyKeys(rawAction, ['rhythmId', 'completionId'])
@@ -474,7 +489,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
 
   const rhythmCompletionOverrides: RhythmCompletionRecord[] = [];
   const overrideIds = new Set<string>();
-  const rawOverrides: unknown[] = isV6 || isV7 || isV8 || isV9 || isV10 || isV11
+  const rawOverrides: unknown[] = isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12
     ? value.data.rhythmCompletionOverrides as unknown[] : [];
   for (const rawOverride of rawOverrides) {
     if (!isRecord(rawOverride) || !hasOnlyKeys(rawOverride, [
@@ -520,7 +535,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   }
 
   const removedSeedCompletionIds = new Set<string>();
-  const rawRemovedIds: unknown[] = isV6 || isV7 || isV8 || isV9 || isV10 || isV11
+  const rawRemovedIds: unknown[] = isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12
     ? value.data.removedSeedCompletionIds as unknown[] : [];
   for (const id of rawRemovedIds) {
     if (typeof id !== 'string' || !syntheticCompletionIds.has(id)
@@ -531,7 +546,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   }
 
   const rhythmHistoryIds = new Set<string>();
-  const rawRhythmHistoryIds: unknown[] = isV10 || isV11
+  const rawRhythmHistoryIds: unknown[] = isV10 || isV11 || isV12
     ? value.data.rhythmHistoryIds as unknown[]
     : datedRhythmCompletions.map(record => record.rhythmId);
   for (const rhythmId of rawRhythmHistoryIds) {
@@ -540,7 +555,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     }
     rhythmHistoryIds.add(rhythmId);
   }
-  if ((isV10 || isV11) && datedRhythmCompletions.some(record => !rhythmHistoryIds.has(record.rhythmId))) {
+  if ((isV10 || isV11 || isV12) && datedRhythmCompletions.some(record => !rhythmHistoryIds.has(record.rhythmId))) {
     return { valid: false, kind: 'invalid', message: 'Dated completion history must retain its Rhythm history marker.' };
   }
 

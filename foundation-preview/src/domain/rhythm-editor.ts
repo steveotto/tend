@@ -1,12 +1,14 @@
 import { areas, syntheticPeople, todayRhythms } from './preview-data.ts';
 import type { PersonId, RhythmPreview } from './preview-data.ts';
 import {
+  effectiveRhythmSchedule,
   rhythmTimeOptions,
   rhythmTimeValueFromLabel,
   rhythmScheduleSummary,
   validateRhythmSchedule,
   validateRhythmScoringMetadata,
   validateRhythmScoringMetadataV10,
+  validateRhythmScoringMetadataV11,
   validateRhythmScoringMetadataV8,
   isValidTimeZone
 } from './rhythm-schedule.ts';
@@ -140,10 +142,14 @@ export function validateSavedRhythmsV11(value: unknown): value is SavedRhythm[] 
   return validateSavedRhythmsWithKeys(value, savedRhythmV9Keys, 'v11');
 }
 
+export function validateSavedRhythmsV12(value: unknown): value is SavedRhythm[] {
+  return validateSavedRhythmsWithKeys(value, savedRhythmV9Keys, 'v12');
+}
+
 function validateSavedRhythmsWithKeys(
   value: unknown,
   allowedKeys: readonly string[],
-  scoringVersion: 'none' | 'v8' | 'v10' | 'v11'
+  scoringVersion: 'none' | 'v8' | 'v10' | 'v11' | 'v12'
 ): value is SavedRhythm[] {
   if (!Array.isArray(value)) return false;
   const ids = new Set<string>();
@@ -154,7 +160,8 @@ function validateSavedRhythmsWithKeys(
     if (typeof record.timeLabel !== 'string' || !labels.has(record.timeLabel)) return false;
     if (rhythmTimeValueFromLabel(record.timeLabel) !== record.timeOfDay) return false;
     if (record.personal !== undefined && typeof record.personal !== 'boolean') return false;
-    if (record.schedule !== undefined && !validateRhythmSchedule(record.schedule).valid) return false;
+    if (record.schedule !== undefined
+      && !validateRhythmSchedule(record.schedule, scoringVersion === 'v12').valid) return false;
     if ((record.createdLocalDate === undefined) !== (record.createdTimeZone === undefined)
       || record.createdLocalDate !== undefined
         && (typeof record.createdLocalDate !== 'string' || !isValidDate(record.createdLocalDate)
@@ -165,7 +172,9 @@ function validateSavedRhythmsWithKeys(
         ? validateRhythmScoringMetadataV8(record.scoring)
         : scoringVersion === 'v10'
           ? validateRhythmScoringMetadataV10(record.scoring)
-          : validateRhythmScoringMetadata(record.scoring);
+          : scoringVersion === 'v11'
+            ? validateRhythmScoringMetadataV11(record.scoring)
+            : validateRhythmScoringMetadata(record.scoring);
       if (!validScoring || record.schedule === undefined || !isRecord(record.scoring)
         || !Array.isArray(record.scoring.scheduleHistory)) return false;
       const latestSchedule = record.scoring.scheduleHistory.at(-1);
@@ -194,8 +203,7 @@ export function rhythmDraftFrom(
   rhythm: RhythmPreview,
   categoryIds: readonly RhythmCategoryId[] = []
 ): RhythmDraft {
-  const originalSchedule = rhythm.schedule
-    ?? (rhythm.cadence === 'Daily' ? { frequency: 'daily' as const } : undefined);
+  const originalSchedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
   const currentSeason = rhythm.scoring?.scheduleHistory.at(-1);
   return {
     title: rhythm.title,

@@ -6,16 +6,19 @@ import {
   calendarDaysInclusive,
   dateParts,
   daysInMonth,
+  isPeriodBasedRhythmSchedule,
   isScheduledDate,
+  rhythmOccurrencePeriod,
   rhythmSchedulesEqual
 } from './rhythm-occurrences.ts';
 export { addCalendarDays, localDateInTimeZone } from './rhythm-occurrences.ts';
 import {
+  effectiveRhythmSchedule,
   isValidTimeZone,
   validateRhythmScoringMetadata
 } from './rhythm-schedule.ts';
 import type { RhythmSchedule, RhythmScoringMetadata, RhythmScheduleHistorySegment } from './rhythm-schedule.ts';
-import { rhythmSeasonForDate } from './rhythm-seasons.ts';
+import { rhythmSeasonForDate, rhythmSeasonInclusiveEndDate } from './rhythm-seasons.ts';
 
 export type UnscoredReasonCode =
   | 'ready-for-first-tend'
@@ -37,6 +40,15 @@ export type ScheduledOccurrenceState = {
   date: string;
   status: 'completed' | 'not-completed';
   recordIds: readonly string[];
+  periodStartDate?: string;
+  eligibleEndDate?: string;
+};
+
+type ScoringOccurrence = ScheduledOccurrenceState & {
+  completionDate: string | null;
+  eligibleEndDate: string;
+  periodStartDate: string;
+  periodBased: boolean;
 };
 
 export type ConsistencyEvidence = {
@@ -62,6 +74,9 @@ export type OnTrackOccurrence = {
   date: string;
   status: 'completed' | 'missed' | 'today';
   score: number;
+  completionDate?: string;
+  periodStartDate?: string;
+  eligibleEndDate?: string;
 };
 
 export type OnTrackZeroScoreSpan = {
@@ -273,6 +288,80 @@ function occurrenceHistoryFailure(
   return null;
 }
 
+function buildScoringOccurrences(input: {
+  firstDueDate: string;
+  lastCandidateDate: string;
+  trackingStartDate: string;
+  asOfDate: string;
+  records: readonly RhythmCompletionRecord[];
+  scheduleForDate: (date: string) => RhythmSchedule | undefined;
+  segments: readonly RhythmScheduleHistorySegment[];
+}): ScoringOccurrence[] {
+  const occurrences: ScoringOccurrence[] = [];
+  const assignedRecordIds = new Set<string>();
+  const recordsByDate = new Map<string, RhythmCompletionRecord[]>();
+  for (const record of input.records) {
+    if (record.effectiveDate > input.asOfDate) continue;
+    const records = recordsByDate.get(record.effectiveDate) ?? [];
+    records.push(record);
+    recordsByDate.set(record.effectiveDate, records);
+  }
+  const yesterday = previousDate(input.asOfDate);
+
+  for (let date = input.firstDueDate; date <= input.lastCandidateDate; date = addCalendarDays(date, 1)) {
+    const schedule = input.scheduleForDate(date);
+    if (!schedule || !isScheduledDate(schedule, date)) continue;
+    const period = rhythmOccurrencePeriod(schedule, date);
+    const periodBased = isPeriodBasedRhythmSchedule(schedule);
+    const segment = rhythmSeasonForDate(input.segments, date);
+    const segmentIndex = segment ? input.segments.findIndex(item => item.id === segment.id) : -1;
+    const segmentEnd = segmentIndex >= 0
+      ? rhythmSeasonInclusiveEndDate(input.segments, segmentIndex)
+      : undefined;
+    const startDate = [
+      period.startDate,
+      input.trackingStartDate,
+      segment?.startDate
+    ].filter((value): value is string => value !== undefined).sort().at(-1)!;
+    const endDate = [
+      period.endDate,
+      schedule.endDate,
+      segmentEnd
+    ].filter((value): value is string => value !== undefined).sort()[0]!;
+    if (date < startDate || date > endDate) continue;
+
+    const matchedRecords: RhythmCompletionRecord[] = [];
+    const firstRecordDate = periodBased ? startDate : date;
+    const lastRecordDate = periodBased
+      ? [endDate, period.endDate, input.asOfDate].sort()[0]!
+      : date;
+    for (let recordDate = firstRecordDate; recordDate <= lastRecordDate; recordDate = addCalendarDays(recordDate, 1)) {
+      for (const record of recordsByDate.get(recordDate) ?? []) {
+        if (assignedRecordIds.has(record.id)) continue;
+        const recordSchedule = input.scheduleForDate(record.effectiveDate);
+        if (!recordSchedule) continue;
+        const recordSegment = rhythmSeasonForDate(input.segments, record.effectiveDate);
+        if ((recordSegment?.id ?? null) !== (segment?.id ?? null)) continue;
+        matchedRecords.push(record);
+      }
+    }
+    for (const record of matchedRecords) assignedRecordIds.add(record.id);
+
+    if (date > yesterday && matchedRecords.length === 0) continue;
+    const recordIds = matchedRecords.map(record => record.id);
+    occurrences.push({
+      date,
+      status: recordIds.length > 0 ? 'completed' : 'not-completed',
+      recordIds,
+      completionDate: matchedRecords.map(record => record.effectiveDate).sort()[0] ?? null,
+      eligibleEndDate: endDate,
+      periodStartDate: startDate,
+      periodBased
+    });
+  }
+  return occurrences;
+}
+
 export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreResult {
   const invalidReason = validateInput(input);
   if (invalidReason) return invalid(input, invalidReason);
@@ -280,7 +369,7 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
   if (input.archived) {
     return baseUnscored(input, unscored('inactive', 'This Rhythm is inactive, so its score is not accruing.'));
   }
-  const schedule = input.schedule ?? (input.cadence === 'Daily' ? { frequency: 'daily' as const } : undefined);
+  const schedule = effectiveRhythmSchedule(input.schedule, input.cadence);
   if (!schedule) {
     if (input.scoring) return invalid(input, 'Scoring metadata exists without a current supported schedule.');
     return baseUnscored(input, unscored(
@@ -353,7 +442,10 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
   } else if (trackingStartDate === input.asOfDate
     && !datedRecords.some(record => record.effectiveDate === input.asOfDate
       && scheduleForDate(record.effectiveDate) !== undefined
-      && isScheduledDate(scheduleForDate(record.effectiveDate)!, record.effectiveDate) === true)) {
+      && isScheduledDate(scheduleForDate(record.effectiveDate)!, record.effectiveDate) === true)
+    && !(scheduleForDate(input.asOfDate)
+      && isPeriodBasedRhythmSchedule(scheduleForDate(input.asOfDate)!)
+      && datedRecords.some(record => record.effectiveDate === input.asOfDate))) {
     const todaySchedule = scheduleForDate(input.asOfDate);
     consistency = todaySchedule && isScheduledDate(todaySchedule, input.asOfDate)
       ? unscored('ready-for-first-tend', 'Ready for your first Tend.')
@@ -378,29 +470,25 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
           ? unscored('unsupported-history', 'A schedule change leaves earlier dates without a known schedule; those occurrences cannot be reconstructed.')
           : historyFailure;
       } else {
-        const completedRecords = new Map<string, string[]>();
-        for (const record of datedRecords) {
-          if (record.effectiveDate < windowStartDate
-            || record.effectiveDate > windowEndDate) continue;
-          const recordSchedule = scheduleForDate(record.effectiveDate);
-          if (!recordSchedule || !consistencyScheduleSupported(recordSchedule)) continue;
-          if (isScheduledDate(recordSchedule, record.effectiveDate) !== true) continue;
-          const ids = completedRecords.get(record.effectiveDate) ?? [];
-          ids.push(record.id);
-          completedRecords.set(record.effectiveDate, ids);
-        }
-        const occurrences: ScheduledOccurrenceState[] = [];
-        for (let date = windowStartDate; date <= windowEndDate; date = addCalendarDays(date, 1)) {
-          const scheduled = scheduleForDate(date);
-          if (!scheduled || !consistencyScheduleSupported(scheduled)) continue;
-          if (isScheduledDate(scheduled, date) !== true) continue;
-          const recordIds = completedRecords.get(date) ?? [];
-          occurrences.push({
-            date,
-            status: recordIds.length > 0 ? 'completed' : 'not-completed',
-            recordIds
-          });
-        }
+        const currentSchedule = scheduleForDate(input.asOfDate);
+        const currentPeriodEnd = currentSchedule
+          ? rhythmOccurrencePeriod(currentSchedule, input.asOfDate).endDate
+          : input.asOfDate;
+        const scoringOccurrences = buildScoringOccurrences({
+          firstDueDate: windowStartDate,
+          lastCandidateDate: currentPeriodEnd > windowEndDate ? currentPeriodEnd : windowEndDate,
+          trackingStartDate,
+          asOfDate: input.asOfDate,
+          records: datedRecords,
+          scheduleForDate,
+          segments
+        });
+        const occurrences = scoringOccurrences.filter(occurrence => {
+          if (occurrence.date !== input.asOfDate || !occurrence.recordIds.length) return true;
+          const occurrenceSchedule = scheduleForDate(occurrence.date);
+          return occurrenceSchedule?.frequency === 'daily'
+            || occurrenceSchedule !== undefined && isPeriodBasedRhythmSchedule(occurrenceSchedule);
+        });
         const completedCount = occurrences.filter(item => item.status === 'completed').length;
         if (occurrences.length === 0) {
           consistency = unscored('no-eligible-occurrences', 'No scheduled moments to measure yet.');
@@ -423,7 +511,17 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
                   : calendarDaysInclusive(windowStartDate, windowEndDate)
                 : null,
               todayIncluded,
-              occurrences
+              occurrences: occurrences.map(occurrence => ({
+                date: occurrence.date,
+                status: occurrence.status,
+                recordIds: occurrence.recordIds,
+                ...(occurrence.periodBased
+                  ? {
+                      periodStartDate: occurrence.periodStartDate,
+                      eligibleEndDate: occurrence.eligibleEndDate
+                    }
+                  : {})
+              }))
             }
           };
         }
@@ -445,18 +543,27 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
       'On Track is unavailable because completion time zones do not match the Rhythm’s scoring time zone.'
     );
   } else {
-    const qualifyingDates = new Set<string>();
-    for (const record of datedRecords) {
-      if (!trackingStartDate || record.effectiveDate < trackingStartDate) continue;
-      const recordSchedule = scheduleForDate(record.effectiveDate);
-      if (recordSchedule && isScheduledDate(recordSchedule, record.effectiveDate)) {
-        qualifyingDates.add(record.effectiveDate);
-      }
-    }
-    const lastQualifyingCompletionDate = [...qualifyingDates].sort().at(-1) ?? null;
     if (!trackingStartDate) {
       onTrack = unscored('ready-for-first-tend', 'Starts with your first Tend.');
     } else {
+      const currentSchedule = scheduleForDate(input.asOfDate);
+      const currentPeriodEnd = currentSchedule
+        ? rhythmOccurrencePeriod(currentSchedule, input.asOfDate).endDate
+        : input.asOfDate;
+      const scoringOccurrences = buildScoringOccurrences({
+        firstDueDate: trackingStartDate,
+        lastCandidateDate: currentPeriodEnd > input.asOfDate ? currentPeriodEnd : input.asOfDate,
+        trackingStartDate,
+        asOfDate: input.asOfDate,
+        records: datedRecords,
+        scheduleForDate,
+        segments
+      });
+      const completedOccurrences = scoringOccurrences.filter(item => item.status === 'completed');
+      const lastQualifyingCompletionDate = completedOccurrences
+        .map(item => item.completionDate!)
+        .sort()
+        .at(-1) ?? null;
       const overdueStartDate = lastQualifyingCompletionDate
         ? addCalendarDays(lastQualifyingCompletionDate, 1)
         : trackingStartDate;
@@ -486,56 +593,95 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
           zeroScoreSpanEnd = null;
           zeroScoreSpanCount = 0;
         };
-        const scheduleChangedOn = (date: string) => {
-          const segmentIndex = segments.findIndex(segment => segment.startDate === date);
-          if (segmentIndex <= 0) return false;
-          const previousSegment = segments[segmentIndex - 1];
-          const currentSegment = segments[segmentIndex];
-          const previousSchedule = previousSegment?.kind === 'scheduled' ? previousSegment.schedule : undefined;
-          const currentSegmentSchedule = currentSegment?.kind === 'scheduled' ? currentSegment.schedule : undefined;
-          return previousSchedule !== undefined && currentSegmentSchedule !== undefined
-            && !rhythmSchedulesEqual(previousSchedule, currentSegmentSchedule);
-        };
-
-        for (let date = trackingStartDate; date < input.asOfDate; date = addCalendarDays(date, 1)) {
-          const daySchedule = scheduleForDate(date);
-          if (scheduleChangedOn(date)) {
-            flushZeroScoreSpan();
-            scheduleChanges.push({ date, score: previousScore });
+        type TrackEvent =
+          | { kind: 'occurrence'; date: string; occurrence: ScoringOccurrence; status: 'completed' | 'missed' }
+          | { kind: 'schedule-change'; date: string };
+        const events: TrackEvent[] = [];
+        for (const occurrence of scoringOccurrences) {
+          if (occurrence.status === 'completed') {
+            events.push({
+              kind: 'occurrence',
+              date: occurrence.completionDate!,
+              occurrence,
+              status: 'completed'
+            });
+          } else if (occurrence.eligibleEndDate < input.asOfDate) {
+            events.push({
+              kind: 'occurrence',
+              date: occurrence.eligibleEndDate,
+              occurrence,
+              status: 'missed'
+            });
           }
-          if (!daySchedule || !isScheduledDate(daySchedule, date)) continue;
-          if (qualifyingDates.has(date)) {
+        }
+        for (let index = 1; index < segments.length; index += 1) {
+          const previousSegment = segments[index - 1]!;
+          const currentSegment = segments[index]!;
+          const previousSchedule = previousSegment.kind === 'scheduled' ? previousSegment.schedule : undefined;
+          const currentSegmentSchedule = currentSegment.kind === 'scheduled' ? currentSegment.schedule : undefined;
+          if (currentSegment.startDate >= trackingStartDate
+            && currentSegment.startDate <= input.asOfDate
+            && previousSchedule !== undefined && currentSegmentSchedule !== undefined
+            && !rhythmSchedulesEqual(previousSchedule, currentSegmentSchedule)) {
+            events.push({ kind: 'schedule-change', date: currentSegment.startDate });
+          }
+        }
+        events.sort((left, right) => left.date.localeCompare(right.date)
+          || (left.kind === 'schedule-change' ? -1 : right.kind === 'schedule-change' ? 1 : 0));
+
+        for (const event of events) {
+          if (event.kind === 'schedule-change') {
+            flushZeroScoreSpan();
+            scheduleChanges.push({ date: event.date, score: previousScore });
+            continue;
+          }
+          const { occurrence, status } = event;
+          if (status === 'completed') {
             flushZeroScoreSpan();
             missedOccurrenceCount = 0;
             previousScore = 100;
-            occurrences.push({ date, status: 'completed', score: previousScore });
+            if (occurrence.date !== input.asOfDate || occurrence.completionDate !== input.asOfDate) {
+              occurrences.push({
+                date: occurrence.date,
+                status: 'completed',
+                score: previousScore,
+                ...(occurrence.periodBased
+                  ? {
+                      completionDate: occurrence.completionDate!,
+                      periodStartDate: occurrence.periodStartDate,
+                      eligibleEndDate: occurrence.eligibleEndDate
+                    }
+                  : {})
+              });
+            }
             continue;
           }
           missedOccurrenceCount += 1;
           const nextScore = Math.max(0, 100 - missedOccurrenceCount * deductionPerMissedOccurrence);
           if (nextScore === 0 && previousScore === 0) {
-            zeroScoreSpanStart ??= date;
-            zeroScoreSpanEnd = date;
+            zeroScoreSpanStart ??= occurrence.date;
+            zeroScoreSpanEnd = occurrence.date;
             zeroScoreSpanCount += 1;
           } else {
             flushZeroScoreSpan();
-            occurrences.push({ date, status: 'missed', score: nextScore });
+            occurrences.push({
+              date: occurrence.date,
+              status: 'missed',
+              score: nextScore,
+              ...(occurrence.periodBased
+                ? { periodStartDate: occurrence.periodStartDate, eligibleEndDate: occurrence.eligibleEndDate }
+                : {})
+            });
           }
           previousScore = nextScore;
         }
         flushZeroScoreSpan();
-        const currentSchedule = scheduleForDate(input.asOfDate);
-        const completedToday = qualifyingDates.has(input.asOfDate);
-        if (scheduleChangedOn(input.asOfDate)) {
-          scheduleChanges.push({ date: input.asOfDate, score: completedToday ? 100 : previousScore });
-        }
-        if (completedToday) {
-          missedOccurrenceCount = 0;
-          previousScore = 100;
-        }
         const score = previousScore;
         occurrences.push({ date: input.asOfDate, status: 'today', score });
-        if (currentSchedule && isScheduledDate(currentSchedule, input.asOfDate) && completedToday) {
+        const dueTodayCompleted = completedOccurrences.some(item =>
+          item.date === input.asOfDate && item.completionDate === input.asOfDate
+        );
+        if (dueTodayCompleted) {
           occurrences[occurrences.length - 1] = { date: input.asOfDate, status: 'completed', score };
         }
         const deduction = Math.min(100, missedOccurrenceCount * deductionPerMissedOccurrence);
