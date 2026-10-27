@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import { useScoringInstant } from './components/useScoringInstant.ts';
 import type { MouseEvent } from 'react';
 import { AppNavigation } from './components/AppNavigation.tsx';
 import type { Destination, TextSize } from './components/AppNavigation.tsx';
 import { MarriageView } from './components/MarriageView.tsx';
 import { saveFoundationRhythmAssociations } from './domain/foundation-rhythm-associations.ts';
 import type { FoundationRhythmAssociationChange } from './domain/foundation-rhythm-associations.ts';
+import { selectFoundationRhythmScores } from './domain/foundation-scoring.ts';
 import { RhythmDetailsDialog } from './components/RhythmDetailsDialog.tsx';
 import { RhythmCompletionDialog } from './components/RhythmCompletionDialog.tsx';
 import { FinanceGoalsView } from './components/FinanceGoalsView.tsx';
@@ -108,6 +110,7 @@ function isDatedCompletionRecord(record: RhythmCompletionRecord): record is Date
 }
 
 export function App() {
+  const scoringInstant = useScoringInstant();
   const [destination, setDestination] = useState<Destination>('today');
   const [previewData, setPreviewData] = useState<PreviewData>(createSamplePreviewData);
   const [hydrated, setHydrated] = useState(false);
@@ -219,6 +222,17 @@ export function App() {
     ...(marriageExampleId === 'populated' ? resolvedMarriageRhythms : []),
     ...allTodayRhythms.filter(rhythm => rhythm.categoryIds?.includes('marriage') === true)
   ];
+  const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const foundationRhythmScores = selectFoundationRhythmScores(
+    foundationRhythms,
+    previewData.archivedRhythmIds,
+    new Set([
+      ...editableTodayRhythms.map(rhythm => rhythm.id),
+      ...archivedRhythms.map(rhythm => rhythm.id)
+    ]),
+    scoringInstant,
+    localTimeZone
+  );
   const activeRhythm = [
     ...allTodayRhythms,
     ...resolvedMarriageRhythms
@@ -1367,6 +1381,7 @@ export function App() {
                 onPartnerProfile={() => navigate('people')}
                 userRhythms={marriageCategoryRhythms}
                 foundationRhythms={foundationRhythms}
+                foundationRhythmScores={foundationRhythmScores}
                 archivedRhythmIds={previewData.archivedRhythmIds}
                 completedRhythms={completedRhythms}
                 undoableRhythms={undoableRhythms}

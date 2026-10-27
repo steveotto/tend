@@ -2,9 +2,8 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import type { FoundationPreview, RhythmPreview } from '../domain/preview-data.ts';
 import {
-  foundationRhythmRole,
-  type FoundationRhythmAssociationChange,
-  type FoundationRhythmRole
+  isRhythmLinkedToFoundation,
+  type FoundationRhythmAssociationChange
 } from '../domain/foundation-rhythm-associations.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 
@@ -24,19 +23,19 @@ export function FoundationRhythmAssociationDialog({
   onSave: (changes: readonly FoundationRhythmAssociationChange[]) => string | null;
   onClose: () => void;
 }) {
-  const [roles, setRoles] = useState(() => new Map(
-    rhythms.map(({ rhythm }) => [rhythm.id, foundationRhythmRole(rhythm, foundation.id)])
+  const [linkedRhythms, setLinkedRhythms] = useState(() => new Map(
+    rhythms.map(({ rhythm }) => [rhythm.id, isRhythmLinkedToFoundation(rhythm, foundation.id)])
   ));
   const [error, setError] = useState<string | null>(null);
 
-  function updateRole(rhythmId: string, role: FoundationRhythmRole) {
-    setRoles(previous => new Map(previous).set(rhythmId, role));
+  function updateLinked(rhythmId: string, linked: boolean) {
+    setLinkedRhythms(previous => new Map(previous).set(rhythmId, linked));
     setError(null);
   }
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const message = onSave([...roles].map(([rhythmId, role]) => ({ rhythmId, role })));
+    const message = onSave([...linkedRhythms].map(([rhythmId, linked]) => ({ rhythmId, linked })));
     if (message) {
       setError(message);
       return;
@@ -45,13 +44,13 @@ export function FoundationRhythmAssociationDialog({
   }
 
   const currentSelections = rhythms.filter(({ rhythm }) =>
-    foundationRhythmRole(rhythm, foundation.id) !== 'none'
+    linkedRhythms.get(rhythm.id) ?? isRhythmLinkedToFoundation(rhythm, foundation.id)
   );
 
   return (
     <MoneyGoalDialog
       title={`Manage Rhythms for ${foundation.name}`}
-      intro="Choose which synthetic Marriage Rhythms support this Foundation. A Rhythm keeps one primary Foundation; it may support additional Foundations."
+      intro="Choose the rhythms that support this Foundation."
       closeLabel="Close Foundation associations"
       initialFocusId="foundation-rhythm-associations-title"
       dialogClassName="foundation-association-dialog"
@@ -66,7 +65,7 @@ export function FoundationRhythmAssociationDialog({
               {currentSelections.map(({ rhythm }) => (
                 <li key={rhythm.id}>
                   <span>{rhythm.title}</span>
-                  <span>{roleLabel(foundationRhythmRole(rhythm, foundation.id))}</span>
+                  <small>{rhythmMetadata(rhythm)}</small>
                 </li>
               ))}
             </ul>
@@ -78,34 +77,21 @@ export function FoundationRhythmAssociationDialog({
           {rhythms.length === 0
             ? <p className="foundation-association-empty">No synthetic Marriage Rhythms are available in this example.</p>
             : rhythms.map(({ rhythm, archived }) => {
-                const primaryElsewhere = Boolean(
-                  rhythm.primaryFoundationId && rhythm.primaryFoundationId !== foundation.id
-                );
-                const selectId = `foundation-rhythm-association-${rhythm.id}`;
-                const metadata = [rhythm.cadence, rhythm.timeLabel].filter(Boolean).join(' · ');
+                const checkboxId = `foundation-rhythm-association-${rhythm.id}`;
                 return (
                   <div className="foundation-association-option" key={rhythm.id}>
-                    <label htmlFor={selectId}>
-                      <span>{rhythm.title} <span className="foundation-association-id">({rhythm.id})</span></span>
-                      {metadata && <small>{metadata}</small>}
+                    <label htmlFor={checkboxId}>
+                      <span>{rhythm.title}</span>
+                      <small>{rhythmMetadata(rhythm)}</small>
                       {archived && <small>Archived · restore before changing this association</small>}
                     </label>
-                    <select
-                      id={selectId}
-                      aria-label={`Association role for ${rhythm.title}, ${rhythm.id}`}
-                      value={roles.get(rhythm.id) ?? 'none'}
+                    <input
+                      id={checkboxId}
+                      type="checkbox"
+                      checked={linkedRhythms.get(rhythm.id) ?? false}
                       disabled={archived}
-                      onChange={event => {
-                        const value = event.currentTarget.value;
-                        if (value === 'none' || value === 'primary' || value === 'supporting') {
-                          updateRole(rhythm.id, value);
-                        }
-                      }}
-                    >
-                      <option value="none">Not linked</option>
-                      <option value="primary" disabled={primaryElsewhere}>Primary</option>
-                      <option value="supporting">Supporting</option>
-                    </select>
+                      onChange={event => updateLinked(rhythm.id, event.currentTarget.checked)}
+                    />
                   </div>
                 );
               })}
@@ -121,6 +107,6 @@ export function FoundationRhythmAssociationDialog({
   );
 }
 
-function roleLabel(role: FoundationRhythmRole): string {
-  return role === 'primary' ? 'Primary' : 'Supporting';
+function rhythmMetadata(rhythm: RhythmPreview): string {
+  return [rhythm.cadence, rhythm.timeLabel].filter(Boolean).join(' · ') || 'Schedule not set';
 }

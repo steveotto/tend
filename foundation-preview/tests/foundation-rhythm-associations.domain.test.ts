@@ -4,7 +4,8 @@ import {
   type RhythmPreview
 } from '../src/domain/preview-data.ts';
 import {
-  foundationRhythmRole,
+  foundationRhythmIds,
+  isRhythmLinkedToFoundation,
   saveFoundationRhythmAssociations
 } from '../src/domain/foundation-rhythm-associations.ts';
 import {
@@ -18,14 +19,14 @@ import { createPreviewEnvelope, createSamplePreviewData, parsePreviewBackup } fr
 function associationChanges(
   rhythms: readonly RhythmPreview[],
   updatedId: string,
-  role: 'none' | 'primary' | 'supporting',
+  linked: boolean,
   foundationId: string
 ) {
   return rhythms.map(rhythm => ({
     rhythmId: rhythm.id,
-    role: rhythm.id === updatedId
-      ? role
-      : foundationRhythmRole(rhythm, foundationId)
+    linked: rhythm.id === updatedId
+      ? linked
+      : isRhythmLinkedToFoundation(rhythm, foundationId)
   }));
 }
 
@@ -51,14 +52,14 @@ describe('Marriage Foundation Rhythm associations', () => {
     }])).toBe(true);
   });
 
-  it('adds and removes a supporting association by stable Rhythm identity without changing other relationships', () => {
+  it('adds and removes a link by stable Rhythm identity without changing other relationships', () => {
     const rhythm = marriageRhythms.find(item => item.id === 'sample-marriage-prayer')!;
     const added = saveFoundationRhythmAssociations(
       [],
       marriageRhythms,
       [],
       'communication',
-      associationChanges(marriageRhythms, rhythm.id, 'supporting', 'communication')
+      associationChanges(marriageRhythms, rhythm.id, true, 'communication')
     );
     expect('error' in added).toBe(false);
     if ('error' in added) return;
@@ -73,7 +74,7 @@ describe('Marriage Foundation Rhythm associations', () => {
       [applySavedRhythmOverrides(rhythm, savedRhythm)],
       [],
       'communication',
-      [{ rhythmId: rhythm.id, role: 'none' }]
+      [{ rhythmId: rhythm.id, linked: false }]
     );
     expect('error' in removed).toBe(false);
     if ('error' in removed) return;
@@ -91,8 +92,8 @@ describe('Marriage Foundation Rhythm associations', () => {
       [],
       'connection',
       [
-        { rhythmId: marriageRhythms[0]!.id, role: 'primary' },
-        { rhythmId: marriageRhythms[0]!.id, role: 'supporting' }
+        { rhythmId: marriageRhythms[0]!.id, linked: true },
+        { rhythmId: marriageRhythms[0]!.id, linked: false }
       ]
     )).toEqual({ error: 'A Rhythm can only have one association choice.' });
 
@@ -101,7 +102,7 @@ describe('Marriage Foundation Rhythm associations', () => {
       marriageRhythms,
       [],
       'connection',
-      [{ rhythmId: 'missing-rhythm', role: 'supporting' }]
+      [{ rhythmId: 'missing-rhythm', linked: true }]
     )).toEqual({ error: 'A selected Rhythm is no longer available.' });
   });
 
@@ -112,7 +113,7 @@ describe('Marriage Foundation Rhythm associations', () => {
       [rhythm],
       [rhythm.id],
       'connection',
-      [{ rhythmId: rhythm.id, role: 'primary' }]
+      [{ rhythmId: rhythm.id, linked: true }]
     );
     expect(unchanged).toEqual({ savedRhythms: [] });
 
@@ -121,7 +122,7 @@ describe('Marriage Foundation Rhythm associations', () => {
       [rhythm],
       [rhythm.id],
       'connection',
-      [{ rhythmId: rhythm.id, role: 'none' }]
+      [{ rhythmId: rhythm.id, linked: false }]
     )).toEqual({ error: 'Restore this Rhythm before changing its Foundation associations.' });
   });
 
@@ -146,7 +147,7 @@ describe('Marriage Foundation Rhythm associations', () => {
       [renamedRhythm],
       [],
       'communication',
-      [{ rhythmId: rhythm.id, role: 'supporting' }]
+      [{ rhythmId: rhythm.id, linked: true }]
     );
     expect('error' in result).toBe(false);
     if ('error' in result) return;
@@ -166,7 +167,48 @@ describe('Marriage Foundation Rhythm associations', () => {
 
     const resolved = applySavedRhythmOverrides(renamedRhythm, association);
     expect(resolved.title).toBe('Prayer, renamed');
-    expect(foundationRhythmRole(resolved, 'communication')).toBe('supporting');
+    expect(isRhythmLinkedToFoundation(resolved, 'communication')).toBe(true);
+  });
+
+  it('removes a former primary link and promotes the first surviving link deterministically', () => {
+    const rhythm = marriageRhythms.find(item => item.id === 'sample-marriage-connection')!;
+    const result = saveFoundationRhythmAssociations(
+      [],
+      [rhythm],
+      [],
+      'connection',
+      [{ rhythmId: rhythm.id, linked: false }]
+    );
+
+    expect('error' in result).toBe(false);
+    if ('error' in result) return;
+    expect(result.savedRhythms[0]).toMatchObject({
+      primaryFoundationId: 'communication',
+      secondaryFoundationIds: ['intimacy']
+    });
+  });
+
+  it('counts duplicate references once and removes the link without losing other links', () => {
+    const rhythm = {
+      ...marriageRhythms.find(item => item.id === 'sample-marriage-connection')!,
+      secondaryFoundationIds: ['communication', 'intimacy', 'connection']
+    };
+    expect(foundationRhythmIds(rhythm)).toEqual(['connection', 'communication', 'intimacy']);
+    expect(isRhythmLinkedToFoundation(rhythm, 'connection')).toBe(true);
+
+    const result = saveFoundationRhythmAssociations(
+      [],
+      [rhythm],
+      [],
+      'connection',
+      [{ rhythmId: rhythm.id, linked: false }]
+    );
+    expect('error' in result).toBe(false);
+    if ('error' in result) return;
+    expect(result.savedRhythms[0]).toMatchObject({
+      primaryFoundationId: 'communication',
+      secondaryFoundationIds: ['intimacy']
+    });
   });
 
   it('rejects unknown Foundation references rather than silently dropping them', () => {

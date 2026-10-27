@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { useScoringInstant } from './useScoringInstant.ts';
 import type { MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
@@ -128,18 +129,7 @@ export function RhythmHistoryView({
   const scoringTimeZone = rhythm.scoring?.timeZone
     ?? rhythm.createdTimeZone
     ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const [scoringInstant, setScoringInstant] = useState(() => new Date());
-  useEffect(() => {
-    const refresh = () => setScoringInstant(new Date());
-    const timer = window.setInterval(refresh, 60_000);
-    window.addEventListener('focus', refresh);
-    document.addEventListener('visibilitychange', refresh);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener('focus', refresh);
-      document.removeEventListener('visibilitychange', refresh);
-    };
-  }, []);
+  const scoringInstant = useScoringInstant();
   const asOfTimeZone = isValidTimeZone(scoringTimeZone)
     ? scoringTimeZone
     : Intl.DateTimeFormat().resolvedOptions().timeZone;

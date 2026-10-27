@@ -6,23 +6,29 @@ import {
 import { rhythmTimeOptions } from './rhythm-schedule.ts';
 import type { SavedRhythm } from './rhythm-editor.ts';
 
-export type FoundationRhythmRole = 'none' | 'primary' | 'supporting';
-
 export type FoundationRhythmAssociationChange = {
   rhythmId: string;
-  role: FoundationRhythmRole;
+  linked: boolean;
 };
 
 export type FoundationRhythmAssociationResult =
   | { savedRhythms: SavedRhythm[] }
   | { error: string };
 
-export function foundationRhythmRole(
+export function foundationRhythmIds(
+  rhythm: Pick<RhythmPreview, 'primaryFoundationId' | 'secondaryFoundationIds'>
+): string[] {
+  return [...new Set([
+    ...(rhythm.primaryFoundationId ? [rhythm.primaryFoundationId] : []),
+    ...(rhythm.secondaryFoundationIds ?? [])
+  ])];
+}
+
+export function isRhythmLinkedToFoundation(
   rhythm: Pick<RhythmPreview, 'primaryFoundationId' | 'secondaryFoundationIds'>,
   foundationId: string
-): FoundationRhythmRole {
-  if (rhythm.primaryFoundationId === foundationId) return 'primary';
-  return rhythm.secondaryFoundationIds?.includes(foundationId) ? 'supporting' : 'none';
+): boolean {
+  return foundationRhythmIds(rhythm).includes(foundationId);
 }
 
 export function saveFoundationRhythmAssociations(
@@ -47,51 +53,38 @@ export function saveFoundationRhythmAssociations(
   }
 
   const seenChanges = new Set<string>();
-  const updates = new Map<string, FoundationRhythmRole>();
+  const updates = new Map<string, boolean>();
   for (const change of changes) {
     const rhythm = rhythmsById.get(change.rhythmId);
     if (!rhythm) return { error: 'A selected Rhythm is no longer available.' };
     if (seenChanges.has(change.rhythmId)) return { error: 'A Rhythm can only have one association choice.' };
-    if (change.role !== 'none' && change.role !== 'primary' && change.role !== 'supporting') {
-      return { error: 'Choose a valid association role.' };
-    }
+    if (typeof change.linked !== 'boolean') return { error: 'Choose whether this Rhythm is linked.' };
     seenChanges.add(change.rhythmId);
-    updates.set(change.rhythmId, change.role);
+    updates.set(change.rhythmId, change.linked);
   }
 
   const nextSaved = [...savedRhythms];
-  for (const [rhythmId, role] of updates) {
+  for (const [rhythmId, linked] of updates) {
     const rhythm = rhythmsById.get(rhythmId)!;
     const existing = savedById.get(rhythmId);
-    const currentRole = foundationRhythmRole(rhythm, foundationId);
-    const secondaryIds = rhythm.secondaryFoundationIds ?? [];
-    if (secondaryIds.includes(rhythm.primaryFoundationId ?? '')) {
-      return { error: 'This Rhythm has conflicting primary and supporting associations.' };
+    const existingIds = foundationRhythmIds(rhythm);
+    const currentLinked = existingIds.includes(foundationId);
+    if (archivedRhythmIds.includes(rhythmId)) {
+      if (linked !== currentLinked) {
+        return { error: 'Restore this Rhythm before changing its Foundation associations.' };
+      }
+      continue;
     }
-    if (new Set(secondaryIds).size !== secondaryIds.length) {
-      return { error: 'This Rhythm has duplicate supporting associations and cannot be changed safely.' };
-    }
-    if (archivedRhythmIds.includes(rhythmId) && role !== currentRole) {
-      return { error: 'Restore this Rhythm before changing its Foundation associations.' };
-    }
-    if (role === 'primary' && rhythm.primaryFoundationId
-      && rhythm.primaryFoundationId !== foundationId) {
-      return { error: 'This Rhythm already has a different primary Foundation.' };
-    }
-    if (role === currentRole) continue;
+    if (linked === currentLinked) continue;
 
-    let primaryFoundationId = rhythm.primaryFoundationId ?? null;
-    let nextSecondaryIds = [...secondaryIds];
-    if (role === 'primary') {
-      primaryFoundationId = foundationId;
-      nextSecondaryIds = nextSecondaryIds.filter(id => id !== foundationId);
-    } else if (role === 'supporting') {
-      if (primaryFoundationId === foundationId) primaryFoundationId = null;
-      if (!nextSecondaryIds.includes(foundationId)) nextSecondaryIds.push(foundationId);
-    } else {
-      if (primaryFoundationId === foundationId) primaryFoundationId = null;
-      nextSecondaryIds = nextSecondaryIds.filter(id => id !== foundationId);
-    }
+    const nextIds = linked === currentLinked
+      ? existingIds
+      : linked ? [...existingIds, foundationId] : existingIds.filter(id => id !== foundationId);
+    const primaryFoundationId = rhythm.primaryFoundationId
+      && nextIds.includes(rhythm.primaryFoundationId)
+      ? rhythm.primaryFoundationId
+      : nextIds[0] ?? null;
+    const nextSecondaryIds = nextIds.filter(id => id !== primaryFoundationId);
 
     let base: SavedRhythm;
     if (existing) {

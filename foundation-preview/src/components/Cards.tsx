@@ -32,6 +32,9 @@ type FoundationCardProps = {
   onSelect?: (event: MouseEvent<HTMLButtonElement>) => void;
   headingId?: string;
   selectButtonId?: string;
+  score?: number | null;
+  scoreLabel?: string;
+  scoreEvidence?: string;
   illustrativeScore?: number | null;
   rhythmCoverage?: { scored: number; total: number };
   children?: ReactNode;
@@ -47,6 +50,9 @@ export function FoundationCard({
   onSelect,
   headingId,
   selectButtonId,
+  score,
+  scoreLabel,
+  scoreEvidence,
   illustrativeScore,
   rhythmCoverage,
   children
@@ -54,6 +60,13 @@ export function FoundationCard({
   const completable = foundation.capabilities.completion !== 'ongoing';
   const isCompleted = lifecycle === 'completed';
   const resolvedHeadingId = headingId ?? `foundation-${foundation.id}`;
+  const displayScore = score === undefined ? illustrativeScore : score;
+  const displayScoreLabel = scoreLabel ?? `${foundation.name} illustrative score`;
+  const coverageText = scoreEvidence ?? (rhythmCoverage
+    ? rhythmCoverage.total === 0
+      ? 'No linked sample Rhythms'
+      : `${rhythmCoverage.scored} of ${rhythmCoverage.total} linked Rhythms have sample values`
+    : undefined);
 
   if (variant === 'compact') {
     const content = (
@@ -64,25 +77,19 @@ export function FoundationCard({
             ? <span className="foundation-card__title" id={headingId} role="heading" aria-level={3}>{foundation.name}</span>
             : <h3 className="foundation-card__title" id={resolvedHeadingId} tabIndex={-1}>{foundation.name}</h3>}
           <span className="foundation-card__description">{foundation.description}</span>
-          {illustrativeScore !== undefined && (
+          {displayScore !== undefined && (
             <>
-              {rhythmCoverage && (
-                <span className="foundation-card__coverage">
-                  {rhythmCoverage.total === 0
-                    ? 'No supporting sample Rhythms'
-                    : `${rhythmCoverage.scored} of ${rhythmCoverage.total} supporting Rhythms have sample values`}
-                </span>
-              )}
+              {coverageText && <span className="foundation-card__coverage">{coverageText}</span>}
               <FoundationProgress
-                label={`${foundation.name} illustrative score`}
-                score={illustrativeScore}
+                label={displayScoreLabel}
+                score={displayScore}
                 decorative={Boolean(onSelect)}
               />
             </>
           )}
         </span>
-        <span className={`foundation-card__score ${scoreTone(illustrativeScore ?? null)}`} aria-hidden="true">
-          {illustrativeScore ?? '—'}
+        <span className={`foundation-card__score ${scoreTone(displayScore ?? null)}`} aria-hidden="true">
+          {displayScore === null || displayScore === undefined ? '—' : Math.round(displayScore)}
         </span>
         {onSelect && <span className="foundation-card__chevron" aria-hidden="true">›</span>}
         {children}
@@ -90,12 +97,12 @@ export function FoundationCard({
     );
 
     if (onSelect) {
-      const scoreName = illustrativeScore === undefined || illustrativeScore === null
-        ? 'score unavailable'
-        : `illustrative score ${illustrativeScore} out of 100`;
-      const coverageName = rhythmCoverage
-        ? `, ${rhythmCoverage.scored} of ${rhythmCoverage.total} supporting Rhythms have sample values`
-        : '';
+      const scoreName = displayScore === undefined || displayScore === null
+        ? `${scoreLabel ?? 'score'} unavailable`
+        : scoreLabel
+          ? `${scoreLabel} ${Math.round(displayScore)} out of 100`
+          : `illustrative score ${displayScore} out of 100`;
+      const coverageName = coverageText ? `, ${coverageText}` : '';
       return (
         <button
           id={selectButtonId}

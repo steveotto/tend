@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import {
   marriageExampleFixtures,
   marriageRhythmGroups,
-  marriageFoundationCoverage,
   marriageScoreCoverage,
   marriageWeekDays,
   peopleForRhythm,
@@ -14,6 +13,9 @@ import {
   rhythmsSupportingFoundation
 } from '../domain/preview-data.ts';
 import type { FoundationRhythmAssociationChange } from '../domain/foundation-rhythm-associations.ts';
+import { selectFoundationScore } from '../domain/foundation-scoring.ts';
+import type { FoundationScoreSelection } from '../domain/foundation-scoring.ts';
+import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { FoundationCard, RhythmCard, ScoreMeter } from './Cards.tsx';
 import { FoundationRhythmAssociationDialog } from './FoundationRhythmAssociationDialog.tsx';
 import { MarriageIcon } from './MarriageIcon.tsx';
@@ -29,6 +31,7 @@ type MarriageViewProps = {
   onRhythmDetails: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   userRhythms: readonly RhythmPreview[];
   foundationRhythms: readonly RhythmPreview[];
+  foundationRhythmScores: ReadonlyMap<string, RhythmScoreResult>;
   archivedRhythmIds: readonly string[];
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
@@ -54,6 +57,7 @@ export function MarriageView({
   onRhythmDetails,
   userRhythms,
   foundationRhythms,
+  foundationRhythmScores,
   archivedRhythmIds,
   completedRhythms,
   undoableRhythms,
@@ -205,6 +209,7 @@ export function MarriageView({
         <FoundationList
           fixture={fixture}
           rhythms={foundationRhythms}
+          rhythmScores={foundationRhythmScores}
           archivedRhythmIds={archivedRhythmIds}
           selectedFoundationId={selectedFoundationId}
           onSelect={openFoundation}
@@ -471,6 +476,7 @@ function RhythmSuggestions({
 function FoundationList({
   fixture,
   rhythms,
+  rhythmScores,
   archivedRhythmIds,
   selectedFoundationId,
   onSelect,
@@ -481,6 +487,7 @@ function FoundationList({
 }: {
   fixture: MarriageFixture;
   rhythms: readonly RhythmPreview[];
+  rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
   archivedRhythmIds: readonly string[];
   selectedFoundationId: string | null;
   onSelect: (id: string, openerId: string) => void;
@@ -489,18 +496,21 @@ function FoundationList({
   onRhythmDetails: MarriageViewProps['onRhythmDetails'];
   onPersonSelect: MarriageViewProps['onPersonSelect'];
 }) {
+  const [scoreInfoExpanded, setScoreInfoExpanded] = useState(false);
+  const scoreInfoId = useId();
+  const foundationScores = new Map(fixture.foundations.map(foundation => [
+    foundation.id,
+    selectFoundationScore(foundation.id, rhythms, rhythmScores, archivedRhythmIds)
+  ]));
   const selectedFoundation = fixture.foundations.find(item => item.id === selectedFoundationId);
-  const supportingRhythms = selectedFoundation
+  const selectedFoundationScore = selectedFoundation
+    ? foundationScores.get(selectedFoundation.id) ?? null
+    : null;
+  const selectedScoreEvidence = selectedFoundationScore
+    ? foundationScoreEvidence(selectedFoundationScore)
+    : undefined;
+  const linkedRhythms = selectedFoundation
     ? rhythmsSupportingFoundation(rhythms, selectedFoundation.id)
-    : [];
-  const primaryRhythms = selectedFoundation
-    ? supportingRhythms.filter(rhythm => rhythm.primaryFoundationId === selectedFoundation.id)
-    : [];
-  const secondaryRhythms = selectedFoundation
-    ? supportingRhythms.filter(rhythm =>
-      rhythm.primaryFoundationId !== selectedFoundation.id &&
-      rhythm.secondaryFoundationIds?.includes(selectedFoundation.id) === true
-    )
     : [];
 
   return (
@@ -510,12 +520,29 @@ function FoundationList({
           <h3 id="marriage-foundations-title">Marriage foundations</h3>
           <p>
             {fixture.id === 'empty'
-              ? 'Ongoing areas of care; no sample scores are available.'
+              ? 'Ongoing areas of care; scores are unavailable without scored linked Rhythms.'
               : 'Ongoing areas of care.'}
           </p>
         </div>
+        <button
+          type="button"
+          className="rhythm-history-view__score-info"
+          aria-label={`${scoreInfoExpanded ? 'Hide' : 'Show'} Foundation scoring explanation`}
+          aria-expanded={scoreInfoExpanded}
+          aria-controls={scoreInfoId}
+          onClick={() => setScoreInfoExpanded(expanded => !expanded)}
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <circle cx="8" cy="8" r="6.25" />
+            <path d="M8 7.2v4M8 4.8h.01" />
+          </svg>
+        </button>
         <span className="marriage-sample-tag">Synthetic examples</span>
       </div>
+      <p id={scoreInfoId} className="marriage-foundation-score-info__copy" hidden={!scoreInfoExpanded}>
+        Linked Rhythms with both scores contribute equally. Foundation Consistency and On Track are
+        averaged over the same Rhythms; Health blends them 75% Consistency and 25% On Track.
+      </p>
       {selectedFoundation
         ? (
           <section className="marriage-foundation-detail" aria-labelledby="marriage-foundation-detail-title">
@@ -527,71 +554,92 @@ function FoundationList({
               variant="compact"
               icon={<MarriageIcon group="foundations" id={selectedFoundation.iconId ?? selectedFoundation.id} />}
               headingId="marriage-foundation-detail-title"
-              illustrativeScore={selectedFoundation.illustrativeScore ?? null}
-              rhythmCoverage={marriageFoundationCoverage(fixture, selectedFoundation.id, rhythms)}
+              score={selectedFoundationScore?.health ?? null}
+              scoreLabel={`${selectedFoundation.name} Foundation Health score`}
+              {...(selectedScoreEvidence !== undefined
+                ? { scoreEvidence: selectedScoreEvidence }
+                : {})}
             >
               <div className="marriage-foundation-support">
                 <div className="marriage-foundation-support__heading">
-                  <h3>Supporting Rhythms · {supportingRhythms.length}</h3>
+                  <h3>Linked Rhythms · {linkedRhythms.length}</h3>
                   <button
                     type="button"
                     className="marriage-foundation-support__actions"
                     aria-haspopup="dialog"
                     onClick={event => onManage(selectedFoundation.id, event)}
                   >
-                    Manage supporting Rhythms
+                    Manage linked Rhythms
                   </button>
                 </div>
-                <p className="marriage-foundation-support__score-note">
-                  Foundation values are illustrative samples, not calculated from these Rhythms.
-                </p>
-                {supportingRhythms.length
+                {selectedFoundationScore && selectedFoundationScore.archivedRhythmIds.length > 0 && (
+                  <p className="marriage-foundation-support__score-note">
+                    {selectedFoundationScore.archivedRhythmIds.length} archived linked
+                    {' '}{selectedFoundationScore.archivedRhythmIds.length === 1 ? 'Rhythm is' : 'Rhythms are'} excluded from scoring.
+                  </p>
+                )}
+                {selectedFoundationScore && selectedFoundationScore.unresolvedRhythmIds.length > 0 && (
+                  <p className="marriage-foundation-support__score-note" role="status">
+                    {selectedFoundationScore.unresolvedRhythmIds.length} linked
+                    {' '}{selectedFoundationScore.unresolvedRhythmIds.length === 1 ? 'Rhythm score could' : 'Rhythm scores could'}
+                    {' '}not be resolved.
+                  </p>
+                )}
+                {selectedFoundationScore && selectedFoundationScore.excludedRhythms.length > 0 && (
+                  <p className="marriage-foundation-support__score-note">
+                    Linked Rhythms without both scores are excluded from both averages.
+                  </p>
+                )}
+                {linkedRhythms.length
                   ? (
-                    <>
-                      {primaryRhythms.length > 0 && (
-                        <FoundationRhythmGroup
-                          title={`Primary associations · ${primaryRhythms.length}`}
-                          rhythms={primaryRhythms}
-                          archivedRhythmIds={archivedRhythmIds}
-                          onRhythmDetails={onRhythmDetails}
-                          onPersonSelect={onPersonSelect}
-                        />
-                      )}
-                      {secondaryRhythms.length > 0 && (
-                        <FoundationRhythmGroup
-                          title={`Secondary associations · ${secondaryRhythms.length}`}
-                          rhythms={secondaryRhythms}
-                          archivedRhythmIds={archivedRhythmIds}
-                          onRhythmDetails={onRhythmDetails}
-                          onPersonSelect={onPersonSelect}
-                        />
-                      )}
-                    </>
+                    <FoundationRhythmGroup
+                      title={`Linked Rhythms · ${linkedRhythms.length}`}
+                      rhythms={linkedRhythms}
+                      archivedRhythmIds={archivedRhythmIds}
+                      onRhythmDetails={onRhythmDetails}
+                      onPersonSelect={onPersonSelect}
+                    />
                   )
-                  : <p>No Rhythms are assigned to this ongoing Foundation yet.</p>}
+                  : <p>No Rhythms are linked to this ongoing Foundation yet.</p>}
               </div>
             </FoundationCard>
           </section>
         )
         : (
           <div className="marriage-foundation-list">
-            {fixture.foundations.map(foundation => (
-              <FoundationCard
-                key={foundation.id}
-                foundation={foundation}
-                variant="compact"
-                icon={<MarriageIcon group="foundations" id={foundation.iconId ?? foundation.id} />}
-                illustrativeScore={foundation.illustrativeScore ?? null}
-                rhythmCoverage={marriageFoundationCoverage(fixture, foundation.id, rhythms)}
-                headingId={`marriage-foundation-list-${foundation.id}`}
-                selectButtonId={`marriage-foundation-select-${foundation.id}`}
-                onSelect={() => onSelect(foundation.id, `marriage-foundation-select-${foundation.id}`)}
-              />
-            ))}
+            {fixture.foundations.map(foundation => {
+              const score = foundationScores.get(foundation.id);
+              const scoreEvidence = score ? foundationScoreEvidence(score) : undefined;
+              return (
+                <FoundationCard
+                  key={foundation.id}
+                  foundation={foundation}
+                  variant="compact"
+                  icon={<MarriageIcon group="foundations" id={foundation.iconId ?? foundation.id} />}
+                  score={score?.health ?? null}
+                  scoreLabel={`${foundation.name} Foundation Health score`}
+                  {...(scoreEvidence !== undefined
+                    ? { scoreEvidence }
+                    : {})}
+                  headingId={`marriage-foundation-list-${foundation.id}`}
+                  selectButtonId={`marriage-foundation-select-${foundation.id}`}
+                  onSelect={() => onSelect(foundation.id, `marriage-foundation-select-${foundation.id}`)}
+                />
+              );
+            })}
           </div>
         )}
     </section>
   );
+}
+
+function foundationScoreEvidence(score: FoundationScoreSelection): string | undefined {
+  if (score.linkedRhythmIds.length === 0) return 'No linked Rhythms';
+  if (score.activeLinkedRhythmIds.length === 0) return 'No active linked Rhythms';
+  if (score.eligibleRhythmIds.length < score.activeLinkedRhythmIds.length) {
+    return `${score.eligibleRhythmIds.length} of ${score.activeLinkedRhythmIds.length} linked Rhythms scored`;
+  }
+  return undefined;
 }
 
 function FoundationRhythmGroup({

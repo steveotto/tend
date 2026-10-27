@@ -755,6 +755,23 @@ describe('shared preview components', () => {
     expect(container.querySelector('.preview-score-marker')).toBeNull();
   });
 
+  it('rounds calculated Foundation Health for display while preserving the exact meter value', () => {
+    const { container } = render(
+      <FoundationCard
+        foundation={{ ...marriageFoundation, name: 'Calculated Foundation' }}
+        variant="compact"
+        score={65.2875}
+        scoreLabel="Calculated Foundation Health score"
+      />
+    );
+
+    expect(container.querySelector('.foundation-card__score')?.textContent).toBe('65');
+    expect(screen.getByRole('meter', { name: 'Calculated Foundation Health score' }).getAttribute('aria-valuenow'))
+      .toBe('65.2875');
+    expect(container.querySelector('.foundation-progress__fill')?.getAttribute('style'))
+      .toContain('width: 65.2875%');
+  });
+
   it('keeps zero and unavailable Foundation row values distinguishable and keyboard-actionable', async () => {
     const user = userEvent.setup();
     const foundation = { ...marriageFoundation, id: 'foundation-score-example', name: 'Sample Foundation' };
