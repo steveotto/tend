@@ -10,7 +10,8 @@ import {
   PREVIEW_V8_RECOVERY_KEY,
   PREVIEW_V9_RECOVERY_KEY,
   PREVIEW_V10_RECOVERY_KEY,
-  PREVIEW_V11_RECOVERY_KEY
+  PREVIEW_V11_RECOVERY_KEY,
+  PREVIEW_V12_RECOVERY_KEY
 } from '../src/storage/preview-v4-recovery.ts';
 
 export class MemoryStorage implements Storage {
@@ -55,7 +56,8 @@ export function installMemoryStorage(): MemoryStorage {
     PREVIEW_V8_RECOVERY_KEY,
     PREVIEW_V9_RECOVERY_KEY,
     PREVIEW_V10_RECOVERY_KEY,
-    PREVIEW_V11_RECOVERY_KEY
+    PREVIEW_V11_RECOVERY_KEY,
+    PREVIEW_V12_RECOVERY_KEY
   ]) {
     storage.removeItem(key);
   }

@@ -1,4 +1,10 @@
-import { areas, syntheticPeople, todayRhythms } from './preview-data.ts';
+import {
+  areas,
+  isMarriageFoundationId,
+  marriageRhythms,
+  syntheticPeople,
+  todayRhythms
+} from './preview-data.ts';
 import type { PersonId, RhythmPreview } from './preview-data.ts';
 import {
   effectiveRhythmSchedule,
@@ -53,6 +59,8 @@ export type SavedRhythm = {
   createdLocalDate?: string;
   createdTimeZone?: string;
   dailyBackfillAllowed?: boolean;
+  primaryFoundationId?: string | null;
+  secondaryFoundationIds?: string[];
 };
 
 export type RhythmDraft = {
@@ -73,6 +81,7 @@ export type RhythmDraft = {
 export type RhythmDraftErrors = Partial<Record<keyof RhythmDraft | 'schedule', string>>;
 
 const existingEditableIds = new Set(todayRhythms.map(rhythm => rhythm.id));
+const fixtureRhythmIds = new Set([...todayRhythms, ...marriageRhythms].map(rhythm => rhythm.id));
 const personIds = new Set(syntheticPeople.map(person => person.id));
 const categoryIds = new Set(areas.map(area => area.id));
 const savedRhythmKeys = ['id', 'title', 'description', 'cadence', 'timeLabel', 'personIds', 'categoryIds'];
@@ -80,6 +89,7 @@ const savedRhythmV4Keys = [...savedRhythmKeys, 'timeOfDay', 'schedule', 'persona
 const savedRhythmV7Keys = [...savedRhythmV4Keys, 'scoring'];
 const savedRhythmV8Keys = [...savedRhythmV7Keys, 'createdLocalDate', 'createdTimeZone', 'dailyBackfillAllowed'];
 const savedRhythmV9Keys = savedRhythmV8Keys;
+const savedRhythmV13Keys = [...savedRhythmV9Keys, 'primaryFoundationId', 'secondaryFoundationIds'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -103,12 +113,23 @@ export function isEditableRhythmId(id: string): boolean {
   return existingEditableIds.has(id) || /^user-rhythm-[0-9a-f-]{36}$/i.test(id);
 }
 
+function isKnownSavedRhythmId(id: string): boolean {
+  return fixtureRhythmIds.has(id) || /^user-rhythm-[0-9a-f-]{36}$/i.test(id);
+}
+
 export function validateSavedRhythms(value: unknown): value is SavedRhythm[] {
+  return validateSavedRhythmsWithIdPolicy(value, isEditableRhythmId);
+}
+
+function validateSavedRhythmsWithIdPolicy(
+  value: unknown,
+  acceptsId: (id: string) => boolean
+): value is SavedRhythm[] {
   if (!Array.isArray(value)) return false;
   const ids = new Set<string>();
   for (const record of value) {
     if (!isRecord(record) || !hasOnlyKeys(record, savedRhythmKeys)) return false;
-    if (typeof record.id !== 'string' || !isEditableRhythmId(record.id) || ids.has(record.id)) return false;
+    if (typeof record.id !== 'string' || !acceptsId(record.id) || ids.has(record.id)) return false;
     if (typeof record.title !== 'string' || record.title.trim().length === 0 || record.title.length > 80) return false;
     if (record.description !== undefined
       && (typeof record.description !== 'string' || record.description.length > 1000)) return false;
@@ -149,10 +170,28 @@ export function validateSavedRhythmsV12(value: unknown): value is SavedRhythm[] 
   return validateSavedRhythmsWithKeys(value, savedRhythmV9Keys, 'v12');
 }
 
+export function validateSavedRhythmsV13(value: unknown): value is SavedRhythm[] {
+  if (!validateSavedRhythmsWithKeys(value, savedRhythmV13Keys, 'v12', true)) return false;
+  return value.every(record => {
+    if (record.primaryFoundationId !== undefined && record.primaryFoundationId !== null
+      && !isMarriageFoundationId(record.primaryFoundationId)) return false;
+    if (record.secondaryFoundationIds !== undefined) {
+      if (!Array.isArray(record.secondaryFoundationIds)) return false;
+      const seen = new Set<string>();
+      for (const id of record.secondaryFoundationIds) {
+        if (!isMarriageFoundationId(id) || id === record.primaryFoundationId || seen.has(id)) return false;
+        seen.add(id);
+      }
+    }
+    return true;
+  });
+}
+
 function validateSavedRhythmsWithKeys(
   value: unknown,
   allowedKeys: readonly string[],
-  scoringVersion: 'none' | 'v8' | 'v10' | 'v11' | 'v12'
+  scoringVersion: 'none' | 'v8' | 'v10' | 'v11' | 'v12',
+  allowMarriageFixtureIds = false
 ): value is SavedRhythm[] {
   if (!Array.isArray(value)) return false;
   const ids = new Set<string>();
@@ -196,7 +235,10 @@ function validateSavedRhythmsWithKeys(
       personIds: record.personIds,
       categoryIds: record.categoryIds
     };
-    if (!validateSavedRhythms([legacyCompatibleRecord])) return false;
+    const validLegacyRecord = allowMarriageFixtureIds
+      ? validateSavedRhythmsWithIdPolicy([legacyCompatibleRecord], isKnownSavedRhythmId)
+      : validateSavedRhythms([legacyCompatibleRecord]);
+    if (!validLegacyRecord) return false;
     const id = record.id as string;
     if (ids.has(id)) return false;
     ids.add(id);
@@ -496,7 +538,11 @@ export function saveRhythmDraft(
     ...(draft.personal === undefined
       ? existing?.personal === undefined ? {} : { personal: existing.personal }
       : { personal: draft.personal }),
-    ...(timeOfDay === undefined ? {} : { timeOfDay })
+    ...(timeOfDay === undefined ? {} : { timeOfDay }),
+    ...(existing?.primaryFoundationId === undefined ? {} : { primaryFoundationId: existing.primaryFoundationId }),
+    ...(existing?.secondaryFoundationIds === undefined
+      ? {}
+      : { secondaryFoundationIds: [...existing.secondaryFoundationIds] })
   };
   return {
     savedRhythms: [
@@ -509,53 +555,51 @@ export function saveRhythmDraft(
 
 export function resolveTodayRhythms(savedRhythms: readonly SavedRhythm[]): RhythmPreview[] {
   const savedById = new Map(savedRhythms.map(rhythm => [rhythm.id, rhythm]));
-  const editable = todayRhythms.map(rhythm => {
-    const saved = savedById.get(rhythm.id);
-    if (!saved) return rhythm;
-    return {
-      ...rhythm,
-      title: saved.title,
-      description: saved.description,
-      cadence: saved.cadence,
-      timeLabel: saved.timeLabel,
-      personIds: saved.personIds,
-      categoryIds: saved.categoryIds,
-      ...(saved.schedule === undefined ? {} : { schedule: saved.schedule }),
-      ...(saved.scoring === undefined ? {} : { scoring: saved.scoring }),
-      ...(saved.timeOfDay === undefined ? {} : { timeOfDay: saved.timeOfDay }),
-      ...(saved.createdLocalDate === undefined ? {} : {
-        createdLocalDate: saved.createdLocalDate,
-        createdTimeZone: saved.createdTimeZone
-      }),
-      ...(saved.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: saved.dailyBackfillAllowed }),
-      ...(saved.personal === undefined ? {} : { personal: saved.personal })
-    };
-  });
+  const editable = todayRhythms.map(rhythm => applySavedRhythmOverrides(rhythm, savedById.get(rhythm.id)));
 
   const custom = savedRhythms
-    .filter(rhythm => !existingEditableIds.has(rhythm.id))
-    .map(rhythm => ({
+    .filter(rhythm => !fixtureRhythmIds.has(rhythm.id))
+    .map(rhythm => applySavedRhythmOverrides({
       id: rhythm.id,
       title: rhythm.title,
-      ...(rhythm.description === undefined ? {} : { description: rhythm.description }),
       cadence: rhythm.cadence,
       timeLabel: rhythm.timeLabel,
       automation: 'manual' as const,
       status: 'Due today' as const,
       personIds: rhythm.personIds,
-      categoryIds: rhythm.categoryIds,
-      ...(rhythm.schedule === undefined ? {} : { schedule: rhythm.schedule }),
-      ...(rhythm.scoring === undefined ? {} : { scoring: rhythm.scoring }),
-      ...(rhythm.timeOfDay === undefined ? {} : { timeOfDay: rhythm.timeOfDay }),
-      ...(rhythm.createdLocalDate === undefined ? {} : {
-        createdLocalDate: rhythm.createdLocalDate,
-        createdTimeZone: rhythm.createdTimeZone
-      }),
-      ...(rhythm.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: rhythm.dailyBackfillAllowed }),
-      ...(rhythm.personal === undefined ? {} : { personal: rhythm.personal })
-    }));
+      categoryIds: rhythm.categoryIds
+    }, rhythm));
 
   return [...editable, ...custom];
+}
+
+export function applySavedRhythmOverrides(
+  rhythm: RhythmPreview,
+  saved?: SavedRhythm
+): RhythmPreview {
+  if (!saved) return rhythm;
+  return {
+    ...rhythm,
+    title: saved.title,
+    description: saved.description,
+    cadence: saved.cadence,
+    timeLabel: saved.timeLabel,
+    personIds: saved.personIds,
+    categoryIds: saved.categoryIds,
+    ...(saved.schedule === undefined ? {} : { schedule: saved.schedule }),
+    ...(saved.scoring === undefined ? {} : { scoring: saved.scoring }),
+    ...(saved.timeOfDay === undefined ? {} : { timeOfDay: saved.timeOfDay }),
+    ...(saved.createdLocalDate === undefined ? {} : {
+      createdLocalDate: saved.createdLocalDate,
+      createdTimeZone: saved.createdTimeZone
+    }),
+    ...(saved.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: saved.dailyBackfillAllowed }),
+    ...(saved.personal === undefined ? {} : { personal: saved.personal }),
+    ...(saved.primaryFoundationId === undefined ? {} : { primaryFoundationId: saved.primaryFoundationId }),
+    ...(saved.secondaryFoundationIds === undefined
+      ? {}
+      : { secondaryFoundationIds: saved.secondaryFoundationIds })
+  };
 }
 
 export function activeTodayRhythms(

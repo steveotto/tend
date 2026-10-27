@@ -2278,7 +2278,7 @@ describe('Tend Today preview', () => {
     const saved = parsePreviewBackup(savedRaw!, localDateString(new Date()));
     expect(saved.valid).toBe(true);
     if (saved.valid) {
-      expect(saved.envelope.schemaVersion).toBe(12);
+      expect(saved.envelope.schemaVersion).toBe(13);
       expect(saved.envelope.data.savedRhythms).toHaveLength(1);
       expect(saved.envelope.data.savedRhythms[0]).toMatchObject({
         id: expect.stringMatching(/^user-rhythm-/),
@@ -2855,6 +2855,119 @@ describe('Tend Today preview', () => {
     expect(screen.getByRole('button', { name: /Open Connection foundation details/ })).toBeTruthy();
   });
 
+  it('saves Marriage associations through reload and export/import, then opens shared read-only Rhythm history', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Marriage' }));
+    await user.click(screen.getByRole('tab', { name: 'Foundations' }));
+    await user.click(screen.getByRole('button', { name: /Open Connection foundation details/ }));
+
+    const manage = screen.getByRole('button', { name: 'Manage supporting Rhythms' });
+    manage.focus();
+    await user.keyboard('{Enter}');
+    const editor = screen.getByRole('dialog', { name: 'Manage Rhythms for Connection' });
+    await user.selectOptions(
+      within(editor).getByRole('combobox', {
+        name: 'Association role for Dream Together, sample-marriage-dream'
+      }),
+      'supporting'
+    );
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Manage Rhythms for Connection' })).toBeNull());
+    expect(document.activeElement).toBe(manage);
+    expect(screen.getByRole('heading', { name: 'Supporting Rhythms · 4' })).toBeTruthy();
+
+    const firstSave = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
+    expect(firstSave.valid).toBe(true);
+    if (!firstSave.valid) return;
+    expect(firstSave.envelope.schemaVersion).toBe(13);
+    expect(firstSave.envelope.data.savedRhythms.find(item => item.id === 'sample-marriage-dream')).toMatchObject({
+      primaryFoundationId: 'partnership',
+      secondaryFoundationIds: ['fun-adventure', 'connection']
+    });
+
+    const backup = JSON.stringify(createPreviewEnvelope(firstSave.envelope.data));
+    const parsedBackup = parsePreviewBackup(backup, localDateString(new Date()));
+    expect(parsedBackup.valid).toBe(true);
+    if (!parsedBackup.valid) return;
+    expect(parsedBackup.envelope.data.savedRhythms.find(item => item.id === 'sample-marriage-dream')?.secondaryFoundationIds)
+      .toEqual(['fun-adventure', 'connection']);
+
+    cleanup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Marriage' }));
+    await user.click(screen.getByRole('tab', { name: 'Foundations' }));
+    await user.click(screen.getByRole('button', { name: /Open Connection foundation details/ }));
+    const dream = screen.getByRole('article', { name: 'Dream Together' });
+    const detailsOpener = within(dream).getByRole('button', { name: 'Details for Dream Together' });
+    await user.click(detailsOpener);
+
+    const details = screen.getByRole('dialog', { name: 'Dream Together' });
+    expect(within(details).queryByRole('button', { name: /^Tend/ })).toBeNull();
+    expect(within(details).queryByRole('button', { name: /^Edit Dream Together/ })).toBeNull();
+    await user.click(within(details).getByRole('button', { name: 'View scores and history for Dream Together' }));
+    const history = within(details).getByRole('region', { name: 'History for Dream Together' });
+    expect(within(history).getByRole('heading', { name: 'All completion history' })).toBeTruthy();
+    expect(details.querySelector('.rhythm-history-view__completion-total strong')?.textContent).toBe('1');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(document.activeElement).toBe(detailsOpener);
+    expect(screen.getByRole('heading', { name: 'Supporting Rhythms · 4' })).toBeTruthy();
+
+    const backupFile = new File([backup], 'marriage-associations.json', { type: 'application/json' });
+    fireEvent.change(screen.getByLabelText('Import preview backup'), { target: { files: [backupFile] } });
+    const importDialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
+    await user.click(within(importDialog).getByRole('button', { name: 'Replace with backup' }));
+    await screen.findByText('Preview backup imported.');
+    const afterImport = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
+    expect(afterImport.valid).toBe(true);
+    if (afterImport.valid) {
+      expect(afterImport.envelope.data.savedRhythms.find(item => item.id === 'sample-marriage-dream')?.secondaryFoundationIds)
+        .toEqual(['fun-adventure', 'connection']);
+    }
+  });
+
+  it('cancels a Foundation association draft unchanged and retains it after a storage failure', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Marriage' }));
+    await user.click(screen.getByRole('tab', { name: 'Foundations' }));
+    await user.click(screen.getByRole('button', { name: /Open Connection foundation details/ }));
+    const manage = screen.getByRole('button', { name: 'Manage supporting Rhythms' });
+    const savedBefore = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
+
+    await user.click(manage);
+    let editor = screen.getByRole('dialog', { name: 'Manage Rhythms for Connection' });
+    const dreamRole = within(editor).getByRole('combobox', {
+      name: 'Association role for Dream Together, sample-marriage-dream'
+    });
+    await user.selectOptions(dreamRole, 'supporting');
+    await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Manage Rhythms for Connection' })).toBeNull());
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(savedBefore);
+    expect(document.activeElement).toBe(manage);
+
+    const storage = window.localStorage as unknown as MemoryStorage;
+    const originalSetItem = storage.setItem.bind(storage);
+    vi.spyOn(storage, 'setItem').mockImplementation((key, value) => {
+      if (key === PREVIEW_STORAGE_KEY) throw new Error('Quota exceeded.');
+      originalSetItem(key, value);
+    });
+    await user.click(manage);
+    editor = screen.getByRole('dialog', { name: 'Manage Rhythms for Connection' });
+    const retainedRole = within(editor).getByRole('combobox', {
+      name: 'Association role for Dream Together, sample-marriage-dream'
+    });
+    await user.selectOptions(retainedRole, 'supporting');
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    expect(within(editor).getByRole('alert').textContent).toContain('Quota exceeded.');
+    expect((retainedRole as HTMLSelectElement).value).toBe('supporting');
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(savedBefore);
+  });
+
   it('shares the populated and empty Marriage example selector on Today and Marriage without persisting it', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -2931,7 +3044,7 @@ describe('Tend Today preview', () => {
     expect(cards[0]?.getAttribute('aria-label')).toContain('score unavailable');
     expect(cards[0]?.querySelector('.foundation-card__score')?.textContent).toBe('—');
     await user.click(cards[0]!);
-    expect(await screen.findByText(/No sample Rhythms are assigned to this ongoing Foundation yet/)).toBeTruthy();
+    expect(await screen.findByText(/No Rhythms are assigned to this ongoing Foundation yet/)).toBeTruthy();
     expect(screen.getByRole('meter', { name: 'Connection illustrative score' }).getAttribute('aria-valuetext')).toBe('Score unavailable');
   });
 

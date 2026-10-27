@@ -13,7 +13,9 @@ import {
   type RhythmPreview,
   rhythmsSupportingFoundation
 } from '../domain/preview-data.ts';
+import type { FoundationRhythmAssociationChange } from '../domain/foundation-rhythm-associations.ts';
 import { FoundationCard, RhythmCard, ScoreMeter } from './Cards.tsx';
+import { FoundationRhythmAssociationDialog } from './FoundationRhythmAssociationDialog.tsx';
 import { MarriageIcon } from './MarriageIcon.tsx';
 import { MarriageExampleSelector } from './MarriageExampleSelector.tsx';
 
@@ -26,10 +28,16 @@ type MarriageViewProps = {
   onPartnerProfile: () => void;
   onRhythmDetails: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   userRhythms: readonly RhythmPreview[];
+  foundationRhythms: readonly RhythmPreview[];
+  archivedRhythmIds: readonly string[];
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
   onTend: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   onUndo: (id: string) => void;
+  onSaveFoundationAssociations: (
+    foundationId: string,
+    changes: readonly FoundationRhythmAssociationChange[]
+  ) => string | null;
 };
 
 const tabs: { id: MarriageTab; label: string }[] = [
@@ -45,15 +53,32 @@ export function MarriageView({
   onPartnerProfile,
   onRhythmDetails,
   userRhythms,
+  foundationRhythms,
+  archivedRhythmIds,
   completedRhythms,
   undoableRhythms,
   onTend,
-  onUndo
+  onUndo,
+  onSaveFoundationAssociations
 }: MarriageViewProps) {
   const [activeTab, setActiveTab] = useState<MarriageTab>('today');
   const [selectedFoundationId, setSelectedFoundationId] = useState<string | null>(null);
+  const [associationFoundationId, setAssociationFoundationId] = useState<string | null>(null);
   const foundationOpener = useRef<string | null>(null);
+  const associationOpener = useRef<HTMLButtonElement | null>(null);
+  const wasAssociationDialogOpen = useRef(false);
   const fixture = marriageExampleFixtures[marriageExampleId];
+  const associationFoundation = fixture.foundations.find(item => item.id === associationFoundationId);
+
+  useEffect(() => {
+    if (associationFoundationId) {
+      wasAssociationDialogOpen.current = true;
+      return;
+    }
+    if (!wasAssociationDialogOpen.current) return;
+    wasAssociationDialogOpen.current = false;
+    if (associationOpener.current?.isConnected) associationOpener.current.focus();
+  }, [associationFoundationId]);
 
   useEffect(() => {
     if (selectedFoundationId) {
@@ -95,6 +120,11 @@ export function MarriageView({
     onMarriageExampleChange(id);
     setSelectedFoundationId(null);
     foundationOpener.current = null;
+  }
+
+  function openAssociationDialog(id: string, event: MouseEvent<HTMLButtonElement>) {
+    associationOpener.current = event.currentTarget;
+    setAssociationFoundationId(id);
   }
 
   const todayRhythms = fixture.rhythms.filter(rhythm => rhythm.status === 'Due today');
@@ -174,13 +204,28 @@ export function MarriageView({
       >
         <FoundationList
           fixture={fixture}
+          rhythms={foundationRhythms}
+          archivedRhythmIds={archivedRhythmIds}
           selectedFoundationId={selectedFoundationId}
           onSelect={openFoundation}
           onBack={() => setSelectedFoundationId(null)}
+          onManage={openAssociationDialog}
           onRhythmDetails={onRhythmDetails}
           onPersonSelect={onPersonSelect}
         />
       </section>
+      {associationFoundation && (
+        <FoundationRhythmAssociationDialog
+          key={associationFoundation.id}
+          foundation={associationFoundation}
+          rhythms={foundationRhythms.map(rhythm => ({
+            rhythm,
+            archived: archivedRhythmIds.includes(rhythm.id)
+          }))}
+          onSave={changes => onSaveFoundationAssociations(associationFoundation.id, changes)}
+          onClose={() => setAssociationFoundationId(null)}
+        />
+      )}
     </main>
   );
 }
@@ -425,22 +470,28 @@ function RhythmSuggestions({
 
 function FoundationList({
   fixture,
+  rhythms,
+  archivedRhythmIds,
   selectedFoundationId,
   onSelect,
   onBack,
+  onManage,
   onRhythmDetails,
   onPersonSelect
 }: {
   fixture: MarriageFixture;
+  rhythms: readonly RhythmPreview[];
+  archivedRhythmIds: readonly string[];
   selectedFoundationId: string | null;
   onSelect: (id: string, openerId: string) => void;
   onBack: () => void;
+  onManage: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   onRhythmDetails: MarriageViewProps['onRhythmDetails'];
   onPersonSelect: MarriageViewProps['onPersonSelect'];
 }) {
   const selectedFoundation = fixture.foundations.find(item => item.id === selectedFoundationId);
   const supportingRhythms = selectedFoundation
-    ? rhythmsSupportingFoundation(fixture.rhythms, selectedFoundation.id)
+    ? rhythmsSupportingFoundation(rhythms, selectedFoundation.id)
     : [];
   const primaryRhythms = selectedFoundation
     ? supportingRhythms.filter(rhythm => rhythm.primaryFoundationId === selectedFoundation.id)
@@ -477,10 +528,23 @@ function FoundationList({
               icon={<MarriageIcon group="foundations" id={selectedFoundation.iconId ?? selectedFoundation.id} />}
               headingId="marriage-foundation-detail-title"
               illustrativeScore={selectedFoundation.illustrativeScore ?? null}
-              rhythmCoverage={marriageFoundationCoverage(fixture, selectedFoundation.id)}
+              rhythmCoverage={marriageFoundationCoverage(fixture, selectedFoundation.id, rhythms)}
             >
               <div className="marriage-foundation-support">
-                <h3>Supporting Rhythms · {supportingRhythms.length}</h3>
+                <div className="marriage-foundation-support__heading">
+                  <h3>Supporting Rhythms · {supportingRhythms.length}</h3>
+                  <button
+                    type="button"
+                    className="marriage-foundation-support__actions"
+                    aria-haspopup="dialog"
+                    onClick={event => onManage(selectedFoundation.id, event)}
+                  >
+                    Manage supporting Rhythms
+                  </button>
+                </div>
+                <p className="marriage-foundation-support__score-note">
+                  Foundation values are illustrative samples, not calculated from these Rhythms.
+                </p>
                 {supportingRhythms.length
                   ? (
                     <>
@@ -488,6 +552,7 @@ function FoundationList({
                         <FoundationRhythmGroup
                           title={`Primary associations · ${primaryRhythms.length}`}
                           rhythms={primaryRhythms}
+                          archivedRhythmIds={archivedRhythmIds}
                           onRhythmDetails={onRhythmDetails}
                           onPersonSelect={onPersonSelect}
                         />
@@ -496,13 +561,14 @@ function FoundationList({
                         <FoundationRhythmGroup
                           title={`Secondary associations · ${secondaryRhythms.length}`}
                           rhythms={secondaryRhythms}
+                          archivedRhythmIds={archivedRhythmIds}
                           onRhythmDetails={onRhythmDetails}
                           onPersonSelect={onPersonSelect}
                         />
                       )}
                     </>
                   )
-                  : <p>No sample Rhythms are assigned to this ongoing Foundation yet.</p>}
+                  : <p>No Rhythms are assigned to this ongoing Foundation yet.</p>}
               </div>
             </FoundationCard>
           </section>
@@ -516,7 +582,7 @@ function FoundationList({
                 variant="compact"
                 icon={<MarriageIcon group="foundations" id={foundation.iconId ?? foundation.id} />}
                 illustrativeScore={foundation.illustrativeScore ?? null}
-                rhythmCoverage={marriageFoundationCoverage(fixture, foundation.id)}
+                rhythmCoverage={marriageFoundationCoverage(fixture, foundation.id, rhythms)}
                 headingId={`marriage-foundation-list-${foundation.id}`}
                 selectButtonId={`marriage-foundation-select-${foundation.id}`}
                 onSelect={() => onSelect(foundation.id, `marriage-foundation-select-${foundation.id}`)}
@@ -531,11 +597,13 @@ function FoundationList({
 function FoundationRhythmGroup({
   title,
   rhythms,
+  archivedRhythmIds,
   onRhythmDetails,
   onPersonSelect
 }: {
   title: string;
   rhythms: MarriageFixture['rhythms'];
+  archivedRhythmIds: readonly string[];
   onRhythmDetails: MarriageViewProps['onRhythmDetails'];
   onPersonSelect: MarriageViewProps['onPersonSelect'];
 }) {
@@ -550,6 +618,7 @@ function FoundationRhythmGroup({
             people={peopleForRhythm(rhythm)}
             onPersonSelect={onPersonSelect}
             variant="simple"
+            archived={archivedRhythmIds.includes(rhythm.id)}
             headingId={`marriage-detail-rhythm-${rhythm.id}`}
             onDetails={event => onRhythmDetails(rhythm.id, event)}
           />

@@ -3,6 +3,8 @@ import type { MouseEvent } from 'react';
 import { AppNavigation } from './components/AppNavigation.tsx';
 import type { Destination, TextSize } from './components/AppNavigation.tsx';
 import { MarriageView } from './components/MarriageView.tsx';
+import { saveFoundationRhythmAssociations } from './domain/foundation-rhythm-associations.ts';
+import type { FoundationRhythmAssociationChange } from './domain/foundation-rhythm-associations.ts';
 import { RhythmDetailsDialog } from './components/RhythmDetailsDialog.tsx';
 import { RhythmCompletionDialog } from './components/RhythmCompletionDialog.tsx';
 import { FinanceGoalsView } from './components/FinanceGoalsView.tsx';
@@ -13,6 +15,7 @@ import { RhythmEditor } from './components/RhythmEditor.tsx';
 import { TodayView } from './components/TodayView.tsx';
 import {
   marriageRhythms,
+  isMarriageFoundationId,
   personById,
   peopleForRhythm,
   todayRhythms,
@@ -40,6 +43,7 @@ import { resolveSeedCompletionRecords } from './domain/rhythm-history.ts';
 import { localDateInTimeZone } from './domain/rhythm-scoring.ts';
 import {
   activeTodayRhythms,
+  applySavedRhythmOverrides,
   archiveRhythmId,
   archivedTodayRhythms,
   isEditableRhythmId,
@@ -79,6 +83,7 @@ import {
   loadV9RecoveryCopy,
   loadV10RecoveryCopy,
   loadV11RecoveryCopy,
+  loadV12RecoveryCopy,
   loadPreview,
   writePreview
 } from './storage/preview-storage.ts';
@@ -130,6 +135,8 @@ export function App() {
   const [v10RecoveryError, setV10RecoveryError] = useState<string | null>(null);
   const [v11RecoveryCopy, setV11RecoveryCopy] = useState<string | null>(null);
   const [v11RecoveryError, setV11RecoveryError] = useState<string | null>(null);
+  const [v12RecoveryCopy, setV12RecoveryCopy] = useState<string | null>(null);
+  const [v12RecoveryError, setV12RecoveryError] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -202,9 +209,19 @@ export function App() {
     previewData.savedRhythms.some(saved => saved.id === rhythm.id)
   );
   const marriageCategoryRhythms = rhythmsForCategory(userRhythms, 'marriage');
+  const resolvedMarriageRhythms = marriageRhythms.map(rhythm =>
+    rhythmWithSavedCompletions(applySavedRhythmOverrides(
+      rhythm,
+      previewData.savedRhythms.find(saved => saved.id === rhythm.id)
+    ))
+  );
+  const foundationRhythms = [
+    ...(marriageExampleId === 'populated' ? resolvedMarriageRhythms : []),
+    ...allTodayRhythms.filter(rhythm => rhythm.categoryIds?.includes('marriage') === true)
+  ];
   const activeRhythm = [
     ...allTodayRhythms,
-    ...marriageRhythms.map(rhythmWithSavedCompletions)
+    ...resolvedMarriageRhythms
   ].find(rhythm => rhythm.id === activeRhythmId) ?? null;
   const selectedPerson = selectedPersonId === null ? null : personById(selectedPersonId);
   const activeRhythmIsToday = activeRhythm !== null && editableTodayRhythms.some(rhythm => rhythm.id === activeRhythm.id);
@@ -359,6 +376,18 @@ export function App() {
     } else {
       setV11RecoveryCopy(null);
       setV11RecoveryError(result.message);
+    }
+    refreshV12RecoveryCopy();
+  }
+
+  function refreshV12RecoveryCopy() {
+    const result = loadV12RecoveryCopy(browserPreviewStorage());
+    if (result.kind === 'loaded') {
+      setV12RecoveryCopy(result.raw);
+      setV12RecoveryError(null);
+    } else {
+      setV12RecoveryCopy(null);
+      setV12RecoveryError(result.message);
     }
   }
 
@@ -616,6 +645,25 @@ export function App() {
     setAutoSaveEnabled(true);
     setPersistenceStatus({ kind: 'saved' });
     return null;
+  }
+
+  function saveFoundationAssociations(
+    foundationId: string,
+    changes: readonly FoundationRhythmAssociationChange[]
+  ): string | null {
+    if (!isMarriageFoundationId(foundationId)) return 'This Marriage Foundation is unavailable.';
+    const result = saveFoundationRhythmAssociations(
+      previewData.savedRhythms,
+      foundationRhythms,
+      previewData.archivedRhythmIds,
+      foundationId,
+      changes
+    );
+    if ('error' in result) return result.error;
+    return persistSeasonHistory(
+      { ...previewData, savedRhythms: result.savedRhythms },
+      'Foundation associations'
+    );
   }
 
   function saveSeasonCorrection(rhythmId: string, draft: RhythmSeasonEditDraft): string | null {
@@ -1318,6 +1366,8 @@ export function App() {
                 onPersonSelect={personId => navigate('people', personId)}
                 onPartnerProfile={() => navigate('people')}
                 userRhythms={marriageCategoryRhythms}
+                foundationRhythms={foundationRhythms}
+                archivedRhythmIds={previewData.archivedRhythmIds}
                 completedRhythms={completedRhythms}
                 undoableRhythms={undoableRhythms}
                 onRhythmDetails={(id, event) => {
@@ -1327,6 +1377,7 @@ export function App() {
                 }}
                 onTend={openCompletion}
                 onUndo={undoTend}
+                onSaveFoundationAssociations={saveFoundationAssociations}
               />
             )
           : destination === 'finances'
@@ -1374,6 +1425,8 @@ export function App() {
         v10RecoveryError={v10RecoveryError}
         v11RecoveryCopy={v11RecoveryCopy}
         v11RecoveryError={v11RecoveryError}
+        v12RecoveryCopy={v12RecoveryCopy}
+        v12RecoveryError={v12RecoveryError}
       />
       <footer className="preview-footer">
         <span>Synthetic preview data stays separate from Tend accounts.</span>
@@ -1385,7 +1438,9 @@ export function App() {
           rhythm={activeRhythmForDetails!}
           initialView={detailsInitialView}
           datedCompletions={[]}
-          completionHistoryAvailable={activeRhythmIsToday || activeRhythmIsArchived}
+          completionHistoryAvailable={
+            activeRhythmIsToday || activeRhythmIsArchived || activeRhythm.completionHistory !== undefined
+          }
           {...(activeRhythmIsToday && isEditableRhythmId(activeRhythm.id) && !activeRhythmIsArchived
             ? { onLogCompletion: record => saveDatedCompletion(record, 'history') }
             : {})}

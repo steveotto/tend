@@ -3007,6 +3007,13 @@ a:focus-visible {
   border-top: 1px solid var(--line);
 }
 
+.marriage-foundation-support__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .marriage-foundation-support h3 {
   margin: 0;
   font-size: 13px;
@@ -3028,6 +3035,155 @@ a:focus-visible {
   margin: 0;
   color: var(--ink-soft);
   font-size: 12px;
+}
+
+.marriage-foundation-support__actions {
+  justify-self: start;
+  min-height: 36px;
+  padding: 5px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--forest-deep);
+  font: 650 11px/1.2 var(--sans);
+  cursor: pointer;
+}
+
+.marriage-foundation-support__actions:hover {
+  border-color: var(--forest);
+  background: var(--mist);
+}
+
+.foundation-association-dialog {
+  width: min(620px, calc(100vw - 28px));
+}
+
+.foundation-association-dialog__surface {
+  display: grid;
+  gap: 12px;
+}
+
+.foundation-association-form {
+  display: grid;
+  gap: 14px;
+}
+
+.foundation-association-form h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.foundation-association-current {
+  display: grid;
+  gap: 6px;
+  margin: -7px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.foundation-association-current li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.foundation-association-current li span:last-child,
+.foundation-association-empty {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.foundation-association-empty {
+  margin: -7px 0 0;
+}
+
+.foundation-association-options {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.foundation-association-options legend {
+  padding: 0 5px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.foundation-association-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(115px, 150px);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.foundation-association-option:last-child {
+  border-bottom: 0;
+}
+
+.foundation-association-option label {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.foundation-association-option small {
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 450;
+}
+
+.foundation-association-id {
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 450;
+}
+
+.foundation-association-option select {
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--card);
+  color: var(--ink);
+  font: 550 12px/1.3 var(--sans);
+}
+
+.foundation-association-option select:focus-visible,
+.marriage-foundation-support__actions:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--forest) 38%, transparent);
+  outline-offset: 2px;
+}
+
+.foundation-association-actions {
+  margin-top: 0;
+}
+
+@media (max-width: 420px) {
+  .marriage-foundation-support__heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .foundation-association-option {
+    grid-template-columns: minmax(0, 1fr) minmax(105px, 120px);
+    gap: 8px;
+  }
 }
 
 .rhythm-card--simple {

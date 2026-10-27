@@ -20,6 +20,21 @@ export type FoundationPreview = {
   illustrativeScore?: number | null;
 };
 
+export const marriageFoundationIds = [
+  'connection',
+  'communication',
+  'fun-adventure',
+  'spiritual-growth',
+  'partnership',
+  'intimacy'
+] as const;
+
+export type MarriageFoundationId = (typeof marriageFoundationIds)[number];
+
+export function isMarriageFoundationId(value: unknown): value is MarriageFoundationId {
+  return typeof value === 'string' && marriageFoundationIds.some(id => id === value);
+}
+
 export type GoalPreview = MoneyGoal;
 
 export type MarriageRhythmGroupId = 'daily' | 'weekly' | 'seasonal';
@@ -65,7 +80,7 @@ export type RhythmPreview = {
   automation: RhythmAutomation;
   status: 'Not confirmed' | 'Due today';
   description?: string | undefined;
-  primaryFoundationId?: string;
+  primaryFoundationId?: string | null;
   secondaryFoundationIds?: readonly string[];
   completionHistory?: readonly RhythmCompletion[] | undefined;
   marriageGroup?: MarriageRhythmGroupId;
@@ -338,8 +353,12 @@ export const marriageRhythmGroups: { id: MarriageRhythmGroupId; title: string }[
   { id: 'seasonal', title: 'Seasonal & Annual' }
 ];
 
-export function marriageFoundationCoverage(fixture: MarriageFixture, foundationId: string) {
-  const associated = rhythmsSupportingFoundation(fixture.rhythms, foundationId);
+export function marriageFoundationCoverage(
+  fixture: MarriageFixture,
+  foundationId: string,
+  rhythms: readonly RhythmPreview[] = fixture.rhythms
+) {
+  const associated = rhythmsSupportingFoundation(rhythms, foundationId);
   return {
     scored: associated.filter(rhythm => rhythm.illustrativeScore !== null && rhythm.illustrativeScore !== undefined).length,
     total: associated.length
