@@ -1578,3 +1578,7 @@ No Foundation UI or scoring was implemented in this closeout.
 ### Publication guard
 
 The local branch's configured upstream is `origin/main`; no `origin/tend2-season-impact-clarity` ref exists. GitHub Pages is configured for the `main` branch at `/` (`build_type: legacy`). Pushing this checkpoint to its configured upstream would publish the site, so the no-deployment requirement prevents that push. No alternative branch was created and no push or merge was performed.
+
+### Local checkpoint identity
+
+The reviewed Season checkpoint was committed locally as `7cdf04086f335be6890ee0b95897449f14e79c76` (`Close Season preview checkpoint`). The remote `origin/main` remains at `df2a92958a4c9c95e588aca04caa2cf7903d2196`; no push was attempted. The local branch is one commit ahead of its configured upstream. Port 4174 was rechecked after the commit and returned HTTP 200.
