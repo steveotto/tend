@@ -8,6 +8,7 @@ import type { RhythmDraft, RhythmDraftErrors } from '../domain/rhythm-editor.ts'
 import { rhythmTimeOptions } from '../domain/rhythm-schedule.ts';
 import { formatRhythmSchedule } from '../domain/rhythm-schedule.ts';
 import { rhythmSchedulesEqual } from '../domain/rhythm-occurrences.ts';
+import { rhythmSeasonForDate } from '../domain/rhythm-seasons.ts';
 import { RhythmScheduleFields } from './RhythmScheduleFields.tsx';
 import { StyledSelect } from './StyledSelect.tsx';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
@@ -31,6 +32,7 @@ function emptyDraft(): RhythmDraft {
 
 type RhythmEditorProps = {
   rhythm?: RhythmPreview;
+  asOfDate?: string;
   hasDatedCompletionHistory?: boolean;
   onSave: (draft: RhythmDraft) => RhythmDraftErrors;
   onArchive?: (id: string) => void;
@@ -39,6 +41,7 @@ type RhythmEditorProps = {
 
 export function RhythmEditor({
   rhythm,
+  asOfDate,
   hasDatedCompletionHistory = false,
   onSave,
   onArchive,
@@ -46,7 +49,7 @@ export function RhythmEditor({
 }: RhythmEditorProps) {
   const [draft, setDraft] = useState<RhythmDraft>(() =>
     rhythm
-      ? rhythmDraftFrom(rhythm, rhythm.categoryIds ?? [])
+      ? rhythmDraftFrom(rhythm, rhythm.categoryIds ?? [], asOfDate)
       : emptyDraft()
   );
   const [errors, setErrors] = useState<RhythmDraftErrors>({});
@@ -63,7 +66,9 @@ export function RhythmEditor({
   const archiveConfirmButtonRef = useRef<HTMLButtonElement>(null);
   const saveButtonRef = useRef<HTMLButtonElement>(null);
   const wasConfirmingArchiveRef = useRef(false);
-  const savedCurrentSeason = rhythm?.scoring?.scheduleHistory.at(-1);
+  const savedCurrentSeason = asOfDate
+    ? rhythmSeasonForDate(rhythm?.scoring?.scheduleHistory ?? [], asOfDate)
+    : rhythm?.scoring?.scheduleHistory.at(-1);
   const hasPreservedSeasonHistory = (rhythm?.scoring?.scheduleHistory.length ?? 0) > 1;
 
   useEffect(() => {

@@ -4,6 +4,11 @@ import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RhythmDetailsDialog } from '../src/components/RhythmDetailsDialog.tsx';
 import { HealthScoreMeter, RhythmHistoryView } from '../src/components/RhythmHistoryView.tsx';
+import { RhythmMetadata } from '../src/components/RhythmMetadata.tsx';
+import {
+  formatRhythmSeasonDateRange,
+  RhythmSeasonCard
+} from '../src/components/RhythmSeasonCard.tsx';
 import { RhythmScoreCircle } from '../src/components/RhythmScoreCircle.tsx';
 import {
   dailyRhythmScoreExample,
@@ -24,9 +29,11 @@ import type { RhythmSchedule } from '../src/domain/rhythm-schedule.ts';
 import {
   createRhythmSeason,
   createUnknownRhythmSeason,
+  rhythmSeasonPaletteAssignments,
   rhythmSeasonPaletteForOrdinal
 } from '../src/domain/rhythm-seasons.ts';
 import { localDateString } from '../src/domain/money-goals.ts';
+import { formatRhythmSchedule } from '../src/domain/rhythm-schedule.ts';
 
 afterEach(cleanup);
 
@@ -134,6 +141,50 @@ function EditableHistoryHarness() {
 }
 
 describe('shared Rhythm history', () => {
+  it('formats Season date ranges compactly while retaining full accessible dates', () => {
+    expect(formatRhythmSeasonDateRange('2026-09-01', '2026-10-16')).toEqual({
+      display: 'Sep 1 – Oct 16, 2026',
+      accessible: 'Sep 1, 2026 – Oct 16, 2026'
+    });
+    expect(formatRhythmSeasonDateRange('2026-10-17', '2026-10-20')).toEqual({
+      display: 'Oct 17 – Oct 20, 2026',
+      accessible: 'Oct 17, 2026 – Oct 20, 2026'
+    });
+    expect(formatRhythmSeasonDateRange('2025-12-01', '2026-01-31')).toEqual({
+      display: 'Dec 1, 2025 – Jan 31, 2026',
+      accessible: 'Dec 1, 2025 – Jan 31, 2026'
+    });
+    expect(formatRhythmSeasonDateRange('2026-10-25', undefined, 'Present')).toEqual({
+      display: 'Oct 25, 2026 – Present',
+      accessible: 'Oct 25, 2026 – Present'
+    });
+    expect(formatRhythmSeasonDateRange(undefined, '2026-10-16')).toEqual({
+      display: 'Start unknown – Oct 16, 2026',
+      accessible: 'Start date not recorded – Oct 16, 2026'
+    });
+  });
+
+  it('shortens missing Season metadata visibly and keeps the complete labels accessible', () => {
+    render(
+      <RhythmSeasonCard
+        seasonKind="unknown"
+        paletteToken="clay"
+        seasonId="unknown-season"
+        title="Earlier schedule needs details"
+        dateRange={{ endDate: '2026-10-19' }}
+        timeLabel="Time of day not recorded"
+        scheduleLabel="Schedule details unavailable."
+      />
+    );
+    const card = screen.getByRole('article', { name: 'Earlier schedule needs details' });
+    const timeframe = card.querySelector('.rhythm-history-view__season-card-timeframe')!;
+    const metadata = card.querySelector('.rhythm-history-view__season-card-metadata')!;
+    expect(timeframe.textContent).toBe('Start unknown – Oct 19, 2026');
+    expect(timeframe.getAttribute('aria-label')).toBe('Start date not recorded – Oct 19, 2026');
+    expect(metadata.textContent).toContain('Time unknown');
+    expect(metadata.querySelector('[aria-label="Time of day not recorded"]')).toBeTruthy();
+  });
+
   it('shows a collapsed single known Season without an Earlier heading or timeline', async () => {
     const user = userEvent.setup();
     const startDate = localDateInTimeZone(new Date(), 'UTC');
@@ -155,6 +206,7 @@ describe('shared Rhythm history', () => {
     );
     const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
     expect(within(history).getByText('1 season')).toBeTruthy();
+    expect(within(history).queryByRole('button', { name: 'Add a Season' })).toBeNull();
     expect(within(history).getByRole('button', { name: 'Show Seasons' }).getAttribute('aria-expanded'))
       .toBe('false');
     expect(within(history).queryByRole('heading', { name: 'Earlier Seasons' })).toBeNull();
@@ -163,7 +215,10 @@ describe('shared Rhythm history', () => {
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
     await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
     expect(within(history).getByRole('heading', { name: 'Daily' })).toBeTruthy();
-    expect(within(history).getByText(`${seasonDateLabel(startDate)} – Present`)).toBeTruthy();
+    const card = within(history).getByRole('heading', { name: 'Daily' }).closest('article')!;
+    expect(card.querySelector('.rhythm-history-view__season-card-timeframe')?.textContent)
+      .toBe(`${seasonDateLabel(startDate)} – Present`);
+    expect(card.querySelector('.rhythm-history-view__season-date-range')).toBeNull();
     expect(within(history).queryByRole('heading', { name: 'Earlier Seasons' })).toBeNull();
     expect(within(history).queryByRole('group', { name: /schedule history timeline/i })).toBeNull();
     expect(setItem).not.toHaveBeenCalled();
@@ -186,7 +241,7 @@ describe('shared Rhythm history', () => {
     expect(within(history).getByText('1 season')).toBeTruthy();
     await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
     expect(within(history).getByRole('heading', { name: 'Daily' })).toBeTruthy();
-    expect(within(history).queryByText(/Start date not recorded/)).toBeNull();
+    expect(within(history).getByText('Start unknown – Present')).toBeTruthy();
     expect(within(history).getByRole('button', { name: 'Edit Daily' })).toBeTruthy();
     const opener = within(history).getByRole('button', { name: 'Edit Daily' });
     await user.click(opener);
@@ -223,6 +278,67 @@ describe('shared Rhythm history', () => {
       .toHaveProperty('value', localDateInTimeZone(new Date(), 'UTC'));
   });
 
+  it('shows the Add Season action only inside the expanded Seasons section for editable history', async () => {
+    const user = userEvent.setup();
+    const startDate = localDateInTimeZone(new Date(), 'UTC');
+    const schedule = { frequency: 'daily' as const };
+    const season = createRhythmSeason(todayConnection.id, startDate, schedule);
+    const onEditSeason = vi.fn(() => null);
+    render(
+      <RhythmHistoryView
+        rhythm={{
+          ...todayConnection,
+          schedule,
+          completionHistory: [],
+          scoring: { trackingStartDate: startDate, timeZone: 'UTC', scheduleHistory: [season] }
+        }}
+        onEditSeason={onEditSeason}
+      />
+    );
+    const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
+    const header = within(history).getByRole('heading', { name: 'Seasons' }).parentElement!;
+    expect(header.querySelector('.rhythm-history-view__seasons-count')?.textContent).toBe('1 season');
+    expect(within(header).getByRole('button', { name: 'Show Seasons' })).toBeTruthy();
+    expect(within(history).queryByRole('button', { name: 'Add a Season' })).toBeNull();
+
+    const toggle = within(header).getByRole('button', { name: 'Show Seasons' });
+    toggle.focus();
+    await user.keyboard('{Enter}');
+    const content = document.getElementById(toggle.getAttribute('aria-controls')!)!;
+    const addButton = within(content).getByRole('button', { name: 'Add a Season' });
+    expect(content.contains(addButton)).toBe(true);
+    const addRow = addButton.parentElement!;
+    expect(addRow.className).toContain('rhythm-history-view__season-add-row');
+    expect(addRow.querySelector('.rhythm-history-view__seasons-info-copy')?.textContent)
+      .toBe('Seasons organize your schedule as it changes. Your logs stay saved, and each is scored using the schedule in place at the time.');
+    addButton.focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('dialog', { name: 'Add a season' })).toBeTruthy();
+    expect(onEditSeason).not.toHaveBeenCalled();
+  });
+
+  it('shows an unrecorded start date in the current card footer without inventing a date', async () => {
+    const user = userEvent.setup();
+    const rhythm = {
+      ...todayConnection,
+      schedule: { frequency: 'daily' as const },
+      completionHistory: [],
+      scoring: { trackingStartDate: '2026-10-01', timeZone: 'UTC', scheduleHistory: [] }
+    };
+    render(<RhythmHistoryView rhythm={rhythm} onEditSeason={() => null} />);
+    const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+    const card = within(history).getByRole('heading', { name: 'Daily' }).closest('article')!;
+    expect(card.querySelector('.rhythm-history-view__season-card-timeframe')?.textContent)
+      .toBe('Start unknown – Present');
+    expect(card.querySelector('.rhythm-history-view__season-card-timeframe')?.getAttribute('aria-label'))
+      .toBe('Start date not recorded – Present');
+    expect(card.querySelector('.rhythm-history-view__season-card-metadata')?.textContent)
+      .toContain('Time unknown');
+    expect(card.querySelector('.rhythm-history-view__season-card-metadata [aria-label="Time of day not recorded"]'))
+      .toBeTruthy();
+  });
+
   it('shows a single structured Season with saved logs and keeps archived schedules read-only', async () => {
     const user = userEvent.setup();
     const asOfDate = localDateInTimeZone(new Date(), 'UTC');
@@ -255,10 +371,11 @@ describe('shared Rhythm history', () => {
     expect(within(history).getByRole('heading', { name: 'Daily' })).toBeTruthy();
     expect(within(history).queryByRole('button', { name: 'Edit Daily' })).toBeNull();
     expect(within(history).queryByRole('button', { name: 'Choose a schedule' })).toBeNull();
+    expect(within(history).queryByRole('button', { name: 'Add a Season' })).toBeNull();
     expect(onChooseSchedule).not.toHaveBeenCalled();
   });
 
-  it('shows Choose a schedule for descriptive and missing schedules without counting unknown history', async () => {
+  it('shows Choose a schedule for descriptive and missing schedules while counting unknown history', async () => {
     const user = userEvent.setup();
     const onChooseSchedule = vi.fn();
     const unknownStart = addCalendarDays(localDateInTimeZone(new Date(), 'UTC'), -10);
@@ -279,7 +396,7 @@ describe('shared Rhythm history', () => {
         <RhythmHistoryView rhythm={rhythm} onChooseSchedule={onChooseSchedule} archived />
       );
       const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
-      expect(within(history).getByText('0 seasons')).toBeTruthy();
+      expect(within(history).getByText(rhythm.scoring ? '1 season' : '0 seasons')).toBeTruthy();
       await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
       expect(within(history).getByText('Choose a schedule to see your current Season.')).toBeTruthy();
       expect(within(history).queryByRole('button', { name: 'Choose a schedule' })).toBeNull();
@@ -331,7 +448,8 @@ describe('shared Rhythm history', () => {
           expectedTimeLabel: 'Anytime',
           restoreSchedule: schedule,
           restoreCadence: 'Daily',
-          restoreTimeLabel: 'Anytime'
+          restoreTimeLabel: 'Anytime',
+          restoreTrackingStartDate: asOfDate
         }}
         onUndoSeasonDeletion={() => null}
       />
@@ -409,19 +527,19 @@ describe('shared Rhythm history', () => {
           timeZone: 'UTC',
           scheduleHistory: [
             {
-              ...createRhythmSeason(todayConnection.id, firstStart, { frequency: 'daily' }),
+              ...createRhythmSeason(todayConnection.id, firstStart, { frequency: 'daily' }, 'afternoon'),
               name: 'Daily grounding',
               note: 'A preserved note.'
             },
             createRhythmSeason(todayConnection.id, secondStart, {
               frequency: 'weekly',
               weekdays: [1, 3]
-            }),
+            }, 'evening'),
             {
               ...createRhythmSeason(todayConnection.id, currentStart, {
                 frequency: 'weekly',
                 weekdays: [1, 3]
-              }),
+              }, 'morning'),
               name: 'Avery time'
             }
           ]
@@ -439,7 +557,7 @@ describe('shared Rhythm history', () => {
       const controlledContent = document.getElementById(info.getAttribute('aria-controls')!)!;
       expect(controlledContent.hidden).toBe(true);
       expect(controlledContent.querySelector('.rhythm-history-view__seasons-info-copy')?.textContent)
-        .toBe('Seasons keep track of schedule changes. Your logs stay saved and are scored using the schedule for their date.');
+        .toBe('Seasons organize your schedule as it changes. Your logs stay saved, and each is scored using the schedule in place at the time.');
       expect(controlledContent.querySelector('.rhythm-history-view__seasons-content__intro')).toBeNull();
       expect(within(history).queryByRole('button', { name: /Go to .*Oct/ })).toBeNull();
       expect(within(history).queryByRole('button', { name: 'Edit Avery time' })).toBeNull();
@@ -450,18 +568,31 @@ describe('shared Rhythm history', () => {
       expect(info.getAttribute('aria-expanded')).toBe('true');
       expect(controlledContent.hidden).toBe(false);
       expect(within(history).getAllByText(
-        'Seasons keep track of schedule changes. Your logs stay saved and are scored using the schedule for their date.'
+        'Seasons organize your schedule as it changes. Your logs stay saved, and each is scored using the schedule in place at the time.'
       )).toHaveLength(1);
       expect(within(history).queryByText('See how your schedule has changed.')).toBeNull();
       expect(within(history).queryByText('Earlier dates keep their earlier schedule. Your logged moments stay with this rhythm.')).toBeNull();
       expect(within(history).getByRole('heading', { name: 'Avery time' })).toBeTruthy();
       expect(within(history).getByText(`${seasonDateLabel(currentStart)} – Present`)).toBeTruthy();
-      expect(within(history).getAllByText('Every week on Monday and Wednesday.')).toHaveLength(2);
-      expect(within(history).getByText('Current')).toBeTruthy();
+      expect(history.querySelectorAll('.rhythm-history-view__season-card-footer')).toHaveLength(3);
+      expect(within(history).queryByText('Current')).toBeNull();
       const currentHeading = within(history).getByRole('heading', { name: 'Current Season' });
       const earlierHeading = within(history).getByRole('heading', { name: 'Earlier Seasons' });
       expect(currentHeading.className).toBe(earlierHeading.className);
+      expect(earlierHeading.parentElement?.querySelector('.rhythm-history-view__season-cards')?.children)
+        .toHaveLength(2);
       const currentCard = within(history).getByRole('heading', { name: 'Avery time' }).closest('article')!;
+      expect(currentCard.querySelector('.rhythm-history-view__season-current-badge')).toBeNull();
+      const currentFooter = currentCard?.querySelector('.rhythm-history-view__season-card-footer')!;
+      const currentFooterGroup = currentFooter.querySelector('.rhythm-metadata-schedule-group')!;
+      expect([...currentFooterGroup.children]
+        .filter(item => !item.classList.contains('visually-hidden'))
+        .map(item => item.querySelector('span')?.textContent ?? item.textContent))
+        .toEqual(['Mon · Wed', 'Morning']);
+      expect(currentFooter.querySelectorAll('svg')).toHaveLength(2);
+      expect(currentFooter.querySelector('.rhythm-history-view__season-card-timeframe')?.textContent)
+        .toBe(`${seasonDateLabel(currentStart)} – Present`);
+      expect(currentCard?.querySelector('.rhythm-history-view__season-date-range')).toBeNull();
       expect(currentHeading.compareDocumentPosition(currentCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(within(history).getByRole('heading', { name: 'Earlier Seasons' })).toBeTruthy();
       expect(within(history).getByText('3 seasons')).toBeTruthy();
@@ -473,18 +604,34 @@ describe('shared Rhythm history', () => {
         'Daily grounding'
       ]);
       const earlierCard = earlierHeadings[0]?.closest('article')!;
+      const earlierFooterGroup = earlierCard.querySelector('.rhythm-metadata-schedule-group')!;
+      expect([...earlierFooterGroup.children]
+        .filter(item => !item.classList.contains('visually-hidden'))
+        .map(item => item.querySelector('span')?.textContent ?? item.textContent))
+        .toEqual(['Mon · Wed', 'Evening']);
       expect(currentCard.className).toContain('rhythm-history-view__season-card');
       expect(earlierCard.className).toContain('rhythm-history-view__season-card');
+      const assignedPalette = rhythmSeasonPaletteAssignments(rhythm.scoring.scheduleHistory);
       expect(currentCard.className)
-        .toContain('rhythm-history-view__season-visual--sky');
+        .toContain(`rhythm-history-view__season-visual--${assignedPalette.get(rhythm.scoring.scheduleHistory[2]!.id)}`);
       expect(earlierCard.className)
-        .toContain('rhythm-history-view__season-visual--sage');
+        .toContain(`rhythm-history-view__season-visual--${assignedPalette.get(rhythm.scoring.scheduleHistory[1]!.id)}`);
       const firstCard = within(earlierSection).getByRole('heading', { name: 'Daily grounding' }).closest('article')!;
-      expect(firstCard.className).toContain('rhythm-history-view__season-visual--fern');
+      expect(firstCard.className)
+        .toContain(`rhythm-history-view__season-visual--${assignedPalette.get(rhythm.scoring.scheduleHistory[0]!.id)}`);
       expect(within(earlierSection).queryByText('Current')).toBeNull();
-      fireEvent.click(within(history).getByRole('button', { name: 'Show details for Daily grounding' }));
       expect(within(history).getByText('A preserved note.')).toBeTruthy();
-      expect(within(history).queryByRole('button', { name: 'Show details for Mon · Wed' })).toBeNull();
+      const dailyCard = within(earlierSection).getByRole('heading', { name: 'Daily grounding' }).closest('article')!;
+      const dailyFooterGroup = dailyCard.querySelector('.rhythm-metadata-schedule-group')!;
+      expect([...dailyFooterGroup.children]
+        .filter(item => !item.classList.contains('visually-hidden'))
+        .map(item => item.querySelector('span')?.textContent ?? item.textContent))
+        .toEqual(['Daily', 'Afternoon']);
+      expect(firstCard.querySelector('.rhythm-history-view__season-card-timeframe')?.textContent)
+        .toBe(`${shortTestDate(firstStart)} – ${seasonDateLabel(addCalendarDays(secondStart, -1))}`);
+      expect(firstCard.querySelector('.rhythm-history-view__season-card-timeframe')?.getAttribute('aria-label'))
+        .toBe(`${seasonDateLabel(firstStart)} – ${seasonDateLabel(addCalendarDays(secondStart, -1))}`);
+      expect(within(history).queryByRole('button', { name: /details for/i })).toBeNull();
       const timelineSegments = [...history.querySelectorAll<HTMLElement>(
         '.rhythm-history-view__season-timeline-segment'
       )];
@@ -492,9 +639,9 @@ describe('shared Rhythm history', () => {
       expect(timelineSegments[0]?.getAttribute('aria-label'))
         .toContain(`${shortTestDate(firstStart)} to ${shortTestDate(addCalendarDays(secondStart, -1))}`);
       expect(timelineSegments[0]?.className)
-        .toContain('rhythm-history-view__season-visual--fern');
+        .toContain(`rhythm-history-view__season-visual--${assignedPalette.get(rhythm.scoring.scheduleHistory[0]!.id)}`);
       expect(timelineSegments[2]?.className)
-        .toContain('rhythm-history-view__season-visual--sky');
+        .toContain(`rhythm-history-view__season-visual--${assignedPalette.get(rhythm.scoring.scheduleHistory[2]!.id)}`);
       expect(timelineSegments.map(segment => Number((segment as HTMLElement).style.flexGrow)))
         .toEqual([90, 183, 25]);
       expect(within(history).queryByRole('button', { name: /Change schedule|Edit Season|Delete Season/ })).toBeNull();
@@ -520,9 +667,124 @@ describe('shared Rhythm history', () => {
       render(<RhythmHistoryView rhythm={rhythm} onEditSeason={() => null} />);
       const editableHistory = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
       await user.click(within(editableHistory).getByRole('button', { name: 'Show Seasons' }));
+      expect(within(editableHistory).getByText('A preserved note.')).toBeTruthy();
+      expect(within(editableHistory).queryByRole('button', { name: /details for/i })).toBeNull();
+      const editableEarlierCard = within(editableHistory).getByRole('heading', { name: 'Daily grounding' }).closest('article')!;
+      const earlierEditButton = within(editableEarlierCard).getByRole('button', { name: 'Edit Daily grounding' });
+      expect(editableEarlierCard.querySelector('.rhythm-history-view__season-card-actions')?.children).toHaveLength(1);
+      expect(earlierEditButton.className).toContain('today-rhythm-details__edit-icon');
       const editButton = within(editableHistory).getByRole('button', { name: 'Edit Avery time' });
       expect(editButton.className).toContain('today-rhythm-details__edit-icon');
       expect(editButton.querySelector('.today-rhythm-details__edit-visual svg')).toBeTruthy();
+  });
+
+  it('shows distinct accessible Health scores for current and historical Season cards', async () => {
+    const user = userEvent.setup();
+    const rhythmId = 'season-health-card-fixture';
+    const asOfDate = localDateInTimeZone(new Date(), 'UTC');
+    const firstStart = addCalendarDays(asOfDate, -5);
+    const currentStart = addCalendarDays(asOfDate, -2);
+    const firstEnd = addCalendarDays(currentStart, -1);
+    const currentSchedule = { frequency: 'daily' as const };
+    const firstSeason = {
+      ...createRhythmSeason(rhythmId, firstStart, currentSchedule, 'morning', 'season-health-earlier', 'plum'),
+      name: 'Earlier daily plan'
+    };
+    const currentSeason = {
+      ...createRhythmSeason(rhythmId, currentStart, currentSchedule, 'evening', 'season-health-current', 'fern'),
+      name: 'Current daily plan'
+    };
+    const completionFor = (id: string, date: string) => ({
+      ...savedRecord(id, date, '12:00'),
+      rhythmId
+    });
+    const rhythm = {
+      ...todayConnection,
+      id: rhythmId,
+      schedule: currentSchedule,
+      createdLocalDate: firstStart,
+      createdTimeZone: 'UTC',
+      scoring: {
+        trackingStartDate: firstStart,
+        timeZone: 'UTC',
+        scheduleHistory: [firstSeason, currentSeason]
+      }
+    };
+    render(
+      <RhythmHistoryView
+        rhythm={rhythm}
+        datedCompletions={[
+          completionFor('earlier-season-tend', firstEnd),
+          completionFor('current-season-tend', addCalendarDays(asOfDate, -1))
+        ]}
+      />
+    );
+    const history = screen.getByRole('region', { name: `History for ${rhythm.title}` });
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+
+    const currentCard = within(history).getByRole('heading', { name: 'Current daily plan' }).closest('article')!;
+    const earlierCard = within(history).getByRole('heading', { name: 'Earlier daily plan' }).closest('article')!;
+    const currentHealth = within(currentCard).getByRole('img', { name: 'Season Health: 63 out of 100' });
+    const earlierHealth = within(earlierCard).getByRole('img', { name: 'Season Health: 50 out of 100' });
+    expect(currentHealth.querySelector('.ma-score__label')?.textContent).toBe('Health');
+    expect(currentHealth.querySelector('.ma-score__value')?.textContent).toBe('63');
+    expect(earlierHealth.querySelector('.ma-score__label')?.textContent).toBe('Health');
+    expect(earlierHealth.querySelector('.ma-score__value')?.textContent).toBe('50');
+    expect(currentCard.querySelector('.rhythm-history-view__season-current-badge')).toBeNull();
+    expect(currentCard.querySelector('.rhythm-history-view__season-health-badge')?.className)
+      .toContain('rhythm-history-view__season-health-badge');
+    expect(earlierCard.querySelector('.rhythm-history-view__season-health-badge')?.className)
+      .toContain('rhythm-history-view__season-health-badge');
+  });
+
+  it('shows upcoming Season cards with their own schedule and time footer', async () => {
+    const user = userEvent.setup();
+    const asOfDate = localDateInTimeZone(new Date(), 'UTC');
+    const futureStart = addCalendarDays(asOfDate, 14);
+    const currentSchedule = { frequency: 'daily' as const };
+    const futureSchedule = {
+      frequency: 'monthly' as const,
+      pattern: { kind: 'dayOfMonth' as const, day: 15 }
+    };
+    const rhythm = {
+      ...todayConnection,
+      schedule: currentSchedule,
+      timeOfDay: 'morning' as const,
+      scoring: {
+        trackingStartDate: asOfDate,
+        timeZone: 'UTC',
+        scheduleHistory: [
+          createRhythmSeason(todayConnection.id, asOfDate, currentSchedule, 'morning'),
+          createRhythmSeason(todayConnection.id, futureStart, futureSchedule, 'bedtime'),
+          createUnknownRhythmSeason(todayConnection.id, addCalendarDays(futureStart, 30))
+        ]
+      }
+    };
+    render(<RhythmHistoryView rhythm={rhythm} archived />);
+    const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+
+    const upcoming = within(history).getByRole('heading', { name: 'Upcoming Seasons' }).parentElement!;
+    const futureCard = within(upcoming).getByRole('heading', { name: 'Monthly · 15th' }).closest('article')!;
+    expect([...futureCard.querySelectorAll<HTMLElement>(
+      '.rhythm-metadata-schedule-group > span:not(.visually-hidden)'
+    )].map(item => item.textContent)).toEqual(['Monthly · 15th', 'Bedtime']);
+    expect(futureCard.querySelector('.rhythm-history-view__season-card-timeframe')?.textContent)
+      .toBe(`${shortTestDate(futureStart)} – ${seasonDateLabel(addCalendarDays(futureStart, 29))}`);
+    const unknownFuture = within(upcoming)
+      .getByRole('heading', { name: 'Upcoming schedule needs details' }).closest('article')!;
+    const unavailableHealth = within(unknownFuture).getByRole('img', { name: 'Season Health unavailable' });
+    expect(unavailableHealth.querySelector('.ma-score__label')?.textContent).toBe('Health');
+    expect(unavailableHealth.querySelector('.ma-score__value')?.textContent).toBe('—');
+    expect(unknownFuture.querySelector('.rhythm-history-view__season-card-metadata')?.textContent)
+      .toContain('Schedule details unavailable.');
+    expect(unknownFuture.querySelector('.rhythm-history-view__season-card-metadata')?.textContent)
+      .toContain('Time unknown');
+    expect(unknownFuture.querySelector('.rhythm-history-view__season-card-metadata [aria-label="Time of day not recorded"]'))
+      .toBeTruthy();
+    expect(unknownFuture.querySelector('.rhythm-history-view__season-card-timeframe')?.textContent)
+      .toBe(`${seasonDateLabel(addCalendarDays(futureStart, 30))} – Upcoming`);
+    expect(within(upcoming).queryByRole('button', { name: /details for/i })).toBeNull();
   });
 
   it('uses each Season palette token for its matching card and timeline segment across palette cycles', async () => {
@@ -564,11 +826,61 @@ describe('shared Rhythm history', () => {
     scheduleHistory.forEach((season, index) => {
       const visualClass = `rhythm-history-view__season-visual--${season.paletteToken}`;
       expect(timelineSegments[index]?.classList.contains(visualClass)).toBe(true);
-      expect(cards.find(card => card.getAttribute('aria-labelledby')?.includes(season.id))
-        ?.classList.contains(visualClass)).toBe(true);
+      expect(cards[cards.length - 1 - index]?.classList.contains(visualClass)).toBe(true);
     });
     expect(scheduleHistory.map(season => season.paletteToken)).toEqual([
       'fern', 'sage', 'sky', 'ocean', 'plum', 'fern', 'sage'
+    ]);
+  });
+
+  it('renders colliding stored colors distinctly and consistently across timeline and cards', async () => {
+    const user = userEvent.setup();
+    const asOfDate = localDateInTimeZone(new Date(), 'UTC');
+    const scheduleHistory = Array.from({ length: 3 }, (_, index) =>
+      createRhythmSeason(
+        todayConnection.id,
+        addCalendarDays(asOfDate, index - 2),
+        { frequency: 'daily' },
+        undefined,
+        `same-color-season-${index}`,
+        'fern'
+      )
+    );
+    render(
+      <RhythmHistoryView
+        rhythm={{
+          ...todayConnection,
+          schedule: { frequency: 'daily' },
+          scoring: {
+            trackingStartDate: scheduleHistory[0]!.startDate,
+            timeZone: 'UTC',
+            scheduleHistory
+          }
+        }}
+      />
+    );
+    const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+
+    const timelineSegments = [...history.querySelectorAll<HTMLElement>(
+      '.rhythm-history-view__season-timeline-segment'
+    )];
+    const cards = [...history.querySelectorAll<HTMLElement>('.rhythm-history-view__season-card')];
+    const assignedColors = scheduleHistory.map((_, index) => {
+      const card = cards[cards.length - 1 - index];
+      const assignedClass = card?.className.split(' ').find(className =>
+        className.startsWith('rhythm-history-view__season-visual--')
+      );
+      expect(assignedClass).toBeTruthy();
+      expect(timelineSegments[index]?.className).toContain(assignedClass);
+      return assignedClass;
+    });
+    expect(new Set(assignedColors).size).toBe(3);
+    expect(assignedColors[0]).toBe('rhythm-history-view__season-visual--fern');
+    expect(assignedColors.slice(0, 3)).toEqual([
+      'rhythm-history-view__season-visual--fern',
+      'rhythm-history-view__season-visual--sage',
+      'rhythm-history-view__season-visual--sky'
     ]);
   });
 
@@ -592,18 +904,19 @@ describe('shared Rhythm history', () => {
     render(<RhythmHistoryView rhythm={rhythm} onEditSeason={() => null} />);
     const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
     await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
-    await user.click(within(history).getByRole('button', {
-      name: 'Show details for Earlier schedule needs details'
-    }));
-
     expect(within(history).getByRole('heading', { name: 'Earlier schedule needs details' })).toBeTruthy();
     expect(within(history).getByText('Original description: A few times weekly')).toBeTruthy();
-    expect(within(history).getByText(`${seasonDateLabel(unknownStart)} – ${seasonDateLabel(addCalendarDays(asOfDate, -1))}`)).toBeTruthy();
+    expect(within(history).queryByRole('button', { name: /details for/i })).toBeNull();
+    expect(within(history).getByText(`${shortTestDate(unknownStart)} – ${seasonDateLabel(addCalendarDays(asOfDate, -1))}`)).toBeTruthy();
     expect(within(history).getByRole('button', { name: 'Set earlier schedule' })).toBeTruthy();
     expect(within(history).getAllByRole('button', { name: 'Set earlier schedule' })).toHaveLength(1);
     const unknownEntry = within(history).getByRole('heading', { name: 'Earlier schedule needs details' }).closest('article')!;
     expect(unknownEntry.className).toContain('rhythm-history-view__season-card');
     expect(unknownEntry.className).toContain('rhythm-history-view__season-visual--unknown');
+    expect(unknownEntry.querySelector('.rhythm-history-view__season-card-timeframe')?.textContent)
+      .toBe(`${shortTestDate(unknownStart)} – ${seasonDateLabel(addCalendarDays(asOfDate, -1))}`);
+    expect(unknownEntry.querySelector('.rhythm-history-view__season-card-timeframe')?.getAttribute('aria-label'))
+      .toBe(`${seasonDateLabel(unknownStart)} – ${seasonDateLabel(addCalendarDays(asOfDate, -1))}`);
     await user.click(within(unknownEntry).getByRole('button', { name: 'Set earlier schedule' }));
     expect(screen.getByRole('dialog', { name: 'Set earlier schedule' })).toBeTruthy();
   });
@@ -970,6 +1283,12 @@ describe('shared Rhythm history', () => {
     expect(description.compareDocumentPosition(people) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(people.compareDocumentPosition(schedule) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(schedule.textContent).toContain('Daily');
+    const summaryGroup = schedule.querySelector('.rhythm-metadata-schedule-group')!;
+    expect([...summaryGroup.children]
+      .filter(item => !item.classList.contains('visually-hidden'))
+      .map(item => item.querySelector('span')?.textContent ?? item.textContent))
+      .toEqual(['Daily', 'Evening']);
+    expect(schedule.querySelectorAll('svg')).toHaveLength(2);
     expect(within(history).getByText('Evening')).toBeTruthy();
     const completionSummary = history.querySelector('.rhythm-history-view__completion-summary')!;
     expect(completionSummary.querySelector('.rhythm-history-view__completion-total strong')?.textContent).toBe('3');
@@ -1012,6 +1331,7 @@ describe('shared Rhythm history', () => {
       year: 'numeric',
       timeZone: 'UTC'
     });
+
     expect([...chart.querySelectorAll('li')].at(-1)?.getAttribute('aria-label'))
       .toBe(`${todayLabel}: no completion recorded yet, today`);
     expect(chart.querySelectorAll('.rhythm-history-view__completion-zero').length).toBe(displayedDates.length - 3);
@@ -1034,6 +1354,100 @@ describe('shared Rhythm history', () => {
         total + Number(day.getAttribute('aria-label')?.match(/: (\d+) completion/)?.[1] ?? 0)
       ), 0)
     );
+  });
+
+  it.each([
+    ['daily', { frequency: 'daily' } satisfies RhythmSchedule, 'Daily', 'Morning'],
+    ['selected days', {
+      frequency: 'weekly',
+      weeklyMode: 'select-days',
+      weekdays: [1, 3, 5]
+    } satisfies RhythmSchedule, 'Select days · Mon · Wed · Fri', 'Evening'],
+    ['Monday, Wednesday, Friday', {
+      frequency: 'weekly',
+      weekdays: [1, 3, 5]
+    } satisfies RhythmSchedule, 'Mon · Wed · Fri', 'Evening'],
+    ['weekday frequency', {
+      frequency: 'weekly',
+      weekdays: [1, 2, 3, 4, 5]
+    } satisfies RhythmSchedule, 'Weekdays', 'Afternoon'],
+    ['monthly', {
+      frequency: 'monthly',
+      pattern: { kind: 'dayOfMonth', day: 15 }
+    } satisfies RhythmSchedule, 'Monthly · 15th', 'Bedtime']
+  ])('uses the compact Rhythm footer wording for %s schedules', (_label, schedule, expected, timeLabel) => {
+    const rhythm = {
+      id: 'schedule-summary-contract',
+      title: 'Schedule summary',
+      automation: 'manual' as const,
+      status: 'Due today' as const,
+      schedule,
+      timeLabel
+    };
+    render(
+      <>
+        <RhythmHistoryView rhythm={rhythm} />
+        <RhythmMetadata
+          variant="footer"
+          schedule={schedule}
+          timeLabel={timeLabel}
+          lastTended="Not yet tended"
+        />
+      </>
+    );
+    const history = screen.getByRole('region', { name: 'History for Schedule summary' });
+    const summary = history.querySelector('.rhythm-history-view__schedule')!;
+    const group = summary.querySelector('.rhythm-metadata-schedule-group')!;
+    const visibleLabels = [...group.children]
+      .filter(item => !item.classList.contains('visually-hidden'))
+      .map(item => item.querySelector('span')?.textContent ?? item.textContent);
+    expect(formatRhythmSchedule(schedule, 'compact')).toBe(expected);
+    expect(visibleLabels).toEqual([expected, timeLabel]);
+    expect(summary.querySelectorAll('svg')).toHaveLength(2);
+    expect(summary.className).toContain('rhythm-metadata-footer');
+    expect(group).toBeTruthy();
+    const footerGroup = document.querySelector('.rhythm-metadata-footer:not(.rhythm-history-view__schedule) .rhythm-metadata-schedule-group')!;
+    const footerLabels = [...footerGroup.children]
+      .filter(item => !item.classList.contains('visually-hidden'))
+      .map(item => item.querySelector('span')?.textContent ?? item.textContent);
+    expect(visibleLabels).toEqual(footerLabels);
+  });
+
+  it('uses the active Season schedule and time in the detail summary', () => {
+    const asOfDate = localDateInTimeZone(new Date(), 'UTC');
+    const currentSchedule: RhythmSchedule = {
+      frequency: 'weekly',
+      weeklyMode: 'select-days',
+      weekdays: [2, 4]
+    };
+    const activeSeason = createRhythmSeason(
+      'effective-detail-summary',
+      addCalendarDays(asOfDate, -30),
+      currentSchedule,
+      'bedtime'
+    );
+    render(
+      <RhythmHistoryView
+        rhythm={{
+          id: 'effective-detail-summary',
+          title: 'Season-backed schedule',
+          automation: 'manual',
+          status: 'Due today',
+          schedule: currentSchedule,
+          timeLabel: 'Stale time',
+          scoring: {
+            trackingStartDate: activeSeason.startDate,
+            timeZone: 'UTC',
+            scheduleHistory: [activeSeason]
+          }
+        }}
+      />
+    );
+    const summary = screen.getByRole('region', { name: 'History for Season-backed schedule' })
+      .querySelector('.rhythm-history-view__schedule')!;
+    expect(summary.textContent).toContain(formatRhythmSchedule(currentSchedule, 'compact'));
+    expect(summary.textContent).toContain('Bedtime');
+    expect(summary.textContent).not.toContain('Stale time');
   });
 
   it('uses singular total/span wording for one actual dated record', () => {
@@ -1638,7 +2052,7 @@ describe('shared Rhythm history', () => {
     expect(within(header).getAllByRole('heading', { name: 'Daily connection' })).toHaveLength(1);
     expect(within(header).getAllByRole('button', { name: 'Close details' })).toHaveLength(1);
     expect(within(header).queryByText('Health')).toBeNull();
-    expect(within(body).getByText('Health')).toBeTruthy();
+    expect(within(body).getByRole('heading', { name: 'Health' })).toBeTruthy();
     expect(within(body).getByRole('heading', { name: 'All completion history' })).toBeTruthy();
     expect(body.querySelector('.rhythm-history-view__logged-moments')).toBeTruthy();
     expect(body.contains(header)).toBe(false);
@@ -1701,7 +2115,7 @@ describe('shared Rhythm history', () => {
     expect(within(history).getByText('1 season')).toBeTruthy();
     await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
     expect(within(history).getByRole('heading', { name: 'Daily' })).toBeTruthy();
-    expect(within(history).queryByText(/Start date not recorded/)).toBeNull();
+    expect(within(history).getByText('Start unknown – Present')).toBeTruthy();
 
     cleanup();
     render(

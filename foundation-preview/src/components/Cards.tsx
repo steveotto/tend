@@ -192,10 +192,34 @@ export function FoundationProgress({
   );
 }
 
-export function CategoryHealthBadge({ score }: { score: number | null }) {
+export function CategoryHealthBadge({
+  score,
+  accessibleLabel,
+  className,
+  displayScore = score,
+  variant = 'default'
+}: {
+  score: number | null;
+  accessibleLabel?: string;
+  className?: string;
+  displayScore?: number | null;
+  variant?: 'default' | 'neutral-labeled';
+}) {
   return (
-    <span className={`ma-score ${scoreTone(score)}`} aria-hidden="true">
-      {score ?? '—'}
+    <span
+      className={`ma-score ${scoreTone(score)}${className ? ` ${className}` : ''}`}
+      {...(accessibleLabel
+        ? { role: 'img', 'aria-label': accessibleLabel }
+        : { 'aria-hidden': true })}
+    >
+      {variant === 'neutral-labeled'
+        ? (
+          <>
+            <span className="ma-score__label">Health</span>
+            <span className="ma-score__value">{displayScore ?? '—'}</span>
+          </>
+        )
+        : displayScore ?? '—'}
     </span>
   );
 }

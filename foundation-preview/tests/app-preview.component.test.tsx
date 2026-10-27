@@ -6,6 +6,7 @@ import { CatalogApp } from '../src/CatalogApp.tsx';
 import { ArchivedRhythmsDialog } from '../src/components/ArchivedRhythmsDialog.tsx';
 import { localDateString } from '../src/domain/money-goals.ts';
 import { addCalendarDays } from '../src/domain/rhythm-scoring.ts';
+import { localDateTimeInZone } from '../src/domain/rhythm-completion.ts';
 import { createRhythmSeason, rhythmSeasonPaletteForOrdinal } from '../src/domain/rhythm-seasons.ts';
 import type { DatedRhythmCompletion } from '../src/domain/rhythm-completion.ts';
 import {
@@ -125,6 +126,102 @@ function seasonDeletionFixture() {
 }
 
 describe('Tend Today preview', () => {
+  it('adds a bounded Season range, persists it without moving logs, and undoes it safely', async () => {
+    const user = userEvent.setup();
+    const fixture = seasonDeletionFixture();
+    const original = fixture.data.savedRhythms.find(entry => entry.id === fixture.rhythmId)!;
+    const originalLogs = fixture.records.map(record => ({ ...record }));
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(fixture.data)));
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await user.click(screen.getByRole('button', {
+      name: 'View scores and history for Season deletion fixture'
+    }));
+    const history = screen.getByRole('region', { name: 'History for Season deletion fixture' });
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+    await user.click(within(history).getByRole('button', { name: 'Add a Season' }));
+    const editor = screen.getByRole('dialog', { name: 'Add a season' });
+    const asOfDate = localDateString(new Date());
+    const rangeStart = addCalendarDays(asOfDate, -5);
+    const rangeEnd = addCalendarDays(asOfDate, -3);
+    fireEvent.change(within(editor).getByLabelText('Starting date'), { target: { value: rangeStart } });
+    await user.click(within(editor).getByLabelText('Set an end date'));
+    fireEvent.change(within(editor).getByLabelText('End date'), { target: { value: rangeEnd } });
+    expect(within(editor).getByText(/will be split/)).toBeTruthy();
+    await user.click(within(editor).getByRole('button', { name: 'Apply' }));
+
+    let saved = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, asOfDate);
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    let updated = saved.envelope.data.savedRhythms.find(entry => entry.id === fixture.rhythmId)!;
+    expect(updated.scoring?.scheduleHistory).toHaveLength(5);
+    expect(updated.scoring?.scheduleHistory.map(season => season.startDate)).toContain(rangeStart);
+    expect(updated.scoring?.scheduleHistory.map(season => season.startDate)).toContain(addCalendarDays(rangeEnd, 1));
+    expect(saved.envelope.data.datedRhythmCompletions).toEqual(originalLogs);
+
+    const undoNotice = within(history).getByText('A Season change was saved. You can undo it.');
+    expect(undoNotice).toBeTruthy();
+    await user.click(within(history).getByRole('button', { name: 'Undo' }));
+    saved = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, asOfDate);
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    updated = saved.envelope.data.savedRhythms.find(entry => entry.id === fixture.rhythmId)!;
+    expect(updated).toEqual(original);
+    expect(saved.envelope.data.datedRhythmCompletions).toEqual(originalLogs);
+
+    cleanup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await user.click(screen.getByRole('button', {
+      name: 'View scores and history for Season deletion fixture'
+    }));
+    const reloaded = screen.getByRole('region', { name: 'History for Season deletion fixture' });
+    await user.click(within(reloaded).getByRole('button', { name: 'Show Seasons' }));
+    expect(within(reloaded).getByText('3 seasons')).toBeTruthy();
+    expect(parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, asOfDate).valid).toBe(true);
+  });
+
+  it('reloads a persisted Add Season timeline without duplicating its fragments', async () => {
+    const user = userEvent.setup();
+    const fixture = seasonDeletionFixture();
+    const originalLogs = fixture.records.map(record => ({ ...record }));
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(fixture.data)));
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await user.click(screen.getByRole('button', {
+      name: 'View scores and history for Season deletion fixture'
+    }));
+    let history = screen.getByRole('region', { name: 'History for Season deletion fixture' });
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+    await user.click(within(history).getByRole('button', { name: 'Add a Season' }));
+    const editor = screen.getByRole('dialog', { name: 'Add a season' });
+    const rangeStart = addCalendarDays(localDateString(new Date()), -5);
+    const rangeEnd = addCalendarDays(rangeStart, 2);
+    fireEvent.change(within(editor).getByLabelText('Starting date'), { target: { value: rangeStart } });
+    await user.click(within(editor).getByLabelText('Set an end date'));
+    fireEvent.change(within(editor).getByLabelText('End date'), { target: { value: rangeEnd } });
+    await user.click(within(editor).getByRole('button', { name: 'Apply' }));
+    const savedRaw = window.localStorage.getItem(PREVIEW_STORAGE_KEY)!;
+    const firstLoad = parsePreviewBackup(savedRaw, localDateString(new Date()));
+    expect(firstLoad.valid).toBe(true);
+    if (!firstLoad.valid) return;
+    expect(firstLoad.envelope.data.savedRhythms.find(entry => entry.id === fixture.rhythmId)
+      ?.scoring?.scheduleHistory).toHaveLength(5);
+    expect(firstLoad.envelope.data.datedRhythmCompletions).toEqual(originalLogs);
+
+    cleanup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await user.click(screen.getByRole('button', {
+      name: 'View scores and history for Season deletion fixture'
+    }));
+    history = screen.getByRole('region', { name: 'History for Season deletion fixture' });
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+    expect(within(history).getByText('5 seasons')).toBeTruthy();
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(savedRaw);
+    expect(within(history).getAllByRole('article')).toHaveLength(5);
+  });
+
   it('persists name-only Season corrections, clears names explicitly, and keeps boundaries and logs intact', async () => {
     const user = userEvent.setup();
     const fixture = seasonDeletionFixture();
@@ -187,7 +284,7 @@ describe('Tend Today preview', () => {
       .getByRole('region', { name: 'History for Season deletion fixture' });
     await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
     expect(within(history).getByRole('heading', { name: 'Mon · Wed · Fri' })).toBeTruthy();
-    expect(within(history).getByText('Every week on Monday, Wednesday, and Friday.')).toBeTruthy();
+    expect(within(history).getAllByText('Mon · Wed · Fri').length).toBeGreaterThan(0);
     expect(within(history).queryByRole('heading', { name: 'Revised middle' })).toBeNull();
     expect(within(history).getByText('Logged moments (5)')).toBeTruthy();
   });
@@ -213,7 +310,9 @@ describe('Tend Today preview', () => {
     const firstSeasonEdit = within(history).getByRole('button', { name: 'Edit First Season' });
     await user.click(firstSeasonEdit);
     const firstSeasonDialog = screen.getByRole('dialog', { name: 'Edit season' });
-    expect(within(firstSeasonDialog).getByText('The first Season cannot be deleted.')).toBeTruthy();
+    expect(within(firstSeasonDialog).getByText(
+      'This season contains logged moments and can’t be deleted. You can edit its schedule.'
+    )).toBeTruthy();
     expect(within(firstSeasonDialog).queryByRole('button', { name: 'Delete season' })).toBeNull();
     await user.click(within(firstSeasonDialog).getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit season' })).toBeNull());
@@ -229,6 +328,7 @@ describe('Tend Today preview', () => {
         fireEvent.change(within(edit).getByLabelText('Season name (optional)'), {
           target: { value: draftName }
         });
+
       }
       await user.click(within(edit).getByRole('button', { name: 'Delete season' }));
     };
@@ -332,6 +432,87 @@ describe('Tend Today preview', () => {
     const restored = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, fixture.today);
     expect(restored.valid && restored.envelope.data.datedRhythmCompletions).toEqual(logsAfterEdit);
     unmount();
+  });
+
+  it('deletes an empty first Season without extending its successor and reloads the resulting scores', async () => {
+    const user = userEvent.setup();
+    const fixture = seasonDeletionFixture();
+    const retainedLogs = fixture.records.filter(record => record.effectiveDate >= fixture.middle.startDate);
+    fixture.data.datedRhythmCompletions = retainedLogs;
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(fixture.data)));
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    const card = screen.getByRole('article', { name: 'Season deletion fixture' });
+    await user.click(within(card).getByRole('button', {
+      name: 'View scores and history for Season deletion fixture'
+    }));
+    const history = screen.getByRole('region', { name: 'History for Season deletion fixture' });
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+    await user.click(within(history).getByRole('button', { name: 'Edit First Season' }));
+    let editor = screen.getByRole('dialog', { name: 'Edit season' });
+    const deleteButton = within(editor).getByRole('button', { name: 'Delete season' });
+    expect(deleteButton.parentElement?.className).toContain('rhythm-season-correction__action-bar');
+    await user.click(deleteButton);
+
+    const confirmation = screen.getByRole('dialog', { name: 'Remove this season?' });
+    expect(within(confirmation).getByText(/The next season will not extend backward/)).toBeTruthy();
+    expect(confirmation.textContent).toContain('tracking starts');
+    expect(within(confirmation).getByText(
+      'No logged moments fall within this season. All completion records will be preserved.'
+    )).toBeTruthy();
+    const impact = within(confirmation).getByRole('region', { name: 'Score impact preview' });
+    const previewScores = ['Health', 'Consistency', 'On Track'].map(metric => {
+      const after = within(impact).getByRole('group', { name: `After ${metric}` });
+      return after.querySelector('.rhythm-season-impact__score strong')?.textContent ?? '—';
+    });
+    await user.click(within(confirmation).getByRole('button', { name: 'Cancel' }));
+    editor = screen.getByRole('dialog', { name: 'Edit season' });
+    await user.click(within(editor).getByRole('button', { name: 'Delete season' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Remove this season?' }))
+      .getByRole('button', { name: 'Delete season' }));
+
+    let stored = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
+    expect(stored.valid).toBe(true);
+    if (!stored.valid) return;
+    let rhythm = stored.envelope.data.savedRhythms.find(entry => entry.id === fixture.rhythmId)!;
+    expect(rhythm.scoring?.trackingStartDate).toBe(fixture.middle.startDate);
+    expect(rhythm.scoring?.scheduleHistory.map(season => season.id))
+      .toEqual([fixture.middle.id, fixture.current.id]);
+    expect(rhythm.scoring?.scheduleHistory[0]).toMatchObject({
+      name: fixture.middle.name,
+      schedule: fixture.middle.schedule,
+      timeOfDay: fixture.middle.timeOfDay,
+      paletteToken: fixture.middle.paletteToken
+    });
+    expect(stored.envelope.data.datedRhythmCompletions).toEqual(retainedLogs);
+
+    const savedScores = ['Health', 'Consistency', 'On Track'].map(metric =>
+      within(history).getByRole('meter', { name: `${metric} score` }).getAttribute('aria-valuenow') ?? '—'
+    );
+    expect(savedScores.map(value => value === '—' ? value : String(Math.round(Number(value)))))
+      .toEqual(previewScores);
+    cleanup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    const reloadedCard = screen.getByRole('article', { name: 'Season deletion fixture' });
+    await user.click(within(reloadedCard).getByRole('button', {
+      name: 'View scores and history for Season deletion fixture'
+    }));
+    const reloadedHistory = screen.getByRole('region', { name: 'History for Season deletion fixture' });
+    expect(['Health', 'Consistency', 'On Track'].map(metric =>
+      within(reloadedHistory).getByRole('meter', { name: `${metric} score` }).getAttribute('aria-valuenow') ?? '—'
+    )).toEqual(savedScores);
+    const reloaded = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(reloaded.valid).toBe(true);
+    if (!reloaded.valid) return;
+    rhythm = reloaded.envelope.data.savedRhythms.find(entry => entry.id === fixture.rhythmId)!;
+    expect(rhythm.scoring?.scheduleHistory).toHaveLength(2);
+    expect(rhythm.scoring?.scheduleHistory.map(season => season.id))
+      .toEqual([fixture.middle.id, fixture.current.id]);
+    expect(reloaded.envelope.data.datedRhythmCompletions).toEqual(retainedLogs);
   });
 
   it('deletes the current Season durably and reloads with its predecessor schedule and time active', async () => {
@@ -611,7 +792,7 @@ describe('Tend Today preview', () => {
     expect(within(history).getByText('2 seasons')).toBeTruthy();
     expect(within(history).getByRole('heading', { name: 'Daily' })).toBeTruthy();
     expect(within(history).getByRole('heading', { name: 'Evening connection' })).toBeTruthy();
-    expect(within(history).getAllByText('Every week on Monday, Wednesday, and Friday.')).toHaveLength(2);
+    expect(within(history).getAllByText('Mon · Wed · Fri')).toHaveLength(2);
     const editNamedSeason = within(history).getByRole('button', { name: 'Edit Evening connection' });
     await user.click(editNamedSeason);
     const correction = screen.getByRole('dialog', { name: 'Edit season' });
@@ -695,16 +876,17 @@ describe('Tend Today preview', () => {
     const endDate = within(editor).getByLabelText('End date');
     expect((endDate as HTMLInputElement).value).toBe('2026-10-25');
     const comparison = within(editor).getByRole('group', { name: 'Saved and proposed schedules' });
-    expect(comparison.textContent).toContain('Proposed schedule');
+    expect(comparison.textContent).toContain('Proposed');
     expect(comparison.textContent).toContain('Selected days: Monday');
-    expect(within(editor).getByText('Effective Oct 17, 2026 – Oct 25, 2026 · Anytime')).toBeTruthy();
+    expect(within(editor).getAllByText('Oct 17, 2026 – Oct 25, 2026')).toHaveLength(2);
     const previewScores = ['Health', 'Consistency', 'On Track'].map(metric =>
       within(editor).getByRole('group', { name: `After ${metric}` })
         .querySelector('strong')?.textContent
     );
-    const calculationDetails = within(editor).getByText('Score calculation details').closest('details')!;
-    await user.click(within(calculationDetails).getByText('Score calculation details'));
-    expect(calculationDetails.textContent).toContain('1 eligible · 0 completed');
+    const calculationDetails = within(editor).getByText('Why the scores change').closest('details')!;
+    await user.click(within(calculationDetails).getByText('Why the scores change'));
+    expect(calculationDetails.textContent).toContain('0 of 1 · 0%');
+    expect(calculationDetails.textContent).toContain('1 scheduled day · 0 completed');
 
     await user.click(within(editor).getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit season' })).toBeNull());
@@ -758,7 +940,7 @@ describe('Tend Today preview', () => {
       .toBe(scoreValues[2]);
     await user.click(within(reloadedHistory).getByRole('button', { name: 'Show Seasons' }));
     expect(within(reloadedHistory).getByRole('heading', { name: 'Special Season' })).toBeTruthy();
-    expect(within(reloadedHistory).getAllByText('Selected days: Monday, ending October 25, 2026.')).toHaveLength(2);
+    expect(within(reloadedHistory).getAllByText('Select days · Mon')).toHaveLength(2);
     expect(within(reloadedHistory).getByText('Logged moments (3)')).toBeTruthy();
     expect(fixture.completionHistory?.map(record => ({ ...record }))).toEqual(originalCompletions);
     saved = parsePreviewBackup(
@@ -774,6 +956,194 @@ describe('Tend Today preview', () => {
       name: 'Special Season',
       schedule: { frequency: 'weekly', weekdays: [1], weeklyMode: 'select-days', endDate: '2026-10-25' }
     });
+  });
+
+  it('preserves pre-boundary completions and the prior schedule when establishing the first Season boundary', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-26T12:00:00.000Z'));
+    const user = userEvent.setup();
+    const rhythmId = 'user-rhythm-40000000-0000-4000-8000-000000000002';
+    const oldSchedule = { frequency: 'daily' as const };
+    const completions = ['2026-10-17', '2026-10-18', '2026-10-20'].map((effectiveDate, index) => {
+      const completedAt = localDateTimeInZone(effectiveDate, '19:00', 'UTC').toISOString();
+      return {
+        id: `season-boundary-completion-${index}`,
+        rhythmId,
+        effectiveDate,
+        localTime: '19:00',
+        timeZone: 'UTC',
+        completedAt,
+        recordedAt: completedAt
+      };
+    });
+    const data = createSamplePreviewData();
+    data.savedRhythms.push({
+      id: rhythmId,
+      title: 'Season boundary fixture',
+      cadence: 'Daily',
+      timeLabel: 'Morning',
+      timeOfDay: 'morning',
+      personIds: [],
+      categoryIds: [],
+      schedule: oldSchedule,
+      createdLocalDate: '2026-10-01',
+      createdTimeZone: 'UTC'
+    });
+    data.datedRhythmCompletions.push(...completions);
+    data.rhythmHistoryIds.push(rhythmId);
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+
+    const card = screen.getByRole('article', { name: 'Season boundary fixture' });
+    await user.click(within(card).getByRole('button', {
+      name: 'View scores and history for Season boundary fixture'
+    }));
+    const history = within(screen.getByRole('dialog', { name: 'Season boundary fixture' }))
+      .getByRole('region', { name: 'History for Season boundary fixture' });
+    await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+    await user.click(within(history).getByRole('button', { name: 'Edit Daily' }));
+
+    const editor = screen.getByRole('dialog', { name: 'Edit season' });
+    fireEvent.change(within(editor).getByLabelText('Starting date'), {
+      target: { value: '2026-10-24' }
+    });
+    await user.click(within(editor).getByRole('combobox', { name: 'Frequency: Daily' }));
+    await user.click(within(editor).getByRole('option', { name: 'Select Days' }));
+    for (const weekday of ['Monday', 'Wednesday', 'Friday']) {
+      await user.click(within(editor).getByRole('checkbox', { name: weekday }));
+    }
+    await user.click(within(editor).getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit season' })).toBeNull());
+
+    let saved = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    let rhythm = saved.envelope.data.savedRhythms.find(item => item.id === rhythmId)!;
+    expect(rhythm.scoring?.scheduleHistory).toHaveLength(2);
+    expect(rhythm.scoring?.scheduleHistory[0]).toMatchObject({
+      kind: 'scheduled',
+      startDate: '2026-10-01',
+      schedule: oldSchedule,
+      timeOfDay: 'morning'
+    });
+    expect(rhythm.scoring?.scheduleHistory[1]).toMatchObject({
+      kind: 'scheduled',
+      startDate: '2026-10-24',
+      schedule: { frequency: 'weekly', weekdays: [1, 3, 5] }
+    });
+    expect(saved.envelope.data.datedRhythmCompletions).toEqual(completions);
+    expect(saved.envelope.data.datedRhythmCompletions.map(record => record.effectiveDate))
+      .toEqual(['2026-10-17', '2026-10-18', '2026-10-20']);
+    expect(within(history).getByText('2 seasons')).toBeTruthy();
+    expect(within(history).getByRole('heading', { name: 'Daily' })).toBeTruthy();
+    expect(within(history).getByText('Oct 1 – Oct 23, 2026')).toBeTruthy();
+    expect(within(history).getByLabelText('Oct 1, 2026 – Oct 23, 2026')).toBeTruthy();
+    expect(within(history).getByRole('heading', { name: 'Mon · Wed · Fri' })).toBeTruthy();
+    expect(within(history).getByText('Oct 24, 2026 – Present')).toBeTruthy();
+    expect(within(history).getByText('Logged moments (3)')).toBeTruthy();
+
+    cleanup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    const reloadedCard = screen.getByRole('article', { name: 'Season boundary fixture' });
+    await user.click(within(reloadedCard).getByRole('button', {
+      name: 'View scores and history for Season boundary fixture'
+    }));
+    const reloadedHistory = within(screen.getByRole('dialog', { name: 'Season boundary fixture' }))
+      .getByRole('region', { name: 'History for Season boundary fixture' });
+    await user.click(within(reloadedHistory).getByRole('button', { name: 'Show Seasons' }));
+    expect(within(reloadedHistory).getByText('2 seasons')).toBeTruthy();
+    expect(within(reloadedHistory).getByRole('heading', { name: 'Daily' })).toBeTruthy();
+    expect(within(reloadedHistory).getByRole('heading', { name: 'Mon · Wed · Fri' })).toBeTruthy();
+    saved = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(saved.valid).toBe(true);
+    if (saved.valid) {
+      rhythm = saved.envelope.data.savedRhythms.find(item => item.id === rhythmId)!;
+      expect(rhythm.scoring?.scheduleHistory).toHaveLength(2);
+      expect(saved.envelope.data.datedRhythmCompletions).toEqual(completions);
+    }
+  });
+
+  it('repairs legacy missing coverage on read without persisting or duplicating an unknown Season', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-26T12:00:00.000Z'));
+    const user = userEvent.setup();
+    const rhythmId = 'user-rhythm-40000000-0000-4000-8000-000000000003';
+    const schedule = { frequency: 'weekly' as const, weekdays: [1, 3, 5] as (1 | 3 | 5)[] };
+    const current = createRhythmSeason(rhythmId, '2026-10-24', schedule, 'evening');
+    const completions = ['2026-10-17', '2026-10-18', '2026-10-20'].map((effectiveDate, index) => {
+      const completedAt = localDateTimeInZone(effectiveDate, '19:00', 'UTC').toISOString();
+      return {
+        id: `legacy-season-completion-${index}`,
+        rhythmId,
+        effectiveDate,
+        localTime: '19:00',
+        timeZone: 'UTC',
+        completedAt,
+        recordedAt: completedAt
+      };
+    });
+    const data = createSamplePreviewData();
+    data.savedRhythms.push({
+      id: rhythmId,
+      title: 'Legacy history fixture',
+      cadence: 'Every week on Monday, Wednesday, and Friday.',
+      timeLabel: 'Evening',
+      timeOfDay: 'evening',
+      personIds: [],
+      categoryIds: [],
+      schedule,
+      scoring: {
+        trackingStartDate: '2026-10-24',
+        timeZone: 'UTC',
+        scheduleHistory: [current]
+      },
+      createdLocalDate: '2026-10-01',
+      createdTimeZone: 'UTC'
+    });
+    data.datedRhythmCompletions.push(...completions);
+    data.rhythmHistoryIds.push(rhythmId);
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+    const rawBeforeLoad = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
+
+    for (let load = 0; load < 2; load += 1) {
+      render(<App />);
+      await screen.findByText('Preview data saved in this browser.');
+      const card = screen.getByRole('article', { name: 'Legacy history fixture' });
+      await user.click(within(card).getByRole('button', {
+        name: 'View scores and history for Legacy history fixture'
+      }));
+      const history = within(screen.getByRole('dialog', { name: 'Legacy history fixture' }))
+        .getByRole('region', { name: 'History for Legacy history fixture' });
+      await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
+      expect(within(history).getByText('2 seasons')).toBeTruthy();
+      expect(within(history).getByRole('heading', { name: 'Earlier schedule needs details' })).toBeTruthy();
+      expect(within(history).getByText('Oct 1 – Oct 23, 2026')).toBeTruthy();
+      expect(within(history).getByLabelText('Oct 1, 2026 – Oct 23, 2026')).toBeTruthy();
+      expect(within(history).getByText('Oct 24, 2026 – Present')).toBeTruthy();
+      expect(within(history).getByText('Logged moments (3)')).toBeTruthy();
+      expect(within(history).getByText(/Some earlier dates have no known schedule/)).toBeTruthy();
+      expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(rawBeforeLoad);
+      cleanup();
+    }
+
+    const saved = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(saved.valid).toBe(true);
+    if (saved.valid) {
+      expect(saved.envelope.data.savedRhythms.find(item => item.id === rhythmId)
+        ?.scoring?.scheduleHistory).toHaveLength(2);
+      expect(saved.envelope.data.datedRhythmCompletions).toEqual(completions);
+    }
   });
 
   it('keeps the history dialog open when Escape dismisses the nested Season correction', async () => {
@@ -828,9 +1198,9 @@ describe('Tend Today preview', () => {
 
     const correction = screen.getByRole('dialog', { name: 'Set earlier schedule' });
     const impact = within(correction).getByRole('region', { name: 'Score impact preview' });
-    expect(within(impact).getByRole('heading', { name: 'Before' })).toBeTruthy();
-    expect(within(impact).getByRole('heading', { name: 'After' })).toBeTruthy();
-    expect(within(impact).getByRole('group', { name: 'Consistency comparison' })).toBeTruthy();
+    expect(within(impact).getByRole('columnheader', { name: 'Before' })).toBeTruthy();
+    expect(within(impact).getByRole('columnheader', { name: 'After' })).toBeTruthy();
+    expect(within(impact).getByRole('row', { name: /Consistency/ })).toBeTruthy();
     await user.keyboard('{Escape}');
     expect(screen.getByRole('dialog', { name: 'Escape fixture' })).toBe(historyDialog);
     expect(screen.getByRole('dialog', { name: 'Set earlier schedule' })).toBe(correction);
@@ -1016,7 +1386,7 @@ describe('Tend Today preview', () => {
       name: 'View scores and history for Quarterly preview habit'
     }));
     const history = screen.getByRole('region', { name: 'History for Quarterly preview habit' });
-    expect(within(history).getByText(/The 1st day of the first month of every quarter\./)).toBeTruthy();
+    expect(within(history).getAllByText('Quarterly', { exact: true }).length).toBeGreaterThan(0);
     expect(within(history).getByText('Morning')).toBeTruthy();
 
     cleanup();
@@ -1453,11 +1823,13 @@ describe('Tend Today preview', () => {
       .toBe(String(originalMinute).padStart(2, '0'));
     expect(screen.getByRole('spinbutton', { name: 'AM / PM' }).getAttribute('aria-valuetext')).toBe(period);
     fireEvent.change(screen.getByLabelText('Date'), { target: { value: newDate } });
-    fireEvent.keyDown(screen.getByRole('spinbutton', { name: 'Minute' }), { key: 'ArrowDown' });
+    const minuteKey = originalMinute! === 59 ? 'ArrowUp' : 'ArrowDown';
+    const nextMinute = originalMinute! === 59 ? originalMinute! - 1 : originalMinute! + 1;
+    fireEvent.keyDown(screen.getByRole('spinbutton', { name: 'Minute' }), { key: minuteKey });
     fireEvent.change(screen.getByLabelText(/Notes/), { target: { value: 'Edited memory\nwith a second line.' } });
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
-    const expectedMinute = String((originalMinute! + 1) % 60).padStart(2, '0');
+    const expectedMinute = String(nextMinute).padStart(2, '0');
     await waitFor(() => {
       const saved = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
       expect(saved.valid).toBe(true);
@@ -1962,7 +2334,7 @@ describe('Tend Today preview', () => {
     }));
     expect(screen.getByRole('dialog', { name: 'Walk after lunch' })).toBeTruthy();
     const scheduleHistory = screen.getByRole('region', { name: 'History for Walk after lunch' });
-    expect(within(scheduleHistory).getByText('Every week on Monday and Wednesday.')).toBeTruthy();
+    expect(within(scheduleHistory).getAllByText('Mon · Wed').length).toBeGreaterThan(0);
     expect(within(scheduleHistory).getByText('Afternoon')).toBeTruthy();
   });
 

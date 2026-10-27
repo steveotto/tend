@@ -34,9 +34,9 @@ type ScheduleFormState = {
 };
 
 const frequencyOptions: readonly StyledSelectOption<FrequencyChoice>[] = [
+  { value: 'select-days', label: 'Select Days' },
   { value: 'daily', label: 'Daily' },
   { value: 'weekly', label: 'Weekly' },
-  { value: 'select-days', label: 'Select Days' },
   { value: 'monthly', label: 'Monthly' },
   { value: 'quarterly', label: 'Quarterly' },
   { value: 'yearly', label: 'Yearly' },
@@ -522,7 +522,7 @@ export function RhythmScheduleFields({
           <span>Set an end date</span>
         </label>
         {form.hasEndDate && (
-          <div className="rhythm-schedule-fields__end-date">
+          <div className="goal-field rhythm-schedule-fields__end-date">
             <input
               id="rhythm-end-date"
               type="date"

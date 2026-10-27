@@ -40,6 +40,8 @@ type RhythmDetailsDialogProps = {
   onDeleteSeason?: (rhythmId: string, seasonId: string) => string | null;
   seasonDeletionUndo?: RhythmSeasonDeletionUndo | null;
   onUndoSeasonDeletion?: () => string | null;
+  seasonRangeUndo?: { rhythmId: string } | null;
+  onUndoSeasonRange?: () => string | null;
   onUndo?: () => void;
   onEdit?: (event: MouseEvent<HTMLButtonElement>) => void;
   archived?: boolean;
@@ -62,6 +64,8 @@ export function RhythmDetailsDialog({
   onDeleteSeason,
   seasonDeletionUndo,
   onUndoSeasonDeletion,
+  seasonRangeUndo,
+  onUndoSeasonRange,
   onUndo,
   onEdit,
   archived = false,
@@ -219,6 +223,8 @@ export function RhythmDetailsDialog({
               {...(onDeleteSeason ? { onDeleteSeason } : {})}
               {...(seasonDeletionUndo !== undefined ? { seasonDeletionUndo } : {})}
               {...(onUndoSeasonDeletion ? { onUndoSeasonDeletion } : {})}
+              {...(seasonRangeUndo !== undefined ? { seasonRangeUndo } : {})}
+              {...(onUndoSeasonRange ? { onUndoSeasonRange } : {})}
               {...(onLogCompletion ? { onSaveCompletion: onLogCompletion } : {})}
               {...(onEdit ? { onChooseSchedule: onEdit } : {})}
               {...(people ? { people } : {})}

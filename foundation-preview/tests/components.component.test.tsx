@@ -357,7 +357,9 @@ describe('shared preview components', () => {
 
     await user.click(screen.getByRole('button', { name: `View scores and history for ${rhythm.title}` }));
     const history = screen.getByRole('region', { name: `History for ${rhythm.title}` });
-    expect(within(history).getByText('The 15th day of the second month of every quarter.')).toBeTruthy();
+    expect(within(history).getAllByText(
+      'Full schedule: The 15th day of the second month of every quarter.'
+    ).length).toBeGreaterThan(0);
     expect(within(history).getByText('Afternoon')).toBeTruthy();
   });
 

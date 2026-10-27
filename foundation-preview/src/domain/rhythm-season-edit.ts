@@ -12,11 +12,16 @@ import {
   validateRhythmSchedule,
   validateRhythmScoringMetadata
 } from './rhythm-schedule.ts';
-import { createRhythmSeason, rhythmSeasonPaletteForOrdinal } from './rhythm-seasons.ts';
+import {
+  createRhythmSeason,
+  ensureRhythmSeasonHistoryCoverage,
+  rhythmSeasonPaletteForOrdinal
+} from './rhythm-seasons.ts';
 
 export type RhythmSeasonEditDraft = {
   segmentId: string;
   startDate: string;
+  endDate?: string;
   schedule: RhythmSchedule;
   timeOfDay: RhythmTimeValue;
   name: string;
@@ -33,6 +38,12 @@ export type RhythmSeasonEditResult =
       activeTimeOfDay?: RhythmTimeValue;
     }
   | { valid: false; error: string };
+
+export type RhythmSeasonHistoryCoverage = {
+  effectiveStartDate?: string;
+  earliestCompletionDate?: string;
+  previousTimeOfDay?: RhythmTimeValue;
+};
 
 export function editRhythmSeason(
   rhythmId: string,
@@ -132,7 +143,8 @@ export function establishCurrentRhythmSeason(
   scoring: RhythmScoringMetadata | undefined,
   timeZone: string,
   asOfDate: string,
-  draft: RhythmSeasonEditDraft
+  draft: RhythmSeasonEditDraft,
+  coverage?: RhythmSeasonHistoryCoverage
 ): RhythmSeasonEditResult {
   if (!isValidDate(draft.startDate) || draft.startDate > asOfDate
     || !validateRhythmSchedule(draft.schedule).valid
@@ -143,8 +155,21 @@ export function establishCurrentRhythmSeason(
   if (!isValidTimeZone(timeZone) || !validateRhythmSchedule(currentSchedule).valid) {
     return { valid: false, error: 'The current schedule or time zone is unavailable.' };
   }
+  for (const date of [coverage?.effectiveStartDate, coverage?.earliestCompletionDate]) {
+    if (date !== undefined && !isValidDate(date)) {
+      return { valid: false, error: 'Earlier schedule history contains an invalid date.' };
+    }
+  }
 
-  const history = scoring?.scheduleHistory ?? [];
+  const coverageStart = [
+    coverage?.effectiveStartDate,
+    coverage?.earliestCompletionDate
+  ].filter((date): date is string => date !== undefined).sort()[0];
+  const history = scoring
+    ? coverageStart
+      ? ensureRhythmSeasonHistoryCoverage(rhythmId, scoring.scheduleHistory, coverageStart)
+      : [...scoring.scheduleHistory]
+    : [];
   const nextIndex = history.findIndex(segment => segment.startDate >= draft.startDate);
   const index = nextIndex < 0 ? history.length : nextIndex;
   const previous = history[index - 1];
@@ -175,7 +200,19 @@ export function establishCurrentRhythmSeason(
   const name = draft.name.trim();
   const namedSeason = name ? { ...season, name } : season;
   const scheduleHistory = [...history];
-  scheduleHistory.splice(index, 0, namedSeason);
+  if (!scoring && coverageStart && coverageStart < draft.startDate) {
+    const previousSeason = createRhythmSeason(
+      rhythmId,
+      coverageStart,
+      currentSchedule,
+      coverage?.previousTimeOfDay,
+      undefined,
+      rhythmSeasonPaletteForOrdinal(0)
+    );
+    scheduleHistory.splice(index, 0, previousSeason, namedSeason);
+  } else {
+    scheduleHistory.splice(index, 0, namedSeason);
+  }
   const firstScheduled = scheduleHistory.find(segment => segment.kind === 'scheduled');
   if (!firstScheduled) return { valid: false, error: 'A known current schedule is required.' };
 

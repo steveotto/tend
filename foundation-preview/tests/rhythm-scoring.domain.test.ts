@@ -64,7 +64,7 @@ function input(
 function scored(inputValue: SelectDailyRhythmScoreInput) {
   const result = selectDailyRhythmScore(inputValue);
   expect(result.kind).toBe('rhythm-score');
-  if (result.kind !== 'rhythm-score') throw new Error('Expected a rhythm scoring result.');
+  if (result.kind !== 'rhythm-score') throw new Error(`Expected a rhythm scoring result: ${result.reason}`);
   return result;
 }
 
@@ -268,7 +268,7 @@ describe('daily occurrence scoring', () => {
   });
 
   it('applies today’s qualifying completion without a deduction and evaluates backdated edits by effective date', () => {
-    const today = scored(input({ records: [record('today', asOfDate)] }));
+    const today = scored(input({ scoring: scoring(asOfDate), records: [record('today', asOfDate)] }));
     expect(today.onTrack).toMatchObject({
       kind: 'scored',
       score: 100,
@@ -808,6 +808,26 @@ describe('daily occurrence scoring', () => {
     expect(afterDelete.consistency).toMatchObject({
       kind: 'scored',
       evidence: { windowStartDate: created, eligibleDueCount: 2, completedCount: 1 }
+    });
+  });
+
+  it('uses explicit Season tracking instead of the implicit creation date', () => {
+    const explicitTrackingStart = '2026-10-20';
+    const result = scored(input({
+      scoring: scoring(explicitTrackingStart),
+      createdLocalDate: '2026-10-01',
+      createdTimeZone: 'UTC'
+    }));
+
+    expect(result.trackingStartDate).toBe(explicitTrackingStart);
+    expect(result.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: {
+        windowStartDate: explicitTrackingStart,
+        windowEndDate: '2026-10-22',
+        eligibleDueCount: 3,
+        completedCount: 0
+      }
     });
   });
 
@@ -1629,6 +1649,11 @@ describe('daily occurrence scoring', () => {
         expectedDue: 12
       },
       {
+        schedule: { frequency: 'weekly', weekdays: [1], weeklyMode: 'select-days' },
+        windowStart: '2026-09-23',
+        expectedDue: 4
+      },
+      {
         schedule: { frequency: 'monthly', pattern: { kind: 'dayOfMonth', day: 'last' } },
         windowStart: '2026-04-23',
         expectedDue: 6
@@ -1667,6 +1692,105 @@ describe('daily occurrence scoring', () => {
     }
   });
 
+  it('uses one current-frequency window while combining each Season schedule occurrence', () => {
+    const monthly: RhythmSchedule = {
+      frequency: 'monthly',
+      pattern: { kind: 'dayOfMonth', day: 1 }
+    };
+    const monthlyThenDaily: SegmentFixture[] = [
+      { startDate: '2026-09-01', schedule: monthly },
+      { startDate: '2026-10-21', schedule: dailySchedule }
+    ];
+    const dailyCurrent = scored(input({
+      schedule: dailySchedule,
+      scoring: scoring('2026-09-01', monthlyThenDaily),
+      createdLocalDate: '2026-10-21',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-26',
+      records: [record('earlier-monthly', '2026-10-01')]
+    }));
+    expect(dailyCurrent.consistency).toMatchObject({
+      kind: 'scored',
+      exactPercent: (1 / 6) * 100,
+      evidence: {
+        frequency: 'daily',
+        windowStartDate: '2026-09-27',
+        windowEndDate: '2026-10-25',
+        eligibleDueCount: 6,
+        completedCount: 1,
+        notCompletedCount: 5
+      }
+    });
+
+    const selectedDays: RhythmSchedule = {
+      frequency: 'weekly',
+      weekdays: [0, 2, 5, 6]
+    };
+    const dailyThenSelectedThenDaily: SegmentFixture[] = [
+      { startDate: '2026-09-01', schedule: dailySchedule },
+      { startDate: '2026-10-17', schedule: selectedDays },
+      { startDate: '2026-10-21', schedule: dailySchedule }
+    ];
+    const mixedDaily = scored(input({
+      schedule: dailySchedule,
+      scoring: scoring('2026-09-01', dailyThenSelectedThenDaily),
+      createdLocalDate: '2026-10-21',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-26',
+      records: [
+        record('selected-saturday', '2026-10-17'),
+        record('selected-sunday', '2026-10-18'),
+        record('selected-tuesday', '2026-10-20')
+      ]
+    }));
+    expect(mixedDaily.consistency).toMatchObject({
+      kind: 'scored',
+      exactPercent: (3 / 28) * 100,
+      evidence: {
+        frequency: 'daily',
+        windowStartDate: '2026-09-27',
+        windowEndDate: '2026-10-25',
+        eligibleDueCount: 28,
+        completedCount: 3,
+        notCompletedCount: 25,
+        todayIncluded: false
+      }
+    });
+    if (mixedDaily.consistency.kind !== 'scored') throw new Error('Expected mixed Daily evidence.');
+    expect(mixedDaily.consistency.evidence.occurrences.map(occurrence => occurrence.date))
+      .not.toContain('2026-10-26');
+
+    const dailyThenMonthly: SegmentFixture[] = [
+      { startDate: '2026-04-01', schedule: dailySchedule },
+      { startDate: '2026-10-01', schedule: monthly }
+    ];
+    const mixedMonthly = scored(input({
+      schedule: monthly,
+      scoring: scoring('2026-04-01', dailyThenMonthly),
+      createdLocalDate: '2026-10-01',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-26',
+      records: [
+        record('earlier-daily', '2026-04-30'),
+        record('current-monthly', '2026-10-01')
+      ]
+    }));
+    expect(mixedMonthly.consistency).toMatchObject({
+      kind: 'scored',
+      exactPercent: (2 / 159) * 100,
+      evidence: {
+        frequency: 'monthly',
+        windowStartDate: '2026-04-26',
+        windowEndDate: '2026-10-25',
+        eligibleDueCount: 159,
+        completedCount: 2,
+        notCompletedCount: 157
+      }
+    });
+    if (mixedMonthly.consistency.kind !== 'scored') throw new Error('Expected mixed Monthly evidence.');
+    expect(mixedMonthly.consistency.evidence.occurrences[0]?.date).toBe('2026-04-26');
+  });
+
   it('does not invent short-month occurrences or score a window with no due dates', () => {
     const schedule = { frequency: 'monthly', pattern: { kind: 'dayOfMonth', day: 31 } } as const;
     const result = selectDailyRhythmScore(input({
@@ -1696,7 +1820,7 @@ describe('daily occurrence scoring', () => {
       scoring: scoring(asOfDate),
       records: []
     }))).toMatchObject({
-      trackingStartDate: null,
+      trackingStartDate: asOfDate,
       consistency: { kind: 'unscored', reasonCode: 'ready-for-first-tend' },
       onTrack: { kind: 'unscored', reasonCode: 'ready-for-first-tend' }
     });

@@ -49,9 +49,11 @@ import {
   rhythmsForCategory,
   saveRhythmDraft
 } from './domain/rhythm-editor.ts';
-import type { RhythmDraft, RhythmDraftErrors } from './domain/rhythm-editor.ts';
+import type { RhythmDraft, RhythmDraftErrors, SavedRhythm } from './domain/rhythm-editor.ts';
 import type { RhythmSeasonEditDraft } from './domain/rhythm-season-edit.ts';
-import { editRhythmSeason, establishCurrentRhythmSeason } from './domain/rhythm-season-edit.ts';
+import { establishCurrentRhythmSeason } from './domain/rhythm-season-edit.ts';
+import { resolveRhythmSeasonRange } from './domain/rhythm-season-range.ts';
+import { ensureRhythmSeasonHistoryCoverage } from './domain/rhythm-seasons.ts';
 import {
   deleteRhythmSeason,
   restoreDeletedRhythmSeason
@@ -138,6 +140,11 @@ export function App() {
   const [selectedPersonId, setSelectedPersonId] = useState<PersonId | null>(null);
   const [activeRhythmId, setActiveRhythmId] = useState<string | null>(null);
   const [seasonDeletionUndo, setSeasonDeletionUndo] = useState<RhythmSeasonDeletionUndo | null>(null);
+  const [seasonRangeUndo, setSeasonRangeUndo] = useState<{
+    rhythmId: string;
+    expected: SavedRhythm;
+    restore?: SavedRhythm;
+  } | null>(null);
   const [detailsInitialView, setDetailsInitialView] = useState<'details' | 'history'>('details');
   const [completionDialogRhythmId, setCompletionDialogRhythmId] = useState<string | null>(null);
   const [rhythmEditor, setRhythmEditor] = useState<{
@@ -167,9 +174,26 @@ export function App() {
     const completionHistory = seededRecords === undefined && datedRecords.length === 0
       ? undefined
       : [...(seededRecords ?? []), ...datedRecords];
-    return completionHistory === undefined
-      ? rhythm
-      : { ...rhythm, completionHistory };
+    const coverageStart = [
+      rhythm.createdLocalDate,
+      ...(completionHistory ?? []).map(record => record.effectiveDate)
+    ].filter((date): date is string => date !== undefined).sort()[0];
+    const scoring = rhythm.scoring && completionHistory?.length && coverageStart
+      ? {
+          ...rhythm.scoring,
+          scheduleHistory: ensureRhythmSeasonHistoryCoverage(
+            rhythm.id,
+            rhythm.scoring.scheduleHistory,
+            coverageStart
+          )
+        }
+      : rhythm.scoring;
+    if (completionHistory === undefined && scoring === rhythm.scoring) return rhythm;
+    return {
+      ...rhythm,
+      ...(completionHistory === undefined ? {} : { completionHistory }),
+      ...(scoring === undefined ? {} : { scoring })
+    };
   }
   const allTodayRhythms = resolveTodayRhythms(previewData.savedRhythms).map(rhythmWithSavedCompletions);
   const editableTodayRhythms = activeTodayRhythms(allTodayRhythms, previewData.archivedRhythmIds);
@@ -516,6 +540,9 @@ export function App() {
         currentDate: localDateInTimeZone(new Date(), scoringTimeZone),
         deviceTimeZone: scoringTimeZone,
         hasDatedCompletionHistory,
+        ...(rhythmEditor.rhythm?.createdLocalDate
+          ? { effectiveStartDate: rhythmEditor.rhythm.createdLocalDate }
+          : {}),
         ...(earliestDatedCompletionDate ? { earliestDatedCompletionDate } : {})
       }
     );
@@ -596,8 +623,91 @@ export function App() {
       return 'This Rhythm is read-only.';
     }
     const savedRhythm = previewData.savedRhythms.find(rhythm => rhythm.id === rhythmId);
+    const rhythm = allTodayRhythms.find(entry => entry.id === rhythmId);
+    if (draft.segmentId === `new-season:${rhythmId}`) {
+      const currentSchedule = rhythm && effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
+      if (!rhythm || !currentSchedule) return 'This Rhythm no longer has a known current schedule.';
+      const timeZone = rhythm.scoring?.timeZone ?? rhythm.createdTimeZone
+        ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const asOfDate = localDateInTimeZone(new Date(), timeZone);
+      const result = resolveRhythmSeasonRange({
+        rhythmId,
+        currentSchedule,
+        ...(rhythm.scoring ? { scoring: rhythm.scoring } : {}),
+        timeZone,
+        asOfDate,
+        draft: {
+          startDate: draft.startDate,
+          ...(draft.endDate === undefined ? {} : { endDate: draft.endDate }),
+          schedule: draft.schedule,
+          timeOfDay: draft.timeOfDay,
+          name: draft.name
+        },
+        coverage: {
+          ...(rhythm.createdLocalDate ? { effectiveStartDate: rhythm.createdLocalDate } : {}),
+          ...(rhythm.completionHistory?.length
+            ? {
+                earliestCompletionDate: rhythm.completionHistory
+                  .map(record => record.effectiveDate)
+                  .sort()[0]
+              }
+            : {}),
+          ...(rhythm.timeOfDay ? { currentTimeOfDay: rhythm.timeOfDay } : {})
+        }
+      });
+      if (!result.valid) return result.error;
+
+      const sourceRhythms = previewData.savedRhythms.map(entry => {
+        if (entry.id !== rhythmId) return entry;
+        const { scoring: _scoring, ...withoutScoring } = entry;
+        return withoutScoring;
+      });
+      const { originalScoring: _originalScoring, ...baseDraft } =
+        rhythmDraftFrom(rhythm, rhythm.categoryIds ?? []);
+      const activeTime = result.activeTimeOfDay ?? rhythm.timeOfDay ?? draft.timeOfDay;
+      const saved = saveRhythmDraft(
+        sourceRhythms,
+        {
+          ...baseDraft,
+          schedule: result.schedule,
+          scheduleEditing: true,
+          originalSchedule: currentSchedule,
+          timeLabel: rhythmTimeLabel(activeTime),
+          seasonName: draft.name
+        },
+        rhythmId,
+        'edit'
+      );
+      if (!saved.savedRhythms) return Object.values(saved.errors)[0] ?? 'This Rhythm could not be saved.';
+      const savedRhythms = saved.savedRhythms.map(entry => entry.id !== rhythmId
+        ? entry
+        : {
+            ...entry,
+            cadence: rhythmScheduleSummary(result.schedule),
+            schedule: result.schedule,
+            scoring: result.scoring,
+            timeOfDay: activeTime,
+            timeLabel: rhythmTimeLabel(activeTime)
+          });
+      const changedRhythm = savedRhythms.find(entry => entry.id === rhythmId);
+      if (!changedRhythm) return 'The updated Rhythm could not be found.';
+      const nextData: PreviewData = {
+        ...previewData,
+        savedRhythms,
+        ...(rhythm.completionHistory?.length && !previewData.rhythmHistoryIds.includes(rhythmId)
+          ? { rhythmHistoryIds: [...previewData.rhythmHistoryIds, rhythmId] }
+          : {})
+      };
+      const saveError = persistSeasonHistory(nextData, 'Season range');
+      if (saveError) return saveError;
+      setSeasonRangeUndo({
+        rhythmId,
+        expected: changedRhythm,
+        ...(savedRhythm ? { restore: savedRhythm } : {})
+      });
+      return null;
+    }
     if (draft.segmentId === `current-schedule:${rhythmId}`) {
-      const rhythm = allTodayRhythms.find(entry => entry.id === rhythmId);
       const currentSchedule = rhythm && effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
       if (!rhythm || !currentSchedule) return 'This Rhythm no longer has a known current schedule.';
       const established = establishCurrentRhythmSeason(
@@ -607,7 +717,18 @@ export function App() {
         rhythm.scoring?.timeZone ?? rhythm.createdTimeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
         localDateInTimeZone(new Date(), rhythm.scoring?.timeZone ?? rhythm.createdTimeZone
           ?? Intl.DateTimeFormat().resolvedOptions().timeZone),
-        draft
+        draft,
+        {
+          ...(rhythm.createdLocalDate ? { effectiveStartDate: rhythm.createdLocalDate } : {}),
+          ...(rhythm.completionHistory?.length
+            ? {
+                earliestCompletionDate: rhythm.completionHistory
+                  .map(record => record.effectiveDate)
+                  .sort()[0]
+              }
+            : {}),
+          ...(rhythm.timeOfDay ? { previousTimeOfDay: rhythm.timeOfDay } : {})
+        }
       );
       if (!established.valid) return established.error;
 
@@ -649,10 +770,28 @@ export function App() {
           });
       return persistSeasonHistory({ ...previewData, savedRhythms }, 'current Season boundary');
     }
-    if (!savedRhythm?.schedule || !savedRhythm.scoring) {
+    const currentSchedule = rhythm && effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
+    if (!savedRhythm?.schedule || !currentSchedule || !rhythm?.scoring) {
       return 'This Rhythm no longer has editable schedule history.';
     }
-    const result = editRhythmSeason(rhythmId, savedRhythm.schedule, savedRhythm.scoring, draft);
+    const timeZone = rhythm.scoring.timeZone;
+    const result = resolveRhythmSeasonRange({
+      rhythmId,
+      currentSchedule,
+      scoring: rhythm.scoring,
+      timeZone,
+      asOfDate: localDateInTimeZone(new Date(), timeZone),
+      draft,
+      ...(rhythm.completionHistory?.length
+        ? {
+            coverage: {
+              earliestCompletionDate: rhythm.completionHistory
+                .map(record => record.effectiveDate)
+                .sort()[0]!
+            }
+          }
+        : {})
+    });
     if (!result.valid) return result.error;
 
     const savedRhythms = previewData.savedRhythms.map(rhythm => rhythm.id !== rhythmId
@@ -670,7 +809,30 @@ export function App() {
           })
         });
     const nextData: PreviewData = { ...previewData, savedRhythms };
-    return persistSeasonHistory(nextData, 'schedule correction');
+    const changedRhythm = savedRhythms.find(entry => entry.id === rhythmId);
+    if (!changedRhythm) return 'The updated Rhythm could not be found.';
+    const saveError = persistSeasonHistory(nextData, 'schedule correction');
+    if (saveError) return saveError;
+    setSeasonRangeUndo({ rhythmId, expected: changedRhythm, restore: savedRhythm });
+    return null;
+  }
+
+  function undoSeasonRange(): string | null {
+    const undo = seasonRangeUndo;
+    if (!undo || activeRhythmId !== undo.rhythmId || !activeRhythmIsToday || activeRhythmIsArchived) {
+      return 'This Rhythm is no longer available for Undo.';
+    }
+    const current = previewData.savedRhythms.find(entry => entry.id === undo.rhythmId);
+    if (!current || JSON.stringify(current) !== JSON.stringify(undo.expected)) {
+      return 'This Rhythm changed after the Season update. It cannot be safely restored without overwriting those changes.';
+    }
+    const savedRhythms = previewData.savedRhythms
+      .filter(entry => entry.id !== undo.rhythmId);
+    if (undo.restore) savedRhythms.push(undo.restore);
+    const saveError = persistSeasonHistory({ ...previewData, savedRhythms }, 'Season Undo');
+    if (saveError) return saveError;
+    setSeasonRangeUndo(null);
+    return null;
   }
 
   function deleteSeason(rhythmId: string, seasonId: string): string | null {
@@ -678,13 +840,23 @@ export function App() {
       return 'This Rhythm is read-only.';
     }
     const rhythm = previewData.savedRhythms.find(entry => entry.id === rhythmId);
-    if (!rhythm?.schedule || !rhythm.scoring) {
+    const resolvedRhythm = allTodayRhythms.find(entry => entry.id === rhythmId);
+    const schedule = resolvedRhythm && effectiveRhythmSchedule(resolvedRhythm.schedule, resolvedRhythm.cadence);
+    if (!rhythm?.schedule || !resolvedRhythm?.scoring || !schedule) {
       return 'This Rhythm no longer has editable schedule history.';
     }
+    const records: RhythmCompletionRecord[] = (resolvedRhythm.completionHistory ?? [])
+      .map(record => ({ ...record, rhythmId }));
     const result = deleteRhythmSeason(
-      rhythm.schedule,
-      rhythm.scoring,
-      seasonId
+      rhythmId,
+      schedule,
+      resolvedRhythm.scoring,
+      seasonId,
+      records,
+      localDateInTimeZone(
+        new Date(),
+        resolvedRhythm.scoring.timeZone
+      )
     );
     if (!result.valid) return result.error;
 
@@ -720,7 +892,8 @@ export function App() {
       restoreSchedule: rhythm.schedule,
       restoreCadence: rhythm.cadence,
       restoreTimeLabel: rhythm.timeLabel,
-      ...(rhythm.timeOfDay === undefined ? {} : { restoreTimeOfDay: rhythm.timeOfDay })
+      ...(rhythm.timeOfDay === undefined ? {} : { restoreTimeOfDay: rhythm.timeOfDay }),
+      restoreTrackingStartDate: resolvedRhythm.scoring.trackingStartDate
     });
     return null;
   }
@@ -734,6 +907,9 @@ export function App() {
     if (!rhythm?.schedule || !rhythm.scoring) {
       return 'This Rhythm no longer has editable schedule history.';
     }
+    const resolvedRhythm = allTodayRhythms.find(entry => entry.id === undo.rhythmId);
+    const records: RhythmCompletionRecord[] = (resolvedRhythm?.completionHistory ?? [])
+      .map(record => ({ ...record, rhythmId: undo.rhythmId }));
     const result = restoreDeletedRhythmSeason(
       rhythm.id,
       rhythm.schedule,
@@ -741,7 +917,8 @@ export function App() {
       rhythm.cadence,
       rhythm.timeLabel,
       rhythm.timeOfDay,
-      undo
+      undo,
+      records
     );
     if (!result.valid) return result.error;
     const savedRhythms = previewData.savedRhythms.map(entry => entry.id !== rhythm.id
@@ -1228,6 +1405,12 @@ export function App() {
           {...(seasonDeletionUndo?.rhythmId === activeRhythm.id
             ? { onUndoSeasonDeletion: undoSeasonDeletion }
             : {})}
+          seasonRangeUndo={seasonRangeUndo?.rhythmId === activeRhythm.id
+            ? { rhythmId: seasonRangeUndo.rhythmId }
+            : null}
+          {...(seasonRangeUndo?.rhythmId === activeRhythm.id
+            ? { onUndoSeasonRange: undoSeasonRange }
+            : {})}
           people={peopleForRhythm(activeRhythm)}
           archived={activeRhythmIsArchived}
           onPersonSelect={personId => {
@@ -1263,6 +1446,12 @@ export function App() {
       {rhythmEditor && (
         <RhythmEditor
           {...(rhythmEditor.rhythm ? { rhythm: rhythmEditor.rhythm } : {})}
+          asOfDate={localDateInTimeZone(
+            new Date(),
+            rhythmEditor.rhythm?.scoring?.timeZone
+              ?? rhythmEditor.rhythm?.createdTimeZone
+              ?? Intl.DateTimeFormat().resolvedOptions().timeZone
+          )}
           hasDatedCompletionHistory={
             previewData.rhythmHistoryIds.includes(rhythmEditor.id)
             || (rhythmEditor.rhythm?.completionHistory?.length ?? 0) > 0

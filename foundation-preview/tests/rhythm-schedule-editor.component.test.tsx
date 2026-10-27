@@ -259,9 +259,9 @@ describe('shared structured Rhythm editor', () => {
     await user.click(frequency);
     expect(within(editor).getByRole('option', { name: 'Daily' }).getAttribute('aria-selected')).toBe('true');
     expect(within(editor).getAllByRole('option').map(option => option.textContent)).toEqual([
+      'Select Days',
       'Daily',
       'Weekly',
-      'Select Days',
       'Monthly',
       'Quarterly',
       'Yearly',
@@ -497,6 +497,7 @@ describe('shared structured Rhythm editor', () => {
     expect((within(editor).getByRole('checkbox', { name: 'Personal' }) as HTMLInputElement).checked).toBe(true);
     const endDate = within(editor).getByLabelText('End date');
     expect(endDate).toBeTruthy();
+    expect(endDate.parentElement?.classList.contains('goal-field')).toBe(true);
     expect(endDate.closest('.rhythm-schedule-fields__end-date-row')?.contains(
       within(editor).getByRole('checkbox', { name: 'Set an end date' })
     )).toBe(true);
@@ -687,13 +688,13 @@ describe('shared structured Rhythm editor', () => {
     await user.keyboard('{Enter}');
     expect(document.activeElement?.getAttribute('role')).toBe('option');
     await user.keyboard('{ArrowUp}');
-    expect(document.activeElement?.textContent).toBe('Custom');
+    expect(document.activeElement?.textContent).toBe('Select Days');
     await user.keyboard('{Home}');
-    expect(document.activeElement?.textContent).toBe('Daily');
+    expect(document.activeElement?.textContent).toBe('Select Days');
     await user.keyboard('{End}');
     expect(document.activeElement?.textContent).toBe('Custom');
     await user.keyboard('{ArrowDown}');
-    expect(document.activeElement?.textContent).toBe('Daily');
+    expect(document.activeElement?.textContent).toBe('Select Days');
     await user.keyboard('{Escape}');
     expect(document.activeElement).toBe(frequency);
     await user.keyboard('{Enter}');

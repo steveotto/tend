@@ -39,13 +39,11 @@ export function RhythmMetadata(props: RhythmMetadataProps) {
 
   return (
     <div className="rhythm-metadata-footer">
-      <span className="rhythm-metadata-schedule-group">
-        <RhythmScheduleSummary
-          cadence={props.cadence}
-          schedule={props.schedule}
-          timeLabel={props.timeLabel}
-        />
-      </span>
+      <RhythmScheduleSummary
+        cadence={props.cadence}
+        schedule={props.schedule}
+        timeLabel={props.timeLabel}
+      />
       <RhythmStatus
         className="rhythm-metadata-last-tended"
         undoBeforeStatus
@@ -63,11 +61,13 @@ export function RhythmScheduleSummary({
   cadence,
   schedule,
   timeLabel,
+  timeAccessibleLabel,
   presentation = 'compact'
 }: {
   cadence?: string | undefined;
   schedule?: RhythmSchedule | undefined;
   timeLabel?: string | undefined;
+  timeAccessibleLabel?: string | undefined;
   presentation?: 'compact' | 'detailed';
 }) {
   const fullScheduleId = useId();
@@ -78,7 +78,7 @@ export function RhythmScheduleSummary({
     ? formatRhythmSchedule(schedule, 'detailed')
     : undefined;
   return (
-    <>
+    <span className="rhythm-metadata-schedule-group">
       {scheduleText && (
         <span aria-describedby={detailedSchedule ? fullScheduleId : undefined}>
           <MetadataIcon kind="recurrence" />
@@ -88,8 +88,13 @@ export function RhythmScheduleSummary({
       {detailedSchedule && (
         <span id={fullScheduleId} className="visually-hidden">Full schedule: {detailedSchedule}</span>
       )}
-      {timeLabel && <span><MetadataIcon kind="time" />{timeLabel}</span>}
-    </>
+      {timeLabel && (
+        <span>
+          <MetadataIcon kind="time" />
+          <span aria-label={timeAccessibleLabel}>{timeLabel}</span>
+        </span>
+      )}
+    </span>
   );
 }
 

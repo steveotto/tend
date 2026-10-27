@@ -16,10 +16,13 @@ import type { RhythmSchedule, RhythmScoringMetadata, RhythmTimeLabel, RhythmTime
 import {
   createRhythmSeason,
   createUnknownRhythmSeason,
+  ensureRhythmSeasonHistoryCoverage,
   rhythmSeasonPaletteForOrdinal
 } from './rhythm-seasons.ts';
 import { isValidDate } from './money-goals.ts';
 import { rhythmSchedulesEqual } from './rhythm-occurrences.ts';
+import { rhythmSeasonForDate } from './rhythm-seasons.ts';
+import { resolveRhythmSeasonRange } from './rhythm-season-range.ts';
 
 export const rhythmCadences = [
   'Daily',
@@ -177,9 +180,11 @@ function validateSavedRhythmsWithKeys(
             : validateRhythmScoringMetadata(record.scoring);
       if (!validScoring || record.schedule === undefined || !isRecord(record.scoring)
         || !Array.isArray(record.scoring.scheduleHistory)) return false;
-      const latestSchedule = record.scoring.scheduleHistory.at(-1);
-      if (!isRecord(latestSchedule)
-        || JSON.stringify(latestSchedule.schedule) !== JSON.stringify(record.schedule)) return false;
+      const matchingSchedule = record.scoring.scheduleHistory.some(segment =>
+        isRecord(segment)
+        && JSON.stringify(segment.schedule) === JSON.stringify(record.schedule)
+      );
+      if (!matchingSchedule) return false;
     }
 
     const legacyCompatibleRecord = {
@@ -201,10 +206,13 @@ function validateSavedRhythmsWithKeys(
 
 export function rhythmDraftFrom(
   rhythm: RhythmPreview,
-  categoryIds: readonly RhythmCategoryId[] = []
+  categoryIds: readonly RhythmCategoryId[] = [],
+  asOfDate?: string
 ): RhythmDraft {
   const originalSchedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
-  const currentSeason = rhythm.scoring?.scheduleHistory.at(-1);
+  const currentSeason = asOfDate
+    ? rhythmSeasonForDate(rhythm.scoring?.scheduleHistory ?? [], asOfDate)
+    : rhythm.scoring?.scheduleHistory.at(-1);
   return {
     title: rhythm.title,
     description: rhythm.description ?? '',
@@ -258,6 +266,7 @@ export function saveRhythmDraft(
     currentDate: string;
     deviceTimeZone: string;
     hasDatedCompletionHistory?: boolean;
+    effectiveStartDate?: string;
     earliestDatedCompletionDate?: string;
   }
 ): { savedRhythms?: SavedRhythm[]; errors: RhythmDraftErrors } {
@@ -282,6 +291,18 @@ export function saveRhythmDraft(
     ? !rhythmSchedulesEqual(draft.schedule, originalSchedule)
     : draft.schedule !== originalSchedule;
   const hasDatedCompletionHistory = scoringContext?.hasDatedCompletionHistory ?? false;
+  for (const date of [scoringContext?.effectiveStartDate, scoringContext?.earliestDatedCompletionDate]) {
+    if (date !== undefined && !isValidDate(date)) {
+      errors.schedule = 'Earlier schedule history contains an invalid date.';
+      return { errors };
+    }
+  }
+  const historicalCoverageStart = hasDatedCompletionHistory
+    ? [
+        scoringContext?.effectiveStartDate,
+        scoringContext?.earliestDatedCompletionDate
+      ].filter((date): date is string => date !== undefined).sort()[0]
+    : undefined;
   let scoring = draft.originalScoring ?? existing?.scoring;
   let initializedScheduleHistory = false;
   if (mode === 'create' && !scoring && draft.schedule && scoringContext
@@ -304,14 +325,9 @@ export function saveRhythmDraft(
   } else if (!scoring && mode === 'edit' && scheduleChanged && draft.schedule
     && scoringContext && isValidDate(scoringContext.currentDate)
     && isValidTimeZone(scoringContext.deviceTimeZone)) {
-    const earliestDatedCompletionDate = scoringContext.earliestDatedCompletionDate;
-    if (earliestDatedCompletionDate !== undefined && !isValidDate(earliestDatedCompletionDate)) {
-      errors.schedule = 'The earliest dated completion is invalid, so schedule history cannot be preserved.';
-      return { errors };
-    }
     const hasEarlierHistory = hasDatedCompletionHistory
-      && earliestDatedCompletionDate !== undefined
-      && earliestDatedCompletionDate < scoringContext.currentDate;
+      && historicalCoverageStart !== undefined
+      && historicalCoverageStart < scoringContext.currentDate;
     const currentSeasonOrdinal = hasEarlierHistory && originalSchedule ? 1 : 0;
     const currentSeason = createRhythmSeason(
       id,
@@ -325,7 +341,7 @@ export function saveRhythmDraft(
     const namedCurrentSeason = seasonName ? { ...currentSeason, name: seasonName } : currentSeason;
     scoring = {
       trackingStartDate: hasEarlierHistory
-        ? earliestDatedCompletionDate
+        ? historicalCoverageStart ?? scoringContext.currentDate
         : scoringContext.currentDate,
       timeZone: scoringContext.deviceTimeZone,
       scheduleHistory: hasEarlierHistory
@@ -333,13 +349,13 @@ export function saveRhythmDraft(
             originalSchedule
               ? createRhythmSeason(
                   id,
-                  earliestDatedCompletionDate,
+                  historicalCoverageStart ?? scoringContext.currentDate,
                   originalSchedule,
                   undefined,
                   undefined,
                   rhythmSeasonPaletteForOrdinal(0)
                 )
-              : createUnknownRhythmSeason(id, earliestDatedCompletionDate),
+              : createUnknownRhythmSeason(id, historicalCoverageStart ?? scoringContext.currentDate),
             namedCurrentSeason
           ]
         : [namedCurrentSeason]
@@ -357,8 +373,11 @@ export function saveRhythmDraft(
       errors.schedule = 'A schedule cannot change before its saved schedule history starts.';
       return { errors };
     }
-    const segments = scoring.scheduleHistory.map(segment => ({ ...segment }));
-    const currentSegment = segments.at(-1);
+    const latestSegment = scoring.scheduleHistory.at(-1);
+    const hasUpcomingSegment = latestSegment !== undefined && latestSegment.startDate > currentDate;
+    const currentSegment = hasUpcomingSegment
+      ? rhythmSeasonForDate(scoring.scheduleHistory, currentDate)
+      : latestSegment;
     if (!currentSegment || currentSegment.kind !== 'scheduled') {
       errors.schedule = 'The current schedule history cannot be changed safely.';
       return { errors };
@@ -367,66 +386,82 @@ export function saveRhythmDraft(
       errors.schedule = 'A schedule cannot change before the current schedule-history segment starts.';
       return { errors };
     }
-    if (!hasDatedCompletionHistory) {
-      segments[segments.length - 1] = {
-        ...currentSegment,
-        schedule: draft.schedule
-      };
-    } else if (currentSegment.startDate === currentDate) {
-      const name = draft.seasonName === undefined
-        ? currentSegment.name
-        : draft.seasonName.trim();
-      const { name: _previousName, ...segmentWithoutName } = currentSegment;
-      segments[segments.length - 1] = {
-        ...segmentWithoutName,
-        schedule: draft.schedule,
-        ...(name ? { name } : {})
-      };
-    } else {
-      const knownSeasonCount = segments.filter(segment => segment.kind === 'scheduled').length;
-      const season = createRhythmSeason(
-        id,
-        currentDate,
-        draft.schedule,
-        undefined,
-        undefined,
-        rhythmSeasonPaletteForOrdinal(knownSeasonCount)
-      );
-      const name = draft.seasonName?.trim();
-      segments.push(name ? { ...season, name } : season);
-    }
-    const earliestDatedCompletionDate = scoringContext.earliestDatedCompletionDate;
-    if (earliestDatedCompletionDate !== undefined && !isValidDate(earliestDatedCompletionDate)) {
-      errors.schedule = 'The earliest dated completion is invalid, so schedule history cannot be preserved.';
-      return { errors };
-    }
-    const firstScheduled = segments.find(segment => segment.kind === 'scheduled');
-    if (earliestDatedCompletionDate && firstScheduled
-      && earliestDatedCompletionDate < firstScheduled.startDate) {
-      const firstSegment = segments[0];
-      if (firstSegment?.kind === 'unknown') {
-        if (earliestDatedCompletionDate < firstSegment.startDate) {
-          segments[0] = { ...firstSegment, startDate: earliestDatedCompletionDate };
-        }
-      } else {
-        segments.unshift(createUnknownRhythmSeason(id, earliestDatedCompletionDate));
+    if (hasUpcomingSegment) {
+      if (!timeOfDay) {
+        errors.timeLabel = 'Choose a time of day.';
+        return { errors };
       }
+      const rangeResult = resolveRhythmSeasonRange({
+        rhythmId: id,
+        currentSchedule: currentSegment.schedule,
+        scoring,
+        timeZone: scoringContext.deviceTimeZone,
+        asOfDate: currentDate,
+        draft: {
+          segmentId: currentSegment.id,
+          startDate: currentDate,
+          schedule: draft.schedule,
+          timeOfDay,
+          name: draft.seasonName ?? currentSegment.name ?? ''
+        }
+      });
+      if (!rangeResult.valid) {
+        errors.schedule = rangeResult.error;
+        return { errors };
+      }
+      scoring = rangeResult.scoring;
+    } else {
+      const segments = scoring.scheduleHistory.map(segment => ({ ...segment }));
+      const currentIndex = segments.findIndex(segment => segment.id === currentSegment.id);
+      if (!hasDatedCompletionHistory) {
+        segments[currentIndex] = { ...currentSegment, schedule: draft.schedule };
+      } else if (currentSegment.startDate === currentDate) {
+        const name = draft.seasonName === undefined ? currentSegment.name : draft.seasonName.trim();
+        const { name: _previousName, ...withoutName } = currentSegment;
+        segments[currentIndex] = {
+          ...withoutName,
+          schedule: draft.schedule,
+          ...(name ? { name } : {})
+        };
+      } else {
+        const knownSeasonCount = segments.filter(segment => segment.kind === 'scheduled').length;
+        const season = createRhythmSeason(
+          id,
+          currentDate,
+          draft.schedule,
+          undefined,
+          undefined,
+          rhythmSeasonPaletteForOrdinal(knownSeasonCount)
+        );
+        const name = draft.seasonName?.trim();
+        segments.splice(currentIndex + 1, 0, name ? { ...season, name } : season);
+      }
+      const coveredSegments = historicalCoverageStart
+        ? ensureRhythmSeasonHistoryCoverage(id, segments, historicalCoverageStart)
+        : segments;
+      scoring = { ...scoring, scheduleHistory: coveredSegments };
     }
-    scoring = { ...scoring, scheduleHistory: segments };
   }
-  const activeSeason = scoring?.scheduleHistory.at(-1);
+  const activeSeason = scoring && scoringContext?.currentDate
+    ? rhythmSeasonForDate(scoring.scheduleHistory, scoringContext.currentDate)
+    : scoring?.scheduleHistory.at(-1);
+  const activeSchedule = activeSeason?.kind === 'scheduled' ? activeSeason.schedule : undefined;
+  const scheduleDefinition = (value: RhythmSchedule) => {
+    const { endDate: _endDate, ...definition } = value;
+    return JSON.stringify(definition);
+  };
   if (scoring && draft.schedule
-    && (activeSeason?.kind !== 'scheduled'
-      || JSON.stringify(activeSeason.schedule) !== JSON.stringify(draft.schedule))) {
+    && (!activeSchedule || scheduleDefinition(activeSchedule) !== scheduleDefinition(draft.schedule))) {
     errors.schedule = 'The active schedule does not match its saved schedule history.';
     return { errors };
   }
+  const storedSchedule = activeSchedule ?? draft.schedule ?? existing?.schedule;
   const cadence = draft.schedule
     ? scheduleChanged || existing === undefined
-      ? rhythmScheduleSummary(draft.schedule)
+      ? rhythmScheduleSummary(storedSchedule ?? draft.schedule)
       : existing.cadence
     : existing?.cadence ?? draft.cadence;
-  const schedule = draft.schedule ?? existing?.schedule;
+  const schedule = storedSchedule;
   const saved: SavedRhythm = {
     id,
     title: draft.title.trim(),
@@ -487,6 +522,7 @@ export function resolveTodayRhythms(savedRhythms: readonly SavedRhythm[]): Rhyth
       categoryIds: saved.categoryIds,
       ...(saved.schedule === undefined ? {} : { schedule: saved.schedule }),
       ...(saved.scoring === undefined ? {} : { scoring: saved.scoring }),
+      ...(saved.timeOfDay === undefined ? {} : { timeOfDay: saved.timeOfDay }),
       ...(saved.createdLocalDate === undefined ? {} : {
         createdLocalDate: saved.createdLocalDate,
         createdTimeZone: saved.createdTimeZone
@@ -510,6 +546,7 @@ export function resolveTodayRhythms(savedRhythms: readonly SavedRhythm[]): Rhyth
       categoryIds: rhythm.categoryIds,
       ...(rhythm.schedule === undefined ? {} : { schedule: rhythm.schedule }),
       ...(rhythm.scoring === undefined ? {} : { scoring: rhythm.scoring }),
+      ...(rhythm.timeOfDay === undefined ? {} : { timeOfDay: rhythm.timeOfDay }),
       ...(rhythm.createdLocalDate === undefined ? {} : {
         createdLocalDate: rhythm.createdLocalDate,
         createdTimeZone: rhythm.createdTimeZone
