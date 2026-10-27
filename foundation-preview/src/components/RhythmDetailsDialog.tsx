@@ -22,8 +22,10 @@ import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
 
 type RhythmDetailsDialogProps = {
   rhythm: RhythmPreview;
+  healthScore?: number | null;
   inline?: boolean;
   initialView?: 'details' | 'history';
+  statusLabel?: string;
   onTend?: (event: MouseEvent<HTMLButtonElement>) => void;
   onHistory?: (event: MouseEvent<HTMLButtonElement>) => void;
   headingId?: string;
@@ -51,6 +53,7 @@ type RhythmDetailsDialogProps = {
 
 export function RhythmDetailsDialog({
   rhythm,
+  healthScore = null,
   people,
   onPersonSelect,
   completed = false,
@@ -72,6 +75,7 @@ export function RhythmDetailsDialog({
   embedded = false,
   inline = false,
   initialView = 'details',
+  statusLabel,
   onTend,
   onHistory,
   headingId,
@@ -143,9 +147,14 @@ export function RhythmDetailsDialog({
       <button
         type="button"
         className="today-rhythm-details__history-button"
-        aria-label={`View scores and history for ${rhythm.title}`}
+        aria-label={inline
+          ? `View scores and history for ${rhythm.title}, Health ${healthScore === null
+            ? 'unavailable'
+            : `${Math.round(healthScore)} out of 100`}`
+          : `View scores and history for ${rhythm.title}`}
         onClick={inline ? event => onHistory?.(event) : () => setShowHistory(true)}
       >
+        {inline && <span className="today-rhythm-details__history-score">{healthScore === null ? '—' : Math.round(healthScore)}</span>}
         <RhythmMetadataIcon kind="history" />
       </button>
     </div>
@@ -279,7 +288,8 @@ export function RhythmDetailsDialog({
                   cadence={rhythm.cadence}
                   schedule={rhythm.schedule}
                   timeLabel={rhythm.timeLabel}
-                  lastTended={rhythmLastTendedLabel(rhythm, completed, asOfDate)}
+                  lastTended={statusLabel ?? rhythmLastTendedLabel(rhythm, completed, asOfDate)}
+                  statusIcon={statusLabel ? 'none' : 'last-tended'}
                   rhythmTitle={rhythm.title}
                   completed={completed}
                   onUndo={onUndo}

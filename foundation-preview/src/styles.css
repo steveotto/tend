@@ -2451,6 +2451,18 @@ a:focus-visible {
   font-size: 17px;
 }
 
+.marriage-summary-title-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.marriage-summary-title-row .rhythm-history-view__score-info {
+  width: 32px;
+  height: 32px;
+}
+
 .marriage-summary-card .category-health-score {
   font-size: 26px;
 }
@@ -2465,11 +2477,6 @@ a:focus-visible {
 
 .marriage-summary-card .health-summary-label {
   font-size: 11px;
-}
-
-.marriage-summary-card .health-summary-detail {
-  font-size: 9px;
-  line-height: 1.3;
 }
 
 .marriage-example-selector {
@@ -2658,6 +2665,10 @@ a:focus-visible {
 
 .marriage-summary-card .health-summary-score {
   color: var(--ink-soft);
+}
+
+.marriage-summary-card .health-summary-item .category-health-meter {
+  margin: 2px 0 1px;
 }
 
 .marriage-view-nav {
@@ -3034,13 +3045,6 @@ a:focus-visible {
 .marriage-foundation-support-group {
   display: grid;
   gap: 6px;
-}
-
-.marriage-foundation-support-group h4 {
-  margin: 0;
-  color: var(--ink-soft);
-  font-size: 11px;
-  font-weight: 650;
 }
 
 .marriage-foundation-support > p {
@@ -3848,11 +3852,32 @@ a:focus-visible {
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__history-button {
   flex: none;
-  width: 44px;
-  min-width: 44px;
+  justify-content: space-between;
+  width: 92px;
+  min-width: 92px;
   height: 44px;
   min-height: 44px;
+  padding: 0 11px;
+  border-color: color-mix(in srgb, var(--tend-line) 76%, var(--tend-forest));
   border-radius: 10px;
+  background: color-mix(in srgb, var(--tend-surface) 94%, var(--tend-mist));
+  color: var(--tend-forest);
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button:hover {
+  background: color-mix(in srgb, var(--tend-surface) 72%, var(--tend-mist));
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button:active {
+  background: color-mix(in srgb, var(--tend-surface) 52%, var(--tend-mist));
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button svg {
+  opacity: .68;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-score {
+  font-weight: 700;
 }
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__footer {
@@ -4129,6 +4154,12 @@ a:focus-visible {
   font-size: 15px;
   font-weight: 650;
   cursor: pointer;
+}
+
+.today-rhythm-details__history-score {
+  min-width: 2ch;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
 }
 
 .today-rhythm-details__history-button:focus-visible,

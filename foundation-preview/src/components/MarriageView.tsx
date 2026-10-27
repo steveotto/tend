@@ -3,7 +3,6 @@ import type { KeyboardEvent, MouseEvent } from 'react';
 import {
   marriageExampleFixtures,
   marriageRhythmGroups,
-  marriageScoreCoverage,
   marriageWeekDays,
   peopleForRhythm,
   type PersonId,
@@ -13,13 +12,17 @@ import {
   rhythmsSupportingFoundation
 } from '../domain/preview-data.ts';
 import type { FoundationRhythmAssociationChange } from '../domain/foundation-rhythm-associations.ts';
+import { selectCategoryScore } from '../domain/category-scoring.ts';
+import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import { selectFoundationScore } from '../domain/foundation-scoring.ts';
 import type { FoundationScoreSelection } from '../domain/foundation-scoring.ts';
+import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { FoundationCard, RhythmCard, ScoreMeter } from './Cards.tsx';
 import { FoundationRhythmAssociationDialog } from './FoundationRhythmAssociationDialog.tsx';
 import { MarriageIcon } from './MarriageIcon.tsx';
 import { MarriageExampleSelector } from './MarriageExampleSelector.tsx';
+import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 
 type MarriageTab = 'today' | 'rhythms' | 'foundations';
 
@@ -29,6 +32,8 @@ type MarriageViewProps = {
   onPersonSelect: (personId: PersonId) => void;
   onPartnerProfile: () => void;
   onRhythmDetails: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onRhythmHistory: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onEditRhythm: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
   userRhythms: readonly RhythmPreview[];
   foundationRhythms: readonly RhythmPreview[];
   foundationRhythmScores: ReadonlyMap<string, RhythmScoreResult>;
@@ -55,6 +60,8 @@ export function MarriageView({
   onPersonSelect,
   onPartnerProfile,
   onRhythmDetails,
+  onRhythmHistory,
+  onEditRhythm,
   userRhythms,
   foundationRhythms,
   foundationRhythmScores,
@@ -131,6 +138,11 @@ export function MarriageView({
     setAssociationFoundationId(id);
   }
 
+  const foundationScores = new Map(fixture.foundations.map(foundation => [
+    foundation.id,
+    selectFoundationScore(foundation.id, foundationRhythms, foundationRhythmScores, archivedRhythmIds)
+  ]));
+  const categoryScore = selectCategoryScore(fixture.foundations, foundationScores);
   const todayRhythms = fixture.rhythms.filter(rhythm => rhythm.status === 'Due today');
 
   return (
@@ -150,7 +162,7 @@ export function MarriageView({
 
       <MarriageExampleSelector value={marriageExampleId} onChange={selectExample} />
 
-      <MarriageSummary fixture={fixture} />
+      <MarriageSummary score={categoryScore} />
 
       <div className="faith-view-nav marriage-view-nav" role="tablist" aria-label="Marriage content">
         {tabs.map((tab, index) => (
@@ -177,7 +189,20 @@ export function MarriageView({
         aria-labelledby="marriage-tab-today"
         hidden={activeTab !== 'today'}
       >
-        <TodayTogether fixture={fixture} rhythms={todayRhythms} onRhythmDetails={onRhythmDetails} onPersonSelect={onPersonSelect} />
+        <TodayTogether
+          fixture={fixture}
+          rhythms={todayRhythms}
+          effectiveRhythms={foundationRhythms}
+          rhythmScores={foundationRhythmScores}
+          archivedRhythmIds={archivedRhythmIds}
+          completedRhythms={completedRhythms}
+          undoableRhythms={undoableRhythms}
+          onTend={onTend}
+          onUndo={onUndo}
+          onEditRhythm={onEditRhythm}
+          onRhythmHistory={onRhythmHistory}
+          onPersonSelect={onPersonSelect}
+        />
       </section>
 
       <section
@@ -190,11 +215,14 @@ export function MarriageView({
         <RhythmSuggestions
           fixture={fixture}
           userRhythms={userRhythms}
+          effectiveRhythms={foundationRhythms}
+          rhythmScores={foundationRhythmScores}
           completedRhythms={completedRhythms}
           undoableRhythms={undoableRhythms}
           onTend={onTend}
           onUndo={onUndo}
           onRhythmDetails={onRhythmDetails}
+          onRhythmHistory={onRhythmHistory}
           onPersonSelect={onPersonSelect}
         />
       </section>
@@ -211,11 +239,17 @@ export function MarriageView({
           rhythms={foundationRhythms}
           rhythmScores={foundationRhythmScores}
           archivedRhythmIds={archivedRhythmIds}
+          foundationScores={foundationScores}
           selectedFoundationId={selectedFoundationId}
           onSelect={openFoundation}
           onBack={() => setSelectedFoundationId(null)}
           onManage={openAssociationDialog}
-          onRhythmDetails={onRhythmDetails}
+          onRhythmHistory={onRhythmHistory}
+          completedRhythms={completedRhythms}
+          undoableRhythms={undoableRhythms}
+          onTend={onTend}
+          onUndo={onUndo}
+          onEditRhythm={onEditRhythm}
           onPersonSelect={onPersonSelect}
         />
       </section>
@@ -235,36 +269,52 @@ export function MarriageView({
   );
 }
 
-function MarriageSummary({ fixture }: { fixture: MarriageFixture }) {
-  const { summary } = fixture;
-  const rhythmCoverage = marriageScoreCoverage(fixture.rhythms.map(rhythm => rhythm.illustrativeScore));
-  const foundationCoverage = marriageScoreCoverage(fixture.foundations.map(foundation => foundation.illustrativeScore));
+function MarriageSummary({ score }: { score: ReturnType<typeof selectCategoryScore> }) {
+  const [scoreInfoExpanded, setScoreInfoExpanded] = useState(false);
+  const scoreInfoId = useId();
+  const coverage = `${score.eligibleFoundationIds.length} of ${score.foundationIds.length} Foundations scored`;
+  const displayedHealth = score.health === null ? null : Math.round(score.health);
   return (
     <section className="card category-health-card marriage-summary-card" aria-labelledby="marriage-health-heading">
       <div className="category-health-heading">
         <div className="category-health-copy">
-          <h3 id="marriage-health-heading">Overall Marriage health</h3>
-          <p className="category-health-status">
-            {summary.overallScore === null ? 'No sample scores available in this example.' : 'Illustrative sample values · not calculated'}
-          </p>
+          <div className="marriage-summary-title-row">
+            <h3 id="marriage-health-heading">Marriage Health</h3>
+            <button
+              type="button"
+              className="rhythm-history-view__score-info"
+              aria-label={`${scoreInfoExpanded ? 'Hide' : 'Show'} Marriage scoring explanation`}
+              aria-expanded={scoreInfoExpanded}
+              aria-controls={scoreInfoId}
+              onClick={() => setScoreInfoExpanded(expanded => !expanded)}
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <circle cx="8" cy="8" r="6.25" />
+                <path d="M8 7.2v4M8 4.8h.01" />
+              </svg>
+            </button>
+          </div>
+          <p className="category-health-status">{coverage}</p>
         </div>
         <span
-          className={`category-health-score${summary.overallScore === null ? ' neutral' : ''}`}
-          aria-label={summary.overallScore === null ? 'Marriage sample score unavailable' : `Illustrative Marriage sample score ${summary.overallScore}`}
+          className={`category-health-score${displayedHealth === null ? ' neutral' : ''}`}
+          aria-label={displayedHealth === null ? 'Marriage Health score unavailable' : `Marriage Health score ${displayedHealth}`}
         >
-          {summary.overallScore ?? '—'}
+          {displayedHealth ?? '—'}
         </span>
       </div>
+      <p id={scoreInfoId} className="marriage-foundation-score-info__copy" hidden={!scoreInfoExpanded}>
+        Eligible Foundations contribute equally to Consistency and On Track. Marriage Health blends
+        them using 75% Consistency and 25% On Track.
+      </p>
       <ScoreMeter
-        label={summary.overallScore === null
-          ? 'Marriage sample score unavailable'
-          : 'Illustrative Marriage sample score, not calculated'}
-        score={summary.overallScore}
-          markerPlacement="below"
+        label="Marriage Health score"
+        score={score.health}
+        markerPlacement="below"
       />
       <div className="health-summary-breakdown" role="group" aria-label="Marriage summary measures">
-        <SummaryMeasure label="Rhythms" score={summary.rhythmScore} coverage={rhythmCoverage} />
-        <SummaryMeasure label="Foundations" score={summary.foundationScore} coverage={foundationCoverage} />
+        <SummaryMeasure label="Consistency" score={score.consistency} />
+        <SummaryMeasure label="On Track" score={score.onTrack} />
       </div>
     </section>
   );
@@ -272,24 +322,22 @@ function MarriageSummary({ fixture }: { fixture: MarriageFixture }) {
 
 function SummaryMeasure({
   label,
-  score,
-  coverage
+  score
 }: {
   label: string;
   score: number | null;
-  coverage: { scored: number; total: number };
 }) {
+  const displayedScore = score === null ? null : Math.round(score);
   return (
     <div className="health-summary-item">
-      <span className={`health-summary-score${score === null ? ' neutral' : ''}`} aria-label={score === null ? `${label} illustrative score unavailable` : `${label} illustrative sample score ${score}`}>
-        {score ?? '—'}
+      <span
+        className={`health-summary-score${displayedScore === null ? ' neutral' : ''}`}
+        aria-label={displayedScore === null ? `${label} score unavailable` : `${label} score ${displayedScore}`}
+      >
+        {displayedScore ?? '—'}
       </span>
       <span className="health-summary-label">{label}</span>
-      <span className="health-summary-detail">
-        {coverage.total === 0
-          ? `No sample ${label.toLowerCase()} are available`
-          : `${coverage.scored} of ${coverage.total} ${label.toLowerCase()} have illustrative values`}
-      </span>
+      <ScoreMeter label={`${label} score`} score={score} compact />
     </div>
   );
 }
@@ -297,14 +345,32 @@ function SummaryMeasure({
 function TodayTogether({
   fixture,
   rhythms,
-  onRhythmDetails,
+  effectiveRhythms,
+  rhythmScores,
+  archivedRhythmIds,
+  completedRhythms,
+  undoableRhythms,
+  onTend,
+  onUndo,
+  onEditRhythm,
+  onRhythmHistory,
   onPersonSelect
 }: {
   fixture: MarriageFixture;
   rhythms: MarriageFixture['rhythms'];
-  onRhythmDetails: MarriageViewProps['onRhythmDetails'];
+  effectiveRhythms: readonly RhythmPreview[];
+  rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
+  archivedRhythmIds: readonly string[];
+  completedRhythms: ReadonlySet<string>;
+  undoableRhythms: ReadonlySet<string>;
+  onTend: MarriageViewProps['onTend'];
+  onUndo: MarriageViewProps['onUndo'];
+  onEditRhythm: MarriageViewProps['onEditRhythm'];
+  onRhythmHistory: MarriageViewProps['onRhythmHistory'];
   onPersonSelect: MarriageViewProps['onPersonSelect'];
 }) {
+  const effectiveRhythmsById = new Map(effectiveRhythms.map(rhythm => [rhythm.id, rhythm]));
+
   return (
     <>
       {fixture.today
@@ -340,18 +406,33 @@ function TodayTogether({
         </div>
         {rhythms.length > 0
           ? (
-            <div className="marriage-rhythm-list">
-              {rhythms.map(rhythm => (
-                <RhythmCard
-                  key={rhythm.id}
-                  rhythm={rhythm}
-                  people={peopleForRhythm(rhythm)}
-                  onPersonSelect={onPersonSelect}
-                  variant="simple"
-                  headingId={`marriage-today-rhythm-${rhythm.id}`}
-                  onDetails={event => onRhythmDetails(rhythm.id, event)}
-                />
-              ))}
+            <div className="marriage-rhythm-list current-plan-item-group">
+              {rhythms.map(sampleRhythm => {
+                const rhythm = effectiveRhythmsById.get(sampleRhythm.id) ?? sampleRhythm;
+                const archived = archivedRhythmIds.includes(rhythm.id);
+                return (
+                  <RhythmDetailsDialog
+                    key={rhythm.id}
+                    rhythm={rhythm}
+                    inline
+                    completed={completedRhythms.has(rhythm.id)}
+                    people={peopleForRhythm(rhythm)}
+                    onPersonSelect={onPersonSelect}
+                    headingId={`marriage-today-rhythm-${rhythm.id}`}
+                    archived={archived}
+                    healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
+                    onHistory={event => onRhythmHistory(rhythm.id, event)}
+                    {...(!archived && isEditableRhythmId(rhythm.id)
+                      ? {
+                          onTend: (event: MouseEvent<HTMLButtonElement>) => onTend(rhythm.id, event),
+                          onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event),
+                          ...(undoableRhythms.has(rhythm.id) ? { onUndo: () => onUndo(rhythm.id) } : {})
+                        }
+                      : {})}
+                    onClose={() => undefined}
+                  />
+                );
+              })}
             </div>
           )
           : <p className="marriage-empty-state">No sample Rhythms are planned for today.</p>}
@@ -390,22 +471,30 @@ function WeeklyStrip({ fixture }: { fixture: MarriageFixture }) {
 function RhythmSuggestions({
   fixture,
   userRhythms,
+  effectiveRhythms,
+  rhythmScores,
   completedRhythms,
   undoableRhythms,
   onTend,
   onUndo,
   onRhythmDetails,
+  onRhythmHistory,
   onPersonSelect
 }: {
   fixture: MarriageFixture;
   userRhythms: readonly RhythmPreview[];
+  effectiveRhythms: readonly RhythmPreview[];
+  rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
   onTend: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   onUndo: (id: string) => void;
   onRhythmDetails: MarriageViewProps['onRhythmDetails'];
+  onRhythmHistory: MarriageViewProps['onRhythmHistory'];
   onPersonSelect: MarriageViewProps['onPersonSelect'];
 }) {
+  const effectiveRhythmsById = new Map(effectiveRhythms.map(rhythm => [rhythm.id, rhythm]));
+
   return (
     <section className="marriage-rhythm-section" aria-labelledby="marriage-rhythm-section-title">
       <div className="marriage-section-heading">
@@ -451,18 +540,24 @@ function RhythmSuggestions({
             {rhythms.length
               ? (
                 <div className="marriage-rhythm-list">
-                  {rhythms.map(rhythm => (
-                    <RhythmCard
-                      key={rhythm.id}
-                      rhythm={rhythm}
-                      people={peopleForRhythm(rhythm)}
-                      onPersonSelect={onPersonSelect}
-                      variant="suggestion"
-                      icon={<MarriageIcon group="rhythms" id={rhythm.iconId ?? ''} />}
-                      headingId={`marriage-suggested-rhythm-${rhythm.id}`}
-                      onDetails={event => onRhythmDetails(rhythm.id, event)}
-                    />
-                  ))}
+                  {rhythms.map(sampleRhythm => {
+                    const rhythm = effectiveRhythmsById.get(sampleRhythm.id) ?? sampleRhythm;
+                    return (
+                      <RhythmDetailsDialog
+                        key={rhythm.id}
+                        rhythm={rhythm}
+                        inline
+                        statusLabel="Suggested sample"
+                        people={peopleForRhythm(rhythm)}
+                        onPersonSelect={onPersonSelect}
+                        headingId={`marriage-suggested-rhythm-${rhythm.id}`}
+                        archived={false}
+                        healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
+                        onHistory={event => onRhythmHistory(rhythm.id, event)}
+                        onClose={() => undefined}
+                      />
+                    );
+                  })}
                 </div>
               )
               : <p className="marriage-empty-state">No sample suggestions in this group.</p>}
@@ -478,30 +573,38 @@ function FoundationList({
   rhythms,
   rhythmScores,
   archivedRhythmIds,
+  foundationScores,
   selectedFoundationId,
   onSelect,
   onBack,
   onManage,
-  onRhythmDetails,
+  onRhythmHistory,
+  completedRhythms,
+  undoableRhythms,
+  onTend,
+  onUndo,
+  onEditRhythm,
   onPersonSelect
 }: {
   fixture: MarriageFixture;
   rhythms: readonly RhythmPreview[];
   rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
   archivedRhythmIds: readonly string[];
+  foundationScores: ReadonlyMap<string, FoundationScoreSelection>;
   selectedFoundationId: string | null;
   onSelect: (id: string, openerId: string) => void;
   onBack: () => void;
   onManage: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
-  onRhythmDetails: MarriageViewProps['onRhythmDetails'];
+  onRhythmHistory: MarriageViewProps['onRhythmHistory'];
+  completedRhythms: ReadonlySet<string>;
+  undoableRhythms: ReadonlySet<string>;
+  onTend: MarriageViewProps['onTend'];
+  onUndo: MarriageViewProps['onUndo'];
+  onEditRhythm: MarriageViewProps['onEditRhythm'];
   onPersonSelect: MarriageViewProps['onPersonSelect'];
 }) {
   const [scoreInfoExpanded, setScoreInfoExpanded] = useState(false);
   const scoreInfoId = useId();
-  const foundationScores = new Map(fixture.foundations.map(foundation => [
-    foundation.id,
-    selectFoundationScore(foundation.id, rhythms, rhythmScores, archivedRhythmIds)
-  ]));
   const selectedFoundation = fixture.foundations.find(item => item.id === selectedFoundationId);
   const selectedFoundationScore = selectedFoundation
     ? foundationScores.get(selectedFoundation.id) ?? null
@@ -562,7 +665,9 @@ function FoundationList({
             >
               <div className="marriage-foundation-support">
                 <div className="marriage-foundation-support__heading">
-                  <h3>Linked Rhythms · {linkedRhythms.length}</h3>
+                  <h3 id="marriage-foundation-linked-rhythms-title">
+                    Linked Rhythms · {linkedRhythms.length}
+                  </h3>
                   <button
                     type="button"
                     className="marriage-foundation-support__actions"
@@ -593,10 +698,16 @@ function FoundationList({
                 {linkedRhythms.length
                   ? (
                     <FoundationRhythmGroup
-                      title={`Linked Rhythms · ${linkedRhythms.length}`}
                       rhythms={linkedRhythms}
                       archivedRhythmIds={archivedRhythmIds}
-                      onRhythmDetails={onRhythmDetails}
+                      headingId="marriage-foundation-linked-rhythms-title"
+                      rhythmScores={rhythmScores}
+                      completedRhythms={completedRhythms}
+                      undoableRhythms={undoableRhythms}
+                      onTend={onTend}
+                      onUndo={onUndo}
+                      onEditRhythm={onEditRhythm}
+                      onRhythmHistory={onRhythmHistory}
                       onPersonSelect={onPersonSelect}
                     />
                   )
@@ -643,32 +754,53 @@ function foundationScoreEvidence(score: FoundationScoreSelection): string | unde
 }
 
 function FoundationRhythmGroup({
-  title,
   rhythms,
   archivedRhythmIds,
-  onRhythmDetails,
+  headingId,
+  rhythmScores,
+  completedRhythms,
+  undoableRhythms,
+  onTend,
+  onUndo,
+  onEditRhythm,
+  onRhythmHistory,
   onPersonSelect
 }: {
-  title: string;
   rhythms: MarriageFixture['rhythms'];
   archivedRhythmIds: readonly string[];
-  onRhythmDetails: MarriageViewProps['onRhythmDetails'];
+  headingId: string;
+  rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
+  completedRhythms: ReadonlySet<string>;
+  undoableRhythms: ReadonlySet<string>;
+  onTend: MarriageViewProps['onTend'];
+  onUndo: MarriageViewProps['onUndo'];
+  onEditRhythm: MarriageViewProps['onEditRhythm'];
+  onRhythmHistory: MarriageViewProps['onRhythmHistory'];
   onPersonSelect: MarriageViewProps['onPersonSelect'];
 }) {
   return (
-    <section className="marriage-foundation-support-group" aria-label={title}>
-      <h4>{title}</h4>
-      <div className="marriage-rhythm-list">
+    <section className="marriage-foundation-support-group" aria-labelledby={headingId}>
+      <div className="marriage-rhythm-list current-plan-item-group">
         {rhythms.map(rhythm => (
-          <RhythmCard
+          <RhythmDetailsDialog
             key={rhythm.id}
             rhythm={rhythm}
+            inline
+            completed={completedRhythms.has(rhythm.id)}
             people={peopleForRhythm(rhythm)}
             onPersonSelect={onPersonSelect}
-            variant="simple"
             archived={archivedRhythmIds.includes(rhythm.id)}
             headingId={`marriage-detail-rhythm-${rhythm.id}`}
-            onDetails={event => onRhythmDetails(rhythm.id, event)}
+            healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
+            onHistory={event => onRhythmHistory(rhythm.id, event)}
+            {...(!archivedRhythmIds.includes(rhythm.id) && isEditableRhythmId(rhythm.id)
+              ? {
+                  onTend: (event: MouseEvent<HTMLButtonElement>) => onTend(rhythm.id, event),
+                  onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event),
+                  ...(undoableRhythms.has(rhythm.id) ? { onUndo: () => onUndo(rhythm.id) } : {})
+                }
+              : {})}
+            onClose={() => undefined}
           />
         ))}
       </div>

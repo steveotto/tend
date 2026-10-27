@@ -10,6 +10,8 @@ import {
   type RhythmPreview
 } from '../domain/preview-data.ts';
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
+import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
+import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { AreaIcon } from './AreaIcon.tsx';
 import { ArchivedRhythmsDialog } from './ArchivedRhythmsDialog.tsx';
 import { CategoryHealthBadge, ScoreMeter } from './Cards.tsx';
@@ -31,6 +33,7 @@ type TodayViewProps = {
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
   rhythms: readonly RhythmPreview[];
+  rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
   archivedRhythms: readonly RhythmPreview[];
   search: string;
   marriageExampleId: MarriageExampleId;
@@ -51,6 +54,7 @@ export function TodayView({
   completedRhythms,
   undoableRhythms,
   rhythms,
+  rhythmScores,
   archivedRhythms,
   search,
   marriageExampleId,
@@ -216,6 +220,7 @@ export function TodayView({
                       people={peopleForRhythm(rhythm)}
                       onPersonSelect={onPersonSelect}
                       completed={completedRhythms.has(rhythm.id)}
+                      healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
                       onTend={event => onTend(rhythm.id, event)}
                       onHistory={event => onHistory(rhythm.id, event)}
                       {...(isEditableRhythmId(rhythm.id)

@@ -222,9 +222,14 @@ export function App() {
     ...(marriageExampleId === 'populated' ? resolvedMarriageRhythms : []),
     ...allTodayRhythms.filter(rhythm => rhythm.categoryIds?.includes('marriage') === true)
   ];
+  const todayRhythmIds = new Set(allTodayRhythms.map(rhythm => rhythm.id));
+  const scoredRhythms = [
+    ...allTodayRhythms,
+    ...foundationRhythms.filter(rhythm => !todayRhythmIds.has(rhythm.id))
+  ];
   const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const foundationRhythmScores = selectFoundationRhythmScores(
-    foundationRhythms,
+  const rhythmScoreResults = selectFoundationRhythmScores(
+    scoredRhythms,
     previewData.archivedRhythmIds,
     new Set([
       ...editableTodayRhythms.map(rhythm => rhythm.id),
@@ -1358,6 +1363,7 @@ export function App() {
               completedRhythms={completedRhythms}
               undoableRhythms={undoableRhythms}
               rhythms={editableTodayRhythms}
+              rhythmScores={rhythmScoreResults}
               archivedRhythms={archivedRhythms}
               search={search}
               marriageExampleId={marriageExampleId}
@@ -1381,7 +1387,7 @@ export function App() {
                 onPartnerProfile={() => navigate('people')}
                 userRhythms={marriageCategoryRhythms}
                 foundationRhythms={foundationRhythms}
-                foundationRhythmScores={foundationRhythmScores}
+                foundationRhythmScores={rhythmScoreResults}
                 archivedRhythmIds={previewData.archivedRhythmIds}
                 completedRhythms={completedRhythms}
                 undoableRhythms={undoableRhythms}
@@ -1390,6 +1396,8 @@ export function App() {
                   setDetailsInitialView('details');
                   setActiveRhythmId(id);
                 }}
+                onRhythmHistory={openRhythmHistory}
+                onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
                 onTend={openCompletion}
                 onUndo={undoTend}
                 onSaveFoundationAssociations={saveFoundationAssociations}

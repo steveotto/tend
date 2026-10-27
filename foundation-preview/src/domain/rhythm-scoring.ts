@@ -141,6 +141,10 @@ export type RhythmScoreResult =
   | UnscoredRhythmSelection
   | InvalidRhythmSelection;
 
+export function rhythmHealthScore(result: RhythmScoreResult | undefined): number | null {
+  return result?.kind === 'rhythm-score' ? result.healthScore : null;
+}
+
 export type SelectRhythmScoreInput = {
   rhythmId: string;
   cadence?: string;

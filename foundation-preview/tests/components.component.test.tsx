@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CatalogApp } from '../src/CatalogApp.tsx';
 import { CategoryHealthBadge, FoundationCard, FoundationProgress, GoalCard, RhythmCard, ScoreMeter } from '../src/components/Cards.tsx';
 import { MarriageIcon } from '../src/components/MarriageIcon.tsx';
+import { historyButtonName } from './history-button-name.ts';
 import { PersonBadgeList } from '../src/components/PersonBadge.tsx';
 import { RhythmDetailsDialog } from '../src/components/RhythmDetailsDialog.tsx';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -355,7 +356,7 @@ describe('shared preview components', () => {
     expect(icon.getAttribute('stroke-width')).toBe('1.8');
     expect(icon.querySelector('path')?.getAttribute('d')).toBe('M3 12a9 9 0 0 1 15.36-6.36L21 8');
 
-    await user.click(screen.getByRole('button', { name: `View scores and history for ${rhythm.title}` }));
+    await user.click(screen.getByRole('button', { name: historyButtonName(`View scores and history for ${rhythm.title}`) }));
     const history = screen.getByRole('region', { name: `History for ${rhythm.title}` });
     expect(within(history).getAllByText(
       'Full schedule: The 15th day of the second month of every quarter.'
@@ -393,18 +394,61 @@ describe('shared preview components', () => {
     expect(within(card).getByText(todayRhythms[0]!.description!)).toBeTruthy();
     expect(within(card).getByRole('group', { name: `Associations for ${todayRhythms[0]!.title}` })).toBeTruthy();
     expect(within(card).getByRole('button', { name: `Tend ${todayRhythms[0]!.title}` })).toBeTruthy();
-    expect(within(card).getByRole('button', { name: `View scores and history for ${todayRhythms[0]!.title}` })).toBeTruthy();
+    expect(within(card).getByRole('button', { name: historyButtonName(`View scores and history for ${todayRhythms[0]!.title}`) })).toBeTruthy();
     expect(within(card).getByRole('button', { name: `Edit ${todayRhythms[0]!.title}` })).toBeTruthy();
     expect(within(card).queryByRole('button', { name: 'Close details' })).toBeNull();
     expect(within(card).queryByRole('button', { name: /^Back/ })).toBeNull();
 
     await user.click(within(card).getByRole('button', { name: `Tend ${todayRhythms[0]!.title}` }));
-    await user.click(within(card).getByRole('button', { name: `View scores and history for ${todayRhythms[0]!.title}` }));
+    await user.click(within(card).getByRole('button', { name: historyButtonName(`View scores and history for ${todayRhythms[0]!.title}`) }));
     await user.click(within(card).getByRole('button', { name: `Edit ${todayRhythms[0]!.title}` }));
     expect(onTend).toHaveBeenCalledOnce();
     expect(onHistory).toHaveBeenCalledOnce();
     expect(onEdit).toHaveBeenCalledOnce();
     expect(onUndo).not.toHaveBeenCalled();
+  });
+
+  it('shows the rounded Health score as part of the shared history action name', () => {
+    const rhythm = todayRhythms[0]!;
+    render(
+      <>
+        <RhythmDetailsDialog
+          rhythm={{ ...rhythm, id: 'scored-inline' }}
+          inline
+          healthScore={42.6}
+          onClose={() => undefined}
+        />
+        <RhythmDetailsDialog
+          rhythm={{ ...rhythm, id: 'zero-inline' }}
+          inline
+          healthScore={0}
+          onClose={() => undefined}
+        />
+        <RhythmDetailsDialog
+          rhythm={{ ...rhythm, id: 'unavailable-inline' }}
+          inline
+          healthScore={null}
+          onClose={() => undefined}
+        />
+      </>
+    );
+
+    const scored = screen.getByRole('button', {
+      name: historyButtonName(`View scores and history for ${rhythm.title}, Health 43 out of 100`)
+    });
+    const zero = screen.getByRole('button', {
+      name: historyButtonName(`View scores and history for ${rhythm.title}, Health 0 out of 100`)
+    });
+    const unavailable = screen.getByRole('button', {
+      name: historyButtonName(`View scores and history for ${rhythm.title}, Health unavailable`)
+    });
+    expect(scored.querySelector('.today-rhythm-details__history-score')?.textContent).toBe('43');
+    expect(zero.querySelector('.today-rhythm-details__history-score')?.textContent).toBe('0');
+    expect(unavailable.querySelector('.today-rhythm-details__history-score')?.textContent).toBe('—');
+    for (const button of [scored, zero, unavailable]) {
+      expect(button.tagName).toBe('BUTTON');
+      expect(button.querySelectorAll('svg')).toHaveLength(1);
+    }
   });
 
   it('keeps the action column in the title row when description and associations are absent', () => {
@@ -435,7 +479,7 @@ describe('shared preview components', () => {
     const body = card.querySelector('.today-rhythm-details__content');
     expect(actions?.parentElement).toBe(header);
     expect(within(card).getByRole('button', { name: `Tend ${rhythm.title}` })).toBeTruthy();
-    expect(within(card).getByRole('button', { name: `View scores and history for ${rhythm.title}` })).toBeTruthy();
+    expect(within(card).getByRole('button', { name: historyButtonName(`View scores and history for ${rhythm.title}`) })).toBeTruthy();
     expect(body?.querySelector('.today-rhythm-details__summary')).toBeNull();
     expect(body?.querySelector('.today-rhythm-details__association-row')).toBeNull();
   });
@@ -615,7 +659,7 @@ describe('shared preview components', () => {
       render(<RhythmDetailsDialog rhythm={rhythm} completed={completed} onClose={onClose} />);
       const dialog = screen.getByRole('dialog', { name: rhythm.title });
       const historyButton = within(dialog).getByRole('button', {
-        name: `View scores and history for ${rhythm.title}`
+        name: historyButtonName(`View scores and history for ${rhythm.title}`)
       });
       expect(historyButton.querySelector('svg')).toBeTruthy();
       historyButton.focus();
@@ -649,7 +693,7 @@ describe('shared preview components', () => {
       'Marriage'
     ]);
     const historyButton = within(dialog).getByRole('button', {
-      name: 'View scores and history for Pray Together'
+      name: historyButtonName('View scores and history for Pray Together')
     });
     expect(historyButton.querySelector('svg')).toBeTruthy();
     expect(within(dialog).queryByRole('button', { name: /^Tend/ })).toBeNull();
@@ -676,7 +720,7 @@ describe('shared preview components', () => {
         />
       );
       expect(screen.getByRole('button', {
-        name: 'View scores and history for Daily Connection'
+        name: historyButtonName('View scores and history for Daily Connection')
       })).toBeTruthy();
     }
   });

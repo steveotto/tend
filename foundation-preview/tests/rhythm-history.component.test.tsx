@@ -34,6 +34,7 @@ import {
 } from '../src/domain/rhythm-seasons.ts';
 import { localDateString } from '../src/domain/money-goals.ts';
 import { formatRhythmSchedule } from '../src/domain/rhythm-schedule.ts';
+import { historyButtonName } from './history-button-name.ts';
 
 afterEach(cleanup);
 
@@ -2451,7 +2452,7 @@ describe('shared Rhythm history', () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     render(<RhythmDetailsDialog rhythm={connection} archived onClose={onClose} />);
-    const historyButton = screen.getByRole('button', { name: 'View scores and history for Daily Connection' });
+    const historyButton = screen.getByRole('button', { name: historyButtonName('View scores and history for Daily Connection') });
     await user.click(historyButton);
 
     expect(screen.getByRole('region', { name: 'History for Daily Connection' })).toBeTruthy();
@@ -2466,7 +2467,7 @@ describe('shared Rhythm history', () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     render(<RhythmDetailsDialog rhythm={connection} onClose={onClose} />);
-    await user.click(screen.getByRole('button', { name: 'View scores and history for Daily Connection' }));
+    await user.click(screen.getByRole('button', { name: historyButtonName('View scores and history for Daily Connection') }));
 
     const history = screen.getByRole('region', { name: 'History for Daily Connection' });
     expect(document.activeElement).toBe(history);
@@ -2494,7 +2495,7 @@ describe('shared Rhythm history', () => {
     );
 
     const historyButton = screen.getByRole('button', {
-      name: `View scores and history for ${todayConnection.title}`
+      name: historyButtonName(`View scores and history for ${todayConnection.title}`)
     });
     let reachedHistoryButton = false;
     for (let index = 0; index < 12 && !reachedHistoryButton; index += 1) {
@@ -2553,7 +2554,7 @@ describe('shared Rhythm history', () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     render(<RhythmDetailsDialog rhythm={connection} onClose={onClose} />);
-    await user.click(screen.getByRole('button', { name: 'View scores and history for Daily Connection' }));
+    await user.click(screen.getByRole('button', { name: historyButtonName('View scores and history for Daily Connection') }));
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalledOnce();
   });
