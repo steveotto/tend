@@ -2863,6 +2863,213 @@ a:focus-visible {
   min-width: 0;
 }
 
+.money-goal-dialog--suggestion-picker {
+  display: flex;
+  width: min(620px, calc(100vw - 28px));
+  height: min(86vh, 760px);
+  max-height: min(86vh, 760px);
+  overflow: hidden;
+  border-color: var(--line);
+  border-radius: 20px;
+}
+
+.money-goal-dialog__surface--suggestion-picker {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.money-goal-dialog__surface--suggestion-picker > h2 {
+  flex: none;
+  padding: 24px 72px 0 24px;
+  color: var(--ink);
+  font-size: 21px;
+  letter-spacing: -.02em;
+}
+
+.money-goal-dialog--suggestion-picker .money-goal-dialog__close {
+  top: 14px;
+  right: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.money-goal-dialog--suggestion-picker .money-goal-dialog__close:hover {
+  background: var(--mist);
+}
+
+.money-goal-dialog__surface--suggestion-picker > .money-goal-dialog__intro {
+  flex: none;
+  margin: 4px 72px 0 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.rhythm-suggestion-picker__body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.rhythm-suggestion-picker__scroll {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 4px 16px 24px 24px;
+  scrollbar-gutter: stable;
+}
+
+.rhythm-suggestion-picker__group {
+  padding: 14px 0 8px;
+}
+
+.rhythm-suggestion-picker__group + .rhythm-suggestion-picker__group {
+  border-top: 1px solid var(--line);
+}
+
+.rhythm-suggestion-picker__group-header {
+  display: grid;
+  gap: 3px;
+  padding: 0 0 8px;
+}
+
+.rhythm-suggestion-picker__group-header h3,
+.rhythm-suggestion-picker__group-header p,
+.rhythm-suggestion-picker__details h4,
+.rhythm-suggestion-picker__details p {
+  margin: 0;
+}
+
+.rhythm-suggestion-picker__group-header h3 {
+  color: var(--forest-deep);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rhythm-suggestion-picker__group-header p {
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.rhythm-suggestion-picker__list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rhythm-suggestion-picker__row {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 12px;
+  min-width: 0;
+  padding: 12px 0;
+}
+
+.rhythm-suggestion-picker__row + .rhythm-suggestion-picker__row {
+  border-top: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+}
+
+.rhythm-suggestion-picker__icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--forest) 11%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--canvas) 82%, var(--mist));
+  color: var(--forest);
+}
+
+.rhythm-suggestion-picker__icon .marriage-svg-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.rhythm-suggestion-picker__details {
+  min-width: 0;
+}
+
+.rhythm-suggestion-picker__details h4 {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-suggestion-picker__details p {
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-suggestion-picker__schedule {
+  margin-top: 2px !important;
+  color: var(--forest-deep);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rhythm-suggestion-picker__description {
+  margin-top: 3px !important;
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+.rhythm-suggestion-picker__action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 8px;
+}
+
+.rhythm-suggestion-picker__action .btn {
+  white-space: nowrap;
+}
+
+.rhythm-suggestion-picker__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--forest-deep);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.rhythm-suggestion-picker__status svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.rhythm-suggestion-picker__status--archived {
+  color: var(--ink-soft);
+}
+
+.marriage-onboarding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .marriage-recommendation-group > header {
   display: flex;
   align-items: baseline;
@@ -2874,6 +3081,82 @@ a:focus-visible {
   flex: none;
   color: var(--ink-faint);
   font-size: 11px;
+}
+
+.rhythm-editor__foundation-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.rhythm-editor__foundation-links legend {
+  padding: 0 6px 0 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rhythm-editor__foundation-links label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.rhythm-editor__foundation-links p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.rhythm-editor__foundation-links .goal-field-error {
+  flex-basis: 100%;
+}
+
+@media (max-width: 520px) {
+  .money-goal-dialog--suggestion-picker {
+    width: calc(100vw - 16px);
+    height: min(90vh, 760px);
+    max-height: 90vh;
+    border-radius: 17px;
+  }
+
+  .money-goal-dialog__surface--suggestion-picker > h2 {
+    padding: 20px 60px 0 16px;
+  }
+
+  .money-goal-dialog__surface--suggestion-picker > .money-goal-dialog__intro {
+    margin-left: 16px;
+    padding-bottom: 13px;
+  }
+
+  .rhythm-suggestion-picker__scroll {
+    padding: 3px 12px 18px 16px;
+  }
+
+  .rhythm-suggestion-picker__row {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 11px 0;
+  }
+
+  .rhythm-suggestion-picker__icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+  }
+
+  .rhythm-suggestion-picker__icon .marriage-svg-icon {
+    width: 18px;
+    height: 18px;
+  }
 }
 
 .foundation-card--compact {

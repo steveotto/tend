@@ -38,6 +38,12 @@ export function isMarriageFoundationId(value: unknown): value is MarriageFoundat
 export type GoalPreview = MoneyGoal;
 
 export type MarriageRhythmGroupId = 'daily' | 'weekly' | 'seasonal';
+export type MarriageRhythmSuggestion = {
+  templateId: string;
+  rhythm: RhythmPreview;
+  scheduleHint: string;
+  sourceSampleRhythmId?: string;
+};
 
 export type PersonPreview = {
   id: PersonId;
@@ -347,10 +353,178 @@ export const todayOverallIllustrativeScore = 87;
 export const marriageFoundations = marriageExampleFixtures.populated.foundations;
 export const marriageRhythms = marriageExampleFixtures.populated.rhythms;
 
-export const marriageRhythmGroups: { id: MarriageRhythmGroupId; title: string }[] = [
-  { id: 'daily', title: 'Daily Connection' },
-  { id: 'weekly', title: 'Weekly Investment' },
-  { id: 'seasonal', title: 'Seasonal & Annual' }
+const marriageSuggestionTemplateRows: {
+  templateId: string;
+  sourceSampleRhythmId?: string;
+  title: string;
+  description: string;
+  cadence: string;
+  timeLabel: string;
+  marriageGroup: MarriageRhythmGroupId;
+  iconId: string;
+  primaryFoundationId: string;
+  secondaryFoundationIds: string[];
+  scheduleHint: string;
+}[] = [
+  {
+    templateId: 'marriage.daily-connection',
+    sourceSampleRhythmId: 'sample-marriage-connection',
+    title: 'Daily Connection',
+    description: 'Make a little room each day to connect in a way that fits your life.',
+    cadence: '5 times a week',
+    timeLabel: 'Anytime',
+    marriageGroup: 'daily',
+    iconId: 'daily-connection',
+    primaryFoundationId: 'connection',
+    secondaryFoundationIds: ['communication', 'intimacy'],
+    scheduleHint: '5 times a week · Flexible'
+  },
+  {
+    templateId: 'marriage.pray-together',
+    sourceSampleRhythmId: 'sample-marriage-prayer',
+    title: 'Pray Together',
+    description: 'Bring gratitude and needs before God together.',
+    cadence: 'Daily',
+    timeLabel: 'Evening',
+    marriageGroup: 'daily',
+    iconId: 'pray-together',
+    primaryFoundationId: 'spiritual-growth',
+    secondaryFoundationIds: ['connection'],
+    scheduleHint: 'Daily · Evening'
+  },
+  {
+    templateId: 'marriage.date-night',
+    sourceSampleRhythmId: 'sample-marriage-date-night',
+    title: 'Date Night',
+    description: 'Enjoy intentional time together beyond responsibilities and logistics.',
+    cadence: 'Weekly',
+    timeLabel: 'Evening',
+    marriageGroup: 'weekly',
+    iconId: 'date-night',
+    primaryFoundationId: 'fun-adventure',
+    secondaryFoundationIds: ['connection'],
+    scheduleHint: 'Weekly · Evening'
+  },
+  {
+    templateId: 'marriage.marriage-check-in',
+    title: 'Marriage Check-In',
+    description: 'Share appreciation, listen to concerns, and choose one supportive next step.',
+    cadence: 'Weekly',
+    timeLabel: 'Anytime',
+    marriageGroup: 'weekly',
+    iconId: 'marriage-check-in',
+    primaryFoundationId: 'communication',
+    secondaryFoundationIds: ['partnership'],
+    scheduleHint: 'Weekly · Flexible'
+  },
+  {
+    templateId: 'marriage.thoughtful-act-of-love',
+    title: 'Thoughtful Act of Love',
+    description: 'Choose a thoughtful action that helps your partner feel cared for.',
+    cadence: 'Weekly',
+    timeLabel: 'Anytime',
+    marriageGroup: 'weekly',
+    iconId: 'thoughtful-act-of-love',
+    primaryFoundationId: 'partnership',
+    secondaryFoundationIds: ['connection'],
+    scheduleHint: 'Weekly · Flexible'
+  },
+  {
+    templateId: 'marriage.dream-together',
+    sourceSampleRhythmId: 'sample-marriage-dream',
+    title: 'Dream Together',
+    description: 'Talk about hopes, plans, and the next season of life.',
+    cadence: 'Quarterly',
+    timeLabel: 'Anytime',
+    marriageGroup: 'seasonal',
+    iconId: 'dream-together',
+    primaryFoundationId: 'partnership',
+    secondaryFoundationIds: ['fun-adventure'],
+    scheduleHint: 'Quarterly · Flexible'
+  },
+  {
+    templateId: 'marriage.overnight-away',
+    title: 'Overnight Away',
+    description: 'Protect time away from the normal routine to reconnect.',
+    cadence: 'Quarterly',
+    timeLabel: 'Anytime',
+    marriageGroup: 'seasonal',
+    iconId: 'overnight-away',
+    primaryFoundationId: 'fun-adventure',
+    secondaryFoundationIds: ['intimacy'],
+    scheduleHint: 'Quarterly · Flexible'
+  },
+  {
+    templateId: 'marriage.marriage-enrichment',
+    title: 'Marriage Enrichment',
+    description: 'Make time to learn, reflect, and grow together.',
+    cadence: 'Yearly',
+    timeLabel: 'Anytime',
+    marriageGroup: 'seasonal',
+    iconId: 'marriage-enrichment',
+    primaryFoundationId: 'communication',
+    secondaryFoundationIds: ['partnership'],
+    scheduleHint: 'Yearly · Flexible'
+  },
+  {
+    templateId: 'marriage.week-away-together',
+    title: 'Week Away Together',
+    description: 'Protect extended time together for rest, enjoyment, and connection.',
+    cadence: 'Yearly',
+    timeLabel: 'Anytime',
+    marriageGroup: 'seasonal',
+    iconId: 'week-away-together',
+    primaryFoundationId: 'fun-adventure',
+    secondaryFoundationIds: ['connection'],
+    scheduleHint: 'Yearly · Flexible'
+  }
+];
+
+export const marriageRhythmSuggestions: readonly MarriageRhythmSuggestion[] =
+  marriageSuggestionTemplateRows.map(template => {
+    const source = template.sourceSampleRhythmId
+      ? marriageRhythms.find(rhythm => rhythm.id === template.sourceSampleRhythmId)
+      : undefined;
+    return {
+      templateId: template.templateId,
+      scheduleHint: template.scheduleHint,
+      ...(template.sourceSampleRhythmId ? { sourceSampleRhythmId: template.sourceSampleRhythmId } : {}),
+      rhythm: {
+        ...(source ?? {
+          id: template.templateId,
+          title: template.title,
+          cadence: template.cadence,
+          timeLabel: template.timeLabel,
+          automation: 'manual' as const,
+          status: 'Not confirmed' as const,
+          description: template.description,
+          iconId: template.iconId,
+          personIds: ['sample-person-avery', 'sample-person-morgan'] as PersonId[],
+          primaryFoundationId: template.primaryFoundationId,
+          secondaryFoundationIds: template.secondaryFoundationIds
+        }),
+        id: template.templateId,
+        title: template.title,
+        cadence: template.cadence,
+        timeLabel: template.timeLabel,
+        description: template.description,
+        iconId: template.iconId,
+        marriageGroup: template.marriageGroup,
+        personIds: ['sample-person-avery', 'sample-person-morgan'],
+        primaryFoundationId: template.primaryFoundationId,
+        secondaryFoundationIds: template.secondaryFoundationIds
+      }
+    };
+  });
+
+export const marriageRhythmGroups: {
+  id: MarriageRhythmGroupId;
+  title: string;
+  subtitle: string;
+}[] = [
+  { id: 'daily', title: 'Daily Connection', subtitle: 'The little things that matter most.' },
+  { id: 'weekly', title: 'Weekly Investment', subtitle: 'Protect time for your relationship.' },
+  { id: 'seasonal', title: 'Seasonal & Annual', subtitle: 'Make room for deeper connection.' }
 ];
 
 export function marriageFoundationCoverage(

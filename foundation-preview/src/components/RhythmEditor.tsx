@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { areas, syntheticPeople, syntheticPersonPickerGroups } from '../domain/preview-data.ts';
+import {
+  areas,
+  marriageExampleFixtures,
+  syntheticPeople,
+  syntheticPersonPickerGroups
+} from '../domain/preview-data.ts';
 import type { PersonPreview } from '../domain/preview-data.ts';
 import type { RhythmPreview } from '../domain/preview-data.ts';
 import { rhythmDraftFrom, validateRhythmDraft } from '../domain/rhythm-editor.ts';
@@ -32,6 +37,7 @@ function emptyDraft(): RhythmDraft {
 
 type RhythmEditorProps = {
   rhythm?: RhythmPreview;
+  initialDraft?: RhythmDraft;
   asOfDate?: string;
   hasDatedCompletionHistory?: boolean;
   onSave: (draft: RhythmDraft) => RhythmDraftErrors;
@@ -41,17 +47,25 @@ type RhythmEditorProps = {
 
 export function RhythmEditor({
   rhythm,
+  initialDraft,
   asOfDate,
   hasDatedCompletionHistory = false,
   onSave,
   onArchive,
   onClose
 }: RhythmEditorProps) {
-  const [draft, setDraft] = useState<RhythmDraft>(() =>
-    rhythm
+  const [draft, setDraft] = useState<RhythmDraft>(() => initialDraft
+    ? {
+        ...initialDraft,
+        personIds: [...initialDraft.personIds],
+        categoryIds: [...initialDraft.categoryIds],
+        ...(initialDraft.secondaryFoundationIds === undefined
+          ? {}
+          : { secondaryFoundationIds: [...initialDraft.secondaryFoundationIds] })
+      }
+    : rhythm
       ? rhythmDraftFrom(rhythm, rhythm.categoryIds ?? [], asOfDate)
-      : emptyDraft()
-  );
+      : emptyDraft());
   const [errors, setErrors] = useState<RhythmDraftErrors>({});
   const [showArchiveConfirmation, setShowArchiveConfirmation] = useState(false);
   const [showScheduleConfirmation, setShowScheduleConfirmation] = useState(false);
@@ -125,6 +139,28 @@ export function RhythmEditor({
     setPickerSelection(current => toggleBadgeGroup(current, ids));
   }
 
+  function toggleFoundation(id: string) {
+    setDraft(previous => {
+      const selected = [
+        ...(previous.primaryFoundationId ? [previous.primaryFoundationId] : []),
+        ...(previous.secondaryFoundationIds ?? [])
+      ];
+      const next = selected.includes(id)
+        ? selected.filter(selectedId => selectedId !== id)
+        : [...selected, id];
+      return {
+        ...previous,
+        primaryFoundationId: next[0] ?? null,
+        secondaryFoundationIds: next.slice(1)
+      };
+    });
+    setErrors(previous => {
+      const next = { ...previous };
+      delete next.foundationIds;
+      return next;
+    });
+  }
+
   function handleDialogEscape() {
     if (activePicker) closePicker(false);
     else onClose();
@@ -177,7 +213,7 @@ export function RhythmEditor({
     saveButtonRef.current?.focus();
   }
 
-  function fieldError(field: keyof RhythmDraft) {
+  function fieldError(field: keyof RhythmDraft | 'foundationIds') {
     return errors[field]
       ? <span className="goal-field-error" id={`rhythm-error-${field}`}>{errors[field]}</span>
       : null;
@@ -198,6 +234,10 @@ export function RhythmEditor({
     .filter(area => draft.categoryIds.includes(area.id));
   const selectedPeople = syntheticPeople
     .filter(person => draft.personIds.includes(person.id));
+  const selectedFoundationIds = [
+    ...(draft.primaryFoundationId ? [draft.primaryFoundationId] : []),
+    ...(draft.secondaryFoundationIds ?? [])
+  ];
   const renderCategoryBadge = (area: typeof areas[number]) => (
     <>
       <span className="rhythm-association-picker__category-icon" aria-hidden="true"><AreaIcon id={area.id} /></span>
@@ -225,7 +265,9 @@ export function RhythmEditor({
   return (
     <MoneyGoalDialog
       title={rhythm ? 'Edit Rhythm' : 'Add Rhythm'}
-      intro="Synthetic preview only. Schedules are stored and displayed, but do not calculate due dates or control completion eligibility."
+      intro={initialDraft
+        ? 'Suggested Rhythm draft. Nothing is saved until you choose Add Rhythm. Choose the schedule that fits; the catalogue hint is only a recommendation.'
+        : 'Synthetic preview only. Schedules are stored and displayed, but do not calculate due dates or control completion eligibility.'}
       onClose={handleDialogEscape}
     >
       {activePicker === 'categories' ? (
@@ -316,6 +358,7 @@ export function RhythmEditor({
               schedule={draft.schedule}
               error={errors.schedule}
               onChange={schedule => update('schedule', schedule)}
+              requireExplicitChoices={initialDraft !== undefined}
             >
               {timeOfDayField}
             </RhythmScheduleFields>
@@ -369,6 +412,24 @@ export function RhythmEditor({
             ))}
             {fieldError('personIds')}
           </div>
+          <fieldset className="rhythm-editor__foundation-links">
+            <legend>Marriage Foundations</legend>
+            {!draft.categoryIds.includes('marriage') && (
+              <p>Select the Marriage category to add Foundation links.</p>
+            )}
+            {marriageExampleFixtures.populated.foundations.map(foundation => (
+              <label key={foundation.id}>
+                <input
+                  type="checkbox"
+                  checked={selectedFoundationIds.includes(foundation.id)}
+                  disabled={!draft.categoryIds.includes('marriage') && !selectedFoundationIds.includes(foundation.id)}
+                  onChange={() => toggleFoundation(foundation.id)}
+                />
+                <span>{foundation.name}</span>
+              </label>
+            ))}
+            {fieldError('foundationIds')}
+          </fieldset>
         </section>
 
         {Object.keys(errors).length > 0 && (

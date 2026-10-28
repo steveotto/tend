@@ -20,12 +20,12 @@ type CustomUnit = Extract<RhythmSchedule, { frequency: 'custom' }>['unit'];
 type ScheduleFormState = {
   frequency?: FrequencyChoice;
   weekdays: RhythmWeekday[];
-  patternKind: PatternKind;
-  day: number | 'last';
-  ordinal: 1 | 2 | 3 | 4 | 'last';
-  patternWeekday: RhythmWeekday;
-  month: RhythmMonth;
-  monthInQuarter: 1 | 2 | 3;
+  patternKind?: PatternKind;
+  day?: number | 'last';
+  ordinal?: 1 | 2 | 3 | 4 | 'last';
+  patternWeekday?: RhythmWeekday;
+  month?: RhythmMonth;
+  monthInQuarter?: 1 | 2 | 3;
   interval: string;
   unit: CustomUnit;
   startDate: string;
@@ -66,7 +66,7 @@ const ordinalOptions: readonly StyledSelectOption<string>[] = [
   { value: 'last', label: 'Last' }
 ];
 
-const dayOptions = (currentDay: number | 'last'): readonly StyledSelectOption<string>[] => [
+const dayOptions = (currentDay?: number | 'last'): readonly StyledSelectOption<string>[] => [
   ...Array.from({ length: 28 }, (_, index) => ({ value: String(index + 1), label: String(index + 1) })),
   { value: 'last', label: 'Last day' },
   ...(typeof currentDay === 'number' && currentDay > 28
@@ -94,15 +94,17 @@ function localToday(): string {
   return `${year}-${month}-${day}`;
 }
 
-function formFromSchedule(schedule?: RhythmSchedule): ScheduleFormState {
+function formFromSchedule(schedule?: RhythmSchedule, requireExplicitChoices = false): ScheduleFormState {
   const base: ScheduleFormState = {
     weekdays: [],
-    patternKind: 'dayOfMonth',
-    day: 1,
-    ordinal: 1,
-    patternWeekday: 0,
-    month: 1,
-    monthInQuarter: 1,
+    ...(!requireExplicitChoices || schedule ? {
+      patternKind: 'dayOfMonth' as const,
+      day: 1,
+      ordinal: 1 as const,
+      patternWeekday: 0 as const,
+      month: 1 as const,
+      monthInQuarter: 1 as const
+    } : {}),
     interval: '1',
     unit: 'days',
     startDate: localToday(),
@@ -138,10 +140,15 @@ function formFromSchedule(schedule?: RhythmSchedule): ScheduleFormState {
   };
 }
 
-function patternFrom(form: ScheduleFormState): RhythmPattern {
-  return form.patternKind === 'dayOfMonth'
-    ? { kind: 'dayOfMonth', day: form.day }
-    : { kind: 'ordinalWeekday', ordinal: form.ordinal, weekday: form.patternWeekday };
+function patternFrom(form: ScheduleFormState): RhythmPattern | undefined {
+  if (form.patternKind === 'dayOfMonth' && form.day !== undefined) {
+    return { kind: 'dayOfMonth', day: form.day };
+  }
+  if (form.patternKind === 'ordinalWeekday'
+    && form.ordinal !== undefined && form.patternWeekday !== undefined) {
+    return { kind: 'ordinalWeekday', ordinal: form.ordinal, weekday: form.patternWeekday };
+  }
+  return undefined;
 }
 
 export type RhythmScheduleFieldsDraft = {
@@ -175,6 +182,30 @@ function buildSchedule(form: ScheduleFormState): RhythmScheduleFieldsDraft {
       validationMessage: 'Choose at least one weekday.'
     };
   }
+  const pattern = patternFrom(form);
+  if ((form.frequency === 'monthly' || form.frequency === 'quarterly' || form.frequency === 'yearly'
+    || form.frequency === 'custom' && (form.unit === 'months' || form.unit === 'years'))
+    && !pattern) {
+    return {
+      hasEndDate: form.hasEndDate,
+      endDate: form.endDate,
+      validationMessage: 'Choose a complete date or day pattern.'
+    };
+  }
+  if (form.frequency === 'quarterly' && form.monthInQuarter === undefined) {
+    return {
+      hasEndDate: form.hasEndDate,
+      endDate: form.endDate,
+      validationMessage: 'Choose which months to use in each quarter.'
+    };
+  }
+  if (form.frequency === 'yearly' && form.month === undefined) {
+    return {
+      hasEndDate: form.hasEndDate,
+      endDate: form.endDate,
+      validationMessage: 'Choose a month.'
+    };
+  }
   let candidate: unknown;
 
   switch (form.frequency) {
@@ -192,13 +223,13 @@ function buildSchedule(form: ScheduleFormState): RhythmScheduleFieldsDraft {
       };
       break;
     case 'monthly':
-      candidate = { frequency: 'monthly', pattern: patternFrom(form) };
+      candidate = { frequency: 'monthly', pattern: pattern! };
       break;
     case 'quarterly':
-      candidate = { frequency: 'quarterly', monthInQuarter: form.monthInQuarter, pattern: patternFrom(form) };
+      candidate = { frequency: 'quarterly', monthInQuarter: form.monthInQuarter!, pattern: pattern! };
       break;
     case 'yearly':
-      candidate = { frequency: 'yearly', month: form.month, pattern: patternFrom(form) };
+      candidate = { frequency: 'yearly', month: form.month!, pattern: pattern! };
       break;
     case 'custom': {
       const interval = Number(form.interval);
@@ -207,14 +238,14 @@ function buildSchedule(form: ScheduleFormState): RhythmScheduleFieldsDraft {
       } else if (form.unit === 'weeks') {
         candidate = { frequency: 'custom', unit: 'weeks', interval, weekdays: form.weekdays, startDate: form.startDate };
       } else if (form.unit === 'months') {
-        candidate = { frequency: 'custom', unit: 'months', interval, pattern: patternFrom(form), startDate: form.startDate };
+        candidate = { frequency: 'custom', unit: 'months', interval, pattern: pattern!, startDate: form.startDate };
       } else {
         candidate = {
           frequency: 'custom',
           unit: 'years',
           interval,
-          month: form.month,
-          pattern: patternFrom(form),
+          month: form.month!,
+          pattern: pattern!,
           startDate: form.startDate
         };
       }
@@ -275,6 +306,7 @@ export function RhythmScheduleFields({
   onChange,
   onDraftChange,
   defaultEndDate,
+  requireExplicitChoices = false,
   children
 }: {
   schedule?: RhythmSchedule | undefined;
@@ -282,9 +314,10 @@ export function RhythmScheduleFields({
   onChange: (schedule: RhythmSchedule | undefined) => void;
   onDraftChange?: (draft: RhythmScheduleFieldsDraft) => void;
   defaultEndDate?: string;
+  requireExplicitChoices?: boolean;
   children: ReactNode;
 }) {
-  const [form, setForm] = useState(() => formFromSchedule(schedule));
+  const [form, setForm] = useState(() => formFromSchedule(schedule, requireExplicitChoices));
   const weekdaysGroupId = useId();
   const patternTypeLabelId = `${useId()}-pattern-type-label`;
   const patternDetailsLabelId = `${useId()}-pattern-details-label`;
@@ -380,7 +413,8 @@ export function RhythmScheduleFields({
                 { value: '2', label: 'Feb · May · Aug · Nov' },
                 { value: '3', label: 'Mar · Jun · Sep · Dec' }
               ]}
-              value={String(form.monthInQuarter)}
+              value={form.monthInQuarter === undefined ? '' : String(form.monthInQuarter)}
+              placeholder="Choose months"
               onChange={value => update('monthInQuarter', Number(value) as 1 | 2 | 3)}
             />
           </div>
@@ -398,7 +432,8 @@ export function RhythmScheduleFields({
             <StyledSelect
               label="Repeat on"
               options={patternOptions}
-              value={form.patternKind}
+              value={form.patternKind ?? ''}
+              placeholder="Choose a pattern"
               onChange={kind => update('patternKind', kind)}
             />
           </div>
@@ -408,9 +443,11 @@ export function RhythmScheduleFields({
             aria-labelledby={patternDetailsLabelId}
           >
             <span id={patternDetailsLabelId} className="rhythm-schedule-fields__pattern-label">
-              {form.patternKind === 'dayOfMonth' ? 'On day' : 'On the'}
+              {form.patternKind === 'dayOfMonth' ? 'On day' : form.patternKind === 'ordinalWeekday' ? 'On the' : 'Pattern details'}
             </span>
-            {form.patternKind === 'dayOfMonth' ? (
+            {form.patternKind === undefined
+              ? <p className="rhythm-schedule-fields__pattern-prompt">Choose a pattern first.</p>
+              : form.patternKind === 'dayOfMonth' ? (
               <div className="rhythm-schedule-fields__pattern-controls">
                 {(form.frequency === 'yearly' || form.frequency === 'custom' && form.unit === 'years') && (
                   <>
@@ -418,7 +455,8 @@ export function RhythmScheduleFields({
                     <StyledSelect
                       label="Month"
                       options={months}
-                      value={String(form.month)}
+                      value={form.month === undefined ? '' : String(form.month)}
+                      placeholder="Choose a month"
                       onChange={value => update('month', Number(value) as RhythmMonth)}
                     />
                   </>
@@ -426,7 +464,8 @@ export function RhythmScheduleFields({
                 <StyledSelect
                   label="Date"
                   options={dayOptions(form.day)}
-                  value={String(form.day)}
+                  value={form.day === undefined ? '' : String(form.day)}
+                  placeholder="Choose a date"
                   onChange={value => update('day', value === 'last' ? 'last' : Number(value))}
                 />
               </div>
@@ -440,13 +479,15 @@ export function RhythmScheduleFields({
                   <StyledSelect
                     label="Which week?"
                     options={ordinalOptions}
-                    value={String(form.ordinal)}
+                    value={form.ordinal === undefined ? '' : String(form.ordinal)}
+                    placeholder="Choose a week"
                     onChange={value => update('ordinal', value === 'last' ? 'last' : Number(value) as 1 | 2 | 3 | 4)}
                   />
                   <StyledSelect
                     label="Day"
                     options={weekdays.map(day => ({ value: String(day.value), label: day.label }))}
-                    value={String(form.patternWeekday)}
+                    value={form.patternWeekday === undefined ? '' : String(form.patternWeekday)}
+                    placeholder="Choose a day"
                     onChange={value => update('patternWeekday', Number(value) as RhythmWeekday)}
                   />
                 </div>
@@ -456,7 +497,8 @@ export function RhythmScheduleFields({
                     <StyledSelect
                       label="Month"
                       options={months}
-                      value={String(form.month)}
+                      value={form.month === undefined ? '' : String(form.month)}
+                      placeholder="Choose a month"
                       onChange={value => update('month', Number(value) as RhythmMonth)}
                     />
                   </div>

@@ -4,6 +4,7 @@ import type { MouseEvent } from 'react';
 import { AppNavigation } from './components/AppNavigation.tsx';
 import type { Destination, TextSize } from './components/AppNavigation.tsx';
 import { MarriageView } from './components/MarriageView.tsx';
+import { activeIdForMarriageSuggestion } from './domain/category-rhythms.ts';
 import { saveFoundationRhythmAssociations } from './domain/foundation-rhythm-associations.ts';
 import type { FoundationRhythmAssociationChange } from './domain/foundation-rhythm-associations.ts';
 import { selectFoundationRhythmScores } from './domain/foundation-scoring.ts';
@@ -160,12 +161,16 @@ export function App() {
   const [rhythmEditor, setRhythmEditor] = useState<{
     id: string;
     rhythm?: (typeof todayRhythms)[number];
+    initialDraft?: RhythmDraft;
+    suggestionTemplateId?: string;
+    returnToSuggestions?: (saved: boolean) => void;
   } | null>(null);
   const dialogOpener = useRef<HTMLButtonElement | null>(null);
   const completionDialogOpener = useRef<HTMLButtonElement | null>(null);
   const rhythmEditorOpener = useRef<HTMLButtonElement | null>(null);
   const wasDetailsOpen = useRef(false);
   const wasRhythmEditorOpen = useRef(false);
+  const rhythmEditorReturnsToSuggestions = useRef(false);
 
   const dateLabel = new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
@@ -520,6 +525,10 @@ export function App() {
     }
     if (!wasRhythmEditorOpen.current) return;
     wasRhythmEditorOpen.current = false;
+    if (rhythmEditorReturnsToSuggestions.current) {
+      rhythmEditorReturnsToSuggestions.current = false;
+      return;
+    }
     if (rhythmEditorOpener.current?.isConnected) rhythmEditorOpener.current.focus();
     else document.querySelector<HTMLButtonElement>('.today-archived-rhythms-toggle')?.focus();
   }, [rhythmEditor]);
@@ -560,17 +569,65 @@ export function App() {
 
   function openRhythmEditor(
     event: MouseEvent<HTMLButtonElement>,
-    rhythm?: (typeof todayRhythms)[number]
+    rhythm?: (typeof todayRhythms)[number],
+    options?: {
+      id?: string;
+      initialDraft?: RhythmDraft;
+      suggestionTemplateId?: string;
+      returnToSuggestions?: (saved: boolean) => void;
+    }
   ) {
     rhythmEditorOpener.current = event.currentTarget;
+    rhythmEditorReturnsToSuggestions.current = false;
     setRhythmEditor({
-      id: rhythm?.id ?? `user-rhythm-${globalThis.crypto.randomUUID()}`,
+      id: options?.id ?? rhythm?.id ?? `user-rhythm-${globalThis.crypto.randomUUID()}`,
+      ...(options?.initialDraft ? { initialDraft: options.initialDraft } : {}),
+      ...(options?.suggestionTemplateId ? { suggestionTemplateId: options.suggestionTemplateId } : {}),
+      ...(options?.returnToSuggestions ? { returnToSuggestions: options.returnToSuggestions } : {}),
       ...(rhythm ? { rhythm } : {})
+    });
+  }
+
+  function finishRhythmEditor(saved: boolean) {
+    const returnToSuggestions = rhythmEditor?.returnToSuggestions;
+    if (returnToSuggestions) rhythmEditorReturnsToSuggestions.current = true;
+    setRhythmEditor(null);
+    returnToSuggestions?.(saved);
+  }
+
+  function openMarriageSuggestion(
+    rhythm: RhythmPreview,
+    event: MouseEvent<HTMLButtonElement>,
+    returnToSuggestions: (saved: boolean) => void
+  ) {
+    const id = activeIdForMarriageSuggestion(rhythm.id);
+    if (!id) return;
+    const initialDraft: RhythmDraft = {
+      title: rhythm.title,
+      description: rhythm.description ?? '',
+      cadence: rhythm.cadence ?? 'Daily',
+      timeLabel: rhythm.timeLabel ?? 'Anytime',
+      personIds: [...(rhythm.personIds ?? [])],
+      categoryIds: ['marriage'],
+      scheduleEditing: true,
+      personal: false,
+      primaryFoundationId: rhythm.primaryFoundationId ?? null,
+      secondaryFoundationIds: [...(rhythm.secondaryFoundationIds ?? [])]
+    };
+    openRhythmEditor(event, undefined, {
+      id,
+      initialDraft,
+      suggestionTemplateId: rhythm.id,
+      returnToSuggestions
     });
   }
 
   function saveRhythm(draft: RhythmDraft): RhythmDraftErrors {
     if (!rhythmEditor) return { title: 'The Rhythm editor is no longer active.' };
+    if (rhythmEditor.suggestionTemplateId
+      && previewData.savedRhythms.some(saved => saved.id === rhythmEditor.id)) {
+      return { title: 'This suggestion is already added. No duplicate Rhythm was saved.' };
+    }
     const scoringTimeZone = rhythmEditor.rhythm?.scoring?.timeZone
       ?? rhythmEditor.rhythm?.createdTimeZone
       ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -630,7 +687,7 @@ export function App() {
     setPreviewData(nextData);
     setAutoSaveEnabled(true);
     setPersistenceStatus({ kind: 'saved' });
-    setRhythmEditor(null);
+    finishRhythmEditor(true);
     return result.errors;
   }
 
@@ -1011,7 +1068,7 @@ export function App() {
         ? { ...previous, archivedRhythmIds }
         : previous;
     });
-    setRhythmEditor(null);
+    finishRhythmEditor(false);
   }
 
   function restoreRhythm(id: string) {
@@ -1383,21 +1440,24 @@ export function App() {
               <MarriageView
                 marriageExampleId={marriageExampleId}
                 onMarriageExampleChange={setMarriageExampleId}
+                todayDate={currentDate}
+                onAddRhythm={event => openRhythmEditor(event)}
+                onAddSuggestion={openMarriageSuggestion}
                 onPersonSelect={personId => navigate('people', personId)}
                 onPartnerProfile={() => navigate('people')}
                 userRhythms={marriageCategoryRhythms}
+                savedRhythmIds={previewData.savedRhythms.map(rhythm => rhythm.id)}
                 foundationRhythms={foundationRhythms}
+                suggestionRhythms={resolvedMarriageRhythms}
                 foundationRhythmScores={rhythmScoreResults}
                 archivedRhythmIds={previewData.archivedRhythmIds}
                 completedRhythms={completedRhythms}
                 undoableRhythms={undoableRhythms}
-                onRhythmDetails={(id, event) => {
-                  dialogOpener.current = event.currentTarget;
-                  setDetailsInitialView('details');
-                  setActiveRhythmId(id);
-                }}
                 onRhythmHistory={openRhythmHistory}
-                onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
+                onEditRhythm={(rhythm, event, returnToSuggestions) => openRhythmEditor(event, rhythm, {
+                  ...(returnToSuggestions ? { returnToSuggestions } : {})
+                })}
+                onRestoreRhythm={restoreRhythm}
                 onTend={openCompletion}
                 onUndo={undoTend}
                 onSaveFoundationAssociations={saveFoundationAssociations}
@@ -1524,6 +1584,7 @@ export function App() {
       {rhythmEditor && (
         <RhythmEditor
           {...(rhythmEditor.rhythm ? { rhythm: rhythmEditor.rhythm } : {})}
+          {...(rhythmEditor.initialDraft ? { initialDraft: rhythmEditor.initialDraft } : {})}
           asOfDate={localDateInTimeZone(
             new Date(),
             rhythmEditor.rhythm?.scoring?.timeZone
@@ -1536,7 +1597,7 @@ export function App() {
           }
           onSave={saveRhythm}
           {...(rhythmEditor.rhythm ? { onArchive: archiveRhythm } : {})}
-          onClose={() => setRhythmEditor(null)}
+          onClose={() => finishRhythmEditor(false)}
         />
       )}
     </div>

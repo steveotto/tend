@@ -8,7 +8,12 @@ import spiritualGrowthIcon from '../../../assets/tend-marriage-icons/foundations
 import dailyConnectionIcon from '../../../assets/tend-marriage-icons/rhythms/daily-connection.svg?url';
 import dateNightIcon from '../../../assets/tend-marriage-icons/rhythms/date-night.svg?url';
 import dreamTogetherIcon from '../../../assets/tend-marriage-icons/rhythms/dream-together.svg?url';
+import marriageCheckInIcon from '../../../assets/tend-marriage-icons/rhythms/marriage-check-in.svg?url';
+import marriageEnrichmentIcon from '../../../assets/tend-marriage-icons/rhythms/marriage-enrichment.svg?url';
+import overnightAwayIcon from '../../../assets/tend-marriage-icons/rhythms/overnight-away.svg?url';
 import prayTogetherIcon from '../../../assets/tend-marriage-icons/rhythms/pray-together.svg?url';
+import thoughtfulActOfLoveIcon from '../../../assets/tend-marriage-icons/rhythms/thoughtful-act-of-love.svg?url';
+import weekAwayTogetherIcon from '../../../assets/tend-marriage-icons/rhythms/week-away-together.svg?url';
 
 const foundationIcons: Record<string, string> = {
   connection: connectionIcon,
@@ -23,7 +28,12 @@ const rhythmIcons: Record<string, string> = {
   'daily-connection': dailyConnectionIcon,
   'date-night': dateNightIcon,
   'dream-together': dreamTogetherIcon,
-  'pray-together': prayTogetherIcon
+  'pray-together': prayTogetherIcon,
+  'marriage-check-in': marriageCheckInIcon,
+  'thoughtful-act-of-love': thoughtfulActOfLoveIcon,
+  'overnight-away': overnightAwayIcon,
+  'marriage-enrichment': marriageEnrichmentIcon,
+  'week-away-together': weekAwayTogetherIcon
 };
 
 type MarriageIconProps = {

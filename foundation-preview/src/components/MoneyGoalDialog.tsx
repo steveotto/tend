@@ -6,11 +6,13 @@ type MoneyGoalDialogProps = {
   intro?: string;
   children: ReactNode;
   closeLabel?: string;
+  closeButtonId?: string;
   labelledBy?: string;
   initialFocusId?: string;
   stopEscapePropagation?: boolean;
   dialogClassName?: string;
   surfaceClassName?: string;
+  bodyClassName?: string;
   onClose: () => void;
 };
 
@@ -19,11 +21,13 @@ export function MoneyGoalDialog({
   intro,
   children,
   closeLabel,
+  closeButtonId,
   labelledBy,
   initialFocusId,
   stopEscapePropagation = false,
   dialogClassName,
   surfaceClassName,
+  bodyClassName,
   onClose
 }: MoneyGoalDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -58,6 +62,7 @@ export function MoneyGoalDialog({
       <div className={['money-goal-dialog__surface', surfaceClassName].filter(Boolean).join(' ')}>
         {closeLabel && (
           <button
+            id={closeButtonId}
             type="button"
             className="money-goal-dialog__close"
             aria-label={closeLabel}
@@ -68,7 +73,7 @@ export function MoneyGoalDialog({
         )}
         {title && <h2 id="money-goal-dialog-title">{title}</h2>}
         {intro && <p className="money-goal-dialog__intro">{intro}</p>}
-        {children}
+        {bodyClassName ? <div className={bodyClassName}>{children}</div> : children}
       </div>
     </dialog>
   );

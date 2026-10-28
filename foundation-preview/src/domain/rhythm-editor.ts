@@ -76,9 +76,11 @@ export type RhythmDraft = {
   originalSchedule?: RhythmSchedule;
   originalScoring?: RhythmScoringMetadata;
   seasonName?: string;
+  primaryFoundationId?: string | null;
+  secondaryFoundationIds?: string[];
 };
 
-export type RhythmDraftErrors = Partial<Record<keyof RhythmDraft | 'schedule', string>>;
+export type RhythmDraftErrors = Partial<Record<keyof RhythmDraft | 'schedule' | 'foundationIds', string>>;
 
 const existingEditableIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 const fixtureRhythmIds = new Set([...todayRhythms, ...marriageRhythms].map(rhythm => rhythm.id));
@@ -271,7 +273,9 @@ export function rhythmDraftFrom(
       ? { seasonName: currentSeason.name }
       : {}),
     scheduleEditing: rhythm.schedule !== undefined,
-    ...(rhythm.personal === undefined ? {} : { personal: rhythm.personal })
+    ...(rhythm.personal === undefined ? {} : { personal: rhythm.personal }),
+    ...(rhythm.primaryFoundationId === undefined ? {} : { primaryFoundationId: rhythm.primaryFoundationId }),
+    ...(rhythm.secondaryFoundationIds === undefined ? {} : { secondaryFoundationIds: [...rhythm.secondaryFoundationIds] })
   };
 }
 
@@ -295,6 +299,17 @@ export function validateRhythmDraft(draft: RhythmDraft): RhythmDraftErrors {
   }
   if (!isUniqueKnownValues<RhythmCategoryId>(draft.categoryIds, categoryIds)) {
     errors.categoryIds = 'Choose each available category at most once.';
+  }
+  const foundationIds = [
+    ...(draft.primaryFoundationId ? [draft.primaryFoundationId] : []),
+    ...(draft.secondaryFoundationIds ?? [])
+  ];
+  if (foundationIds.some(id => !isMarriageFoundationId(id))
+    || new Set(foundationIds).size !== foundationIds.length) {
+    errors.foundationIds = 'Choose each available Marriage Foundation at most once.';
+  }
+  if (foundationIds.length > 0 && !draft.categoryIds.includes('marriage')) {
+    errors.foundationIds = 'Marriage Foundation links require the Marriage category.';
   }
   return errors;
 }
@@ -539,10 +554,12 @@ export function saveRhythmDraft(
       ? existing?.personal === undefined ? {} : { personal: existing.personal }
       : { personal: draft.personal }),
     ...(timeOfDay === undefined ? {} : { timeOfDay }),
-    ...(existing?.primaryFoundationId === undefined ? {} : { primaryFoundationId: existing.primaryFoundationId }),
-    ...(existing?.secondaryFoundationIds === undefined
-      ? {}
-      : { secondaryFoundationIds: [...existing.secondaryFoundationIds] })
+    ...(draft.primaryFoundationId === undefined
+      ? existing?.primaryFoundationId === undefined ? {} : { primaryFoundationId: existing.primaryFoundationId }
+      : { primaryFoundationId: draft.primaryFoundationId }),
+    ...(draft.secondaryFoundationIds === undefined
+      ? existing?.secondaryFoundationIds === undefined ? {} : { secondaryFoundationIds: [...existing.secondaryFoundationIds] }
+      : { secondaryFoundationIds: [...draft.secondaryFoundationIds] })
   };
   return {
     savedRhythms: [
