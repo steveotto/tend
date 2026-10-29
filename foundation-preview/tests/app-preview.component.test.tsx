@@ -71,6 +71,11 @@ function cancelNativeDialog(dialog: HTMLElement): void {
   fireEvent(dialog, new Event('cancel', { cancelable: true }));
 }
 
+async function openPreviewSettings(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(screen.getByRole('button', { name: 'More, settings' }));
+  await user.click(await screen.findByRole('button', { name: 'Settings' }));
+}
+
 function savedMarriageRhythm(
   id: string,
   title: string,
@@ -212,6 +217,35 @@ function seasonDeletionFixture() {
 }
 
 describe('Tend Today preview', () => {
+  it('keeps preview controls out of everyday routes and exposes them in More → Settings', async () => {
+    const user = userEvent.setup();
+    const envelope = createPreviewEnvelope(createSamplePreviewData());
+    const originalRaw = JSON.stringify(envelope);
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, originalRaw);
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+
+    expect(screen.queryByRole('button', { name: 'Export preview backup' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'More, settings' }));
+    expect(await screen.findByRole('heading', { name: 'More' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Export preview backup' })).toBeNull();
+
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Settings' })).toBe(document.activeElement);
+    await user.keyboard('{Enter}');
+    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Preview data' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Export preview backup' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Reset sample data' })).toBeTruthy();
+    expect(screen.getByText(/separate from your live Tend account/)).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: '‹ More' }));
+    expect(await screen.findByRole('heading', { name: 'More' })).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'More' }));
+    expect(screen.queryByRole('button', { name: 'Export preview backup' })).toBeNull();
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+  });
+
   it('opens a linked Foundation directly from a Today card and restores Marriage return context', async () => {
     const user = userEvent.setup();
     const data = createSamplePreviewData();
@@ -941,6 +975,7 @@ describe('Tend Today preview', () => {
 
     const backup = JSON.stringify(createPreviewEnvelope(saved.envelope.data));
     const backupFile = new File([backup], 'parenting-associations.json', { type: 'application/json' });
+    await openPreviewSettings(user);
     fireEvent.change(screen.getByLabelText('Import preview backup'), { target: { files: [backupFile] } });
     const importDialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     await user.click(within(importDialog).getByRole('button', { name: 'Replace with backup' }));
@@ -2164,6 +2199,7 @@ describe('Tend Today preview', () => {
     const reloadedDialog = await openHistory();
     await user.click(within(reloadedDialog).getByRole('button', { name: 'Close details' }));
 
+    await openPreviewSettings(user);
     await user.upload(
       screen.getByLabelText('Import preview backup'),
       new File([exportedBackup], 'on-track-export.json', { type: 'application/json' })
@@ -2171,6 +2207,7 @@ describe('Tend Today preview', () => {
     const importConfirmation = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     await user.click(within(importConfirmation).getByRole('button', { name: 'Replace with backup' }));
     await screen.findByText('Preview backup imported.');
+    await user.click(screen.getByRole('button', { name: 'Today' }));
     const importedDialog = await openHistory();
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toContain('reload-score-completion');
     await user.click(within(importedDialog).getByRole('button', { name: 'Close details' }));
@@ -2357,6 +2394,7 @@ describe('Tend Today preview', () => {
     window.localStorage.setItem(PREVIEW_STORAGE_KEY, v5Raw);
     render(<App />);
 
+    await openPreviewSettings(user);
     await user.click(screen.getByRole('button', { name: 'Reset sample data' }));
     const confirmation = await screen.findByRole('dialog', { name: 'Reset sample data?' });
     await user.click(within(confirmation).getByRole('button', { name: 'Reset sample data' }));
@@ -4353,6 +4391,7 @@ describe('Tend Today preview', () => {
     expect(screen.getByRole('heading', { name: 'Linked Rhythms · 1', level: 3 })).toBeTruthy();
 
     const backupFile = new File([backup], 'marriage-associations.json', { type: 'application/json' });
+    await openPreviewSettings(user);
     fireEvent.change(screen.getByLabelText('Import preview backup'), { target: { files: [backupFile] } });
     const importDialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     await user.click(within(importDialog).getByRole('button', { name: 'Replace with backup' }));
@@ -4627,6 +4666,7 @@ describe('Tend Today preview', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(browse));
     const backupFile = new File([backup], 'reusable-rhythms.json', { type: 'application/json' });
+    await openPreviewSettings(user);
     fireEvent.change(screen.getByLabelText('Import preview backup'), { target: { files: [backupFile] } });
     const importDialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     await user.click(within(importDialog).getByRole('button', { name: 'Replace with backup' }));
@@ -4830,7 +4870,7 @@ describe('Tend Today preview', () => {
       within(screen.getByRole('navigation', { name: 'Areas' }))
         .getByRole('button', { name: 'Health & Fitness' })
     );
-    await user.click(screen.getByRole('button', { name: 'Rhythms' }));
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
     await user.click(screen.getByRole('button', { name: 'Add Rhythm' }));
     const rhythmEditor = screen.getByRole('dialog');
     await user.type(within(rhythmEditor).getByLabelText('Title'), 'Strength integration session');
@@ -4838,10 +4878,10 @@ describe('Tend Today preview', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
     await user.click(screen.getByRole('button', { name: /^Log workout/ }));
-    const workoutDialog = screen.getByRole('dialog', { name: 'Log a workout' });
+    const workoutDialog = screen.getByRole('dialog', { name: 'Log workout' });
     await user.click(within(workoutDialog).getByRole('checkbox', { name: 'Chest' }));
     await user.click(within(workoutDialog).getByRole('button', { name: 'Save workout' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Log a workout' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Log workout' })).toBeNull());
 
     const saved = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
     expect(saved.valid).toBe(true);
@@ -4856,9 +4896,14 @@ describe('Tend Today preview', () => {
     expect(saved.envelope.data.datedRhythmCompletions.filter(item => item.id === log.completionId)).toHaveLength(1);
     expect(saved.envelope.data.activeRhythmCompletions.filter(item => item.completionId === log.completionId)).toHaveLength(1);
 
-    await user.click(screen.getByRole('button', { name: 'Training' }));
-    const history = screen.getByRole('heading', { name: 'Workout history' }).parentElement!;
-    await user.click(within(history).getByRole('button', { name: 'Delete' }));
+    await user.click(screen.getByRole('tab', { name: 'Workouts' }));
+    await user.click(screen.getByRole('tab', { name: 'History' }));
+    const history = screen.getByRole('tabpanel', { name: 'History' });
+    await user.click(within(history).getByRole('button', { name: /View Custom workout/ }));
+    const details = screen.getByRole('dialog', { name: 'Custom workout' });
+    await user.click(within(details).getByRole('button', { name: 'Delete' }));
+    const confirmation = within(details).getByRole('alertdialog', { name: 'Delete this workout?' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Delete workout' }));
     await waitFor(() => {
       const afterDelete = parsePreviewBackup(
         window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,

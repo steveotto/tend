@@ -8449,11 +8449,156 @@ a:focus-visible {
   font-weight: 600;
 }
 
-.strength-tabs button[aria-current="page"],
+.strength-tabs button[aria-selected="true"],
 .strength-map-toolbar button[aria-pressed="true"] {
   border-color: var(--tend-line);
   background: var(--tend-mist);
   color: var(--tend-forest);
+}
+
+.strength-tabs button:focus-visible,
+.strength-history-row:focus-visible {
+  outline: 3px solid var(--tend-forest);
+  outline-offset: 2px;
+}
+
+.strength-tabs button {
+  min-width: max-content;
+}
+
+.strength-tabs[role="tablist"] {
+  align-items: center;
+}
+
+.strength-tabs--secondary {
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 4px 0 8px;
+}
+
+.strength-tabs--secondary button {
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: .94rem;
+}
+
+.strength-page [role="tabpanel"] {
+  min-width: 0;
+}
+
+.strength-page [role="tabpanel"][hidden] {
+  display: none;
+}
+
+.strength-history-page {
+  min-width: 0;
+}
+
+.strength-history-status {
+  color: var(--tend-secondary);
+  margin: 0 0 10px;
+}
+
+.strength-history {
+  display: grid;
+  gap: 18px;
+}
+
+.strength-history-month {
+  min-width: 0;
+}
+
+.strength-history-month h3 {
+  margin: 0 0 5px;
+  color: var(--tend-secondary);
+  font-size: .88rem;
+  font-weight: 650;
+}
+
+.strength-history-month ol {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.strength-history-month li {
+  min-width: 0;
+  border-bottom: 1px solid var(--tend-line);
+}
+
+.strength-history-row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--tend-ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.strength-history-row__content {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.strength-history-row__content > * {
+  overflow-wrap: anywhere;
+}
+
+.strength-history-row__content > span {
+  color: var(--tend-secondary);
+  line-height: 1.4;
+}
+
+.strength-history-row__chevron {
+  flex: 0 0 auto;
+  color: var(--tend-secondary);
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.strength-history-more {
+  justify-self: start;
+  margin-top: 12px;
+}
+
+.strength-history-detail {
+  display: grid;
+  gap: 16px;
+}
+
+.strength-history-detail section h3,
+.strength-history-delete-confirmation h3 {
+  margin: 0 0 5px;
+}
+
+.strength-history-detail section p,
+.strength-history-delete-confirmation p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.strength-history-detail__notes {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.strength-history-delete-confirmation {
+  padding: 14px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+  background: var(--tend-mist);
+}
+
+.strength-history-delete-confirmation .money-goal-dialog__actions {
+  margin-top: 12px;
 }
 
 .strength-view-grid {
@@ -8678,47 +8823,6 @@ a:focus-visible {
   line-height: 1.5;
 }
 
-.strength-history-heading {
-  margin: 22px 0 8px !important;
-  padding-top: 16px;
-  border-top: 1px solid var(--tend-line);
-}
-
-.strength-history {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.strength-history li {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--tend-line);
-}
-
-.strength-history li > div:first-child {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.strength-history li span,
-.strength-history li p {
-  color: var(--tend-secondary);
-  line-height: 1.4;
-}
-
-.strength-history li p {
-  margin: 3px 0 0;
-  overflow-wrap: anywhere;
-}
-
-.strength-history li > div:last-child,
 .strength-template__actions {
   display: flex;
   flex-wrap: wrap;
@@ -8825,6 +8929,57 @@ a:focus-visible {
   align-items: center;
   gap: 8px;
   min-height: 36px;
+}
+
+.strength-muscle-selection {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.strength-muscle-selection legend {
+  margin-bottom: 7px;
+  color: var(--tend-secondary);
+  font-weight: 650;
+}
+
+.strength-muscle-selection__tile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 7px 9px;
+  border: 1px solid var(--tend-line);
+  border-radius: 10px;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+  cursor: pointer;
+  font-size: .9rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.strength-muscle-selection__tile.is-selected {
+  border-color: var(--tend-forest);
+  background: var(--tend-mist);
+}
+
+.strength-muscle-selection__tile input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--tend-forest);
+}
+
+.strength-muscle-selection__tile:focus-within {
+  outline: 3px solid var(--tend-focus, #287f63);
+  outline-offset: 2px;
 }
 
 .strength-form-error {
@@ -9065,6 +9220,83 @@ a:focus-visible {
   display: grid;
   gap: 16px;
   min-width: 0;
+}
+
+.settings-page {
+  display: grid;
+  gap: 14px;
+  width: min(100%, 860px);
+  min-width: 0;
+  margin-inline: auto;
+}
+
+.settings-page__heading {
+  margin: 32px 0 0;
+}
+
+.settings-page__heading h2 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.settings-section {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--tend-line);
+  border-radius: 18px;
+  background: var(--tend-surface);
+  box-shadow: 0 6px 20px rgb(22 53 39 / 5%);
+}
+
+.settings-section h3 {
+  margin: 10px 0 0;
+  font-size: 17px;
+}
+
+.settings-page__back {
+  min-height: 40px;
+}
+
+.settings-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+  cursor: pointer;
+  font-weight: 600;
+  text-align: left;
+}
+
+.settings-link:hover {
+  background: var(--tend-mist);
+}
+
+.settings-link:focus-visible,
+.settings-page__back:focus-visible {
+  outline: 2px solid var(--tend-forest);
+  outline-offset: 2px;
+}
+
+.preview-data-controls[hidden] {
+  display: none;
+}
+
+.preview-storage-alert {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .health-fitness-tabs,

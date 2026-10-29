@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { FormEvent, MouseEvent } from 'react';
+import type { FormEvent, KeyboardEvent, MouseEvent, MutableRefObject } from 'react';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { PersonBadge } from './PersonBadge.tsx';
 import { RhythmCard } from './Cards.tsx';
 import { toggleBadgeGroup } from './BadgeSelectionPicker.tsx';
 import { PeopleAssociationRow, PeopleBadgeSelectionPicker } from './PeopleAssociationControls.tsx';
+import { StrengthMuscleSelection } from './StrengthMuscleSelection.tsx';
 import { StrengthWorkoutSuggestionsDialog } from './StrengthWorkoutSuggestionsDialog.tsx';
 import {
   createStrengthWorkout,
@@ -13,6 +14,7 @@ import {
   editStrengthWorkout,
   rankStrengthWorkouts,
   saveStrengthWorkoutLog,
+  selectStrengthWorkoutHistory,
   selectStrengthMuscleScores,
   selectStrengthScore,
   strengthMuscleName as muscleName,
@@ -26,6 +28,7 @@ import type {
   StrengthMuscleScore,
   StrengthSavedWorkout,
   StrengthWorkoutSuggestion,
+  StrengthWorkoutHistory,
   StrengthWorkoutLog
 } from '../domain/strength.ts';
 import { personById, syntheticPeople, type PersonId, type RhythmPreview } from '../domain/preview-data.ts';
@@ -57,6 +60,7 @@ export type StrengthViewProps = {
 };
 
 type FitnessTab = 'training' | 'workouts' | 'rhythms';
+type WorkoutsTab = 'saved' | 'history';
 type FitnessDialog =
   | { kind: 'goals' }
   | {
@@ -66,7 +70,19 @@ type FitnessDialog =
       returnToSuggestions?: boolean;
     }
   | { kind: 'log'; log?: StrengthWorkoutLog; templateId?: string; rhythm?: StrengthRhythm }
+  | { kind: 'history'; log: StrengthWorkoutLog }
   | { kind: 'mode'; setting: StrengthRhythm };
+
+const strengthTabs = [
+  { id: 'training', label: 'Training' },
+  { id: 'workouts', label: 'Workouts' },
+  { id: 'rhythms', label: 'Rhythms' }
+] as const satisfies readonly { id: FitnessTab; label: string }[];
+
+const workoutTabs = [
+  { id: 'saved', label: 'Saved Workouts' },
+  { id: 'history', label: 'History' }
+] as const satisfies readonly { id: WorkoutsTab; label: string }[];
 
 export function StrengthView({
   data,
@@ -83,17 +99,33 @@ export function StrengthView({
   onRestoreRhythm
 }: StrengthViewProps) {
   const [tab, setTab] = useState<FitnessTab>('training');
+  const [workoutsTab, setWorkoutsTab] = useState<WorkoutsTab>('saved');
+  const [visibleHistoryLimit, setVisibleHistoryLimit] = useState(10);
+  const [historyAnnouncement, setHistoryAnnouncement] = useState('');
+  const [confirmingLogDelete, setConfirmingLogDelete] = useState(false);
+  const [deleteLogError, setDeleteLogError] = useState('');
   const [bodyView, setBodyView] = useState<'front' | 'back'>('front');
   const [selectedMuscleId, setSelectedMuscleId] = useState<StrengthMuscleId>('chest');
   const [dialog, setDialog] = useState<FitnessDialog | null>(null);
   const [error, setError] = useState('');
   const [logTemplateSelection, setLogTemplateSelection] = useState('');
+  const [logMuscleIds, setLogMuscleIds] = useState<StrengthMuscleId[]>([]);
   const [workoutPeople, setWorkoutPeople] = useState<PersonId[]>([]);
   const [pickerPeople, setPickerPeople] = useState<PersonId[]>([]);
   const [peoplePickerOpen, setPeoplePickerOpen] = useState(false);
   const [suggestionPickerOpen, setSuggestionPickerOpen] = useState(false);
   const [suggestionFocusSourceId, setSuggestionFocusSourceId] = useState<string | undefined>();
   const openerRef = useRef<HTMLButtonElement | null>(null);
+  const historyRowOpenerRef = useRef<HTMLButtonElement | null>(null);
+  const historyRowRefs = useRef(new Map<string, HTMLButtonElement>());
+  const focusAfterHistoryDeleteRef = useRef<string | null>(null);
+  const restoreHistoryFocusRef = useRef(false);
+  const historyTabRef = useRef<HTMLButtonElement | null>(null);
+  const strengthTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const workoutTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const deleteLogButtonRef = useRef<HTMLButtonElement | null>(null);
+  const historyDeleteCancelRef = useRef<HTMLButtonElement | null>(null);
+  const restoreDeleteActionFocusRef = useRef(false);
   const peoplePickerOpenerRef = useRef<HTMLButtonElement | null>(null);
   const suggestionPickerOpenerRef = useRef<HTMLButtonElement | null>(null);
   const restorePeoplePickerFocusRef = useRef(false);
@@ -104,10 +136,52 @@ export function StrengthView({
   const score = selectStrengthScore(scores);
   const recommendations = useMemo(() => rankStrengthWorkouts(scores, data.savedWorkouts), [data.savedWorkouts, scores]);
   const selected = scores.find(item => item.id === selectedMuscleId)!;
+  const history = useMemo(
+    () => selectStrengthWorkoutHistory(data.workouts, visibleHistoryLimit),
+    [data.workouts, visibleHistoryLimit]
+  );
+  const orderedHistory = useMemo(
+    () => selectStrengthWorkoutHistory(data.workouts, Number.MAX_SAFE_INTEGER).visibleLogs,
+    [data.workouts]
+  );
+  const detailLog = dialog?.kind === 'history' ? dialog.log : undefined;
+  const detailRhythm = detailLog?.rhythmId
+    ? rhythms.find(item => item.rhythm.id === detailLog.rhythmId)?.rhythm
+      ?? archivedRhythms.find(item => item.id === detailLog.rhythmId)
+    : undefined;
+  const contextualTemplate = dialog?.kind === 'log' && dialog.templateId
+    ? data.savedWorkouts.find(workout => workout.id === dialog.templateId)
+    : undefined;
+  const isContextualLog = dialog?.kind === 'log' && Boolean(dialog.templateId);
+  const contextualWorkoutName = contextualTemplate?.name
+    ?? (dialog?.kind === 'log' && dialog.templateId ? 'Saved workout unavailable' : undefined);
 
   useEffect(() => {
-    if (!dialog && openerRef.current?.isConnected) openerRef.current.focus();
-  }, [dialog]);
+    if (dialog) return;
+    const focusAfterDelete = focusAfterHistoryDeleteRef.current;
+    if (focusAfterDelete) {
+      focusAfterHistoryDeleteRef.current = null;
+      const target = historyRowRefs.current.get(focusAfterDelete);
+      if (target?.isConnected) target.focus({ preventScroll: true });
+      else if (historyTabRef.current?.isConnected) historyTabRef.current.focus({ preventScroll: true });
+      return;
+    }
+    if (restoreHistoryFocusRef.current) {
+      restoreHistoryFocusRef.current = false;
+      if (historyRowOpenerRef.current?.isConnected) historyRowOpenerRef.current.focus({ preventScroll: true });
+      else if (historyTabRef.current?.isConnected) historyTabRef.current.focus({ preventScroll: true });
+      return;
+    }
+    if (openerRef.current?.isConnected) openerRef.current.focus({ preventScroll: true });
+  }, [data.workouts, dialog]);
+
+  useEffect(() => {
+    if (confirmingLogDelete) historyDeleteCancelRef.current?.focus();
+    else if (restoreDeleteActionFocusRef.current) {
+      restoreDeleteActionFocusRef.current = false;
+      deleteLogButtonRef.current?.focus();
+    }
+  }, [confirmingLogDelete]);
 
   useEffect(() => {
     if (!peoplePickerOpen && restorePeoplePickerFocusRef.current) {
@@ -137,6 +211,7 @@ export function StrengthView({
         : undefined;
     setError('');
     setLogTemplateSelection(configuredWorkoutId ?? '');
+    setLogMuscleIds(data.savedWorkouts.find(workout => workout.id === configuredWorkoutId)?.muscleIds ?? []);
     draftLogIdRef.current = `strength-log-${globalThis.crypto.randomUUID()}`;
     setDialog({
       kind: 'log',
@@ -147,11 +222,19 @@ export function StrengthView({
   }, [pendingRhythmLog, recommendations, rhythms, onRhythmLogOpened]);
 
   function openDialog(next: FitnessDialog, event: MouseEvent<HTMLButtonElement>) {
-    openerRef.current = event.currentTarget;
+    restoreHistoryFocusRef.current = next.kind === 'log' && Boolean(next.log && historyRowOpenerRef.current);
+    openerRef.current = next.kind === 'log' && next.log
+      ? historyRowOpenerRef.current ?? event.currentTarget
+      : event.currentTarget;
     setError('');
     setLogTemplateSelection(next.kind === 'log'
       ? next.templateId ?? next.log?.savedWorkoutId ?? ''
       : '');
+    setLogMuscleIds(next.kind === 'log'
+      ? [...(next.log?.muscleIds
+        ?? data.savedWorkouts.find(workout => workout.id === next.templateId)?.muscleIds
+        ?? [])]
+      : []);
     draftWorkoutIdRef.current = next.kind === 'workout' ? next.workout?.id ?? null : null;
     setWorkoutPeople(next.kind === 'workout' ? [...(next.workout?.sharedWith ?? [])] : []);
     setPickerPeople([]);
@@ -287,11 +370,11 @@ export function StrengthView({
   function saveLog(formEvent: FormEvent<HTMLFormElement>) {
     formEvent.preventDefault();
     const form = new FormData(formEvent.currentTarget);
-    const selectedTemplateId = String(form.get('savedWorkoutId') ?? '');
+    const selectedTemplateId = dialog?.kind === 'log' && dialog.templateId
+      ? dialog.templateId
+      : String(form.get('savedWorkoutId') ?? '');
     const template = data.savedWorkouts.find(item => item.id === selectedTemplateId);
-    const muscleIds = template
-      ? [...template.muscleIds]
-      : strengthMuscles.filter(muscle => form.get(`muscle-${muscle.id}`) === 'on').map(muscle => muscle.id);
+    const muscleIds = strengthMuscles.filter(muscle => logMuscleIds.includes(muscle.id)).map(muscle => muscle.id);
     const existing = dialog?.kind === 'log' ? dialog.log : undefined;
     draftLogIdRef.current ??= `strength-log-${globalThis.crypto.randomUUID()}`;
     const log: StrengthWorkoutLog = {
@@ -337,7 +420,18 @@ export function StrengthView({
     }
     const saveError = onChange({ ...data, workouts: result.workouts });
     if (saveError) setError(saveError);
-    else closeDialog();
+    else {
+      if (existing) {
+        const updatedHistory = selectStrengthWorkoutHistory(result.workouts, visibleHistoryLimit);
+        const remainsVisible = updatedHistory.visibleLogs.some(item => item.id === existing.id);
+        setHistoryAnnouncement(remainsVisible
+          ? 'Workout updated.'
+          : 'Workout updated. It is outside the currently shown recent entries.');
+        setTab('workouts');
+        setWorkoutsTab('history');
+      }
+      closeDialog();
+    }
   }
 
   function removeTemplate(workout: StrengthSavedWorkout) {
@@ -349,8 +443,55 @@ export function StrengthView({
 
   function removeLog(log: StrengthWorkoutLog) {
     const result = deleteStrengthWorkoutLog(data.workouts, log.id);
+    if (!result.deleted) return;
+    const removedIndex = orderedHistory.findIndex(item => item.id === log.id);
+    const nextLog = result.workouts.length
+      ? selectStrengthWorkoutHistory(result.workouts, Number.MAX_SAFE_INTEGER)
+        .visibleLogs[Math.min(Math.max(removedIndex, 0), result.workouts.length - 1)]
+      : undefined;
+    focusAfterHistoryDeleteRef.current = nextLog?.id ?? null;
     const saveError = onChange({ ...data, workouts: result.workouts });
-    if (saveError) setError(saveError);
+    if (saveError) {
+      focusAfterHistoryDeleteRef.current = null;
+      setDeleteLogError(saveError);
+      return;
+    }
+    setConfirmingLogDelete(false);
+    setDeleteLogError('');
+    setHistoryAnnouncement('Workout deleted.');
+    setDialog(null);
+  }
+
+  function openHistoryDetails(log: StrengthWorkoutLog, event: MouseEvent<HTMLButtonElement>) {
+    historyRowOpenerRef.current = event.currentTarget;
+    restoreHistoryFocusRef.current = true;
+    openerRef.current = event.currentTarget;
+    setError('');
+    setDeleteLogError('');
+    setConfirmingLogDelete(false);
+    setDialog({ kind: 'history', log });
+  }
+
+  function onTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    const next = event.key === 'ArrowRight' ? (index + 1) % strengthTabs.length
+      : event.key === 'ArrowLeft' ? (index - 1 + strengthTabs.length) % strengthTabs.length
+        : event.key === 'Home' ? 0
+          : event.key === 'End' ? strengthTabs.length - 1 : -1;
+    if (next < 0) return;
+    event.preventDefault();
+    setTab(strengthTabs[next]!.id);
+    strengthTabRefs.current[next]?.focus();
+  }
+
+  function onWorkoutsTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    const next = event.key === 'ArrowRight' ? (index + 1) % workoutTabs.length
+      : event.key === 'ArrowLeft' ? (index - 1 + workoutTabs.length) % workoutTabs.length
+        : event.key === 'Home' ? 0
+          : event.key === 'End' ? workoutTabs.length - 1 : -1;
+    if (next < 0) return;
+    event.preventDefault();
+    setWorkoutsTab(workoutTabs[next]!.id);
+    workoutTabRefs.current[next]?.focus();
   }
 
   function chooseMuscle(id: StrengthMuscleId) {
@@ -379,18 +520,28 @@ export function StrengthView({
         </div>
       </header>
 
-      <nav className="strength-tabs" aria-label="Strength sections">
-        {([
-          ['training', 'Training'],
-          ['workouts', 'Workouts'],
-          ['rhythms', 'Rhythms']
-        ] as const).map(([id, label]) => (
-          <button key={id} type="button" aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
+      <div className="strength-tabs" role="tablist" aria-label="Strength views">
+        {strengthTabs.map(({ id, label }, index) => (
+          <button
+            key={id}
+            ref={element => {
+              strengthTabRefs.current[index] = element;
+            }}
+            type="button"
+            role="tab"
+            id={`strength-tab-${id}`}
+            aria-controls={`strength-panel-${id}`}
+            aria-selected={tab === id}
+            tabIndex={tab === id ? 0 : -1}
+            onClick={() => setTab(id)}
+            onKeyDown={event => onTabKeyDown(event, index)}
+          >
             {label}
           </button>
         ))}
-      </nav>
+      </div>
 
+      <section id="strength-panel-training" role="tabpanel" aria-labelledby="strength-tab-training" hidden={tab !== 'training'}>
       {tab === 'training' && (
         <div className="strength-view-grid">
           <section className="card strength-card strength-map-card" aria-labelledby="strength-map-heading">
@@ -457,58 +608,102 @@ export function StrengthView({
                   : 'No saved workout is eligible right now. You can still log a custom workout.'}
               </div>
             )}
-            <h2 className="strength-history-heading">Workout history</h2>
-            <StrengthWorkoutHistory
-              logs={data.workouts}
-              onEdit={(log, event) => openDialog({ kind: 'log', log }, event)}
-              onDelete={removeLog}
-            />
           </section>
         </div>
       )}
+      </section>
 
-      {tab === 'workouts' && (
-        <section className="card strength-card" aria-labelledby="saved-workouts-heading">
-          <header className="strength-card-heading">
-            <div><h2 id="saved-workouts-heading">Saved workouts</h2><p>Workout templates are separate from recorded activity.</p></div>
-            <div className="strength-card-heading__actions">
-              <button
-                ref={suggestionPickerOpenerRef}
-                type="button"
-                className="btn mini ghost"
-                onClick={() => {
-                  setSuggestionFocusSourceId(undefined);
-                  setSuggestionPickerOpen(true);
-                }}
-              >
-                Browse suggested workouts
-              </button>
-              <button type="button" className="btn mini" onClick={event => openDialog({ kind: 'workout' }, event)}>Add workout</button>
-            </div>
-          </header>
-          {data.savedWorkouts.length ? (
-            <div className="strength-template-list">
-              {data.savedWorkouts.map(workout => (
-                <article key={workout.id} className="strength-template">
-                  <div><h3>{workout.name}</h3><p>{workout.muscleIds.map(id => muscleName(id)).join(' · ')}</p>
-                    {workout.sharedWith.length > 0 && (
-                      <div className="strength-template__people" role="group" aria-label={`People associated with ${workout.name}`}>
-                        {workout.sharedWith.map(id => <PersonBadge key={id} person={personById(id)} presentation="static" />)}
-                      </div>
-                    )}
-                  </div>
-                  <div className="strength-template__actions">
-                    <button type="button" className="btn mini" onClick={event => openDialog({ kind: 'log', templateId: workout.id }, event)}>Log workout</button>
-                    <button type="button" className="btn mini ghost" onClick={event => openDialog({ kind: 'workout', workout }, event)}>Edit</button>
-                    <button type="button" className="btn mini ghost" onClick={() => removeTemplate(workout)}>Delete</button>
-                  </div>
-                </article>
+      <section id="strength-panel-workouts" role="tabpanel" aria-labelledby="strength-tab-workouts" hidden={tab !== 'workouts'}>
+        {tab === 'workouts' && (
+          <>
+            <div className="strength-tabs strength-tabs--secondary" role="tablist" aria-label="Workouts views">
+              {workoutTabs.map(({ id, label }, index) => (
+                <button
+                  key={id}
+                  ref={element => {
+                    workoutTabRefs.current[index] = element;
+                    if (id === 'history') historyTabRef.current = element;
+                  }}
+                  type="button"
+                  role="tab"
+                  id={`strength-workout-tab-${id}`}
+                  aria-controls={`strength-workout-panel-${id}`}
+                  aria-selected={workoutsTab === id}
+                  tabIndex={workoutsTab === id ? 0 : -1}
+                  onClick={() => setWorkoutsTab(id)}
+                  onKeyDown={event => onWorkoutsTabKeyDown(event, index)}
+                >
+                  {label}
+                </button>
               ))}
             </div>
-          ) : <p className="strength-empty">No saved workouts yet. Create one to quickly log your usual muscle groups.</p>}
-        </section>
-      )}
+            <section id="strength-workout-panel-saved" role="tabpanel" aria-labelledby="strength-workout-tab-saved" hidden={workoutsTab !== 'saved'}>
+              {workoutsTab === 'saved' && (
+                <section className="card strength-card" aria-labelledby="saved-workouts-heading">
+                  <header className="strength-card-heading">
+                    <div><h2 id="saved-workouts-heading">Saved workouts</h2><p>Workout templates are separate from recorded activity.</p></div>
+                    <div className="strength-card-heading__actions">
+                      <button
+                        ref={suggestionPickerOpenerRef}
+                        type="button"
+                        className="btn mini ghost"
+                        onClick={() => {
+                          setSuggestionFocusSourceId(undefined);
+                          setSuggestionPickerOpen(true);
+                        }}
+                      >
+                        Browse suggested workouts
+                      </button>
+                      <button type="button" className="btn mini" onClick={event => openDialog({ kind: 'workout' }, event)}>Add workout</button>
+                    </div>
+                  </header>
+                  {data.savedWorkouts.length ? (
+                    <div className="strength-template-list">
+                      {data.savedWorkouts.map(workout => (
+                        <article key={workout.id} className="strength-template">
+                          <div><h3>{workout.name}</h3><p>{workout.muscleIds.map(id => muscleName(id)).join(' · ')}</p>
+                            {workout.sharedWith.length > 0 && (
+                              <div className="strength-template__people" role="group" aria-label={`People associated with ${workout.name}`}>
+                                {workout.sharedWith.map(id => <PersonBadge key={id} person={personById(id)} presentation="static" />)}
+                              </div>
+                            )}
+                          </div>
+                          <div className="strength-template__actions">
+                            <button type="button" className="btn mini" onClick={event => openDialog({ kind: 'log', templateId: workout.id }, event)}>Log workout</button>
+                            <button type="button" className="btn mini ghost" onClick={event => openDialog({ kind: 'workout', workout }, event)}>Edit</button>
+                            <button type="button" className="btn mini ghost" onClick={() => removeTemplate(workout)}>Delete</button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : <p className="strength-empty">No saved workouts yet. Create one to quickly log your usual muscle groups.</p>}
+                </section>
+              )}
+            </section>
+            <section id="strength-workout-panel-history" role="tabpanel" aria-labelledby="strength-workout-tab-history" hidden={workoutsTab !== 'history'}>
+              {workoutsTab === 'history' && (
+                <section className="card strength-card strength-history-page" aria-labelledby="strength-history-heading">
+                  <header className="strength-card-heading">
+                    <div>
+                      <h2 id="strength-history-heading">Workout history</h2>
+                      <p>{history.total} {history.total === 1 ? 'workout' : 'workouts'} logged</p>
+                    </div>
+                  </header>
+                  {historyAnnouncement && <p className="strength-history-status" role="status">{historyAnnouncement}</p>}
+                  <StrengthWorkoutHistory
+                    history={history}
+                    rowRefs={historyRowRefs}
+                    onOpen={openHistoryDetails}
+                    onShowMore={() => setVisibleHistoryLimit(limit => limit + 10)}
+                  />
+                </section>
+              )}
+            </section>
+          </>
+        )}
+      </section>
 
+      <section id="strength-panel-rhythms" role="tabpanel" aria-labelledby="strength-tab-rhythms" hidden={tab !== 'rhythms'}>
       {tab === 'rhythms' && (
         <section className="card strength-card" aria-labelledby="strength-rhythms-heading">
           <header className="strength-card-heading">
@@ -557,6 +752,7 @@ export function StrengthView({
           {error && !dialog && <p className="strength-form-error" role="alert">{error}</p>}
         </section>
       )}
+      </section>
 
       {dialog?.kind === 'goals' && (
         <MoneyGoalDialog
@@ -641,6 +837,74 @@ export function StrengthView({
           </form>
         </MoneyGoalDialog>
       )}
+      {detailLog && (
+        <MoneyGoalDialog
+          title={detailLog.workoutName ?? 'Custom workout'}
+          intro={formatFitnessDate(detailLog.date)}
+          labelledBy="strength-history-detail-title"
+          titleId="strength-history-detail-title"
+          closeLabel="Close workout details"
+          bodyClassName="strength-dialog-body"
+          onClose={closeDialog}
+        >
+          <div className="strength-history-detail">
+            <section aria-labelledby="strength-history-detail-muscles">
+              <h3 id="strength-history-detail-muscles">Muscles trained</h3>
+              <p>{detailLog.muscleIds.map(muscleName).join(' · ') || 'Muscle selection unavailable'}</p>
+            </section>
+            {detailLog.notes && (
+              <section aria-labelledby="strength-history-detail-notes">
+                <h3 id="strength-history-detail-notes">Notes</h3>
+                <p className="strength-history-detail__notes">{detailLog.notes}</p>
+              </section>
+            )}
+            {detailLog.rhythmId && (
+              <section aria-labelledby="strength-history-detail-rhythm">
+                <h3 id="strength-history-detail-rhythm">Linked Rhythm</h3>
+                <p>{detailRhythm?.title ?? 'Rhythm unavailable'}</p>
+                {detailLog.rhythmOccurrence && <p>Occurrence: {formatFitnessDate(detailLog.rhythmOccurrence)}</p>}
+              </section>
+            )}
+            {deleteLogError && <p className="strength-form-error" role="alert">{deleteLogError}</p>}
+            {confirmingLogDelete ? (
+              <div className="strength-history-delete-confirmation" role="alertdialog" aria-labelledby="strength-history-delete-title">
+                <h3 id="strength-history-delete-title">Delete this workout?</h3>
+                <p>This removes the workout log and only its linked completion.</p>
+                <div className="money-goal-dialog__actions">
+                  <button
+                    ref={historyDeleteCancelRef}
+                    type="button"
+                    className="btn mini ghost"
+                    onClick={() => {
+                      restoreDeleteActionFocusRef.current = true;
+                      setConfirmingLogDelete(false);
+                      setDeleteLogError('');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button type="button" className="btn mini danger" onClick={() => removeLog(detailLog)}>Delete workout</button>
+                </div>
+              </div>
+            ) : (
+              <div className="money-goal-dialog__actions">
+                <button type="button" className="btn mini" onClick={event => openDialog({ kind: 'log', log: detailLog }, event)}>Edit</button>
+                <button
+                  ref={deleteLogButtonRef}
+                  type="button"
+                  className="btn mini ghost"
+                  onClick={() => {
+                    setDeleteLogError('');
+                    setConfirmingLogDelete(true);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        </MoneyGoalDialog>
+      )}
       {peoplePickerOpen && dialog?.kind === 'workout' && (
         <MoneyGoalDialog
           labelledBy="rhythm-association-picker-title"
@@ -664,7 +928,8 @@ export function StrengthView({
       )}
       {dialog?.kind === 'log' && (
         <MoneyGoalDialog
-          title={dialog.log ? 'Edit workout log' : 'Log a workout'}
+          title={dialog.log ? 'Edit workout log' : 'Log workout'}
+          {...(contextualWorkoutName ? { intro: contextualWorkoutName } : {})}
           labelledBy="strength-log-title"
           titleId="strength-log-title"
           closeLabel="Close workout log"
@@ -672,23 +937,34 @@ export function StrengthView({
           onClose={closeDialog}
         >
           <form onSubmit={saveLog}>
+            {!isContextualLog && (
+              <label className="strength-form-field">Saved workout (optional)
+                <select
+                  name="savedWorkoutId"
+                  value={logTemplateSelection}
+                  onChange={event => {
+                    const workoutId = event.currentTarget.value;
+                    setLogTemplateSelection(workoutId);
+                    setLogMuscleIds(data.savedWorkouts.find(workout => workout.id === workoutId)?.muscleIds ?? []);
+                  }}
+                >
+                  <option value="">Custom workout</option>
+                  {logTemplateSelection && !data.savedWorkouts.some(workout => workout.id === logTemplateSelection) && (
+                    <option value={logTemplateSelection}>Saved workout unavailable</option>
+                  )}
+                  {data.savedWorkouts.map(workout => <option key={workout.id} value={workout.id}>{workout.name}</option>)}
+                </select>
+              </label>
+            )}
             <label className="strength-form-field">Workout date<input name="date" type="date" max={evaluationDate} defaultValue={dialog.log?.date ?? evaluationDate} required /></label>
-            <label className="strength-form-field">Saved workout (optional)
-              <select
-                name="savedWorkoutId"
-                value={logTemplateSelection}
-                onChange={event => setLogTemplateSelection(event.currentTarget.value)}
-              >
-                <option value="">Custom workout</option>
-                {logTemplateSelection && !data.savedWorkouts.some(workout => workout.id === logTemplateSelection) && (
-                  <option value={logTemplateSelection}>Saved workout unavailable</option>
-                )}
-                {data.savedWorkouts.map(workout => <option key={workout.id} value={workout.id}>{workout.name}</option>)}
-              </select>
-            </label>
-            <fieldset className="strength-checkbox-list"><legend>Muscle groups</legend>
-              {strengthMuscles.map(muscle => <label key={muscle.id}><input type="checkbox" name={`muscle-${muscle.id}`} defaultChecked={dialog.log?.muscleIds.includes(muscle.id) ?? false} disabled={logTemplateSelection !== '' || Boolean(dialog.rhythm?.mode === 'specific' && dialog.rhythm.workoutId)} />{muscle.name}</label>)}
-            </fieldset>
+            <StrengthMuscleSelection
+              selectedMuscleIds={logMuscleIds}
+              onToggle={muscleId => setLogMuscleIds(current =>
+                current.includes(muscleId)
+                  ? current.filter(selectedMuscleId => selectedMuscleId !== muscleId)
+                  : [...current, muscleId]
+              )}
+            />
             <label className="strength-form-field">Notes<textarea name="notes" maxLength={1000} defaultValue={dialog.log?.notes ?? ''} /></label>
             {error && <p className="strength-form-error" role="alert">{error}</p>}
             <div className="money-goal-dialog__actions"><button type="submit" className="btn mini">Save workout</button><button type="button" className="btn mini ghost" onClick={closeDialog}>Cancel</button></div>
@@ -767,28 +1043,49 @@ function StrengthBodyMap({
 }
 
 function StrengthWorkoutHistory({
-  logs,
-  onEdit,
-  onDelete
+  history,
+  rowRefs,
+  onOpen,
+  onShowMore
 }: {
-  logs: readonly StrengthWorkoutLog[];
-  onEdit: (log: StrengthWorkoutLog, event: MouseEvent<HTMLButtonElement>) => void;
-  onDelete: (log: StrengthWorkoutLog) => void;
+  history: StrengthWorkoutHistory;
+  rowRefs: MutableRefObject<Map<string, HTMLButtonElement>>;
+  onOpen: (log: StrengthWorkoutLog, event: MouseEvent<HTMLButtonElement>) => void;
+  onShowMore: () => void;
 }) {
-  if (!logs.length) return <p className="strength-empty">No workouts logged yet.</p>;
+  if (!history.total) return <p className="strength-empty">No workouts logged yet.</p>;
   return (
-    <ol className="strength-history">
-      {[...logs].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)).map(log => (
-        <li key={log.id}>
-          <div><strong>{log.workoutName ?? 'Custom workout'}</strong>
-            <span>{formatFitnessDate(log.date)} · {log.muscleIds.map(muscleName).join(' · ') || 'Muscle selection unavailable'}</span>
-            {log.notes && <p>{log.notes}</p>}
-          </div>
-          <div><button type="button" className="btn mini ghost" onClick={event => onEdit(log, event)}>Edit</button>
-            <button type="button" className="btn mini ghost" onClick={() => onDelete(log)}>Delete</button></div>
-        </li>
+    <div className="strength-history">
+      {history.groups.map(group => (
+        <section key={group.key} className="strength-history-month" aria-labelledby={`strength-history-month-${group.key}`}>
+          <h3 id={`strength-history-month-${group.key}`}>{group.label}</h3>
+          <ol>
+            {group.logs.map(log => (
+              <li key={log.id}>
+                <button
+                  ref={element => {
+                    if (element) rowRefs.current.set(log.id, element);
+                    else rowRefs.current.delete(log.id);
+                  }}
+                  type="button"
+                  className="strength-history-row"
+                  aria-label={`View ${log.workoutName ?? 'Custom workout'}, ${formatFitnessDate(log.date)}, ${log.muscleIds.map(muscleName).join(', ') || 'muscle selection unavailable'}`}
+                  onClick={event => onOpen(log, event)}
+                >
+                  <span className="strength-history-row__content">
+                    <strong>{log.workoutName ?? 'Custom workout'}</strong>
+                    <span>{formatFitnessDate(log.date)}</span>
+                    <span>{log.muscleIds.map(muscleName).join(' · ') || 'Muscle selection unavailable'}</span>
+                  </span>
+                  <span className="strength-history-row__chevron" aria-hidden="true">›</span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </section>
       ))}
-    </ol>
+      {history.hasMore && <button type="button" className="btn mini ghost strength-history-more" onClick={onShowMore}>Show 10 more</button>}
+    </div>
   );
 }
 

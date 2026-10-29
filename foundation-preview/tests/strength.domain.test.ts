@@ -10,6 +10,7 @@ import {
   editStrengthWorkout,
   rankStrengthWorkouts,
   saveStrengthWorkoutLog,
+  selectStrengthWorkoutHistory,
   selectStrengthMuscleScores,
   selectStrengthScore,
   strengthMuscles,
@@ -125,6 +126,33 @@ describe('Strength selector and command behavior', () => {
     expect(deleteStrengthWorkoutLog(logs.workouts, log.id)).toMatchObject({
       workouts: [],
       deleted: { id: log.id, date: log.date }
+    });
+  });
+
+  it('orders history newest first, resolves same-date ties deterministically, and groups after applying the visible limit', () => {
+    const logs = [
+      { id: 'a', date: '2025-12-31', muscleIds: ['chest'] as ('chest')[] },
+      { id: 'c', date: '2026-01-01', muscleIds: ['back'] as ('back')[] },
+      { id: 'b', date: '2026-01-01', muscleIds: ['abs'] as ('abs')[] },
+      { id: 'd', date: '2026-02-01', muscleIds: ['quads'] as ('quads')[] }
+    ];
+    const firstThree = selectStrengthWorkoutHistory(logs, 3);
+    expect(firstThree.visibleLogs.map(log => log.id)).toEqual(['d', 'c', 'b']);
+    expect(firstThree.groups.map(group => [group.key, group.label, group.logs.map(log => log.id)])).toEqual([
+      ['2026-02', 'February 2026', ['d']],
+      ['2026-01', 'January 2026', ['c', 'b']]
+    ]);
+    expect(firstThree).toMatchObject({ total: 4, hasMore: true });
+
+    const all = selectStrengthWorkoutHistory(logs, 10);
+    expect(all.groups.map(group => group.key)).toEqual(['2026-02', '2026-01', '2025-12']);
+    expect(all.groups[1]?.logs.map(log => log.id)).toEqual(['c', 'b']);
+    expect(all.hasMore).toBe(false);
+    expect(selectStrengthWorkoutHistory([], 10)).toMatchObject({
+      total: 0,
+      visibleLogs: [],
+      groups: [],
+      hasMore: false
     });
   });
 

@@ -1601,6 +1601,11 @@ describe('synthetic preview storage adapter and envelope', () => {
   });
 });
 
+async function openPreviewSettings(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(screen.getByRole('button', { name: 'More, settings' }));
+  await user.click(await screen.findByRole('button', { name: 'Settings' }));
+}
+
 describe('preview backup controls', () => {
   it('exports the explicit envelope and imports the backup through confirmation', async () => {
     const user = userEvent.setup();
@@ -1712,6 +1717,7 @@ describe('preview backup controls', () => {
     const { createObjectURL } = setDownloadMocks();
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
+    await openPreviewSettings(user);
     await user.click(screen.getByRole('button', { name: 'Reset sample data' }));
     const dialog = await screen.findByRole('dialog', { name: 'Reset sample data?' });
     await user.click(within(dialog).getByRole('button', { name: 'Download current preview backup' }));
@@ -1730,6 +1736,7 @@ describe('preview backup controls', () => {
 
     expect(await screen.findByText(/original value is preserved/)).toBeTruthy();
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(corruptRaw);
+    await openPreviewSettings(user);
     await user.click(screen.getByRole('button', { name: 'Download raw recovery file' }));
     expect(createObjectURL).toHaveBeenCalledOnce();
     const recoveryBlob = createObjectURL.mock.calls[0]![0] as Blob;
@@ -1803,6 +1810,7 @@ describe('preview backup controls', () => {
       expect(within(card).getByText(`Last tended ${dateLabel}`)).toBeTruthy();
     });
 
+    await openPreviewSettings(user);
     await user.click(screen.getByRole('button', { name: 'Export preview backup' }));
     const exportedText = await (createObjectURL.mock.calls[0]![0] as Blob).text();
     await user.upload(
@@ -1811,16 +1819,18 @@ describe('preview backup controls', () => {
     );
     const importDialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     await user.click(within(importDialog).getByRole('button', { name: 'Replace with backup' }));
+    await user.click(screen.getByRole('button', { name: 'Today' }));
+    const restoredCard = screen.getByRole('article', { name: 'Take a walk' });
     await waitFor(() => {
-      expect(within(card).getByRole('button', { name: 'Tend Take a walk' })).toBeTruthy();
-      expect(within(card).getByText(`Last tended ${dateLabel}`)).toBeTruthy();
+      expect(within(restoredCard).getByRole('button', { name: 'Tend Take a walk' })).toBeTruthy();
+      expect(within(restoredCard).getByText(`Last tended ${dateLabel}`)).toBeTruthy();
     });
 
     cleanup();
     render(<App />);
-    const restoredCard = await screen.findByRole('article', { name: 'Take a walk' });
-    expect(within(restoredCard).getByRole('button', { name: 'Tend Take a walk' })).toBeTruthy();
-    expect(within(restoredCard).getByText(`Last tended ${dateLabel}`)).toBeTruthy();
+    const reloadedCard = await screen.findByRole('article', { name: 'Take a walk' });
+    expect(within(reloadedCard).getByRole('button', { name: 'Tend Take a walk' })).toBeTruthy();
+    expect(within(reloadedCard).getByText(`Last tended ${dateLabel}`)).toBeTruthy();
   });
 
   it('renders imported strings as text and persists the confirmed preview replacement', async () => {
@@ -1829,6 +1839,7 @@ describe('preview backup controls', () => {
     imported.goals[0]!.title = '<script>synthetic</script>';
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
+    await openPreviewSettings(user);
     await user.upload(
       screen.getByLabelText('Import preview backup'),
       new File([JSON.stringify(createPreviewEnvelope(imported))], 'safe-data.json', { type: 'application/json' })
@@ -1861,10 +1872,10 @@ describe('preview backup controls', () => {
       newValue: { value: newValue }
     });
     window.dispatchEvent(storageEvent);
+    await openPreviewSettings(user);
     expect(await screen.findByText(/changed in another tab/)).toBeTruthy();
-    await user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Finances' }));
-    expect(screen.getByRole('article', { name: 'Starter reserve' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Reload other tab’s preview' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Finances' }));
     expect(await screen.findByRole('article', { name: 'Another tab reserve' })).toBeTruthy();
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(newValue);
 
@@ -1879,6 +1890,7 @@ describe('preview backup controls', () => {
       newValue: { value: laterValue }
     });
     window.dispatchEvent(laterEvent);
+    await openPreviewSettings(user);
     await screen.findByText(/changed in another tab/);
     await user.click(screen.getByRole('button', { name: 'Replace other tab’s data' }));
     const replaceDialog = await screen.findByRole('dialog', { name: 'Replace the other tab?' });
@@ -1889,16 +1901,21 @@ describe('preview backup controls', () => {
   });
 
   it('reports blocked storage and quota errors without claiming that data was saved', async () => {
+    const user = userEvent.setup();
     vi.spyOn(MemoryStorage.prototype, 'getItem').mockImplementation(() => { throw new Error('Storage access denied'); });
     render(<App />);
-    expect(await screen.findByText(/Browser storage is unavailable/)).toBeTruthy();
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    await openPreviewSettings(user);
+    expect(screen.getByText(/Browser storage is unavailable/)).toBeTruthy();
     expect(screen.queryByText('Preview data saved in this browser.')).toBeNull();
     cleanup();
     vi.restoreAllMocks();
 
     vi.spyOn(MemoryStorage.prototype, 'setItem').mockImplementation(() => { throw new Error('Quota exceeded'); });
     render(<App />);
-    expect(await screen.findByText(/Preview data was not saved\. Quota exceeded/)).toBeTruthy();
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    await openPreviewSettings(user);
+    expect(screen.getByText(/Preview data was not saved\. Quota exceeded/)).toBeTruthy();
     expect(screen.queryByText('Preview data saved in this browser.')).toBeNull();
   });
 });

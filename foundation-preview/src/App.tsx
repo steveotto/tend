@@ -193,6 +193,7 @@ function isDatedCompletionRecord(record: RhythmCompletionRecord): record is Date
 export function App() {
   const scoringInstant = useScoringInstant();
   const [destination, setDestination] = useState<Destination>('today');
+  const [moreSettingsOpen, setMoreSettingsOpen] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewData>(createSamplePreviewData);
   const [hydrated, setHydrated] = useState(false);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
@@ -234,6 +235,7 @@ export function App() {
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
+  const morePageHeading = useRef<HTMLHeadingElement>(null);
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [textSize, setTextSize] = useState<TextSize>('small');
@@ -657,6 +659,10 @@ export function App() {
   }, [textSize]);
 
   useEffect(() => {
+    if (destination === 'more') morePageHeading.current?.focus();
+  }, [destination, moreSettingsOpen]);
+
+  useEffect(() => {
     if (activeRhythmId) {
       wasDetailsOpen.current = true;
       return;
@@ -701,6 +707,7 @@ export function App() {
 
   function navigate(next: Destination, personId?: PersonId) {
     setDestination(next);
+    setMoreSettingsOpen(false);
     setSelectedPersonId(personId ?? null);
     setSearch('');
     setSearchOpen(false);
@@ -1782,6 +1789,10 @@ export function App() {
     }
   }
 
+  const isPreviewSettings = destination === 'more' && moreSettingsOpen;
+  const storageNeedsAttention = ['unavailable', 'error', 'corrupt', 'unsupported', 'conflict']
+    .includes(persistenceStatus.kind);
+
   return (
     <div className="wrap tend-app-preview" data-text-size={textSize}>
       <AppNavigation
@@ -1798,6 +1809,41 @@ export function App() {
       <div id="view">
         {!hydrated
           ? <p role="status">Loading saved preview data…</p>
+          : destination === 'more'
+            ? (
+              <main className="settings-page" aria-labelledby="more-page-title">
+                <header className="settings-page__heading">
+                  <h2 id="more-page-title" ref={morePageHeading} tabIndex={-1}>
+                    {moreSettingsOpen ? 'Settings' : 'More'}
+                  </h2>
+                </header>
+                {moreSettingsOpen
+                  ? (
+                    <section className="settings-section" aria-labelledby="preview-data-title">
+                      <button
+                        type="button"
+                        className="btn mini ghost settings-page__back"
+                        onClick={() => setMoreSettingsOpen(false)}
+                      >
+                        ‹ More
+                      </button>
+                      <h3 id="preview-data-title">Preview data</h3>
+                    </section>
+                  )
+                  : (
+                    <section className="settings-section" aria-label="More options">
+                      <button
+                        type="button"
+                        className="settings-link"
+                        onClick={() => setMoreSettingsOpen(true)}
+                      >
+                        <span>Settings</span>
+                        <span aria-hidden="true">›</span>
+                      </button>
+                    </section>
+                  )}
+              </main>
+            )
           : destination === 'today'
           ? (
             <TodayView
@@ -2022,6 +2068,7 @@ export function App() {
           : <PlaceholderPage destination={destination} onToday={() => navigate('today')} />}
       </div>
       <PreviewDataControls
+        hidden={!isPreviewSettings}
         data={previewData}
         status={persistenceStatus}
         currentDate={currentDate}
@@ -2065,6 +2112,11 @@ export function App() {
         v17RecoveryCopy={v17RecoveryCopy}
         v17RecoveryError={v17RecoveryError}
       />
+      {storageNeedsAttention && !isPreviewSettings && (
+        <p className="preview-storage-alert" role="alert">
+          Preview data needs attention. Open More → Settings → Preview data to review recovery and storage options.
+        </p>
+      )}
       <footer className="preview-footer">
         <span>Synthetic preview data stays separate from Tend accounts.</span>
         <a href="/preview.html">Component catalogue</a>

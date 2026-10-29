@@ -394,6 +394,52 @@ export function deleteStrengthWorkoutLog(
   };
 }
 
+export type StrengthWorkoutHistoryGroup = {
+  key: string;
+  label: string;
+  logs: StrengthWorkoutLog[];
+};
+
+export type StrengthWorkoutHistory = {
+  total: number;
+  visibleLogs: StrengthWorkoutLog[];
+  groups: StrengthWorkoutHistoryGroup[];
+  hasMore: boolean;
+};
+
+export function selectStrengthWorkoutHistory(
+  workouts: readonly StrengthWorkoutLog[],
+  visibleLimit = 10
+): StrengthWorkoutHistory {
+  const ordered = [...workouts].sort((a, b) => compareText(b.date, a.date) || compareText(b.id, a.id));
+  const limit = Math.max(0, Math.floor(visibleLimit));
+  const visibleLogs = ordered.slice(0, limit);
+  const groups: StrengthWorkoutHistoryGroup[] = [];
+  for (const log of visibleLogs) {
+    const [year, month] = log.date.split('-');
+    const key = `${year}-${month}`;
+    let group = groups.at(-1);
+    if (!group || group.key !== key) {
+      const monthDate = new Date(Date.UTC(Number(year), Number(month) - 1, 1, 12));
+      group = {
+        key,
+        label: Number.isFinite(monthDate.getTime())
+          ? new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(monthDate)
+          : 'Date unavailable',
+        logs: []
+      };
+      groups.push(group);
+    }
+    group.logs.push(log);
+  }
+  return {
+    total: ordered.length,
+    visibleLogs,
+    groups,
+    hasMore: visibleLogs.length < ordered.length
+  };
+}
+
 function fitnessDateDifference(from: string, to: string): number {
   const fromDay = fitnessDayNumber(from);
   const toDay = fitnessDayNumber(to);

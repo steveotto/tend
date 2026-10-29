@@ -20,6 +20,7 @@ type PendingAction =
   | { kind: 'replace-external' };
 
 type PreviewDataControlsProps = {
+  hidden?: boolean;
   data: PreviewData;
   status: PreviewPersistenceStatus;
   currentDate: string;
@@ -82,6 +83,7 @@ function downloadText(filename: string, content: string, type: string): string |
 }
 
 export function PreviewDataControls({
+  hidden = false,
   data,
   status,
   currentDate,
@@ -201,7 +203,7 @@ export function PreviewDataControls({
                 : 'This preview changed in another tab. Reload it or explicitly replace it after downloading a backup.';
 
   return (
-    <section className="preview-data-controls card" aria-label="Preview data and backups">
+    <section className="preview-data-controls card" aria-label="Preview data and backups" hidden={hidden}>
       <div className="preview-data-controls__copy">
         <p className="preview-data-controls__notice" role={status.kind === 'saved' ? 'status' : 'alert'}>
           <strong>{statusMessage}</strong> This is separate from your live Tend account and does not sync across devices.
