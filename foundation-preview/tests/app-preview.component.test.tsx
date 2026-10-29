@@ -2470,23 +2470,18 @@ describe('Tend Today preview', () => {
     expect(container.querySelector('.dashboard-greeting .hint')?.textContent).toMatch(/,\s+\w+\s+\d+/);
   });
 
-  it('shows decorative mountain artwork only in the main Today greeting', async () => {
-    const user = userEvent.setup();
+  it('restores the original Today greeting without mountain artwork or reserved space', () => {
     const { container } = render(<App />);
-    const greeting = container.querySelector('.home-dashboard > .today-greeting');
-    const artwork = greeting?.querySelector('img.today-greeting__mountains');
-    expect(artwork?.getAttribute('alt')).toBe('');
-    expect(artwork?.getAttribute('aria-hidden')).toBe('true');
+    const greeting = container.querySelector('.home-dashboard > .sectiontitle.dashboard-greeting');
+    expect(greeting?.tagName).toBe('DIV');
+    expect(greeting?.querySelector('.today-greeting__mountains')).toBeNull();
     expect(greeting?.contains(screen.getByRole('heading', { name: /Good (morning|afternoon|evening)/ }))).toBe(true);
     expect(greeting?.contains(screen.getByText(/\w+day, \w+ \d+/))).toBe(true);
-    const healthCardPosition = greeting?.compareDocumentPosition(
-      screen.getByRole('region', { name: 'Overall health summary' })
-    ) ?? 0;
+    const healthCard = screen.getByRole('region', { name: 'Overall health summary' });
+    const healthCardPosition = greeting?.compareDocumentPosition(healthCard) ?? 0;
     expect(healthCardPosition & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
-      .getByRole('button', { name: 'Friendships' }));
-    expect(document.querySelector('.today-greeting__mountains')).toBeNull();
+    expect(container.querySelector('.today-greeting__copy')).toBeNull();
+    expect(container.querySelector('.today-greeting__mountains')).toBeNull();
   });
 
   it('uses shared full-detail cards on Today and preserves the catalogue RhythmCard', () => {

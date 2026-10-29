@@ -551,43 +551,6 @@ a:focus-visible {
   font-family: var(--sans);
 }
 
-.home-dashboard > header.sectiontitle.today-greeting {
-  position: relative;
-  display: block;
-  width: 100vw;
-  min-height: 148px;
-  margin: 10px 0 12px calc(50% - 50vw);
-  padding: 17px 0 0;
-  overflow: hidden;
-  border-radius: 0;
-  background: var(--tend-canvas, #F7F9F7);
-  isolation: isolate;
-}
-
-.today-greeting__copy {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  min-width: 0;
-  padding-left: calc((100vw - min(1040px, calc(100vw - 24px))) / 2);
-}
-
-.today-greeting__mountains {
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: right bottom;
-  pointer-events: none;
-  user-select: none;
-}
-
 .dashboard-greeting h2,
 .category-page-heading h2 {
   margin: 0;
@@ -599,14 +562,6 @@ a:focus-visible {
 .category-page-heading .hint {
   color: var(--ink-soft);
   font-size: 13px;
-}
-
-@media (max-width: 600px) {
-  .home-dashboard > header.sectiontitle.today-greeting {
-    min-height: 132px;
-    margin-top: 8px;
-    padding-top: 14px;
-  }
 }
 
 .dashboard-overall-heading {

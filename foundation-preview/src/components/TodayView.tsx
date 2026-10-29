@@ -18,7 +18,6 @@ import { CategoryHealthBadge, ScoreMeter } from './Cards.tsx';
 import { MarriageExampleSelector } from './MarriageExampleSelector.tsx';
 import type { Destination } from './AppNavigation.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
-import todayMountains from '../assets/today-mountains.svg';
 
 type PlanType = 'scheduled' | 'anytime' | 'all-day';
 
@@ -100,12 +99,9 @@ export function TodayView({
 
   return (
     <main className="home-dashboard">
-      <header className="sectiontitle dashboard-greeting today-greeting">
-        <div className="today-greeting__copy">
-          <h2>{greeting}</h2><span className="hint">{dateLabel}</span>
-        </div>
-        <img className="today-greeting__mountains" src={todayMountains} alt="" aria-hidden="true" />
-      </header>
+      <div className="sectiontitle dashboard-greeting">
+        <h2>{greeting}</h2><span className="hint">{dateLabel}</span>
+      </div>
 
       <section className="card overall-card" aria-label="Overall health summary">
         <div className="dashboard-overall-heading">
