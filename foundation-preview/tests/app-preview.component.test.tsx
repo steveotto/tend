@@ -217,6 +217,57 @@ function seasonDeletionFixture() {
 }
 
 describe('Tend Today preview', () => {
+  it('integrates Friendships with category navigation and persists one shared connection across reload', async () => {
+    const user = userEvent.setup();
+    const today = localDateString(new Date());
+    const { unmount } = render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Friendships' }));
+    expect(within(screen.getByRole('tabpanel', { name: 'Today' })).getByText('No friends yet.')).toBeTruthy();
+    await user.click(screen.getByRole('tab', { name: 'Friends' }));
+    await user.click(within(screen.getByRole('tabpanel', { name: 'Friends' }))
+      .getByRole('button', { name: 'Go to People' }));
+    await user.click(screen.getByRole('button', { name: 'Mark Morgan Reed as a friend' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Friendships' }));
+    await user.click(screen.getByRole('tab', { name: 'Friends' }));
+    await user.click(screen.getByRole('button', { name: /Change connection cadence for Morgan Reed/ }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Connection cadence · Morgan Reed' }))
+      .getByRole('button', { name: 'Weekly' }));
+    await user.click(screen.getByRole('button', { name: 'Text Morgan Reed' }));
+    const connectionEditor = screen.getByRole('dialog', { name: 'Log connection' });
+    expect((within(connectionEditor).getByLabelText('Connection type') as HTMLSelectElement).value).toBe('text');
+    await user.click(within(connectionEditor).getByRole('button', { name: 'Save connection' }));
+
+    await waitFor(() => {
+      const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
+      expect(raw).not.toBeNull();
+      const parsed = parsePreviewBackup(raw!, today);
+      expect(parsed.valid).toBe(true);
+      if (parsed.valid) {
+        expect(parsed.envelope.data.peopleGroups.find(group => group.id === 'friends')?.memberIds)
+          .toEqual(['sample-person-morgan']);
+        expect(parsed.envelope.data.friendships.connections).toHaveLength(1);
+        expect(parsed.envelope.data.friendships.connections[0]).toMatchObject({
+          type: 'text',
+          date: today,
+          participantIds: ['sample-person-morgan']
+        });
+      }
+    });
+
+    unmount();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Friendships' }));
+    expect(screen.getByText('You’re caught up.')).toBeTruthy();
+    await user.click(screen.getByRole('tab', { name: 'Friends' }));
+    expect(screen.getByRole('button', { name: 'View connections (1)' })).toBeTruthy();
+  });
+
   it('keeps preview controls out of everyday routes and exposes them in More → Settings', async () => {
     const user = userEvent.setup();
     const envelope = createPreviewEnvelope(createSamplePreviewData());
@@ -2424,7 +2475,7 @@ describe('Tend Today preview', () => {
     expect(within(todayCard).getByRole('button', { name: historyButtonName('View scores and history for Pray together') })).toBeTruthy();
     expect(within(todayCard).getByRole('button', { name: 'Tend Pray together' })).toBeTruthy();
     expect(within(todayCard).getByText('Take a quiet moment to pray together and begin the day connected.')).toBeTruthy();
-    expect(within(todayCard).getByText('Due today')).toBeTruthy();
+    expect(within(todayCard).getByText('Never')).toBeTruthy();
     expect(within(todayCard).queryByRole('button', { name: 'Details for Pray together' })).toBeNull();
     expect(within(todayCard).queryByRole('button', { name: 'Close details' })).toBeNull();
     expect(within(todayCard).queryByRole('button', { name: /Back/ })).toBeNull();
@@ -2520,7 +2571,7 @@ describe('Tend Today preview', () => {
     expect(within(dialog).getByRole('region', { name: 'History for Pray together' })).toBeTruthy();
     expect(within(screen.getByRole('article', { name: 'Pray together' }))
       .getByRole('button', { name: 'Tended Pray together' }).matches(':disabled')).toBe(true);
-    expect(within(screen.getByRole('article', { name: 'Pray together' })).getByText('Tended today')).toBeTruthy();
+    expect(within(screen.getByRole('article', { name: 'Pray together' })).getByText('Today')).toBeTruthy();
     await waitFor(() => {
       const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
       expect(raw).not.toBeNull();
@@ -2562,8 +2613,10 @@ describe('Tend Today preview', () => {
 
     await waitFor(() => {
       expect(within(card).getByRole('button', { name: 'Tend Take a walk' })).toBeTruthy();
-      expect(within(card).getByText(`Last tended ${backdatedLabel}`)).toBeTruthy();
+      expect(within(card).getByText(backdatedLabel)).toBeTruthy();
     });
+    expect(within(card).getByText(backdatedLabel).getAttribute('aria-label'))
+      .toBe(`Last tended: ${backdatedLabel}`);
     let saved = parsePreviewBackup(
       window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
       localDateString(new Date())
@@ -2578,8 +2631,9 @@ describe('Tend Today preview', () => {
     await user.click(within(todayDialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => {
       expect(within(card).getByRole('button', { name: 'Tended Take a walk' }).matches(':disabled')).toBe(true);
-      expect(within(card).getByText('Tended today')).toBeTruthy();
+      expect(within(card).getByText('Today')).toBeTruthy();
     });
+    expect(within(card).getByText('Today').getAttribute('aria-label')).toBe('Last tended: Today');
     expect(within(card).getByRole('button', { name: 'Undo completion for Take a walk' })).toBeTruthy();
 
     await user.click(within(card).getByRole('button', { name: historyButtonName('View scores and history for Take a walk') }));
@@ -2601,7 +2655,7 @@ describe('Tend Today preview', () => {
 
     await waitFor(() => {
       expect(within(card).getByRole('button', { name: 'Tend Take a walk' })).toBeTruthy();
-      expect(within(card).getByText(`Last tended ${backdatedLabel}`)).toBeTruthy();
+      expect(within(card).getByText(backdatedLabel)).toBeTruthy();
     });
     saved = parsePreviewBackup(
       window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
@@ -2651,7 +2705,7 @@ describe('Tend Today preview', () => {
     expect((within(history).getByRole('button', { name: '+ Log a moment' })
       .closest('details') as HTMLDetailsElement).open).toBe(true);
     expect(within(card).getByRole('button', { name: 'Tend Take a walk' })).toBeTruthy();
-    expect(within(card).getByText(`Last tended ${latestDateLabel}`)).toBeTruthy();
+    expect(within(card).getByText(latestDateLabel)).toBeTruthy();
 
     const olderDate = new Date(latestDate);
     olderDate.setDate(olderDate.getDate() - 2);
@@ -2664,7 +2718,7 @@ describe('Tend Today preview', () => {
     expect(within(history).getByText('Logged moments (2)')).toBeTruthy();
     expect(within(history).getByText('First history note')).toBeTruthy();
     expect(within(history).getByText('Older history note')).toBeTruthy();
-    expect(within(card).getByText(`Last tended ${latestDateLabel}`)).toBeTruthy();
+    expect(within(card).getByText(latestDateLabel)).toBeTruthy();
     expect(within(card).queryByRole('button', { name: /^Undo completion/ })).toBeNull();
     parsed = parsePreviewBackup(
       window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
@@ -2693,7 +2747,7 @@ describe('Tend Today preview', () => {
     expect(document.activeElement).toBe(within(history).getByRole('button', { name: '+ Log a moment' }));
     expect(within(history).getByText('Logged moments (4)')).toBeTruthy();
     expect(within(card).getByRole('button', { name: 'Tended Daily connection' }).matches(':disabled')).toBe(true);
-    expect(within(card).getByText('Tended today')).toBeTruthy();
+    expect(within(card).getByText('Today')).toBeTruthy();
     expect(within(card).queryByRole('button', { name: 'Undo completion for Daily connection' })).toBeNull();
     await waitFor(() => {
       const cardHealthButton = within(card).getByRole('button', {
@@ -2806,7 +2860,7 @@ describe('Tend Today preview', () => {
     const backdatedLabel = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
       .format(new Date(`${newDate}T12:00:00`));
     expect(within(card).getByRole('button', { name: 'Tend Pray together' })).toBeTruthy();
-    expect(within(card).getByText(`Last tended ${backdatedLabel}`)).toBeTruthy();
+    expect(within(card).getByText(backdatedLabel)).toBeTruthy();
 
     cleanup();
     render(<App />);
@@ -2816,7 +2870,7 @@ describe('Tend Today preview', () => {
     const reloadedDetails = await screen.findByRole('dialog', { name: 'Pray together' });
     const reloadedHistory = within(reloadedDetails).getByRole('region', { name: 'History for Pray together' });
     expect(within(reloadedCard).getByRole('button', { name: 'Tend Pray together' })).toBeTruthy();
-    expect(within(reloadedCard).getByText(`Last tended ${backdatedLabel}`)).toBeTruthy();
+    expect(within(reloadedCard).getByText(backdatedLabel)).toBeTruthy();
     await user.click(within(reloadedHistory).getByText('Logged moments (1)'));
     expect([...within(reloadedHistory).getByRole('list', { name: 'Recorded completion count by date' }).querySelectorAll('time')]
       .map(time => time.getAttribute('dateTime'))).toContain(newDate);
@@ -2838,7 +2892,7 @@ describe('Tend Today preview', () => {
     expect(savedAfterDelete.valid && savedAfterDelete.envelope.data.datedRhythmCompletions).toEqual([]);
     expect(savedAfterDelete.valid && savedAfterDelete.envelope.data.activeRhythmCompletions).toEqual([]);
     expect(savedAfterDelete.valid && savedAfterDelete.envelope.data.completedRhythmIds).not.toContain('sample-pray-together');
-    expect(within(reloadedCard).getByText('Due today')).toBeTruthy();
+    expect(within(reloadedCard).getByText('Never')).toBeTruthy();
     const detailsOpener = within(reloadedCard).getByRole('button', { name: historyButtonName('View scores and history for Pray together') });
     await user.click(within(reloadedHistory).getByRole('button', { name: 'Close details' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -3351,7 +3405,7 @@ describe('Tend Today preview', () => {
     expect(within(editor).getByText('Daily')).toBeTruthy();
     await user.click(within(editor).getByRole('button', { name: 'Save Rhythm' }));
     expect(within(card).getByRole('button', { name: 'Tended Pray together' }).matches(':disabled')).toBe(true);
-    expect(card.textContent).toContain('Tended today');
+    expect(card.textContent).toContain('Today');
     await waitFor(() => {
       const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
       expect(raw).not.toBeNull();
@@ -3728,7 +3782,6 @@ describe('Tend Today preview', () => {
 
     await user.click(screen.getByRole('button', { name: /Your partner/ }));
     expect(screen.getByRole('heading', { name: 'People' })).toBeTruthy();
-    expect(screen.getByText('This destination is not implemented in this preview.')).toBeTruthy();
   });
 
   it('keeps the shared score explanation scoped to the selected Category without changing saved data', async () => {

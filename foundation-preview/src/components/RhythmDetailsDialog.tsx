@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import {
-  rhythmLastTendedLabel,
+  rhythmLastActivityLabel,
   type FoundationPreview,
   type PersonId,
   type PersonPreview,
@@ -319,8 +319,7 @@ export function RhythmDetailsDialog({
                   cadence={rhythm.cadence}
                   schedule={rhythm.schedule}
                   timeLabel={rhythm.timeLabel}
-                  lastTended={statusLabel ?? rhythmLastTendedLabel(rhythm, completed, asOfDate)}
-                  statusIcon={statusLabel ? 'none' : 'last-tended'}
+                  lastTended={statusLabel ?? rhythmLastActivityLabel(rhythm, asOfDate)}
                   rhythmTitle={rhythm.title}
                   completed={completed}
                   onUndo={onUndo}

@@ -4,6 +4,7 @@ import { rhythmTimeValueFromLabel, rhythmTimeValueFromLegacyLabel } from './rhyt
 import type { RhythmTimeLabel, RhythmTimeValue, RhythmSchedule } from './rhythm-schedule.ts';
 import type { SavedRhythm } from './rhythm-editor.ts';
 import { createCardioData } from './cardio.ts';
+import { createFriendshipData } from './friendships.ts';
 
 export const PROPOSED_PREVIEW_SCHEMA_VERSION = PREVIEW_SCHEMA_VERSION;
 
@@ -29,7 +30,7 @@ export type PreviewV4MigrationResult =
   | {
       valid: true;
       envelope: PreviewEnvelope;
-      sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18;
+      sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20;
     }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
@@ -41,6 +42,9 @@ export function migratePreviewToProposedV4(raw: string, currentDate: string): Pr
     || parsed.sourceSchemaVersion === 12 || parsed.sourceSchemaVersion === 13
     || parsed.sourceSchemaVersion === 14 || parsed.sourceSchemaVersion === 15
     || parsed.sourceSchemaVersion === 16 || parsed.sourceSchemaVersion === 17 || parsed.sourceSchemaVersion === 18) {
+    return { valid: true, envelope: parsed.envelope, sourceSchemaVersion: parsed.sourceSchemaVersion };
+  }
+  if (parsed.sourceSchemaVersion === 19 || parsed.sourceSchemaVersion === 20) {
     return { valid: true, envelope: parsed.envelope, sourceSchemaVersion: parsed.sourceSchemaVersion };
   }
   if (parsed.sourceSchemaVersion === 7) {
@@ -99,7 +103,9 @@ export function migratePreviewToProposedV4(raw: string, currentDate: string): Pr
         rhythmHistoryIds: [],
         strength: parsed.envelope.data.strength,
         weight: parsed.envelope.data.weight,
-        cardio: createCardioData()
+        cardio: createCardioData(),
+        friendships: createFriendshipData(),
+        peopleGroups: parsed.envelope.data.peopleGroups
       }
     }
   };

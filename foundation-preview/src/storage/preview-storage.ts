@@ -20,6 +20,8 @@ import {
   PREVIEW_V15_RECOVERY_KEY,
   PREVIEW_V16_RECOVERY_KEY,
   PREVIEW_V17_RECOVERY_KEY,
+  PREVIEW_V18_RECOVERY_KEY,
+  PREVIEW_V19_RECOVERY_KEY,
   preserveProposedV4SourceRecovery,
   proposedV4SourceVersionForRaw
 } from './preview-v4-recovery.ts';
@@ -42,7 +44,9 @@ export {
   PREVIEW_V14_RECOVERY_KEY,
   PREVIEW_V15_RECOVERY_KEY,
   PREVIEW_V16_RECOVERY_KEY,
-  PREVIEW_V17_RECOVERY_KEY
+  PREVIEW_V17_RECOVERY_KEY,
+  PREVIEW_V18_RECOVERY_KEY,
+  PREVIEW_V19_RECOVERY_KEY
 };
 
 export type PreviewStorage = Pick<Storage, 'getItem' | 'setItem'>;
@@ -283,6 +287,22 @@ export function loadV16RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadRe
 export function loadV17RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
   try {
     return { kind: 'loaded', raw: storage.getItem(PREVIEW_V17_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV18RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V18_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV19RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V19_RECOVERY_KEY) };
   } catch (error) {
     return { kind: 'error', message: errorMessage(error) };
   }

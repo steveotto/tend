@@ -31,7 +31,14 @@ import type {
   StrengthWorkoutHistory,
   StrengthWorkoutLog
 } from '../domain/strength.ts';
-import { personById, syntheticPeople, type PersonId, type RhythmPreview } from '../domain/preview-data.ts';
+import {
+  personById,
+  syntheticPeople,
+  syntheticPersonPickerGroups,
+  type PersonId,
+  type PersonPickerGroup,
+  type RhythmPreview
+} from '../domain/preview-data.ts';
 
 type StrengthRhythm = {
   rhythm: RhythmPreview;
@@ -41,6 +48,7 @@ type StrengthRhythm = {
 
 export type StrengthViewProps = {
   data: StrengthData;
+  peopleGroups?: readonly PersonPickerGroup[];
   rhythms: readonly StrengthRhythm[];
   archivedRhythms?: readonly RhythmPreview[];
   completedRhythmIds: ReadonlySet<string>;
@@ -86,6 +94,7 @@ const workoutTabs = [
 
 export function StrengthView({
   data,
+  peopleGroups = syntheticPersonPickerGroups,
   rhythms,
   archivedRhythms = [],
   completedRhythmIds,
@@ -589,7 +598,7 @@ export function StrengthView({
           </section>
           <section className="card strength-card" aria-labelledby="strength-recommendations-heading">
             <header className="strength-card-heading">
-              <div><h2 id="strength-recommendations-heading">Suggested workouts</h2><p>Based on your training plan—not recovery or medical advice.</p></div>
+              <div><h2 id="strength-recommendations-heading">Recommended workouts</h2><p>Based on your training plan—not recovery or medical advice.</p></div>
               <button type="button" className="btn mini" onClick={event => openDialog({ kind: 'log' }, event)}>Custom workout</button>
             </header>
             {recommendations.length ? (
@@ -921,6 +930,7 @@ export function StrengthView({
               current.includes(id) ? current.filter(selected => selected !== id) : [...current, id]
             )}
             onToggleGroup={ids => setPickerPeople(current => toggleBadgeGroup(current, ids))}
+            groups={peopleGroups}
             onDone={() => closePeoplePicker(true)}
             onCancel={() => closePeoplePicker(false)}
           />

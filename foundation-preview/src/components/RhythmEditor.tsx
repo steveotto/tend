@@ -4,9 +4,10 @@ import {
   areas,
   foundationCatalogue,
   foundationTerminologyForCategory,
-  syntheticPeople
+  syntheticPeople,
+  syntheticPersonPickerGroups
 } from '../domain/preview-data.ts';
-import type { FoundationPreview, PersonId } from '../domain/preview-data.ts';
+import type { FoundationPreview, PersonId, PersonPickerGroup } from '../domain/preview-data.ts';
 import type { RhythmPreview } from '../domain/preview-data.ts';
 import {
   foundationCategoryId,
@@ -55,6 +56,7 @@ type RhythmEditorProps = {
   recommendedFrequency?: RhythmFrequencyRecommendation;
   frequencyGuidance?: string;
   asOfDate?: string;
+  peopleGroups?: readonly PersonPickerGroup[];
   hasDatedCompletionHistory?: boolean;
   onSave: (draft: RhythmDraft) => RhythmDraftErrors;
   onArchive?: (id: string) => void;
@@ -105,6 +107,7 @@ export function RhythmEditor({
   recommendedFrequency,
   frequencyGuidance,
   asOfDate,
+  peopleGroups = syntheticPersonPickerGroups,
   hasDatedCompletionHistory = false,
   onSave,
   onArchive,
@@ -929,6 +932,7 @@ export function RhythmEditor({
             )}
             onToggle={id => togglePickerItem(id)}
             onToggleGroup={selectPickerGroup}
+            groups={peopleGroups}
             onDone={() => closePicker(true)}
             onCancel={() => closePicker(false)}
           />

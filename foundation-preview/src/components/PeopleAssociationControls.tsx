@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import type { PersonId, PersonPreview } from '../domain/preview-data.ts';
+import type { PersonId, PersonPickerGroup, PersonPreview } from '../domain/preview-data.ts';
 import { syntheticPeople, syntheticPersonPickerGroups } from '../domain/preview-data.ts';
 import { BadgeSelectionPicker } from './BadgeSelectionPicker.tsx';
 import { PersonBadge, PersonBadgeVisual } from './PersonBadge.tsx';
@@ -47,12 +47,14 @@ export function PeopleBadgeSelectionPicker({
   selectedIds,
   onToggle,
   onToggleGroup,
+  groups = syntheticPersonPickerGroups,
   onDone,
   onCancel
 }: {
   selectedIds: readonly PersonId[];
   onToggle: (id: PersonId) => void;
   onToggleGroup: (ids: readonly PersonId[]) => void;
+  groups?: readonly PersonPickerGroup[];
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -63,7 +65,7 @@ export function PeopleBadgeSelectionPicker({
       selectedIds={selectedIds}
       getLabel={person => person.displayName}
       renderBadge={person => <PersonBadgeVisual person={person} />}
-      groups={syntheticPersonPickerGroups}
+      groups={groups}
       onToggle={onToggle}
       onToggleGroup={onToggleGroup}
       onDone={onDone}

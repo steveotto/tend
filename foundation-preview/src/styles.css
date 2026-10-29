@@ -3574,7 +3574,457 @@ a:focus-visible {
     max-height: 90vh;
     border-radius: 17px;
   }
+}
 
+.friendships-page > .category-page-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+}
+
+.friendships-page > .category-page-heading h2 {
+  font-size: var(--tend-type-section-header, 19px);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.friendships-page > .category-page-heading .menu-area-icon {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 10px;
+  background-color: var(--forest-soft, #edf4ef);
+  color: var(--forest-deep, #294c3a);
+}
+
+.friendships-panel {
+  min-width: 0;
+}
+
+.friendships-section-heading,
+.friendships-due-row,
+.friendships-history-item__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.friendships-section-heading h3,
+.friendships-due-row h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.friendships-empty,
+.friendships-caught-up {
+  margin: 0;
+  padding: 18px 14px;
+  border: 1px solid var(--line, #e5e9e5);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--ink-soft, #66736b);
+  text-align: center;
+}
+
+.friendships-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 18px 14px;
+  border: 1px solid var(--line, #e5e9e5);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--ink-soft, #66736b);
+  text-align: center;
+}
+
+.friendships-empty-state p {
+  margin: 0;
+}
+
+.friendships-empty-state p:first-child {
+  color: var(--ink, #25332b);
+  font-weight: 600;
+}
+
+.friendships-caught-up {
+  color: var(--forest-deep, #294c3a);
+}
+
+.friendships-due-list,
+.friendships-friend-list,
+.friendships-history-list {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.friendships-due-row {
+  flex-wrap: wrap;
+  padding: 12px;
+  border: 1px solid var(--line, #e5e9e5);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.friendships-person,
+.friendships-friend-row__identity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.friendships-person__details {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.friendships-person p,
+.friendships-friend-row__last {
+  margin: 0;
+  color: var(--ink-soft, #66736b);
+  font-size: 12px;
+}
+
+.friendships-friend-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 14px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line, #e5e9e5);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.friendships-friend-row__identity {
+  grid-column: 1;
+  justify-content: center;
+}
+
+.friendships-friend-row .person-badge-name {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.friendships-cadence-button,
+.friendships-history-button,
+.friendships-quick-action {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 11px;
+  border: 1px solid var(--line, #dfe5df);
+  border-radius: 12px;
+  background: var(--tend-canvas, #fff);
+  color: var(--tend-secondary, #4f6257);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.friendships-cadence-button {
+  grid-column: 2;
+  justify-content: space-between;
+  color: var(--forest-deep, #294c3a);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.friendships-cadence-button:hover,
+.friendships-history-button:hover,
+.friendships-quick-action:hover {
+  border-color: var(--forest-soft, #c8d8ce);
+  background: var(--forest-soft, #edf4ef);
+}
+
+.friendships-cadence-button:focus-visible,
+.friendships-history-button:focus-visible,
+.friendships-quick-action:focus-visible,
+.friendships-cadence-choice:focus-visible,
+.people-view__friendship button:focus-visible {
+  outline: 2px solid var(--forest-deep, #294c3a);
+  outline-offset: 2px;
+}
+
+.friendships-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  grid-column: 1;
+}
+
+.friendships-quick-action {
+  color: var(--forest-deep, #294c3a);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.friendships-quick-action svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.friendships-history-button {
+  grid-column: 2;
+  font-size: 12px;
+}
+
+.friendships-cadence-choices {
+  display: grid;
+  gap: 6px;
+  min-width: min(100%, 280px);
+}
+
+.friendships-cadence-choice {
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid var(--line, #dfe5df);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink, #25332b);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.friendships-cadence-choice--selected {
+  border-color: var(--forest-deep, #294c3a);
+  background: var(--forest-soft, #edf4ef);
+  color: var(--forest-deep, #294c3a);
+  font-weight: 600;
+}
+
+.friendships-connection-form select,
+.friendships-connection-form input,
+.friendships-connection-form textarea {
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid var(--line, #dfe5df);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink, #25332b);
+  font: inherit;
+}
+
+.friendships-actions {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.friendships-history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.friendships-history-item {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line, #e5e9e5);
+  min-width: 0;
+}
+
+.friendships-history-item__heading {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  color: var(--ink-soft, #66736b);
+  font-size: 13px;
+}
+
+.friendships-history-item__heading strong {
+  color: var(--ink, #25332b);
+}
+
+.friendships-history-item__participants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.friendships-history-item__notes {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.friendships-connection-form {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.friendships-connection-form > label,
+.friendships-date-fields > label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--ink-soft, #66736b);
+  font-size: 13px;
+}
+
+.friendships-date-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.friendships-connection-form textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.friendships-participants {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--line, #e5e9e5);
+  border-radius: 12px;
+}
+
+.friendships-participants legend {
+  padding: 0 5px;
+  color: var(--ink-soft, #66736b);
+  font-size: 13px;
+}
+
+.friendships-participants label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 5px;
+  border-radius: 9px;
+  overflow-wrap: anywhere;
+}
+
+.friendships-participants input {
+  flex: none;
+  min-width: 18px;
+  min-height: 18px;
+  accent-color: var(--forest-deep, #294c3a);
+}
+
+.friendships-form-error {
+  margin: 0;
+  color: var(--danger, #a23c34);
+}
+
+.people-view__list {
+  display: grid;
+  gap: 10px;
+}
+
+.people-view__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line, #e5e9e5);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.people-view .person-badge-name {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.people-view__friendship {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.people-view__friend-status {
+  color: var(--forest-deep, #294c3a);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.people-view__friendship button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--line, #dfe5df);
+  border-radius: 10px;
+  background: var(--tend-canvas, #fff);
+  color: var(--forest-deep, #294c3a);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+@media (max-width: 420px) {
+  .friendships-date-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .friendships-due-row > .btn {
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .friendships-friend-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .friendships-friend-row__identity,
+  .friendships-cadence-button,
+  .friendships-quick-actions,
+  .friendships-history-button {
+    grid-column: 1;
+  }
+
+  .friendships-quick-actions {
+    gap: 4px;
+  }
+
+  .friendships-quick-action {
+    flex: 1 1 auto;
+  }
+
+  .people-view__row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .people-view__friendship {
+    justify-content: space-between;
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
   .money-goal-dialog__surface--suggestion-picker > h2 {
     padding: 20px 60px 0 16px;
   }
@@ -4670,7 +5120,7 @@ a:focus-visible {
   display: flex;
   min-height: 45px;
   align-items: center;
-  padding: 0 var(--rhythm-details-horizontal-padding);
+  padding: 8px var(--rhythm-details-horizontal-padding);
   border-top: 1px solid var(--line);
 }
 

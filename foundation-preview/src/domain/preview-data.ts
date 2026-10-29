@@ -354,6 +354,7 @@ export type PersonPickerGroup = {
   id: PersonPickerGroupId;
   label: string;
   memberIds: readonly PersonId[];
+  [key: string]: unknown;
 };
 
 const syntheticPeopleById = {
@@ -369,6 +370,69 @@ export const syntheticPersonPickerGroups: readonly PersonPickerGroup[] = [
   { id: 'parenting', label: 'Parenting', memberIds: ['sample-person-morgan', 'sample-person-jordan'] },
   { id: 'friends', label: 'Friends', memberIds: ['sample-person-avery', 'sample-person-jordan'] }
 ];
+
+export function createPersonPickerGroups(): PersonPickerGroup[] {
+  return syntheticPersonPickerGroups.map(group => ({
+    ...group,
+    memberIds: group.id === 'friends' ? [] : [...group.memberIds]
+  }));
+}
+
+export function personGroupMemberIds(
+  groups: readonly PersonPickerGroup[],
+  groupId: PersonPickerGroupId
+): PersonId[] {
+  return [...(groups.find(group => group.id === groupId)?.memberIds ?? [])];
+}
+
+export function setPersonGroupMembership(
+  groups: readonly PersonPickerGroup[],
+  groupId: PersonPickerGroupId,
+  personId: PersonId,
+  isMember: boolean
+): PersonPickerGroup[] {
+  return groups.map(group => {
+    if (group.id !== groupId || group.memberIds.includes(personId) === isMember) return group;
+    return {
+      ...group,
+      memberIds: isMember
+        ? [...group.memberIds, personId]
+        : group.memberIds.filter(id => id !== personId)
+    };
+  });
+}
+
+export function migrateLegacyFriendIdsIntoPeopleGroups(
+  groups: readonly PersonPickerGroup[],
+  friendIds: readonly PersonId[]
+): PersonPickerGroup[] {
+  return groups.map(group => ({
+    ...group,
+    memberIds: group.id === 'friends'
+      ? [...friendIds]
+      : [...group.memberIds]
+  }));
+}
+
+export function validatePersonPickerGroups(value: unknown): value is PersonPickerGroup[] {
+  if (!Array.isArray(value) || value.length !== syntheticPersonPickerGroups.length) return false;
+  const knownIds = new Set<PersonPickerGroupId>(['marriage', 'parenting', 'friends']);
+  const knownPeople = new Set<PersonId>(syntheticPeople.map(person => person.id));
+  const seenGroups = new Set<PersonPickerGroupId>();
+  for (const candidate of value) {
+    if (typeof candidate !== 'object' || candidate === null || Array.isArray(candidate)) return false;
+    const group = candidate as Record<string, unknown>;
+    if (typeof group.id !== 'string' || !knownIds.has(group.id as PersonPickerGroupId)
+      || seenGroups.has(group.id as PersonPickerGroupId)
+      || typeof group.label !== 'string' || group.label.trim().length === 0 || group.label.length > 80
+      || !Array.isArray(group.memberIds)) return false;
+    const members = group.memberIds;
+    if (!members.every((id): id is PersonId => typeof id === 'string' && knownPeople.has(id as PersonId))
+      || new Set(members).size !== members.length) return false;
+    seenGroups.add(group.id as PersonPickerGroupId);
+  }
+  return seenGroups.size === knownIds.size;
+}
 
 export function personById(id: PersonId): PersonPreview {
   return syntheticPeopleById[id];
@@ -1065,6 +1129,26 @@ export function orderedCompletions(
   return [...(history ?? [])].sort((a, b) =>
     b.effectiveDate.localeCompare(a.effectiveDate) || a.id.localeCompare(b.id)
   );
+}
+
+export function rhythmLastActivityLabel(
+  rhythm: Pick<RhythmPreview, 'completionHistory'>,
+  asOfDate: string
+): string {
+  const latest = orderedCompletions(rhythm.completionHistory?.filter(record =>
+    record.effectiveDate <= asOfDate
+  ))[0];
+  if (!latest) return 'Never';
+  if (latest.effectiveDate === asOfDate) return 'Today';
+
+  const activityYear = Number(latest.effectiveDate.slice(0, 4));
+  const evaluationYear = Number(asOfDate.slice(0, 4));
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(activityYear !== evaluationYear ? { year: 'numeric' as const } : {}),
+    timeZone: 'UTC'
+  }).format(new Date(`${latest.effectiveDate}T12:00:00Z`));
 }
 
 export function rhythmLastTendedLabel(

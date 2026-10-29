@@ -20,9 +20,11 @@ import { FinanceGoalsView } from './components/FinanceGoalsView.tsx';
 import { PreviewDataControls } from './components/PreviewDataControls.tsx';
 import type { PreviewPersistenceStatus } from './components/PreviewDataControls.tsx';
 import { PersonProfilePlaceholder } from './components/PersonProfilePlaceholder.tsx';
+import { PeopleView } from './components/PeopleView.tsx';
 import { RhythmEditor } from './components/RhythmEditor.tsx';
 import { TodayView } from './components/TodayView.tsx';
 import { HealthFitnessView } from './components/HealthFitnessView.tsx';
+import { FriendshipsView } from './components/FriendshipsView.tsx';
 import {
   marriageRhythms,
   foundationCatalogue,
@@ -116,6 +118,8 @@ import {
   loadV15RecoveryCopy,
   loadV16RecoveryCopy,
   loadV17RecoveryCopy,
+  loadV18RecoveryCopy,
+  loadV19RecoveryCopy,
   loadPreview,
   writePreview
 } from './storage/preview-storage.ts';
@@ -232,6 +236,10 @@ export function App() {
   const [v16RecoveryError, setV16RecoveryError] = useState<string | null>(null);
   const [v17RecoveryCopy, setV17RecoveryCopy] = useState<string | null>(null);
   const [v17RecoveryError, setV17RecoveryError] = useState<string | null>(null);
+  const [v18RecoveryCopy, setV18RecoveryCopy] = useState<string | null>(null);
+  const [v18RecoveryError, setV18RecoveryError] = useState<string | null>(null);
+  const [v19RecoveryCopy, setV19RecoveryCopy] = useState<string | null>(null);
+  const [v19RecoveryError, setV19RecoveryError] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -343,10 +351,12 @@ export function App() {
   const parentingCategoryRhythms = rhythmsForCategory(userRhythms, 'parenting');
   const faithCategoryRhythms = rhythmsForCategory(userRhythms, 'faith');
   const healthCategoryRhythms = rhythmsForCategory(userRhythms, 'health');
+  const friendshipCategoryRhythms = rhythmsForCategory(userRhythms, 'friendships');
   const archivedMarriageRhythms = rhythmsForCategory(archivedUserRhythms, 'marriage');
   const archivedParentingRhythms = rhythmsForCategory(archivedUserRhythms, 'parenting');
   const archivedFaithRhythms = rhythmsForCategory(archivedUserRhythms, 'faith');
   const archivedHealthRhythms = rhythmsForCategory(archivedUserRhythms, 'health');
+  const archivedFriendshipRhythms = rhythmsForCategory(archivedUserRhythms, 'friendships');
   const pendingStrengthLogRhythm = strengthLogRequest
     ? healthCategoryRhythms.find(rhythm => rhythm.id === strengthLogRequest.rhythmId)
     : undefined;
@@ -580,6 +590,22 @@ export function App() {
     } else {
       setV17RecoveryCopy(null);
       setV17RecoveryError(v17.message);
+    }
+    const v18 = loadV18RecoveryCopy(browserPreviewStorage());
+    if (v18.kind === 'loaded') {
+      setV18RecoveryCopy(v18.raw);
+      setV18RecoveryError(null);
+    } else {
+      setV18RecoveryCopy(null);
+      setV18RecoveryError(v18.message);
+    }
+    const v19 = loadV19RecoveryCopy(browserPreviewStorage());
+    if (v19.kind === 'loaded') {
+      setV19RecoveryCopy(v19.raw);
+      setV19RecoveryError(null);
+    } else {
+      setV19RecoveryCopy(null);
+      setV19RecoveryError(v19.message);
     }
   }
 
@@ -1985,6 +2011,7 @@ export function App() {
               <HealthFitnessView
                 strength={{
                   data: previewData.strength,
+                  peopleGroups: previewData.peopleGroups,
                   rhythms: healthCategoryRhythms.map(rhythm => {
                     const setting = previewData.strength.rhythmModes.find(item => item.rhythmId === rhythm.id);
                     return {
@@ -2053,6 +2080,33 @@ export function App() {
                 }}
               />
             )
+          : destination === 'friendships'
+            ? (
+              <FriendshipsView
+                data={previewData.friendships}
+                peopleGroups={previewData.peopleGroups}
+                today={localDateInTimeZone(new Date(), localTimeZone)}
+                rhythms={friendshipCategoryRhythms}
+                archivedRhythms={archivedFriendshipRhythms}
+                foundations={foundationCatalogue}
+                rhythmScores={rhythmScoreResults}
+                completedRhythms={completedRhythms}
+                undoableRhythms={undoableRhythms}
+                onChange={friendships => setPreviewData(previous => ({ ...previous, friendships }))}
+                onAddRhythm={event => openRhythmEditor(event, undefined, {
+                  initialDraft: createRhythmDraft(['friendships'])
+                })}
+                onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
+                onTend={openCompletion}
+                onUndo={id => undoTend(id)}
+                onPersonSelect={personId => navigate('people', personId)}
+                onGoToPeople={() => navigate('people')}
+                onRhythmHistory={openRhythmHistory}
+                onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
+                onOpenCategory={categoryId => navigate(categoryId)}
+                onRestoreRhythm={restoreRhythm}
+              />
+            )
           : destination === 'finances'
             ? (
               <FinanceGoalsView
@@ -2065,6 +2119,14 @@ export function App() {
             )
           : destination === 'people' && selectedPerson
             ? <PersonProfilePlaceholder person={selectedPerson} backLabel="Today" onBack={() => navigate('today')} />
+          : destination === 'people'
+            ? (
+              <PeopleView
+                groups={previewData.peopleGroups}
+                onChangeGroups={peopleGroups => setPreviewData(previous => ({ ...previous, peopleGroups }))}
+                onOpenPerson={personId => navigate('people', personId)}
+              />
+            )
           : <PlaceholderPage destination={destination} onToday={() => navigate('today')} />}
       </div>
       <PreviewDataControls
@@ -2111,6 +2173,10 @@ export function App() {
         v16RecoveryError={v16RecoveryError}
         v17RecoveryCopy={v17RecoveryCopy}
         v17RecoveryError={v17RecoveryError}
+        v18RecoveryCopy={v18RecoveryCopy}
+        v18RecoveryError={v18RecoveryError}
+        v19RecoveryCopy={v19RecoveryCopy}
+        v19RecoveryError={v19RecoveryError}
       />
       {storageNeedsAttention && !isPreviewSettings && (
         <p className="preview-storage-alert" role="alert">
@@ -2222,6 +2288,7 @@ export function App() {
               ?? rhythmEditor.rhythm?.createdTimeZone
               ?? Intl.DateTimeFormat().resolvedOptions().timeZone
           )}
+          peopleGroups={previewData.peopleGroups}
           hasDatedCompletionHistory={
             previewData.rhythmHistoryIds.includes(rhythmEditor.id)
             || (rhythmEditor.rhythm?.completionHistory?.length ?? 0) > 0

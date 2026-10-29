@@ -4,6 +4,7 @@ import type { PersonId, PersonPreview } from '../domain/preview-data.ts';
 
 type PersonBadgeProps = {
   person: PersonPreview;
+  displayNameMode?: 'first' | 'full';
 } & (
   | {
       presentation?: 'interactive';
@@ -18,7 +19,7 @@ type PersonBadgeProps = {
 );
 
 export function PersonBadge(props: PersonBadgeProps) {
-  const { person } = props;
+  const { person, displayNameMode = 'first' } = props;
   if (props.presentation === 'static') {
     return (
       <span
@@ -27,7 +28,7 @@ export function PersonBadge(props: PersonBadgeProps) {
         aria-label={person.displayName}
         title={person.displayName}
       >
-        <PersonBadgeVisual person={person} />
+        <PersonBadgeVisual person={person} displayNameMode={displayNameMode} />
       </span>
     );
   }
@@ -41,12 +42,18 @@ export function PersonBadge(props: PersonBadgeProps) {
       data-person-id={person.id}
       onClick={() => props.onSelect(person.id)}
     >
-      <PersonBadgeVisual person={person} />
+      <PersonBadgeVisual person={person} displayNameMode={displayNameMode} />
     </button>
   );
 }
 
-export function PersonBadgeVisual({ person }: { person: PersonPreview }) {
+export function PersonBadgeVisual({
+  person,
+  displayNameMode = 'first'
+}: {
+  person: PersonPreview;
+  displayNameMode?: 'first' | 'full';
+}) {
   return (
     <span className="person-badge-visual">
       <span className="person-badge-avatar" aria-hidden="true">
@@ -54,7 +61,9 @@ export function PersonBadgeVisual({ person }: { person: PersonPreview }) {
           ? <img src={person.avatarUrl} alt="" />
           : <span>{personInitials(person.displayName)}</span>}
       </span>
-      <span className="person-badge-name">{personFirstName(person.displayName)}</span>
+      <span className="person-badge-name">
+        {displayNameMode === 'full' ? person.displayName : personFirstName(person.displayName)}
+      </span>
     </span>
   );
 }

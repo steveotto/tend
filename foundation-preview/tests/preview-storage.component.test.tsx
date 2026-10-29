@@ -13,6 +13,8 @@ import {
 import { createStrengthData } from '../src/domain/strength.ts';
 import { createWeightData } from '../src/domain/weight.ts';
 import { createCardioData } from '../src/domain/cardio.ts';
+import { createFriendshipData } from '../src/domain/friendships.ts';
+import { createPersonPickerGroups, setPersonGroupMembership } from '../src/domain/preview-data.ts';
 import type { StrengthSavedWorkout } from '../src/domain/strength.ts';
 import {
   browserPreviewStorage,
@@ -31,6 +33,8 @@ import {
   loadV14RecoveryCopy,
   loadV16RecoveryCopy,
   loadV17RecoveryCopy,
+  loadV18RecoveryCopy,
+  PREVIEW_V19_RECOVERY_KEY,
   PREVIEW_STORAGE_KEY,
   PREVIEW_V1_RECOVERY_KEY,
   PREVIEW_V2_RECOVERY_KEY,
@@ -47,6 +51,7 @@ import {
   PREVIEW_V14_RECOVERY_KEY,
   PREVIEW_V16_RECOVERY_KEY,
   PREVIEW_V17_RECOVERY_KEY,
+  PREVIEW_V18_RECOVERY_KEY,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -76,6 +81,7 @@ afterEach(() => {
   window.localStorage.removeItem(PREVIEW_V14_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V16_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V17_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V18_RECOVERY_KEY);
   vi.unstubAllGlobals();
 });
 
@@ -167,6 +173,8 @@ function versionSixRaw(data: PreviewData): string {
     strength: _strength,
     weight: _weight,
     cardio: _cardio,
+    friendships: _friendships,
+    peopleGroups: _peopleGroups,
     ...legacyData
   } = envelope.data;
   return JSON.stringify({
@@ -209,6 +217,8 @@ function versionEightRaw(data: PreviewData): string {
     strength: _strength,
     weight: _weight,
     cardio: _cardio,
+    friendships: _friendships,
+    peopleGroups: _peopleGroups,
     ...legacyData
   } = envelope.data;
   return JSON.stringify({
@@ -248,6 +258,8 @@ function versionNineRaw(data: PreviewData): string {
     strength: _strength,
     weight: _weight,
     cardio: _cardio,
+    friendships: _friendships,
+    peopleGroups: _peopleGroups,
     ...legacyData
   } = envelope.data;
   return JSON.stringify({ ...envelope, schemaVersion: 9, data: legacyData });
@@ -255,7 +267,14 @@ function versionNineRaw(data: PreviewData): string {
 
 function versionTenRaw(data: PreviewData): string {
   const envelope = createPreviewEnvelope(data);
-  const { strength: _strength, weight: _weight, cardio: _cardio, ...legacyData } = envelope.data;
+  const {
+    strength: _strength,
+    weight: _weight,
+    cardio: _cardio,
+    friendships: _friendships,
+    peopleGroups: _peopleGroups,
+    ...legacyData
+  } = envelope.data;
   return JSON.stringify({
     ...envelope,
     schemaVersion: 10,
@@ -315,8 +334,29 @@ function setDownloadMocks() {
 }
 
 describe('synthetic preview storage adapter and envelope', () => {
-  it('round-trips the explicit versioned envelope with goals, check-ins, corrections, and Today completion', () => {
+  it('round-trips the explicit versioned envelope including shared Friendships records', () => {
     const data = sampleWithHistory();
+    data.friendships = {
+      cadenceSettings: [{
+        personId: 'sample-person-morgan',
+        cadence: 'weekly',
+        setOn: '2026-10-19'
+      }],
+      connections: [{
+        id: 'friendship-connection-storage-test',
+        type: 'time-together',
+        date: '2026-10-20',
+        time: '17:30',
+        participantIds: ['sample-person-morgan', 'sample-person-avery'],
+        notes: 'One shared event, two actual participants.'
+      }]
+    };
+    data.peopleGroups = setPersonGroupMembership(
+      data.peopleGroups,
+      'friends',
+      'sample-person-morgan',
+      true
+    );
     const envelope = createPreviewEnvelope(data);
     const parsed = validatePreviewEnvelope(envelope, '2026-10-21');
     expect(parsed.valid).toBe(true);
@@ -330,6 +370,52 @@ describe('synthetic preview storage adapter and envelope', () => {
     const loaded = loadPreview(storage, '2026-10-21');
     expect(loaded.kind).toBe('loaded');
     if (loaded.kind === 'loaded') expect(loaded.data).toEqual(data);
+  });
+
+  it('migrates schema v19 friend selections exactly and preserves the raw v19 recovery copy', () => {
+    const data = createSamplePreviewData();
+    data.friendships = {
+      cadenceSettings: [{
+        personId: 'sample-person-morgan',
+        cadence: 'weekly',
+        setOn: '2026-10-01'
+      }],
+      connections: [{
+        id: 'legacy-friendship-event',
+        type: 'call',
+        date: '2026-10-10',
+        participantIds: ['sample-person-morgan'],
+        notes: 'Existing history is retained.'
+      }]
+    };
+    const legacyEnvelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+      schemaVersion: number;
+      data: Record<string, unknown> & { friendships: Record<string, unknown> };
+    };
+    legacyEnvelope.schemaVersion = 19;
+    delete legacyEnvelope.data.peopleGroups;
+    legacyEnvelope.data.friendships = {
+      ...data.friendships,
+      friendIds: ['sample-person-morgan']
+    };
+    const raw = JSON.stringify(legacyEnvelope);
+
+    const parsed = parsePreviewBackup(raw, '2026-10-21');
+    expect(parsed.valid).toBe(true);
+    if (!parsed.valid) return;
+    expect(parsed.sourceSchemaVersion).toBe(19);
+    expect(parsed.envelope.schemaVersion).toBe(20);
+    expect(parsed.envelope.data.peopleGroups.find(group => group.id === 'friends')?.memberIds)
+      .toEqual(['sample-person-morgan']);
+    expect(parsed.envelope.data.friendships).toEqual(data.friendships);
+    expect(parsed.envelope.data.friendships.connections).toEqual(data.friendships.connections);
+
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(writePreview(storage, loaded.data, raw, { currentDate: '2026-10-21' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V19_RECOVERY_KEY)).toBe(raw);
   });
 
   it('exports and imports structured schedules and Personal through the backup controls', async () => {
@@ -389,6 +475,26 @@ describe('synthetic preview storage adapter and envelope', () => {
       memory: 'Date-only edit survives backup.'
     }];
     data.removedSeedCompletionIds = ['sample-connect-2026-10-18'];
+    data.friendships = {
+      cadenceSettings: [{
+        personId: 'sample-person-morgan',
+        cadence: 'monthly',
+        setOn: '2026-10-01'
+      }],
+      connections: [{
+        id: 'friendship-connection-export-test',
+        type: 'text',
+        date: '2026-10-20',
+        participantIds: ['sample-person-morgan'],
+        notes: 'Preserved through export and import.'
+      }]
+    };
+    data.peopleGroups = setPersonGroupMembership(
+      data.peopleGroups,
+      'friends',
+      'sample-person-morgan',
+      true
+    );
     const savedStrengthTemplate: StrengthSavedWorkout = {
       id: 'saved-strength-template',
       name: 'Renamed strength day',
@@ -421,6 +527,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(JSON.parse(backup).data.rhythmCompletionOverrides).toEqual(data.rhythmCompletionOverrides);
     expect(JSON.parse(backup).data.removedSeedCompletionIds).toEqual(data.removedSeedCompletionIds);
     expect(JSON.parse(backup).data.rhythmHistoryIds).toEqual(data.rhythmHistoryIds);
+    expect(JSON.parse(backup).data.friendships).toEqual(data.friendships);
     expect(JSON.parse(backup).data.strength.savedWorkouts[0]).toMatchObject({
       id: 'saved-strength-template',
       name: 'Renamed strength day',
@@ -477,7 +584,9 @@ describe('synthetic preview storage adapter and envelope', () => {
       rhythmHistoryIds: [],
       strength: createStrengthData(),
       weight: createWeightData(),
-      cardio: createCardioData()
+      cardio: createCardioData(),
+      friendships: createFriendshipData(),
+      peopleGroups: createPersonPickerGroups()
     };
     const raw = JSON.stringify(createPreviewEnvelope(empty));
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
@@ -529,7 +638,9 @@ describe('synthetic preview storage adapter and envelope', () => {
       rhythmHistoryIds: [],
       strength: createStrengthData(),
       weight: createWeightData(),
-      cardio: createCardioData()
+      cardio: createCardioData(),
+      friendships: createFriendshipData(),
+      peopleGroups: createPersonPickerGroups()
     });
   });
 
@@ -995,7 +1106,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(occupied.values.get(PREVIEW_V2_RECOVERY_KEY)).toBe('{"different":"v2"}');
   });
 
-  it('round-trips schema v18 Weight and Cardio data, capability metadata, suggestion sources, and prior records', () => {
+  it('round-trips schema v20 People and Friendships, Weight and Cardio data, capability metadata, suggestion sources, and prior records', () => {
     const data = sampleWithHistory();
     const id = 'user-rhythm-11111111-1111-4111-8111-111111111111';
     data.savedRhythms = [{
@@ -1074,7 +1185,7 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('hydrates v16 Weight with an empty default and saves the exact source bytes for recovery', () => {
       const data = createSamplePreviewData();
       const current = createPreviewEnvelope(data);
-      const { weight: _weight, cardio: _cardio, ...v16Data } = current.data;
+      const { weight: _weight, cardio: _cardio, friendships: _friendships, peopleGroups: _peopleGroups, ...v16Data } = current.data;
       const source = JSON.stringify({ ...current, schemaVersion: 16, data: v16Data });
       const originalRaw = ` \n${source}\n`;
       const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
@@ -1090,7 +1201,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       expect(loadV16RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
   });
 
-  it('hydrates v17 Weight with an empty Cardio default and preserves exact bytes before schema v18 writes', () => {
+  it('hydrates v17 Weight with empty Cardio and Friendships defaults and preserves exact bytes before schema v20 writes', () => {
     const data = createSamplePreviewData();
     data.weight = {
       displayUnit: 'lb',
@@ -1098,7 +1209,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       weighIns: [{ id: 'existing-v17-weigh-in', date: '2026-10-20', weightKg: 78 }]
     };
     const current = createPreviewEnvelope(data);
-    const { cardio: _cardio, ...v17Data } = current.data;
+    const { cardio: _cardio, friendships: _friendships, peopleGroups: _peopleGroups, ...v17Data } = current.data;
     const source = JSON.stringify({ ...current, schemaVersion: 17, data: v17Data });
     const originalRaw = ` \n${source}\n`;
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
@@ -1115,10 +1226,35 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(loadV17RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
   });
 
-  it('hydrates v14 with default Strength and Weight data and preserves exact source bytes before schema v18 writes', () => {
+  it('hydrates v18 with empty Friendships and People defaults and preserves exact source bytes before schema v20 writes', () => {
+    const data = createSamplePreviewData();
+    const current = createPreviewEnvelope(data);
+    const { friendships: _friendships, peopleGroups: _peopleGroups, ...v18Data } = current.data;
+    const originalRaw = ` \n${JSON.stringify({ ...current, schemaVersion: 18, data: v18Data })}\n`;
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
+
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.friendships).toEqual(createFriendshipData());
+
+    expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V18_RECOVERY_KEY)).toBe(originalRaw);
+    expect(loadV18RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
+  });
+
+  it('hydrates v14 with default Strength, Weight, Friendships, and People data and preserves exact source bytes before schema v20 writes', () => {
     const data = sampleWithHistory();
     const envelope = createPreviewEnvelope(data);
-    const { strength: _strength, weight: _weight, cardio: _cardio, ...v14Data } = envelope.data;
+    const {
+      strength: _strength,
+      weight: _weight,
+      cardio: _cardio,
+      friendships: _friendships,
+      peopleGroups: _peopleGroups,
+      ...v14Data
+    } = envelope.data;
     const originalRaw = JSON.stringify({ ...envelope, schemaVersion: 14, data: v14Data });
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
 
@@ -1138,7 +1274,14 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('preserves exact v12 source bytes before the first association-schema v13 write', () => {
     const data = createSamplePreviewData();
     const current = createPreviewEnvelope(data);
-    const { strength: _strength, weight: _weight, cardio: _cardio, ...v12Data } = current.data;
+    const {
+      strength: _strength,
+      weight: _weight,
+      cardio: _cardio,
+      friendships: _friendships,
+      peopleGroups: _peopleGroups,
+      ...v12Data
+    } = current.data;
     const source = JSON.stringify({
       format: current.format,
       schemaVersion: 12,
@@ -1275,6 +1418,8 @@ describe('synthetic preview storage adapter and envelope', () => {
         strength: _strength,
         weight: _weight,
         cardio: _cardio,
+        friendships: _friendships,
+        peopleGroups: _peopleGroups,
         ...versionElevenData
       } = versionTwelve.data;
       const originalRaw = ` \n${JSON.stringify({
@@ -1451,7 +1596,7 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('does not overwrite an unsupported active envelope', () => {
     const unsupportedRaw = JSON.stringify({
       format: 'tend.synthetic-preview',
-      schemaVersion: 19,
+      schemaVersion: 21,
       data: { goals: [], completedRhythmIds: [], savedRhythms: [], archivedRhythmIds: [] }
     });
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: unsupportedRaw });
@@ -1509,7 +1654,7 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('rejects malformed JSON, unsupported versions, malformed records, duplicate IDs, and invalid references', () => {
     expect(parsePreviewBackup('{', '2026-10-21').valid).toBe(false);
     const unsupported = createPreviewEnvelope(sampleWithHistory());
-    expect(validatePreviewEnvelope({ ...unsupported, schemaVersion: 19 }, '2026-10-21')).toMatchObject({
+    expect(validatePreviewEnvelope({ ...unsupported, schemaVersion: 21 }, '2026-10-21')).toMatchObject({
       valid: false,
       kind: 'unsupported'
     });
@@ -1807,7 +1952,7 @@ describe('preview backup controls', () => {
     await user.click(within(completionDialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => {
       expect(within(card).getByRole('button', { name: 'Tend Take a walk' })).toBeTruthy();
-      expect(within(card).getByText(`Last tended ${dateLabel}`)).toBeTruthy();
+      expect(within(card).getByText(dateLabel)).toBeTruthy();
     });
 
     await openPreviewSettings(user);
@@ -1823,14 +1968,14 @@ describe('preview backup controls', () => {
     const restoredCard = screen.getByRole('article', { name: 'Take a walk' });
     await waitFor(() => {
       expect(within(restoredCard).getByRole('button', { name: 'Tend Take a walk' })).toBeTruthy();
-      expect(within(restoredCard).getByText(`Last tended ${dateLabel}`)).toBeTruthy();
+      expect(within(restoredCard).getByText(dateLabel)).toBeTruthy();
     });
 
     cleanup();
     render(<App />);
     const reloadedCard = await screen.findByRole('article', { name: 'Take a walk' });
     expect(within(reloadedCard).getByRole('button', { name: 'Tend Take a walk' })).toBeTruthy();
-    expect(within(reloadedCard).getByText(`Last tended ${dateLabel}`)).toBeTruthy();
+    expect(within(reloadedCard).getByText(dateLabel)).toBeTruthy();
   });
 
   it('renders imported strings as text and persists the confirmed preview replacement', async () => {

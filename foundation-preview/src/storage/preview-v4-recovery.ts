@@ -19,6 +19,8 @@ export const PREVIEW_V14_RECOVERY_KEY = 'tend2:synthetic-preview:v14-recovery';
 export const PREVIEW_V15_RECOVERY_KEY = 'tend2:synthetic-preview:v15-recovery';
 export const PREVIEW_V16_RECOVERY_KEY = 'tend2:synthetic-preview:v16-recovery';
 export const PREVIEW_V17_RECOVERY_KEY = 'tend2:synthetic-preview:v17-recovery';
+export const PREVIEW_V18_RECOVERY_KEY = 'tend2:synthetic-preview:v18-recovery';
+export const PREVIEW_V19_RECOVERY_KEY = 'tend2:synthetic-preview:v19-recovery';
 
 const recoveryKeys = {
   1: PREVIEW_V1_RECOVERY_KEY,
@@ -37,7 +39,9 @@ const recoveryKeys = {
   14: PREVIEW_V14_RECOVERY_KEY,
   15: PREVIEW_V15_RECOVERY_KEY,
   16: PREVIEW_V16_RECOVERY_KEY,
-  17: PREVIEW_V17_RECOVERY_KEY
+  17: PREVIEW_V17_RECOVERY_KEY,
+  18: PREVIEW_V18_RECOVERY_KEY,
+  19: PREVIEW_V19_RECOVERY_KEY
 } as const;
 
 export type ProposedRecoveryResult =
@@ -57,7 +61,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function proposedV4SourceVersionForRaw(
   raw: string
-): 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | null {
+): 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | null {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!isRecord(parsed)) return null;
@@ -69,6 +73,7 @@ export function proposedV4SourceVersionForRaw(
       || envelope.schemaVersion === 9 || envelope.schemaVersion === 10 || envelope.schemaVersion === 11
       || envelope.schemaVersion === 12 || envelope.schemaVersion === 13 || envelope.schemaVersion === 14
       || envelope.schemaVersion === 15 || envelope.schemaVersion === 16 || envelope.schemaVersion === 17
+      || envelope.schemaVersion === 18 || envelope.schemaVersion === 19
       ? envelope.schemaVersion
       : null;
   } catch {
@@ -102,7 +107,7 @@ export function proposedV4RecoveryKeyForRaw(raw: string): string | null {
   const version = proposedV4SourceVersionForRaw(raw);
   return version === 1 || version === 2 || version === 3 || version === 4 || version === 5
     || version === 6 || version === 7 || version === 8 || version === 9 || version === 10
-    || version === 11 || version === 12 || version === 13 || version === 14 || version === 15 || version === 16 || version === 17
+    || version === 11 || version === 12 || version === 13 || version === 14 || version === 15 || version === 16 || version === 17 || version === 18 || version === 19
     ? recoveryKeys[version]
     : null;
 }

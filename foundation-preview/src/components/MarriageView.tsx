@@ -7,7 +7,7 @@ import {
   foundationCatalogue,
   foundationTerminologyForCategory,
   peopleForRhythm,
-  rhythmLastTendedLabel,
+  rhythmLastActivityLabel,
   type FoundationTerminology,
   type FoundationPreview,
   type PersonId,
@@ -630,7 +630,7 @@ function TodayTogether({
                 rhythm={rhythm}
                 inline
                 completed={completedRhythms.has(rhythm.id)}
-                statusLabel={rhythmLastTendedLabel(rhythm, completedRhythms.has(rhythm.id), todayDate)}
+                statusLabel={rhythmLastActivityLabel(rhythm, todayDate)}
                 people={peopleForRhythm(rhythm)}
                 foundations={foundations}
                 onPersonSelect={onPersonSelect}
@@ -744,7 +744,7 @@ function RhythmSuggestions({
                       key={rhythm.id}
                       rhythm={rhythm}
                       inline
-                      statusLabel={rhythmLastTendedLabel(rhythm, completedRhythms.has(rhythm.id), todayDate)}
+                      statusLabel={rhythmLastActivityLabel(rhythm, todayDate)}
                       completed={completedRhythms.has(rhythm.id)}
                       people={peopleForRhythm(rhythm)}
                       foundations={foundations}

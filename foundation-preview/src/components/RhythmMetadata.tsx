@@ -18,7 +18,6 @@ type RhythmMetadataProps =
     schedule?: RhythmSchedule | undefined;
     timeLabel?: string | undefined;
     lastTended: string;
-    statusIcon?: 'last-tended' | 'none';
     rhythmTitle?: string;
     completed?: boolean;
     onUndo?: (() => void) | undefined;
@@ -49,7 +48,7 @@ export function RhythmMetadata(props: RhythmMetadataProps) {
         className="rhythm-metadata-last-tended"
         undoBeforeStatus
         status={props.lastTended}
-        showIcon={props.statusIcon !== 'none'}
+        statusAccessibleLabel={`Last tended: ${props.lastTended}`}
         rhythmTitle={props.rhythmTitle}
         completed={props.completed}
         onUndo={props.onUndo}
@@ -108,7 +107,7 @@ function RhythmStatus({
   tendButtonRef,
   className,
   undoBeforeStatus = false,
-  showIcon = true
+  statusAccessibleLabel
 }: {
   status: string;
   rhythmTitle?: string | undefined;
@@ -117,7 +116,7 @@ function RhythmStatus({
   tendButtonRef?: RefObject<HTMLButtonElement | null> | undefined;
   className?: string | undefined;
   undoBeforeStatus?: boolean;
-  showIcon?: boolean;
+  statusAccessibleLabel?: string;
 }) {
   const undoRef = useRef<HTMLButtonElement>(null);
   const restoreTendFocus = useRef(false);
@@ -148,8 +147,8 @@ function RhythmStatus({
     : null;
   const statusGroup = (
     <span className="rhythm-metadata-status-group">
-      {showIcon && <MetadataIcon kind="last-tended" />}
-      <span className="rhythm-metadata-status">{status}</span>
+      <MetadataIcon kind="last-tended" />
+      <span className="rhythm-metadata-status" aria-label={statusAccessibleLabel}>{status}</span>
     </span>
   );
 

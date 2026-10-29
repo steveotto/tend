@@ -472,8 +472,9 @@ describe('shared preview components', () => {
     expect(within(dialog).queryByRole('button', { name: /^Tend/ })).toBeNull();
     expect(within(dialog).queryByRole('button', { name: /^Undo/ })).toBeNull();
     expect(within(dialog).queryByRole('region', { name: /completion history/ })).toBeNull();
-    expect(within(dialog).queryByText('Due today')).toBeTruthy();
-    expect(within(dialog).getByText('Due today').previousElementSibling?.tagName.toLowerCase()).toBe('svg');
+    expect(within(dialog).getByText('Never')).toBeTruthy();
+    expect(within(dialog).getByText('Never').getAttribute('aria-label')).toBe('Last tended: Never');
+    expect(within(dialog).getByText('Never').previousElementSibling?.tagName.toLowerCase()).toBe('svg');
     const footer = dialog.querySelector('.rhythm-metadata-footer')!;
     const scheduleGroup = footer.querySelector('.rhythm-metadata-schedule-group')!;
     const statusGroup = footer.querySelector('.rhythm-metadata-last-tended')!;
@@ -483,12 +484,12 @@ describe('shared preview components', () => {
     expect(scheduleGroup.querySelectorAll(':scope > span')).toHaveLength(2);
     expect(scheduleGroup.textContent).toContain('Daily');
     expect(scheduleGroup.textContent).toContain('Morning');
-    expect(statusGroup.textContent).toContain('Due today');
+    expect(statusGroup.textContent).toContain('Never');
     expect(statusGroup.querySelector('.rhythm-metadata-status-group')?.children[0]?.tagName.toLowerCase())
       .toBe('svg');
   });
 
-  it('shows structured next-due and due-today labels from the effective schedule', () => {
+  it('keeps schedule changes out of the last-activity footer', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-25T12:00:00.000Z'));
     try {
@@ -517,8 +518,8 @@ describe('shared preview components', () => {
       };
       const { rerender } = render(<RhythmDetailsDialog rhythm={quarterly} onClose={() => undefined} />);
       const footer = document.querySelector('.rhythm-metadata-footer') as HTMLElement;
-      expect(within(footer).getByText('Next due Jan 1')).toBeTruthy();
-      expect(within(footer).queryByText('Due today')).toBeNull();
+      expect(within(footer).getByText('Never')).toBeTruthy();
+      expect(within(footer).queryByText('Next due Jan 1')).toBeNull();
 
       const dailySchedule = { frequency: 'daily' as const };
       rerender(
@@ -534,7 +535,7 @@ describe('shared preview components', () => {
           onClose={() => undefined}
         />
       );
-      expect(within(document.querySelector('.rhythm-metadata-footer') as HTMLElement).getByText('Due today')).toBeTruthy();
+      expect(within(document.querySelector('.rhythm-metadata-footer') as HTMLElement).getByText('Never')).toBeTruthy();
     } finally {
       vi.useRealTimers();
     }
@@ -557,7 +558,7 @@ describe('shared preview components', () => {
     const statusGroup = statusCluster.querySelector('.rhythm-metadata-status-group')!;
     expect(statusCluster.children[0]).toBe(undo);
     expect(statusCluster.children[1]).toBe(statusGroup);
-    expect(statusGroup.querySelector('.rhythm-metadata-status')?.textContent).toBe('Tended today');
+    expect(statusGroup.querySelector('.rhythm-metadata-status')?.textContent).toBe('Never');
   });
 
   it('uses a compact structured footer label with accessible full details and the shared refresh icon', async () => {
