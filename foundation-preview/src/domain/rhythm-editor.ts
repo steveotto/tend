@@ -1,14 +1,17 @@
 import {
   areas,
-  isMarriageFoundationId,
+  foundationCatalogue,
+  foundationTerminologyForCategory,
   marriageRhythms,
   syntheticPeople,
-  todayRhythms
+  todayRhythms,
+  type CategoryId
 } from './preview-data.ts';
-import type { PersonId, RhythmPreview } from './preview-data.ts';
+import type { FoundationPreview, PersonId, RhythmPreview } from './preview-data.ts';
 import {
   effectiveRhythmSchedule,
   rhythmTimeOptions,
+  rhythmTimeLabel,
   rhythmTimeValueFromLabel,
   rhythmScheduleSummary,
   validateRhythmSchedule,
@@ -29,6 +32,8 @@ import { isValidDate } from './money-goals.ts';
 import { rhythmSchedulesEqual } from './rhythm-occurrences.ts';
 import { rhythmSeasonForDate } from './rhythm-seasons.ts';
 import { resolveRhythmSeasonRange } from './rhythm-season-range.ts';
+import { foundationOwnershipError } from './foundation-rhythm-associations.ts';
+import { isValidSuggestionSourceId } from './category-rhythms.ts';
 
 export const rhythmCadences = [
   'Daily',
@@ -42,7 +47,7 @@ export const rhythmTimes = ['Morning', 'Afternoon', 'Evening', 'Anytime'] as con
 
 export type RhythmCadence = (typeof rhythmCadences)[number];
 export type RhythmTime = (typeof rhythmTimes)[number];
-export type RhythmCategoryId = (typeof areas)[number]['id'];
+export type RhythmCategoryId = CategoryId;
 
 export type SavedRhythm = {
   id: string;
@@ -61,6 +66,7 @@ export type SavedRhythm = {
   dailyBackfillAllowed?: boolean;
   primaryFoundationId?: string | null;
   secondaryFoundationIds?: string[];
+  suggestionSourceId?: string;
 };
 
 export type RhythmDraft = {
@@ -82,6 +88,20 @@ export type RhythmDraft = {
 
 export type RhythmDraftErrors = Partial<Record<keyof RhythmDraft | 'schedule' | 'foundationIds', string>>;
 
+export function createRhythmDraft(categoryIds: readonly RhythmCategoryId[] = []): RhythmDraft {
+  return {
+    title: '',
+    description: '',
+    cadence: 'Daily',
+    timeLabel: 'Anytime',
+    personIds: [],
+    categoryIds: [...categoryIds],
+    schedule: { frequency: 'daily' },
+    scheduleEditing: true,
+    personal: false
+  };
+}
+
 const existingEditableIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 const fixtureRhythmIds = new Set([...todayRhythms, ...marriageRhythms].map(rhythm => rhythm.id));
 const personIds = new Set(syntheticPeople.map(person => person.id));
@@ -92,6 +112,7 @@ const savedRhythmV7Keys = [...savedRhythmV4Keys, 'scoring'];
 const savedRhythmV8Keys = [...savedRhythmV7Keys, 'createdLocalDate', 'createdTimeZone', 'dailyBackfillAllowed'];
 const savedRhythmV9Keys = savedRhythmV8Keys;
 const savedRhythmV13Keys = [...savedRhythmV9Keys, 'primaryFoundationId', 'secondaryFoundationIds'];
+const savedRhythmV14Keys = [...savedRhythmV13Keys, 'suggestionSourceId'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -174,14 +195,28 @@ export function validateSavedRhythmsV12(value: unknown): value is SavedRhythm[] 
 
 export function validateSavedRhythmsV13(value: unknown): value is SavedRhythm[] {
   if (!validateSavedRhythmsWithKeys(value, savedRhythmV13Keys, 'v12', true)) return false;
+  return validateFoundationAssociations(value);
+}
+
+export function validateSavedRhythmsV14(value: unknown): value is SavedRhythm[] {
+  if (!validateSavedRhythmsWithKeys(value, savedRhythmV14Keys, 'v12', true)) return false;
+  if (!validateFoundationAssociations(value)) return false;
+  return value.every(record =>
+    record.suggestionSourceId === undefined || isValidSuggestionSourceId(record.suggestionSourceId)
+  );
+}
+
+function validateFoundationAssociations(value: unknown): value is SavedRhythm[] {
+  if (!Array.isArray(value)) return false;
   return value.every(record => {
+    if (!isRecord(record)) return false;
     if (record.primaryFoundationId !== undefined && record.primaryFoundationId !== null
-      && !isMarriageFoundationId(record.primaryFoundationId)) return false;
+      && (typeof record.primaryFoundationId !== 'string' || record.primaryFoundationId.length === 0)) return false;
     if (record.secondaryFoundationIds !== undefined) {
       if (!Array.isArray(record.secondaryFoundationIds)) return false;
       const seen = new Set<string>();
       for (const id of record.secondaryFoundationIds) {
-        if (!isMarriageFoundationId(id) || id === record.primaryFoundationId || seen.has(id)) return false;
+        if (typeof id !== 'string' || id.length === 0 || id === record.primaryFoundationId || seen.has(id)) return false;
         seen.add(id);
       }
     }
@@ -253,18 +288,24 @@ export function rhythmDraftFrom(
   categoryIds: readonly RhythmCategoryId[] = [],
   asOfDate?: string
 ): RhythmDraft {
-  const originalSchedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
   const currentSeason = asOfDate
     ? rhythmSeasonForDate(rhythm.scoring?.scheduleHistory ?? [], asOfDate)
     : rhythm.scoring?.scheduleHistory.at(-1);
+  const originalSchedule = currentSeason?.kind === 'unknown'
+    ? undefined
+    : currentSeason?.kind === 'scheduled'
+      ? currentSeason.schedule
+      : effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
   return {
     title: rhythm.title,
     description: rhythm.description ?? '',
     cadence: rhythm.cadence ?? 'Daily',
-    timeLabel: rhythm.timeLabel ?? 'Anytime',
+    timeLabel: currentSeason?.kind === 'scheduled' && currentSeason.timeOfDay
+      ? rhythmTimeLabel(currentSeason.timeOfDay)
+      : rhythm.timeLabel ?? 'Anytime',
     personIds: [...(rhythm.personIds ?? [])],
     categoryIds: [...categoryIds],
-    ...(rhythm.schedule === undefined ? {} : { schedule: rhythm.schedule }),
+    ...(originalSchedule === undefined ? {} : { schedule: originalSchedule }),
     ...(originalSchedule === undefined ? {} : { originalSchedule }),
     ...(rhythm.scoring === undefined ? {} : {
       originalScoring: rhythm.scoring
@@ -272,14 +313,17 @@ export function rhythmDraftFrom(
     ...(currentSeason?.kind === 'scheduled' && currentSeason.name
       ? { seasonName: currentSeason.name }
       : {}),
-    scheduleEditing: rhythm.schedule !== undefined,
+    scheduleEditing: originalSchedule !== undefined && rhythm.schedule !== undefined,
     ...(rhythm.personal === undefined ? {} : { personal: rhythm.personal }),
     ...(rhythm.primaryFoundationId === undefined ? {} : { primaryFoundationId: rhythm.primaryFoundationId }),
     ...(rhythm.secondaryFoundationIds === undefined ? {} : { secondaryFoundationIds: [...rhythm.secondaryFoundationIds] })
   };
 }
 
-export function validateRhythmDraft(draft: RhythmDraft): RhythmDraftErrors {
+export function validateRhythmDraft(
+  draft: RhythmDraft,
+  foundations: readonly FoundationPreview[] = foundationCatalogue
+): RhythmDraftErrors {
   const errors: RhythmDraftErrors = {};
   if (!draft.title.trim()) errors.title = 'Enter a Rhythm title.';
   else if (draft.title.trim().length > 80) errors.title = 'Use 80 characters or fewer.';
@@ -304,12 +348,14 @@ export function validateRhythmDraft(draft: RhythmDraft): RhythmDraftErrors {
     ...(draft.primaryFoundationId ? [draft.primaryFoundationId] : []),
     ...(draft.secondaryFoundationIds ?? [])
   ];
-  if (foundationIds.some(id => !isMarriageFoundationId(id))
-    || new Set(foundationIds).size !== foundationIds.length) {
-    errors.foundationIds = 'Choose each available Marriage Foundation at most once.';
-  }
-  if (foundationIds.length > 0 && !draft.categoryIds.includes('marriage')) {
-    errors.foundationIds = 'Marriage Foundation links require the Marriage category.';
+  if (new Set(foundationIds).size !== foundationIds.length) {
+    const term = draft.categoryIds.length === 1
+      ? foundationTerminologyForCategory(draft.categoryIds[0]).singular
+      : 'Foundation';
+    errors.foundationIds = `Choose each ${term} at most once.`;
+  } else {
+    const ownershipError = foundationOwnershipError(draft.categoryIds, foundationIds, foundations);
+    if (ownershipError) errors.foundationIds = ownershipError;
   }
   return errors;
 }
@@ -325,9 +371,11 @@ export function saveRhythmDraft(
     hasDatedCompletionHistory?: boolean;
     effectiveStartDate?: string;
     earliestDatedCompletionDate?: string;
-  }
+  },
+  foundations: readonly FoundationPreview[] = foundationCatalogue,
+  options: { suggestionSourceId?: string } = {}
 ): { savedRhythms?: SavedRhythm[]; errors: RhythmDraftErrors } {
-  const errors = validateRhythmDraft(draft);
+  const errors = validateRhythmDraft(draft, foundations);
   const hasSavedRecord = savedRhythms.some(rhythm => rhythm.id === id);
   if (mode === 'create') {
     if (!/^user-rhythm-[0-9a-f-]{36}$/i.test(id) || hasSavedRecord || existingEditableIds.has(id)) {
@@ -342,11 +390,17 @@ export function saveRhythmDraft(
   if (Object.keys(errors).length > 0) return { errors };
 
   const existing = savedRhythms.find(rhythm => rhythm.id === id);
+  if (options.suggestionSourceId !== undefined && !isValidSuggestionSourceId(options.suggestionSourceId)) {
+    errors.title = 'This suggestion source is no longer available.';
+    return { errors };
+  }
   const timeOfDay = rhythmTimeValueFromLabel(draft.timeLabel);
   const originalSchedule = draft.originalSchedule ?? existing?.schedule;
-  const scheduleChanged = draft.schedule !== undefined && originalSchedule !== undefined
-    ? !rhythmSchedulesEqual(draft.schedule, originalSchedule)
-    : draft.schedule !== originalSchedule;
+  const scheduleChanged = draft.schedule !== undefined
+    ? originalSchedule !== undefined
+      ? !rhythmSchedulesEqual(draft.schedule, originalSchedule)
+      : true
+    : false;
   const hasDatedCompletionHistory = scoringContext?.hasDatedCompletionHistory ?? false;
   for (const date of [scoringContext?.effectiveStartDate, scoringContext?.earliestDatedCompletionDate]) {
     if (date !== undefined && !isValidDate(date)) {
@@ -512,13 +566,13 @@ export function saveRhythmDraft(
     errors.schedule = 'The active schedule does not match its saved schedule history.';
     return { errors };
   }
-  const storedSchedule = activeSchedule ?? draft.schedule ?? existing?.schedule;
-  const cadence = draft.schedule
-    ? scheduleChanged || existing === undefined
-      ? rhythmScheduleSummary(storedSchedule ?? draft.schedule)
-      : existing.cadence
+  const storedSchedule = activeSchedule
+    ?? (scheduleChanged ? draft.schedule : existing?.schedule);
+  const cadence = scheduleChanged && draft.schedule
+    ? rhythmScheduleSummary(storedSchedule ?? draft.schedule)
     : existing?.cadence ?? draft.cadence;
   const schedule = storedSchedule;
+  const suggestionSourceId = options.suggestionSourceId ?? existing?.suggestionSourceId;
   const saved: SavedRhythm = {
     id,
     title: draft.title.trim(),
@@ -559,7 +613,8 @@ export function saveRhythmDraft(
       : { primaryFoundationId: draft.primaryFoundationId }),
     ...(draft.secondaryFoundationIds === undefined
       ? existing?.secondaryFoundationIds === undefined ? {} : { secondaryFoundationIds: [...existing.secondaryFoundationIds] }
-      : { secondaryFoundationIds: [...draft.secondaryFoundationIds] })
+      : { secondaryFoundationIds: [...draft.secondaryFoundationIds] }),
+    ...(suggestionSourceId === undefined ? {} : { suggestionSourceId })
   };
   return {
     savedRhythms: [
@@ -615,7 +670,8 @@ export function applySavedRhythmOverrides(
     ...(saved.primaryFoundationId === undefined ? {} : { primaryFoundationId: saved.primaryFoundationId }),
     ...(saved.secondaryFoundationIds === undefined
       ? {}
-      : { secondaryFoundationIds: saved.secondaryFoundationIds })
+      : { secondaryFoundationIds: saved.secondaryFoundationIds }),
+    ...(saved.suggestionSourceId === undefined ? {} : { suggestionSourceId: saved.suggestionSourceId })
   };
 }
 

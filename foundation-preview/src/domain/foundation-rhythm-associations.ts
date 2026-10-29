@@ -1,10 +1,10 @@
 import {
-  isMarriageFoundationId,
-  type MarriageFoundationId,
+  foundationCatalogue,
+  foundationTerminologyForCategory,
+  type FoundationPreview,
   type RhythmPreview
 } from './preview-data.ts';
-import { rhythmTimeOptions } from './rhythm-schedule.ts';
-import type { SavedRhythm } from './rhythm-editor.ts';
+import type { RhythmCategoryId, SavedRhythm } from './rhythm-editor.ts';
 
 export type FoundationRhythmAssociationChange = {
   rhythmId: string;
@@ -24,6 +24,93 @@ export function foundationRhythmIds(
   ])];
 }
 
+export function foundationCategoryId(
+  foundationId: string,
+  foundations: readonly FoundationPreview[] = foundationCatalogue
+): RhythmCategoryId | undefined {
+  const foundation = foundations.find(item => item.id === foundationId);
+  return foundation?.categoryId;
+}
+
+export function foundationOwnershipError(
+  categoryIds: readonly string[],
+  foundationIds: readonly string[],
+  foundations: readonly FoundationPreview[] = foundationCatalogue
+): string | undefined {
+  const unresolved = foundationIds.filter(id => !foundations.some(foundation => foundation.id === id));
+  if (unresolved.length > 0) {
+    const term = categoryIds.length === 1
+      ? foundationTerminologyForCategory(categoryIds[0]).singular
+      : foundationTerminologyForCategory().singular;
+    const noun = `${term} links`;
+    return `Remove or resolve unavailable ${noun} before saving: ${unresolved.join(', ')}.`;
+  }
+
+  const knownFoundations = foundationIds
+    .map(id => foundations.find(foundation => foundation.id === id)!);
+  const unassigned = knownFoundations.filter(foundation => {
+    return !categoryIds.includes(foundation.categoryId);
+  });
+  if (unassigned.length === 0) return undefined;
+
+  const names = [...new Set(unassigned.map(foundation => foundation.name))];
+  const categories = [...new Set(unassigned.map(foundation => foundation.category))];
+  const categoryInstruction = categories.length === 1
+    ? `the ${categories[0]} category`
+    : `these Categories: ${categories.join(', ')}`;
+  const terms = [...new Set(unassigned.map(foundation =>
+    foundationTerminologyForCategory(foundation.categoryId).singular
+  ))];
+  const linkTerm = terms.length === 1 ? terms[0]! : 'association';
+  return `Assign ${categoryInstruction} or unlink these ${linkTerm} links: ${names.join(', ')}.`;
+}
+
+export function removeFoundationLinksForCategory(
+  rhythm: Pick<RhythmPreview, 'primaryFoundationId' | 'secondaryFoundationIds'>,
+  categoryId: RhythmCategoryId,
+  foundations: readonly FoundationPreview[] = foundationCatalogue
+): {
+  primaryFoundationId: string | null;
+  secondaryFoundationIds: string[];
+  removedIds: string[];
+} {
+  const existingIds = foundationRhythmIds(rhythm);
+  const removedIds = existingIds.filter(id => foundationCategoryId(id, foundations) === categoryId);
+  const remainingIds = existingIds.filter(id => !removedIds.includes(id));
+  const primaryFoundationId = rhythm.primaryFoundationId && remainingIds.includes(rhythm.primaryFoundationId)
+    ? rhythm.primaryFoundationId
+    : rhythm.primaryFoundationId
+      ? remainingIds[0] ?? null
+      : null;
+
+  return {
+    primaryFoundationId,
+    secondaryFoundationIds: remainingIds.filter(id => id !== primaryFoundationId),
+    removedIds
+  };
+}
+
+export function resolveRhythmFoundationLinks(
+  rhythm: Pick<RhythmPreview, 'primaryFoundationId' | 'secondaryFoundationIds'>,
+  foundations: readonly FoundationPreview[]
+): { foundations: FoundationPreview[]; unresolvedIds: string[] } {
+  const linkedIds = foundationRhythmIds(rhythm);
+  const linkedIdSet = new Set(linkedIds);
+  const seen = new Set<string>();
+  const resolved: FoundationPreview[] = [];
+
+  for (const foundation of foundations) {
+    if (!linkedIdSet.has(foundation.id) || seen.has(foundation.id)) continue;
+    seen.add(foundation.id);
+    resolved.push(foundation);
+  }
+
+  return {
+    foundations: resolved,
+    unresolvedIds: linkedIds.filter(id => !seen.has(id))
+  };
+}
+
 export function isRhythmLinkedToFoundation(
   rhythm: Pick<RhythmPreview, 'primaryFoundationId' | 'secondaryFoundationIds'>,
   foundationId: string
@@ -35,10 +122,13 @@ export function saveFoundationRhythmAssociations(
   savedRhythms: readonly SavedRhythm[],
   rhythms: readonly RhythmPreview[],
   archivedRhythmIds: readonly string[],
-  foundationId: MarriageFoundationId,
-  changes: readonly FoundationRhythmAssociationChange[]
+  foundationId: string,
+  changes: readonly FoundationRhythmAssociationChange[],
+  foundations: readonly FoundationPreview[] = foundationCatalogue
 ): FoundationRhythmAssociationResult {
-  if (!isMarriageFoundationId(foundationId)) return { error: 'This Marriage Foundation is unavailable.' };
+  if (!foundations.some(foundation => foundation.id === foundationId)) {
+    return { error: 'This linked Practice or Foundation is unavailable.' };
+  }
 
   const rhythmsById = new Map<string, RhythmPreview>();
   for (const rhythm of rhythms) {
@@ -62,6 +152,9 @@ export function saveFoundationRhythmAssociations(
     seenChanges.add(change.rhythmId);
     updates.set(change.rhythmId, change.linked);
   }
+  for (const rhythmId of updates.keys()) {
+    if (!savedById.has(rhythmId)) return { error: 'A selected Rhythm is no longer available.' };
+  }
 
   const nextSaved = [...savedRhythms];
   for (const [rhythmId, linked] of updates) {
@@ -71,51 +164,27 @@ export function saveFoundationRhythmAssociations(
     const currentLinked = existingIds.includes(foundationId);
     if (archivedRhythmIds.includes(rhythmId)) {
       if (linked !== currentLinked) {
-        return { error: 'Restore this Rhythm before changing its Foundation associations.' };
+        const term = foundationTerminologyForCategory(
+          foundationCategoryId(foundationId, foundations)
+        ).singular;
+        return { error: `Restore this Rhythm before changing its ${term} associations.` };
       }
       continue;
     }
     if (linked === currentLinked) continue;
 
-    const nextIds = linked === currentLinked
-      ? existingIds
-      : linked ? [...existingIds, foundationId] : existingIds.filter(id => id !== foundationId);
+    if (!existing) return { error: 'A selected Rhythm is no longer available.' };
+    const nextIds = linked ? [...existingIds, foundationId] : existingIds.filter(id => id !== foundationId);
+    const ownershipError = foundationOwnershipError(existing.categoryIds, nextIds, foundations);
+    if (ownershipError) return { error: ownershipError };
     const primaryFoundationId = rhythm.primaryFoundationId
       && nextIds.includes(rhythm.primaryFoundationId)
       ? rhythm.primaryFoundationId
       : nextIds[0] ?? null;
     const nextSecondaryIds = nextIds.filter(id => id !== primaryFoundationId);
 
-    let base: SavedRhythm;
-    if (existing) {
-      base = existing;
-    } else {
-      const timeLabel = rhythmTimeOptions.find(option => option.label === rhythm.timeLabel)?.label;
-      if (!rhythm.cadence || !timeLabel) {
-        return { error: 'This Rhythm does not have enough schedule information to save its association.' };
-      }
-      base = {
-        id: rhythm.id,
-        title: rhythm.title,
-        ...(rhythm.description === undefined ? {} : { description: rhythm.description }),
-        cadence: rhythm.cadence,
-        timeLabel,
-        personIds: [...(rhythm.personIds ?? [])],
-        categoryIds: [...(rhythm.categoryIds ?? [])],
-        ...(rhythm.schedule === undefined ? {} : { schedule: rhythm.schedule }),
-        ...(rhythm.scoring === undefined ? {} : { scoring: rhythm.scoring }),
-        ...(rhythm.timeOfDay === undefined ? {} : { timeOfDay: rhythm.timeOfDay }),
-        ...(rhythm.createdLocalDate === undefined ? {} : {
-          createdLocalDate: rhythm.createdLocalDate,
-          createdTimeZone: rhythm.createdTimeZone
-        }),
-        ...(rhythm.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: rhythm.dailyBackfillAllowed }),
-        ...(rhythm.personal === undefined ? {} : { personal: rhythm.personal })
-      };
-    }
-
     const saved: SavedRhythm = {
-      ...base,
+      ...existing,
       primaryFoundationId,
       secondaryFoundationIds: nextSecondaryIds
     };

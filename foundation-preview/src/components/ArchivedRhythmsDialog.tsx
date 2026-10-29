@@ -1,22 +1,29 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
-import type { PersonId, RhythmPreview } from '../domain/preview-data.ts';
+import type { FoundationPreview, PersonId, RhythmPreview } from '../domain/preview-data.ts';
+import type { Destination } from './AppNavigation.tsx';
 import { peopleForRhythm } from '../domain/preview-data.ts';
 import { RhythmCard } from './Cards.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 
 type ArchivedRhythmsDialogProps = {
   rhythms: readonly RhythmPreview[];
+  foundations?: readonly FoundationPreview[];
   completedRhythms: ReadonlySet<string>;
   onPersonSelect: (personId: PersonId) => void;
+  onOpenFoundation?: (foundationId: string, openerId: string) => void;
+  onOpenCategory?: (categoryId: Destination, openerId: string) => void;
   onRestore: (id: string) => void;
   onClose: () => void;
 };
 
 export function ArchivedRhythmsDialog({
   rhythms,
+  foundations,
   completedRhythms,
   onPersonSelect,
+  onOpenFoundation,
+  onOpenCategory,
   onRestore,
   onClose
 }: ArchivedRhythmsDialogProps) {
@@ -68,6 +75,19 @@ export function ArchivedRhythmsDialog({
     setSelectedRhythmId(id);
   }
 
+  const navigateToFoundation = onOpenFoundation
+    ? (foundationId: string, openerId: string) => {
+        onClose();
+        onOpenFoundation(foundationId, openerId);
+      }
+    : undefined;
+  const navigateToCategory = onOpenCategory
+    ? (categoryId: Destination, openerId: string) => {
+        onClose();
+        onOpenCategory(categoryId, openerId);
+      }
+    : undefined;
+
   return (
     <dialog
       ref={dialogRef}
@@ -105,11 +125,14 @@ export function ArchivedRhythmsDialog({
             </p>
             <RhythmDetailsDialog
               rhythm={selectedRhythm}
+              {...(foundations ? { foundations } : {})}
               people={peopleForRhythm(selectedRhythm)}
               completed={completedRhythms.has(selectedRhythm.id)}
               archived
               embedded
               onPersonSelect={onPersonSelect}
+              {...(navigateToFoundation ? { onOpenFoundation: navigateToFoundation } : {})}
+              {...(navigateToCategory ? { onOpenCategory: navigateToCategory } : {})}
               onClose={onClose}
             />
             <button

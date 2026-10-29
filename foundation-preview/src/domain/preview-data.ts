@@ -4,13 +4,19 @@ import type {
   RhythmAutomation
 } from '../../../src/domain/capabilities.ts';
 import type { MoneyGoal } from './money-goals.ts';
-import type { RhythmSchedule, RhythmScoringMetadata, RhythmTimeValue } from './rhythm-schedule.ts';
+import type {
+  RhythmFrequencyRecommendation,
+  RhythmSchedule,
+  RhythmScoringMetadata,
+  RhythmTimeValue
+} from './rhythm-schedule.ts';
 import { effectiveRhythmSchedule } from './rhythm-schedule.ts';
 import { selectNextScheduledOccurrence } from './rhythm-occurrences.ts';
 
 export type FoundationPreview = {
   id: string;
-  category: 'Marriage' | 'Finances';
+  category: 'Faith' | 'Marriage' | 'Parenting' | 'Finances';
+  categoryId: CategoryId;
   name: string;
   description: string;
   capabilities: FoundationCapabilities;
@@ -19,6 +25,27 @@ export type FoundationPreview = {
   iconId?: string;
   illustrativeScore?: number | null;
 };
+
+export type CategoryId = 'faith' | 'marriage' | 'parenting' | 'health' | 'finances' | 'friendships';
+
+export type FoundationTerminology = {
+  singular: string;
+  plural: string;
+};
+
+const foundationTerminology: FoundationTerminology = {
+  singular: 'Foundation',
+  plural: 'Foundations'
+};
+
+const faithPracticeTerminology: FoundationTerminology = {
+  singular: 'Practice',
+  plural: 'Practices'
+};
+
+export function foundationTerminologyForCategory(categoryId?: string): FoundationTerminology {
+  return categoryId === 'faith' ? faithPracticeTerminology : foundationTerminology;
+}
 
 export const marriageFoundationIds = [
   'connection',
@@ -42,8 +69,277 @@ export type MarriageRhythmSuggestion = {
   templateId: string;
   rhythm: RhythmPreview;
   scheduleHint: string;
+  recommendedFrequency: RhythmFrequencyRecommendation;
+  frequencyGuidance?: string;
   sourceSampleRhythmId?: string;
 };
+
+export type CategoryRhythmSuggestionGroupDefinition = {
+  id: string;
+  title: string;
+  subtitle: string;
+};
+
+export type CategoryRhythmSuggestionTemplate = {
+  sourceId: string;
+  groupId: string;
+  title: string;
+  description: string;
+  cadence: string;
+  scheduleHint: string;
+  recommendedFrequency: RhythmFrequencyRecommendation;
+  iconId: string;
+  primaryFoundationId: string;
+  secondaryFoundationIds: readonly string[];
+  frequencyGuidance?: string;
+};
+
+export const parentingRhythmSuggestionGroups: readonly CategoryRhythmSuggestionGroupDefinition[] = [
+  { id: 'daily-connection', title: 'Daily Connection', subtitle: 'Small moments of attention and conversation.' },
+  { id: 'weekly-regular', title: 'Weekly & Regular', subtitle: 'Make room for steady connection and support.' },
+  { id: 'seasonal-annual', title: 'Seasonal & Annual', subtitle: 'Plan for meaningful time and milestones.' }
+];
+
+export const parentingRhythmSuggestions: readonly CategoryRhythmSuggestionTemplate[] = [
+  {
+    sourceId: 'parenting.daily-connection',
+    groupId: 'daily-connection',
+    title: 'Daily Connection',
+    description: 'Give your child a little undivided attention.',
+    cadence: 'Daily',
+    scheduleHint: 'Daily · Flexible',
+    recommendedFrequency: 'daily',
+    iconId: 'parenting-connection-belonging',
+    primaryFoundationId: 'parenting-connection-belonging',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'parenting.walk-together',
+    groupId: 'weekly-regular',
+    title: 'Walk Together',
+    description: 'Take a walk and make room for easy conversation.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Flexible',
+    recommendedFrequency: 'weekly',
+    iconId: 'parenting-connection-belonging',
+    primaryFoundationId: 'parenting-connection-belonging',
+    secondaryFoundationIds: ['parenting-communication-trust']
+  },
+  {
+    sourceId: 'parenting.prayer-conversation',
+    groupId: 'daily-connection',
+    title: 'Prayer & Conversation',
+    description: 'Share a prayer and talk about what matters.',
+    cadence: 'Daily',
+    scheduleHint: 'Daily · Flexible',
+    recommendedFrequency: 'daily',
+    iconId: 'parenting-spiritual-growth',
+    primaryFoundationId: 'parenting-spiritual-growth',
+    secondaryFoundationIds: ['parenting-communication-trust']
+  },
+  {
+    sourceId: 'parenting.one-on-one-time',
+    groupId: 'weekly-regular',
+    title: 'One-on-One Time',
+    description: 'Spend intentional time together doing something they enjoy.',
+    cadence: 'Every 2 weeks',
+    scheduleHint: 'Every 2 weeks · Flexible',
+    recommendedFrequency: 'every-two-weeks',
+    iconId: 'parenting-connection-belonging',
+    primaryFoundationId: 'parenting-connection-belonging',
+    secondaryFoundationIds: ['parenting-fun-memories']
+  },
+  {
+    sourceId: 'parenting.encouraging-text',
+    groupId: 'weekly-regular',
+    title: 'Encouraging Text',
+    description: 'Send a thoughtful message that recognizes their strengths or effort.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Flexible',
+    recommendedFrequency: 'weekly',
+    iconId: 'parenting-encouragement-affirmation',
+    primaryFoundationId: 'parenting-encouragement-affirmation',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'parenting.call-catch-up',
+    groupId: 'weekly-regular',
+    title: 'Call & Catch Up',
+    description: 'Make space to listen and hear how life is going.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Flexible',
+    recommendedFrequency: 'weekly',
+    iconId: 'parenting-communication-trust',
+    primaryFoundationId: 'parenting-communication-trust',
+    secondaryFoundationIds: ['parenting-connection-belonging']
+  },
+  {
+    sourceId: 'parenting.special-outing',
+    groupId: 'seasonal-annual',
+    title: 'Special Outing',
+    description: 'Plan an outing and make a memory together.',
+    cadence: 'Quarterly',
+    scheduleHint: 'Quarterly · Flexible',
+    recommendedFrequency: 'quarterly',
+    iconId: 'parenting-fun-memories',
+    primaryFoundationId: 'parenting-fun-memories',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'parenting.teach-life-skill',
+    groupId: 'seasonal-annual',
+    title: 'Teach a Life Skill',
+    description: 'Practice a useful skill together and share what you know.',
+    cadence: 'Quarterly',
+    scheduleHint: 'Quarterly · Flexible',
+    recommendedFrequency: 'quarterly',
+    iconId: 'parenting-guidance-equipping',
+    primaryFoundationId: 'parenting-guidance-equipping',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'parenting.life-stage-check-in',
+    groupId: 'weekly-regular',
+    title: 'Life-Stage Check-In',
+    description: 'Listen and offer support through a change or new responsibility.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Flexible recommendation',
+    recommendedFrequency: 'weekly',
+    frequencyGuidance: 'Weekly is a starting recommendation. Choose the day that works for you.',
+    iconId: 'parenting-guidance-equipping',
+    primaryFoundationId: 'parenting-guidance-equipping',
+    secondaryFoundationIds: ['parenting-communication-trust']
+  },
+  {
+    sourceId: 'parenting.trip-together',
+    groupId: 'seasonal-annual',
+    title: 'Trip Together',
+    description: 'Set aside a day or overnight for time away together.',
+    cadence: 'Yearly',
+    scheduleHint: 'Yearly · Flexible',
+    recommendedFrequency: 'yearly',
+    iconId: 'parenting-fun-memories',
+    primaryFoundationId: 'parenting-fun-memories',
+    secondaryFoundationIds: ['parenting-connection-belonging']
+  }
+];
+
+export const faithRhythmSuggestionGroups: readonly CategoryRhythmSuggestionGroupDefinition[] = [
+  { id: 'daily-regular', title: 'Daily & Regular', subtitle: 'Make room for daily practices and regular reflection.' },
+  { id: 'weekly', title: 'Weekly', subtitle: 'Set aside time for worship, fasting and service.' },
+  { id: 'monthly', title: 'Monthly', subtitle: 'Choose a recurring time for generous and faithful witness.' }
+];
+
+export const faithRhythmSuggestions: readonly CategoryRhythmSuggestionTemplate[] = [
+  {
+    sourceId: 'faith.sabbath',
+    groupId: 'weekly',
+    title: 'Sabbath',
+    description: 'A full day of rest, delight, and presence with God and others.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Flexible',
+    recommendedFrequency: 'weekly',
+    iconId: 'faith-sabbath',
+    primaryFoundationId: 'faith-sabbath',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'faith.pray-together',
+    groupId: 'daily-regular',
+    title: 'Pray Together',
+    description: 'Share gratitude and prayer requests.',
+    cadence: 'Daily',
+    scheduleHint: 'Daily · Flexible',
+    recommendedFrequency: 'daily',
+    iconId: 'faith-prayer',
+    primaryFoundationId: 'faith-prayer',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'faith.fasting',
+    groupId: 'weekly',
+    title: 'Fasting',
+    description: 'Voluntarily abstain from food to create space for God.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Flexible',
+    recommendedFrequency: 'weekly',
+    iconId: 'faith-fasting',
+    primaryFoundationId: 'faith-fasting',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'faith.solitude-silence',
+    groupId: 'daily-regular',
+    title: 'Solitude & Silence',
+    description: 'Withdraw from noise and distractions to be alone with God.',
+    cadence: 'Select Days',
+    scheduleHint: 'Select Days · Flexible',
+    recommendedFrequency: 'select-days',
+    iconId: 'faith-solitude',
+    primaryFoundationId: 'faith-solitude',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'faith.generosity-practice',
+    groupId: 'monthly',
+    title: 'Generosity Practice',
+    description: 'Give money, time, or resources as an act of worship.',
+    cadence: 'Monthly',
+    scheduleHint: 'Monthly · Flexible',
+    recommendedFrequency: 'monthly',
+    iconId: 'faith-generosity',
+    primaryFoundationId: 'faith-generosity',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'faith.community-gathering',
+    groupId: 'weekly',
+    title: 'Community Gathering',
+    description: 'Gather for worship, teaching, and life together.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Flexible',
+    recommendedFrequency: 'weekly',
+    iconId: 'faith-community',
+    primaryFoundationId: 'faith-community',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'faith.serve-someone',
+    groupId: 'weekly',
+    title: 'Serve Someone',
+    description: 'Use your gifts and time to serve others in love.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Flexible',
+    recommendedFrequency: 'weekly',
+    iconId: 'faith-service',
+    primaryFoundationId: 'faith-service',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'faith.share-your-story',
+    groupId: 'monthly',
+    title: 'Share Your Story',
+    description: 'Share your faith through words and actions.',
+    cadence: 'Monthly',
+    scheduleHint: 'Monthly · Flexible',
+    recommendedFrequency: 'monthly',
+    iconId: 'faith-witness',
+    primaryFoundationId: 'faith-witness',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'faith.bible-reading',
+    groupId: 'daily-regular',
+    title: 'Bible Reading',
+    description: 'Read and reflect on Scripture, optionally following a reading plan.',
+    cadence: 'Daily',
+    scheduleHint: 'Daily · Flexible',
+    recommendedFrequency: 'daily',
+    iconId: 'faith-scripture',
+    primaryFoundationId: 'faith-scripture',
+    secondaryFoundationIds: []
+  }
+];
 
 export type PersonPreview = {
   id: PersonId;
@@ -88,12 +384,13 @@ export type RhythmPreview = {
   description?: string | undefined;
   primaryFoundationId?: string | null;
   secondaryFoundationIds?: readonly string[];
+  suggestionSourceId?: string;
   completionHistory?: readonly RhythmCompletion[] | undefined;
   marriageGroup?: MarriageRhythmGroupId;
   iconId?: string;
   illustrativeScore?: number | null | undefined;
   personIds?: readonly PersonId[];
-  categoryIds?: readonly ('faith' | 'marriage' | 'parenting' | 'health' | 'finances' | 'friendships')[];
+  categoryIds?: readonly CategoryId[];
   schedule?: RhythmSchedule;
   scoring?: RhythmScoringMetadata;
   createdLocalDate?: string;
@@ -125,6 +422,7 @@ export const areas = [
 export const marriageFoundation: FoundationPreview = {
   id: 'marriage-connection',
   category: 'Marriage',
+  categoryId: 'marriage',
   name: 'Connection',
   description: 'An ongoing foundation supported by small, intentional investments.',
   capabilities: {
@@ -167,6 +465,7 @@ const marriageFoundationDetails = [
   {
     id: 'connection',
     category: 'Marriage',
+    categoryId: 'marriage',
     name: 'Connection',
     description: 'Feeling known, loved, and emotionally close.',
     capabilities: ongoingMarriageCapabilities,
@@ -176,6 +475,7 @@ const marriageFoundationDetails = [
   {
     id: 'communication',
     category: 'Marriage',
+    categoryId: 'marriage',
     name: 'Communication',
     description: 'Listening, understanding, and navigating life together.',
     capabilities: ongoingMarriageCapabilities,
@@ -185,6 +485,7 @@ const marriageFoundationDetails = [
   {
     id: 'fun-adventure',
     category: 'Marriage',
+    categoryId: 'marriage',
     name: 'Fun & Adventure',
     description: 'Enjoying life together, laughter, and shared experiences.',
     capabilities: ongoingMarriageCapabilities,
@@ -194,6 +495,7 @@ const marriageFoundationDetails = [
   {
     id: 'spiritual-growth',
     category: 'Marriage',
+    categoryId: 'marriage',
     name: 'Spiritual Growth',
     description: 'Shared faith, prayer, and spiritual growth.',
     capabilities: ongoingMarriageCapabilities,
@@ -203,6 +505,7 @@ const marriageFoundationDetails = [
   {
     id: 'partnership',
     category: 'Marriage',
+    categoryId: 'marriage',
     name: 'Partnership',
     description: 'Teamwork, support, and shared responsibilities.',
     capabilities: ongoingMarriageCapabilities,
@@ -212,6 +515,7 @@ const marriageFoundationDetails = [
   {
     id: 'intimacy',
     category: 'Marriage',
+    categoryId: 'marriage',
     name: 'Intimacy',
     description: 'Affection, romance, and physical closeness.',
     capabilities: ongoingMarriageCapabilities,
@@ -234,7 +538,163 @@ const populatedMarriageFoundations: FoundationPreview[] = marriageFoundationDeta
   illustrativeScore: marriageFoundationScores[foundation.id] ?? null
 }));
 
-const populatedMarriageRhythms: RhythmPreview[] = [
+export const parentingFoundations: readonly FoundationPreview[] = [
+  {
+    id: 'parenting-connection-belonging',
+    category: 'Parenting',
+    categoryId: 'parenting',
+    name: 'Connection & Belonging',
+    description: 'Helping your child feel loved, included and connected.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'parenting-connection-belonging'
+  },
+  {
+    id: 'parenting-communication-trust',
+    category: 'Parenting',
+    categoryId: 'parenting',
+    name: 'Communication & Trust',
+    description: 'Listening well and making room for honest conversation.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'parenting-communication-trust'
+  },
+  {
+    id: 'parenting-fun-memories',
+    category: 'Parenting',
+    categoryId: 'parenting',
+    name: 'Fun & Memories',
+    description: 'Enjoying time together and making meaningful memories.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'parenting-fun-memories'
+  },
+  {
+    id: 'parenting-spiritual-growth',
+    category: 'Parenting',
+    categoryId: 'parenting',
+    name: 'Spiritual Growth',
+    description: 'Sharing prayer, Scripture and conversations about faith.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'parenting-spiritual-growth'
+  },
+  {
+    id: 'parenting-guidance-equipping',
+    category: 'Parenting',
+    categoryId: 'parenting',
+    name: 'Guidance & Equipping',
+    description: 'Offering practical skills, support and wisdom for life.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'parenting-guidance-equipping'
+  },
+  {
+    id: 'parenting-encouragement-affirmation',
+    category: 'Parenting',
+    categoryId: 'parenting',
+    name: 'Encouragement & Affirmation',
+    description: 'Recognizing your child’s strengths, effort and growth.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'parenting-encouragement-affirmation'
+  }
+];
+
+export const faithPractices: readonly FoundationPreview[] = [
+  {
+    id: 'faith-sabbath',
+    category: 'Faith',
+    categoryId: 'faith',
+    name: 'Sabbath',
+    description: 'Make room for rest, delight and time with God.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'faith-sabbath'
+  },
+  {
+    id: 'faith-prayer',
+    category: 'Faith',
+    categoryId: 'faith',
+    name: 'Prayer',
+    description: 'Build a steady rhythm of prayer and listening.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'faith-prayer'
+  },
+  {
+    id: 'faith-fasting',
+    category: 'Faith',
+    categoryId: 'faith',
+    name: 'Fasting',
+    description: 'Create space for God through intentional fasting.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'faith-fasting'
+  },
+  {
+    id: 'faith-solitude',
+    category: 'Faith',
+    categoryId: 'faith',
+    name: 'Solitude',
+    description: 'Make room for quiet, reflection and listening.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'faith-solitude'
+  },
+  {
+    id: 'faith-generosity',
+    category: 'Faith',
+    categoryId: 'faith',
+    name: 'Generosity',
+    description: 'Practice open-handed living with what you have.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'faith-generosity'
+  },
+  {
+    id: 'faith-community',
+    category: 'Faith',
+    categoryId: 'faith',
+    name: 'Community',
+    description: 'Share worship, belonging and life with others.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'faith-community'
+  },
+  {
+    id: 'faith-service',
+    category: 'Faith',
+    categoryId: 'faith',
+    name: 'Service',
+    description: 'Turn care for others into regular acts of service.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'faith-service'
+  },
+  {
+    id: 'faith-witness',
+    category: 'Faith',
+    categoryId: 'faith',
+    name: 'Witness',
+    description: 'Live and share your faith with the people around you.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'faith-witness'
+  },
+  {
+    id: 'faith-scripture',
+    category: 'Faith',
+    categoryId: 'faith',
+    name: 'Scripture',
+    description: 'Read and reflect on Scripture regularly.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'faith-scripture'
+  }
+];
+
+const populatedMarriageRhythms = ([
   {
     id: 'sample-marriage-connection',
     title: 'Daily Connection',
@@ -308,7 +768,10 @@ const populatedMarriageRhythms: RhythmPreview[] = [
     ],
     marriageGroup: 'seasonal'
   }
-];
+] satisfies RhythmPreview[]).map<RhythmPreview>(rhythm => ({
+  ...rhythm,
+  categoryIds: ['marriage']
+}));
 
 export const marriageExampleFixtures: Record<MarriageExampleId, MarriageFixture> = {
   populated: {
@@ -365,6 +828,8 @@ const marriageSuggestionTemplateRows: {
   primaryFoundationId: string;
   secondaryFoundationIds: string[];
   scheduleHint: string;
+  recommendedFrequency: RhythmFrequencyRecommendation;
+  frequencyGuidance?: string;
 }[] = [
   {
     templateId: 'marriage.daily-connection',
@@ -377,7 +842,9 @@ const marriageSuggestionTemplateRows: {
     iconId: 'daily-connection',
     primaryFoundationId: 'connection',
     secondaryFoundationIds: ['communication', 'intimacy'],
-    scheduleHint: '5 times a week · Flexible'
+    scheduleHint: '5 times a week · Flexible',
+    recommendedFrequency: 'select-days',
+    frequencyGuidance: 'Choose the days you want; no weekdays are selected.'
   },
   {
     templateId: 'marriage.pray-together',
@@ -390,7 +857,8 @@ const marriageSuggestionTemplateRows: {
     iconId: 'pray-together',
     primaryFoundationId: 'spiritual-growth',
     secondaryFoundationIds: ['connection'],
-    scheduleHint: 'Daily · Evening'
+    scheduleHint: 'Daily · Evening',
+    recommendedFrequency: 'daily'
   },
   {
     templateId: 'marriage.date-night',
@@ -403,7 +871,8 @@ const marriageSuggestionTemplateRows: {
     iconId: 'date-night',
     primaryFoundationId: 'fun-adventure',
     secondaryFoundationIds: ['connection'],
-    scheduleHint: 'Weekly · Evening'
+    scheduleHint: 'Weekly · Evening',
+    recommendedFrequency: 'weekly'
   },
   {
     templateId: 'marriage.marriage-check-in',
@@ -415,7 +884,8 @@ const marriageSuggestionTemplateRows: {
     iconId: 'marriage-check-in',
     primaryFoundationId: 'communication',
     secondaryFoundationIds: ['partnership'],
-    scheduleHint: 'Weekly · Flexible'
+    scheduleHint: 'Weekly · Flexible',
+    recommendedFrequency: 'weekly'
   },
   {
     templateId: 'marriage.thoughtful-act-of-love',
@@ -427,7 +897,8 @@ const marriageSuggestionTemplateRows: {
     iconId: 'thoughtful-act-of-love',
     primaryFoundationId: 'partnership',
     secondaryFoundationIds: ['connection'],
-    scheduleHint: 'Weekly · Flexible'
+    scheduleHint: 'Weekly · Flexible',
+    recommendedFrequency: 'weekly'
   },
   {
     templateId: 'marriage.dream-together',
@@ -440,7 +911,8 @@ const marriageSuggestionTemplateRows: {
     iconId: 'dream-together',
     primaryFoundationId: 'partnership',
     secondaryFoundationIds: ['fun-adventure'],
-    scheduleHint: 'Quarterly · Flexible'
+    scheduleHint: 'Quarterly · Flexible',
+    recommendedFrequency: 'quarterly'
   },
   {
     templateId: 'marriage.overnight-away',
@@ -452,7 +924,8 @@ const marriageSuggestionTemplateRows: {
     iconId: 'overnight-away',
     primaryFoundationId: 'fun-adventure',
     secondaryFoundationIds: ['intimacy'],
-    scheduleHint: 'Quarterly · Flexible'
+    scheduleHint: 'Quarterly · Flexible',
+    recommendedFrequency: 'quarterly'
   },
   {
     templateId: 'marriage.marriage-enrichment',
@@ -464,7 +937,8 @@ const marriageSuggestionTemplateRows: {
     iconId: 'marriage-enrichment',
     primaryFoundationId: 'communication',
     secondaryFoundationIds: ['partnership'],
-    scheduleHint: 'Yearly · Flexible'
+    scheduleHint: 'Yearly · Flexible',
+    recommendedFrequency: 'yearly'
   },
   {
     templateId: 'marriage.week-away-together',
@@ -476,7 +950,8 @@ const marriageSuggestionTemplateRows: {
     iconId: 'week-away-together',
     primaryFoundationId: 'fun-adventure',
     secondaryFoundationIds: ['connection'],
-    scheduleHint: 'Yearly · Flexible'
+    scheduleHint: 'Yearly · Flexible',
+    recommendedFrequency: 'yearly'
   }
 ];
 
@@ -488,6 +963,8 @@ export const marriageRhythmSuggestions: readonly MarriageRhythmSuggestion[] =
     return {
       templateId: template.templateId,
       scheduleHint: template.scheduleHint,
+      recommendedFrequency: template.recommendedFrequency,
+      ...(template.frequencyGuidance ? { frequencyGuidance: template.frequencyGuidance } : {}),
       ...(template.sourceSampleRhythmId ? { sourceSampleRhythmId: template.sourceSampleRhythmId } : {}),
       rhythm: {
         ...(source ?? {
@@ -626,6 +1103,7 @@ export function rhythmLastTendedLabel(
 export const financeFoundation: FoundationPreview = {
   id: 'finance-example-milestone',
   category: 'Finances',
+  categoryId: 'finances',
   name: 'Emergency reserve · example milestone',
   description: 'A sample completable milestone. This is illustrative, not a finalized Finances taxonomy.',
   capabilities: {
@@ -636,6 +1114,13 @@ export const financeFoundation: FoundationPreview = {
   lifecycle: 'active',
   sampleOnly: true
 };
+
+export const foundationCatalogue: readonly FoundationPreview[] = [
+  ...marriageFoundations,
+  ...parentingFoundations,
+  ...faithPractices,
+  financeFoundation
+];
 
 export const goals: GoalPreview[] = [
   {

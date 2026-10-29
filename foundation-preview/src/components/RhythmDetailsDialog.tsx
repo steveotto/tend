@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import {
   rhythmLastTendedLabel,
+  type FoundationPreview,
   type PersonId,
   type PersonPreview,
   type RhythmPreview
@@ -19,6 +20,10 @@ import type { RhythmSeasonEditDraft } from '../domain/rhythm-season-edit.ts';
 import type { RhythmSeasonDeletionUndo } from '../domain/rhythm-season-delete.ts';
 import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
 import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
+import { RhythmFoundationBadges } from './RhythmFoundationBadges.tsx';
+import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
+import type { Destination } from './AppNavigation.tsx';
+import { RhythmAssociationRows } from './RhythmAssociationRows.tsx';
 
 type RhythmDetailsDialogProps = {
   rhythm: RhythmPreview;
@@ -26,11 +31,16 @@ type RhythmDetailsDialogProps = {
   inline?: boolean;
   initialView?: 'details' | 'history';
   statusLabel?: string;
+  completionActionLabel?: string;
+  completedActionLabel?: string;
   onTend?: (event: MouseEvent<HTMLButtonElement>) => void;
   onHistory?: (event: MouseEvent<HTMLButtonElement>) => void;
   headingId?: string;
   people?: readonly PersonPreview[];
+  foundations?: readonly FoundationPreview[];
   onPersonSelect?: (personId: PersonId) => void;
+  onOpenFoundation?: (foundationId: string, openerId: string) => void;
+  onOpenCategory?: (categoryId: Destination, openerId: string) => void;
   completed?: boolean;
   datedCompletions?: readonly DatedRhythmCompletion[];
   completionHistoryAvailable?: boolean;
@@ -55,7 +65,10 @@ export function RhythmDetailsDialog({
   rhythm,
   healthScore = null,
   people,
+  foundations,
   onPersonSelect,
+  onOpenFoundation,
+  onOpenCategory,
   completed = false,
   datedCompletions = [],
   completionHistoryAvailable = false,
@@ -76,6 +89,8 @@ export function RhythmDetailsDialog({
   inline = false,
   initialView = 'details',
   statusLabel,
+  completionActionLabel,
+  completedActionLabel,
   onTend,
   onHistory,
   headingId,
@@ -124,11 +139,13 @@ export function RhythmDetailsDialog({
     if (event.target === event.currentTarget) onClose();
   }
 
-  const hasSummaryContent = Boolean(rhythm.description?.trim())
-    || Boolean(people?.length && onPersonSelect)
-    || Boolean(rhythm.categoryIds?.length);
   const hasPeople = Boolean(people?.length && onPersonSelect);
   const hasCategories = Boolean(rhythm.categoryIds?.length);
+  const hasFoundationLinks = Boolean(
+    foundations?.length
+    && onOpenFoundation
+    && foundationRhythmIds(rhythm).some(id => foundations.some(foundation => foundation.id === id))
+  );
   const scoringTimeZone = rhythm.scoring?.timeZone
     ?? rhythm.createdTimeZone
     ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -136,11 +153,13 @@ export function RhythmDetailsDialog({
 
   const detailsActions = (
     <div className="today-rhythm-details__actions">
-      {((inline && onTend) || (!inline && onSaveCompletion)) && !archived && (
+      {((inline && onTend) || (!inline && (onSaveCompletion || onTend))) && !archived && (
         <RhythmCompletionActions
           rhythmTitle={rhythm.title}
           completed={completed}
-          onTend={inline ? onTend! : () => setShowCompletion(true)}
+          actionLabel={completionActionLabel}
+          completedLabel={completedActionLabel}
+          onTend={inline || onTend ? onTend! : () => setShowCompletion(true)}
           tendButtonRef={tendButtonRef}
         />
       )}
@@ -183,6 +202,9 @@ export function RhythmDetailsDialog({
               )}
               {archived && <RhythmArchivedBadge />}
               {rhythm.personal && <RhythmPersonalBadge />}
+              {inline && rhythm.description?.trim() && (
+                <p className="tend-type-description today-rhythm-details__description">{rhythm.description}</p>
+              )}
             </div>
           )}
           {inline && !showCompletion && detailsActions}
@@ -238,6 +260,9 @@ export function RhythmDetailsDialog({
               {...(onEdit ? { onChooseSchedule: onEdit } : {})}
               {...(people ? { people } : {})}
               {...(onPersonSelect ? { onPersonSelect } : {})}
+              {...(onOpenCategory ? { onOpenCategory } : {})}
+              {...(foundations ? { foundations } : {})}
+              {...(onOpenFoundation ? { onOpenFoundation } : {})}
               onClose={onClose}
               closeButtonRef={closeButtonRef}
               archived={archived}
@@ -245,43 +270,49 @@ export function RhythmDetailsDialog({
           )
           : (
             <>
-              <div className="today-rhythm-details__content">
-                {(!inline || hasSummaryContent) && (
-                  <div className="today-rhythm-details__summary">
-                    {rhythm.description?.trim() && (
-                      <p className="tend-type-description today-rhythm-details__description">{rhythm.description}</p>
+              {(!inline || hasPeople || hasCategories || hasFoundationLinks) && (
+                <div className="today-rhythm-details__content">
+                  {inline
+                    ? (
+                      <div
+                        className="today-rhythm-details__association-row"
+                        role="group"
+                        aria-label={`Associations for ${rhythm.title}`}
+                      >
+                        <RhythmAssociationRows
+                          rhythm={rhythm}
+                          {...(hasPeople && people ? { people } : {})}
+                          {...(foundations ? { foundations } : {})}
+                          {...(onPersonSelect ? { onPersonSelect } : {})}
+                          {...(onOpenCategory ? { onOpenCategory } : {})}
+                          {...(onOpenFoundation ? { onOpenFoundation } : {})}
+                        />
+                      </div>
+                    )
+                    : (
+                      <div className="today-rhythm-details__summary">
+                        {rhythm.description?.trim() && (
+                          <p className="tend-type-description today-rhythm-details__description">{rhythm.description}</p>
+                        )}
+                        {people && onPersonSelect && (
+                          <PersonBadgeList people={people} rhythmTitle={rhythm.title} onSelect={onPersonSelect} />
+                        )}
+                        <RhythmCategoryBadges
+                          rhythm={rhythm}
+                          {...(onOpenCategory ? { onOpenCategory } : {})}
+                        />
+                        {foundations && onOpenFoundation && (
+                          <RhythmFoundationBadges
+                            rhythm={rhythm}
+                            foundations={foundations}
+                            onOpenFoundation={onOpenFoundation}
+                          />
+                        )}
+                      </div>
                     )}
-                    {inline
-                      ? (hasPeople || hasCategories) && (
-                        <div
-                          className="today-rhythm-details__association-row"
-                          role="group"
-                          aria-label={`Associations for ${rhythm.title}`}
-                        >
-                          {hasPeople && people && onPersonSelect && (
-                            <PersonBadgeList
-                              people={people}
-                              rhythmTitle={rhythm.title}
-                              onSelect={onPersonSelect}
-                              collapsedLimit={2}
-                              itemsOnly
-                            />
-                          )}
-                          {hasCategories && <RhythmCategoryBadges rhythm={rhythm} itemsOnly />}
-                        </div>
-                      )
-                      : (
-                        <>
-                          {people && onPersonSelect && (
-                            <PersonBadgeList people={people} rhythmTitle={rhythm.title} onSelect={onPersonSelect} />
-                          )}
-                          <RhythmCategoryBadges rhythm={rhythm} />
-                        </>
-                      )}
-                  </div>
-                )}
-                {!inline && detailsActions}
-              </div>
+                  {!inline && detailsActions}
+                </div>
+              )}
               <footer className="today-rhythm-details__footer">
                 <RhythmMetadata
                   variant="footer"

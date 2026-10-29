@@ -3,9 +3,15 @@ import { useScoringInstant } from './components/useScoringInstant.ts';
 import type { MouseEvent } from 'react';
 import { AppNavigation } from './components/AppNavigation.tsx';
 import type { Destination, TextSize } from './components/AppNavigation.tsx';
-import { MarriageView } from './components/MarriageView.tsx';
-import { activeIdForMarriageSuggestion } from './domain/category-rhythms.ts';
-import { saveFoundationRhythmAssociations } from './domain/foundation-rhythm-associations.ts';
+import {
+  MarriageView,
+  type CategoryRhythmSuggestion,
+  type CategoryRhythmSuggestionCatalogue,
+  type MarriageTab
+} from './components/MarriageView.tsx';
+import { MarriageIcon } from './components/MarriageIcon.tsx';
+import { selectActiveUserRhythms, selectArchivedUserRhythms } from './domain/active-user-rhythms.ts';
+import { foundationCategoryId, saveFoundationRhythmAssociations } from './domain/foundation-rhythm-associations.ts';
 import type { FoundationRhythmAssociationChange } from './domain/foundation-rhythm-associations.ts';
 import { selectFoundationRhythmScores } from './domain/foundation-scoring.ts';
 import { RhythmDetailsDialog } from './components/RhythmDetailsDialog.tsx';
@@ -16,12 +22,20 @@ import type { PreviewPersistenceStatus } from './components/PreviewDataControls.
 import { PersonProfilePlaceholder } from './components/PersonProfilePlaceholder.tsx';
 import { RhythmEditor } from './components/RhythmEditor.tsx';
 import { TodayView } from './components/TodayView.tsx';
+import { StrengthView } from './components/StrengthView.tsx';
 import {
   marriageRhythms,
-  isMarriageFoundationId,
+  foundationCatalogue,
+  faithRhythmSuggestionGroups,
+  faithRhythmSuggestions,
+  parentingRhythmSuggestionGroups,
+  parentingRhythmSuggestions,
   personById,
   peopleForRhythm,
   todayRhythms,
+  type CategoryRhythmSuggestionGroupDefinition,
+  type CategoryRhythmSuggestionTemplate,
+  type CategoryId,
   type MarriageExampleId,
   type PersonId,
   type RhythmPreview
@@ -44,6 +58,10 @@ import {
 } from './domain/rhythm-completion.ts';
 import { resolveSeedCompletionRecords } from './domain/rhythm-history.ts';
 import { localDateInTimeZone } from './domain/rhythm-scoring.ts';
+import { hasRhythmOccurrenceForCompletion } from './domain/rhythm-occurrences.ts';
+import { prepareDatedRhythmCompletion } from './domain/rhythm-completion.ts';
+import { validateStrengthData } from './domain/strength.ts';
+import type { StrengthMode } from './domain/strength.ts';
 import {
   activeTodayRhythms,
   applySavedRhythmOverrides,
@@ -56,6 +74,7 @@ import {
   rhythmsForCategory,
   saveRhythmDraft
 } from './domain/rhythm-editor.ts';
+import { createRhythmDraft } from './domain/rhythm-editor.ts';
 import type { RhythmDraft, RhythmDraftErrors, SavedRhythm } from './domain/rhythm-editor.ts';
 import type { RhythmSeasonEditDraft } from './domain/rhythm-season-edit.ts';
 import { establishCurrentRhythmSeason } from './domain/rhythm-season-edit.ts';
@@ -69,7 +88,8 @@ import type { RhythmSeasonDeletionUndo } from './domain/rhythm-season-delete.ts'
 import {
   effectiveRhythmSchedule,
   rhythmScheduleSummary,
-  rhythmTimeLabel
+  rhythmTimeLabel,
+  type RhythmFrequencyRecommendation
 } from './domain/rhythm-schedule.ts';
 import { rhythmSchedulesEqual } from './domain/rhythm-occurrences.ts';
 import {
@@ -87,6 +107,9 @@ import {
   loadV10RecoveryCopy,
   loadV11RecoveryCopy,
   loadV12RecoveryCopy,
+  loadV13RecoveryCopy,
+  loadV14RecoveryCopy,
+  loadV15RecoveryCopy,
   loadPreview,
   writePreview
 } from './storage/preview-storage.ts';
@@ -102,6 +125,57 @@ const destinationLabels: Record<Exclude<Destination, 'today'>, string> = {
   finances: 'Finances',
   friendships: 'Friendships'
 };
+
+function categorySuggestionCatalogue(
+  categoryId: CategoryId,
+  title: string,
+  groups: readonly CategoryRhythmSuggestionGroupDefinition[],
+  templates: readonly CategoryRhythmSuggestionTemplate[]
+): CategoryRhythmSuggestionCatalogue {
+  return {
+    title,
+    groups: groups.map(group => ({
+      id: group.id,
+      title: group.title,
+      subtitle: group.subtitle,
+      suggestions: templates
+        .filter(suggestion => suggestion.groupId === group.id)
+        .map(suggestion => ({
+          sourceId: suggestion.sourceId,
+          categoryId,
+          rhythm: {
+            id: suggestion.sourceId,
+            title: suggestion.title,
+            description: suggestion.description,
+            cadence: suggestion.cadence,
+            timeLabel: 'Anytime',
+            automation: 'manual',
+            status: 'Not confirmed',
+            primaryFoundationId: suggestion.primaryFoundationId,
+            secondaryFoundationIds: suggestion.secondaryFoundationIds,
+            categoryIds: [categoryId]
+          },
+          scheduleHint: suggestion.scheduleHint,
+          icon: <MarriageIcon group="foundations" id={suggestion.iconId} />,
+          recommendedFrequency: suggestion.recommendedFrequency,
+          ...(suggestion.frequencyGuidance ? { frequencyGuidance: suggestion.frequencyGuidance } : {})
+        }))
+    }))
+  };
+}
+
+const parentingSuggestionCatalogue = categorySuggestionCatalogue(
+  'parenting',
+  'Parenting rhythms',
+  parentingRhythmSuggestionGroups,
+  parentingRhythmSuggestions
+);
+const faithSuggestionCatalogue = categorySuggestionCatalogue(
+  'faith',
+  'Faith practice suggestions',
+  faithRhythmSuggestionGroups,
+  faithRhythmSuggestions
+);
 
 function isDatedCompletionRecord(record: RhythmCompletionRecord): record is DatedRhythmCompletion {
   return typeof record.localTime === 'string'
@@ -141,6 +215,12 @@ export function App() {
   const [v11RecoveryError, setV11RecoveryError] = useState<string | null>(null);
   const [v12RecoveryCopy, setV12RecoveryCopy] = useState<string | null>(null);
   const [v12RecoveryError, setV12RecoveryError] = useState<string | null>(null);
+  const [v13RecoveryCopy, setV13RecoveryCopy] = useState<string | null>(null);
+  const [v13RecoveryError, setV13RecoveryError] = useState<string | null>(null);
+  const [v14RecoveryCopy, setV14RecoveryCopy] = useState<string | null>(null);
+  const [v14RecoveryError, setV14RecoveryError] = useState<string | null>(null);
+  const [v15RecoveryCopy, setV15RecoveryCopy] = useState<string | null>(null);
+  const [v15RecoveryError, setV15RecoveryError] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -148,6 +228,13 @@ export function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [textSize, setTextSize] = useState<TextSize>('small');
   const [marriageExampleId, setMarriageExampleId] = useState<MarriageExampleId>('populated');
+  const [foundationNavigationRequest, setFoundationNavigationRequest] = useState<{
+    foundationId: string;
+    requestId: number;
+    returnTab: 'today' | MarriageTab;
+  } | null>(null);
+  const foundationNavigationSequence = useRef(0);
+  const activeRhythmReturnTab = useRef<'today' | MarriageTab>('today');
   const [selectedPersonId, setSelectedPersonId] = useState<PersonId | null>(null);
   const [activeRhythmId, setActiveRhythmId] = useState<string | null>(null);
   const [seasonDeletionUndo, setSeasonDeletionUndo] = useState<RhythmSeasonDeletionUndo | null>(null);
@@ -158,11 +245,20 @@ export function App() {
   } | null>(null);
   const [detailsInitialView, setDetailsInitialView] = useState<'details' | 'history'>('details');
   const [completionDialogRhythmId, setCompletionDialogRhythmId] = useState<string | null>(null);
+  const [strengthLogRequest, setStrengthLogRequest] = useState<{
+    rhythmId: string;
+    mode: StrengthMode;
+    workoutId?: string;
+    requestId: number;
+  } | null>(null);
+  const strengthLogRequestSequence = useRef(0);
   const [rhythmEditor, setRhythmEditor] = useState<{
     id: string;
     rhythm?: (typeof todayRhythms)[number];
     initialDraft?: RhythmDraft;
-    suggestionTemplateId?: string;
+    suggestionSourceId?: string;
+    recommendedFrequency?: RhythmFrequencyRecommendation;
+    frequencyGuidance?: string;
     returnToSuggestions?: (saved: boolean) => void;
   } | null>(null);
   const dialogOpener = useRef<HTMLButtonElement | null>(null);
@@ -213,25 +309,41 @@ export function App() {
   const allTodayRhythms = resolveTodayRhythms(previewData.savedRhythms).map(rhythmWithSavedCompletions);
   const editableTodayRhythms = activeTodayRhythms(allTodayRhythms, previewData.archivedRhythmIds);
   const archivedRhythms = archivedTodayRhythms(allTodayRhythms, previewData.archivedRhythmIds);
-  const userRhythms = editableTodayRhythms.filter(rhythm =>
-    previewData.savedRhythms.some(saved => saved.id === rhythm.id)
-  );
-  const marriageCategoryRhythms = rhythmsForCategory(userRhythms, 'marriage');
   const resolvedMarriageRhythms = marriageRhythms.map(rhythm =>
     rhythmWithSavedCompletions(applySavedRhythmOverrides(
       rhythm,
       previewData.savedRhythms.find(saved => saved.id === rhythm.id)
     ))
   );
-  const foundationRhythms = [
-    ...(marriageExampleId === 'populated' ? resolvedMarriageRhythms : []),
-    ...allTodayRhythms.filter(rhythm => rhythm.categoryIds?.includes('marriage') === true)
-  ];
-  const todayRhythmIds = new Set(allTodayRhythms.map(rhythm => rhythm.id));
-  const scoredRhythms = [
-    ...allTodayRhythms,
-    ...foundationRhythms.filter(rhythm => !todayRhythmIds.has(rhythm.id))
-  ];
+  const composedUserRhythmCandidates = [...allTodayRhythms, ...resolvedMarriageRhythms];
+  const savedRhythmIds = previewData.savedRhythms.map(rhythm => rhythm.id);
+  const userRhythms = selectActiveUserRhythms(
+    composedUserRhythmCandidates,
+    savedRhythmIds,
+    previewData.archivedRhythmIds
+  );
+  const archivedUserRhythms = selectArchivedUserRhythms(
+    composedUserRhythmCandidates,
+    savedRhythmIds,
+    previewData.archivedRhythmIds
+  );
+  const marriageCategoryRhythms = rhythmsForCategory(userRhythms, 'marriage');
+  const parentingCategoryRhythms = rhythmsForCategory(userRhythms, 'parenting');
+  const faithCategoryRhythms = rhythmsForCategory(userRhythms, 'faith');
+  const healthCategoryRhythms = rhythmsForCategory(userRhythms, 'health');
+  const archivedMarriageRhythms = rhythmsForCategory(archivedUserRhythms, 'marriage');
+  const archivedParentingRhythms = rhythmsForCategory(archivedUserRhythms, 'parenting');
+  const archivedFaithRhythms = rhythmsForCategory(archivedUserRhythms, 'faith');
+  const archivedHealthRhythms = rhythmsForCategory(archivedUserRhythms, 'health');
+  const pendingStrengthLogRhythm = strengthLogRequest
+    ? healthCategoryRhythms.find(rhythm => rhythm.id === strengthLogRequest.rhythmId)
+    : undefined;
+  const pendingStrengthRhythmLog = strengthLogRequest && pendingStrengthLogRhythm
+    ? { ...strengthLogRequest, rhythm: pendingStrengthLogRhythm }
+    : null;
+  const scoredRhythms = [...new Map(
+    [...allTodayRhythms, ...resolvedMarriageRhythms].map(rhythm => [rhythm.id, rhythm])
+  ).values()];
   const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const rhythmScoreResults = selectFoundationRhythmScores(
     scoredRhythms,
@@ -413,6 +525,34 @@ export function App() {
       setV12RecoveryCopy(null);
       setV12RecoveryError(result.message);
     }
+    refreshV13RecoveryCopy();
+  }
+
+  function refreshV13RecoveryCopy() {
+    const result = loadV13RecoveryCopy(browserPreviewStorage());
+    if (result.kind === 'loaded') {
+      setV13RecoveryCopy(result.raw);
+      setV13RecoveryError(null);
+    } else {
+      setV13RecoveryCopy(null);
+      setV13RecoveryError(result.message);
+    }
+    const v14 = loadV14RecoveryCopy(browserPreviewStorage());
+    if (v14.kind === 'loaded') {
+      setV14RecoveryCopy(v14.raw);
+      setV14RecoveryError(null);
+    } else {
+      setV14RecoveryCopy(null);
+      setV14RecoveryError(v14.message);
+    }
+    const v15 = loadV15RecoveryCopy(browserPreviewStorage());
+    if (v15.kind === 'loaded') {
+      setV15RecoveryCopy(v15.raw);
+      setV15RecoveryError(null);
+    } else {
+      setV15RecoveryCopy(null);
+      setV15RecoveryError(v15.message);
+    }
   }
 
   useEffect(() => {
@@ -530,7 +670,7 @@ export function App() {
       return;
     }
     if (rhythmEditorOpener.current?.isConnected) rhythmEditorOpener.current.focus();
-    else document.querySelector<HTMLButtonElement>('.today-archived-rhythms-toggle')?.focus();
+    else document.querySelector<HTMLButtonElement>('.utility-primary-button[aria-current="page"]')?.focus();
   }, [rhythmEditor]);
 
   function navigate(next: Destination, personId?: PersonId) {
@@ -539,6 +679,18 @@ export function App() {
     setSearch('');
     setSearchOpen(false);
     document.body.classList.remove('mobile-search-open');
+  }
+
+  function navigateToFoundation(foundationId: string, returnTab: 'today' | MarriageTab) {
+    const categoryId = foundationCategoryId(foundationId);
+    if (!categoryId) return;
+    foundationNavigationSequence.current += 1;
+    setFoundationNavigationRequest({
+      foundationId,
+      requestId: foundationNavigationSequence.current,
+      returnTab
+    });
+    navigate(categoryId);
   }
 
   function closeSearch() {
@@ -554,8 +706,13 @@ export function App() {
     if (!next) setSearch('');
   }
 
-  function openRhythmHistory(id: string, event: MouseEvent<HTMLButtonElement>) {
+  function openRhythmHistory(
+    id: string,
+    event: MouseEvent<HTMLButtonElement>,
+    returnTab: 'today' | MarriageTab = 'today'
+  ) {
     dialogOpener.current = event.currentTarget;
+    activeRhythmReturnTab.current = returnTab;
     setDetailsInitialView('history');
     setActiveRhythmId(id);
   }
@@ -563,6 +720,19 @@ export function App() {
   function openCompletion(id: string, event: MouseEvent<HTMLButtonElement>) {
     if (!isEditableRhythmId(id) || completedRhythms.has(id)
       || previewData.archivedRhythmIds.includes(id)) return;
+    const rhythm = allTodayRhythms.find(item => item.id === id);
+    if (rhythm?.categoryIds?.includes('health')) {
+      const mode = previewData.strength.rhythmModes.find(item => item.rhythmId === id);
+      strengthLogRequestSequence.current += 1;
+      setStrengthLogRequest({
+        rhythmId: id,
+        mode: mode?.mode ?? 'recommended',
+        ...(mode?.workoutId ? { workoutId: mode.workoutId } : {}),
+        requestId: strengthLogRequestSequence.current
+      });
+      navigate('health');
+      return;
+    }
     completionDialogOpener.current = event.currentTarget;
     setCompletionDialogRhythmId(id);
   }
@@ -573,7 +743,9 @@ export function App() {
     options?: {
       id?: string;
       initialDraft?: RhythmDraft;
-      suggestionTemplateId?: string;
+      suggestionSourceId?: string;
+      recommendedFrequency?: RhythmFrequencyRecommendation;
+      frequencyGuidance?: string;
       returnToSuggestions?: (saved: boolean) => void;
     }
   ) {
@@ -582,7 +754,9 @@ export function App() {
     setRhythmEditor({
       id: options?.id ?? rhythm?.id ?? `user-rhythm-${globalThis.crypto.randomUUID()}`,
       ...(options?.initialDraft ? { initialDraft: options.initialDraft } : {}),
-      ...(options?.suggestionTemplateId ? { suggestionTemplateId: options.suggestionTemplateId } : {}),
+      ...(options?.suggestionSourceId ? { suggestionSourceId: options.suggestionSourceId } : {}),
+      ...(options?.recommendedFrequency ? { recommendedFrequency: options.recommendedFrequency } : {}),
+      ...(options?.frequencyGuidance ? { frequencyGuidance: options.frequencyGuidance } : {}),
       ...(options?.returnToSuggestions ? { returnToSuggestions: options.returnToSuggestions } : {}),
       ...(rhythm ? { rhythm } : {})
     });
@@ -595,38 +769,38 @@ export function App() {
     returnToSuggestions?.(saved);
   }
 
-  function openMarriageSuggestion(
-    rhythm: RhythmPreview,
+  function openRhythmSuggestion(
+    suggestion: CategoryRhythmSuggestion,
     event: MouseEvent<HTMLButtonElement>,
     returnToSuggestions: (saved: boolean) => void
   ) {
-    const id = activeIdForMarriageSuggestion(rhythm.id);
-    if (!id) return;
+    const rhythm = suggestion.rhythm;
     const initialDraft: RhythmDraft = {
       title: rhythm.title,
       description: rhythm.description ?? '',
       cadence: rhythm.cadence ?? 'Daily',
       timeLabel: rhythm.timeLabel ?? 'Anytime',
-      personIds: [...(rhythm.personIds ?? [])],
-      categoryIds: ['marriage'],
+      personIds: [],
+      categoryIds: [suggestion.categoryId],
+      ...(suggestion.recommendedFrequency === 'daily' ? { schedule: { frequency: 'daily' as const } } : {}),
       scheduleEditing: true,
       personal: false,
       primaryFoundationId: rhythm.primaryFoundationId ?? null,
       secondaryFoundationIds: [...(rhythm.secondaryFoundationIds ?? [])]
     };
     openRhythmEditor(event, undefined, {
-      id,
       initialDraft,
-      suggestionTemplateId: rhythm.id,
+      suggestionSourceId: suggestion.sourceId,
+      recommendedFrequency: suggestion.recommendedFrequency,
+      ...(suggestion.frequencyGuidance ? { frequencyGuidance: suggestion.frequencyGuidance } : {}),
       returnToSuggestions
     });
   }
 
   function saveRhythm(draft: RhythmDraft): RhythmDraftErrors {
     if (!rhythmEditor) return { title: 'The Rhythm editor is no longer active.' };
-    if (rhythmEditor.suggestionTemplateId
-      && previewData.savedRhythms.some(saved => saved.id === rhythmEditor.id)) {
-      return { title: 'This suggestion is already added. No duplicate Rhythm was saved.' };
+    if (!rhythmEditor.rhythm && previewData.savedRhythms.some(saved => saved.id === rhythmEditor.id)) {
+      return { title: 'This Rhythm draft has already been saved. No duplicate Rhythm was created.' };
     }
     const scoringTimeZone = rhythmEditor.rhythm?.scoring?.timeZone
       ?? rhythmEditor.rhythm?.createdTimeZone
@@ -649,6 +823,12 @@ export function App() {
           ? { effectiveStartDate: rhythmEditor.rhythm.createdLocalDate }
           : {}),
         ...(earliestDatedCompletionDate ? { earliestDatedCompletionDate } : {})
+      },
+      undefined,
+      {
+        ...(rhythmEditor.suggestionSourceId
+          ? { suggestionSourceId: rhythmEditor.suggestionSourceId }
+          : {})
       }
     );
     const savedRhythms = result.savedRhythms;
@@ -656,6 +836,17 @@ export function App() {
     const nextData: PreviewData = {
       ...previewData,
       savedRhythms,
+      ...(!rhythmEditor.rhythm && draft.categoryIds.includes('health')
+        ? {
+            strength: {
+              ...previewData.strength,
+              rhythmModes: [
+                ...previewData.strength.rhythmModes.filter(item => item.rhythmId !== rhythmEditor.id),
+                { rhythmId: rhythmEditor.id, mode: 'recommended' as const }
+              ]
+            }
+          }
+        : {}),
       ...(hasDatedCompletionHistory && !previewData.rhythmHistoryIds.includes(rhythmEditor.id)
         ? { rhythmHistoryIds: [...previewData.rhythmHistoryIds, rhythmEditor.id] }
         : {})
@@ -723,14 +914,120 @@ export function App() {
     return null;
   }
 
+  function saveStrengthData(strength: PreviewData['strength']): string | null {
+    if (!validateStrengthData(strength)) {
+      return 'Strength settings or workout records are invalid. No changes were saved.';
+    }
+    const previousLogs = new Map(previewData.strength.workouts.map(log => [log.id, log]));
+    const nextLogs = new Map(strength.workouts.map(log => [log.id, log]));
+    let datedRhythmCompletions = [...previewData.datedRhythmCompletions];
+    let activeRhythmCompletions = [...previewData.activeRhythmCompletions];
+    let completedRhythmIds = [...previewData.completedRhythmIds];
+    let rhythmHistoryIds = [...previewData.rhythmHistoryIds];
+
+    for (const previous of previousLogs.values()) {
+      const next = nextLogs.get(previous.id);
+      if (!previous.completionId || next?.completionId === previous.completionId && next.rhythmId === previous.rhythmId) continue;
+      const removed = deleteDatedCompletion(
+        datedRhythmCompletions,
+        activeRhythmCompletions,
+        completedRhythmIds,
+        previous.completionId
+      );
+      datedRhythmCompletions = removed.records;
+      activeRhythmCompletions = removed.active;
+      completedRhythmIds = removed.completedRhythmIds;
+    }
+
+    const now = new Date();
+    const timeParts = new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    }).formatToParts(now);
+    const hour = Number(timeParts.find(part => part.type === 'hour')?.value);
+    const minute = Number(timeParts.find(part => part.type === 'minute')?.value);
+    const period = timeParts.find(part => part.type === 'dayPeriod')?.value.toUpperCase();
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    for (const log of strength.workouts) {
+      if (!log.rhythmId) continue;
+      const previous = previousLogs.get(log.id);
+      const rhythm = allTodayRhythms.find(item => item.id === log.rhythmId);
+      if (!rhythm || !isEditableRhythmId(log.rhythmId)
+        || previewData.archivedRhythmIds.includes(log.rhythmId)
+        || log.rhythmOccurrence !== log.date || !log.completionId) {
+        return 'The linked Strength Rhythm or its completion record is unavailable. No workout changes were saved.';
+      }
+      const existingCompletion = datedRhythmCompletions.find(item => item.id === log.completionId);
+      const ownsCompletion = previous?.completionId === log.completionId;
+      if (existingCompletion && !ownsCompletion) {
+        return 'This workout is linked to a different completion record. No changes were saved.';
+      }
+      if (ownsCompletion && !existingCompletion) {
+        return 'The linked completion record is missing. No workout changes were saved.';
+      }
+      if (ownsCompletion && existingCompletion && previous?.rhythmId === log.rhythmId
+        && previous.rhythmOccurrence === log.rhythmOccurrence && previous.date === log.date) continue;
+      const schedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
+      if (!schedule || !hasRhythmOccurrenceForCompletion(
+        schedule,
+        log.date,
+        rhythm.scoring?.trackingStartDate
+      )) {
+        return 'The workout date is not a scheduled occurrence for this Rhythm. No changes were saved.';
+      }
+      if (datedRhythmCompletions.some(item => item.rhythmId === log.rhythmId
+        && item.effectiveDate === log.date && item.id !== log.completionId)) {
+        return 'This Strength Rhythm occurrence already has a completion. No changes were saved.';
+      }
+      const completion = prepareDatedRhythmCompletion({
+        id: log.completionId,
+        rhythmId: log.rhythmId,
+        effectiveDate: log.date,
+        hour,
+        minute,
+        period: period === 'PM' ? 'PM' : 'AM',
+        memory: '',
+        timeZone
+      }, now);
+      if (!completion.valid) {
+        return completion.errors.time ?? completion.errors.effectiveDate
+          ?? 'The linked completion time is invalid. No workout changes were saved.';
+      }
+      if (existingCompletion) {
+        datedRhythmCompletions = datedRhythmCompletions.map(item =>
+          item.id === log.completionId ? completion.record : item
+        );
+      } else {
+        datedRhythmCompletions.push(completion.record);
+      }
+      if (!activeRhythmCompletions.some(item => item.completionId === log.completionId)) {
+        activeRhythmCompletions = [
+          ...activeRhythmCompletions.filter(item => item.rhythmId !== log.rhythmId),
+          { rhythmId: log.rhythmId, completionId: log.completionId }
+        ];
+        if (!completedRhythmIds.includes(log.rhythmId)) completedRhythmIds.push(log.rhythmId);
+      }
+      if (!rhythmHistoryIds.includes(log.rhythmId)) rhythmHistoryIds.push(log.rhythmId);
+    }
+
+    return persistSeasonHistory({
+      ...previewData,
+      strength,
+      datedRhythmCompletions,
+      activeRhythmCompletions,
+      completedRhythmIds,
+      rhythmHistoryIds
+    }, 'Strength data');
+  }
+
   function saveFoundationAssociations(
     foundationId: string,
     changes: readonly FoundationRhythmAssociationChange[]
   ): string | null {
-    if (!isMarriageFoundationId(foundationId)) return 'This Marriage Foundation is unavailable.';
     const result = saveFoundationRhythmAssociations(
       previewData.savedRhythms,
-      foundationRhythms,
+    userRhythms,
       previewData.archivedRhythmIds,
       foundationId,
       changes
@@ -1085,6 +1382,11 @@ export function App() {
       return 'A new completion must include its selected local time. No completion was saved.';
     }
     const record = candidate;
+    if (source === 'history' && allTodayRhythms.some(rhythm =>
+      rhythm.id === record.rhythmId && rhythm.categoryIds?.includes('health')
+    )) {
+      return 'Log a workout from the Strength Rhythm so its history stays linked.';
+    }
     const isTendAction = source === 'tend';
     if (!isEditableRhythmId(record.rhythmId)
       || !resolveTodayRhythms(previewData.savedRhythms).some(rhythm => rhythm.id === record.rhythmId)
@@ -1117,6 +1419,9 @@ export function App() {
   }
 
   function updateDatedCompletion(record: RhythmCompletionRecord): string | null {
+    if (previewData.strength.workouts.some(log => log.completionId === record.id)) {
+      return 'Edit this completion through its linked Strength workout log.';
+    }
     const existing = previewData.datedRhythmCompletions.find(item => item.id === record.id);
     if (!isEditableRhythmId(record.rhythmId)
       || previewData.archivedRhythmIds.includes(record.rhythmId)
@@ -1162,6 +1467,9 @@ export function App() {
   }
 
   function deleteDatedCompletionRecord(completionId: string): string | null {
+    if (previewData.strength.workouts.some(log => log.completionId === completionId)) {
+      return 'Delete this completion through its linked Strength workout log.';
+    }
     const record = previewData.datedRhythmCompletions.find(item => item.id === completionId);
     const seedRhythmId = todayRhythms.find(rhythm =>
       rhythm.completionHistory?.some(item => item.id === completionId)
@@ -1421,18 +1729,17 @@ export function App() {
               undoableRhythms={undoableRhythms}
               rhythms={editableTodayRhythms}
               rhythmScores={rhythmScoreResults}
-              archivedRhythms={archivedRhythms}
               search={search}
               marriageExampleId={marriageExampleId}
+              foundations={foundationCatalogue}
               onNavigate={navigate}
               onMarriageExampleChange={setMarriageExampleId}
+              onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
               onPersonSelect={personId => navigate('people', personId)}
               onHistory={openRhythmHistory}
               onTend={openCompletion}
               onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
               onUndo={undoTend}
-              onAddRhythm={event => openRhythmEditor(event)}
-              onRestoreRhythm={restoreRhythm}
             />
           )
           : destination === 'marriage'
@@ -1442,13 +1749,15 @@ export function App() {
                 onMarriageExampleChange={setMarriageExampleId}
                 todayDate={currentDate}
                 onAddRhythm={event => openRhythmEditor(event)}
-                onAddSuggestion={openMarriageSuggestion}
+                onAddSuggestion={openRhythmSuggestion}
                 onPersonSelect={personId => navigate('people', personId)}
                 onPartnerProfile={() => navigate('people')}
+                onOpenCategory={categoryId => navigate(categoryId)}
                 userRhythms={marriageCategoryRhythms}
-                savedRhythmIds={previewData.savedRhythms.map(rhythm => rhythm.id)}
-                foundationRhythms={foundationRhythms}
+                archivedRhythms={archivedMarriageRhythms}
+                foundationRhythms={marriageCategoryRhythms}
                 suggestionRhythms={resolvedMarriageRhythms}
+                suggestionInstances={allTodayRhythms}
                 foundationRhythmScores={rhythmScoreResults}
                 archivedRhythmIds={previewData.archivedRhythmIds}
                 completedRhythms={completedRhythms}
@@ -1461,6 +1770,123 @@ export function App() {
                 onTend={openCompletion}
                 onUndo={undoTend}
                 onSaveFoundationAssociations={saveFoundationAssociations}
+                foundationNavigationRequest={foundationNavigationRequest}
+                onFoundationNavigationHandled={() => setFoundationNavigationRequest(null)}
+              />
+            )
+          : destination === 'parenting'
+            ? (
+              <MarriageView
+                categoryConfig={{
+                  categoryId: 'parenting',
+                  label: 'Parenting',
+                  description: 'Build connection, trust and meaningful memories with your children.',
+                  foundations: foundationCatalogue.filter(foundation => foundation.categoryId === 'parenting'),
+                  emptyFoundationDescription: 'Ongoing areas of care; scores are unavailable without scored linked Rhythms.',
+                  scoreInterpretationNote: 'These scores reflect follow-through on chosen Rhythms. They do not measure a child’s wellbeing or the quality of someone’s parenting.',
+                  suggestionCatalogue: parentingSuggestionCatalogue
+                }}
+                todayDate={currentDate}
+                onAddRhythm={event => openRhythmEditor(event, undefined, {
+                  initialDraft: createRhythmDraft(['parenting'])
+                })}
+                onAddSuggestion={openRhythmSuggestion}
+                onPersonSelect={personId => navigate('people', personId)}
+                onOpenCategory={categoryId => navigate(categoryId)}
+                userRhythms={parentingCategoryRhythms}
+                archivedRhythms={archivedParentingRhythms}
+                foundationRhythms={parentingCategoryRhythms}
+                suggestionRhythms={parentingCategoryRhythms}
+                suggestionInstances={allTodayRhythms}
+                foundationRhythmScores={rhythmScoreResults}
+                archivedRhythmIds={previewData.archivedRhythmIds}
+                completedRhythms={completedRhythms}
+                undoableRhythms={undoableRhythms}
+                onRhythmHistory={openRhythmHistory}
+                onEditRhythm={(rhythm, event, returnToSuggestions) => openRhythmEditor(event, rhythm, {
+                  ...(returnToSuggestions ? { returnToSuggestions } : {})
+                })}
+                onRestoreRhythm={restoreRhythm}
+                onTend={openCompletion}
+                onUndo={undoTend}
+                onSaveFoundationAssociations={saveFoundationAssociations}
+                foundationNavigationRequest={foundationNavigationRequest}
+                onFoundationNavigationHandled={() => setFoundationNavigationRequest(null)}
+              />
+            )
+          : destination === 'faith'
+            ? (
+              <MarriageView
+                categoryConfig={{
+                  categoryId: 'faith',
+                  label: 'Faith',
+                  description: 'Faith practices that help you make room for God in everyday life.',
+                  foundations: foundationCatalogue.filter(foundation => foundation.categoryId === 'faith'),
+                  foundationTerm: { singular: 'Practice', plural: 'Practices' },
+                  tabLabel: 'Practices',
+                  emptyFoundationDescription: 'Ongoing practices; scores are unavailable without scored linked Rhythms.',
+                  scoreExplanationIntro: 'Your score reflects follow-through on your chosen practices—not the strength of your faith.',
+                  suggestionCatalogue: faithSuggestionCatalogue
+                }}
+                todayDate={currentDate}
+                onAddRhythm={event => openRhythmEditor(event, undefined, {
+                  initialDraft: createRhythmDraft(['faith'])
+                })}
+                onAddSuggestion={openRhythmSuggestion}
+                onPersonSelect={personId => navigate('people', personId)}
+                onOpenCategory={categoryId => navigate(categoryId)}
+                userRhythms={faithCategoryRhythms}
+                archivedRhythms={archivedFaithRhythms}
+                foundationRhythms={faithCategoryRhythms}
+                suggestionRhythms={faithCategoryRhythms}
+                suggestionInstances={allTodayRhythms}
+                foundationRhythmScores={rhythmScoreResults}
+                archivedRhythmIds={previewData.archivedRhythmIds}
+                completedRhythms={completedRhythms}
+                undoableRhythms={undoableRhythms}
+                onRhythmHistory={openRhythmHistory}
+                onEditRhythm={(rhythm, event, returnToSuggestions) => openRhythmEditor(event, rhythm, {
+                  ...(returnToSuggestions ? { returnToSuggestions } : {})
+                })}
+                onRestoreRhythm={restoreRhythm}
+                onTend={openCompletion}
+                onUndo={undoTend}
+                onSaveFoundationAssociations={saveFoundationAssociations}
+                foundationNavigationRequest={foundationNavigationRequest}
+                onFoundationNavigationHandled={() => setFoundationNavigationRequest(null)}
+              />
+            )
+          : destination === 'health'
+            ? (
+              <StrengthView
+                data={previewData.strength}
+                rhythms={healthCategoryRhythms.map(rhythm => {
+                  const setting = previewData.strength.rhythmModes.find(item => item.rhythmId === rhythm.id);
+                  return {
+                    rhythm,
+                    mode: setting?.mode ?? 'recommended',
+                    ...(setting?.workoutId ? { workoutId: setting.workoutId } : {})
+                  };
+                })}
+                archivedRhythms={archivedHealthRhythms}
+                completedRhythmIds={completedRhythms}
+                evaluationDate={currentDate}
+                onChange={saveStrengthData}
+                onAddRhythm={event => openRhythmEditor(event, undefined, {
+                  initialDraft: createRhythmDraft(['health'])
+                })}
+                onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
+                onOpenRhythm={(rhythm, event) => {
+                  dialogOpener.current = event.currentTarget;
+                  activeRhythmReturnTab.current = 'today';
+                  setDetailsInitialView('details');
+                  setActiveRhythmId(rhythm.id);
+                }}
+                pendingRhythmLog={pendingStrengthRhythmLog}
+                onRhythmLogOpened={requestId => {
+                  setStrengthLogRequest(current => current?.requestId === requestId ? null : current);
+                }}
+                onRestoreRhythm={restoreRhythm}
               />
             )
           : destination === 'finances'
@@ -1510,6 +1936,12 @@ export function App() {
         v11RecoveryError={v11RecoveryError}
         v12RecoveryCopy={v12RecoveryCopy}
         v12RecoveryError={v12RecoveryError}
+        v13RecoveryCopy={v13RecoveryCopy}
+        v13RecoveryError={v13RecoveryError}
+        v14RecoveryCopy={v14RecoveryCopy}
+        v14RecoveryError={v14RecoveryError}
+        v15RecoveryCopy={v15RecoveryCopy}
+        v15RecoveryError={v15RecoveryError}
       />
       <footer className="preview-footer">
         <span>Synthetic preview data stays separate from Tend accounts.</span>
@@ -1524,7 +1956,11 @@ export function App() {
           completionHistoryAvailable={
             activeRhythmIsToday || activeRhythmIsArchived || activeRhythm.completionHistory !== undefined
           }
+          {...(activeRhythm.categoryIds?.includes('health')
+            ? { completionActionLabel: 'Log workout', completedActionLabel: 'Logged' }
+            : {})}
           {...(activeRhythmIsToday && isEditableRhythmId(activeRhythm.id) && !activeRhythmIsArchived
+            && !activeRhythm.categoryIds?.includes('health')
             ? { onLogCompletion: record => saveDatedCompletion(record, 'history') }
             : {})}
           {...(activeRhythmIsToday && isEditableRhythmId(activeRhythm.id) && !activeRhythmIsArchived
@@ -1550,7 +1986,16 @@ export function App() {
             ? { onUndoSeasonRange: undoSeasonRange }
             : {})}
           people={peopleForRhythm(activeRhythm)}
+          foundations={foundationCatalogue}
           archived={activeRhythmIsArchived}
+          onOpenFoundation={foundationId => {
+            setActiveRhythmId(null);
+            navigateToFoundation(foundationId, activeRhythmReturnTab.current);
+          }}
+          onOpenCategory={categoryId => {
+            setActiveRhythmId(null);
+            navigate(categoryId);
+          }}
           onPersonSelect={personId => {
             setActiveRhythmId(null);
             dialogOpener.current = null;
@@ -1560,6 +2005,9 @@ export function App() {
             ? {
                 completed: completedRhythms.has(activeRhythm.id),
                 ...(!activeRhythmIsArchived ? { onSaveCompletion: saveDatedCompletion } : {}),
+                ...(activeRhythm.categoryIds?.includes('health') && !activeRhythmIsArchived
+                  ? { onTend: event => openCompletion(activeRhythm.id, event) }
+                  : {}),
                 ...(undoableRhythms.has(activeRhythm.id) ? { onUndo: () => undoTend(activeRhythm.id) } : {}),
                 ...(isEditableRhythmId(activeRhythm.id)
                   ? {
@@ -1585,6 +2033,15 @@ export function App() {
         <RhythmEditor
           {...(rhythmEditor.rhythm ? { rhythm: rhythmEditor.rhythm } : {})}
           {...(rhythmEditor.initialDraft ? { initialDraft: rhythmEditor.initialDraft } : {})}
+          {...(rhythmEditor.suggestionSourceId
+            ? { suggestionSourceId: rhythmEditor.suggestionSourceId }
+            : {})}
+          {...(rhythmEditor.recommendedFrequency
+            ? {
+                recommendedFrequency: rhythmEditor.recommendedFrequency,
+                ...(rhythmEditor.frequencyGuidance ? { frequencyGuidance: rhythmEditor.frequencyGuidance } : {})
+              }
+            : {})}
           asOfDate={localDateInTimeZone(
             new Date(),
             rhythmEditor.rhythm?.scoring?.timeZone

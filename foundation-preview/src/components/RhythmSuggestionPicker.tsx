@@ -1,6 +1,19 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
+
+export type RhythmSuggestionPickerInstance = {
+  id: string;
+  title: string;
+  peopleLabel?: string;
+  scheduleSummary: string;
+  archived: boolean;
+  onEdit?: (
+    event: MouseEvent<HTMLButtonElement>,
+    returnToPicker: (saved: boolean) => void
+  ) => void;
+  onRestore?: () => void;
+};
 
 export type RhythmSuggestionPickerItem = {
   id: string;
@@ -8,16 +21,11 @@ export type RhythmSuggestionPickerItem = {
   description?: string;
   scheduleHint: string;
   icon: ReactNode;
-  status: 'available' | 'added' | 'archived';
+  instances: readonly RhythmSuggestionPickerInstance[];
   onAdd?: (
     event: MouseEvent<HTMLButtonElement>,
     returnToPicker: (saved: boolean) => void
   ) => void;
-  onEdit?: (
-    event: MouseEvent<HTMLButtonElement>,
-    returnToPicker: (saved: boolean) => void
-  ) => void;
-  onRestore?: () => void;
 };
 
 export type RhythmSuggestionPickerGroup = {
@@ -43,7 +51,10 @@ export function RhythmSuggestionPicker({
   const bodyRef = useRef<HTMLDivElement>(null);
   const scrollTopRef = useRef(0);
   const returnFocusIdRef = useRef<string | null>(null);
+  const [selectedSuggestionId, setSelectedSuggestionId] = useState<string | null>(null);
   const closeId = `${useId()}-suggestion-picker-close`;
+  const selectedItem = groups.flatMap(group => group.items)
+    .find(item => item.id === selectedSuggestionId);
 
   useEffect(() => {
     if (open && bodyRef.current) bodyRef.current.scrollTop = scrollTopRef.current;
@@ -56,11 +67,10 @@ export function RhythmSuggestionPicker({
       target.focus({ preventScroll: true });
       returnFocusIdRef.current = null;
     }
-  }, [groups, open]);
+  }, [groups, open, selectedSuggestionId]);
 
   function startAction(
-    item: RhythmSuggestionPickerItem,
-    action: NonNullable<RhythmSuggestionPickerItem['onAdd'] | RhythmSuggestionPickerItem['onEdit']>,
+    action: NonNullable<RhythmSuggestionPickerItem['onAdd'] | RhythmSuggestionPickerInstance['onEdit']>,
     focusTargetId: string,
     event: MouseEvent<HTMLButtonElement>
   ) {
@@ -68,11 +78,9 @@ export function RhythmSuggestionPicker({
     returnFocusIdRef.current = focusTargetId;
     onClose();
     action(event, saved => {
-      returnFocusIdRef.current = saved
-        ? `${closeId}-edit-${item.id}`
-        : focusTargetId;
+      returnFocusIdRef.current = focusTargetId;
       onReopen(saved);
-      const returnFocusId = returnFocusIdRef.current;
+      const returnFocusId = focusTargetId;
       window.setTimeout(() => {
         const target = document.getElementById(returnFocusId);
         if (target instanceof HTMLElement) {
@@ -81,6 +89,30 @@ export function RhythmSuggestionPicker({
         }
       }, 0);
     });
+  }
+
+  function openChoice(item: RhythmSuggestionPickerItem) {
+    setSelectedSuggestionId(item.id);
+    const firstActive = item.instances.find(instance => !instance.archived);
+    const firstArchived = item.instances.find(instance => instance.archived);
+    const focusId = firstActive
+      ? `${closeId}-choice-edit-${item.id}-${firstActive.id}`
+      : firstArchived
+        ? `${closeId}-choice-restore-${item.id}-${firstArchived.id}`
+        : `${closeId}-choice-add-another-${item.id}`;
+    window.setTimeout(() => {
+      const target = document.getElementById(focusId);
+      if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+    }, 0);
+  }
+
+  function returnToCatalogue(item: RhythmSuggestionPickerItem) {
+    setSelectedSuggestionId(null);
+    const focusId = `${closeId}-add-${item.id}`;
+    window.setTimeout(() => {
+      const target = document.getElementById(focusId);
+      if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+    }, 0);
   }
 
   if (!open) return null;
@@ -104,7 +136,88 @@ export function RhythmSuggestionPicker({
           scrollTopRef.current = event.currentTarget.scrollTop;
         }}
       >
-        {groups.map(group => (
+        {selectedItem ? (
+          <section className="rhythm-suggestion-picker__choice" aria-labelledby={`${closeId}-choice-title`}>
+            <button
+              type="button"
+              className="btn mini ghost rhythm-suggestion-picker__back"
+              onClick={() => returnToCatalogue(selectedItem)}
+            >
+              Back
+            </button>
+            <h3 id={`${closeId}-choice-title`}>
+              {selectedItem.instances.some(instance => !instance.archived)
+                ? `You’ve added ${selectedItem.title}`
+                : `Previously added ${selectedItem.title}`}
+            </h3>
+            <p>Edit an existing rhythm or create another.</p>
+            {selectedItem.instances.some(instance => !instance.archived) && (
+              <ul className="rhythm-suggestion-picker__instance-list" aria-label="Active instances">
+                {selectedItem.instances.filter(instance => !instance.archived).map(instance => {
+                  const editId = `${closeId}-choice-edit-${selectedItem.id}-${instance.id}`;
+                  return (
+                    <li key={instance.id} className="rhythm-suggestion-picker__instance">
+                      <div>
+                        <h4>{instance.title}</h4>
+                        {instance.peopleLabel && <p>{instance.peopleLabel}</p>}
+                        <p>{instance.scheduleSummary}</p>
+                      </div>
+                      {instance.onEdit && (
+                        <button
+                          id={editId}
+                          type="button"
+                          className="btn mini ghost"
+                          aria-label={`Edit ${instance.title}`}
+                          onClick={event => startAction(instance.onEdit!, editId, event)}
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {selectedItem.instances.some(instance => instance.archived) && (
+              <section className="rhythm-suggestion-picker__archived" aria-labelledby={`${closeId}-archived-title`}>
+                <h4 id={`${closeId}-archived-title`}>Archived</h4>
+                <ul className="rhythm-suggestion-picker__instance-list">
+                  {selectedItem.instances.filter(instance => instance.archived).map(instance => {
+                    const restoreId = `${closeId}-choice-restore-${selectedItem.id}-${instance.id}`;
+                    return (
+                      <li key={instance.id} className="rhythm-suggestion-picker__instance">
+                        <div>
+                          <h4>{instance.title}</h4>
+                          {instance.peopleLabel && <p>{instance.peopleLabel}</p>}
+                          <p>{instance.scheduleSummary}</p>
+                        </div>
+                        {instance.onRestore && (
+                          <button
+                            id={restoreId}
+                            type="button"
+                            className="btn mini ghost"
+                            onClick={() => instance.onRestore?.()}
+                          >
+                            Restore
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            )}
+            <button
+              id={`${closeId}-choice-add-another-${selectedItem.id}`}
+              type="button"
+              className="btn mini rhythm-suggestion-picker__add-another"
+              onClick={event => selectedItem.onAdd
+                && startAction(selectedItem.onAdd, `${closeId}-choice-add-another-${selectedItem.id}`, event)}
+            >
+              ＋ Add another
+            </button>
+          </section>
+        ) : groups.map(group => (
           <section
             key={group.id}
             className="rhythm-suggestion-picker__group"
@@ -117,71 +230,40 @@ export function RhythmSuggestionPicker({
             <ul className="rhythm-suggestion-picker__list">
               {group.items.map(item => {
                 const addId = `${closeId}-add-${item.id}`;
-                const editId = `${closeId}-edit-${item.id}`;
+                const activeCount = item.instances.filter(instance => !instance.archived).length;
                 return (
                   <li className="rhythm-suggestion-picker__row" key={item.id}>
                     <span className="rhythm-suggestion-picker__icon">{item.icon}</span>
                     <div className="rhythm-suggestion-picker__details">
-                      <h4>{item.title}</h4>
-                      <p className="rhythm-suggestion-picker__schedule">{item.scheduleHint}</p>
-                      {item.description && <p className="rhythm-suggestion-picker__description">{item.description}</p>}
-                    </div>
-                    <div className="rhythm-suggestion-picker__action">
-                      {item.status === 'available' && item.onAdd && (
-                        <button
-                          id={addId}
-                          type="button"
-                          className="btn mini"
-                          onClick={event => startAction(item, item.onAdd!, addId, event)}
-                        >
-                          Add
-                        </button>
-                      )}
-                      {item.status === 'added' && (
-                        <>
+                      <div className={`rhythm-suggestion-picker__title-line${activeCount ? ' rhythm-suggestion-picker__title-line--added' : ''}`}>
+                        <h4>{item.title}</h4>
+                        {activeCount === 1 && (
                           <span className="rhythm-suggestion-picker__status">
                             <svg viewBox="0 0 20 20" aria-hidden="true">
                               <path d="m4 10 4 4 8-8" />
                             </svg>
                             Added
                           </span>
-                          {item.onEdit && (
-                            <button
-                              id={editId}
-                              type="button"
-                              className="btn mini ghost"
-                              onClick={event => startAction(item, item.onEdit!, editId, event)}
-                            >
-                              Edit rhythm
-                            </button>
-                          )}
-                        </>
-                      )}
-                      {item.status === 'archived' && (
-                        <>
-                          <span className="rhythm-suggestion-picker__status rhythm-suggestion-picker__status--archived">
-                            Archived
-                          </span>
-                          {item.onRestore && (
-                            <button
-                              type="button"
-                              className="btn mini ghost"
-                              onClick={() => {
-                                returnFocusIdRef.current = editId;
-                                item.onRestore?.();
-                                window.setTimeout(() => {
-                                  const target = document.getElementById(editId);
-                                  if (target instanceof HTMLElement) {
-                                    target.focus({ preventScroll: true });
-                                    returnFocusIdRef.current = null;
-                                  }
-                                }, 0);
-                              }}
-                            >
-                              Restore rhythm
-                            </button>
-                          )}
-                        </>
+                        )}
+                        {activeCount > 1 && (
+                          <span className="rhythm-suggestion-picker__status">{activeCount} added</span>
+                        )}
+                      </div>
+                      <p className="rhythm-suggestion-picker__schedule">{item.scheduleHint}</p>
+                      {item.description && <p className="rhythm-suggestion-picker__description">{item.description}</p>}
+                    </div>
+                    <div className="rhythm-suggestion-picker__action">
+                      {item.onAdd && (
+                        <button
+                          id={addId}
+                          type="button"
+                          className="btn mini"
+                          onClick={event => item.instances.length > 0
+                            ? openChoice(item)
+                            : startAction(item.onAdd!, addId, event)}
+                        >
+                          Add
+                        </button>
                       )}
                     </div>
                   </li>

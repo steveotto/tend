@@ -136,7 +136,7 @@ describe('v4 migration and recovery domain', () => {
     expect(result.valid).toBe(true);
     if (!result.valid) return;
     expect(result.sourceSchemaVersion).toBe(4);
-    expect(result.envelope.schemaVersion).toBe(13);
+    expect(result.envelope.schemaVersion).toBe(PROPOSED_PREVIEW_SCHEMA_VERSION);
     expect(result.envelope.data.datedRhythmCompletions).toEqual([]);
     expect(result.envelope.data.activeRhythmCompletions).toEqual([]);
     expect(result.envelope.data.completedRhythmIds).toEqual(data.completedRhythmIds);
@@ -154,7 +154,7 @@ describe('v4 migration and recovery domain', () => {
 
     const futureRaw = JSON.stringify({
       format: 'tend.synthetic-preview',
-      schemaVersion: 14,
+      schemaVersion: 17,
       data: { unknownFutureValue: true }
     });
     const futureStorage = storageFixture(futureRaw);
@@ -194,6 +194,26 @@ describe('v4 migration and recovery domain', () => {
     }
   });
 
+  it('assigns schema v15 an immutable recovery key before schema v16 writes', () => {
+    const data = createSamplePreviewData();
+    const envelope = createPreviewEnvelope(data);
+    const originalRaw = ` \n${JSON.stringify({ ...envelope, schemaVersion: 15 })}\n`;
+    const { storage, values } = storageFixture(originalRaw);
+
+    expect(proposedV4RecoveryKeyForRaw(originalRaw)).toBe('tend2:synthetic-preview:v15-recovery');
+    expect(preserveProposedV4SourceRecovery(storage, originalRaw)).toEqual({
+      kind: 'preserved',
+      key: 'tend2:synthetic-preview:v15-recovery',
+      raw: originalRaw
+    });
+    expect(values.get('tend2:synthetic-preview:v15-recovery')).toBe(originalRaw);
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    const saved = writePreview(storage, data, originalRaw, { currentDate });
+    expect(saved.kind).toBe('saved');
+    expect(values.get('tend2:synthetic-preview:v15-recovery')).toBe(originalRaw);
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PROPOSED_PREVIEW_SCHEMA_VERSION);
+  });
+
   it('preserves raw known-version bytes even when payload validation blocks migration', () => {
     const malformed = JSON.stringify({
       format: 'tend.synthetic-preview',
@@ -230,8 +250,8 @@ describe('v4 migration and recovery domain', () => {
     expect(stale.values.size).toBe(1);
   });
 
-  it('uses schema v13 for active preview serialization', () => {
-    expect(createPreviewEnvelope(dataWithHistory()).schemaVersion).toBe(13);
+  it('uses schema v16 for active preview serialization', () => {
+    expect(createPreviewEnvelope(dataWithHistory()).schemaVersion).toBe(PROPOSED_PREVIEW_SCHEMA_VERSION);
   });
 
   it('loads v4 backups with legacy day-of-month values 29–31 unchanged', () => {

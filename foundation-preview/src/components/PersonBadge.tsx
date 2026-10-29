@@ -2,23 +2,44 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import type { Ref } from 'react';
 import type { PersonId, PersonPreview } from '../domain/preview-data.ts';
 
-export function PersonBadge({
-  person,
-  onSelect,
-  buttonRef
-}: {
+type PersonBadgeProps = {
   person: PersonPreview;
-  onSelect: (personId: PersonId) => void;
-  buttonRef?: Ref<HTMLButtonElement>;
-}) {
+} & (
+  | {
+      presentation?: 'interactive';
+      onSelect: (personId: PersonId) => void;
+      buttonRef?: Ref<HTMLButtonElement>;
+    }
+  | {
+      presentation: 'static';
+      onSelect?: never;
+      buttonRef?: never;
+    }
+);
+
+export function PersonBadge(props: PersonBadgeProps) {
+  const { person } = props;
+  if (props.presentation === 'static') {
+    return (
+      <span
+        className="rhythm-person-badge rhythm-person-badge--static"
+        role="img"
+        aria-label={person.displayName}
+        title={person.displayName}
+      >
+        <PersonBadgeVisual person={person} />
+      </span>
+    );
+  }
+
   return (
     <button
-      ref={buttonRef}
+      ref={props.buttonRef}
       type="button"
       className="rhythm-person-badge"
       aria-label={`Open synthetic profile for ${person.displayName}`}
       data-person-id={person.id}
-      onClick={() => onSelect(person.id)}
+      onClick={() => props.onSelect(person.id)}
     >
       <PersonBadgeVisual person={person} />
     </button>

@@ -1,10 +1,21 @@
 import type { CSSProperties, ImgHTMLAttributes } from 'react';
-import connectionIcon from '../../../assets/tend-marriage-icons/foundations/connection.svg?url';
-import communicationIcon from '../../../assets/tend-marriage-icons/foundations/communication.svg?url';
-import funAdventureIcon from '../../../assets/tend-marriage-icons/foundations/fun-adventure.svg?url';
-import intimacyIcon from '../../../assets/tend-marriage-icons/foundations/intimacy.svg?url';
-import partnershipIcon from '../../../assets/tend-marriage-icons/foundations/partnership.svg?url';
-import spiritualGrowthIcon from '../../../assets/tend-marriage-icons/foundations/spiritual-growth.svg?url';
+import connectionIcon from '../assets/tend-approved-icons/foundations/connection.svg?url';
+import communicationIcon from '../assets/tend-approved-icons/foundations/communication.svg?url';
+import funAdventureIcon from '../assets/tend-approved-icons/foundations/fun-adventure.svg?url';
+import intimacyIcon from '../assets/tend-approved-icons/foundations/intimacy.svg?url';
+import partnershipIcon from '../assets/tend-approved-icons/foundations/partnership.svg?url';
+import spiritualGrowthIcon from '../assets/tend-approved-icons/foundations/spiritual-growth.svg?url';
+import sparklesIcon from '../assets/tend-approved-icons/foundations/sparkles.svg?url';
+import heartPlusIcon from '../assets/tend-approved-icons/foundations/heart-plus.svg?url';
+import faithSabbathIcon from '../assets/tend-approved-icons/foundations/faith-sabbath.svg?url';
+import faithPrayerIcon from '../assets/tend-approved-icons/foundations/faith-prayer.svg?url';
+import faithFastingIcon from '../assets/tend-approved-icons/foundations/faith-fasting.svg?url';
+import faithSolitudeIcon from '../assets/tend-approved-icons/foundations/faith-solitude.svg?url';
+import faithGenerosityIcon from '../assets/tend-approved-icons/foundations/faith-generosity.svg?url';
+import faithCommunityIcon from '../assets/tend-approved-icons/foundations/faith-community.svg?url';
+import faithServiceIcon from '../assets/tend-approved-icons/foundations/faith-service.svg?url';
+import faithWitnessIcon from '../assets/tend-approved-icons/foundations/faith-witness.svg?url';
+import faithScriptureIcon from '../assets/tend-approved-icons/foundations/faith-scripture.svg?url';
 import dailyConnectionIcon from '../../../assets/tend-marriage-icons/rhythms/daily-connection.svg?url';
 import dateNightIcon from '../../../assets/tend-marriage-icons/rhythms/date-night.svg?url';
 import dreamTogetherIcon from '../../../assets/tend-marriage-icons/rhythms/dream-together.svg?url';
@@ -21,8 +32,27 @@ const foundationIcons: Record<string, string> = {
   'fun-adventure': funAdventureIcon,
   'spiritual-growth': spiritualGrowthIcon,
   partnership: partnershipIcon,
-  intimacy: intimacyIcon
+  intimacy: intimacyIcon,
+  'parenting-connection-belonging': connectionIcon,
+  'parenting-communication-trust': communicationIcon,
+  'parenting-fun-memories': sparklesIcon,
+  'parenting-spiritual-growth': spiritualGrowthIcon,
+  'parenting-guidance-equipping': funAdventureIcon,
+  'parenting-encouragement-affirmation': heartPlusIcon,
+  'faith-sabbath': faithSabbathIcon,
+  'faith-prayer': faithPrayerIcon,
+  'faith-fasting': faithFastingIcon,
+  'faith-solitude': faithSolitudeIcon,
+  'faith-generosity': faithGenerosityIcon,
+  'faith-community': faithCommunityIcon,
+  'faith-service': faithServiceIcon,
+  'faith-witness': faithWitnessIcon,
+  'faith-scripture': faithScriptureIcon
 };
+
+export function hasFoundationIcon(id: string): boolean {
+  return Object.prototype.hasOwnProperty.call(foundationIcons, id);
+}
 
 const rhythmIcons: Record<string, string> = {
   'daily-connection': dailyConnectionIcon,

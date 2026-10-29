@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useScoringInstant } from './useScoringInstant.ts';
 import type { MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
-import type { PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
+import type { FoundationPreview, PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
 import { orderedCompletions } from '../domain/preview-data.ts';
 import type { RhythmCompletion } from '../domain/preview-data.ts';
 import type { DatedRhythmCompletion, RhythmCompletionRecord } from '../domain/rhythm-completion.ts';
@@ -15,9 +15,9 @@ import type { RhythmSeasonEditTarget } from '../domain/rhythm-season-edit.ts';
 import type { RhythmSeasonDeletionUndo } from '../domain/rhythm-season-delete.ts';
 import { deleteRhythmSeason } from '../domain/rhythm-season-delete.ts';
 import {
-  prepareCompletionHistory,
   HEALTH_CONSISTENCY_WEIGHT,
-  HEALTH_ON_TRACK_WEIGHT
+  HEALTH_ON_TRACK_WEIGHT,
+  prepareCompletionHistory
 } from '../domain/rhythm-history.ts';
 import {
   localDateInTimeZone,
@@ -57,9 +57,12 @@ import { RhythmScoreCircle } from './RhythmScoreCircle.tsx';
 import { RhythmCompletionHistoryChart } from './RhythmCompletionHistoryChart.tsx';
 import { RhythmCompletionForm } from './RhythmCompletionForm.tsx';
 import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
+import { RhythmFoundationBadges } from './RhythmFoundationBadges.tsx';
 import { RhythmSeasonCorrectionDialog } from './RhythmSeasonCorrectionDialog.tsx';
 import type { RhythmSeasonEditDialogDraft } from './RhythmSeasonCorrectionDialog.tsx';
 import { RhythmSeasonDeleteDialog } from './RhythmSeasonDeleteDialog.tsx';
+import { HealthWeightPanels } from './HealthWeightPanels.tsx';
+import type { Destination } from './AppNavigation.tsx';
 
 type MetricName = 'consistency' | 'onTrack';
 
@@ -101,11 +104,16 @@ export function RhythmHistoryView({
   seasonDeletionUndo,
   onUndoSeasonDeletion,
   seasonRangeUndo,
-  onUndoSeasonRange
+  onUndoSeasonRange,
+  onOpenCategory,
+  foundations,
+  onOpenFoundation
 }: {
   rhythm: RhythmPreview;
   people?: readonly PersonPreview[];
+  foundations?: readonly FoundationPreview[];
   onPersonSelect?: (personId: PersonId) => void;
+  onOpenFoundation?: (foundationId: string, openerId: string) => void;
   archived?: boolean;
   onClose?: () => void;
   closeButtonRef?: { current: HTMLButtonElement | null };
@@ -121,6 +129,7 @@ export function RhythmHistoryView({
   onUndoSeasonDeletion?: () => string | null;
   seasonRangeUndo?: { rhythmId: string } | null;
   onUndoSeasonRange?: () => string | null;
+  onOpenCategory?: (categoryId: Destination, openerId: string) => void;
 }) {
   const historyRecords: readonly RhythmCompletion[] | undefined =
     rhythm.completionHistory === undefined && !completionHistoryAvailable && datedCompletions.length === 0
@@ -525,7 +534,17 @@ export function RhythmHistoryView({
             <PersonBadgeList people={people} rhythmTitle={rhythm.title} onSelect={onPersonSelect} />
           </div>
         )}
-        <RhythmCategoryBadges rhythm={rhythm} />
+        <RhythmCategoryBadges
+          rhythm={rhythm}
+          {...(onOpenCategory ? { onOpenCategory } : {})}
+        />
+        {foundations && onOpenFoundation && (
+          <RhythmFoundationBadges
+            rhythm={rhythm}
+            foundations={foundations}
+            onOpenFoundation={onOpenFoundation}
+          />
+        )}
         {(rhythm.cadence || detailSchedule || detailTimeLabel) && (
           <div className="rhythm-history-view__schedule rhythm-metadata-footer">
             <RhythmScheduleSummary
@@ -1638,30 +1657,7 @@ function HealthCalculation({ explanation }: { explanation?: string }) {
         Health is weighted {consistencyWeight} percent Consistency and {onTrackWeight} percent On Track.
         These are fixed formula weights, not this Rhythm&apos;s current scores.
       </p>
-      <div className="rhythm-history-view__health-weight-panels">
-        <div className="rhythm-history-view__health-weight-panel rhythm-history-view__health-weight-panel--consistency">
-          <div className="rhythm-history-view__health-weight-value">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <rect x="3.5" y="5.5" width="17" height="15" rx="2" />
-              <path d="M8 3.5v4M16 3.5v4M3.5 9.5h17m-11 5 2 2 4-4" />
-            </svg>
-            <strong>{consistencyWeight}%</strong>
-          </div>
-          <span className="rhythm-history-view__health-weight-name">Consistency</span>
-          <span className="rhythm-history-view__health-weight-subtitle">Your longer-term pattern.</span>
-        </div>
-        <div className="rhythm-history-view__health-weight-panel rhythm-history-view__health-weight-panel--on-track">
-          <div className="rhythm-history-view__health-weight-value">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <circle cx="12" cy="12" r="8" />
-              <path d="M12 7v5l3 2" />
-            </svg>
-            <strong>{onTrackWeight}%</strong>
-          </div>
-          <span className="rhythm-history-view__health-weight-name">On Track</span>
-          <span className="rhythm-history-view__health-weight-subtitle">Up to date</span>
-        </div>
-      </div>
+      <HealthWeightPanels />
       {explanation && (
         <p className="rhythm-history-view__health-unavailable">{explanation}</p>
       )}

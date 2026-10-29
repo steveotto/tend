@@ -21,6 +21,7 @@ import { rhythmSeasonPaletteAssignments } from '../domain/rhythm-seasons.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { RhythmSeasonImpact } from './RhythmSeasonImpact.tsx';
 import { formatRhythmSeasonDate, RhythmSeasonCard } from './RhythmSeasonCard.tsx';
+import { RhythmCalendarIcon } from './RhythmCalendarIcon.tsx';
 import { RhythmScheduleFields } from './RhythmScheduleFields.tsx';
 import type { RhythmScheduleFieldsDraft } from './RhythmScheduleFields.tsx';
 import { StyledSelect } from './StyledSelect.tsx';
@@ -210,20 +211,6 @@ function SeasonSectionHeading({
         <p>{description}</p>
       </div>
     </header>
-  );
-}
-
-function SeasonCalendarIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 20 20"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <rect x="2.75" y="4.25" width="14.5" height="13" rx="2" />
-      <path d="M6 2.75v3M14 2.75v3M3 8h14" />
-    </svg>
   );
 }
 
@@ -660,11 +647,13 @@ export function RhythmSeasonCorrectionDialog({
               </div>
             </RhythmScheduleFields>
             <p className="rhythm-season-correction__affected-dates">
-              <SeasonCalendarIcon />
+              <RhythmCalendarIcon />
               <span className="rhythm-season-correction__affected-label">Affected dates</span>
               <strong>{affectedDateLabel}</strong>
             </p>
-            {validationMessage && <p className="goal-field-error" role="alert">{validationMessage}</p>}
+            {validationMessage && scheduleDraft.validationField !== 'weekdays' && (
+              <p className="goal-field-error" role="alert">{validationMessage}</p>
+            )}
           </div>
         </section>
 
@@ -698,7 +687,7 @@ export function RhythmSeasonCorrectionDialog({
             </div>
           )}
           <p className="rhythm-season-correction__effective-range" aria-label={`Affected dates: ${affectedDateLabel}`}>
-            <SeasonCalendarIcon />
+            <RhythmCalendarIcon />
             <strong>{affectedDateLabel}</strong>
           </p>
           {rangeResult?.valid && (visibleSeasonChanges.length > 0 || showScoreChangeWarning || extendsTrackingHistory) && (

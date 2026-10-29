@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { FoundationScoreSelection } from '../src/domain/foundation-scoring.ts';
 import { selectFoundationScore } from '../src/domain/foundation-scoring.ts';
 import { selectCategoryScore } from '../src/domain/category-scoring.ts';
-import { marriageRhythms } from '../src/domain/preview-data.ts';
+import { faithPractices, marriageRhythms, parentingFoundations } from '../src/domain/preview-data.ts';
 import type { RhythmScoreSelection } from '../src/domain/rhythm-scoring.ts';
 
 function foundationScore(
@@ -66,6 +66,122 @@ function scoredRhythm(consistency: number, onTrack: number): RhythmScoreSelectio
 }
 
 describe('selecting equal-weight Marriage Category scores', () => {
+  it('extends the shared equal-weight selectors to Faith Practices without a breadth penalty', () => {
+    const firstRhythm = {
+      ...marriageRhythms[0]!,
+      id: 'faith-scored-rhythm-1',
+      categoryIds: ['faith'] as const,
+      primaryFoundationId: faithPractices[1]!.id,
+      secondaryFoundationIds: []
+    };
+    const secondRhythm = {
+      ...marriageRhythms[0]!,
+      id: 'faith-scored-rhythm-2',
+      categoryIds: ['faith'] as const,
+      primaryFoundationId: faithPractices[8]!.id,
+      secondaryFoundationIds: []
+    };
+    const rhythmScores = new Map([
+      [firstRhythm.id, scoredRhythm(80, 100)],
+      [secondRhythm.id, scoredRhythm(60, 60)]
+    ]);
+    const foundationScores = new Map(faithPractices.map(practice => [
+      practice.id,
+      selectFoundationScore(practice.id, [firstRhythm, secondRhythm], rhythmScores, [])
+    ]));
+    const result = selectCategoryScore(faithPractices, foundationScores);
+
+    expect(result.foundationIds).toHaveLength(9);
+    expect(result.eligibleFoundationIds).toEqual([faithPractices[1]!.id, faithPractices[8]!.id]);
+    expect(result.consistency).toBe(70);
+    expect(result.onTrack).toBe(80);
+    expect(result.health).toBe(72.5);
+    expect(result.excludedFoundationIds).toHaveLength(7);
+  });
+
+  it('keeps Faith zero distinct from unscored and archived Practice data', () => {
+    const scored = {
+      ...marriageRhythms[0]!,
+      id: 'faith-zero-rhythm',
+      categoryIds: ['faith'] as const,
+      primaryFoundationId: faithPractices[0]!.id,
+      secondaryFoundationIds: []
+    };
+    const archived = {
+      ...marriageRhythms[0]!,
+      id: 'faith-archived-rhythm',
+      categoryIds: ['faith'] as const,
+      primaryFoundationId: faithPractices[1]!.id,
+      secondaryFoundationIds: []
+    };
+    const score = selectFoundationScore(
+      faithPractices[0]!.id,
+      [scored],
+      new Map([[scored.id, scoredRhythm(0, 0)]]),
+      []
+    );
+    const archivedScore = selectFoundationScore(
+      faithPractices[1]!.id,
+      [archived],
+      new Map([[archived.id, scoredRhythm(100, 100)]]),
+      [archived.id]
+    );
+    const category = selectCategoryScore(
+      faithPractices,
+      new Map(faithPractices.map(practice => [
+        practice.id,
+        practice.id === faithPractices[0]!.id
+          ? score
+          : practice.id === faithPractices[1]!.id
+            ? archivedScore
+            : selectFoundationScore(practice.id, [], new Map(), [])
+      ]))
+    );
+
+    expect(score).toMatchObject({ consistency: 0, onTrack: 0, health: 0 });
+    expect(archivedScore).toMatchObject({ consistency: null, onTrack: null, health: null });
+    expect(category).toMatchObject({ consistency: 0, onTrack: 0, health: 0 });
+    expect(category.eligibleFoundationIds).toEqual([faithPractices[0]!.id]);
+    expect(category.excludedFoundationIds).toContain(faithPractices[1]!.id);
+  });
+
+  it('uses the same equal-weight scoring for Parenting Foundations with an explicit numeric example', () => {
+    const firstRhythm = {
+      ...marriageRhythms[0]!,
+      id: 'parenting-scored-rhythm-1',
+      primaryFoundationId: parentingFoundations[0]!.id,
+      secondaryFoundationIds: []
+    };
+    const secondRhythm = {
+      ...marriageRhythms[0]!,
+      id: 'parenting-scored-rhythm-2',
+      primaryFoundationId: parentingFoundations[1]!.id,
+      secondaryFoundationIds: []
+    };
+    const rhythmScores = new Map([
+      [firstRhythm.id, scoredRhythm(80, 100)],
+      [secondRhythm.id, scoredRhythm(60, 60)]
+    ]);
+    const foundationScores = new Map(parentingFoundations.map(foundation => [
+      foundation.id,
+      selectFoundationScore(
+        foundation.id,
+        [firstRhythm, secondRhythm],
+        rhythmScores,
+        []
+      )
+    ]));
+    const result = selectCategoryScore(parentingFoundations, foundationScores);
+
+    expect(result.eligibleFoundationIds).toEqual([
+      parentingFoundations[0]!.id,
+      parentingFoundations[1]!.id
+    ]);
+    expect(result.consistency).toBe(70);
+    expect(result.onTrack).toBe(80);
+    expect(result.health).toBe(72.5);
+  });
+
   it('uses the single eligible Foundation directly', () => {
     const result = selectCategoryScore(
       [{ id: 'connection' }, { id: 'partnership' }],

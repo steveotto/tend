@@ -1,15 +1,19 @@
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 type MoneyGoalDialogProps = {
+  eyebrow?: string;
   title?: string;
   intro?: string;
   children: ReactNode;
   closeLabel?: string;
   closeButtonId?: string;
   labelledBy?: string;
+  titleId?: string;
   initialFocusId?: string;
   stopEscapePropagation?: boolean;
+  portalToBody?: boolean;
   dialogClassName?: string;
   surfaceClassName?: string;
   bodyClassName?: string;
@@ -17,14 +21,17 @@ type MoneyGoalDialogProps = {
 };
 
 export function MoneyGoalDialog({
+  eyebrow,
   title,
   intro,
   children,
   closeLabel,
   closeButtonId,
   labelledBy,
+  titleId,
   initialFocusId,
   stopEscapePropagation = false,
+  portalToBody = false,
   dialogClassName,
   surfaceClassName,
   bodyClassName,
@@ -32,7 +39,7 @@ export function MoneyGoalDialog({
 }: MoneyGoalDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (typeof dialog.showModal === 'function') dialog.showModal();
@@ -45,7 +52,7 @@ export function MoneyGoalDialog({
     };
   }, [initialFocusId]);
 
-  return (
+  const dialog = (
     <dialog
       ref={dialogRef}
       className={['money-goal-dialog', dialogClassName].filter(Boolean).join(' ')}
@@ -71,10 +78,12 @@ export function MoneyGoalDialog({
             ×
           </button>
         )}
-        {title && <h2 id="money-goal-dialog-title">{title}</h2>}
+        {eyebrow && <p className="money-goal-dialog__eyebrow">{eyebrow}</p>}
+        {title && <h2 id={titleId ?? 'money-goal-dialog-title'}>{title}</h2>}
         {intro && <p className="money-goal-dialog__intro">{intro}</p>}
         {bodyClassName ? <div className={bodyClassName}>{children}</div> : children}
       </div>
     </dialog>
   );
+  return portalToBody ? createPortal(dialog, document.body) : dialog;
 }

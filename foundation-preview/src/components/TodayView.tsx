@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import {
   areas,
   peopleForRhythm,
+  type FoundationPreview,
   todayAreaScore,
   todayOverallIllustrativeScore,
   type MarriageExampleId,
@@ -13,7 +14,6 @@ import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
 import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { AreaIcon } from './AreaIcon.tsx';
-import { ArchivedRhythmsDialog } from './ArchivedRhythmsDialog.tsx';
 import { CategoryHealthBadge, ScoreMeter } from './Cards.tsx';
 import { MarriageExampleSelector } from './MarriageExampleSelector.tsx';
 import type { Destination } from './AppNavigation.tsx';
@@ -34,18 +34,17 @@ type TodayViewProps = {
   undoableRhythms: ReadonlySet<string>;
   rhythms: readonly RhythmPreview[];
   rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
-  archivedRhythms: readonly RhythmPreview[];
   search: string;
   marriageExampleId: MarriageExampleId;
   onNavigate: (destination: Destination) => void;
   onMarriageExampleChange: (id: MarriageExampleId) => void;
   onPersonSelect: (personId: PersonId) => void;
+  foundations: readonly FoundationPreview[];
+  onOpenFoundation: (foundationId: string, openerId: string) => void;
   onHistory: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   onTend: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   onEditRhythm: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
   onUndo: (id: string) => void;
-  onAddRhythm: (event: MouseEvent<HTMLButtonElement>) => void;
-  onRestoreRhythm: (id: string) => void;
 };
 
 export function TodayView({
@@ -55,9 +54,10 @@ export function TodayView({
   undoableRhythms,
   rhythms,
   rhythmScores,
-  archivedRhythms,
   search,
   marriageExampleId,
+  foundations,
+  onOpenFoundation,
   onNavigate,
   onMarriageExampleChange,
   onPersonSelect,
@@ -65,28 +65,12 @@ export function TodayView({
   onTend,
   onEditRhythm,
   onUndo,
-  onAddRhythm,
-  onRestoreRhythm
 }: TodayViewProps) {
   const [planType, setPlanType] = useState<PlanType>('scheduled');
-  const [showArchivedRhythms, setShowArchivedRhythms] = useState(false);
-  const archivedRhythmsButtonRef = useRef<HTMLButtonElement>(null);
-  const wasArchiveDialogOpen = useRef(false);
   const visibleRhythms = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     return query ? rhythms.filter(item => item.title.toLocaleLowerCase().includes(query)) : rhythms;
   }, [rhythms, search]);
-
-  useEffect(() => {
-    if (showArchivedRhythms) {
-      wasArchiveDialogOpen.current = true;
-      return;
-    }
-    if (wasArchiveDialogOpen.current) {
-      archivedRhythmsButtonRef.current?.focus();
-      wasArchiveDialogOpen.current = false;
-    }
-  }, [showArchivedRhythms]);
 
   function handlePlanTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let nextIndex: number;
@@ -142,7 +126,9 @@ export function TodayView({
                   : `${area.label} illustrative sample score ${score}, not calculated`}
                 onClick={() => onNavigate(area.id)}
               >
-                <span className="menu-area-icon" aria-hidden="true"><AreaIcon id={area.id} /></span>
+                <span className="menu-area-icon" aria-hidden="true">
+                  <AreaIcon id={area.id} variant="today-summary" />
+                </span>
                 <span className="ma-name">{area.label}</span>
                 <CategoryHealthBadge score={score} />
               </button>
@@ -156,28 +142,7 @@ export function TodayView({
         <div className="sectiontitle today-plan-heading">
           <h2 id="today-plan-heading">Your plan</h2>
           <span className="hint">Today</span>
-          <button
-            ref={archivedRhythmsButtonRef}
-            type="button"
-            className="today-archived-rhythms-toggle"
-            aria-expanded={showArchivedRhythms}
-            aria-haspopup="dialog"
-            aria-controls="archived-rhythms-dialog"
-            onClick={() => setShowArchivedRhythms(true)}
-          >
-            Archived rhythms ({archivedRhythms.length})
-          </button>
-          <button type="button" className="btn mini today-add-rhythm" onClick={onAddRhythm}>Add Rhythm</button>
         </div>
-        {showArchivedRhythms && (
-          <ArchivedRhythmsDialog
-            rhythms={archivedRhythms}
-            completedRhythms={completedRhythms}
-            onPersonSelect={onPersonSelect}
-            onRestore={onRestoreRhythm}
-            onClose={() => setShowArchivedRhythms(false)}
-          />
-        )}
         <div className="card planblock current">
           <div className="current-plan-summary">
             <div className="plan-block-name">Today</div>
@@ -218,10 +183,16 @@ export function TodayView({
                       inline
                       headingId={`today-rhythm-${rhythm.id}-title`}
                       people={peopleForRhythm(rhythm)}
+                      foundations={foundations}
                       onPersonSelect={onPersonSelect}
+                      onOpenFoundation={onOpenFoundation}
+                      onOpenCategory={categoryId => onNavigate(categoryId)}
                       completed={completedRhythms.has(rhythm.id)}
                       healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
                       onTend={event => onTend(rhythm.id, event)}
+                      {...(rhythm.categoryIds?.includes('health')
+                        ? { completionActionLabel: 'Log workout', completedActionLabel: 'Logged' }
+                        : {})}
                       onHistory={event => onHistory(rhythm.id, event)}
                       {...(isEditableRhythmId(rhythm.id)
                         ? { onEdit: event => onEditRhythm(rhythm, event) }
@@ -231,11 +202,9 @@ export function TodayView({
                     />
                   ))}
                 </div>
-              ) : <p className="empty plan-empty" role="status">No sample Rhythms match “{search.trim()}”.</p>
+              ) : <div className="dashed-empty-state" role="status"><p>No active Rhythms.</p></div>
             ) : (
-              <p className="empty plan-empty" role="status">
-                {planType === 'anytime' ? 'No anytime Rhythms in this sample.' : 'No all-day commitments in this sample.'}
-              </p>
+              <div className="dashed-empty-state" role="status"><p>No active Rhythms.</p></div>
             )}
           </div>
         </div>

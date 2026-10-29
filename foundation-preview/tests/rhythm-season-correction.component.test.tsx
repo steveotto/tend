@@ -883,7 +883,10 @@ describe('shared Season correction score preview', () => {
     expect(screen.queryByText(/Thursday logs will not count toward a Monday\/Wednesday\/Friday schedule/)).toBeNull();
     await user.click(screen.getByRole('checkbox', { name: 'Wednesday' }));
     await user.click(screen.getByRole('checkbox', { name: 'Monday' }));
-    expect(screen.getByRole('alert').textContent).toContain('Choose at least one weekday');
+    const weekdayGroup = screen.getByRole('group', { name: 'Which days?' });
+    expect(within(weekdayGroup).getByRole('status').textContent).toBe('Choose at least one day.');
+    expect(weekdayGroup.getAttribute('aria-invalid')).toBe('true');
+    expect(screen.queryByRole('alert')).toBeNull();
     expect(within(screen.getByRole('group', { name: 'After Consistency' })).getByText('Unavailable')).toBeTruthy();
     expect(screen.getByText(/The proposed schedule is invalid; On Track is unavailable/)).toBeTruthy();
   });

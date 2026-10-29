@@ -28,7 +28,7 @@ export type PreviewV4MigrationResult =
   | {
       valid: true;
       envelope: PreviewEnvelope;
-      sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13;
+      sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
     }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
@@ -37,7 +37,9 @@ export function migratePreviewToProposedV4(raw: string, currentDate: string): Pr
   if (!parsed.valid) return parsed;
   if (parsed.sourceSchemaVersion === 8 || parsed.sourceSchemaVersion === 9
     || parsed.sourceSchemaVersion === 10 || parsed.sourceSchemaVersion === 11
-    || parsed.sourceSchemaVersion === 12 || parsed.sourceSchemaVersion === 13) {
+    || parsed.sourceSchemaVersion === 12 || parsed.sourceSchemaVersion === 13
+    || parsed.sourceSchemaVersion === 14 || parsed.sourceSchemaVersion === 15
+    || parsed.sourceSchemaVersion === 16) {
     return { valid: true, envelope: parsed.envelope, sourceSchemaVersion: parsed.sourceSchemaVersion };
   }
   if (parsed.sourceSchemaVersion === 7) {
@@ -93,7 +95,8 @@ export function migratePreviewToProposedV4(raw: string, currentDate: string): Pr
         activeRhythmCompletions: [],
         rhythmCompletionOverrides: [],
         removedSeedCompletionIds: [],
-        rhythmHistoryIds: []
+        rhythmHistoryIds: [],
+        strength: parsed.envelope.data.strength
       }
     }
   };

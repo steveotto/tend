@@ -14,6 +14,9 @@ export const PREVIEW_V9_RECOVERY_KEY = 'tend2:synthetic-preview:v9-recovery';
 export const PREVIEW_V10_RECOVERY_KEY = 'tend2:synthetic-preview:v10-recovery';
 export const PREVIEW_V11_RECOVERY_KEY = 'tend2:synthetic-preview:v11-recovery';
 export const PREVIEW_V12_RECOVERY_KEY = 'tend2:synthetic-preview:v12-recovery';
+export const PREVIEW_V13_RECOVERY_KEY = 'tend2:synthetic-preview:v13-recovery';
+export const PREVIEW_V14_RECOVERY_KEY = 'tend2:synthetic-preview:v14-recovery';
+export const PREVIEW_V15_RECOVERY_KEY = 'tend2:synthetic-preview:v15-recovery';
 
 const recoveryKeys = {
   1: PREVIEW_V1_RECOVERY_KEY,
@@ -27,7 +30,10 @@ const recoveryKeys = {
   9: PREVIEW_V9_RECOVERY_KEY,
   10: PREVIEW_V10_RECOVERY_KEY,
   11: PREVIEW_V11_RECOVERY_KEY,
-  12: PREVIEW_V12_RECOVERY_KEY
+  12: PREVIEW_V12_RECOVERY_KEY,
+  13: PREVIEW_V13_RECOVERY_KEY,
+  14: PREVIEW_V14_RECOVERY_KEY,
+  15: PREVIEW_V15_RECOVERY_KEY
 } as const;
 
 export type ProposedRecoveryResult =
@@ -47,7 +53,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function proposedV4SourceVersionForRaw(
   raw: string
-): 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | null {
+): 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | null {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!isRecord(parsed)) return null;
@@ -57,7 +63,8 @@ export function proposedV4SourceVersionForRaw(
       || envelope.schemaVersion === 3 || envelope.schemaVersion === 4 || envelope.schemaVersion === 5
       || envelope.schemaVersion === 6 || envelope.schemaVersion === 7 || envelope.schemaVersion === 8
       || envelope.schemaVersion === 9 || envelope.schemaVersion === 10 || envelope.schemaVersion === 11
-      || envelope.schemaVersion === 12 || envelope.schemaVersion === 13
+      || envelope.schemaVersion === 12 || envelope.schemaVersion === 13 || envelope.schemaVersion === 14
+      || envelope.schemaVersion === 15 || envelope.schemaVersion === 16
       ? envelope.schemaVersion
       : null;
   } catch {
@@ -91,7 +98,7 @@ export function proposedV4RecoveryKeyForRaw(raw: string): string | null {
   const version = proposedV4SourceVersionForRaw(raw);
   return version === 1 || version === 2 || version === 3 || version === 4 || version === 5
     || version === 6 || version === 7 || version === 8 || version === 9 || version === 10
-    || version === 11 || version === 12
+    || version === 11 || version === 12 || version === 13 || version === 14 || version === 15
     ? recoveryKeys[version]
     : null;
 }

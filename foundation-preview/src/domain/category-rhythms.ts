@@ -1,11 +1,12 @@
 import type { RhythmPreview } from './preview-data.ts';
+import { areas } from './preview-data.ts';
 import { effectiveRhythmSchedule } from './rhythm-schedule.ts';
 import type { RhythmSchedule } from './rhythm-schedule.ts';
 import { selectNextScheduledOccurrence } from './rhythm-occurrences.ts';
 
 export type CategoryRhythmGroupId = 'daily' | 'weekly' | 'seasonal' | 'custom';
 
-const marriageSuggestionRhythmIds: Readonly<Record<string, string>> = {
+const legacyMarriageSuggestionRhythmIds: Readonly<Record<string, string>> = {
   'marriage.daily-connection': 'user-rhythm-00000000-0000-4000-8000-000000000001',
   'marriage.date-night': 'user-rhythm-00000000-0000-4000-8000-000000000002',
   'marriage.pray-together': 'user-rhythm-00000000-0000-4000-8000-000000000003',
@@ -18,7 +19,32 @@ const marriageSuggestionRhythmIds: Readonly<Record<string, string>> = {
 };
 
 export function activeIdForMarriageSuggestion(templateId: string): string | undefined {
-  return marriageSuggestionRhythmIds[templateId];
+  return legacyMarriageSuggestionRhythmIds[templateId];
+}
+
+const legacySuggestionSourceByRhythmId = new Map(
+  Object.entries(legacyMarriageSuggestionRhythmIds).map(([sourceId, rhythmId]) => [rhythmId, sourceId])
+);
+const knownCategoryIds = new Set<string>(areas.map(area => area.id));
+
+export function legacySuggestionSourceForRhythmId(rhythmId: string): string | undefined {
+  return legacySuggestionSourceByRhythmId.get(rhythmId);
+}
+
+export function isValidSuggestionSourceId(sourceId: unknown): sourceId is string {
+  if (typeof sourceId !== 'string') return false;
+  const separator = sourceId.indexOf('.');
+  if (separator <= 0 || separator === sourceId.length - 1) return false;
+  const categoryId = sourceId.slice(0, separator);
+  const templateId = sourceId.slice(separator + 1);
+  return knownCategoryIds.has(categoryId) && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(templateId);
+}
+
+export function rhythmsForSuggestionSource(
+  rhythms: readonly RhythmPreview[],
+  sourceId: string
+): RhythmPreview[] {
+  return rhythms.filter(rhythm => rhythm.suggestionSourceId === sourceId);
 }
 
 export function categoryRhythmGroup(
