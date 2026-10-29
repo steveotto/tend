@@ -23,6 +23,8 @@ import {
   faithRhythmSuggestionGroups,
   faithRhythmSuggestions,
   parentingFoundations,
+  createPersonPickerGroups,
+  setPersonGroupMembership,
   marriageScoreCoverage,
   marriageWeekDays,
   orderedCompletions,
@@ -2468,6 +2470,25 @@ describe('Tend Today preview', () => {
     expect(container.querySelector('.dashboard-greeting .hint')?.textContent).toMatch(/,\s+\w+\s+\d+/);
   });
 
+  it('shows decorative mountain artwork only in the main Today greeting', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+    const greeting = container.querySelector('.home-dashboard > .today-greeting');
+    const artwork = greeting?.querySelector('img.today-greeting__mountains');
+    expect(artwork?.getAttribute('alt')).toBe('');
+    expect(artwork?.getAttribute('aria-hidden')).toBe('true');
+    expect(greeting?.contains(screen.getByRole('heading', { name: /Good (morning|afternoon|evening)/ }))).toBe(true);
+    expect(greeting?.contains(screen.getByText(/\w+day, \w+ \d+/))).toBe(true);
+    const healthCardPosition = greeting?.compareDocumentPosition(
+      screen.getByRole('region', { name: 'Overall health summary' })
+    ) ?? 0;
+    expect(healthCardPosition & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Friendships' }));
+    expect(document.querySelector('.today-greeting__mountains')).toBeNull();
+  });
+
   it('uses shared full-detail cards on Today and preserves the catalogue RhythmCard', () => {
     const { container } = render(<App />);
     const todayCard = screen.getByRole('article', { name: 'Pray together' });
@@ -2490,7 +2511,7 @@ describe('Tend Today preview', () => {
     expect(todayCardCount).toBe(3);
   });
 
-  it('navigates person badges to synthetic profiles without activating Rhythm actions', async () => {
+  it('opens the shared person profile from a Rhythm badge and restores focus without activating Rhythm actions', async () => {
     const user = userEvent.setup();
     render(<App />);
     const todayRhythm = screen.getByRole('article', { name: 'Pray together' });
@@ -2499,15 +2520,96 @@ describe('Tend Today preview', () => {
     todayAvery.focus();
     await user.keyboard('{Enter}');
 
-    expect(screen.getByRole('heading', { name: 'Avery Brooks' })).toBeTruthy();
-    expect(screen.getByText(/does not connect to an account/)).toBeTruthy();
-    expect(screen.queryByRole('dialog')).toBeNull();
-
-    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
-      .getByRole('button', { name: 'Today' }));
+    const profile = screen.getByRole('dialog', { name: 'Avery Brooks' });
+    expect(within(profile).getByRole('tab', { name: 'Rhythms' })).toBeTruthy();
+    expect(within(profile).getByRole('tab', { name: 'Connections' })).toBeTruthy();
+    expect(within(profile).getByRole('article', { name: 'Pray together' })).toBeTruthy();
+    cancelNativeDialog(profile);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Avery Brooks' })).toBeNull());
+    expect(document.activeElement).toBe(todayAvery);
     expect(screen.getByText('0 of 3 tended')).toBeTruthy();
     expect(within(screen.getByRole('article', { name: 'Pray together' }))
       .getByRole('button', { name: 'Tend Pray together' })).toBeTruthy();
+  });
+
+  it('uses the same profile from People and Friendships and opens a person-only Rhythm draft', async () => {
+    const user = userEvent.setup();
+    const data = createSamplePreviewData();
+    data.peopleGroups = setPersonGroupMembership(
+      createPersonPickerGroups(),
+      'friends',
+      'sample-person-avery',
+      true
+    );
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+    render(<App />);
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'People' }));
+    const peopleOpener = screen.getByRole('button', { name: 'Open synthetic profile for Avery Brooks' });
+    await user.click(peopleOpener);
+    let profile = screen.getByRole('dialog', { name: 'Avery Brooks' });
+    await user.click(within(profile).getByRole('button', { name: 'Add Rhythm' }));
+    const editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+    expect(within(editor).getByRole('button', { name: /Choose people, Avery Brooks/ })).toBeTruthy();
+    expect(within(editor).getByRole('button', { name: 'Choose categories' })).toBeTruthy();
+    expect(within(editor).getByRole('button', { name: 'Choose a category first' })).toBeTruthy();
+    await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
+    expect(document.activeElement).toBe(within(profile).getByRole('button', { name: 'Add Rhythm' }));
+    expect(JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}').data.savedRhythms).toEqual([]);
+    await user.click(within(profile).getByRole('button', { name: 'Close profile for Avery Brooks' }));
+    expect(document.activeElement).toBe(peopleOpener);
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Friendships' }));
+    await user.click(screen.getByRole('tab', { name: 'Friends' }));
+    const friendshipOpener = screen.getByRole('button', { name: 'Open synthetic profile for Avery Brooks' });
+    await user.click(friendshipOpener);
+    profile = screen.getByRole('dialog', { name: 'Avery Brooks' });
+    expect(within(profile).getByRole('tab', { name: 'Rhythms' })).toBeTruthy();
+    await user.click(within(profile).getByRole('button', { name: 'Close profile for Avery Brooks' }));
+    expect(document.activeElement).toBe(friendshipOpener);
+  });
+
+  it('saves one person-scoped connection through the profile and restores it after reload', async () => {
+    const user = userEvent.setup();
+    const data = createSamplePreviewData();
+    data.peopleGroups = setPersonGroupMembership(
+      createPersonPickerGroups(),
+      'friends',
+      'sample-person-avery',
+      true
+    );
+    const initialCompleted = [...data.completedRhythmIds];
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+    render(<App />);
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'People' }));
+    await user.click(screen.getByRole('button', { name: 'Open synthetic profile for Avery Brooks' }));
+    let profile = screen.getByRole('dialog', { name: 'Avery Brooks' });
+    await user.click(within(profile).getByRole('tab', { name: 'Connections' }));
+    await user.click(within(profile).getByRole('button', { name: 'Text Avery Brooks' }));
+    const editor = screen.getByRole('dialog', { name: 'Log connection' });
+    await user.click(within(editor).getByRole('button', { name: 'Save connection' }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}').data;
+      expect(saved.friendships.connections).toHaveLength(1);
+      expect(saved.friendships.connections[0].participantIds).toEqual(['sample-person-avery']);
+      expect(saved.completedRhythmIds).toEqual(initialCompleted);
+    });
+
+    cleanup();
+    render(<App />);
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'People' }));
+    await user.click(screen.getByRole('button', { name: 'Open synthetic profile for Avery Brooks' }));
+    profile = screen.getByRole('dialog', { name: 'Avery Brooks' });
+    await user.click(within(profile).getByRole('tab', { name: 'Connections' }));
+    expect(within(profile).getByRole('button', { name: 'Text Avery Brooks' })).toBeTruthy();
+    const restored = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}').data;
+    expect(restored.friendships.connections).toHaveLength(1);
   });
 
   it('opens the shared history modal directly from the chart action', async () => {

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 300">
+  <defs>
+    <linearGradient id="sky-blend" x1="720" y1="0" x2="720" y2="300" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff"/>
+      <stop offset=".58" stop-color="#fff"/>
+      <stop offset="1" stop-color="#F7F9F7"/>
+    </linearGradient>
+    <linearGradient id="foreground-mist" x1="720" y1="258" x2="720" y2="300" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7F9F7" stop-opacity="0"/>
+      <stop offset="1" stop-color="#F7F9F7"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#sky-blend)" d="M0 0h1440v300H0z"/>
+  <path fill="#E5ECE5" d="M0 236c77-3 117-37 196-35 72 2 101 31 170 28 76-3 116-54 189-59 70-5 104 34 174 34 74 0 112-40 185-44 76-4 111 29 184 25 73-4 101-54 174-61 66-6 101 31 168 17v159H0z"/>
+  <path fill="#CFDCCF" d="M0 254c88-8 133-33 205-29 76 4 103 34 177 31 76-3 120-42 191-45 76-3 113 31 184 29 79-2 112-31 185-30 70 1 104 29 175 25 74-4 108-40 178-41 59-1 91 23 145 17v89H0z"/>
+  <path fill="#AABDAB" d="M0 267c78-7 126-24 198-20 70 4 102 22 174 20 72-2 100-23 169-25 69-2 100 18 170 18 69 0 101-17 168-16 71 1 99 19 166 16 70-3 107-26 177-23 66 3 100 22 138 18 31-3 56-9 80-8v53H0z"/>
+  <path fill="#78927D" d="M0 281c75-11 120-26 185-22 70 4 103 22 168 20 66-2 101-21 165-21 65 0 96 18 160 16 69-2 106-21 168-19 65 2 95 19 156 17 66-2 103-23 168-20 56 3 95 17 138 14 39-3 110-10 132-8v42H0z"/>
+  <path fill="#28563F" d="M0 293c86-10 137-27 204-23 67 4 100 21 162 19 66-2 100-19 166-18 66 1 98 19 160 17 65-2 103-21 165-20 67 1 98 19 162 17 63-2 103-21 168-20 64 1 100 20 162 16 39-2 69-8 91-8v27H0z"/>
+  <path fill="url(#foreground-mist)" d="M0 220h1440v80H0z"/>
+</svg>

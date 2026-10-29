@@ -19,7 +19,7 @@ import { RhythmCompletionDialog } from './components/RhythmCompletionDialog.tsx'
 import { FinanceGoalsView } from './components/FinanceGoalsView.tsx';
 import { PreviewDataControls } from './components/PreviewDataControls.tsx';
 import type { PreviewPersistenceStatus } from './components/PreviewDataControls.tsx';
-import { PersonProfilePlaceholder } from './components/PersonProfilePlaceholder.tsx';
+import { PersonProfileView } from './components/PersonProfileView.tsx';
 import { PeopleView } from './components/PeopleView.tsx';
 import { RhythmEditor } from './components/RhythmEditor.tsx';
 import { TodayView } from './components/TodayView.tsx';
@@ -255,7 +255,7 @@ export function App() {
   } | null>(null);
   const foundationNavigationSequence = useRef(0);
   const activeRhythmReturnTab = useRef<'today' | MarriageTab>('today');
-  const [selectedPersonId, setSelectedPersonId] = useState<PersonId | null>(null);
+  const [profilePersonId, setProfilePersonId] = useState<PersonId | null>(null);
   const [activeRhythmId, setActiveRhythmId] = useState<string | null>(null);
   const [seasonDeletionUndo, setSeasonDeletionUndo] = useState<RhythmSeasonDeletionUndo | null>(null);
   const [seasonRangeUndo, setSeasonRangeUndo] = useState<{
@@ -284,6 +284,8 @@ export function App() {
   const dialogOpener = useRef<HTMLButtonElement | null>(null);
   const completionDialogOpener = useRef<HTMLButtonElement | null>(null);
   const rhythmEditorOpener = useRef<HTMLButtonElement | null>(null);
+  const profileOpener = useRef<HTMLElement | null>(null);
+  const wasProfileOpen = useRef(false);
   const wasDetailsOpen = useRef(false);
   const wasRhythmEditorOpen = useRef(false);
   const rhythmEditorReturnsToSuggestions = useRef(false);
@@ -381,7 +383,23 @@ export function App() {
     ...allTodayRhythms,
     ...resolvedMarriageRhythms
   ].find(rhythm => rhythm.id === activeRhythmId) ?? null;
-  const selectedPerson = selectedPersonId === null ? null : personById(selectedPersonId);
+  const selectedProfilePerson = profilePersonId === null ? null : personById(profilePersonId);
+  const profileRhythmCandidates = [...new Map(
+    [...editableTodayRhythms, ...userRhythms].map(rhythm => [rhythm.id, rhythm])
+  ).values()];
+  const archivedProfileRhythmCandidates = [...new Map(
+    [...archivedRhythms, ...archivedUserRhythms].map(rhythm => [rhythm.id, rhythm])
+  ).values()];
+  const personActiveRhythms = profilePersonId === null
+    ? []
+    : profileRhythmCandidates.filter(rhythm =>
+        rhythm.personIds?.includes(profilePersonId) && !previewData.archivedRhythmIds.includes(rhythm.id)
+      );
+  const personArchivedRhythms = profilePersonId === null
+    ? []
+    : archivedProfileRhythmCandidates.filter(rhythm =>
+        rhythm.personIds?.includes(profilePersonId)
+      );
   const activeRhythmIsToday = activeRhythm !== null && editableTodayRhythms.some(rhythm => rhythm.id === activeRhythm.id);
   const activeRhythmIsArchived = activeRhythm !== null && previewData.archivedRhythmIds.includes(activeRhythm.id);
   const activeRhythmForDetails = activeRhythm;
@@ -731,14 +749,37 @@ export function App() {
     else document.querySelector<HTMLButtonElement>('.utility-primary-button[aria-current="page"]')?.focus();
   }, [rhythmEditor]);
 
-  function navigate(next: Destination, personId?: PersonId) {
+  function navigate(next: Destination) {
     setDestination(next);
     setMoreSettingsOpen(false);
-    setSelectedPersonId(personId ?? null);
     setSearch('');
     setSearchOpen(false);
     document.body.classList.remove('mobile-search-open');
   }
+
+  function openPersonProfile(personId: PersonId) {
+    if (profilePersonId === null) {
+      profileOpener.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    }
+    setProfilePersonId(personId);
+  }
+
+  function closePersonProfile() {
+    setProfilePersonId(null);
+  }
+
+  useEffect(() => {
+    if (profilePersonId !== null) {
+      wasProfileOpen.current = true;
+      return;
+    }
+    if (wasProfileOpen.current) {
+      wasProfileOpen.current = false;
+      profileOpener.current?.focus();
+    }
+  }, [profilePersonId]);
 
   function navigateToFoundation(foundationId: string, returnTab: 'today' | MarriageTab) {
     const categoryId = foundationCategoryId(foundationId);
@@ -1885,7 +1926,7 @@ export function App() {
               onNavigate={navigate}
               onMarriageExampleChange={setMarriageExampleId}
               onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
-              onPersonSelect={personId => navigate('people', personId)}
+              onPersonSelect={openPersonProfile}
               onHistory={openRhythmHistory}
               onTend={openCompletion}
               onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
@@ -1900,7 +1941,7 @@ export function App() {
                 todayDate={currentDate}
                 onAddRhythm={event => openRhythmEditor(event)}
                 onAddSuggestion={openRhythmSuggestion}
-                onPersonSelect={personId => navigate('people', personId)}
+                onPersonSelect={openPersonProfile}
                 onPartnerProfile={() => navigate('people')}
                 onOpenCategory={categoryId => navigate(categoryId)}
                 userRhythms={marriageCategoryRhythms}
@@ -1941,7 +1982,7 @@ export function App() {
                   initialDraft: createRhythmDraft(['parenting'])
                 })}
                 onAddSuggestion={openRhythmSuggestion}
-                onPersonSelect={personId => navigate('people', personId)}
+                onPersonSelect={openPersonProfile}
                 onOpenCategory={categoryId => navigate(categoryId)}
                 userRhythms={parentingCategoryRhythms}
                 archivedRhythms={archivedParentingRhythms}
@@ -1983,7 +2024,7 @@ export function App() {
                   initialDraft: createRhythmDraft(['faith'])
                 })}
                 onAddSuggestion={openRhythmSuggestion}
-                onPersonSelect={personId => navigate('people', personId)}
+                onPersonSelect={openPersonProfile}
                 onOpenCategory={categoryId => navigate(categoryId)}
                 userRhythms={faithCategoryRhythms}
                 archivedRhythms={archivedFaithRhythms}
@@ -2099,7 +2140,7 @@ export function App() {
                 onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
                 onTend={openCompletion}
                 onUndo={id => undoTend(id)}
-                onPersonSelect={personId => navigate('people', personId)}
+                onPersonSelect={openPersonProfile}
                 onGoToPeople={() => navigate('people')}
                 onRhythmHistory={openRhythmHistory}
                 onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
@@ -2117,18 +2158,51 @@ export function App() {
                 onToday={() => navigate('today')}
               />
             )
-          : destination === 'people' && selectedPerson
-            ? <PersonProfilePlaceholder person={selectedPerson} backLabel="Today" onBack={() => navigate('today')} />
           : destination === 'people'
             ? (
               <PeopleView
                 groups={previewData.peopleGroups}
                 onChangeGroups={peopleGroups => setPreviewData(previous => ({ ...previous, peopleGroups }))}
-                onOpenPerson={personId => navigate('people', personId)}
+                onOpenPerson={openPersonProfile}
               />
             )
           : <PlaceholderPage destination={destination} onToday={() => navigate('today')} />}
       </div>
+      {selectedProfilePerson && (
+        <PersonProfileView
+          key={selectedProfilePerson.id}
+          personId={selectedProfilePerson.id}
+          peopleGroups={previewData.peopleGroups}
+          friendships={previewData.friendships}
+          today={localDateInTimeZone(new Date(), localTimeZone)}
+          rhythms={personActiveRhythms}
+          archivedRhythms={personArchivedRhythms}
+          foundations={foundationCatalogue}
+          rhythmScores={rhythmScoreResults}
+          completedRhythms={completedRhythms}
+          undoableRhythms={undoableRhythms}
+          onFriendshipsChange={friendships => setPreviewData(previous => ({ ...previous, friendships }))}
+          onAddRhythm={(event, personId) => openRhythmEditor(event, undefined, {
+            initialDraft: { ...createRhythmDraft([]), personIds: [personId] }
+          })}
+          onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
+          onRhythmHistory={openRhythmHistory}
+          onTend={openCompletion}
+          onUndo={undoTend}
+          onRestoreRhythm={restoreRhythm}
+          onOpenFoundation={foundationId => {
+            closePersonProfile();
+            navigateToFoundation(foundationId, 'today');
+          }}
+          onOpenCategory={categoryId => {
+            closePersonProfile();
+            navigate(categoryId);
+          }}
+          onPersonSelect={openPersonProfile}
+          onConnectionChange={friendships => setPreviewData(previous => ({ ...previous, friendships }))}
+          onClose={closePersonProfile}
+        />
+      )}
       <PreviewDataControls
         hidden={!isPreviewSettings}
         data={previewData}
@@ -2237,9 +2311,7 @@ export function App() {
             navigate(categoryId);
           }}
           onPersonSelect={personId => {
-            setActiveRhythmId(null);
-            dialogOpener.current = null;
-            navigate('people', personId);
+            openPersonProfile(personId);
           }}
           {...(activeRhythmIsToday
             ? {

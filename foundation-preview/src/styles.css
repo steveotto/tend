@@ -551,6 +551,43 @@ a:focus-visible {
   font-family: var(--sans);
 }
 
+.home-dashboard > header.sectiontitle.today-greeting {
+  position: relative;
+  display: block;
+  width: 100vw;
+  min-height: 148px;
+  margin: 10px 0 12px calc(50% - 50vw);
+  padding: 17px 0 0;
+  overflow: hidden;
+  border-radius: 0;
+  background: var(--tend-canvas, #F7F9F7);
+  isolation: isolate;
+}
+
+.today-greeting__copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+  padding-left: calc((100vw - min(1040px, calc(100vw - 24px))) / 2);
+}
+
+.today-greeting__mountains {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: right bottom;
+  pointer-events: none;
+  user-select: none;
+}
+
 .dashboard-greeting h2,
 .category-page-heading h2 {
   margin: 0;
@@ -562,6 +599,14 @@ a:focus-visible {
 .category-page-heading .hint {
   color: var(--ink-soft);
   font-size: 13px;
+}
+
+@media (max-width: 600px) {
+  .home-dashboard > header.sectiontitle.today-greeting {
+    min-height: 132px;
+    margin-top: 8px;
+    padding-top: 14px;
+  }
 }
 
 .dashboard-overall-heading {
@@ -4027,6 +4072,156 @@ a:focus-visible {
 @media (max-width: 520px) {
   .money-goal-dialog__surface--suggestion-picker > h2 {
     padding: 20px 60px 0 16px;
+  }
+}
+
+.person-profile-dialog {
+  width: min(840px, calc(100vw - 28px));
+  max-height: min(90vh, 920px);
+}
+
+.person-profile-dialog__surface {
+  padding: 24px;
+}
+
+.person-profile-dialog__body,
+.person-profile {
+  min-width: 0;
+}
+
+.person-profile {
+  display: grid;
+  gap: 20px;
+}
+
+.person-profile__identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding-right: 42px;
+}
+
+.person-profile__identity > .person-badge-avatar {
+  flex-basis: 48px;
+  width: 48px;
+  height: 48px;
+  font-size: 15px;
+}
+
+.person-profile__identity-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.person-profile__identity h2 {
+  margin: 0;
+  color: var(--ink, #25332b);
+  font-size: clamp(20px, 4vw, 26px);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.person-profile__classifications {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.person-profile__classification {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid var(--line, #e5e9e5);
+  border-radius: 999px;
+  background: var(--tend-canvas, #fff);
+  color: var(--ink-soft, #66736b);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.person-profile__classification svg {
+  width: 13px;
+  height: 13px;
+}
+
+.person-profile__nav {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.person-profile__nav [role="tab"] {
+  min-width: 0;
+  padding-inline: 8px;
+}
+
+.person-profile__panel[hidden] {
+  display: none;
+}
+
+.person-profile__panel {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.person-profile__section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  min-width: 0;
+}
+
+.person-profile__section-heading h3 {
+  margin: 0;
+  color: var(--ink, #25332b);
+  font-size: 16px;
+}
+
+.person-profile__cadence {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--line, #e5e9e5);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink-soft, #66736b);
+  font-size: 13px;
+}
+
+.person-profile-dialog .money-goal-dialog__close {
+  top: 8px;
+  right: 8px;
+}
+
+@media (max-width: 520px) {
+  .person-profile-dialog__surface {
+    padding: 18px 14px;
+  }
+
+  .person-profile {
+    gap: 14px;
+  }
+
+  .person-profile__section-heading {
+    align-items: flex-start;
+  }
+
+  .person-profile__section-heading .friendships-quick-actions {
+    width: 100%;
+  }
+
+  .person-profile__section-heading .friendships-quick-action {
+    flex: 1 1 90px;
   }
 
   .money-goal-dialog__surface--suggestion-picker > .money-goal-dialog__intro {

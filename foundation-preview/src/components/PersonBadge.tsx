@@ -56,14 +56,20 @@ export function PersonBadgeVisual({
 }) {
   return (
     <span className="person-badge-visual">
-      <span className="person-badge-avatar" aria-hidden="true">
-        {person.avatarUrl
-          ? <img src={person.avatarUrl} alt="" />
-          : <span>{personInitials(person.displayName)}</span>}
-      </span>
+      <PersonAvatar person={person} />
       <span className="person-badge-name">
         {displayNameMode === 'full' ? person.displayName : personFirstName(person.displayName)}
       </span>
+    </span>
+  );
+}
+
+export function PersonAvatar({ person }: { person: PersonPreview }) {
+  return (
+    <span className="person-badge-avatar" aria-hidden="true">
+      {person.avatarUrl
+        ? <img src={person.avatarUrl} alt="" />
+        : <span>{personInitials(person.displayName)}</span>}
     </span>
   );
 }

@@ -3,10 +3,8 @@ import type { KeyboardEvent, MouseEvent } from 'react';
 import {
   addOrUpdateConnection,
   connectionsForPerson,
-  deleteConnection,
   friendConnectionStatus,
   selectFriendStatuses,
-  setFriendCadence
 } from '../domain/friendships.ts';
 import type {
   ConnectionCadence,
@@ -14,7 +12,7 @@ import type {
   FriendshipConnection,
   FriendshipData
 } from '../domain/friendships.ts';
-import { personById, personGroupMemberIds, syntheticPeople, syntheticPersonPickerGroups } from '../domain/preview-data.ts';
+import { personById, personGroupMemberIds, syntheticPersonPickerGroups } from '../domain/preview-data.ts';
 import type {
   FoundationPreview,
   PersonId,
@@ -25,13 +23,17 @@ import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
 import { peopleForRhythm } from '../domain/preview-data.ts';
 import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
-import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { ArchivedRhythmsDialog } from './ArchivedRhythmsDialog.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 import { PersonBadge } from './PersonBadge.tsx';
-import { PersonBadgeVisual } from './PersonBadge.tsx';
 import { AreaIcon } from './AreaIcon.tsx';
 import type { Destination } from './AppNavigation.tsx';
+import {
+  ConnectionTypeActions,
+  ConnectionEditor,
+  ConnectionHistoryDialog,
+  FriendshipCadenceControl
+} from './FriendshipConnectionControls.tsx';
 
 type FriendshipTab = 'today' | 'friends' | 'rhythms';
 
@@ -47,20 +49,6 @@ const cadenceLabels: Record<ConnectionCadence, string> = {
   'two-weeks': 'Every two weeks',
   monthly: 'Monthly'
 };
-const cadenceChoices: { value: ConnectionCadence | null; label: string }[] = [
-  { value: 'daily', label: 'Daily' },
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'two-weeks', label: 'Every two weeks' },
-  { value: 'monthly', label: 'Monthly' },
-  { value: null, label: 'No cadence' }
-];
-
-const connectionTypeLabels: Record<ConnectionType, string> = {
-  text: 'Text',
-  call: 'Call',
-  'time-together': 'Time Together'
-};
-
 type FriendshipsViewProps = {
   data: FriendshipData;
   peopleGroups?: readonly PersonPickerGroup[];
@@ -107,39 +95,20 @@ export function FriendshipsView({
   onOpenCategory
 }: FriendshipsViewProps) {
   const [tab, setTab] = useState<FriendshipTab>('today');
-  const [cadencePersonId, setCadencePersonId] = useState<PersonId | null>(null);
   const [historyPersonId, setHistoryPersonId] = useState<PersonId | null>(null);
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [connectionEditor, setConnectionEditor] = useState<{
     record?: FriendshipConnection;
     participantId?: PersonId;
     type?: ConnectionType;
   } | null>(null);
   const [showArchived, setShowArchived] = useState(false);
-  const [expandedConnectionId, setExpandedConnectionId] = useState<string | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const cadenceOpener = useRef<HTMLButtonElement | null>(null);
   const historyOpener = useRef<HTMLButtonElement | null>(null);
   const connectionOpener = useRef<HTMLButtonElement | null>(null);
-  const wasCadenceOpen = useRef(false);
   const wasHistoryOpen = useRef(false);
   const wasEditorOpen = useRef(false);
   const wasArchiveOpen = useRef(false);
   const archiveOpener = useRef<HTMLButtonElement | null>(null);
-  const deleteCancelButton = useRef<HTMLButtonElement | null>(null);
-  const focusHistoryAfterDelete = useRef(false);
-
-  useEffect(() => {
-    if (cadencePersonId !== null) {
-      wasCadenceOpen.current = true;
-      return;
-    }
-    if (wasCadenceOpen.current) {
-      wasCadenceOpen.current = false;
-      cadenceOpener.current?.focus();
-    }
-  }, [cadencePersonId]);
-
   useEffect(() => {
     if (historyPersonId !== null) {
       wasHistoryOpen.current = true;
@@ -197,13 +166,8 @@ export function FriendshipsView({
     tabRefs.current[target]?.focus();
   }
 
-  function setCadence(personId: PersonId, cadence: ConnectionCadence | null) {
-    onChange(setFriendCadence(data, personId, cadence, today));
-  }
-
   function openHistory(personId: PersonId, event: MouseEvent<HTMLButtonElement>) {
     historyOpener.current = event.currentTarget;
-    setExpandedConnectionId(null);
     setHistoryPersonId(personId);
   }
 
@@ -237,20 +201,6 @@ export function FriendshipsView({
   const editorParticipantIds = connectionEditor
     ? connectionEditor.record?.participantIds ?? (connectionEditor.participantId ? [connectionEditor.participantId] : [])
     : [];
-  const cadencePerson = cadencePersonId === null ? null : personById(cadencePersonId);
-
-  useEffect(() => {
-    if (confirmingDeleteId !== null) deleteCancelButton.current?.focus();
-    else if (focusHistoryAfterDelete.current) {
-      focusHistoryAfterDelete.current = false;
-      document.querySelector<HTMLButtonElement>('.friendships-history-item [data-connection-edit]')
-        ?.focus();
-      if (!document.activeElement?.matches('.friendships-history-item [data-connection-edit]')) {
-        document.querySelector<HTMLButtonElement>('#friendships-history-dialog-close')?.focus();
-      }
-    }
-  }, [confirmingDeleteId, activeHistory.length]);
-
   return (
     <main className="category-page friendships-page" aria-labelledby="friendships-page-title">
       <header className="category-page-heading">
@@ -330,11 +280,9 @@ export function FriendshipsView({
                 status={status}
                 today={today}
                 connections={connectionsForPerson(data, status.personId)}
+                data={data}
+                onChange={onChange}
                 onPersonSelect={onPersonSelect}
-                onCadenceOpen={event => {
-                  cadenceOpener.current = event.currentTarget;
-                  setCadencePersonId(status.personId);
-                }}
                 onHistory={event => openHistory(status.personId, event)}
                 onQuickLog={(type, event) => openNewConnection(event, status.personId, type)}
               />
@@ -397,126 +345,16 @@ export function FriendshipsView({
         </button>
       </section>
 
-      {cadencePerson && (
-        <MoneyGoalDialog
-          title={`Connection cadence · ${cadencePerson.displayName}`}
-          titleId="friendships-cadence-title"
-          labelledBy="friendships-cadence-title"
-          closeLabel="Close connection cadence"
-          onClose={() => setCadencePersonId(null)}
-        >
-          <div className="friendships-cadence-choices" role="group" aria-label="Connection cadence">
-            {cadenceChoices.map(choice => {
-              const selected = choice.value === (statuses.find(status => status.personId === cadencePerson.id)?.cadence ?? null);
-              return (
-                <button
-                  key={choice.label}
-                  type="button"
-                  className={selected ? 'friendships-cadence-choice friendships-cadence-choice--selected' : 'friendships-cadence-choice'}
-                  aria-pressed={selected}
-                  onClick={() => {
-                    setCadence(cadencePerson.id, choice.value);
-                    setCadencePersonId(null);
-                  }}
-                >
-                  {choice.label}
-                </button>
-              );
-            })}
-          </div>
-        </MoneyGoalDialog>
-      )}
       {historyPersonId !== null && (
-        <MoneyGoalDialog
-          title={`${personById(historyPersonId).displayName} · connection history`}
-          titleId="friendships-history-title"
-          labelledBy="friendships-history-title"
-          closeLabel="Close connection history"
-          closeButtonId="friendships-history-dialog-close"
+        <ConnectionHistoryDialog
+          personId={historyPersonId}
+          connections={activeHistory}
+          data={data}
+          onChange={onChange}
+          onPersonSelect={onPersonSelect}
+          onEdit={openEditConnection}
           onClose={() => setHistoryPersonId(null)}
-        >
-          {activeHistory.length === 0 ? (
-            <p className="friendships-empty">No connections yet.</p>
-          ) : (
-            <ol className="friendships-history-list">
-              {activeHistory.map(connection => (
-                <li key={connection.id} className="friendships-history-item">
-                  <div className="friendships-history-item__heading">
-                    <strong>{connectionTypeLabels[connection.type]}</strong>
-                    <time dateTime={connection.date}>{formatLocalDate(connection.date)}</time>
-                    {connection.time && <span>{formatLocalTime(connection.time)}</span>}
-                  </div>
-                  <div className="friendships-history-item__participants">
-                    {connection.participantIds.map(id => (
-                      <PersonBadge key={id} person={personById(id)} presentation="static" />
-                    ))}
-                  </div>
-                  {expandedConnectionId === connection.id && (
-                    <p className="friendships-history-item__notes">
-                      {connection.notes || 'No notes.'}
-                    </p>
-                  )}
-                  <div className="friendships-actions">
-                    <button
-                      type="button"
-                      className="btn mini ghost"
-                      aria-expanded={expandedConnectionId === connection.id}
-                      onClick={() => setExpandedConnectionId(current => current === connection.id ? null : connection.id)}
-                    >
-                      {expandedConnectionId === connection.id ? 'Hide details' : 'Details'}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn mini ghost"
-                      data-connection-edit={connection.id}
-                      onClick={event => openEditConnection(connection, event)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="btn mini ghost"
-                      data-connection-delete={connection.id}
-                      onClick={() => setConfirmingDeleteId(connection.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                  {confirmingDeleteId === connection.id && (
-                    <div className="friendships-delete-confirmation" role="alertdialog"
-                      aria-labelledby={`friendship-delete-title-${connection.id}`}>
-                      <p id={`friendship-delete-title-${connection.id}`}>
-                        Delete this connection from the history of all its participants?
-                      </p>
-                      <div className="friendships-actions">
-                        <button
-                          ref={deleteCancelButton}
-                          type="button"
-                          className="btn mini ghost"
-                          onClick={() => setConfirmingDeleteId(null)}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          className="btn mini"
-                          onClick={() => {
-                            focusHistoryAfterDelete.current = true;
-                            onChange(deleteConnection(data, connection.id));
-                            setConfirmingDeleteId(null);
-                            setExpandedConnectionId(null);
-                          }}
-                        >
-                          Delete connection
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ol>
-          )}
-        </MoneyGoalDialog>
+        />
       )}
       {connectionEditor && (
         <ConnectionEditor
@@ -572,16 +410,18 @@ function FriendRow({
   status,
   today,
   connections,
+  data,
+  onChange,
   onPersonSelect,
-  onCadenceOpen,
   onHistory,
   onQuickLog
 }: {
   status: ReturnType<typeof friendConnectionStatus>;
   today: string;
   connections: FriendshipConnection[];
+  data: FriendshipData;
+  onChange: (data: FriendshipData) => void;
   onPersonSelect: (id: PersonId) => void;
-  onCadenceOpen: (event: MouseEvent<HTMLButtonElement>) => void;
   onHistory: (event: MouseEvent<HTMLButtonElement>) => void;
   onQuickLog: (type: ConnectionType, event: MouseEvent<HTMLButtonElement>) => void;
 }) {
@@ -595,181 +435,22 @@ function FriendRow({
           {last ? `Last connected ${formatFriendDate(last.date, today)}` : 'No connections yet'}
         </p>
       </div>
-      <button
-        type="button"
-        className="friendships-cadence-button"
-        aria-haspopup="dialog"
-        aria-label={`Change connection cadence for ${person.displayName}. Current: ${status.cadence ? cadenceLabels[status.cadence] : 'No cadence'}`}
-        onClick={onCadenceOpen}
-      >
-        {status.cadence ? cadenceLabels[status.cadence] : 'No cadence'}
-        <span aria-hidden="true">⌄</span>
-      </button>
-      <div className="friendships-quick-actions" role="group" aria-label={`Log a connection with ${person.displayName}`}>
-        {(Object.keys(connectionTypeLabels) as ConnectionType[]).map(type => (
-          <button
-            key={type}
-            type="button"
-            className="friendships-quick-action"
-            aria-label={`${connectionTypeLabels[type]} ${person.displayName}`}
-            onClick={event => onQuickLog(type, event)}
-          >
-            <ConnectionTypeIcon type={type} />
-            <span>{connectionTypeLabels[type]}</span>
-          </button>
-        ))}
-      </div>
+      <FriendshipCadenceControl
+        personId={status.personId}
+        cadence={status.cadence}
+        today={today}
+        data={data}
+        onChange={onChange}
+      />
+      <ConnectionTypeActions
+        personId={status.personId}
+        onSelect={(type, event) => onQuickLog(type, event)}
+      />
       <button type="button" className="friendships-history-button" onClick={onHistory}>
         View connections{connections.length > 0 ? ` (${connections.length})` : ''}
         </button>
     </article>
   );
-}
-
-function ConnectionTypeIcon({ type }: { type: ConnectionType }) {
-  if (type === 'text') {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
-        <path d="M3.5 4.5h13v9h-7l-4 3v-3h-2z" />
-      </svg>
-    );
-  }
-  if (type === 'call') {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
-        <path d="M6 3.5 4 5c.3 5.2 5.8 10.7 11 11l1.5-2-3-3-2 1c-1.6-.7-2.8-1.9-3.5-3.5l1-2z" />
-      </svg>
-    );
-  }
-  return (
-    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
-      <circle cx="7" cy="7" r="2.5" />
-      <circle cx="14" cy="8" r="2" />
-      <path d="M2.5 16c.2-2.5 2-4 4.5-4s4.3 1.5 4.5 4m.2-3.3c2.8-.5 5.3.8 5.8 3.3" />
-    </svg>
-  );
-}
-
-function ConnectionEditor({
-  record,
-  initialParticipantIds,
-  initialType,
-  today,
-  onSave,
-  onClose
-}: {
-  record?: FriendshipConnection;
-  initialParticipantIds: PersonId[];
-  initialType?: ConnectionType;
-  today: string;
-  onSave: (record: FriendshipConnection) => string | null;
-  onClose: () => void;
-}) {
-  const [type, setType] = useState<ConnectionType>(record?.type ?? initialType ?? 'text');
-  const [date, setDate] = useState(record?.date ?? today);
-  const [time, setTime] = useState(record?.time ?? '');
-  const [participantIds, setParticipantIds] = useState<PersonId[]>(initialParticipantIds);
-  const [notes, setNotes] = useState(record?.notes ?? '');
-  const [error, setError] = useState('');
-  function submit(event: import('react').FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!date) {
-      setError('Choose a connection date.');
-      return;
-    }
-    if (participantIds.length === 0) {
-      setError('Choose at least one participant.');
-      return;
-    }
-    const {
-      time: _previousTime,
-      notes: _previousNotes,
-      ...existingFields
-    } = record ?? {};
-    const next: FriendshipConnection = {
-      ...existingFields,
-      id: record?.id ?? `friendship-connection-${globalThis.crypto.randomUUID()}`,
-      type,
-      date,
-      ...(time ? { time } : {}),
-      participantIds,
-      ...(notes.trim() ? { notes: notes.trim() } : {})
-    };
-    const saveError = onSave(next);
-    if (saveError) {
-      setError(saveError);
-      return;
-    }
-    onClose();
-  }
-
-  return (
-    <MoneyGoalDialog
-      title={record ? 'Edit connection' : 'Log connection'}
-      titleId="friendship-connection-title"
-      labelledBy="friendship-connection-title"
-      initialFocusId="friendship-connection-type"
-      onClose={onClose}
-    >
-      <form className="friendships-connection-form" onSubmit={submit} noValidate>
-        <label>
-          <span>Connection type</span>
-          <select
-            id="friendship-connection-type"
-            value={type}
-            onChange={event => setType(event.currentTarget.value as ConnectionType)}
-          >
-            {Object.entries(connectionTypeLabels).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-        </label>
-        <div className="friendships-date-fields">
-          <label>
-            <span>Date</span>
-            <input type="date" value={date} onChange={event => setDate(event.currentTarget.value)} required />
-          </label>
-          <label>
-            <span>Time (optional)</span>
-            <input type="time" value={time} onChange={event => setTime(event.currentTarget.value)} />
-          </label>
-        </div>
-        <fieldset className="friendships-participants">
-          <legend>Actual participants</legend>
-          {syntheticPeople.map(person => (
-            <label key={person.id}>
-              <input
-                type="checkbox"
-                checked={participantIds.includes(person.id)}
-                onChange={() => setParticipantIds(current => current.includes(person.id)
-                  ? current.filter(id => id !== person.id)
-                  : [...current, person.id])}
-              />
-              <PersonBadgeVisual person={person} />
-            </label>
-          ))}
-        </fieldset>
-        <label>
-          <span>Notes (optional)</span>
-          <textarea maxLength={4000} value={notes} onChange={event => setNotes(event.currentTarget.value)} />
-        </label>
-        {error && <p className="friendships-form-error" role="alert">{error}</p>}
-        <div className="money-goal-dialog__actions">
-          <button type="submit" className="btn mini">{record ? 'Save changes' : 'Save connection'}</button>
-          <button type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>
-        </div>
-      </form>
-    </MoneyGoalDialog>
-  );
-}
-
-function formatLocalDate(value: string): string {
-  const [year, month, day] = value.split('-').map(Number);
-  return new Date(year!, month! - 1, day!, 12).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  });
 }
 
 function formatFriendDate(value: string, today: string): string {
@@ -779,13 +460,5 @@ function formatFriendDate(value: string, today: string): string {
     month: 'short',
     day: 'numeric',
     ...(year !== currentYear ? { year: 'numeric' as const } : {})
-  });
-}
-
-function formatLocalTime(value: string): string {
-  const [hour, minute] = value.split(':').map(Number);
-  return new Date(2000, 0, 1, hour, minute).toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit'
   });
 }

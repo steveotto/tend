@@ -289,7 +289,7 @@ describe('shared preview components', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Tend Pray together' }));
   });
 
-  it('routes catalogue person badges to the synthetic profile placeholder and back', async () => {
+  it('routes catalogue person badges to the shared synthetic profile and back', async () => {
     const user = userEvent.setup();
     render(<CatalogApp />);
     const rhythm = screen.getByRole('article', { name: 'Monthly savings transfer' });
@@ -297,9 +297,11 @@ describe('shared preview components', () => {
     expect(badge.querySelector('.person-badge-name')?.textContent).toBe('Avery');
     await user.click(badge);
     expect(screen.getByRole('heading', { name: 'Avery Brooks' })).toBeTruthy();
-    expect(screen.getByText(/does not connect to an account/)).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Rhythms' })).toBeTruthy();
+    await user.click(screen.getByRole('tab', { name: 'Connections' }));
+    expect(screen.getByText('No connections yet.')).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: 'Back to Component catalogue' }));
+    await user.click(screen.getByRole('button', { name: 'Close profile for Avery Brooks' }));
     expect(screen.getByRole('heading', { name: 'Goals' })).toBeTruthy();
   });
 
