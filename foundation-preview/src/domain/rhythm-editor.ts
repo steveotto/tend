@@ -67,6 +67,7 @@ export type SavedRhythm = {
   primaryFoundationId?: string | null;
   secondaryFoundationIds?: string[];
   suggestionSourceId?: string;
+  healthLogCapability?: 'weight' | 'cardio';
 };
 
 export type RhythmDraft = {
@@ -84,6 +85,7 @@ export type RhythmDraft = {
   seasonName?: string;
   primaryFoundationId?: string | null;
   secondaryFoundationIds?: string[];
+  healthLogCapability?: 'weight' | 'cardio';
 };
 
 export type RhythmDraftErrors = Partial<Record<keyof RhythmDraft | 'schedule' | 'foundationIds', string>>;
@@ -113,6 +115,8 @@ const savedRhythmV8Keys = [...savedRhythmV7Keys, 'createdLocalDate', 'createdTim
 const savedRhythmV9Keys = savedRhythmV8Keys;
 const savedRhythmV13Keys = [...savedRhythmV9Keys, 'primaryFoundationId', 'secondaryFoundationIds'];
 const savedRhythmV14Keys = [...savedRhythmV13Keys, 'suggestionSourceId'];
+const savedRhythmV17Keys = [...savedRhythmV14Keys, 'healthLogCapability'];
+const savedRhythmV18Keys = savedRhythmV17Keys;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -203,6 +207,29 @@ export function validateSavedRhythmsV14(value: unknown): value is SavedRhythm[] 
   if (!validateFoundationAssociations(value)) return false;
   return value.every(record =>
     record.suggestionSourceId === undefined || isValidSuggestionSourceId(record.suggestionSourceId)
+  );
+}
+
+export function validateSavedRhythmsV17(value: unknown): value is SavedRhythm[] {
+  return validateSavedRhythmsWithCapability(value, savedRhythmV17Keys, 'weight');
+}
+
+export function validateSavedRhythmsV18(value: unknown): value is SavedRhythm[] {
+  return validateSavedRhythmsWithCapability(value, savedRhythmV18Keys, 'weight', 'cardio');
+}
+
+function validateSavedRhythmsWithCapability(
+  value: unknown,
+  allowedKeys: readonly string[],
+  ...capabilities: Array<'weight' | 'cardio'>
+): value is SavedRhythm[] {
+  if (!validateSavedRhythmsWithKeys(value, allowedKeys, 'v12', true)) return false;
+  if (!validateFoundationAssociations(value)) return false;
+  return value.every(record =>
+    (record.suggestionSourceId === undefined || isValidSuggestionSourceId(record.suggestionSourceId))
+    && (record.healthLogCapability === undefined
+      || capabilities.includes(record.healthLogCapability)
+        && record.categoryIds.includes('health'))
   );
 }
 
@@ -316,7 +343,8 @@ export function rhythmDraftFrom(
     scheduleEditing: originalSchedule !== undefined && rhythm.schedule !== undefined,
     ...(rhythm.personal === undefined ? {} : { personal: rhythm.personal }),
     ...(rhythm.primaryFoundationId === undefined ? {} : { primaryFoundationId: rhythm.primaryFoundationId }),
-    ...(rhythm.secondaryFoundationIds === undefined ? {} : { secondaryFoundationIds: [...rhythm.secondaryFoundationIds] })
+    ...(rhythm.secondaryFoundationIds === undefined ? {} : { secondaryFoundationIds: [...rhythm.secondaryFoundationIds] }),
+    ...(rhythm.healthLogCapability === undefined ? {} : { healthLogCapability: rhythm.healthLogCapability })
   };
 }
 
@@ -343,6 +371,11 @@ export function validateRhythmDraft(
   }
   if (!isUniqueKnownValues<RhythmCategoryId>(draft.categoryIds, categoryIds)) {
     errors.categoryIds = 'Choose each available category at most once.';
+  }
+  if (draft.healthLogCapability !== undefined
+    && ((draft.healthLogCapability !== 'weight' && draft.healthLogCapability !== 'cardio')
+      || !draft.categoryIds.includes('health'))) {
+    errors.categoryIds = 'Fitness logging capability requires the Health & Fitness category.';
   }
   const foundationIds = [
     ...(draft.primaryFoundationId ? [draft.primaryFoundationId] : []),
@@ -614,7 +647,10 @@ export function saveRhythmDraft(
     ...(draft.secondaryFoundationIds === undefined
       ? existing?.secondaryFoundationIds === undefined ? {} : { secondaryFoundationIds: [...existing.secondaryFoundationIds] }
       : { secondaryFoundationIds: [...draft.secondaryFoundationIds] }),
-    ...(suggestionSourceId === undefined ? {} : { suggestionSourceId })
+    ...(suggestionSourceId === undefined ? {} : { suggestionSourceId }),
+    ...(draft.healthLogCapability === undefined
+      ? existing?.healthLogCapability === undefined ? {} : { healthLogCapability: existing.healthLogCapability }
+      : { healthLogCapability: draft.healthLogCapability })
   };
   return {
     savedRhythms: [
@@ -671,7 +707,8 @@ export function applySavedRhythmOverrides(
     ...(saved.secondaryFoundationIds === undefined
       ? {}
       : { secondaryFoundationIds: saved.secondaryFoundationIds }),
-    ...(saved.suggestionSourceId === undefined ? {} : { suggestionSourceId: saved.suggestionSourceId })
+    ...(saved.suggestionSourceId === undefined ? {} : { suggestionSourceId: saved.suggestionSourceId }),
+    ...(saved.healthLogCapability === undefined ? {} : { healthLogCapability: saved.healthLogCapability })
   };
 }
 

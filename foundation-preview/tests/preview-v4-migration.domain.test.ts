@@ -154,7 +154,7 @@ describe('v4 migration and recovery domain', () => {
 
     const futureRaw = JSON.stringify({
       format: 'tend.synthetic-preview',
-      schemaVersion: 17,
+      schemaVersion: 19,
       data: { unknownFutureValue: true }
     });
     const futureStorage = storageFixture(futureRaw);
@@ -194,10 +194,15 @@ describe('v4 migration and recovery domain', () => {
     }
   });
 
-  it('assigns schema v15 an immutable recovery key before schema v16 writes', () => {
+  it('assigns schema v15 an immutable recovery key before schema v18 writes', () => {
     const data = createSamplePreviewData();
-    const envelope = createPreviewEnvelope(data);
-    const originalRaw = ` \n${JSON.stringify({ ...envelope, schemaVersion: 15 })}\n`;
+    const { weight: _weight, cardio: _cardio, ...dataBeforeWeight } = data;
+    const savedRhythms = dataBeforeWeight.savedRhythms.map(({ healthLogCapability: _capability, ...rhythm }) => rhythm);
+    const originalRaw = ` \n${JSON.stringify({
+      format: 'tend.synthetic-preview',
+      schemaVersion: 15,
+      data: { ...dataBeforeWeight, savedRhythms }
+    })}\n`;
     const { storage, values } = storageFixture(originalRaw);
 
     expect(proposedV4RecoveryKeyForRaw(originalRaw)).toBe('tend2:synthetic-preview:v15-recovery');
@@ -250,7 +255,7 @@ describe('v4 migration and recovery domain', () => {
     expect(stale.values.size).toBe(1);
   });
 
-  it('uses schema v16 for active preview serialization', () => {
+  it('uses schema v18 for active preview serialization', () => {
     expect(createPreviewEnvelope(dataWithHistory()).schemaVersion).toBe(PROPOSED_PREVIEW_SCHEMA_VERSION);
   });
 

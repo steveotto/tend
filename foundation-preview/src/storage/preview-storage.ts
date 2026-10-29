@@ -18,6 +18,8 @@ import {
   PREVIEW_V13_RECOVERY_KEY,
   PREVIEW_V14_RECOVERY_KEY,
   PREVIEW_V15_RECOVERY_KEY,
+  PREVIEW_V16_RECOVERY_KEY,
+  PREVIEW_V17_RECOVERY_KEY,
   preserveProposedV4SourceRecovery,
   proposedV4SourceVersionForRaw
 } from './preview-v4-recovery.ts';
@@ -38,7 +40,9 @@ export {
   PREVIEW_V12_RECOVERY_KEY,
   PREVIEW_V13_RECOVERY_KEY,
   PREVIEW_V14_RECOVERY_KEY,
-  PREVIEW_V15_RECOVERY_KEY
+  PREVIEW_V15_RECOVERY_KEY,
+  PREVIEW_V16_RECOVERY_KEY,
+  PREVIEW_V17_RECOVERY_KEY
 };
 
 export type PreviewStorage = Pick<Storage, 'getItem' | 'setItem'>;
@@ -122,7 +126,9 @@ export function writePreview(
                   : recovery.message
           };
         }
-      } else if (sourceVersion === null && !options.allowUnrecoverableReplacement) {
+      } else if (sourceVersion === null
+        && (!source.valid || source.sourceSchemaVersion !== PREVIEW_SCHEMA_VERSION)
+        && !options.allowUnrecoverableReplacement) {
         return {
           kind: 'error',
           message: 'The stored value has no supported immutable recovery key. Download its raw recovery before explicitly replacing it.'
@@ -261,6 +267,22 @@ export function loadV14RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadRe
 export function loadV15RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
   try {
     return { kind: 'loaded', raw: storage.getItem(PREVIEW_V15_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV16RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V16_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV17RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V17_RECOVERY_KEY) };
   } catch (error) {
     return { kind: 'error', message: errorMessage(error) };
   }

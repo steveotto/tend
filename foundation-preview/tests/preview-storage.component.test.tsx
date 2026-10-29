@@ -11,6 +11,8 @@ import {
   validatePreviewEnvelope
 } from '../src/domain/preview-state.ts';
 import { createStrengthData } from '../src/domain/strength.ts';
+import { createWeightData } from '../src/domain/weight.ts';
+import { createCardioData } from '../src/domain/cardio.ts';
 import type { StrengthSavedWorkout } from '../src/domain/strength.ts';
 import {
   browserPreviewStorage,
@@ -27,6 +29,8 @@ import {
   loadV11RecoveryCopy,
   loadV12RecoveryCopy,
   loadV14RecoveryCopy,
+  loadV16RecoveryCopy,
+  loadV17RecoveryCopy,
   PREVIEW_STORAGE_KEY,
   PREVIEW_V1_RECOVERY_KEY,
   PREVIEW_V2_RECOVERY_KEY,
@@ -41,6 +45,8 @@ import {
   PREVIEW_V11_RECOVERY_KEY,
   PREVIEW_V12_RECOVERY_KEY,
   PREVIEW_V14_RECOVERY_KEY,
+  PREVIEW_V16_RECOVERY_KEY,
+  PREVIEW_V17_RECOVERY_KEY,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -68,6 +74,8 @@ afterEach(() => {
   window.localStorage.removeItem(PREVIEW_V11_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V12_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V14_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V16_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V17_RECOVERY_KEY);
   vi.unstubAllGlobals();
 });
 
@@ -154,7 +162,13 @@ function versionFiveRaw(data: PreviewData): string {
 
 function versionSixRaw(data: PreviewData): string {
   const envelope = createPreviewEnvelope(data);
-  const { rhythmHistoryIds: _rhythmHistoryIds, strength: _strength, ...legacyData } = envelope.data;
+  const {
+    rhythmHistoryIds: _rhythmHistoryIds,
+    strength: _strength,
+    weight: _weight,
+    cardio: _cardio,
+    ...legacyData
+  } = envelope.data;
   return JSON.stringify({
     ...envelope,
     schemaVersion: 6,
@@ -190,7 +204,13 @@ function versionSevenRaw(data: PreviewData): string {
 
 function versionEightRaw(data: PreviewData): string {
   const envelope = createPreviewEnvelope(data);
-  const { rhythmHistoryIds: _rhythmHistoryIds, strength: _strength, ...legacyData } = envelope.data;
+  const {
+    rhythmHistoryIds: _rhythmHistoryIds,
+    strength: _strength,
+    weight: _weight,
+    cardio: _cardio,
+    ...legacyData
+  } = envelope.data;
   return JSON.stringify({
     ...envelope,
     schemaVersion: 8,
@@ -223,13 +243,19 @@ function versionEightRaw(data: PreviewData): string {
 
 function versionNineRaw(data: PreviewData): string {
   const envelope = createPreviewEnvelope(data);
-  const { rhythmHistoryIds: _rhythmHistoryIds, strength: _strength, ...legacyData } = envelope.data;
+  const {
+    rhythmHistoryIds: _rhythmHistoryIds,
+    strength: _strength,
+    weight: _weight,
+    cardio: _cardio,
+    ...legacyData
+  } = envelope.data;
   return JSON.stringify({ ...envelope, schemaVersion: 9, data: legacyData });
 }
 
 function versionTenRaw(data: PreviewData): string {
   const envelope = createPreviewEnvelope(data);
-  const { strength: _strength, ...legacyData } = envelope.data;
+  const { strength: _strength, weight: _weight, cardio: _cardio, ...legacyData } = envelope.data;
   return JSON.stringify({
     ...envelope,
     schemaVersion: 10,
@@ -449,7 +475,9 @@ describe('synthetic preview storage adapter and envelope', () => {
       rhythmCompletionOverrides: [],
       removedSeedCompletionIds: [],
       rhythmHistoryIds: [],
-      strength: createStrengthData()
+      strength: createStrengthData(),
+      weight: createWeightData(),
+      cardio: createCardioData()
     };
     const raw = JSON.stringify(createPreviewEnvelope(empty));
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
@@ -499,7 +527,9 @@ describe('synthetic preview storage adapter and envelope', () => {
       rhythmCompletionOverrides: [],
       removedSeedCompletionIds: [],
       rhythmHistoryIds: [],
-      strength: createStrengthData()
+      strength: createStrengthData(),
+      weight: createWeightData(),
+      cardio: createCardioData()
     });
   });
 
@@ -965,7 +995,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(occupied.values.get(PREVIEW_V2_RECOVERY_KEY)).toBe('{"different":"v2"}');
   });
 
-  it('round-trips schema v16 suggestion sources, Rhythm associations, prior records, and goal history', () => {
+  it('round-trips schema v18 Weight and Cardio data, capability metadata, suggestion sources, and prior records', () => {
     const data = sampleWithHistory();
     const id = 'user-rhythm-11111111-1111-4111-8111-111111111111';
     data.savedRhythms = [{
@@ -990,10 +1020,31 @@ describe('synthetic preview storage adapter and envelope', () => {
       },
       personal: true,
       personIds: ['sample-person-morgan', 'sample-person-avery'],
-      categoryIds: ['marriage', 'friendships'],
+      categoryIds: ['health', 'friendships'],
       primaryFoundationId: 'connection',
-      secondaryFoundationIds: ['partnership']
+      secondaryFoundationIds: ['partnership'],
+      healthLogCapability: 'weight'
     }];
+    data.weight = {
+      displayUnit: 'kg',
+      goals: {
+        startWeightKg: 90.718474,
+        startDate: '2026-10-01',
+        targetWeightKg: 81.646626,
+        goalDate: '2027-01-01',
+        importedNote: 'Preserve this unknown field.'
+      },
+      weighIns: [
+        { id: 'preserved-weight-entry', date: '2026-10-20', weightKg: 88.4, legacyField: 'kept' },
+        { id: 'invalid-weight-entry', date: 'not-a-date', value: 'preserve raw record' }
+      ],
+      extraWeightField: { untouched: true }
+    };
+    data.cardio = {
+      goals: { weeklyRunTarget: 2, weeklyMileTarget: 8 },
+      runs: [{ id: 'preserved-cardio-run', date: '2026-10-20', distance: 3, legacyField: 'kept' }],
+      extraCardioField: { untouched: true }
+    };
     data.completedRhythmIds.push(id);
     data.archivedRhythmIds = [id];
     data.rhythmCompletionOverrides = [{
@@ -1017,12 +1068,57 @@ describe('synthetic preview storage adapter and envelope', () => {
       sourceSchemaVersion: PREVIEW_SCHEMA_VERSION,
       envelope: { schemaVersion: PREVIEW_SCHEMA_VERSION }
     });
+
   });
 
-  it('hydrates v14 with default Strength data and preserves exact source bytes before schema v16 writes', () => {
+  it('hydrates v16 Weight with an empty default and saves the exact source bytes for recovery', () => {
+      const data = createSamplePreviewData();
+      const current = createPreviewEnvelope(data);
+      const { weight: _weight, cardio: _cardio, ...v16Data } = current.data;
+      const source = JSON.stringify({ ...current, schemaVersion: 16, data: v16Data });
+      const originalRaw = ` \n${source}\n`;
+      const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
+
+      const loaded = loadPreview(storage, '2026-10-21');
+      expect(loaded.kind).toBe('loaded');
+      expect(values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+      if (loaded.kind !== 'loaded') return;
+      expect(loaded.data.weight).toEqual(createWeightData());
+
+      expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
+      expect(values.get(PREVIEW_V16_RECOVERY_KEY)).toBe(originalRaw);
+      expect(loadV16RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
+  });
+
+  it('hydrates v17 Weight with an empty Cardio default and preserves exact bytes before schema v18 writes', () => {
+    const data = createSamplePreviewData();
+    data.weight = {
+      displayUnit: 'lb',
+      goals: { startWeightKg: 80, startDate: '2026-10-01', targetWeightKg: 75, goalDate: '2027-01-01' },
+      weighIns: [{ id: 'existing-v17-weigh-in', date: '2026-10-20', weightKg: 78 }]
+    };
+    const current = createPreviewEnvelope(data);
+    const { cardio: _cardio, ...v17Data } = current.data;
+    const source = JSON.stringify({ ...current, schemaVersion: 17, data: v17Data });
+    const originalRaw = ` \n${source}\n`;
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
+
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.weight).toEqual(data.weight);
+    expect(loaded.data.cardio).toEqual(createCardioData());
+
+    expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V17_RECOVERY_KEY)).toBe(originalRaw);
+    expect(loadV17RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
+  });
+
+  it('hydrates v14 with default Strength and Weight data and preserves exact source bytes before schema v18 writes', () => {
     const data = sampleWithHistory();
     const envelope = createPreviewEnvelope(data);
-    const { strength: _strength, ...v14Data } = envelope.data;
+    const { strength: _strength, weight: _weight, cardio: _cardio, ...v14Data } = envelope.data;
     const originalRaw = JSON.stringify({ ...envelope, schemaVersion: 14, data: v14Data });
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
 
@@ -1042,7 +1138,7 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('preserves exact v12 source bytes before the first association-schema v13 write', () => {
     const data = createSamplePreviewData();
     const current = createPreviewEnvelope(data);
-    const { strength: _strength, ...v12Data } = current.data;
+    const { strength: _strength, weight: _weight, cardio: _cardio, ...v12Data } = current.data;
     const source = JSON.stringify({
       format: current.format,
       schemaVersion: 12,
@@ -1175,7 +1271,12 @@ describe('synthetic preview storage adapter and envelope', () => {
       }];
       data.rhythmHistoryIds = [id];
       const versionTwelve = createPreviewEnvelope(data);
-      const { strength: _strength, ...versionElevenData } = versionTwelve.data;
+      const {
+        strength: _strength,
+        weight: _weight,
+        cardio: _cardio,
+        ...versionElevenData
+      } = versionTwelve.data;
       const originalRaw = ` \n${JSON.stringify({
         ...versionTwelve,
         schemaVersion: 11,
@@ -1350,7 +1451,7 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('does not overwrite an unsupported active envelope', () => {
     const unsupportedRaw = JSON.stringify({
       format: 'tend.synthetic-preview',
-      schemaVersion: 17,
+      schemaVersion: 19,
       data: { goals: [], completedRhythmIds: [], savedRhythms: [], archivedRhythmIds: [] }
     });
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: unsupportedRaw });
@@ -1408,7 +1509,7 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('rejects malformed JSON, unsupported versions, malformed records, duplicate IDs, and invalid references', () => {
     expect(parsePreviewBackup('{', '2026-10-21').valid).toBe(false);
     const unsupported = createPreviewEnvelope(sampleWithHistory());
-    expect(validatePreviewEnvelope({ ...unsupported, schemaVersion: 17 }, '2026-10-21')).toMatchObject({
+    expect(validatePreviewEnvelope({ ...unsupported, schemaVersion: 19 }, '2026-10-21')).toMatchObject({
       valid: false,
       kind: 'unsupported'
     });

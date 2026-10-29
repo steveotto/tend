@@ -58,6 +58,10 @@ type PreviewDataControlsProps = {
   v14RecoveryError?: string | null;
   v15RecoveryCopy?: string | null;
   v15RecoveryError?: string | null;
+  v16RecoveryCopy?: string | null;
+  v16RecoveryError?: string | null;
+  v17RecoveryCopy?: string | null;
+  v17RecoveryError?: string | null;
 };
 
 function downloadText(filename: string, content: string, type: string): string | null {
@@ -115,7 +119,11 @@ export function PreviewDataControls({
   v14RecoveryCopy = null,
   v14RecoveryError = null,
   v15RecoveryCopy = null,
-  v15RecoveryError = null
+  v15RecoveryError = null,
+  v16RecoveryCopy = null,
+  v16RecoveryError = null,
+  v17RecoveryCopy = null,
+  v17RecoveryError = null
 }: PreviewDataControlsProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -402,6 +410,29 @@ export function PreviewDataControls({
             Download original v15 recovery backup
           </button>
         )}
+        {v16RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v16-recovery.json',
+              v16RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v16 recovery backup downloaded.')}
+          >
+            Download original v16 recovery backup
+          </button>
+        )}
+        {v17RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v17-recovery.json',
+              v17RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v17 recovery backup downloaded.')}>
+            Download original v17 recovery backup
+          </button>
+        )}
         <label className="btn mini ghost preview-data-controls__file-button">
           Import preview backup
           <input
@@ -454,6 +485,8 @@ export function PreviewDataControls({
       {v13RecoveryError && <p className="preview-data-controls__help" role="alert">The original v13 recovery copy could not be read: {v13RecoveryError}</p>}
       {v14RecoveryError && <p className="preview-data-controls__help" role="alert">The original v14 recovery copy could not be read: {v14RecoveryError}</p>}
       {v15RecoveryError && <p className="preview-data-controls__help" role="alert">The original v15 recovery copy could not be read: {v15RecoveryError}</p>}
+      {v16RecoveryError && <p className="preview-data-controls__help" role="alert">The original v16 recovery copy could not be read: {v16RecoveryError}</p>}
+      {v17RecoveryError && <p className="preview-data-controls__help" role="alert">The original v17 recovery copy could not be read: {v17RecoveryError}</p>}
       {message && <p className="preview-data-controls__message" role="status">{message}</p>}
       {pendingAction && (
         <MoneyGoalDialog

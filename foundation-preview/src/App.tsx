@@ -22,7 +22,7 @@ import type { PreviewPersistenceStatus } from './components/PreviewDataControls.
 import { PersonProfilePlaceholder } from './components/PersonProfilePlaceholder.tsx';
 import { RhythmEditor } from './components/RhythmEditor.tsx';
 import { TodayView } from './components/TodayView.tsx';
-import { StrengthView } from './components/StrengthView.tsx';
+import { HealthFitnessView } from './components/HealthFitnessView.tsx';
 import {
   marriageRhythms,
   foundationCatalogue,
@@ -62,6 +62,10 @@ import { hasRhythmOccurrenceForCompletion } from './domain/rhythm-occurrences.ts
 import { prepareDatedRhythmCompletion } from './domain/rhythm-completion.ts';
 import { validateStrengthData } from './domain/strength.ts';
 import type { StrengthMode } from './domain/strength.ts';
+import {
+  saveWeightDataCommand
+} from './domain/weight.ts';
+import { saveCardioDataCommand } from './domain/cardio.ts';
 import {
   activeTodayRhythms,
   applySavedRhythmOverrides,
@@ -110,6 +114,8 @@ import {
   loadV13RecoveryCopy,
   loadV14RecoveryCopy,
   loadV15RecoveryCopy,
+  loadV16RecoveryCopy,
+  loadV17RecoveryCopy,
   loadPreview,
   writePreview
 } from './storage/preview-storage.ts';
@@ -221,6 +227,10 @@ export function App() {
   const [v14RecoveryError, setV14RecoveryError] = useState<string | null>(null);
   const [v15RecoveryCopy, setV15RecoveryCopy] = useState<string | null>(null);
   const [v15RecoveryError, setV15RecoveryError] = useState<string | null>(null);
+  const [v16RecoveryCopy, setV16RecoveryCopy] = useState<string | null>(null);
+  const [v16RecoveryError, setV16RecoveryError] = useState<string | null>(null);
+  const [v17RecoveryCopy, setV17RecoveryCopy] = useState<string | null>(null);
+  const [v17RecoveryError, setV17RecoveryError] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -552,6 +562,22 @@ export function App() {
     } else {
       setV15RecoveryCopy(null);
       setV15RecoveryError(v15.message);
+    }
+    const v16 = loadV16RecoveryCopy(browserPreviewStorage());
+    if (v16.kind === 'loaded') {
+      setV16RecoveryCopy(v16.raw);
+      setV16RecoveryError(null);
+    } else {
+      setV16RecoveryCopy(null);
+      setV16RecoveryError(v16.message);
+    }
+    const v17 = loadV17RecoveryCopy(browserPreviewStorage());
+    if (v17.kind === 'loaded') {
+      setV17RecoveryCopy(v17.raw);
+      setV17RecoveryError(null);
+    } else {
+      setV17RecoveryCopy(null);
+      setV17RecoveryError(v17.message);
     }
   }
 
@@ -1019,6 +1045,58 @@ export function App() {
       completedRhythmIds,
       rhythmHistoryIds
     }, 'Strength data');
+  }
+
+  function saveWeightData(weight: PreviewData['weight']): string | null {
+    const result = saveWeightDataCommand({
+      previous: previewData.weight,
+      next: weight,
+      today: currentDate,
+      now: new Date(),
+      rhythms: allTodayRhythms,
+      archivedRhythmIds: new Set(previewData.archivedRhythmIds),
+      editableRhythmIds: new Set(allTodayRhythms
+        .filter(rhythm => isEditableRhythmId(rhythm.id))
+        .map(rhythm => rhythm.id)),
+      completionState: {
+        datedRhythmCompletions: previewData.datedRhythmCompletions,
+        activeRhythmCompletions: previewData.activeRhythmCompletions,
+        completedRhythmIds: previewData.completedRhythmIds,
+        rhythmHistoryIds: previewData.rhythmHistoryIds
+      }
+    });
+    if (!result.valid) return result.error;
+    return persistSeasonHistory({
+      ...previewData,
+      weight: result.weight,
+      ...result.completionState
+    }, 'Weight data');
+  }
+
+  function saveCardioData(cardio: PreviewData['cardio']): string | null {
+    const result = saveCardioDataCommand({
+      previous: previewData.cardio,
+      next: cardio,
+      today: currentDate,
+      now: new Date(),
+      rhythms: allTodayRhythms,
+      archivedRhythmIds: new Set(previewData.archivedRhythmIds),
+      editableRhythmIds: new Set(allTodayRhythms
+        .filter(rhythm => isEditableRhythmId(rhythm.id))
+        .map(rhythm => rhythm.id)),
+      completionState: {
+        datedRhythmCompletions: previewData.datedRhythmCompletions,
+        activeRhythmCompletions: previewData.activeRhythmCompletions,
+        completedRhythmIds: previewData.completedRhythmIds,
+        rhythmHistoryIds: previewData.rhythmHistoryIds
+      }
+    });
+    if (!result.valid) return result.error;
+    return persistSeasonHistory({
+      ...previewData,
+      cardio: result.cardio,
+      ...result.completionState
+    }, 'Cardio data');
   }
 
   function saveFoundationAssociations(
@@ -1858,35 +1936,75 @@ export function App() {
             )
           : destination === 'health'
             ? (
-              <StrengthView
-                data={previewData.strength}
-                rhythms={healthCategoryRhythms.map(rhythm => {
-                  const setting = previewData.strength.rhythmModes.find(item => item.rhythmId === rhythm.id);
-                  return {
-                    rhythm,
-                    mode: setting?.mode ?? 'recommended',
-                    ...(setting?.workoutId ? { workoutId: setting.workoutId } : {})
-                  };
-                })}
-                archivedRhythms={archivedHealthRhythms}
-                completedRhythmIds={completedRhythms}
-                evaluationDate={currentDate}
-                onChange={saveStrengthData}
-                onAddRhythm={event => openRhythmEditor(event, undefined, {
-                  initialDraft: createRhythmDraft(['health'])
-                })}
-                onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
-                onOpenRhythm={(rhythm, event) => {
-                  dialogOpener.current = event.currentTarget;
-                  activeRhythmReturnTab.current = 'today';
-                  setDetailsInitialView('details');
-                  setActiveRhythmId(rhythm.id);
+              <HealthFitnessView
+                strength={{
+                  data: previewData.strength,
+                  rhythms: healthCategoryRhythms.map(rhythm => {
+                    const setting = previewData.strength.rhythmModes.find(item => item.rhythmId === rhythm.id);
+                    return {
+                      rhythm,
+                      mode: setting?.mode ?? 'recommended',
+                      ...(setting?.workoutId ? { workoutId: setting.workoutId } : {})
+                    };
+                  }),
+                  archivedRhythms: archivedHealthRhythms,
+                  completedRhythmIds: completedRhythms,
+                  evaluationDate: currentDate,
+                  onChange: saveStrengthData,
+                  onAddRhythm: event => openRhythmEditor(event, undefined, {
+                    initialDraft: createRhythmDraft(['health'])
+                  }),
+                  onEditRhythm: (rhythm, event) => openRhythmEditor(event, rhythm),
+                  onOpenRhythm: (rhythm, event) => {
+                    dialogOpener.current = event.currentTarget;
+                    activeRhythmReturnTab.current = 'today';
+                    setDetailsInitialView('details');
+                    setActiveRhythmId(rhythm.id);
+                  },
+                  pendingRhythmLog: pendingStrengthRhythmLog,
+                  onRhythmLogOpened: requestId => {
+                    setStrengthLogRequest(current => current?.requestId === requestId ? null : null);
+                  },
+                  onRestoreRhythm: restoreRhythm
                 }}
-                pendingRhythmLog={pendingStrengthRhythmLog}
-                onRhythmLogOpened={requestId => {
-                  setStrengthLogRequest(current => current?.requestId === requestId ? null : current);
+                weight={{
+                  data: previewData.weight,
+                  today: currentDate,
+                  rhythms: healthCategoryRhythms,
+                  archivedRhythmIds: new Set(previewData.archivedRhythmIds),
+                  completedRhythmIds: completedRhythms,
+                  datedRhythmCompletions: previewData.datedRhythmCompletions,
+                  onChange: saveWeightData,
+                  onAddRhythm: event => openRhythmEditor(event, undefined, {
+                    initialDraft: createRhythmDraft(['health'])
+                  }),
+                  onEditRhythm: (rhythm, event) => openRhythmEditor(event, rhythm),
+                  onOpenRhythm: (rhythm, event) => {
+                    dialogOpener.current = event.currentTarget;
+                    activeRhythmReturnTab.current = 'today';
+                    setDetailsInitialView('details');
+                    setActiveRhythmId(rhythm.id);
+                  }
                 }}
-                onRestoreRhythm={restoreRhythm}
+                cardio={{
+                  data: previewData.cardio,
+                  today: currentDate,
+                  rhythms: healthCategoryRhythms,
+                  archivedRhythmIds: new Set(previewData.archivedRhythmIds),
+                  completedRhythmIds: completedRhythms,
+                  datedRhythmCompletions: previewData.datedRhythmCompletions,
+                  onChange: saveCardioData,
+                  onAddRhythm: event => openRhythmEditor(event, undefined, {
+                    initialDraft: createRhythmDraft(['health'])
+                  }),
+                  onEditRhythm: (rhythm, event) => openRhythmEditor(event, rhythm),
+                  onOpenRhythm: (rhythm, event) => {
+                    dialogOpener.current = event.currentTarget;
+                    activeRhythmReturnTab.current = 'today';
+                    setDetailsInitialView('details');
+                    setActiveRhythmId(rhythm.id);
+                  }
+                }}
               />
             )
           : destination === 'finances'
@@ -1942,6 +2060,10 @@ export function App() {
         v14RecoveryError={v14RecoveryError}
         v15RecoveryCopy={v15RecoveryCopy}
         v15RecoveryError={v15RecoveryError}
+        v16RecoveryCopy={v16RecoveryCopy}
+        v16RecoveryError={v16RecoveryError}
+        v17RecoveryCopy={v17RecoveryCopy}
+        v17RecoveryError={v17RecoveryError}
       />
       <footer className="preview-footer">
         <span>Synthetic preview data stays separate from Tend accounts.</span>

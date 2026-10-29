@@ -36,7 +36,7 @@ type StrengthRhythm = {
   workoutId?: string;
 };
 
-type StrengthViewProps = {
+export type StrengthViewProps = {
   data: StrengthData;
   rhythms: readonly StrengthRhythm[];
   archivedRhythms?: readonly RhythmPreview[];

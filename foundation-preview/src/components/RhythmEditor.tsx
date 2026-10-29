@@ -680,6 +680,20 @@ export function RhythmEditor({
               </span>
             ) : <span className="rhythm-editor__association-empty">Choose categories</span>}
           </RhythmAssociationRow>
+          {(draft.categoryIds.includes('health') || draft.healthLogCapability !== undefined) && (
+            <div className="rhythm-editor__fitness-capabilities" aria-label="Health & Fitness logging">
+              <label className="rhythm-editor__fitness-capability">
+                <input type="checkbox" checked={draft.healthLogCapability === 'cardio'}
+                  onChange={event => update('healthLogCapability', event.currentTarget.checked ? 'cardio' : undefined)} />
+                <span>Can log a run</span>
+              </label>
+              <label className="rhythm-editor__fitness-capability">
+                <input type="checkbox" checked={draft.healthLogCapability === 'weight'}
+                  onChange={event => update('healthLogCapability', event.currentTarget.checked ? 'weight' : undefined)} />
+                <span>Can log a weigh-in</span>
+              </label>
+            </div>
+          )}
           <RhythmAssociationRow
             title={foundationRowTitle}
             accessibleName={associationName(foundationRowTitle, selectedFoundationNames, foundationEmptyState)}

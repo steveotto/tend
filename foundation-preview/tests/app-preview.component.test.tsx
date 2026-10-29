@@ -4872,4 +4872,130 @@ describe('Tend Today preview', () => {
       }
     });
   });
+
+  it('logs and deletes a Weight weigh-in through its opted-in shared Rhythm and preview storage', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Areas' }))
+        .getByRole('button', { name: 'Health & Fitness' })
+    );
+    await user.click(screen.getByRole('tab', { name: 'Weight' }));
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    await user.click(screen.getByRole('button', { name: 'Add Weight Rhythm' }));
+    const editor = screen.getByRole('dialog');
+    await user.type(within(editor).getByLabelText('Title'), 'Weight integration rhythm');
+    await user.click(within(editor).getByRole('checkbox', { name: 'Can log a weigh-in' }));
+    await user.click(within(editor).getByRole('button', { name: 'Add Rhythm' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    await user.click(screen.getByRole('button', { name: /^Log weigh-in/ }));
+    const logDialog = screen.getByRole('dialog', { name: 'Add weigh-in' });
+    await user.type(within(logDialog).getByLabelText('Weight (lb)'), '180');
+    await user.click(within(logDialog).getByRole('button', { name: 'Save weigh-in' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add weigh-in' })).toBeNull());
+
+    const saved = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    const weighIn = saved.envelope.data.weight.weighIns[0] as {
+      id: string;
+      date: string;
+      rhythmId: string;
+      completionId: string;
+    };
+    expect(weighIn.rhythmId).toBeTruthy();
+    expect(weighIn.completionId).toBeTruthy();
+    expect(saved.envelope.data.datedRhythmCompletions.filter(item => item.id === weighIn.completionId))
+      .toHaveLength(1);
+
+    await user.click(screen.getByRole('tab', { name: 'Progress' }));
+    await user.click(screen.getByRole('button', { name: /^Delete weigh-in from/ }));
+    await waitFor(() => {
+      const afterDelete = parsePreviewBackup(
+        window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+        localDateString(new Date())
+      );
+      expect(afterDelete.valid).toBe(true);
+      if (afterDelete.valid) {
+        expect(afterDelete.envelope.data.weight.weighIns).toHaveLength(0);
+        expect(afterDelete.envelope.data.datedRhythmCompletions.some(item => item.id === weighIn.completionId))
+          .toBe(false);
+      }
+    });
+  });
+
+  it('links a Cardio run to one shared Rhythm completion, reloads it, and deletes only owned credit', async () => {
+    const user = userEvent.setup();
+    const data = createSamplePreviewData();
+    const rhythmId = 'user-rhythm-22222222-2222-4222-8222-222222222222';
+    data.savedRhythms.push({
+      id: rhythmId,
+      title: 'Cardio integration rhythm',
+      cadence: 'Daily',
+      timeLabel: 'Anytime',
+      timeOfDay: 'anytime',
+      personIds: [],
+      categoryIds: ['health'],
+      schedule: { frequency: 'daily' },
+      healthLogCapability: 'cardio'
+    });
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+    render(<App />);
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Areas' }))
+        .getByRole('button', { name: 'Health & Fitness' })
+    );
+    await user.click(screen.getByRole('tab', { name: 'Cardio' }));
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    await user.click(screen.getByRole('button', { name: 'Log run Cardio integration rhythm' }));
+    const logDialog = screen.getByRole('dialog', { name: 'Log run' });
+    await user.type(within(logDialog).getByLabelText('Distance (miles)'), '3');
+    await user.click(within(logDialog).getByRole('button', { name: 'Save run' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Log run' })).toBeNull());
+
+    const saved = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    const run = saved.envelope.data.cardio.runs[0] as {
+      id: string;
+      date: string;
+      rhythmId: string;
+      completionId: string;
+    };
+    expect(run.rhythmId).toBe(rhythmId);
+    expect(saved.envelope.data.datedRhythmCompletions.filter(item => item.id === run.completionId))
+      .toHaveLength(1);
+    expect(saved.envelope.data.activeRhythmCompletions.filter(item => item.completionId === run.completionId))
+      .toHaveLength(1);
+
+    cleanup();
+    render(<App />);
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Areas' }))
+        .getByRole('button', { name: 'Health & Fitness' })
+    );
+    await user.click(screen.getByRole('tab', { name: 'Cardio' }));
+    expect(screen.getByText('3 mi')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /^Delete run from/ }));
+    await waitFor(() => {
+      const afterDelete = parsePreviewBackup(
+        window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+        localDateString(new Date())
+      );
+      expect(afterDelete.valid).toBe(true);
+      if (afterDelete.valid) {
+        expect(afterDelete.envelope.data.cardio.runs).toHaveLength(0);
+        expect(afterDelete.envelope.data.datedRhythmCompletions.some(item => item.id === run.completionId))
+          .toBe(false);
+        expect(afterDelete.envelope.data.savedRhythms.some(item => item.id === rhythmId)).toBe(true);
+      }
+    });
+  });
 });

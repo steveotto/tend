@@ -398,6 +398,7 @@ export type RhythmPreview = {
   dailyBackfillAllowed?: boolean;
   timeOfDay?: RhythmTimeValue;
   personal?: boolean;
+  healthLogCapability?: 'weight' | 'cardio';
 };
 
 export type RhythmCompletion = {

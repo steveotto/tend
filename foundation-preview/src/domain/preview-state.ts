@@ -17,7 +17,9 @@ import {
   validateSavedRhythmsV11,
   validateSavedRhythmsV12,
   validateSavedRhythmsV13,
-  validateSavedRhythmsV14
+  validateSavedRhythmsV14,
+  validateSavedRhythmsV17,
+  validateSavedRhythmsV18
 } from './rhythm-editor.ts';
 import { validateSavedRhythmsV10 } from './rhythm-editor.ts';
 import type { SavedRhythm } from './rhythm-editor.ts';
@@ -36,9 +38,13 @@ import {
 import { legacySuggestionSourceForRhythmId } from './category-rhythms.ts';
 import { createStrengthData, validateStrengthData } from './strength.ts';
 import type { StrengthData } from './strength.ts';
+import { createWeightData, validateWeightDataShape } from './weight.ts';
+import type { WeightData } from './weight.ts';
+import { createCardioData, validateCardioDataShape } from './cardio.ts';
+import type { CardioData } from './cardio.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 16;
+export const PREVIEW_SCHEMA_VERSION = 18;
 
 export type PreviewData = {
   goals: MoneyGoal[];
@@ -51,6 +57,8 @@ export type PreviewData = {
   removedSeedCompletionIds: string[];
   rhythmHistoryIds: string[];
   strength: StrengthData;
+  weight: WeightData;
+  cardio: CardioData;
 };
 
 export type PreviewEnvelope = {
@@ -81,7 +89,7 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
 const goalKeys = [
@@ -106,6 +114,8 @@ const dataKeysV13 = dataKeysV12;
 const dataKeysV14 = dataKeysV13;
 const dataKeysV15 = [...dataKeysV14, 'strength'];
 const dataKeysV16 = dataKeysV15;
+const dataKeysV17 = [...dataKeysV16, 'weight'];
+const dataKeysV18 = [...dataKeysV17, 'cardio'];
 const envelopeKeys = ['format', 'schemaVersion', 'data'];
 const supportedRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 const builtInRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
@@ -131,7 +141,9 @@ export function createSamplePreviewData(): PreviewData {
     rhythmCompletionOverrides: [],
     removedSeedCompletionIds: [],
     rhythmHistoryIds: [],
-    strength: createStrengthData()
+    strength: createStrengthData(),
+    weight: createWeightData(),
+    cardio: createCardioData()
   };
 }
 
@@ -264,6 +276,7 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
           ? {}
           : { secondaryFoundationIds: [...rhythm.secondaryFoundationIds] }),
         ...(rhythm.suggestionSourceId === undefined ? {} : { suggestionSourceId: rhythm.suggestionSourceId }),
+        ...(rhythm.healthLogCapability === undefined ? {} : { healthLogCapability: rhythm.healthLogCapability }),
         ...(rhythm.scoring === undefined ? {} : { scoring: cloneRhythmScoring(rhythm.scoring) }),
         ...(rhythm.createdLocalDate === undefined ? {} : {
           createdLocalDate: rhythm.createdLocalDate,
@@ -301,6 +314,16 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
         })),
         workouts: data.strength.workouts.map(workout => ({ ...workout, muscleIds: [...workout.muscleIds] })),
         rhythmModes: data.strength.rhythmModes.map(mode => ({ ...mode }))
+      },
+      weight: {
+        ...data.weight,
+        goals: isRecord(data.weight.goals) ? { ...data.weight.goals } : data.weight.goals,
+        weighIns: data.weight.weighIns.map(record => isRecord(record) ? { ...record } : record)
+      },
+      cardio: {
+        ...data.cardio,
+        goals: isRecord(data.cardio.goals) ? { ...data.cardio.goals } : data.cardio.goals,
+        runs: data.cardio.runs.map(record => isRecord(record) ? { ...record } : record)
       }
     }
   };
@@ -335,7 +358,8 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
       && value.schemaVersion !== 6 && value.schemaVersion !== 7 && value.schemaVersion !== 8
       && value.schemaVersion !== 9
       && value.schemaVersion !== 10 && value.schemaVersion !== 11 && value.schemaVersion !== 12 && value.schemaVersion !== 13
-      && value.schemaVersion !== 14 && value.schemaVersion !== 15
+      && value.schemaVersion !== 14 && value.schemaVersion !== 15 && value.schemaVersion !== 16
+      && value.schemaVersion !== 17
       && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
@@ -355,25 +379,29 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const isV14 = value.schemaVersion === 14;
   const isV15 = value.schemaVersion === 15;
   const isV16 = value.schemaVersion === 16;
+  const isV17 = value.schemaVersion === 17;
+  const isV18 = value.schemaVersion === 18;
   const allowedDataKeys = isV1 ? dataKeysV1 : isV2 ? dataKeysV2
     : isV3 || isV4 ? dataKeysV3
-      : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
+      : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
         : isV11 || isV12 ? dataKeysV12 : isV10 ? dataKeysV10
       : isV8 || isV9 ? dataKeysV8 : isV7 ? dataKeysV7 : isV6 ? dataKeysV6 : dataKeysV5;
   if (!isRecord(value.data) || !hasOnlyKeys(value.data, allowedDataKeys)
     || !Array.isArray(value.data.goals) || !Array.isArray(value.data.completedRhythmIds)
-    || ((isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16)
+    || ((isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18)
       && (!Array.isArray(value.data.datedRhythmCompletions)
       || !Array.isArray(value.data.activeRhythmCompletions)))
-    || ((isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16) && (!Array.isArray(value.data.rhythmCompletionOverrides)
+    || ((isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18) && (!Array.isArray(value.data.rhythmCompletionOverrides)
       || !Array.isArray(value.data.removedSeedCompletionIds)))) {
     return { valid: false, kind: 'invalid', message: 'Preview data must contain goals and completed Rhythm IDs.' };
   }
-  if ((isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16) && !Array.isArray(value.data.rhythmHistoryIds)) {
+  if ((isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18) && !Array.isArray(value.data.rhythmHistoryIds)) {
     return { valid: false, kind: 'invalid', message: 'Rhythm history references must be a list.' };
   }
-  if (!isV1 && !((isV4 || isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16)
-    ? isV14 || isV15 || isV16 ? validateSavedRhythmsV14(value.data.savedRhythms)
+  if (!isV1 && !((isV4 || isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18)
+    ? isV18 ? validateSavedRhythmsV18(value.data.savedRhythms)
+      : isV17 ? validateSavedRhythmsV17(value.data.savedRhythms)
+      : isV14 || isV15 || isV16 ? validateSavedRhythmsV14(value.data.savedRhythms)
       : isV13 ? validateSavedRhythmsV13(value.data.savedRhythms)
       : isV12 ? validateSavedRhythmsV12(value.data.savedRhythms)
       : isV11 ? validateSavedRhythmsV11(value.data.savedRhythms)
@@ -423,7 +451,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   }
 
   let savedRhythms: SavedRhythm[];
-  if (isV16 || isV15 || isV14 || isV13 || isV12 || isV11 || isV10 || isV9) {
+  if (isV18 || isV17 || isV16 || isV15 || isV14 || isV13 || isV12 || isV11 || isV10 || isV9) {
     savedRhythms = value.data.savedRhythms as SavedRhythm[];
   } else if (isV7 || isV8) {
     savedRhythms = (value.data.savedRhythms as SavedRhythm[]).map(rhythm => {
@@ -464,7 +492,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const datedRhythmCompletions: DatedRhythmCompletion[] = [];
   const completionIds = new Set<string>();
   const knownRhythmIds = new Set([...builtInRhythmIds, ...savedRhythmIds]);
-  const rawDatedCompletions: unknown[] = isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16
+  const rawDatedCompletions: unknown[] = isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18
     ? value.data.datedRhythmCompletions as unknown[] : [];
   for (const rawCompletion of rawDatedCompletions) {
     if (!isRecord(rawCompletion)
@@ -503,7 +531,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const activeRhythmCompletions: ActiveRhythmCompletion[] = [];
   const activeRhythmIds = new Set<string>();
   const activeCompletionIds = new Set<string>();
-  const rawActiveCompletions: unknown[] = isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16
+  const rawActiveCompletions: unknown[] = isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18
     ? value.data.activeRhythmCompletions as unknown[] : [];
   for (const rawAction of rawActiveCompletions) {
     if (!isRecord(rawAction) || !hasOnlyKeys(rawAction, ['rhythmId', 'completionId'])
@@ -527,7 +555,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
 
   const rhythmCompletionOverrides: RhythmCompletionRecord[] = [];
   const overrideIds = new Set<string>();
-  const rawOverrides: unknown[] = isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16
+  const rawOverrides: unknown[] = isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18
     ? value.data.rhythmCompletionOverrides as unknown[] : [];
   for (const rawOverride of rawOverrides) {
     if (!isRecord(rawOverride) || !hasOnlyKeys(rawOverride, [
@@ -573,7 +601,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   }
 
   const removedSeedCompletionIds = new Set<string>();
-  const rawRemovedIds: unknown[] = isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16
+  const rawRemovedIds: unknown[] = isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18
     ? value.data.removedSeedCompletionIds as unknown[] : [];
   for (const id of rawRemovedIds) {
     if (typeof id !== 'string' || !syntheticCompletionIds.has(id)
@@ -584,7 +612,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   }
 
   const rhythmHistoryIds = new Set<string>();
-  const rawRhythmHistoryIds: unknown[] = isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16
+  const rawRhythmHistoryIds: unknown[] = isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18
     ? value.data.rhythmHistoryIds as unknown[]
     : datedRhythmCompletions.map(record => record.rhythmId);
   for (const rhythmId of rawRhythmHistoryIds) {
@@ -593,7 +621,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     }
     rhythmHistoryIds.add(rhythmId);
   }
-  if ((isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16) && datedRhythmCompletions.some(record => !rhythmHistoryIds.has(record.rhythmId))) {
+  if ((isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18) && datedRhythmCompletions.some(record => !rhythmHistoryIds.has(record.rhythmId))) {
     return { valid: false, kind: 'invalid', message: 'Dated completion history must retain its Rhythm history marker.' };
   }
 
@@ -604,7 +632,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     datesByRhythm.set(record.rhythmId, dates);
   }
   savedRhythms = savedRhythms.map(rhythm => {
-    const suggestionSourceId = !isV14 && !isV15 && !isV16 && rhythm.suggestionSourceId === undefined
+    const suggestionSourceId = !isV14 && !isV15 && !isV16 && !isV17 && !isV18 && rhythm.suggestionSourceId === undefined
       ? legacySuggestionSourceForRhythmId(rhythm.id)
       : rhythm.suggestionSourceId;
     if (!rhythm.scoring && suggestionSourceId === rhythm.suggestionSourceId) return rhythm;
@@ -635,7 +663,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     };
   });
 
-  const strength = isV15 || isV16 ? value.data.strength : createStrengthData();
+  const strength = isV15 || isV16 || isV17 || isV18 ? value.data.strength : createStrengthData();
   if (!validateStrengthData(strength)) {
     return { valid: false, kind: 'invalid', message: 'Strength settings, workouts, or workout history are invalid.' };
   }
@@ -656,7 +684,17 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
         message: 'A linked Strength workout must reference its Health Rhythm and matching completion.'
       };
     }
+
     linkedWorkoutCompletionIds.add(log.completionId);
+  }
+
+  const weight = isV17 || isV18 ? value.data.weight : createWeightData();
+  if (!validateWeightDataShape(weight)) {
+    return { valid: false, kind: 'invalid', message: 'Weight data must retain its settings and weigh-in records.' };
+  }
+  const cardio = isV18 ? value.data.cardio : createCardioData();
+  if (!validateCardioDataShape(cardio)) {
+    return { valid: false, kind: 'invalid', message: 'Cardio data must retain its goals and run records.' };
   }
 
   const envelopeData = {
@@ -669,7 +707,9 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     rhythmCompletionOverrides,
     removedSeedCompletionIds: [...removedSeedCompletionIds],
     rhythmHistoryIds: [...rhythmHistoryIds],
-    strength
+    strength,
+    weight,
+    cardio
   };
 
   return {
