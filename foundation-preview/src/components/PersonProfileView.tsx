@@ -36,12 +36,15 @@ import {
   personDetailsForId
 } from '../domain/person-details.ts';
 import type { PersonDetails } from '../domain/person-details.ts';
+import { PersonNotesPanel } from './PersonNotesPanel.tsx';
+import type { PersonNote, PersonNoteDraft } from '../domain/person-notes.ts';
 
-type ProfileTab = 'rhythms' | 'connections';
+type ProfileTab = 'rhythms' | 'connections' | 'notes';
 
 const profileTabs: { id: ProfileTab; label: string }[] = [
   { id: 'rhythms', label: 'Rhythms' },
-  { id: 'connections', label: 'Connections' }
+  { id: 'connections', label: 'Connections' },
+  { id: 'notes', label: 'Notes' }
 ];
 
 export function PersonProfileView({
@@ -58,6 +61,10 @@ export function PersonProfileView({
   onFriendshipsChange,
   onPeopleGroupsChange,
   personDetails = [],
+  personNotes = [],
+  onCreatePersonNote,
+  onUpdatePersonNote,
+  onDeletePersonNote,
   onEditPerson,
   onAddRhythm,
   onEditRhythm,
@@ -85,6 +92,10 @@ export function PersonProfileView({
   onFriendshipsChange: (friendships: FriendshipData) => void;
   onPeopleGroupsChange: (peopleGroups: PersonPickerGroup[]) => void;
   personDetails?: readonly PersonDetails[];
+  personNotes?: readonly PersonNote[];
+  onCreatePersonNote?: (personId: PersonId, draft: PersonNoteDraft) => string | null;
+  onUpdatePersonNote?: (noteId: string, expectedUpdatedAt: string, actorId: PersonId, draft: PersonNoteDraft) => string | null;
+  onDeletePersonNote?: (noteId: string, expectedUpdatedAt: string, actorId: PersonId) => string | null;
   onEditPerson?: (personId: PersonId, event: MouseEvent<HTMLButtonElement>) => void;
   onAddRhythm: (event: MouseEvent<HTMLButtonElement>, personId: PersonId) => void;
   onEditRhythm: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
@@ -365,6 +376,27 @@ export function PersonProfileView({
               onEdit={openEditConnection}
               onDelete={id => onConnectionChange(deleteConnection(friendships, id))}
               onPersonSelect={onPersonSelect}
+            />
+          </section>
+          <section
+            id="person-profile-panel-notes"
+            className="person-profile__panel marriage-view-panel"
+            role="tabpanel"
+            aria-labelledby="person-profile-tab-notes"
+            hidden={tab !== 'notes'}
+          >
+            <PersonNotesPanel
+              personId={personId}
+              notes={personNotes}
+              onCreate={draft => onCreatePersonNote
+                ? onCreatePersonNote(personId, draft)
+                : 'Person notes are unavailable.'}
+              onUpdate={(noteId, expectedUpdatedAt, actorId, draft) => onUpdatePersonNote
+                ? onUpdatePersonNote(noteId, expectedUpdatedAt, actorId, draft)
+                : 'Person notes are unavailable.'}
+              onDelete={(noteId, expectedUpdatedAt, actorId) => onDeletePersonNote
+                ? onDeletePersonNote(noteId, expectedUpdatedAt, actorId)
+                : 'Person notes are unavailable.'}
             />
           </section>
         </section>

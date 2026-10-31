@@ -58,6 +58,12 @@ import { createSamplePreviewData, parsePreviewBackup } from './domain/preview-st
 import type { PreviewData } from './domain/preview-state.ts';
 import { savePersonDetailsCommand, personDetailsForId } from './domain/person-details.ts';
 import type { PersonDetailsDraft } from './domain/person-details.ts';
+import {
+  createPersonNote,
+  deletePersonNote,
+  updatePersonNote
+} from './domain/person-notes.ts';
+import type { PersonNoteDraft } from './domain/person-notes.ts';
 import type { DatedRhythmCompletion, RhythmCompletionRecord } from './domain/rhythm-completion.ts';
 import {
   deleteDatedCompletion,
@@ -134,6 +140,7 @@ import {
   loadV26RecoveryCopy,
   loadV27RecoveryCopy,
   loadV28RecoveryCopy,
+  loadV29RecoveryCopy,
   loadPreview,
   writePreview
 } from './storage/preview-storage.ts';
@@ -277,6 +284,8 @@ export function App() {
   const [v27RecoveryError, setV27RecoveryError] = useState<string | null>(null);
   const [v28RecoveryCopy, setV28RecoveryCopy] = useState<string | null>(null);
   const [v28RecoveryError, setV28RecoveryError] = useState<string | null>(null);
+  const [v29RecoveryCopy, setV29RecoveryCopy] = useState<string | null>(null);
+  const [v29RecoveryError, setV29RecoveryError] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -586,7 +595,19 @@ export function App() {
       setV9RecoveryCopy(null);
       setV9RecoveryError(result.message);
     }
+
     refreshV10RecoveryCopy();
+  }
+
+  function refreshV29RecoveryCopy() {
+    const result = loadV29RecoveryCopy(browserPreviewStorage());
+    if (result.kind === 'loaded') {
+      setV29RecoveryCopy(result.raw);
+      setV29RecoveryError(null);
+    } else {
+      setV29RecoveryCopy(null);
+      setV29RecoveryError(result.message);
+    }
   }
 
   function refreshV10RecoveryCopy() {
@@ -758,6 +779,7 @@ export function App() {
     refreshV7RecoveryCopy();
     refreshV8RecoveryCopy();
     refreshV9RecoveryCopy();
+    refreshV29RecoveryCopy();
     const loaded = loadPreview(browserPreviewStorage(), initialLoadDate);
     if (loaded.kind === 'loaded') {
       expectedRaw.current = loaded.raw;
@@ -786,6 +808,7 @@ export function App() {
       return;
     }
     const saved = writePreview(browserPreviewStorage(), previewData, expectedRaw.current, { currentDate });
+    refreshV29RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -904,6 +927,44 @@ export function App() {
       { ...previewData, personDetails: result.details },
       'Person details'
     );
+  }
+
+  function savePersonNote(personId: PersonId, draft: PersonNoteDraft): string | null {
+    const now = new Date().toISOString();
+    const result = createPersonNote(previewData.personNotes, {
+      id: `person-note-${globalThis.crypto.randomUUID()}`,
+      personId,
+      sharedWith: draft.sharedWith,
+      content: draft.content,
+      createdAt: now,
+      updatedAt: now
+    });
+    if (!result.valid) return result.error;
+    return persistSeasonHistory({ ...previewData, personNotes: result.notes }, 'person note');
+  }
+
+  function editPersonNote(
+    noteId: string,
+    expectedUpdatedAt: string,
+    actorId: PersonId,
+    draft: PersonNoteDraft
+  ): string | null {
+    const result = updatePersonNote(
+      previewData.personNotes,
+      noteId,
+      expectedUpdatedAt,
+      actorId,
+      draft,
+      new Date().toISOString()
+    );
+    if (!result.valid) return result.error;
+    return persistSeasonHistory({ ...previewData, personNotes: result.notes }, 'person note');
+  }
+
+  function removePersonNote(noteId: string, expectedUpdatedAt: string, actorId: PersonId): string | null {
+    const result = deletePersonNote(previewData.personNotes, noteId, expectedUpdatedAt, actorId);
+    if (!result.valid) return result.error;
+    return persistSeasonHistory({ ...previewData, personNotes: result.notes }, 'person note');
   }
 
   useEffect(() => {
@@ -1124,6 +1185,7 @@ export function App() {
         : {})
     };
     const written = writePreview(browserPreviewStorage(), nextData, expectedRaw.current, { currentDate });
+    refreshV29RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -1156,6 +1218,7 @@ export function App() {
 
   function persistSeasonHistory(nextData: PreviewData, action: string): string | null {
     const written = writePreview(browserPreviewStorage(), nextData, expectedRaw.current, { currentDate });
+    refreshV29RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -1885,6 +1948,7 @@ export function App() {
     skipNextAutosave.current = true;
     setPreviewData(nextData);
     const written = writePreview(browserPreviewStorage(), nextData, expectedRaw.current, { currentDate });
+    refreshV29RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -1915,6 +1979,7 @@ export function App() {
       allowUnrecoverableReplacement,
       currentDate
     });
+    refreshV29RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -1976,6 +2041,7 @@ export function App() {
       allowUnrecoverableReplacement: true,
       currentDate
     });
+    refreshV29RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -2006,6 +2072,7 @@ export function App() {
     skipNextAutosave.current = true;
     setAutoSaveEnabled(true);
     const written = writePreview(browserPreviewStorage(), previewData, expectedRaw.current, { currentDate });
+    refreshV29RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -2372,6 +2439,7 @@ export function App() {
           personId={selectedProfilePerson.id}
           peopleGroups={previewData.peopleGroups}
           personDetails={previewData.personDetails}
+          personNotes={previewData.personNotes}
           friendships={previewData.friendships}
           today={localDateInTimeZone(new Date(), localTimeZone)}
           rhythms={personActiveRhythms}
@@ -2401,6 +2469,9 @@ export function App() {
           }}
           onPersonSelect={openPersonProfile}
           onConnectionChange={friendships => setPreviewData(previous => ({ ...previous, friendships }))}
+          onCreatePersonNote={savePersonNote}
+          onUpdatePersonNote={editPersonNote}
+          onDeletePersonNote={removePersonNote}
           onClose={closePersonProfile}
         />
       )}
@@ -2479,6 +2550,8 @@ export function App() {
         v27RecoveryError={v27RecoveryError}
         v28RecoveryCopy={v28RecoveryCopy}
         v28RecoveryError={v28RecoveryError}
+        v29RecoveryCopy={v29RecoveryCopy}
+        v29RecoveryError={v29RecoveryError}
       />
       {storageNeedsAttention && !isPreviewSettings && (
         <p className="preview-storage-alert" role="alert">

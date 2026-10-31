@@ -48,6 +48,7 @@ export function PeopleBadgeSelectionPicker({
   onToggle,
   onToggleGroup,
   groups = syntheticPersonPickerGroups,
+  excludedIds = [],
   onDone,
   onCancel
 }: {
@@ -55,17 +56,24 @@ export function PeopleBadgeSelectionPicker({
   onToggle: (id: PersonId) => void;
   onToggleGroup: (ids: readonly PersonId[]) => void;
   groups?: readonly PersonPickerGroup[];
+  excludedIds?: readonly PersonId[];
   onDone: () => void;
   onCancel: () => void;
 }) {
+  const excluded = new Set(excludedIds);
+  const availablePeople = syntheticPeople.filter(person => !excluded.has(person.id));
+  const availableGroups = groups.map(group => ({
+    ...group,
+    memberIds: group.memberIds.filter(id => !excluded.has(id))
+  }));
   return (
     <BadgeSelectionPicker
       title="Choose people"
-      items={syntheticPeople}
+      items={availablePeople}
       selectedIds={selectedIds}
       getLabel={person => person.displayName}
       renderBadge={person => <PersonBadgeVisual person={person} />}
-      groups={groups}
+      groups={availableGroups}
       onToggle={onToggle}
       onToggleGroup={onToggleGroup}
       onDone={onDone}

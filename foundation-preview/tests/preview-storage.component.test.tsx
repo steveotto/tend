@@ -39,6 +39,7 @@ import {
   loadV25RecoveryCopy,
   loadV27RecoveryCopy,
   loadV28RecoveryCopy,
+  loadV29RecoveryCopy,
   PREVIEW_V19_RECOVERY_KEY,
   PREVIEW_STORAGE_KEY,
   PREVIEW_V1_RECOVERY_KEY,
@@ -62,6 +63,7 @@ import {
   PREVIEW_V25_RECOVERY_KEY,
   PREVIEW_V27_RECOVERY_KEY,
   PREVIEW_V28_RECOVERY_KEY,
+  PREVIEW_V29_RECOVERY_KEY,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -202,6 +204,7 @@ function versionSixRaw(data: PreviewData): string {
     friendships: _friendships,
     peopleGroups: _peopleGroups,
     personDetails: _personDetails,
+    personNotes: _personNotes,
     ...legacyData
   } = envelope.data;
   return JSON.stringify({
@@ -219,11 +222,12 @@ function versionSixRaw(data: PreviewData): string {
 
 function versionSevenRaw(data: PreviewData): string {
   const envelope = JSON.parse(versionEightRaw(data)) as ReturnType<typeof createPreviewEnvelope>;
+  const { personNotes: _personNotes, ...legacyData } = envelope.data;
   return JSON.stringify({
     ...envelope,
     schemaVersion: 7,
     data: {
-      ...envelope.data,
+      ...legacyData,
       savedRhythms: envelope.data.savedRhythms.map(rhythm => {
         const {
           createdLocalDate: _createdLocalDate,
@@ -247,6 +251,7 @@ function versionEightRaw(data: PreviewData): string {
     friendships: _friendships,
     peopleGroups: _peopleGroups,
     personDetails: _personDetails,
+    personNotes: _personNotes,
     ...legacyData
   } = envelope.data;
   return JSON.stringify({
@@ -289,6 +294,7 @@ function versionNineRaw(data: PreviewData): string {
     friendships: _friendships,
     peopleGroups: _peopleGroups,
     personDetails: _personDetails,
+    personNotes: _personNotes,
     ...legacyData
   } = envelope.data;
   return JSON.stringify({ ...envelope, schemaVersion: 9, data: legacyData });
@@ -303,6 +309,7 @@ function versionTenRaw(data: PreviewData): string {
     friendships: _friendships,
     peopleGroups: _peopleGroups,
     personDetails: _personDetails,
+    personNotes: _personNotes,
     ...legacyData
   } = envelope.data;
   return JSON.stringify({
@@ -373,6 +380,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     };
     priorEnvelope.schemaVersion = 28;
     delete priorEnvelope.data.personDetails;
+    delete priorEnvelope.data.personNotes;
     const raw = JSON.stringify(priorEnvelope);
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
 
@@ -385,6 +393,54 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(values.get(PREVIEW_V28_RECOVERY_KEY)).toBe(raw);
     expect(loadV28RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
     expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+  });
+
+  it('migrates schema v29 with an empty person-note collection and preserves exact raw recovery', () => {
+    const data = createSamplePreviewData();
+    const previous = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+      format: string;
+      schemaVersion: number;
+      data: Record<string, unknown>;
+    };
+    previous.schemaVersion = 29;
+    delete previous.data.personNotes;
+    const raw = ` \n${JSON.stringify(previous)}\n`;
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-10-31');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.personNotes).toEqual([]);
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+    expect(writePreview(storage, loaded.data, loaded.raw, { currentDate: '2026-10-31' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V29_RECOVERY_KEY)).toBe(raw);
+    expect(loadV29RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(30);
+  });
+
+  it('round-trips person notes and refuses a stale write that would replace a newer document', () => {
+    const data = createSamplePreviewData();
+    data.personNotes = [{
+      id: 'preview-note-one',
+      personId: 'sample-person-avery',
+      sharedWith: ['sample-person-morgan'],
+      content: 'A synthetic note\nwith retained formatting.',
+      createdAt: '2026-10-31T12:00:00.000Z',
+      updatedAt: '2026-10-31T12:00:00.000Z'
+    }];
+    const backup = JSON.stringify(createPreviewEnvelope(data));
+    const parsed = parsePreviewBackup(backup, '2026-10-31');
+    expect(parsed.valid).toBe(true);
+    if (!parsed.valid) return;
+    expect(parsed.envelope.data.personNotes).toEqual(data.personNotes);
+
+    const currentRaw = JSON.stringify(createPreviewEnvelope(createSamplePreviewData()));
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: currentRaw });
+    const externalRaw = JSON.stringify(createPreviewEnvelope({ ...createSamplePreviewData(), personNotes: [...data.personNotes] }));
+    values.set(PREVIEW_STORAGE_KEY, externalRaw);
+    expect(writePreview(storage, data, currentRaw, { currentDate: '2026-10-31' }))
+      .toEqual({ kind: 'conflict', actualRaw: externalRaw });
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(externalRaw);
   });
 
   it('accepts subsequent writes when a current-schema source contains an active Strength session draft', () => {
@@ -497,6 +553,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     legacyEnvelope.schemaVersion = 19;
     delete legacyEnvelope.data.peopleGroups;
     delete legacyEnvelope.data.personDetails;
+    delete legacyEnvelope.data.personNotes;
     legacyEnvelope.data.friendships = {
       ...data.friendships,
       friendIds: ['sample-person-morgan']
@@ -542,6 +599,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     };
     legacyEnvelope.schemaVersion = 20;
     delete legacyEnvelope.data.personDetails;
+    delete legacyEnvelope.data.personNotes;
     const legacyStrength = legacyEnvelope.data.strength as { settings: Record<string, unknown> };
     delete legacyStrength.settings.weightUnit;
     const raw = ` \n${JSON.stringify(legacyEnvelope)}\n`;
@@ -672,7 +730,7 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('preserves exact schema v21 bytes before writing the resumable timer-ready schema v25 draft shape', () => {
     const data = createSamplePreviewData();
     const current = createPreviewEnvelope(data);
-    const { personDetails: _personDetails, ...v21Data } = current.data;
+    const { personDetails: _personDetails, personNotes: _personNotes, ...v21Data } = current.data;
     const v21Raw = ` \n${JSON.stringify({ ...current, schemaVersion: 21, data: v21Data })}\n`;
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: v21Raw });
     const loaded = loadPreview(storage, '2026-10-21');
@@ -898,10 +956,12 @@ describe('synthetic preview storage adapter and envelope', () => {
         cardio: Record<string, unknown>;
         strength: Record<string, unknown>;
         personDetails?: unknown;
+        personNotes?: unknown;
       };
     };
     legacy.schemaVersion = 27;
     delete legacy.data.personDetails;
+    delete legacy.data.personNotes;
     delete legacy.data.cardio.trackingStartDate;
     delete legacy.data.cardio.targetHistory;
     delete legacy.data.strength.trackingStartDate;
@@ -952,7 +1012,8 @@ describe('synthetic preview storage adapter and envelope', () => {
       cardio: createCardioData(),
       friendships: createFriendshipData(),
       peopleGroups: createPersonPickerGroups(),
-      personDetails: []
+      personDetails: [],
+      personNotes: []
     };
     const raw = JSON.stringify(createPreviewEnvelope(empty));
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
@@ -1007,7 +1068,8 @@ describe('synthetic preview storage adapter and envelope', () => {
       cardio: createCardioData(),
       friendships: createFriendshipData(),
       peopleGroups: createPersonPickerGroups(),
-      personDetails: []
+      personDetails: [],
+      personNotes: []
     });
   });
 
@@ -1561,6 +1623,7 @@ describe('synthetic preview storage adapter and envelope', () => {
         friendships: _friendships,
         peopleGroups: _peopleGroups,
         personDetails: _personDetails,
+        personNotes: _personNotes,
         ...v16Data
       } = current.data;
       const source = JSON.stringify({ ...current, schemaVersion: 16, data: v16Data });
@@ -1591,6 +1654,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       friendships: _friendships,
       peopleGroups: _peopleGroups,
       personDetails: _personDetails,
+      personNotes: _personNotes,
       ...v17Data
     } = current.data;
     const source = JSON.stringify({ ...current, schemaVersion: 17, data: v17Data });
@@ -1616,6 +1680,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       friendships: _friendships,
       peopleGroups: _peopleGroups,
       personDetails: _personDetails,
+      personNotes: _personNotes,
       ...v18Data
     } = current.data;
     const originalRaw = ` \n${JSON.stringify({ ...current, schemaVersion: 18, data: v18Data })}\n`;
@@ -1642,6 +1707,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       friendships: _friendships,
       peopleGroups: _peopleGroups,
       personDetails: _personDetails,
+      personNotes: _personNotes,
       ...v14Data
     } = envelope.data;
     const originalRaw = JSON.stringify({ ...envelope, schemaVersion: 14, data: v14Data });
@@ -1670,6 +1736,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       friendships: _friendships,
       peopleGroups: _peopleGroups,
       personDetails: _personDetails,
+      personNotes: _personNotes,
       ...v12Data
     } = current.data;
     const source = JSON.stringify({
@@ -1811,6 +1878,7 @@ describe('synthetic preview storage adapter and envelope', () => {
         friendships: _friendships,
         peopleGroups: _peopleGroups,
         personDetails: _personDetails,
+        personNotes: _personNotes,
         ...versionElevenData
       } = versionTwelve.data;
       const originalRaw = ` \n${JSON.stringify({
@@ -2367,6 +2435,74 @@ describe('preview backup controls', () => {
     const reloadedCard = await screen.findByRole('article', { name: 'Take a walk' });
     expect(within(reloadedCard).getByRole('button', { name: 'Tend Take a walk' })).toBeTruthy();
     expect(within(reloadedCard).getByText(dateLabel)).toBeTruthy();
+  });
+
+  it('creates, shares, edits from a linked profile, and reloads one stored person note in App', async () => {
+    const user = userEvent.setup();
+    window.localStorage.clear();
+    window.localStorage.setItem(
+      PREVIEW_STORAGE_KEY,
+      JSON.stringify(createPreviewEnvelope(createSamplePreviewData()))
+    );
+    const openPerson = async (name: string) => {
+      await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+        .getByRole('button', { name: 'People' }));
+      await user.click(screen.getByRole('button', { name: `Open synthetic profile for ${name}` }));
+      await user.click(screen.getByRole('tab', { name: 'Notes' }));
+    };
+
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await openPerson('Avery Brooks');
+    await user.click(screen.getByRole('button', { name: 'Add note' }));
+    const editor = screen.getByRole('dialog', { name: 'Add note for Avery Brooks' });
+    await user.type(within(editor).getByRole('textbox', { name: 'Note' }), 'App integration first line{Enter}second line');
+    await user.click(within(editor).getByRole('button', { name: 'Choose people' }));
+    const picker = screen.getByRole('dialog', { name: 'Share note' });
+    await user.click(within(picker).getByRole('button', { name: 'Morgan Reed' }));
+    await user.click(within(picker).getByRole('button', { name: 'Done' }));
+    await user.click(within(editor).getByRole('button', { name: 'Save note' }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}') as {
+        data?: { personNotes?: Array<Record<string, unknown>> };
+      };
+      expect(saved.data?.personNotes).toHaveLength(1);
+      expect(saved.data?.personNotes?.[0]).toMatchObject({
+        personId: 'sample-person-avery',
+        sharedWith: ['sample-person-morgan'],
+        content: 'App integration first line\nsecond line'
+      });
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Close profile for Avery Brooks' }));
+    await openPerson('Morgan Reed');
+    await user.click(screen.getByRole('button', { name: /Open note updated/ }));
+    const noteDetail = screen.getByRole('dialog', { name: 'Note' });
+    expect(within(noteDetail).getByText(/Primary person: Avery Brooks/)).toBeTruthy();
+    await user.click(within(noteDetail).getByRole('button', { name: 'Edit note' }));
+    const edit = screen.getByRole('dialog', { name: 'Edit note' });
+    await user.clear(within(edit).getByRole('textbox', { name: 'Note' }));
+    await user.type(within(edit).getByRole('textbox', { name: 'Note' }), 'Edited from the shared profile');
+    await user.click(within(edit).getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}') as {
+        data?: { personNotes?: Array<Record<string, unknown>> };
+      };
+      expect(saved.data?.personNotes).toHaveLength(1);
+      expect(saved.data?.personNotes?.[0]).toMatchObject({
+        personId: 'sample-person-avery',
+        sharedWith: ['sample-person-morgan'],
+        content: 'Edited from the shared profile'
+      });
+    });
+
+    cleanup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await openPerson('Avery Brooks');
+    expect(screen.getByText('Notes (1)')).toBeTruthy();
+    expect(screen.getByText('Edited from the shared profile')).toBeTruthy();
   });
 
   it('renders imported strings as text and persists the confirmed preview replacement', async () => {

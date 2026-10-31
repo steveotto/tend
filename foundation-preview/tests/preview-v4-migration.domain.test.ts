@@ -268,7 +268,11 @@ describe('v4 migration and recovery domain', () => {
     const envelope = createPreviewEnvelope(data);
     const legacyStrength = structuredClone(envelope.data.strength);
     delete (legacyStrength.settings as Partial<StrengthData['settings']>).betweenSetRestSeconds;
-    const { personDetails: _personDetails, ...v25Data } = envelope.data;
+    const {
+      personDetails: _personDetails,
+      personNotes: _personNotes,
+      ...v25Data
+    } = envelope.data;
     const raw = JSON.stringify({
       ...envelope,
       schemaVersion: 25,
@@ -336,7 +340,11 @@ describe('v4 migration and recovery domain', () => {
       for (const set of exercise.sets) delete set.measurement;
     }
     const envelope = createPreviewEnvelope(data);
-    const { personDetails: _personDetails, ...v24Data } = envelope.data;
+    const {
+      personDetails: _personDetails,
+      personNotes: _personNotes,
+      ...v24Data
+    } = envelope.data;
     const raw = JSON.stringify({
       ...envelope,
       schemaVersion: 24,
@@ -485,6 +493,7 @@ describe('v4 migration and recovery domain', () => {
       friendships: _friendships,
       peopleGroups: _peopleGroups,
       personDetails: _personDetails,
+      personNotes: _personNotes,
       ...dataBeforeWeight
     } = data;
     const savedRhythms = dataBeforeWeight.savedRhythms.map(({ healthLogCapability: _capability, ...rhythm }) => rhythm);
@@ -555,6 +564,7 @@ describe('v4 migration and recovery domain', () => {
     const legacyEnvelope = JSON.parse(JSON.stringify(currentEnvelope)) as Record<string, unknown>;
     legacyEnvelope.schemaVersion = 23;
     delete (legacyEnvelope.data as Record<string, unknown>).personDetails;
+    delete (legacyEnvelope.data as Record<string, unknown>).personNotes;
     const legacyStrength = (legacyEnvelope.data as Record<string, unknown>).strength as Record<string, unknown>;
     const legacySettings = legacyStrength.settings as Record<string, unknown>;
     delete legacySettings.weightUnit;
@@ -650,7 +660,11 @@ describe('v4 migration and recovery domain', () => {
 
     const strengthV21 = clearStrengthGuidedSessionDraft(data.strength);
     const v21Envelope = createPreviewEnvelope({ ...data, strength: strengthV21 });
-    const { personDetails: _personDetails, ...v21Data } = v21Envelope.data;
+    const {
+      personDetails: _personDetails,
+      personNotes: _personNotes,
+      ...v21Data
+    } = v21Envelope.data;
     const v21Raw = ` \n${JSON.stringify({
       ...v21Envelope,
       schemaVersion: 21,
@@ -705,7 +719,11 @@ describe('v4 migration and recovery domain', () => {
     expect(validateStrengthData(strengthAtV24(data.strength), true)).toBe(true);
 
     const current = createPreviewEnvelope(data);
-    const { personDetails: _personDetails, ...v22Data } = current.data;
+    const {
+      personDetails: _personDetails,
+      personNotes: _personNotes,
+      ...v22Data
+    } = current.data;
     const v22Raw = ` \n${JSON.stringify({
       ...current,
       schemaVersion: 22,
