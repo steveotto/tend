@@ -26,7 +26,12 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
   selectedIds,
   getLabel,
   renderBadge,
+  emptyMessage = 'No options are available.',
   groups,
+  groupBy,
+  unavailableSelectedItems = [],
+  unavailableItemType = 'Foundation',
+  focusItemId,
   onToggle,
   onToggleGroup,
   onDone,
@@ -37,7 +42,12 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
   selectedIds: readonly string[];
   getLabel: (item: Item) => string;
   renderBadge: (item: Item) => ReactNode;
+  emptyMessage?: string;
   groups?: readonly BadgeSelectionGroup<Item['id']>[];
+  groupBy?: (item: Item) => string | undefined;
+  unavailableSelectedItems?: readonly { id: string; label: string }[];
+  unavailableItemType?: string;
+  focusItemId?: string | null;
   onToggle: (id: Item['id']) => void;
   onToggleGroup?: (ids: readonly Item['id'][]) => void;
   onDone: () => void;
@@ -46,8 +56,14 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
-    headingRef.current?.focus();
-  }, []);
+    if (focusItemId) {
+      Array.from(document.querySelectorAll<HTMLButtonElement>('[data-picker-item-id]'))
+        .find(button => button.dataset.pickerItemId === focusItemId)
+        ?.focus();
+    } else {
+      headingRef.current?.focus();
+    }
+  }, [focusItemId]);
 
   const availableIds = new Set(items.map(item => item.id));
 
@@ -109,26 +125,74 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
         </div>
       )}
       {items.length === 0 ? (
-        <p className="rhythm-association-picker__empty">No options are available.</p>
+        <>
+          <p className="rhythm-association-picker__empty">{emptyMessage}</p>
+          {unavailableSelectedItems.map(item => (
+            <button
+              key={item.id}
+              type="button"
+              className="rhythm-association-picker__option rhythm-association-picker__option--unavailable"
+              aria-label={`Remove unresolved ${unavailableItemType} link ${item.id}`}
+              aria-pressed="true"
+              data-selected="true"
+              onClick={() => onToggle(item.id)}
+            >
+              <span className="rhythm-association-picker__badge">{item.label}</span>
+            </button>
+          ))}
+        </>
       ) : (
         <div className="rhythm-association-picker__options" role="group" aria-label={title}>
-          {items.map(item => {
-            const selected = selectedIds.includes(item.id);
-            const label = getLabel(item);
+          {(groupBy
+            ? [...new Set(items.map(groupBy))]
+            : [undefined]
+          ).map(groupLabel => {
+            const groupItems = groupBy
+              ? items.filter(item => groupBy(item) === groupLabel)
+              : items;
             return (
-              <button
-                key={item.id}
-                type="button"
-                className="rhythm-association-picker__option"
-                aria-label={label}
-                aria-pressed={selected}
-                data-selected={selected ? 'true' : 'false'}
-                onClick={() => onToggle(item.id)}
+              <section
+                key={groupLabel ?? title}
+                className="rhythm-association-picker__option-group"
+                aria-label={groupLabel}
               >
-                <span className="rhythm-association-picker__badge">{renderBadge(item)}</span>
-              </button>
+                {groupLabel && <h4>{groupLabel}</h4>}
+                <div className="rhythm-association-picker__option-grid">
+                  {groupItems.map(item => {
+                    const selected = selectedIds.includes(item.id);
+                    const label = getLabel(item);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className="rhythm-association-picker__option"
+                        data-picker-item-id={item.id}
+                        aria-label={label}
+                        aria-pressed={selected}
+                        data-selected={selected ? 'true' : 'false'}
+                        onClick={() => onToggle(item.id)}
+                      >
+                        <span className="rhythm-association-picker__badge">{renderBadge(item)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
             );
           })}
+          {unavailableSelectedItems.map(item => (
+            <button
+              key={item.id}
+              type="button"
+              className="rhythm-association-picker__option rhythm-association-picker__option--unavailable"
+              aria-label={`Remove unresolved ${unavailableItemType} link ${item.id}`}
+              aria-pressed="true"
+              data-selected="true"
+              onClick={() => onToggle(item.id)}
+            >
+              <span className="rhythm-association-picker__badge">{item.label}</span>
+            </button>
+          ))}
         </div>
       )}
       <div className="money-goal-dialog__actions rhythm-association-picker__actions">

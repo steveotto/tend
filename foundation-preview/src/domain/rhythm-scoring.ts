@@ -141,6 +141,10 @@ export type RhythmScoreResult =
   | UnscoredRhythmSelection
   | InvalidRhythmSelection;
 
+export function rhythmHealthScore(result: RhythmScoreResult | undefined): number | null {
+  return result?.kind === 'rhythm-score' ? result.healthScore : null;
+}
+
 export type SelectRhythmScoreInput = {
   rhythmId: string;
   cadence?: string;
@@ -222,7 +226,8 @@ function consistencyScheduleSupported(
 
 function maximumWindowStart(schedule: Exclude<RhythmSchedule, { frequency: 'custom' }>, asOfDate: string): string {
   if (schedule.frequency === 'daily') return addCalendarDays(asOfDate, -29);
-  if (schedule.frequency === 'weekly' && schedule.weekdays.length > 1) {
+  if (schedule.frequency === 'weekly'
+    && (schedule.weeklyMode === 'select-days' || schedule.weekdays.length > 1)) {
     return addCalendarDays(asOfDate, -30);
   }
   if (schedule.frequency === 'weekly') return addCalendarDays(asOfDate, -84);
@@ -393,11 +398,15 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
       return invalid(input, 'Scoring metadata or schedule history is malformed.');
     }
     const latestSegment = scheduleHistory.at(-1);
+    const activeSegment = rhythmSeasonForDate(scheduleHistory, input.asOfDate);
     if (!latestSegment) {
       return invalid(input, 'Schedule history has no current segment.');
     }
-    if (latestSegment.kind !== 'scheduled' || !rhythmSchedulesEqual(latestSegment.schedule, schedule)) {
-      return invalid(input, 'The current schedule does not match the final saved schedule-history segment.');
+    if (latestSegment.kind !== 'scheduled') {
+      return invalid(input, 'The latest saved schedule-history segment must have a known schedule.');
+    }
+    if (activeSegment?.kind === 'scheduled' && !rhythmSchedulesEqual(activeSegment.schedule, schedule)) {
+      return invalid(input, 'The current schedule does not match the schedule effective today.');
     }
     segments = scheduleHistory;
   }
@@ -405,9 +414,12 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
   const datedRecords = input.records.filter(record => record.rhythmId === input.rhythmId
     && record.effectiveDate <= input.asOfDate);
   const oldestCompletionDate = datedRecords.map(record => record.effectiveDate).sort()[0];
+  // Explicit schedule history owns its tracking boundary; older logs still expose missing history.
+  const trackingCandidates = input.scoring
+    ? [input.scoring.trackingStartDate, oldestCompletionDate]
+    : [input.createdLocalDate, oldestCompletionDate];
   const trackingStartDate = [
-    input.createdLocalDate,
-    oldestCompletionDate
+    ...trackingCandidates
   ].filter((date): date is string => date !== undefined).sort()[0] ?? null;
   if (trackingStartDate && trackingStartDate > input.asOfDate) {
     return baseUnscored(input, unscored('not-started', 'This Rhythm’s tracking date is in the future.'));
@@ -716,6 +728,87 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
     onTrack,
     healthScore
   };
+}
+
+export function selectRhythmSeasonScore(
+  input: SelectRhythmScoreInput,
+  season: RhythmScheduleHistorySegment,
+  endDate?: string
+): RhythmScoreResult {
+  if (season.kind !== 'scheduled') {
+    return baseUnscored(input, unscored(
+      'unsupported-history',
+      'Season Health is unavailable because its schedule is unknown.'
+    ));
+  }
+  if (!input.scoring) {
+    return baseUnscored(input, unscored(
+      'unsupported-history',
+      'Season Health is unavailable because its schedule history is not recorded.'
+    ));
+  }
+  const historyIndex = input.scoring.scheduleHistory.findIndex(segment => segment.id === season.id);
+  const savedSeason = input.scoring.scheduleHistory[historyIndex];
+  if (!savedSeason || savedSeason.kind !== 'scheduled') {
+    return baseUnscored(input, unscored(
+      'unsupported-history',
+      'Season Health is unavailable because its schedule history is unresolved.'
+    ));
+  }
+  if (endDate !== undefined && !isValidDate(endDate)) {
+    return invalid(input, 'The Season scoring end date is invalid.');
+  }
+  const seasonEndDate = endDate && endDate < input.asOfDate ? endDate : input.asOfDate;
+  if (seasonEndDate < savedSeason.startDate) {
+    return baseUnscored(input, unscored(
+      'not-started',
+      'This Season has not started, so it does not have a score yet.'
+    ));
+  }
+  const evaluationDate = endDate !== undefined && savedSeason.schedule.endDate !== undefined
+    && savedSeason.schedule.endDate < seasonEndDate
+    ? savedSeason.schedule.endDate
+    : seasonEndDate;
+  const trackingStartDate = savedSeason.startDate > input.scoring.trackingStartDate
+    ? savedSeason.startDate
+    : input.scoring.trackingStartDate;
+  if (trackingStartDate > evaluationDate) {
+    return baseUnscored(input, unscored(
+      'not-started',
+      'This Season is outside the Rhythm’s established tracking dates.'
+    ));
+  }
+  const scopedSeason: RhythmScheduleHistorySegment = {
+    ...savedSeason,
+    startDate: trackingStartDate
+  };
+  const scopedHistory: RhythmScheduleHistorySegment[] = [scopedSeason];
+  if (evaluationDate < input.asOfDate) {
+    const afterSeasonDate = addCalendarDays(evaluationDate, 1);
+    if (!isValidDate(afterSeasonDate)) {
+      return invalid(input, 'The Season scoring end date cannot be represented as a following calendar date.');
+    }
+    scopedHistory.push({
+      ...scopedSeason,
+      id: `season-score-end:${savedSeason.id}:${evaluationDate}`,
+      startDate: afterSeasonDate
+    });
+  }
+  return selectRhythmScore({
+    ...input,
+    schedule: savedSeason.schedule,
+    scoring: {
+      ...input.scoring,
+      trackingStartDate,
+      scheduleHistory: scopedHistory
+    },
+    records: input.records.filter(record =>
+      record.rhythmId === input.rhythmId
+      && record.effectiveDate >= savedSeason.startDate
+      && record.effectiveDate <= evaluationDate
+    ),
+    asOfDate: evaluationDate
+  });
 }
 
 export const selectDailyRhythmScore = selectRhythmScore;

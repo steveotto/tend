@@ -2,31 +2,30 @@ import { useState } from 'react';
 import type { FoundationLifecycle } from '../../src/domain/capabilities.ts';
 import {
   financeFoundation,
+  foundationCatalogue,
   goals,
   marriageFoundation,
   personById,
   peopleForRhythm,
   rhythms,
+  createPersonPickerGroups,
   type PersonId
 } from './domain/preview-data.ts';
+import type { PersonPickerGroup } from './domain/preview-data.ts';
+import { createFriendshipData } from './domain/friendships.ts';
+import type { FriendshipData } from './domain/friendships.ts';
+import { localDateString } from './domain/money-goals.ts';
+import type { RhythmScoreResult } from './domain/rhythm-scoring.ts';
 import { FoundationCard, GoalCard, RhythmCard, ScoreMeter } from './components/Cards.tsx';
-import { PersonProfilePlaceholder } from './components/PersonProfilePlaceholder.tsx';
+import { PersonProfileView } from './components/PersonProfileView.tsx';
 
 export function CatalogApp() {
   const [financeLifecycle, setFinanceLifecycle] = useState<FoundationLifecycle>(financeFoundation.lifecycle);
   const [selectedPersonId, setSelectedPersonId] = useState<PersonId | null>(null);
+  const [friendships, setFriendships] = useState<FriendshipData>(createFriendshipData);
+  const [peopleGroups, setPeopleGroups] = useState<PersonPickerGroup[]>(createPersonPickerGroups);
   const financeFoundationView = { ...financeFoundation, lifecycle: financeLifecycle };
   const selectedPerson = selectedPersonId === null ? null : personById(selectedPersonId);
-
-  if (selectedPerson) {
-    return (
-      <PersonProfilePlaceholder
-        person={selectedPerson}
-        backLabel="Component catalogue"
-        onBack={() => setSelectedPersonId(null)}
-      />
-    );
-  }
 
   return (
     <main className="app-shell">
@@ -124,6 +123,35 @@ export function CatalogApp() {
         <strong>Preview only.</strong> No account data, banking connection, score calculation, or save
         action is active.
       </footer>
+      {selectedPerson && (
+        <PersonProfileView
+          key={selectedPerson.id}
+          personId={selectedPerson.id}
+          peopleGroups={peopleGroups}
+          friendships={friendships}
+          today={localDateString(new Date())}
+          rhythms={rhythms.filter(rhythm => rhythm.personIds?.includes(selectedPerson.id))}
+          archivedRhythms={[]}
+          foundations={foundationCatalogue}
+          rhythmScores={new Map<string, RhythmScoreResult>()}
+          completedRhythms={new Set()}
+          undoableRhythms={new Set()}
+          onFriendshipsChange={setFriendships}
+          onPeopleGroupsChange={setPeopleGroups}
+          onAddRhythm={() => undefined}
+          onEditRhythm={() => undefined}
+          onRhythmHistory={() => undefined}
+          onTend={() => undefined}
+          onUndo={() => undefined}
+          onRestoreRhythm={() => undefined}
+          onOpenFoundation={() => undefined}
+          onOpenCategory={() => undefined}
+          onPersonSelect={setSelectedPersonId}
+          onConnectionChange={setFriendships}
+          showAddRhythm={false}
+          onClose={() => setSelectedPersonId(null)}
+        />
+      )}
     </main>
   );
 }

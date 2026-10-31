@@ -12,7 +12,14 @@ import {
   type GoalCheckIn,
   type MoneyGoal
 } from '../domain/money-goals.ts';
-import { rhythmLastTendedLabel, type FoundationPreview, type PersonId, type PersonPreview, type RhythmPreview } from '../domain/preview-data.ts';
+import {
+  foundationTerminologyForCategory,
+  rhythmLastTendedLabel,
+  type FoundationPreview,
+  type PersonId,
+  type PersonPreview,
+  type RhythmPreview
+} from '../domain/preview-data.ts';
 import { localDateInTimeZone } from '../domain/rhythm-occurrences.ts';
 import { PersonBadgeList } from './PersonBadge.tsx';
 import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
@@ -32,10 +39,79 @@ type FoundationCardProps = {
   onSelect?: (event: MouseEvent<HTMLButtonElement>) => void;
   headingId?: string;
   selectButtonId?: string;
+  score?: number | null;
+  scoreLabel?: string;
+  scoreEvidence?: string;
   illustrativeScore?: number | null;
   rhythmCoverage?: { scored: number; total: number };
+  reserveDescriptionSpace?: boolean;
   children?: ReactNode;
 };
+
+function CompactCardBody({
+  title,
+  description,
+  icon,
+  headingId,
+  interactive,
+  reserveDescriptionSpace,
+  children
+}: {
+  title: string;
+  description: string;
+  icon?: ReactNode;
+  headingId?: string;
+  interactive: boolean;
+  reserveDescriptionSpace: boolean;
+  children?: ReactNode;
+}) {
+  return (
+    <>
+      {icon && <span className="foundation-card__icon" aria-hidden="true">{icon}</span>}
+      <span className="foundation-card__content">
+        {interactive
+          ? <span className="foundation-card__title" id={headingId} role="heading" aria-level={3}>{title}</span>
+          : <h3 className="foundation-card__title" id={headingId} tabIndex={-1}>{title}</h3>}
+        <span className={`foundation-card__description${interactive || reserveDescriptionSpace
+          ? ' foundation-card__description--reserved'
+          : ''}`}>
+          {description}
+        </span>
+        {children}
+      </span>
+    </>
+  );
+}
+
+export function DetailNavigationCard({
+  title,
+  description,
+  icon,
+  onSelect
+}: {
+  title: string;
+  description: string;
+  icon?: ReactNode;
+  onSelect: (event: MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      className="foundation-card foundation-card--compact foundation-card--interactive"
+      type="button"
+      aria-label={`${title}: ${description}`}
+      onClick={onSelect}
+    >
+      <CompactCardBody
+        title={title}
+        description={description}
+        icon={icon}
+        interactive
+        reserveDescriptionSpace
+      />
+      <span className="foundation-card__chevron" aria-hidden="true">›</span>
+    </button>
+  );
+}
 
 export function FoundationCard({
   foundation,
@@ -47,42 +123,52 @@ export function FoundationCard({
   onSelect,
   headingId,
   selectButtonId,
+  score,
+  scoreLabel,
+  scoreEvidence,
   illustrativeScore,
   rhythmCoverage,
+  reserveDescriptionSpace = false,
   children
 }: FoundationCardProps) {
   const completable = foundation.capabilities.completion !== 'ongoing';
   const isCompleted = lifecycle === 'completed';
   const resolvedHeadingId = headingId ?? `foundation-${foundation.id}`;
+  const foundationTerm = foundationTerminologyForCategory(foundation.categoryId);
+  const displayScore = score === undefined ? illustrativeScore : score;
+  const displayScoreLabel = scoreLabel ?? `${foundation.name} illustrative score`;
+  const coverageText = scoreEvidence ?? (rhythmCoverage
+    ? rhythmCoverage.total === 0
+      ? 'No linked sample Rhythms'
+      : `${rhythmCoverage.scored} of ${rhythmCoverage.total} linked Rhythms have sample values`
+    : undefined);
 
   if (variant === 'compact') {
     const content = (
       <>
-        {icon && <span className="foundation-card__icon" aria-hidden="true">{icon}</span>}
-        <span className="foundation-card__content">
-          {onSelect
-            ? <span className="foundation-card__title" id={headingId} role="heading" aria-level={3}>{foundation.name}</span>
-            : <h3 className="foundation-card__title" id={resolvedHeadingId} tabIndex={-1}>{foundation.name}</h3>}
-          <span className="foundation-card__description">{foundation.description}</span>
-          {illustrativeScore !== undefined && (
+        <CompactCardBody
+          title={foundation.name}
+          description={foundation.description}
+          icon={icon}
+          {...(onSelect
+            ? headingId ? { headingId } : {}
+            : { headingId: resolvedHeadingId })}
+          interactive={Boolean(onSelect)}
+          reserveDescriptionSpace={reserveDescriptionSpace}
+        >
+          {displayScore !== undefined && (
             <>
-              {rhythmCoverage && (
-                <span className="foundation-card__coverage">
-                  {rhythmCoverage.total === 0
-                    ? 'No supporting sample Rhythms'
-                    : `${rhythmCoverage.scored} of ${rhythmCoverage.total} supporting Rhythms have sample values`}
-                </span>
-              )}
+              {coverageText && <span className="foundation-card__coverage">{coverageText}</span>}
               <FoundationProgress
-                label={`${foundation.name} illustrative score`}
-                score={illustrativeScore}
+                label={displayScoreLabel}
+                score={displayScore}
                 decorative={Boolean(onSelect)}
               />
             </>
           )}
-        </span>
-        <span className={`foundation-card__score ${scoreTone(illustrativeScore ?? null)}`} aria-hidden="true">
-          {illustrativeScore ?? '—'}
+        </CompactCardBody>
+        <span className={`foundation-card__score ${scoreTone(displayScore ?? null)}`} aria-hidden="true">
+          {displayScore === null || displayScore === undefined ? '—' : Math.round(displayScore)}
         </span>
         {onSelect && <span className="foundation-card__chevron" aria-hidden="true">›</span>}
         {children}
@@ -90,12 +176,12 @@ export function FoundationCard({
     );
 
     if (onSelect) {
-      const scoreName = illustrativeScore === undefined || illustrativeScore === null
-        ? 'score unavailable'
-        : `illustrative score ${illustrativeScore} out of 100`;
-      const coverageName = rhythmCoverage
-        ? `, ${rhythmCoverage.scored} of ${rhythmCoverage.total} supporting Rhythms have sample values`
-        : '';
+      const scoreName = displayScore === undefined || displayScore === null
+        ? `${scoreLabel ?? 'score'} unavailable`
+        : scoreLabel
+          ? `${scoreLabel} ${Math.round(displayScore)} out of 100`
+          : `illustrative score ${displayScore} out of 100`;
+      const coverageName = coverageText ? `, ${coverageText}` : '';
       return (
         <button
           id={selectButtonId}
@@ -103,7 +189,7 @@ export function FoundationCard({
           className="foundation-card foundation-card--compact foundation-card--interactive"
           type="button"
           onClick={onSelect}
-          aria-label={`Open ${foundation.name} foundation details, ${scoreName}${coverageName}`}
+          aria-label={`Open ${foundation.name} ${foundationTerm.singular.toLowerCase()} details, ${scoreName}${coverageName}`}
         >
           {content}
         </button>
@@ -124,7 +210,7 @@ export function FoundationCard({
     <article className="foundation-card" aria-labelledby={headingId ?? `foundation-${foundation.id}`}>
       <div className="card-heading">
         <div>
-          <p className="eyebrow">{foundation.category} foundation</p>
+          <p className="eyebrow">{foundation.category} {foundationTerm.singular.toLowerCase()}</p>
           <h3 id={headingId ?? `foundation-${foundation.id}`} tabIndex={onSelect || headingId ? -1 : undefined}>{foundation.name}</h3>
         </div>
         <span className={`lifecycle-badge${isCompleted ? ' is-complete' : ''}`} aria-live="polite">
@@ -132,7 +218,10 @@ export function FoundationCard({
         </span>
       </div>
       <p className="card-copy">{foundation.description}</p>
-      <CapabilityList capabilities={foundation.capabilities} />
+      <CapabilityList
+        capabilities={foundation.capabilities}
+        label={`${foundationTerm.singular} capabilities`}
+      />
       {children}
       {onSelect && (
         <button
@@ -192,10 +281,34 @@ export function FoundationProgress({
   );
 }
 
-export function CategoryHealthBadge({ score }: { score: number | null }) {
+export function CategoryHealthBadge({
+  score,
+  accessibleLabel,
+  className,
+  displayScore = score,
+  variant = 'default'
+}: {
+  score: number | null;
+  accessibleLabel?: string;
+  className?: string;
+  displayScore?: number | null;
+  variant?: 'default' | 'neutral-labeled';
+}) {
   return (
-    <span className={`ma-score ${scoreTone(score)}`} aria-hidden="true">
-      {score ?? '—'}
+    <span
+      className={`ma-score ${scoreTone(score)}${className ? ` ${className}` : ''}`}
+      {...(accessibleLabel
+        ? { role: 'img', 'aria-label': accessibleLabel }
+        : { 'aria-hidden': true })}
+    >
+      {variant === 'neutral-labeled'
+        ? (
+          <>
+            <span className="ma-score__label">Health</span>
+            <span className="ma-score__value">{displayScore ?? '—'}</span>
+          </>
+        )
+        : displayScore ?? '—'}
     </span>
   );
 }
@@ -313,7 +426,16 @@ type RhythmCardBaseProps = {
 
 type RhythmCardProps = RhythmCardBaseProps & (
   | { variant?: 'catalogue'; icon?: ReactNode | undefined; onDetails?: (event: MouseEvent<HTMLButtonElement>) => void }
-  | { variant: 'simple'; completed?: boolean; archived?: boolean; onDetails: (event: MouseEvent<HTMLButtonElement>) => void; onTend?: (event: MouseEvent<HTMLButtonElement>) => void; onUndo?: () => void }
+  | {
+      variant: 'simple';
+      completed?: boolean;
+      archived?: boolean;
+      completionActionLabel?: string;
+      completedActionLabel?: string;
+      onDetails: (event: MouseEvent<HTMLButtonElement>) => void;
+      onTend?: (event: MouseEvent<HTMLButtonElement>) => void;
+      onUndo?: () => void;
+    }
   | { variant: 'suggestion'; icon?: ReactNode | undefined; onDetails: (event: MouseEvent<HTMLButtonElement>) => void }
 );
 
@@ -368,6 +490,8 @@ export function RhythmCard(props: RhythmCardProps) {
         onPersonSelect={onPersonSelect}
         completed={props.completed === true}
         archived={props.archived === true}
+        completionActionLabel={props.completionActionLabel}
+        completedActionLabel={props.completedActionLabel}
         onDetails={props.onDetails}
         onTend={props.onTend}
         onUndo={props.onUndo}
@@ -414,6 +538,8 @@ function SimpleRhythmCard({
   onPersonSelect,
   completed = false,
   archived = false,
+  completionActionLabel,
+  completedActionLabel,
   suggestion = false,
   icon,
   onDetails,
@@ -427,6 +553,8 @@ function SimpleRhythmCard({
   onPersonSelect?: ((personId: PersonId) => void) | undefined;
   completed?: boolean;
   archived?: boolean;
+  completionActionLabel?: string | undefined;
+  completedActionLabel?: string | undefined;
   suggestion?: boolean;
   icon?: ReactNode | undefined;
   onDetails: (event: MouseEvent<HTMLButtonElement>) => void;
@@ -458,6 +586,8 @@ function SimpleRhythmCard({
           <RhythmCompletionActions
             rhythmTitle={rhythm.title}
             completed={completed}
+            actionLabel={completionActionLabel}
+            completedLabel={completedActionLabel}
             onTend={onTend}
             tendButtonRef={tendButtonRef}
           />
@@ -546,7 +676,13 @@ function RhythmCardSummary({
   );
 }
 
-function CapabilityList({ capabilities }: { capabilities: FoundationCapabilities }) {
+function CapabilityList({
+  capabilities,
+  label
+}: {
+  capabilities: FoundationCapabilities;
+  label: string;
+}) {
   const labels = [
     capabilities.rhythms ? 'Supports Rhythms' : null,
     capabilities.numericGoals ? 'Supports numeric goals' : null,
@@ -554,7 +690,7 @@ function CapabilityList({ capabilities }: { capabilities: FoundationCapabilities
   ].filter((label): label is string => label !== null);
 
   return (
-    <ul className="capability-list" aria-label="Foundation capabilities">
+    <ul className="capability-list" aria-label={label}>
       {labels.map(label => <li key={label}>{label}</li>)}
     </ul>
   );

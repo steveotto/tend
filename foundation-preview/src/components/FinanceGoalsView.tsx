@@ -3,6 +3,7 @@ import type { CheckInDraft, CheckInDraftErrors, GoalCheckIn, MoneyGoal } from '.
 import { GoalEditor } from './GoalEditor.tsx';
 import { GoalCard } from './Cards.tsx';
 import { ProgressCheckIn } from './ProgressCheckIn.tsx';
+import { CategoryHeader } from './CategoryHeader.tsx';
 
 type GoalDialogState =
   | { kind: 'edit'; goal: MoneyGoal | null; newGoalId: string }
@@ -38,11 +39,12 @@ export function FinanceGoalsView({ goals, currentDate, onSaveGoal, onSaveCheckIn
   }
 
   return (
-    <main className="category-page money-goals-page" aria-labelledby="finances-heading">
-      <header className="category-page-heading">
-        <h2 id="finances-heading">Finances</h2>
-        <span className="hint">Examples only · taxonomy not finalized</span>
-      </header>
+    <main className="category-page category-page--with-header money-goals-page" aria-labelledby="finances-heading">
+      <CategoryHeader
+        title="Finances"
+        titleId="finances-heading"
+        trailing={<span className="hint">Examples only · taxonomy not finalized</span>}
+      />
       <section className="money-goals-intro card" aria-label="Finance preview information">
         <p><strong>Sample goals and balance snapshots.</strong> All values are illustrative; edits are saved only in this browser’s synthetic preview.</p>
         <p>Manual check-ins are dated observations. No account, bank connection, balance verification, or money movement is active.</p>

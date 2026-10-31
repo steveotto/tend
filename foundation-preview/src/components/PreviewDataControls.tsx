@@ -20,6 +20,7 @@ type PendingAction =
   | { kind: 'replace-external' };
 
 type PreviewDataControlsProps = {
+  hidden?: boolean;
   data: PreviewData;
   status: PreviewPersistenceStatus;
   currentDate: string;
@@ -50,6 +51,40 @@ type PreviewDataControlsProps = {
   v10RecoveryError?: string | null;
   v11RecoveryCopy?: string | null;
   v11RecoveryError?: string | null;
+  v12RecoveryCopy?: string | null;
+  v12RecoveryError?: string | null;
+  v13RecoveryCopy?: string | null;
+  v13RecoveryError?: string | null;
+  v14RecoveryCopy?: string | null;
+  v14RecoveryError?: string | null;
+  v15RecoveryCopy?: string | null;
+  v15RecoveryError?: string | null;
+  v16RecoveryCopy?: string | null;
+  v16RecoveryError?: string | null;
+  v17RecoveryCopy?: string | null;
+  v17RecoveryError?: string | null;
+  v18RecoveryCopy?: string | null;
+  v18RecoveryError?: string | null;
+  v19RecoveryCopy?: string | null;
+  v19RecoveryError?: string | null;
+  v20RecoveryCopy?: string | null;
+  v20RecoveryError?: string | null;
+  v21RecoveryCopy?: string | null;
+  v21RecoveryError?: string | null;
+  v22RecoveryCopy?: string | null;
+  v22RecoveryError?: string | null;
+  v23RecoveryCopy?: string | null;
+  v23RecoveryError?: string | null;
+  v25RecoveryCopy?: string | null;
+  v25RecoveryError?: string | null;
+  v26RecoveryCopy?: string | null;
+  v26RecoveryError?: string | null;
+  v27RecoveryCopy?: string | null;
+  v27RecoveryError?: string | null;
+  v28RecoveryCopy?: string | null;
+  v28RecoveryError?: string | null;
+  v29RecoveryCopy?: string | null;
+  v29RecoveryError?: string | null;
 };
 
 function downloadText(filename: string, content: string, type: string): string | null {
@@ -70,6 +105,7 @@ function downloadText(filename: string, content: string, type: string): string |
 }
 
 export function PreviewDataControls({
+  hidden = false,
   data,
   status,
   currentDate,
@@ -99,7 +135,41 @@ export function PreviewDataControls({
   v10RecoveryCopy = null,
   v10RecoveryError = null,
   v11RecoveryCopy = null,
-  v11RecoveryError = null
+  v11RecoveryError = null,
+  v12RecoveryCopy = null,
+  v12RecoveryError = null,
+  v13RecoveryCopy = null,
+  v13RecoveryError = null,
+  v14RecoveryCopy = null,
+  v14RecoveryError = null,
+  v15RecoveryCopy = null,
+  v15RecoveryError = null,
+  v16RecoveryCopy = null,
+  v16RecoveryError = null,
+  v17RecoveryCopy = null,
+  v17RecoveryError = null,
+  v18RecoveryCopy = null,
+  v18RecoveryError = null,
+  v19RecoveryCopy = null,
+  v19RecoveryError = null,
+  v20RecoveryCopy = null,
+  v20RecoveryError = null,
+  v21RecoveryCopy = null,
+  v21RecoveryError = null,
+  v22RecoveryCopy = null,
+  v22RecoveryError = null,
+  v23RecoveryCopy = null,
+  v23RecoveryError = null,
+  v25RecoveryCopy = null,
+  v25RecoveryError = null,
+  v26RecoveryCopy = null,
+  v26RecoveryError = null,
+  v27RecoveryCopy = null,
+  v27RecoveryError = null,
+  v28RecoveryCopy = null,
+  v28RecoveryError = null,
+  v29RecoveryCopy = null,
+  v29RecoveryError = null
 }: PreviewDataControlsProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -177,7 +247,7 @@ export function PreviewDataControls({
                 : 'This preview changed in another tab. Reload it or explicitly replace it after downloading a backup.';
 
   return (
-    <section className="preview-data-controls card" aria-label="Preview data and backups">
+    <section className="preview-data-controls card" aria-label="Preview data and backups" hidden={hidden}>
       <div className="preview-data-controls__copy">
         <p className="preview-data-controls__notice" role={status.kind === 'saved' ? 'status' : 'alert'}>
           <strong>{statusMessage}</strong> This is separate from your live Tend account and does not sync across devices.
@@ -334,6 +404,191 @@ export function PreviewDataControls({
             Download original v11 recovery backup
           </button>
         )}
+        {v12RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v12-recovery.json',
+              v12RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v12 recovery backup downloaded.')}
+          >
+            Download original v12 recovery backup
+          </button>
+        )}
+        {v13RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v13-recovery.json',
+              v13RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v13 recovery backup downloaded.')}
+          >
+            Download original v13 recovery backup
+          </button>
+        )}
+        {v14RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v14-recovery.json',
+              v14RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v14 recovery backup downloaded.')}
+          >
+            Download original v14 recovery backup
+          </button>
+        )}
+        {v15RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v15-recovery.json',
+              v15RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v15 recovery backup downloaded.')}
+          >
+            Download original v15 recovery backup
+          </button>
+        )}
+        {v16RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v16-recovery.json',
+              v16RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v16 recovery backup downloaded.')}
+          >
+            Download original v16 recovery backup
+          </button>
+        )}
+        {v17RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v17-recovery.json',
+              v17RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v17 recovery backup downloaded.')}>
+            Download original v17 recovery backup
+          </button>
+        )}
+        {v18RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v18-recovery.json',
+              v18RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v18 recovery backup downloaded.')}>
+            Download original v18 recovery backup
+          </button>
+        )}
+        {v19RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v19-recovery.json',
+              v19RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v19 recovery backup downloaded.')}>
+            Download original v19 recovery backup
+          </button>
+        )}
+        {v20RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v20-recovery.json',
+              v20RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v20 recovery backup downloaded.')}>
+            Download original v20 recovery backup
+          </button>
+        )}
+        {v21RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v21-recovery.json',
+              v21RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v21 recovery backup downloaded.')}>
+            Download original v21 recovery backup
+          </button>
+        )}
+        {v22RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v22-recovery.json',
+              v22RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v22 recovery backup downloaded.')}>
+            Download original v22 recovery backup
+          </button>
+        )}
+        {v23RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v23-recovery.json',
+              v23RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v23 recovery backup downloaded.')}>
+            Download original v23 recovery backup
+          </button>
+        )}
+        {v25RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v25-recovery.json',
+              v25RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v25 recovery backup downloaded.')}>
+            Download original v25 recovery backup
+          </button>
+        )}
+        {v26RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v26-recovery.json',
+              v26RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v26 recovery backup downloaded.')}>
+            Download original v26 recovery backup
+          </button>
+        )}
+        {v27RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v27-recovery.json',
+              v27RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v27 recovery backup downloaded.')}>
+            Download original v27 recovery backup
+          </button>
+        )}
+        {v28RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v28-recovery.json',
+              v28RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v28 recovery backup downloaded.')}>
+            Download original v28 recovery backup
+          </button>
+        )}
+        {v29RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v29-recovery.json',
+              v29RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v29 recovery backup downloaded.')}>
+            Download original v29 recovery backup
+          </button>
+        )}
         <label className="btn mini ghost preview-data-controls__file-button">
           Import preview backup
           <input
@@ -382,6 +637,23 @@ export function PreviewDataControls({
       {v9RecoveryError && <p className="preview-data-controls__help" role="alert">The original v9 recovery copy could not be read: {v9RecoveryError}</p>}
       {v10RecoveryError && <p className="preview-data-controls__help" role="alert">The original v10 recovery copy could not be read: {v10RecoveryError}</p>}
       {v11RecoveryError && <p className="preview-data-controls__help" role="alert">The original v11 recovery copy could not be read: {v11RecoveryError}</p>}
+      {v12RecoveryError && <p className="preview-data-controls__help" role="alert">The original v12 recovery copy could not be read: {v12RecoveryError}</p>}
+      {v13RecoveryError && <p className="preview-data-controls__help" role="alert">The original v13 recovery copy could not be read: {v13RecoveryError}</p>}
+      {v14RecoveryError && <p className="preview-data-controls__help" role="alert">The original v14 recovery copy could not be read: {v14RecoveryError}</p>}
+      {v15RecoveryError && <p className="preview-data-controls__help" role="alert">The original v15 recovery copy could not be read: {v15RecoveryError}</p>}
+      {v16RecoveryError && <p className="preview-data-controls__help" role="alert">The original v16 recovery copy could not be read: {v16RecoveryError}</p>}
+      {v17RecoveryError && <p className="preview-data-controls__help" role="alert">The original v17 recovery copy could not be read: {v17RecoveryError}</p>}
+      {v18RecoveryError && <p className="preview-data-controls__help" role="alert">The original v18 recovery copy could not be read: {v18RecoveryError}</p>}
+      {v19RecoveryError && <p className="preview-data-controls__help" role="alert">The original v19 recovery copy could not be read: {v19RecoveryError}</p>}
+      {v20RecoveryError && <p className="preview-data-controls__help" role="alert">The original v20 recovery copy could not be read: {v20RecoveryError}</p>}
+      {v21RecoveryError && <p className="preview-data-controls__help" role="alert">The original v21 recovery copy could not be read: {v21RecoveryError}</p>}
+      {v22RecoveryError && <p className="preview-data-controls__help" role="alert">The original v22 recovery copy could not be read: {v22RecoveryError}</p>}
+      {v23RecoveryError && <p className="preview-data-controls__help" role="alert">The original v23 recovery copy could not be read: {v23RecoveryError}</p>}
+      {v25RecoveryError && <p className="preview-data-controls__help" role="alert">The original v25 recovery copy could not be read: {v25RecoveryError}</p>}
+      {v26RecoveryError && <p className="preview-data-controls__help" role="alert">The original v26 recovery copy could not be read: {v26RecoveryError}</p>}
+      {v27RecoveryError && <p className="preview-data-controls__help" role="alert">The original v27 recovery copy could not be read: {v27RecoveryError}</p>}
+      {v28RecoveryError && <p className="preview-data-controls__help" role="alert">The original v28 recovery copy could not be read: {v28RecoveryError}</p>}
+      {v29RecoveryError && <p className="preview-data-controls__help" role="alert">The original v29 recovery copy could not be read: {v29RecoveryError}</p>}
       {message && <p className="preview-data-controls__message" role="status">{message}</p>}
       {pendingAction && (
         <MoneyGoalDialog

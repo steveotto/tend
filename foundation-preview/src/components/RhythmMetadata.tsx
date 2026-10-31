@@ -39,17 +39,16 @@ export function RhythmMetadata(props: RhythmMetadataProps) {
 
   return (
     <div className="rhythm-metadata-footer">
-      <span className="rhythm-metadata-schedule-group">
-        <RhythmScheduleSummary
-          cadence={props.cadence}
-          schedule={props.schedule}
-          timeLabel={props.timeLabel}
-        />
-      </span>
+      <RhythmScheduleSummary
+        cadence={props.cadence}
+        schedule={props.schedule}
+        timeLabel={props.timeLabel}
+      />
       <RhythmStatus
         className="rhythm-metadata-last-tended"
         undoBeforeStatus
         status={props.lastTended}
+        statusAccessibleLabel={`Last tended: ${props.lastTended}`}
         rhythmTitle={props.rhythmTitle}
         completed={props.completed}
         onUndo={props.onUndo}
@@ -63,11 +62,13 @@ export function RhythmScheduleSummary({
   cadence,
   schedule,
   timeLabel,
+  timeAccessibleLabel,
   presentation = 'compact'
 }: {
   cadence?: string | undefined;
   schedule?: RhythmSchedule | undefined;
   timeLabel?: string | undefined;
+  timeAccessibleLabel?: string | undefined;
   presentation?: 'compact' | 'detailed';
 }) {
   const fullScheduleId = useId();
@@ -78,7 +79,7 @@ export function RhythmScheduleSummary({
     ? formatRhythmSchedule(schedule, 'detailed')
     : undefined;
   return (
-    <>
+    <span className="rhythm-metadata-schedule-group">
       {scheduleText && (
         <span aria-describedby={detailedSchedule ? fullScheduleId : undefined}>
           <MetadataIcon kind="recurrence" />
@@ -88,8 +89,13 @@ export function RhythmScheduleSummary({
       {detailedSchedule && (
         <span id={fullScheduleId} className="visually-hidden">Full schedule: {detailedSchedule}</span>
       )}
-      {timeLabel && <span><MetadataIcon kind="time" />{timeLabel}</span>}
-    </>
+      {timeLabel && (
+        <span>
+          <MetadataIcon kind="time" />
+          <span aria-label={timeAccessibleLabel}>{timeLabel}</span>
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -100,7 +106,8 @@ function RhythmStatus({
   onUndo,
   tendButtonRef,
   className,
-  undoBeforeStatus = false
+  undoBeforeStatus = false,
+  statusAccessibleLabel
 }: {
   status: string;
   rhythmTitle?: string | undefined;
@@ -109,6 +116,7 @@ function RhythmStatus({
   tendButtonRef?: RefObject<HTMLButtonElement | null> | undefined;
   className?: string | undefined;
   undoBeforeStatus?: boolean;
+  statusAccessibleLabel?: string;
 }) {
   const undoRef = useRef<HTMLButtonElement>(null);
   const restoreTendFocus = useRef(false);
@@ -140,7 +148,7 @@ function RhythmStatus({
   const statusGroup = (
     <span className="rhythm-metadata-status-group">
       <MetadataIcon kind="last-tended" />
-      <span className="rhythm-metadata-status">{status}</span>
+      <span className="rhythm-metadata-status" aria-label={statusAccessibleLabel}>{status}</span>
     </span>
   );
 

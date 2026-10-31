@@ -3,6 +3,8 @@ import type { PreviewData, PreviewEnvelope } from './preview-state.ts';
 import { rhythmTimeValueFromLabel, rhythmTimeValueFromLegacyLabel } from './rhythm-schedule.ts';
 import type { RhythmTimeLabel, RhythmTimeValue, RhythmSchedule } from './rhythm-schedule.ts';
 import type { SavedRhythm } from './rhythm-editor.ts';
+import { createCardioData } from './cardio.ts';
+import { createFriendshipData } from './friendships.ts';
 
 export const PROPOSED_PREVIEW_SCHEMA_VERSION = PREVIEW_SCHEMA_VERSION;
 
@@ -28,7 +30,7 @@ export type PreviewV4MigrationResult =
   | {
       valid: true;
       envelope: PreviewEnvelope;
-      sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
+      sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30;
     }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
@@ -37,7 +39,16 @@ export function migratePreviewToProposedV4(raw: string, currentDate: string): Pr
   if (!parsed.valid) return parsed;
   if (parsed.sourceSchemaVersion === 8 || parsed.sourceSchemaVersion === 9
     || parsed.sourceSchemaVersion === 10 || parsed.sourceSchemaVersion === 11
-    || parsed.sourceSchemaVersion === 12) {
+    || parsed.sourceSchemaVersion === 12 || parsed.sourceSchemaVersion === 13
+    || parsed.sourceSchemaVersion === 14 || parsed.sourceSchemaVersion === 15
+    || parsed.sourceSchemaVersion === 16 || parsed.sourceSchemaVersion === 17 || parsed.sourceSchemaVersion === 18) {
+    return { valid: true, envelope: parsed.envelope, sourceSchemaVersion: parsed.sourceSchemaVersion };
+  }
+  if (parsed.sourceSchemaVersion === 19 || parsed.sourceSchemaVersion === 20
+    || parsed.sourceSchemaVersion === 21 || parsed.sourceSchemaVersion === 22
+    || parsed.sourceSchemaVersion === 23 || parsed.sourceSchemaVersion === 24
+    || parsed.sourceSchemaVersion === 25 || parsed.sourceSchemaVersion === 26 || parsed.sourceSchemaVersion === 27
+    || parsed.sourceSchemaVersion === 28 || parsed.sourceSchemaVersion === 29 || parsed.sourceSchemaVersion === 30) {
     return { valid: true, envelope: parsed.envelope, sourceSchemaVersion: parsed.sourceSchemaVersion };
   }
   if (parsed.sourceSchemaVersion === 7) {
@@ -93,7 +104,14 @@ export function migratePreviewToProposedV4(raw: string, currentDate: string): Pr
         activeRhythmCompletions: [],
         rhythmCompletionOverrides: [],
         removedSeedCompletionIds: [],
-        rhythmHistoryIds: []
+        rhythmHistoryIds: [],
+        strength: parsed.envelope.data.strength,
+        weight: parsed.envelope.data.weight,
+        cardio: createCardioData(),
+        friendships: createFriendshipData(),
+        peopleGroups: parsed.envelope.data.peopleGroups,
+        personDetails: parsed.envelope.data.personDetails,
+        personNotes: []
       }
     }
   };

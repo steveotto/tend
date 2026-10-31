@@ -1,10 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { rhythmLastTendedLabel } from '../src/domain/preview-data.ts';
+import { rhythmLastActivityLabel, rhythmLastTendedLabel } from '../src/domain/preview-data.ts';
 import { selectNextScheduledOccurrence } from '../src/domain/rhythm-occurrences.ts';
 import type { RhythmSchedule, RhythmScoringMetadata } from '../src/domain/rhythm-schedule.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
 
 describe('next scheduled occurrence selection', () => {
+  it('labels only the latest actual completion, with date, year, and no-history distinctions', () => {
+    expect(rhythmLastActivityLabel({
+      completionHistory: [{ id: 'today', effectiveDate: '2026-10-25' }]
+    }, '2026-10-25')).toBe('Today');
+    expect(rhythmLastActivityLabel({
+      completionHistory: [
+        { id: 'recent', effectiveDate: '2026-10-20' },
+        { id: 'older', effectiveDate: '2026-10-18' }
+      ]
+    }, '2026-10-25')).toBe('Oct 20');
+    expect(rhythmLastActivityLabel({
+      completionHistory: [{ id: 'prior-year', effectiveDate: '2025-10-20' }]
+    }, '2026-10-25')).toBe('Oct 20, 2025');
+    expect(rhythmLastActivityLabel({
+      completionHistory: [{ id: 'future', effectiveDate: '2026-10-26' }]
+    }, '2026-10-25')).toBe('Never');
+    expect(rhythmLastActivityLabel({ completionHistory: [] }, '2026-10-25')).toBe('Never');
+  });
+
   it('uses the quarterly pattern to label the actual next date and today when due', () => {
     const quarterlySchedule: RhythmSchedule = {
       frequency: 'quarterly',

@@ -14,6 +14,23 @@ import {
   PREVIEW_V9_RECOVERY_KEY,
   PREVIEW_V10_RECOVERY_KEY,
   PREVIEW_V11_RECOVERY_KEY,
+  PREVIEW_V12_RECOVERY_KEY,
+  PREVIEW_V13_RECOVERY_KEY,
+  PREVIEW_V14_RECOVERY_KEY,
+  PREVIEW_V15_RECOVERY_KEY,
+  PREVIEW_V16_RECOVERY_KEY,
+  PREVIEW_V17_RECOVERY_KEY,
+  PREVIEW_V18_RECOVERY_KEY,
+  PREVIEW_V19_RECOVERY_KEY,
+  PREVIEW_V20_RECOVERY_KEY,
+  PREVIEW_V21_RECOVERY_KEY,
+  PREVIEW_V22_RECOVERY_KEY,
+  PREVIEW_V23_RECOVERY_KEY,
+  PREVIEW_V25_RECOVERY_KEY,
+  PREVIEW_V26_RECOVERY_KEY,
+  PREVIEW_V27_RECOVERY_KEY,
+  PREVIEW_V28_RECOVERY_KEY,
+  PREVIEW_V29_RECOVERY_KEY,
   preserveProposedV4SourceRecovery,
   proposedV4SourceVersionForRaw
 } from './preview-v4-recovery.ts';
@@ -30,7 +47,24 @@ export {
   PREVIEW_V8_RECOVERY_KEY,
   PREVIEW_V9_RECOVERY_KEY,
   PREVIEW_V10_RECOVERY_KEY,
-  PREVIEW_V11_RECOVERY_KEY
+  PREVIEW_V11_RECOVERY_KEY,
+  PREVIEW_V12_RECOVERY_KEY,
+  PREVIEW_V13_RECOVERY_KEY,
+  PREVIEW_V14_RECOVERY_KEY,
+  PREVIEW_V15_RECOVERY_KEY,
+  PREVIEW_V16_RECOVERY_KEY,
+  PREVIEW_V17_RECOVERY_KEY,
+  PREVIEW_V18_RECOVERY_KEY,
+  PREVIEW_V19_RECOVERY_KEY,
+  PREVIEW_V20_RECOVERY_KEY,
+  PREVIEW_V21_RECOVERY_KEY,
+  PREVIEW_V22_RECOVERY_KEY,
+  PREVIEW_V23_RECOVERY_KEY,
+  PREVIEW_V25_RECOVERY_KEY,
+  PREVIEW_V26_RECOVERY_KEY,
+  PREVIEW_V27_RECOVERY_KEY,
+  PREVIEW_V28_RECOVERY_KEY,
+  PREVIEW_V29_RECOVERY_KEY
 };
 
 export type PreviewStorage = Pick<Storage, 'getItem' | 'setItem'>;
@@ -114,7 +148,9 @@ export function writePreview(
                   : recovery.message
           };
         }
-      } else if (sourceVersion === null && !options.allowUnrecoverableReplacement) {
+      } else if (sourceVersion === null
+        && (!source.valid || source.sourceSchemaVersion !== PREVIEW_SCHEMA_VERSION)
+        && !options.allowUnrecoverableReplacement) {
         return {
           kind: 'error',
           message: 'The stored value has no supported immutable recovery key. Download its raw recovery before explicitly replacing it.'
@@ -221,6 +257,142 @@ export function loadV10RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadRe
 export function loadV11RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
   try {
     return { kind: 'loaded', raw: storage.getItem(PREVIEW_V11_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV12RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V12_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV13RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V13_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV14RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V14_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV15RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V15_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV16RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V16_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV17RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V17_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV18RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V18_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV19RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V19_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV20RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V20_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV21RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V21_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV22RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V22_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV23RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V23_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV25RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V25_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV26RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V26_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV27RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V27_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV28RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V28_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV29RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V29_RECOVERY_KEY) };
   } catch (error) {
     return { kind: 'error', message: errorMessage(error) };
   }

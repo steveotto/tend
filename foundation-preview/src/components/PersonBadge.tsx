@@ -2,38 +2,74 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import type { Ref } from 'react';
 import type { PersonId, PersonPreview } from '../domain/preview-data.ts';
 
-export function PersonBadge({
-  person,
-  onSelect,
-  buttonRef
-}: {
+type PersonBadgeProps = {
   person: PersonPreview;
-  onSelect: (personId: PersonId) => void;
-  buttonRef?: Ref<HTMLButtonElement>;
-}) {
+  displayNameMode?: 'first' | 'full';
+} & (
+  | {
+      presentation?: 'interactive';
+      onSelect: (personId: PersonId) => void;
+      buttonRef?: Ref<HTMLButtonElement>;
+    }
+  | {
+      presentation: 'static';
+      onSelect?: never;
+      buttonRef?: never;
+    }
+);
+
+export function PersonBadge(props: PersonBadgeProps) {
+  const { person, displayNameMode = 'first' } = props;
+  if (props.presentation === 'static') {
+    return (
+      <span
+        className="rhythm-person-badge rhythm-person-badge--static"
+        role="img"
+        aria-label={person.displayName}
+        title={person.displayName}
+      >
+        <PersonBadgeVisual person={person} displayNameMode={displayNameMode} />
+      </span>
+    );
+  }
+
   return (
     <button
-      ref={buttonRef}
+      ref={props.buttonRef}
       type="button"
       className="rhythm-person-badge"
       aria-label={`Open synthetic profile for ${person.displayName}`}
       data-person-id={person.id}
-      onClick={() => onSelect(person.id)}
+      onClick={() => props.onSelect(person.id)}
     >
-      <PersonBadgeVisual person={person} />
+      <PersonBadgeVisual person={person} displayNameMode={displayNameMode} />
     </button>
   );
 }
 
-export function PersonBadgeVisual({ person }: { person: PersonPreview }) {
+export function PersonBadgeVisual({
+  person,
+  displayNameMode = 'first'
+}: {
+  person: PersonPreview;
+  displayNameMode?: 'first' | 'full';
+}) {
   return (
     <span className="person-badge-visual">
-      <span className="person-badge-avatar" aria-hidden="true">
-        {person.avatarUrl
-          ? <img src={person.avatarUrl} alt="" />
-          : <span>{personInitials(person.displayName)}</span>}
+      <PersonAvatar person={person} />
+      <span className="person-badge-name">
+        {displayNameMode === 'full' ? person.displayName : personFirstName(person.displayName)}
       </span>
-      <span className="person-badge-name">{personFirstName(person.displayName)}</span>
+    </span>
+  );
+}
+
+export function PersonAvatar({ person }: { person: PersonPreview }) {
+  return (
+    <span className="person-badge-avatar" aria-hidden="true">
+      {person.avatarUrl
+        ? <img src={person.avatarUrl} alt="" />
+        : <span>{personInitials(person.displayName)}</span>}
     </span>
   );
 }

@@ -1,0 +1,136 @@
+import { cleanup, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { TodayView } from '../src/components/TodayView.tsx';
+import type { TodayWeatherController } from '../src/components/useTodayWeather.ts';
+import type { TodayFocusId } from '../src/domain/today-plan.ts';
+import { foundationCatalogue, todayRhythms } from '../src/domain/preview-data.ts';
+
+afterEach(cleanup);
+
+const unavailableWeather: TodayWeatherController = {
+  city: null,
+  weather: { status: 'idle', report: null, fetchedAt: null, message: null },
+  search: { status: 'idle', results: [], message: null },
+  searchCities: vi.fn(),
+  selectCity: vi.fn(),
+  clearCity: vi.fn(),
+  retry: vi.fn()
+};
+
+function TodayHarness() {
+  const [focus, setFocus] = useState<TodayFocusId>('now');
+  return (
+    <TodayView
+      greeting="Good morning"
+      dateLabel="Saturday, October 31"
+      evaluationInstant={new Date(2026, 9, 31, 10, 0)}
+      localDate="2026-10-31"
+      focus={focus}
+      onFocusChange={setFocus}
+      weatherController={unavailableWeather}
+      completedRhythms={new Set(['sample-pray-together'])}
+      undoableRhythms={new Set()}
+      rhythms={todayRhythms}
+      rhythmScores={new Map()}
+      search=""
+      marriageExampleId="empty"
+      onNavigate={vi.fn()}
+      onMarriageExampleChange={vi.fn()}
+      onPersonSelect={vi.fn()}
+      foundations={foundationCatalogue}
+      onOpenFoundation={vi.fn()}
+      onHistory={vi.fn()}
+      onTend={vi.fn()}
+      onEditRhythm={vi.fn()}
+      onUndo={vi.fn()}
+    />
+  );
+}
+
+function renderToday() {
+  return render(<TodayHarness />);
+}
+
+describe('Today time-frame interaction', () => {
+  it('defaults to Now, counts only the selected range, and keeps the selected block during the visit', async () => {
+    const user = userEvent.setup();
+    renderToday();
+    const plan = screen.getByRole('region', { name: "Today's plan" });
+    expect(within(plan).getByText('Now', { selector: 'summary span' })).toBeTruthy();
+    expect(within(plan).getByText('Morning · 9:00am – 11:30am')).toBeTruthy();
+    expect(within(plan).getByText('1 of 1 tended')).toBeTruthy();
+    expect(within(plan).getByRole('article', { name: 'Pray together' })).toBeTruthy();
+    expect(within(plan).queryByRole('article', { name: 'Daily connection' })).toBeNull();
+    expect(within(plan).queryByRole('heading', { name: 'Your plan' })).toBeNull();
+
+    await user.click(within(plan).getByText('Now', { selector: 'summary span' }));
+    await user.click(within(plan).getByRole('button', { name: /Evening/ }));
+
+    expect(within(plan).getByText('Evening · 6:00pm – 9:30pm')).toBeTruthy();
+    expect(within(plan).getByText('0 of 1 tended')).toBeTruthy();
+    expect(within(plan).getByRole('article', { name: 'Daily connection' })).toBeTruthy();
+    expect(within(plan).queryByRole('article', { name: 'Pray together' })).toBeNull();
+  });
+
+  it('offers Everything today and the three preserved item-type tabs with ARIA selection', async () => {
+    const user = userEvent.setup();
+    renderToday();
+    const plan = screen.getByRole('region', { name: "Today's plan" });
+    await user.click(within(plan).getByText('Now', { selector: 'summary span' }));
+    await user.click(within(plan).getByRole('button', { name: /Everything today/ }));
+
+    expect(within(plan).getByText('1 of 3 tended')).toBeTruthy();
+    for (const name of ['Pray together', 'Daily connection', 'Take a walk']) {
+      expect(within(plan).getByRole('article', { name })).toBeTruthy();
+    }
+    for (const tabName of ['Scheduled', 'Anytime', 'All-day']) {
+      expect(within(plan).getByRole('tab', { name: tabName })).toBeTruthy();
+    }
+    expect(within(plan).getByRole('tab', { name: 'Scheduled' }).getAttribute('aria-selected')).toBe('true');
+
+    await user.click(within(plan).getByRole('tab', { name: 'Anytime' }));
+    expect(within(plan).getByRole('tab', { name: 'Anytime' }).getAttribute('aria-selected')).toBe('true');
+    expect(within(plan).getByText('No preferred time')).toBeTruthy();
+    expect(within(plan).getByText('No eligible Anytime rhythms.')).toBeTruthy();
+  });
+
+  it('keeps focus-frame hover and keyboard focus separate from activation', async () => {
+    const user = userEvent.setup();
+    renderToday();
+    const plan = screen.getByRole('region', { name: "Today's plan" });
+    const trigger = plan.querySelector('.today-plan__focus-trigger') as HTMLElement;
+    await user.click(trigger);
+
+    const evening = within(plan).getByRole('button', { name: /Evening.*6:00pm – 9:30pm.*1 item/ });
+    const initialTendedCount = within(plan).getByText('1 of 1 tended').textContent;
+    await user.hover(evening);
+    expect(evening.getAttribute('aria-pressed')).toBe('false');
+    expect(within(plan).getByText('Now', { selector: 'summary span' })).toBeTruthy();
+    expect(within(plan).getByText(initialTendedCount!)).toBeTruthy();
+    expect(within(plan).getByRole('article', { name: 'Pray together' })).toBeTruthy();
+    expect(within(plan).queryByRole('status')).toBeNull();
+    expect(plan.querySelector('.today-plan__weather')).toBeNull();
+
+    await user.unhover(evening);
+    expect(evening.getAttribute('aria-pressed')).toBe('false');
+
+    await user.tab();
+    const nowOption = within(plan).getByRole('button', { name: /^Now/ });
+    expect(document.activeElement).toBe(nowOption);
+    await user.tab();
+    const everythingOption = within(plan).getByRole('button', { name: /Everything today/ });
+    expect(document.activeElement).toBe(everythingOption);
+    expect(everythingOption.getAttribute('aria-pressed')).toBe('false');
+    expect(within(plan).getByText(initialTendedCount!)).toBeTruthy();
+
+    await user.keyboard('{Enter}');
+    expect(everythingOption.getAttribute('aria-pressed')).toBe('true');
+    expect(within(plan).getByText('Everything today', { selector: 'summary span' })).toBeTruthy();
+    expect(within(plan).getByText('1 of 3 tended')).toBeTruthy();
+    expect(within(plan).getByRole('article', { name: 'Daily connection' })).toBeTruthy();
+    expect(within(plan).queryByText(/Weather is unavailable/)).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+});

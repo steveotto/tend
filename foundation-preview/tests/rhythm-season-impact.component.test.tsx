@@ -11,7 +11,11 @@ import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
 const rhythmId = 'season-impact-fixture';
 const schedule = { frequency: 'daily' } as const;
 
-function score(records: readonly RhythmCompletionRecord[] = [], recordsAvailable = true): RhythmScoreResult {
+function score(
+  records: readonly RhythmCompletionRecord[] = [],
+  recordsAvailable = true,
+  asOfDate = '2026-10-03'
+): RhythmScoreResult {
   const scoring: RhythmScoringMetadata = {
     trackingStartDate: '2026-10-01',
     timeZone: 'UTC',
@@ -25,7 +29,7 @@ function score(records: readonly RhythmCompletionRecord[] = [], recordsAvailable
     recordsAvailable,
     createdLocalDate: '2026-10-01',
     createdTimeZone: 'UTC',
-    asOfDate: '2026-10-03',
+    asOfDate,
     timeZone: 'UTC'
   });
 }
@@ -46,6 +50,28 @@ function visibleScore(target: HTMLElement): string | undefined {
 afterEach(cleanup);
 
 describe('shared Rhythm season impact comparison', () => {
+  it('renders an Add Season single-score view without comparison or disclosure controls', () => {
+    render(
+      <RhythmSeasonImpact
+        mode="single"
+        singleScore={score([completed('out-of-range', '2026-09-01')])}
+        noRecordedActivity
+        singleMessage="No recorded activity in this date range."
+      />
+    );
+    const impact = screen.getByRole('region', { name: 'Score impact preview' });
+    expect(within(impact).getByRole('heading', { name: 'Score' })).toBeTruthy();
+    expect(within(impact).queryByRole('heading', { name: 'Before' })).toBeNull();
+    expect(within(impact).queryByRole('heading', { name: 'After' })).toBeNull();
+    expect(within(impact).getByText('No recorded activity in this date range.')).toBeTruthy();
+    expect(within(impact).queryByText('Why the scores change')).toBeNull();
+    expect(within(impact).queryByText(/No score change|produces the same scores/)).toBeNull();
+    for (const metric of ['Consistency', 'On Track', 'Health']) {
+      expect(within(impact).getByRole('group', { name: `Score ${metric}` })
+        .querySelector('.rhythm-season-impact__score strong')?.textContent).toBe('—');
+    }
+  });
+
   it('compares selector values and reports matching evidence only once', () => {
     const unchanged = score([completed('one', '2026-10-01')]);
     render(<RhythmSeasonImpact before={unchanged} after={unchanged} />);
@@ -61,6 +87,7 @@ describe('shared Rhythm season impact comparison', () => {
       expect(cell(metric, 'Before').querySelector('.rhythm-season-impact__score')?.textContent).not.toContain('/ 100');
     }
     expect(screen.getAllByText(/Both · \d+ eligible · \d+ completed/)).toHaveLength(2);
+    expect(screen.queryByText(/No score change|produces the same scores/)).toBeNull();
     expect(cell('Consistency', 'Before').textContent).not.toContain('eligible');
     expect(cell('Consistency', 'After').textContent).not.toContain('eligible');
     expect(screen.getByRole('heading', { name: 'Before' }).tagName).toBe('H4');
@@ -97,6 +124,38 @@ describe('shared Rhythm season impact comparison', () => {
     expect(afterOnTrack.textContent).toContain('—');
     expect(afterOnTrack.textContent).toContain('Unavailable');
     expect(afterOnTrack.textContent).toContain('Completion history is unavailable.');
+  });
+
+  it('uses the real tracking baseline when there is no qualifying completion and shows the score floor', async () => {
+    const user = userEvent.setup();
+    const firstDay = score([], true, '2026-10-01');
+    render(
+      <RhythmSeasonImpact
+        before={firstDay}
+        after={firstDay}
+        beforeSchedule={schedule}
+        afterSchedule={schedule}
+        detailsDisclosure
+      />
+    );
+    const disclosure = screen.getByText('Why the scores change');
+    await user.click(disclosure);
+    expect(screen.getAllByText(/No qualifying Tend yet; tracking began Oct 1, 2026/)).toHaveLength(2);
+
+    cleanup();
+    const floor = score([], true, '2026-10-21');
+    render(
+      <RhythmSeasonImpact
+        before={floor}
+        after={floor}
+        beforeSchedule={schedule}
+        afterSchedule={schedule}
+        detailsDisclosure
+      />
+    );
+    await user.click(screen.getByText('Why the scores change'));
+    expect(screen.getAllByText('max(0, 100 − 10 × 20) = 0')).toHaveLength(2);
+    expect(screen.getAllByText('20 missed days')).toHaveLength(2);
   });
 
   it('keeps the complete long unavailable reason available without pushing values into another metric', async () => {

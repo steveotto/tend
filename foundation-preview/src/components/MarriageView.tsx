@@ -1,88 +1,256 @@
-import { useEffect, useRef, useState } from 'react';
-import type { KeyboardEvent, MouseEvent } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import {
   marriageExampleFixtures,
   marriageRhythmGroups,
-  marriageFoundationCoverage,
-  marriageScoreCoverage,
-  marriageWeekDays,
+  marriageRhythmSuggestions,
+  foundationCatalogue,
+  foundationTerminologyForCategory,
   peopleForRhythm,
+  rhythmLastActivityLabel,
+  type FoundationTerminology,
+  type FoundationPreview,
   type PersonId,
   type MarriageExampleId,
-  type MarriageFixture,
   type RhythmPreview,
   rhythmsSupportingFoundation
 } from '../domain/preview-data.ts';
-import { FoundationCard, RhythmCard, ScoreMeter } from './Cards.tsx';
+import { effectiveRhythmSchedule, rhythmScheduleSummary, rhythmTimeLabel, rhythmTimeValueFromLabel } from '../domain/rhythm-schedule.ts';
+import {
+  isRhythmRelevantOnDate,
+  rhythmsForSuggestionSource
+} from '../domain/category-rhythms.ts';
+import type { FoundationRhythmAssociationChange } from '../domain/foundation-rhythm-associations.ts';
+import { selectCategoryScore } from '../domain/category-scoring.ts';
+import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
+import { selectFoundationScore } from '../domain/foundation-scoring.ts';
+import type { FoundationScoreSelection } from '../domain/foundation-scoring.ts';
+import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
+import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
+import { FoundationCard } from './Cards.tsx';
+import { BackButton } from './BackButton.tsx';
+import { HealthScoreBreakdown } from './HealthScoreBreakdown.tsx';
+import { CategoryHealthSummary } from './CategoryHealthSummary.tsx';
+import { CategoryHeader } from './CategoryHeader.tsx';
+import { SegmentedTabs } from './SegmentedTabs.tsx';
+import type { SegmentedTab } from './SegmentedTabs.tsx';
+import { ArchivedRhythmsDialog } from './ArchivedRhythmsDialog.tsx';
+import { FoundationRhythmAssociationDialog } from './FoundationRhythmAssociationDialog.tsx';
 import { MarriageIcon } from './MarriageIcon.tsx';
 import { MarriageExampleSelector } from './MarriageExampleSelector.tsx';
+import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
+import { CategoryRhythmCollection } from './CategoryRhythmCollection.tsx';
+import { RhythmSuggestionPicker } from './RhythmSuggestionPicker.tsx';
+import type { RhythmSuggestionPickerGroup } from './RhythmSuggestionPicker.tsx';
+import type { Destination } from './AppNavigation.tsx';
+import type { RhythmCategoryId } from '../domain/rhythm-editor.ts';
+import type { RhythmFrequencyRecommendation } from '../domain/rhythm-schedule.ts';
 
-type MarriageTab = 'today' | 'rhythms' | 'foundations';
+export type MarriageTab = 'today' | 'rhythms' | 'foundations';
+
+export type CategoryRhythmSuggestion = {
+  sourceId: string;
+  categoryId: RhythmCategoryId;
+  rhythm: RhythmPreview;
+  scheduleHint: string;
+  icon: ReactNode;
+  recommendedFrequency: RhythmFrequencyRecommendation;
+  frequencyGuidance?: string;
+};
+
+export type CategoryRhythmSuggestionGroup = {
+  id: string;
+  title: string;
+  subtitle: string;
+  suggestions: readonly CategoryRhythmSuggestion[];
+};
+
+export type CategoryRhythmSuggestionCatalogue = {
+  title: string;
+  groups: readonly CategoryRhythmSuggestionGroup[];
+};
 
 type MarriageViewProps = {
-  marriageExampleId: MarriageExampleId;
-  onMarriageExampleChange: (id: MarriageExampleId) => void;
+  marriageExampleId?: MarriageExampleId;
+  onMarriageExampleChange?: (id: MarriageExampleId) => void;
+  categoryConfig?: {
+    categoryId: RhythmCategoryId;
+    label: string;
+    description: string;
+    foundations: readonly FoundationPreview[];
+    foundationTerm?: FoundationTerminology;
+    tabLabel?: string;
+    emptyFoundationDescription?: string;
+    scoreInterpretationNote?: string;
+    scoreExplanationIntro?: string;
+    suggestionCatalogue?: CategoryRhythmSuggestionCatalogue;
+  };
+  todayDate: string;
+  onAddRhythm: (event: MouseEvent<HTMLButtonElement>) => void;
+  onAddSuggestion?: (
+    suggestion: CategoryRhythmSuggestion,
+    event: MouseEvent<HTMLButtonElement>,
+    returnToSuggestions: (saved: boolean) => void
+  ) => void;
   onPersonSelect: (personId: PersonId) => void;
-  onPartnerProfile: () => void;
-  onRhythmDetails: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onPartnerProfile?: () => void;
+  onOpenCategory: (categoryId: Destination, openerId: string) => void;
+  onRhythmHistory: (id: string, event: MouseEvent<HTMLButtonElement>, returnTab?: MarriageTab) => void;
+  onEditRhythm: (
+    rhythm: RhythmPreview,
+    event: MouseEvent<HTMLButtonElement>,
+    returnToSuggestions?: (saved: boolean) => void
+  ) => void;
+  onRestoreRhythm: (id: string) => void;
   userRhythms: readonly RhythmPreview[];
+  archivedRhythms: readonly RhythmPreview[];
+  foundationRhythms: readonly RhythmPreview[];
+  suggestionRhythms: readonly RhythmPreview[];
+  suggestionInstances: readonly RhythmPreview[];
+  foundationRhythmScores: ReadonlyMap<string, RhythmScoreResult>;
+  archivedRhythmIds: readonly string[];
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
   onTend: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   onUndo: (id: string) => void;
+  onSaveFoundationAssociations: (
+    foundationId: string,
+    changes: readonly FoundationRhythmAssociationChange[]
+  ) => string | null;
+  foundationNavigationRequest?: {
+    foundationId: string;
+    requestId: number;
+    returnTab: MarriageTab;
+  } | null;
+  onFoundationNavigationHandled?: (requestId: number) => void;
 };
 
-const tabs: { id: MarriageTab; label: string }[] = [
-  { id: 'today', label: 'Today' },
-  { id: 'rhythms', label: 'Rhythms' },
-  { id: 'foundations', label: 'Foundations' }
+const tabs: readonly SegmentedTab<MarriageTab>[] = [
+  { id: 'today', label: 'Today', tabId: 'today', panelId: 'marriage-panel-today' },
+  { id: 'rhythms', label: 'Rhythms', tabId: 'rhythms', panelId: 'marriage-panel-rhythms' },
+  { id: 'foundations', label: 'Foundations', tabId: 'foundations', panelId: 'marriage-panel-foundations' }
 ];
 
 export function MarriageView({
   marriageExampleId,
   onMarriageExampleChange,
+  categoryConfig,
+  todayDate,
+  onAddRhythm,
+  onAddSuggestion,
   onPersonSelect,
   onPartnerProfile,
-  onRhythmDetails,
+  onOpenCategory,
+  onRhythmHistory,
+  onEditRhythm,
+  onRestoreRhythm,
   userRhythms,
+  archivedRhythms,
+  foundationRhythms,
+  suggestionRhythms,
+  suggestionInstances,
+  foundationRhythmScores,
+  archivedRhythmIds,
   completedRhythms,
   undoableRhythms,
   onTend,
-  onUndo
+  onUndo,
+  onSaveFoundationAssociations,
+  foundationNavigationRequest = null,
+  onFoundationNavigationHandled
 }: MarriageViewProps) {
   const [activeTab, setActiveTab] = useState<MarriageTab>('today');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showArchivedRhythms, setShowArchivedRhythms] = useState(false);
   const [selectedFoundationId, setSelectedFoundationId] = useState<string | null>(null);
-  const foundationOpener = useRef<string | null>(null);
-  const fixture = marriageExampleFixtures[marriageExampleId];
+  const [associationFoundationId, setAssociationFoundationId] = useState<string | null>(null);
+  const foundationOpener = useRef<{ id: string; tab: MarriageTab } | null>(null);
+  const handledFoundationNavigationRequest = useRef<number | null>(null);
+  const associationOpener = useRef<HTMLButtonElement | null>(null);
+  const suggestionsOpener = useRef<HTMLButtonElement | null>(null);
+  const archivedRhythmsOpener = useRef<HTMLButtonElement | null>(null);
+  const wasSuggestionsOpen = useRef(false);
+  const skipSuggestionsFocusRestore = useRef(false);
+  const wasAssociationDialogOpen = useRef(false);
+  const wasArchiveDialogOpen = useRef(false);
+  const fixture = marriageExampleFixtures[marriageExampleId ?? 'populated'];
+  const categoryId = categoryConfig?.categoryId ?? 'marriage';
+  const categoryLabel = categoryConfig?.label ?? 'Marriage';
+  const categoryDescription = categoryConfig?.description ?? 'Structure beats good intentions.';
+  const categoryToken = categoryId;
+  const foundationTerm = categoryConfig?.foundationTerm ?? foundationTerminologyForCategory(categoryId);
+  const categoryFoundations = categoryConfig?.foundations ?? fixture.foundations;
+  const associationFoundation = categoryFoundations.find(item => item.id === associationFoundationId);
+
+  useEffect(() => {
+    if (associationFoundationId) {
+      wasAssociationDialogOpen.current = true;
+      return;
+    }
+    if (!wasAssociationDialogOpen.current) return;
+    wasAssociationDialogOpen.current = false;
+    if (associationOpener.current?.isConnected) associationOpener.current.focus();
+  }, [associationFoundationId]);
+
+  useEffect(() => {
+    if (showArchivedRhythms) {
+      wasArchiveDialogOpen.current = true;
+      return;
+    }
+    if (!wasArchiveDialogOpen.current) return;
+    wasArchiveDialogOpen.current = false;
+    archivedRhythmsOpener.current?.focus();
+  }, [showArchivedRhythms]);
 
   useEffect(() => {
     if (selectedFoundationId) {
-      document.getElementById('marriage-foundation-detail-title')?.focus();
+      document.getElementById(`${categoryToken}-foundation-detail-title`)?.focus();
     } else if (foundationOpener.current) {
-      document.getElementById(foundationOpener.current)?.focus();
+      const opener = foundationOpener.current;
+      if (activeTab !== opener.tab) {
+        setActiveTab(opener.tab);
+        return;
+      }
+      const returnTarget = document.getElementById(opener.id);
+      if (returnTarget) returnTarget.focus();
+      else document.getElementById(`${categoryToken}-tab-${opener.tab}`)?.focus();
       foundationOpener.current = null;
     }
-  }, [selectedFoundationId]);
+  }, [selectedFoundationId, activeTab]);
 
-  function openFoundation(id: string, openerId: string) {
-    foundationOpener.current = openerId;
+  useEffect(() => {
+    const request = foundationNavigationRequest;
+    if (!request || handledFoundationNavigationRequest.current === request.requestId) return;
+    handledFoundationNavigationRequest.current = request.requestId;
+    if (categoryFoundations.some(foundation => foundation.id === request.foundationId)) {
+      foundationOpener.current = {
+        id: `${categoryToken}-tab-${request.returnTab}`,
+        tab: request.returnTab
+      };
+      setSelectedFoundationId(request.foundationId);
+      setActiveTab('foundations');
+    }
+    onFoundationNavigationHandled?.(request.requestId);
+  }, [foundationNavigationRequest?.requestId, categoryToken]);
+
+  useEffect(() => {
+    if (showSuggestions) {
+      wasSuggestionsOpen.current = true;
+      return;
+    }
+    if (!wasSuggestionsOpen.current) return;
+    wasSuggestionsOpen.current = false;
+    if (skipSuggestionsFocusRestore.current) {
+      skipSuggestionsFocusRestore.current = false;
+      return;
+    }
+    suggestionsOpener.current?.focus();
+  }, [showSuggestions]);
+
+  function openFoundation(id: string, openerId: string, returnTab: MarriageTab = activeTab) {
+    foundationOpener.current = { id: openerId, tab: returnTab };
     setActiveTab('foundations');
     setSelectedFoundationId(id);
-  }
-
-  function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
-    let nextIndex: number;
-    if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
-    else if (event.key === 'ArrowLeft') nextIndex = (index + tabs.length - 1) % tabs.length;
-    else if (event.key === 'Home') nextIndex = 0;
-    else if (event.key === 'End') nextIndex = tabs.length - 1;
-    else return;
-    event.preventDefault();
-    const next = tabs[nextIndex]!;
-    setActiveTab(next.id);
-    setSelectedFoundationId(null);
-    foundationOpener.current = null;
-    event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(`#marriage-tab-${next.id}`)?.focus();
   }
 
   function selectTab(tab: MarriageTab) {
@@ -92,484 +260,681 @@ export function MarriageView({
   }
 
   function selectExample(id: MarriageExampleId) {
-    onMarriageExampleChange(id);
+    onMarriageExampleChange?.(id);
     setSelectedFoundationId(null);
     foundationOpener.current = null;
   }
 
-  const todayRhythms = fixture.rhythms.filter(rhythm => rhythm.status === 'Due today');
+  function openAssociationDialog(id: string, event: MouseEvent<HTMLButtonElement>) {
+    associationOpener.current = event.currentTarget;
+    setAssociationFoundationId(id);
+  }
 
+  const foundationScores = new Map(categoryFoundations.map(foundation => [
+    foundation.id,
+    selectFoundationScore(foundation.id, foundationRhythms, foundationRhythmScores, archivedRhythmIds)
+  ]));
+  const categoryScore = selectCategoryScore(categoryFoundations, foundationScores);
+  const todayRhythms = userRhythms.filter(rhythm => isRhythmRelevantOnDate(rhythm, todayDate));
+  function browseSuggestions(event: MouseEvent<HTMLButtonElement>) {
+    suggestionsOpener.current = event.currentTarget;
+    setShowSuggestions(true);
+  }
+  function returnToSuggestions(saved: boolean) {
+    if (saved) setActiveTab('rhythms');
+    setShowSuggestions(true);
+  }
+  function beginSuggestionAdd(
+    suggestion: CategoryRhythmSuggestion,
+    event: MouseEvent<HTMLButtonElement>,
+    returnToPicker: (saved: boolean) => void
+  ) {
+    if (!onAddSuggestion) return;
+    skipSuggestionsFocusRestore.current = true;
+    onAddSuggestion(suggestion, event, returnToPicker);
+  }
+  function beginSuggestionEdit(
+    rhythm: RhythmPreview,
+    event: MouseEvent<HTMLButtonElement>,
+    returnToPicker: (saved: boolean) => void
+  ) {
+    if (!onEditRhythm) return;
+    skipSuggestionsFocusRestore.current = true;
+    onEditRhythm(rhythm, event, returnToPicker);
+  }
+
+  const suggestionById = new Map(suggestionRhythms.map(rhythm => [rhythm.id, rhythm]));
+  const defaultSuggestionCatalogue: CategoryRhythmSuggestionCatalogue = {
+    title: 'Marriage rhythms',
+    groups: marriageRhythmGroups.map(group => ({
+      id: group.id,
+      title: group.title,
+      subtitle: group.subtitle,
+      suggestions: marriageRhythmSuggestions
+        .filter(suggestion => suggestion.rhythm.marriageGroup === group.id)
+        .map(suggestion => {
+          const source = suggestion.sourceSampleRhythmId
+            ? suggestionById.get(suggestion.sourceSampleRhythmId)
+            : undefined;
+          return {
+            sourceId: suggestion.templateId,
+            categoryId: 'marriage',
+            rhythm: {
+              ...suggestion.rhythm,
+              ...(source ? {
+                description: source.description ?? suggestion.rhythm.description,
+                primaryFoundationId: source.primaryFoundationId ?? suggestion.rhythm.primaryFoundationId,
+                secondaryFoundationIds: source.secondaryFoundationIds ?? suggestion.rhythm.secondaryFoundationIds
+              } : {})
+            },
+            scheduleHint: suggestion.scheduleHint,
+            icon: <MarriageIcon group="rhythms" id={suggestion.rhythm.iconId ?? suggestion.templateId} />,
+            recommendedFrequency: suggestion.recommendedFrequency,
+            ...(suggestion.frequencyGuidance ? { frequencyGuidance: suggestion.frequencyGuidance } : {})
+          };
+        })
+    }))
+  };
+  const suggestionCatalogue = categoryConfig?.suggestionCatalogue
+    ?? (!categoryConfig ? defaultSuggestionCatalogue : undefined);
+  const suggestionPickerGroups: RhythmSuggestionPickerGroup[] = (suggestionCatalogue?.groups ?? []).map(group => ({
+    id: group.id,
+    title: group.title,
+    subtitle: group.subtitle,
+    items: group.suggestions.map(suggestion => {
+        const instances = rhythmsForSuggestionSource(suggestionInstances, suggestion.sourceId)
+          .map(instance => {
+            const archived = archivedRhythmIds.includes(instance.id);
+            const schedule = effectiveRhythmSchedule(instance.schedule, instance.cadence);
+            const summary = schedule
+              ? rhythmScheduleSummary(schedule).replace(/\.$/, '')
+              : instance.cadence ?? 'Schedule unavailable';
+            const timeOfDay = instance.timeOfDay ?? rhythmTimeValueFromLabel(instance.timeLabel ?? '');
+            const timeLabel = timeOfDay ? rhythmTimeLabel(timeOfDay) : undefined;
+            return {
+              id: instance.id,
+              title: instance.title,
+              ...(peopleForRhythm(instance).length
+                ? { peopleLabel: peopleForRhythm(instance).map(person => person.displayName).join(', ') }
+                : {}),
+              scheduleSummary: timeLabel && timeLabel !== 'Anytime' ? `${summary} · ${timeLabel}` : summary,
+              archived,
+              ...(!archived
+                ? {
+                    onEdit: (
+                      event: MouseEvent<HTMLButtonElement>,
+                      returnToPicker: (saved: boolean) => void
+                    ) => beginSuggestionEdit(instance, event, returnToPicker)
+                  }
+                : { onRestore: () => onRestoreRhythm(instance.id) })
+            };
+          });
+        return {
+          id: suggestion.sourceId,
+          title: suggestion.rhythm.title,
+          ...(suggestion.rhythm.description ? { description: suggestion.rhythm.description } : {}),
+          scheduleHint: suggestion.scheduleHint,
+          icon: suggestion.icon,
+          instances,
+          onAdd: (
+            event: MouseEvent<HTMLButtonElement>,
+            returnToPicker: (saved: boolean) => void
+          ) => beginSuggestionAdd(suggestion, event, returnToPicker)
+        };
+      })
+  }));
   return (
-    <main className="category-page marriage-page" aria-labelledby="marriage-title">
-      <header className="category-page-heading marriage-page-heading">
-        <div className="marriage-heading-copy">
-          <h2 id="marriage-title">Marriage</h2>
-          <p>Structure beats good intentions.</p>
-        </div>
-        <button type="button" className="marriage-spouse-shortcut" onClick={onPartnerProfile}>
-          <span className="marriage-partner-avatar" aria-hidden="true">P</span>
-          <span>Your partner</span>
-          <span className="marriage-spouse-shortcut-chevron" aria-hidden="true">›</span>
-        </button>
-        <span className="marriage-sample-tag">Synthetic example</span>
-      </header>
+    <main className="category-page category-page--with-header marriage-page" aria-labelledby={`${categoryToken}-title`}>
+      <CategoryHeader
+        title={categoryLabel}
+        titleId={`${categoryToken}-title`}
+        subtitle={categoryDescription}
+        trailing={onPartnerProfile || !categoryConfig ? (
+          <>
+            {onPartnerProfile && (
+              <button type="button" className="marriage-spouse-shortcut" onClick={onPartnerProfile}>
+                <span className="marriage-partner-avatar" aria-hidden="true">P</span>
+                <span>Your partner</span>
+                <span className="marriage-spouse-shortcut-chevron" aria-hidden="true">›</span>
+              </button>
+            )}
+            {!categoryConfig && <span className="marriage-sample-tag">Synthetic example</span>}
+          </>
+        ) : undefined}
+      />
 
-      <MarriageExampleSelector value={marriageExampleId} onChange={selectExample} />
+      {!categoryConfig && (
+        <MarriageExampleSelector value={marriageExampleId ?? 'populated'} onChange={selectExample} />
+      )}
 
-      <MarriageSummary fixture={fixture} />
+      <CategoryHealthSummary
+        key={categoryConfig?.categoryId ?? 'marriage'}
+        score={categoryScore}
+        categoryLabel={categoryLabel}
+        itemTerm={foundationTerm}
+        {...(categoryConfig?.scoreExplanationIntro
+          ? { explanationIntro: categoryConfig.scoreExplanationIntro }
+          : {})}
+        {...(categoryConfig?.scoreInterpretationNote
+          ? { interpretationNote: categoryConfig.scoreInterpretationNote }
+          : {})}
+      />
 
-      <div className="faith-view-nav marriage-view-nav" role="tablist" aria-label="Marriage content">
-        {tabs.map((tab, index) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            id={`marriage-tab-${tab.id}`}
-            aria-controls={`marriage-panel-${tab.id}`}
-            aria-selected={activeTab === tab.id}
-            tabIndex={activeTab === tab.id ? 0 : -1}
-            onClick={() => selectTab(tab.id)}
-            onKeyDown={event => handleTabKeyDown(event, index)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <SegmentedTabs
+        tabs={tabs.map(tab => ({
+          ...tab,
+          tabId: `${categoryToken}-tab-${tab.id}`,
+          panelId: `${categoryToken}-panel-${tab.id}`,
+          label: tab.id === 'foundations' ? categoryConfig?.tabLabel ?? tab.label : tab.label
+        }))}
+        selectedTabId={activeTab}
+        ariaLabel={`${categoryLabel} content`}
+        onChange={selectTab}
+      />
 
       <section
         className="marriage-view-panel"
-        id="marriage-panel-today"
+        id={`${categoryToken}-panel-today`}
         role="tabpanel"
-        aria-labelledby="marriage-tab-today"
+        aria-labelledby={`${categoryToken}-tab-today`}
         hidden={activeTab !== 'today'}
       >
-        <TodayTogether fixture={fixture} rhythms={todayRhythms} onRhythmDetails={onRhythmDetails} onPersonSelect={onPersonSelect} />
-      </section>
-
-      <section
-        className="marriage-view-panel"
-        id="marriage-panel-rhythms"
-        role="tabpanel"
-        aria-labelledby="marriage-tab-rhythms"
-        hidden={activeTab !== 'rhythms'}
-      >
-        <RhythmSuggestions
-          fixture={fixture}
-          userRhythms={userRhythms}
+        <TodayTogether
+          rhythms={todayRhythms}
+          hasActiveRhythms={userRhythms.length > 0}
+          rhythmScores={foundationRhythmScores}
           completedRhythms={completedRhythms}
           undoableRhythms={undoableRhythms}
           onTend={onTend}
           onUndo={onUndo}
-          onRhythmDetails={onRhythmDetails}
+          onEditRhythm={onEditRhythm}
+          onRhythmHistory={(id, event) => onRhythmHistory(id, event, 'today')}
           onPersonSelect={onPersonSelect}
+          foundations={foundationCatalogue}
+          onOpenFoundation={(id, openerId) => openFoundation(id, openerId, 'today')}
+          onOpenCategory={onOpenCategory}
+          todayDate={todayDate}
+          categoryToken={categoryToken}
         />
       </section>
 
       <section
         className="marriage-view-panel"
-        id="marriage-panel-foundations"
+        id={`${categoryToken}-panel-rhythms`}
         role="tabpanel"
-        aria-labelledby="marriage-tab-foundations"
+        aria-labelledby={`${categoryToken}-tab-rhythms`}
+        hidden={activeTab !== 'rhythms'}
+      >
+        <CategoryRhythmCollection
+          rhythms={userRhythms}
+          rhythmScores={foundationRhythmScores}
+          completedRhythms={completedRhythms}
+          undoableRhythms={undoableRhythms}
+          onTend={onTend}
+          onUndo={onUndo}
+          onEditRhythm={onEditRhythm}
+          onRhythmHistory={(id, event) => onRhythmHistory(id, event, 'rhythms')}
+          onPersonSelect={onPersonSelect}
+          foundations={foundationCatalogue}
+          onOpenFoundation={(id, openerId) => openFoundation(id, openerId, 'rhythms')}
+          onOpenCategory={onOpenCategory}
+          todayDate={todayDate}
+          onAddRhythm={onAddRhythm}
+          {...(suggestionCatalogue ? { onBrowseSuggestions: browseSuggestions } : {})}
+          archivedRhythms={archivedRhythms}
+          archivedRhythmsOpenerRef={archivedRhythmsOpener}
+          showArchivedRhythms={showArchivedRhythms}
+          onShowArchivedRhythms={() => setShowArchivedRhythms(true)}
+          categoryLabel={categoryLabel}
+          categoryToken={categoryToken}
+        />
+      </section>
+
+      <section
+        className="marriage-view-panel"
+        id={`${categoryToken}-panel-foundations`}
+        role="tabpanel"
+        aria-labelledby={`${categoryToken}-tab-foundations`}
         hidden={activeTab !== 'foundations'}
       >
         <FoundationList
-          fixture={fixture}
+          categoryLabel={categoryLabel}
+          foundationTerm={foundationTerm}
+          categoryToken={categoryToken}
+          categoryFoundations={categoryFoundations}
+          emptyFoundationDescription={categoryConfig?.emptyFoundationDescription
+            ?? (fixture.id === 'empty'
+              ? 'Ongoing areas of care; scores are unavailable without scored linked Rhythms.'
+              : 'Ongoing areas of care.')}
+          rhythms={foundationRhythms}
+          rhythmScores={foundationRhythmScores}
+          archivedRhythmIds={archivedRhythmIds}
+          foundationScores={foundationScores}
           selectedFoundationId={selectedFoundationId}
           onSelect={openFoundation}
           onBack={() => setSelectedFoundationId(null)}
-          onRhythmDetails={onRhythmDetails}
+          onManage={openAssociationDialog}
+          onRhythmHistory={(id, event) => onRhythmHistory(id, event, 'foundations')}
+          completedRhythms={completedRhythms}
+          undoableRhythms={undoableRhythms}
+          onTend={onTend}
+          onUndo={onUndo}
+          onEditRhythm={onEditRhythm}
           onPersonSelect={onPersonSelect}
+          associationFoundations={foundationCatalogue}
+          onOpenFoundation={(id, openerId) => openFoundation(id, openerId, 'foundations')}
+          onOpenCategory={onOpenCategory}
         />
       </section>
+      {associationFoundation && (
+        <FoundationRhythmAssociationDialog
+          key={associationFoundation.id}
+          foundation={associationFoundation}
+          foundationTerm={foundationTerm}
+          rhythms={foundationRhythms.map(rhythm => ({
+            rhythm,
+            archived: archivedRhythmIds.includes(rhythm.id)
+          }))}
+          onSave={changes => onSaveFoundationAssociations(associationFoundation.id, changes)}
+          onClose={() => setAssociationFoundationId(null)}
+        />
+      )}
+      {showArchivedRhythms && (
+        <ArchivedRhythmsDialog
+          rhythms={archivedRhythms}
+          foundations={foundationCatalogue}
+          completedRhythms={completedRhythms}
+          onPersonSelect={onPersonSelect}
+          onOpenFoundation={(id, openerId) => {
+            setShowArchivedRhythms(false);
+            openFoundation(id, openerId, 'rhythms');
+          }}
+          onOpenCategory={onOpenCategory}
+          onRestore={onRestoreRhythm}
+          onClose={() => setShowArchivedRhythms(false)}
+        />
+      )}
+      {suggestionCatalogue && <RhythmSuggestionPicker
+        title={suggestionCatalogue.title}
+        open={showSuggestions}
+        groups={suggestionPickerGroups}
+        onClose={() => setShowSuggestions(false)}
+        onReopen={returnToSuggestions}
+      />}
     </main>
   );
 }
 
-function MarriageSummary({ fixture }: { fixture: MarriageFixture }) {
-  const { summary } = fixture;
-  const rhythmCoverage = marriageScoreCoverage(fixture.rhythms.map(rhythm => rhythm.illustrativeScore));
-  const foundationCoverage = marriageScoreCoverage(fixture.foundations.map(foundation => foundation.illustrativeScore));
-  return (
-    <section className="card category-health-card marriage-summary-card" aria-labelledby="marriage-health-heading">
-      <div className="category-health-heading">
-        <div className="category-health-copy">
-          <h3 id="marriage-health-heading">Overall Marriage health</h3>
-          <p className="category-health-status">
-            {summary.overallScore === null ? 'No sample scores available in this example.' : 'Illustrative sample values · not calculated'}
-          </p>
-        </div>
-        <span
-          className={`category-health-score${summary.overallScore === null ? ' neutral' : ''}`}
-          aria-label={summary.overallScore === null ? 'Marriage sample score unavailable' : `Illustrative Marriage sample score ${summary.overallScore}`}
-        >
-          {summary.overallScore ?? '—'}
-        </span>
-      </div>
-      <ScoreMeter
-        label={summary.overallScore === null
-          ? 'Marriage sample score unavailable'
-          : 'Illustrative Marriage sample score, not calculated'}
-        score={summary.overallScore}
-          markerPlacement="below"
-      />
-      <div className="health-summary-breakdown" role="group" aria-label="Marriage summary measures">
-        <SummaryMeasure label="Rhythms" score={summary.rhythmScore} coverage={rhythmCoverage} />
-        <SummaryMeasure label="Foundations" score={summary.foundationScore} coverage={foundationCoverage} />
-      </div>
-    </section>
-  );
-}
-
-function SummaryMeasure({
-  label,
-  score,
-  coverage
-}: {
-  label: string;
-  score: number | null;
-  coverage: { scored: number; total: number };
-}) {
-  return (
-    <div className="health-summary-item">
-      <span className={`health-summary-score${score === null ? ' neutral' : ''}`} aria-label={score === null ? `${label} illustrative score unavailable` : `${label} illustrative sample score ${score}`}>
-        {score ?? '—'}
-      </span>
-      <span className="health-summary-label">{label}</span>
-      <span className="health-summary-detail">
-        {coverage.total === 0
-          ? `No sample ${label.toLowerCase()} are available`
-          : `${coverage.scored} of ${coverage.total} ${label.toLowerCase()} have illustrative values`}
-      </span>
-    </div>
-  );
-}
-
 function TodayTogether({
-  fixture,
   rhythms,
-  onRhythmDetails,
-  onPersonSelect
-}: {
-  fixture: MarriageFixture;
-  rhythms: MarriageFixture['rhythms'];
-  onRhythmDetails: MarriageViewProps['onRhythmDetails'];
-  onPersonSelect: MarriageViewProps['onPersonSelect'];
-}) {
-  return (
-    <>
-      {fixture.today
-        ? (
-          <section className="marriage-daily-card" aria-labelledby="marriage-invitation-title">
-            <div className="marriage-daily-heading">
-              <div>
-                <span className="marriage-daily-eyebrow">A small invitation · example</span>
-                <h3 id="marriage-invitation-title">Daily Connection</h3>
-              </div>
-              <span className="marriage-sample-tag">Read-only</span>
-            </div>
-            <div className="marriage-daily-topic">
-              <span className="marriage-topic-icon"><MarriageIcon group="rhythms" id="daily-connection" /></span>
-              <span><span className="marriage-daily-prompt-label">Today’s topic</span><strong>{fixture.today.topic}</strong></span>
-            </div>
-            <div className="marriage-daily-prompt-inset">
-              <p className="marriage-daily-prompt">{fixture.today.prompt}</p>
-            </div>
-            <WeeklyStrip fixture={fixture} />
-            <p className="marriage-readonly-note">Tending, editing the prompt, and changing settings are unavailable in this synthetic preview.</p>
-          </section>
-        )
-        : <p className="marriage-empty-state">No sample invitation or topic is available.</p>}
-
-      <section className="marriage-today-section" aria-labelledby="marriage-today-together-title">
-        <div className="marriage-section-heading">
-          <div>
-            <h3 id="marriage-today-together-title">Today together</h3>
-            <p>Read-only sample Rhythms planned for today.</p>
-          </div>
-          <span className="marriage-sample-tag">Examples</span>
-        </div>
-        {rhythms.length > 0
-          ? (
-            <div className="marriage-rhythm-list">
-              {rhythms.map(rhythm => (
-                <RhythmCard
-                  key={rhythm.id}
-                  rhythm={rhythm}
-                  people={peopleForRhythm(rhythm)}
-                  onPersonSelect={onPersonSelect}
-                  variant="simple"
-                  headingId={`marriage-today-rhythm-${rhythm.id}`}
-                  onDetails={event => onRhythmDetails(rhythm.id, event)}
-                />
-              ))}
-            </div>
-          )
-          : <p className="marriage-empty-state">No sample Rhythms are planned for today.</p>}
-      </section>
-    </>
-  );
-}
-
-function WeeklyStrip({ fixture }: { fixture: MarriageFixture }) {
-  const days = marriageWeekDays(fixture);
-  const completed = days.filter(day => day.state === 'sample' || day.state === 'today-sample').length;
-  return (
-    <section className="marriage-weekly-goal" aria-label="Example activity this week">
-      <div className="marriage-weekly-heading">
-        <h3>Weekly connection</h3>
-        <span className="marriage-sample-tag">
-          Sample week · {formatDate(fixture.week.startDate)}–{formatDate(days[6]!.date)}
-        </span>
-      </div>
-      <p className="marriage-weekly-progress">{completed} of {fixture.week.target} sample connections this week</p>
-      <div className="marriage-weekday-strip" role="group" aria-label="Synthetic example activity by day">
-        {days.map(day => (
-          <span
-            key={day.date}
-            className={`marriage-weekday${day.state === 'sample' || day.state === 'today-sample' ? ' is-complete' : ''}${day.state === 'today' || day.state === 'today-sample' ? ' is-today' : ''}`}
-            aria-label={`${formatDay(day.date)}: ${day.state === 'sample' || day.state === 'today-sample' ? 'sample activity' : day.state === 'today' ? 'today' : 'no sample activity'}`}
-          >
-            {day.label}
-          </span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function RhythmSuggestions({
-  fixture,
-  userRhythms,
+  hasActiveRhythms,
+  rhythmScores,
   completedRhythms,
   undoableRhythms,
   onTend,
   onUndo,
-  onRhythmDetails,
-  onPersonSelect
+  onEditRhythm,
+  onRhythmHistory,
+  onPersonSelect,
+  foundations,
+  onOpenFoundation,
+  onOpenCategory,
+  todayDate,
+  categoryToken
 }: {
-  fixture: MarriageFixture;
-  userRhythms: readonly RhythmPreview[];
+  rhythms: readonly RhythmPreview[];
+  hasActiveRhythms: boolean;
+  rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
-  onTend: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
-  onUndo: (id: string) => void;
-  onRhythmDetails: MarriageViewProps['onRhythmDetails'];
+  onTend: MarriageViewProps['onTend'];
+  onUndo: MarriageViewProps['onUndo'];
+  onEditRhythm: MarriageViewProps['onEditRhythm'];
+  onRhythmHistory: MarriageViewProps['onRhythmHistory'];
   onPersonSelect: MarriageViewProps['onPersonSelect'];
+  foundations: readonly FoundationPreview[];
+  onOpenFoundation: (foundationId: string, openerId: string) => void;
+  onOpenCategory: MarriageViewProps['onOpenCategory'];
+  todayDate: string;
+  categoryToken: string;
 }) {
+  const completedCount = rhythms.filter(rhythm => completedRhythms.has(rhythm.id)).length;
   return (
-    <section className="marriage-rhythm-section" aria-labelledby="marriage-rhythm-section-title">
+    <section className="marriage-today-section" aria-labelledby={`${categoryToken}-today-together-title`}>
       <div className="marriage-section-heading">
         <div>
-          <h3 id="marriage-rhythm-section-title">Explore Marriage Rhythms</h3>
-          <p>Suggestions for small, intentional investments in your relationship.</p>
+          <h3 id={`${categoryToken}-today-together-title`}>Today</h3>
+          <p>{completedCount} of {rhythms.length} Rhythms tended today</p>
         </div>
-        <span className="marriage-sample-tag">Synthetic examples</span>
       </div>
-      <p className="marriage-readonly-note">These suggestions are not added or scheduled. Editing and adding Rhythms are unavailable in this preview.</p>
-      {userRhythms.length > 0 && (
-        <section className="marriage-user-rhythms" aria-labelledby="marriage-user-rhythms-title">
-          <div className="marriage-section-heading">
-            <div>
-              <h3 id="marriage-user-rhythms-title">Your Rhythms</h3>
-              <p>Preview Rhythms assigned to Marriage.</p>
-            </div>
-            <span className="marriage-sample-tag">Synthetic</span>
-          </div>
-          <div className="marriage-rhythm-list">
-            {userRhythms.map(rhythm => (
-              <RhythmCard
+      {rhythms.length > 0
+        ? (
+          <div className="marriage-rhythm-list current-plan-item-group">
+            {rhythms.map(rhythm => (
+              <RhythmDetailsDialog
                 key={rhythm.id}
                 rhythm={rhythm}
-                people={peopleForRhythm(rhythm)}
-                onPersonSelect={onPersonSelect}
-                variant="simple"
+                inline
                 completed={completedRhythms.has(rhythm.id)}
-                headingId={`marriage-user-rhythm-${rhythm.id}`}
-                onDetails={event => onRhythmDetails(rhythm.id, event)}
-                onTend={event => onTend(rhythm.id, event)}
-                {...(undoableRhythms.has(rhythm.id) ? { onUndo: () => onUndo(rhythm.id) } : {})}
+                statusLabel={rhythmLastActivityLabel(rhythm, todayDate)}
+                people={peopleForRhythm(rhythm)}
+                foundations={foundations}
+                onPersonSelect={onPersonSelect}
+                onOpenFoundation={onOpenFoundation}
+                onOpenCategory={onOpenCategory}
+                headingId={`${categoryToken}-today-rhythm-${rhythm.id}`}
+                archived={false}
+                healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
+                onHistory={event => onRhythmHistory(rhythm.id, event)}
+                {...(isEditableRhythmId(rhythm.id)
+                  ? {
+                      onTend: (event: MouseEvent<HTMLButtonElement>) => onTend(rhythm.id, event),
+                      onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event),
+                      ...(undoableRhythms.has(rhythm.id) ? { onUndo: () => onUndo(rhythm.id) } : {})
+                    }
+                  : {})}
+                onClose={() => undefined}
               />
             ))}
           </div>
-        </section>
-      )}
-      {marriageRhythmGroups.map(group => {
-        const rhythms = fixture.rhythms.filter(rhythm => rhythm.marriageGroup === group.id);
-        return (
-          <section key={group.id} className="marriage-recommendation-group" aria-labelledby={`marriage-group-${group.id}`}>
-            <header><h4 id={`marriage-group-${group.id}`}>{group.title}</h4><span>{rhythms.length} suggested</span></header>
-            {rhythms.length
-              ? (
-                <div className="marriage-rhythm-list">
-                  {rhythms.map(rhythm => (
-                    <RhythmCard
-                      key={rhythm.id}
-                      rhythm={rhythm}
-                      people={peopleForRhythm(rhythm)}
-                      onPersonSelect={onPersonSelect}
-                      variant="suggestion"
-                      icon={<MarriageIcon group="rhythms" id={rhythm.iconId ?? ''} />}
-                      headingId={`marriage-suggested-rhythm-${rhythm.id}`}
-                      onDetails={event => onRhythmDetails(rhythm.id, event)}
-                    />
-                  ))}
-                </div>
-              )
-              : <p className="marriage-empty-state">No sample suggestions in this group.</p>}
-          </section>
-        );
-      })}
-    </section>
-  );
-}
-
-function FoundationList({
-  fixture,
-  selectedFoundationId,
-  onSelect,
-  onBack,
-  onRhythmDetails,
-  onPersonSelect
-}: {
-  fixture: MarriageFixture;
-  selectedFoundationId: string | null;
-  onSelect: (id: string, openerId: string) => void;
-  onBack: () => void;
-  onRhythmDetails: MarriageViewProps['onRhythmDetails'];
-  onPersonSelect: MarriageViewProps['onPersonSelect'];
-}) {
-  const selectedFoundation = fixture.foundations.find(item => item.id === selectedFoundationId);
-  const supportingRhythms = selectedFoundation
-    ? rhythmsSupportingFoundation(fixture.rhythms, selectedFoundation.id)
-    : [];
-  const primaryRhythms = selectedFoundation
-    ? supportingRhythms.filter(rhythm => rhythm.primaryFoundationId === selectedFoundation.id)
-    : [];
-  const secondaryRhythms = selectedFoundation
-    ? supportingRhythms.filter(rhythm =>
-      rhythm.primaryFoundationId !== selectedFoundation.id &&
-      rhythm.secondaryFoundationIds?.includes(selectedFoundation.id) === true
-    )
-    : [];
-
-  return (
-    <section className="marriage-foundations-section" aria-labelledby="marriage-foundations-title">
-      <div className="marriage-section-heading">
-        <div>
-          <h3 id="marriage-foundations-title">Marriage foundations</h3>
-          <p>
-            {fixture.id === 'empty'
-              ? 'Ongoing areas of care; no sample scores are available.'
-              : 'Ongoing areas of care.'}
-          </p>
-        </div>
-        <span className="marriage-sample-tag">Synthetic examples</span>
-      </div>
-      {selectedFoundation
-        ? (
-          <section className="marriage-foundation-detail" aria-labelledby="marriage-foundation-detail-title">
-            <button type="button" className="marriage-back-link" onClick={onBack}>
-              ‹ All Foundations
-            </button>
-            <FoundationCard
-              foundation={selectedFoundation}
-              variant="compact"
-              icon={<MarriageIcon group="foundations" id={selectedFoundation.iconId ?? selectedFoundation.id} />}
-              headingId="marriage-foundation-detail-title"
-              illustrativeScore={selectedFoundation.illustrativeScore ?? null}
-              rhythmCoverage={marriageFoundationCoverage(fixture, selectedFoundation.id)}
-            >
-              <div className="marriage-foundation-support">
-                <h3>Supporting Rhythms · {supportingRhythms.length}</h3>
-                {supportingRhythms.length
-                  ? (
-                    <>
-                      {primaryRhythms.length > 0 && (
-                        <FoundationRhythmGroup
-                          title={`Primary associations · ${primaryRhythms.length}`}
-                          rhythms={primaryRhythms}
-                          onRhythmDetails={onRhythmDetails}
-                          onPersonSelect={onPersonSelect}
-                        />
-                      )}
-                      {secondaryRhythms.length > 0 && (
-                        <FoundationRhythmGroup
-                          title={`Secondary associations · ${secondaryRhythms.length}`}
-                          rhythms={secondaryRhythms}
-                          onRhythmDetails={onRhythmDetails}
-                          onPersonSelect={onPersonSelect}
-                        />
-                      )}
-                    </>
-                  )
-                  : <p>No sample Rhythms are assigned to this ongoing Foundation yet.</p>}
-              </div>
-            </FoundationCard>
-          </section>
         )
         : (
-          <div className="marriage-foundation-list">
-            {fixture.foundations.map(foundation => (
-              <FoundationCard
-                key={foundation.id}
-                foundation={foundation}
-                variant="compact"
-                icon={<MarriageIcon group="foundations" id={foundation.iconId ?? foundation.id} />}
-                illustrativeScore={foundation.illustrativeScore ?? null}
-                rhythmCoverage={marriageFoundationCoverage(fixture, foundation.id)}
-                headingId={`marriage-foundation-list-${foundation.id}`}
-                selectButtonId={`marriage-foundation-select-${foundation.id}`}
-                onSelect={() => onSelect(foundation.id, `marriage-foundation-select-${foundation.id}`)}
-              />
-            ))}
+          <div className="marriage-empty-state">
+            <p>{hasActiveRhythms ? 'All caught up. Nothing to tend to.' : 'No active Rhythms.'}</p>
           </div>
         )}
     </section>
   );
 }
 
-function FoundationRhythmGroup({
-  title,
+function FoundationList({
+  categoryLabel,
+  foundationTerm,
+  categoryToken,
+  categoryFoundations,
+  emptyFoundationDescription,
   rhythms,
-  onRhythmDetails,
-  onPersonSelect
+  rhythmScores,
+  archivedRhythmIds,
+  foundationScores,
+  selectedFoundationId,
+  onSelect,
+  onBack,
+  onManage,
+  onRhythmHistory,
+  completedRhythms,
+  undoableRhythms,
+  onTend,
+  onUndo,
+  onEditRhythm,
+  onPersonSelect,
+  associationFoundations,
+  onOpenFoundation,
+  onOpenCategory
 }: {
-  title: string;
-  rhythms: MarriageFixture['rhythms'];
-  onRhythmDetails: MarriageViewProps['onRhythmDetails'];
+  categoryLabel: string;
+  foundationTerm: FoundationTerminology;
+  categoryToken: string;
+  categoryFoundations: readonly FoundationPreview[];
+  emptyFoundationDescription: string;
+  rhythms: readonly RhythmPreview[];
+  rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
+  archivedRhythmIds: readonly string[];
+  foundationScores: ReadonlyMap<string, FoundationScoreSelection>;
+  selectedFoundationId: string | null;
+  onSelect: (id: string, openerId: string) => void;
+  onBack: () => void;
+  onManage: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onRhythmHistory: MarriageViewProps['onRhythmHistory'];
+  completedRhythms: ReadonlySet<string>;
+  undoableRhythms: ReadonlySet<string>;
+  onTend: MarriageViewProps['onTend'];
+  onUndo: MarriageViewProps['onUndo'];
+  onEditRhythm: MarriageViewProps['onEditRhythm'];
   onPersonSelect: MarriageViewProps['onPersonSelect'];
+  associationFoundations: readonly FoundationPreview[];
+  onOpenFoundation: (foundationId: string, openerId: string) => void;
+  onOpenCategory: MarriageViewProps['onOpenCategory'];
+}) {
+  const [scoreInfoExpanded, setScoreInfoExpanded] = useState(false);
+  const scoreInfoId = useId();
+  const selectedFoundation = categoryFoundations.find(item => item.id === selectedFoundationId);
+  const selectedFoundationScore = selectedFoundation
+    ? foundationScores.get(selectedFoundation.id) ?? null
+    : null;
+  const selectedScoreEvidence = selectedFoundationScore
+    ? foundationScoreEvidence(selectedFoundationScore)
+    : undefined;
+  const linkedRhythms = selectedFoundation
+    ? rhythmsSupportingFoundation(rhythms, selectedFoundation.id)
+    : [];
+
+  return (
+    <section className="marriage-foundations-section" aria-labelledby={`${categoryToken}-foundations-title`}>
+      <div className="marriage-section-heading marriage-foundations-section__heading">
+        <div className="marriage-foundations-section__heading-copy">
+          <div className="marriage-foundations-section__title-row">
+            <h3 id={`${categoryToken}-foundations-title`}>{categoryLabel} {foundationTerm.plural.toLowerCase()}</h3>
+            <button
+              type="button"
+              className="rhythm-history-view__score-info"
+              aria-label={`${scoreInfoExpanded ? 'Hide' : 'Show'} ${foundationTerm.singular} scoring explanation`}
+              aria-expanded={scoreInfoExpanded}
+              aria-controls={scoreInfoId}
+              onClick={() => setScoreInfoExpanded(expanded => !expanded)}
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <circle cx="8" cy="8" r="6.25" />
+                <path d="M8 7.2v4M8 4.8h.01" />
+              </svg>
+            </button>
+          </div>
+          <p>
+            {emptyFoundationDescription}
+          </p>
+        </div>
+      </div>
+      <div
+        id={scoreInfoId}
+        className="marriage-foundation-score-info__content"
+        role="region"
+        aria-labelledby={`${scoreInfoId}-title`}
+        hidden={!scoreInfoExpanded}
+      >
+        <h4 id={`${scoreInfoId}-title`}>
+          {foundationTerm.singular === 'Practice'
+            ? 'Each Rhythm counts equally.'
+            : 'Each rhythm counts equally.'}
+        </h4>
+        <p>We combine their Consistency and On Track scores to calculate this {foundationTerm.singular}’s Health.</p>
+        <p>Consistency reflects how regularly you follow through; On Track reflects how caught up you are.</p>
+        <p>Health combines 75% Consistency and 25% On Track.</p>
+        <p className="marriage-foundation-score-info__note">Rhythms need both scores to count.</p>
+      </div>
+      {selectedFoundation
+        ? (
+          <section className="marriage-foundation-detail tend-back-stack" aria-labelledby={`${categoryToken}-foundation-detail-title`}>
+            <BackButton onClick={onBack}>All {foundationTerm.plural}</BackButton>
+            <FoundationCard
+              foundation={selectedFoundation}
+              variant="compact"
+              icon={<MarriageIcon group="foundations" id={selectedFoundation.iconId ?? selectedFoundation.id} />}
+              headingId={`${categoryToken}-foundation-detail-title`}
+            />
+            {selectedFoundationScore && (
+              <HealthScoreBreakdown
+                title="Health"
+                score={selectedFoundationScore.health}
+                healthLabel={`${selectedFoundation.name} ${foundationTerm.singular} Health`}
+                ariaLabel={`${selectedFoundation.name} ${foundationTerm.singular} Health scores`}
+                consistency={{ score: selectedFoundationScore.consistency }}
+                onTrack={{ score: selectedFoundationScore.onTrack }}
+                consistencyCaption="How often you show up."
+                onTrackCaption="How caught up you are."
+                className="marriage-foundation-detail__scores"
+              />
+            )}
+            <div className="marriage-foundation-support">
+                {selectedScoreEvidence && (
+                  <p className="marriage-foundation-support__score-note">{selectedScoreEvidence}</p>
+                )}
+                <div className="marriage-foundation-support__heading">
+                  <h3 id={`${categoryToken}-foundation-linked-rhythms-title`}>
+                    Linked Rhythms · {linkedRhythms.length}
+                  </h3>
+                  <button
+                    type="button"
+                    className="marriage-foundation-support__actions"
+                    aria-haspopup="dialog"
+                    onClick={event => onManage(selectedFoundation.id, event)}
+                  >
+                    Manage linked Rhythms
+                  </button>
+                </div>
+                {selectedFoundationScore && selectedFoundationScore.archivedRhythmIds.length > 0 && (
+                  <p className="marriage-foundation-support__score-note">
+                    {selectedFoundationScore.archivedRhythmIds.length} archived linked
+                    {' '}{selectedFoundationScore.archivedRhythmIds.length === 1 ? 'Rhythm is' : 'Rhythms are'} excluded from scoring.
+                  </p>
+                )}
+                {selectedFoundationScore && selectedFoundationScore.unresolvedRhythmIds.length > 0 && (
+                  <p className="marriage-foundation-support__score-note" role="status">
+                    {selectedFoundationScore.unresolvedRhythmIds.length} linked
+                    {' '}{selectedFoundationScore.unresolvedRhythmIds.length === 1 ? 'Rhythm score could' : 'Rhythm scores could'}
+                    {' '}not be resolved.
+                  </p>
+                )}
+                {selectedFoundationScore && selectedFoundationScore.excludedRhythms.length > 0 && (
+                  <p className="marriage-foundation-support__score-note">
+                    Linked Rhythms without both scores are excluded from both averages.
+                  </p>
+                )}
+                {linkedRhythms.length
+                  ? (
+                    <FoundationRhythmGroup
+                      rhythms={linkedRhythms}
+                      archivedRhythmIds={archivedRhythmIds}
+                      headingId={`${categoryToken}-foundation-linked-rhythms-title`}
+                      rhythmScores={rhythmScores}
+                      completedRhythms={completedRhythms}
+                      undoableRhythms={undoableRhythms}
+                      onTend={onTend}
+                      onUndo={onUndo}
+                      onEditRhythm={onEditRhythm}
+                      onRhythmHistory={(id, event) => onRhythmHistory(id, event, 'foundations')}
+                      onPersonSelect={onPersonSelect}
+                      foundations={associationFoundations}
+                      categoryToken={categoryToken}
+                      onOpenFoundation={id => onOpenFoundation(
+                        id,
+                        `${categoryToken}-foundation-select-${selectedFoundation.id}`
+                      )}
+                      onOpenCategory={onOpenCategory}
+                    />
+                  )
+                  : <p>No Rhythms are linked to this ongoing {foundationTerm.singular} yet.</p>}
+            </div>
+          </section>
+        )
+        : (
+          <div className="marriage-foundation-list">
+            {categoryFoundations.map(foundation => {
+              const score = foundationScores.get(foundation.id);
+              const scoreEvidence = score ? foundationScoreEvidence(score) : undefined;
+              return (
+                <FoundationCard
+                  key={foundation.id}
+                  foundation={foundation}
+                  variant="compact"
+                  icon={<MarriageIcon group="foundations" id={foundation.iconId ?? foundation.id} />}
+                  score={score?.health ?? null}
+                  scoreLabel={`${foundation.name} ${foundationTerm.singular} Health score`}
+                  {...(scoreEvidence !== undefined
+                    ? { scoreEvidence }
+                    : {})}
+                  headingId={`${categoryToken}-foundation-list-${foundation.id}`}
+                  selectButtonId={`${categoryToken}-foundation-select-${foundation.id}`}
+                  onSelect={() => onSelect(foundation.id, `${categoryToken}-foundation-select-${foundation.id}`)}
+                />
+              );
+            })}
+          </div>
+        )}
+    </section>
+  );
+}
+
+function foundationScoreEvidence(score: FoundationScoreSelection): string | undefined {
+  if (score.linkedRhythmIds.length === 0) return 'No linked Rhythms';
+  if (score.activeLinkedRhythmIds.length === 0) return 'No active linked Rhythms';
+  if (score.eligibleRhythmIds.length < score.activeLinkedRhythmIds.length) {
+    return `${score.eligibleRhythmIds.length} of ${score.activeLinkedRhythmIds.length} linked Rhythms scored`;
+  }
+  return undefined;
+}
+
+function FoundationRhythmGroup({
+  rhythms,
+  archivedRhythmIds,
+  headingId,
+  rhythmScores,
+  completedRhythms,
+  undoableRhythms,
+  onTend,
+  onUndo,
+  onEditRhythm,
+  onRhythmHistory,
+  onPersonSelect,
+  foundations,
+  categoryToken,
+  onOpenFoundation,
+  onOpenCategory
+}: {
+  rhythms: readonly RhythmPreview[];
+  archivedRhythmIds: readonly string[];
+  headingId: string;
+  rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
+  completedRhythms: ReadonlySet<string>;
+  undoableRhythms: ReadonlySet<string>;
+  onTend: MarriageViewProps['onTend'];
+  onUndo: MarriageViewProps['onUndo'];
+  onEditRhythm: MarriageViewProps['onEditRhythm'];
+  onRhythmHistory: MarriageViewProps['onRhythmHistory'];
+  onPersonSelect: MarriageViewProps['onPersonSelect'];
+  foundations: readonly FoundationPreview[];
+  categoryToken: string;
+  onOpenFoundation: (foundationId: string, openerId: string) => void;
+  onOpenCategory: MarriageViewProps['onOpenCategory'];
 }) {
   return (
-    <section className="marriage-foundation-support-group" aria-label={title}>
-      <h4>{title}</h4>
-      <div className="marriage-rhythm-list">
+    <section className="marriage-foundation-support-group" aria-labelledby={headingId}>
+      <div className="marriage-rhythm-list current-plan-item-group">
         {rhythms.map(rhythm => (
-          <RhythmCard
+          <RhythmDetailsDialog
             key={rhythm.id}
             rhythm={rhythm}
+            inline
+            completed={completedRhythms.has(rhythm.id)}
             people={peopleForRhythm(rhythm)}
+            foundations={foundations}
             onPersonSelect={onPersonSelect}
-            variant="simple"
-            headingId={`marriage-detail-rhythm-${rhythm.id}`}
-            onDetails={event => onRhythmDetails(rhythm.id, event)}
+            onOpenFoundation={onOpenFoundation}
+            onOpenCategory={onOpenCategory}
+            archived={archivedRhythmIds.includes(rhythm.id)}
+            headingId={`${categoryToken}-detail-rhythm-${rhythm.id}`}
+            healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
+            onHistory={event => onRhythmHistory(rhythm.id, event)}
+            {...(!archivedRhythmIds.includes(rhythm.id) && isEditableRhythmId(rhythm.id)
+              ? {
+                  onTend: (event: MouseEvent<HTMLButtonElement>) => onTend(rhythm.id, event),
+                  onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event),
+                  ...(undoableRhythms.has(rhythm.id) ? { onUndo: () => onUndo(rhythm.id) } : {})
+                }
+              : {})}
+            onClose={() => undefined}
           />
         ))}
       </div>
     </section>
   );
-}
-
-function formatDay(value: string): string {
-  return new Date(`${value}T12:00:00`).toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric'
-  });
-}
-
-function formatDate(value: string): string {
-  return new Date(`${value}T12:00:00`).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric'
-  });
 }

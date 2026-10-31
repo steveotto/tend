@@ -1,21 +1,47 @@
 import { useEffect, useRef, useState } from 'react';
+import { useScoringInstant } from './components/useScoringInstant.ts';
 import type { MouseEvent } from 'react';
 import { AppNavigation } from './components/AppNavigation.tsx';
 import type { Destination, TextSize } from './components/AppNavigation.tsx';
-import { MarriageView } from './components/MarriageView.tsx';
+import {
+  MarriageView,
+  type CategoryRhythmSuggestion,
+  type CategoryRhythmSuggestionCatalogue,
+  type MarriageTab
+} from './components/MarriageView.tsx';
+import { MarriageIcon } from './components/MarriageIcon.tsx';
+import { selectActiveUserRhythms, selectArchivedUserRhythms } from './domain/active-user-rhythms.ts';
+import { foundationCategoryId, saveFoundationRhythmAssociations } from './domain/foundation-rhythm-associations.ts';
+import type { FoundationRhythmAssociationChange } from './domain/foundation-rhythm-associations.ts';
+import { selectFoundationRhythmScores } from './domain/foundation-scoring.ts';
 import { RhythmDetailsDialog } from './components/RhythmDetailsDialog.tsx';
 import { RhythmCompletionDialog } from './components/RhythmCompletionDialog.tsx';
 import { FinanceGoalsView } from './components/FinanceGoalsView.tsx';
 import { PreviewDataControls } from './components/PreviewDataControls.tsx';
 import type { PreviewPersistenceStatus } from './components/PreviewDataControls.tsx';
-import { PersonProfilePlaceholder } from './components/PersonProfilePlaceholder.tsx';
+import { PersonProfileView } from './components/PersonProfileView.tsx';
+import { PersonDetailsEditor } from './components/PersonDetailsEditor.tsx';
+import { PeopleView } from './components/PeopleView.tsx';
 import { RhythmEditor } from './components/RhythmEditor.tsx';
 import { TodayView } from './components/TodayView.tsx';
+import { TodayWeatherSettings } from './components/TodayWeatherSettings.tsx';
+import { useTodayWeather } from './components/useTodayWeather.ts';
+import type { TodayFocusId } from './domain/today-plan.ts';
+import { HealthFitnessView } from './components/HealthFitnessView.tsx';
+import { FriendshipsView } from './components/FriendshipsView.tsx';
 import {
   marriageRhythms,
+  foundationCatalogue,
+  faithRhythmSuggestionGroups,
+  faithRhythmSuggestions,
+  parentingRhythmSuggestionGroups,
+  parentingRhythmSuggestions,
   personById,
   peopleForRhythm,
   todayRhythms,
+  type CategoryRhythmSuggestionGroupDefinition,
+  type CategoryRhythmSuggestionTemplate,
+  type CategoryId,
   type MarriageExampleId,
   type PersonId,
   type RhythmPreview
@@ -30,6 +56,14 @@ import {
 } from './domain/money-goals.ts';
 import { createSamplePreviewData, parsePreviewBackup } from './domain/preview-state.ts';
 import type { PreviewData } from './domain/preview-state.ts';
+import { savePersonDetailsCommand, personDetailsForId } from './domain/person-details.ts';
+import type { PersonDetailsDraft } from './domain/person-details.ts';
+import {
+  createPersonNote,
+  deletePersonNote,
+  updatePersonNote
+} from './domain/person-notes.ts';
+import type { PersonNoteDraft } from './domain/person-notes.ts';
 import type { DatedRhythmCompletion, RhythmCompletionRecord } from './domain/rhythm-completion.ts';
 import {
   deleteDatedCompletion,
@@ -38,8 +72,17 @@ import {
 } from './domain/rhythm-completion.ts';
 import { resolveSeedCompletionRecords } from './domain/rhythm-history.ts';
 import { localDateInTimeZone } from './domain/rhythm-scoring.ts';
+import { hasRhythmOccurrenceForCompletion } from './domain/rhythm-occurrences.ts';
+import { prepareDatedRhythmCompletion } from './domain/rhythm-completion.ts';
+import { validateStrengthData } from './domain/strength.ts';
+import type { StrengthMode } from './domain/strength.ts';
+import {
+  saveWeightDataCommand
+} from './domain/weight.ts';
+import { saveCardioDataCommand } from './domain/cardio.ts';
 import {
   activeTodayRhythms,
+  applySavedRhythmOverrides,
   archiveRhythmId,
   archivedTodayRhythms,
   isEditableRhythmId,
@@ -49,9 +92,12 @@ import {
   rhythmsForCategory,
   saveRhythmDraft
 } from './domain/rhythm-editor.ts';
-import type { RhythmDraft, RhythmDraftErrors } from './domain/rhythm-editor.ts';
+import { createRhythmDraft } from './domain/rhythm-editor.ts';
+import type { RhythmDraft, RhythmDraftErrors, SavedRhythm } from './domain/rhythm-editor.ts';
 import type { RhythmSeasonEditDraft } from './domain/rhythm-season-edit.ts';
-import { editRhythmSeason, establishCurrentRhythmSeason } from './domain/rhythm-season-edit.ts';
+import { establishCurrentRhythmSeason } from './domain/rhythm-season-edit.ts';
+import { resolveRhythmSeasonRange } from './domain/rhythm-season-range.ts';
+import { ensureRhythmSeasonHistoryCoverage } from './domain/rhythm-seasons.ts';
 import {
   deleteRhythmSeason,
   restoreDeletedRhythmSeason
@@ -60,7 +106,8 @@ import type { RhythmSeasonDeletionUndo } from './domain/rhythm-season-delete.ts'
 import {
   effectiveRhythmSchedule,
   rhythmScheduleSummary,
-  rhythmTimeLabel
+  rhythmTimeLabel,
+  type RhythmFrequencyRecommendation
 } from './domain/rhythm-schedule.ts';
 import { rhythmSchedulesEqual } from './domain/rhythm-occurrences.ts';
 import {
@@ -77,6 +124,23 @@ import {
   loadV9RecoveryCopy,
   loadV10RecoveryCopy,
   loadV11RecoveryCopy,
+  loadV12RecoveryCopy,
+  loadV13RecoveryCopy,
+  loadV14RecoveryCopy,
+  loadV15RecoveryCopy,
+  loadV16RecoveryCopy,
+  loadV17RecoveryCopy,
+  loadV18RecoveryCopy,
+  loadV19RecoveryCopy,
+  loadV20RecoveryCopy,
+  loadV21RecoveryCopy,
+  loadV22RecoveryCopy,
+  loadV23RecoveryCopy,
+  loadV25RecoveryCopy,
+  loadV26RecoveryCopy,
+  loadV27RecoveryCopy,
+  loadV28RecoveryCopy,
+  loadV29RecoveryCopy,
   loadPreview,
   writePreview
 } from './storage/preview-storage.ts';
@@ -93,6 +157,57 @@ const destinationLabels: Record<Exclude<Destination, 'today'>, string> = {
   friendships: 'Friendships'
 };
 
+function categorySuggestionCatalogue(
+  categoryId: CategoryId,
+  title: string,
+  groups: readonly CategoryRhythmSuggestionGroupDefinition[],
+  templates: readonly CategoryRhythmSuggestionTemplate[]
+): CategoryRhythmSuggestionCatalogue {
+  return {
+    title,
+    groups: groups.map(group => ({
+      id: group.id,
+      title: group.title,
+      subtitle: group.subtitle,
+      suggestions: templates
+        .filter(suggestion => suggestion.groupId === group.id)
+        .map(suggestion => ({
+          sourceId: suggestion.sourceId,
+          categoryId,
+          rhythm: {
+            id: suggestion.sourceId,
+            title: suggestion.title,
+            description: suggestion.description,
+            cadence: suggestion.cadence,
+            timeLabel: 'Anytime',
+            automation: 'manual',
+            status: 'Not confirmed',
+            primaryFoundationId: suggestion.primaryFoundationId,
+            secondaryFoundationIds: suggestion.secondaryFoundationIds,
+            categoryIds: [categoryId]
+          },
+          scheduleHint: suggestion.scheduleHint,
+          icon: <MarriageIcon group="foundations" id={suggestion.iconId} />,
+          recommendedFrequency: suggestion.recommendedFrequency,
+          ...(suggestion.frequencyGuidance ? { frequencyGuidance: suggestion.frequencyGuidance } : {})
+        }))
+    }))
+  };
+}
+
+const parentingSuggestionCatalogue = categorySuggestionCatalogue(
+  'parenting',
+  'Parenting rhythms',
+  parentingRhythmSuggestionGroups,
+  parentingRhythmSuggestions
+);
+const faithSuggestionCatalogue = categorySuggestionCatalogue(
+  'faith',
+  'Faith practice suggestions',
+  faithRhythmSuggestionGroups,
+  faithRhythmSuggestions
+);
+
 function isDatedCompletionRecord(record: RhythmCompletionRecord): record is DatedRhythmCompletion {
   return typeof record.localTime === 'string'
     && typeof record.timeZone === 'string'
@@ -101,7 +216,16 @@ function isDatedCompletionRecord(record: RhythmCompletionRecord): record is Date
 }
 
 export function App() {
+  const scoringInstant = useScoringInstant();
   const [destination, setDestination] = useState<Destination>('today');
+  const [moreSettingsOpen, setMoreSettingsOpen] = useState(false);
+  const weatherTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const todayWeather = useTodayWeather(
+    destination === 'today' || (destination === 'more' && moreSettingsOpen),
+    weatherTimeZone
+  );
+  const [todayFocus, setTodayFocus] = useState<TodayFocusId>('now');
+  const [healthFitnessVisited, setHealthFitnessVisited] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewData>(createSamplePreviewData);
   const [hydrated, setHydrated] = useState(false);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
@@ -128,34 +252,112 @@ export function App() {
   const [v10RecoveryError, setV10RecoveryError] = useState<string | null>(null);
   const [v11RecoveryCopy, setV11RecoveryCopy] = useState<string | null>(null);
   const [v11RecoveryError, setV11RecoveryError] = useState<string | null>(null);
+  const [v12RecoveryCopy, setV12RecoveryCopy] = useState<string | null>(null);
+  const [v12RecoveryError, setV12RecoveryError] = useState<string | null>(null);
+  const [v13RecoveryCopy, setV13RecoveryCopy] = useState<string | null>(null);
+  const [v13RecoveryError, setV13RecoveryError] = useState<string | null>(null);
+  const [v14RecoveryCopy, setV14RecoveryCopy] = useState<string | null>(null);
+  const [v14RecoveryError, setV14RecoveryError] = useState<string | null>(null);
+  const [v15RecoveryCopy, setV15RecoveryCopy] = useState<string | null>(null);
+  const [v15RecoveryError, setV15RecoveryError] = useState<string | null>(null);
+  const [v16RecoveryCopy, setV16RecoveryCopy] = useState<string | null>(null);
+  const [v16RecoveryError, setV16RecoveryError] = useState<string | null>(null);
+  const [v17RecoveryCopy, setV17RecoveryCopy] = useState<string | null>(null);
+  const [v17RecoveryError, setV17RecoveryError] = useState<string | null>(null);
+  const [v18RecoveryCopy, setV18RecoveryCopy] = useState<string | null>(null);
+  const [v18RecoveryError, setV18RecoveryError] = useState<string | null>(null);
+  const [v19RecoveryCopy, setV19RecoveryCopy] = useState<string | null>(null);
+  const [v19RecoveryError, setV19RecoveryError] = useState<string | null>(null);
+  const [v20RecoveryCopy, setV20RecoveryCopy] = useState<string | null>(null);
+  const [v20RecoveryError, setV20RecoveryError] = useState<string | null>(null);
+  const [v21RecoveryCopy, setV21RecoveryCopy] = useState<string | null>(null);
+  const [v21RecoveryError, setV21RecoveryError] = useState<string | null>(null);
+  const [v22RecoveryCopy, setV22RecoveryCopy] = useState<string | null>(null);
+  const [v22RecoveryError, setV22RecoveryError] = useState<string | null>(null);
+  const [v23RecoveryCopy, setV23RecoveryCopy] = useState<string | null>(null);
+  const [v23RecoveryError, setV23RecoveryError] = useState<string | null>(null);
+  const [v25RecoveryCopy, setV25RecoveryCopy] = useState<string | null>(null);
+  const [v25RecoveryError, setV25RecoveryError] = useState<string | null>(null);
+  const [v26RecoveryCopy, setV26RecoveryCopy] = useState<string | null>(null);
+  const [v26RecoveryError, setV26RecoveryError] = useState<string | null>(null);
+  const [v27RecoveryCopy, setV27RecoveryCopy] = useState<string | null>(null);
+  const [v27RecoveryError, setV27RecoveryError] = useState<string | null>(null);
+  const [v28RecoveryCopy, setV28RecoveryCopy] = useState<string | null>(null);
+  const [v28RecoveryError, setV28RecoveryError] = useState<string | null>(null);
+  const [v29RecoveryCopy, setV29RecoveryCopy] = useState<string | null>(null);
+  const [v29RecoveryError, setV29RecoveryError] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
+  const morePageHeading = useRef<HTMLHeadingElement>(null);
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [textSize, setTextSize] = useState<TextSize>('small');
   const [marriageExampleId, setMarriageExampleId] = useState<MarriageExampleId>('populated');
-  const [selectedPersonId, setSelectedPersonId] = useState<PersonId | null>(null);
+  const [foundationNavigationRequest, setFoundationNavigationRequest] = useState<{
+    foundationId: string;
+    requestId: number;
+    returnTab: 'today' | MarriageTab;
+  } | null>(null);
+  const foundationNavigationSequence = useRef(0);
+  const activeRhythmReturnTab = useRef<'today' | MarriageTab>('today');
+  const [profilePersonId, setProfilePersonId] = useState<PersonId | null>(null);
+  const [personDetailsEditorId, setPersonDetailsEditorId] = useState<PersonId | null>(null);
+  const personDetailsEditorOpener = useRef<HTMLButtonElement | null>(null);
+  const wasPersonDetailsEditorOpen = useRef(false);
   const [activeRhythmId, setActiveRhythmId] = useState<string | null>(null);
   const [seasonDeletionUndo, setSeasonDeletionUndo] = useState<RhythmSeasonDeletionUndo | null>(null);
+  const [seasonRangeUndo, setSeasonRangeUndo] = useState<{
+    rhythmId: string;
+    expected: SavedRhythm;
+    restore?: SavedRhythm;
+  } | null>(null);
   const [detailsInitialView, setDetailsInitialView] = useState<'details' | 'history'>('details');
   const [completionDialogRhythmId, setCompletionDialogRhythmId] = useState<string | null>(null);
+  const [strengthLogRequest, setStrengthLogRequest] = useState<{
+    rhythmId: string;
+    mode: StrengthMode;
+    workoutId?: string;
+    requestId: number;
+    opener?: HTMLButtonElement;
+  } | null>(null);
+  const strengthLogRequestSequence = useRef(0);
+  const [cardioLogRequest, setCardioLogRequest] = useState<{
+    requestId: number;
+    opener: HTMLButtonElement;
+    rhythm?: (typeof todayRhythms)[number];
+  } | null>(null);
+  const cardioLogRequestSequence = useRef(0);
+  const [weightLogRequest, setWeightLogRequest] = useState<{
+    requestId: number;
+    opener: HTMLButtonElement;
+    rhythm?: (typeof todayRhythms)[number];
+  } | null>(null);
+  const weightLogRequestSequence = useRef(0);
   const [rhythmEditor, setRhythmEditor] = useState<{
     id: string;
     rhythm?: (typeof todayRhythms)[number];
+    initialDraft?: RhythmDraft;
+    suggestionSourceId?: string;
+    recommendedFrequency?: RhythmFrequencyRecommendation;
+    frequencyGuidance?: string;
+    returnToSuggestions?: (saved: boolean) => void;
   } | null>(null);
   const dialogOpener = useRef<HTMLButtonElement | null>(null);
   const completionDialogOpener = useRef<HTMLButtonElement | null>(null);
   const rhythmEditorOpener = useRef<HTMLButtonElement | null>(null);
+  const profileOpener = useRef<HTMLElement | null>(null);
+  const wasProfileOpen = useRef(false);
   const wasDetailsOpen = useRef(false);
   const wasRhythmEditorOpen = useRef(false);
+  const rhythmEditorReturnsToSuggestions = useRef(false);
 
   const dateLabel = new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
     month: 'long',
     day: 'numeric'
-  }).format(new Date());
-  const hour = new Date().getHours();
+  }).format(scoringInstant);
+  const hour = scoringInstant.getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   function rhythmWithSavedCompletions(rhythm: RhythmPreview): RhythmPreview {
     const seededRecords = resolveSeedCompletionRecords(
@@ -167,29 +369,110 @@ export function App() {
     const completionHistory = seededRecords === undefined && datedRecords.length === 0
       ? undefined
       : [...(seededRecords ?? []), ...datedRecords];
-    return completionHistory === undefined
-      ? rhythm
-      : { ...rhythm, completionHistory };
+    const coverageStart = [
+      rhythm.createdLocalDate,
+      ...(completionHistory ?? []).map(record => record.effectiveDate)
+    ].filter((date): date is string => date !== undefined).sort()[0];
+    const scoring = rhythm.scoring && completionHistory?.length && coverageStart
+      ? {
+          ...rhythm.scoring,
+          scheduleHistory: ensureRhythmSeasonHistoryCoverage(
+            rhythm.id,
+            rhythm.scoring.scheduleHistory,
+            coverageStart
+          )
+        }
+      : rhythm.scoring;
+    if (completionHistory === undefined && scoring === rhythm.scoring) return rhythm;
+    return {
+      ...rhythm,
+      ...(completionHistory === undefined ? {} : { completionHistory }),
+      ...(scoring === undefined ? {} : { scoring })
+    };
   }
   const allTodayRhythms = resolveTodayRhythms(previewData.savedRhythms).map(rhythmWithSavedCompletions);
   const editableTodayRhythms = activeTodayRhythms(allTodayRhythms, previewData.archivedRhythmIds);
   const archivedRhythms = archivedTodayRhythms(allTodayRhythms, previewData.archivedRhythmIds);
-  const userRhythms = editableTodayRhythms.filter(rhythm =>
-    previewData.savedRhythms.some(saved => saved.id === rhythm.id)
+  const resolvedMarriageRhythms = marriageRhythms.map(rhythm =>
+    rhythmWithSavedCompletions(applySavedRhythmOverrides(
+      rhythm,
+      previewData.savedRhythms.find(saved => saved.id === rhythm.id)
+    ))
+  );
+  const composedUserRhythmCandidates = [...allTodayRhythms, ...resolvedMarriageRhythms];
+  const savedRhythmIds = previewData.savedRhythms.map(rhythm => rhythm.id);
+  const userRhythms = selectActiveUserRhythms(
+    composedUserRhythmCandidates,
+    savedRhythmIds,
+    previewData.archivedRhythmIds
+  );
+  const archivedUserRhythms = selectArchivedUserRhythms(
+    composedUserRhythmCandidates,
+    savedRhythmIds,
+    previewData.archivedRhythmIds
   );
   const marriageCategoryRhythms = rhythmsForCategory(userRhythms, 'marriage');
+  const parentingCategoryRhythms = rhythmsForCategory(userRhythms, 'parenting');
+  const faithCategoryRhythms = rhythmsForCategory(userRhythms, 'faith');
+  const healthCategoryRhythms = rhythmsForCategory(userRhythms, 'health');
+  const friendshipCategoryRhythms = rhythmsForCategory(userRhythms, 'friendships');
+  const archivedMarriageRhythms = rhythmsForCategory(archivedUserRhythms, 'marriage');
+  const archivedParentingRhythms = rhythmsForCategory(archivedUserRhythms, 'parenting');
+  const archivedFaithRhythms = rhythmsForCategory(archivedUserRhythms, 'faith');
+  const archivedHealthRhythms = rhythmsForCategory(archivedUserRhythms, 'health');
+  const archivedFriendshipRhythms = rhythmsForCategory(archivedUserRhythms, 'friendships');
+  const pendingStrengthLogRhythm = strengthLogRequest
+    ? healthCategoryRhythms.find(rhythm => rhythm.id === strengthLogRequest.rhythmId)
+    : undefined;
+  const pendingStrengthRhythmLog = strengthLogRequest && pendingStrengthLogRhythm
+    ? { ...strengthLogRequest, rhythm: pendingStrengthLogRhythm }
+    : null;
+  const scoredRhythms = [...new Map(
+    [...allTodayRhythms, ...resolvedMarriageRhythms].map(rhythm => [rhythm.id, rhythm])
+  ).values()];
+  const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const rhythmScoreResults = selectFoundationRhythmScores(
+    scoredRhythms,
+    previewData.archivedRhythmIds,
+    new Set([
+      ...editableTodayRhythms.map(rhythm => rhythm.id),
+      ...archivedRhythms.map(rhythm => rhythm.id)
+    ]),
+    scoringInstant,
+    localTimeZone
+  );
   const activeRhythm = [
     ...allTodayRhythms,
-    ...marriageRhythms.map(rhythmWithSavedCompletions)
+    ...resolvedMarriageRhythms
   ].find(rhythm => rhythm.id === activeRhythmId) ?? null;
-  const selectedPerson = selectedPersonId === null ? null : personById(selectedPersonId);
+  const selectedProfilePerson = profilePersonId === null ? null : personById(profilePersonId);
+  const selectedDetailsEditorPerson = personDetailsEditorId === null ? null : personById(personDetailsEditorId);
+  const selectedDetailsEditorDetails = personDetailsEditorId === null
+    ? undefined
+    : personDetailsForId(previewData.personDetails, personDetailsEditorId);
+  const profileRhythmCandidates = [...new Map(
+    [...editableTodayRhythms, ...userRhythms].map(rhythm => [rhythm.id, rhythm])
+  ).values()];
+  const archivedProfileRhythmCandidates = [...new Map(
+    [...archivedRhythms, ...archivedUserRhythms].map(rhythm => [rhythm.id, rhythm])
+  ).values()];
+  const personActiveRhythms = profilePersonId === null
+    ? []
+    : profileRhythmCandidates.filter(rhythm =>
+        rhythm.personIds?.includes(profilePersonId) && !previewData.archivedRhythmIds.includes(rhythm.id)
+      );
+  const personArchivedRhythms = profilePersonId === null
+    ? []
+    : archivedProfileRhythmCandidates.filter(rhythm =>
+        rhythm.personIds?.includes(profilePersonId)
+      );
   const activeRhythmIsToday = activeRhythm !== null && editableTodayRhythms.some(rhythm => rhythm.id === activeRhythm.id);
   const activeRhythmIsArchived = activeRhythm !== null && previewData.archivedRhythmIds.includes(activeRhythm.id);
   const activeRhythmForDetails = activeRhythm;
   const completionDialogRhythm = completionDialogRhythmId
     ? allTodayRhythms.find(rhythm => rhythm.id === completionDialogRhythmId) ?? null
     : null;
-  const currentDate = localDateString(new Date());
+  const currentDate = localDateString(scoringInstant);
   const initialLoadDate = useRef(currentDate).current;
   const completionStates = new Map(allTodayRhythms.map(rhythm => {
     const timeZone = rhythm.scoring?.timeZone
@@ -312,7 +595,19 @@ export function App() {
       setV9RecoveryCopy(null);
       setV9RecoveryError(result.message);
     }
+
     refreshV10RecoveryCopy();
+  }
+
+  function refreshV29RecoveryCopy() {
+    const result = loadV29RecoveryCopy(browserPreviewStorage());
+    if (result.kind === 'loaded') {
+      setV29RecoveryCopy(result.raw);
+      setV29RecoveryError(null);
+    } else {
+      setV29RecoveryCopy(null);
+      setV29RecoveryError(result.message);
+    }
   }
 
   function refreshV10RecoveryCopy() {
@@ -336,6 +631,142 @@ export function App() {
       setV11RecoveryCopy(null);
       setV11RecoveryError(result.message);
     }
+    refreshV12RecoveryCopy();
+  }
+
+  function refreshV12RecoveryCopy() {
+    const result = loadV12RecoveryCopy(browserPreviewStorage());
+    if (result.kind === 'loaded') {
+      setV12RecoveryCopy(result.raw);
+      setV12RecoveryError(null);
+    } else {
+      setV12RecoveryCopy(null);
+      setV12RecoveryError(result.message);
+    }
+    refreshV13RecoveryCopy();
+  }
+
+  function refreshV13RecoveryCopy() {
+    const result = loadV13RecoveryCopy(browserPreviewStorage());
+    if (result.kind === 'loaded') {
+      setV13RecoveryCopy(result.raw);
+      setV13RecoveryError(null);
+    } else {
+      setV13RecoveryCopy(null);
+      setV13RecoveryError(result.message);
+    }
+    const v14 = loadV14RecoveryCopy(browserPreviewStorage());
+    if (v14.kind === 'loaded') {
+      setV14RecoveryCopy(v14.raw);
+      setV14RecoveryError(null);
+    } else {
+      setV14RecoveryCopy(null);
+      setV14RecoveryError(v14.message);
+    }
+    const v15 = loadV15RecoveryCopy(browserPreviewStorage());
+    if (v15.kind === 'loaded') {
+      setV15RecoveryCopy(v15.raw);
+      setV15RecoveryError(null);
+    } else {
+      setV15RecoveryCopy(null);
+      setV15RecoveryError(v15.message);
+    }
+    const v16 = loadV16RecoveryCopy(browserPreviewStorage());
+    if (v16.kind === 'loaded') {
+      setV16RecoveryCopy(v16.raw);
+      setV16RecoveryError(null);
+    } else {
+      setV16RecoveryCopy(null);
+      setV16RecoveryError(v16.message);
+    }
+    const v17 = loadV17RecoveryCopy(browserPreviewStorage());
+    if (v17.kind === 'loaded') {
+      setV17RecoveryCopy(v17.raw);
+      setV17RecoveryError(null);
+    } else {
+      setV17RecoveryCopy(null);
+      setV17RecoveryError(v17.message);
+    }
+    const v18 = loadV18RecoveryCopy(browserPreviewStorage());
+    if (v18.kind === 'loaded') {
+      setV18RecoveryCopy(v18.raw);
+      setV18RecoveryError(null);
+    } else {
+      setV18RecoveryCopy(null);
+      setV18RecoveryError(v18.message);
+    }
+    const v19 = loadV19RecoveryCopy(browserPreviewStorage());
+    if (v19.kind === 'loaded') {
+      setV19RecoveryCopy(v19.raw);
+      setV19RecoveryError(null);
+    } else {
+      setV19RecoveryCopy(null);
+      setV19RecoveryError(v19.message);
+    }
+    const v20 = loadV20RecoveryCopy(browserPreviewStorage());
+    if (v20.kind === 'loaded') {
+      setV20RecoveryCopy(v20.raw);
+      setV20RecoveryError(null);
+    } else {
+      setV20RecoveryCopy(null);
+      setV20RecoveryError(v20.message);
+    }
+    const v21 = loadV21RecoveryCopy(browserPreviewStorage());
+    if (v21.kind === 'loaded') {
+      setV21RecoveryCopy(v21.raw);
+      setV21RecoveryError(null);
+    } else {
+      setV21RecoveryCopy(null);
+      setV21RecoveryError(v21.message);
+    }
+    const v22 = loadV22RecoveryCopy(browserPreviewStorage());
+    if (v22.kind === 'loaded') {
+      setV22RecoveryCopy(v22.raw);
+      setV22RecoveryError(null);
+    } else {
+      setV22RecoveryCopy(null);
+      setV22RecoveryError(v22.message);
+    }
+    const v23 = loadV23RecoveryCopy(browserPreviewStorage());
+    if (v23.kind === 'loaded') {
+      setV23RecoveryCopy(v23.raw);
+      setV23RecoveryError(null);
+    } else {
+      setV23RecoveryCopy(null);
+      setV23RecoveryError(v23.message);
+    }
+    const v25 = loadV25RecoveryCopy(browserPreviewStorage());
+    if (v25.kind === 'loaded') {
+      setV25RecoveryCopy(v25.raw);
+      setV25RecoveryError(null);
+    } else {
+      setV25RecoveryCopy(null);
+      setV25RecoveryError(v25.message);
+    }
+    const v26 = loadV26RecoveryCopy(browserPreviewStorage());
+    if (v26.kind === 'loaded') {
+      setV26RecoveryCopy(v26.raw);
+      setV26RecoveryError(null);
+    } else {
+      setV26RecoveryCopy(null);
+      setV26RecoveryError(v26.message);
+    }
+    const v27 = loadV27RecoveryCopy(browserPreviewStorage());
+    if (v27.kind === 'loaded') {
+      setV27RecoveryCopy(v27.raw);
+      setV27RecoveryError(null);
+    } else {
+      setV27RecoveryCopy(null);
+      setV27RecoveryError(v27.message);
+    }
+    const v28 = loadV28RecoveryCopy(browserPreviewStorage());
+    if (v28.kind === 'loaded') {
+      setV28RecoveryCopy(v28.raw);
+      setV28RecoveryError(null);
+    } else {
+      setV28RecoveryCopy(null);
+      setV28RecoveryError(v28.message);
+    }
   }
 
   useEffect(() => {
@@ -348,6 +779,7 @@ export function App() {
     refreshV7RecoveryCopy();
     refreshV8RecoveryCopy();
     refreshV9RecoveryCopy();
+    refreshV29RecoveryCopy();
     const loaded = loadPreview(browserPreviewStorage(), initialLoadDate);
     if (loaded.kind === 'loaded') {
       expectedRaw.current = loaded.raw;
@@ -376,6 +808,7 @@ export function App() {
       return;
     }
     const saved = writePreview(browserPreviewStorage(), previewData, expectedRaw.current, { currentDate });
+    refreshV29RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -414,6 +847,10 @@ export function App() {
   }, [textSize]);
 
   useEffect(() => {
+    if (destination === 'more') morePageHeading.current?.focus();
+  }, [destination, moreSettingsOpen]);
+
+  useEffect(() => {
     if (activeRhythmId) {
       wasDetailsOpen.current = true;
       return;
@@ -448,16 +885,124 @@ export function App() {
     }
     if (!wasRhythmEditorOpen.current) return;
     wasRhythmEditorOpen.current = false;
+    if (rhythmEditorReturnsToSuggestions.current) {
+      rhythmEditorReturnsToSuggestions.current = false;
+      return;
+    }
     if (rhythmEditorOpener.current?.isConnected) rhythmEditorOpener.current.focus();
-    else document.querySelector<HTMLButtonElement>('.today-archived-rhythms-toggle')?.focus();
+    else document.querySelector<HTMLButtonElement>('.utility-primary-button[aria-current="page"]')?.focus();
   }, [rhythmEditor]);
 
-  function navigate(next: Destination, personId?: PersonId) {
+  function navigate(next: Destination) {
     setDestination(next);
-    setSelectedPersonId(personId ?? null);
+    if (next === 'health') setHealthFitnessVisited(true);
+    setMoreSettingsOpen(false);
     setSearch('');
     setSearchOpen(false);
     document.body.classList.remove('mobile-search-open');
+  }
+
+  function openPersonProfile(personId: PersonId) {
+    if (profilePersonId === null) {
+      profileOpener.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    }
+    setProfilePersonId(personId);
+  }
+
+  function openPersonDetailsEditor(personId: PersonId, event: MouseEvent<HTMLButtonElement>) {
+    personDetailsEditorOpener.current = event.currentTarget;
+    setPersonDetailsEditorId(personId);
+  }
+
+  function closePersonDetailsEditor() {
+    setPersonDetailsEditorId(null);
+  }
+
+  function savePersonDetails(personId: PersonId, draft: PersonDetailsDraft): string | null {
+    const result = savePersonDetailsCommand(previewData.personDetails, personId, draft, currentDate);
+    if (!result.valid) return Object.values(result.errors)[0] ?? 'Person details are invalid.';
+    return persistSeasonHistory(
+      { ...previewData, personDetails: result.details },
+      'Person details'
+    );
+  }
+
+  function savePersonNote(personId: PersonId, draft: PersonNoteDraft): string | null {
+    const now = new Date().toISOString();
+    const result = createPersonNote(previewData.personNotes, {
+      id: `person-note-${globalThis.crypto.randomUUID()}`,
+      personId,
+      sharedWith: draft.sharedWith,
+      content: draft.content,
+      createdAt: now,
+      updatedAt: now
+    });
+    if (!result.valid) return result.error;
+    return persistSeasonHistory({ ...previewData, personNotes: result.notes }, 'person note');
+  }
+
+  function editPersonNote(
+    noteId: string,
+    expectedUpdatedAt: string,
+    actorId: PersonId,
+    draft: PersonNoteDraft
+  ): string | null {
+    const result = updatePersonNote(
+      previewData.personNotes,
+      noteId,
+      expectedUpdatedAt,
+      actorId,
+      draft,
+      new Date().toISOString()
+    );
+    if (!result.valid) return result.error;
+    return persistSeasonHistory({ ...previewData, personNotes: result.notes }, 'person note');
+  }
+
+  function removePersonNote(noteId: string, expectedUpdatedAt: string, actorId: PersonId): string | null {
+    const result = deletePersonNote(previewData.personNotes, noteId, expectedUpdatedAt, actorId);
+    if (!result.valid) return result.error;
+    return persistSeasonHistory({ ...previewData, personNotes: result.notes }, 'person note');
+  }
+
+  useEffect(() => {
+    if (personDetailsEditorId !== null) {
+      wasPersonDetailsEditorOpen.current = true;
+      return;
+    }
+    if (wasPersonDetailsEditorOpen.current) {
+      wasPersonDetailsEditorOpen.current = false;
+      personDetailsEditorOpener.current?.focus();
+    }
+  }, [personDetailsEditorId]);
+
+  function closePersonProfile() {
+    setProfilePersonId(null);
+  }
+
+  useEffect(() => {
+    if (profilePersonId !== null) {
+      wasProfileOpen.current = true;
+      return;
+    }
+    if (wasProfileOpen.current) {
+      wasProfileOpen.current = false;
+      profileOpener.current?.focus();
+    }
+  }, [profilePersonId]);
+
+  function navigateToFoundation(foundationId: string, returnTab: 'today' | MarriageTab) {
+    const categoryId = foundationCategoryId(foundationId);
+    if (!categoryId) return;
+    foundationNavigationSequence.current += 1;
+    setFoundationNavigationRequest({
+      foundationId,
+      requestId: foundationNavigationSequence.current,
+      returnTab
+    });
+    navigate(categoryId);
   }
 
   function closeSearch() {
@@ -473,8 +1018,13 @@ export function App() {
     if (!next) setSearch('');
   }
 
-  function openRhythmHistory(id: string, event: MouseEvent<HTMLButtonElement>) {
+  function openRhythmHistory(
+    id: string,
+    event: MouseEvent<HTMLButtonElement>,
+    returnTab: 'today' | MarriageTab = 'today'
+  ) {
     dialogOpener.current = event.currentTarget;
+    activeRhythmReturnTab.current = returnTab;
     setDetailsInitialView('history');
     setActiveRhythmId(id);
   }
@@ -482,23 +1032,109 @@ export function App() {
   function openCompletion(id: string, event: MouseEvent<HTMLButtonElement>) {
     if (!isEditableRhythmId(id) || completedRhythms.has(id)
       || previewData.archivedRhythmIds.includes(id)) return;
+    const rhythm = allTodayRhythms.find(item => item.id === id);
+    if (rhythm?.categoryIds?.includes('health')) {
+      if (rhythm.healthLogCapability === 'cardio') {
+        cardioLogRequestSequence.current += 1;
+        setCardioLogRequest({
+          requestId: cardioLogRequestSequence.current,
+          opener: event.currentTarget,
+          rhythm
+        });
+        navigate('health');
+        return;
+      }
+      if (rhythm.healthLogCapability === 'weight') {
+        weightLogRequestSequence.current += 1;
+        setWeightLogRequest({
+          requestId: weightLogRequestSequence.current,
+          opener: event.currentTarget,
+          rhythm
+        });
+        navigate('health');
+        return;
+      }
+      const mode = previewData.strength.rhythmModes.find(item => item.rhythmId === id);
+      strengthLogRequestSequence.current += 1;
+      setStrengthLogRequest({
+        rhythmId: id,
+        mode: mode?.mode ?? 'recommended',
+        ...(mode?.workoutId ? { workoutId: mode.workoutId } : {}),
+        requestId: strengthLogRequestSequence.current,
+        opener: event.currentTarget
+      });
+      navigate('health');
+      return;
+    }
     completionDialogOpener.current = event.currentTarget;
     setCompletionDialogRhythmId(id);
   }
 
   function openRhythmEditor(
     event: MouseEvent<HTMLButtonElement>,
-    rhythm?: (typeof todayRhythms)[number]
+    rhythm?: (typeof todayRhythms)[number],
+    options?: {
+      id?: string;
+      initialDraft?: RhythmDraft;
+      suggestionSourceId?: string;
+      recommendedFrequency?: RhythmFrequencyRecommendation;
+      frequencyGuidance?: string;
+      returnToSuggestions?: (saved: boolean) => void;
+    }
   ) {
     rhythmEditorOpener.current = event.currentTarget;
+    rhythmEditorReturnsToSuggestions.current = false;
     setRhythmEditor({
-      id: rhythm?.id ?? `user-rhythm-${globalThis.crypto.randomUUID()}`,
+      id: options?.id ?? rhythm?.id ?? `user-rhythm-${globalThis.crypto.randomUUID()}`,
+      ...(options?.initialDraft ? { initialDraft: options.initialDraft } : {}),
+      ...(options?.suggestionSourceId ? { suggestionSourceId: options.suggestionSourceId } : {}),
+      ...(options?.recommendedFrequency ? { recommendedFrequency: options.recommendedFrequency } : {}),
+      ...(options?.frequencyGuidance ? { frequencyGuidance: options.frequencyGuidance } : {}),
+      ...(options?.returnToSuggestions ? { returnToSuggestions: options.returnToSuggestions } : {}),
       ...(rhythm ? { rhythm } : {})
+    });
+  }
+
+  function finishRhythmEditor(saved: boolean) {
+    const returnToSuggestions = rhythmEditor?.returnToSuggestions;
+    if (returnToSuggestions) rhythmEditorReturnsToSuggestions.current = true;
+    setRhythmEditor(null);
+    returnToSuggestions?.(saved);
+  }
+
+  function openRhythmSuggestion(
+    suggestion: CategoryRhythmSuggestion,
+    event: MouseEvent<HTMLButtonElement>,
+    returnToSuggestions: (saved: boolean) => void
+  ) {
+    const rhythm = suggestion.rhythm;
+    const initialDraft: RhythmDraft = {
+      title: rhythm.title,
+      description: rhythm.description ?? '',
+      cadence: rhythm.cadence ?? 'Daily',
+      timeLabel: rhythm.timeLabel ?? 'Anytime',
+      personIds: [],
+      categoryIds: [suggestion.categoryId],
+      ...(suggestion.recommendedFrequency === 'daily' ? { schedule: { frequency: 'daily' as const } } : {}),
+      scheduleEditing: true,
+      personal: false,
+      primaryFoundationId: rhythm.primaryFoundationId ?? null,
+      secondaryFoundationIds: [...(rhythm.secondaryFoundationIds ?? [])]
+    };
+    openRhythmEditor(event, undefined, {
+      initialDraft,
+      suggestionSourceId: suggestion.sourceId,
+      recommendedFrequency: suggestion.recommendedFrequency,
+      ...(suggestion.frequencyGuidance ? { frequencyGuidance: suggestion.frequencyGuidance } : {}),
+      returnToSuggestions
     });
   }
 
   function saveRhythm(draft: RhythmDraft): RhythmDraftErrors {
     if (!rhythmEditor) return { title: 'The Rhythm editor is no longer active.' };
+    if (!rhythmEditor.rhythm && previewData.savedRhythms.some(saved => saved.id === rhythmEditor.id)) {
+      return { title: 'This Rhythm draft has already been saved. No duplicate Rhythm was created.' };
+    }
     const scoringTimeZone = rhythmEditor.rhythm?.scoring?.timeZone
       ?? rhythmEditor.rhythm?.createdTimeZone
       ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -516,7 +1152,16 @@ export function App() {
         currentDate: localDateInTimeZone(new Date(), scoringTimeZone),
         deviceTimeZone: scoringTimeZone,
         hasDatedCompletionHistory,
+        ...(rhythmEditor.rhythm?.createdLocalDate
+          ? { effectiveStartDate: rhythmEditor.rhythm.createdLocalDate }
+          : {}),
         ...(earliestDatedCompletionDate ? { earliestDatedCompletionDate } : {})
+      },
+      undefined,
+      {
+        ...(rhythmEditor.suggestionSourceId
+          ? { suggestionSourceId: rhythmEditor.suggestionSourceId }
+          : {})
       }
     );
     const savedRhythms = result.savedRhythms;
@@ -524,11 +1169,23 @@ export function App() {
     const nextData: PreviewData = {
       ...previewData,
       savedRhythms,
+      ...(!rhythmEditor.rhythm && draft.categoryIds.includes('health')
+        ? {
+            strength: {
+              ...previewData.strength,
+              rhythmModes: [
+                ...previewData.strength.rhythmModes.filter(item => item.rhythmId !== rhythmEditor.id),
+                { rhythmId: rhythmEditor.id, mode: 'recommended' as const }
+              ]
+            }
+          }
+        : {}),
       ...(hasDatedCompletionHistory && !previewData.rhythmHistoryIds.includes(rhythmEditor.id)
         ? { rhythmHistoryIds: [...previewData.rhythmHistoryIds, rhythmEditor.id] }
         : {})
     };
     const written = writePreview(browserPreviewStorage(), nextData, expectedRaw.current, { currentDate });
+    refreshV29RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -542,12 +1199,12 @@ export function App() {
       externalRaw.current = written.actualRaw;
       setAutoSaveEnabled(false);
       setPersistenceStatus({ kind: 'conflict' });
-      return { title: 'Preview storage changed in another tab. No Rhythm changes were saved.' };
+      return { form: 'Preview storage changed in another tab. No Rhythm changes were saved.' };
     }
     if (written.kind === 'error') {
       setAutoSaveEnabled(false);
       setPersistenceStatus({ kind: 'error', message: written.message });
-      return { title: `Preview could not save this Rhythm. ${written.message}` };
+      return { form: `Preview could not save this Rhythm. ${written.message}` };
     }
     expectedRaw.current = written.raw;
     externalRaw.current = null;
@@ -555,12 +1212,13 @@ export function App() {
     setPreviewData(nextData);
     setAutoSaveEnabled(true);
     setPersistenceStatus({ kind: 'saved' });
-    setRhythmEditor(null);
+    finishRhythmEditor(true);
     return result.errors;
   }
 
   function persistSeasonHistory(nextData: PreviewData, action: string): string | null {
     const written = writePreview(browserPreviewStorage(), nextData, expectedRaw.current, { currentDate });
+    refreshV29RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -591,13 +1249,273 @@ export function App() {
     return null;
   }
 
+  function saveStrengthData(strength: PreviewData['strength']): string | null {
+    if (!validateStrengthData(strength, true, true, true, true)) {
+      return 'Strength settings or workout records are invalid. No changes were saved.';
+    }
+    const previousLogs = new Map(previewData.strength.workouts.map(log => [log.id, log]));
+    const nextLogs = new Map(strength.workouts.map(log => [log.id, log]));
+    let datedRhythmCompletions = [...previewData.datedRhythmCompletions];
+    let activeRhythmCompletions = [...previewData.activeRhythmCompletions];
+    let completedRhythmIds = [...previewData.completedRhythmIds];
+    let rhythmHistoryIds = [...previewData.rhythmHistoryIds];
+
+    for (const previous of previousLogs.values()) {
+      const next = nextLogs.get(previous.id);
+      if (!previous.completionId || next?.completionId === previous.completionId && next.rhythmId === previous.rhythmId) continue;
+      const removed = deleteDatedCompletion(
+        datedRhythmCompletions,
+        activeRhythmCompletions,
+        completedRhythmIds,
+        previous.completionId
+      );
+      datedRhythmCompletions = removed.records;
+      activeRhythmCompletions = removed.active;
+      completedRhythmIds = removed.completedRhythmIds;
+    }
+
+    const now = new Date();
+    const timeParts = new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    }).formatToParts(now);
+    const hour = Number(timeParts.find(part => part.type === 'hour')?.value);
+    const minute = Number(timeParts.find(part => part.type === 'minute')?.value);
+    const period = timeParts.find(part => part.type === 'dayPeriod')?.value.toUpperCase();
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    for (const log of strength.workouts) {
+      if (!log.rhythmId) continue;
+      const previous = previousLogs.get(log.id);
+      const rhythm = allTodayRhythms.find(item => item.id === log.rhythmId);
+      if (!rhythm || !isEditableRhythmId(log.rhythmId)
+        || previewData.archivedRhythmIds.includes(log.rhythmId)
+        || log.rhythmOccurrence !== log.date || !log.completionId) {
+        return 'The linked Strength Rhythm or its completion record is unavailable. No workout changes were saved.';
+      }
+      const existingCompletion = datedRhythmCompletions.find(item => item.id === log.completionId);
+      const ownsCompletion = previous?.completionId === log.completionId;
+      if (existingCompletion && !ownsCompletion) {
+        return 'This workout is linked to a different completion record. No changes were saved.';
+      }
+      if (ownsCompletion && !existingCompletion) {
+        return 'The linked completion record is missing. No workout changes were saved.';
+      }
+      if (ownsCompletion && existingCompletion && previous?.rhythmId === log.rhythmId
+        && previous.rhythmOccurrence === log.rhythmOccurrence && previous.date === log.date) continue;
+      const schedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
+      if (!schedule || !hasRhythmOccurrenceForCompletion(
+        schedule,
+        log.date,
+        rhythm.scoring?.trackingStartDate
+      )) {
+        return 'The workout date is not a scheduled occurrence for this Rhythm. No changes were saved.';
+      }
+      if (datedRhythmCompletions.some(item => item.rhythmId === log.rhythmId
+        && item.effectiveDate === log.date && item.id !== log.completionId)) {
+        return 'This Strength Rhythm occurrence already has a completion. No changes were saved.';
+      }
+      const completion = prepareDatedRhythmCompletion({
+        id: log.completionId,
+        rhythmId: log.rhythmId,
+        effectiveDate: log.date,
+        hour,
+        minute,
+        period: period === 'PM' ? 'PM' : 'AM',
+        memory: '',
+        timeZone
+      }, now);
+      if (!completion.valid) {
+        return completion.errors.time ?? completion.errors.effectiveDate
+          ?? 'The linked completion time is invalid. No workout changes were saved.';
+      }
+      if (existingCompletion) {
+        datedRhythmCompletions = datedRhythmCompletions.map(item =>
+          item.id === log.completionId ? completion.record : item
+        );
+      } else {
+        datedRhythmCompletions.push(completion.record);
+      }
+      if (!activeRhythmCompletions.some(item => item.completionId === log.completionId)) {
+        activeRhythmCompletions = [
+          ...activeRhythmCompletions.filter(item => item.rhythmId !== log.rhythmId),
+          { rhythmId: log.rhythmId, completionId: log.completionId }
+        ];
+        if (!completedRhythmIds.includes(log.rhythmId)) completedRhythmIds.push(log.rhythmId);
+      }
+      if (!rhythmHistoryIds.includes(log.rhythmId)) rhythmHistoryIds.push(log.rhythmId);
+    }
+
+    return persistSeasonHistory({
+      ...previewData,
+      strength,
+      datedRhythmCompletions,
+      activeRhythmCompletions,
+      completedRhythmIds,
+      rhythmHistoryIds
+    }, 'Strength data');
+  }
+
+  function saveWeightData(weight: PreviewData['weight']): string | null {
+    const result = saveWeightDataCommand({
+      previous: previewData.weight,
+      next: weight,
+      today: currentDate,
+      now: new Date(),
+      rhythms: allTodayRhythms,
+      archivedRhythmIds: new Set(previewData.archivedRhythmIds),
+      editableRhythmIds: new Set(allTodayRhythms
+        .filter(rhythm => isEditableRhythmId(rhythm.id))
+        .map(rhythm => rhythm.id)),
+      completionState: {
+        datedRhythmCompletions: previewData.datedRhythmCompletions,
+        activeRhythmCompletions: previewData.activeRhythmCompletions,
+        completedRhythmIds: previewData.completedRhythmIds,
+        rhythmHistoryIds: previewData.rhythmHistoryIds
+      }
+    });
+    if (!result.valid) return result.error;
+    return persistSeasonHistory({
+      ...previewData,
+      weight: result.weight,
+      ...result.completionState
+    }, 'Weight data');
+  }
+
+  function saveCardioData(cardio: PreviewData['cardio']): string | null {
+    const result = saveCardioDataCommand({
+      previous: previewData.cardio,
+      next: cardio,
+      today: currentDate,
+      now: new Date(),
+      rhythms: allTodayRhythms,
+      archivedRhythmIds: new Set(previewData.archivedRhythmIds),
+      editableRhythmIds: new Set(allTodayRhythms
+        .filter(rhythm => isEditableRhythmId(rhythm.id))
+        .map(rhythm => rhythm.id)),
+      completionState: {
+        datedRhythmCompletions: previewData.datedRhythmCompletions,
+        activeRhythmCompletions: previewData.activeRhythmCompletions,
+        completedRhythmIds: previewData.completedRhythmIds,
+        rhythmHistoryIds: previewData.rhythmHistoryIds
+      }
+    });
+    if (!result.valid) return result.error;
+    return persistSeasonHistory({
+      ...previewData,
+      cardio: result.cardio,
+      ...result.completionState
+    }, 'Cardio data');
+  }
+
+  function saveFoundationAssociations(
+    foundationId: string,
+    changes: readonly FoundationRhythmAssociationChange[]
+  ): string | null {
+    const result = saveFoundationRhythmAssociations(
+      previewData.savedRhythms,
+    userRhythms,
+      previewData.archivedRhythmIds,
+      foundationId,
+      changes
+    );
+    if ('error' in result) return result.error;
+    return persistSeasonHistory(
+      { ...previewData, savedRhythms: result.savedRhythms },
+      'Foundation associations'
+    );
+  }
+
   function saveSeasonCorrection(rhythmId: string, draft: RhythmSeasonEditDraft): string | null {
     if (!activeRhythmIsToday || activeRhythmIsArchived) {
       return 'This Rhythm is read-only.';
     }
     const savedRhythm = previewData.savedRhythms.find(rhythm => rhythm.id === rhythmId);
+    const rhythm = allTodayRhythms.find(entry => entry.id === rhythmId);
+    if (draft.segmentId === `new-season:${rhythmId}`) {
+      const currentSchedule = rhythm && effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
+      if (!rhythm || !currentSchedule) return 'This Rhythm no longer has a known current schedule.';
+      const timeZone = rhythm.scoring?.timeZone ?? rhythm.createdTimeZone
+        ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const asOfDate = localDateInTimeZone(new Date(), timeZone);
+      const result = resolveRhythmSeasonRange({
+        rhythmId,
+        currentSchedule,
+        ...(rhythm.scoring ? { scoring: rhythm.scoring } : {}),
+        timeZone,
+        asOfDate,
+        draft: {
+          startDate: draft.startDate,
+          ...(draft.endDate === undefined ? {} : { endDate: draft.endDate }),
+          schedule: draft.schedule,
+          timeOfDay: draft.timeOfDay,
+          name: draft.name
+        },
+        coverage: {
+          ...(rhythm.createdLocalDate ? { effectiveStartDate: rhythm.createdLocalDate } : {}),
+          ...(rhythm.completionHistory?.length
+            ? {
+                earliestCompletionDate: rhythm.completionHistory
+                  .map(record => record.effectiveDate)
+                  .sort()[0]
+              }
+            : {}),
+          ...(rhythm.timeOfDay ? { currentTimeOfDay: rhythm.timeOfDay } : {})
+        }
+      });
+      if (!result.valid) return result.error;
+
+      const sourceRhythms = previewData.savedRhythms.map(entry => {
+        if (entry.id !== rhythmId) return entry;
+        const { scoring: _scoring, ...withoutScoring } = entry;
+        return withoutScoring;
+      });
+      const { originalScoring: _originalScoring, ...baseDraft } =
+        rhythmDraftFrom(rhythm, rhythm.categoryIds ?? []);
+      const activeTime = result.activeTimeOfDay ?? rhythm.timeOfDay ?? draft.timeOfDay;
+      const saved = saveRhythmDraft(
+        sourceRhythms,
+        {
+          ...baseDraft,
+          schedule: result.schedule,
+          scheduleEditing: true,
+          originalSchedule: currentSchedule,
+          timeLabel: rhythmTimeLabel(activeTime),
+          seasonName: draft.name
+        },
+        rhythmId,
+        'edit'
+      );
+      if (!saved.savedRhythms) return Object.values(saved.errors)[0] ?? 'This Rhythm could not be saved.';
+      const savedRhythms = saved.savedRhythms.map(entry => entry.id !== rhythmId
+        ? entry
+        : {
+            ...entry,
+            cadence: rhythmScheduleSummary(result.schedule),
+            schedule: result.schedule,
+            scoring: result.scoring,
+            timeOfDay: activeTime,
+            timeLabel: rhythmTimeLabel(activeTime)
+          });
+      const changedRhythm = savedRhythms.find(entry => entry.id === rhythmId);
+      if (!changedRhythm) return 'The updated Rhythm could not be found.';
+      const nextData: PreviewData = {
+        ...previewData,
+        savedRhythms,
+        ...(rhythm.completionHistory?.length && !previewData.rhythmHistoryIds.includes(rhythmId)
+          ? { rhythmHistoryIds: [...previewData.rhythmHistoryIds, rhythmId] }
+          : {})
+      };
+      const saveError = persistSeasonHistory(nextData, 'Season range');
+      if (saveError) return saveError;
+      setSeasonRangeUndo({
+        rhythmId,
+        expected: changedRhythm,
+        ...(savedRhythm ? { restore: savedRhythm } : {})
+      });
+      return null;
+    }
     if (draft.segmentId === `current-schedule:${rhythmId}`) {
-      const rhythm = allTodayRhythms.find(entry => entry.id === rhythmId);
       const currentSchedule = rhythm && effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
       if (!rhythm || !currentSchedule) return 'This Rhythm no longer has a known current schedule.';
       const established = establishCurrentRhythmSeason(
@@ -607,7 +1525,18 @@ export function App() {
         rhythm.scoring?.timeZone ?? rhythm.createdTimeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
         localDateInTimeZone(new Date(), rhythm.scoring?.timeZone ?? rhythm.createdTimeZone
           ?? Intl.DateTimeFormat().resolvedOptions().timeZone),
-        draft
+        draft,
+        {
+          ...(rhythm.createdLocalDate ? { effectiveStartDate: rhythm.createdLocalDate } : {}),
+          ...(rhythm.completionHistory?.length
+            ? {
+                earliestCompletionDate: rhythm.completionHistory
+                  .map(record => record.effectiveDate)
+                  .sort()[0]
+              }
+            : {}),
+          ...(rhythm.timeOfDay ? { previousTimeOfDay: rhythm.timeOfDay } : {})
+        }
       );
       if (!established.valid) return established.error;
 
@@ -649,10 +1578,28 @@ export function App() {
           });
       return persistSeasonHistory({ ...previewData, savedRhythms }, 'current Season boundary');
     }
-    if (!savedRhythm?.schedule || !savedRhythm.scoring) {
+    const currentSchedule = rhythm && effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
+    if (!savedRhythm?.schedule || !currentSchedule || !rhythm?.scoring) {
       return 'This Rhythm no longer has editable schedule history.';
     }
-    const result = editRhythmSeason(rhythmId, savedRhythm.schedule, savedRhythm.scoring, draft);
+    const timeZone = rhythm.scoring.timeZone;
+    const result = resolveRhythmSeasonRange({
+      rhythmId,
+      currentSchedule,
+      scoring: rhythm.scoring,
+      timeZone,
+      asOfDate: localDateInTimeZone(new Date(), timeZone),
+      draft,
+      ...(rhythm.completionHistory?.length
+        ? {
+            coverage: {
+              earliestCompletionDate: rhythm.completionHistory
+                .map(record => record.effectiveDate)
+                .sort()[0]!
+            }
+          }
+        : {})
+    });
     if (!result.valid) return result.error;
 
     const savedRhythms = previewData.savedRhythms.map(rhythm => rhythm.id !== rhythmId
@@ -670,7 +1617,30 @@ export function App() {
           })
         });
     const nextData: PreviewData = { ...previewData, savedRhythms };
-    return persistSeasonHistory(nextData, 'schedule correction');
+    const changedRhythm = savedRhythms.find(entry => entry.id === rhythmId);
+    if (!changedRhythm) return 'The updated Rhythm could not be found.';
+    const saveError = persistSeasonHistory(nextData, 'schedule correction');
+    if (saveError) return saveError;
+    setSeasonRangeUndo({ rhythmId, expected: changedRhythm, restore: savedRhythm });
+    return null;
+  }
+
+  function undoSeasonRange(): string | null {
+    const undo = seasonRangeUndo;
+    if (!undo || activeRhythmId !== undo.rhythmId || !activeRhythmIsToday || activeRhythmIsArchived) {
+      return 'This Rhythm is no longer available for Undo.';
+    }
+    const current = previewData.savedRhythms.find(entry => entry.id === undo.rhythmId);
+    if (!current || JSON.stringify(current) !== JSON.stringify(undo.expected)) {
+      return 'This Rhythm changed after the Season update. It cannot be safely restored without overwriting those changes.';
+    }
+    const savedRhythms = previewData.savedRhythms
+      .filter(entry => entry.id !== undo.rhythmId);
+    if (undo.restore) savedRhythms.push(undo.restore);
+    const saveError = persistSeasonHistory({ ...previewData, savedRhythms }, 'Season Undo');
+    if (saveError) return saveError;
+    setSeasonRangeUndo(null);
+    return null;
   }
 
   function deleteSeason(rhythmId: string, seasonId: string): string | null {
@@ -678,13 +1648,23 @@ export function App() {
       return 'This Rhythm is read-only.';
     }
     const rhythm = previewData.savedRhythms.find(entry => entry.id === rhythmId);
-    if (!rhythm?.schedule || !rhythm.scoring) {
+    const resolvedRhythm = allTodayRhythms.find(entry => entry.id === rhythmId);
+    const schedule = resolvedRhythm && effectiveRhythmSchedule(resolvedRhythm.schedule, resolvedRhythm.cadence);
+    if (!rhythm?.schedule || !resolvedRhythm?.scoring || !schedule) {
       return 'This Rhythm no longer has editable schedule history.';
     }
+    const records: RhythmCompletionRecord[] = (resolvedRhythm.completionHistory ?? [])
+      .map(record => ({ ...record, rhythmId }));
     const result = deleteRhythmSeason(
-      rhythm.schedule,
-      rhythm.scoring,
-      seasonId
+      rhythmId,
+      schedule,
+      resolvedRhythm.scoring,
+      seasonId,
+      records,
+      localDateInTimeZone(
+        new Date(),
+        resolvedRhythm.scoring.timeZone
+      )
     );
     if (!result.valid) return result.error;
 
@@ -720,7 +1700,8 @@ export function App() {
       restoreSchedule: rhythm.schedule,
       restoreCadence: rhythm.cadence,
       restoreTimeLabel: rhythm.timeLabel,
-      ...(rhythm.timeOfDay === undefined ? {} : { restoreTimeOfDay: rhythm.timeOfDay })
+      ...(rhythm.timeOfDay === undefined ? {} : { restoreTimeOfDay: rhythm.timeOfDay }),
+      restoreTrackingStartDate: resolvedRhythm.scoring.trackingStartDate
     });
     return null;
   }
@@ -734,6 +1715,9 @@ export function App() {
     if (!rhythm?.schedule || !rhythm.scoring) {
       return 'This Rhythm no longer has editable schedule history.';
     }
+    const resolvedRhythm = allTodayRhythms.find(entry => entry.id === undo.rhythmId);
+    const records: RhythmCompletionRecord[] = (resolvedRhythm?.completionHistory ?? [])
+      .map(record => ({ ...record, rhythmId: undo.rhythmId }));
     const result = restoreDeletedRhythmSeason(
       rhythm.id,
       rhythm.schedule,
@@ -741,7 +1725,8 @@ export function App() {
       rhythm.cadence,
       rhythm.timeLabel,
       rhythm.timeOfDay,
-      undo
+      undo,
+      records
     );
     if (!result.valid) return result.error;
     const savedRhythms = previewData.savedRhythms.map(entry => entry.id !== rhythm.id
@@ -767,7 +1752,7 @@ export function App() {
         ? { ...previous, archivedRhythmIds }
         : previous;
     });
-    setRhythmEditor(null);
+    finishRhythmEditor(false);
   }
 
   function restoreRhythm(id: string) {
@@ -784,6 +1769,11 @@ export function App() {
       return 'A new completion must include its selected local time. No completion was saved.';
     }
     const record = candidate;
+    if (source === 'history' && allTodayRhythms.some(rhythm =>
+      rhythm.id === record.rhythmId && rhythm.categoryIds?.includes('health')
+    )) {
+      return 'Log a workout from the Strength Rhythm so its history stays linked.';
+    }
     const isTendAction = source === 'tend';
     if (!isEditableRhythmId(record.rhythmId)
       || !resolveTodayRhythms(previewData.savedRhythms).some(rhythm => rhythm.id === record.rhythmId)
@@ -816,6 +1806,9 @@ export function App() {
   }
 
   function updateDatedCompletion(record: RhythmCompletionRecord): string | null {
+    if (previewData.strength.workouts.some(log => log.completionId === record.id)) {
+      return 'Edit this completion through its linked Strength workout log.';
+    }
     const existing = previewData.datedRhythmCompletions.find(item => item.id === record.id);
     if (!isEditableRhythmId(record.rhythmId)
       || previewData.archivedRhythmIds.includes(record.rhythmId)
@@ -861,6 +1854,9 @@ export function App() {
   }
 
   function deleteDatedCompletionRecord(completionId: string): string | null {
+    if (previewData.strength.workouts.some(log => log.completionId === completionId)) {
+      return 'Delete this completion through its linked Strength workout log.';
+    }
     const record = previewData.datedRhythmCompletions.find(item => item.id === completionId);
     const seedRhythmId = todayRhythms.find(rhythm =>
       rhythm.completionHistory?.some(item => item.id === completionId)
@@ -952,6 +1948,7 @@ export function App() {
     skipNextAutosave.current = true;
     setPreviewData(nextData);
     const written = writePreview(browserPreviewStorage(), nextData, expectedRaw.current, { currentDate });
+    refreshV29RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -982,6 +1979,7 @@ export function App() {
       allowUnrecoverableReplacement,
       currentDate
     });
+    refreshV29RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -1043,6 +2041,7 @@ export function App() {
       allowUnrecoverableReplacement: true,
       currentDate
     });
+    refreshV29RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -1073,6 +2072,7 @@ export function App() {
     skipNextAutosave.current = true;
     setAutoSaveEnabled(true);
     const written = writePreview(browserPreviewStorage(), previewData, expectedRaw.current, { currentDate });
+    refreshV29RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -1095,6 +2095,91 @@ export function App() {
     }
   }
 
+  const isPreviewSettings = destination === 'more' && moreSettingsOpen;
+  const storageNeedsAttention = ['unavailable', 'error', 'corrupt', 'unsupported', 'conflict']
+    .includes(persistenceStatus.kind);
+
+  const healthFitnessView = hydrated && (healthFitnessVisited || destination === 'health') ? (
+    <HealthFitnessView
+      hidden={destination !== 'health'}
+      strength={{
+        data: previewData.strength,
+        peopleGroups: previewData.peopleGroups,
+        rhythms: healthCategoryRhythms.map(rhythm => {
+          const setting = previewData.strength.rhythmModes.find(item => item.rhythmId === rhythm.id);
+          return {
+            rhythm,
+            mode: setting?.mode ?? 'recommended',
+            ...(setting?.workoutId ? { workoutId: setting.workoutId } : {})
+          };
+        }),
+        archivedRhythms: archivedHealthRhythms,
+        evaluationDate: currentDate,
+        onChange: saveStrengthData,
+        pendingRhythmLog: pendingStrengthRhythmLog,
+        onRhythmLogOpened: requestId => {
+          setStrengthLogRequest(current => current?.requestId === requestId ? null : current);
+        }
+      }}
+      weight={{
+        data: previewData.weight,
+        today: currentDate,
+        rhythms: healthCategoryRhythms,
+        archivedRhythmIds: new Set(previewData.archivedRhythmIds),
+        datedRhythmCompletions: previewData.datedRhythmCompletions,
+        onChange: saveWeightData,
+        pendingLogRequest: weightLogRequest,
+        onLogRequestOpened: requestId => {
+          setWeightLogRequest(current => current?.requestId === requestId ? null : current);
+        },
+        onQuickLog: event => {
+          weightLogRequestSequence.current += 1;
+          setWeightLogRequest({
+            requestId: weightLogRequestSequence.current,
+            opener: event.currentTarget
+          });
+        }
+      }}
+      cardio={{
+        data: previewData.cardio,
+        today: currentDate,
+        rhythms: healthCategoryRhythms,
+        archivedRhythmIds: new Set(previewData.archivedRhythmIds),
+        datedRhythmCompletions: previewData.datedRhythmCompletions,
+        onChange: saveCardioData,
+        pendingLogRequest: cardioLogRequest,
+        onLogRequestOpened: requestId => {
+          setCardioLogRequest(current => current?.requestId === requestId ? null : current);
+        },
+        onQuickLog: event => {
+          cardioLogRequestSequence.current += 1;
+          setCardioLogRequest({
+            requestId: cardioLogRequestSequence.current,
+            opener: event.currentTarget
+          });
+        }
+      }}
+      rhythms={healthCategoryRhythms}
+      archivedRhythms={archivedHealthRhythms}
+      todayDate={currentDate}
+      rhythmScores={rhythmScoreResults}
+      completedRhythms={completedRhythms}
+      undoableRhythms={undoableRhythms}
+      foundations={foundationCatalogue}
+      onAddRhythm={event => openRhythmEditor(event, undefined, {
+        initialDraft: createRhythmDraft(['health'])
+      })}
+      onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
+      onRhythmHistory={openRhythmHistory}
+      onRestoreRhythm={restoreRhythm}
+      onTendRhythm={openCompletion}
+      onUndoRhythm={undoTend}
+      onPersonSelect={openPersonProfile}
+      onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
+      onOpenCategory={categoryId => navigate(categoryId)}
+    />
+  ) : null;
+
   return (
     <div className="wrap tend-app-preview" data-text-size={textSize}>
       <AppNavigation
@@ -1111,26 +2196,72 @@ export function App() {
       <div id="view">
         {!hydrated
           ? <p role="status">Loading saved preview data…</p>
+          : destination === 'more'
+            ? (
+              <main className="settings-page" aria-labelledby="more-page-title">
+                <header className="settings-page__heading">
+                  <h2 id="more-page-title" ref={morePageHeading} tabIndex={-1}>
+                    {moreSettingsOpen ? 'Settings' : 'More'}
+                  </h2>
+                </header>
+                {moreSettingsOpen
+                  ? (
+                    <>
+                      <button
+                        type="button"
+                        className="btn mini ghost settings-page__back"
+                        onClick={() => setMoreSettingsOpen(false)}
+                      >
+                        ‹ More
+                      </button>
+                      <section className="settings-section" aria-labelledby="weather-settings-title">
+                        <h3 id="weather-settings-title">Weather</h3>
+                        <TodayWeatherSettings controller={todayWeather} timeZone={weatherTimeZone} />
+                      </section>
+                      <section className="settings-section" aria-labelledby="preview-data-title">
+                      <h3 id="preview-data-title">Preview data</h3>
+                      </section>
+                    </>
+                  )
+                  : (
+                    <section className="settings-section" aria-label="More options">
+                      <button
+                        type="button"
+                        className="settings-link"
+                        onClick={() => setMoreSettingsOpen(true)}
+                      >
+                        <span>Settings</span>
+                        <span aria-hidden="true">›</span>
+                      </button>
+                    </section>
+                  )}
+              </main>
+            )
           : destination === 'today'
           ? (
             <TodayView
               greeting={greeting}
               dateLabel={dateLabel}
+              evaluationInstant={scoringInstant}
+              localDate={currentDate}
+              focus={todayFocus}
+              onFocusChange={setTodayFocus}
+              weatherController={todayWeather}
               completedRhythms={completedRhythms}
               undoableRhythms={undoableRhythms}
               rhythms={editableTodayRhythms}
-              archivedRhythms={archivedRhythms}
+              rhythmScores={rhythmScoreResults}
               search={search}
               marriageExampleId={marriageExampleId}
+              foundations={foundationCatalogue}
               onNavigate={navigate}
               onMarriageExampleChange={setMarriageExampleId}
-              onPersonSelect={personId => navigate('people', personId)}
+              onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
+              onPersonSelect={openPersonProfile}
               onHistory={openRhythmHistory}
               onTend={openCompletion}
               onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
               onUndo={undoTend}
-              onAddRhythm={event => openRhythmEditor(event)}
-              onRestoreRhythm={restoreRhythm}
             />
           )
           : destination === 'marriage'
@@ -1138,18 +2269,143 @@ export function App() {
               <MarriageView
                 marriageExampleId={marriageExampleId}
                 onMarriageExampleChange={setMarriageExampleId}
-                onPersonSelect={personId => navigate('people', personId)}
+                todayDate={currentDate}
+                onAddRhythm={event => openRhythmEditor(event)}
+                onAddSuggestion={openRhythmSuggestion}
+                onPersonSelect={openPersonProfile}
                 onPartnerProfile={() => navigate('people')}
+                onOpenCategory={categoryId => navigate(categoryId)}
                 userRhythms={marriageCategoryRhythms}
+                archivedRhythms={archivedMarriageRhythms}
+                foundationRhythms={marriageCategoryRhythms}
+                suggestionRhythms={resolvedMarriageRhythms}
+                suggestionInstances={allTodayRhythms}
+                foundationRhythmScores={rhythmScoreResults}
+                archivedRhythmIds={previewData.archivedRhythmIds}
                 completedRhythms={completedRhythms}
                 undoableRhythms={undoableRhythms}
-                onRhythmDetails={(id, event) => {
-                  dialogOpener.current = event.currentTarget;
-                  setDetailsInitialView('details');
-                  setActiveRhythmId(id);
-                }}
+                onRhythmHistory={openRhythmHistory}
+                onEditRhythm={(rhythm, event, returnToSuggestions) => openRhythmEditor(event, rhythm, {
+                  ...(returnToSuggestions ? { returnToSuggestions } : {})
+                })}
+                onRestoreRhythm={restoreRhythm}
                 onTend={openCompletion}
                 onUndo={undoTend}
+                onSaveFoundationAssociations={saveFoundationAssociations}
+                foundationNavigationRequest={foundationNavigationRequest}
+                onFoundationNavigationHandled={() => setFoundationNavigationRequest(null)}
+              />
+            )
+          : destination === 'parenting'
+            ? (
+              <MarriageView
+                categoryConfig={{
+                  categoryId: 'parenting',
+                  label: 'Parenting',
+                  description: "If your presence isn't felt, your absence won't be noticed.",
+                  foundations: foundationCatalogue.filter(foundation => foundation.categoryId === 'parenting'),
+                  emptyFoundationDescription: 'Ongoing areas of care; scores are unavailable without scored linked Rhythms.',
+                  scoreInterpretationNote: 'These scores reflect follow-through on chosen Rhythms. They do not measure a child’s wellbeing or the quality of someone’s parenting.',
+                  suggestionCatalogue: parentingSuggestionCatalogue
+                }}
+                todayDate={currentDate}
+                onAddRhythm={event => openRhythmEditor(event, undefined, {
+                  initialDraft: createRhythmDraft(['parenting'])
+                })}
+                onAddSuggestion={openRhythmSuggestion}
+                onPersonSelect={openPersonProfile}
+                onOpenCategory={categoryId => navigate(categoryId)}
+                userRhythms={parentingCategoryRhythms}
+                archivedRhythms={archivedParentingRhythms}
+                foundationRhythms={parentingCategoryRhythms}
+                suggestionRhythms={parentingCategoryRhythms}
+                suggestionInstances={allTodayRhythms}
+                foundationRhythmScores={rhythmScoreResults}
+                archivedRhythmIds={previewData.archivedRhythmIds}
+                completedRhythms={completedRhythms}
+                undoableRhythms={undoableRhythms}
+                onRhythmHistory={openRhythmHistory}
+                onEditRhythm={(rhythm, event, returnToSuggestions) => openRhythmEditor(event, rhythm, {
+                  ...(returnToSuggestions ? { returnToSuggestions } : {})
+                })}
+                onRestoreRhythm={restoreRhythm}
+                onTend={openCompletion}
+                onUndo={undoTend}
+                onSaveFoundationAssociations={saveFoundationAssociations}
+                foundationNavigationRequest={foundationNavigationRequest}
+                onFoundationNavigationHandled={() => setFoundationNavigationRequest(null)}
+              />
+            )
+          : destination === 'faith'
+            ? (
+              <MarriageView
+                categoryConfig={{
+                  categoryId: 'faith',
+                  label: 'Faith',
+                  description: 'Faith practices that help you make room for God in everyday life.',
+                  foundations: foundationCatalogue.filter(foundation => foundation.categoryId === 'faith'),
+                  foundationTerm: { singular: 'Practice', plural: 'Practices' },
+                  tabLabel: 'Practices',
+                  emptyFoundationDescription: 'Ongoing practices; scores are unavailable without scored linked Rhythms.',
+                  scoreExplanationIntro: 'Your score reflects follow-through on your chosen practices—not the strength of your faith.',
+                  suggestionCatalogue: faithSuggestionCatalogue
+                }}
+                todayDate={currentDate}
+                onAddRhythm={event => openRhythmEditor(event, undefined, {
+                  initialDraft: createRhythmDraft(['faith'])
+                })}
+                onAddSuggestion={openRhythmSuggestion}
+                onPersonSelect={openPersonProfile}
+                onOpenCategory={categoryId => navigate(categoryId)}
+                userRhythms={faithCategoryRhythms}
+                archivedRhythms={archivedFaithRhythms}
+                foundationRhythms={faithCategoryRhythms}
+                suggestionRhythms={faithCategoryRhythms}
+                suggestionInstances={allTodayRhythms}
+                foundationRhythmScores={rhythmScoreResults}
+                archivedRhythmIds={previewData.archivedRhythmIds}
+                completedRhythms={completedRhythms}
+                undoableRhythms={undoableRhythms}
+                onRhythmHistory={openRhythmHistory}
+                onEditRhythm={(rhythm, event, returnToSuggestions) => openRhythmEditor(event, rhythm, {
+                  ...(returnToSuggestions ? { returnToSuggestions } : {})
+                })}
+                onRestoreRhythm={restoreRhythm}
+                onTend={openCompletion}
+                onUndo={undoTend}
+                onSaveFoundationAssociations={saveFoundationAssociations}
+                foundationNavigationRequest={foundationNavigationRequest}
+                onFoundationNavigationHandled={() => setFoundationNavigationRequest(null)}
+              />
+            )
+          : destination === 'health'
+            ? null
+          : destination === 'friendships'
+            ? (
+              <FriendshipsView
+                data={previewData.friendships}
+                peopleGroups={previewData.peopleGroups}
+                personDetails={previewData.personDetails}
+                today={localDateInTimeZone(new Date(), localTimeZone)}
+                rhythms={friendshipCategoryRhythms}
+                archivedRhythms={archivedFriendshipRhythms}
+                foundations={foundationCatalogue}
+                rhythmScores={rhythmScoreResults}
+                completedRhythms={completedRhythms}
+                undoableRhythms={undoableRhythms}
+                onChange={friendships => setPreviewData(previous => ({ ...previous, friendships }))}
+                onAddRhythm={event => openRhythmEditor(event, undefined, {
+                  initialDraft: createRhythmDraft(['friendships'])
+                })}
+                onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
+                onTend={openCompletion}
+                onUndo={id => undoTend(id)}
+                onPersonSelect={openPersonProfile}
+                onGoToPeople={() => navigate('people')}
+                onRhythmHistory={openRhythmHistory}
+                onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
+                onOpenCategory={categoryId => navigate(categoryId)}
+                onRestoreRhythm={restoreRhythm}
               />
             )
           : destination === 'finances'
@@ -1162,11 +2418,76 @@ export function App() {
                 onToday={() => navigate('today')}
               />
             )
-          : destination === 'people' && selectedPerson
-            ? <PersonProfilePlaceholder person={selectedPerson} backLabel="Today" onBack={() => navigate('today')} />
+          : destination === 'people'
+            ? (
+              <PeopleView
+                groups={previewData.peopleGroups}
+                friendships={previewData.friendships}
+                today={currentDate}
+                personDetails={previewData.personDetails}
+                onChangeGroups={peopleGroups => setPreviewData(previous => ({ ...previous, peopleGroups }))}
+                onOpenPerson={openPersonProfile}
+                onEditPerson={openPersonDetailsEditor}
+              />
+            )
           : <PlaceholderPage destination={destination} onToday={() => navigate('today')} />}
       </div>
+      {healthFitnessView}
+      {selectedProfilePerson && (
+        <PersonProfileView
+          key={selectedProfilePerson.id}
+          personId={selectedProfilePerson.id}
+          peopleGroups={previewData.peopleGroups}
+          personDetails={previewData.personDetails}
+          personNotes={previewData.personNotes}
+          friendships={previewData.friendships}
+          today={localDateInTimeZone(new Date(), localTimeZone)}
+          rhythms={personActiveRhythms}
+          archivedRhythms={personArchivedRhythms}
+          foundations={foundationCatalogue}
+          rhythmScores={rhythmScoreResults}
+          completedRhythms={completedRhythms}
+          undoableRhythms={undoableRhythms}
+          onFriendshipsChange={friendships => setPreviewData(previous => ({ ...previous, friendships }))}
+          onPeopleGroupsChange={peopleGroups => setPreviewData(previous => ({ ...previous, peopleGroups }))}
+          onEditPerson={openPersonDetailsEditor}
+          onAddRhythm={(event, personId) => openRhythmEditor(event, undefined, {
+            initialDraft: { ...createRhythmDraft([]), personIds: [personId] }
+          })}
+          onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
+          onRhythmHistory={openRhythmHistory}
+          onTend={openCompletion}
+          onUndo={undoTend}
+          onRestoreRhythm={restoreRhythm}
+          onOpenFoundation={foundationId => {
+            closePersonProfile();
+            navigateToFoundation(foundationId, 'today');
+          }}
+          onOpenCategory={categoryId => {
+            closePersonProfile();
+            navigate(categoryId);
+          }}
+          onPersonSelect={openPersonProfile}
+          onConnectionChange={friendships => setPreviewData(previous => ({ ...previous, friendships }))}
+          onCreatePersonNote={savePersonNote}
+          onUpdatePersonNote={editPersonNote}
+          onDeletePersonNote={removePersonNote}
+          onClose={closePersonProfile}
+        />
+      )}
+      {selectedDetailsEditorPerson && (
+        <PersonDetailsEditor
+          key={selectedDetailsEditorPerson.id}
+          personId={selectedDetailsEditorPerson.id}
+          personName={selectedDetailsEditorPerson.displayName}
+          {...(selectedDetailsEditorDetails ? { details: selectedDetailsEditorDetails } : {})}
+          today={currentDate}
+          onSave={draft => savePersonDetails(selectedDetailsEditorPerson.id, draft)}
+          onClose={closePersonDetailsEditor}
+        />
+      )}
       <PreviewDataControls
+        hidden={!isPreviewSettings}
         data={previewData}
         status={persistenceStatus}
         currentDate={currentDate}
@@ -1197,7 +2518,46 @@ export function App() {
         v10RecoveryError={v10RecoveryError}
         v11RecoveryCopy={v11RecoveryCopy}
         v11RecoveryError={v11RecoveryError}
+        v12RecoveryCopy={v12RecoveryCopy}
+        v12RecoveryError={v12RecoveryError}
+        v13RecoveryCopy={v13RecoveryCopy}
+        v13RecoveryError={v13RecoveryError}
+        v14RecoveryCopy={v14RecoveryCopy}
+        v14RecoveryError={v14RecoveryError}
+        v15RecoveryCopy={v15RecoveryCopy}
+        v15RecoveryError={v15RecoveryError}
+        v16RecoveryCopy={v16RecoveryCopy}
+        v16RecoveryError={v16RecoveryError}
+        v17RecoveryCopy={v17RecoveryCopy}
+        v17RecoveryError={v17RecoveryError}
+        v18RecoveryCopy={v18RecoveryCopy}
+        v18RecoveryError={v18RecoveryError}
+        v19RecoveryCopy={v19RecoveryCopy}
+        v19RecoveryError={v19RecoveryError}
+        v20RecoveryCopy={v20RecoveryCopy}
+        v20RecoveryError={v20RecoveryError}
+        v21RecoveryCopy={v21RecoveryCopy}
+        v21RecoveryError={v21RecoveryError}
+        v22RecoveryCopy={v22RecoveryCopy}
+        v22RecoveryError={v22RecoveryError}
+        v23RecoveryCopy={v23RecoveryCopy}
+        v23RecoveryError={v23RecoveryError}
+        v25RecoveryCopy={v25RecoveryCopy}
+        v25RecoveryError={v25RecoveryError}
+        v26RecoveryCopy={v26RecoveryCopy}
+        v26RecoveryError={v26RecoveryError}
+        v27RecoveryCopy={v27RecoveryCopy}
+        v27RecoveryError={v27RecoveryError}
+        v28RecoveryCopy={v28RecoveryCopy}
+        v28RecoveryError={v28RecoveryError}
+        v29RecoveryCopy={v29RecoveryCopy}
+        v29RecoveryError={v29RecoveryError}
       />
+      {storageNeedsAttention && !isPreviewSettings && (
+        <p className="preview-storage-alert" role="alert">
+          Preview data needs attention. Open More → Settings → Preview data to review recovery and storage options.
+        </p>
+      )}
       <footer className="preview-footer">
         <span>Synthetic preview data stays separate from Tend accounts.</span>
         <a href="/preview.html">Component catalogue</a>
@@ -1208,8 +2568,14 @@ export function App() {
           rhythm={activeRhythmForDetails!}
           initialView={detailsInitialView}
           datedCompletions={[]}
-          completionHistoryAvailable={activeRhythmIsToday || activeRhythmIsArchived}
+          completionHistoryAvailable={
+            activeRhythmIsToday || activeRhythmIsArchived || activeRhythm.completionHistory !== undefined
+          }
+          {...(activeRhythm.categoryIds?.includes('health')
+            ? { completionActionLabel: 'Log workout', completedActionLabel: 'Logged' }
+            : {})}
           {...(activeRhythmIsToday && isEditableRhythmId(activeRhythm.id) && !activeRhythmIsArchived
+            && !activeRhythm.categoryIds?.includes('health')
             ? { onLogCompletion: record => saveDatedCompletion(record, 'history') }
             : {})}
           {...(activeRhythmIsToday && isEditableRhythmId(activeRhythm.id) && !activeRhythmIsArchived
@@ -1228,17 +2594,33 @@ export function App() {
           {...(seasonDeletionUndo?.rhythmId === activeRhythm.id
             ? { onUndoSeasonDeletion: undoSeasonDeletion }
             : {})}
+          seasonRangeUndo={seasonRangeUndo?.rhythmId === activeRhythm.id
+            ? { rhythmId: seasonRangeUndo.rhythmId }
+            : null}
+          {...(seasonRangeUndo?.rhythmId === activeRhythm.id
+            ? { onUndoSeasonRange: undoSeasonRange }
+            : {})}
           people={peopleForRhythm(activeRhythm)}
+          foundations={foundationCatalogue}
           archived={activeRhythmIsArchived}
-          onPersonSelect={personId => {
+          onOpenFoundation={foundationId => {
             setActiveRhythmId(null);
-            dialogOpener.current = null;
-            navigate('people', personId);
+            navigateToFoundation(foundationId, activeRhythmReturnTab.current);
+          }}
+          onOpenCategory={categoryId => {
+            setActiveRhythmId(null);
+            navigate(categoryId);
+          }}
+          onPersonSelect={personId => {
+            openPersonProfile(personId);
           }}
           {...(activeRhythmIsToday
             ? {
                 completed: completedRhythms.has(activeRhythm.id),
                 ...(!activeRhythmIsArchived ? { onSaveCompletion: saveDatedCompletion } : {}),
+                ...(activeRhythm.categoryIds?.includes('health') && !activeRhythmIsArchived
+                  ? { onTend: event => openCompletion(activeRhythm.id, event) }
+                  : {}),
                 ...(undoableRhythms.has(activeRhythm.id) ? { onUndo: () => undoTend(activeRhythm.id) } : {}),
                 ...(isEditableRhythmId(activeRhythm.id)
                   ? {
@@ -1263,13 +2645,30 @@ export function App() {
       {rhythmEditor && (
         <RhythmEditor
           {...(rhythmEditor.rhythm ? { rhythm: rhythmEditor.rhythm } : {})}
+          {...(rhythmEditor.initialDraft ? { initialDraft: rhythmEditor.initialDraft } : {})}
+          {...(rhythmEditor.suggestionSourceId
+            ? { suggestionSourceId: rhythmEditor.suggestionSourceId }
+            : {})}
+          {...(rhythmEditor.recommendedFrequency
+            ? {
+                recommendedFrequency: rhythmEditor.recommendedFrequency,
+                ...(rhythmEditor.frequencyGuidance ? { frequencyGuidance: rhythmEditor.frequencyGuidance } : {})
+              }
+            : {})}
+          asOfDate={localDateInTimeZone(
+            new Date(),
+            rhythmEditor.rhythm?.scoring?.timeZone
+              ?? rhythmEditor.rhythm?.createdTimeZone
+              ?? Intl.DateTimeFormat().resolvedOptions().timeZone
+          )}
+          peopleGroups={previewData.peopleGroups}
           hasDatedCompletionHistory={
             previewData.rhythmHistoryIds.includes(rhythmEditor.id)
             || (rhythmEditor.rhythm?.completionHistory?.length ?? 0) > 0
           }
           onSave={saveRhythm}
           {...(rhythmEditor.rhythm ? { onArchive: archiveRhythm } : {})}
-          onClose={() => setRhythmEditor(null)}
+          onClose={() => finishRhythmEditor(false)}
         />
       )}
     </div>

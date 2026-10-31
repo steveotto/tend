@@ -69,6 +69,6 @@ test("time wheel uses separate stationary center bands and measured option cente
   assert.match(styles, /\.time-wheel-viewport\{[^}]*height:210px/);
   assert.match(styles, /\.time-wheel-viewports\{[^}]*grid-template-columns:1fr 1fr \.85fr;gap:6px/);
   assert.match(styles, /\.time-wheel-options\{padding-block:0\}/);
-  assert.match(index, /app-timewheel\.js\?v=20261015-time-wheel-three-highlights-tap-step/);
+  assert.match(index, /app-timewheel\.js\?v=20261029-minute-shortcuts/);
   assert.match(index, /app-sync\.js\?v=0\.11\.8/);
 });

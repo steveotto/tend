@@ -142,9 +142,74 @@ describe('synthetic Rhythm editor domain', () => {
       timeLabel: fixture.timeLabel,
       personIds: fixture.personIds,
       categoryIds: [],
+      schedule: { frequency: 'daily' },
       originalSchedule: { frequency: 'daily' },
       scheduleEditing: false
     });
+  });
+
+  it('uses the supported effective schedule without persisting an unchanged legacy fallback', () => {
+    const fixture = todayRhythms[1]!;
+    expect(fixture.schedule).toBeUndefined();
+    const draft = rhythmDraftFrom(fixture);
+    expect(draft.schedule).toEqual({ frequency: 'daily' });
+    expect(draft.originalSchedule).toEqual({ frequency: 'daily' });
+
+    const saved = saveRhythmDraft([], {
+      ...draft,
+      title: 'Updated without changing frequency'
+    }, fixture.id, 'edit');
+    expect(saved.errors).toEqual({});
+    expect(saved.savedRhythms?.[0]?.schedule).toBeUndefined();
+  });
+
+  it('uses the active Season schedule and time of day as the editor effective values', () => {
+    const id = 'user-rhythm-123e4567-e89b-42d3-a456-426614174000';
+    const historicalSchedule = { frequency: 'daily' as const };
+    const activeSchedule = {
+      frequency: 'quarterly' as const,
+      monthInQuarter: 2 as const,
+      pattern: { kind: 'ordinalWeekday' as const, ordinal: 2 as const, weekday: 3 as const },
+      endDate: '2027-12-31'
+    };
+    const rhythm = {
+      ...todayRhythms[0]!,
+      id,
+      cadence: 'Daily',
+      schedule: historicalSchedule,
+      scoring: {
+        trackingStartDate: '2026-01-01',
+        timeZone: 'UTC',
+        scheduleHistory: [
+          createRhythmSeason(id, '2026-01-01', historicalSchedule, 'anytime'),
+          createRhythmSeason(id, '2026-06-01', activeSchedule, 'early-morning')
+        ]
+      }
+    };
+
+    const draft = rhythmDraftFrom(rhythm, [], '2026-10-28');
+    expect(draft.schedule).toEqual(activeSchedule);
+    expect(draft.originalSchedule).toEqual(activeSchedule);
+    expect(draft.timeLabel).toBe('Early morning');
+  });
+
+  it('does not infer a schedule from a descriptive cadence or an unknown active Season', () => {
+    const descriptive = { ...todayRhythms[2]!, cadence: '3 times a week' };
+    expect(rhythmDraftFrom(descriptive).schedule).toBeUndefined();
+
+    const id = 'user-rhythm-123e4567-e89b-42d3-a456-426614174000';
+    const rhythm = {
+      ...todayRhythms[0]!,
+      id,
+      cadence: 'Daily',
+      schedule: { frequency: 'daily' as const },
+      scoring: {
+        trackingStartDate: '2026-01-01',
+        timeZone: 'UTC',
+        scheduleHistory: [createUnknownRhythmSeason(id, '2026-01-01', 'Daily')]
+      }
+    };
+    expect(rhythmDraftFrom(rhythm, [], '2026-10-28').schedule).toBeUndefined();
   });
 
   it('keeps creation and scoring metadata out of an unconfirmed draft', () => {
