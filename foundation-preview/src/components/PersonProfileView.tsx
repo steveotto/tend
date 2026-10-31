@@ -29,6 +29,13 @@ import { PersonAvatar } from './PersonBadge.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 import { selectPersonRhythmsDueToday } from '../domain/person-rhythms.ts';
 import type { Destination } from './AppNavigation.tsx';
+import {
+  anniversarySummary,
+  birthdaySummary,
+  connectionStyleLabel,
+  personDetailsForId
+} from '../domain/person-details.ts';
+import type { PersonDetails } from '../domain/person-details.ts';
 
 type ProfileTab = 'rhythms' | 'connections';
 
@@ -50,6 +57,8 @@ export function PersonProfileView({
   undoableRhythms,
   onFriendshipsChange,
   onPeopleGroupsChange,
+  personDetails = [],
+  onEditPerson,
   onAddRhythm,
   onEditRhythm,
   onRhythmHistory,
@@ -75,6 +84,8 @@ export function PersonProfileView({
   undoableRhythms: ReadonlySet<string>;
   onFriendshipsChange: (friendships: FriendshipData) => void;
   onPeopleGroupsChange: (peopleGroups: PersonPickerGroup[]) => void;
+  personDetails?: readonly PersonDetails[];
+  onEditPerson?: (personId: PersonId, event: MouseEvent<HTMLButtonElement>) => void;
   onAddRhythm: (event: MouseEvent<HTMLButtonElement>, personId: PersonId) => void;
   onEditRhythm: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
   onRhythmHistory: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
@@ -89,6 +100,9 @@ export function PersonProfileView({
   onClose: () => void;
 }) {
   const person = personById(personId);
+  const details = personDetailsForId(personDetails, personId);
+  const birthday = details?.birthday ? birthdaySummary(details.birthday, today) : null;
+  const anniversary = details?.anniversary ? anniversarySummary(details.anniversary, today) : null;
   const [tab, setTab] = useState<ProfileTab>('rhythms');
   const [connectionEditor, setConnectionEditor] = useState<{
     record?: FriendshipConnection;
@@ -207,6 +221,18 @@ export function PersonProfileView({
             <PersonAvatar person={person} />
             <div className="person-profile__identity-copy">
               <h2 id="person-profile-title">{person.displayName}</h2>
+              {details?.relationshipLabel && (
+                <p className="person-profile__relationship">{details.relationshipLabel}</p>
+              )}
+              {(birthday || anniversary || details?.connectionStyle) && (
+                <div className="person-profile__details" aria-label={`${person.displayName} details`}>
+                  {birthday && <span className="person-profile__detail">{birthday.label}</span>}
+                  {anniversary && <span className="person-profile__detail">{anniversary}</span>}
+                  {details?.connectionStyle && (
+                    <span className="person-profile__detail">{connectionStyleLabel(details.connectionStyle)}</span>
+                  )}
+                </div>
+              )}
               {classifications.length > 0 && (
                 <div className="person-profile__classifications" aria-label="People classifications">
                   {classifications.map(group => (
@@ -227,6 +253,11 @@ export function PersonProfileView({
                 </svg>
               </summary>
               <div className="person-profile__action-menu">
+                {onEditPerson && (
+                  <button type="button" onClick={event => onEditPerson(personId, event)}>
+                    Edit details
+                  </button>
+                )}
                 <button
                   type="button"
                   aria-pressed={isFriend}

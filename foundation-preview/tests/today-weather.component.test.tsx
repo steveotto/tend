@@ -15,9 +15,9 @@ const syntheticWeatherFixture: TodayWeatherReport = {
 };
 
 describe('Today weather adapter presentation', () => {
-  it('shows an honest unavailable state when no preview weather source is configured', () => {
-    render(<TodayWeather localDate="2026-10-31" time={null} />);
-    expect(screen.getByRole('status').textContent).toBe('Weather is unavailable in this preview.');
+  it('omits weather when no city-selected report is available', () => {
+    const { container } = render(<TodayWeather localDate="2026-10-31" time={null} />);
+    expect(container.firstChild).toBeNull();
     expect(screen.queryByRole('img')).toBeNull();
   });
 
@@ -35,8 +35,10 @@ describe('Today weather adapter presentation', () => {
   });
 
   it('does not substitute weather from another date when the selected block has no forecast', () => {
-    render(<TodayWeather report={syntheticWeatherFixture} localDate="2026-11-02" time="18:00" />);
-    expect(screen.getByRole('status').textContent).toBe('No forecast is available for this time.');
+    const { container } = render(
+      <TodayWeather report={syntheticWeatherFixture} localDate="2026-11-02" time="18:00" />
+    );
+    expect(container.firstChild).toBeNull();
   });
 
   it('keeps the existing day/night icon and color mapping for Open-Meteo weather codes', () => {

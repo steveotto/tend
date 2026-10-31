@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FriendshipsView } from '../src/components/FriendshipsView.tsx';
 import { addOrUpdateConnection, createFriendshipData, setFriendCadence } from '../src/domain/friendships.ts';
 import type { FriendshipData } from '../src/domain/friendships.ts';
+import type { PersonDetails } from '../src/domain/person-details.ts';
 import { foundationCatalogue, createPersonPickerGroups, setPersonGroupMembership } from '../src/domain/preview-data.ts';
 import type { PersonId, PersonPickerGroup, RhythmPreview } from '../src/domain/preview-data.ts';
 import { PeopleView } from '../src/components/PeopleView.tsx';
@@ -37,6 +38,7 @@ function FriendshipsHarness({
   onPersonSelect = vi.fn(),
   onGoToPeople = vi.fn(),
   rhythms = [],
+  personDetails = [],
   onEditRhythm = vi.fn(),
   onRhythmHistory = vi.fn(),
   onTend = vi.fn(),
@@ -47,6 +49,7 @@ function FriendshipsHarness({
   onPersonSelect?: (personId: PersonId) => void;
   onGoToPeople?: () => void;
   rhythms?: readonly RhythmPreview[];
+  personDetails?: readonly PersonDetails[];
   onEditRhythm?: (rhythm: RhythmPreview, event: ReactMouseEvent<HTMLButtonElement>) => void;
   onRhythmHistory?: (id: string, event: ReactMouseEvent<HTMLButtonElement>) => void;
   onTend?: (id: string, event: ReactMouseEvent<HTMLButtonElement>) => void;
@@ -58,6 +61,7 @@ function FriendshipsHarness({
     <FriendshipsView
       data={data}
       peopleGroups={peopleGroups}
+      personDetails={personDetails}
       today="2026-10-21"
       rhythms={rhythms}
       archivedRhythms={[]}
@@ -81,6 +85,32 @@ function FriendshipsHarness({
 }
 
 describe('Friendships view', () => {
+  it('uses shared Person details on Friendship cards without changing classifications', async () => {
+    const user = userEvent.setup();
+    const groups = setPersonGroupMembership(
+      createPersonPickerGroups(),
+      'friends',
+      'sample-person-avery',
+      true
+    );
+    render(
+      <FriendshipsHarness
+        initialGroups={groups}
+        personDetails={[{
+          personId: 'sample-person-avery',
+          relationshipLabel: 'A lifelong friend',
+          birthday: { monthDay: '10-22' }
+        }]}
+      />
+    );
+    await user.click(screen.getByRole('tab', { name: 'Friends' }));
+    const row = screen.getByRole('article').closest('.friendships-friend-row');
+    expect(row).toBeTruthy();
+    expect(within(row as HTMLElement).getByText('A lifelong friend')).toBeTruthy();
+    expect(within(row as HTMLElement).getByText(/^Birthday in/)).toBeTruthy();
+    expect(within(row as HTMLElement).getByRole('group', { name: 'Avery Brooks classifications' })).toBeTruthy();
+  });
+
   it('projects People friend categorization into Friends while preserving cadence and shared history', async () => {
     const user = userEvent.setup();
     const initialData = addOrUpdateConnection(

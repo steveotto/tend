@@ -10,6 +10,7 @@ export function PeopleCard({
   person,
   classifications,
   relationshipLabel,
+  birthdayLabel,
   connectionRecency,
   onSelect,
   className = '',
@@ -20,6 +21,7 @@ export function PeopleCard({
   person: PersonPreview;
   classifications: readonly Pick<PersonPickerGroup, 'id' | 'label'>[];
   relationshipLabel?: string;
+  birthdayLabel?: string;
   connectionRecency?: string;
   onSelect: (personId: PersonId) => void;
   className?: string;
@@ -36,6 +38,7 @@ export function PeopleCard({
           onSelect={onSelect}
         />
         {relationshipLabel && <p className="people-card__relationship">{relationshipLabel}</p>}
+        {birthdayLabel && <p className="people-card__birthday">{birthdayLabel}</p>}
         {classifications.length > 0 && (
           <div
             className="people-card__classifications"

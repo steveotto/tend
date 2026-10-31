@@ -9,6 +9,7 @@ import { addCalendarDays } from '../src/domain/rhythm-scoring.ts';
 import { localDateTimeInZone } from '../src/domain/rhythm-completion.ts';
 import { createRhythmSeason, rhythmSeasonPaletteForOrdinal } from '../src/domain/rhythm-seasons.ts';
 import { activeIdForMarriageSuggestion } from '../src/domain/category-rhythms.ts';
+import { addOrUpdateConnection, setFriendCadence } from '../src/domain/friendships.ts';
 import { hasFoundationIcon } from '../src/components/MarriageIcon.tsx';
 import { createStrengthGuidedSession, startStrengthSessionRestTimer } from '../src/domain/strength.ts';
 import type { StrengthSavedWorkout } from '../src/domain/strength.ts';
@@ -278,12 +279,13 @@ describe('Tend Today preview', () => {
 
     const trigger = screen.getByLabelText('Choose a time frame, currently Now');
     expect(screen.getByText(/^\d+ of \d+ tended$/)).toBeTruthy();
-    expect(screen.getByText('Weather is unavailable until you choose a city.')).toBeTruthy();
+    expect(document.querySelector('.today-plan__weather')).toBeNull();
+    expect(screen.queryByText('Choose city')).toBeNull();
 
     await user.click(trigger);
     await user.click(screen.getByRole('button', { name: /Everything today/ }));
     expect(screen.getByText('0 of 3 tended')).toBeTruthy();
-    expect(screen.queryByText('Weather is unavailable until you choose a city.')).toBeNull();
+    expect(document.querySelector('.today-plan__weather')).toBeNull();
     expect(document.activeElement).toBe(trigger);
 
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
@@ -291,6 +293,26 @@ describe('Tend Today preview', () => {
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
       .getByRole('button', { name: 'Today' }));
     expect(screen.getByLabelText('Choose a time frame, currently Everything today')).toBeTruthy();
+  });
+
+  it('moves weather configuration to More settings without reserving space in Today', async () => {
+    const user = userEvent.setup();
+    testingRender(<App />);
+    expect(screen.queryByText('Choose city')).toBeNull();
+    expect(document.querySelector('.today-plan__weather')).toBeNull();
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'More, settings' }));
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.getByRole('heading', { name: 'Weather' })).toBeTruthy();
+    expect(screen.getByText(/Source: Open-Meteo/)).toBeTruthy();
+    expect(screen.getByText('Choose city')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: '‹ More' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'Today' }));
+    expect(screen.queryByText('Choose city')).toBeNull();
+    expect(document.querySelector('.today-plan__weather')).toBeNull();
   });
 
   it('integrates Friendships with category navigation and persists one shared connection across reload', async () => {
@@ -2736,6 +2758,118 @@ describe('Tend Today preview', () => {
     expect(within(profile).getByRole('tab', { name: 'Rhythms' })).toBeTruthy();
     await user.click(within(profile).getByRole('button', { name: 'Close profile for Avery Brooks' }));
     expect(document.activeElement).toBe(friendshipOpener);
+  });
+
+  it('edits optional Person details from People, preserves associations, and reloads the same profile', async () => {
+    const user = userEvent.setup();
+    const data = createSamplePreviewData();
+    data.peopleGroups = setPersonGroupMembership(
+      createPersonPickerGroups(),
+      'friends',
+      'sample-person-avery',
+      true
+    );
+    data.friendships = addOrUpdateConnection(
+      setFriendCadence(data.friendships, 'sample-person-avery', 'weekly', '2026-10-01'),
+      {
+        id: 'preserved-person-detail-connection',
+        type: 'call',
+        date: '2026-10-20',
+        participantIds: ['sample-person-avery']
+      }
+    );
+    data.savedRhythms = [savedMarriageRhythm(
+      'user-rhythm-88888888-8888-4888-8888-888888888888',
+      'Preserved person rhythm',
+      ['connection']
+    )].map(rhythm => ({ ...rhythm, personIds: ['sample-person-avery'] }));
+    const groupsBefore = structuredClone(data.peopleGroups);
+    const friendshipsBefore = structuredClone(data.friendships);
+    const rhythmsBefore = structuredClone(data.savedRhythms);
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+    const app = render(<App />);
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'People' }));
+    const editButton = screen.getByRole('button', { name: 'Edit details for Avery Brooks' });
+    await user.click(editButton);
+    let editor = screen.getByRole('dialog', { name: 'Edit Avery Brooks' });
+    await user.type(within(editor).getByLabelText('Month and day (MM-DD)'), '02-30');
+    await user.click(within(editor).getByRole('button', { name: 'Save details' }));
+    expect(within(editor).getByText('Enter a valid month and day (MM-DD).')).toBeTruthy();
+    expect(parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()))
+      .valid).toBe(true);
+    await user.clear(within(editor).getByLabelText('Month and day (MM-DD)'));
+    await user.type(within(editor).getByLabelText('Month and day (MM-DD)'), '02-29');
+    await user.type(within(editor).getByLabelText('Relationship'), 'Sister');
+    await user.type(within(editor).getByLabelText('Anniversary (MM-DD)'), '12-31');
+    await user.selectOptions(within(editor).getByLabelText('Preferred connection style'), 'wa');
+    await user.click(within(editor).getByRole('button', { name: 'Save details' }));
+    expect(document.activeElement).toBe(editButton);
+
+    expect(screen.getByText('Sister')).toBeTruthy();
+    expect(screen.getByText(/^Birthday in/)).toBeTruthy();
+    const savedResult = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(savedResult.valid).toBe(true);
+    if (savedResult.valid) {
+      expect(savedResult.envelope.data.personDetails).toEqual([{
+        personId: 'sample-person-avery',
+        relationshipLabel: 'Sister',
+        birthday: { monthDay: '02-29' },
+        anniversary: { monthDay: '12-31' },
+        connectionStyle: 'wa'
+      }]);
+      expect(savedResult.envelope.data.peopleGroups).toEqual(groupsBefore);
+      expect(savedResult.envelope.data.friendships).toEqual(friendshipsBefore);
+      expect(savedResult.envelope.data.savedRhythms).toEqual(rhythmsBefore);
+    }
+
+    await user.click(screen.getByRole('button', { name: 'Open synthetic profile for Avery Brooks' }));
+    const profile = screen.getByRole('dialog', { name: 'Avery Brooks' });
+    expect(within(profile).getByText('Sister')).toBeTruthy();
+    expect(within(profile).getByText(/^Birthday in/)).toBeTruthy();
+    expect(within(profile).getByText(/^Anniversary in/)).toBeTruthy();
+    expect(within(profile).getByText('Words of Affirmation')).toBeTruthy();
+    expect(within(profile).getByRole('article', { name: 'Preserved person rhythm' })).toBeTruthy();
+    await user.click(within(profile).getByLabelText('More actions for Avery Brooks'));
+    const profileEditButton = within(profile).getByRole('button', { name: 'Edit details' });
+    await user.click(profileEditButton);
+    editor = screen.getByRole('dialog', { name: 'Edit Avery Brooks' });
+    const relationship = within(editor).getByLabelText('Relationship');
+    await user.clear(relationship);
+    cancelNativeDialog(editor);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit Avery Brooks' })).toBeNull());
+    expect(document.activeElement).toBe(profileEditButton);
+    expect(within(profile).getByText('Sister')).toBeTruthy();
+    app.unmount();
+
+    render(<App />);
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'People' }));
+    expect(screen.getByText('Sister')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Open synthetic profile for Avery Brooks' }));
+    expect(screen.getByRole('dialog', { name: 'Avery Brooks' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Close profile for Avery Brooks' }));
+    const clearDetailsButton = screen.getByRole('button', { name: 'Edit details for Avery Brooks' });
+    await user.click(clearDetailsButton);
+    editor = screen.getByRole('dialog', { name: 'Edit Avery Brooks' });
+    await user.clear(within(editor).getByLabelText('Relationship'));
+    await user.clear(within(editor).getByLabelText('Month and day (MM-DD)'));
+    await user.clear(within(editor).getByLabelText('Birth year (leave blank if unknown)'));
+    await user.clear(within(editor).getByLabelText('Anniversary (MM-DD)'));
+    await user.selectOptions(within(editor).getByLabelText('Preferred connection style'), '');
+    await user.click(within(editor).getByRole('button', { name: 'Save details' }));
+    expect(document.activeElement).toBe(clearDetailsButton);
+    expect(screen.queryByText('Sister')).toBeNull();
+    const cleared = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(cleared.valid).toBe(true);
+    if (cleared.valid) expect(cleared.envelope.data.personDetails).toEqual([]);
   });
 
   it('saves one person-scoped connection through the profile and restores it after reload', async () => {

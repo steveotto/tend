@@ -1,26 +1,23 @@
 import { useRef, useState, type FormEvent } from 'react';
 import type { WeatherCity } from '../weather/open-meteo.ts';
 import type { TodayWeatherController } from './useTodayWeather.ts';
-import { TodayWeather } from './TodayWeather.tsx';
 
 export function weatherCityLabel(city: WeatherCity): string {
   return [city.name, city.admin1, city.country].filter(Boolean).join(', ');
 }
 
-export function TodayWeatherPanel({
+export function TodayWeatherSettings({
   controller,
-  localDate,
-  time
+  timeZone
 }: {
   controller: TodayWeatherController;
-  localDate: string;
-  time: string | null | undefined;
+  timeZone: string;
 }) {
   const [query, setQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
   const pickerRef = useRef<HTMLDetailsElement>(null);
   const triggerRef = useRef<HTMLElement>(null);
-  const { city, weather, search, searchCities, selectCity, retry } = controller;
+  const { city, weather, search, searchCities, selectCity, clearCity, retry } = controller;
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -40,7 +37,7 @@ export function TodayWeatherPanel({
   }
 
   return (
-    <section className="today-weather-panel" aria-label="Local weather">
+    <section className="today-weather-settings" aria-label="Weather settings">
       <div className="today-weather-panel__row">
         <div className="today-weather-panel__place">
           {city && <span className="today-weather-panel__city">{weatherCityLabel(city)}</span>}
@@ -94,29 +91,36 @@ export function TodayWeatherPanel({
               )}
             </div>
           </details>
+          {city && (
+            <button type="button" className="today-weather-picker__clear" onClick={clearCity}>
+              Clear
+            </button>
+          )}
         </div>
       </div>
-      {time === undefined
-        ? <p className="today-weather-unavailable" role="status">Weather is not shown for Everything today.</p>
-        : weather.status === 'loading' && city
-          ? <p className="today-weather-unavailable" role="status">Loading weather for {city.name}…</p>
-          : weather.status === 'error' && city
-            ? (
-              <div className="today-weather-panel__error">
-                <p className="today-weather-unavailable" role="status">
-                  {weather.message ?? 'Weather could not be loaded. Check your connection and try again.'}
-                </p>
-                <button type="button" className="today-weather-panel__retry" onClick={retry}>Retry</button>
-              </div>
-            )
-            : (
-              <TodayWeather
-                report={weather.status === 'ready' ? weather.report : null}
-                localDate={localDate}
-                time={time}
-                unavailableMessage={city ? 'Weather is unavailable.' : 'Weather is unavailable until you choose a city.'}
-              />
-            )}
+      <p className="today-weather-picker__privacy">
+        Source: Open-Meteo · Time zone: {timeZone} · City choice is session-only.
+      </p>
+      {city && weather.status === 'loading' && (
+        <p className="today-weather-picker__message" role="status">Loading weather for {city.name}…</p>
+      )}
+      {city && weather.status === 'error' && (
+        <div className="today-weather-panel__error">
+          <p className="today-weather-picker__message" role="status">
+            {weather.message ?? 'Weather could not be loaded. Check your connection and try again.'}
+          </p>
+          <button type="button" className="today-weather-panel__retry" onClick={retry}>Retry</button>
+        </div>
+      )}
+      {city && weather.status === 'ready' && weather.fetchedAt !== null && (
+        <p className="today-weather-picker__message" role="status">
+          Forecast updated {new Intl.DateTimeFormat(undefined, {
+            hour: 'numeric',
+            minute: '2-digit',
+            timeZone
+          }).format(weather.fetchedAt)}.
+        </p>
+      )}
     </section>
   );
 }

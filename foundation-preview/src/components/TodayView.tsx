@@ -26,7 +26,7 @@ import {
   todayFocusLabel
 } from '../domain/today-plan.ts';
 import type { TodayFocusId, TodayItemType } from '../domain/today-plan.ts';
-import { TodayWeatherPanel } from './TodayWeatherPanel.tsx';
+import { TodayWeather } from './TodayWeather.tsx';
 import type { TodayWeatherController } from './useTodayWeather.ts';
 
 const planTypes: { id: TodayItemType; label: string }[] = [
@@ -238,13 +238,17 @@ export function TodayView({
               {tendedCount} of {planRhythms.length} tended
             </span>
           </div>
-          <div className="today-plan__weather">
-            <TodayWeatherPanel
-              controller={weatherController}
-              localDate={localDate}
-              time={weatherTime}
-            />
-          </div>
+          {weatherController.city
+            && weatherController.weather.status === 'ready'
+            && focus !== 'everything-today'
+            && weatherTime !== undefined && (
+              <TodayWeather
+                report={weatherController.weather.report}
+                localDate={localDate}
+                time={weatherTime ?? null}
+                containerClassName="today-plan__weather"
+              />
+            )}
           <div className="faith-practice-tabs home-plan-type-tabs" role="tablist" aria-label="Plan items">
             {planTypes.map((type, index) => (
               <button

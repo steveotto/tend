@@ -4,19 +4,26 @@ import { personGroupMemberIds, setPersonGroupMembership } from '../domain/previe
 import type { FriendshipData } from '../domain/friendships.ts';
 import { connectionsForPerson } from '../domain/friendships.ts';
 import { PeopleCard } from './PeopleCard.tsx';
+import { birthdaySummary, personDetailsForId } from '../domain/person-details.ts';
+import type { PersonDetails } from '../domain/person-details.ts';
+import type { MouseEvent } from 'react';
 
 export function PeopleView({
   groups,
   friendships,
   today,
+  personDetails = [],
   onChangeGroups,
-  onOpenPerson
+  onOpenPerson,
+  onEditPerson
 }: {
   groups: readonly PersonPickerGroup[];
   friendships: FriendshipData;
   today: string;
+  personDetails?: readonly PersonDetails[];
   onChangeGroups: (next: PersonPickerGroup[]) => void;
   onOpenPerson: (personId: PersonId) => void;
+  onEditPerson?: (personId: PersonId, event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const friends = new Set(personGroupMemberIds(groups, 'friends'));
 
@@ -29,11 +36,15 @@ export function PeopleView({
         {syntheticPeople.map(person => {
           const isFriend = friends.has(person.id);
           const lastConnection = connectionsForPerson(friendships, person.id)[0];
+          const details = personDetailsForId(personDetails, person.id);
+          const birthday = details?.birthday ? birthdaySummary(details.birthday, today) : null;
           return (
             <PeopleCard
               key={person.id}
               person={person}
               classifications={groups.filter(group => group.memberIds.includes(person.id))}
+              {...(details?.relationshipLabel ? { relationshipLabel: details.relationshipLabel } : {})}
+              {...(birthday ? { birthdayLabel: birthday.label } : {})}
               {...(lastConnection
                 ? { connectionRecency: `Last connected ${formatPersonDate(lastConnection.date, today)}` }
                 : {})}
@@ -49,6 +60,15 @@ export function PeopleView({
                 >
                   {isFriend ? 'Remove friend' : 'Mark as friend'}
                 </button>
+                {onEditPerson && (
+                  <button
+                    type="button"
+                    aria-label={`Edit details for ${person.displayName}`}
+                    onClick={event => onEditPerson(person.id, event)}
+                  >
+                    Edit details
+                  </button>
+                )}
               </div>
             </PeopleCard>
           );

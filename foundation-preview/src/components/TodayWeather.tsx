@@ -5,27 +5,19 @@ export function TodayWeather({
   report,
   localDate,
   time,
-  unavailableMessage = 'Weather is unavailable in this preview.'
+  containerClassName
 }: {
   report?: TodayWeatherReport | null;
   localDate: string;
   time: string | null;
-  unavailableMessage?: string;
+  containerClassName?: string;
 }) {
-  if (!report) {
-    return <p className="today-weather-unavailable" role="status">{unavailableMessage}</p>;
-  }
+  if (!report) return null;
   const observation = selectWeatherForTime(report, localDate, time);
-  if (!observation) {
-    return (
-      <p className="today-weather-unavailable" role="status">
-        {time === null ? 'Current conditions are unavailable for this date.' : 'No forecast is available for this time.'}
-      </p>
-    );
-  }
+  if (!observation) return null;
   const condition = weatherCondition(observation.code, observation.isDay);
   const roundedTemperature = Math.round(observation.temperature);
-  return (
+  const reading = (
     <span
       className={`today-weather today-weather--${condition.theme}`}
       role="img"
@@ -38,6 +30,7 @@ export function TodayWeather({
       </span>
     </span>
   );
+  return containerClassName ? <div className={containerClassName}>{reading}</div> : reading;
 }
 
 function WeatherIcon({ code, isDay }: { code: number; isDay: boolean }) {

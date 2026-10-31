@@ -2,7 +2,8 @@ import { act, cleanup, render, renderHook, screen, waitFor, within } from '@test
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TodayWeatherPanel } from '../src/components/TodayWeatherPanel.tsx';
+import { TodayWeatherSettings } from '../src/components/TodayWeatherSettings.tsx';
+import { TodayWeather } from '../src/components/TodayWeather.tsx';
 import { useTodayWeather } from '../src/components/useTodayWeather.ts';
 import type { OpenMeteoWeatherClient } from '../src/weather/open-meteo.ts';
 import {
@@ -50,18 +51,35 @@ function WeatherHarness({ client, enabled = true }: {
   enabled?: boolean;
 }) {
   const [time, setTime] = useState<string | null | undefined>(null);
+  const [page, setPage] = useState<'today' | 'settings'>('settings');
   const controller = useTodayWeather(enabled, 'America/Los_Angeles', client);
   return (
     <>
-      <TodayWeatherPanel controller={controller} localDate="2026-10-31" time={time} />
-      <button type="button" onClick={() => setTime('18:00')}>Evening</button>
-      <button type="button" onClick={() => setTime(undefined)}>Everything today</button>
+      <button type="button" onClick={() => setPage('settings')}>Settings</button>
+      <button type="button" onClick={() => setPage('today')}>Today</button>
+      {page === 'settings' ? (
+        <TodayWeatherSettings controller={controller} timeZone="America/Los_Angeles" />
+      ) : (
+        <>
+          {controller.city && controller.weather.status === 'ready' && time !== undefined && (
+            <TodayWeather
+              report={controller.weather.report}
+              localDate="2026-10-31"
+              time={time}
+              containerClassName="today-plan__weather"
+            />
+          )}
+          <button type="button" onClick={() => setTime(null)}>Now</button>
+          <button type="button" onClick={() => setTime('18:00')}>Evening</button>
+          <button type="button" onClick={() => setTime(undefined)}>Everything today</button>
+        </>
+      )}
     </>
   );
 }
 
 describe('Today city weather flow', () => {
-  it('searches only on submit, distinguishes city results, then updates Now and selected-period weather', async () => {
+  it('keeps city setup in Settings and shows period-specific weather in Today only', async () => {
     const user = userEvent.setup();
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(input.toString());
@@ -70,7 +88,11 @@ describe('Today city weather flow', () => {
     const client = new WeatherClient(fetcher);
     const storageWrite = vi.spyOn(Storage.prototype, 'setItem');
     render(<WeatherHarness client={client} />);
-    expect(screen.getByRole('status').textContent).toContain('choose a city');
+    await user.click(screen.getByRole('button', { name: 'Today' }));
+    expect(screen.queryByRole('img')).toBeNull();
+    expect(document.querySelector('.today-plan__weather')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.getByText(/City choice is session-only/)).toBeTruthy();
     expect(fetcher).not.toHaveBeenCalled();
     expect(storageWrite).not.toHaveBeenCalled();
 
@@ -89,6 +111,8 @@ describe('Today city weather flow', () => {
     await user.click(options[0]!);
     expect(screen.getByText('Springfield, Oregon, United States')).toBeTruthy();
     expect(screen.queryByRole('group', { name: 'Matching locations' })).toBeNull();
+    expect(await screen.findByText(/Forecast updated/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Today' }));
     expect(await screen.findByRole('img', {
       name: 'Current conditions: Partly cloudy, 65 degrees'
     })).toBeTruthy();
@@ -97,9 +121,17 @@ describe('Today city weather flow', () => {
     await user.click(screen.getByRole('button', { name: 'Evening' }));
     expect(await screen.findByRole('img', { name: 'Forecast: Clear night, 52 degrees' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Everything today' }));
-    expect(screen.getByRole('status').textContent).toBe('Weather is not shown for Everything today.');
     expect(screen.queryByRole('img')).toBeNull();
+    expect(document.querySelector('.today-plan__weather')).toBeNull();
     expect(fetcher).toHaveBeenCalledTimes(2);
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.getByText('Springfield, Oregon, United States')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(screen.getByText('Choose city')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Today' }));
+    expect(screen.queryByRole('img')).toBeNull();
+    expect(document.querySelector('.today-plan__weather')).toBeNull();
   });
 
   it('keeps the selected city on forecast failure and retries without another search', async () => {
@@ -118,7 +150,7 @@ describe('Today city weather flow', () => {
     expect(await screen.findByRole('button', { name: 'Retry' })).toBeTruthy();
     expect(screen.getByText('Springfield, Oregon, United States')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Retry' }));
-    expect(await screen.findByRole('img', { name: 'Current conditions: Partly cloudy, 65 degrees' })).toBeTruthy();
+    expect(await screen.findByText(/Forecast updated/)).toBeTruthy();
     expect(fetcher).toHaveBeenCalledTimes(3);
     expect(screen.getByText(/cleared when this preview reloads/)).toBeTruthy();
   });

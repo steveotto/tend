@@ -81,6 +81,8 @@ type PreviewDataControlsProps = {
   v26RecoveryError?: string | null;
   v27RecoveryCopy?: string | null;
   v27RecoveryError?: string | null;
+  v28RecoveryCopy?: string | null;
+  v28RecoveryError?: string | null;
 };
 
 function downloadText(filename: string, content: string, type: string): string | null {
@@ -161,7 +163,9 @@ export function PreviewDataControls({
   v26RecoveryCopy = null,
   v26RecoveryError = null,
   v27RecoveryCopy = null,
-  v27RecoveryError = null
+  v27RecoveryError = null,
+  v28RecoveryCopy = null,
+  v28RecoveryError = null
 }: PreviewDataControlsProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -561,6 +565,16 @@ export function PreviewDataControls({
             Download original v27 recovery backup
           </button>
         )}
+        {v28RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v28-recovery.json',
+              v28RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v28 recovery backup downloaded.')}>
+            Download original v28 recovery backup
+          </button>
+        )}
         <label className="btn mini ghost preview-data-controls__file-button">
           Import preview backup
           <input
@@ -624,6 +638,7 @@ export function PreviewDataControls({
       {v25RecoveryError && <p className="preview-data-controls__help" role="alert">The original v25 recovery copy could not be read: {v25RecoveryError}</p>}
       {v26RecoveryError && <p className="preview-data-controls__help" role="alert">The original v26 recovery copy could not be read: {v26RecoveryError}</p>}
       {v27RecoveryError && <p className="preview-data-controls__help" role="alert">The original v27 recovery copy could not be read: {v27RecoveryError}</p>}
+      {v28RecoveryError && <p className="preview-data-controls__help" role="alert">The original v28 recovery copy could not be read: {v28RecoveryError}</p>}
       {message && <p className="preview-data-controls__message" role="status">{message}</p>}
       {pendingAction && (
         <MoneyGoalDialog

@@ -38,6 +38,7 @@ import {
   loadV21RecoveryCopy,
   loadV25RecoveryCopy,
   loadV27RecoveryCopy,
+  loadV28RecoveryCopy,
   PREVIEW_V19_RECOVERY_KEY,
   PREVIEW_STORAGE_KEY,
   PREVIEW_V1_RECOVERY_KEY,
@@ -60,6 +61,7 @@ import {
   PREVIEW_V21_RECOVERY_KEY,
   PREVIEW_V25_RECOVERY_KEY,
   PREVIEW_V27_RECOVERY_KEY,
+  PREVIEW_V28_RECOVERY_KEY,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -199,6 +201,7 @@ function versionSixRaw(data: PreviewData): string {
     cardio: _cardio,
     friendships: _friendships,
     peopleGroups: _peopleGroups,
+    personDetails: _personDetails,
     ...legacyData
   } = envelope.data;
   return JSON.stringify({
@@ -243,6 +246,7 @@ function versionEightRaw(data: PreviewData): string {
     cardio: _cardio,
     friendships: _friendships,
     peopleGroups: _peopleGroups,
+    personDetails: _personDetails,
     ...legacyData
   } = envelope.data;
   return JSON.stringify({
@@ -284,6 +288,7 @@ function versionNineRaw(data: PreviewData): string {
     cardio: _cardio,
     friendships: _friendships,
     peopleGroups: _peopleGroups,
+    personDetails: _personDetails,
     ...legacyData
   } = envelope.data;
   return JSON.stringify({ ...envelope, schemaVersion: 9, data: legacyData });
@@ -297,6 +302,7 @@ function versionTenRaw(data: PreviewData): string {
     cardio: _cardio,
     friendships: _friendships,
     peopleGroups: _peopleGroups,
+    personDetails: _personDetails,
     ...legacyData
   } = envelope.data;
   return JSON.stringify({
@@ -358,6 +364,29 @@ function setDownloadMocks() {
 }
 
 describe('synthetic preview storage adapter and envelope', () => {
+  it('migrates schema v28 without inventing Person details and preserves exact source recovery', () => {
+    const data = createSamplePreviewData();
+    const priorEnvelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+      format: string;
+      schemaVersion: number;
+      data: Record<string, unknown>;
+    };
+    priorEnvelope.schemaVersion = 28;
+    delete priorEnvelope.data.personDetails;
+    const raw = JSON.stringify(priorEnvelope);
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-10-31');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.personDetails).toEqual([]);
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+    expect(writePreview(storage, loaded.data, loaded.raw, { currentDate: '2026-10-31' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V28_RECOVERY_KEY)).toBe(raw);
+    expect(loadV28RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+  });
+
   it('accepts subsequent writes when a current-schema source contains an active Strength session draft', () => {
     const data = createSamplePreviewData();
     const workout: StrengthSavedWorkout = {
@@ -467,6 +496,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     };
     legacyEnvelope.schemaVersion = 19;
     delete legacyEnvelope.data.peopleGroups;
+    delete legacyEnvelope.data.personDetails;
     legacyEnvelope.data.friendships = {
       ...data.friendships,
       friendIds: ['sample-person-morgan']
@@ -511,6 +541,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       data: Record<string, unknown>;
     };
     legacyEnvelope.schemaVersion = 20;
+    delete legacyEnvelope.data.personDetails;
     const legacyStrength = legacyEnvelope.data.strength as { settings: Record<string, unknown> };
     delete legacyStrength.settings.weightUnit;
     const raw = ` \n${JSON.stringify(legacyEnvelope)}\n`;
@@ -641,7 +672,8 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('preserves exact schema v21 bytes before writing the resumable timer-ready schema v25 draft shape', () => {
     const data = createSamplePreviewData();
     const current = createPreviewEnvelope(data);
-    const v21Raw = ` \n${JSON.stringify({ ...current, schemaVersion: 21 })}\n`;
+    const { personDetails: _personDetails, ...v21Data } = current.data;
+    const v21Raw = ` \n${JSON.stringify({ ...current, schemaVersion: 21, data: v21Data })}\n`;
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: v21Raw });
     const loaded = loadPreview(storage, '2026-10-21');
     expect(loaded.kind).toBe('loaded');
@@ -865,9 +897,11 @@ describe('synthetic preview storage adapter and envelope', () => {
       data: {
         cardio: Record<string, unknown>;
         strength: Record<string, unknown>;
+        personDetails?: unknown;
       };
     };
     legacy.schemaVersion = 27;
+    delete legacy.data.personDetails;
     delete legacy.data.cardio.trackingStartDate;
     delete legacy.data.cardio.targetHistory;
     delete legacy.data.strength.trackingStartDate;
@@ -917,7 +951,8 @@ describe('synthetic preview storage adapter and envelope', () => {
       weight: createWeightData(),
       cardio: createCardioData(),
       friendships: createFriendshipData(),
-      peopleGroups: createPersonPickerGroups()
+      peopleGroups: createPersonPickerGroups(),
+      personDetails: []
     };
     const raw = JSON.stringify(createPreviewEnvelope(empty));
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
@@ -971,7 +1006,8 @@ describe('synthetic preview storage adapter and envelope', () => {
       weight: createWeightData(),
       cardio: createCardioData(),
       friendships: createFriendshipData(),
-      peopleGroups: createPersonPickerGroups()
+      peopleGroups: createPersonPickerGroups(),
+      personDetails: []
     });
   });
 
@@ -1519,7 +1555,14 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('hydrates v16 Weight with an empty default and saves the exact source bytes for recovery', () => {
       const data = createSamplePreviewData();
       const current = createPreviewEnvelope(data);
-      const { weight: _weight, cardio: _cardio, friendships: _friendships, peopleGroups: _peopleGroups, ...v16Data } = current.data;
+      const {
+        weight: _weight,
+        cardio: _cardio,
+        friendships: _friendships,
+        peopleGroups: _peopleGroups,
+        personDetails: _personDetails,
+        ...v16Data
+      } = current.data;
       const source = JSON.stringify({ ...current, schemaVersion: 16, data: v16Data });
       const originalRaw = ` \n${source}\n`;
       const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
@@ -1543,7 +1586,13 @@ describe('synthetic preview storage adapter and envelope', () => {
       weighIns: [{ id: 'existing-v17-weigh-in', date: '2026-10-20', weightKg: 78 }]
     };
     const current = createPreviewEnvelope(data);
-    const { cardio: _cardio, friendships: _friendships, peopleGroups: _peopleGroups, ...v17Data } = current.data;
+    const {
+      cardio: _cardio,
+      friendships: _friendships,
+      peopleGroups: _peopleGroups,
+      personDetails: _personDetails,
+      ...v17Data
+    } = current.data;
     const source = JSON.stringify({ ...current, schemaVersion: 17, data: v17Data });
     const originalRaw = ` \n${source}\n`;
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
@@ -1563,7 +1612,12 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('hydrates v18 with empty Friendships and People defaults and preserves exact source bytes before schema v21 writes', () => {
     const data = createSamplePreviewData();
     const current = createPreviewEnvelope(data);
-    const { friendships: _friendships, peopleGroups: _peopleGroups, ...v18Data } = current.data;
+    const {
+      friendships: _friendships,
+      peopleGroups: _peopleGroups,
+      personDetails: _personDetails,
+      ...v18Data
+    } = current.data;
     const originalRaw = ` \n${JSON.stringify({ ...current, schemaVersion: 18, data: v18Data })}\n`;
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
 
@@ -1587,6 +1641,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       cardio: _cardio,
       friendships: _friendships,
       peopleGroups: _peopleGroups,
+      personDetails: _personDetails,
       ...v14Data
     } = envelope.data;
     const originalRaw = JSON.stringify({ ...envelope, schemaVersion: 14, data: v14Data });
@@ -1614,6 +1669,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       cardio: _cardio,
       friendships: _friendships,
       peopleGroups: _peopleGroups,
+      personDetails: _personDetails,
       ...v12Data
     } = current.data;
     const source = JSON.stringify({
@@ -1754,6 +1810,7 @@ describe('synthetic preview storage adapter and envelope', () => {
         cardio: _cardio,
         friendships: _friendships,
         peopleGroups: _peopleGroups,
+        personDetails: _personDetails,
         ...versionElevenData
       } = versionTwelve.data;
       const originalRaw = ` \n${JSON.stringify({

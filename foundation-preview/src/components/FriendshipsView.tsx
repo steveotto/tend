@@ -36,6 +36,8 @@ import {
   FriendshipCadenceControl
 } from './FriendshipConnectionControls.tsx';
 import { CategoryHeader } from './CategoryHeader.tsx';
+import { birthdaySummary, personDetailsForId } from '../domain/person-details.ts';
+import type { PersonDetails } from '../domain/person-details.ts';
 
 type FriendshipTab = 'today' | 'friends' | 'rhythms';
 
@@ -54,6 +56,7 @@ const cadenceLabels: Record<ConnectionCadence, string> = {
 type FriendshipsViewProps = {
   data: FriendshipData;
   peopleGroups?: readonly PersonPickerGroup[];
+  personDetails?: readonly PersonDetails[];
   today: string;
   rhythms: readonly RhythmPreview[];
   archivedRhythms: readonly RhythmPreview[];
@@ -77,6 +80,7 @@ type FriendshipsViewProps = {
 export function FriendshipsView({
   data,
   peopleGroups = syntheticPersonPickerGroups,
+  personDetails = [],
   today,
   rhythms,
   archivedRhythms,
@@ -277,20 +281,24 @@ export function FriendshipsView({
           </div>
         ) : (
           <div className="friendships-friend-list">
-            {statuses.map(status => (
-              <FriendRow
-                key={status.personId}
-                status={status}
-                today={today}
-                connections={connectionsForPerson(data, status.personId)}
-                classifications={peopleGroups.filter(group => group.memberIds.includes(status.personId))}
-                data={data}
-                onChange={onChange}
-                onPersonSelect={onPersonSelect}
-                onHistory={event => openHistory(status.personId, event)}
-                onQuickLog={(type, event) => openNewConnection(event, status.personId, type)}
-              />
-            ))}
+            {statuses.map(status => {
+              const details = personDetailsForId(personDetails, status.personId);
+              return (
+                <FriendRow
+                  key={status.personId}
+                  status={status}
+                  today={today}
+                  connections={connectionsForPerson(data, status.personId)}
+                  classifications={peopleGroups.filter(group => group.memberIds.includes(status.personId))}
+                  {...(details ? { details } : {})}
+                  data={data}
+                  onChange={onChange}
+                  onPersonSelect={onPersonSelect}
+                  onHistory={event => openHistory(status.personId, event)}
+                  onQuickLog={(type, event) => openNewConnection(event, status.personId, type)}
+                />
+              );
+            })}
           </div>
         )}
       </section>
@@ -415,6 +423,7 @@ function FriendRow({
   today,
   connections,
   classifications,
+  details,
   data,
   onChange,
   onPersonSelect,
@@ -425,6 +434,7 @@ function FriendRow({
   today: string;
   connections: FriendshipConnection[];
   classifications: readonly Pick<PersonPickerGroup, 'id' | 'label'>[];
+  details?: PersonDetails;
   data: FriendshipData;
   onChange: (data: FriendshipData) => void;
   onPersonSelect: (id: PersonId) => void;
@@ -433,10 +443,13 @@ function FriendRow({
 }) {
   const person = personById(status.personId);
   const last = connections[0] ?? null;
+  const birthday = details?.birthday ? birthdaySummary(details.birthday, today) : null;
   return (
     <PeopleCard
       person={person}
       classifications={classifications}
+      {...(details?.relationshipLabel ? { relationshipLabel: details.relationshipLabel } : {})}
+      {...(birthday ? { birthdayLabel: birthday.label } : {})}
       {...(last ? { connectionRecency: `Last connected ${formatFriendDate(last.date, today)}` } : {})}
       onSelect={onPersonSelect}
       className="friendships-friend-row"

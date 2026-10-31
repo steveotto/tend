@@ -26,6 +26,7 @@ export type TodayWeatherController = {
   search: CitySearchState;
   searchCities: (query: string) => void;
   selectCity: (city: WeatherCity) => void;
+  clearCity: () => void;
   retry: () => void;
 };
 
@@ -92,6 +93,18 @@ export function useTodayWeather(
     setCity(selected);
     setWeather({ status: 'loading', report: null, fetchedAt: null, message: null });
   }, []);
+
+  const clearCity = useCallback(() => {
+    requestSequence.current += 1;
+    searchSequence.current += 1;
+    searchController.current?.abort();
+    searchController.current = null;
+    if (city) service.cancelForecast(city, timeZone);
+    forceRefresh.current = false;
+    setCity(null);
+    setWeather({ status: 'idle', report: null, fetchedAt: null, message: null });
+    setSearch({ status: 'idle', results: [], message: null });
+  }, [city, service, timeZone]);
 
   const retry = useCallback(() => {
     if (!city) return;
@@ -166,5 +179,5 @@ export function useTodayWeather(
     };
   }, [city, enabled, service, timeZone, weather.fetchedAt, weather.status]);
 
-  return { city, weather, search, searchCities, selectCity, retry };
+  return { city, weather, search, searchCities, selectCity, clearCity, retry };
 }

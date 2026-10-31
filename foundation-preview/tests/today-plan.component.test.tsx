@@ -15,6 +15,7 @@ const unavailableWeather: TodayWeatherController = {
   search: { status: 'idle', results: [], message: null },
   searchCities: vi.fn(),
   selectCity: vi.fn(),
+  clearCity: vi.fn(),
   retry: vi.fn()
 };
 
@@ -109,7 +110,8 @@ describe('Today time-frame interaction', () => {
     expect(within(plan).getByText('Now', { selector: 'summary span' })).toBeTruthy();
     expect(within(plan).getByText(initialTendedCount!)).toBeTruthy();
     expect(within(plan).getByRole('article', { name: 'Pray together' })).toBeTruthy();
-    expect(within(plan).getByRole('status').textContent).toContain('Weather is unavailable');
+    expect(within(plan).queryByRole('status')).toBeNull();
+    expect(plan.querySelector('.today-plan__weather')).toBeNull();
 
     await user.unhover(evening);
     expect(evening.getAttribute('aria-pressed')).toBe('false');
