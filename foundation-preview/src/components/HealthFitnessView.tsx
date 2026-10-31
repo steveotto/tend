@@ -385,7 +385,7 @@ export function HealthFitnessView({
               ))}
             </div>
           </section>
-          <section className="health-fitness-progress__detail" aria-label="Strength progress" hidden={progressSelected !== 'strength'}>
+          <section className="health-fitness-progress__detail tend-back-stack" aria-label="Strength progress" hidden={progressSelected !== 'strength'}>
             {renderProgressOverviewLink()}
             <StrengthView
               {...strength}
@@ -399,11 +399,11 @@ export function HealthFitnessView({
               onRhythmModeRequestClosed={restoreLogContext}
             />
           </section>
-          <section className="health-fitness-progress__detail" aria-label="Cardio progress" hidden={progressSelected !== 'cardio'}>
+          <section className="health-fitness-progress__detail tend-back-stack" aria-label="Cardio progress" hidden={progressSelected !== 'cardio'}>
             {renderProgressOverviewLink()}
             <CardioView {...cardio} onLogRequestClosed={restoreLogContext} />
           </section>
-          <section className="health-fitness-progress__detail" aria-label="Weight progress" hidden={progressSelected !== 'weight'}>
+          <section className="health-fitness-progress__detail tend-back-stack" aria-label="Weight progress" hidden={progressSelected !== 'weight'}>
             {renderProgressOverviewLink()}
             <WeightView {...weight} onLogRequestClosed={restoreLogContext} />
           </section>

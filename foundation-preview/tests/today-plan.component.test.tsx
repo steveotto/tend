@@ -83,4 +83,41 @@ describe('Today time-frame interaction', () => {
     expect(within(plan).getByText('No preferred time')).toBeTruthy();
     expect(within(plan).getByRole('status').textContent).toBe('No eligible Anytime rhythms.');
   });
+
+  it('keeps focus-frame hover and keyboard focus separate from activation', async () => {
+    const user = userEvent.setup();
+    renderToday();
+    const plan = screen.getByRole('region', { name: "Today's plan" });
+    const trigger = plan.querySelector('.today-plan__focus-trigger') as HTMLElement;
+    await user.click(trigger);
+
+    const evening = within(plan).getByRole('button', { name: /Evening.*6:00pm – 9:30pm.*1 item/ });
+    const initialTendedCount = within(plan).getByText('1 of 1 tended').textContent;
+    await user.hover(evening);
+    expect(evening.getAttribute('aria-pressed')).toBe('false');
+    expect(within(plan).getByText('Now', { selector: 'summary span' })).toBeTruthy();
+    expect(within(plan).getByText(initialTendedCount!)).toBeTruthy();
+    expect(within(plan).getByRole('article', { name: 'Pray together' })).toBeTruthy();
+    expect(within(plan).getByRole('status').textContent).toContain('Weather is unavailable');
+
+    await user.unhover(evening);
+    expect(evening.getAttribute('aria-pressed')).toBe('false');
+
+    await user.tab();
+    const nowOption = within(plan).getByRole('button', { name: /^Now/ });
+    expect(document.activeElement).toBe(nowOption);
+    await user.tab();
+    const everythingOption = within(plan).getByRole('button', { name: /Everything today/ });
+    expect(document.activeElement).toBe(everythingOption);
+    expect(everythingOption.getAttribute('aria-pressed')).toBe('false');
+    expect(within(plan).getByText(initialTendedCount!)).toBeTruthy();
+
+    await user.keyboard('{Enter}');
+    expect(everythingOption.getAttribute('aria-pressed')).toBe('true');
+    expect(within(plan).getByText('Everything today', { selector: 'summary span' })).toBeTruthy();
+    expect(within(plan).getByText('1 of 3 tended')).toBeTruthy();
+    expect(within(plan).getByRole('article', { name: 'Daily connection' })).toBeTruthy();
+    expect(within(plan).queryByText(/Weather is unavailable/)).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
 });

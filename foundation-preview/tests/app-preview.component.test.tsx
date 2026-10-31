@@ -4368,6 +4368,18 @@ describe('Tend Today preview', () => {
     expect(screen.getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Linked Rhythms · 2', level: 3 })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Linked Rhythms · 2' })).toBeTruthy();
+    const foundationDetail = document.querySelector('.marriage-foundation-detail') as HTMLElement;
+    const detailParts = Array.from(foundationDetail.children);
+    expect(detailParts.map(element => element.className)).toEqual([
+      'tend-back-button',
+      'foundation-card foundation-card--compact',
+      'health-score-breakdown marriage-foundation-detail__scores',
+      'marriage-foundation-support'
+    ]);
+    expect(detailParts[1]?.querySelector('.foundation-card__description')?.classList.contains(
+      'foundation-card__description--reserved'
+    )).toBe(false);
+    expect(detailParts[1]?.querySelector('.health-score-breakdown')).toBeNull();
     expect(screen.getAllByRole('heading', { name: 'Linked Rhythms · 2' })).toHaveLength(1);
     expect(screen.queryByRole('region', { name: /Primary|Secondary associations/ })).toBeNull();
     const dailyConnection = screen.getByRole('article', { name: 'Daily Connection' });

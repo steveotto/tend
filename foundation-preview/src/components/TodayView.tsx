@@ -107,6 +107,13 @@ export function TodayView({
     : focus === 'everything-today'
       ? undefined
       : DEFAULT_TODAY_BLOCKS.find(block => block.id === focus)?.start;
+  const scheduledItemCount = (timeFrame: TodayFocusId) =>
+    selectTodayPlanGroups(visibleRhythms, 'scheduled', timeFrame, evaluationInstant)
+      .reduce((count, group) => count + group.rhythms.length, 0);
+  const itemCountLabel = (timeFrame: TodayFocusId) => {
+    const count = scheduledItemCount(timeFrame);
+    return `${count} ${count === 1 ? 'item' : 'items'}`;
+  };
 
   function handlePlanTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let nextIndex: number;
@@ -190,8 +197,8 @@ export function TodayView({
                 <div className="today-plan__focus-options-section">
                   <span>View</span>
                   {([
-                    ['now', 'Now', `${todayFocusLabel('now', evaluationInstant)} · ${todayFocusContext('now', 'scheduled', evaluationInstant)}`],
-                    ['everything-today', 'Everything today', 'Across every time block']
+                    ['now', 'Now', `${todayFocusContext('now', 'scheduled', evaluationInstant)} · ${itemCountLabel('now')}`],
+                    ['everything-today', 'Everything today', `Across every time block · ${itemCountLabel('everything-today')}`]
                   ] as const).map(([id, label, range]) => (
                     <button
                       key={id}
@@ -220,7 +227,8 @@ export function TodayView({
                         focusTriggerRef.current?.focus();
                       }}
                     >
-                      <span>{block.name}</span><small>{todayFocusContext(block.id, 'scheduled', evaluationInstant)}</small>
+                      <span>{block.name}</span>
+                      <small>{todayFocusContext(block.id, 'scheduled', evaluationInstant)} · {itemCountLabel(block.id)}</small>
                     </button>
                   ))}
                 </div>

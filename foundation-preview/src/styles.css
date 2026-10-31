@@ -787,11 +787,22 @@ a:focus-visible {
   color: var(--ink);
   text-align: left;
   cursor: pointer;
+  transition: background-color 120ms ease-out;
 }
 
 .today-plan__focus-options button[aria-pressed="true"] {
   background: var(--mist);
   color: var(--forest);
+}
+
+.today-plan__focus-options button[aria-pressed="false"]:focus-visible {
+  background-color: var(--mist);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .today-plan__focus-options button[aria-pressed="false"]:hover {
+    background-color: var(--mist);
+  }
 }
 
 .today-plan__focus-options button > span {
@@ -4899,9 +4910,14 @@ a:focus-visible {
   line-height: 1;
 }
 
-.marriage-foundation-detail {
+.tend-back-stack {
   display: grid;
-  gap: 8px;
+  gap: calc(var(--tend-space-unit, 8px) * 2);
+  min-width: 0;
+}
+
+.marriage-foundation-detail {
+  min-width: 0;
 }
 
 .marriage-foundation-detail > .foundation-card--compact {
@@ -4910,10 +4926,6 @@ a:focus-visible {
 
 .marriage-foundation-detail .foundation-card__content {
   grid-column: 2;
-}
-
-.marriage-foundation-detail .marriage-foundation-support {
-  grid-column: 1 / -1;
 }
 
 .tend-back-button {
@@ -11424,7 +11436,7 @@ a:focus-visible {
 }
 
 .marriage-foundation-detail__scores {
-  margin: 14px 0;
+  margin: 0;
 }
 
 @media (max-width: 360px) {

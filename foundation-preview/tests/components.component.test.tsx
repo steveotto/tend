@@ -346,7 +346,6 @@ describe('shared preview components', () => {
           variant="compact"
           score={50}
           scoreEvidence="1 of 2 linked Rhythms scored"
-          reserveDescriptionSpace
         >
           <div className="foundation-detail-linked-rhythms">Linked Rhythms</div>
         </FoundationCard>
@@ -372,7 +371,7 @@ describe('shared preview components', () => {
     const detailCard = container.querySelector('.foundation-detail-linked-rhythms')?.parentElement;
     expect(detailCard?.querySelector('.foundation-card__description')?.classList.contains(
       'foundation-card__description--reserved'
-    )).toBe(true);
+    )).toBe(false);
     expect(detailCard?.querySelector('.foundation-card__coverage')?.textContent)
       .toBe('1 of 2 linked Rhythms scored');
     expect(detailCard?.querySelector('.foundation-progress')).toBeTruthy();

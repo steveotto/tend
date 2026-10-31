@@ -753,29 +753,28 @@ function FoundationList({
       </div>
       {selectedFoundation
         ? (
-          <section className="marriage-foundation-detail" aria-labelledby={`${categoryToken}-foundation-detail-title`}>
+          <section className="marriage-foundation-detail tend-back-stack" aria-labelledby={`${categoryToken}-foundation-detail-title`}>
             <BackButton onClick={onBack}>All {foundationTerm.plural}</BackButton>
             <FoundationCard
               foundation={selectedFoundation}
               variant="compact"
               icon={<MarriageIcon group="foundations" id={selectedFoundation.iconId ?? selectedFoundation.id} />}
               headingId={`${categoryToken}-foundation-detail-title`}
-              reserveDescriptionSpace
-            >
-              {selectedFoundationScore && (
-                <HealthScoreBreakdown
-                  title="Health"
-                  score={selectedFoundationScore.health}
-                  healthLabel={`${selectedFoundation.name} ${foundationTerm.singular} Health`}
-                  ariaLabel={`${selectedFoundation.name} ${foundationTerm.singular} Health scores`}
-                  consistency={{ score: selectedFoundationScore.consistency }}
-                  onTrack={{ score: selectedFoundationScore.onTrack }}
-                  consistencyCaption="How often you show up."
-                  onTrackCaption="How caught up you are."
-                  className="marriage-foundation-detail__scores"
-                />
-              )}
-              <div className="marriage-foundation-support">
+            />
+            {selectedFoundationScore && (
+              <HealthScoreBreakdown
+                title="Health"
+                score={selectedFoundationScore.health}
+                healthLabel={`${selectedFoundation.name} ${foundationTerm.singular} Health`}
+                ariaLabel={`${selectedFoundation.name} ${foundationTerm.singular} Health scores`}
+                consistency={{ score: selectedFoundationScore.consistency }}
+                onTrack={{ score: selectedFoundationScore.onTrack }}
+                consistencyCaption="How often you show up."
+                onTrackCaption="How caught up you are."
+                className="marriage-foundation-detail__scores"
+              />
+            )}
+            <div className="marriage-foundation-support">
                 {selectedScoreEvidence && (
                   <p className="marriage-foundation-support__score-note">{selectedScoreEvidence}</p>
                 )}
@@ -834,8 +833,7 @@ function FoundationList({
                     />
                   )
                   : <p>No Rhythms are linked to this ongoing {foundationTerm.singular} yet.</p>}
-              </div>
-            </FoundationCard>
+            </div>
           </section>
         )
         : (
