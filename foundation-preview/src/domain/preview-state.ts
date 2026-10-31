@@ -41,11 +41,21 @@ import {
   rhythmSeasonPaletteForOrdinal
 } from './rhythm-seasons.ts';
 import { legacySuggestionSourceForRhythmId } from './category-rhythms.ts';
-import { createStrengthData, validateStrengthData } from './strength.ts';
+import {
+  cloneStrengthSavedWorkout,
+  cloneStrengthGuidedSessionDraft,
+  cloneStrengthWorkoutLog,
+  createStrengthData,
+  migrateStrengthDataToV28,
+  migrateStrengthDataToV27,
+  migrateStrengthDataToV26,
+  migrateStrengthDataToV25,
+  validateStrengthData
+} from './strength.ts';
 import type { StrengthData } from './strength.ts';
 import { createWeightData, validateWeightDataShape } from './weight.ts';
 import type { WeightData } from './weight.ts';
-import { createCardioData, validateCardioDataShape } from './cardio.ts';
+import { createCardioData, migrateCardioDataToV28, validateCardioDataShape } from './cardio.ts';
 import type { CardioData } from './cardio.ts';
 import {
   createFriendshipData,
@@ -57,7 +67,7 @@ import {
 import type { FriendshipData } from './friendships.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 20;
+export const PREVIEW_SCHEMA_VERSION = 28;
 
 export type PreviewData = {
   goals: MoneyGoal[];
@@ -105,7 +115,7 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
 const goalKeys = [
@@ -134,6 +144,14 @@ const dataKeysV17 = [...dataKeysV16, 'weight'];
 const dataKeysV18 = [...dataKeysV17, 'cardio'];
 const dataKeysV19 = [...dataKeysV18, 'friendships'];
 const dataKeysV20 = [...dataKeysV19, 'peopleGroups'];
+const dataKeysV21 = [...dataKeysV20];
+const dataKeysV22 = [...dataKeysV21];
+const dataKeysV23 = [...dataKeysV22];
+const dataKeysV24 = [...dataKeysV23];
+const dataKeysV25 = [...dataKeysV24];
+const dataKeysV26 = [...dataKeysV25];
+const dataKeysV27 = [...dataKeysV26];
+const dataKeysV28 = [...dataKeysV27];
 const envelopeKeys = ['format', 'schemaVersion', 'data'];
 const supportedRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 const builtInRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
@@ -249,6 +267,10 @@ function validateGoal(value: unknown, goalIds: Set<string>, checkInIds: Set<stri
 }
 
 export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
+  const currentStrength = migrateStrengthDataToV28(migrateStrengthDataToV27(
+    migrateStrengthDataToV26(migrateStrengthDataToV25(data.strength))
+  ));
+  const currentCardio = migrateCardioDataToV28(data.cardio);
   return {
     format: PREVIEW_BACKUP_FORMAT,
     schemaVersion: PREVIEW_SCHEMA_VERSION,
@@ -325,16 +347,24 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
       rhythmHistoryIds: [...data.rhythmHistoryIds],
       strength: {
         settings: {
-          muscleIntervals: { ...data.strength.settings.muscleIntervals },
-          preferredRestDays: { ...data.strength.settings.preferredRestDays }
+          muscleIntervals: { ...currentStrength.settings.muscleIntervals },
+          preferredRestDays: { ...currentStrength.settings.preferredRestDays },
+          betweenSetRestSeconds: { ...currentStrength.settings.betweenSetRestSeconds },
+          weightUnit: currentStrength.settings.weightUnit ?? 'lb'
         },
-        savedWorkouts: data.strength.savedWorkouts.map(workout => ({
-          ...workout,
-          muscleIds: [...workout.muscleIds],
-          sharedWith: [...workout.sharedWith]
+        ...(currentStrength.trackingStartDate === undefined
+          ? {} : { trackingStartDate: currentStrength.trackingStartDate }),
+        scoringSettingsHistory: (currentStrength.scoringSettingsHistory ?? []).map(version => ({
+          effectiveDate: version.effectiveDate,
+          muscleIntervals: { ...version.muscleIntervals },
+          preferredRestDays: { ...version.preferredRestDays }
         })),
-        workouts: data.strength.workouts.map(workout => ({ ...workout, muscleIds: [...workout.muscleIds] })),
-        rhythmModes: data.strength.rhythmModes.map(mode => ({ ...mode }))
+        savedWorkouts: currentStrength.savedWorkouts.map(cloneStrengthSavedWorkout),
+        workouts: currentStrength.workouts.map(cloneStrengthWorkoutLog),
+        rhythmModes: currentStrength.rhythmModes.map(mode => ({ ...mode })),
+        ...(currentStrength.guidedSessionDraft === undefined
+          ? {}
+          : { guidedSessionDraft: cloneStrengthGuidedSessionDraft(currentStrength.guidedSessionDraft) })
       },
       weight: {
         ...data.weight,
@@ -342,9 +372,12 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
         weighIns: data.weight.weighIns.map(record => isRecord(record) ? { ...record } : record)
       },
       cardio: {
-        ...data.cardio,
-        goals: isRecord(data.cardio.goals) ? { ...data.cardio.goals } : data.cardio.goals,
-        runs: data.cardio.runs.map(record => isRecord(record) ? { ...record } : record)
+        ...currentCardio,
+        goals: isRecord(currentCardio.goals) ? { ...currentCardio.goals } : currentCardio.goals,
+        runs: currentCardio.runs.map(record => isRecord(record) ? { ...record } : record),
+        ...(currentCardio.trackingStartDate === undefined
+          ? {} : { trackingStartDate: currentCardio.trackingStartDate }),
+        targetHistory: (currentCardio.targetHistory ?? []).map(version => ({ ...version }))
       },
       friendships: {
         ...data.friendships,
@@ -391,6 +424,14 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
       && value.schemaVersion !== 14 && value.schemaVersion !== 15 && value.schemaVersion !== 16
       && value.schemaVersion !== 17 && value.schemaVersion !== 18
       && value.schemaVersion !== 19
+      && value.schemaVersion !== 20
+      && value.schemaVersion !== 21
+      && value.schemaVersion !== 22
+      && value.schemaVersion !== 23
+      && value.schemaVersion !== 24
+      && value.schemaVersion !== 25
+      && value.schemaVersion !== 26
+      && value.schemaVersion !== 27
       && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
@@ -414,14 +455,22 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const isV18 = value.schemaVersion === 18;
   const isV19 = value.schemaVersion === 19;
   const isV20 = value.schemaVersion === 20;
-  const hasCurrentFriendshipsData = isV19 || isV20;
+  const isV21 = value.schemaVersion === 21;
+  const isV22 = value.schemaVersion === 22;
+  const isV23 = value.schemaVersion === 23;
+  const isV24 = value.schemaVersion === 24;
+  const isV25 = value.schemaVersion === 25;
+  const isV26 = value.schemaVersion === 26;
+  const isV27 = value.schemaVersion === 27;
+  const isV28 = value.schemaVersion === 28;
+  const hasCurrentFriendshipsData = isV19 || isV20 || isV21 || isV22 || isV23 || isV24 || isV25 || isV26 || isV27 || isV28;
   const hasCardio = isV18 || hasCurrentFriendshipsData;
   const allowedDataKeys = isV1 ? dataKeysV1 : isV2 ? dataKeysV2
     : isV3 || isV4 ? dataKeysV3
-      : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
+      : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
         : isV11 || isV12 ? dataKeysV12 : isV10 ? dataKeysV10
       : isV8 || isV9 ? dataKeysV8 : isV7 ? dataKeysV7 : isV6 ? dataKeysV6 : dataKeysV5;
-  if (!isRecord(value.data) || (!hasCurrentFriendshipsData && !hasOnlyKeys(value.data, allowedDataKeys))
+  if (!isRecord(value.data) || (!isV19 && !isV20 && !hasOnlyKeys(value.data, allowedDataKeys))
     || !Array.isArray(value.data.goals) || !Array.isArray(value.data.completedRhythmIds)
     || ((isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || hasCurrentFriendshipsData)
       && (!Array.isArray(value.data.datedRhythmCompletions)
@@ -698,8 +747,31 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     };
   });
 
-  const strength = isV15 || isV16 || isV17 || isV18 || hasCurrentFriendshipsData ? value.data.strength : createStrengthData();
-  if (!validateStrengthData(strength)) {
+  const sourceStrength = isV15 || isV16 || isV17 || isV18 || hasCurrentFriendshipsData
+    ? value.data.strength
+    : createStrengthData();
+  const strengthWithUnit = !isV24 && !isV25 && !isV26 && !isV27 && !isV28 && isRecord(sourceStrength) && isRecord(sourceStrength.settings)
+    && sourceStrength.settings.weightUnit === undefined
+    ? {
+        ...sourceStrength,
+        settings: { ...sourceStrength.settings, weightUnit: 'lb' }
+      }
+    : sourceStrength;
+  if (!validateStrengthData(
+    strengthWithUnit,
+    isV22 || isV23 || isV24 || isV25 || isV26 || isV27 || isV28,
+    isV25 || isV26 || isV27 || isV28,
+    isV26 || isV27 || isV28,
+    isV28
+  )) {
+    return { valid: false, kind: 'invalid', message: 'Strength settings, workouts, or workout history are invalid.' };
+  }
+  const strength = isV28
+    ? strengthWithUnit
+    : isV27
+    ? strengthWithUnit
+    : migrateStrengthDataToV28(migrateStrengthDataToV27(migrateStrengthDataToV26(migrateStrengthDataToV25(strengthWithUnit))));
+  if (!strength || !validateStrengthData(strength, true, true, true)) {
     return { valid: false, kind: 'invalid', message: 'Strength settings, workouts, or workout history are invalid.' };
   }
   const linkedWorkoutCompletionIds = new Set<string>();
@@ -728,13 +800,14 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     return { valid: false, kind: 'invalid', message: 'Weight data must retain its settings and weigh-in records.' };
   }
   const cardio = hasCardio ? value.data.cardio : createCardioData();
-  if (!validateCardioDataShape(cardio)) {
+  if (!validateCardioDataShape(cardio, isV28)) {
     return { valid: false, kind: 'invalid', message: 'Cardio data must retain its goals and run records.' };
   }
+  const currentCardio = migrateCardioDataToV28(cardio);
   const legacyFriendships = isV19 && validateLegacyFriendshipDataV19(value.data.friendships)
     ? value.data.friendships
     : null;
-  const friendships = isV20
+  const friendships = isV20 || isV21 || isV22 || isV23 || isV24 || isV25 || isV26 || isV27 || isV28
     ? value.data.friendships
     : legacyFriendships
       ? migrateLegacyFriendshipDataV19(legacyFriendships)
@@ -742,7 +815,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   if ((isV19 && !legacyFriendships) || !validateFriendshipData(friendships)) {
     return { valid: false, kind: 'invalid', message: 'Friendships contain invalid people, cadence settings, or connection records.' };
   }
-  const peopleGroups = isV20
+  const peopleGroups = isV20 || isV21 || isV22 || isV23 || isV24 || isV25 || isV26 || isV27 || isV28
     ? value.data.peopleGroups
     : migrateLegacyFriendIdsIntoPeopleGroups(
         createPersonPickerGroups(),
@@ -765,7 +838,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     rhythmHistoryIds: [...rhythmHistoryIds],
     strength,
     weight,
-    cardio,
+    cardio: currentCardio,
     friendships,
     peopleGroups
   };

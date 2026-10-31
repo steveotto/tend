@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
-import { HealthWeightPanels } from './HealthWeightPanels.tsx';
+import { HealthScoreMeasures } from './HealthScoreBreakdown.tsx';
 import type { FoundationTerminology } from '../domain/preview-data.ts';
 
 type CategoryHealthSummaryProps = {
@@ -56,13 +56,16 @@ export function CategoryHealthSummary({
           label={`${categoryLabel} Health score`}
           score={score.health}
           className="category-health-score"
+          decorative={expanded}
         />
       </div>
 
-      <div className="health-summary-breakdown" role="group" aria-label={`${categoryLabel} summary measures`}>
-        <SummaryMeasure label="Consistency" description="How regularly you show up" score={score.consistency} />
-        <SummaryMeasure label="On Track" description="How caught up you are" score={score.onTrack} />
-      </div>
+      {!expanded && (
+        <div className="health-summary-breakdown" role="group" aria-label={`${categoryLabel} summary measures`}>
+          <SummaryMeasure label="Consistency" description="How regularly you show up" score={score.consistency} />
+          <SummaryMeasure label="On Track" description="How caught up you are" score={score.onTrack} />
+        </div>
+      )}
 
       <div
         id={detailsId}
@@ -71,13 +74,23 @@ export function CategoryHealthSummary({
         aria-label={`${categoryLabel} Health explanation`}
         hidden={!expanded}
       >
+        <HealthScoreMeasures
+          healthScore={score.health}
+          healthLabel={`${categoryLabel} Health`}
+          consistency={{ score: score.consistency }}
+          onTrack={{ score: score.onTrack }}
+          consistencyCaption="How often you show up."
+          onTrackCaption="How caught up you are."
+        />
         {explanationIntro && (
           <p className="category-health-summary__interpretation">{explanationIntro}</p>
         )}
         <p className="category-health-summary__explanation">
           Each scored {itemTerm.singular} counts equally.
         </p>
-        <HealthWeightPanels consistencyDescription="" onTrackDescription="" />
+        <p className="category-health-summary__explanation">
+          Health combines 75% Consistency and 25% On Track.
+        </p>
         <p className="category-health-summary__explanation">
           {itemTerm.plural} need both scores to count.
         </p>
@@ -114,15 +127,25 @@ function SummaryMeasure({
 function CategoryHealthValue({
   label,
   score,
-  className
+  className,
+  decorative = false
 }: {
   label: string;
   score: number | null;
   className: string;
+  decorative?: boolean;
 }) {
   const usableScore = score !== null && Number.isFinite(score)
     ? Math.max(0, Math.min(100, score))
     : null;
+
+  if (decorative) {
+    return (
+      <span className={`${className}${usableScore === null ? ' neutral' : ''}`} aria-hidden="true">
+        {usableScore === null ? '—' : Math.round(usableScore)}
+      </span>
+    );
+  }
 
   return (
     <span

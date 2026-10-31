@@ -26,6 +26,7 @@ import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { ArchivedRhythmsDialog } from './ArchivedRhythmsDialog.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 import { PersonBadge } from './PersonBadge.tsx';
+import { PeopleCard } from './PeopleCard.tsx';
 import { AreaIcon } from './AreaIcon.tsx';
 import type { Destination } from './AppNavigation.tsx';
 import {
@@ -34,6 +35,7 @@ import {
   ConnectionHistoryDialog,
   FriendshipCadenceControl
 } from './FriendshipConnectionControls.tsx';
+import { CategoryHeader } from './CategoryHeader.tsx';
 
 type FriendshipTab = 'today' | 'friends' | 'rhythms';
 
@@ -202,11 +204,12 @@ export function FriendshipsView({
     ? connectionEditor.record?.participantIds ?? (connectionEditor.participantId ? [connectionEditor.participantId] : [])
     : [];
   return (
-    <main className="category-page friendships-page" aria-labelledby="friendships-page-title">
-      <header className="category-page-heading">
-        <h2 id="friendships-page-title" tabIndex={-1}>Friendships</h2>
-        <span className="menu-area-icon"><AreaIcon id="friendships" variant="today-summary" /></span>
-      </header>
+    <main className="category-page category-page--with-header friendships-page" aria-labelledby="friendships-page-title">
+      <CategoryHeader
+        title="Friendships"
+        titleId="friendships-page-title"
+        trailing={<span className="menu-area-icon"><AreaIcon id="friendships" variant="today-summary" /></span>}
+      />
       <div className="faith-view-nav marriage-view-nav" role="tablist" aria-label="Friendships">
         {friendshipTabs.map((item, index) => (
           <button
@@ -280,6 +283,7 @@ export function FriendshipsView({
                 status={status}
                 today={today}
                 connections={connectionsForPerson(data, status.personId)}
+                classifications={peopleGroups.filter(group => group.memberIds.includes(status.personId))}
                 data={data}
                 onChange={onChange}
                 onPersonSelect={onPersonSelect}
@@ -410,6 +414,7 @@ function FriendRow({
   status,
   today,
   connections,
+  classifications,
   data,
   onChange,
   onPersonSelect,
@@ -419,6 +424,7 @@ function FriendRow({
   status: ReturnType<typeof friendConnectionStatus>;
   today: string;
   connections: FriendshipConnection[];
+  classifications: readonly Pick<PersonPickerGroup, 'id' | 'label'>[];
   data: FriendshipData;
   onChange: (data: FriendshipData) => void;
   onPersonSelect: (id: PersonId) => void;
@@ -428,13 +434,15 @@ function FriendRow({
   const person = personById(status.personId);
   const last = connections[0] ?? null;
   return (
-    <article className="friendships-friend-row">
-      <div className="friendships-friend-row__identity">
-        <PersonBadge person={person} displayNameMode="full" onSelect={onPersonSelect} />
-        <p className="friendships-friend-row__last">
-          {last ? `Last connected ${formatFriendDate(last.date, today)}` : 'No connections yet'}
-        </p>
-      </div>
+    <PeopleCard
+      person={person}
+      classifications={classifications}
+      {...(last ? { connectionRecency: `Last connected ${formatFriendDate(last.date, today)}` } : {})}
+      onSelect={onPersonSelect}
+      className="friendships-friend-row"
+      identityClassName="friendships-friend-row__identity"
+      connectionClassName="friendships-friend-row__last"
+    >
       <FriendshipCadenceControl
         personId={status.personId}
         cadence={status.cadence}
@@ -448,8 +456,8 @@ function FriendRow({
       />
       <button type="button" className="friendships-history-button" onClick={onHistory}>
         View connections{connections.length > 0 ? ` (${connections.length})` : ''}
-        </button>
-    </article>
+      </button>
+    </PeopleCard>
   );
 }
 

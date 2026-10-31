@@ -727,6 +727,39 @@ describe('shared structured Rhythm editor', () => {
     expect(within(editor).getByRole('combobox', { name: 'Frequency: Select Days' })).toBeTruthy();
   });
 
+  it('places Select Days weekdays across the full form below both schedule columns without losing selection', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn((_draft: RhythmDraft) => ({}));
+    const editor = renderEditor(onSave);
+
+    await choose(user, 'Frequency', 'Select Days');
+    const frequency = within(editor).getByRole('combobox', { name: 'Frequency: Select Days' });
+    const weekdays = within(editor).getByRole('group', { name: 'Which days?' });
+    const timeLabel = within(editor).getByText('Time of day');
+    const endDateToggle = within(editor).getByRole('checkbox', { name: 'Set an end date' });
+    const topRow = weekdays.parentElement;
+
+    expect(topRow?.classList.contains('rhythm-schedule-fields__top-row')).toBe(true);
+    expect(weekdays.closest('.rhythm-schedule-fields__frequency')).toBeNull();
+    expect(topRow?.contains(weekdays)).toBe(true);
+    expect(frequency.compareDocumentPosition(weekdays) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(timeLabel.compareDocumentPosition(weekdays) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(timeLabel.compareDocumentPosition(endDateToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(weekdays.compareDocumentPosition(endDateToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(editor).getAllByRole('group', { name: 'Which days?' })).toHaveLength(1);
+    expect(within(weekdays).getAllByRole('checkbox')).toHaveLength(7);
+    expect([...weekdays.querySelectorAll('.rhythm-schedule-fields__weekday-list > label > span')]
+      .map(day => day.textContent))
+      .toEqual(['Su', 'M', 'Tu', 'W', 'Th', 'F', 'Sa']);
+
+    await user.click(within(weekdays).getByRole('checkbox', { name: 'Tuesday' }));
+    await user.click(within(weekdays).getByRole('checkbox', { name: 'Saturday' }));
+    expect((within(weekdays).getByRole('checkbox', { name: 'Tuesday' }) as HTMLInputElement).checked).toBe(true);
+    expect((within(weekdays).getByRole('checkbox', { name: 'Saturday' }) as HTMLInputElement).checked).toBe(true);
+    await user.click(within(editor).getByRole('button', { name: 'Add Rhythm' }));
+    expect(onSave.mock.calls.at(-1)?.[0].schedule).toEqual({ frequency: 'weekly', weekdays: [2, 6] });
+  });
+
   it('retains an explicit one-day Select Days choice when editing and after reloading its saved schedule', async () => {
     const user = userEvent.setup();
     const schedule = {

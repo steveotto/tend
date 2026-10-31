@@ -71,6 +71,28 @@ export function formatWeight(weightKg: number, unit: WeightUnit): string {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(value);
 }
 
+export function formatWeightInput(weightKg: number | null, unit: WeightUnit): string {
+  if (weightKg === null) return '';
+  return new Intl.NumberFormat('en-US', {
+    useGrouping: false,
+    maximumFractionDigits: 2
+  }).format(weightValueInUnit(weightKg, unit));
+}
+
+export function parseWeightInput(value: string, unit: WeightUnit): number | null {
+  if (!value.trim()) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return unit === 'lb' ? poundsToKilograms(parsed) : parsed;
+}
+
+export function stepWeightInput(weightKg: number | null, unit: WeightUnit, direction: -1 | 1): number | null {
+  const current = weightKg === null ? null : weightValueInUnit(weightKg, unit);
+  if (current === null) return direction > 0 ? (unit === 'lb' ? poundsToKilograms(1) : 1) : null;
+  const next = Math.min(2000, Math.max(0.1, current + direction));
+  return unit === 'lb' ? poundsToKilograms(next) : next;
+}
+
 export function createWeightData(): WeightData {
   return {
     displayUnit: 'lb',

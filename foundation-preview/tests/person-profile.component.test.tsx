@@ -11,6 +11,7 @@ import {
   foundationCatalogue,
   setPersonGroupMembership
 } from '../src/domain/preview-data.ts';
+import type { PersonPickerGroup } from '../src/domain/preview-data.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
 import type { PersonId } from '../src/domain/preview-data.ts';
 import type { RhythmScoreResult } from '../src/domain/rhythm-scoring.ts';
@@ -67,7 +68,8 @@ function ProfileHarness({
   onTend = vi.fn(),
   onUndo = vi.fn(),
   onRestoreRhythm = vi.fn(),
-  onClose = vi.fn()
+  onClose = vi.fn(),
+  onPeopleGroupsChange = vi.fn()
 }: {
   rhythms?: readonly RhythmPreview[];
   archivedRhythms?: readonly RhythmPreview[];
@@ -80,6 +82,7 @@ function ProfileHarness({
   onUndo?: (id: string) => void;
   onRestoreRhythm?: (id: string) => void;
   onClose?: () => void;
+  onPeopleGroupsChange?: (groups: PersonPickerGroup[]) => void;
 }) {
   const [friendships, setFriendships] = useState<FriendshipData>(initialFriendships);
   const groups = setPersonGroupMembership(createPersonPickerGroups(), 'friends', 'sample-person-avery', true);
@@ -97,6 +100,7 @@ function ProfileHarness({
         completedRhythms={completed ? new Set([linkedRhythm.id]) : new Set()}
         undoableRhythms={completed ? new Set([linkedRhythm.id]) : new Set()}
         onFriendshipsChange={setFriendships}
+        onPeopleGroupsChange={onPeopleGroupsChange}
         onAddRhythm={onAddRhythm}
         onEditRhythm={onEditRhythm}
         onRhythmHistory={onRhythmHistory}
@@ -134,6 +138,7 @@ describe('shared person profile', () => {
 
     expect(screen.getByRole('dialog', { name: 'Avery Brooks' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Avery Brooks' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Today with Avery Brooks' })).toBeTruthy();
     expect(screen.getByText('Friends')).toBeTruthy();
     expect(screen.getByRole('article', { name: 'Avery and Morgan walk' })).toBeTruthy();
     expect(screen.queryByRole('article', { name: 'Jordan walk' })).toBeNull();
@@ -149,6 +154,17 @@ describe('shared person profile', () => {
     expect(tend).toHaveBeenCalledOnce();
     expect(editRhythm).toHaveBeenCalledOnce();
     expect(rhythmHistory).toHaveBeenCalledOnce();
+  });
+
+  it('uses the profile overflow menu to update the existing People-owned friend classification', async () => {
+    const user = userEvent.setup();
+    const onPeopleGroupsChange = vi.fn<(groups: PersonPickerGroup[]) => void>();
+    render(<ProfileHarness onPeopleGroupsChange={onPeopleGroupsChange} />);
+    await user.click(screen.getByLabelText('More actions for Avery Brooks'));
+    await user.click(screen.getByRole('button', { name: 'Remove friend' }));
+    expect(onPeopleGroupsChange).toHaveBeenCalledOnce();
+    expect(onPeopleGroupsChange.mock.calls[0]?.[0].find(group => group.id === 'friends')?.memberIds)
+      .not.toContain('sample-person-avery');
   });
 
   it('retains shared Undo behavior for a completed person-linked Rhythm', async () => {
@@ -206,6 +222,7 @@ describe('shared person profile', () => {
             completedRhythms={new Set()}
             undoableRhythms={new Set()}
             onFriendshipsChange={setFriendships}
+            onPeopleGroupsChange={vi.fn()}
             onAddRhythm={vi.fn()}
             onEditRhythm={vi.fn()}
             onRhythmHistory={vi.fn()}

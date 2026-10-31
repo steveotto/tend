@@ -85,7 +85,6 @@ describe('shared Category Health summary', () => {
     for (const name of ['Marriage Health score', 'Consistency score', 'On Track score']) {
       expect(screen.getByRole('meter', { name }).getAttribute('aria-valuenow')).toBe('0');
     }
-    expect(screen.getAllByText('0')).toHaveLength(3);
     expect(screen.getByText('1 of 6 Foundations scored')).toBeTruthy();
   });
 
@@ -109,12 +108,15 @@ describe('shared Category Health summary', () => {
     expect(info.getAttribute('aria-expanded')).toBe('true');
     const details = screen.getByRole('region', { name: 'Encouragement & Affirmation Health explanation' });
     expect(within(details).getByText('Each scored Foundation counts equally.')).toBeTruthy();
-    expect(within(details).getByText('75%')).toBeTruthy();
-    expect(within(details).getByText('25%')).toBeTruthy();
+    expect(within(details).getByRole('img', {
+      name: 'Encouragement & Affirmation Health: Not enough data'
+    })).toBeTruthy();
+    expect(within(details).getByRole('img', { name: 'Consistency: Score unavailable' })).toBeTruthy();
+    expect(within(details).getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
+    expect(within(details).getByText('Health combines 75% Consistency and 25% On Track.')).toBeTruthy();
     expect(within(details).getByText('Foundations need both scores to count.')).toBeTruthy();
-    expect(details.querySelector('.rhythm-history-view__health-weight-panels')).toBeTruthy();
-    expect(within(details).queryByText(/Health combines 75%/)).toBeNull();
-
+    expect(details.querySelector('.rhythm-history-view__health-weight-panels')).toBeNull();
+    expect(details.querySelector('.health-score-measures__grid')).toBeTruthy();
     await user.click(info);
     expect(info.getAttribute('aria-expanded')).toBe('false');
     expect(document.getElementById(detailsId)?.hasAttribute('hidden')).toBe(true);
@@ -163,7 +165,8 @@ describe('shared Category Health summary', () => {
     )).toBeTruthy();
     expect(within(explanation).getByText('Each scored Practice counts equally.')).toBeTruthy();
     expect(within(explanation).getByText('Practices need both scores to count.')).toBeTruthy();
-    expect(within(explanation).getByText('75%')).toBeTruthy();
-    expect(within(explanation).getByText('25%')).toBeTruthy();
+    expect(within(explanation).getByText('Health combines 75% Consistency and 25% On Track.')).toBeTruthy();
+    expect(within(explanation).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('80');
+    expect(within(explanation).getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('100');
   });
 });

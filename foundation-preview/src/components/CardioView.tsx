@@ -1,14 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FormEvent, KeyboardEvent, MouseEvent } from 'react';
+import type { FormEvent, MouseEvent } from 'react';
 import {
   cardioDataIssues,
   cardioGoalSettings,
   cardioRhythmOccurrenceError,
+  addDateDays,
+  cardioTargetsForDate,
+  cardioWeekStart,
   deleteCardioRun,
   isCardioRun,
+  parseCardioGoalInput,
   saveCardioGoals,
   saveCardioRun,
   selectCardioProgress,
+  stepCardioGoalInput,
   validatedCardioRuns,
   validateCardioGoals
 } from '../domain/cardio.ts';
@@ -16,19 +21,20 @@ import type { CardioData, CardioRun } from '../domain/cardio.ts';
 import type { RhythmPreview } from '../domain/preview-data.ts';
 import type { DatedRhythmCompletion } from '../domain/rhythm-completion.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
-import { RhythmCard, ScoreMeter } from './Cards.tsx';
+import { NumericControl } from './NumericControl.tsx';
+import { FitnessScoreSummary } from './FitnessScoreSummary.tsx';
 
 export type CardioViewProps = {
   data: CardioData;
   today: string;
   rhythms: readonly RhythmPreview[];
   archivedRhythmIds: ReadonlySet<string>;
-  completedRhythmIds: ReadonlySet<string>;
   datedRhythmCompletions: readonly DatedRhythmCompletion[];
   onChange: (data: CardioData) => string | null;
-  onAddRhythm: (event: MouseEvent<HTMLButtonElement>) => void;
-  onEditRhythm: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
-  onOpenRhythm: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
+  pendingLogRequest?: { requestId: number; opener: HTMLButtonElement; rhythm?: RhythmPreview } | null;
+  onLogRequestOpened?: (requestId: number) => void;
+  onLogRequestClosed?: () => void;
+  onQuickLog?: (event: MouseEvent<HTMLButtonElement>) => void;
 };
 
 type DialogState = { kind: 'goals' } | { kind: 'run'; run?: CardioRun; rhythm?: RhythmPreview };
@@ -38,21 +44,19 @@ export function CardioView({
   today,
   rhythms,
   archivedRhythmIds,
-  completedRhythmIds,
   datedRhythmCompletions,
   onChange,
-  onAddRhythm,
-  onEditRhythm,
-  onOpenRhythm
+  pendingLogRequest = null,
+  onLogRequestOpened,
+  onLogRequestClosed
 }: CardioViewProps) {
   const [dialog, setDialog] = useState<DialogState | null>(null);
-  const [tab, setTab] = useState<'progress' | 'rhythms'>('progress');
   const [actionError, setActionError] = useState('');
   const openerRef = useRef<HTMLButtonElement | null>(null);
-  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const handledLogRequestRef = useRef<number | null>(null);
+  const activeLogRequestRef = useRef<number | null>(null);
   const progress = selectCardioProgress(data, today);
   const runs = validatedCardioRuns(data, today).records;
-  const cardioRhythms = rhythms.filter(rhythm => rhythm.healthLogCapability === 'cardio');
   const issues = [
     ...cardioDataIssues(data, today),
     ...cardioLinkIssues(data, rhythms, archivedRhythmIds, datedRhythmCompletions)
@@ -62,20 +66,26 @@ export function CardioView({
     if (!dialog && openerRef.current?.isConnected) openerRef.current.focus();
   }, [dialog]);
 
+  useEffect(() => {
+    if (!pendingLogRequest || handledLogRequestRef.current === pendingLogRequest.requestId) return;
+    handledLogRequestRef.current = pendingLogRequest.requestId;
+    activeLogRequestRef.current = pendingLogRequest.requestId;
+    openerRef.current = pendingLogRequest.opener;
+    setDialog({ kind: 'run', ...(pendingLogRequest.rhythm ? { rhythm: pendingLogRequest.rhythm } : {}) });
+    onLogRequestOpened?.(pendingLogRequest.requestId);
+  }, [pendingLogRequest?.requestId]);
+
   function openDialog(next: DialogState, event: MouseEvent<HTMLButtonElement>) {
     openerRef.current = event.currentTarget;
     setDialog(next);
   }
 
-  function onTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
-    const next = event.key === 'ArrowRight' ? (index + 1) % 2
-      : event.key === 'ArrowLeft' ? (index - 1 + 2) % 2
-        : event.key === 'Home' ? 0
-          : event.key === 'End' ? 1 : -1;
-    if (next < 0) return;
-    event.preventDefault();
-    setTab(next === 0 ? 'progress' : 'rhythms');
-    tabRefs.current[next]?.focus();
+  function closeDialog() {
+    setDialog(null);
+    if (activeLogRequestRef.current !== null) {
+      activeLogRequestRef.current = null;
+      onLogRequestClosed?.();
+    }
   }
 
   function removeRun(run: CardioRun) {
@@ -97,18 +107,7 @@ export function CardioView({
           <p>Track weekly runs and mileage against the goals you set.</p>
         </div>
       </header>
-      <div className="cardio-tabs" role="tablist" aria-label="Cardio views">
-        <button ref={element => { tabRefs.current[0] = element; }} type="button" role="tab"
-          id="cardio-tab-progress" aria-controls="cardio-panel-progress"
-          aria-selected={tab === 'progress'} tabIndex={tab === 'progress' ? 0 : -1}
-          onClick={() => setTab('progress')} onKeyDown={event => onTabKeyDown(event, 0)}>Progress</button>
-        <button ref={element => { tabRefs.current[1] = element; }} type="button" role="tab"
-          id="cardio-tab-rhythms" aria-controls="cardio-panel-rhythms"
-          aria-selected={tab === 'rhythms'} tabIndex={tab === 'rhythms' ? 0 : -1}
-          onClick={() => setTab('rhythms')} onKeyDown={event => onTabKeyDown(event, 1)}>Rhythms</button>
-      </div>
-      {tab === 'progress' ? (
-        <section id="cardio-panel-progress" role="tabpanel" aria-labelledby="cardio-tab-progress">
+      <section className="cardio-progress" aria-label="Weekly cardio and run history">
           <section className="card cardio-progress-card" aria-labelledby="cardio-progress-title">
             <header className="cardio-card-heading">
               <div>
@@ -119,7 +118,7 @@ export function CardioView({
                 onClick={event => openDialog({ kind: 'goals' }, event)}>Edit goals</button>
             </header>
             {progress.targetRuns === null || progress.targetMiles === null ? (
-              <p className="cardio-empty">Set both weekly run and mileage goals to track progress.</p>
+              null
             ) : (
               <>
                 <div className="cardio-measures">
@@ -129,14 +128,52 @@ export function CardioView({
                     percent={progress.mileageProgress ?? 0}
                     remaining={`${formatNumber(progress.remainingMiles ?? 0)} mi remaining`} />
                 </div>
-                <ScoreMeter label="Cardio score, lower of run and mileage goal progress"
-                  score={progress.score} compact />
-                <details className="cardio-calculation-info">
-                  <summary>How weekly progress is calculated</summary>
-                  <p>The week runs Monday through Sunday. Runs count on their activity dates. The Cardio score is the rounded lower percentage of run and mileage goals; each percentage caps at 100%, while recorded totals remain uncapped.</p>
-                </details>
               </>
             )}
+            <FitnessScoreSummary
+                category="Cardio"
+                consistency={progress.consistency}
+                onTrack={progress.score}
+                health={progress.health}
+                consistencyCaption="Four completed weeks of run and distance goals."
+                onTrackCaption="This week’s goal progress."
+                setupRequired={
+                  !data.trackingStartDate
+                  || !data.targetHistory?.length
+                  || progress.targetRuns === null
+                  || progress.targetMiles === null
+                }
+                statusMessage={progress.health === null
+                  && Boolean(data.trackingStartDate && data.targetHistory?.length)
+                  && progress.targetRuns !== null
+                  && progress.targetMiles !== null
+                  ? 'Your score will appear as tracking builds.'
+                  : null}
+                onSetup={event => openDialog({ kind: 'goals' }, event)}
+                evidenceDetails={(
+                  <>
+                    {progress.eligibleConsistencyWeeks > 0 && (
+                      <p>
+                        {progress.eligibleConsistencyWeeks} completed week
+                        {progress.eligibleConsistencyWeeks === 1 ? '' : 's'} have eligible targets.
+                      </p>
+                    )}
+                    {progress.consistencyUnavailableReason && (
+                      <p>
+                        {progress.consistencyUnavailableReason.includes('tracking start')
+                          ? 'Set a tracking start date and save weekly goals to begin.'
+                          : 'No completed week in the four-week lookback has full tracking and trustworthy goals yet.'}
+                      </p>
+                    )}
+                    <p>
+                      Only complete Monday–Sunday weeks with known targets count. Goal changes
+                      start the following Monday; first-time setup applies to this week’s progress,
+                      but its partial week is excluded from Consistency. Unavailable recent weeks
+                      are not replaced with older weeks.
+                    </p>
+                  </>
+                )}
+            />
             <div className="cardio-week-strip" role="group" aria-label="Run activity Monday through Sunday">
               {progress.days.map(day => (
                 <div key={day.date} className={`cardio-week-day${day.count ? ' has-run' : ''}${day.date === today ? ' is-today' : ''}`}
@@ -177,38 +214,9 @@ export function CardioView({
             )}
             {actionError && <p className="goal-field-error" role="alert">{actionError}</p>}
           </section>
-        </section>
-      ) : (
-        <section id="cardio-panel-rhythms" role="tabpanel" aria-labelledby="cardio-tab-rhythms"
-          className="card cardio-rhythms-card">
-          <header className="cardio-card-heading">
-            <div><h2>Cardio Rhythms</h2><p>Only Rhythms explicitly enabled for run logging appear here.</p></div>
-            <button type="button" className="btn mini" onClick={onAddRhythm}>Add Cardio Rhythm</button>
-          </header>
-          {cardioRhythms.length > 0 ? (
-            <div className="cardio-rhythm-list">
-              {cardioRhythms.map(rhythm => (
-                <div className="cardio-rhythm-entry" key={rhythm.id}>
-                  <RhythmCard
-                    variant="simple"
-                    rhythm={rhythm}
-                    completed={completedRhythmIds.has(rhythm.id)}
-                    onDetails={event => onOpenRhythm(rhythm, event)}
-                    onTend={event => openDialog({ kind: 'run', rhythm }, event)}
-                    completionActionLabel="Log run"
-                    completedActionLabel="Logged"
-                  />
-                  <button type="button" className="btn mini ghost" onClick={event => onEditRhythm(rhythm, event)}>
-                    Edit Rhythm
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : <p className="cardio-empty">No Rhythms are marked for run logging yet. Add one or edit a Health &amp; Fitness Rhythm.</p>}
-        </section>
-      )}
+      </section>
       {dialog?.kind === 'goals' && (
-        <CardioGoalsDialog data={data} onSave={onChange} onClose={() => setDialog(null)} />
+        <CardioGoalsDialog data={data} today={today} onSave={onChange} onClose={closeDialog} />
       )}
       {dialog?.kind === 'run' && (
         <CardioRunDialog
@@ -220,7 +228,7 @@ export function CardioView({
           {...(dialog.run ? { run: dialog.run } : {})}
           {...(dialog.rhythm ? { initialRhythm: dialog.rhythm } : {})}
           onSave={onChange}
-          onClose={() => setDialog(null)}
+          onClose={closeDialog}
         />
       )}
       {issues.length > 0 && (
@@ -255,56 +263,129 @@ function CardioMeasure({ label, value, target, percent, remaining }: {
   );
 }
 
-function CardioGoalsDialog({ data, onSave, onClose }: {
+function CardioGoalsDialog({ data, today, onSave, onClose }: {
   data: CardioData;
+  today: string;
   onSave: (data: CardioData) => string | null;
   onClose: () => void;
 }) {
-  const goals = cardioGoalSettings(data.goals);
+  const history = data.targetHistory ?? [];
+  const selectedHistory = [...history].filter(item => item.effectiveDate > today).at(-1)
+    ?? [...history].filter(item => item.effectiveDate <= today).at(-1);
+  const goals = data.trackingStartDate
+    ? selectedHistory ? cardioGoalSettings(selectedHistory) : cardioTargetsForDate(data, today)
+    : cardioGoalSettings(data.goals);
   const rawGoals = typeof data.goals === 'object' && data.goals !== null
     ? data.goals as Record<string, unknown> : {};
   const [runs, setRuns] = useState(goals ? String(goals.weeklyRunTarget)
-    : rawGoals.weeklyRunTarget == null ? '' : String(rawGoals.weeklyRunTarget));
+    : selectedHistory || data.trackingStartDate || rawGoals.weeklyRunTarget == null ? '' : String(rawGoals.weeklyRunTarget));
   const [miles, setMiles] = useState(goals ? String(goals.weeklyMileTarget)
-    : rawGoals.weeklyMileTarget == null ? '' : String(rawGoals.weeklyMileTarget));
-  const [error, setError] = useState('');
+    : selectedHistory || data.trackingStartDate || rawGoals.weeklyMileTarget == null ? '' : String(rawGoals.weeklyMileTarget));
+  const [trackingStartDate, setTrackingStartDate] = useState(data.trackingStartDate ?? today);
+  const [errors, setErrors] = useState<{ runs: string | null; miles: string | null; form: string | null }>({
+    runs: null, miles: null, form: null
+  });
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const runTarget = runs.trim() ? Number(runs) : null;
-    const mileTarget = miles.trim() ? Number(miles) : null;
-    if (runs.trim() && (!Number.isInteger(runTarget) || (runTarget ?? 0) > 21)
-      || miles.trim() && (!Number.isFinite(mileTarget) || (mileTarget ?? 0) > 1000)) {
-      setError('Enter a positive weekly target within the listed limits.');
-      return;
+    const runTarget = parseCardioGoalInput(runs);
+    const mileTarget = parseCardioGoalInput(miles);
+    const nextErrors: { runs: string | null; miles: string | null; form: string | null } = {
+      runs: null, miles: null, form: null
+    };
+    if (runs.trim() && (!Number.isInteger(runTarget) || (runTarget ?? 0) < 1 || (runTarget ?? 0) > 21)) {
+      nextErrors.runs = 'Enter 1 to 21 runs per week.';
+    }
+    if (miles.trim() && (!Number.isFinite(mileTarget) || (mileTarget ?? 0) < 0.1 || (mileTarget ?? 0) > 1000)) {
+      nextErrors.miles = 'Enter a distance from 0.1 to 1,000 miles.';
     }
     const validation = validateCardioGoals({ weeklyRunTarget: runTarget, weeklyMileTarget: mileTarget });
     if (validation) {
-      setError(validation);
+      if (runTarget === null && mileTarget !== null) nextErrors.runs = 'Set both weekly targets, or leave both blank.';
+      if (mileTarget === null && runTarget !== null) nextErrors.miles = 'Set both weekly targets, or leave both blank.';
+      if (!nextErrors.runs && !nextErrors.miles) nextErrors.form = validation;
+    }
+    if (nextErrors.runs || nextErrors.miles || nextErrors.form) {
+      setErrors(nextErrors);
+      return;
+    }
+    if (!data.trackingStartDate && (!trackingStartDate || trackingStartDate > today)) {
+      setErrors({ runs: null, miles: null, form: 'Choose a Cardio tracking start date that is today or earlier.' });
       return;
     }
     const writeError = onSave(saveCardioGoals(data, {
       weeklyRunTarget: runTarget,
       weeklyMileTarget: mileTarget
-    }));
-    if (writeError) setError(writeError);
+    }, today, trackingStartDate));
+    if (writeError) setErrors({ runs: null, miles: null, form: writeError });
     else onClose();
   }
 
   return (
     <MoneyGoalDialog title="Cardio goals" labelledBy="cardio-goals-title" titleId="cardio-goals-title"
       initialFocusId="cardio-goal-runs" onClose={onClose} closeLabel="Close Cardio goals">
-      <form className="cardio-form" onSubmit={submit}>
+      <form className="cardio-form" noValidate onSubmit={submit}>
         <p>Both weekly targets are needed to calculate Cardio progress. Leave both blank to clear them.</p>
-        <label>Runs per week
-          <input id="cardio-goal-runs" type="number" min="1" max="21" step="1" value={runs}
-            onChange={event => setRuns(event.currentTarget.value)} />
-        </label>
-        <label>Miles per week
-          <input type="number" min="0.1" max="1000" step="0.1" value={miles}
-            onChange={event => setMiles(event.currentTarget.value)} />
-        </label>
-        {error && <p className="goal-field-error" role="alert">{error}</p>}
+        {!data.trackingStartDate && (
+          <label className="cardio-tracking-start">Start Cardio tracking on
+            <input type="date" max={today} value={trackingStartDate}
+              onChange={event => setTrackingStartDate(event.currentTarget.value)} />
+          </label>
+        )}
+        <div className="cardio-goal-inputs">
+          <div className="cardio-goal-field">
+            <NumericControl
+              id="cardio-goal-runs"
+              label="Runs per week"
+              value={runs}
+              min={1}
+              max={21}
+              step={1}
+              inputMode="numeric"
+              invalid={Boolean(errors.runs)}
+              {...(errors.runs ? { describedBy: 'cardio-goal-runs-error' } : {})}
+              decreaseLabel="Decrease runs per week by 1"
+              increaseLabel="Increase runs per week by 1"
+              onChange={value => {
+                setRuns(value);
+                setErrors(current => ({ ...current, runs: null, form: null }));
+              }}
+              onStep={direction => setRuns(value => stepCardioGoalInput(value, direction, 'runs'))}
+            />
+            {errors.runs && <small id="cardio-goal-runs-error" className="numeric-control__error" role="alert">{errors.runs}</small>}
+          </div>
+          {data.trackingStartDate ? (
+            <p className="cardio-goal-effective-date">
+              Upcoming targets: {runTargetText(runs)} runs/week and {mileTargetText(miles)} miles/week,
+              effective Monday {formatLongDate(addDateDays(cardioWeekStart(today), 7))}. Current targets stay active through Sunday.
+            </p>
+          ) : (
+            <p className="cardio-goal-effective-date">
+              Tracking starts {formatLongDate(trackingStartDate)}. These goals affect this week’s progress immediately; this partial setup week is excluded from Consistency.
+            </p>
+          )}
+          <div className="cardio-goal-field">
+            <NumericControl
+              id="cardio-goal-miles"
+              label="Miles per week"
+              value={miles}
+              min={0.1}
+              max={1000}
+              step={0.1}
+              invalid={Boolean(errors.miles)}
+              {...(errors.miles ? { describedBy: 'cardio-goal-miles-error' } : {})}
+              decreaseLabel="Decrease miles per week by 0.1"
+              increaseLabel="Increase miles per week by 0.1"
+              onChange={value => {
+                setMiles(value);
+                setErrors(current => ({ ...current, miles: null, form: null }));
+              }}
+              onStep={direction => setMiles(value => stepCardioGoalInput(value, direction, 'miles'))}
+            />
+            {errors.miles && <small id="cardio-goal-miles-error" className="numeric-control__error" role="alert">{errors.miles}</small>}
+          </div>
+        </div>
+        {errors.form && <p className="goal-field-error" role="alert">{errors.form}</p>}
         <div className="profile-editor-actions">
           <button type="submit" className="btn mini">Save goals</button>
           <button type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>
@@ -450,6 +531,16 @@ function cardioLinkIssues(
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(value);
+}
+
+function runTargetText(value: string): string {
+  const parsed = Number(value);
+  return value.trim() && Number.isFinite(parsed) ? formatNumber(parsed) : '—';
+}
+
+function mileTargetText(value: string): string {
+  const parsed = Number(value);
+  return value.trim() && Number.isFinite(parsed) ? formatNumber(parsed) : '—';
 }
 
 function formatDate(value: string): string {

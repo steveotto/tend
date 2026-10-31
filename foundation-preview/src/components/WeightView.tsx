@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FormEvent, KeyboardEvent, MouseEvent } from 'react';
+import type { FormEvent, MouseEvent } from 'react';
 import {
   deleteWeightMeasurement,
   formatWeight,
+  formatWeightInput,
   isWeightMeasurement,
-  poundsToKilograms,
+  parseWeightInput,
   saveWeightGoals,
   saveWeightMeasurement,
   selectWeightProgress,
+  stepWeightInput,
   validateCanonicalWeightGoals,
   validWeightMeasurements,
   weightDataIssues,
@@ -20,19 +22,20 @@ import type { WeightData, WeightMeasurement, WeightUnit } from '../domain/weight
 import type { RhythmPreview } from '../domain/preview-data.ts';
 import type { DatedRhythmCompletion } from '../domain/rhythm-completion.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
-import { RhythmCard, ScoreMeter } from './Cards.tsx';
+import { ScoreMeter } from './Cards.tsx';
+import { NumericControl } from './NumericControl.tsx';
 
 export type WeightViewProps = {
   data: WeightData;
   today: string;
   rhythms: readonly RhythmPreview[];
   archivedRhythmIds: ReadonlySet<string>;
-  completedRhythmIds: ReadonlySet<string>;
   datedRhythmCompletions: readonly DatedRhythmCompletion[];
   onChange: (data: WeightData) => string | null;
-  onAddRhythm: (event: MouseEvent<HTMLButtonElement>) => void;
-  onEditRhythm: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
-  onOpenRhythm: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
+  pendingLogRequest?: { requestId: number; opener: HTMLButtonElement; rhythm?: RhythmPreview } | null;
+  onLogRequestOpened?: (requestId: number) => void;
+  onLogRequestClosed?: () => void;
+  onQuickLog?: (event: MouseEvent<HTMLButtonElement>) => void;
 };
 
 type DialogState = { kind: 'goals' } | { kind: 'weigh-in'; measurement?: WeightMeasurement; rhythm?: RhythmPreview };
@@ -42,44 +45,47 @@ export function WeightView({
   today,
   rhythms,
   archivedRhythmIds,
-  completedRhythmIds,
   datedRhythmCompletions,
   onChange,
-  onAddRhythm,
-  onEditRhythm,
-  onOpenRhythm
+  pendingLogRequest = null,
+  onLogRequestOpened,
+  onLogRequestClosed
 }: WeightViewProps) {
   const [dialog, setDialog] = useState<DialogState | null>(null);
-  const [tab, setTab] = useState<'progress' | 'rhythms'>('progress');
   const [actionError, setActionError] = useState('');
   const openerRef = useRef<HTMLButtonElement | null>(null);
-  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const handledLogRequestRef = useRef<number | null>(null);
+  const activeLogRequestRef = useRef<number | null>(null);
   const progress = selectWeightProgress(data, today);
   const measurements = validWeightMeasurements(data, today);
   const issues = [
     ...weightDataIssues(data, today),
     ...weightLinkIssues(data, rhythms, archivedRhythmIds, today, datedRhythmCompletions)
   ];
-  const weightRhythms = rhythms.filter(rhythm => rhythm.healthLogCapability === 'weight');
-
   useEffect(() => {
     if (!dialog && openerRef.current?.isConnected) openerRef.current.focus();
   }, [dialog]);
+
+  useEffect(() => {
+    if (!pendingLogRequest || handledLogRequestRef.current === pendingLogRequest.requestId) return;
+    handledLogRequestRef.current = pendingLogRequest.requestId;
+    activeLogRequestRef.current = pendingLogRequest.requestId;
+    openerRef.current = pendingLogRequest.opener;
+    setDialog({ kind: 'weigh-in', ...(pendingLogRequest.rhythm ? { rhythm: pendingLogRequest.rhythm } : {}) });
+    onLogRequestOpened?.(pendingLogRequest.requestId);
+  }, [pendingLogRequest?.requestId]);
 
   function openDialog(next: DialogState, event: MouseEvent<HTMLButtonElement>) {
     openerRef.current = event.currentTarget;
     setDialog(next);
   }
 
-  function onTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
-    const next = event.key === 'ArrowRight' ? (index + 1) % 2
-      : event.key === 'ArrowLeft' ? (index - 1 + 2) % 2
-        : event.key === 'Home' ? 0
-          : event.key === 'End' ? 1 : -1;
-    if (next < 0) return;
-    event.preventDefault();
-    setTab(next === 0 ? 'progress' : 'rhythms');
-    tabRefs.current[next]?.focus();
+  function closeDialog() {
+    setDialog(null);
+    if (activeLogRequestRef.current !== null) {
+      activeLogRequestRef.current = null;
+      onLogRequestClosed?.();
+    }
   }
 
   function removeMeasurement(measurement: WeightMeasurement) {
@@ -101,18 +107,7 @@ export function WeightView({
           <p>Recorded weigh-ins and a separate estimate along your goal path.</p>
         </div>
       </header>
-      <div className="weight-tabs" role="tablist" aria-label="Weight views">
-        <button ref={element => { tabRefs.current[0] = element; }} type="button" role="tab"
-          id="weight-tab-progress" aria-controls="weight-panel-progress"
-          aria-selected={tab === 'progress'} tabIndex={tab === 'progress' ? 0 : -1}
-          onClick={() => setTab('progress')} onKeyDown={event => onTabKeyDown(event, 0)}>Progress</button>
-        <button ref={element => { tabRefs.current[1] = element; }} type="button" role="tab"
-          id="weight-tab-rhythms" aria-controls="weight-panel-rhythms"
-          aria-selected={tab === 'rhythms'} tabIndex={tab === 'rhythms' ? 0 : -1}
-          onClick={() => setTab('rhythms')} onKeyDown={event => onTabKeyDown(event, 1)}>Rhythms</button>
-      </div>
-      {tab === 'progress' ? (
-        <section id="weight-panel-progress" role="tabpanel" aria-labelledby="weight-tab-progress">
+      <section className="weight-progress">
           <section className="card weight-progress-card" aria-labelledby="weight-progress-heading">
             <header className="weight-card-heading">
               <div><h2 id="weight-progress-heading">Body weight progress</h2>
@@ -154,7 +149,7 @@ export function WeightView({
               </div>
             </div>
             <ScoreMeter label="Weight progress score, separate from category and Foundation scores"
-              score={progress.score} compact />
+              score={progress.score} />
             <WeightChart
               data={data}
               today={today}
@@ -198,36 +193,7 @@ export function WeightView({
           <button type="button" className="money-goals-back" onClick={event => openDialog({ kind: 'weigh-in' }, event)}>
             Add weigh-in
           </button>
-        </section>
-      ) : (
-        <section id="weight-panel-rhythms" role="tabpanel" aria-labelledby="weight-tab-rhythms"
-          className="card weight-rhythms-card">
-          <header className="weight-card-heading">
-            <div><h2>Weight Rhythms</h2><p>Only Rhythms explicitly enabled for weigh-in logging appear here.</p></div>
-            <button type="button" className="btn mini" onClick={onAddRhythm}>Add Weight Rhythm</button>
-          </header>
-          {weightRhythms.length > 0 ? (
-            <div className="weight-rhythm-list">
-              {weightRhythms.map(rhythm => (
-                <div className="weight-rhythm-entry" key={rhythm.id}>
-                  <RhythmCard
-                    variant="simple"
-                    rhythm={rhythm}
-                    completed={completedRhythmIds.has(rhythm.id)}
-                    onDetails={event => onOpenRhythm(rhythm, event)}
-                    onTend={event => openDialog({ kind: 'weigh-in', rhythm }, event)}
-                    completionActionLabel="Log weigh-in"
-                    completedActionLabel="Logged"
-                  />
-                  <button type="button" className="btn mini ghost" onClick={event => onEditRhythm(rhythm, event)}>
-                    Edit Rhythm
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : <p className="weight-empty">No Rhythms are marked for weigh-in logging yet. Add one or edit a Health &amp; Fitness Rhythm.</p>}
-        </section>
-      )}
+      </section>
       {issues.length > 0 && (
         <section className="weight-data-issues" role="status" aria-label="Weight data quality">
           <h2>Some Weight data needs review</h2>
@@ -239,7 +205,7 @@ export function WeightView({
           key="weight-goals"
           data={data}
           onSave={onChange}
-          onClose={() => setDialog(null)}
+          onClose={closeDialog}
         />
       )}
       {dialog?.kind === 'weigh-in' && (
@@ -252,7 +218,7 @@ export function WeightView({
           {...(dialog.measurement ? { measurement: dialog.measurement } : {})}
           {...(dialog.rhythm ? { initialRhythm: dialog.rhythm } : {})}
           onSave={onChange}
-          onClose={() => setDialog(null)}
+          onClose={closeDialog}
         />
       )}
     </main>
@@ -269,16 +235,21 @@ function WeightGoalsDialog({
   onClose: () => void;
 }) {
   const current = weightGoalSettings(data.goals);
-  const [unit, setUnit] = useState<WeightUnit>(weightUnit(data.displayUnit));
+  const initialUnit = weightUnit(data.displayUnit);
+  const [unit, setUnit] = useState<WeightUnit>(initialUnit);
   const [startKg, setStartKg] = useState<number | null>(current?.startWeightKg ?? null);
+  const [startText, setStartText] = useState(formatWeightInput(current?.startWeightKg ?? null, initialUnit));
   const [startDate, setStartDate] = useState(current?.startDate ?? '');
   const [targetKg, setTargetKg] = useState<number | null>(current?.targetWeightKg ?? null);
+  const [targetText, setTargetText] = useState(formatWeightInput(current?.targetWeightKg ?? null, initialUnit));
   const [goalDate, setGoalDate] = useState(current?.goalDate ?? '');
   const [error, setError] = useState('');
   const malformed = weightDataIssues(data, '9999-12-31').some(issue => issue.includes('goal settings'));
 
-  function inputValue(value: number | null): string {
-    return value === null ? '' : weightValueInUnit(value, unit).toFixed(2);
+  function changeUnit(next: WeightUnit) {
+    setUnit(next);
+    setStartText(formatWeightInput(startKg, next));
+    setTargetText(formatWeightInput(targetKg, next));
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -304,45 +275,78 @@ function WeightGoalsDialog({
   return (
     <MoneyGoalDialog title="Weight goals" labelledBy="weight-goals-title" titleId="weight-goals-title"
       initialFocusId="weight-goal-start" onClose={onClose} closeLabel="Close Weight goals">
-      <form className="weight-form" onSubmit={submit}>
+      <form className="weight-form" noValidate onSubmit={submit}>
         {malformed && (
           <p className="weight-form__notice" role="status">
             Saved goal values are invalid and remain preserved until you replace or clear them.
           </p>
         )}
         <label>Weight unit
-          <select value={unit} onChange={event => setUnit(event.currentTarget.value as WeightUnit)}>
+          <select value={unit} onChange={event => changeUnit(event.currentTarget.value as WeightUnit)}>
             <option value="lb">Pounds (lb)</option>
             <option value="kg">Kilograms (kg)</option>
           </select>
         </label>
         <div className="weight-form__grid">
-          <label>Starting weight ({unit})
-            <input id="weight-goal-start" type="number" min="0.1" max="2000" step="0.01"
-              value={inputValue(startKg)}
-              onChange={event => setStartKg(event.currentTarget.value === '' ? null
-                : unit === 'lb' ? poundsToKilograms(Number(event.currentTarget.value)) : Number(event.currentTarget.value))} />
-          </label>
+          <NumericControl
+            id="weight-goal-start"
+            label={`Starting weight (${unit})`}
+            groupLabel="Starting weight"
+            value={startText}
+            min={0.1}
+            max={2000}
+            step="any"
+            invalid={Boolean(error)}
+            {...(error ? { describedBy: 'weight-goals-error' } : {})}
+            decreaseLabel={`Decrease starting weight by 1 ${unit}`}
+            increaseLabel={`Increase starting weight by 1 ${unit}`}
+            onChange={value => {
+              setStartText(value);
+              setStartKg(parseWeightInput(value, unit));
+            }}
+            onStep={direction => {
+              const next = stepWeightInput(startKg, unit, direction);
+              setStartKg(next);
+              setStartText(formatWeightInput(next, unit));
+            }}
+          />
           <label>Starting date
             <input type="date" value={startDate} onChange={event => setStartDate(event.currentTarget.value)} />
           </label>
-          <label>Target weight ({unit})
-            <input type="number" min="0.1" max="2000" step="0.01"
-              value={inputValue(targetKg)}
-              onChange={event => setTargetKg(event.currentTarget.value === '' ? null
-                : unit === 'lb' ? poundsToKilograms(Number(event.currentTarget.value)) : Number(event.currentTarget.value))} />
-          </label>
+          <NumericControl
+            id="weight-goal-target"
+            label={`Target weight (${unit})`}
+            groupLabel="Target weight"
+            value={targetText}
+            min={0.1}
+            max={2000}
+            step="any"
+            invalid={Boolean(error)}
+            {...(error ? { describedBy: 'weight-goals-error' } : {})}
+            decreaseLabel={`Decrease target weight by 1 ${unit}`}
+            increaseLabel={`Increase target weight by 1 ${unit}`}
+            onChange={value => {
+              setTargetText(value);
+              setTargetKg(parseWeightInput(value, unit));
+            }}
+            onStep={direction => {
+              const next = stepWeightInput(targetKg, unit, direction);
+              setTargetKg(next);
+              setTargetText(formatWeightInput(next, unit));
+            }}
+          />
           <label>Goal date
             <input type="date" value={goalDate} onChange={event => setGoalDate(event.currentTarget.value)} />
           </label>
         </div>
         {malformed && (
           <button type="button" className="btn mini ghost" onClick={() => {
-            setStartKg(null); setStartDate(''); setTargetKg(null); setGoalDate('');
+            setStartKg(null); setStartText(''); setStartDate('');
+            setTargetKg(null); setTargetText(''); setGoalDate('');
             setError('Invalid saved goal values will be cleared when you save.');
           }}>Clear invalid saved goals</button>
         )}
-        {error && <p className="goal-field-error" role="alert">{error}</p>}
+        {error && <p id="weight-goals-error" className="goal-field-error" role="alert">{error}</p>}
         <div className="profile-editor-actions">
           <button type="submit" className="btn mini">Save goals</button>
           <button type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>
@@ -371,8 +375,10 @@ function WeightLogDialog({
   onSave: (data: WeightData) => string | null;
   onClose: () => void;
 }) {
-  const [unit, setUnit] = useState<WeightUnit>(weightUnit(data.displayUnit));
+  const initialUnit = weightUnit(data.displayUnit);
+  const [unit, setUnit] = useState<WeightUnit>(initialUnit);
   const [weightKg, setWeightKg] = useState<number | null>(measurement?.weightKg ?? null);
+  const [weightText, setWeightText] = useState(formatWeightInput(measurement?.weightKg ?? null, initialUnit));
   const [date, setDate] = useState(measurement?.date ?? today);
   const [notes, setNotes] = useState(measurement?.notes ?? '');
   const [rhythmId, setRhythmId] = useState(measurement?.rhythmId ?? initialRhythm?.id ?? '');
@@ -382,6 +388,11 @@ function WeightLogDialog({
   const associationError = rhythmId
     ? weightRhythmOccurrenceError(selectedRhythm, date, today, archivedRhythmIds)
     : null;
+
+  function changeUnit(next: WeightUnit) {
+    setUnit(next);
+    setWeightText(formatWeightInput(weightKg, next));
+  }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -430,24 +441,40 @@ function WeightLogDialog({
     <MoneyGoalDialog title={measurement ? 'Edit weigh-in' : 'Add weigh-in'}
       labelledBy="weight-entry-title" titleId="weight-entry-title"
       initialFocusId="weight-entry-date" onClose={onClose} closeLabel="Close weigh-in">
-      <form className="weight-form" onSubmit={submit}>
+      <form className="weight-form" noValidate onSubmit={submit}>
         <label>Date
           <input id="weight-entry-date" type="date" max={today} value={date}
             onChange={event => setDate(event.currentTarget.value)} required />
         </label>
         <label>Weight unit
-          <select value={unit} onChange={event => setUnit(event.currentTarget.value as WeightUnit)}>
+          <select value={unit} onChange={event => changeUnit(event.currentTarget.value as WeightUnit)}>
             <option value="lb">Pounds (lb)</option>
             <option value="kg">Kilograms (kg)</option>
           </select>
         </label>
-        <label>Weight ({unit})
-          <input type="number" min="0.1" max="2000" step="0.01" value={
-            weightKg === null ? '' : weightValueInUnit(weightKg, unit).toFixed(2)
-          } onChange={event => setWeightKg(event.currentTarget.value === '' ? null
-            : unit === 'lb' ? poundsToKilograms(Number(event.currentTarget.value)) : Number(event.currentTarget.value))}
-          required />
-        </label>
+        <NumericControl
+          id="weight-entry-weight"
+          label={`Weight (${unit})`}
+          groupLabel="Weigh-in weight"
+          value={weightText}
+          min={0.1}
+          max={2000}
+          step="any"
+          required
+          invalid={Boolean(error)}
+          {...(error ? { describedBy: 'weight-entry-error' } : {})}
+          decreaseLabel={`Decrease weight by 1 ${unit}`}
+          increaseLabel={`Increase weight by 1 ${unit}`}
+          onChange={value => {
+            setWeightText(value);
+            setWeightKg(parseWeightInput(value, unit));
+          }}
+          onStep={direction => {
+            const next = stepWeightInput(weightKg, unit, direction);
+            setWeightKg(next);
+            setWeightText(formatWeightInput(next, unit));
+          }}
+        />
         <label>Notes (optional)
           <textarea rows={3} maxLength={1000} value={notes} onChange={event => setNotes(event.currentTarget.value)} />
         </label>
@@ -460,7 +487,7 @@ function WeightLogDialog({
           </select>
         </label>
         {associationError && <p className="weight-form__notice" role="status">{associationError}</p>}
-        {error && <p className="goal-field-error" role="alert">{error}</p>}
+        {error && <p id="weight-entry-error" className="goal-field-error" role="alert">{error}</p>}
         <div className="profile-editor-actions">
           <button type="submit" className="btn mini">{measurement ? 'Save changes' : 'Save weigh-in'}</button>
           <button type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>

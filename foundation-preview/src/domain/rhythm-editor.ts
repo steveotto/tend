@@ -88,7 +88,7 @@ export type RhythmDraft = {
   healthLogCapability?: 'weight' | 'cardio';
 };
 
-export type RhythmDraftErrors = Partial<Record<keyof RhythmDraft | 'schedule' | 'foundationIds', string>>;
+export type RhythmDraftErrors = Partial<Record<keyof RhythmDraft | 'schedule' | 'foundationIds' | 'form', string>>;
 
 export function createRhythmDraft(categoryIds: readonly RhythmCategoryId[] = []): RhythmDraft {
   return {

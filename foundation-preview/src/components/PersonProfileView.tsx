@@ -10,7 +10,7 @@ import type {
   FriendshipConnection,
   FriendshipData
 } from '../domain/friendships.ts';
-import { personById, personGroupMemberIds } from '../domain/preview-data.ts';
+import { personById, personGroupMemberIds, setPersonGroupMembership } from '../domain/preview-data.ts';
 import type {
   FoundationPreview,
   PersonId,
@@ -27,6 +27,7 @@ import { ConnectionEditor, ConnectionHistoryList, ConnectionTypeActions, Friends
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { PersonAvatar } from './PersonBadge.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
+import { selectPersonRhythmsDueToday } from '../domain/person-rhythms.ts';
 import type { Destination } from './AppNavigation.tsx';
 
 type ProfileTab = 'rhythms' | 'connections';
@@ -48,6 +49,7 @@ export function PersonProfileView({
   completedRhythms,
   undoableRhythms,
   onFriendshipsChange,
+  onPeopleGroupsChange,
   onAddRhythm,
   onEditRhythm,
   onRhythmHistory,
@@ -72,6 +74,7 @@ export function PersonProfileView({
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
   onFriendshipsChange: (friendships: FriendshipData) => void;
+  onPeopleGroupsChange: (peopleGroups: PersonPickerGroup[]) => void;
   onAddRhythm: (event: MouseEvent<HTMLButtonElement>, personId: PersonId) => void;
   onEditRhythm: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
   onRhythmHistory: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
@@ -103,6 +106,9 @@ export function PersonProfileView({
   const friendStatus = isFriend ? friendConnectionStatus(friendships, personId, today) : null;
   const classifications = peopleGroups.filter(group => group.memberIds.includes(personId));
   const personRhythms = rhythms.filter(rhythm => rhythm.personIds?.includes(personId));
+  const duePersonRhythms = selectPersonRhythmsDueToday(personRhythms, personId, today);
+  const dueRhythmIds = new Set(duePersonRhythms.map(rhythm => rhythm.id));
+  const otherPersonRhythms = personRhythms.filter(rhythm => !dueRhythmIds.has(rhythm.id));
   const personArchivedRhythms = archivedRhythms.filter(rhythm => rhythm.personIds?.includes(personId));
 
   useEffect(() => {
@@ -157,6 +163,35 @@ export function PersonProfileView({
     setConnectionEditor({ record });
   }
 
+  function renderPersonRhythm(rhythm: RhythmPreview) {
+    return (
+      <RhythmDetailsDialog
+        key={rhythm.id}
+        rhythm={rhythm}
+        inline
+        headingId={`person-profile-rhythm-${personId}-${rhythm.id}`}
+        people={peopleForRhythm(rhythm)}
+        foundations={foundations}
+        onPersonSelect={onPersonSelect}
+        onOpenFoundation={onOpenFoundation}
+        onOpenCategory={onOpenCategory}
+        completed={completedRhythms.has(rhythm.id)}
+        healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
+        onHistory={event => onRhythmHistory(rhythm.id, event)}
+        {...(isEditableRhythmId(rhythm.id)
+          ? {
+              onTend: (event: MouseEvent<HTMLButtonElement>) => onTend(rhythm.id, event),
+              onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event),
+              ...(completedRhythms.has(rhythm.id) && undoableRhythms.has(rhythm.id)
+                ? { onUndo: () => onUndo(rhythm.id) }
+                : {})
+            }
+          : {})}
+        onClose={() => undefined}
+      />
+    );
+  }
+
   return (
     <>
       <MoneyGoalDialog
@@ -183,6 +218,26 @@ export function PersonProfileView({
                 </div>
               )}
             </div>
+            <details className="person-profile__actions">
+              <summary aria-label={`More actions for ${person.displayName}`}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="5" cy="12" r="1.5" />
+                  <circle cx="12" cy="12" r="1.5" />
+                  <circle cx="19" cy="12" r="1.5" />
+                </svg>
+              </summary>
+              <div className="person-profile__action-menu">
+                <button
+                  type="button"
+                  aria-pressed={isFriend}
+                  onClick={() => onPeopleGroupsChange(
+                    setPersonGroupMembership(peopleGroups, 'friends', personId, !isFriend)
+                  )}
+                >
+                  {isFriend ? 'Remove friend' : 'Mark as friend'}
+                </button>
+              </div>
+            </details>
           </header>
           <div className="faith-view-nav marriage-view-nav person-profile__nav" role="tablist" aria-label={`${person.displayName} profile`}>
             {profileTabs.map((item, index) => (
@@ -210,7 +265,7 @@ export function PersonProfileView({
             hidden={tab !== 'rhythms'}
           >
             <div className="person-profile__section-heading">
-              <h3>Rhythms</h3>
+              <h3>Today with {person.displayName}</h3>
               {showAddRhythm && (
                 <button
                   type="button"
@@ -221,37 +276,22 @@ export function PersonProfileView({
                 </button>
               )}
             </div>
-            {personRhythms.length > 0 ? (
+            {duePersonRhythms.length > 0 ? (
               <div className="marriage-rhythm-list current-plan-item-group">
-                {personRhythms.map(rhythm => (
-                  <RhythmDetailsDialog
-                    key={rhythm.id}
-                    rhythm={rhythm}
-                    inline
-                    headingId={`person-profile-rhythm-${personId}-${rhythm.id}`}
-                    people={peopleForRhythm(rhythm)}
-                    foundations={foundations}
-                    onPersonSelect={onPersonSelect}
-                    onOpenFoundation={onOpenFoundation}
-                    onOpenCategory={onOpenCategory}
-                    completed={completedRhythms.has(rhythm.id)}
-                    healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
-                    onHistory={event => onRhythmHistory(rhythm.id, event)}
-                    {...(isEditableRhythmId(rhythm.id)
-                      ? {
-                          onTend: (event: MouseEvent<HTMLButtonElement>) => onTend(rhythm.id, event),
-                          onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event),
-                          ...(completedRhythms.has(rhythm.id) && undoableRhythms.has(rhythm.id)
-                            ? { onUndo: () => onUndo(rhythm.id) }
-                            : {})
-                        }
-                      : {})}
-                    onClose={() => undefined}
-                  />
-                ))}
+                {duePersonRhythms.map(renderPersonRhythm)}
               </div>
             ) : (
-              <p className="friendships-empty">No Rhythms yet.</p>
+              <p className="friendships-empty">
+                {personRhythms.length === 0 ? 'No Rhythms yet.' : 'No Rhythms due today.'}
+              </p>
+            )}
+            {otherPersonRhythms.length > 0 && (
+              <section className="person-profile__other-rhythms" aria-labelledby="person-profile-other-rhythms">
+                <h4 id="person-profile-other-rhythms">Other Rhythms</h4>
+                <div className="marriage-rhythm-list current-plan-item-group">
+                  {otherPersonRhythms.map(renderPersonRhythm)}
+                </div>
+              </section>
             )}
             <button
               ref={archiveOpener}

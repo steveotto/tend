@@ -13,7 +13,10 @@ type MoneyGoalDialogProps = {
   titleId?: string;
   initialFocusId?: string;
   stopEscapePropagation?: boolean;
+  closeOnEscape?: boolean;
   portalToBody?: boolean;
+  dialogId?: string;
+  dismissOnBackdrop?: boolean;
   dialogClassName?: string;
   surfaceClassName?: string;
   bodyClassName?: string;
@@ -31,7 +34,10 @@ export function MoneyGoalDialog({
   titleId,
   initialFocusId,
   stopEscapePropagation = false,
+  closeOnEscape = false,
   portalToBody = false,
+  dialogId,
+  dismissOnBackdrop = false,
   dialogClassName,
   surfaceClassName,
   bodyClassName,
@@ -55,6 +61,7 @@ export function MoneyGoalDialog({
   const dialog = (
     <dialog
       ref={dialogRef}
+      id={dialogId}
       className={['money-goal-dialog', dialogClassName].filter(Boolean).join(' ')}
       aria-labelledby={labelledBy ?? 'money-goal-dialog-title'}
       onCancel={event => {
@@ -63,7 +70,16 @@ export function MoneyGoalDialog({
         onClose();
       }}
       onKeyDown={event => {
-        if (stopEscapePropagation && event.key === 'Escape') event.stopPropagation();
+        if (event.key === 'Escape' && closeOnEscape) {
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+        } else if (stopEscapePropagation && event.key === 'Escape') {
+          event.stopPropagation();
+        }
+      }}
+      onClick={event => {
+        if (dismissOnBackdrop && event.target === event.currentTarget) onClose();
       }}
     >
       <div className={['money-goal-dialog__surface', surfaceClassName].filter(Boolean).join(' ')}>

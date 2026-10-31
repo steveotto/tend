@@ -8,9 +8,10 @@ import {
   personById,
   peopleForRhythm,
   rhythms,
-  syntheticPersonPickerGroups,
+  createPersonPickerGroups,
   type PersonId
 } from './domain/preview-data.ts';
+import type { PersonPickerGroup } from './domain/preview-data.ts';
 import { createFriendshipData } from './domain/friendships.ts';
 import type { FriendshipData } from './domain/friendships.ts';
 import { localDateString } from './domain/money-goals.ts';
@@ -22,6 +23,7 @@ export function CatalogApp() {
   const [financeLifecycle, setFinanceLifecycle] = useState<FoundationLifecycle>(financeFoundation.lifecycle);
   const [selectedPersonId, setSelectedPersonId] = useState<PersonId | null>(null);
   const [friendships, setFriendships] = useState<FriendshipData>(createFriendshipData);
+  const [peopleGroups, setPeopleGroups] = useState<PersonPickerGroup[]>(createPersonPickerGroups);
   const financeFoundationView = { ...financeFoundation, lifecycle: financeLifecycle };
   const selectedPerson = selectedPersonId === null ? null : personById(selectedPersonId);
 
@@ -125,7 +127,7 @@ export function CatalogApp() {
         <PersonProfileView
           key={selectedPerson.id}
           personId={selectedPerson.id}
-          peopleGroups={syntheticPersonPickerGroups}
+          peopleGroups={peopleGroups}
           friendships={friendships}
           today={localDateString(new Date())}
           rhythms={rhythms.filter(rhythm => rhythm.personIds?.includes(selectedPerson.id))}
@@ -135,6 +137,7 @@ export function CatalogApp() {
           completedRhythms={new Set()}
           undoableRhythms={new Set()}
           onFriendshipsChange={setFriendships}
+          onPeopleGroupsChange={setPeopleGroups}
           onAddRhythm={() => undefined}
           onEditRhythm={() => undefined}
           onRhythmHistory={() => undefined}

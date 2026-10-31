@@ -48,6 +48,71 @@ type FoundationCardProps = {
   children?: ReactNode;
 };
 
+function CompactCardBody({
+  title,
+  description,
+  icon,
+  headingId,
+  interactive,
+  reserveDescriptionSpace,
+  children
+}: {
+  title: string;
+  description: string;
+  icon?: ReactNode;
+  headingId?: string;
+  interactive: boolean;
+  reserveDescriptionSpace: boolean;
+  children?: ReactNode;
+}) {
+  return (
+    <>
+      {icon && <span className="foundation-card__icon" aria-hidden="true">{icon}</span>}
+      <span className="foundation-card__content">
+        {interactive
+          ? <span className="foundation-card__title" id={headingId} role="heading" aria-level={3}>{title}</span>
+          : <h3 className="foundation-card__title" id={headingId} tabIndex={-1}>{title}</h3>}
+        <span className={`foundation-card__description${interactive || reserveDescriptionSpace
+          ? ' foundation-card__description--reserved'
+          : ''}`}>
+          {description}
+        </span>
+        {children}
+      </span>
+    </>
+  );
+}
+
+export function DetailNavigationCard({
+  title,
+  description,
+  icon,
+  onSelect
+}: {
+  title: string;
+  description: string;
+  icon?: ReactNode;
+  onSelect: (event: MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      className="foundation-card foundation-card--compact foundation-card--interactive"
+      type="button"
+      aria-label={`${title}: ${description}`}
+      onClick={onSelect}
+    >
+      <CompactCardBody
+        title={title}
+        description={description}
+        icon={icon}
+        interactive
+        reserveDescriptionSpace
+      />
+      <span className="foundation-card__chevron" aria-hidden="true">›</span>
+    </button>
+  );
+}
+
 export function FoundationCard({
   foundation,
   variant = 'catalogue',
@@ -81,16 +146,16 @@ export function FoundationCard({
   if (variant === 'compact') {
     const content = (
       <>
-        {icon && <span className="foundation-card__icon" aria-hidden="true">{icon}</span>}
-        <span className="foundation-card__content">
-          {onSelect
-            ? <span className="foundation-card__title" id={headingId} role="heading" aria-level={3}>{foundation.name}</span>
-            : <h3 className="foundation-card__title" id={resolvedHeadingId} tabIndex={-1}>{foundation.name}</h3>}
-          <span className={`foundation-card__description${onSelect || reserveDescriptionSpace
-            ? ' foundation-card__description--reserved'
-            : ''}`}>
-            {foundation.description}
-          </span>
+        <CompactCardBody
+          title={foundation.name}
+          description={foundation.description}
+          icon={icon}
+          {...(onSelect
+            ? headingId ? { headingId } : {}
+            : { headingId: resolvedHeadingId })}
+          interactive={Boolean(onSelect)}
+          reserveDescriptionSpace={reserveDescriptionSpace}
+        >
           {displayScore !== undefined && (
             <>
               {coverageText && <span className="foundation-card__coverage">{coverageText}</span>}
@@ -101,7 +166,7 @@ export function FoundationCard({
               />
             </>
           )}
-        </span>
+        </CompactCardBody>
         <span className={`foundation-card__score ${scoreTone(displayScore ?? null)}`} aria-hidden="true">
           {displayScore === null || displayScore === undefined ? '—' : Math.round(displayScore)}
         </span>

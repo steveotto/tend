@@ -4,15 +4,19 @@ import type { StrengthMuscleId } from '../domain/strength.ts';
 
 export function StrengthMuscleSelection({
   selectedMuscleIds,
-  onToggle
+  onToggle,
+  legendLabel = 'Muscles trained',
+  hideLegend = false
 }: {
   selectedMuscleIds: readonly StrengthMuscleId[];
   onToggle: (muscleId: StrengthMuscleId) => void;
+  legendLabel?: string;
+  hideLegend?: boolean;
 }) {
   const idPrefix = useId();
   return (
     <fieldset className="strength-muscle-selection">
-      <legend>Muscles trained</legend>
+      <legend className={hideLegend ? 'visually-hidden' : undefined}>{legendLabel}</legend>
       {strengthMuscles.map(muscle => {
         const selected = selectedMuscleIds.includes(muscle.id);
         const inputId = `${idPrefix}-strength-log-muscle-${muscle.id}`;

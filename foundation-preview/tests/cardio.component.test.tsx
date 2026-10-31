@@ -7,7 +7,10 @@ import type { CardioData } from '../src/domain/cardio.ts';
 import { todayRhythms } from '../src/domain/preview-data.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  document.querySelectorAll('[data-test-cardio-opener]').forEach(element => element.remove());
+});
 
 function renderCardio(data: CardioData = createCardioData(), options: { saveError?: string } = {}) {
   const rhythm = cardioRhythm();
@@ -19,12 +22,8 @@ function renderCardio(data: CardioData = createCardioData(), options: { saveErro
         today="2026-10-22"
         rhythms={[rhythm]}
         archivedRhythmIds={new Set()}
-        completedRhythmIds={new Set()}
         datedRhythmCompletions={[]}
         onChange={onChange}
-        onAddRhythm={vi.fn()}
-        onEditRhythm={vi.fn()}
-        onOpenRhythm={vi.fn()}
       />
     ),
     onChange,
@@ -58,12 +57,39 @@ describe('Cardio preview presentation', () => {
     const { container } = renderCardio(data);
     expect(screen.getByText('Runs this week')).toBeTruthy();
     expect(screen.getByText('Miles this week')).toBeTruthy();
-    expect(screen.getByRole('meter', { name: /Cardio score/ }).getAttribute('aria-valuenow')).toBe('38');
+    const onTrack = screen.getByRole('meter', { name: 'On Track score' });
+    expect(onTrack.getAttribute('aria-valuenow')).toBe('38');
+    expect(onTrack.getAttribute('style')).toContain('37.5%');
+    expect(screen.getByRole('img', { name: 'Cardio Health: Not enough data' })).toBeTruthy();
     expect(container.querySelector('.cardio-week-day.is-today')?.textContent).toContain('Today');
     expect(screen.getByText('Oct 16, 2026')).toBeTruthy();
     expect(screen.getByText('Oct 22, 2026')).toBeTruthy();
     expect(screen.getByRole('meter', { name: 'Runs this week' }).getAttribute('aria-valuenow')).toBe('50');
     expect(screen.getByRole('meter', { name: 'Miles this week' }).getAttribute('aria-valuenow')).toBe('37.5');
+  });
+
+  it('shows one tracking setup callout and explains Cardio’s completed-week and current-week measures', async () => {
+    const user = userEvent.setup();
+    renderCardio();
+    expect(screen.getByText('Set up tracking to see your scores.')).toBeTruthy();
+    expect(screen.queryByText(/Set both weekly run and mileage goals/)).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Set up tracking' }));
+    expect(screen.getByRole('dialog', { name: 'Cardio goals' })).toBeTruthy();
+
+    cleanup();
+    const data: CardioData = {
+      ...createCardioData(),
+      goals: { weeklyRunTarget: 2, weeklyMileTarget: 8 }
+    };
+    renderCardio(data);
+    await user.click(screen.getByRole('button', { name: 'Show Cardio Health scoring details' }));
+    const details = screen.getByRole('region', { name: 'Cardio Health scoring details' });
+    expect(within(details).getByText(/four most recently completed weeks/)).toBeTruthy();
+    expect(within(details).getByText(/This week’s run and distance goal progress/)).toBeTruthy();
+    expect(within(details).getByText(/75% Consistency \+ 25% On Track/)).toBeTruthy();
+    expect(within(details).queryByText(/training interval/i)).toBeNull();
+    await user.click(within(details).getByText('Details'));
+    expect(within(details).getByText(/Monday–Sunday weeks with known targets/)).toBeTruthy();
   });
 
   it('saves and clears complete weekly goals while rejecting a partial pair', async () => {
@@ -82,9 +108,8 @@ describe('Cardio preview presentation', () => {
     const next = vi.fn((_data: CardioData) => null);
     render(
       <CardioView data={{ ...createCardioData(), goals: { weeklyRunTarget: 2, weeklyMileTarget: 8 } }}
-        today="2026-10-22" rhythms={[]} archivedRhythmIds={new Set()} completedRhythmIds={new Set()}
-        datedRhythmCompletions={[]} onChange={next} onAddRhythm={vi.fn()} onEditRhythm={vi.fn()}
-        onOpenRhythm={vi.fn()} />
+        today="2026-10-22" rhythms={[]} archivedRhythmIds={new Set()}
+        datedRhythmCompletions={[]} onChange={next} />
     );
     await user.click(screen.getByRole('button', { name: 'Edit goals' }));
     const edit = screen.getByRole('dialog', { name: 'Cardio goals' });
@@ -92,6 +117,46 @@ describe('Cardio preview presentation', () => {
     await user.click(within(edit).getByRole('button', { name: 'Save goals' }));
     expect(screen.getByRole('alert').textContent).toContain('both weekly');
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it('uses labeled integrated steppers for blank and fractional weekly goals', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderCardio();
+    await user.click(screen.getByRole('button', { name: 'Edit goals' }));
+    const dialog = screen.getByRole('dialog', { name: 'Cardio goals' });
+    const runs = within(dialog).getByLabelText('Runs per week') as HTMLInputElement;
+    const miles = within(dialog).getByLabelText('Miles per week') as HTMLInputElement;
+
+    expect(runs.value).toBe('');
+    expect(runs.inputMode).toBe('numeric');
+    expect(runs.min).toBe('1');
+    expect(miles.value).toBe('');
+    expect(miles.inputMode).toBe('decimal');
+    await user.click(within(dialog).getByRole('button', { name: 'Decrease runs per week by 1' }));
+    expect(runs.value).toBe('');
+    await user.click(within(dialog).getByRole('button', { name: 'Increase runs per week by 1' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Increase miles per week by 0.1' }));
+    expect(runs.value).toBe('1');
+    expect(miles.value).toBe('0.1');
+
+    await user.clear(miles);
+    await user.type(miles, '8.5');
+    await user.click(within(dialog).getByRole('button', { name: 'Save goals' }));
+    expect(onChange.mock.calls[0]?.[0].goals).toEqual({ weeklyRunTarget: 1, weeklyMileTarget: 8.5 });
+  });
+
+  it('keeps entered zero distinct from blank and exposes a field-level target error', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderCardio();
+    await user.click(screen.getByRole('button', { name: 'Edit goals' }));
+    const dialog = screen.getByRole('dialog', { name: 'Cardio goals' });
+    const runs = within(dialog).getByLabelText('Runs per week') as HTMLInputElement;
+    await user.type(runs, '0');
+    await user.click(within(dialog).getByRole('button', { name: 'Save goals' }));
+    expect(runs.value).toBe('0');
+    expect(runs.getAttribute('aria-invalid')).toBe('true');
+    expect(within(dialog).getByText('Enter 1 to 21 runs per week.')).toBeTruthy();
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('logs a date-only run through explicit save and restores focus after Cancel or Escape', async () => {
@@ -160,19 +225,9 @@ describe('Cardio preview presentation', () => {
     ]);
   });
 
-  it('retains the run draft when persistence fails and keeps tab keyboard behavior', async () => {
+  it('retains the run draft when persistence fails', async () => {
     const user = userEvent.setup();
     const { onChange } = renderCardio(createCardioData(), { saveError: 'Synthetic write failed.' });
-    const progress = screen.getByRole('tab', { name: 'Progress' });
-    const rhythms = screen.getByRole('tab', { name: 'Rhythms' });
-    progress.focus();
-    await user.keyboard('{ArrowRight}');
-    expect(rhythms.getAttribute('aria-selected')).toBe('true');
-    await user.keyboard('{End}');
-    await user.keyboard('{Home}');
-    expect(progress.getAttribute('aria-selected')).toBe('true');
-    expect(progress.getAttribute('tabindex')).toBe('0');
-    expect(rhythms.getAttribute('tabindex')).toBe('-1');
 
     await user.click(screen.getByRole('button', { name: /Log run/ }));
     const dialog = screen.getByRole('dialog', { name: 'Log run' });
@@ -185,21 +240,31 @@ describe('Cardio preview presentation', () => {
     expect((distance as HTMLInputElement).value).toBe('4.5');
   });
 
-  it('uses the shared Rhythm card action and offers only explicitly capable Cardio Rhythms', async () => {
+  it('opens a dispatched Cardio Rhythm log request and restores focus after cancellation', async () => {
     const user = userEvent.setup();
-    const { onChange, rhythm } = renderCardio();
-    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
-    expect(screen.getByRole('article', { name: 'Run rhythm' })).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: /Log run/ }));
-    const dialog = screen.getByRole('dialog', { name: 'Log run' });
+    const rhythm = cardioRhythm();
+    const opener = document.createElement('button');
+    opener.dataset.testCardioOpener = 'true';
+    document.body.append(opener);
+    const onChange = vi.fn((_data: CardioData) => null);
+    const onLogRequestClosed = vi.fn();
+    render(
+      <CardioView
+        data={createCardioData()}
+        today="2026-10-22"
+        rhythms={[rhythm]}
+        archivedRhythmIds={new Set()}
+        datedRhythmCompletions={[]}
+        onChange={onChange}
+        pendingLogRequest={{ requestId: 1, opener, rhythm }}
+        onLogRequestClosed={onLogRequestClosed}
+      />
+    );
+    const dialog = await screen.findByRole('dialog', { name: 'Log run' });
     expect((within(dialog).getByLabelText('Cardio Rhythm (optional)') as HTMLSelectElement).value).toBe(rhythm.id);
-    await user.type(within(dialog).getByLabelText('Distance (miles)'), '4');
-    await user.click(within(dialog).getByRole('button', { name: 'Save run' }));
-    expect(onChange.mock.calls[0]![0].runs[0]).toMatchObject({
-      rhythmId: rhythm.id,
-      rhythmOccurrence: '2026-10-22',
-      distance: 4
-    });
-    expect(onChange.mock.calls[0]![0].runs[0]).toHaveProperty('completionId');
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onLogRequestClosed).toHaveBeenCalledOnce();
+    expect(document.activeElement).toBe(opener);
   });
 });

@@ -46,14 +46,14 @@ import type {
   ScoredOnTrackMetric,
   UnscoredMetric
 } from '../domain/rhythm-scoring.ts';
-import { scoreTone } from '../domain/score-tone.ts';
 import { PersonBadgeList } from './PersonBadge.tsx';
 import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
 import { RhythmScheduleSummary } from './RhythmMetadata.tsx';
 import { RhythmSeasonCard } from './RhythmSeasonCard.tsx';
 import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
 import { RhythmPersonalBadge } from './RhythmPersonalBadge.tsx';
-import { RhythmScoreCircle } from './RhythmScoreCircle.tsx';
+import { HealthScoreBreakdown, HealthScoreMeasures } from './HealthScoreBreakdown.tsx';
+export { HealthScoreMeter } from './HealthScoreBreakdown.tsx';
 import { RhythmCompletionHistoryChart } from './RhythmCompletionHistoryChart.tsx';
 import { RhythmCompletionForm } from './RhythmCompletionForm.tsx';
 import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
@@ -63,8 +63,6 @@ import type { RhythmSeasonEditDialogDraft } from './RhythmSeasonCorrectionDialog
 import { RhythmSeasonDeleteDialog } from './RhythmSeasonDeleteDialog.tsx';
 import { HealthWeightPanels } from './HealthWeightPanels.tsx';
 import type { Destination } from './AppNavigation.tsx';
-
-type MetricName = 'consistency' | 'onTrack';
 
 const occurrenceKindByFrequency = {
   daily: 'eligible day',
@@ -579,15 +577,24 @@ export function RhythmHistoryView({
               </svg>
             </button>
           </div>
-          <div className="rhythm-history-view__health-summary">
-            <div className="rhythm-history-view__health-heading">
-              <h3>Health</h3>
-              <span className={score.healthScore === null ? 'is-unavailable' : undefined}>
-                {score.healthScore === null ? '—' : Math.round(score.healthScore)}
-              </span>
-            </div>
-            <HealthScoreMeter score={score.healthScore} />
-          </div>
+          <HealthScoreBreakdown
+            title="Health"
+            score={score.healthScore}
+            consistency={{
+              score: score.consistency.kind === 'scored' ? score.consistency.score : null,
+              state: score.consistency.kind,
+              ...(score.consistency.kind === 'unscored' ? { explanation: score.consistency.explanation } : {})
+            }}
+            onTrack={{
+              score: score.onTrack.kind === 'scored' ? score.onTrack.score : null,
+              state: score.onTrack.kind,
+              ...(score.onTrack.kind === 'unscored' ? { explanation: score.onTrack.explanation } : {})
+            }}
+            consistencyCaption={metricCopy.consistency.shortDescription}
+            onTrackCaption={metricCopy.onTrack.shortDescription}
+            ariaLabel="Health score summary"
+            showMeasures={false}
+          />
           <div
             id={healthCalculationId}
             className="rhythm-history-view__health-calculation-disclosure"
@@ -606,18 +613,22 @@ export function RhythmHistoryView({
               )}
           </div>
           <div className="rhythm-history-view__score-summary-divider" aria-hidden="true" />
-          <div className="rhythm-history-view__score-grid">
-            <RhythmMetricSummary
-              name="consistency"
-              metric={score.consistency}
-              copy={metricCopy.consistency}
-            />
-            <RhythmMetricSummary
-              name="onTrack"
-              metric={score.onTrack}
-              copy={metricCopy.onTrack}
-            />
-          </div>
+          <HealthScoreMeasures
+            healthScore={score.healthScore}
+            consistency={{
+              score: score.consistency.kind === 'scored' ? score.consistency.score : null,
+              state: score.consistency.kind,
+              ...(score.consistency.kind === 'unscored' ? { explanation: score.consistency.explanation } : {})
+            }}
+            onTrack={{
+              score: score.onTrack.kind === 'scored' ? score.onTrack.score : null,
+              state: score.onTrack.kind,
+              ...(score.onTrack.kind === 'unscored' ? { explanation: score.onTrack.explanation } : {})
+            }}
+            consistencyCaption={metricCopy.consistency.shortDescription}
+            onTrackCaption={metricCopy.onTrack.shortDescription}
+            showHealthMeter={false}
+          />
           <div
             id={scoreDetailsId}
             className="rhythm-history-view__score-details-grid"
@@ -984,12 +995,6 @@ export function RhythmHistoryView({
   );
 }
 
-type ScoreMetric =
-  | ScoredConsistencyMetric
-  | ScoredOnTrackMetric
-  | UnscoredMetric
-  | { kind: 'unavailable'; explanation: string };
-
 function SeasonsHistory({
   displayOnlyCurrentSeason,
   seasons,
@@ -1354,53 +1359,6 @@ function SeasonEditButton(props: SeasonEditButtonProps) {
 function seasonTimeLabel(season: Pick<RhythmScheduleSegment, 'timeOfDay'>): string | undefined {
   if (!season.timeOfDay) return undefined;
   return rhythmTimeOptions.find(option => option.value === season.timeOfDay)?.label;
-}
-
-function RhythmMetricSummary({
-  name,
-  metric,
-  copy
-}: {
-  name: MetricName;
-  metric: ScoreMetric;
-  copy: (typeof metricCopy)[keyof typeof metricCopy];
-}) {
-  const headingId = `rhythm-score-${name}`;
-  return (
-    <section className="rhythm-history-view__score-summary" aria-labelledby={headingId}>
-      <header className="rhythm-history-view__score-heading">
-        <h3 id={headingId}>{copy.title}</h3>
-      </header>
-      <RhythmScoreCircle
-        label={copy.title}
-        score={metric.kind === 'scored' ? Math.round(metric.score) : null}
-        state={metric.kind}
-        {...(metric.kind === 'unscored' ? { explanation: metric.explanation } : {})}
-      />
-      <p className="rhythm-history-view__short-description">{copy.shortDescription}</p>
-    </section>
-  );
-}
-
-export function HealthScoreMeter({ score, illustrative = false }: { score: number | null; illustrative?: boolean }) {
-  const available = score !== null;
-  return (
-    <div
-      className={`rhythm-history-view__health-meter ${scoreTone(score)}`}
-      role={available ? 'meter' : 'img'}
-      aria-label={available ? 'Health score' : 'Health: Not enough data'}
-      aria-valuemin={available ? 0 : undefined}
-      aria-valuemax={available ? 100 : undefined}
-      aria-valuenow={score ?? undefined}
-      aria-valuetext={available ? `${Math.round(score)} out of 100${illustrative ? ', illustrative blend' : ''}` : undefined}
-    >
-      <span
-        className="rhythm-history-view__health-meter-fill"
-        aria-hidden="true"
-        style={{ width: `${score ?? 0}%` }}
-      />
-    </div>
-  );
 }
 
 function ConsistencyScoreBreakdown({ metric }: { metric: ScoredConsistencyMetric }) {

@@ -5,23 +5,22 @@ import { WeightView } from '../src/components/WeightView.tsx';
 import { createWeightData, poundsToKilograms } from '../src/domain/weight.ts';
 import type { WeightData } from '../src/domain/weight.ts';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  document.querySelectorAll('[data-test-weight-opener]').forEach(element => element.remove());
+});
 
-function renderWeight(data: WeightData = createWeightData()) {
+function renderWeight(data: WeightData = createWeightData(), today = '2026-10-22') {
   const onChange = vi.fn((_next: WeightData) => null);
   return {
     ...render(
     <WeightView
       data={data}
-      today="2026-10-22"
+      today={today}
       rhythms={[]}
       archivedRhythmIds={new Set()}
-      completedRhythmIds={new Set()}
       datedRhythmCompletions={[]}
       onChange={onChange}
-      onAddRhythm={vi.fn()}
-      onEditRhythm={vi.fn()}
-      onOpenRhythm={vi.fn()}
     />
     ),
     onChange
@@ -52,6 +51,51 @@ describe('Weight preview presentation', () => {
     expect(container.querySelector('.weight-chart__goal')).toBeTruthy();
   });
 
+  it('keeps progress and history as separate stacked cards in empty and populated states', () => {
+    const empty = renderWeight();
+    const emptyProgress = empty.container.querySelector('.weight-progress');
+    expect(emptyProgress?.children[0]?.classList.contains('weight-progress-card')).toBe(true);
+    expect(emptyProgress?.children[1]?.classList.contains('weight-history-card')).toBe(true);
+    expect(screen.getByText('No valid weigh-ins to show.')).toBeTruthy();
+
+    cleanup();
+    const populated = renderWeight({
+      ...createWeightData(),
+      weighIns: [{ id: 'spaced-history', date: '2026-10-20', weightKg: 80 }]
+    });
+    const populatedProgress = populated.container.querySelector('.weight-progress');
+    expect(populatedProgress?.children[0]?.classList.contains('weight-progress-card')).toBe(true);
+    expect(populatedProgress?.children[1]?.classList.contains('weight-history-card')).toBe(true);
+    expect(screen.getAllByText('Oct 20, 2026').length).toBeGreaterThan(0);
+  });
+
+  it('uses the shared full score meter and distinguishes unavailable from numeric zero', () => {
+    renderWeight();
+    const unavailableMeter = screen.getByRole('meter', { name: 'Weight progress score, separate from category and Foundation scores' });
+    expect(unavailableMeter.getAttribute('aria-valuetext')).toBe('Score unavailable');
+    expect(unavailableMeter.hasAttribute('aria-valuenow')).toBe(false);
+    expect(unavailableMeter.className).not.toContain('preview-score-meter--compact');
+    expect(unavailableMeter.querySelector('.category-health-spectrum')?.classList.contains('is-empty')).toBe(true);
+    expect(unavailableMeter.querySelector('.preview-score-marker')).toBeNull();
+
+    cleanup();
+    const zero = renderWeight({
+      ...createWeightData(),
+      goals: {
+        startWeightKg: 200,
+        startDate: '2026-10-01',
+        targetWeightKg: 180,
+        goalDate: '2026-10-21'
+      },
+      weighIns: [{ id: 'zero-progress', date: '2026-10-11', weightKg: 210 }]
+    }, '2026-10-11');
+    const zeroMeter = screen.getByRole('meter', { name: 'Weight progress score, separate from category and Foundation scores' });
+    expect(zeroMeter.getAttribute('aria-valuenow')).toBe('0');
+    expect(zeroMeter.getAttribute('aria-valuetext')).toBe('0 out of 100');
+    expect(zeroMeter.querySelector('.preview-score-marker')).toBeTruthy();
+    expect(zero.container.querySelector('.preview-score-meter--compact')).toBeNull();
+  });
+
   it('cancels without saving and records a positive unit-converted weigh-in', async () => {
     const user = userEvent.setup();
     const { onChange } = renderWeight();
@@ -75,30 +119,30 @@ describe('Weight preview presentation', () => {
     expect((saved.weighIns[0] as { weightKg: number }).weightKg).toBe(poundsToKilograms(180));
   });
 
-  it('supports arrow, Home, and End navigation with roving focus and tab selection', async () => {
+  it('opens a dispatched weigh-in request and restores focus after cancellation', async () => {
     const user = userEvent.setup();
-    renderWeight();
-    const progress = screen.getByRole('tab', { name: 'Progress' });
-    const rhythms = screen.getByRole('tab', { name: 'Rhythms' });
-
-    expect(progress.getAttribute('aria-selected')).toBe('true');
-    expect(progress.getAttribute('aria-controls')).toBe('weight-panel-progress');
-    expect(rhythms.getAttribute('tabindex')).toBe('-1');
-    progress.focus();
-    await user.keyboard('{ArrowRight}');
-    expect(rhythms.getAttribute('aria-selected')).toBe('true');
-    expect(document.activeElement).toBe(rhythms);
-    expect(screen.getByRole('tabpanel', { name: 'Rhythms' })).toBeTruthy();
-    expect(screen.queryByRole('tabpanel', { name: 'Progress' })).toBeNull();
-
-    await user.keyboard('{ArrowRight}');
-    expect(progress.getAttribute('aria-selected')).toBe('true');
-    await user.keyboard('{End}');
-    expect(rhythms.getAttribute('aria-selected')).toBe('true');
-    await user.keyboard('{Home}');
-    expect(progress.getAttribute('aria-selected')).toBe('true');
-    expect(progress.getAttribute('tabindex')).toBe('0');
-    expect(rhythms.getAttribute('tabindex')).toBe('-1');
+    const opener = document.createElement('button');
+    opener.dataset.testWeightOpener = 'true';
+    document.body.append(opener);
+    const onChange = vi.fn((_next: WeightData) => null);
+    const onLogRequestClosed = vi.fn();
+    render(
+      <WeightView
+        data={createWeightData()}
+        today="2026-10-22"
+        rhythms={[]}
+        archivedRhythmIds={new Set()}
+        datedRhythmCompletions={[]}
+        onChange={onChange}
+        pendingLogRequest={{ requestId: 1, opener }}
+        onLogRequestClosed={onLogRequestClosed}
+      />
+    );
+    const dialog = await screen.findByRole('dialog', { name: 'Add weigh-in' });
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onLogRequestClosed).toHaveBeenCalledOnce();
+    expect(document.activeElement).toBe(opener);
   });
 
   it('keeps the weigh-in dialog open and the draft intact when persistence reports an error', async () => {
@@ -110,12 +154,8 @@ describe('Weight preview presentation', () => {
         today="2026-10-22"
         rhythms={[]}
         archivedRhythmIds={new Set()}
-        completedRhythmIds={new Set()}
         datedRhythmCompletions={[]}
         onChange={onChange}
-        onAddRhythm={vi.fn()}
-        onEditRhythm={vi.fn()}
-        onOpenRhythm={vi.fn()}
       />
     );
     await user.click(screen.getAllByRole('button', { name: 'Add weigh-in' })[0]!);
@@ -148,6 +188,26 @@ describe('Weight preview presentation', () => {
       targetWeightKg: poundsToKilograms(180),
       startDate: '2026-10-01',
       goalDate: '2026-11-01'
+    });
+  });
+
+  it('accepts fractional weight entry through the shared numeric control', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderWeight();
+    await user.click(screen.getByRole('button', { name: 'Edit goals' }));
+    const dialog = screen.getByRole('dialog', { name: 'Weight goals' });
+    const start = within(dialog).getByLabelText('Starting weight (lb)') as HTMLInputElement;
+    const target = within(dialog).getByLabelText('Target weight (lb)') as HTMLInputElement;
+    await user.type(start, '173.5');
+    await user.type(within(dialog).getByLabelText('Starting date'), '2026-10-01');
+    await user.type(target, '162.25');
+    await user.type(within(dialog).getByLabelText('Goal date'), '2026-11-01');
+    expect(start.value).toBe('173.5');
+    expect(target.value).toBe('162.25');
+    await user.click(within(dialog).getByRole('button', { name: 'Save goals' }));
+    expect(onChange.mock.calls[0]?.[0].goals).toMatchObject({
+      startWeightKg: poundsToKilograms(173.5),
+      targetWeightKg: poundsToKilograms(162.25)
     });
   });
 
@@ -193,6 +253,109 @@ describe('Weight preview presentation', () => {
     ]);
   });
 
+  it('keeps trailing zeros out of controls and preserves fractional canonical values on unit-only saves', async () => {
+    const user = userEvent.setup();
+    const fractional: WeightData = {
+      ...createWeightData(),
+      displayUnit: 'kg',
+      goals: {
+        startWeightKg: 90.123,
+        startDate: '2026-10-01',
+        targetWeightKg: 80.987,
+        goalDate: '2026-11-01'
+      },
+      weighIns: [{ id: 'fractional-record', date: '2026-10-20', weightKg: 82.321 }]
+    };
+    const { onChange } = renderWeight(fractional);
+
+    await user.click(screen.getByRole('button', { name: 'Edit goals' }));
+    const goals = screen.getByRole('dialog', { name: 'Weight goals' });
+    const start = within(goals).getByLabelText('Starting weight (kg)') as HTMLInputElement;
+    expect(start.value).toBe('90.12');
+    expect(start.step).toBe('any');
+    await user.selectOptions(within(goals).getByLabelText('Weight unit'), 'lb');
+    await user.click(within(goals).getByRole('button', { name: 'Save goals' }));
+    expect(onChange.mock.calls[0]?.[0].goals).toMatchObject({
+      startWeightKg: 90.123,
+      targetWeightKg: 80.987
+    });
+
+    cleanup();
+    const { onChange: measurementSave } = renderWeight(fractional);
+    await user.click(screen.getByRole('button', { name: 'Edit weigh-in from Oct 20, 2026' }));
+    const editor = screen.getByRole('dialog', { name: 'Edit weigh-in' });
+    const weight = within(editor).getByLabelText('Weight (kg)') as HTMLInputElement;
+    expect(weight.value).toBe('82.32');
+    await user.selectOptions(within(editor).getByLabelText('Weight unit'), 'lb');
+    await user.click(within(editor).getByRole('button', { name: 'Save changes' }));
+    expect(measurementSave.mock.calls[0]?.[0].weighIns).toEqual([
+      expect.objectContaining({ id: 'fractional-record', weightKg: 82.321 })
+    ]);
+  });
+
+  it('uses whole-unit steppers for goals and weigh-ins without changing other fields', async () => {
+    const user = userEvent.setup();
+    const data: WeightData = {
+      ...createWeightData(),
+      displayUnit: 'lb',
+      goals: {
+        startWeightKg: poundsToKilograms(173),
+        startDate: '2026-10-01',
+        targetWeightKg: poundsToKilograms(160.5),
+        goalDate: '2026-11-01'
+      },
+      weighIns: [{ id: 'step-record', date: '2026-10-20', weightKg: poundsToKilograms(173.5), notes: 'Keep note' }]
+    };
+    const { onChange } = renderWeight(data);
+    await user.click(screen.getByRole('button', { name: 'Edit goals' }));
+    const goals = screen.getByRole('dialog', { name: 'Weight goals' });
+    const start = within(goals).getByLabelText('Starting weight (lb)') as HTMLInputElement;
+    const target = within(goals).getByLabelText('Target weight (lb)') as HTMLInputElement;
+    expect(start.value).toBe('173');
+    expect(target.value).toBe('160.5');
+    await user.click(within(goals).getByRole('button', { name: 'Increase starting weight by 1 lb' }));
+    expect(start.value).toBe('174');
+    await user.click(within(goals).getByRole('button', { name: 'Save goals' }));
+    expect(onChange.mock.calls[0]?.[0].goals).toMatchObject({
+      startWeightKg: poundsToKilograms(174),
+      targetWeightKg: poundsToKilograms(160.5),
+      startDate: '2026-10-01',
+      goalDate: '2026-11-01'
+    });
+
+    cleanup();
+    const { onChange: measurementSave } = renderWeight(data);
+    await user.click(screen.getByRole('button', { name: 'Edit weigh-in from Oct 20, 2026' }));
+    const editor = screen.getByRole('dialog', { name: 'Edit weigh-in' });
+    const weight = within(editor).getByLabelText('Weight (lb)') as HTMLInputElement;
+    expect(weight.value).toBe('173.5');
+    await user.click(within(editor).getByRole('button', { name: 'Increase weight by 1 lb' }));
+    expect(weight.value).toBe('174.5');
+    await user.click(within(editor).getByRole('button', { name: 'Save changes' }));
+    expect(measurementSave.mock.calls[0]?.[0].weighIns).toEqual([
+      expect.objectContaining({
+        id: 'step-record',
+        date: '2026-10-20',
+        weightKg: poundsToKilograms(174.5),
+        notes: 'Keep note'
+      })
+    ]);
+  });
+
+  it('keeps entered zero distinct from blank and reports invalid weigh-in input accessibly', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderWeight();
+    await user.click(screen.getAllByRole('button', { name: 'Add weigh-in' })[0]!);
+    const dialog = screen.getByRole('dialog', { name: 'Add weigh-in' });
+    const weight = within(dialog).getByLabelText('Weight (lb)') as HTMLInputElement;
+    await user.type(weight, '0');
+    expect(weight.value).toBe('0');
+    await user.click(within(dialog).getByRole('button', { name: 'Save weigh-in' }));
+    expect(weight.getAttribute('aria-invalid')).toBe('true');
+    expect(within(dialog).getByRole('alert').textContent).toContain('positive weight');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('keeps history IDs through edits and deletes only the selected measurement', async () => {
     const user = userEvent.setup();
     const data: WeightData = {
@@ -217,12 +380,8 @@ describe('Weight preview presentation', () => {
         today="2026-10-22"
         rhythms={[]}
         archivedRhythmIds={new Set()}
-        completedRhythmIds={new Set()}
         datedRhythmCompletions={[]}
         onChange={deleteChange}
-        onAddRhythm={vi.fn()}
-        onEditRhythm={vi.fn()}
-        onOpenRhythm={vi.fn()}
       />
     );
     await user.click(screen.getByRole('button', { name: 'Delete weigh-in from Oct 20, 2026' }));

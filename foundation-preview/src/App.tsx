@@ -23,6 +23,7 @@ import { PersonProfileView } from './components/PersonProfileView.tsx';
 import { PeopleView } from './components/PeopleView.tsx';
 import { RhythmEditor } from './components/RhythmEditor.tsx';
 import { TodayView } from './components/TodayView.tsx';
+import type { TodayFocusId } from './domain/today-plan.ts';
 import { HealthFitnessView } from './components/HealthFitnessView.tsx';
 import { FriendshipsView } from './components/FriendshipsView.tsx';
 import {
@@ -120,6 +121,13 @@ import {
   loadV17RecoveryCopy,
   loadV18RecoveryCopy,
   loadV19RecoveryCopy,
+  loadV20RecoveryCopy,
+  loadV21RecoveryCopy,
+  loadV22RecoveryCopy,
+  loadV23RecoveryCopy,
+  loadV25RecoveryCopy,
+  loadV26RecoveryCopy,
+  loadV27RecoveryCopy,
   loadPreview,
   writePreview
 } from './storage/preview-storage.ts';
@@ -197,6 +205,8 @@ function isDatedCompletionRecord(record: RhythmCompletionRecord): record is Date
 export function App() {
   const scoringInstant = useScoringInstant();
   const [destination, setDestination] = useState<Destination>('today');
+  const [todayFocus, setTodayFocus] = useState<TodayFocusId>('now');
+  const [healthFitnessVisited, setHealthFitnessVisited] = useState(false);
   const [moreSettingsOpen, setMoreSettingsOpen] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewData>(createSamplePreviewData);
   const [hydrated, setHydrated] = useState(false);
@@ -240,6 +250,20 @@ export function App() {
   const [v18RecoveryError, setV18RecoveryError] = useState<string | null>(null);
   const [v19RecoveryCopy, setV19RecoveryCopy] = useState<string | null>(null);
   const [v19RecoveryError, setV19RecoveryError] = useState<string | null>(null);
+  const [v20RecoveryCopy, setV20RecoveryCopy] = useState<string | null>(null);
+  const [v20RecoveryError, setV20RecoveryError] = useState<string | null>(null);
+  const [v21RecoveryCopy, setV21RecoveryCopy] = useState<string | null>(null);
+  const [v21RecoveryError, setV21RecoveryError] = useState<string | null>(null);
+  const [v22RecoveryCopy, setV22RecoveryCopy] = useState<string | null>(null);
+  const [v22RecoveryError, setV22RecoveryError] = useState<string | null>(null);
+  const [v23RecoveryCopy, setV23RecoveryCopy] = useState<string | null>(null);
+  const [v23RecoveryError, setV23RecoveryError] = useState<string | null>(null);
+  const [v25RecoveryCopy, setV25RecoveryCopy] = useState<string | null>(null);
+  const [v25RecoveryError, setV25RecoveryError] = useState<string | null>(null);
+  const [v26RecoveryCopy, setV26RecoveryCopy] = useState<string | null>(null);
+  const [v26RecoveryError, setV26RecoveryError] = useState<string | null>(null);
+  const [v27RecoveryCopy, setV27RecoveryCopy] = useState<string | null>(null);
+  const [v27RecoveryError, setV27RecoveryError] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -270,8 +294,21 @@ export function App() {
     mode: StrengthMode;
     workoutId?: string;
     requestId: number;
+    opener?: HTMLButtonElement;
   } | null>(null);
   const strengthLogRequestSequence = useRef(0);
+  const [cardioLogRequest, setCardioLogRequest] = useState<{
+    requestId: number;
+    opener: HTMLButtonElement;
+    rhythm?: (typeof todayRhythms)[number];
+  } | null>(null);
+  const cardioLogRequestSequence = useRef(0);
+  const [weightLogRequest, setWeightLogRequest] = useState<{
+    requestId: number;
+    opener: HTMLButtonElement;
+    rhythm?: (typeof todayRhythms)[number];
+  } | null>(null);
+  const weightLogRequestSequence = useRef(0);
   const [rhythmEditor, setRhythmEditor] = useState<{
     id: string;
     rhythm?: (typeof todayRhythms)[number];
@@ -294,8 +331,8 @@ export function App() {
     weekday: 'long',
     month: 'long',
     day: 'numeric'
-  }).format(new Date());
-  const hour = new Date().getHours();
+  }).format(scoringInstant);
+  const hour = scoringInstant.getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   function rhythmWithSavedCompletions(rhythm: RhythmPreview): RhythmPreview {
     const seededRecords = resolveSeedCompletionRecords(
@@ -406,7 +443,7 @@ export function App() {
   const completionDialogRhythm = completionDialogRhythmId
     ? allTodayRhythms.find(rhythm => rhythm.id === completionDialogRhythmId) ?? null
     : null;
-  const currentDate = localDateString(new Date());
+  const currentDate = localDateString(scoringInstant);
   const initialLoadDate = useRef(currentDate).current;
   const completionStates = new Map(allTodayRhythms.map(rhythm => {
     const timeZone = rhythm.scoring?.timeZone
@@ -625,6 +662,62 @@ export function App() {
       setV19RecoveryCopy(null);
       setV19RecoveryError(v19.message);
     }
+    const v20 = loadV20RecoveryCopy(browserPreviewStorage());
+    if (v20.kind === 'loaded') {
+      setV20RecoveryCopy(v20.raw);
+      setV20RecoveryError(null);
+    } else {
+      setV20RecoveryCopy(null);
+      setV20RecoveryError(v20.message);
+    }
+    const v21 = loadV21RecoveryCopy(browserPreviewStorage());
+    if (v21.kind === 'loaded') {
+      setV21RecoveryCopy(v21.raw);
+      setV21RecoveryError(null);
+    } else {
+      setV21RecoveryCopy(null);
+      setV21RecoveryError(v21.message);
+    }
+    const v22 = loadV22RecoveryCopy(browserPreviewStorage());
+    if (v22.kind === 'loaded') {
+      setV22RecoveryCopy(v22.raw);
+      setV22RecoveryError(null);
+    } else {
+      setV22RecoveryCopy(null);
+      setV22RecoveryError(v22.message);
+    }
+    const v23 = loadV23RecoveryCopy(browserPreviewStorage());
+    if (v23.kind === 'loaded') {
+      setV23RecoveryCopy(v23.raw);
+      setV23RecoveryError(null);
+    } else {
+      setV23RecoveryCopy(null);
+      setV23RecoveryError(v23.message);
+    }
+    const v25 = loadV25RecoveryCopy(browserPreviewStorage());
+    if (v25.kind === 'loaded') {
+      setV25RecoveryCopy(v25.raw);
+      setV25RecoveryError(null);
+    } else {
+      setV25RecoveryCopy(null);
+      setV25RecoveryError(v25.message);
+    }
+    const v26 = loadV26RecoveryCopy(browserPreviewStorage());
+    if (v26.kind === 'loaded') {
+      setV26RecoveryCopy(v26.raw);
+      setV26RecoveryError(null);
+    } else {
+      setV26RecoveryCopy(null);
+      setV26RecoveryError(v26.message);
+    }
+    const v27 = loadV27RecoveryCopy(browserPreviewStorage());
+    if (v27.kind === 'loaded') {
+      setV27RecoveryCopy(v27.raw);
+      setV27RecoveryError(null);
+    } else {
+      setV27RecoveryCopy(null);
+      setV27RecoveryError(v27.message);
+    }
   }
 
   useEffect(() => {
@@ -751,6 +844,7 @@ export function App() {
 
   function navigate(next: Destination) {
     setDestination(next);
+    if (next === 'health') setHealthFitnessVisited(true);
     setMoreSettingsOpen(false);
     setSearch('');
     setSearchOpen(false);
@@ -822,13 +916,34 @@ export function App() {
       || previewData.archivedRhythmIds.includes(id)) return;
     const rhythm = allTodayRhythms.find(item => item.id === id);
     if (rhythm?.categoryIds?.includes('health')) {
+      if (rhythm.healthLogCapability === 'cardio') {
+        cardioLogRequestSequence.current += 1;
+        setCardioLogRequest({
+          requestId: cardioLogRequestSequence.current,
+          opener: event.currentTarget,
+          rhythm
+        });
+        navigate('health');
+        return;
+      }
+      if (rhythm.healthLogCapability === 'weight') {
+        weightLogRequestSequence.current += 1;
+        setWeightLogRequest({
+          requestId: weightLogRequestSequence.current,
+          opener: event.currentTarget,
+          rhythm
+        });
+        navigate('health');
+        return;
+      }
       const mode = previewData.strength.rhythmModes.find(item => item.rhythmId === id);
       strengthLogRequestSequence.current += 1;
       setStrengthLogRequest({
         rhythmId: id,
         mode: mode?.mode ?? 'recommended',
         ...(mode?.workoutId ? { workoutId: mode.workoutId } : {}),
-        requestId: strengthLogRequestSequence.current
+        requestId: strengthLogRequestSequence.current,
+        opener: event.currentTarget
       });
       navigate('health');
       return;
@@ -965,12 +1080,12 @@ export function App() {
       externalRaw.current = written.actualRaw;
       setAutoSaveEnabled(false);
       setPersistenceStatus({ kind: 'conflict' });
-      return { title: 'Preview storage changed in another tab. No Rhythm changes were saved.' };
+      return { form: 'Preview storage changed in another tab. No Rhythm changes were saved.' };
     }
     if (written.kind === 'error') {
       setAutoSaveEnabled(false);
       setPersistenceStatus({ kind: 'error', message: written.message });
-      return { title: `Preview could not save this Rhythm. ${written.message}` };
+      return { form: `Preview could not save this Rhythm. ${written.message}` };
     }
     expectedRaw.current = written.raw;
     externalRaw.current = null;
@@ -1015,7 +1130,7 @@ export function App() {
   }
 
   function saveStrengthData(strength: PreviewData['strength']): string | null {
-    if (!validateStrengthData(strength)) {
+    if (!validateStrengthData(strength, true, true, true, true)) {
       return 'Strength settings or workout records are invalid. No changes were saved.';
     }
     const previousLogs = new Map(previewData.strength.workouts.map(log => [log.id, log]));
@@ -1860,6 +1975,87 @@ export function App() {
   const storageNeedsAttention = ['unavailable', 'error', 'corrupt', 'unsupported', 'conflict']
     .includes(persistenceStatus.kind);
 
+  const healthFitnessView = hydrated && (healthFitnessVisited || destination === 'health') ? (
+    <HealthFitnessView
+      hidden={destination !== 'health'}
+      strength={{
+        data: previewData.strength,
+        peopleGroups: previewData.peopleGroups,
+        rhythms: healthCategoryRhythms.map(rhythm => {
+          const setting = previewData.strength.rhythmModes.find(item => item.rhythmId === rhythm.id);
+          return {
+            rhythm,
+            mode: setting?.mode ?? 'recommended',
+            ...(setting?.workoutId ? { workoutId: setting.workoutId } : {})
+          };
+        }),
+        archivedRhythms: archivedHealthRhythms,
+        evaluationDate: currentDate,
+        onChange: saveStrengthData,
+        pendingRhythmLog: pendingStrengthRhythmLog,
+        onRhythmLogOpened: requestId => {
+          setStrengthLogRequest(current => current?.requestId === requestId ? null : current);
+        }
+      }}
+      weight={{
+        data: previewData.weight,
+        today: currentDate,
+        rhythms: healthCategoryRhythms,
+        archivedRhythmIds: new Set(previewData.archivedRhythmIds),
+        datedRhythmCompletions: previewData.datedRhythmCompletions,
+        onChange: saveWeightData,
+        pendingLogRequest: weightLogRequest,
+        onLogRequestOpened: requestId => {
+          setWeightLogRequest(current => current?.requestId === requestId ? null : current);
+        },
+        onQuickLog: event => {
+          weightLogRequestSequence.current += 1;
+          setWeightLogRequest({
+            requestId: weightLogRequestSequence.current,
+            opener: event.currentTarget
+          });
+        }
+      }}
+      cardio={{
+        data: previewData.cardio,
+        today: currentDate,
+        rhythms: healthCategoryRhythms,
+        archivedRhythmIds: new Set(previewData.archivedRhythmIds),
+        datedRhythmCompletions: previewData.datedRhythmCompletions,
+        onChange: saveCardioData,
+        pendingLogRequest: cardioLogRequest,
+        onLogRequestOpened: requestId => {
+          setCardioLogRequest(current => current?.requestId === requestId ? null : current);
+        },
+        onQuickLog: event => {
+          cardioLogRequestSequence.current += 1;
+          setCardioLogRequest({
+            requestId: cardioLogRequestSequence.current,
+            opener: event.currentTarget
+          });
+        }
+      }}
+      rhythms={healthCategoryRhythms}
+      archivedRhythms={archivedHealthRhythms}
+      todayDate={currentDate}
+      rhythmScores={rhythmScoreResults}
+      completedRhythms={completedRhythms}
+      undoableRhythms={undoableRhythms}
+      foundations={foundationCatalogue}
+      onAddRhythm={event => openRhythmEditor(event, undefined, {
+        initialDraft: createRhythmDraft(['health'])
+      })}
+      onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
+      onRhythmHistory={openRhythmHistory}
+      onRestoreRhythm={restoreRhythm}
+      onTendRhythm={openCompletion}
+      onUndoRhythm={undoTend}
+      onPersonSelect={openPersonProfile}
+      onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
+      onOpenCategory={categoryId => navigate(categoryId)}
+    />
+  ) : null;
+
   return (
     <div className="wrap tend-app-preview" data-text-size={textSize}>
       <AppNavigation
@@ -1916,6 +2112,10 @@ export function App() {
             <TodayView
               greeting={greeting}
               dateLabel={dateLabel}
+              evaluationInstant={scoringInstant}
+              localDate={currentDate}
+              focus={todayFocus}
+              onFocusChange={setTodayFocus}
               completedRhythms={completedRhythms}
               undoableRhythms={undoableRhythms}
               rhythms={editableTodayRhythms}
@@ -1971,7 +2171,7 @@ export function App() {
                 categoryConfig={{
                   categoryId: 'parenting',
                   label: 'Parenting',
-                  description: 'Build connection, trust and meaningful memories with your children.',
+                  description: "If your presence isn't felt, your absence won't be noticed.",
                   foundations: foundationCatalogue.filter(foundation => foundation.categoryId === 'parenting'),
                   emptyFoundationDescription: 'Ongoing areas of care; scores are unavailable without scored linked Rhythms.',
                   scoreInterpretationNote: 'These scores reflect follow-through on chosen Rhythms. They do not measure a child’s wellbeing or the quality of someone’s parenting.',
@@ -2048,79 +2248,7 @@ export function App() {
               />
             )
           : destination === 'health'
-            ? (
-              <HealthFitnessView
-                strength={{
-                  data: previewData.strength,
-                  peopleGroups: previewData.peopleGroups,
-                  rhythms: healthCategoryRhythms.map(rhythm => {
-                    const setting = previewData.strength.rhythmModes.find(item => item.rhythmId === rhythm.id);
-                    return {
-                      rhythm,
-                      mode: setting?.mode ?? 'recommended',
-                      ...(setting?.workoutId ? { workoutId: setting.workoutId } : {})
-                    };
-                  }),
-                  archivedRhythms: archivedHealthRhythms,
-                  completedRhythmIds: completedRhythms,
-                  evaluationDate: currentDate,
-                  onChange: saveStrengthData,
-                  onAddRhythm: event => openRhythmEditor(event, undefined, {
-                    initialDraft: createRhythmDraft(['health'])
-                  }),
-                  onEditRhythm: (rhythm, event) => openRhythmEditor(event, rhythm),
-                  onOpenRhythm: (rhythm, event) => {
-                    dialogOpener.current = event.currentTarget;
-                    activeRhythmReturnTab.current = 'today';
-                    setDetailsInitialView('details');
-                    setActiveRhythmId(rhythm.id);
-                  },
-                  pendingRhythmLog: pendingStrengthRhythmLog,
-                  onRhythmLogOpened: requestId => {
-                    setStrengthLogRequest(current => current?.requestId === requestId ? null : null);
-                  },
-                  onRestoreRhythm: restoreRhythm
-                }}
-                weight={{
-                  data: previewData.weight,
-                  today: currentDate,
-                  rhythms: healthCategoryRhythms,
-                  archivedRhythmIds: new Set(previewData.archivedRhythmIds),
-                  completedRhythmIds: completedRhythms,
-                  datedRhythmCompletions: previewData.datedRhythmCompletions,
-                  onChange: saveWeightData,
-                  onAddRhythm: event => openRhythmEditor(event, undefined, {
-                    initialDraft: createRhythmDraft(['health'])
-                  }),
-                  onEditRhythm: (rhythm, event) => openRhythmEditor(event, rhythm),
-                  onOpenRhythm: (rhythm, event) => {
-                    dialogOpener.current = event.currentTarget;
-                    activeRhythmReturnTab.current = 'today';
-                    setDetailsInitialView('details');
-                    setActiveRhythmId(rhythm.id);
-                  }
-                }}
-                cardio={{
-                  data: previewData.cardio,
-                  today: currentDate,
-                  rhythms: healthCategoryRhythms,
-                  archivedRhythmIds: new Set(previewData.archivedRhythmIds),
-                  completedRhythmIds: completedRhythms,
-                  datedRhythmCompletions: previewData.datedRhythmCompletions,
-                  onChange: saveCardioData,
-                  onAddRhythm: event => openRhythmEditor(event, undefined, {
-                    initialDraft: createRhythmDraft(['health'])
-                  }),
-                  onEditRhythm: (rhythm, event) => openRhythmEditor(event, rhythm),
-                  onOpenRhythm: (rhythm, event) => {
-                    dialogOpener.current = event.currentTarget;
-                    activeRhythmReturnTab.current = 'today';
-                    setDetailsInitialView('details');
-                    setActiveRhythmId(rhythm.id);
-                  }
-                }}
-              />
-            )
+            ? null
           : destination === 'friendships'
             ? (
               <FriendshipsView
@@ -2162,12 +2290,15 @@ export function App() {
             ? (
               <PeopleView
                 groups={previewData.peopleGroups}
+                friendships={previewData.friendships}
+                today={currentDate}
                 onChangeGroups={peopleGroups => setPreviewData(previous => ({ ...previous, peopleGroups }))}
                 onOpenPerson={openPersonProfile}
               />
             )
           : <PlaceholderPage destination={destination} onToday={() => navigate('today')} />}
       </div>
+      {healthFitnessView}
       {selectedProfilePerson && (
         <PersonProfileView
           key={selectedProfilePerson.id}
@@ -2182,6 +2313,7 @@ export function App() {
           completedRhythms={completedRhythms}
           undoableRhythms={undoableRhythms}
           onFriendshipsChange={friendships => setPreviewData(previous => ({ ...previous, friendships }))}
+          onPeopleGroupsChange={peopleGroups => setPreviewData(previous => ({ ...previous, peopleGroups }))}
           onAddRhythm={(event, personId) => openRhythmEditor(event, undefined, {
             initialDraft: { ...createRhythmDraft([]), personIds: [personId] }
           })}
@@ -2251,6 +2383,20 @@ export function App() {
         v18RecoveryError={v18RecoveryError}
         v19RecoveryCopy={v19RecoveryCopy}
         v19RecoveryError={v19RecoveryError}
+        v20RecoveryCopy={v20RecoveryCopy}
+        v20RecoveryError={v20RecoveryError}
+        v21RecoveryCopy={v21RecoveryCopy}
+        v21RecoveryError={v21RecoveryError}
+        v22RecoveryCopy={v22RecoveryCopy}
+        v22RecoveryError={v22RecoveryError}
+        v23RecoveryCopy={v23RecoveryCopy}
+        v23RecoveryError={v23RecoveryError}
+        v25RecoveryCopy={v25RecoveryCopy}
+        v25RecoveryError={v25RecoveryError}
+        v26RecoveryCopy={v26RecoveryCopy}
+        v26RecoveryError={v26RecoveryError}
+        v27RecoveryCopy={v27RecoveryCopy}
+        v27RecoveryError={v27RecoveryError}
       />
       {storageNeedsAttention && !isPreviewSettings && (
         <p className="preview-storage-alert" role="alert">

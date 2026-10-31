@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render as testingRender, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../src/App.tsx';
@@ -10,7 +10,7 @@ import {
   PREVIEW_SCHEMA_VERSION,
   validatePreviewEnvelope
 } from '../src/domain/preview-state.ts';
-import { createStrengthData } from '../src/domain/strength.ts';
+import { createStrengthData, createStrengthGuidedSession } from '../src/domain/strength.ts';
 import { createWeightData } from '../src/domain/weight.ts';
 import { createCardioData } from '../src/domain/cardio.ts';
 import { createFriendshipData } from '../src/domain/friendships.ts';
@@ -34,6 +34,10 @@ import {
   loadV16RecoveryCopy,
   loadV17RecoveryCopy,
   loadV18RecoveryCopy,
+  loadV20RecoveryCopy,
+  loadV21RecoveryCopy,
+  loadV25RecoveryCopy,
+  loadV27RecoveryCopy,
   PREVIEW_V19_RECOVERY_KEY,
   PREVIEW_STORAGE_KEY,
   PREVIEW_V1_RECOVERY_KEY,
@@ -52,6 +56,10 @@ import {
   PREVIEW_V16_RECOVERY_KEY,
   PREVIEW_V17_RECOVERY_KEY,
   PREVIEW_V18_RECOVERY_KEY,
+  PREVIEW_V20_RECOVERY_KEY,
+  PREVIEW_V21_RECOVERY_KEY,
+  PREVIEW_V25_RECOVERY_KEY,
+  PREVIEW_V27_RECOVERY_KEY,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -61,6 +69,18 @@ import type { PreviewData } from '../src/domain/preview-state.ts';
 import { localDateString } from '../src/domain/money-goals.ts';
 import { addCalendarDays } from '../src/domain/rhythm-occurrences.ts';
 import { installMemoryStorage, MemoryStorage } from './memory-storage.ts';
+
+function render(ui: Parameters<typeof testingRender>[0]) {
+  const result = testingRender(ui);
+  const trigger = result.container.querySelector('.today-plan__focus-trigger');
+  if (trigger) {
+    fireEvent.click(trigger);
+    const allDayOption = [...result.container.querySelectorAll('button')]
+      .find(button => button.textContent?.startsWith('Everything today'));
+    if (allDayOption) fireEvent.click(allDayOption);
+  }
+  return result;
+}
 
 beforeEach(installMemoryStorage);
 afterEach(() => {
@@ -82,6 +102,10 @@ afterEach(() => {
   window.localStorage.removeItem(PREVIEW_V16_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V17_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V18_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V20_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V21_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V25_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V27_RECOVERY_KEY);
   vi.unstubAllGlobals();
 });
 
@@ -334,6 +358,55 @@ function setDownloadMocks() {
 }
 
 describe('synthetic preview storage adapter and envelope', () => {
+  it('accepts subsequent writes when a current-schema source contains an active Strength session draft', () => {
+    const data = createSamplePreviewData();
+    const workout: StrengthSavedWorkout = {
+      id: 'active-session-template',
+      name: 'Active session',
+      muscleIds: ['chest'],
+      sharedWith: [],
+      exercises: [{
+        id: 'active-session-exercise',
+        name: 'Bench Press',
+        muscleIds: ['chest'],
+        equipment: 'Barbell',
+        loadMeaning: 'total',
+        restDurationSeconds: 180,
+        restDurationOverridden: false,
+        sets: [{ id: 'active-session-set', targetReps: 8 }]
+      }],
+      supersetGroups: []
+    };
+    const started = createStrengthGuidedSession(workout, {
+      id: 'active-session-draft',
+      date: '2026-10-22',
+      startedAt: '2026-10-22T09:00:00.000Z',
+      timeZone: 'UTC'
+    });
+    expect(started.valid).toBe(true);
+    if (!started.valid) return;
+    data.strength.savedWorkouts = [workout];
+    data.strength.guidedSessionDraft = started.session;
+    const { storage } = storageFixture();
+
+    const initial = writePreview(storage, data, null);
+    expect(initial.kind).toBe('saved');
+    if (initial.kind !== 'saved') return;
+    expect(parsePreviewBackup(initial.raw, '2026-10-22')).toMatchObject({
+      valid: true,
+      sourceSchemaVersion: PREVIEW_SCHEMA_VERSION
+    });
+
+    const updated = {
+      ...data,
+      strength: {
+        ...data.strength,
+        guidedSessionDraft: { ...started.session, notes: 'Session progress remains resumable.' }
+      }
+    };
+    expect(writePreview(storage, updated, initial.raw, { currentDate: '2026-10-22' }).kind).toBe('saved');
+  });
+
   it('round-trips the explicit versioned envelope including shared Friendships records', () => {
     const data = sampleWithHistory();
     data.friendships = {
@@ -404,7 +477,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(parsed.valid).toBe(true);
     if (!parsed.valid) return;
     expect(parsed.sourceSchemaVersion).toBe(19);
-    expect(parsed.envelope.schemaVersion).toBe(20);
+    expect(parsed.envelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
     expect(parsed.envelope.data.peopleGroups.find(group => group.id === 'friends')?.memberIds)
       .toEqual(['sample-person-morgan']);
     expect(parsed.envelope.data.friendships).toEqual(data.friendships);
@@ -416,6 +489,168 @@ describe('synthetic preview storage adapter and envelope', () => {
     if (loaded.kind !== 'loaded') return;
     expect(writePreview(storage, loaded.data, raw, { currentDate: '2026-10-21' }).kind).toBe('saved');
     expect(values.get(PREVIEW_V19_RECOVERY_KEY)).toBe(raw);
+  });
+
+  it('migrates schema v20 Strength without fabricating exercise data and preserves exact recovery bytes', () => {
+    const data = createSamplePreviewData();
+    data.strength.savedWorkouts = [{
+      id: 'legacy-template-without-plan',
+      name: 'Existing workout',
+      muscleIds: ['chest'],
+      sharedWith: []
+    }];
+    data.strength.workouts = [{
+      id: 'legacy-date-only-log',
+      date: '2026-10-10',
+      muscleIds: ['chest'],
+      savedWorkoutId: 'legacy-template-without-plan',
+      workoutName: 'Existing workout'
+    }];
+    const legacyEnvelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+      schemaVersion: number;
+      data: Record<string, unknown>;
+    };
+    legacyEnvelope.schemaVersion = 20;
+    const legacyStrength = legacyEnvelope.data.strength as { settings: Record<string, unknown> };
+    delete legacyStrength.settings.weightUnit;
+    const raw = ` \n${JSON.stringify(legacyEnvelope)}\n`;
+
+    const parsed = parsePreviewBackup(raw, '2026-10-21');
+    expect(parsed.valid).toBe(true);
+    if (!parsed.valid) return;
+    expect(parsed.sourceSchemaVersion).toBe(20);
+    expect(parsed.envelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+    expect(parsed.envelope.data.strength.settings.weightUnit).toBe('lb');
+    expect(parsed.envelope.data.strength.savedWorkouts[0]).toEqual({
+      ...data.strength.savedWorkouts[0],
+      supersetGroups: []
+    });
+    expect(parsed.envelope.data.strength.workouts[0]).toEqual({
+      ...data.strength.workouts[0],
+      supersetGroups: []
+    });
+
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(writePreview(storage, loaded.data, raw, { currentDate: '2026-10-21' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V20_RECOVERY_KEY)).toBe(raw);
+    expect(loadV20RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+    const reloaded = loadPreview(storage, '2026-10-21');
+    expect(reloaded.kind).toBe('loaded');
+    if (reloaded.kind === 'loaded') {
+      expect(reloaded.data.strength.savedWorkouts[0]).toEqual({
+        ...data.strength.savedWorkouts[0],
+        supersetGroups: []
+      });
+      expect(reloaded.data.strength.workouts[0]).toEqual({
+        ...data.strength.workouts[0],
+        supersetGroups: []
+      });
+    }
+
+    const occupied = storageFixture({
+      [PREVIEW_STORAGE_KEY]: raw,
+      [PREVIEW_V20_RECOVERY_KEY]: 'different original bytes'
+    });
+    expect(writePreview(occupied.storage, data, raw, { currentDate: '2026-10-21' })).toMatchObject({
+      kind: 'error',
+      message: expect.stringContaining('recovery copy')
+    });
+    expect(occupied.values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+  });
+
+  it('round-trips nested Strength plans and immutable performance snapshots through preview backup', () => {
+    const data = createSamplePreviewData();
+    data.strength.savedWorkouts = [{
+      id: 'plan-roundtrip',
+      name: 'Push',
+      muscleIds: ['chest', 'triceps'],
+      sharedWith: ['sample-person-avery'],
+      exercises: [{
+        id: 'exercise-bench',
+        name: 'Bench Press',
+        muscleIds: ['chest'],
+        equipment: 'Barbell',
+        restDurationSeconds: 90,
+        sets: [{
+          id: 'bench-set-1',
+          targetReps: 8,
+          targetLoad: { kind: 'external', meaning: 'total', value: 135, unit: 'lb' }
+        }]
+      }]
+    }];
+    const active = createStrengthGuidedSession(data.strength.savedWorkouts[0]!, {
+      id: 'guided-session-roundtrip',
+      date: '2026-10-21',
+      startedAt: '2026-10-21T09:00:00.000Z',
+      timeZone: 'UTC'
+    });
+    expect(active.valid).toBe(true);
+    if (!active.valid) return;
+    data.strength.guidedSessionDraft = {
+      ...active.session,
+      autoStartRest: true,
+      restTimer: {
+        status: 'running',
+        durationSeconds: 90,
+        deadlineAt: '2026-10-21T09:01:30.000Z'
+      }
+    };
+    data.strength.workouts = [{
+      id: 'log-roundtrip',
+      date: '2026-10-21',
+      muscleIds: ['chest'],
+      savedWorkoutId: 'plan-roundtrip',
+      workoutName: 'Push',
+      startedAt: '2026-10-21T09:00:00.000Z',
+      finishedAt: '2026-10-21T09:30:00.000Z',
+      timeZone: 'UTC',
+      exercises: [{
+        id: 'exercise-bench',
+        name: 'Bench Press',
+        muscleIds: ['chest'],
+        equipment: 'Barbell',
+        restDurationSeconds: 90,
+        sets: [{
+          id: 'bench-set-1',
+          targetReps: 8,
+          targetLoad: { kind: 'external', meaning: 'total', value: 135, unit: 'lb' },
+          status: 'performed',
+          actualReps: 8,
+          actualLoad: { kind: 'external', meaning: 'total', value: 135, unit: 'lb' },
+          confirmedAt: '2026-10-21T09:10:00.000Z'
+        }]
+      }]
+    }];
+    const expectedStrength = createPreviewEnvelope(data).data.strength;
+    const backup = JSON.stringify(createPreviewEnvelope(data));
+    const parsed = parsePreviewBackup(backup, '2026-10-21');
+    expect(parsed.valid).toBe(true);
+    if (!parsed.valid) return;
+    expect(parsed.envelope.data.strength).toEqual(expectedStrength);
+
+    const { storage } = storageFixture();
+    expect(writePreview(storage, data, null).kind).toBe('saved');
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind === 'loaded') expect(loaded.data.strength).toEqual(expectedStrength);
+  });
+
+  it('preserves exact schema v21 bytes before writing the resumable timer-ready schema v25 draft shape', () => {
+    const data = createSamplePreviewData();
+    const current = createPreviewEnvelope(data);
+    const v21Raw = ` \n${JSON.stringify({ ...current, schemaVersion: 21 })}\n`;
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: v21Raw });
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.strength.guidedSessionDraft).toBeUndefined();
+    expect(writePreview(storage, loaded.data, v21Raw, { currentDate: '2026-10-21' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V21_RECOVERY_KEY)).toBe(v21Raw);
+    expect(loadV21RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: v21Raw });
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
   });
 
   it('exports and imports structured schedules and Personal through the backup controls', async () => {
@@ -546,7 +781,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     );
     const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
-    expect(onImport).toHaveBeenCalledWith(data);
+    expect(onImport).toHaveBeenCalledWith(createPreviewEnvelope(data).data);
   });
 
   it('offers exact v3 recovery bytes through the shared backup controls', async () => {
@@ -569,6 +804,102 @@ describe('synthetic preview storage adapter and envelope', () => {
     await user.click(screen.getByRole('button', { name: 'Download original v3 recovery backup' }));
     const download = createObjectURL.mock.calls[0]![0];
     expect(await download.text()).toBe(raw);
+  });
+
+  it('offers the exact v20 source envelope through the shared recovery controls', async () => {
+    const user = userEvent.setup();
+    const raw = ` \n${JSON.stringify({
+      ...createPreviewEnvelope(createSamplePreviewData()),
+      schemaVersion: 20
+    })}\n`;
+    const { createObjectURL } = setDownloadMocks();
+    render(
+      <PreviewDataControls
+        data={createSamplePreviewData()}
+        status={{ kind: 'saved' }}
+        currentDate="2026-10-21"
+        onImport={() => null}
+        onReset={() => null}
+        onRetrySave={() => {}}
+        onReloadExternal={() => null}
+        onReplaceExternal={() => null}
+        v20RecoveryCopy={raw}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'Download original v20 recovery backup' }));
+    const download = createObjectURL.mock.calls[0]![0];
+    expect(await download.text()).toBe(raw);
+  });
+
+  it('loads and exposes the exact v25 recovery envelope through the shared controls', async () => {
+    const user = userEvent.setup();
+    const raw = ` \n${JSON.stringify({
+      ...createPreviewEnvelope(createSamplePreviewData()),
+      schemaVersion: 25
+    })}\n`;
+    window.localStorage.setItem(PREVIEW_V25_RECOVERY_KEY, raw);
+    const recovered = loadV25RecoveryCopy(browserPreviewStorage());
+    expect(recovered).toEqual({ kind: 'loaded', raw });
+    const { createObjectURL } = setDownloadMocks();
+    render(
+      <PreviewDataControls
+        data={createSamplePreviewData()}
+        status={{ kind: 'saved' }}
+        currentDate="2026-10-21"
+        onImport={() => null}
+        onReset={() => null}
+        onRetrySave={() => {}}
+        onReloadExternal={() => null}
+        onReplaceExternal={() => null}
+        v25RecoveryCopy={raw}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'Download original v25 recovery backup' }));
+    expect(await createObjectURL.mock.calls[0]![0].text()).toBe(raw);
+  });
+
+  it('preserves and exposes the exact v27 source before schema-v28 scoring migration', async () => {
+    const data = createSamplePreviewData();
+    const legacy = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+      schemaVersion: number;
+      data: {
+        cardio: Record<string, unknown>;
+        strength: Record<string, unknown>;
+      };
+    };
+    legacy.schemaVersion = 27;
+    delete legacy.data.cardio.trackingStartDate;
+    delete legacy.data.cardio.targetHistory;
+    delete legacy.data.strength.trackingStartDate;
+    delete legacy.data.strength.scoringSettingsHistory;
+    const raw = JSON.stringify(legacy);
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(writePreview(storage, loaded.data, raw, { currentDate: '2026-10-21' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V27_RECOVERY_KEY)).toBe(raw);
+
+    window.localStorage.setItem(PREVIEW_V27_RECOVERY_KEY, raw);
+    expect(loadV27RecoveryCopy(browserPreviewStorage())).toEqual({ kind: 'loaded', raw });
+    const user = userEvent.setup();
+    const { createObjectURL } = setDownloadMocks();
+    render(
+      <PreviewDataControls
+        data={createSamplePreviewData()}
+        status={{ kind: 'saved' }}
+        currentDate="2026-10-21"
+        onImport={() => null}
+        onReset={() => null}
+        onRetrySave={() => {}}
+        onReloadExternal={() => null}
+        onReplaceExternal={() => null}
+        v27RecoveryCopy={raw}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'Download original v27 recovery backup' }));
+    expect(await createObjectURL.mock.calls[0]![0].text()).toBe(raw);
   });
 
   it('restores valid empty state without reinitializing sample goals or completions', () => {
@@ -1106,7 +1437,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(occupied.values.get(PREVIEW_V2_RECOVERY_KEY)).toBe('{"different":"v2"}');
   });
 
-  it('round-trips schema v20 People and Friendships, Weight and Cardio data, capability metadata, suggestion sources, and prior records', () => {
+  it('round-trips legacy fitness records and leaves new scoring history unavailable', () => {
     const data = sampleWithHistory();
     const id = 'user-rhythm-11111111-1111-4111-8111-111111111111';
     data.savedRhythms = [{
@@ -1173,7 +1504,10 @@ describe('synthetic preview storage adapter and envelope', () => {
     const loaded = loadPreview(storage, '2026-10-21');
     expect(loaded.kind).toBe('loaded');
     if (loaded.kind !== 'loaded') return;
-    expect(loaded.data).toEqual(data);
+    expect(loaded.data).toMatchObject(data);
+    expect(loaded.data.cardio.targetHistory).toEqual([]);
+    expect(loaded.data.strength.trackingStartDate).toBeUndefined();
+    expect(loaded.data.strength.scoringSettingsHistory).toEqual([]);
     expect(parsePreviewBackup(saved.raw, '2026-10-21')).toMatchObject({
       valid: true,
       sourceSchemaVersion: PREVIEW_SCHEMA_VERSION,
@@ -1201,7 +1535,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       expect(loadV16RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
   });
 
-  it('hydrates v17 Weight with empty Cardio and Friendships defaults and preserves exact bytes before schema v20 writes', () => {
+  it('hydrates v17 Weight with empty Cardio and Friendships defaults and preserves exact bytes before schema v21 writes', () => {
     const data = createSamplePreviewData();
     data.weight = {
       displayUnit: 'lb',
@@ -1226,7 +1560,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(loadV17RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
   });
 
-  it('hydrates v18 with empty Friendships and People defaults and preserves exact source bytes before schema v20 writes', () => {
+  it('hydrates v18 with empty Friendships and People defaults and preserves exact source bytes before schema v21 writes', () => {
     const data = createSamplePreviewData();
     const current = createPreviewEnvelope(data);
     const { friendships: _friendships, peopleGroups: _peopleGroups, ...v18Data } = current.data;
@@ -1244,7 +1578,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(loadV18RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
   });
 
-  it('hydrates v14 with default Strength, Weight, Friendships, and People data and preserves exact source bytes before schema v20 writes', () => {
+  it('hydrates v14 with default Strength, Weight, Friendships, and People data and preserves exact source bytes before schema v21 writes', () => {
     const data = sampleWithHistory();
     const envelope = createPreviewEnvelope(data);
     const {
@@ -1596,7 +1930,7 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('does not overwrite an unsupported active envelope', () => {
     const unsupportedRaw = JSON.stringify({
       format: 'tend.synthetic-preview',
-      schemaVersion: 21,
+      schemaVersion: PREVIEW_SCHEMA_VERSION + 1,
       data: { goals: [], completedRhythmIds: [], savedRhythms: [], archivedRhythmIds: [] }
     });
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: unsupportedRaw });
@@ -1654,7 +1988,7 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('rejects malformed JSON, unsupported versions, malformed records, duplicate IDs, and invalid references', () => {
     expect(parsePreviewBackup('{', '2026-10-21').valid).toBe(false);
     const unsupported = createPreviewEnvelope(sampleWithHistory());
-    expect(validatePreviewEnvelope({ ...unsupported, schemaVersion: 21 }, '2026-10-21')).toMatchObject({
+    expect(validatePreviewEnvelope({ ...unsupported, schemaVersion: PREVIEW_SCHEMA_VERSION + 1 }, '2026-10-21')).toMatchObject({
       valid: false,
       kind: 'unsupported'
     });

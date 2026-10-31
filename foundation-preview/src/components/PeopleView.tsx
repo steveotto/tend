@@ -1,14 +1,20 @@
 import { syntheticPeople } from '../domain/preview-data.ts';
 import type { PersonPickerGroup, PersonId } from '../domain/preview-data.ts';
 import { personGroupMemberIds, setPersonGroupMembership } from '../domain/preview-data.ts';
-import { PersonBadge } from './PersonBadge.tsx';
+import type { FriendshipData } from '../domain/friendships.ts';
+import { connectionsForPerson } from '../domain/friendships.ts';
+import { PeopleCard } from './PeopleCard.tsx';
 
 export function PeopleView({
   groups,
+  friendships,
+  today,
   onChangeGroups,
   onOpenPerson
 }: {
   groups: readonly PersonPickerGroup[];
+  friendships: FriendshipData;
+  today: string;
   onChangeGroups: (next: PersonPickerGroup[]) => void;
   onOpenPerson: (personId: PersonId) => void;
 }) {
@@ -22,16 +28,19 @@ export function PeopleView({
       <div className="people-view__list">
         {syntheticPeople.map(person => {
           const isFriend = friends.has(person.id);
+          const lastConnection = connectionsForPerson(friendships, person.id)[0];
           return (
-            <article key={person.id} className="people-view__row">
-              <PersonBadge
-                person={person}
-                displayNameMode="full"
-                presentation="interactive"
-                onSelect={onOpenPerson}
-              />
+            <PeopleCard
+              key={person.id}
+              person={person}
+              classifications={groups.filter(group => group.memberIds.includes(person.id))}
+              {...(lastConnection
+                ? { connectionRecency: `Last connected ${formatPersonDate(lastConnection.date, today)}` }
+                : {})}
+              onSelect={onOpenPerson}
+              className="people-view__row"
+            >
               <div className="people-view__friendship">
-                {isFriend && <span className="people-view__friend-status">Friend</span>}
                 <button
                   type="button"
                   aria-pressed={isFriend}
@@ -41,10 +50,19 @@ export function PeopleView({
                   {isFriend ? 'Remove friend' : 'Mark as friend'}
                 </button>
               </div>
-            </article>
+            </PeopleCard>
           );
         })}
       </div>
     </section>
   );
+}
+
+function formatPersonDate(value: string, today: string): string {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year!, month! - 1, day!, 12).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    ...(year !== Number(today.slice(0, 4)) ? { year: 'numeric' as const } : {})
+  });
 }

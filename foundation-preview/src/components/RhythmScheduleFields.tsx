@@ -432,10 +432,43 @@ export function RhythmScheduleFields({
       )}
     </>
   );
+  const weekdaySelector = showScheduleControls && showWeekdays && (
+    <div
+      className={`rhythm-schedule-fields__weekday-row${weekdaysError ? ' rhythm-schedule-fields__weekday-row--invalid' : ''}`}
+      role={form.frequency === 'weekly' ? 'radiogroup' : 'group'}
+      aria-label={form.frequency === 'weekly' ? 'Choose one weekday' : 'Which days?'}
+      aria-invalid={weekdaysError ? true : undefined}
+      aria-describedby={weekdaysError ? weekdaysErrorId : undefined}
+      aria-errormessage={weekdaysError ? weekdaysErrorId : undefined}
+    >
+      <span>On</span>
+      <div className="rhythm-schedule-fields__weekday-list">
+        {weekdays.map(day => (
+          <label key={day.value} className="rhythm-schedule-fields__weekday">
+            <input
+              type={form.frequency === 'weekly' ? 'radio' : 'checkbox'}
+              {...(form.frequency === 'weekly' ? { name: weekdaysGroupId } : {})}
+              aria-label={day.label}
+              checked={form.frequency === 'weekly'
+                ? form.weekdays.length === 1 && form.weekdays[0] === day.value
+                : form.weekdays.includes(day.value)}
+              onChange={event => toggleWeekday(day.value, event.currentTarget.checked)}
+            />
+            <span aria-hidden="true">{['Su', 'M', 'Tu', 'W', 'Th', 'F', 'Sa'][day.value]}</span>
+          </label>
+        ))}
+      </div>
+      {weekdaysError && (
+        <span id={weekdaysErrorId} className="rhythm-schedule-fields__weekday-error" role="status">
+          {weekdaysError}
+        </span>
+      )}
+    </div>
+  );
 
   return (
     <div className="rhythm-schedule-fields">
-      <div className="rhythm-schedule-fields__top-row">
+      <div className={`rhythm-schedule-fields__top-row${weekdaySelector ? ' rhythm-schedule-fields__top-row--with-weekdays' : ''}`}>
         {showScheduleControls && (
           <div className="goal-field rhythm-schedule-fields__frequency">
             <label>Frequency</label>
@@ -450,6 +483,7 @@ export function RhythmScheduleFields({
           </div>
         )}
         {children}
+        {weekdaySelector}
       </div>
       {endDatePlacement === 'after-time' && endDateControl}
       {showScheduleControls && frequencyGuidance && (
@@ -585,40 +619,6 @@ export function RhythmScheduleFields({
               </>
             )}
           </div>
-        </div>
-      )}
-
-      {showScheduleControls && showWeekdays && (
-        <div
-          className={`rhythm-schedule-fields__weekday-row${weekdaysError ? ' rhythm-schedule-fields__weekday-row--invalid' : ''}`}
-          role={form.frequency === 'weekly' ? 'radiogroup' : 'group'}
-          aria-label={form.frequency === 'weekly' ? 'Choose one weekday' : 'Which days?'}
-          aria-invalid={weekdaysError ? true : undefined}
-          aria-describedby={weekdaysError ? weekdaysErrorId : undefined}
-          aria-errormessage={weekdaysError ? weekdaysErrorId : undefined}
-        >
-          <span>On</span>
-          <div className="rhythm-schedule-fields__weekday-list">
-            {weekdays.map(day => (
-              <label key={day.value} className="rhythm-schedule-fields__weekday">
-                <input
-                  type={form.frequency === 'weekly' ? 'radio' : 'checkbox'}
-                  {...(form.frequency === 'weekly' ? { name: weekdaysGroupId } : {})}
-                  aria-label={day.label}
-                  checked={form.frequency === 'weekly'
-                    ? form.weekdays.length === 1 && form.weekdays[0] === day.value
-                    : form.weekdays.includes(day.value)}
-                  onChange={event => toggleWeekday(day.value, event.currentTarget.checked)}
-                />
-                <span aria-hidden="true">{['Su', 'M', 'Tu', 'W', 'Th', 'F', 'Sa'][day.value]}</span>
-              </label>
-            ))}
-          </div>
-          {weekdaysError && (
-            <span id={weekdaysErrorId} className="rhythm-schedule-fields__weekday-error" role="status">
-              {weekdaysError}
-            </span>
-          )}
         </div>
       )}
 

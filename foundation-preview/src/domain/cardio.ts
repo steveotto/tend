@@ -2,6 +2,7 @@ import { isValidDate } from './money-goals.ts';
 import type { RhythmPreview } from './preview-data.ts';
 import { hasRhythmOccurrenceForCompletion } from './rhythm-occurrences.ts';
 import { isPeriodBasedRhythmSchedule, rhythmOccurrencePeriod } from './rhythm-occurrences.ts';
+import { blendFitnessHealth } from './fitness-scoring.ts';
 import { effectiveRhythmSchedule } from './rhythm-schedule.ts';
 import { rhythmSeasonForDate } from './rhythm-seasons.ts';
 import type { RhythmSchedule } from './rhythm-schedule.ts';
@@ -27,7 +28,15 @@ export type CardioRun = {
 export type CardioData = {
   goals: unknown;
   runs: unknown[];
+  trackingStartDate?: string;
+  targetHistory?: CardioTargetVersion[];
   [key: string]: unknown;
+};
+
+export type CardioTargetVersion = {
+  effectiveDate: string;
+  weeklyRunTarget: number | null;
+  weeklyMileTarget: number | null;
 };
 
 export type CardioGoalSettings = {
@@ -51,6 +60,10 @@ export type CardioProgress = {
   runProgress: number | null;
   mileageProgress: number | null;
   score: number | null;
+  consistency: number | null;
+  health: number | null;
+  eligibleConsistencyWeeks: number;
+  consistencyUnavailableReason: string | null;
   remainingRuns: number | null;
   remainingMiles: number | null;
   days: CardioDay[];
@@ -58,15 +71,29 @@ export type CardioProgress = {
 
 export const createCardioData = (): CardioData => ({
   goals: { weeklyRunTarget: null, weeklyMileTarget: null },
-  runs: []
+  runs: [],
+  targetHistory: []
 });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export function validateCardioDataShape(value: unknown): value is CardioData {
-  return isRecord(value) && Array.isArray(value.runs);
+export function migrateCardioDataToV28(value: CardioData): CardioData {
+  return {
+    ...value,
+    targetHistory: Array.isArray(value.targetHistory) ? value.targetHistory : []
+  };
+}
+
+export function validateCardioDataShape(value: unknown, requireV28 = false): value is CardioData {
+  if (!isRecord(value) || !Array.isArray(value.runs)
+    || requireV28 && !Array.isArray(value.targetHistory)
+    || value.trackingStartDate !== undefined
+      && (typeof value.trackingStartDate !== 'string' || !isValidDate(value.trackingStartDate))
+    || value.targetHistory !== undefined
+      && !validateCardioTargetHistory(value.targetHistory, value.trackingStartDate)) return false;
+  return true;
 }
 
 export function cardioGoalSettings(value: unknown): CardioGoalSettings | null {
@@ -102,11 +129,57 @@ export function validateCardioGoals(value: {
   return null;
 }
 
+export function parseCardioGoalInput(value: string): number | null {
+  if (!value.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function stepCardioGoalInput(
+  value: string,
+  direction: -1 | 1,
+  field: 'runs' | 'miles'
+): string {
+  const minimum = field === 'runs' ? 1 : 0.1;
+  const maximum = field === 'runs' ? 21 : 1000;
+  const step = field === 'runs' ? 1 : 0.1;
+  if (!value.trim()) return direction > 0 ? String(minimum) : '';
+  const current = Number(value);
+  if (!Number.isFinite(current)) return value;
+  const next = Math.min(maximum, Math.max(minimum, current + direction * step));
+  return field === 'runs' ? String(Math.trunc(next)) : String(Number(next.toFixed(10)));
+}
+
 export function saveCardioGoals(
   data: CardioData,
-  goals: { weeklyRunTarget: number | null; weeklyMileTarget: number | null }
+  goals: { weeklyRunTarget: number | null; weeklyMileTarget: number | null },
+  today: string,
+  trackingStartDate = today
 ): CardioData {
-  return { ...data, goals: { ...goals } };
+  if (!isValidDate(today) || !isValidDate(trackingStartDate) || trackingStartDate > today) return data;
+  const history = data.targetHistory ?? [];
+  if (!data.trackingStartDate) {
+    if (goals.weeklyRunTarget === null && goals.weeklyMileTarget === null) {
+      return { ...data, goals: { ...goals }, targetHistory: [] };
+    }
+    return {
+      ...data,
+      goals: { ...goals },
+      trackingStartDate,
+      targetHistory: [{ effectiveDate: trackingStartDate, ...goals }]
+    };
+  }
+  const effectiveDate = addDateDays(cardioWeekStart(today), 7);
+  const currentTargets = data.trackingStartDate
+    ? cardioTargetsForDate(data, today)
+    : cardioGoalSettings(data.goals);
+  const retained = history.filter(version => version.effectiveDate < effectiveDate);
+  const sameAsCurrent = currentTargets?.weeklyRunTarget === goals.weeklyRunTarget
+    && currentTargets?.weeklyMileTarget === goals.weeklyMileTarget;
+  return {
+    ...data,
+    targetHistory: sameAsCurrent ? retained : [...retained, { effectiveDate, ...goals }]
+  };
 }
 
 export function isCardioRun(value: unknown): value is CardioRun {
@@ -165,12 +238,16 @@ export function selectCardioProgress(data: CardioData, evaluationDate: string): 
   const weekRuns = valid.filter(run => run.date >= weekStart && run.date <= evaluationDate);
   const runs = weekRuns.length;
   const miles = weekRuns.reduce((total, run) => total + run.distance, 0);
-  const goals = cardioGoalSettings(data.goals);
+  const goals = data.trackingStartDate
+    ? cardioTargetsForDate(data, evaluationDate)
+    : cardioGoalSettings(data.goals);
   const runProgress = goals ? Math.min(100, runs / goals.weeklyRunTarget * 100) : null;
   const mileageProgress = goals ? Math.min(100, miles / goals.weeklyMileTarget * 100) : null;
-  const score = runProgress === null || mileageProgress === null
+  const onTrack = runProgress === null || mileageProgress === null
     ? null
-    : Math.round(Math.min(runProgress, mileageProgress));
+    : Math.min(runProgress, mileageProgress);
+  const consistency = selectCardioConsistency(data, valid, evaluationDate);
+  const health = blendFitnessHealth(consistency.score, onTrack).health;
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = addDateDays(weekStart, index);
     const dayRuns = weekRuns.filter(run => run.date === date);
@@ -185,11 +262,86 @@ export function selectCardioProgress(data: CardioData, evaluationDate: string): 
     targetMiles: goals?.weeklyMileTarget ?? null,
     runProgress,
     mileageProgress,
-    score,
+    score: onTrack,
+    consistency: consistency.score,
+    health,
+    eligibleConsistencyWeeks: consistency.eligibleWeeks,
+    consistencyUnavailableReason: consistency.reason,
     remainingRuns: goals ? Math.max(0, goals.weeklyRunTarget - runs) : null,
     remainingMiles: goals ? Math.max(0, goals.weeklyMileTarget - miles) : null,
     days
   };
+}
+
+export function selectCardioConsistency(
+  data: CardioData,
+  runs: readonly CardioRun[],
+  evaluationDate: string
+): { score: number | null; eligibleWeeks: number; reason: string | null } {
+  if (!data.trackingStartDate || !isValidDate(data.trackingStartDate)) {
+    return { score: null, eligibleWeeks: 0, reason: 'Set an explicit Cardio tracking start date and save weekly goals.' };
+  }
+  const currentWeekStart = cardioWeekStart(evaluationDate);
+  const weeks: { start: string; end: string }[] = Array.from({ length: 4 }, (_, index) => {
+    const start = addDateDays(currentWeekStart, -7 * (index + 1));
+    return { start, end: addDateDays(start, 6) };
+  }).reverse();
+  const results: number[] = [];
+  for (const week of weeks) {
+    if (week.start < data.trackingStartDate || week.end > evaluationDate) continue;
+    const targets = cardioTargetsForWeek(data, week.start, week.end);
+    if (!targets || !cardioGoalSettings(targets)) continue;
+    const weekRuns = runs.filter(run => run.date >= week.start && run.date <= week.end);
+    const runProgress = Math.min(100, weekRuns.length / targets.weeklyRunTarget! * 100);
+    const distance = weekRuns.reduce((total, run) => total + run.distance, 0);
+    const distanceProgress = Math.min(100, distance / targets.weeklyMileTarget! * 100);
+    results.push(Math.min(runProgress, distanceProgress));
+  }
+  return results.length
+    ? { score: results.reduce((sum, score) => sum + score, 0) / results.length, eligibleWeeks: results.length, reason: null }
+    : {
+        score: null,
+        eligibleWeeks: 0,
+        reason: 'No completed week in the four-week lookback has full tracking and trustworthy targets.'
+      };
+}
+
+export function cardioTargetsForDate(data: CardioData, date: string): CardioGoalSettings | null {
+  const latest = (data.targetHistory ?? []).filter(version => version.effectiveDate <= date).at(-1);
+  if (latest) return cardioGoalSettings(latest);
+  return data.trackingStartDate ? null : cardioGoalSettings(data.goals);
+}
+
+function cardioTargetsForWeek(
+  data: CardioData,
+  start: string,
+  end: string
+): CardioTargetVersion | null {
+  const history = data.targetHistory ?? [];
+  const targets = history.filter(version => version.effectiveDate <= start).at(-1);
+  if (!targets) return null;
+  if (history.some(version => version.effectiveDate > start && version.effectiveDate <= end)) return null;
+  return targets;
+}
+
+function validateCardioTargetHistory(value: unknown, trackingStartDate: unknown): value is CardioTargetVersion[] {
+  if (!Array.isArray(value)) return false;
+  if (trackingStartDate === undefined) return value.length === 0;
+  if (typeof trackingStartDate !== 'string' || !isValidDate(trackingStartDate)
+    || value.length === 0 || !isRecord(value[0]) || value[0].effectiveDate !== trackingStartDate) return false;
+  let previousDate = '';
+  for (const item of value) {
+    if (!isRecord(item) || Object.keys(item).some(key =>
+      !['effectiveDate', 'weeklyRunTarget', 'weeklyMileTarget'].includes(key))
+      || typeof item.effectiveDate !== 'string' || !isValidDate(item.effectiveDate)
+      || item.effectiveDate <= previousDate
+      || typeof item.weeklyRunTarget !== 'number' && item.weeklyRunTarget !== null
+      || typeof item.weeklyMileTarget !== 'number' && item.weeklyMileTarget !== null
+      || (item.weeklyRunTarget === null) !== (item.weeklyMileTarget === null)
+      || item.weeklyRunTarget !== null && !cardioGoalSettings(item)) return false;
+    previousDate = item.effectiveDate;
+  }
+  return true;
 }
 
 export function cardioWeekStart(date: string): string {
@@ -296,7 +448,7 @@ export function saveCardioDataCommand(input: {
   editableRhythmIds: ReadonlySet<string>;
   completionState: CardioCompletionState;
 }): CardioSaveResult {
-  if (!validateCardioDataShape(input.next)) {
+  if (!validateCardioDataShape(input.next, true)) {
     return { valid: false, error: 'Cardio goals or runs are malformed. No changes were saved.' };
   }
   const previousRuns = new Map(validatedCardioRuns(input.previous, input.today).records.map(run => [run.id, run]));

@@ -4,10 +4,12 @@ import {
   cardioWeekStart,
   createCardioData,
   deleteCardioRun,
+  parseCardioGoalInput,
   saveCardioDataCommand,
   saveCardioGoals,
   saveCardioRun,
   selectCardioProgress,
+  stepCardioGoalInput,
   validatedCardioRuns,
   validateCardioGoals
 } from '../src/domain/cardio.ts';
@@ -103,12 +105,12 @@ describe('Cardio domain', () => {
       .toContain('Health & Fitness category');
   });
 
-  it('matches the legacy run and mileage formula and caps only percentages', () => {
+  it('keeps current run and mileage percentages unrounded and caps only progress', () => {
     const goals = { weeklyRunTarget: 2, weeklyMileTarget: 8 };
     const oneRun: CardioData = { ...createCardioData(), goals, runs: [run({ distance: 3 })] };
     expect(selectCardioProgress(oneRun, today)).toMatchObject({
       runs: 1, miles: 3, runProgress: 50, mileageProgress: 37.5,
-      score: 38, remainingRuns: 1, remainingMiles: 5
+      score: 37.5, remainingRuns: 1, remainingMiles: 5
     });
 
     const twoRuns: CardioData = {
@@ -129,6 +131,60 @@ describe('Cardio domain', () => {
     });
   });
 
+  it('blends four completed Cardio weeks with current-week progress without rounding', () => {
+    const data: CardioData = {
+      ...createCardioData(),
+      goals: { weeklyRunTarget: 2, weeklyMileTarget: 8 },
+      trackingStartDate: '2026-09-01',
+      targetHistory: [{
+        effectiveDate: '2026-09-01',
+        weeklyRunTarget: 2,
+        weeklyMileTarget: 8
+      }],
+      runs: [
+        run({ id: 'week-1-a', date: '2026-09-23', distance: 4 }),
+        run({ id: 'week-1-b', date: '2026-09-25', distance: 4 }),
+        run({ id: 'week-2-a', date: '2026-09-30', distance: 4 }),
+        run({ id: 'week-2-b', date: '2026-10-02', distance: 4 }),
+        run({ id: 'week-3-a', date: '2026-10-07', distance: 4 }),
+        run({ id: 'current-week-a', date: '2026-10-22', distance: 4 })
+      ]
+    };
+
+    expect(selectCardioProgress(data, today)).toMatchObject({
+      consistency: 62.5,
+      score: 50,
+      health: 59.375,
+      eligibleConsistencyWeeks: 4,
+      weekStart: '2026-10-19',
+      weekEnd: '2026-10-25'
+    });
+  });
+
+  it('excludes the current partial week, pre-tracking weeks, and weeks with unknown target history', () => {
+    const untracked = {
+      ...createCardioData(),
+      goals: { weeklyRunTarget: 2, weeklyMileTarget: 8 },
+      runs: [run({ date: '2026-10-22', distance: 4 })]
+    };
+    expect(selectCardioProgress(untracked, today)).toMatchObject({
+      consistency: null,
+      score: 50,
+      health: null,
+      eligibleConsistencyWeeks: 0
+    });
+
+    const changedMidweek: CardioData = {
+      ...untracked,
+      trackingStartDate: '2026-09-01',
+      targetHistory: [
+        { effectiveDate: '2026-09-01', weeklyRunTarget: 2, weeklyMileTarget: 8 },
+        { effectiveDate: '2026-10-14', weeklyRunTarget: 3, weeklyMileTarget: 10 }
+      ]
+    };
+    expect(selectCardioProgress(changedMidweek, today).eligibleConsistencyWeeks).toBe(3);
+  });
+
   it('distinguishes valid zero progress from unavailable or invalid goals', () => {
     const noRuns: CardioData = { ...createCardioData(), goals: { weeklyRunTarget: 2, weeklyMileTarget: 8 } };
     expect(selectCardioProgress(noRuns, today)).toMatchObject({
@@ -140,12 +196,26 @@ describe('Cardio domain', () => {
     expect(validateCardioGoals({ weeklyRunTarget: 0, weeklyMileTarget: 8 })).toContain('positive weekly target');
     expect(validateCardioGoals({ weeklyRunTarget: 2, weeklyMileTarget: null })).toContain('both');
     expect(validateCardioGoals({ weeklyRunTarget: null, weeklyMileTarget: null })).toBeNull();
-    expect(saveCardioGoals(noRuns, { weeklyRunTarget: null, weeklyMileTarget: null }).goals)
+    expect(saveCardioGoals(noRuns, { weeklyRunTarget: null, weeklyMileTarget: null }, today).goals)
       .toEqual({ weeklyRunTarget: null, weeklyMileTarget: null });
     expect(selectCardioProgress({
       ...noRuns,
       goals: { weeklyRunTarget: 2, weeklyMileTarget: 0 }
     }, today).score).toBeNull();
+  });
+
+  it('steps blank and fractional weekly targets without crossing their valid bounds', () => {
+    expect(parseCardioGoalInput('')).toBeNull();
+    expect(parseCardioGoalInput('0')).toBe(0);
+    expect(parseCardioGoalInput('8.5')).toBe(8.5);
+    expect(stepCardioGoalInput('', 1, 'runs')).toBe('1');
+    expect(stepCardioGoalInput('', -1, 'runs')).toBe('');
+    expect(stepCardioGoalInput('1', -1, 'runs')).toBe('1');
+    expect(stepCardioGoalInput('21', 1, 'runs')).toBe('21');
+    expect(stepCardioGoalInput('', 1, 'miles')).toBe('0.1');
+    expect(stepCardioGoalInput('8.5', 1, 'miles')).toBe('8.6');
+    expect(stepCardioGoalInput('0.1', -1, 'miles')).toBe('0.1');
+    expect(validateCardioGoals({ weeklyRunTarget: 2, weeklyMileTarget: 8.5 })).toBeNull();
   });
 
   it('uses explicit date-only Monday–Sunday boundaries across month, year, and DST dates', () => {

@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest';
 import {
   createWeightData,
   deleteWeightMeasurement,
+  formatWeightInput,
   kilogramsToPounds,
+  parseWeightInput,
   poundsToKilograms,
   saveWeightDataCommand,
   saveWeightGoals,
   saveWeightMeasurement,
   selectWeightProgress,
+  stepWeightInput,
   validateCanonicalWeightGoals,
   validWeightMeasurements,
   weightDataIssues,
@@ -85,6 +88,22 @@ function command(
 }
 
 describe('Weight domain', () => {
+  it('formats numeric control values without trailing zeros and steps by whole display units', () => {
+    expect(formatWeightInput(poundsToKilograms(173), 'lb')).toBe('173');
+    expect(formatWeightInput(poundsToKilograms(173.5), 'lb')).toBe('173.5');
+    expect(formatWeightInput(173.5, 'kg')).toBe('173.5');
+    expect(formatWeightInput(null, 'lb')).toBe('');
+    expect(formatWeightInput(0, 'lb')).toBe('0');
+    expect(parseWeightInput('', 'lb')).toBeNull();
+    expect(parseWeightInput('0', 'lb')).toBe(0);
+    expect(parseWeightInput('173.5', 'lb')).toBe(poundsToKilograms(173.5));
+    expect(parseWeightInput('invalid', 'kg')).toBeNull();
+    expect(stepWeightInput(null, 'lb', 1)).toBe(poundsToKilograms(1));
+    expect(stepWeightInput(null, 'lb', -1)).toBeNull();
+    expect(formatWeightInput(stepWeightInput(poundsToKilograms(173.5), 'lb', 1), 'lb')).toBe('174.5');
+    expect(formatWeightInput(stepWeightInput(poundsToKilograms(173.5), 'lb', -1), 'lb')).toBe('172.5');
+  });
+
   it('converts physical units exactly and preserves canonical values across repeated display-unit changes', () => {
     const pounds = 200;
     const kilograms = poundsToKilograms(pounds);

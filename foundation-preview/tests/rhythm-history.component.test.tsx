@@ -1217,13 +1217,13 @@ describe('shared Rhythm history', () => {
     expect(zeroMeter.getAttribute('aria-valuenow')).toBe('0');
     expect(zeroMeter.getAttribute('aria-valuetext')).toBe('0 out of 100');
     expect(zeroMeter.classList.contains('red')).toBe(true);
-    expect(zeroMeter.querySelector('.rhythm-history-view__health-meter-fill')?.getAttribute('style')).toContain('0%');
+    expect(zeroMeter.querySelector('.health-score-meter__fill')?.getAttribute('style')).toContain('0%');
 
     rerender(<HealthScoreMeter score={null} />);
     const unavailable = screen.getByRole('img', { name: 'Health: Not enough data' });
     expect(unavailable.hasAttribute('aria-valuenow')).toBe(false);
     expect(unavailable.classList.contains('neutral')).toBe(true);
-    expect(unavailable.querySelector('.rhythm-history-view__health-meter-fill')?.getAttribute('style')).toContain('0%');
+    expect(unavailable.querySelector('.health-score-meter__fill')?.getAttribute('style')).toContain('0%');
   });
 
   it('prepares out-of-order dated records as chronological daily counts without losing IDs', () => {
@@ -1507,7 +1507,7 @@ describe('shared Rhythm history', () => {
     expect(details.hidden).toBe(true);
     expect(healthCalculationDisclosure.hidden).toBe(true);
     expect(document.querySelectorAll('.rhythm-history-view__score-card')).toHaveLength(1);
-    expect(document.querySelectorAll('.rhythm-history-view__score-summary')).toHaveLength(2);
+    expect(document.querySelectorAll('.health-score-measures__item')).toHaveLength(2);
     expect(document.querySelectorAll('.rhythm-history-view__score-summary-divider')).toHaveLength(1);
     expect(document.querySelectorAll('.rhythm-history-view__score-card .rhythm-history-view__score-info')).toHaveLength(1);
     expect(info.getAttribute('aria-expanded')).toBe('false');
@@ -1545,16 +1545,21 @@ describe('shared Rhythm history', () => {
     const scoreCard = document.querySelector('.rhythm-history-view__score-card')!;
     const orderedSections = [...scoreCard.children]
       .filter(element => element.classList.contains('rhythm-history-view__health-summary')
+        || element.classList.contains('health-score-breakdown')
         || element.classList.contains('rhythm-history-view__health-calculation-disclosure')
         || element.classList.contains('rhythm-history-view__score-summary-divider')
-        || element.classList.contains('rhythm-history-view__score-grid')
+        || element.classList.contains('health-score-measures')
         || element.classList.contains('rhythm-history-view__score-details-grid'))
-      .map(element => element.className.split(' ').find(className => className.startsWith('rhythm-history-view__')));
+      .map(element => element.className.split(' ').find(className =>
+        className.startsWith('rhythm-history-view__')
+        || className === 'health-score-breakdown'
+        || className === 'health-score-measures'
+      ));
     expect(orderedSections).toEqual([
-      'rhythm-history-view__health-summary',
+      'health-score-breakdown',
       'rhythm-history-view__health-calculation-disclosure',
       'rhythm-history-view__score-summary-divider',
-      'rhythm-history-view__score-grid',
+      'health-score-measures',
       'rhythm-history-view__score-details-grid'
     ]);
     const healthDetails = details.querySelector('.rhythm-history-view__score-details-column:first-child') as HTMLElement;
@@ -2078,9 +2083,9 @@ describe('shared Rhythm history', () => {
 
     expect(screen.getByRole('img', { name: 'Health: Not enough data' })).toBeTruthy();
     expect(screen.queryByText('Not enough data.')).toBeNull();
-    expect(document.querySelector('.rhythm-history-view__health-heading > span')?.textContent).toBe('—');
-    expect(document.querySelector('.rhythm-history-view__health-meter')?.classList.contains('neutral')).toBe(true);
-    expect(document.querySelector('.rhythm-history-view__health-meter-fill')?.getAttribute('style')).toContain('0%');
+    expect(document.querySelector('.health-score-breakdown__header > span')?.textContent).toBe('—');
+    expect(document.querySelector('.health-score-meter')?.classList.contains('neutral')).toBe(true);
+    expect(document.querySelector('.health-score-meter__fill')?.getAttribute('style')).toContain('0%');
     expect(screen.getByText('Dated completion history is unavailable for this Rhythm.')).toBeTruthy();
     expect(screen.queryByText('Your story starts with the first Tend.')).toBeNull();
     expect(screen.queryByRole('list', { name: 'Recorded completion count by date' })).toBeNull();

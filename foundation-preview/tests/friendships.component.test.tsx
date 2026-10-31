@@ -97,7 +97,13 @@ describe('Friendships view', () => {
       const [data, setData] = useState(initialData);
       return (
         <>
-          <PeopleView groups={peopleGroups} onChangeGroups={setPeopleGroups} onOpenPerson={vi.fn()} />
+          <PeopleView
+            groups={peopleGroups}
+            friendships={data}
+            today="2026-10-21"
+            onChangeGroups={setPeopleGroups}
+            onOpenPerson={vi.fn()}
+          />
           <FriendshipsView
             data={data}
             peopleGroups={peopleGroups}
@@ -125,7 +131,11 @@ describe('Friendships view', () => {
     }
 
     render(<IntegratedHarness />);
+    expect(within(document.querySelector('.people-view')!).getAllByText('Last connected Oct 10')).toHaveLength(2);
     await user.click(screen.getByRole('button', { name: 'Mark Morgan Reed as a friend' }));
+    expect(
+      within(screen.getByRole('group', { name: 'Morgan Reed classifications' })).getByText('Friends')
+    ).toBeTruthy();
     await user.click(screen.getByRole('tab', { name: 'Friends' }));
     expect(screen.getByRole('button', { name: 'View connections (1)' })).toBeTruthy();
 

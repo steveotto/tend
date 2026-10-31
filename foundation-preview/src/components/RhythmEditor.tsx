@@ -751,7 +751,8 @@ export function RhythmEditor({
           {fieldError('foundationIds')}
         </div>
 
-        {Object.keys(errors).length > 0 && (
+        {errors.form && <p className="goal-form-error-summary" role="alert">{errors.form}</p>}
+        {Object.keys(errors).some(field => field !== 'form') && (
           <p className="goal-form-error-summary" role="alert">Review the highlighted Rhythm fields.</p>
         )}
         <div className="rhythm-editor__action-row">

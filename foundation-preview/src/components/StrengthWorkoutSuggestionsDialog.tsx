@@ -45,6 +45,12 @@ export function StrengthWorkoutSuggestionsDialog({
             const linkedWorkouts = savedWorkouts.filter(workout =>
               workout.suggestionSourceId === suggestion.sourceId
             );
+            const timedSetCount = suggestion.exercises.reduce((count, exercise) =>
+              count + exercise.sets.filter(set => 'targetDurationSeconds' in set).length, 0);
+            const planMarkers = [
+              ...(suggestion.supersetExerciseIndexes ? ['Superset'] : []),
+              ...(timedSetCount ? [`${timedSetCount} timed ${timedSetCount === 1 ? 'set' : 'sets'}`] : [])
+            ];
             const expanded = expandedSourceId === suggestion.sourceId && linkedWorkouts.length > 1;
             const sourceControlId = `strength-workout-suggestion-action-${suggestion.sourceId}`;
             const choiceListId = `strength-workout-suggestion-choices-${suggestion.sourceId}`;
@@ -60,6 +66,7 @@ export function StrengthWorkoutSuggestionsDialog({
                     )}
                   </div>
                   <p>{suggestion.muscleIds.map(strengthMuscleName).join(' · ')}</p>
+                  <p>{suggestion.exercises.length} exercises · {suggestion.exercises.reduce((total, exercise) => total + exercise.sets.length, 0)} planned sets{planMarkers.length ? ` · ${planMarkers.join(' · ')}` : ''}</p>
                   {expanded && (
                     <div
                       className="strength-workout-suggestion__choices"
