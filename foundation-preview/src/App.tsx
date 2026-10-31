@@ -23,6 +23,7 @@ import { PersonProfileView } from './components/PersonProfileView.tsx';
 import { PeopleView } from './components/PeopleView.tsx';
 import { RhythmEditor } from './components/RhythmEditor.tsx';
 import { TodayView } from './components/TodayView.tsx';
+import { useTodayWeather } from './components/useTodayWeather.ts';
 import type { TodayFocusId } from './domain/today-plan.ts';
 import { HealthFitnessView } from './components/HealthFitnessView.tsx';
 import { FriendshipsView } from './components/FriendshipsView.tsx';
@@ -205,6 +206,8 @@ function isDatedCompletionRecord(record: RhythmCompletionRecord): record is Date
 export function App() {
   const scoringInstant = useScoringInstant();
   const [destination, setDestination] = useState<Destination>('today');
+  const weatherTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const todayWeather = useTodayWeather(destination === 'today', weatherTimeZone);
   const [todayFocus, setTodayFocus] = useState<TodayFocusId>('now');
   const [healthFitnessVisited, setHealthFitnessVisited] = useState(false);
   const [moreSettingsOpen, setMoreSettingsOpen] = useState(false);
@@ -2116,6 +2119,7 @@ export function App() {
               localDate={currentDate}
               focus={todayFocus}
               onFocusChange={setTodayFocus}
+              weatherController={todayWeather}
               completedRhythms={completedRhythms}
               undoableRhythms={undoableRhythms}
               rhythms={editableTodayRhythms}

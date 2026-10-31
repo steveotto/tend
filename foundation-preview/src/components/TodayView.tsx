@@ -26,8 +26,8 @@ import {
   todayFocusLabel
 } from '../domain/today-plan.ts';
 import type { TodayFocusId, TodayItemType } from '../domain/today-plan.ts';
-import { TodayWeather } from './TodayWeather.tsx';
-import type { TodayWeatherReport } from '../domain/today-weather.ts';
+import { TodayWeatherPanel } from './TodayWeatherPanel.tsx';
+import type { TodayWeatherController } from './useTodayWeather.ts';
 
 const planTypes: { id: TodayItemType; label: string }[] = [
   { id: 'scheduled', label: 'Scheduled' },
@@ -42,7 +42,7 @@ type TodayViewProps = {
   localDate: string;
   focus: TodayFocusId;
   onFocusChange: (focus: TodayFocusId) => void;
-  weatherReport?: TodayWeatherReport | null;
+  weatherController: TodayWeatherController;
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
   rhythms: readonly RhythmPreview[];
@@ -67,7 +67,7 @@ export function TodayView({
   localDate,
   focus,
   onFocusChange,
-  weatherReport,
+  weatherController,
   completedRhythms,
   undoableRhythms,
   rhythms,
@@ -238,15 +238,13 @@ export function TodayView({
               {tendedCount} of {planRhythms.length} tended
             </span>
           </div>
-          {weatherTime !== undefined && (
-            <div className="today-plan__weather">
-              <TodayWeather
-                {...(weatherReport === undefined ? {} : { report: weatherReport })}
-                localDate={localDate}
-                time={weatherTime}
-              />
-            </div>
-          )}
+          <div className="today-plan__weather">
+            <TodayWeatherPanel
+              controller={weatherController}
+              localDate={localDate}
+              time={weatherTime}
+            />
+          </div>
           <div className="faith-practice-tabs home-plan-type-tabs" role="tablist" aria-label="Plan items">
             {planTypes.map((type, index) => (
               <button

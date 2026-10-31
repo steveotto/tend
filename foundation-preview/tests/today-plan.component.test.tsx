@@ -3,10 +3,20 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TodayView } from '../src/components/TodayView.tsx';
+import type { TodayWeatherController } from '../src/components/useTodayWeather.ts';
 import type { TodayFocusId } from '../src/domain/today-plan.ts';
 import { foundationCatalogue, todayRhythms } from '../src/domain/preview-data.ts';
 
 afterEach(cleanup);
+
+const unavailableWeather: TodayWeatherController = {
+  city: null,
+  weather: { status: 'idle', report: null, fetchedAt: null, message: null },
+  search: { status: 'idle', results: [], message: null },
+  searchCities: vi.fn(),
+  selectCity: vi.fn(),
+  retry: vi.fn()
+};
 
 function TodayHarness() {
   const [focus, setFocus] = useState<TodayFocusId>('now');
@@ -18,6 +28,7 @@ function TodayHarness() {
       localDate="2026-10-31"
       focus={focus}
       onFocusChange={setFocus}
+      weatherController={unavailableWeather}
       completedRhythms={new Set(['sample-pray-together'])}
       undoableRhythms={new Set()}
       rhythms={todayRhythms}
@@ -81,7 +92,7 @@ describe('Today time-frame interaction', () => {
     await user.click(within(plan).getByRole('tab', { name: 'Anytime' }));
     expect(within(plan).getByRole('tab', { name: 'Anytime' }).getAttribute('aria-selected')).toBe('true');
     expect(within(plan).getByText('No preferred time')).toBeTruthy();
-    expect(within(plan).getByRole('status').textContent).toBe('No eligible Anytime rhythms.');
+    expect(within(plan).getByText('No eligible Anytime rhythms.')).toBeTruthy();
   });
 
   it('keeps focus-frame hover and keyboard focus separate from activation', async () => {

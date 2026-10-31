@@ -25,11 +25,11 @@ describe('Today weather adapter presentation', () => {
     const { rerender } = render(
       <TodayWeather report={syntheticWeatherFixture} localDate="2026-10-31" time={null} />
     );
-    expect(screen.getByRole('img', { name: 'Partly cloudy, 65 degrees' }).className)
+    expect(screen.getByRole('img', { name: 'Current conditions: Partly cloudy, 65 degrees' }).className)
       .toContain('today-weather--partly');
 
     rerender(<TodayWeather report={syntheticWeatherFixture} localDate="2026-10-31" time="10:00" />);
-    expect(screen.getByRole('img', { name: 'Rain, 65 degrees' }).className)
+    expect(screen.getByRole('img', { name: 'Forecast: Rain, 65 degrees' }).className)
       .toContain('today-weather--rain');
     expect(screen.getByRole('img').querySelector('svg')).toBeTruthy();
   });
@@ -37,5 +37,22 @@ describe('Today weather adapter presentation', () => {
   it('does not substitute weather from another date when the selected block has no forecast', () => {
     render(<TodayWeather report={syntheticWeatherFixture} localDate="2026-11-02" time="18:00" />);
     expect(screen.getByRole('status').textContent).toBe('No forecast is available for this time.');
+  });
+
+  it('keeps the existing day/night icon and color mapping for Open-Meteo weather codes', () => {
+    const { rerender } = render(
+      <TodayWeather report={{ ...syntheticWeatherFixture, current: { ...syntheticWeatherFixture.current, code: 0 } }}
+        localDate="2026-10-31" time={null} />
+    );
+    expect(screen.getByRole('img', { name: 'Current conditions: Clear, 65 degrees' }).className)
+      .toContain('today-weather--sunny');
+    expect(screen.getByRole('img').querySelector('svg circle')).toBeTruthy();
+
+    rerender(
+      <TodayWeather report={{ ...syntheticWeatherFixture, current: { ...syntheticWeatherFixture.current, code: 0, isDay: false } }}
+        localDate="2026-10-31" time={null} />
+    );
+    expect(screen.getByRole('img', { name: 'Current conditions: Clear night, 65 degrees' }).className)
+      .toContain('today-weather--night');
   });
 });

@@ -278,12 +278,12 @@ describe('Tend Today preview', () => {
 
     const trigger = screen.getByLabelText('Choose a time frame, currently Now');
     expect(screen.getByText(/^\d+ of \d+ tended$/)).toBeTruthy();
-    expect(screen.getByText('Weather is unavailable in this preview.')).toBeTruthy();
+    expect(screen.getByText('Weather is unavailable until you choose a city.')).toBeTruthy();
 
     await user.click(trigger);
     await user.click(screen.getByRole('button', { name: /Everything today/ }));
     expect(screen.getByText('0 of 3 tended')).toBeTruthy();
-    expect(screen.queryByText('Weather is unavailable in this preview.')).toBeNull();
+    expect(screen.queryByText('Weather is unavailable until you choose a city.')).toBeNull();
     expect(document.activeElement).toBe(trigger);
 
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))

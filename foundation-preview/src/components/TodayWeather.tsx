@@ -17,7 +17,11 @@ export function TodayWeather({
   }
   const observation = selectWeatherForTime(report, localDate, time);
   if (!observation) {
-    return <p className="today-weather-unavailable" role="status">No forecast is available for this time.</p>;
+    return (
+      <p className="today-weather-unavailable" role="status">
+        {time === null ? 'Current conditions are unavailable for this date.' : 'No forecast is available for this time.'}
+      </p>
+    );
   }
   const condition = weatherCondition(observation.code, observation.isDay);
   const roundedTemperature = Math.round(observation.temperature);
@@ -25,7 +29,7 @@ export function TodayWeather({
     <span
       className={`today-weather today-weather--${condition.theme}`}
       role="img"
-      aria-label={`${condition.description}, ${roundedTemperature} degrees`}
+      aria-label={`${time === null ? 'Current conditions' : 'Forecast'}: ${condition.description}, ${roundedTemperature} degrees`}
     >
       <WeatherIcon code={observation.code} isDay={observation.isDay} />
       <span className="today-weather__reading">
