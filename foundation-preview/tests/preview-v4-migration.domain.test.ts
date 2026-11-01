@@ -269,6 +269,7 @@ describe('v4 migration and recovery domain', () => {
     const legacyStrength = structuredClone(envelope.data.strength);
     delete (legacyStrength.settings as Partial<StrengthData['settings']>).betweenSetRestSeconds;
     const {
+      people: _people,
       personDetails: _personDetails,
       personNotes: _personNotes,
       ...v25Data
@@ -341,6 +342,7 @@ describe('v4 migration and recovery domain', () => {
     }
     const envelope = createPreviewEnvelope(data);
     const {
+      people: _people,
       personDetails: _personDetails,
       personNotes: _personNotes,
       ...v24Data
@@ -492,6 +494,7 @@ describe('v4 migration and recovery domain', () => {
       cardio: _cardio,
       friendships: _friendships,
       peopleGroups: _peopleGroups,
+      people: _people,
       personDetails: _personDetails,
       personNotes: _personNotes,
       ...dataBeforeWeight
@@ -563,6 +566,7 @@ describe('v4 migration and recovery domain', () => {
     const currentEnvelope = createPreviewEnvelope(data);
     const legacyEnvelope = JSON.parse(JSON.stringify(currentEnvelope)) as Record<string, unknown>;
     legacyEnvelope.schemaVersion = 23;
+    delete (legacyEnvelope.data as Record<string, unknown>).people;
     delete (legacyEnvelope.data as Record<string, unknown>).personDetails;
     delete (legacyEnvelope.data as Record<string, unknown>).personNotes;
     const legacyStrength = (legacyEnvelope.data as Record<string, unknown>).strength as Record<string, unknown>;
@@ -661,6 +665,7 @@ describe('v4 migration and recovery domain', () => {
     const strengthV21 = clearStrengthGuidedSessionDraft(data.strength);
     const v21Envelope = createPreviewEnvelope({ ...data, strength: strengthV21 });
     const {
+      people: _people,
       personDetails: _personDetails,
       personNotes: _personNotes,
       ...v21Data
@@ -720,6 +725,7 @@ describe('v4 migration and recovery domain', () => {
 
     const current = createPreviewEnvelope(data);
     const {
+      people: _people,
       personDetails: _personDetails,
       personNotes: _personNotes,
       ...v22Data

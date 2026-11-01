@@ -655,7 +655,7 @@ describe('Strength selector and command behavior', () => {
       ...createStrengthData(),
       savedWorkouts: [{ ...template, sharedWith: ['unresolved-person'] }],
       workouts: []
-    })).toBe(false);
+    }, true, false, false, false, ['sample-person-avery', 'sample-person-morgan', 'sample-person-jordan'])).toBe(false);
     const invalidLogData = createStrengthData();
     invalidLogData.workouts = [{
       id: 'invalid-confirmation-window',

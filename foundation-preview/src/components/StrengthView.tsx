@@ -57,6 +57,7 @@ import {
   syntheticPersonPickerGroups,
   type PersonId,
   type PersonPickerGroup,
+  type PersonPreview,
   type RhythmPreview
 } from '../domain/preview-data.ts';
 
@@ -68,6 +69,7 @@ type StrengthRhythm = {
 
 export type StrengthViewProps = {
   data: StrengthData;
+  people?: readonly PersonPreview[];
   peopleGroups?: readonly PersonPickerGroup[];
   rhythms: readonly StrengthRhythm[];
   archivedRhythms?: readonly RhythmPreview[];
@@ -129,6 +131,7 @@ const workoutTabs = [
 
 export function StrengthView({
   data,
+  people = syntheticPeople,
   peopleGroups = syntheticPersonPickerGroups,
   rhythms,
   archivedRhythms = [],
@@ -1195,7 +1198,7 @@ export function StrengthView({
                             )}
                             {workout.sharedWith.length > 0 && (
                               <div className="strength-template__people" role="group" aria-label={`People associated with ${workout.name}`}>
-                                {workout.sharedWith.map(id => <PersonBadge key={id} person={personById(id)} presentation="static" />)}
+                                {workout.sharedWith.map(id => <PersonBadge key={id} person={personById(people, id)} presentation="static" />)}
                               </div>
                             )}
                           </div>
@@ -1384,7 +1387,7 @@ export function StrengthView({
             />
             <section className="rhythm-editor__association" aria-label="Associations">
               <PeopleAssociationRow
-                selectedPeople={syntheticPeople.filter(person => workoutPeople.includes(person.id))}
+                selectedPeople={people.filter(person => workoutPeople.includes(person.id))}
                 openerRef={peoplePickerOpenerRef}
                 onChoose={openPeoplePicker}
               />
@@ -1622,6 +1625,7 @@ export function StrengthView({
           onClose={() => closePeoplePicker(false)}
         >
           <PeopleBadgeSelectionPicker
+            people={people}
             selectedIds={pickerPeople}
             onToggle={id => setPickerPeople(current =>
               current.includes(id) ? current.filter(selected => selected !== id) : [...current, id]
@@ -1741,6 +1745,7 @@ export function StrengthView({
       {guidedSessionOpen && data.guidedSessionDraft && (
         <StrengthGuidedSessionDialog
           key={data.guidedSessionDraft.id}
+          people={people}
           session={data.guidedSessionDraft}
           workouts={data.workouts}
           preferredWeightUnit={data.settings.weightUnit}

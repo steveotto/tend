@@ -3,6 +3,7 @@ import {
   annualDateSummary,
   birthdaySummary,
   connectionStyleLabel,
+  isStandardRelationship,
   personDetailsDraft,
   savePersonDetailsCommand,
   validatePersonDetailsCollection,
@@ -16,17 +17,20 @@ describe('person details domain', () => {
     const groupsBefore = structuredClone(data.peopleGroups);
     const draft = {
       relationshipLabel: '  Sister  ',
-      birthdayMonthDay: '02-29',
-      birthdayYear: '',
-      anniversaryMonthDay: '12-31',
-      connectionStyle: 'wa'
+      birthdayDate: '2000-02-29',
+      birthdayYearUnknown: true,
+      anniversaryDate: '2000-12-31',
+      anniversaryYearUnknown: true,
+      connectionStyle: 'wa',
+      connectionCadence: '',
+      photoDataUrl: ''
     };
     const saved = savePersonDetailsCommand([], 'sample-person-avery', draft, '2026-10-31');
     expect(saved).toEqual({
       valid: true,
       details: [{
         personId: 'sample-person-avery',
-        relationshipLabel: '  Sister  ',
+        relationshipLabel: 'Sister',
         birthday: { monthDay: '02-29' },
         anniversary: { monthDay: '12-31' },
         connectionStyle: 'wa'
@@ -40,15 +44,21 @@ describe('person details domain', () => {
     expect(data.savedRhythms).toEqual([]);
   });
 
-  it('validates calendar dates and disallows future or impossible known birthdays', () => {
+  it('validates combined date-picker values and disallows future or impossible known birthdays', () => {
     const base = personDetailsDraft();
-    expect(validatePersonDetailsDraft({ ...base, birthdayMonthDay: '02-30' }, '2026-10-31').valid).toBe(false);
-    expect(validatePersonDetailsDraft({ ...base, birthdayMonthDay: '02-29', birthdayYear: '2025' }, '2026-10-31').valid).toBe(false);
-    expect(validatePersonDetailsDraft({ ...base, birthdayMonthDay: '02-29', birthdayYear: '2000' }, '2026-10-31').valid).toBe(true);
-    expect(validatePersonDetailsDraft({ ...base, birthdayMonthDay: '12-01', birthdayYear: '2027' }, '2026-10-31').valid).toBe(false);
-    expect(validatePersonDetailsDraft({ ...base, birthdayYear: '1990' }, '2026-10-31')).toMatchObject({
-      valid: false,
-      errors: { birthdayMonthDay: expect.any(String) }
+    expect(validatePersonDetailsDraft({ ...base, birthdayDate: '2026-02-30' }, '2026-10-31').valid).toBe(false);
+    expect(validatePersonDetailsDraft({ ...base, birthdayDate: '2025-02-28' }, '2026-10-31').valid).toBe(true);
+    expect(validatePersonDetailsDraft({ ...base, birthdayDate: '2000-02-29' }, '2026-10-31').valid).toBe(true);
+    expect(validatePersonDetailsDraft({ ...base, birthdayDate: '2027-12-01' }, '2026-10-31').valid).toBe(false);
+    expect(validatePersonDetailsDraft({ ...base, birthdayDate: '2000-02-29', birthdayYearUnknown: false }, '2026-10-31')
+      .valid).toBe(true);
+    expect(validatePersonDetailsDraft({
+      ...base,
+      birthdayDate: '2000-02-29',
+      birthdayYearUnknown: true
+    }, '2026-10-31')).toMatchObject({
+      valid: true,
+      details: { birthday: { monthDay: '02-29' } }
     });
   });
 
@@ -87,15 +97,40 @@ describe('person details domain', () => {
     });
   });
 
-  it('uses date-only anniversaries and the supported legacy connection-style labels', () => {
+  it('retains full and unknown-year anniversaries, love-language labels and relationship values', () => {
     expect(annualDateSummary('12-31', '2026-12-31')?.daysUntil).toBe(0);
     expect(connectionStyleLabel('pt')).toBe('Physical Touch');
     expect(connectionStyleLabel('qt')).toBe('Quality Time');
+    expect(isStandardRelationship('Spouse')).toBe(true);
+    expect(isStandardRelationship('Other')).toBe(true);
+    expect(isStandardRelationship('Great-aunt')).toBe(false);
+    const fullAnniversary = validatePersonDetailsDraft({
+      ...personDetailsDraft(),
+      anniversaryDate: '2010-03-15'
+    }, '2026-10-31');
+    expect(fullAnniversary).toMatchObject({
+      valid: true,
+      details: { anniversary: { monthDay: '03-15', year: 2010 } }
+    });
+    const unknownAnniversary = personDetailsDraft({
+      personId: 'sample-person-avery',
+      anniversary: { monthDay: '02-29' }
+    });
+    expect(unknownAnniversary.anniversaryDate).toBe('2000-02-29');
+    expect(unknownAnniversary.anniversaryYearUnknown).toBe(true);
     expect(validatePersonDetailsCollection([{
       personId: 'sample-person-avery',
-      anniversary: { monthDay: '03-15' },
+      anniversary: { monthDay: '03-15', year: 2010 },
       connectionStyle: 'as'
     }], '2026-10-31')).toBe(true);
+    expect(validatePersonDetailsCollection([{
+      personId: 'sample-person-avery',
+      anniversary: { monthDay: '02-29' }
+    }], '2026-10-31', ['sample-person-avery', 'sample-person-morgan', 'sample-person-jordan'])).toBe(true);
+    expect(validatePersonDetailsCollection([{
+      personId: 'unresolved-person',
+      anniversary: { monthDay: '02-29' }
+    }], '2026-10-31', ['sample-person-avery', 'sample-person-morgan', 'sample-person-jordan'])).toBe(false);
     expect(validatePersonDetailsCollection([{
       personId: 'sample-person-avery',
       birthday: { monthDay: '02-29', year: 2025 }
@@ -106,12 +141,14 @@ describe('person details domain', () => {
     }], '2026-10-31')).toBe(true);
   });
 
-  it('round-trips optional details in schema v29 and rejects unresolved or malformed records', () => {
+  it('round-trips optional details in schema v31 and rejects unresolved or malformed records', () => {
     const data = createSamplePreviewData();
     data.personDetails = [{
       personId: 'sample-person-morgan',
       birthday: { monthDay: '02-29' },
-      connectionStyle: 'gf'
+      anniversary: { monthDay: '03-15', year: 2010 },
+      connectionStyle: 'gf',
+      photoDataUrl: 'data:image/jpeg;base64,/9j/2Q=='
     }];
     const raw = JSON.stringify(createPreviewEnvelope(data));
     const parsed = parsePreviewBackup(raw, '2026-10-31');
@@ -120,6 +157,14 @@ describe('person details domain', () => {
 
     const malformed = JSON.parse(raw) as { data: { personDetails: unknown[] } };
     malformed.data.personDetails = [{ personId: 'unknown-person', relationshipLabel: 'Friend' }];
+    expect(parsePreviewBackup(JSON.stringify(malformed), '2026-10-31')).toMatchObject({
+      valid: false,
+      message: expect.stringContaining('Person details')
+    });
+    malformed.data.personDetails = [{
+      personId: 'sample-person-morgan',
+      photoDataUrl: 'data:image/svg+xml;base64,PHN2Zy8+'
+    }];
     expect(parsePreviewBackup(JSON.stringify(malformed), '2026-10-31')).toMatchObject({
       valid: false,
       message: expect.stringContaining('Person details')

@@ -3,7 +3,7 @@ import {
   foundationCatalogue,
   foundationTerminologyForCategory,
   marriageRhythms,
-  syntheticPeople,
+  isValidPersonId,
   todayRhythms,
   type CategoryId
 } from './preview-data.ts';
@@ -106,7 +106,6 @@ export function createRhythmDraft(categoryIds: readonly RhythmCategoryId[] = [])
 
 const existingEditableIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 const fixtureRhythmIds = new Set([...todayRhythms, ...marriageRhythms].map(rhythm => rhythm.id));
-const personIds = new Set(syntheticPeople.map(person => person.id));
 const categoryIds = new Set(areas.map(area => area.id));
 const savedRhythmKeys = ['id', 'title', 'description', 'cadence', 'timeLabel', 'personIds', 'categoryIds'];
 const savedRhythmV4Keys = [...savedRhythmKeys, 'timeOfDay', 'schedule', 'personal'];
@@ -136,6 +135,12 @@ function isUniqueKnownValues<T extends string>(values: unknown, knownValues: Set
   return true;
 }
 
+function isUniquePersonIds(value: unknown): value is PersonId[] {
+  return Array.isArray(value)
+    && value.every(isValidPersonId)
+    && new Set(value).size === value.length;
+}
+
 export function isEditableRhythmId(id: string): boolean {
   return existingEditableIds.has(id) || /^user-rhythm-[0-9a-f-]{36}$/i.test(id);
 }
@@ -162,7 +167,7 @@ function validateSavedRhythmsWithIdPolicy(
       && (typeof record.description !== 'string' || record.description.length > 1000)) return false;
     if (!rhythmCadences.includes(record.cadence as RhythmCadence)
       || !rhythmTimes.includes(record.timeLabel as RhythmTime)) return false;
-    if (!isUniqueKnownValues<PersonId>(record.personIds, personIds)
+    if (!isUniquePersonIds(record.personIds)
       || !isUniqueKnownValues<RhythmCategoryId>(record.categoryIds, categoryIds)) return false;
     ids.add(record.id);
   }
@@ -350,7 +355,8 @@ export function rhythmDraftFrom(
 
 export function validateRhythmDraft(
   draft: RhythmDraft,
-  foundations: readonly FoundationPreview[] = foundationCatalogue
+  foundations: readonly FoundationPreview[] = foundationCatalogue,
+  knownPersonIds?: readonly PersonId[]
 ): RhythmDraftErrors {
   const errors: RhythmDraftErrors = {};
   if (!draft.title.trim()) errors.title = 'Enter a Rhythm title.';
@@ -366,9 +372,11 @@ export function validateRhythmDraft(
   } else if (draft.schedule !== undefined && !validateRhythmSchedule(draft.schedule).valid) {
     errors.schedule = 'Choose a valid schedule.';
   }
-  if (!isUniqueKnownValues<PersonId>(draft.personIds, personIds)) {
-    errors.personIds = 'Choose each available synthetic person at most once.';
+  if (!isUniquePersonIds(draft.personIds)
+    || knownPersonIds !== undefined && draft.personIds.some(id => !knownPersonIds.includes(id))) {
+    errors.personIds = 'Choose each available person at most once.';
   }
+
   if (!isUniqueKnownValues<RhythmCategoryId>(draft.categoryIds, categoryIds)) {
     errors.categoryIds = 'Choose each available category at most once.';
   }
@@ -406,9 +414,10 @@ export function saveRhythmDraft(
     earliestDatedCompletionDate?: string;
   },
   foundations: readonly FoundationPreview[] = foundationCatalogue,
-  options: { suggestionSourceId?: string } = {}
+  options: { suggestionSourceId?: string } = {},
+  knownPersonIds?: readonly PersonId[]
 ): { savedRhythms?: SavedRhythm[]; errors: RhythmDraftErrors } {
-  const errors = validateRhythmDraft(draft, foundations);
+  const errors = validateRhythmDraft(draft, foundations, knownPersonIds);
   const hasSavedRecord = savedRhythms.some(rhythm => rhythm.id === id);
   if (mode === 'create') {
     if (!/^user-rhythm-[0-9a-f-]{36}$/i.test(id) || hasSavedRecord || existingEditableIds.has(id)) {

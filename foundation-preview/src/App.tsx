@@ -29,6 +29,7 @@ import { useTodayWeather } from './components/useTodayWeather.ts';
 import type { TodayFocusId } from './domain/today-plan.ts';
 import { HealthFitnessView } from './components/HealthFitnessView.tsx';
 import { FriendshipsView } from './components/FriendshipsView.tsx';
+import { connectionCadences, setFriendCadence } from './domain/friendships.ts';
 import {
   marriageRhythms,
   foundationCatalogue,
@@ -38,12 +39,15 @@ import {
   parentingRhythmSuggestions,
   personById,
   peopleForRhythm,
+  setPersonGroupMembership,
   todayRhythms,
   type CategoryRhythmSuggestionGroupDefinition,
   type CategoryRhythmSuggestionTemplate,
   type CategoryId,
   type MarriageExampleId,
   type PersonId,
+  type PersonPickerGroupId,
+  type PersonPreview,
   type RhythmPreview
 } from './domain/preview-data.ts';
 import {
@@ -141,6 +145,8 @@ import {
   loadV27RecoveryCopy,
   loadV28RecoveryCopy,
   loadV29RecoveryCopy,
+  loadV30RecoveryCopy,
+  loadV31RecoveryCopy,
   loadPreview,
   writePreview
 } from './storage/preview-storage.ts';
@@ -156,6 +162,7 @@ const destinationLabels: Record<Exclude<Destination, 'today'>, string> = {
   finances: 'Finances',
   friendships: 'Friendships'
 };
+const personProfileHistoryKey = 'tendPersonProfileId';
 
 function categorySuggestionCatalogue(
   categoryId: CategoryId,
@@ -286,6 +293,10 @@ export function App() {
   const [v28RecoveryError, setV28RecoveryError] = useState<string | null>(null);
   const [v29RecoveryCopy, setV29RecoveryCopy] = useState<string | null>(null);
   const [v29RecoveryError, setV29RecoveryError] = useState<string | null>(null);
+  const [v30RecoveryCopy, setV30RecoveryCopy] = useState<string | null>(null);
+  const [v30RecoveryError, setV30RecoveryError] = useState<string | null>(null);
+  const [v31RecoveryCopy, setV31RecoveryCopy] = useState<string | null>(null);
+  const [v31RecoveryError, setV31RecoveryError] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -301,7 +312,13 @@ export function App() {
   } | null>(null);
   const foundationNavigationSequence = useRef(0);
   const activeRhythmReturnTab = useRef<'today' | MarriageTab>('today');
-  const [profilePersonId, setProfilePersonId] = useState<PersonId | null>(null);
+  const [profilePersonId, setProfilePersonId] = useState<PersonId | null>(() => {
+    const storedProfileId = window.history.state?.[personProfileHistoryKey];
+    return typeof storedProfileId === 'string'
+      ? previewData.people.find(person => person.id === storedProfileId)?.id ?? null
+      : null;
+  });
+  const profileReturnRhythmId = useRef<string | null>(null);
   const [personDetailsEditorId, setPersonDetailsEditorId] = useState<PersonId | null>(null);
   const personDetailsEditorOpener = useRef<HTMLButtonElement | null>(null);
   const wasPersonDetailsEditorOpen = useRef(false);
@@ -347,6 +364,7 @@ export function App() {
   const completionDialogOpener = useRef<HTMLButtonElement | null>(null);
   const rhythmEditorOpener = useRef<HTMLButtonElement | null>(null);
   const profileOpener = useRef<HTMLElement | null>(null);
+  const profileReturnPersonId = useRef<PersonId | null>(null);
   const wasProfileOpen = useRef(false);
   const wasDetailsOpen = useRef(false);
   const wasRhythmEditorOpen = useRef(false);
@@ -445,11 +463,18 @@ export function App() {
     ...allTodayRhythms,
     ...resolvedMarriageRhythms
   ].find(rhythm => rhythm.id === activeRhythmId) ?? null;
-  const selectedProfilePerson = profilePersonId === null ? null : personById(profilePersonId);
-  const selectedDetailsEditorPerson = personDetailsEditorId === null ? null : personById(personDetailsEditorId);
+  const selectedProfilePerson = profilePersonId === null ? null : personById(previewData.people, profilePersonId) ?? null;
+  const selectedDetailsEditorPerson = personDetailsEditorId === null
+    ? null
+    : personById(previewData.people, personDetailsEditorId) ?? null;
   const selectedDetailsEditorDetails = personDetailsEditorId === null
     ? undefined
     : personDetailsForId(previewData.personDetails, personDetailsEditorId);
+  const selectedDetailsEditorCadence = personDetailsEditorId === null
+    ? null
+    : previewData.friendships.cadenceSettings.find(item => item.personId === personDetailsEditorId)?.cadence ?? null;
+  const selectedDetailsEditorIsFriend = personDetailsEditorId !== null
+    && Boolean(previewData.peopleGroups.find(group => group.id === 'friends')?.memberIds.includes(personDetailsEditorId));
   const profileRhythmCandidates = [...new Map(
     [...editableTodayRhythms, ...userRhythms].map(rhythm => [rhythm.id, rhythm])
   ).values()];
@@ -607,6 +632,26 @@ export function App() {
     } else {
       setV29RecoveryCopy(null);
       setV29RecoveryError(result.message);
+    }
+
+  }
+
+  function refreshV30RecoveryCopy() {
+    const result = loadV30RecoveryCopy(browserPreviewStorage());
+    if (result.kind === 'loaded') {
+      setV30RecoveryCopy(result.raw);
+      setV30RecoveryError(null);
+    } else {
+      setV30RecoveryCopy(null);
+      setV30RecoveryError(result.message);
+    }
+    const previous = loadV31RecoveryCopy(browserPreviewStorage());
+    if (previous.kind === 'loaded') {
+      setV31RecoveryCopy(previous.raw);
+      setV31RecoveryError(null);
+    } else {
+      setV31RecoveryCopy(null);
+      setV31RecoveryError(previous.message);
     }
   }
 
@@ -780,6 +825,7 @@ export function App() {
     refreshV8RecoveryCopy();
     refreshV9RecoveryCopy();
     refreshV29RecoveryCopy();
+    refreshV30RecoveryCopy();
     const loaded = loadPreview(browserPreviewStorage(), initialLoadDate);
     if (loaded.kind === 'loaded') {
       expectedRaw.current = loaded.raw;
@@ -809,6 +855,7 @@ export function App() {
     }
     const saved = writePreview(browserPreviewStorage(), previewData, expectedRaw.current, { currentDate });
     refreshV29RecoveryCopy();
+    refreshV30RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -894,6 +941,13 @@ export function App() {
   }, [rhythmEditor]);
 
   function navigate(next: Destination) {
+    if (profilePersonId !== null) {
+      const state = { ...(window.history.state ?? {}) };
+      delete state[personProfileHistoryKey];
+      window.history.replaceState(state, '', window.location.href);
+      profileReturnRhythmId.current = null;
+      setProfilePersonId(null);
+    }
     setDestination(next);
     if (next === 'health') setHealthFitnessVisited(true);
     setMoreSettingsOpen(false);
@@ -903,11 +957,20 @@ export function App() {
   }
 
   function openPersonProfile(personId: PersonId) {
+    if (profilePersonId === personId) return;
     if (profilePersonId === null) {
       profileOpener.current = document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
+      profileReturnPersonId.current = personId;
+      profileReturnRhythmId.current = activeRhythmId;
+      if (activeRhythmId !== null) setActiveRhythmId(null);
     }
+    window.history.pushState(
+      { ...(window.history.state ?? {}), [personProfileHistoryKey]: personId },
+      '',
+      window.location.href
+    );
     setProfilePersonId(personId);
   }
 
@@ -920,13 +983,32 @@ export function App() {
     setPersonDetailsEditorId(null);
   }
 
+  function createPerson(
+    person: PersonPreview,
+    groupIds: readonly PersonPickerGroupId[]
+  ): string | null {
+    if (previewData.people.some(item => item.id === person.id)) {
+      return 'This person ID already exists. No changes were saved.';
+    }
+    let peopleGroups = previewData.peopleGroups;
+    for (const groupId of groupIds) {
+      peopleGroups = setPersonGroupMembership(peopleGroups, groupId, person.id, true);
+    }
+    return persistSeasonHistory({
+      ...previewData,
+      people: [...previewData.people, person],
+      peopleGroups
+    }, 'person');
+  }
+
   function savePersonDetails(personId: PersonId, draft: PersonDetailsDraft): string | null {
     const result = savePersonDetailsCommand(previewData.personDetails, personId, draft, currentDate);
     if (!result.valid) return Object.values(result.errors)[0] ?? 'Person details are invalid.';
-    return persistSeasonHistory(
-      { ...previewData, personDetails: result.details },
-      'Person details'
-    );
+    const cadence = connectionCadences.find(item => item === draft.connectionCadence) ?? null;
+    const friendships = selectedDetailsEditorIsFriend
+      ? setFriendCadence(previewData.friendships, personId, cadence, currentDate)
+      : previewData.friendships;
+    return persistSeasonHistory({ ...previewData, personDetails: result.details, friendships }, 'person settings');
   }
 
   function savePersonNote(personId: PersonId, draft: PersonNoteDraft): string | null {
@@ -979,8 +1061,23 @@ export function App() {
   }, [personDetailsEditorId]);
 
   function closePersonProfile() {
-    setProfilePersonId(null);
+    if (window.history.state?.[personProfileHistoryKey]) {
+      window.history.back();
+    } else {
+      setProfilePersonId(null);
+    }
   }
+
+  useEffect(() => {
+    function syncProfileFromHistory() {
+      const profileId = window.history.state?.[personProfileHistoryKey];
+      setProfilePersonId(typeof profileId === 'string'
+        ? previewData.people.find(person => person.id === profileId)?.id ?? null
+        : null);
+    }
+    window.addEventListener('popstate', syncProfileFromHistory);
+    return () => window.removeEventListener('popstate', syncProfileFromHistory);
+  }, []);
 
   useEffect(() => {
     if (profilePersonId !== null) {
@@ -989,7 +1086,23 @@ export function App() {
     }
     if (wasProfileOpen.current) {
       wasProfileOpen.current = false;
-      profileOpener.current?.focus();
+      const returnRhythmId = profileReturnRhythmId.current;
+      profileReturnRhythmId.current = null;
+      if (returnRhythmId !== null) setActiveRhythmId(returnRhythmId);
+      if (profileOpener.current?.isConnected) {
+        profileOpener.current.focus();
+      } else {
+        requestAnimationFrame(() => {
+          const restoredPersonButton = profileReturnPersonId.current
+            ? document.querySelector<HTMLButtonElement>(
+                `dialog[open] [data-person-id="${profileReturnPersonId.current}"]`
+              )
+            : null;
+          if (restoredPersonButton) restoredPersonButton.focus();
+          else document.querySelector<HTMLButtonElement>('.utility-primary-button[aria-current="page"]')?.focus();
+          profileReturnPersonId.current = null;
+        });
+      }
     }
   }, [profilePersonId]);
 
@@ -1162,7 +1275,8 @@ export function App() {
         ...(rhythmEditor.suggestionSourceId
           ? { suggestionSourceId: rhythmEditor.suggestionSourceId }
           : {})
-      }
+      },
+      previewData.people.map(person => person.id)
     );
     const savedRhythms = result.savedRhythms;
     if (!savedRhythms) return result.errors;
@@ -1186,6 +1300,7 @@ export function App() {
     };
     const written = writePreview(browserPreviewStorage(), nextData, expectedRaw.current, { currentDate });
     refreshV29RecoveryCopy();
+    refreshV30RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -1219,6 +1334,7 @@ export function App() {
   function persistSeasonHistory(nextData: PreviewData, action: string): string | null {
     const written = writePreview(browserPreviewStorage(), nextData, expectedRaw.current, { currentDate });
     refreshV29RecoveryCopy();
+    refreshV30RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -1250,7 +1366,7 @@ export function App() {
   }
 
   function saveStrengthData(strength: PreviewData['strength']): string | null {
-    if (!validateStrengthData(strength, true, true, true, true)) {
+    if (!validateStrengthData(strength, true, true, true, true, previewData.people.map(person => person.id))) {
       return 'Strength settings or workout records are invalid. No changes were saved.';
     }
     const previousLogs = new Map(previewData.strength.workouts.map(log => [log.id, log]));
@@ -1484,7 +1600,11 @@ export function App() {
           seasonName: draft.name
         },
         rhythmId,
-        'edit'
+        'edit',
+        undefined,
+        undefined,
+        {},
+        previewData.people.map(person => person.id)
       );
       if (!saved.savedRhythms) return Object.values(saved.errors)[0] ?? 'This Rhythm could not be saved.';
       const savedRhythms = saved.savedRhythms.map(entry => entry.id !== rhythmId
@@ -1560,7 +1680,11 @@ export function App() {
           seasonName: draft.name
         },
         rhythmId,
-        'edit'
+        'edit',
+        undefined,
+        undefined,
+        {},
+        previewData.people.map(person => person.id)
       );
       if (!saved.savedRhythms) return Object.values(saved.errors)[0] ?? 'This Rhythm could not be saved.';
       const savedRhythms = saved.savedRhythms.map(entry => entry.id !== rhythmId
@@ -1949,6 +2073,7 @@ export function App() {
     setPreviewData(nextData);
     const written = writePreview(browserPreviewStorage(), nextData, expectedRaw.current, { currentDate });
     refreshV29RecoveryCopy();
+    refreshV30RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -1980,6 +2105,7 @@ export function App() {
       currentDate
     });
     refreshV29RecoveryCopy();
+    refreshV30RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -2042,6 +2168,7 @@ export function App() {
       currentDate
     });
     refreshV29RecoveryCopy();
+    refreshV30RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -2073,6 +2200,7 @@ export function App() {
     setAutoSaveEnabled(true);
     const written = writePreview(browserPreviewStorage(), previewData, expectedRaw.current, { currentDate });
     refreshV29RecoveryCopy();
+    refreshV30RecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -2101,9 +2229,11 @@ export function App() {
 
   const healthFitnessView = hydrated && (healthFitnessVisited || destination === 'health') ? (
     <HealthFitnessView
-      hidden={destination !== 'health'}
+      people={previewData.people}
+      hidden={destination !== 'health' || profilePersonId !== null}
       strength={{
         data: previewData.strength,
+        people: previewData.people,
         peopleGroups: previewData.peopleGroups,
         rhythms: healthCategoryRhythms.map(rhythm => {
           const setting = previewData.strength.rhythmModes.find(item => item.rhythmId === rhythm.id);
@@ -2193,7 +2323,7 @@ export function App() {
         onSearchToggle={toggleSearch}
         onTextSizeChange={() => setTextSize(size => size === 'small' ? 'medium' : size === 'medium' ? 'large' : 'small')}
       />
-      <div id="view">
+      <div id="view" hidden={profilePersonId !== null}>
         {!hydrated
           ? <p role="status">Loading saved preview data…</p>
           : destination === 'more'
@@ -2240,6 +2370,7 @@ export function App() {
           : destination === 'today'
           ? (
             <TodayView
+              people={previewData.people}
               greeting={greeting}
               dateLabel={dateLabel}
               evaluationInstant={scoringInstant}
@@ -2267,6 +2398,7 @@ export function App() {
           : destination === 'marriage'
             ? (
               <MarriageView
+                people={previewData.people}
                 marriageExampleId={marriageExampleId}
                 onMarriageExampleChange={setMarriageExampleId}
                 todayDate={currentDate}
@@ -2299,6 +2431,7 @@ export function App() {
           : destination === 'parenting'
             ? (
               <MarriageView
+                people={previewData.people}
                 categoryConfig={{
                   categoryId: 'parenting',
                   label: 'Parenting',
@@ -2339,6 +2472,7 @@ export function App() {
           : destination === 'faith'
             ? (
               <MarriageView
+                people={previewData.people}
                 categoryConfig={{
                   categoryId: 'faith',
                   label: 'Faith',
@@ -2384,6 +2518,7 @@ export function App() {
             ? (
               <FriendshipsView
                 data={previewData.friendships}
+                people={previewData.people}
                 peopleGroups={previewData.peopleGroups}
                 personDetails={previewData.personDetails}
                 today={localDateInTimeZone(new Date(), localTimeZone)}
@@ -2406,6 +2541,7 @@ export function App() {
                 onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
                 onOpenCategory={categoryId => navigate(categoryId)}
                 onRestoreRhythm={restoreRhythm}
+                profileOpen={profilePersonId !== null}
               />
             )
           : destination === 'finances'
@@ -2421,6 +2557,7 @@ export function App() {
           : destination === 'people'
             ? (
               <PeopleView
+                people={previewData.people}
                 groups={previewData.peopleGroups}
                 friendships={previewData.friendships}
                 today={currentDate}
@@ -2428,6 +2565,7 @@ export function App() {
                 onChangeGroups={peopleGroups => setPreviewData(previous => ({ ...previous, peopleGroups }))}
                 onOpenPerson={openPersonProfile}
                 onEditPerson={openPersonDetailsEditor}
+                onCreatePerson={createPerson}
               />
             )
           : <PlaceholderPage destination={destination} onToday={() => navigate('today')} />}
@@ -2435,8 +2573,9 @@ export function App() {
       {healthFitnessView}
       {selectedProfilePerson && (
         <PersonProfileView
-          key={selectedProfilePerson.id}
           personId={selectedProfilePerson.id}
+          people={previewData.people}
+          returnLabel={destination === 'today' ? 'Today' : destinationLabels[destination]}
           peopleGroups={previewData.peopleGroups}
           personDetails={previewData.personDetails}
           personNotes={previewData.personNotes}
@@ -2460,11 +2599,9 @@ export function App() {
           onUndo={undoTend}
           onRestoreRhythm={restoreRhythm}
           onOpenFoundation={foundationId => {
-            closePersonProfile();
             navigateToFoundation(foundationId, 'today');
           }}
           onOpenCategory={categoryId => {
-            closePersonProfile();
             navigate(categoryId);
           }}
           onPersonSelect={openPersonProfile}
@@ -2482,6 +2619,8 @@ export function App() {
           personName={selectedDetailsEditorPerson.displayName}
           {...(selectedDetailsEditorDetails ? { details: selectedDetailsEditorDetails } : {})}
           today={currentDate}
+          cadence={selectedDetailsEditorCadence}
+          isFriend={selectedDetailsEditorIsFriend}
           onSave={draft => savePersonDetails(selectedDetailsEditorPerson.id, draft)}
           onClose={closePersonDetailsEditor}
         />
@@ -2552,6 +2691,10 @@ export function App() {
         v28RecoveryError={v28RecoveryError}
         v29RecoveryCopy={v29RecoveryCopy}
         v29RecoveryError={v29RecoveryError}
+        v30RecoveryCopy={v30RecoveryCopy}
+        v30RecoveryError={v30RecoveryError}
+        v31RecoveryCopy={v31RecoveryCopy}
+        v31RecoveryError={v31RecoveryError}
       />
       {storageNeedsAttention && !isPreviewSettings && (
         <p className="preview-storage-alert" role="alert">
@@ -2600,7 +2743,7 @@ export function App() {
           {...(seasonRangeUndo?.rhythmId === activeRhythm.id
             ? { onUndoSeasonRange: undoSeasonRange }
             : {})}
-          people={peopleForRhythm(activeRhythm)}
+          people={peopleForRhythm(activeRhythm, previewData.people)}
           foundations={foundationCatalogue}
           archived={activeRhythmIsArchived}
           onOpenFoundation={foundationId => {
@@ -2644,6 +2787,7 @@ export function App() {
       )}
       {rhythmEditor && (
         <RhythmEditor
+          people={previewData.people}
           {...(rhythmEditor.rhythm ? { rhythm: rhythmEditor.rhythm } : {})}
           {...(rhythmEditor.initialDraft ? { initialDraft: rhythmEditor.initialDraft } : {})}
           {...(rhythmEditor.suggestionSourceId

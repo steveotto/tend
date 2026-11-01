@@ -7,10 +7,12 @@ import {
   foundationCatalogue,
   foundationTerminologyForCategory,
   peopleForRhythm,
+  syntheticPeople,
   rhythmLastActivityLabel,
   type FoundationTerminology,
   type FoundationPreview,
   type PersonId,
+  type PersonPreview,
   type MarriageExampleId,
   type RhythmPreview,
   rhythmsSupportingFoundation
@@ -71,6 +73,7 @@ export type CategoryRhythmSuggestionCatalogue = {
 };
 
 type MarriageViewProps = {
+  people?: readonly PersonPreview[];
   marriageExampleId?: MarriageExampleId;
   onMarriageExampleChange?: (id: MarriageExampleId) => void;
   categoryConfig?: {
@@ -132,6 +135,7 @@ const tabs: readonly SegmentedTab<MarriageTab>[] = [
 ];
 
 export function MarriageView({
+  people = syntheticPeople,
   marriageExampleId,
   onMarriageExampleChange,
   categoryConfig,
@@ -354,8 +358,8 @@ export function MarriageView({
             return {
               id: instance.id,
               title: instance.title,
-              ...(peopleForRhythm(instance).length
-                ? { peopleLabel: peopleForRhythm(instance).map(person => person.displayName).join(', ') }
+              ...(peopleForRhythm(instance, people).length
+                ? { peopleLabel: peopleForRhythm(instance, people).map(person => person.displayName).join(', ') }
                 : {}),
               scheduleSummary: timeLabel && timeLabel !== 'Anytime' ? `${summary} · ${timeLabel}` : summary,
               archived,
@@ -440,6 +444,7 @@ export function MarriageView({
         hidden={activeTab !== 'today'}
       >
         <TodayTogether
+          people={people}
           rhythms={todayRhythms}
           hasActiveRhythms={userRhythms.length > 0}
           rhythmScores={foundationRhythmScores}
@@ -466,6 +471,7 @@ export function MarriageView({
         hidden={activeTab !== 'rhythms'}
       >
         <CategoryRhythmCollection
+          people={people}
           rhythms={userRhythms}
           rhythmScores={foundationRhythmScores}
           completedRhythms={completedRhythms}
@@ -498,6 +504,7 @@ export function MarriageView({
         hidden={activeTab !== 'foundations'}
       >
         <FoundationList
+          people={people}
           categoryLabel={categoryLabel}
           foundationTerm={foundationTerm}
           categoryToken={categoryToken}
@@ -542,6 +549,7 @@ export function MarriageView({
       {showArchivedRhythms && (
         <ArchivedRhythmsDialog
           rhythms={archivedRhythms}
+          people={people}
           foundations={foundationCatalogue}
           completedRhythms={completedRhythms}
           onPersonSelect={onPersonSelect}
@@ -566,6 +574,7 @@ export function MarriageView({
 }
 
 function TodayTogether({
+  people,
   rhythms,
   hasActiveRhythms,
   rhythmScores,
@@ -582,6 +591,7 @@ function TodayTogether({
   todayDate,
   categoryToken
 }: {
+  people: readonly PersonPreview[];
   rhythms: readonly RhythmPreview[];
   hasActiveRhythms: boolean;
   rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
@@ -617,7 +627,7 @@ function TodayTogether({
                 inline
                 completed={completedRhythms.has(rhythm.id)}
                 statusLabel={rhythmLastActivityLabel(rhythm, todayDate)}
-                people={peopleForRhythm(rhythm)}
+                people={peopleForRhythm(rhythm, people)}
                 foundations={foundations}
                 onPersonSelect={onPersonSelect}
                 onOpenFoundation={onOpenFoundation}
@@ -648,6 +658,7 @@ function TodayTogether({
 }
 
 function FoundationList({
+  people,
   categoryLabel,
   foundationTerm,
   categoryToken,
@@ -672,6 +683,7 @@ function FoundationList({
   onOpenFoundation,
   onOpenCategory
 }: {
+  people: readonly PersonPreview[];
   categoryLabel: string;
   foundationTerm: FoundationTerminology;
   categoryToken: string;
@@ -812,6 +824,7 @@ function FoundationList({
                 {linkedRhythms.length
                   ? (
                     <FoundationRhythmGroup
+                      people={people}
                       rhythms={linkedRhythms}
                       archivedRhythmIds={archivedRhythmIds}
                       headingId={`${categoryToken}-foundation-linked-rhythms-title`}
@@ -874,6 +887,7 @@ function foundationScoreEvidence(score: FoundationScoreSelection): string | unde
 }
 
 function FoundationRhythmGroup({
+  people,
   rhythms,
   archivedRhythmIds,
   headingId,
@@ -890,6 +904,7 @@ function FoundationRhythmGroup({
   onOpenFoundation,
   onOpenCategory
 }: {
+  people: readonly PersonPreview[];
   rhythms: readonly RhythmPreview[];
   archivedRhythmIds: readonly string[];
   headingId: string;
@@ -915,7 +930,7 @@ function FoundationRhythmGroup({
             rhythm={rhythm}
             inline
             completed={completedRhythms.has(rhythm.id)}
-            people={peopleForRhythm(rhythm)}
+            people={peopleForRhythm(rhythm, people)}
             foundations={foundations}
             onPersonSelect={onPersonSelect}
             onOpenFoundation={onOpenFoundation}

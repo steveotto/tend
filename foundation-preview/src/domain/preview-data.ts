@@ -347,7 +347,7 @@ export type PersonPreview = {
   avatarUrl?: string;
 };
 
-export type PersonId = 'sample-person-avery' | 'sample-person-morgan' | 'sample-person-jordan';
+export type PersonId = string;
 export type PersonPickerGroupId = 'marriage' | 'parenting' | 'friends';
 
 export type PersonPickerGroup = {
@@ -357,13 +357,15 @@ export type PersonPickerGroup = {
   [key: string]: unknown;
 };
 
-const syntheticPeopleById = {
-  'sample-person-avery': { id: 'sample-person-avery', displayName: 'Avery Brooks' },
-  'sample-person-morgan': { id: 'sample-person-morgan', displayName: 'Morgan Reed' },
-  'sample-person-jordan': { id: 'sample-person-jordan', displayName: 'Jordan Bell' }
-} satisfies Record<PersonId, PersonPreview>;
+export const syntheticPeople: readonly PersonPreview[] = [
+  { id: 'sample-person-avery', displayName: 'Avery Brooks' },
+  { id: 'sample-person-morgan', displayName: 'Morgan Reed' },
+  { id: 'sample-person-jordan', displayName: 'Jordan Bell' }
+];
 
-export const syntheticPeople = Object.values(syntheticPeopleById);
+export function createSamplePeople(): PersonPreview[] {
+  return syntheticPeople.map(person => ({ ...person }));
+}
 
 export const syntheticPersonPickerGroups: readonly PersonPickerGroup[] = [
   { id: 'marriage', label: 'Marriage', memberIds: ['sample-person-avery', 'sample-person-morgan'] },
@@ -414,10 +416,13 @@ export function migrateLegacyFriendIdsIntoPeopleGroups(
   }));
 }
 
-export function validatePersonPickerGroups(value: unknown): value is PersonPickerGroup[] {
+export function validatePersonPickerGroups(
+  value: unknown,
+  people: readonly PersonPreview[] = syntheticPeople
+): value is PersonPickerGroup[] {
   if (!Array.isArray(value) || value.length !== syntheticPersonPickerGroups.length) return false;
   const knownIds = new Set<PersonPickerGroupId>(['marriage', 'parenting', 'friends']);
-  const knownPeople = new Set<PersonId>(syntheticPeople.map(person => person.id));
+  const knownPeople = new Set<PersonId>(people.map(person => person.id));
   const seenGroups = new Set<PersonPickerGroupId>();
   for (const candidate of value) {
     if (typeof candidate !== 'object' || candidate === null || Array.isArray(candidate)) return false;
@@ -434,8 +439,10 @@ export function validatePersonPickerGroups(value: unknown): value is PersonPicke
   return seenGroups.size === knownIds.size;
 }
 
-export function personById(id: PersonId): PersonPreview {
-  return syntheticPeopleById[id];
+export function personById(people: readonly PersonPreview[], id: PersonId): PersonPreview {
+  const person = people.find(candidate => candidate.id === id);
+  if (!person) throw new Error(`Unresolved Person ID: ${id}`);
+  return person;
 }
 
 export type RhythmPreview = {
@@ -1081,8 +1088,35 @@ export function marriageFoundationCoverage(
   };
 }
 
-export function peopleForRhythm(rhythm: Pick<RhythmPreview, 'personIds'>): PersonPreview[] {
-  return (rhythm.personIds ?? []).map(personById);
+export function peopleForRhythm(
+  rhythm: Pick<RhythmPreview, 'personIds'>,
+  people: readonly PersonPreview[] = syntheticPeople
+): PersonPreview[] {
+  return (rhythm.personIds ?? []).flatMap(id => {
+    const person = people.find(candidate => candidate.id === id);
+    return person ? [person] : [];
+  });
+}
+
+export function isValidPersonId(value: unknown): value is PersonId {
+  return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(value);
+}
+
+export function validatePeopleCollection(value: unknown): value is PersonPreview[] {
+  if (!Array.isArray(value)) return false;
+  const seen = new Set<string>();
+  for (const candidate of value) {
+    if (typeof candidate !== 'object' || candidate === null || Array.isArray(candidate)) return false;
+    const person = candidate as Record<string, unknown>;
+    if (Object.keys(person).some(key => key !== 'id' && key !== 'displayName')
+      || !isValidPersonId(person.id)
+      || seen.has(person.id)
+      || typeof person.displayName !== 'string'
+      || person.displayName.trim().length === 0
+      || person.displayName.length > 120) return false;
+    seen.add(person.id);
+  }
+  return true;
 }
 
 export function marriageScoreCoverage(scores: readonly (number | null | undefined)[]) {

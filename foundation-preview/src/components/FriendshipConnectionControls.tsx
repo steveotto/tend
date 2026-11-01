@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, MouseEvent } from 'react';
 import { personById, syntheticPeople } from '../domain/preview-data.ts';
-import type { PersonId } from '../domain/preview-data.ts';
+import type { PersonId, PersonPreview } from '../domain/preview-data.ts';
 import {
   deleteConnection,
   setFriendCadence
@@ -38,12 +38,14 @@ const cadenceChoices: { value: ConnectionCadence | null; label: string }[] = [
 
 export function ConnectionTypeActions({
   personId,
+  people = syntheticPeople,
   onSelect
 }: {
   personId: PersonId;
+  people?: readonly PersonPreview[];
   onSelect: (type: ConnectionType, event: MouseEvent<HTMLButtonElement>) => void;
 }) {
-  const person = personById(personId);
+  const person = personById(people, personId);
   return (
     <div className="friendships-quick-actions" role="group" aria-label={`Log a connection with ${person.displayName}`}>
       {(Object.keys(connectionTypeLabels) as ConnectionType[]).map(type => (
@@ -64,18 +66,20 @@ export function ConnectionTypeActions({
 
 export function FriendshipCadenceControl({
   personId,
+  people = syntheticPeople,
   cadence,
   today,
   data,
   onChange
 }: {
   personId: PersonId;
+  people?: readonly PersonPreview[];
   cadence: ConnectionCadence | null;
   today: string;
   data: FriendshipData;
   onChange: (data: FriendshipData) => void;
 }) {
-  const person = personById(personId);
+  const person = personById(people, personId);
   const [open, setOpen] = useState(false);
   const opener = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(false);
@@ -139,11 +143,13 @@ export function FriendshipCadenceControl({
 
 export function ConnectionHistoryList({
   connections,
+  people = syntheticPeople,
   onEdit,
   onDelete,
   onPersonSelect
 }: {
   connections: readonly FriendshipConnection[];
+  people?: readonly PersonPreview[];
   onEdit: (connection: FriendshipConnection, event: MouseEvent<HTMLButtonElement>) => void;
   onDelete: (connectionId: string) => void;
   onPersonSelect: (personId: PersonId) => void;
@@ -195,7 +201,7 @@ export function ConnectionHistoryList({
           </div>
           <div className="friendships-history-item__participants">
             {connection.participantIds.map(id => (
-              <PersonBadge key={id} person={personById(id)} onSelect={onPersonSelect} />
+              <PersonBadge key={id} person={personById(people, id)} onSelect={onPersonSelect} />
             ))}
           </div>
           {expandedId === connection.id && (
@@ -277,6 +283,7 @@ export function ConnectionHistoryList({
 
 export function ConnectionHistoryDialog({
   personId,
+  people = syntheticPeople,
   connections,
   onEdit,
   onChange,
@@ -285,6 +292,7 @@ export function ConnectionHistoryDialog({
   onClose
 }: {
   personId: PersonId;
+  people?: readonly PersonPreview[];
   connections: readonly FriendshipConnection[];
   onEdit: (connection: FriendshipConnection, event: MouseEvent<HTMLButtonElement>) => void;
   onChange: (data: FriendshipData) => void;
@@ -292,7 +300,7 @@ export function ConnectionHistoryDialog({
   onPersonSelect: (personId: PersonId) => void;
   onClose: () => void;
 }) {
-  const person = personById(personId);
+  const person = personById(people, personId);
   return (
     <MoneyGoalDialog
       title={`${person.displayName} · connection history`}
@@ -304,6 +312,7 @@ export function ConnectionHistoryDialog({
     >
       <ConnectionHistoryList
         connections={connections}
+        people={people}
         onEdit={onEdit}
         onDelete={id => onChange(deleteConnection(data, id))}
         onPersonSelect={onPersonSelect}
@@ -314,6 +323,7 @@ export function ConnectionHistoryDialog({
 
 export function ConnectionEditor({
   record,
+  people = syntheticPeople,
   initialParticipantIds,
   initialType,
   today,
@@ -321,6 +331,7 @@ export function ConnectionEditor({
   onClose
 }: {
   record?: FriendshipConnection;
+  people?: readonly PersonPreview[];
   initialParticipantIds: PersonId[];
   initialType?: ConnectionType;
   today: string;
@@ -399,7 +410,7 @@ export function ConnectionEditor({
         </div>
         <fieldset className="friendships-participants">
           <legend>Actual participants</legend>
-          {syntheticPeople.map(person => (
+          {people.map(person => (
             <label key={person.id}>
               <input
                 type="checkbox"

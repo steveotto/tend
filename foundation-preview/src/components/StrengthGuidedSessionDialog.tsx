@@ -43,8 +43,10 @@ import type {
 } from '../domain/strength.ts';
 import { localDateTimeInZone } from '../domain/rhythm-completion.ts';
 import { syntheticPeople } from '../domain/preview-data.ts';
+import type { PersonPreview } from '../domain/preview-data.ts';
 
 type Props = {
+  people?: readonly PersonPreview[];
   session: StrengthGuidedSessionDraft;
   workouts: readonly StrengthWorkoutLog[];
   preferredWeightUnit?: 'lb' | 'kg';
@@ -75,6 +77,7 @@ const LOAD_MEANING_ERROR = 'Choose a load meaning in Exercise details before log
 const INVALID_LOAD_ERROR = 'Enter a valid load value, or leave it blank.';
 
 export function StrengthGuidedSessionDialog({
+  people = syntheticPeople,
   session,
   workouts,
   preferredWeightUnit = 'lb',
@@ -752,7 +755,7 @@ export function StrengthGuidedSessionDialog({
               <span>Participants:</span>
               {session.sharedWith.length
                 ? session.sharedWith.map(id => {
-                    const person = syntheticPeople.find(item => item.id === id);
+                    const person = people.find(item => item.id === id);
                     return person ? <PersonBadge key={id} person={person} presentation="static" /> : null;
                   })
                 : <span>None</span>}

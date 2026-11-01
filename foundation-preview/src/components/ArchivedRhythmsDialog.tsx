@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
-import type { FoundationPreview, PersonId, RhythmPreview } from '../domain/preview-data.ts';
+import { syntheticPeople } from '../domain/preview-data.ts';
+import type { FoundationPreview, PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
 import type { Destination } from './AppNavigation.tsx';
 import { peopleForRhythm } from '../domain/preview-data.ts';
 import { RhythmCard } from './Cards.tsx';
@@ -8,6 +9,7 @@ import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 
 type ArchivedRhythmsDialogProps = {
   rhythms: readonly RhythmPreview[];
+  people?: readonly PersonPreview[];
   foundations?: readonly FoundationPreview[];
   completedRhythms: ReadonlySet<string>;
   onPersonSelect: (personId: PersonId) => void;
@@ -19,6 +21,7 @@ type ArchivedRhythmsDialogProps = {
 
 export function ArchivedRhythmsDialog({
   rhythms,
+  people = syntheticPeople,
   foundations,
   completedRhythms,
   onPersonSelect,
@@ -126,7 +129,7 @@ export function ArchivedRhythmsDialog({
             <RhythmDetailsDialog
               rhythm={selectedRhythm}
               {...(foundations ? { foundations } : {})}
-              people={peopleForRhythm(selectedRhythm)}
+              people={peopleForRhythm(selectedRhythm, people)}
               completed={completedRhythms.has(selectedRhythm.id)}
               archived
               embedded
@@ -161,7 +164,7 @@ export function ArchivedRhythmsDialog({
                   <div className="archived-rhythms-dialog__item" key={rhythm.id}>
                     <RhythmCard
                       rhythm={rhythm}
-                      people={peopleForRhythm(rhythm)}
+                      people={peopleForRhythm(rhythm, people)}
                       onPersonSelect={onPersonSelect}
                       variant="simple"
                       completed={completedRhythms.has(rhythm.id)}

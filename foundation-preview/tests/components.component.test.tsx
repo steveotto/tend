@@ -301,7 +301,7 @@ describe('shared preview components', () => {
     await user.click(screen.getByRole('tab', { name: 'Connections' }));
     expect(screen.getByText('No connections yet.')).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: 'Close profile for Avery Brooks' }));
+    await user.click(screen.getByRole('button', { name: 'Back to previous page' }));
     expect(screen.getByRole('heading', { name: 'Goals' })).toBeTruthy();
   });
 

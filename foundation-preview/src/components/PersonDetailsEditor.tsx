@@ -1,9 +1,12 @@
-import { useState } from 'react';
-import type { FormEvent } from 'react';
+import { useRef, useState } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
+import type { ConnectionCadence } from '../domain/friendships.ts';
 import type { PersonId } from '../domain/preview-data.ts';
 import {
   connectionStyles,
+  isStandardRelationship,
   personDetailsDraft,
+  relationshipGroups,
   validatePersonDetailsDraft
 } from '../domain/person-details.ts';
 import type {
@@ -12,12 +15,23 @@ import type {
   PersonDetailsDraftErrors
 } from '../domain/person-details.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
+import { PersonAvatar } from './PersonBadge.tsx';
+import { compressPersonPhoto } from './person-photo.ts';
+
+const cadenceOptions: readonly { value: ConnectionCadence; label: string }[] = [
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'two-weeks', label: 'Every 2 weeks' },
+  { value: 'monthly', label: 'Monthly' }
+];
 
 export function PersonDetailsEditor({
   personId,
   personName,
   details,
   today,
+  cadence,
+  isFriend,
   onSave,
   onClose
 }: {
@@ -25,18 +39,79 @@ export function PersonDetailsEditor({
   personName: string;
   details?: PersonDetails;
   today: string;
+  cadence?: ConnectionCadence | null;
+  isFriend: boolean;
   onSave: (draft: PersonDetailsDraft) => string | null;
   onClose: () => void;
 }) {
-  const [draft, setDraft] = useState(() => personDetailsDraft(details));
+  const [draft, setDraft] = useState(() => personDetailsDraft(details, cadence));
   const [errors, setErrors] = useState<PersonDetailsDraftErrors>({});
   const [saveError, setSaveError] = useState('');
+  const [photoError, setPhotoError] = useState('');
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [dateYearConfirmed, setDateYearConfirmed] = useState(() => ({
+    birthday: details?.birthday?.year !== undefined,
+    anniversary: details?.anniversary?.year !== undefined
+  }));
+  const photoRequest = useRef(0);
   const titleId = `person-details-title-${personId}`;
+  const relationshipIsStandard = isStandardRelationship(draft.relationshipLabel);
+  const avatarPerson = {
+    id: personId,
+    displayName: personName,
+    ...(draft.photoDataUrl ? { avatarUrl: draft.photoDataUrl } : {})
+  };
 
-  function update(field: keyof PersonDetailsDraft, value: string) {
+  function update<K extends keyof PersonDetailsDraft>(field: K, value: PersonDetailsDraft[K]) {
     setDraft(current => ({ ...current, [field]: value }));
     setErrors(current => ({ ...current, [field]: undefined }));
     setSaveError('');
+  }
+
+  function changeUnknownYear(
+    field: 'birthdayYearUnknown' | 'anniversaryYearUnknown',
+    dateField: 'birthdayDate' | 'anniversaryDate',
+    dateKind: 'birthday' | 'anniversary',
+    unknown: boolean
+  ) {
+    if (!unknown && draft[dateField] && !dateYearConfirmed[dateKind]) {
+      setErrors(current => ({
+        ...current,
+        [dateField]: 'Choose a full date to set its year, or leave Year unknown selected.'
+      }));
+      return;
+    }
+    update(field, unknown);
+  }
+
+  function changeDate(
+    field: 'birthdayDate' | 'anniversaryDate',
+    dateKind: 'birthday' | 'anniversary',
+    value: string
+  ) {
+    if (value && draft[field].slice(0, 4) !== value.slice(0, 4)) {
+      setDateYearConfirmed(current => ({ ...current, [dateKind]: true }));
+    }
+    update(field, value);
+  }
+
+  async function selectPhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) return;
+    const request = ++photoRequest.current;
+    setPhotoBusy(true);
+    setPhotoError('');
+    try {
+      const photoDataUrl = await compressPersonPhoto(file);
+      if (photoRequest.current === request) update('photoDataUrl', photoDataUrl);
+    } catch (error) {
+      if (photoRequest.current === request) {
+        setPhotoError(error instanceof Error ? error.message : 'The selected photo could not be prepared.');
+      }
+    } finally {
+      if (photoRequest.current === request) setPhotoBusy(false);
+    }
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -61,7 +136,7 @@ export function PersonDetailsEditor({
 
   return (
     <MoneyGoalDialog
-      title={`Edit ${personName}`}
+      title={`Person settings — ${personName}`}
       titleId={titleId}
       labelledBy={titleId}
       dialogClassName="person-details-dialog"
@@ -69,81 +144,175 @@ export function PersonDetailsEditor({
       onClose={onClose}
     >
       <form className="person-details-editor" noValidate onSubmit={submit}>
-        <p className="person-details-editor__hint">All details are optional. Changes stay in this synthetic preview.</p>
-        <div className="goal-field">
-          <label htmlFor={`person-details-relationship-${personId}`}>Relationship</label>
-          <input
-            id={`person-details-relationship-${personId}`}
-            type="text"
-            maxLength={80}
-            value={draft.relationshipLabel}
-            aria-invalid={Boolean(errors.relationshipLabel)}
-            aria-describedby={errors.relationshipLabel ? 'person-details-error-relationshipLabel' : undefined}
-            onChange={event => update('relationshipLabel', event.currentTarget.value)}
-          />
-          {fieldError('relationshipLabel')}
-        </div>
-        <fieldset className="person-details-editor__date">
-          <legend>Birthday</legend>
-          <label htmlFor={`person-details-birthday-${personId}`}>Month and day (MM-DD)</label>
-          <input
-            id={`person-details-birthday-${personId}`}
-            type="text"
-            inputMode="numeric"
-            placeholder="MM-DD"
-            pattern="(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])"
-            value={draft.birthdayMonthDay}
-            aria-invalid={Boolean(errors.birthdayMonthDay)}
-            aria-describedby={errors.birthdayMonthDay ? 'person-details-error-birthdayMonthDay' : undefined}
-            onChange={event => update('birthdayMonthDay', event.currentTarget.value)}
-          />
-          {fieldError('birthdayMonthDay')}
-          <label htmlFor={`person-details-birth-year-${personId}`}>Birth year (leave blank if unknown)</label>
-          <input
-            id={`person-details-birth-year-${personId}`}
-            type="text"
-            inputMode="numeric"
-            maxLength={4}
-            placeholder="Unknown"
-            value={draft.birthdayYear}
-            aria-invalid={Boolean(errors.birthdayYear)}
-            aria-describedby={errors.birthdayYear ? 'person-details-error-birthdayYear' : undefined}
-            onChange={event => update('birthdayYear', event.currentTarget.value)}
-          />
-          {fieldError('birthdayYear')}
-        </fieldset>
-        <div className="goal-field">
-          <label htmlFor={`person-details-anniversary-${personId}`}>Anniversary (MM-DD)</label>
-          <input
-            id={`person-details-anniversary-${personId}`}
-            type="text"
-            inputMode="numeric"
-            placeholder="MM-DD"
-            pattern="(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])"
-            value={draft.anniversaryMonthDay}
-            aria-invalid={Boolean(errors.anniversaryMonthDay)}
-            aria-describedby={errors.anniversaryMonthDay ? 'person-details-error-anniversaryMonthDay' : undefined}
-            onChange={event => update('anniversaryMonthDay', event.currentTarget.value)}
-          />
-          {fieldError('anniversaryMonthDay')}
-        </div>
-        <div className="goal-field">
-          <label htmlFor={`person-details-style-${personId}`}>Preferred connection style</label>
-          <select
-            id={`person-details-style-${personId}`}
-            value={draft.connectionStyle}
-            aria-invalid={Boolean(errors.connectionStyle)}
-            aria-describedby={errors.connectionStyle ? 'person-details-error-connectionStyle' : undefined}
-            onChange={event => update('connectionStyle', event.currentTarget.value)}
-          >
-            <option value="">Not set</option>
-            {connectionStyles.map(style => <option key={style.value} value={style.value}>{style.label}</option>)}
-          </select>
-          {fieldError('connectionStyle')}
+        <div className="person-details-editor__scroll">
+          <section className="person-details-editor__section" aria-labelledby={`person-section-${personId}`}>
+            <h3 id={`person-section-${personId}`}>Person</h3>
+            <div className="person-details-editor__photo">
+              <span className="person-details-editor__photo-preview">
+                <PersonAvatar person={avatarPerson} />
+              </span>
+              <div className="person-details-editor__photo-controls">
+                <input
+                  id={`person-photo-${personId}`}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  aria-label={`Choose photo for ${personName}`}
+                  onChange={selectPhoto}
+                  disabled={photoBusy}
+                />
+                <label className="btn mini ghost" htmlFor={`person-photo-${personId}`}>
+                  Choose photo
+                </label>
+                {draft.photoDataUrl && (
+                  <button type="button" className="btn mini ghost" onClick={() => update('photoDataUrl', '')}>
+                    Remove photo
+                  </button>
+                )}
+              </div>
+              <p className="person-details-editor__help">Photos are cropped to a circle and saved with this preview.</p>
+              {photoBusy && <p className="person-details-editor__help" role="status">Preparing photo…</p>}
+              {photoError && <p className="goal-field-error" role="alert">{photoError}</p>}
+              {fieldError('photoDataUrl')}
+            </div>
+            <div className="goal-field">
+              <label htmlFor={`person-details-relationship-${personId}`}>Relationship</label>
+              <select
+                id={`person-details-relationship-${personId}`}
+                value={relationshipIsStandard ? draft.relationshipLabel : draft.relationshipLabel ? '__custom' : ''}
+                aria-invalid={Boolean(errors.relationshipLabel)}
+                aria-describedby={errors.relationshipLabel ? 'person-details-error-relationshipLabel' : undefined}
+                onChange={event => {
+                  const value = event.currentTarget.value;
+                  if (value === '__custom') {
+                    if (relationshipIsStandard) update('relationshipLabel', '');
+                  } else {
+                    update('relationshipLabel', value);
+                  }
+                }}
+              >
+                <option value="">Not set</option>
+                {relationshipGroups.map(group => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.values.map(value => <option key={value} value={value}>{value}</option>)}
+                  </optgroup>
+                ))}
+                {draft.relationshipLabel && !relationshipIsStandard && (
+                  <option value="__custom">{draft.relationshipLabel} (custom)</option>
+                )}
+                <option value="__custom">Custom…</option>
+              </select>
+              {fieldError('relationshipLabel')}
+              {!relationshipIsStandard && (
+                <input
+                  type="text"
+                  maxLength={80}
+                  aria-label="Custom relationship"
+                  placeholder="Type a custom relationship"
+                  value={draft.relationshipLabel}
+                  aria-invalid={Boolean(errors.relationshipLabel)}
+                  aria-describedby={errors.relationshipLabel ? 'person-details-error-relationshipLabel' : undefined}
+                  onChange={event => update('relationshipLabel', event.currentTarget.value)}
+                />
+              )}
+            </div>
+            <div className="person-details-editor__date-grid">
+              <div className="goal-field">
+                <label htmlFor={`person-details-birthday-${personId}`}>Birthday</label>
+                <input
+                  id={`person-details-birthday-${personId}`}
+                  type="date"
+                  value={draft.birthdayDate}
+                  aria-invalid={Boolean(errors.birthdayDate)}
+                  aria-describedby={errors.birthdayDate ? 'person-details-error-birthdayDate' : undefined}
+                  onChange={event => changeDate('birthdayDate', 'birthday', event.currentTarget.value)}
+                />
+                <label className="person-details-editor__unknown-year">
+                  <input
+                    type="checkbox"
+                    checked={draft.birthdayYearUnknown}
+                    onChange={event => changeUnknownYear(
+                      'birthdayYearUnknown',
+                      'birthdayDate',
+                      'birthday',
+                      event.currentTarget.checked
+                    )}
+                  />
+                  Year unknown
+                </label>
+                {fieldError('birthdayDate')}
+              </div>
+              <div className="goal-field">
+                <label htmlFor={`person-details-anniversary-${personId}`}>Anniversary</label>
+                <input
+                  id={`person-details-anniversary-${personId}`}
+                  type="date"
+                  value={draft.anniversaryDate}
+                  aria-invalid={Boolean(errors.anniversaryDate)}
+                  aria-describedby={errors.anniversaryDate ? 'person-details-error-anniversaryDate' : undefined}
+                  onChange={event => changeDate('anniversaryDate', 'anniversary', event.currentTarget.value)}
+                />
+                <label className="person-details-editor__unknown-year">
+                  <input
+                    type="checkbox"
+                    checked={draft.anniversaryYearUnknown}
+                    onChange={event => changeUnknownYear(
+                      'anniversaryYearUnknown',
+                      'anniversaryDate',
+                      'anniversary',
+                      event.currentTarget.checked
+                    )}
+                  />
+                  Year unknown
+                </label>
+                {fieldError('anniversaryDate')}
+              </div>
+            </div>
+          </section>
+          <section className="person-details-editor__section" aria-labelledby={`connection-section-${personId}`}>
+            <h3 id={`connection-section-${personId}`}>Connection</h3>
+            <div className="person-details-editor__date-grid">
+              <label className="goal-field" htmlFor={`person-details-cadence-${personId}`}>
+                <span>Connection cadence</span>
+                <select
+                  id={`person-details-cadence-${personId}`}
+                  value={draft.connectionCadence}
+                  disabled={!isFriend}
+                  aria-invalid={Boolean(errors.connectionCadence)}
+                  aria-describedby={!isFriend
+                    ? `person-details-cadence-help-${personId}`
+                    : errors.connectionCadence ? 'person-details-error-connectionCadence' : undefined}
+                  onChange={event => update('connectionCadence', event.currentTarget.value)}
+                >
+                  <option value="">Not set</option>
+                  {cadenceOptions.map(option => <option value={option.value} key={option.value}>{option.label}</option>)}
+                </select>
+                {!isFriend && (
+                  <span className="person-details-editor__help" id={`person-details-cadence-help-${personId}`}>
+                    Cadence is available for people classified as Friends. Change that classification separately to edit it.
+                  </span>
+                )}
+                {fieldError('connectionCadence')}
+              </label>
+              <label className="goal-field" htmlFor={`person-details-style-${personId}`}>
+                <span>Love language</span>
+                <select
+                  id={`person-details-style-${personId}`}
+                  value={draft.connectionStyle}
+                  aria-invalid={Boolean(errors.connectionStyle)}
+                  aria-describedby={errors.connectionStyle ? 'person-details-error-connectionStyle' : undefined}
+                  onChange={event => update('connectionStyle', event.currentTarget.value)}
+                >
+                  <option value="">Not set</option>
+                  {connectionStyles.map(style => <option key={style.value} value={style.value}>{style.label}</option>)}
+                </select>
+                {fieldError('connectionStyle')}
+              </label>
+            </div>
+          </section>
         </div>
         {saveError && <p className="goal-field-error" role="alert">{saveError}</p>}
-        <div className="money-goal-dialog__actions">
-          <button type="submit" className="btn mini">Save details</button>
+        <div className="money-goal-dialog__actions person-details-editor__actions">
+          <button type="submit" className="btn mini" disabled={photoBusy}>Save</button>
           <button type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>
         </div>
       </form>

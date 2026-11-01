@@ -18,7 +18,8 @@ import { ArchivedRhythmsDialog } from './ArchivedRhythmsDialog.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
 import type { Destination } from './AppNavigation.tsx';
-import type { FoundationPreview, PersonId, RhythmPreview } from '../domain/preview-data.ts';
+import { syntheticPeople } from '../domain/preview-data.ts';
+import type { FoundationPreview, PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
 import { peopleForRhythm, rhythmLastActivityLabel } from '../domain/preview-data.ts';
 import { isRhythmRelevantOnDate } from '../domain/category-rhythms.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
@@ -29,6 +30,7 @@ type HealthFitnessTab = 'today' | 'rhythms' | 'progress';
 type ProgressTab = 'strength' | 'cardio' | 'weight';
 
 type HealthFitnessViewProps = {
+  people?: readonly PersonPreview[];
   hidden?: boolean;
   strength: StrengthViewProps;
   weight: WeightViewProps;
@@ -64,6 +66,7 @@ const progressDetails: readonly { id: ProgressTab; title: string; description: s
 ];
 
 export function HealthFitnessView({
+  people = syntheticPeople,
   hidden = false,
   strength,
   weight,
@@ -293,7 +296,7 @@ export function HealthFitnessView({
                       inline
                       completed={completedRhythms.has(rhythm.id)}
                       statusLabel={rhythmLastActivityLabel(rhythm, todayDate)}
-                      people={peopleForRhythm(rhythm)}
+                      people={peopleForRhythm(rhythm, people)}
                       foundations={foundations}
                       onPersonSelect={onPersonSelect}
                       onOpenFoundation={(id, openerId) => onOpenFoundation(id, openerId, 'today')}
@@ -336,6 +339,7 @@ export function HealthFitnessView({
 
       <section id="health-panel-rhythms" role="tabpanel" aria-labelledby="health-tab-rhythms" hidden={selected !== 'rhythms'}>
         <CategoryRhythmCollection
+          people={people}
           categoryLabel="Health & Fitness"
           categoryToken="health"
           rhythms={rhythms}
@@ -413,6 +417,7 @@ export function HealthFitnessView({
       {showArchivedRhythms && (
         <ArchivedRhythmsDialog
           rhythms={archivedRhythms}
+          people={people}
           foundations={foundations}
           completedRhythms={completedRhythms}
           onPersonSelect={onPersonSelect}

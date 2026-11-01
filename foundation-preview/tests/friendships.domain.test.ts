@@ -16,6 +16,7 @@ import type { FriendshipConnection } from '../src/domain/friendships.ts';
 import { localDateInTimeZone } from '../src/domain/rhythm-occurrences.ts';
 import {
   createPersonPickerGroups,
+  createSamplePeople,
   migrateLegacyFriendIdsIntoPeopleGroups,
   personGroupMemberIds,
   setPersonGroupMembership
@@ -56,7 +57,7 @@ describe('Friendships cadence and connection history', () => {
       nextDueDate: null,
       due: false
     });
-    expect(selectFriendStatuses(data, [avery], '2026-03-01')).toHaveLength(1);
+    expect(selectFriendStatuses(data, [avery], '2026-03-01', createSamplePeople())).toHaveLength(1);
   });
 
   it('uses the latest actual connection as anchor and cadence changes do not rewrite history', () => {
@@ -161,13 +162,14 @@ describe('Friendships cadence and connection history', () => {
       cadenceSettings: [{ personId: avery, cadence: 'weekly', setOn: '2026-01-01' }],
       connections: [event('valid', '2026-01-01', [avery])]
     };
-    expect(validateFriendshipData(valid)).toBe(true);
+    const knownPeople = [avery, morgan, jordan];
+    expect(validateFriendshipData(valid, knownPeople)).toBe(true);
     expect(validateFriendshipData({
       ...valid,
       connections: [event('broken', '2026-01-01', ['unknown-person' as typeof avery])]
-    })).toBe(false);
-    expect(validateFriendshipData({ ...valid, connections: [event('duplicate', 'bad', [avery])] })).toBe(false);
-    expect(validateFriendshipData({ ...valid, friendIds: [avery] })).toBe(false);
+    }, knownPeople)).toBe(false);
+    expect(validateFriendshipData({ ...valid, connections: [event('duplicate', 'bad', [avery])] }, knownPeople)).toBe(false);
+    expect(validateFriendshipData({ ...valid, friendIds: [avery] }, knownPeople)).toBe(false);
   });
 
   it('preserves unknown fields when commands update known relationship state', () => {
@@ -186,7 +188,7 @@ describe('Friendships cadence and connection history', () => {
       cadenceSettings: [{ personId: avery, cadence: 'weekly' as const, setOn: '2026-01-01' }],
       connections: [event('shared', '2026-01-02', [avery, morgan])]
     };
-    expect(validateLegacyFriendshipDataV19(legacy)).toBe(true);
+    expect(validateLegacyFriendshipDataV19(legacy, createSamplePeople().map(person => person.id))).toBe(true);
     const migratedFriendships = migrateLegacyFriendshipDataV19(legacy);
     const migratedGroups = migrateLegacyFriendIdsIntoPeopleGroups(createPersonPickerGroups(), legacy.friendIds);
     expect(personGroupMemberIds(migratedGroups, 'friends')).toEqual([avery, morgan]);

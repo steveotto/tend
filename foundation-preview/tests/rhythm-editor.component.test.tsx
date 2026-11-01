@@ -42,7 +42,11 @@ describe('synthetic Rhythm editor domain', () => {
       timeLabel: 'Overnight',
       personIds: ['not-a-synthetic-person'],
       categoryIds: ['not-a-category']
-    } as unknown as RhythmDraft)).toMatchObject({
+    } as unknown as RhythmDraft, undefined, [
+      'sample-person-avery',
+      'sample-person-morgan',
+      'sample-person-jordan'
+    ])).toMatchObject({
       title: expect.any(String),
       description: expect.any(String),
       cadence: expect.any(String),

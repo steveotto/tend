@@ -7,10 +7,13 @@ import {
 import type { MoneyGoal } from './money-goals.ts';
 import { goals as sampleGoals, todayRhythms } from './preview-data.ts';
 import {
+  createSamplePeople,
   createPersonPickerGroups,
   migrateLegacyFriendIdsIntoPeopleGroups,
+  validatePeopleCollection,
   validatePersonPickerGroups
 } from './preview-data.ts';
+import type { PersonPreview } from './preview-data.ts';
 import type { ActiveRhythmCompletion, DatedRhythmCompletion, RhythmCompletionRecord } from './rhythm-completion.ts';
 import { localDateTimeInZone } from './rhythm-completion.ts';
 import {
@@ -71,7 +74,7 @@ import { validatePersonNotesCollection } from './person-notes.ts';
 import type { PersonNote } from './person-notes.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 30;
+export const PREVIEW_SCHEMA_VERSION = 32;
 
 export type PreviewData = {
   goals: MoneyGoal[];
@@ -87,6 +90,7 @@ export type PreviewData = {
   weight: WeightData;
   cardio: CardioData;
   friendships: FriendshipData;
+  people: PersonPreview[];
   peopleGroups: ReturnType<typeof createPersonPickerGroups>;
   personDetails: PersonDetails[];
   personNotes: PersonNote[];
@@ -121,7 +125,7 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
 const goalKeys = [
@@ -160,6 +164,8 @@ const dataKeysV27 = [...dataKeysV26];
 const dataKeysV28 = [...dataKeysV27];
 const dataKeysV29 = [...dataKeysV28, 'personDetails'];
 const dataKeysV30 = [...dataKeysV29, 'personNotes'];
+const dataKeysV31 = [...dataKeysV30];
+const dataKeysV32 = [...dataKeysV31, 'people'];
 const envelopeKeys = ['format', 'schemaVersion', 'data'];
 const supportedRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 const builtInRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
@@ -189,7 +195,28 @@ export function createSamplePreviewData(): PreviewData {
     weight: createWeightData(),
     cardio: createCardioData(),
     friendships: createFriendshipData(),
+    people: createSamplePeople(),
     peopleGroups: createPersonPickerGroups(),
+    personDetails: [],
+    personNotes: []
+  };
+}
+
+export function createEmptyPreviewData(): PreviewData {
+  const sample = createSamplePreviewData();
+  return {
+    ...sample,
+    goals: [],
+    completedRhythmIds: [],
+    savedRhythms: [],
+    archivedRhythmIds: [],
+    datedRhythmCompletions: [],
+    activeRhythmCompletions: [],
+    rhythmCompletionOverrides: [],
+    removedSeedCompletionIds: [],
+    rhythmHistoryIds: [],
+    people: [],
+    peopleGroups: sample.peopleGroups.map(group => ({ ...group, memberIds: [] })),
     personDetails: [],
     personNotes: []
   };
@@ -397,6 +424,7 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
           participantIds: [...connection.participantIds]
         }))
       },
+      people: data.people.map(person => ({ ...person })),
       peopleGroups: data.peopleGroups.map(group => ({ ...group, memberIds: [...group.memberIds] })),
       personDetails: data.personDetails.map(details => ({
         ...details,
@@ -453,6 +481,8 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
       && value.schemaVersion !== 27
       && value.schemaVersion !== 28
       && value.schemaVersion !== 29
+      && value.schemaVersion !== 30
+      && value.schemaVersion !== 31
       && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
@@ -486,11 +516,13 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const isV28 = value.schemaVersion === 28;
   const isV29 = value.schemaVersion === 29;
   const isV30 = value.schemaVersion === 30;
-  const hasCurrentFriendshipsData = isV19 || isV20 || isV21 || isV22 || isV23 || isV24 || isV25 || isV26 || isV27 || isV28 || isV29 || isV30;
+  const isV31 = value.schemaVersion === 31;
+  const isV32 = value.schemaVersion === 32;
+  const hasCurrentFriendshipsData = isV19 || isV20 || isV21 || isV22 || isV23 || isV24 || isV25 || isV26 || isV27 || isV28 || isV29 || isV30 || isV31 || isV32;
   const hasCardio = isV18 || hasCurrentFriendshipsData;
   const allowedDataKeys = isV1 ? dataKeysV1 : isV2 ? dataKeysV2
     : isV3 || isV4 ? dataKeysV3
-      : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
+      : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
         : isV11 || isV12 ? dataKeysV12 : isV10 ? dataKeysV10
       : isV8 || isV9 ? dataKeysV8 : isV7 ? dataKeysV7 : isV6 ? dataKeysV6 : dataKeysV5;
   if (!isRecord(value.data) || (!isV19 && !isV20 && !hasOnlyKeys(value.data, allowedDataKeys))
@@ -505,12 +537,16 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   if ((isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18 || hasCurrentFriendshipsData) && !Array.isArray(value.data.rhythmHistoryIds)) {
     return { valid: false, kind: 'invalid', message: 'Rhythm history references must be a list.' };
   }
-  if ((isV29 || isV30) && !Array.isArray(value.data.personDetails)) {
+  if ((isV29 || isV30 || isV31 || isV32) && !Array.isArray(value.data.personDetails)) {
     return { valid: false, kind: 'invalid', message: 'Person details must be a list.' };
   }
-  if (isV30 && !Array.isArray(value.data.personNotes)) {
+  if ((isV30 || isV31 || isV32) && !Array.isArray(value.data.personNotes)) {
     return { valid: false, kind: 'invalid', message: 'Person notes must be a list.' };
   }
+  if (isV32 && !validatePeopleCollection(value.data.people)) {
+    return { valid: false, kind: 'invalid', message: 'People must contain unique stable IDs and non-empty names.' };
+  }
+  const people: PersonPreview[] = isV32 ? value.data.people as PersonPreview[] : createSamplePeople();
   if (!isV1 && !((isV4 || isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18 || hasCurrentFriendshipsData)
     ? isV18 || hasCurrentFriendshipsData ? validateSavedRhythmsV18(value.data.savedRhythms)
       : isV17 ? validateSavedRhythmsV17(value.data.savedRhythms)
@@ -788,19 +824,20 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     : sourceStrength;
   if (!validateStrengthData(
     strengthWithUnit,
-    isV22 || isV23 || isV24 || isV25 || isV26 || isV27 || isV28 || isV29 || isV30,
-    isV25 || isV26 || isV27 || isV28 || isV29 || isV30,
-    isV26 || isV27 || isV28 || isV29 || isV30,
-    isV28 || isV29 || isV30
+    isV22 || isV23 || isV24 || isV25 || isV26 || isV27 || isV28 || isV29 || isV30 || isV31 || isV32,
+    isV25 || isV26 || isV27 || isV28 || isV29 || isV30 || isV31 || isV32,
+    isV26 || isV27 || isV28 || isV29 || isV30 || isV31 || isV32,
+    isV28 || isV29 || isV30 || isV31 || isV32,
+    people.map(person => person.id)
   )) {
     return { valid: false, kind: 'invalid', message: 'Strength settings, workouts, or workout history are invalid.' };
   }
-  const strength = isV28 || isV29 || isV30
+  const strength = isV28 || isV29 || isV30 || isV31 || isV32
     ? strengthWithUnit
     : isV27
     ? strengthWithUnit
     : migrateStrengthDataToV28(migrateStrengthDataToV27(migrateStrengthDataToV26(migrateStrengthDataToV25(strengthWithUnit))));
-  if (!strength || !validateStrengthData(strength, true, true, true)) {
+  if (!strength || !validateStrengthData(strength, true, true, true, undefined, people.map(person => person.id))) {
     return { valid: false, kind: 'invalid', message: 'Strength settings, workouts, or workout history are invalid.' };
   }
   const linkedWorkoutCompletionIds = new Set<string>();
@@ -829,37 +866,51 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     return { valid: false, kind: 'invalid', message: 'Weight data must retain its settings and weigh-in records.' };
   }
   const cardio = hasCardio ? value.data.cardio : createCardioData();
-  if (!validateCardioDataShape(cardio, isV28 || isV29 || isV30)) {
+  if (!validateCardioDataShape(cardio, isV28 || isV29 || isV30 || isV31 || isV32)) {
     return { valid: false, kind: 'invalid', message: 'Cardio data must retain its goals and run records.' };
   }
   const currentCardio = migrateCardioDataToV28(cardio);
-  const legacyFriendships = isV19 && validateLegacyFriendshipDataV19(value.data.friendships)
+  const legacyFriendships = isV19 && validateLegacyFriendshipDataV19(value.data.friendships, people.map(person => person.id))
     ? value.data.friendships
     : null;
-  const friendships = isV20 || isV21 || isV22 || isV23 || isV24 || isV25 || isV26 || isV27 || isV28 || isV29 || isV30
+  const friendships = isV20 || isV21 || isV22 || isV23 || isV24 || isV25 || isV26 || isV27 || isV28 || isV29 || isV30 || isV31 || isV32
     ? value.data.friendships
     : legacyFriendships
       ? migrateLegacyFriendshipDataV19(legacyFriendships)
       : createFriendshipData();
-  if ((isV19 && !legacyFriendships) || !validateFriendshipData(friendships)) {
+  if ((isV19 && !legacyFriendships) || !validateFriendshipData(friendships, people.map(person => person.id))) {
     return { valid: false, kind: 'invalid', message: 'Friendships contain invalid people, cadence settings, or connection records.' };
   }
-  const peopleGroups = isV20 || isV21 || isV22 || isV23 || isV24 || isV25 || isV26 || isV27 || isV28 || isV29 || isV30
+  const peopleGroups = isV20 || isV21 || isV22 || isV23 || isV24 || isV25 || isV26 || isV27 || isV28 || isV29 || isV30 || isV31 || isV32
     ? value.data.peopleGroups
     : migrateLegacyFriendIdsIntoPeopleGroups(
         createPersonPickerGroups(),
         legacyFriendships ? getLegacyFriendIdsV19(legacyFriendships) : []
       );
-  if (!validatePersonPickerGroups(peopleGroups)) {
+  if (!validatePersonPickerGroups(peopleGroups, people)) {
     return { valid: false, kind: 'invalid', message: 'People categories must contain unique known people.' };
   }
-  const personDetails = isV29 || isV30 ? value.data.personDetails : [];
-  if (!validatePersonDetailsCollection(personDetails, currentDate)) {
+  const personDetails = isV29 || isV30 || isV31 || isV32 ? value.data.personDetails : [];
+  if (!validatePersonDetailsCollection(personDetails, currentDate, people.map(person => person.id))) {
     return { valid: false, kind: 'invalid', message: 'Person details contain invalid fields, dates, styles, or unresolved Person IDs.' };
   }
-  const personNotes = isV30 ? value.data.personNotes : [];
-  if (!validatePersonNotesCollection(personNotes)) {
+  const personNotes = isV30 || isV31 || isV32 ? value.data.personNotes : [];
+  if (!validatePersonNotesCollection(personNotes, people.map(person => person.id))) {
     return { valid: false, kind: 'invalid', message: 'Person notes contain invalid fields, dates, duplicate IDs, or unresolved Person IDs.' };
+  }
+  const knownPersonIds = new Set(people.map(person => person.id));
+  const referencesKnownPeople = (ids: readonly string[]) => ids.every(id => knownPersonIds.has(id));
+  if (savedRhythms.some(rhythm => !referencesKnownPeople(rhythm.personIds))
+    || friendships.cadenceSettings.some(setting => !knownPersonIds.has(setting.personId))
+    || friendships.connections.some(connection => !referencesKnownPeople(connection.participantIds))
+    || personDetails.some(details => !knownPersonIds.has(details.personId))
+    || personNotes.some(note => !knownPersonIds.has(note.personId)
+      || !referencesKnownPeople(note.sharedWith ?? []))
+    || strength.savedWorkouts.some(workout => !referencesKnownPeople(workout.sharedWith))
+    || strength.workouts.some(workout => !referencesKnownPeople(workout.sharedWith ?? []))
+    || strength.guidedSessionDraft !== undefined
+      && !referencesKnownPeople(strength.guidedSessionDraft.sharedWith)) {
+    return { valid: false, kind: 'invalid', message: 'A supported People link refers to an unresolved Person ID.' };
   }
 
   const envelopeData = {
@@ -877,6 +928,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     weight,
     cardio: currentCardio,
     friendships,
+    people,
     peopleGroups,
     personDetails,
     personNotes

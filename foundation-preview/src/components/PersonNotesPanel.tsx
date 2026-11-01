@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, MouseEvent } from 'react';
-import { personById } from '../domain/preview-data.ts';
-import type { PersonId } from '../domain/preview-data.ts';
+import { personById, syntheticPeople } from '../domain/preview-data.ts';
+import type { PersonId, PersonPreview } from '../domain/preview-data.ts';
 import {
   formatPersonNoteDate,
   personNoteDraft,
@@ -19,18 +19,20 @@ type NoteEditorState =
 
 export function PersonNotesPanel({
   personId,
+  people = syntheticPeople,
   notes,
   onCreate,
   onUpdate,
   onDelete
 }: {
   personId: PersonId;
+  people?: readonly PersonPreview[];
   notes: readonly PersonNote[];
   onCreate: (draft: PersonNoteDraft) => string | null;
   onUpdate: (noteId: string, expectedUpdatedAt: string, actorId: PersonId, draft: PersonNoteDraft) => string | null;
   onDelete: (noteId: string, expectedUpdatedAt: string, actorId: PersonId) => string | null;
 }) {
-  const person = personById(personId);
+  const person = personById(people, personId);
   const visibleNotes = personNotesForPerson(notes, personId);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [editor, setEditor] = useState<NoteEditorState | null>(null);
@@ -106,7 +108,7 @@ export function PersonNotesPanel({
           <div className="person-notes-list" aria-label={`${person.displayName} notes`}>
             {visibleNotes.map(note => {
               const date = formatPersonNoteDate(note.updatedAt);
-              const sharedPeople = (note.sharedWith ?? []).map(id => personById(id).displayName);
+              const sharedPeople = (note.sharedWith ?? []).map(id => personById(people, id).displayName);
               return (
                 <button
                   type="button"
@@ -132,6 +134,7 @@ export function PersonNotesPanel({
       {selectedNote && (
         <PersonNoteDetailDialog
           actorId={personId}
+          people={people}
           note={selectedNote}
           onEdit={event => openEditor(
             { kind: 'edit', note: selectedNote, expectedUpdatedAt: selectedNote.updatedAt },
@@ -147,6 +150,7 @@ export function PersonNotesPanel({
       {editor && (
         <PersonNoteEditor
           actorId={personId}
+          people={people}
           personName={person.displayName}
           {...(editor.kind === 'edit' ? { note: editor.note } : {})}
           onClose={() => setEditor(null)}
@@ -158,6 +162,7 @@ export function PersonNotesPanel({
       {deleteCandidate && (
         <PersonNoteDeleteDialog
           actorId={personId}
+          people={people}
           note={deleteCandidate}
           onDelete={() => {
             const error = onDelete(deleteCandidate.id, deleteCandidate.updatedAt, personId);
@@ -175,19 +180,21 @@ export function PersonNotesPanel({
 
 function PersonNoteDetailDialog({
   actorId,
+  people,
   note,
   onEdit,
   onDelete,
   onClose
 }: {
   actorId: PersonId;
+  people: readonly PersonPreview[];
   note: PersonNote;
   onEdit: (event: MouseEvent<HTMLButtonElement>) => void;
   onDelete: (event: MouseEvent<HTMLButtonElement>) => void;
   onClose: () => void;
 }) {
-  const primaryPerson = personById(note.personId);
-  const sharedNames = (note.sharedWith ?? []).map(id => personById(id).displayName);
+  const primaryPerson = personById(people, note.personId);
+  const sharedNames = (note.sharedWith ?? []).map(id => personById(people, id).displayName);
   const titleId = `person-note-title-${note.id}`;
   return (
     <MoneyGoalDialog
@@ -219,12 +226,14 @@ function PersonNoteDetailDialog({
 
 function PersonNoteEditor({
   actorId,
+  people,
   personName,
   note,
   onSave,
   onClose
 }: {
   actorId: PersonId;
+  people: readonly PersonPreview[];
   personName: string;
   note?: PersonNote;
   onSave: (draft: PersonNoteDraft) => string | null;
@@ -277,6 +286,7 @@ function PersonNoteEditor({
       >
         <h2 id={titleId}>Share note</h2>
         <PeopleBadgeSelectionPicker
+          people={people}
           selectedIds={pickerDraft}
           excludedIds={[note?.personId ?? actorId]}
           onToggle={id => setPickerDraft(current => current?.includes(id)
@@ -304,7 +314,7 @@ function PersonNoteEditor({
     >
       <h2 id={titleId}>{note ? 'Edit note' : `Add note for ${personName}`}</h2>
       {note && note.personId !== actorId && (
-        <p className="person-note-editor__hint">Primary person: {personById(note.personId).displayName}. Ownership stays with them.</p>
+        <p className="person-note-editor__hint">Primary person: {personById(people, note.personId).displayName}. Ownership stays with them.</p>
       )}
       <form className="person-note-editor" noValidate onSubmit={submit}>
         <div className="goal-field">
@@ -329,11 +339,11 @@ function PersonNoteEditor({
           <div className="person-note-editor__sharing-copy">
             <strong>Shared with</strong>
             <span>{draft.sharedWith.length > 0
-              ? draft.sharedWith.map(id => personById(id).displayName).join(', ')
+              ? draft.sharedWith.map(id => personById(people, id).displayName).join(', ')
               : 'Only the primary person'}</span>
             {draft.sharedWith.length > 0 && (
               <span className="person-note-editor__badges">
-                {draft.sharedWith.map(id => <PersonBadgeVisual key={id} person={personById(id)} />)}
+                {draft.sharedWith.map(id => <PersonBadgeVisual key={id} person={personById(people, id)} />)}
               </span>
             )}
           </div>
@@ -357,11 +367,13 @@ function PersonNoteEditor({
 
 function PersonNoteDeleteDialog({
   actorId,
+  people,
   note,
   onDelete,
   onClose
 }: {
   actorId: PersonId;
+  people: readonly PersonPreview[];
   note: PersonNote;
   onDelete: () => string | null;
   onClose: () => void;
@@ -381,8 +393,8 @@ function PersonNoteDeleteDialog({
       <h2 id={titleId}>Delete this note?</h2>
       <p>{isShared
         ? 'This removes the same note from all linked People profiles.'
-        : `This permanently removes the note for ${personById(note.personId).displayName}.`}</p>
-      {actorId !== note.personId && <p className="person-note-editor__hint">Primary person: {personById(note.personId).displayName}.</p>}
+        : `This permanently removes the note for ${personById(people, note.personId).displayName}.`}</p>
+      {actorId !== note.personId && <p className="person-note-editor__hint">Primary person: {personById(people, note.personId).displayName}.</p>}
       {error && <p className="goal-field-error" role="alert">{error}</p>}
       <div className="money-goal-dialog__actions">
         <button id={`person-note-cancel-delete-${note.id}`} type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>

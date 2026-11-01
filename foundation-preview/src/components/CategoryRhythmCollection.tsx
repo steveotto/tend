@@ -1,5 +1,6 @@
 import type { MouseEvent, ReactNode, RefObject } from 'react';
-import type { FoundationPreview, PersonId, RhythmPreview } from '../domain/preview-data.ts';
+import { syntheticPeople } from '../domain/preview-data.ts';
+import type { FoundationPreview, PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
 import type { CategoryRhythmGroupId } from '../domain/category-rhythms.ts';
 import type { Destination } from './AppNavigation.tsx';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
@@ -10,6 +11,7 @@ import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 
 type Props = {
+  people?: readonly PersonPreview[];
   categoryLabel: string;
   categoryToken: string;
   rhythms: readonly RhythmPreview[];
@@ -44,6 +46,7 @@ const groups = [
 ] as const;
 
 export function CategoryRhythmCollection({
+  people = syntheticPeople,
   categoryLabel,
   categoryToken,
   rhythms,
@@ -128,7 +131,7 @@ export function CategoryRhythmCollection({
                       inline
                       statusLabel={rhythmLastActivityLabel(rhythm, todayDate)}
                       completed={completedRhythms.has(rhythm.id)}
-                      people={peopleForRhythm(rhythm)}
+                      people={peopleForRhythm(rhythm, people)}
                       foundations={foundations}
                       onPersonSelect={onPersonSelect}
                       onOpenFoundation={onOpenFoundation}

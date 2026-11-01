@@ -7,7 +7,7 @@ import {
   syntheticPeople,
   syntheticPersonPickerGroups
 } from '../domain/preview-data.ts';
-import type { FoundationPreview, PersonId, PersonPickerGroup } from '../domain/preview-data.ts';
+import type { FoundationPreview, PersonId, PersonPickerGroup, PersonPreview } from '../domain/preview-data.ts';
 import type { RhythmPreview } from '../domain/preview-data.ts';
 import {
   foundationCategoryId,
@@ -56,6 +56,7 @@ type RhythmEditorProps = {
   recommendedFrequency?: RhythmFrequencyRecommendation;
   frequencyGuidance?: string;
   asOfDate?: string;
+  people?: readonly PersonPreview[];
   peopleGroups?: readonly PersonPickerGroup[];
   hasDatedCompletionHistory?: boolean;
   onSave: (draft: RhythmDraft) => RhythmDraftErrors;
@@ -107,6 +108,7 @@ export function RhythmEditor({
   recommendedFrequency,
   frequencyGuidance,
   asOfDate,
+  people = syntheticPeople,
   peopleGroups = syntheticPersonPickerGroups,
   hasDatedCompletionHistory = false,
   onSave,
@@ -307,7 +309,7 @@ export function RhythmEditor({
       : draft.schedule !== undefined;
     if (rhythm && (hasDatedCompletionHistory || hasPreservedSeasonHistory)
       && scheduleChanged && draft.schedule) {
-      const nextErrors = validateRhythmDraft(draft);
+      const nextErrors = validateRhythmDraft(draft, undefined, people.map(person => person.id));
       setErrors(nextErrors);
       if (Object.keys(nextErrors).length === 0) {
         if (scheduleFlowOpeningDraftRef.current === null) {
@@ -412,7 +414,7 @@ export function RhythmEditor({
   const scheduleEffectiveDate = asOfDate ?? localDateString(new Date());
   const selectedCategories = areas
     .filter(area => draft.categoryIds.includes(area.id));
-  const selectedPeople = syntheticPeople
+  const selectedPeople = people
     .filter(person => draft.personIds.includes(person.id));
   const selectedFoundationIds = [
     ...(draft.primaryFoundationId ? [draft.primaryFoundationId] : []),
@@ -928,8 +930,9 @@ export function RhythmEditor({
           />
         ) : activePicker === 'people' ? (
           <PeopleBadgeSelectionPicker
+            people={people}
             selectedIds={pickerSelection.filter((id): id is PersonId =>
-              syntheticPeople.some(person => person.id === id)
+              people.some(person => person.id === id)
             )}
             onToggle={id => togglePickerItem(id)}
             onToggleGroup={selectPickerGroup}

@@ -14,7 +14,7 @@ import { createStrengthData, createStrengthGuidedSession } from '../src/domain/s
 import { createWeightData } from '../src/domain/weight.ts';
 import { createCardioData } from '../src/domain/cardio.ts';
 import { createFriendshipData } from '../src/domain/friendships.ts';
-import { createPersonPickerGroups, setPersonGroupMembership } from '../src/domain/preview-data.ts';
+import { createPersonPickerGroups, createSamplePeople, setPersonGroupMembership } from '../src/domain/preview-data.ts';
 import type { StrengthSavedWorkout } from '../src/domain/strength.ts';
 import {
   browserPreviewStorage,
@@ -40,6 +40,8 @@ import {
   loadV27RecoveryCopy,
   loadV28RecoveryCopy,
   loadV29RecoveryCopy,
+  loadV30RecoveryCopy,
+  loadV31RecoveryCopy,
   PREVIEW_V19_RECOVERY_KEY,
   PREVIEW_STORAGE_KEY,
   PREVIEW_V1_RECOVERY_KEY,
@@ -64,6 +66,8 @@ import {
   PREVIEW_V27_RECOVERY_KEY,
   PREVIEW_V28_RECOVERY_KEY,
   PREVIEW_V29_RECOVERY_KEY,
+  PREVIEW_V30_RECOVERY_KEY,
+  PREVIEW_V31_RECOVERY_KEY,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -89,6 +93,9 @@ function render(ui: Parameters<typeof testingRender>[0]) {
 beforeEach(installMemoryStorage);
 afterEach(() => {
   cleanup();
+  const historyState = { ...(window.history.state ?? {}) };
+  delete historyState.tendPersonProfileId;
+  window.history.replaceState(historyState, '', window.location.href);
   window.localStorage.removeItem(PREVIEW_STORAGE_KEY);
   window.localStorage.removeItem(PREVIEW_V1_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V2_RECOVERY_KEY);
@@ -110,6 +117,7 @@ afterEach(() => {
   window.localStorage.removeItem(PREVIEW_V21_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V25_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V27_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V31_RECOVERY_KEY);
   vi.unstubAllGlobals();
 });
 
@@ -202,6 +210,7 @@ function versionSixRaw(data: PreviewData): string {
     weight: _weight,
     cardio: _cardio,
     friendships: _friendships,
+    people: _people,
     peopleGroups: _peopleGroups,
     personDetails: _personDetails,
     personNotes: _personNotes,
@@ -249,6 +258,7 @@ function versionEightRaw(data: PreviewData): string {
     weight: _weight,
     cardio: _cardio,
     friendships: _friendships,
+    people: _people,
     peopleGroups: _peopleGroups,
     personDetails: _personDetails,
     personNotes: _personNotes,
@@ -292,6 +302,7 @@ function versionNineRaw(data: PreviewData): string {
     weight: _weight,
     cardio: _cardio,
     friendships: _friendships,
+    people: _people,
     peopleGroups: _peopleGroups,
     personDetails: _personDetails,
     personNotes: _personNotes,
@@ -307,6 +318,7 @@ function versionTenRaw(data: PreviewData): string {
     weight: _weight,
     cardio: _cardio,
     friendships: _friendships,
+    people: _people,
     peopleGroups: _peopleGroups,
     personDetails: _personDetails,
     personNotes: _personNotes,
@@ -379,6 +391,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       data: Record<string, unknown>;
     };
     priorEnvelope.schemaVersion = 28;
+    delete priorEnvelope.data.people;
     delete priorEnvelope.data.personDetails;
     delete priorEnvelope.data.personNotes;
     const raw = JSON.stringify(priorEnvelope);
@@ -403,6 +416,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       data: Record<string, unknown>;
     };
     previous.schemaVersion = 29;
+    delete previous.data.people;
     delete previous.data.personNotes;
     const raw = ` \n${JSON.stringify(previous)}\n`;
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
@@ -415,7 +429,70 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(writePreview(storage, loaded.data, loaded.raw, { currentDate: '2026-10-31' }).kind).toBe('saved');
     expect(values.get(PREVIEW_V29_RECOVERY_KEY)).toBe(raw);
     expect(loadV29RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
-    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(30);
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+  });
+
+  it('migrates schema v30 with photo and anniversary defaults and preserves exact raw recovery', () => {
+    const data = createSamplePreviewData();
+    data.personDetails = [{
+      personId: 'sample-person-avery',
+      birthday: { monthDay: '02-29' },
+      anniversary: { monthDay: '04-15' }
+    }];
+    const previous = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+      format: string;
+      schemaVersion: number;
+      data: Record<string, unknown>;
+    };
+    previous.schemaVersion = 30;
+    delete previous.data.people;
+    const raw = ` \n${JSON.stringify(previous)}\n`;
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-10-31');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.personDetails).toEqual(data.personDetails);
+    expect(writePreview(storage, loaded.data, loaded.raw, { currentDate: '2026-10-31' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V30_RECOVERY_KEY)).toBe(raw);
+    expect(loadV30RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+  });
+
+  it('migrates v31 sample identities losslessly and preserves the exact pre-identity schema', () => {
+    const data = createSamplePreviewData();
+    data.peopleGroups = setPersonGroupMembership(data.peopleGroups, 'friends', 'sample-person-morgan', true);
+    data.personDetails = [{
+      personId: 'sample-person-morgan',
+      relationshipLabel: 'Custom relationship',
+      birthday: { monthDay: '02-29' }
+    }];
+    const prior = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+      format: string;
+      schemaVersion: number;
+      data: Record<string, unknown>;
+    };
+    prior.schemaVersion = 31;
+    delete prior.data.people;
+    const raw = `\n${JSON.stringify(prior)}\n`;
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-10-31');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.people.map(person => person.id)).toEqual([
+      'sample-person-avery',
+      'sample-person-morgan',
+      'sample-person-jordan'
+    ]);
+    expect(loaded.data.personDetails).toEqual(data.personDetails);
+    expect(loaded.data.peopleGroups.find(group => group.id === 'friends')?.memberIds)
+      .toEqual(['sample-person-morgan']);
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+
+    expect(writePreview(storage, loaded.data, loaded.raw, { currentDate: '2026-10-31' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V31_RECOVERY_KEY)).toBe(raw);
+    expect(loadV31RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
   });
 
   it('round-trips person notes and refuses a stale write that would replace a newer document', () => {
@@ -528,6 +605,75 @@ describe('synthetic preview storage adapter and envelope', () => {
     const loaded = loadPreview(storage, '2026-10-21');
     expect(loaded.kind).toBe('loaded');
     if (loaded.kind === 'loaded') expect(loaded.data).toEqual(data);
+  });
+
+  it('round-trips arbitrary People identities and their linked model references', () => {
+    const data = createSamplePreviewData();
+    const firstId = 'account:person:0001';
+    const secondId = 'account:person:0002';
+    data.people = [
+      { id: firstId, displayName: 'Alex Example' },
+      { id: secondId, displayName: 'Alex Example' },
+      { id: 'legacy.person-03', displayName: 'Morgan Example' },
+      { id: 'arbitrary_04', displayName: 'Taylor Example' }
+    ];
+    data.peopleGroups = data.peopleGroups.map(group => ({
+      ...group,
+      memberIds: group.id === 'friends' ? [firstId, secondId] : []
+    }));
+    data.personDetails = [{ personId: firstId, relationshipLabel: 'Custom relationship' }];
+    data.savedRhythms = [{
+      id: 'user-rhythm-11111111-1111-4111-8111-111111111111',
+      title: 'Shared walk',
+      cadence: 'Weekly',
+      timeLabel: 'Evening',
+      personIds: [firstId, secondId],
+      categoryIds: ['friendships']
+    }];
+    data.friendships = {
+      cadenceSettings: [{ personId: firstId, cadence: 'weekly', setOn: '2026-10-01' }],
+      connections: [{
+        id: 'shared-connection',
+        type: 'time-together',
+        date: '2026-10-20',
+        participantIds: [firstId, secondId]
+      }]
+    };
+    data.personNotes = [{
+      id: 'shared-note',
+      personId: firstId,
+      sharedWith: [secondId],
+      content: 'Synthetic linked note.',
+      createdAt: '2026-10-20T12:00:00.000Z',
+      updatedAt: '2026-10-20T12:00:00.000Z'
+    }];
+    data.strength.savedWorkouts = [{
+      id: 'shared-workout-plan',
+      name: 'Shared plan',
+      muscleIds: ['chest'],
+      sharedWith: [firstId, secondId]
+    }];
+
+    const envelope = createPreviewEnvelope(data);
+    const validation = validatePreviewEnvelope(envelope, '2026-10-31');
+    if (!validation.valid) throw new Error(validation.message);
+    expect(validation.valid).toBe(true);
+    const backup = JSON.stringify(envelope);
+    const parsed = parsePreviewBackup(backup, '2026-10-31');
+    expect(parsed.valid).toBe(true);
+    if (!parsed.valid) return;
+    expect(parsed.envelope.data).toMatchObject(data);
+
+    const { storage } = storageFixture();
+    expect(writePreview(storage, data, null, { currentDate: '2026-10-31' }).kind).toBe('saved');
+    const reloaded = loadPreview(storage, '2026-10-31');
+    expect(reloaded.kind).toBe('loaded');
+    if (reloaded.kind !== 'loaded') return;
+    expect(reloaded.data.people).toEqual(data.people);
+    expect(reloaded.data.savedRhythms[0]?.personIds).toEqual([firstId, secondId]);
+    expect(reloaded.data.friendships.connections[0]?.participantIds).toEqual([firstId, secondId]);
+    expect(reloaded.data.personNotes[0]?.sharedWith).toEqual([secondId]);
+    expect(reloaded.data.strength.savedWorkouts[0]?.sharedWith).toEqual([firstId, secondId]);
   });
 
   it('migrates schema v19 friend selections exactly and preserves the raw v19 recovery copy', () => {
@@ -730,7 +876,12 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('preserves exact schema v21 bytes before writing the resumable timer-ready schema v25 draft shape', () => {
     const data = createSamplePreviewData();
     const current = createPreviewEnvelope(data);
-    const { personDetails: _personDetails, personNotes: _personNotes, ...v21Data } = current.data;
+    const {
+      people: _people,
+      personDetails: _personDetails,
+      personNotes: _personNotes,
+      ...v21Data
+    } = current.data;
     const v21Raw = ` \n${JSON.stringify({ ...current, schemaVersion: 21, data: v21Data })}\n`;
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: v21Raw });
     const loaded = loadPreview(storage, '2026-10-21');
@@ -955,11 +1106,13 @@ describe('synthetic preview storage adapter and envelope', () => {
       data: {
         cardio: Record<string, unknown>;
         strength: Record<string, unknown>;
+        people?: unknown;
         personDetails?: unknown;
         personNotes?: unknown;
       };
     };
     legacy.schemaVersion = 27;
+    delete legacy.data.people;
     delete legacy.data.personDetails;
     delete legacy.data.personNotes;
     delete legacy.data.cardio.trackingStartDate;
@@ -1011,6 +1164,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       weight: createWeightData(),
       cardio: createCardioData(),
       friendships: createFriendshipData(),
+      people: createSamplePeople(),
       peopleGroups: createPersonPickerGroups(),
       personDetails: [],
       personNotes: []
@@ -1067,6 +1221,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       weight: createWeightData(),
       cardio: createCardioData(),
       friendships: createFriendshipData(),
+      people: createSamplePeople(),
       peopleGroups: createPersonPickerGroups(),
       personDetails: [],
       personNotes: []
@@ -1621,6 +1776,7 @@ describe('synthetic preview storage adapter and envelope', () => {
         weight: _weight,
         cardio: _cardio,
         friendships: _friendships,
+        people: _people,
         peopleGroups: _peopleGroups,
         personDetails: _personDetails,
         personNotes: _personNotes,
@@ -1652,6 +1808,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     const {
       cardio: _cardio,
       friendships: _friendships,
+      people: _people,
       peopleGroups: _peopleGroups,
       personDetails: _personDetails,
       personNotes: _personNotes,
@@ -1678,6 +1835,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     const current = createPreviewEnvelope(data);
     const {
       friendships: _friendships,
+      people: _people,
       peopleGroups: _peopleGroups,
       personDetails: _personDetails,
       personNotes: _personNotes,
@@ -1705,6 +1863,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       weight: _weight,
       cardio: _cardio,
       friendships: _friendships,
+      people: _people,
       peopleGroups: _peopleGroups,
       personDetails: _personDetails,
       personNotes: _personNotes,
@@ -1734,6 +1893,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       weight: _weight,
       cardio: _cardio,
       friendships: _friendships,
+      people: _people,
       peopleGroups: _peopleGroups,
       personDetails: _personDetails,
       personNotes: _personNotes,
@@ -1876,6 +2036,7 @@ describe('synthetic preview storage adapter and envelope', () => {
         weight: _weight,
         cardio: _cardio,
         friendships: _friendships,
+        people: _people,
         peopleGroups: _peopleGroups,
         personDetails: _personDetails,
         personNotes: _personNotes,
@@ -2447,7 +2608,7 @@ describe('preview backup controls', () => {
     const openPerson = async (name: string) => {
       await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
         .getByRole('button', { name: 'People' }));
-      await user.click(screen.getByRole('button', { name: `Open synthetic profile for ${name}` }));
+      await user.click(screen.getByRole('button', { name: `Open profile for ${name}` }));
       await user.click(screen.getByRole('tab', { name: 'Notes' }));
     };
 
@@ -2475,7 +2636,7 @@ describe('preview backup controls', () => {
       });
     });
 
-    await user.click(screen.getByRole('button', { name: 'Close profile for Avery Brooks' }));
+    await user.click(screen.getByRole('button', { name: 'Back to People' }));
     await openPerson('Morgan Reed');
     await user.click(screen.getByRole('button', { name: /Open note updated/ }));
     const noteDetail = screen.getByRole('dialog', { name: 'Note' });

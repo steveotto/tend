@@ -1,5 +1,6 @@
 import { isValidDate } from './money-goals.ts';
-import { personById, syntheticPeople } from './preview-data.ts';
+import { isValidPersonId } from './preview-data.ts';
+import type { PersonPreview } from './preview-data.ts';
 import type { PersonId } from './preview-data.ts';
 
 export const connectionCadences = ['daily', 'weekly', 'two-weeks', 'monthly'] as const;
@@ -44,7 +45,6 @@ export type FriendConnectionStatus = {
   due: boolean;
 };
 
-const knownPersonIds = new Set<string>(syntheticPeople.map(person => person.id));
 const cadenceSet = new Set<string>(connectionCadences);
 const connectionTypes = new Set<ConnectionType>(['text', 'call', 'time-together']);
 
@@ -57,7 +57,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isPersonId(value: unknown): value is PersonId {
-  return typeof value === 'string' && knownPersonIds.has(value);
+  return isValidPersonId(value);
 }
 
 function isUniquePersonIds(value: unknown): value is PersonId[] {
@@ -70,15 +70,19 @@ function isValidTime(value: unknown): value is string {
   return typeof value === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
 }
 
-export function validateFriendshipData(value: unknown): value is FriendshipData {
+export function validateFriendshipData(
+  value: unknown,
+  knownPersonIds: readonly PersonId[]
+): value is FriendshipData {
   if (!isRecord(value) || Object.hasOwn(value, 'friendIds')
     || !Array.isArray(value.cadenceSettings) || !Array.isArray(value.connections)) return false;
 
+  const knownPeople = new Set(knownPersonIds);
   const cadencePeople = new Set<string>();
   for (const setting of value.cadenceSettings) {
     if (!isRecord(setting)) return false;
     const personId = setting.personId;
-    if (!isPersonId(personId)) return false;
+    if (!isPersonId(personId) || !knownPeople.has(personId)) return false;
     const personKey = String(personId);
     if (!cadenceSet.has(String(setting.cadence))
       || typeof setting.setOn !== 'string' || !isValidDate(setting.setOn)
@@ -97,6 +101,7 @@ export function validateFriendshipData(value: unknown): value is FriendshipData 
       || typeof connection.date !== 'string' || !isValidDate(connection.date)
       || (connection.time !== undefined && !isValidTime(connection.time))
       || !isUniquePersonIds(connection.participantIds) || connection.participantIds.length === 0
+      || connection.participantIds.some(personId => !knownPeople.has(personId))
       || (connection.notes !== undefined
         && (typeof connection.notes !== 'string' || connection.notes.length > 4000))) return false;
     connectionIds.add(connectionId);
@@ -104,10 +109,15 @@ export function validateFriendshipData(value: unknown): value is FriendshipData 
   return true;
 }
 
-export function validateLegacyFriendshipDataV19(value: unknown): value is LegacyFriendshipDataV19 {
+export function validateLegacyFriendshipDataV19(
+  value: unknown,
+  knownPersonIds: readonly PersonId[]
+): value is LegacyFriendshipDataV19 {
   if (!isRecord(value) || !isUniquePersonIds(value.friendIds)) return false;
+  const knownPeople = new Set(knownPersonIds);
+  if (value.friendIds.some(personId => !knownPeople.has(personId))) return false;
   const { friendIds: _friendIds, ...friendships } = value;
-  return validateFriendshipData(friendships);
+  return validateFriendshipData(friendships, knownPersonIds);
 }
 
 export function migrateLegacyFriendshipDataV19(value: LegacyFriendshipDataV19): FriendshipData {
@@ -223,13 +233,15 @@ export function friendConnectionStatus(
 export function selectFriendStatuses(
   data: FriendshipData,
   friendIds: readonly PersonId[],
-  today: string
+  today: string,
+  people: readonly PersonPreview[]
 ): FriendConnectionStatus[] {
   return friendIds
     .map(personId => friendConnectionStatus(data, personId, today))
     .sort((a, b) => {
       if (a.due !== b.due) return a.due ? -1 : 1;
       return (a.nextDueDate ?? '9999-12-31').localeCompare(b.nextDueDate ?? '9999-12-31')
-        || personById(a.personId).displayName.localeCompare(personById(b.personId).displayName);
+        || (people.find(person => person.id === a.personId)?.displayName ?? a.personId)
+          .localeCompare(people.find(person => person.id === b.personId)?.displayName ?? b.personId);
     });
 }

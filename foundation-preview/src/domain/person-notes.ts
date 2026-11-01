@@ -1,4 +1,4 @@
-import { syntheticPeople } from './preview-data.ts';
+import { isValidPersonId } from './preview-data.ts';
 import type { PersonId } from './preview-data.ts';
 
 export type PersonNote = {
@@ -19,7 +19,6 @@ export type PersonNoteCommandResult =
   | { valid: true; notes: PersonNote[] }
   | { valid: false; error: string };
 
-const knownPeople = new Set<string>(syntheticPeople.map(person => person.id));
 const maxNoteLength = 10_000;
 
 function isCanonicalTimestamp(value: unknown): value is string {
@@ -36,11 +35,15 @@ function validId(value: unknown): value is string {
 }
 
 function validPersonId(value: unknown): value is PersonId {
-  return typeof value === 'string' && knownPeople.has(value);
+  return isValidPersonId(value);
 }
 
-export function validatePersonNotesCollection(value: unknown): value is PersonNote[] {
+export function validatePersonNotesCollection(
+  value: unknown,
+  knownPersonIds?: readonly PersonId[]
+): value is PersonNote[] {
   if (!Array.isArray(value)) return false;
+  const knownPeople = knownPersonIds === undefined ? null : new Set(knownPersonIds);
   const ids = new Set<string>();
   for (const item of value) {
     if (typeof item !== 'object' || item === null || Array.isArray(item)) return false;
@@ -51,8 +54,10 @@ export function validatePersonNotesCollection(value: unknown): value is PersonNo
     const sharedWith = Array.isArray(note.sharedWith) ? note.sharedWith : [];
     if (!validId(note.id) || ids.has(note.id)
       || !validPersonId(note.personId)
+      || knownPeople !== null && !knownPeople.has(note.personId)
       || (note.sharedWith !== undefined && !Array.isArray(note.sharedWith))
       || !sharedWith.every(validPersonId)
+      || knownPeople !== null && sharedWith.some(id => !knownPeople.has(id))
       || sharedWith.some(id => id === note.personId)
       || new Set(sharedWith).size !== sharedWith.length
       || typeof note.content !== 'string'

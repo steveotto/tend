@@ -2,6 +2,8 @@ import { useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { createPreviewEnvelope, parsePreviewBackup } from '../domain/preview-state.ts';
 import type { PreviewData } from '../domain/preview-state.ts';
+import { analyzeLegacyTendImport } from '../domain/legacy-import.ts';
+import type { LegacyImportDryRun } from '../domain/legacy-import.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 
 export type PreviewPersistenceStatus =
@@ -85,6 +87,10 @@ type PreviewDataControlsProps = {
   v28RecoveryError?: string | null;
   v29RecoveryCopy?: string | null;
   v29RecoveryError?: string | null;
+  v30RecoveryCopy?: string | null;
+  v30RecoveryError?: string | null;
+  v31RecoveryCopy?: string | null;
+  v31RecoveryError?: string | null;
 };
 
 function downloadText(filename: string, content: string, type: string): string | null {
@@ -169,10 +175,17 @@ export function PreviewDataControls({
   v28RecoveryCopy = null,
   v28RecoveryError = null,
   v29RecoveryCopy = null,
-  v29RecoveryError = null
+  v29RecoveryError = null,
+  v30RecoveryCopy = null,
+  v30RecoveryError = null,
+  v31RecoveryCopy = null,
+  v31RecoveryError = null
 }: PreviewDataControlsProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [legacyDryRun, setLegacyDryRun] = useState<LegacyImportDryRun | null>(null);
+  const [legacyPackageDownloaded, setLegacyPackageDownloaded] = useState(false);
+  const [legacyImportConfirmed, setLegacyImportConfirmed] = useState(false);
   const [message, setMessage] = useState('');
 
   function exportCurrent() {
@@ -209,6 +222,50 @@ export function PreviewDataControls({
       });
     };
     reader.readAsText(file);
+  }
+
+  function readLegacyImport(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onerror = () => setMessage('The selected Classic export could not be read.');
+    reader.onload = () => {
+      const dryRun = analyzeLegacyTendImport(String(reader.result ?? ''), currentDate);
+      setLegacyDryRun(dryRun);
+      setLegacyPackageDownloaded(false);
+      setLegacyImportConfirmed(false);
+      setMessage('');
+    };
+    reader.readAsText(file);
+  }
+
+  function downloadLegacyRecoveryPackage() {
+    if (!legacyDryRun) return;
+    const error = downloadText(
+      'tend-classic-migration-recovery.json',
+      legacyDryRun.recoveryPackage,
+      'application/json'
+    );
+    if (error) {
+      setMessage(error);
+      return;
+    }
+    setLegacyPackageDownloaded(true);
+    setMessage('Classic migration recovery package downloaded.');
+  }
+
+  function confirmLegacyImport() {
+    if (!legacyDryRun?.candidate || !legacyPackageDownloaded || !legacyImportConfirmed) return;
+    const error = onImport(legacyDryRun.candidate);
+    if (error) {
+      setMessage(error);
+      return;
+    }
+    setLegacyDryRun(null);
+    setLegacyPackageDownloaded(false);
+    setLegacyImportConfirmed(false);
+    setMessage('Supported People data imported into the synthetic preview.');
   }
 
   function confirmPendingAction() {
@@ -589,6 +646,26 @@ export function PreviewDataControls({
             Download original v29 recovery backup
           </button>
         )}
+        {v30RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v30-recovery.json',
+              v30RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v30 recovery backup downloaded.')}>
+            Download original v30 recovery backup
+          </button>
+        )}
+        {v31RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v31-recovery.json',
+              v31RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v31 recovery backup downloaded.')}>
+            Download original v31 recovery backup
+          </button>
+        )}
         <label className="btn mini ghost preview-data-controls__file-button">
           Import preview backup
           <input
@@ -597,6 +674,16 @@ export function PreviewDataControls({
             accept="application/json,.json"
             aria-label="Import preview backup"
             onChange={readImport}
+            disabled={status.kind === 'loading'}
+          />
+        </label>
+        <label className="btn mini ghost preview-data-controls__file-button">
+          Dry-run Classic Tend import
+          <input
+            type="file"
+            accept="application/json,.json"
+            aria-label="Dry-run Classic Tend import"
+            onChange={readLegacyImport}
             disabled={status.kind === 'loading'}
           />
         </label>
@@ -654,6 +741,8 @@ export function PreviewDataControls({
       {v27RecoveryError && <p className="preview-data-controls__help" role="alert">The original v27 recovery copy could not be read: {v27RecoveryError}</p>}
       {v28RecoveryError && <p className="preview-data-controls__help" role="alert">The original v28 recovery copy could not be read: {v28RecoveryError}</p>}
       {v29RecoveryError && <p className="preview-data-controls__help" role="alert">The original v29 recovery copy could not be read: {v29RecoveryError}</p>}
+      {v30RecoveryError && <p className="preview-data-controls__help" role="alert">The original v30 recovery copy could not be read: {v30RecoveryError}</p>}
+      {v31RecoveryError && <p className="preview-data-controls__help" role="alert">The original v31 recovery copy could not be read: {v31RecoveryError}</p>}
       {message && <p className="preview-data-controls__message" role="status">{message}</p>}
       {pendingAction && (
         <MoneyGoalDialog
@@ -674,6 +763,74 @@ export function PreviewDataControls({
               {pendingAction.kind === 'import' ? 'Replace with backup' : pendingAction.kind === 'reset' ? 'Reset sample data' : 'Replace other tab'}
             </button>
             <button type="button" className="btn mini ghost" onClick={() => setPendingAction(null)}>Cancel</button>
+          </div>
+        </MoneyGoalDialog>
+      )}
+      {legacyDryRun && (
+        <MoneyGoalDialog
+          title="Review Classic Tend import"
+          intro="This dry run converts only People identities, supported details, and explicit classifications. No preview data has changed."
+          onClose={() => {
+            setLegacyDryRun(null);
+            setLegacyPackageDownloaded(false);
+            setLegacyImportConfirmed(false);
+          }}
+        >
+          <dl className="legacy-import-report">
+            <div><dt>Supported People</dt><dd>{legacyDryRun.report.supported.people}</dd></div>
+            <div><dt>Supported details</dt><dd>{legacyDryRun.report.supported.details}</dd></div>
+            <div><dt>Explicit classifications</dt><dd>{legacyDryRun.report.supported.classifications}</dd></div>
+            <div><dt>Unsupported sections or fields</dt><dd>{legacyDryRun.report.unsupported.reduce((sum, item) => sum + item.count, 0)}</dd></div>
+            <div><dt>Ambiguous records</dt><dd>{legacyDryRun.report.ambiguous.reduce((sum, item) => sum + item.count, 0)}</dd></div>
+            <div><dt>Invalid records</dt><dd>{legacyDryRun.report.invalid.reduce((sum, item) => sum + item.count, 0)}</dd></div>
+          </dl>
+          {legacyDryRun.report.unsupported.length > 0 && (
+            <div className="preview-data-controls__help">
+              <p>Unsupported data stays only in the recovery package; it is not imported. Current limitations include linked Rhythms, notes, connection history, and Fitness records.</p>
+              <ul>
+                {legacyDryRun.report.unsupported.map(item => (
+                  <li key={item.path}>{item.path} ({item.count})</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {legacyDryRun.report.ambiguous.length > 0 && (
+            <p className="preview-data-controls__help" role="alert">
+              Ambiguous identity records prevent import. Resolve duplicate source IDs before retrying.
+            </p>
+          )}
+          {legacyDryRun.report.invalid.length > 0 && (
+            <p className="preview-data-controls__help" role="alert">
+              Invalid People data prevents import. Correct the source records and run the dry run again.
+            </p>
+          )}
+          <p className="preview-data-controls__help">
+            Download the source-preserving recovery package before confirming. The current preview is replaced only once, after confirmation.
+          </p>
+          <label className="preview-data-controls__help">
+            <input
+              type="checkbox"
+              checked={legacyImportConfirmed}
+              onChange={event => setLegacyImportConfirmed(event.currentTarget.checked)}
+            />
+            I understand unsupported records will not be imported.
+          </label>
+          <div className="money-goal-dialog__actions">
+            <button type="button" className="btn mini ghost" onClick={exportCurrent}>Download current preview backup</button>
+            <button type="button" className="btn mini ghost" onClick={downloadLegacyRecoveryPackage}>Download migration recovery package</button>
+            <button
+              type="button"
+              className="btn mini"
+              onClick={confirmLegacyImport}
+              disabled={!legacyDryRun.candidate || !legacyPackageDownloaded || !legacyImportConfirmed}
+            >
+              Import supported People data
+            </button>
+            <button type="button" className="btn mini ghost" onClick={() => {
+              setLegacyDryRun(null);
+              setLegacyPackageDownloaded(false);
+              setLegacyImportConfirmed(false);
+            }}>Cancel</button>
           </div>
         </MoneyGoalDialog>
       )}

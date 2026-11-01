@@ -12,11 +12,12 @@ import type {
   FriendshipConnection,
   FriendshipData
 } from '../domain/friendships.ts';
-import { personById, personGroupMemberIds, syntheticPersonPickerGroups } from '../domain/preview-data.ts';
+import { personById, personGroupMemberIds, syntheticPeople, syntheticPersonPickerGroups } from '../domain/preview-data.ts';
 import type {
   FoundationPreview,
   PersonId,
   PersonPickerGroup,
+  PersonPreview,
   RhythmPreview
 } from '../domain/preview-data.ts';
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
@@ -36,7 +37,7 @@ import {
   FriendshipCadenceControl
 } from './FriendshipConnectionControls.tsx';
 import { CategoryHeader } from './CategoryHeader.tsx';
-import { birthdaySummary, personDetailsForId } from '../domain/person-details.ts';
+import { birthdayCardSummary, personDetailsForId } from '../domain/person-details.ts';
 import type { PersonDetails } from '../domain/person-details.ts';
 
 type FriendshipTab = 'today' | 'friends' | 'rhythms';
@@ -55,6 +56,7 @@ const cadenceLabels: Record<ConnectionCadence, string> = {
 };
 type FriendshipsViewProps = {
   data: FriendshipData;
+  people?: readonly PersonPreview[];
   peopleGroups?: readonly PersonPickerGroup[];
   personDetails?: readonly PersonDetails[];
   today: string;
@@ -75,10 +77,12 @@ type FriendshipsViewProps = {
   onRestoreRhythm: (id: string) => void;
   onOpenFoundation: (foundationId: string, openerId: string) => void;
   onOpenCategory: (categoryId: Destination, openerId: string) => void;
+  profileOpen?: boolean;
 };
 
 export function FriendshipsView({
   data,
+  people = syntheticPeople,
   peopleGroups = syntheticPersonPickerGroups,
   personDetails = [],
   today,
@@ -98,7 +102,8 @@ export function FriendshipsView({
   onGoToPeople,
   onRestoreRhythm,
   onOpenFoundation,
-  onOpenCategory
+  onOpenCategory,
+  profileOpen = false
 }: FriendshipsViewProps) {
   const [tab, setTab] = useState<FriendshipTab>('today');
   const [historyPersonId, setHistoryPersonId] = useState<PersonId | null>(null);
@@ -198,7 +203,7 @@ export function FriendshipsView({
   }
 
   const friendIds = personGroupMemberIds(peopleGroups, 'friends');
-  const statuses = selectFriendStatuses(data, friendIds, today);
+  const statuses = selectFriendStatuses(data, friendIds, today, people);
   const dueStatuses = statuses.filter(status => status.due);
   const configuredCadenceCount = statuses.filter(status => status.cadence !== null).length;
   const activeHistory = historyPersonId === null
@@ -250,6 +255,7 @@ export function FriendshipsView({
             {dueStatuses.map(status => (
               <DueFriendRow
                 key={status.personId}
+                people={people}
                 status={status}
                 today={today}
                 onLog={event => openNewConnection(event, status.personId)}
@@ -286,6 +292,7 @@ export function FriendshipsView({
               return (
                 <FriendRow
                   key={status.personId}
+                  people={people}
                   status={status}
                   today={today}
                   connections={connectionsForPerson(data, status.personId)}
@@ -322,7 +329,7 @@ export function FriendshipsView({
                 rhythm={rhythm}
                 inline
                 headingId={`friendships-rhythm-${rhythm.id}`}
-                people={peopleForRhythm(rhythm)}
+                people={peopleForRhythm(rhythm, people)}
                 foundations={foundations}
                 onPersonSelect={onPersonSelect}
                 onOpenFoundation={onOpenFoundation}
@@ -357,9 +364,10 @@ export function FriendshipsView({
         </button>
       </section>
 
-      {historyPersonId !== null && (
+      {historyPersonId !== null && !profileOpen && (
         <ConnectionHistoryDialog
           personId={historyPersonId}
+          people={people}
           connections={activeHistory}
           data={data}
           onChange={onChange}
@@ -368,10 +376,11 @@ export function FriendshipsView({
           onClose={() => setHistoryPersonId(null)}
         />
       )}
-      {connectionEditor && (
+      {connectionEditor && !profileOpen && (
         <ConnectionEditor
           key={connectionEditor.record?.id ?? connectionEditor.participantId ?? 'new'}
           {...(connectionEditor.record ? { record: connectionEditor.record } : {})}
+          people={people}
           initialParticipantIds={editorParticipantIds}
           {...(connectionEditor.type ? { initialType: connectionEditor.type } : {})}
           today={today}
@@ -379,7 +388,7 @@ export function FriendshipsView({
           onClose={() => setConnectionEditor(null)}
         />
       )}
-      {showArchived && (
+      {showArchived && !profileOpen && (
         <ArchivedRhythmsDialog
           rhythms={archivedRhythms}
           completedRhythms={completedRhythms}
@@ -394,14 +403,16 @@ export function FriendshipsView({
 
 function DueFriendRow({
   status,
+  people = syntheticPeople,
   today,
   onLog
 }: {
   status: ReturnType<typeof friendConnectionStatus>;
+  people?: readonly PersonPreview[];
   today: string;
   onLog: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
-  const person = personById(status.personId);
+  const person = personById(people, status.personId);
   return (
     <article className="friendships-due-row">
       <div className="friendships-person">
@@ -420,6 +431,7 @@ function DueFriendRow({
 
 function FriendRow({
   status,
+  people = syntheticPeople,
   today,
   connections,
   classifications,
@@ -431,6 +443,7 @@ function FriendRow({
   onQuickLog
 }: {
   status: ReturnType<typeof friendConnectionStatus>;
+  people?: readonly PersonPreview[];
   today: string;
   connections: FriendshipConnection[];
   classifications: readonly Pick<PersonPickerGroup, 'id' | 'label'>[];
@@ -441,15 +454,15 @@ function FriendRow({
   onHistory: (event: MouseEvent<HTMLButtonElement>) => void;
   onQuickLog: (type: ConnectionType, event: MouseEvent<HTMLButtonElement>) => void;
 }) {
-  const person = personById(status.personId);
+  const person = personById(people, status.personId);
   const last = connections[0] ?? null;
-  const birthday = details?.birthday ? birthdaySummary(details.birthday, today) : null;
+  const birthday = details?.birthday ? birthdayCardSummary(details.birthday, today) : null;
   return (
     <PeopleCard
       person={person}
       classifications={classifications}
       {...(details?.relationshipLabel ? { relationshipLabel: details.relationshipLabel } : {})}
-      {...(birthday ? { birthdayLabel: birthday.label } : {})}
+      {...(birthday ? { birthday } : {})}
       {...(last ? { connectionRecency: `Last connected ${formatFriendDate(last.date, today)}` } : {})}
       onSelect={onPersonSelect}
       className="friendships-friend-row"
@@ -458,6 +471,7 @@ function FriendRow({
     >
       <FriendshipCadenceControl
         personId={status.personId}
+        people={people}
         cadence={status.cadence}
         today={today}
         data={data}
@@ -465,6 +479,7 @@ function FriendRow({
       />
       <ConnectionTypeActions
         personId={status.personId}
+        people={people}
         onSelect={(type, event) => onQuickLog(type, event)}
       />
       <button type="button" className="friendships-history-button" onClick={onHistory}>

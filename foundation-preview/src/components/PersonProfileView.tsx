@@ -10,11 +10,12 @@ import type {
   FriendshipConnection,
   FriendshipData
 } from '../domain/friendships.ts';
-import { personById, personGroupMemberIds, setPersonGroupMembership } from '../domain/preview-data.ts';
+import { personById, personGroupMemberIds, setPersonGroupMembership, syntheticPeople } from '../domain/preview-data.ts';
 import type {
   FoundationPreview,
   PersonId,
   PersonPickerGroup,
+  PersonPreview,
   RhythmPreview
 } from '../domain/preview-data.ts';
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
@@ -23,8 +24,8 @@ import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { ArchivedRhythmsDialog } from './ArchivedRhythmsDialog.tsx';
 import { AreaIcon } from './AreaIcon.tsx';
+import { BackButton } from './BackButton.tsx';
 import { ConnectionEditor, ConnectionHistoryList, ConnectionTypeActions, FriendshipCadenceControl } from './FriendshipConnectionControls.tsx';
-import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { PersonAvatar } from './PersonBadge.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 import { selectPersonRhythmsDueToday } from '../domain/person-rhythms.ts';
@@ -49,6 +50,7 @@ const profileTabs: { id: ProfileTab; label: string }[] = [
 
 export function PersonProfileView({
   personId,
+  people = syntheticPeople,
   peopleGroups,
   friendships,
   today,
@@ -77,9 +79,11 @@ export function PersonProfileView({
   onPersonSelect,
   onConnectionChange,
   showAddRhythm = true,
+  returnLabel = 'previous page',
   onClose
 }: {
   personId: PersonId;
+  people?: readonly PersonPreview[];
   peopleGroups: readonly PersonPickerGroup[];
   friendships: FriendshipData;
   today: string;
@@ -108,10 +112,14 @@ export function PersonProfileView({
   onPersonSelect: (id: PersonId) => void;
   onConnectionChange: (friendships: FriendshipData) => void;
   showAddRhythm?: boolean;
+  returnLabel?: string;
   onClose: () => void;
 }) {
-  const person = personById(personId);
   const details = personDetailsForId(personDetails, personId);
+  const basePerson = personById(people, personId);
+  const person = details?.photoDataUrl
+    ? { ...basePerson, avatarUrl: details.photoDataUrl }
+    : basePerson;
   const birthday = details?.birthday ? birthdaySummary(details.birthday, today) : null;
   const anniversary = details?.anniversary ? anniversarySummary(details.anniversary, today) : null;
   const [tab, setTab] = useState<ProfileTab>('rhythms');
@@ -120,6 +128,7 @@ export function PersonProfileView({
     type?: 'text' | 'call' | 'time-together';
   } | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [archivedPersonId, setArchivedPersonId] = useState<PersonId | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const connectionOpener = useRef<HTMLButtonElement | null>(null);
   const wasEditorOpen = useRef(false);
@@ -195,7 +204,7 @@ export function PersonProfileView({
         rhythm={rhythm}
         inline
         headingId={`person-profile-rhythm-${personId}-${rhythm.id}`}
-        people={peopleForRhythm(rhythm)}
+        people={peopleForRhythm(rhythm, people)}
         foundations={foundations}
         onPersonSelect={onPersonSelect}
         onOpenFoundation={onOpenFoundation}
@@ -218,16 +227,11 @@ export function PersonProfileView({
   }
 
   return (
-    <>
-      <MoneyGoalDialog
-        dialogClassName="person-profile-dialog"
-        surfaceClassName="person-profile-dialog__surface"
-        bodyClassName="person-profile-dialog__body"
-        labelledBy="person-profile-title"
-        closeLabel={`Close profile for ${person.displayName}`}
-        onClose={onClose}
-      >
-        <section className="person-profile" aria-labelledby="person-profile-title">
+    <main className="person-profile-page" aria-labelledby="person-profile-title">
+      <div className="person-profile-page__back">
+        <BackButton onClick={onClose}>Back to {returnLabel}</BackButton>
+      </div>
+      <section className="person-profile" aria-labelledby="person-profile-title">
           <header className="person-profile__identity">
             <PersonAvatar person={person} />
             <div className="person-profile__identity-copy">
@@ -340,7 +344,10 @@ export function PersonProfileView({
               type="button"
               className="category-archived-rhythms-toggle"
               aria-haspopup="dialog"
-              onClick={() => setShowArchived(true)}
+              onClick={() => {
+                setArchivedPersonId(personId);
+                setShowArchived(true);
+              }}
             >
               Archived rhythms ({personArchivedRhythms.length})
             </button>
@@ -356,6 +363,7 @@ export function PersonProfileView({
               <h3>Connections</h3>
               <ConnectionTypeActions
                 personId={personId}
+                people={people}
                 onSelect={openConnectionDraft}
               />
             </div>
@@ -364,6 +372,7 @@ export function PersonProfileView({
                 <span>Connection cadence</span>
                 <FriendshipCadenceControl
                   personId={personId}
+                  people={people}
                   cadence={friendStatus.cadence}
                   today={today}
                   data={friendships}
@@ -373,6 +382,7 @@ export function PersonProfileView({
             )}
             <ConnectionHistoryList
               connections={connectionHistory}
+              people={people}
               onEdit={openEditConnection}
               onDelete={id => onConnectionChange(deleteConnection(friendships, id))}
               onPersonSelect={onPersonSelect}
@@ -387,6 +397,7 @@ export function PersonProfileView({
           >
             <PersonNotesPanel
               personId={personId}
+              people={people}
               notes={personNotes}
               onCreate={draft => onCreatePersonNote
                 ? onCreatePersonNote(personId, draft)
@@ -399,12 +410,12 @@ export function PersonProfileView({
                 : 'Person notes are unavailable.'}
             />
           </section>
-        </section>
-      </MoneyGoalDialog>
+      </section>
       {connectionEditor && (
         <ConnectionEditor
           key={connectionEditor.record?.id ?? `${personId}-new`}
           {...(connectionEditor.record ? { record: connectionEditor.record } : {})}
+          people={people}
           initialParticipantIds={connectionEditor.record?.participantIds ?? [personId]}
           {...(connectionEditor.type ? { initialType: connectionEditor.type } : {})}
           today={today}
@@ -415,18 +426,22 @@ export function PersonProfileView({
           onClose={() => setConnectionEditor(null)}
         />
       )}
-      {showArchived && (
+      {showArchived && archivedPersonId === personId && (
         <ArchivedRhythmsDialog
           rhythms={personArchivedRhythms}
+          people={people}
           foundations={foundations}
           completedRhythms={completedRhythms}
           onPersonSelect={onPersonSelect}
           onOpenFoundation={onOpenFoundation}
           onOpenCategory={onOpenCategory}
           onRestore={onRestoreRhythm}
-          onClose={() => setShowArchived(false)}
+          onClose={() => {
+            setShowArchived(false);
+            setArchivedPersonId(null);
+          }}
         />
       )}
-    </>
+    </main>
   );
 }

@@ -3,11 +3,13 @@ import type { KeyboardEvent, MouseEvent } from 'react';
 import {
   areas,
   peopleForRhythm,
+  syntheticPeople,
   type FoundationPreview,
   todayAreaScore,
   todayOverallIllustrativeScore,
   type MarriageExampleId,
   type PersonId,
+  type PersonPreview,
   type RhythmPreview
 } from '../domain/preview-data.ts';
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
@@ -36,6 +38,7 @@ const planTypes: { id: TodayItemType; label: string }[] = [
 ];
 
 type TodayViewProps = {
+  people?: readonly PersonPreview[];
   greeting: string;
   dateLabel: string;
   evaluationInstant: Date;
@@ -61,6 +64,7 @@ type TodayViewProps = {
 };
 
 export function TodayView({
+  people = syntheticPeople,
   greeting,
   dateLabel,
   evaluationInstant,
@@ -282,7 +286,7 @@ export function TodayView({
                       rhythm={rhythm}
                       inline
                       headingId={`today-rhythm-${rhythm.id}-title`}
-                      people={peopleForRhythm(rhythm)}
+                      people={peopleForRhythm(rhythm, people)}
                       foundations={foundations}
                       onPersonSelect={onPersonSelect}
                       onOpenFoundation={onOpenFoundation}

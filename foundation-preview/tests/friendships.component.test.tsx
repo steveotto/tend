@@ -10,7 +10,9 @@ import type { PersonDetails } from '../src/domain/person-details.ts';
 import { foundationCatalogue, createPersonPickerGroups, setPersonGroupMembership } from '../src/domain/preview-data.ts';
 import type { PersonId, PersonPickerGroup, RhythmPreview } from '../src/domain/preview-data.ts';
 import { PeopleView } from '../src/components/PeopleView.tsx';
+import { PeopleCard } from '../src/components/PeopleCard.tsx';
 import type { RhythmScoreResult } from '../src/domain/rhythm-scoring.ts';
+import { syntheticPeople } from '../src/domain/preview-data.ts';
 
 afterEach(cleanup);
 
@@ -85,6 +87,67 @@ function FriendshipsHarness({
 }
 
 describe('Friendships view', () => {
+  it('aligns multiple classifications beside recency without squeezing a long person name', () => {
+    const person = {
+      ...syntheticPeople[0]!,
+      displayName: 'Alexandria Brooks-Williams'
+    };
+    render(
+      <PeopleCard
+        person={person}
+        classifications={[
+          { id: 'marriage', label: 'Marriage' },
+          { id: 'parenting', label: 'Parenting' },
+          { id: 'friends', label: 'Friends' }
+        ]}
+        connectionRecency="Connected 3 wk ago"
+        onSelect={vi.fn()}
+      />
+    );
+    const identity = screen.getByRole('button', { name: 'Open profile for Alexandria Brooks-Williams' });
+    const metadataRow = identity.querySelector<HTMLElement>('.people-card__meta-row')!;
+    expect(within(metadataRow).getByText('Connected 3 wk ago')).toBeTruthy();
+    expect(within(metadataRow).getByRole('group', {
+      name: 'Alexandria Brooks-Williams classifications'
+    }).textContent).toContain('MarriageParentingFriends');
+    expect(within(identity).getByText('Alexandria Brooks-Williams')).toBeTruthy();
+  });
+
+  it('renders only supported People details and filters by explicit classifications', async () => {
+    const user = userEvent.setup();
+    const openPerson = vi.fn();
+    render(
+      <PeopleView
+        groups={createPersonPickerGroups()}
+        friendships={createFriendshipData()}
+        today="2025-02-28"
+        personDetails={[{
+          personId: 'sample-person-avery',
+          relationshipLabel: 'Sister',
+          birthday: { monthDay: '02-29' }
+        }]}
+        onChangeGroups={vi.fn()}
+        onOpenPerson={openPerson}
+      />
+    );
+
+    expect(screen.getAllByRole('button', { name: /^Open profile for/ })).toHaveLength(3);
+    const avery = screen.getByRole('button', { name: 'Open profile for Avery Brooks' });
+    expect(within(avery).getByLabelText('Person score unavailable').textContent).toBe('—');
+    expect(within(avery).getByText('Score unavailable')).toBeTruthy();
+    expect(within(avery).queryByText('Needs attention')).toBeNull();
+    expect(within(avery).getByText('March 1')).toBeTruthy();
+    expect(within(avery).queryByText(/^Age/)).toBeNull();
+    await user.click(avery);
+    expect(openPerson).toHaveBeenCalledWith('sample-person-avery');
+
+    await user.click(screen.getByRole('button', { name: 'Marriage' }));
+    expect(screen.getAllByRole('button', { name: /^Open profile for/ })).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Open profile for Jordan Bell' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'All' }));
+    expect(screen.getAllByRole('button', { name: /^Open profile for/ })).toHaveLength(3);
+  });
+
   it('uses shared Person details on Friendship cards without changing classifications', async () => {
     const user = userEvent.setup();
     const groups = setPersonGroupMembership(
@@ -161,17 +224,22 @@ describe('Friendships view', () => {
     }
 
     render(<IntegratedHarness />);
-    expect(within(document.querySelector('.people-view')!).getAllByText('Last connected Oct 10')).toHaveLength(2);
-    await user.click(screen.getByRole('button', { name: 'Mark Morgan Reed as a friend' }));
+    const peopleView = document.querySelector<HTMLElement>('.people-view')!;
+    const morganCard = peopleView.querySelector<HTMLElement>('.people-card:nth-child(2)')!;
+    expect(within(peopleView).getAllByText('Connected 1 wk ago')).toHaveLength(2);
+    await user.click(within(morganCard).getByLabelText('More actions for Morgan Reed'));
+    await user.click(within(morganCard).getByRole('button', { name: 'Add Friends' }));
     expect(
       within(screen.getByRole('group', { name: 'Morgan Reed classifications' })).getByText('Friends')
     ).toBeTruthy();
     await user.click(screen.getByRole('tab', { name: 'Friends' }));
     expect(screen.getByRole('button', { name: 'View connections (1)' })).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: 'Remove Morgan Reed as a friend' }));
+    await user.click(within(morganCard).getByLabelText('More actions for Morgan Reed'));
+    await user.click(within(morganCard).getByRole('button', { name: 'Remove Friends' }));
     expect(screen.queryByRole('button', { name: 'Text Morgan Reed' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Mark Morgan Reed as a friend' }));
+    await user.click(within(morganCard).getByLabelText('More actions for Morgan Reed'));
+    await user.click(within(morganCard).getByRole('button', { name: 'Add Friends' }));
     expect(screen.getByRole('button', { name: 'View connections (1)' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'View connections (1)' }));
     const history = screen.getByRole('dialog', { name: 'Morgan Reed · connection history' });

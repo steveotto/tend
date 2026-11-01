@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render as testingRender, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render as testingRender, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../src/App.tsx';
@@ -71,9 +71,17 @@ async function showEvening(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: /^Evening/ }));
 }
 
-beforeEach(installMemoryStorage);
+beforeEach(() => {
+  const historyState = { ...(window.history.state ?? {}) };
+  delete historyState.tendPersonProfileId;
+  window.history.replaceState(historyState, '', window.location.href);
+  installMemoryStorage();
+});
 afterEach(() => {
   cleanup();
+  const historyState = { ...(window.history.state ?? {}) };
+  delete historyState.tendPersonProfileId;
+  window.history.replaceState(historyState, '', window.location.href);
   vi.restoreAllMocks();
   window.localStorage.removeItem(PREVIEW_STORAGE_KEY);
   vi.useRealTimers();
@@ -327,7 +335,11 @@ describe('Tend Today preview', () => {
     await user.click(screen.getByRole('tab', { name: 'Friends' }));
     await user.click(within(screen.getByRole('tabpanel', { name: 'Friends' }))
       .getByRole('button', { name: 'Go to People' }));
-    await user.click(screen.getByRole('button', { name: 'Mark Morgan Reed as a friend' }));
+    const morganCard = document.querySelector<HTMLElement>(
+      '.people-view__list .people-card:nth-child(2)'
+    )!;
+    await user.click(within(morganCard).getByLabelText('More actions for Morgan Reed'));
+    await user.click(within(morganCard).getByRole('button', { name: 'Add Friends' }));
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
       .getByRole('button', { name: 'Friendships' }));
     await user.click(screen.getByRole('tab', { name: 'Friends' }));
@@ -2709,16 +2721,39 @@ describe('Tend Today preview', () => {
     todayAvery.focus();
     await user.keyboard('{Enter}');
 
-    const profile = screen.getByRole('dialog', { name: 'Avery Brooks' });
+    const profile = screen.getByRole('main', { name: 'Avery Brooks' });
     expect(within(profile).getByRole('tab', { name: 'Rhythms' })).toBeTruthy();
     expect(within(profile).getByRole('tab', { name: 'Connections' })).toBeTruthy();
     expect(within(profile).getByRole('article', { name: 'Pray together' })).toBeTruthy();
-    cancelNativeDialog(profile);
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Avery Brooks' })).toBeNull());
+    await user.click(within(profile).getByRole('button', { name: 'Back to Today' }));
+    await waitFor(() => expect(screen.queryByRole('main', { name: 'Avery Brooks' })).toBeNull());
     expect(document.activeElement).toBe(todayAvery);
     expect(screen.getByText('0 of 3 tended')).toBeTruthy();
     expect(within(screen.getByRole('article', { name: 'Pray together' }))
       .getByRole('button', { name: 'Tend Pray together' })).toBeTruthy();
+  });
+
+  it('supports browser Back and Forward while preserving the People origin', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'People' }));
+    const opener = screen.getByRole('button', { name: 'Open profile for Avery Brooks' });
+    await user.click(opener);
+    expect(screen.getByRole('main', { name: 'Avery Brooks' })).toBeTruthy();
+
+    await act(async () => {
+      window.history.back();
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    await waitFor(() => expect(screen.queryByRole('main', { name: 'Avery Brooks' })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(opener));
+
+    await act(async () => {
+      window.history.forward();
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(await screen.findByRole('main', { name: 'Avery Brooks' })).toBeTruthy();
   });
 
   it('uses the same profile from People and Friendships and opens a person-only Rhythm draft', async () => {
@@ -2735,9 +2770,9 @@ describe('Tend Today preview', () => {
 
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
       .getByRole('button', { name: 'People' }));
-    const peopleOpener = screen.getByRole('button', { name: 'Open synthetic profile for Avery Brooks' });
+    const peopleOpener = screen.getByRole('button', { name: 'Open profile for Avery Brooks' });
     await user.click(peopleOpener);
-    let profile = screen.getByRole('dialog', { name: 'Avery Brooks' });
+    let profile = screen.getByRole('main', { name: 'Avery Brooks' });
     await user.click(within(profile).getByRole('button', { name: 'Add Rhythm' }));
     const editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
     expect(within(editor).getByRole('button', { name: /Choose people, Avery Brooks/ })).toBeTruthy();
@@ -2746,17 +2781,17 @@ describe('Tend Today preview', () => {
     await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
     expect(document.activeElement).toBe(within(profile).getByRole('button', { name: 'Add Rhythm' }));
     expect(JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}').data.savedRhythms).toEqual([]);
-    await user.click(within(profile).getByRole('button', { name: 'Close profile for Avery Brooks' }));
+    await user.click(within(profile).getByRole('button', { name: 'Back to People' }));
     expect(document.activeElement).toBe(peopleOpener);
 
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
       .getByRole('button', { name: 'Friendships' }));
     await user.click(screen.getByRole('tab', { name: 'Friends' }));
-    const friendshipOpener = screen.getByRole('button', { name: 'Open synthetic profile for Avery Brooks' });
+    const friendshipOpener = screen.getByRole('button', { name: 'Open profile for Avery Brooks' });
     await user.click(friendshipOpener);
-    profile = screen.getByRole('dialog', { name: 'Avery Brooks' });
+    profile = screen.getByRole('main', { name: 'Avery Brooks' });
     expect(within(profile).getByRole('tab', { name: 'Rhythms' })).toBeTruthy();
-    await user.click(within(profile).getByRole('button', { name: 'Close profile for Avery Brooks' }));
+    await user.click(within(profile).getByRole('button', { name: 'Back to Friendships' }));
     expect(document.activeElement).toBe(friendshipOpener);
   });
 
@@ -2791,20 +2826,17 @@ describe('Tend Today preview', () => {
 
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
       .getByRole('button', { name: 'People' }));
+    await user.click(screen.getByLabelText('More actions for Avery Brooks'));
     const editButton = screen.getByRole('button', { name: 'Edit details for Avery Brooks' });
     await user.click(editButton);
-    let editor = screen.getByRole('dialog', { name: 'Edit Avery Brooks' });
-    await user.type(within(editor).getByLabelText('Month and day (MM-DD)'), '02-30');
-    await user.click(within(editor).getByRole('button', { name: 'Save details' }));
-    expect(within(editor).getByText('Enter a valid month and day (MM-DD).')).toBeTruthy();
-    expect(parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()))
-      .valid).toBe(true);
-    await user.clear(within(editor).getByLabelText('Month and day (MM-DD)'));
-    await user.type(within(editor).getByLabelText('Month and day (MM-DD)'), '02-29');
-    await user.type(within(editor).getByLabelText('Relationship'), 'Sister');
-    await user.type(within(editor).getByLabelText('Anniversary (MM-DD)'), '12-31');
-    await user.selectOptions(within(editor).getByLabelText('Preferred connection style'), 'wa');
-    await user.click(within(editor).getByRole('button', { name: 'Save details' }));
+    let editor = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
+    await user.selectOptions(within(editor).getByLabelText('Relationship'), 'Sister');
+    fireEvent.change(within(editor).getByLabelText('Birthday'), { target: { value: '2000-02-29' } });
+    await user.click(within(editor).getAllByLabelText('Year unknown')[0]!);
+    fireEvent.change(within(editor).getByLabelText('Anniversary'), { target: { value: '2010-12-31' } });
+    await user.selectOptions(within(editor).getByLabelText('Love language'), 'wa');
+    await user.selectOptions(within(editor).getByLabelText('Connection cadence'), 'monthly');
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
     expect(document.activeElement).toBe(editButton);
 
     expect(screen.getByText('Sister')).toBeTruthy();
@@ -2819,16 +2851,21 @@ describe('Tend Today preview', () => {
         personId: 'sample-person-avery',
         relationshipLabel: 'Sister',
         birthday: { monthDay: '02-29' },
-        anniversary: { monthDay: '12-31' },
+        anniversary: { monthDay: '12-31', year: 2010 },
         connectionStyle: 'wa'
       }]);
       expect(savedResult.envelope.data.peopleGroups).toEqual(groupsBefore);
-      expect(savedResult.envelope.data.friendships).toEqual(friendshipsBefore);
+      expect(savedResult.envelope.data.friendships).toEqual(setFriendCadence(
+        friendshipsBefore,
+        'sample-person-avery',
+        'monthly',
+        localDateString(new Date())
+      ));
       expect(savedResult.envelope.data.savedRhythms).toEqual(rhythmsBefore);
     }
 
-    await user.click(screen.getByRole('button', { name: 'Open synthetic profile for Avery Brooks' }));
-    const profile = screen.getByRole('dialog', { name: 'Avery Brooks' });
+    await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
+    const profile = screen.getByRole('main', { name: 'Avery Brooks' });
     expect(within(profile).getByText('Sister')).toBeTruthy();
     expect(within(profile).getByText(/^Birthday in/)).toBeTruthy();
     expect(within(profile).getByText(/^Anniversary in/)).toBeTruthy();
@@ -2837,11 +2874,9 @@ describe('Tend Today preview', () => {
     await user.click(within(profile).getByLabelText('More actions for Avery Brooks'));
     const profileEditButton = within(profile).getByRole('button', { name: 'Edit details' });
     await user.click(profileEditButton);
-    editor = screen.getByRole('dialog', { name: 'Edit Avery Brooks' });
-    const relationship = within(editor).getByLabelText('Relationship');
-    await user.clear(relationship);
+    editor = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
     cancelNativeDialog(editor);
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit Avery Brooks' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Person settings — Avery Brooks' })).toBeNull());
     expect(document.activeElement).toBe(profileEditButton);
     expect(within(profile).getByText('Sister')).toBeTruthy();
     app.unmount();
@@ -2850,18 +2885,18 @@ describe('Tend Today preview', () => {
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
       .getByRole('button', { name: 'People' }));
     expect(screen.getByText('Sister')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Open synthetic profile for Avery Brooks' }));
-    expect(screen.getByRole('dialog', { name: 'Avery Brooks' })).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Close profile for Avery Brooks' }));
+    await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
+    expect(screen.getByRole('main', { name: 'Avery Brooks' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Back to People' }));
     const clearDetailsButton = screen.getByRole('button', { name: 'Edit details for Avery Brooks' });
     await user.click(clearDetailsButton);
-    editor = screen.getByRole('dialog', { name: 'Edit Avery Brooks' });
-    await user.clear(within(editor).getByLabelText('Relationship'));
-    await user.clear(within(editor).getByLabelText('Month and day (MM-DD)'));
-    await user.clear(within(editor).getByLabelText('Birth year (leave blank if unknown)'));
-    await user.clear(within(editor).getByLabelText('Anniversary (MM-DD)'));
-    await user.selectOptions(within(editor).getByLabelText('Preferred connection style'), '');
-    await user.click(within(editor).getByRole('button', { name: 'Save details' }));
+    editor = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
+    await user.selectOptions(within(editor).getByLabelText('Relationship'), '');
+    fireEvent.change(within(editor).getByLabelText('Birthday'), { target: { value: '' } });
+    fireEvent.change(within(editor).getByLabelText('Anniversary'), { target: { value: '' } });
+    await user.selectOptions(within(editor).getByLabelText('Love language'), '');
+    await user.selectOptions(within(editor).getByLabelText('Connection cadence'), '');
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
     expect(document.activeElement).toBe(clearDetailsButton);
     expect(screen.queryByText('Sister')).toBeNull();
     const cleared = parsePreviewBackup(
@@ -2887,8 +2922,8 @@ describe('Tend Today preview', () => {
 
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
       .getByRole('button', { name: 'People' }));
-    await user.click(screen.getByRole('button', { name: 'Open synthetic profile for Avery Brooks' }));
-    let profile = screen.getByRole('dialog', { name: 'Avery Brooks' });
+    await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
+    let profile = screen.getByRole('main', { name: 'Avery Brooks' });
     await user.click(within(profile).getByRole('tab', { name: 'Connections' }));
     await user.click(within(profile).getByRole('button', { name: 'Text Avery Brooks' }));
     const editor = screen.getByRole('dialog', { name: 'Log connection' });
@@ -2905,8 +2940,8 @@ describe('Tend Today preview', () => {
     render(<App />);
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
       .getByRole('button', { name: 'People' }));
-    await user.click(screen.getByRole('button', { name: 'Open synthetic profile for Avery Brooks' }));
-    profile = screen.getByRole('dialog', { name: 'Avery Brooks' });
+    await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
+    profile = screen.getByRole('main', { name: 'Avery Brooks' });
     await user.click(within(profile).getByRole('tab', { name: 'Connections' }));
     expect(within(profile).getByRole('button', { name: 'Text Avery Brooks' })).toBeTruthy();
     const restored = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}').data;

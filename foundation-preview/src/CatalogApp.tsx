@@ -8,6 +8,7 @@ import {
   personById,
   peopleForRhythm,
   rhythms,
+  syntheticPeople,
   createPersonPickerGroups,
   type PersonId
 } from './domain/preview-data.ts';
@@ -24,8 +25,9 @@ export function CatalogApp() {
   const [selectedPersonId, setSelectedPersonId] = useState<PersonId | null>(null);
   const [friendships, setFriendships] = useState<FriendshipData>(createFriendshipData);
   const [peopleGroups, setPeopleGroups] = useState<PersonPickerGroup[]>(createPersonPickerGroups);
+  const people = syntheticPeople;
   const financeFoundationView = { ...financeFoundation, lifecycle: financeLifecycle };
-  const selectedPerson = selectedPersonId === null ? null : personById(selectedPersonId);
+  const selectedPerson = selectedPersonId === null ? null : personById(people, selectedPersonId);
 
   return (
     <main className="app-shell">
@@ -111,7 +113,7 @@ export function CatalogApp() {
           {rhythms.map(rhythm => (
             <RhythmCard
               rhythm={rhythm}
-              people={peopleForRhythm(rhythm)}
+              people={peopleForRhythm(rhythm, people)}
               onPersonSelect={setSelectedPersonId}
               key={rhythm.id}
             />
@@ -127,6 +129,7 @@ export function CatalogApp() {
         <PersonProfileView
           key={selectedPerson.id}
           personId={selectedPerson.id}
+          people={people}
           peopleGroups={peopleGroups}
           friendships={friendships}
           today={localDateString(new Date())}

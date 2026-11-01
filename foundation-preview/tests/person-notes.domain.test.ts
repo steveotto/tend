@@ -9,6 +9,7 @@ import {
 import type { PersonNote } from '../src/domain/person-notes.ts';
 
 const createdAt = '2026-10-31T12:00:00.000Z';
+const knownPeople = ['sample-person-avery', 'sample-person-morgan', 'sample-person-jordan'];
 
 function note(overrides: Partial<PersonNote> = {}): PersonNote {
   return {
@@ -99,11 +100,11 @@ describe('person-linked notes domain', () => {
       ...note({ content: ' \n ' }),
       sharedWith: []
     })).toMatchObject({ valid: false });
-    expect(validatePersonNotesCollection([note({ createdAt: '2026-02-30T12:00:00.000Z' })])).toBe(false);
-    expect(validatePersonNotesCollection([note(), note()])).toBe(false);
-    expect(validatePersonNotesCollection([note({ personId: 'unresolved-person' as PersonNote['personId'] })])).toBe(false);
-    expect(validatePersonNotesCollection([note({ sharedWith: ['sample-person-avery'] })])).toBe(false);
-    expect(validatePersonNotesCollection([note({ sharedWith: ['sample-person-morgan', 'sample-person-morgan'] })])).toBe(false);
+    expect(validatePersonNotesCollection([note({ createdAt: '2026-02-30T12:00:00.000Z' })], knownPeople)).toBe(false);
+    expect(validatePersonNotesCollection([note(), note()], knownPeople)).toBe(false);
+    expect(validatePersonNotesCollection([note({ personId: 'unresolved-person' as PersonNote['personId'] })], knownPeople)).toBe(false);
+    expect(validatePersonNotesCollection([note({ sharedWith: ['sample-person-avery'] })], knownPeople)).toBe(false);
+    expect(validatePersonNotesCollection([note({ sharedWith: ['sample-person-morgan', 'sample-person-morgan'] })], knownPeople)).toBe(false);
   });
 
   it('deletes only the expected version when initiated from a linked profile', () => {

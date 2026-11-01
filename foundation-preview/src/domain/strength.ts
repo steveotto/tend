@@ -1,4 +1,5 @@
 import { isValidDate } from './money-goals.ts';
+import { isValidPersonId } from './preview-data.ts';
 import type { PersonId } from './preview-data.ts';
 import { blendFitnessHealth } from './fitness-scoring.ts';
 
@@ -543,7 +544,8 @@ export function validateStrengthData(
   allowGuidedSessionDraft = true,
   requireV25 = false,
   requireV26 = false,
-  requireV28 = false
+  requireV28 = false,
+  knownPersonIds?: readonly PersonId[]
 ): value is StrengthData {
   if (!isRecord(value) || !hasOnlyKeys(value, [
     'settings', 'trackingStartDate', 'scoringSettingsHistory',
@@ -564,6 +566,7 @@ export function validateStrengthData(
     || !Array.isArray(value.savedWorkouts)
     || !Array.isArray(value.workouts)
     || !Array.isArray(value.rhythmModes)) return false;
+  const knownPeople = knownPersonIds === undefined ? null : new Set<unknown>(knownPersonIds);
 
   for (const [id, interval] of Object.entries(value.settings.muscleIntervals)) {
     if (!isStrengthMuscleId(id) || !Number.isInteger(interval) || Number(interval) < 1 || Number(interval) > 365) return false;
@@ -592,6 +595,7 @@ export function validateStrengthData(
       || !isNonEmptyText(workout.name, 120) || !Array.isArray(workout.muscleIds)
       || !workout.muscleIds.every(isStrengthMuscleId) || !Array.isArray(workout.sharedWith)
       || !workout.sharedWith.every(isPersonId)
+      || knownPeople !== null && workout.sharedWith.some(id => !knownPeople.has(id))
       || workout.invalidMuscleIds !== undefined && typeof workout.invalidMuscleIds !== 'boolean'
       || workout.suggestionSourceId !== undefined && !isNonEmptyText(workout.suggestionSourceId, 160)
       || requireV25 && (!Array.isArray(workout.supersetGroups)
@@ -619,7 +623,8 @@ export function validateStrengthData(
       || !isOptionalText(log.rhythmOccurrence, 10)
       || !isOptionalText(log.completionId, 160)
       || log.sharedWith !== undefined && (!Array.isArray(log.sharedWith)
-        || !log.sharedWith.every(isPersonId) || new Set(log.sharedWith).size !== log.sharedWith.length)
+        || !log.sharedWith.every(isPersonId) || new Set(log.sharedWith).size !== log.sharedWith.length
+        || knownPeople !== null && log.sharedWith.some(id => !knownPeople.has(id)))
       || log.startedAt !== undefined && !isCanonicalInstant(log.startedAt)
       || log.finishedAt !== undefined && !isCanonicalInstant(log.finishedAt)
       || log.timeZone !== undefined && !isValidTimeZone(log.timeZone)
@@ -653,6 +658,10 @@ export function validateStrengthData(
   }
   if (value.guidedSessionDraft !== undefined
     && !validateStrengthGuidedSessionDraft(value.guidedSessionDraft, requireV25)) return false;
+  if (knownPeople !== null && value.guidedSessionDraft !== undefined
+    && isRecord(value.guidedSessionDraft)
+    && Array.isArray(value.guidedSessionDraft.sharedWith)
+    && value.guidedSessionDraft.sharedWith.some(id => !knownPeople.has(id))) return false;
   return true;
 }
 
@@ -2497,7 +2506,7 @@ function isStrengthMuscleId(value: unknown): value is StrengthMuscleId {
 }
 
 function isPersonId(value: unknown): value is PersonId {
-  return value === 'sample-person-avery' || value === 'sample-person-morgan' || value === 'sample-person-jordan';
+  return isValidPersonId(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

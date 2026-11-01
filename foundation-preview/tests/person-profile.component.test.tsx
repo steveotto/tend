@@ -180,7 +180,7 @@ describe('shared person profile', () => {
       />
     );
 
-    expect(screen.getByRole('dialog', { name: 'Avery Brooks' })).toBeTruthy();
+    expect(screen.getByRole('main', { name: 'Avery Brooks' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Avery Brooks' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Today with Avery Brooks' })).toBeTruthy();
     expect(screen.getByText('Friends')).toBeTruthy();
@@ -345,11 +345,11 @@ describe('shared person profile', () => {
     expect(updated.cadenceSettings).toEqual(data.cadenceSettings);
   });
 
-  it('supports keyboard tab movement and Escape close', async () => {
+  it('supports keyboard tab movement and returns through the shared back button', async () => {
     const user = userEvent.setup();
     const close = vi.fn();
     render(<ProfileHarness rhythms={[]} onClose={close} />);
-    const dialog = screen.getByRole('dialog', { name: 'Avery Brooks' });
+    const profile = screen.getByRole('main', { name: 'Avery Brooks' });
     const rhythmsTab = screen.getByRole('tab', { name: 'Rhythms' });
     expect(rhythmsTab.getAttribute('aria-controls')).toBe('person-profile-panel-rhythms');
     expect(screen.getByRole('tabpanel', { name: 'Rhythms' })).toBeTruthy();
@@ -369,7 +369,7 @@ describe('shared person profile', () => {
     await user.keyboard('{End}');
     expect(document.activeElement).toBe(notesTab);
     expect(notesTab.getAttribute('aria-selected')).toBe('true');
-    fireEvent(dialog, new Event('cancel', { bubbles: false, cancelable: true }));
+    await user.click(within(profile).getByRole('button', { name: 'Back to previous page' }));
     expect(close).toHaveBeenCalledOnce();
   });
 
@@ -485,7 +485,7 @@ describe('shared person profile', () => {
     const addEditor = screen.getByRole('dialog', { name: 'Add note for Avery Brooks' });
     fireEvent(addEditor, new Event('cancel', { bubbles: false, cancelable: true }));
     expect(screen.queryByRole('dialog', { name: 'Add note for Avery Brooks' })).toBeNull();
-    expect(screen.getByRole('dialog', { name: 'Avery Brooks' })).toBeTruthy();
+    expect(screen.getByRole('main', { name: 'Avery Brooks' })).toBeTruthy();
     await waitFor(() => expect(document.activeElement).toBe(addButton));
 
     await user.click(screen.getByRole('button', { name: /Open note updated/ }));
