@@ -2,6 +2,11 @@ import { createPreviewEnvelope, parsePreviewBackup, PREVIEW_SCHEMA_VERSION } fro
 import type { PreviewData } from '../domain/preview-state.ts';
 import { migratePreviewToProposedV4 } from '../domain/preview-v4-migration.ts';
 import {
+  DEVELOPMENT_PREVIEW_IDENTITY,
+  validatePreviewIdentity
+} from '../domain/preview-identity.ts';
+import type { PreviewIdentityState } from '../domain/preview-identity.ts';
+import {
   PREVIEW_STORAGE_KEY,
   PREVIEW_V1_RECOVERY_KEY,
   PREVIEW_V2_RECOVERY_KEY,
@@ -74,8 +79,13 @@ export {
 };
 
 export const PREVIEW_CATEGORY_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:v32-category-recovery`;
+export const PREVIEW_ACCOUNT_STORAGE_PREFIX = 'tend2:preview:account';
 
 export type PreviewStorage = Pick<Storage, 'getItem' | 'setItem'>;
+export type PreviewStorageScope = {
+  key: string;
+  storage: PreviewStorage;
+};
 
 export type PreviewLoadResult =
   | { kind: 'missing' }
@@ -97,6 +107,29 @@ export type PreviewWriteOptions = {
   allowUnrecoverableReplacement?: boolean;
   currentDate?: string;
 };
+
+export function createPreviewStorageScope(
+  storage: PreviewStorage,
+  identity: PreviewIdentityState
+): PreviewStorageScope | null {
+  const validatedIdentity = validatePreviewIdentity(identity);
+  if (validatedIdentity.kind === 'development') return { key: PREVIEW_STORAGE_KEY, storage };
+  if (validatedIdentity.kind !== 'authenticated') return null;
+
+  const accountRoot = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${validatedIdentity.accountId}`;
+  const mapKey = (key: string) => key === PREVIEW_STORAGE_KEY
+    ? accountRoot
+    : key.startsWith(`${PREVIEW_STORAGE_KEY}:`)
+      ? `${accountRoot}${key.slice(PREVIEW_STORAGE_KEY.length)}`
+      : key;
+  return {
+    key: accountRoot,
+    storage: {
+      getItem: key => storage.getItem(mapKey(key)),
+      setItem: (key, value) => storage.setItem(mapKey(key), value)
+    }
+  };
+}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Browser storage is unavailable.';
@@ -194,11 +227,15 @@ export function writePreview(
   }
 }
 
-export function browserPreviewStorage(): PreviewStorage {
-  return {
+export function browserPreviewStorage(
+  identity: PreviewIdentityState = DEVELOPMENT_PREVIEW_IDENTITY
+): PreviewStorage {
+  const scope = createPreviewStorageScope({
     getItem: key => window.localStorage.getItem(key),
     setItem: (key, value) => window.localStorage.setItem(key, value)
-  };
+  }, identity);
+  if (!scope) throw new Error('Preview storage is unavailable without an authenticated identity.');
+  return scope.storage;
 }
 
 export function loadV1RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
@@ -449,10 +486,27 @@ export function loadV32RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadRe
   }
 }
 
-export function listenForPreviewChanges(listener: (newValue: string | null) => void): () => void {
+export function listenForPreviewChanges(
+  listener: (newValue: string | null) => void,
+  identity: PreviewIdentityState = DEVELOPMENT_PREVIEW_IDENTITY
+): () => void {
+  const scope = createPreviewStorageScope(browserPreviewStorageBase(), identity);
+  if (!scope) return () => undefined;
+  const activeKey = scope.key;
   function handleStorageChange(event: StorageEvent) {
-    if (event.key === PREVIEW_STORAGE_KEY || event.key === null) listener(event.key === null ? null : event.newValue);
+    if (event.key === null) {
+      listener(null);
+      return;
+    }
+    if (event.key === activeKey) listener(event.newValue);
   }
   window.addEventListener('storage', handleStorageChange);
   return () => window.removeEventListener('storage', handleStorageChange);
+}
+
+function browserPreviewStorageBase(): PreviewStorage {
+  return {
+    getItem: key => window.localStorage.getItem(key),
+    setItem: (key, value) => window.localStorage.setItem(key, value)
+  };
 }

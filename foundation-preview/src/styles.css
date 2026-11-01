@@ -5005,6 +5005,21 @@ a:focus-visible {
   margin-bottom: 16px;
 }
 
+.preview-access-state {
+  width: min(100% - 32px, 520px);
+  margin: clamp(48px, 12vh, 120px) auto;
+  color: var(--tend-ink, #25332b);
+}
+
+.preview-access-state h1 {
+  margin: 0 0 10px;
+  font-size: clamp(24px, 6vw, 32px);
+}
+
+.preview-access-state p {
+  color: var(--ink-soft, #66736b);
+}
+
 .person-component-health-summary .health-score-measures__grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

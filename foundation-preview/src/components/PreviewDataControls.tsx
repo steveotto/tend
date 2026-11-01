@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { createPreviewEnvelope, parsePreviewBackup } from '../domain/preview-state.ts';
 import type { PreviewData } from '../domain/preview-state.ts';
@@ -192,6 +192,17 @@ export function PreviewDataControls({
   const [legacyImportConfirmed, setLegacyImportConfirmed] = useState(false);
   const [legacyExclusionsConfirmed, setLegacyExclusionsConfirmed] = useState(false);
   const [message, setMessage] = useState('');
+  const activeRef = useRef(true);
+  const readersRef = useRef(new Set<FileReader>());
+
+  useEffect(() => {
+    activeRef.current = true;
+    return () => {
+      activeRef.current = false;
+      for (const reader of readersRef.current) reader.abort();
+      readersRef.current.clear();
+    };
+  }, []);
 
   function exportCurrent() {
     const error = downloadText(
@@ -212,8 +223,13 @@ export function PreviewDataControls({
     event.currentTarget.value = '';
     if (!file) return;
     const reader = new FileReader();
-    reader.onerror = () => setMessage('The selected backup could not be read.');
+    readersRef.current.add(reader);
+    reader.onloadend = () => readersRef.current.delete(reader);
+    reader.onerror = () => {
+      if (activeRef.current) setMessage('The selected backup could not be read.');
+    };
     reader.onload = () => {
+      if (!activeRef.current) return;
       const result = parsePreviewBackup(String(reader.result ?? ''), currentDate);
       if (!result.valid) {
         setMessage(result.message);
@@ -235,8 +251,13 @@ export function PreviewDataControls({
     event.currentTarget.value = '';
     if (!file) return;
     const reader = new FileReader();
-    reader.onerror = () => setMessage('The selected Classic export could not be read.');
+    readersRef.current.add(reader);
+    reader.onloadend = () => readersRef.current.delete(reader);
+    reader.onerror = () => {
+      if (activeRef.current) setMessage('The selected Classic export could not be read.');
+    };
     reader.onload = () => {
+      if (!activeRef.current) return;
       const dryRun = analyzeLegacyTendImport(String(reader.result ?? ''), currentDate);
       setLegacyDryRun(dryRun);
       setLegacyPackageDownloaded(false);

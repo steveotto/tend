@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useScoringInstant } from './components/useScoringInstant.ts';
 import type { MouseEvent } from 'react';
 import { AppNavigation } from './components/AppNavigation.tsx';
@@ -58,8 +58,19 @@ import {
   localDateString,
   type MoneyGoal
 } from './domain/money-goals.ts';
-import { createSamplePreviewData, parsePreviewBackup } from './domain/preview-state.ts';
+import {
+  createEmptyPreviewData,
+  createSamplePreviewData,
+  parsePreviewBackup
+} from './domain/preview-state.ts';
 import type { PreviewData } from './domain/preview-state.ts';
+import {
+  DEVELOPMENT_PREVIEW_IDENTITY,
+  PREVIEW_AUTH_PENDING,
+  previewIdentityKey,
+  validatePreviewIdentity
+} from './domain/preview-identity.ts';
+import type { PreviewIdentityState } from './domain/preview-identity.ts';
 import { savePersonDetailsCommand, personDetailsForId } from './domain/person-details.ts';
 import type { PersonDetailsDraft } from './domain/person-details.ts';
 import {
@@ -232,8 +243,66 @@ function isDatedCompletionRecord(record: RhythmCompletionRecord): record is Date
     && typeof record.recordedAt === 'string';
 }
 
-export function App() {
+const defaultPreviewIdentity = import.meta.env.DEV
+  ? DEVELOPMENT_PREVIEW_IDENTITY
+  : PREVIEW_AUTH_PENDING;
+
+export function App({ identity = defaultPreviewIdentity }: { identity?: PreviewIdentityState } = {}) {
+  const resolvedIdentity = useMemo(() => validatePreviewIdentity(identity), [identity]);
+  const identityKey = previewIdentityKey(resolvedIdentity);
+  const activeIdentityKey = useRef(identityKey);
+  activeIdentityKey.current = identityKey;
+  const isIdentityCurrent = useCallback(
+    (key: string) => activeIdentityKey.current === key,
+    []
+  );
+  useEffect(() => {
+    const state = { ...(window.history.state ?? {}) };
+    if (!(personProfileHistoryKey in state)) return;
+    delete state[personProfileHistoryKey];
+    window.history.replaceState(state, '', window.location.href);
+  }, [identityKey]);
+
+  if (resolvedIdentity.kind === 'pending') {
+    return <PreviewAccessState title="Checking Preview access" message="Your account data has not been opened." />;
+  }
+  if (resolvedIdentity.kind === 'signed-out') {
+    return <PreviewAccessState title="Sign in to open Preview" message="No account Preview data was loaded." />;
+  }
+  if (resolvedIdentity.kind === 'error') {
+    return <PreviewAccessState title="Preview access is unavailable" message={resolvedIdentity.message} />;
+  }
+
+  return (
+    <PreviewWorkspace
+      key={identityKey}
+      identity={resolvedIdentity}
+      isIdentityCurrent={() => isIdentityCurrent(identityKey)}
+    />
+  );
+}
+
+function PreviewAccessState({ title, message }: { title: string; message: string }) {
+  return (
+    <main className="preview-access-state" aria-labelledby="preview-access-title">
+      <h1 id="preview-access-title">{title}</h1>
+      <p>{message}</p>
+    </main>
+  );
+}
+
+function PreviewWorkspace({
+  identity,
+  isIdentityCurrent
+}: {
+  identity: Extract<PreviewIdentityState, { kind: 'development' | 'authenticated' }>;
+  isIdentityCurrent: () => boolean;
+}) {
   const scoringInstant = useScoringInstant();
+  const previewStorage = useMemo(() => browserPreviewStorage(identity), [identity]);
+  const initialPreviewData = () => identity.kind === 'development'
+    ? createSamplePreviewData()
+    : createEmptyPreviewData();
   const [destination, setDestination] = useState<Destination>('today');
   const [moreSettingsOpen, setMoreSettingsOpen] = useState(false);
   const weatherTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -324,12 +393,7 @@ export function App() {
   } | null>(null);
   const foundationNavigationSequence = useRef(0);
   const activeRhythmReturnTab = useRef<'today' | MarriageTab>('today');
-  const [profilePersonId, setProfilePersonId] = useState<PersonId | null>(() => {
-    const storedProfileId = window.history.state?.[personProfileHistoryKey];
-    return typeof storedProfileId === 'string'
-      ? previewData.people.find(person => person.id === storedProfileId)?.id ?? null
-      : null;
-  });
+  const [profilePersonId, setProfilePersonId] = useState<PersonId | null>(null);
   const profileReturnRhythmId = useRef<string | null>(null);
   const [personDetailsEditorId, setPersonDetailsEditorId] = useState<PersonId | null>(null);
   const personDetailsEditorOpener = useRef<HTMLButtonElement | null>(null);
@@ -381,6 +445,17 @@ export function App() {
   const wasDetailsOpen = useRef(false);
   const wasRhythmEditorOpen = useRef(false);
   const rhythmEditorReturnsToSuggestions = useRef(false);
+
+  function writeCurrentPreview(
+    data: PreviewData,
+    expected: string | null,
+    options: Parameters<typeof writePreview>[3] = {}
+  ) {
+    if (!isIdentityCurrent()) {
+      return { kind: 'error' as const, message: 'Preview identity changed. No changes were saved.' };
+    }
+    return writePreview(previewStorage, data, expected, options);
+  }
 
   const dateLabel = new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
@@ -540,7 +615,7 @@ export function App() {
   const moneyGoals = previewData.goals;
 
   function refreshV1RecoveryCopy() {
-    const result = loadV1RecoveryCopy(browserPreviewStorage());
+    const result = loadV1RecoveryCopy(previewStorage);
     if (result.kind === 'loaded') {
       setV1RecoveryCopy(result.raw);
       setV1RecoveryError(null);
@@ -551,7 +626,7 @@ export function App() {
   }
 
   function refreshV2RecoveryCopy() {
-    const result = loadV2RecoveryCopy(browserPreviewStorage());
+    const result = loadV2RecoveryCopy(previewStorage);
     if (result.kind === 'loaded') {
       setV2RecoveryCopy(result.raw);
       setV2RecoveryError(null);
@@ -562,7 +637,7 @@ export function App() {
   }
 
   function refreshV3RecoveryCopy() {
-    const result = loadV3RecoveryCopy(browserPreviewStorage());
+    const result = loadV3RecoveryCopy(previewStorage);
     if (result.kind === 'loaded') {
       setV3RecoveryCopy(result.raw);
       setV3RecoveryError(null);
@@ -573,7 +648,7 @@ export function App() {
   }
 
   function refreshV4RecoveryCopy() {
-    const result = loadV4RecoveryCopy(browserPreviewStorage());
+    const result = loadV4RecoveryCopy(previewStorage);
     if (result.kind === 'loaded') {
       setV4RecoveryCopy(result.raw);
       setV4RecoveryError(null);
@@ -585,7 +660,7 @@ export function App() {
   }
 
   function refreshV5RecoveryCopy() {
-    const result = loadV5RecoveryCopy(browserPreviewStorage());
+    const result = loadV5RecoveryCopy(previewStorage);
     if (result.kind === 'loaded') {
       setV5RecoveryCopy(result.raw);
       setV5RecoveryError(null);
@@ -596,7 +671,7 @@ export function App() {
   }
 
   function refreshV6RecoveryCopy() {
-    const result = loadV6RecoveryCopy(browserPreviewStorage());
+    const result = loadV6RecoveryCopy(previewStorage);
     if (result.kind === 'loaded') {
       setV6RecoveryCopy(result.raw);
       setV6RecoveryError(null);
@@ -608,7 +683,7 @@ export function App() {
   }
 
   function refreshV7RecoveryCopy() {
-    const result = loadV7RecoveryCopy(browserPreviewStorage());
+    const result = loadV7RecoveryCopy(previewStorage);
     if (result.kind === 'loaded') {
       setV7RecoveryCopy(result.raw);
       setV7RecoveryError(null);
@@ -619,7 +694,7 @@ export function App() {
   }
 
   function refreshV8RecoveryCopy() {
-    const result = loadV8RecoveryCopy(browserPreviewStorage());
+    const result = loadV8RecoveryCopy(previewStorage);
     if (result.kind === 'loaded') {
       setV8RecoveryCopy(result.raw);
       setV8RecoveryError(null);
@@ -630,7 +705,7 @@ export function App() {
   }
 
   function refreshV9RecoveryCopy() {
-    const result = loadV9RecoveryCopy(browserPreviewStorage());
+    const result = loadV9RecoveryCopy(previewStorage);
     if (result.kind === 'loaded') {
       setV9RecoveryCopy(result.raw);
       setV9RecoveryError(null);
@@ -643,7 +718,7 @@ export function App() {
   }
 
   function refreshV29RecoveryCopy() {
-    const result = loadV29RecoveryCopy(browserPreviewStorage());
+    const result = loadV29RecoveryCopy(previewStorage);
     if (result.kind === 'loaded') {
       setV29RecoveryCopy(result.raw);
       setV29RecoveryError(null);
@@ -655,7 +730,7 @@ export function App() {
   }
 
   function refreshV30RecoveryCopy() {
-    const result = loadV30RecoveryCopy(browserPreviewStorage());
+    const result = loadV30RecoveryCopy(previewStorage);
     if (result.kind === 'loaded') {
       setV30RecoveryCopy(result.raw);
       setV30RecoveryError(null);
@@ -663,7 +738,7 @@ export function App() {
       setV30RecoveryCopy(null);
       setV30RecoveryError(result.message);
     }
-    const previous = loadV31RecoveryCopy(browserPreviewStorage());
+    const previous = loadV31RecoveryCopy(previewStorage);
     if (previous.kind === 'loaded') {
       setV31RecoveryCopy(previous.raw);
       setV31RecoveryError(null);
@@ -671,7 +746,7 @@ export function App() {
       setV31RecoveryCopy(null);
       setV31RecoveryError(previous.message);
     }
-    const latest = loadV32RecoveryCopy(browserPreviewStorage());
+    const latest = loadV32RecoveryCopy(previewStorage);
     if (latest.kind === 'loaded') {
       setV32RecoveryCopy(latest.raw);
       setV32RecoveryError(null);
@@ -682,7 +757,7 @@ export function App() {
   }
 
   function refreshV10RecoveryCopy() {
-    const result = loadV10RecoveryCopy(browserPreviewStorage());
+    const result = loadV10RecoveryCopy(previewStorage);
     if (result.kind === 'loaded') {
       setV10RecoveryCopy(result.raw);
       setV10RecoveryError(null);
@@ -694,7 +769,7 @@ export function App() {
   }
 
   function refreshV11RecoveryCopy() {
-    const result = loadV11RecoveryCopy(browserPreviewStorage());
+    const result = loadV11RecoveryCopy(previewStorage);
     if (result.kind === 'loaded') {
       setV11RecoveryCopy(result.raw);
       setV11RecoveryError(null);
@@ -706,7 +781,7 @@ export function App() {
   }
 
   function refreshV12RecoveryCopy() {
-    const result = loadV12RecoveryCopy(browserPreviewStorage());
+    const result = loadV12RecoveryCopy(previewStorage);
     if (result.kind === 'loaded') {
       setV12RecoveryCopy(result.raw);
       setV12RecoveryError(null);
@@ -718,7 +793,7 @@ export function App() {
   }
 
   function refreshV13RecoveryCopy() {
-    const result = loadV13RecoveryCopy(browserPreviewStorage());
+    const result = loadV13RecoveryCopy(previewStorage);
     if (result.kind === 'loaded') {
       setV13RecoveryCopy(result.raw);
       setV13RecoveryError(null);
@@ -726,7 +801,7 @@ export function App() {
       setV13RecoveryCopy(null);
       setV13RecoveryError(result.message);
     }
-    const v14 = loadV14RecoveryCopy(browserPreviewStorage());
+    const v14 = loadV14RecoveryCopy(previewStorage);
     if (v14.kind === 'loaded') {
       setV14RecoveryCopy(v14.raw);
       setV14RecoveryError(null);
@@ -734,7 +809,7 @@ export function App() {
       setV14RecoveryCopy(null);
       setV14RecoveryError(v14.message);
     }
-    const v15 = loadV15RecoveryCopy(browserPreviewStorage());
+    const v15 = loadV15RecoveryCopy(previewStorage);
     if (v15.kind === 'loaded') {
       setV15RecoveryCopy(v15.raw);
       setV15RecoveryError(null);
@@ -742,7 +817,7 @@ export function App() {
       setV15RecoveryCopy(null);
       setV15RecoveryError(v15.message);
     }
-    const v16 = loadV16RecoveryCopy(browserPreviewStorage());
+    const v16 = loadV16RecoveryCopy(previewStorage);
     if (v16.kind === 'loaded') {
       setV16RecoveryCopy(v16.raw);
       setV16RecoveryError(null);
@@ -750,7 +825,7 @@ export function App() {
       setV16RecoveryCopy(null);
       setV16RecoveryError(v16.message);
     }
-    const v17 = loadV17RecoveryCopy(browserPreviewStorage());
+    const v17 = loadV17RecoveryCopy(previewStorage);
     if (v17.kind === 'loaded') {
       setV17RecoveryCopy(v17.raw);
       setV17RecoveryError(null);
@@ -758,7 +833,7 @@ export function App() {
       setV17RecoveryCopy(null);
       setV17RecoveryError(v17.message);
     }
-    const v18 = loadV18RecoveryCopy(browserPreviewStorage());
+    const v18 = loadV18RecoveryCopy(previewStorage);
     if (v18.kind === 'loaded') {
       setV18RecoveryCopy(v18.raw);
       setV18RecoveryError(null);
@@ -766,7 +841,7 @@ export function App() {
       setV18RecoveryCopy(null);
       setV18RecoveryError(v18.message);
     }
-    const v19 = loadV19RecoveryCopy(browserPreviewStorage());
+    const v19 = loadV19RecoveryCopy(previewStorage);
     if (v19.kind === 'loaded') {
       setV19RecoveryCopy(v19.raw);
       setV19RecoveryError(null);
@@ -774,7 +849,7 @@ export function App() {
       setV19RecoveryCopy(null);
       setV19RecoveryError(v19.message);
     }
-    const v20 = loadV20RecoveryCopy(browserPreviewStorage());
+    const v20 = loadV20RecoveryCopy(previewStorage);
     if (v20.kind === 'loaded') {
       setV20RecoveryCopy(v20.raw);
       setV20RecoveryError(null);
@@ -782,7 +857,7 @@ export function App() {
       setV20RecoveryCopy(null);
       setV20RecoveryError(v20.message);
     }
-    const v21 = loadV21RecoveryCopy(browserPreviewStorage());
+    const v21 = loadV21RecoveryCopy(previewStorage);
     if (v21.kind === 'loaded') {
       setV21RecoveryCopy(v21.raw);
       setV21RecoveryError(null);
@@ -790,7 +865,7 @@ export function App() {
       setV21RecoveryCopy(null);
       setV21RecoveryError(v21.message);
     }
-    const v22 = loadV22RecoveryCopy(browserPreviewStorage());
+    const v22 = loadV22RecoveryCopy(previewStorage);
     if (v22.kind === 'loaded') {
       setV22RecoveryCopy(v22.raw);
       setV22RecoveryError(null);
@@ -798,7 +873,7 @@ export function App() {
       setV22RecoveryCopy(null);
       setV22RecoveryError(v22.message);
     }
-    const v23 = loadV23RecoveryCopy(browserPreviewStorage());
+    const v23 = loadV23RecoveryCopy(previewStorage);
     if (v23.kind === 'loaded') {
       setV23RecoveryCopy(v23.raw);
       setV23RecoveryError(null);
@@ -806,7 +881,7 @@ export function App() {
       setV23RecoveryCopy(null);
       setV23RecoveryError(v23.message);
     }
-    const v25 = loadV25RecoveryCopy(browserPreviewStorage());
+    const v25 = loadV25RecoveryCopy(previewStorage);
     if (v25.kind === 'loaded') {
       setV25RecoveryCopy(v25.raw);
       setV25RecoveryError(null);
@@ -814,7 +889,7 @@ export function App() {
       setV25RecoveryCopy(null);
       setV25RecoveryError(v25.message);
     }
-    const v26 = loadV26RecoveryCopy(browserPreviewStorage());
+    const v26 = loadV26RecoveryCopy(previewStorage);
     if (v26.kind === 'loaded') {
       setV26RecoveryCopy(v26.raw);
       setV26RecoveryError(null);
@@ -822,7 +897,7 @@ export function App() {
       setV26RecoveryCopy(null);
       setV26RecoveryError(v26.message);
     }
-    const v27 = loadV27RecoveryCopy(browserPreviewStorage());
+    const v27 = loadV27RecoveryCopy(previewStorage);
     if (v27.kind === 'loaded') {
       setV27RecoveryCopy(v27.raw);
       setV27RecoveryError(null);
@@ -830,7 +905,7 @@ export function App() {
       setV27RecoveryCopy(null);
       setV27RecoveryError(v27.message);
     }
-    const v28 = loadV28RecoveryCopy(browserPreviewStorage());
+    const v28 = loadV28RecoveryCopy(previewStorage);
     if (v28.kind === 'loaded') {
       setV28RecoveryCopy(v28.raw);
       setV28RecoveryError(null);
@@ -852,7 +927,8 @@ export function App() {
     refreshV9RecoveryCopy();
     refreshV29RecoveryCopy();
     refreshV30RecoveryCopy();
-    const loaded = loadPreview(browserPreviewStorage(), initialLoadDate);
+    if (!isIdentityCurrent()) return;
+    const loaded = loadPreview(previewStorage, initialLoadDate);
     if (loaded.kind === 'loaded') {
       expectedRaw.current = loaded.raw;
       skipNextAutosave.current = true;
@@ -861,7 +937,7 @@ export function App() {
       setAutoSaveEnabled(true);
     } else if (loaded.kind === 'missing') {
       expectedRaw.current = null;
-      setPreviewData(createSamplePreviewData());
+      setPreviewData(initialPreviewData());
       setPersistenceStatus({ kind: 'saving' });
       setAutoSaveEnabled(true);
     } else if (loaded.kind === 'corrupt' || loaded.kind === 'unsupported') {
@@ -879,7 +955,7 @@ export function App() {
       skipNextAutosave.current = false;
       return;
     }
-    const saved = writePreview(browserPreviewStorage(), previewData, expectedRaw.current, { currentDate });
+    const saved = writeCurrentPreview(previewData, expectedRaw.current, { currentDate });
     refreshV29RecoveryCopy();
     refreshV30RecoveryCopy();
     refreshV1RecoveryCopy();
@@ -907,11 +983,12 @@ export function App() {
   useEffect(() => {
     if (!hydrated) return;
     return listenForPreviewChanges(newValue => {
+      if (!isIdentityCurrent()) return;
       if (newValue === expectedRaw.current) return;
       externalRaw.current = newValue;
       setAutoSaveEnabled(false);
       setPersistenceStatus({ kind: 'conflict' });
-    });
+    }, identity);
   }, [hydrated]);
 
   useEffect(() => {
@@ -1418,7 +1495,7 @@ export function App() {
         ? { rhythmHistoryIds: [...previewData.rhythmHistoryIds, rhythmEditor.id] }
         : {})
     };
-    const written = writePreview(browserPreviewStorage(), nextData, expectedRaw.current, { currentDate });
+    const written = writeCurrentPreview(nextData, expectedRaw.current, { currentDate });
     refreshV29RecoveryCopy();
     refreshV30RecoveryCopy();
     refreshV1RecoveryCopy();
@@ -1452,7 +1529,7 @@ export function App() {
   }
 
   function persistSeasonHistory(nextData: PreviewData, action: string): string | null {
-    const written = writePreview(browserPreviewStorage(), nextData, expectedRaw.current, { currentDate });
+    const written = writeCurrentPreview(nextData, expectedRaw.current, { currentDate });
     refreshV29RecoveryCopy();
     refreshV30RecoveryCopy();
     refreshV1RecoveryCopy();
@@ -2191,7 +2268,7 @@ export function App() {
     };
     skipNextAutosave.current = true;
     setPreviewData(nextData);
-    const written = writePreview(browserPreviewStorage(), nextData, expectedRaw.current, { currentDate });
+    const written = writeCurrentPreview(nextData, expectedRaw.current, { currentDate });
     refreshV29RecoveryCopy();
     refreshV30RecoveryCopy();
     refreshV1RecoveryCopy();
@@ -2220,7 +2297,7 @@ export function App() {
   }
 
   function finishWrite(resultData: PreviewData, allowUnrecoverableReplacement = false): string | null {
-    const written = writePreview(browserPreviewStorage(), resultData, expectedRaw.current, {
+    const written = writeCurrentPreview(resultData, expectedRaw.current, {
       allowUnrecoverableReplacement,
       currentDate
     });
@@ -2259,7 +2336,7 @@ export function App() {
     const raw = externalRaw.current;
     if (raw === null) {
       expectedRaw.current = null;
-      return finishWrite(createSamplePreviewData());
+      return finishWrite(initialPreviewData());
     }
     const parsed = parsePreviewBackup(raw, currentDate);
     if (!parsed.valid) {
@@ -2283,7 +2360,7 @@ export function App() {
   }
 
   function replaceExternal(): string | null {
-    const written = writePreview(browserPreviewStorage(), previewData, externalRaw.current, {
+    const written = writeCurrentPreview(previewData, externalRaw.current, {
       allowUnrecoverableReplacement: true,
       currentDate
     });
@@ -2318,7 +2395,7 @@ export function App() {
   function retrySave() {
     skipNextAutosave.current = true;
     setAutoSaveEnabled(true);
-    const written = writePreview(browserPreviewStorage(), previewData, expectedRaw.current, { currentDate });
+    const written = writeCurrentPreview(previewData, expectedRaw.current, { currentDate });
     refreshV29RecoveryCopy();
     refreshV30RecoveryCopy();
     refreshV1RecoveryCopy();
@@ -2429,6 +2506,10 @@ export function App() {
       onOpenCategory={categoryId => navigate(categoryId)}
     />
   ) : null;
+
+  if (!hydrated) {
+    return <PreviewAccessState title="Opening Preview" message="Loading this session’s local data." />;
+  }
 
   return (
     <div className="wrap tend-app-preview" data-text-size={textSize}>
@@ -2754,7 +2835,7 @@ export function App() {
         status={persistenceStatus}
         currentDate={currentDate}
         onImport={data => finishWrite(data, true)}
-        onReset={() => finishWrite(createSamplePreviewData(), true)}
+        onReset={() => finishWrite(initialPreviewData(), true)}
         onRetrySave={retrySave}
         onReloadExternal={reloadExternal}
         onReplaceExternal={replaceExternal}
