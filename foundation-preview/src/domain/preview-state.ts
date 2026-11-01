@@ -74,9 +74,11 @@ import { validatePersonDetailsCollection } from './person-details.ts';
 import type { PersonDetails } from './person-details.ts';
 import { validatePersonNotesCollection } from './person-notes.ts';
 import type { PersonNote } from './person-notes.ts';
+import { validatePersonPrayerRequestsCollection } from './person-prayers.ts';
+import type { PersonPrayerRequest } from './person-prayers.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 32;
+export const PREVIEW_SCHEMA_VERSION = 33;
 
 export type PreviewData = {
   goals: MoneyGoal[];
@@ -96,6 +98,7 @@ export type PreviewData = {
   peopleGroups: ReturnType<typeof createPersonPickerGroups>;
   personDetails: PersonDetails[];
   personNotes: PersonNote[];
+  prayerRequests: PersonPrayerRequest[];
   [key: string]: unknown;
 };
 
@@ -127,7 +130,7 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32; resolvedPersonCategories: number }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33; resolvedPersonCategories: number }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
 const goalKeys = [
@@ -168,6 +171,7 @@ const dataKeysV29 = [...dataKeysV28, 'personDetails'];
 const dataKeysV30 = [...dataKeysV29, 'personNotes'];
 const dataKeysV31 = [...dataKeysV30];
 const dataKeysV32 = [...dataKeysV31, 'people'];
+const dataKeysV33 = [...dataKeysV32, 'prayerRequests'];
 const envelopeKeys = ['format', 'schemaVersion', 'data'];
 const supportedRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 const builtInRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
@@ -200,7 +204,8 @@ export function createSamplePreviewData(): PreviewData {
     people: createSamplePeople(),
     peopleGroups: createPersonPickerGroups(),
     personDetails: [],
-    personNotes: []
+    personNotes: [],
+    prayerRequests: []
   };
 }
 
@@ -220,7 +225,8 @@ export function createEmptyPreviewData(): PreviewData {
     people: [],
     peopleGroups: sample.peopleGroups.map(group => ({ ...group, memberIds: [] })),
     personDetails: [],
-    personNotes: []
+    personNotes: [],
+    prayerRequests: []
   };
 }
 
@@ -230,6 +236,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function hasOnlyKeys(record: Record<string, unknown>, allowed: readonly string[]): boolean {
   return Object.keys(record).every(key => allowed.includes(key));
+}
+
+function hasOnlyKeysWithEmptyPrayerDefault(
+  record: Record<string, unknown>,
+  allowed: readonly string[]
+): boolean {
+  return Object.keys(record).every(key => allowed.includes(key)
+    || key === 'prayerRequests'
+      && Array.isArray(record[key])
+      && record[key].length === 0);
 }
 
 function isNonEmptyText(value: unknown, maxLength = 160): value is string {
@@ -436,6 +452,11 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
       personNotes: data.personNotes.map(note => ({
         ...note,
         ...(note.sharedWith === undefined ? {} : { sharedWith: [...note.sharedWith] })
+      })),
+      prayerRequests: data.prayerRequests.map(request => ({
+        ...request,
+        ...(request.sharedWith === undefined ? {} : { sharedWith: [...request.sharedWith] }),
+        prayerLogs: request.prayerLogs.map(log => ({ ...log }))
       }))
     }
   };
@@ -485,6 +506,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
       && value.schemaVersion !== 29
       && value.schemaVersion !== 30
       && value.schemaVersion !== 31
+      && value.schemaVersion !== 32
       && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
@@ -519,15 +541,16 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const isV29 = value.schemaVersion === 29;
   const isV30 = value.schemaVersion === 30;
   const isV31 = value.schemaVersion === 31;
-  const isV32 = value.schemaVersion === 32;
+  const isV33 = value.schemaVersion === 33;
+  const isV32 = value.schemaVersion === 32 || isV33;
   const hasCurrentFriendshipsData = isV19 || isV20 || isV21 || isV22 || isV23 || isV24 || isV25 || isV26 || isV27 || isV28 || isV29 || isV30 || isV31 || isV32;
   const hasCardio = isV18 || hasCurrentFriendshipsData;
   const allowedDataKeys = isV1 ? dataKeysV1 : isV2 ? dataKeysV2
     : isV3 || isV4 ? dataKeysV3
-      : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
+      : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
         : isV11 || isV12 ? dataKeysV12 : isV10 ? dataKeysV10
       : isV8 || isV9 ? dataKeysV8 : isV7 ? dataKeysV7 : isV6 ? dataKeysV6 : dataKeysV5;
-  if (!isRecord(value.data) || (!isV19 && !isV20 && !hasOnlyKeys(value.data, allowedDataKeys))
+  if (!isRecord(value.data) || (!isV19 && !isV20 && !hasOnlyKeysWithEmptyPrayerDefault(value.data, allowedDataKeys))
     || !Array.isArray(value.data.goals) || !Array.isArray(value.data.completedRhythmIds)
     || ((isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || hasCurrentFriendshipsData)
       && (!Array.isArray(value.data.datedRhythmCompletions)
@@ -547,6 +570,9 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   }
   if (isV32 && !validatePeopleCollection(value.data.people)) {
     return { valid: false, kind: 'invalid', message: 'People must contain unique stable IDs and non-empty names.' };
+  }
+  if (isV33 && !validatePersonPrayerRequestsCollection(value.data.prayerRequests)) {
+    return { valid: false, kind: 'invalid', message: 'Prayer requests contain invalid fields, history, or Person references.' };
   }
   const people: PersonPreview[] = isV32 ? value.data.people as PersonPreview[] : createSamplePeople();
   if (!isV1 && !((isV4 || isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18 || hasCurrentFriendshipsData)
@@ -908,6 +934,10 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     return { valid: false, kind: 'invalid', message: 'Person notes contain invalid fields, dates, duplicate IDs, or unresolved Person IDs.' };
   }
   const knownPersonIds = new Set(people.map(person => person.id));
+  const prayerRequests = isV33 ? value.data.prayerRequests as PersonPrayerRequest[] : [];
+  if (!validatePersonPrayerRequestsCollection(prayerRequests, people.map(person => person.id))) {
+    return { valid: false, kind: 'invalid', message: 'Prayer requests contain invalid fields, history, or unresolved Person IDs.' };
+  }
   const referencesKnownPeople = (ids: readonly string[]) => ids.every(id => knownPersonIds.has(id));
   if (savedRhythms.some(rhythm => !referencesKnownPeople(rhythm.personIds))
     || friendships.cadenceSettings.some(setting => !knownPersonIds.has(setting.personId))
@@ -940,7 +970,8 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     people,
     peopleGroups,
     personDetails,
-    personNotes
+    personNotes,
+    prayerRequests
   };
 
   return {

@@ -42,6 +42,7 @@ import {
   loadV29RecoveryCopy,
   loadV30RecoveryCopy,
   loadV31RecoveryCopy,
+  loadV32RecoveryCopy,
   PREVIEW_V19_RECOVERY_KEY,
   PREVIEW_CATEGORY_RECOVERY_KEY,
   PREVIEW_STORAGE_KEY,
@@ -69,6 +70,7 @@ import {
   PREVIEW_V29_RECOVERY_KEY,
   PREVIEW_V30_RECOVERY_KEY,
   PREVIEW_V31_RECOVERY_KEY,
+  PREVIEW_V32_RECOVERY_KEY,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -519,6 +521,53 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(writePreview(storage, data, currentRaw, { currentDate: '2026-10-31' }))
       .toEqual({ kind: 'conflict', actualRaw: externalRaw });
     expect(values.get(PREVIEW_STORAGE_KEY)).toBe(externalRaw);
+  });
+
+  it('migrates v32 with an empty Prayer collection and preserves its exact raw source before v33 writes', () => {
+    const current = createPreviewEnvelope(createSamplePreviewData());
+    const { prayerRequests: _prayerRequests, ...v32Data } = current.data;
+    const raw = JSON.stringify({ ...current, schemaVersion: 32, data: v32Data });
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-10-31');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.prayerRequests).toEqual([]);
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+
+    expect(writePreview(storage, loaded.data, loaded.raw, { currentDate: '2026-10-31' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V32_RECOVERY_KEY)).toBe(raw);
+    expect(loadV32RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+    const saved = JSON.parse(values.get(PREVIEW_STORAGE_KEY) ?? '{}') as { schemaVersion: number; data: { prayerRequests?: unknown[] } };
+    expect(saved.schemaVersion).toBe(33);
+    expect(saved.data.prayerRequests).toEqual([]);
+  });
+
+  it('round-trips typed Prayer request ownership and rejects unresolved Person references', () => {
+    const data = createSamplePreviewData();
+    data.prayerRequests = [{
+      id: 'preview-prayer-one',
+      personId: 'sample-person-avery',
+      sharedWith: ['sample-person-morgan'],
+      title: 'A synthetic request',
+      details: 'Keep this text plain.',
+      status: 'active',
+      createdAt: '2026-10-31T12:00:00.000Z',
+      updatedAt: '2026-10-31T12:00:00.000Z',
+      prayerLogs: [{ id: 'preview-prayer-log-one', prayedAt: '2026-10-31T13:00:00.000Z' }]
+    }];
+    const backup = JSON.stringify(createPreviewEnvelope(data));
+    const parsed = parsePreviewBackup(backup, '2026-10-31');
+    expect(parsed.valid).toBe(true);
+    if (!parsed.valid) return;
+    expect(parsed.envelope.data.prayerRequests).toEqual(data.prayerRequests);
+
+    const unresolved = JSON.parse(backup) as { data: { prayerRequests: Array<Record<string, unknown>> } };
+    unresolved.data.prayerRequests[0]!.sharedWith = ['missing-person'];
+    expect(validatePreviewEnvelope(unresolved, '2026-10-31')).toMatchObject({
+      valid: false,
+      kind: 'invalid'
+    });
   });
 
   it('accepts subsequent writes when a current-schema source contains an active Strength session draft', () => {
@@ -1168,7 +1217,8 @@ describe('synthetic preview storage adapter and envelope', () => {
       people: createSamplePeople(),
       peopleGroups: createPersonPickerGroups(),
       personDetails: [],
-      personNotes: []
+      personNotes: [],
+      prayerRequests: []
     };
     const raw = JSON.stringify(createPreviewEnvelope(empty));
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
@@ -1225,7 +1275,8 @@ describe('synthetic preview storage adapter and envelope', () => {
       people: createSamplePeople(),
       peopleGroups: createPersonPickerGroups(),
       personDetails: [],
-      personNotes: []
+      personNotes: [],
+      prayerRequests: []
     });
   });
 
@@ -2636,12 +2687,12 @@ describe('preview backup controls', () => {
       await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
         .getByRole('button', { name: 'People' }));
       await user.click(screen.getByRole('button', { name: `Open profile for ${name}` }));
-      await user.click(screen.getByRole('tab', { name: 'Notes' }));
     };
 
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
     await openPerson('Avery Brooks');
+    await user.click(screen.getByRole('button', { name: 'Notes (0)' }));
     await user.click(screen.getByRole('button', { name: 'Add note' }));
     const editor = screen.getByRole('dialog', { name: 'Add note for Avery Brooks' });
     await user.type(within(editor).getByRole('textbox', { name: 'Note' }), 'App integration first line{Enter}second line');
@@ -2665,6 +2716,7 @@ describe('preview backup controls', () => {
 
     await user.click(screen.getByRole('button', { name: 'Back to People' }));
     await openPerson('Morgan Reed');
+    await user.click(screen.getByRole('button', { name: 'Notes (1)' }));
     await user.click(screen.getByRole('button', { name: /Open note updated/ }));
     const noteDetail = screen.getByRole('dialog', { name: 'Note' });
     expect(within(noteDetail).getByText(/Primary person: Avery Brooks/)).toBeTruthy();
@@ -2689,8 +2741,94 @@ describe('preview backup controls', () => {
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
     await openPerson('Avery Brooks');
-    expect(screen.getByText('Notes (1)')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Notes (1)' }));
+    expect(screen.getByRole('heading', { name: 'Notes (1)' })).toBeTruthy();
     expect(screen.getByText('Edited from the shared profile')).toBeTruthy();
+  });
+
+  it('persists shared Prayer requests without changing Rhythm records and separates unlink from owner deletion', async () => {
+    const user = userEvent.setup();
+    window.localStorage.clear();
+    const initialData = createSamplePreviewData();
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(initialData)));
+    const openPerson = async (name: string) => {
+      await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+        .getByRole('button', { name: 'People' }));
+      await user.click(screen.getByRole('button', { name: `Open profile for ${name}` }));
+      await user.click(screen.getByRole('tab', { name: 'Prayer' }));
+    };
+
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await openPerson('Avery Brooks');
+    await user.click(screen.getByRole('button', { name: 'Add prayer request' }));
+    const editor = screen.getByRole('dialog', { name: 'Add prayer request' });
+    await user.type(within(editor).getByRole('textbox', { name: 'Title' }), 'Pray about school');
+    await user.click(within(editor).getByRole('button', { name: 'Choose people' }));
+    const picker = screen.getByRole('dialog', { name: 'Choose people to share this request with' });
+    await user.click(within(picker).getByRole('button', { name: 'Morgan Reed' }));
+    await user.click(within(picker).getByRole('button', { name: 'Done' }));
+    await user.click(within(editor).getByRole('button', { name: 'Save request' }));
+    let saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}') as {
+      data?: {
+        prayerRequests?: Array<Record<string, unknown> & { prayerLogs: unknown[] }>;
+        completedRhythmIds?: string[];
+        datedRhythmCompletions?: unknown[];
+        activeRhythmCompletions?: unknown[];
+      };
+    };
+    expect(saved.data?.prayerRequests).toHaveLength(1);
+    expect(saved.data?.prayerRequests?.[0]).toMatchObject({
+      personId: 'sample-person-avery',
+      sharedWith: ['sample-person-morgan'],
+      status: 'active',
+      prayerLogs: []
+    });
+
+    const rhythmState = {
+      completed: saved.data?.completedRhythmIds,
+      dated: saved.data?.datedRhythmCompletions,
+      active: saved.data?.activeRhythmCompletions
+    };
+    await user.click(screen.getByRole('button', { name: 'Prayed' }));
+    await user.click(screen.getByRole('button', { name: 'Answer' }));
+    saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}');
+    expect(saved.data?.prayerRequests?.[0]?.status).toBe('answered');
+    expect(saved.data?.prayerRequests?.[0]?.prayerLogs).toHaveLength(1);
+    expect({
+      completed: saved.data?.completedRhythmIds,
+      dated: saved.data?.datedRhythmCompletions,
+      active: saved.data?.activeRhythmCompletions
+    }).toEqual(rhythmState);
+    await user.click(screen.getByRole('button', { name: 'Reopen' }));
+
+    await user.click(screen.getByRole('button', { name: 'Back to People' }));
+    await openPerson('Morgan Reed');
+    expect(screen.getByRole('tabpanel', { name: 'Prayer' })).toBeTruthy();
+    expect(screen.getByRole('listitem')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Remove Pray about school from this profile' }));
+    const unlink = screen.getByRole('dialog', { name: 'Remove this request from this profile?' });
+    await user.click(within(unlink).getByRole('button', { name: 'Remove from profile' }));
+    saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}');
+    expect(saved.data?.prayerRequests).toHaveLength(1);
+    expect(saved.data?.prayerRequests?.[0]).toMatchObject({
+      personId: 'sample-person-avery',
+      sharedWith: [],
+      prayerLogs: [{ id: expect.any(String), prayedAt: expect.any(String) }]
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Back to People' }));
+    await openPerson('Avery Brooks');
+    await user.click(screen.getByRole('button', { name: 'Delete Pray about school' }));
+    const deletion = screen.getByRole('dialog', { name: 'Delete this request?' });
+    await user.click(within(deletion).getByRole('button', { name: 'Delete request' }));
+    saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}');
+    expect(saved.data?.prayerRequests).toEqual([]);
+    expect({
+      completed: saved.data?.completedRhythmIds,
+      dated: saved.data?.datedRhythmCompletions,
+      active: saved.data?.activeRhythmCompletions
+    }).toEqual(rhythmState);
   });
 
   it('renders imported strings as text and persists the confirmed preview replacement', async () => {

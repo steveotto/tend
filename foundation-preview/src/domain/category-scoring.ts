@@ -1,9 +1,6 @@
 import type { FoundationPreview } from './preview-data.ts';
 import type { FoundationScoreSelection } from './foundation-scoring.ts';
-import {
-  HEALTH_CONSISTENCY_WEIGHT,
-  HEALTH_ON_TRACK_WEIGHT
-} from './rhythm-history.ts';
+import { aggregateHealthMeasures } from './health-scoring.ts';
 
 export type CategoryScoreSelection = {
   foundationIds: readonly string[];
@@ -62,16 +59,11 @@ export function selectCategoryScore(
     };
   }
 
-  const consistency = eligible.reduce((total, item) => total + item.consistency, 0) / eligible.length;
-  const onTrack = eligible.reduce((total, item) => total + item.onTrack, 0) / eligible.length;
-
   return {
     foundationIds,
     eligibleFoundationIds: eligible.map(item => item.id),
     excludedFoundationIds,
     unresolvedFoundationIds,
-    consistency,
-    onTrack,
-    health: consistency * HEALTH_CONSISTENCY_WEIGHT + onTrack * HEALTH_ON_TRACK_WEIGHT
+    ...aggregateHealthMeasures(eligible)
   };
 }

@@ -33,6 +33,7 @@ export const PREVIEW_V28_RECOVERY_KEY = 'tend2:synthetic-preview:v28-recovery';
 export const PREVIEW_V29_RECOVERY_KEY = 'tend2:synthetic-preview:v29-recovery';
 export const PREVIEW_V30_RECOVERY_KEY = 'tend2:synthetic-preview:v30-recovery';
 export const PREVIEW_V31_RECOVERY_KEY = 'tend2:synthetic-preview:v31-recovery';
+export const PREVIEW_V32_RECOVERY_KEY = 'tend2:synthetic-preview:v32-recovery';
 
 const recoveryKeys = {
   1: PREVIEW_V1_RECOVERY_KEY,
@@ -65,7 +66,8 @@ const recoveryKeys = {
   28: PREVIEW_V28_RECOVERY_KEY,
   29: PREVIEW_V29_RECOVERY_KEY,
   30: PREVIEW_V30_RECOVERY_KEY,
-  31: PREVIEW_V31_RECOVERY_KEY
+  31: PREVIEW_V31_RECOVERY_KEY,
+  32: PREVIEW_V32_RECOVERY_KEY
 } as const;
 
 export type ProposedRecoveryResult =
@@ -85,7 +87,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function proposedV4SourceVersionForRaw(
   raw: string
-): 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | null {
+): 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | null {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!isRecord(parsed)) return null;
@@ -101,7 +103,7 @@ export function proposedV4SourceVersionForRaw(
       || envelope.schemaVersion === 21
       || envelope.schemaVersion === 22 || envelope.schemaVersion === 23 || envelope.schemaVersion === 24
       || envelope.schemaVersion === 25 || envelope.schemaVersion === 26 || envelope.schemaVersion === 27
-      || envelope.schemaVersion === 28 || envelope.schemaVersion === 29 || envelope.schemaVersion === 30 || envelope.schemaVersion === 31
+      || envelope.schemaVersion === 28 || envelope.schemaVersion === 29 || envelope.schemaVersion === 30 || envelope.schemaVersion === 31 || envelope.schemaVersion === 32
       ? envelope.schemaVersion
       : null;
   } catch {
@@ -137,7 +139,7 @@ export function proposedV4RecoveryKeyForRaw(raw: string): string | null {
     || version === 6 || version === 7 || version === 8 || version === 9 || version === 10
     || version === 11 || version === 12 || version === 13 || version === 14 || version === 15 || version === 16 || version === 17 || version === 18 || version === 19 || version === 20
     || version === 21 || version === 22 || version === 23 || version === 24 || version === 25 || version === 26 || version === 27
-    || version === 28 || version === 29 || version === 30 || version === 31
+    || version === 28 || version === 29 || version === 30 || version === 31 || version === 32
     ? recoveryKeys[version]
     : null;
 }

@@ -4953,6 +4953,7 @@ a:focus-visible {
 .person-profile__detail {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   min-height: 24px;
   padding: 3px 8px;
   border: 1px solid var(--line, #e5e9e5);
@@ -4961,6 +4962,245 @@ a:focus-visible {
   font-size: 11px;
   line-height: 1.3;
   overflow-wrap: anywhere;
+}
+
+.person-profile__detail svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.person-profile__category {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px 9px;
+  border: 1px solid var(--line, #dfe5df);
+  border-radius: 999px;
+  color: var(--forest-deep, #294c3a);
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.person-profile__category svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+
+.person-profile-health-overview {
+  min-width: 0;
+}
+
+.person-component-health-summary {
+  min-width: 0;
+  margin-bottom: 16px;
+}
+
+.person-component-health-summary .health-score-measures__grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.person-profile__notes-access {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -18px;
+}
+
+.person-profile__notes-view {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.person-profile__notes-view[hidden] {
+  display: none;
+}
+
+.person-profile__notes-view .person-profile__section-heading {
+  align-items: center;
+}
+
+.person-prayer-panel,
+.person-prayer-panel__group,
+.person-prayer-card,
+.person-prayer-card__content {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.person-prayer-panel .person-profile__section-heading > div {
+  min-width: 0;
+}
+
+.person-prayer-panel .person-profile__section-heading > div p {
+  margin: 4px 0 0;
+  color: var(--ink-soft, #66736b);
+  font-size: 12px;
+}
+
+.person-prayer-panel__group {
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.person-prayer-panel__group > h4 {
+  margin: 0;
+  color: var(--ink, #25332b);
+  font-size: 14px;
+}
+
+.person-prayer-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.person-prayer-card {
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--line, #e5e9e5);
+  border-radius: 14px;
+  background: var(--tend-surface, #fff);
+}
+
+.person-prayer-card__content {
+  gap: 6px;
+}
+
+.person-prayer-card h5 {
+  margin: 0;
+  color: var(--ink, #25332b);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.person-prayer-card__details {
+  margin: 0;
+  color: var(--ink, #25332b);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.person-prayer-card__meta {
+  margin: 0;
+  color: var(--ink-soft, #66736b);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.person-prayer-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.person-prayer-panel__error {
+  margin: 0;
+  color: #a43838;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.person-prayer-dialog {
+  box-sizing: border-box;
+  width: min(560px, calc(100vw - 28px));
+  max-height: min(90vh, 760px);
+  overflow: auto;
+}
+
+.person-prayer-dialog--picker {
+  width: min(700px, calc(100vw - 28px));
+}
+
+.person-prayer-form,
+.person-prayer-confirm {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.person-prayer-form h2,
+.person-prayer-confirm h2 {
+  margin: 0;
+  color: var(--ink, #25332b);
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.person-prayer-form > label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--ink, #25332b);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.person-prayer-form input,
+.person-prayer-form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line, #dfe5df);
+  border-radius: 10px;
+  background: var(--tend-canvas, #fff);
+  color: var(--ink, #25332b);
+  font: inherit;
+}
+
+.person-prayer-form textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.person-prayer-form__sharing,
+.person-prayer-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.person-prayer-form__sharing > span:first-child {
+  color: var(--ink, #25332b);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.person-prayer-form__sharing > span:nth-child(2) {
+  flex: 1 1 80px;
+  color: var(--ink-soft, #66736b);
+  font-size: 12px;
+}
+
+.person-prayer-confirm > p {
+  margin: 0;
+  color: var(--ink-soft, #66736b);
+  line-height: 1.5;
+}
+
+.person-prayer-form button:focus-visible,
+.person-prayer-confirm button:focus-visible {
+  outline: 2px solid var(--forest-deep, #294c3a);
+  outline-offset: 2px;
 }
 
 .person-details-dialog {

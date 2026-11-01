@@ -344,7 +344,7 @@ describe('Tend Today preview', () => {
     await user.click(within(settings).getByRole('option', { name: 'Friend' }));
     await user.click(within(settings).getByRole('button', { name: 'Save' }));
     expect(document.activeElement).toBe(settingsButton);
-    expect(within(morganProfile).getByText('Friends')).toBeTruthy();
+    expect(within(morganProfile).getByText('Friend')).toBeTruthy();
     await user.click(within(morganProfile).getByRole('button', { name: 'Back to People' }));
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
       .getByRole('button', { name: 'Friendships' }));
@@ -2857,8 +2857,8 @@ describe('Tend Today preview', () => {
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
     expect(document.activeElement).toBe(editButton);
 
-    expect(within(profileForEdit).getByText('Spouse')).toBeTruthy();
-    expect(within(profileForEdit).getByText(/Birthday in/)).toBeTruthy();
+    expect(within(profileForEdit).getByText('Friend')).toBeTruthy();
+    expect(within(profileForEdit).getByLabelText('Birthday: Feb 29')).toBeTruthy();
     const savedResult = parsePreviewBackup(
       window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
       localDateString(new Date())
@@ -2930,9 +2930,9 @@ describe('Tend Today preview', () => {
     }
 
     const profile = profileForEdit;
-    expect(within(profile).getByText('Spouse')).toBeTruthy();
-    expect(within(profile).getByText(/Birthday in/)).toBeTruthy();
-    expect(within(profile).getByText(/^Anniversary in/)).toBeTruthy();
+    expect(within(profile).getByText('Marriage')).toBeTruthy();
+    expect(within(profile).getByLabelText('Birthday: Feb 29')).toBeTruthy();
+    expect(within(profile).getByLabelText('Anniversary: Dec 31')).toBeTruthy();
     expect(within(profile).getByText('Words of Affirmation')).toBeTruthy();
     expect(within(profile).getByRole('article', { name: 'Preserved person rhythm' })).toBeTruthy();
     const profileEditButton = within(profile).getByRole('button', { name: 'Person settings' });
@@ -2941,7 +2941,7 @@ describe('Tend Today preview', () => {
     cancelNativeDialog(editor);
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Person settings — Avery Brooks' })).toBeNull());
     expect(document.activeElement).toBe(profileEditButton);
-    expect(within(profile).getByText('Spouse')).toBeTruthy();
+    expect(within(profile).getByText('Marriage')).toBeTruthy();
     app.unmount();
 
     render(<App />);
@@ -2962,7 +2962,7 @@ describe('Tend Today preview', () => {
     await user.click(within(editor).getByRole('option', { name: 'Not set' }));
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
     expect(document.activeElement).toBe(clearDetailsButton);
-    expect(within(profileToClear).getByText('Spouse')).toBeTruthy();
+    expect(within(profileToClear).getByText('Marriage')).toBeTruthy();
     const cleared = parsePreviewBackup(
       window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
       localDateString(new Date())

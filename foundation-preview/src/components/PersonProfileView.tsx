@@ -31,21 +31,30 @@ import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 import { selectPersonRhythmsDueToday } from '../domain/person-rhythms.ts';
 import type { Destination } from './AppNavigation.tsx';
 import {
-  anniversarySummary,
-  birthdaySummary,
   connectionStyleLabel,
   personDetailsForId
 } from '../domain/person-details.ts';
 import type { PersonDetails } from '../domain/person-details.ts';
 import { PersonNotesPanel } from './PersonNotesPanel.tsx';
+import { personNotesForPerson } from '../domain/person-notes.ts';
 import type { PersonNote, PersonNoteDraft } from '../domain/person-notes.ts';
+import { resolvePersonCategory } from '../domain/person-categories.ts';
+import { BirthdayCakeIcon } from './BirthdayCakeIcon.tsx';
+import { PersonHealthSummary } from './PersonHealthSummary.tsx';
+import { PersonPrayerPanel } from './PersonPrayerPanel.tsx';
+import { selectPersonHealth, selectPersonRhythmHealth } from '../domain/person-health.ts';
+import type {
+  PersonPrayerRequest,
+  PersonPrayerRequestDraft,
+  PrayerRequestTransition
+} from '../domain/person-prayers.ts';
 
-type ProfileTab = 'rhythms' | 'connections' | 'notes';
+type ProfileTab = 'rhythms' | 'connections' | 'prayer';
 
 const profileTabs: { id: ProfileTab; label: string }[] = [
   { id: 'rhythms', label: 'Rhythms' },
   { id: 'connections', label: 'Connections' },
-  { id: 'notes', label: 'Notes' }
+  { id: 'prayer', label: 'Prayer' }
 ];
 
 export function PersonProfileView({
@@ -63,9 +72,15 @@ export function PersonProfileView({
   onFriendshipsChange,
   personDetails = [],
   personNotes = [],
+  prayerRequests = [],
   onCreatePersonNote,
   onUpdatePersonNote,
   onDeletePersonNote,
+  onCreatePrayerRequest,
+  onUpdatePrayerRequest,
+  onPrayerRequestTransition,
+  onPrayForRequest,
+  onRemovePrayerRequest,
   onEditPerson,
   onAddRhythm,
   onEditRhythm,
@@ -95,9 +110,25 @@ export function PersonProfileView({
   onFriendshipsChange: (friendships: FriendshipData) => void;
   personDetails?: readonly PersonDetails[];
   personNotes?: readonly PersonNote[];
+  prayerRequests?: readonly PersonPrayerRequest[];
   onCreatePersonNote?: (personId: PersonId, draft: PersonNoteDraft) => string | null;
   onUpdatePersonNote?: (noteId: string, expectedUpdatedAt: string, actorId: PersonId, draft: PersonNoteDraft) => string | null;
   onDeletePersonNote?: (noteId: string, expectedUpdatedAt: string, actorId: PersonId) => string | null;
+  onCreatePrayerRequest?: (personId: PersonId, draft: PersonPrayerRequestDraft) => string | null;
+  onUpdatePrayerRequest?: (
+    requestId: string,
+    expectedUpdatedAt: string,
+    actorId: PersonId,
+    draft: PersonPrayerRequestDraft
+  ) => string | null;
+  onPrayerRequestTransition?: (
+    requestId: string,
+    expectedUpdatedAt: string,
+    actorId: PersonId,
+    transition: PrayerRequestTransition
+  ) => string | null;
+  onPrayForRequest?: (requestId: string, expectedUpdatedAt: string, actorId: PersonId) => string | null;
+  onRemovePrayerRequest?: (requestId: string, expectedUpdatedAt: string, actorId: PersonId) => string | null;
   onEditPerson?: (personId: PersonId, event: MouseEvent<HTMLButtonElement>) => void;
   onAddRhythm: (event: MouseEvent<HTMLButtonElement>, personId: PersonId) => void;
   onEditRhythm: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
@@ -118,9 +149,8 @@ export function PersonProfileView({
   const person = details?.photoDataUrl
     ? { ...basePerson, avatarUrl: details.photoDataUrl }
     : basePerson;
-  const birthday = details?.birthday ? birthdaySummary(details.birthday, today) : null;
-  const anniversary = details?.anniversary ? anniversarySummary(details.anniversary, today) : null;
   const [tab, setTab] = useState<ProfileTab>('rhythms');
+  const [notesOpen, setNotesOpen] = useState(false);
   const [connectionEditor, setConnectionEditor] = useState<{
     record?: FriendshipConnection;
     type?: 'text' | 'call' | 'time-together';
@@ -128,6 +158,7 @@ export function PersonProfileView({
   const [showArchived, setShowArchived] = useState(false);
   const [archivedPersonId, setArchivedPersonId] = useState<PersonId | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const notesAccessRef = useRef<HTMLButtonElement | null>(null);
   const connectionOpener = useRef<HTMLButtonElement | null>(null);
   const wasEditorOpen = useRef(false);
   const archiveOpener = useRef<HTMLButtonElement | null>(null);
@@ -135,7 +166,30 @@ export function PersonProfileView({
   const connectionHistory = connectionsForPerson(friendships, personId);
   const personConnectionStatus = friendConnectionStatus(friendships, personId, today);
   const classifications = peopleGroups.filter(group => group.memberIds.includes(personId));
+  const resolvedCategory = resolvePersonCategory(classifications.map(group => group.id));
+  const categoryLabel = resolvedCategory === 'friends'
+    ? 'Friend'
+    : resolvedCategory === 'marriage'
+      ? 'Marriage'
+      : resolvedCategory === 'parenting'
+        ? 'Parenting'
+        : null;
+  const profileNotes = personNotesForPerson(personNotes, personId);
+  const birthdayDateLabel = details?.birthday ? personDateLabel(details.birthday.monthDay) : null;
+  const anniversaryDateLabel = details?.anniversary ? personDateLabel(details.anniversary.monthDay) : null;
   const personRhythms = rhythms.filter(rhythm => rhythm.personIds?.includes(personId));
+  const archivedRhythmIds = new Set(archivedRhythms.map(rhythm => rhythm.id));
+  const personRhythmHealth = selectPersonRhythmHealth(
+    personId,
+    [...rhythms, ...archivedRhythms],
+    rhythmScores,
+    archivedRhythmIds
+  );
+  const overallHealth = selectPersonHealth([
+    { id: 'rhythms', consistency: personRhythmHealth.consistency, onTrack: personRhythmHealth.onTrack },
+    { id: 'connection', consistency: null, onTrack: null, scoringStatus: 'unavailable' },
+    { id: 'prayer', consistency: null, onTrack: null, scoringStatus: 'unavailable' }
+  ]);
   const duePersonRhythms = selectPersonRhythmsDueToday(personRhythms, personId, today);
   const dueRhythmIds = new Set(duePersonRhythms.map(rhythm => rhythm.id));
   const otherPersonRhythms = personRhythms.filter(rhythm => !dueRhythmIds.has(rhythm.id));
@@ -166,6 +220,7 @@ export function PersonProfileView({
 
   function selectTab(next: ProfileTab) {
     setTab(next);
+    setNotesOpen(false);
   }
 
   function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
@@ -222,6 +277,15 @@ export function PersonProfileView({
     );
   }
 
+  function personDateLabel(monthDay: string): string {
+    const [month, day] = monthDay.split('-').map(Number);
+    return new Date(Date.UTC(2000, month! - 1, day!)).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC'
+    });
+  }
+
   return (
     <main className="person-profile-page" aria-labelledby="person-profile-title">
       <div className="person-profile-page__back">
@@ -232,27 +296,11 @@ export function PersonProfileView({
             <PersonAvatar person={person} />
             <div className="person-profile__identity-copy">
               <h2 id="person-profile-title">{person.displayName}</h2>
-              {details?.relationshipLabel && (
-                <p className="person-profile__relationship">{details.relationshipLabel}</p>
-              )}
-              {(birthday || anniversary || details?.connectionStyle) && (
-                <div className="person-profile__details" aria-label={`${person.displayName} details`}>
-                  {birthday && <span className="person-profile__detail">{birthday.label}</span>}
-                  {anniversary && <span className="person-profile__detail">{anniversary}</span>}
-                  {details?.connectionStyle && (
-                    <span className="person-profile__detail">{connectionStyleLabel(details.connectionStyle)}</span>
-                  )}
-                </div>
-              )}
-              {classifications.length > 0 && (
-                <div className="person-profile__classifications" aria-label="People classifications">
-                  {classifications.map(group => (
-                    <span className="person-profile__classification" key={group.id}>
-                      {group.id !== 'friends' && <AreaIcon id={group.id} />}
-                      {group.label}
-                    </span>
-                  ))}
-                </div>
+              {categoryLabel && (
+                <span className="person-profile__category">
+                  {resolvedCategory !== 'friends' && resolvedCategory && <AreaIcon id={resolvedCategory} />}
+                  {categoryLabel}
+                </span>
               )}
             </div>
             {onEditPerson && (
@@ -269,6 +317,44 @@ export function PersonProfileView({
               </button>
             )}
           </header>
+          {(details?.connectionStyle || birthdayDateLabel || anniversaryDateLabel) && (
+            <div className="person-profile__details" aria-label={`${person.displayName} personal details`}>
+              {details?.connectionStyle && (
+                <span className="person-profile__detail" aria-label={`Love language: ${connectionStyleLabel(details.connectionStyle)}`}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M20.8 4.8a5.4 5.4 0 0 0-7.6 0L12 6l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6l1.2 1.2L12 21l7.6-7.4 1.2-1.2a5.4 5.4 0 0 0 0-7.6Z" />
+                  </svg>
+                  {connectionStyleLabel(details.connectionStyle)}
+                </span>
+              )}
+              {birthdayDateLabel && (
+                <span className="person-profile__detail" aria-label={`Birthday: ${birthdayDateLabel}`}>
+                  <BirthdayCakeIcon />
+                  {birthdayDateLabel}
+                </span>
+              )}
+              {anniversaryDateLabel && (
+                <span className="person-profile__detail" aria-label={`Anniversary: ${anniversaryDateLabel}`}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M20.8 4.8a5.4 5.4 0 0 0-7.6 0L12 6l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6l1.2 1.2L12 21l7.6-7.4 1.2-1.2a5.4 5.4 0 0 0 0-7.6Z" />
+                  </svg>
+                  {anniversaryDateLabel}
+                </span>
+              )}
+            </div>
+          )}
+          <div className="person-profile-health-overview">
+            <PersonHealthSummary
+              key={`${personId}:overall-health`}
+              title="Overall Health"
+              health={overallHealth}
+              itemTerm="component"
+              totalCount={overallHealth.componentIds.length}
+              eligibleCount={overallHealth.eligibleComponentIds.length}
+              excludedCount={overallHealth.excludedComponentIds.length}
+              unscoredCount={overallHealth.unscoredComponentIds.length}
+            />
+          </div>
           <div className="faith-view-nav marriage-view-nav person-profile__nav" role="tablist" aria-label={`${person.displayName} profile`}>
             {profileTabs.map((item, index) => (
               <button
@@ -287,13 +373,41 @@ export function PersonProfileView({
               </button>
             ))}
           </div>
+          <div className="person-profile__notes-access">
+            <button
+              ref={notesAccessRef}
+              type="button"
+              className="btn mini ghost"
+              aria-controls={`person-profile-notes-view-${personId}`}
+              aria-expanded={notesOpen}
+              onClick={() => setNotesOpen(true)}
+            >
+              Notes ({profileNotes.length})
+            </button>
+          </div>
           <section
             id="person-profile-panel-rhythms"
             className="person-profile__panel marriage-view-panel"
             role="tabpanel"
             aria-labelledby="person-profile-tab-rhythms"
-            hidden={tab !== 'rhythms'}
+            hidden={notesOpen || tab !== 'rhythms'}
           >
+            <PersonHealthSummary
+              key={`${personId}:rhythm-health`}
+              title="Rhythm Health"
+              health={personRhythmHealth}
+              itemTerm="Rhythm"
+              totalCount={personRhythmHealth.activeRhythmIds.length}
+              eligibleCount={personRhythmHealth.eligibleRhythmIds.length}
+              excludedCount={personRhythmHealth.excludedRhythmIds.length}
+              unresolvedCount={personRhythmHealth.unresolvedRhythmIds.length}
+              archivedCount={personRhythmHealth.archivedRhythmIds.length}
+              coverageLabel={personRhythmHealth.activeRhythmIds.length === 0
+                ? personRhythmHealth.archivedRhythmIds.length > 0
+                  ? 'No active associated Rhythms; archived Rhythms are excluded.'
+                  : 'No associated Rhythms.'
+                : `${personRhythmHealth.eligibleRhythmIds.length} of ${personRhythmHealth.activeRhythmIds.length} active associated Rhythms scored.`}
+            />
             <div className="person-profile__section-heading">
               <h3>Today with {person.displayName}</h3>
               {showAddRhythm && (
@@ -341,8 +455,17 @@ export function PersonProfileView({
             className="person-profile__panel marriage-view-panel"
             role="tabpanel"
             aria-labelledby="person-profile-tab-connections"
-            hidden={tab !== 'connections'}
+            hidden={notesOpen || tab !== 'connections'}
           >
+            <PersonHealthSummary
+              key={`${personId}:connection-health`}
+              title="Connection Health"
+              health={{ consistency: null, onTrack: null, health: null }}
+              itemTerm="component"
+              totalCount={1}
+              eligibleCount={0}
+              coverageLabel="Connection scoring is not defined yet."
+            />
             <div className="person-profile__section-heading">
               <h3>Connections</h3>
               <ConnectionTypeActions
@@ -371,26 +494,76 @@ export function PersonProfileView({
             />
           </section>
           <section
-            id="person-profile-panel-notes"
+            id="person-profile-panel-prayer"
             className="person-profile__panel marriage-view-panel"
             role="tabpanel"
-            aria-labelledby="person-profile-tab-notes"
-            hidden={tab !== 'notes'}
+            aria-labelledby="person-profile-tab-prayer"
+            hidden={notesOpen || tab !== 'prayer'}
           >
-            <PersonNotesPanel
+            <PersonHealthSummary
+              key={`${personId}:prayer-health`}
+              title="Prayer Health"
+              health={{ consistency: null, onTrack: null, health: null }}
+              itemTerm="component"
+              totalCount={1}
+              eligibleCount={0}
+              coverageLabel="Prayer scoring is not defined yet."
+            />
+            <PersonPrayerPanel
               personId={personId}
               people={people}
-              notes={personNotes}
-              onCreate={draft => onCreatePersonNote
-                ? onCreatePersonNote(personId, draft)
-                : 'Person notes are unavailable.'}
-              onUpdate={(noteId, expectedUpdatedAt, actorId, draft) => onUpdatePersonNote
-                ? onUpdatePersonNote(noteId, expectedUpdatedAt, actorId, draft)
-                : 'Person notes are unavailable.'}
-              onDelete={(noteId, expectedUpdatedAt, actorId) => onDeletePersonNote
-                ? onDeletePersonNote(noteId, expectedUpdatedAt, actorId)
-                : 'Person notes are unavailable.'}
+              peopleGroups={peopleGroups}
+              requests={prayerRequests}
+              onCreate={(ownerId, draft) => onCreatePrayerRequest
+                ? onCreatePrayerRequest(ownerId, draft)
+                : 'Prayer requests are unavailable.'}
+              onUpdate={(requestId, expectedUpdatedAt, actorId, draft) => onUpdatePrayerRequest
+                ? onUpdatePrayerRequest(requestId, expectedUpdatedAt, actorId, draft)
+                : 'Prayer requests are unavailable.'}
+              onTransition={(requestId, expectedUpdatedAt, actorId, transition) => onPrayerRequestTransition
+                ? onPrayerRequestTransition(requestId, expectedUpdatedAt, actorId, transition)
+                : 'Prayer requests are unavailable.'}
+              onPray={(requestId, expectedUpdatedAt, actorId) => onPrayForRequest
+                ? onPrayForRequest(requestId, expectedUpdatedAt, actorId)
+                : 'Prayer logging is unavailable.'}
+              onRemove={(requestId, expectedUpdatedAt, actorId) => onRemovePrayerRequest
+                ? onRemovePrayerRequest(requestId, expectedUpdatedAt, actorId)
+                : 'Prayer requests are unavailable.'}
             />
+          </section>
+          <section
+            id={`person-profile-notes-view-${personId}`}
+            className="person-profile__notes-view"
+            aria-labelledby={`person-profile-notes-heading-${personId}`}
+            hidden={!notesOpen}
+          >
+              <header className="person-profile__section-heading">
+                <h3 id={`person-profile-notes-heading-${personId}`}>Notes</h3>
+                <button
+                  type="button"
+                  className="btn mini ghost"
+                  onClick={() => {
+                    setNotesOpen(false);
+                    notesAccessRef.current?.focus();
+                  }}
+                >
+                  Return to profile tabs
+                </button>
+              </header>
+              <PersonNotesPanel
+                personId={personId}
+                people={people}
+                notes={personNotes}
+                onCreate={draft => onCreatePersonNote
+                  ? onCreatePersonNote(personId, draft)
+                  : 'Person notes are unavailable.'}
+                onUpdate={(noteId, expectedUpdatedAt, actorId, draft) => onUpdatePersonNote
+                  ? onUpdatePersonNote(noteId, expectedUpdatedAt, actorId, draft)
+                  : 'Person notes are unavailable.'}
+                onDelete={(noteId, expectedUpdatedAt, actorId) => onDeletePersonNote
+                  ? onDeletePersonNote(noteId, expectedUpdatedAt, actorId)
+                  : 'Person notes are unavailable.'}
+              />
           </section>
       </section>
       {connectionEditor && (

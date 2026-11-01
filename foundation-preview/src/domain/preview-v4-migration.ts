@@ -30,7 +30,7 @@ export type PreviewV4MigrationResult =
   | {
       valid: true;
       envelope: PreviewEnvelope;
-      sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32;
+      sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33;
     }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
@@ -49,7 +49,8 @@ export function migratePreviewToProposedV4(raw: string, currentDate: string): Pr
     || parsed.sourceSchemaVersion === 23 || parsed.sourceSchemaVersion === 24
     || parsed.sourceSchemaVersion === 25 || parsed.sourceSchemaVersion === 26 || parsed.sourceSchemaVersion === 27
     || parsed.sourceSchemaVersion === 28 || parsed.sourceSchemaVersion === 29
-    || parsed.sourceSchemaVersion === 30 || parsed.sourceSchemaVersion === 31 || parsed.sourceSchemaVersion === 32) {
+    || parsed.sourceSchemaVersion === 30 || parsed.sourceSchemaVersion === 31
+    || parsed.sourceSchemaVersion === 32 || parsed.sourceSchemaVersion === 33) {
     return { valid: true, envelope: parsed.envelope, sourceSchemaVersion: parsed.sourceSchemaVersion };
   }
   if (parsed.sourceSchemaVersion === 7) {
@@ -113,7 +114,8 @@ export function migratePreviewToProposedV4(raw: string, currentDate: string): Pr
         people: parsed.envelope.data.people.map(person => ({ ...person })),
         peopleGroups: parsed.envelope.data.peopleGroups,
         personDetails: parsed.envelope.data.personDetails,
-        personNotes: []
+        personNotes: [],
+        prayerRequests: []
       }
     }
   };

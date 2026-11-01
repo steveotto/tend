@@ -91,6 +91,8 @@ type PreviewDataControlsProps = {
   v30RecoveryError?: string | null;
   v31RecoveryCopy?: string | null;
   v31RecoveryError?: string | null;
+  v32RecoveryCopy?: string | null;
+  v32RecoveryError?: string | null;
 };
 
 function downloadText(filename: string, content: string, type: string): string | null {
@@ -179,7 +181,9 @@ export function PreviewDataControls({
   v30RecoveryCopy = null,
   v30RecoveryError = null,
   v31RecoveryCopy = null,
-  v31RecoveryError = null
+  v31RecoveryError = null,
+  v32RecoveryCopy = null,
+  v32RecoveryError = null
 }: PreviewDataControlsProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -671,6 +675,16 @@ export function PreviewDataControls({
             Download original v31 recovery backup
           </button>
         )}
+        {v32RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v32-recovery.json',
+              v32RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v32 recovery backup downloaded.')}>
+            Download original v32 recovery backup
+          </button>
+        )}
         <label className="btn mini ghost preview-data-controls__file-button">
           Import preview backup
           <input
@@ -748,6 +762,7 @@ export function PreviewDataControls({
       {v29RecoveryError && <p className="preview-data-controls__help" role="alert">The original v29 recovery copy could not be read: {v29RecoveryError}</p>}
       {v30RecoveryError && <p className="preview-data-controls__help" role="alert">The original v30 recovery copy could not be read: {v30RecoveryError}</p>}
       {v31RecoveryError && <p className="preview-data-controls__help" role="alert">The original v31 recovery copy could not be read: {v31RecoveryError}</p>}
+      {v32RecoveryError && <p className="preview-data-controls__help" role="alert">The original v32 recovery copy could not be read: {v32RecoveryError}</p>}
       {message && <p className="preview-data-controls__message" role="status">{message}</p>}
       {pendingAction && (
         <MoneyGoalDialog

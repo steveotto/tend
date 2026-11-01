@@ -68,6 +68,15 @@ import {
   updatePersonNote
 } from './domain/person-notes.ts';
 import type { PersonNoteDraft } from './domain/person-notes.ts';
+import {
+  createPersonPrayerRequest,
+  deletePersonPrayerRequest,
+  recordPersonPrayer,
+  transitionPersonPrayerRequest,
+  unlinkPersonPrayerRequest,
+  updatePersonPrayerRequest
+} from './domain/person-prayers.ts';
+import type { PersonPrayerRequestDraft, PrayerRequestTransition } from './domain/person-prayers.ts';
 import type { DatedRhythmCompletion, RhythmCompletionRecord } from './domain/rhythm-completion.ts';
 import {
   deleteDatedCompletion,
@@ -147,6 +156,7 @@ import {
   loadV29RecoveryCopy,
   loadV30RecoveryCopy,
   loadV31RecoveryCopy,
+  loadV32RecoveryCopy,
   loadPreview,
   writePreview
 } from './storage/preview-storage.ts';
@@ -297,6 +307,8 @@ export function App() {
   const [v30RecoveryError, setV30RecoveryError] = useState<string | null>(null);
   const [v31RecoveryCopy, setV31RecoveryCopy] = useState<string | null>(null);
   const [v31RecoveryError, setV31RecoveryError] = useState<string | null>(null);
+  const [v32RecoveryCopy, setV32RecoveryCopy] = useState<string | null>(null);
+  const [v32RecoveryError, setV32RecoveryError] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -658,6 +670,14 @@ export function App() {
     } else {
       setV31RecoveryCopy(null);
       setV31RecoveryError(previous.message);
+    }
+    const latest = loadV32RecoveryCopy(browserPreviewStorage());
+    if (latest.kind === 'loaded') {
+      setV32RecoveryCopy(latest.raw);
+      setV32RecoveryError(null);
+    } else {
+      setV32RecoveryCopy(null);
+      setV32RecoveryError(latest.message);
     }
   }
 
@@ -1063,6 +1083,90 @@ export function App() {
     const result = deletePersonNote(previewData.personNotes, noteId, expectedUpdatedAt, actorId);
     if (!result.valid) return result.error;
     return persistSeasonHistory({ ...previewData, personNotes: result.notes }, 'person note');
+  }
+
+  function createPrayerRequest(personId: PersonId, draft: PersonPrayerRequestDraft): string | null {
+    const now = new Date().toISOString();
+    const result = createPersonPrayerRequest(previewData.prayerRequests, {
+      id: `prayer-request-${globalThis.crypto.randomUUID()}`,
+      personId,
+      sharedWith: draft.sharedWith,
+      title: draft.title.trim(),
+      ...(draft.details.trim() ? { details: draft.details } : {}),
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+      prayerLogs: []
+    }, previewData.people.map(person => person.id));
+    if (!result.valid) return result.error;
+    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer request');
+  }
+
+  function editPrayerRequest(
+    requestId: string,
+    expectedUpdatedAt: string,
+    actorId: PersonId,
+    draft: PersonPrayerRequestDraft
+  ): string | null {
+    const result = updatePersonPrayerRequest(
+      previewData.prayerRequests,
+      requestId,
+      expectedUpdatedAt,
+      actorId,
+      { ...draft, title: draft.title.trim() },
+      new Date().toISOString(),
+      previewData.people.map(person => person.id)
+    );
+    if (!result.valid) return result.error;
+    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer request');
+  }
+
+  function transitionPrayerRequest(
+    requestId: string,
+    expectedUpdatedAt: string,
+    actorId: PersonId,
+    transition: PrayerRequestTransition
+  ): string | null {
+    const result = transitionPersonPrayerRequest(
+      previewData.prayerRequests,
+      requestId,
+      expectedUpdatedAt,
+      actorId,
+      transition,
+      new Date().toISOString()
+    );
+    if (!result.valid) return result.error;
+    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer request');
+  }
+
+  function prayForRequest(requestId: string, expectedUpdatedAt: string, actorId: PersonId): string | null {
+    const now = new Date().toISOString();
+    const result = recordPersonPrayer(
+      previewData.prayerRequests,
+      requestId,
+      expectedUpdatedAt,
+      actorId,
+      { id: `prayer-log-${globalThis.crypto.randomUUID()}`, prayedAt: now },
+      previewData.people.map(person => person.id)
+    );
+    if (!result.valid) return result.error;
+    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer log');
+  }
+
+  function removePrayerRequest(requestId: string, expectedUpdatedAt: string, actorId: PersonId): string | null {
+    const request = previewData.prayerRequests.find(item => item.id === requestId);
+    if (!request) return 'This prayer request is no longer available.';
+    const result = request.personId === actorId
+      ? deletePersonPrayerRequest(previewData.prayerRequests, requestId, expectedUpdatedAt, actorId)
+      : unlinkPersonPrayerRequest(
+          previewData.prayerRequests,
+          requestId,
+          expectedUpdatedAt,
+          actorId,
+          new Date().toISOString()
+        );
+    if (!result.valid) return result.error;
+    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer request');
   }
 
   useEffect(() => {
@@ -2593,6 +2697,7 @@ export function App() {
           peopleGroups={resolvedPeopleGroups}
           personDetails={previewData.personDetails}
           personNotes={previewData.personNotes}
+          prayerRequests={previewData.prayerRequests}
           friendships={previewData.friendships}
           today={localDateInTimeZone(new Date(), localTimeZone)}
           rhythms={personActiveRhythms}
@@ -2622,6 +2727,11 @@ export function App() {
           onCreatePersonNote={savePersonNote}
           onUpdatePersonNote={editPersonNote}
           onDeletePersonNote={removePersonNote}
+          onCreatePrayerRequest={createPrayerRequest}
+          onUpdatePrayerRequest={editPrayerRequest}
+          onPrayerRequestTransition={transitionPrayerRequest}
+          onPrayForRequest={prayForRequest}
+          onRemovePrayerRequest={removePrayerRequest}
           onClose={closePersonProfile}
         />
       )}
@@ -2708,6 +2818,8 @@ export function App() {
         v30RecoveryError={v30RecoveryError}
         v31RecoveryCopy={v31RecoveryCopy}
         v31RecoveryError={v31RecoveryError}
+        v32RecoveryCopy={v32RecoveryCopy}
+        v32RecoveryError={v32RecoveryError}
       />
       {storageNeedsAttention && !isPreviewSettings && (
         <p className="preview-storage-alert" role="alert">

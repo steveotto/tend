@@ -12,6 +12,7 @@ import {
   updatePersonNote
 } from '../src/domain/person-notes.ts';
 import type { PersonNote, PersonNoteDraft } from '../src/domain/person-notes.ts';
+import type { PersonDetails } from '../src/domain/person-details.ts';
 import {
   createPersonPickerGroups,
   foundationCatalogue,
@@ -62,12 +63,54 @@ const score: RhythmScoreResult = {
   healthScore: 0
 };
 
+function scoredProfileRhythmScore(consistency: number, onTrack: number): RhythmScoreResult {
+  return {
+    kind: 'rhythm-score',
+    asOfDate: '2026-10-29',
+    timeZone: 'UTC',
+    trackingStartDate: '2026-10-01',
+    consistency: {
+      kind: 'scored',
+      score: consistency,
+      exactPercent: consistency,
+      evidence: {
+        frequency: 'daily',
+        windowStartDate: '2026-10-01',
+        windowEndDate: '2026-10-29',
+        eligibleDueCount: 1,
+        completedCount: 1,
+        notCompletedCount: 0,
+        limitedHistoryDays: null,
+        todayIncluded: true,
+        occurrences: []
+      }
+    },
+    onTrack: {
+      kind: 'scored',
+      score: onTrack,
+      evidence: {
+        lastQualifyingCompletionDate: '2026-10-29',
+        missedOccurrenceCount: 0,
+        pointsPerMissedOccurrence: 10,
+        deduction: 0,
+        occurrences: [],
+        repeatedZeroScoreSpans: [],
+        scheduleChanges: []
+      }
+    },
+    healthScore: consistency * 0.75 + onTrack * 0.25
+  };
+}
+
 function ProfileHarness({
   personId = 'sample-person-avery',
+  category = 'friends',
+  initialDetails = [],
   initialNotes = [],
   failNoteUpdates = false,
   rhythms = [linkedRhythm, otherRhythm],
   archivedRhythms = [],
+  rhythmScores = new Map([[linkedRhythm.id, score]]),
   initialFriendships = createFriendshipData(),
   completed = false,
   onAddRhythm = vi.fn(),
@@ -80,10 +123,13 @@ function ProfileHarness({
   onEditPerson = vi.fn()
 }: {
   personId?: PersonId;
+  category?: 'marriage' | 'parenting' | 'friends' | null;
+  initialDetails?: readonly PersonDetails[];
   initialNotes?: readonly PersonNote[];
   failNoteUpdates?: boolean;
   rhythms?: readonly RhythmPreview[];
   archivedRhythms?: readonly RhythmPreview[];
+  rhythmScores?: ReadonlyMap<string, RhythmScoreResult>;
   initialFriendships?: FriendshipData;
   completed?: boolean;
   onAddRhythm?: (event: ReactMouseEvent<HTMLButtonElement>, personId: PersonId) => void;
@@ -97,7 +143,13 @@ function ProfileHarness({
 }) {
   const [friendships, setFriendships] = useState<FriendshipData>(initialFriendships);
   const [personNotes, setPersonNotes] = useState<PersonNote[]>([...initialNotes]);
-  const groups = setPersonGroupMembership(createPersonPickerGroups(), 'friends', 'sample-person-avery', true);
+  const emptyForPerson = createPersonPickerGroups().map(group => ({
+    ...group,
+    memberIds: group.memberIds.filter(id => id !== personId)
+  }));
+  const groups = category
+    ? setPersonGroupMembership(emptyForPerson, category, personId, true)
+    : emptyForPerson;
   return (
     <>
       <PersonProfileView
@@ -108,11 +160,12 @@ function ProfileHarness({
         rhythms={rhythms}
         archivedRhythms={archivedRhythms}
         foundations={foundationCatalogue}
-        rhythmScores={new Map([[linkedRhythm.id, score]])}
+        rhythmScores={rhythmScores}
         completedRhythms={completed ? new Set([linkedRhythm.id]) : new Set()}
         undoableRhythms={completed ? new Set([linkedRhythm.id]) : new Set()}
         onFriendshipsChange={setFriendships}
         onEditPerson={onEditPerson}
+        personDetails={initialDetails}
         personNotes={personNotes}
         onCreatePersonNote={(ownerId: PersonId, draft: PersonNoteDraft) => {
           const now = '2026-10-31T12:00:00.000Z';
@@ -192,7 +245,7 @@ describe('shared person profile', () => {
     expect(screen.getByRole('main', { name: 'Avery Brooks' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Avery Brooks' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Today with Avery Brooks' })).toBeTruthy();
-    expect(screen.getByText('Friends')).toBeTruthy();
+    expect(screen.getByText('Friend')).toBeTruthy();
     expect(screen.getByRole('article', { name: 'Avery and Morgan walk' })).toBeTruthy();
     expect(screen.queryByRole('article', { name: 'Jordan walk' })).toBeNull();
     expect(screen.getByText('Take a walk and talk.')).toBeTruthy();
@@ -221,7 +274,183 @@ describe('shared person profile', () => {
     expect(within(profile).queryByLabelText('More actions for Avery Brooks')).toBeNull();
     expect(within(profile).getByRole('tab', { name: 'Rhythms' })).toBeTruthy();
     expect(within(profile).getByRole('tab', { name: 'Connections' })).toBeTruthy();
-    expect(within(profile).getByRole('tab', { name: 'Notes' })).toBeTruthy();
+    expect(within(profile).getByRole('tab', { name: 'Prayer' })).toBeTruthy();
+  });
+
+  it('shows the resolved category and only supplied date and love-language badges', () => {
+    render(
+      <ProfileHarness
+        category="marriage"
+        initialDetails={[{
+          personId: 'sample-person-avery',
+          relationshipLabel: 'Spouse',
+          connectionStyle: 'qt',
+          birthday: { monthDay: '12-02' },
+          anniversary: { monthDay: '06-12', year: 2018 }
+        }]}
+        rhythms={[]}
+      />
+    );
+    expect(screen.getByText('Marriage')).toBeTruthy();
+    expect(screen.queryByText('Spouse')).toBeNull();
+    expect(screen.getByLabelText('Love language: Quality Time')).toBeTruthy();
+    expect(screen.getByLabelText('Birthday: Dec 2')).toBeTruthy();
+    expect(screen.getByLabelText('Anniversary: Jun 12')).toBeTruthy();
+    const overallHealth = screen.getByRole('region', { name: 'Overall Health summary' });
+    expect(within(overallHealth).getByRole('meter', { name: 'Overall Health score' })
+      .getAttribute('aria-valuetext')).toBe('Score unavailable');
+    expect(screen.getAllByText('—').length).toBeGreaterThan(1);
+    expect(screen.getByRole('tab', { name: 'Prayer' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Notes (0)' })).toBeTruthy();
+  });
+
+  it('shows two compact measures by default and preserves overall scores across tabs', async () => {
+    const user = userEvent.setup();
+    const rhythmScores = new Map<string, RhythmScoreResult>([
+      [linkedRhythm.id, scoredProfileRhythmScore(80.4, 100)]
+    ]);
+    render(<ProfileHarness rhythms={[linkedRhythm]} rhythmScores={rhythmScores} />);
+    const profile = screen.getByRole('main', { name: 'Avery Brooks' });
+    const overall = within(profile).getByRole('region', { name: 'Overall Health summary' });
+    const rhythmSummary = within(profile).getByRole('region', { name: 'Rhythm Health summary' });
+
+    expect(within(overall).getByRole('button', { name: 'Show Overall Health scoring explanation' })
+      .getAttribute('aria-expanded')).toBe('false');
+    expect(within(within(overall).getByRole('group', { name: 'Overall Health summary measures' }))
+      .getAllByRole('meter')).toHaveLength(2);
+    expect(within(within(rhythmSummary).getByRole('group', { name: 'Rhythm Health summary measures' }))
+      .getAllByRole('meter')).toHaveLength(2);
+    expect(within(overall).getByText('85')).toBeTruthy();
+    expect(within(rhythmSummary).getByText('85')).toBeTruthy();
+    expect(within(rhythmSummary).getByText('1 of 1 active associated Rhythms scored.')).toBeTruthy();
+
+    await user.click(within(profile).getByRole('tab', { name: 'Connections' }));
+    const connectionSummary = within(profile).getByRole('region', { name: 'Connection Health summary' });
+    expect(within(within(connectionSummary).getByRole('group', { name: 'Connection Health summary measures' }))
+      .getAllByRole('meter')).toHaveLength(2);
+    expect(within(connectionSummary).getByText('Connection scoring is not defined yet.')).toBeTruthy();
+    expect(within(overall).getByText('85')).toBeTruthy();
+    expect(within(profile).getByRole('heading', { name: 'Connections' })).toBeTruthy();
+
+    await user.click(within(profile).getByRole('tab', { name: 'Prayer' }));
+    const prayerSummary = within(profile).getByRole('region', { name: 'Prayer Health summary' });
+    expect(within(within(prayerSummary).getByRole('group', { name: 'Prayer Health summary measures' }))
+      .getAllByRole('meter')).toHaveLength(2);
+    expect(within(overall).getByText('85')).toBeTruthy();
+    expect(within(profile).getByRole('heading', { name: 'Prayer' })).toBeTruthy();
+  });
+
+  it('expands each Person Health summary independently and retains expansion through tabs and a child dialog', async () => {
+    const user = userEvent.setup();
+    const rhythmScores = new Map<string, RhythmScoreResult>([
+      [linkedRhythm.id, scoredProfileRhythmScore(80.4, 100)]
+    ]);
+    render(<ProfileHarness rhythms={[linkedRhythm]} rhythmScores={rhythmScores} />);
+    const profile = screen.getByRole('main', { name: 'Avery Brooks' });
+    const overall = within(profile).getByRole('region', { name: 'Overall Health summary' });
+    const overallToggle = within(overall).getByRole('button', { name: 'Show Overall Health scoring explanation' });
+    const overallDetails = document.getElementById(overallToggle.getAttribute('aria-controls')!)!;
+
+    expect(overallToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(overallDetails.hasAttribute('hidden')).toBe(true);
+    expect(Number(within(overall).getByRole('meter', { name: 'Overall Health score' })
+      .getAttribute('aria-valuenow'))).toBeCloseTo(85.3);
+    expect(within(overall).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('80.4');
+    expect(within(overall).getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('100');
+
+    overallToggle.focus();
+    await user.keyboard('{Enter}');
+    expect(overallToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(overallDetails.hasAttribute('hidden')).toBe(false);
+    expect(document.activeElement).toBe(overallToggle);
+    expect(within(overallDetails).getAllByRole('meter')).toHaveLength(3);
+    expect(Number(within(overallDetails).getByRole('meter', { name: 'Overall Health score' })
+      .getAttribute('aria-valuenow'))).toBeCloseTo(85.3);
+
+    const rhythmSummary = within(profile).getByRole('region', { name: 'Rhythm Health summary' });
+    const rhythmToggle = within(rhythmSummary).getByRole('button', { name: 'Show Rhythm Health scoring explanation' });
+    await user.click(rhythmToggle);
+    expect(rhythmToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(within(rhythmSummary).getByRole('meter', { name: 'Rhythm Health score' })
+      .getAttribute('aria-valuetext')).toBe('85 out of 100');
+
+    await user.click(within(profile).getByRole('tab', { name: 'Connections' }));
+    const connectionSummary = within(profile).getByRole('region', { name: 'Connection Health summary' });
+    const connectionToggle = within(connectionSummary).getByRole('button', { name: 'Show Connection Health scoring explanation' });
+    connectionToggle.focus();
+    await user.keyboard(' ');
+    expect(connectionToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(within(connectionSummary).queryByText(/excluded for missing measures/)).toBeNull();
+    expect(rhythmSummary.querySelector('button[aria-label="Hide Rhythm Health scoring explanation"]')
+      ?.getAttribute('aria-expanded')).toBe('true');
+    expect(within(overall).getByRole('button', { name: 'Hide Overall Health scoring explanation' })
+      .getAttribute('aria-expanded')).toBe('true');
+
+    await user.click(within(profile).getByRole('tab', { name: 'Prayer' }));
+    expect(connectionSummary.querySelector('button[aria-label="Hide Connection Health scoring explanation"]')
+      ?.getAttribute('aria-expanded')).toBe('true');
+    const prayerSummary = within(profile).getByRole('region', { name: 'Prayer Health summary' });
+    const prayerToggle = within(prayerSummary).getByRole('button', { name: 'Show Prayer Health scoring explanation' });
+    expect(prayerToggle.getAttribute('aria-expanded')).toBe('false');
+    await user.click(prayerToggle);
+    const addRequest = within(profile).getByRole('button', { name: 'Add prayer request' });
+    await user.click(addRequest);
+    expect(screen.getByRole('dialog', { name: 'Add prayer request' })).toBeTruthy();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Add prayer request' })).toBeNull();
+    expect(prayerToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(document.activeElement).toBe(addRequest);
+
+    prayerToggle.focus();
+    await user.keyboard('{Escape}');
+    expect(prayerToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(prayerToggle);
+    expect(within(overall).getByRole('button', { name: 'Hide Overall Health scoring explanation' })
+      .getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('scopes disclosure expansion to the current Person', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<ProfileHarness personId="sample-person-avery" />);
+    const firstToggle = screen.getByRole('button', { name: 'Show Overall Health scoring explanation' });
+    await user.click(firstToggle);
+    expect(firstToggle.getAttribute('aria-expanded')).toBe('true');
+
+    rerender(<ProfileHarness personId="sample-person-morgan" />);
+    expect(screen.getByRole('button', { name: 'Show Overall Health scoring explanation' })
+      .getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('keeps scored zero distinct from unavailable in compact and expanded summaries', async () => {
+    const user = userEvent.setup();
+    const rhythmScores = new Map<string, RhythmScoreResult>([
+      [linkedRhythm.id, scoredProfileRhythmScore(0, 0)]
+    ]);
+    render(<ProfileHarness rhythms={[linkedRhythm]} rhythmScores={rhythmScores} />);
+    const profile = screen.getByRole('main', { name: 'Avery Brooks' });
+    const overall = within(profile).getByRole('region', { name: 'Overall Health summary' });
+    expect(within(overall).getByRole('meter', { name: 'Overall Health score' })
+      .getAttribute('aria-valuenow')).toBe('0');
+    expect(within(overall).getByRole('meter', { name: 'Consistency score' })
+      .getAttribute('aria-valuenow')).toBe('0');
+    expect(within(overall).getByRole('meter', { name: 'On Track score' })
+      .getAttribute('aria-valuenow')).toBe('0');
+
+    await user.click(within(overall).getByRole('button', { name: 'Show Overall Health scoring explanation' }));
+    const details = screen.getByRole('region', { name: 'Overall Health scoring explanation' });
+    expect(within(details).getByRole('meter', { name: 'Overall Health score' })
+      .getAttribute('aria-valuenow')).toBe('0');
+    expect(within(details).getAllByRole('meter')).toHaveLength(3);
+  });
+
+  it('omits category and metadata badges when no values are supplied', () => {
+    render(<ProfileHarness personId="sample-person-morgan" category={null} rhythms={[]} />);
+    expect(screen.queryByText('Marriage')).toBeNull();
+    expect(screen.queryByText('Parenting')).toBeNull();
+    expect(screen.queryByText('Friend')).toBeNull();
+    expect(screen.queryByLabelText(/^Love language:/)).toBeNull();
+    expect(screen.queryByLabelText(/^Birthday:/)).toBeNull();
+    expect(screen.queryByLabelText(/^Anniversary:/)).toBeNull();
   });
 
   it('exposes the shared person-owned cadence control on an uncategorized profile', async () => {
@@ -378,16 +607,21 @@ describe('shared person profile', () => {
     expect(document.activeElement).toBe(connectionsTab);
     expect(connectionsTab.getAttribute('aria-selected')).toBe('true');
     await user.keyboard('{ArrowRight}');
-    const notesTab = screen.getByRole('tab', { name: 'Notes' });
-    expect(document.activeElement).toBe(notesTab);
+    const prayerTab = screen.getByRole('tab', { name: 'Prayer' });
+    expect(document.activeElement).toBe(prayerTab);
     await user.keyboard('{ArrowLeft}');
     expect(document.activeElement).toBe(connectionsTab);
     await user.keyboard('{Home}');
     expect(document.activeElement).toBe(rhythmsTab);
     expect(rhythmsTab.getAttribute('aria-selected')).toBe('true');
     await user.keyboard('{End}');
-    expect(document.activeElement).toBe(notesTab);
-    expect(notesTab.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(prayerTab);
+    expect(prayerTab.getAttribute('aria-selected')).toBe('true');
+    await user.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(rhythmsTab);
+    expect(rhythmsTab.getAttribute('aria-selected')).toBe('true');
+    await user.keyboard('{ArrowLeft}');
+    expect(document.activeElement).toBe(prayerTab);
     await user.click(within(profile).getByRole('button', { name: 'Back to previous page' }));
     expect(close).toHaveBeenCalledOnce();
   });
@@ -395,11 +629,12 @@ describe('shared person profile', () => {
   it('creates, shares, edits and deletes a plain-text note through the shared profile', async () => {
     const user = userEvent.setup();
     render(<ProfileHarness rhythms={[]} />);
-    const profileTabs = screen.getByRole('tablist', { name: 'Avery Brooks profile' });
-    const notesTab = within(profileTabs).getByRole('tab', { name: 'Notes' });
-    await user.click(notesTab);
-    expect(notesTab.getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('tabpanel', { name: 'Notes' })).toBeTruthy();
+    const notesButton = screen.getByRole('button', { name: 'Notes (0)' });
+    await user.click(notesButton);
+    expect(screen.getByRole('region', { name: 'Notes' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Return to profile tabs' }));
+    expect(document.activeElement).toBe(notesButton);
+    await user.click(notesButton);
     expect(screen.getByText('No notes yet. Add a note to keep something meaningful in view.')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Notes (0)' })).toBeTruthy();
 
@@ -466,7 +701,7 @@ describe('shared person profile', () => {
       updatedAt: '2026-10-30T12:00:00.000Z'
     };
     render(<ProfileHarness personId="sample-person-morgan" initialNotes={[sharedNote]} rhythms={[]} />);
-    await user.click(screen.getByRole('tab', { name: 'Notes' }));
+    await user.click(screen.getByRole('button', { name: 'Notes (1)' }));
     expect(screen.getByRole('heading', { name: 'Notes (1)' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: /Open note updated/ }));
     expect(screen.getByText(/Primary person: Avery Brooks/)).toBeTruthy();
@@ -498,7 +733,7 @@ describe('shared person profile', () => {
       updatedAt: '2026-10-30T12:00:00.000Z'
     };
     render(<ProfileHarness initialNotes={[sharedNote]} rhythms={[]} failNoteUpdates />);
-    await user.click(screen.getByRole('tab', { name: 'Notes' }));
+    await user.click(screen.getByRole('button', { name: 'Notes (1)' }));
     const addButton = screen.getByRole('button', { name: 'Add note' });
     await user.click(addButton);
     const addEditor = screen.getByRole('dialog', { name: 'Add note for Avery Brooks' });

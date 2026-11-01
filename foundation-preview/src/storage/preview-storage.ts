@@ -33,6 +33,7 @@ import {
   PREVIEW_V29_RECOVERY_KEY,
   PREVIEW_V30_RECOVERY_KEY,
   PREVIEW_V31_RECOVERY_KEY,
+  PREVIEW_V32_RECOVERY_KEY,
   preserveProposedV4SourceRecovery,
   proposedV4SourceVersionForRaw
 } from './preview-v4-recovery.ts';
@@ -68,7 +69,8 @@ export {
   PREVIEW_V28_RECOVERY_KEY,
   PREVIEW_V29_RECOVERY_KEY,
   PREVIEW_V30_RECOVERY_KEY,
-  PREVIEW_V31_RECOVERY_KEY
+  PREVIEW_V31_RECOVERY_KEY,
+  PREVIEW_V32_RECOVERY_KEY
 };
 
 export const PREVIEW_CATEGORY_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:v32-category-recovery`;
@@ -153,6 +155,16 @@ export function writePreview(
                   ? recovery.message
                   : recovery.message
           };
+        }
+        if (source.valid && source.resolvedPersonCategories > 0) {
+          const categoryRecovery = storage.getItem(PREVIEW_CATEGORY_RECOVERY_KEY);
+          if (categoryRecovery !== null && categoryRecovery !== expectedRaw) {
+            return {
+              kind: 'error',
+              message: 'The immutable category-resolution recovery copy already contains different data. No preview write was made.'
+            };
+          }
+          if (categoryRecovery === null) storage.setItem(PREVIEW_CATEGORY_RECOVERY_KEY, expectedRaw);
         }
       } else if (source.valid && source.resolvedPersonCategories > 0) {
         const recovery = storage.getItem(PREVIEW_CATEGORY_RECOVERY_KEY);
@@ -424,6 +436,14 @@ export function loadV30RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadRe
 export function loadV31RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
   try {
     return { kind: 'loaded', raw: storage.getItem(PREVIEW_V31_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV32RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V32_RECOVERY_KEY) };
   } catch (error) {
     return { kind: 'error', message: errorMessage(error) };
   }
