@@ -34,6 +34,7 @@ In **Authentication → URL Configuration**:
 - Add `https://steveotto.github.io/tend/` to the redirect allow list.
 - For local development, add both `http://localhost:8000/` and `http://127.0.0.1:8000/`.
 - Keep confirmation and password-recovery redirects within those app URLs. Tend handles Supabase's email callback in the static app; no server-side route is required.
+- The deployed Preview Pages root is `https://tend-beta-3gb.pages.dev/`. It must be an allowed redirect URL for Preview password recovery. Keep the existing Classic **Site URL** and redirects unchanged; this is an additional allow-list entry, not a Site URL replacement. Do not allow arbitrary branch-preview hosts. Preview recovery sends `resetPasswordForEmail` to the current Preview origin root, while Classic recovery continues to use `https://steveotto.github.io/tend/`.
 
 Run locally with `python3 -m http.server 8000` from the repository root, then visit `http://localhost:8000/`.
 

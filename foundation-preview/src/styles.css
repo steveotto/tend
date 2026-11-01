@@ -5123,8 +5123,46 @@ a:focus-visible {
   opacity: 0.6;
 }
 
+.preview-login__text-button,
+.preview-login__primary-action {
+  min-height: 44px;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: var(--forest, #24694b);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.preview-login__primary-action {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 20px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--forest, #24694b);
+  color: #fff;
+  text-align: center;
+  text-decoration: none;
+}
+
+.preview-login__text-button:focus-visible,
+.preview-login__primary-action:focus-visible {
+  outline: 3px solid var(--forest, #24694b);
+  outline-offset: 3px;
+}
+
+.preview-login__status {
+  color: var(--forest, #24694b);
+  line-height: 1.5;
+}
+
 .preview-login__error {
   color: #a33426;
+  line-height: 1.5;
 }
 
 .preview-login__classic {

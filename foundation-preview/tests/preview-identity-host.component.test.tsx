@@ -12,8 +12,14 @@ import { installMemoryStorage } from './memory-storage.ts';
 const accountId = 'a0000000-0000-4000-8000-000000000001';
 const session: PreviewSession = { user: { id: accountId } };
 
-function fakeAuth(initialSession: PreviewSession | null = null) {
+function fakeAuth(
+  initialSession: PreviewSession | null = null,
+  updateError: { message: string } | null = null,
+  resetError: { message: string } | null = null
+) {
   let callback: ((event: string, value: PreviewSession | null) => void) | null = null;
+  const resetPasswordForEmail = vi.fn(async () => ({ error: resetError }));
+  const updateUser = vi.fn(async () => ({ error: updateError }));
   const signInWithPassword = vi.fn(async () => {
     callback?.('SIGNED_IN', session);
     return { data: { session }, error: null };
@@ -30,6 +36,8 @@ function fakeAuth(initialSession: PreviewSession | null = null) {
         return { data: { subscription: { unsubscribe: vi.fn() } } };
       },
       signInWithPassword,
+      resetPasswordForEmail,
+      updateUser,
       signOut
     }
   };
@@ -41,14 +49,18 @@ function fakeAuth(initialSession: PreviewSession | null = null) {
   return {
     clientFactory,
     factoryOptions,
+    resetPasswordForEmail,
+    updateUser,
     signInWithPassword,
     signOut,
-    emitSession: (value: PreviewSession | null) => callback?.('INITIAL_SESSION', value)
+    emitSession: (value: PreviewSession | null) => callback?.('INITIAL_SESSION', value),
+    emitEvent: (event: string, value: PreviewSession | null) => callback?.(event, value)
   };
 }
 
 afterEach(() => {
   cleanup();
+  window.history.replaceState(null, '', '/');
   vi.restoreAllMocks();
 });
 
@@ -143,5 +155,112 @@ describe('PreviewIdentityHost', () => {
 
     await screen.findByRole('button', { name: 'Sign out' });
     expect(screen.queryByRole('heading', { name: 'Sign in with Tend' })).toBeNull();
+  });
+
+  it('sends password-reset requests back to the Preview root without revealing account existence', async () => {
+    installMemoryStorage();
+    const auth = fakeAuth();
+    const user = userEvent.setup();
+    render(
+      <PreviewIdentityHost
+        accessReady
+        supabaseUrl="https://project.supabase.co"
+        supabasePublishableKey="synthetic-public-key"
+        clientFactory={auth.clientFactory}
+      />
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Forgot password?' }));
+    await user.type(screen.getByRole('textbox', { name: 'Email address' }), 'synthetic@example.test');
+    await user.click(screen.getByRole('button', { name: 'Send reset link' }));
+
+    expect((await screen.findByRole('status')).textContent).toContain(
+      'If that email belongs to a Tend account, a password-reset link has been sent.'
+    );
+    expect(auth.resetPasswordForEmail).toHaveBeenCalledWith(
+      'synthetic@example.test',
+      { redirectTo: `${window.location.origin}/` }
+    );
+  });
+
+  it('routes a recovery session to confirmed new-password fields and updates without the old password', async () => {
+    window.history.replaceState(null, '', '/#access_token=synthetic-token&type=recovery&token_type=bearer');
+    installMemoryStorage();
+    const auth = fakeAuth();
+    const user = userEvent.setup();
+    render(
+      <PreviewIdentityHost
+        accessReady
+        supabaseUrl="https://project.supabase.co"
+        supabasePublishableKey="synthetic-public-key"
+        clientFactory={auth.clientFactory}
+      />
+    );
+    await screen.findByRole('heading', { name: 'Sign in with Tend' });
+
+    act(() => auth.emitEvent('PASSWORD_RECOVERY', session));
+    expect(await screen.findByRole('heading', { name: 'Choose a new password' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull();
+    expect(window.location.hash).toBe('');
+    act(() => auth.emitEvent('TOKEN_REFRESHED', session));
+    expect(screen.getByRole('heading', { name: 'Choose a new password' })).toBeTruthy();
+
+    await user.type(screen.getByLabelText('New password'), 'synthetic-new-password');
+    await user.type(screen.getByLabelText('Confirm password'), 'different-password');
+    await user.click(screen.getByRole('button', { name: 'Save new password' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('The passwords do not match.');
+    expect(auth.updateUser).not.toHaveBeenCalled();
+
+    await user.clear(screen.getByLabelText('Confirm password'));
+    await user.type(screen.getByLabelText('Confirm password'), 'synthetic-new-password');
+    await user.click(screen.getByRole('button', { name: 'Save new password' }));
+    expect(await screen.findByRole('heading', { name: 'Your password is updated' })).toBeTruthy();
+    expect(auth.updateUser).toHaveBeenCalledWith({ password: 'synthetic-new-password' });
+    expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull();
+  });
+
+  it('retains the recovery form and gives a safe message when Supabase rejects the password update', async () => {
+    installMemoryStorage();
+    const auth = fakeAuth(null, { message: 'synthetic failure' });
+    const user = userEvent.setup();
+    render(
+      <PreviewIdentityHost
+        accessReady
+        supabaseUrl="https://project.supabase.co"
+        supabasePublishableKey="synthetic-public-key"
+        clientFactory={auth.clientFactory}
+      />
+    );
+    await screen.findByRole('heading', { name: 'Sign in with Tend' });
+    act(() => auth.emitEvent('PASSWORD_RECOVERY', session));
+
+    await user.type(screen.getByLabelText('New password'), 'synthetic-new-password');
+    await user.type(screen.getByLabelText('Confirm password'), 'synthetic-new-password');
+    await user.click(screen.getByRole('button', { name: 'Save new password' }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'We could not update your password. The reset link may have expired; request a new one and try again.'
+    );
+    expect(screen.getByRole('heading', { name: 'Choose a new password' })).toBeTruthy();
+    expect(auth.updateUser).toHaveBeenCalledWith({ password: 'synthetic-new-password' });
+  });
+
+  it('shows an invalid-link recovery state for expired Supabase callbacks without logging in', async () => {
+    window.history.replaceState(null, '', '/#error=access_denied&error_code=otp_expired&type=recovery');
+    installMemoryStorage();
+    const auth = fakeAuth();
+    render(
+      <PreviewIdentityHost
+        accessReady
+        supabaseUrl="https://project.supabase.co"
+        supabasePublishableKey="synthetic-public-key"
+        clientFactory={auth.clientFactory}
+      />
+    );
+
+    expect(await screen.findByRole('heading', { name: 'This reset link can’t be used' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull();
+    expect(window.location.hash).toBe('');
+    expect(auth.clientFactory).toHaveBeenCalled();
   });
 });

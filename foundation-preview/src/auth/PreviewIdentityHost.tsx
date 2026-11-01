@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { App } from '../App.tsx';
 import { createAuthenticatedPreviewIdentity } from '../domain/preview-identity.ts';
 import type { PreviewIdentityState } from '../domain/preview-identity.ts';
@@ -16,6 +17,8 @@ export type PreviewAuthClient = {
     signInWithPassword(credentials: { email: string; password: string }): Promise<AuthResult & {
       data?: { session: PreviewSession | null };
     }>;
+    resetPasswordForEmail(email: string, options: { redirectTo: string }): Promise<AuthResult>;
+    updateUser(attributes: { password: string }): Promise<AuthResult>;
     signOut(options: { scope: 'local' }): Promise<AuthResult>;
   };
 };
@@ -56,9 +59,13 @@ export function PreviewIdentityHost({
   const [identity, setIdentity] = useState<PreviewIdentityState>({ kind: 'pending' });
   const [client, setClient] = useState<PreviewAuthClient | null>(null);
   const [authMessage, setAuthMessage] = useState('');
+  const [authScreen, setAuthScreen] = useState<PreviewAuthScreen>('sign-in');
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isRequestingReset, setIsRequestingReset] = useState(false);
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
   const activeUserId = useRef<string | null>(null);
+  const recoveryUserId = useRef<string | null>(null);
   const sessionGeneration = useRef(0);
   const suppressSessionCallbacks = useRef(false);
 
@@ -77,6 +84,11 @@ export function PreviewIdentityHost({
     }
 
     let active = true;
+    if (hasRecoveryLinkError(window.location)) {
+      setAuthScreen('recovery-error');
+      clearRecoveryFragment();
+    }
+
     let authClient: PreviewAuthClient;
     try {
       authClient = factory(authUrl, supabasePublishableKey.trim(), {
@@ -89,15 +101,25 @@ export function PreviewIdentityHost({
         }
       });
       setClient(authClient);
-      const { data: { subscription } } = authClient.auth.onAuthStateChange((_event, session) => {
+      const { data: { subscription } } = authClient.auth.onAuthStateChange((event, session) => {
         if (!active) return;
         if (session && suppressSessionCallbacks.current) return;
         const userId = session?.user?.id ?? null;
         if (userId !== activeUserId.current) {
           sessionGeneration.current += 1;
           activeUserId.current = userId;
+          recoveryUserId.current = null;
+        }
+        if (event === 'PASSWORD_RECOVERY' && session) {
+          recoveryUserId.current = userId;
+          setIdentity({ kind: 'pending' });
+          setAuthMessage('');
+          setAuthScreen('recovery');
+          clearRecoveryFragment();
+          return;
         }
         if (!session) {
+          recoveryUserId.current = null;
           setIdentity({ kind: 'signed-out' });
           return;
         }
@@ -144,11 +166,66 @@ export function PreviewIdentityHost({
     }
   }
 
+  async function requestPasswordReset(email: string) {
+    if (!client || isSigningIn || isSigningOut) return;
+    setIsRequestingReset(true);
+    setAuthMessage('');
+    try {
+      const result = await client.auth.resetPasswordForEmail(email, {
+        redirectTo: new URL('/', window.location.origin).toString()
+      });
+      if (result.error) {
+        setAuthMessage('We could not send a reset email right now. Try again shortly.');
+        return;
+      }
+      setAuthMessage('If that email belongs to a Tend account, a password-reset link has been sent.');
+    } catch {
+      setAuthMessage('We could not send a reset email right now. Check your connection and try again.');
+    } finally {
+      setIsRequestingReset(false);
+    }
+  }
+
+  async function updatePassword(password: string, confirmation: string) {
+    if (!client || isSavingPassword || isSigningOut) return;
+    if (password.length < 8) {
+      setAuthMessage('Use a password with at least 8 characters.');
+      return;
+    }
+    if (password !== confirmation) {
+      setAuthMessage('The passwords do not match. Check both fields and try again.');
+      return;
+    }
+    if (!activeUserId.current || recoveryUserId.current !== activeUserId.current) {
+      setAuthMessage('This reset link is no longer active. Request a new password-reset link.');
+      setAuthScreen('recovery-error');
+      return;
+    }
+
+    setIsSavingPassword(true);
+    setAuthMessage('');
+    try {
+      const result = await client.auth.updateUser({ password });
+      if (result.error) {
+        setAuthMessage('We could not update your password. The reset link may have expired; request a new one and try again.');
+        return;
+      }
+      recoveryUserId.current = null;
+      setIdentity(createAuthenticatedPreviewIdentity(activeUserId.current, sessionGeneration.current));
+      setAuthScreen('password-updated');
+    } catch {
+      setAuthMessage('We could not update your password. Check your connection and try again.');
+    } finally {
+      setIsSavingPassword(false);
+    }
+  }
+
   async function signOut() {
     const currentClient = client;
     suppressSessionCallbacks.current = true;
     sessionGeneration.current += 1;
     activeUserId.current = null;
+    recoveryUserId.current = null;
     setIdentity({ kind: 'signed-out' });
     setAuthMessage('');
     if (!currentClient) return;
@@ -187,6 +264,66 @@ export function PreviewIdentityHost({
       />
     );
   }
+  if (authScreen === 'recovery') {
+    return (
+      <PreviewAuthLayout
+        title="Choose a new password"
+        description="Create a new password for your Tend account."
+      >
+        <form
+          className="preview-login__form"
+          onSubmit={event => {
+            event.preventDefault();
+            const form = new FormData(event.currentTarget);
+            void updatePassword(
+              String(form.get('password') ?? ''),
+              String(form.get('confirmPassword') ?? '')
+            );
+          }}
+        >
+          <label>
+            New password
+            <input name="password" type="password" autoComplete="new-password" minLength={8} required />
+          </label>
+          <label>
+            Confirm password
+            <input name="confirmPassword" type="password" autoComplete="new-password" minLength={8} required />
+          </label>
+          <button type="submit" disabled={!client || isSavingPassword || isSigningOut}>
+            {isSavingPassword ? 'Saving password…' : 'Save new password'}
+          </button>
+        </form>
+        {authMessage && <p className="preview-login__error" role="alert">{authMessage}</p>}
+      </PreviewAuthLayout>
+    );
+  }
+  if (authScreen === 'recovery-error') {
+    return (
+      <PreviewAuthLayout
+        title="This reset link can’t be used"
+        description="It may have expired or already been used. Return to sign in and request a new password-reset link."
+      >
+        <button className="preview-login__text-button" type="button" onClick={() => {
+          setAuthMessage('');
+          setAuthScreen('sign-in');
+        }}>
+          Back to sign in
+        </button>
+      </PreviewAuthLayout>
+    );
+  }
+  if (authScreen === 'password-updated') {
+    return (
+      <PreviewAuthLayout
+        title="Your password is updated"
+        description="Your new password is ready. Continue to your separate Preview workspace."
+      >
+        <button className="preview-login__primary-action" type="button" onClick={() => setAuthScreen('sign-in')}>
+          Continue to Preview
+        </button>
+      </PreviewAuthLayout>
+    );
+  }
   if (identity.kind === 'pending') {
     return <PreviewAccessNotice title="Checking Tend sign-in" message="No Preview account data has been opened." />;
   }
@@ -197,12 +334,44 @@ export function PreviewIdentityHost({
     return <PreviewAccessNotice title="Preview sign-in is unavailable" message={identity.message} />;
   }
 
+  if (authScreen === 'request-reset') {
+    return (
+      <PreviewAuthLayout
+        title="Reset your password"
+        description="We’ll email a secure reset link if there is an account for that address."
+      >
+        <form
+          className="preview-login__form"
+          onSubmit={event => {
+            event.preventDefault();
+            const form = new FormData(event.currentTarget);
+            void requestPasswordReset(String(form.get('email') ?? '').trim());
+          }}
+        >
+          <label>
+            Email address
+            <input name="email" type="email" autoComplete="email" required />
+          </label>
+          <button type="submit" disabled={!client || isRequestingReset || isSigningOut}>
+            {isRequestingReset ? 'Sending link…' : 'Send reset link'}
+          </button>
+        </form>
+        {authMessage && <p className="preview-login__status" role="status">{authMessage}</p>}
+        <button className="preview-login__text-button" type="button" onClick={() => {
+          setAuthMessage('');
+          setAuthScreen('sign-in');
+        }}>
+          Back to sign in
+        </button>
+      </PreviewAuthLayout>
+    );
+  }
+
   return (
-    <main className="preview-login" aria-labelledby="preview-login-title">
-      <section className="preview-login__card">
-        <p className="preview-login__eyebrow">Tend Preview</p>
-        <h1 id="preview-login-title">Sign in with Tend</h1>
-        <p>Use your existing Tend email and password. Preview keeps a separate local copy on this device.</p>
+    <PreviewAuthLayout
+      title="Sign in with Tend"
+      description="Use your existing Tend email and password. Preview keeps a separate local copy on this device."
+    >
         <form
           className="preview-login__form"
           onSubmit={event => {
@@ -224,6 +393,34 @@ export function PreviewIdentityHost({
           </button>
         </form>
         {authMessage && <p className="preview-login__error" role="alert">{authMessage}</p>}
+        <button className="preview-login__text-button" type="button" onClick={() => {
+          setAuthMessage('');
+          setAuthScreen('request-reset');
+        }}>
+          Forgot password?
+        </button>
+    </PreviewAuthLayout>
+  );
+}
+
+type PreviewAuthScreen = 'sign-in' | 'request-reset' | 'recovery' | 'recovery-error' | 'password-updated';
+
+function PreviewAuthLayout({
+  title,
+  description,
+  children
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <main className="preview-login" aria-labelledby="preview-login-title">
+      <section className="preview-login__card">
+        <p className="preview-login__eyebrow">Tend Preview</p>
+        <h1 id="preview-login-title">{title}</h1>
+        <p>{description}</p>
+        {children}
         <p className="preview-login__classic">
           Need account help? <a href={classicUrl}>Open Tend Classic</a>
         </p>
@@ -240,6 +437,22 @@ function PreviewAccessNotice({ title, message }: { title: string; message: strin
       <p><a href={classicUrl}>Open Tend Classic</a></p>
     </main>
   );
+}
+
+function hasRecoveryLinkError(location: Location): boolean {
+  const search = new URLSearchParams(location.search);
+  const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+  const error = search.get('error') ?? hash.get('error');
+  const errorCode = search.get('error_code') ?? hash.get('error_code');
+  const type = search.get('type') ?? hash.get('type');
+  return Boolean(error || errorCode) && (type === 'recovery' || errorCode === 'otp_expired' || errorCode === 'access_denied');
+}
+
+function clearRecoveryFragment() {
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  if (hash.has('type') || hash.has('error') || hash.has('error_code')) {
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+  }
 }
 
 function validatedSupabaseUrl(value: string): string | null {
