@@ -12,6 +12,7 @@ import { cardioGoalSettings, validateCardioDataShape } from './cardio.ts';
 import type { CardioRun } from './cardio.ts';
 import { createFriendshipData } from './friendships.ts';
 import type { ConnectionCadence, FriendshipConnection } from './friendships.ts';
+import { resolvePersonCategoryGroups } from './person-categories.ts';
 import { validatePersonNotesCollection } from './person-notes.ts';
 import type { PersonNote } from './person-notes.ts';
 import { isValidTimeZone, rhythmTimeLabel, rhythmTimeValueFromLegacyLabel } from './rhythm-schedule.ts';
@@ -63,6 +64,7 @@ export type LegacyImportReport = {
   ambiguous: LegacyImportIssue[];
   invalid: LegacyImportIssue[];
   excluded: LegacyImportExclusion[];
+  resolvedCategoryConflicts: number;
   remappedIds: number;
   remappedRhythmIds: number;
 };
@@ -325,6 +327,7 @@ export function analyzeLegacyTendImport(originalText: string, currentDate: strin
     ambiguous: [],
     invalid: [],
     excluded: [],
+    resolvedCategoryConflicts: 0,
     remappedIds: 0,
     remappedRhythmIds: 0
   };
@@ -1317,10 +1320,17 @@ export function analyzeLegacyTendImport(originalText: string, currentDate: strin
   }
 
   candidate.personDetails = details;
-  candidate.peopleGroups = candidate.peopleGroups.map(group => ({
+  const importedGroups = candidate.peopleGroups.map(group => ({
     ...group,
     memberIds: groups.get(group.id) ?? []
   }));
+  const resolvedCategories = resolvePersonCategoryGroups(importedGroups);
+  candidate.peopleGroups = resolvedCategories.groups;
+  report.resolvedCategoryConflicts = resolvedCategories.resolvedPeople;
+  report.supported.classifications = candidate.peopleGroups.reduce(
+    (total, group) => total + group.memberIds.length,
+    0
+  );
   const validation = validatePreviewEnvelope(createPreviewEnvelope(candidate), currentDate);
   if (!validation.valid) addIssue(report.invalid, '/people');
 

@@ -11,8 +11,10 @@ import {
   createPersonPickerGroups,
   migrateLegacyFriendIdsIntoPeopleGroups,
   validatePeopleCollection,
-  validatePersonPickerGroups
+  validatePersonPickerGroups,
+  validatePersonPickerGroupsStructure
 } from './preview-data.ts';
+import { resolvePersonCategoryGroups } from './person-categories.ts';
 import type { PersonPreview } from './preview-data.ts';
 import type { ActiveRhythmCompletion, DatedRhythmCompletion, RhythmCompletionRecord } from './rhythm-completion.ts';
 import { localDateTimeInZone } from './rhythm-completion.ts';
@@ -125,7 +127,7 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32; resolvedPersonCategories: number }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
 const goalKeys = [
@@ -881,14 +883,21 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   if ((isV19 && !legacyFriendships) || !validateFriendshipData(friendships, people.map(person => person.id))) {
     return { valid: false, kind: 'invalid', message: 'Friendships contain invalid people, cadence settings, or connection records.' };
   }
-  const peopleGroups = isV20 || isV21 || isV22 || isV23 || isV24 || isV25 || isV26 || isV27 || isV28 || isV29 || isV30 || isV31 || isV32
+  const peopleGroupsInput = isV20 || isV21 || isV22 || isV23 || isV24 || isV25 || isV26 || isV27 || isV28 || isV29 || isV30 || isV31 || isV32
     ? value.data.peopleGroups
     : migrateLegacyFriendIdsIntoPeopleGroups(
-        createPersonPickerGroups(),
+        legacyFriendships
+          ? createPersonPickerGroups().map(group => ({ ...group, memberIds: [] }))
+          : createPersonPickerGroups(),
         legacyFriendships ? getLegacyFriendIdsV19(legacyFriendships) : []
       );
-  if (!validatePersonPickerGroups(peopleGroups, people)) {
+  if (!validatePersonPickerGroupsStructure(peopleGroupsInput, people)) {
     return { valid: false, kind: 'invalid', message: 'People categories must contain unique known people.' };
+  }
+  const resolvedCategories = resolvePersonCategoryGroups(peopleGroupsInput);
+  const peopleGroups = resolvedCategories.groups;
+  if (!validatePersonPickerGroups(peopleGroups, people)) {
+    return { valid: false, kind: 'invalid', message: 'People categories must contain one category per person.' };
   }
   const personDetails = isV29 || isV30 || isV31 || isV32 ? value.data.personDetails : [];
   if (!validatePersonDetailsCollection(personDetails, currentDate, people.map(person => person.id))) {
@@ -937,7 +946,8 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   return {
     valid: true,
     envelope: createPreviewEnvelope(envelopeData),
-    sourceSchemaVersion: value.schemaVersion
+    sourceSchemaVersion: value.schemaVersion,
+    resolvedPersonCategories: resolvedCategories.resolvedPeople
   };
 }
 

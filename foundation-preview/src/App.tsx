@@ -29,7 +29,8 @@ import { useTodayWeather } from './components/useTodayWeather.ts';
 import type { TodayFocusId } from './domain/today-plan.ts';
 import { HealthFitnessView } from './components/HealthFitnessView.tsx';
 import { FriendshipsView } from './components/FriendshipsView.tsx';
-import { connectionCadences, setFriendCadence } from './domain/friendships.ts';
+import { connectionCadences, setPersonConnectionCadence } from './domain/friendships.ts';
+import { resolvePersonCategory, resolvePersonCategoryGroups, setPersonCategory } from './domain/person-categories.ts';
 import {
   marriageRhythms,
   foundationCatalogue,
@@ -39,7 +40,6 @@ import {
   parentingRhythmSuggestions,
   personById,
   peopleForRhythm,
-  setPersonGroupMembership,
   todayRhythms,
   type CategoryRhythmSuggestionGroupDefinition,
   type CategoryRhythmSuggestionTemplate,
@@ -475,9 +475,12 @@ export function App() {
     : previewData.friendships.cadenceSettings.find(item => item.personId === personDetailsEditorId)?.cadence ?? null;
   const selectedDetailsEditorCategoryIds = personDetailsEditorId === null
     ? []
-    : previewData.peopleGroups
-        .filter(group => group.memberIds.includes(personDetailsEditorId))
-        .map(group => group.id);
+    : [resolvePersonCategory(
+        previewData.peopleGroups
+          .filter(group => group.memberIds.includes(personDetailsEditorId))
+          .map(group => group.id)
+      )].filter((category): category is PersonPickerGroupId => category !== null);
+  const resolvedPeopleGroups = resolvePersonCategoryGroups(previewData.peopleGroups).groups;
   const profileRhythmCandidates = [...new Map(
     [...editableTodayRhythms, ...userRhythms].map(rhythm => [rhythm.id, rhythm])
   ).values()];
@@ -990,13 +993,11 @@ export function App() {
     person: PersonPreview,
     groupIds: readonly PersonPickerGroupId[]
   ): string | null {
+    if (groupIds.length > 1) return 'Choose one category for this person.';
     if (previewData.people.some(item => item.id === person.id)) {
       return 'This person ID already exists. No changes were saved.';
     }
-    let peopleGroups = previewData.peopleGroups;
-    for (const groupId of groupIds) {
-      peopleGroups = setPersonGroupMembership(peopleGroups, groupId, person.id, true);
-    }
+    const peopleGroups = setPersonCategory(previewData.peopleGroups, person.id, groupIds[0] ?? null);
     return persistSeasonHistory({
       ...previewData,
       people: [...previewData.people, person],
@@ -1008,19 +1009,16 @@ export function App() {
     const result = savePersonDetailsCommand(previewData.personDetails, personId, draft, currentDate);
     if (!result.valid) return Object.values(result.errors)[0] ?? 'Person details are invalid.';
     let peopleGroups = previewData.peopleGroups;
-    for (const group of previewData.peopleGroups) {
-      peopleGroups = setPersonGroupMembership(
-        peopleGroups,
-        group.id,
-        personId,
-        draft.categoryIds.includes(group.id)
-      );
+    if (draft.categoryChanged) {
+      peopleGroups = setPersonCategory(peopleGroups, personId, draft.categoryIds[0] ?? null);
     }
     const cadence = connectionCadences.find(item => item === draft.connectionCadence) ?? null;
-    const isFriend = draft.categoryIds.includes('friends');
-    const friendships = isFriend
-      ? setFriendCadence(previewData.friendships, personId, cadence, currentDate)
-      : previewData.friendships;
+    const friendships = setPersonConnectionCadence(
+      previewData.friendships,
+      personId,
+      cadence,
+      currentDate
+    );
     return persistSeasonHistory({
       ...previewData,
       personDetails: result.details,
@@ -2537,7 +2535,7 @@ export function App() {
               <FriendshipsView
                 data={previewData.friendships}
                 people={previewData.people}
-                peopleGroups={previewData.peopleGroups}
+                peopleGroups={resolvedPeopleGroups}
                 personDetails={previewData.personDetails}
                 today={localDateInTimeZone(new Date(), localTimeZone)}
                 rhythms={friendshipCategoryRhythms}
@@ -2576,7 +2574,7 @@ export function App() {
             ? (
               <PeopleView
                 people={previewData.people}
-                groups={previewData.peopleGroups}
+                groups={resolvedPeopleGroups}
                 friendships={previewData.friendships}
                 today={currentDate}
                 personDetails={previewData.personDetails}
@@ -2592,7 +2590,7 @@ export function App() {
           personId={selectedProfilePerson.id}
           people={previewData.people}
           returnLabel={destination === 'today' ? 'Today' : destinationLabels[destination]}
-          peopleGroups={previewData.peopleGroups}
+          peopleGroups={resolvedPeopleGroups}
           personDetails={previewData.personDetails}
           personNotes={previewData.personNotes}
           friendships={previewData.friendships}
@@ -2820,7 +2818,7 @@ export function App() {
               ?? rhythmEditor.rhythm?.createdTimeZone
               ?? Intl.DateTimeFormat().resolvedOptions().timeZone
           )}
-          peopleGroups={previewData.peopleGroups}
+          peopleGroups={resolvedPeopleGroups}
           hasDatedCompletionHistory={
             previewData.rhythmHistoryIds.includes(rhythmEditor.id)
             || (rhythmEditor.rhythm?.completionHistory?.length ?? 0) > 0

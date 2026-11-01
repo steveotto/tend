@@ -26,7 +26,8 @@ describe('People creation', () => {
     await user.click(screen.getByRole('button', { name: 'Add person' }));
     const dialog = screen.getByRole('dialog');
     await user.type(within(dialog).getByLabelText('Name'), 'Taylor Example');
-    await user.click(within(dialog).getByRole('button', { name: 'Marriage' }));
+    await user.click(within(dialog).getByRole('combobox', { name: 'Category: Not set' }));
+    await user.click(within(dialog).getByRole('option', { name: 'Marriage' }));
     await user.click(within(dialog).getByRole('button', { name: 'Add person' }));
 
     expect(onCreatePerson).toHaveBeenCalledOnce();
@@ -56,13 +57,14 @@ describe('People creation', () => {
     const dialog = screen.getByRole('dialog');
     const name = within(dialog).getByLabelText('Name');
     await user.type(name, 'Taylor Example');
-    const friends = within(dialog).getByRole('button', { name: 'Friends' });
-    await user.click(friends);
+    const category = within(dialog).getByRole('combobox', { name: 'Category: Not set' });
+    await user.click(category);
+    await user.click(within(dialog).getByRole('option', { name: 'Friend' }));
     await user.click(within(dialog).getByRole('button', { name: 'Add person' }));
 
     expect((await within(dialog).findByRole('alert')).textContent).toContain('Preview storage changed');
     expect((name as HTMLInputElement).value).toBe('Taylor Example');
-    expect(friends.getAttribute('aria-pressed')).toBe('true');
+    expect(within(dialog).getByRole('combobox', { name: 'Category: Friend' })).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
   });
 });

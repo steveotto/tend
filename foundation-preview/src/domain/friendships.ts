@@ -3,16 +3,17 @@ import { isValidPersonId } from './preview-data.ts';
 import type { PersonPreview } from './preview-data.ts';
 import type { PersonId } from './preview-data.ts';
 
-export const connectionCadences = ['daily', 'weekly', 'two-weeks', 'monthly'] as const;
+export const connectionCadences = ['daily', 'weekly', 'two-weeks', 'monthly', 'twice-weekly'] as const;
 export type ConnectionCadence = (typeof connectionCadences)[number];
 export type ConnectionType = 'text' | 'call' | 'time-together';
 
-export type FriendshipCadenceSetting = {
+export type PersonConnectionCadenceSetting = {
   personId: PersonId;
   cadence: ConnectionCadence;
   setOn: string;
   [key: string]: unknown;
 };
+export type FriendshipCadenceSetting = PersonConnectionCadenceSetting;
 
 export type FriendshipConnection = {
   id: string;
@@ -43,6 +44,14 @@ export type FriendConnectionStatus = {
   lastConnection: FriendshipConnection | null;
   nextDueDate: string | null;
   due: boolean;
+  weeklyProgress: {
+    qualifyingDays: number;
+    targetDays: 2;
+    weekStart: string;
+    weekEnd: string;
+    met: boolean;
+    label: string;
+  } | null;
 };
 
 const cadenceSet = new Set<string>(connectionCadences);
@@ -129,7 +138,7 @@ export function getLegacyFriendIdsV19(value: LegacyFriendshipDataV19): PersonId[
   return [...value.friendIds];
 }
 
-export function setFriendCadence(
+export function setPersonConnectionCadence(
   data: FriendshipData,
   personId: PersonId,
   cadence: ConnectionCadence | null,
@@ -154,6 +163,8 @@ export function setFriendCadence(
     ]
   };
 }
+
+export const setFriendCadence = setPersonConnectionCadence;
 
 export function addOrUpdateConnection(
   data: FriendshipData,
@@ -196,6 +207,7 @@ function compareConnectionsNewestFirst(a: FriendshipConnection, b: FriendshipCon
 
 export function addConnectionCadence(date: string, cadence: ConnectionCadence): string | null {
   if (!isValidDate(date)) return null;
+  if (cadence === 'twice-weekly') return null;
   const [year, month, day] = date.split('-').map(Number);
   const result = new Date(Date.UTC(year!, month! - 1, day!));
   if (cadence === 'daily') result.setUTCDate(result.getUTCDate() + 1);
@@ -209,7 +221,7 @@ export function addConnectionCadence(date: string, cadence: ConnectionCadence): 
   return result.toISOString().slice(0, 10);
 }
 
-export function friendConnectionStatus(
+export function connectionStatusForPerson(
   data: FriendshipData,
   personId: PersonId,
   today: string
@@ -217,7 +229,33 @@ export function friendConnectionStatus(
   const cadence = data.cadenceSettings.find(item => item.personId === personId);
   const lastConnection = connectionsForPerson(data, personId)[0] ?? null;
   if (!cadence) {
-    return { personId, cadence: null, lastConnection, nextDueDate: null, due: false };
+    return { personId, cadence: null, lastConnection, nextDueDate: null, due: false, weeklyProgress: null };
+  }
+  if (cadence.cadence === 'twice-weekly') {
+    const weekStart = localWeekStart(today);
+    const weekEnd = addDateDays(weekStart, 6);
+    const qualifyingDays = new Set(
+      connectionsForPerson(data, personId)
+        .map(connection => connection.date)
+        .filter(date => date >= weekStart && date <= weekEnd && date <= today)
+    ).size;
+    const met = qualifyingDays >= 2;
+    const weeklyProgress = {
+      qualifyingDays,
+      targetDays: 2 as const,
+      weekStart,
+      weekEnd,
+      met,
+      label: met ? 'Weekly goal met' : `${qualifyingDays} of 2 days this week`
+    };
+    return {
+      personId,
+      cadence: cadence.cadence,
+      lastConnection,
+      nextDueDate: null,
+      due: !met,
+      weeklyProgress
+    };
   }
   const anchorDate = lastConnection?.date ?? cadence.setOn;
   const nextDueDate = addConnectionCadence(anchorDate, cadence.cadence);
@@ -226,8 +264,47 @@ export function friendConnectionStatus(
     cadence: cadence.cadence,
     lastConnection,
     nextDueDate,
-    due: nextDueDate !== null && isValidDate(today) && today >= nextDueDate
+    due: nextDueDate !== null && isValidDate(today) && today >= nextDueDate,
+    weeklyProgress: null
   };
+}
+
+export const friendConnectionStatus = connectionStatusForPerson;
+
+export function localWeekStart(date: string): string {
+  if (!isValidDate(date)) return date;
+  const [year, month, day] = date.split('-').map(Number);
+  const dateValue = new Date(Date.UTC(year!, month! - 1, day!));
+  const daysSinceMonday = (dateValue.getUTCDay() + 6) % 7;
+  dateValue.setUTCDate(dateValue.getUTCDate() - daysSinceMonday);
+  return dateValue.toISOString().slice(0, 10);
+}
+
+function addDateDays(date: string, days: number): string {
+  const [year, month, day] = date.split('-').map(Number);
+  const result = new Date(Date.UTC(year!, month! - 1, day!));
+  result.setUTCDate(result.getUTCDate() + days);
+  return result.toISOString().slice(0, 10);
+}
+
+export function selectConnectionStatuses(
+  data: FriendshipData,
+  personIds: readonly PersonId[],
+  today: string,
+  people: readonly PersonPreview[]
+): FriendConnectionStatus[] {
+  return personIds
+    .map(personId => connectionStatusForPerson(data, personId, today))
+    .sort((a, b) => {
+      if (a.due !== b.due) return a.due ? -1 : 1;
+      if (a.weeklyProgress && b.weeklyProgress
+        && a.weeklyProgress.qualifyingDays !== b.weeklyProgress.qualifyingDays) {
+        return b.weeklyProgress.qualifyingDays - a.weeklyProgress.qualifyingDays;
+      }
+      return (a.nextDueDate ?? '9999-12-31').localeCompare(b.nextDueDate ?? '9999-12-31')
+        || (people.find(person => person.id === a.personId)?.displayName ?? a.personId)
+          .localeCompare(people.find(person => person.id === b.personId)?.displayName ?? b.personId);
+    });
 }
 
 export function selectFriendStatuses(
@@ -236,12 +313,5 @@ export function selectFriendStatuses(
   today: string,
   people: readonly PersonPreview[]
 ): FriendConnectionStatus[] {
-  return friendIds
-    .map(personId => friendConnectionStatus(data, personId, today))
-    .sort((a, b) => {
-      if (a.due !== b.due) return a.due ? -1 : 1;
-      return (a.nextDueDate ?? '9999-12-31').localeCompare(b.nextDueDate ?? '9999-12-31')
-        || (people.find(person => person.id === a.personId)?.displayName ?? a.personId)
-          .localeCompare(people.find(person => person.id === b.personId)?.displayName ?? b.personId);
-    });
+  return selectConnectionStatuses(data, friendIds, today, people);
 }

@@ -10,7 +10,7 @@ import type {
   FriendshipConnection,
   FriendshipData
 } from '../domain/friendships.ts';
-import { personById, personGroupMemberIds, syntheticPeople } from '../domain/preview-data.ts';
+import { personById, syntheticPeople } from '../domain/preview-data.ts';
 import type {
   FoundationPreview,
   PersonId,
@@ -132,10 +132,8 @@ export function PersonProfileView({
   const wasEditorOpen = useRef(false);
   const archiveOpener = useRef<HTMLButtonElement | null>(null);
   const wasArchiveOpen = useRef(false);
-  const friends = new Set(personGroupMemberIds(peopleGroups, 'friends'));
-  const isFriend = friends.has(personId);
   const connectionHistory = connectionsForPerson(friendships, personId);
-  const friendStatus = isFriend ? friendConnectionStatus(friendships, personId, today) : null;
+  const personConnectionStatus = friendConnectionStatus(friendships, personId, today);
   const classifications = peopleGroups.filter(group => group.memberIds.includes(personId));
   const personRhythms = rhythms.filter(rhythm => rhythm.personIds?.includes(personId));
   const duePersonRhythms = selectPersonRhythmsDueToday(personRhythms, personId, today);
@@ -353,19 +351,17 @@ export function PersonProfileView({
                 onSelect={openConnectionDraft}
               />
             </div>
-            {friendStatus && (
-              <section className="person-profile__cadence" aria-label="Friendship cadence">
+            <section className="person-profile__cadence" aria-label="Person connection cadence">
                 <span>Connection cadence</span>
                 <FriendshipCadenceControl
                   personId={personId}
                   people={people}
-                  cadence={friendStatus.cadence}
+                  cadence={personConnectionStatus.cadence}
                   today={today}
                   data={friendships}
                   onChange={onFriendshipsChange}
                 />
-              </section>
-            )}
+            </section>
             <ConnectionHistoryList
               connections={connectionHistory}
               people={people}

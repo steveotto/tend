@@ -340,8 +340,8 @@ describe('Tend Today preview', () => {
     const settingsButton = within(morganProfile).getByRole('button', { name: 'Person settings' });
     await user.click(settingsButton);
     const settings = screen.getByRole('dialog', { name: 'Person settings — Morgan Reed' });
-    await user.click(within(settings).getByLabelText('Category: Marriage, Parenting'));
-    await user.click(within(settings).getByRole('checkbox', { name: 'Friend' }));
+    await user.click(within(settings).getByRole('combobox', { name: /^Category:/ }));
+    await user.click(within(settings).getByRole('option', { name: 'Friend' }));
     await user.click(within(settings).getByRole('button', { name: 'Save' }));
     expect(document.activeElement).toBe(settingsButton);
     expect(within(morganProfile).getByText('Friends')).toBeTruthy();
@@ -349,9 +349,8 @@ describe('Tend Today preview', () => {
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
       .getByRole('button', { name: 'Friendships' }));
     await user.click(screen.getByRole('tab', { name: 'Friends' }));
-    await user.click(screen.getByRole('button', { name: /Change connection cadence for Morgan Reed/ }));
-    await user.click(within(screen.getByRole('dialog', { name: 'Connection cadence · Morgan Reed' }))
-      .getByRole('button', { name: 'Weekly' }));
+    await user.click(screen.getByRole('combobox', { name: 'Connection cadence: No cadence' }));
+    await user.click(within(screen.getByRole('listbox', { name: 'Connection cadence' })).getByRole('option', { name: 'Weekly' }));
     await user.click(screen.getByRole('button', { name: 'Text Morgan Reed' }));
     const connectionEditor = screen.getByRole('dialog', { name: 'Log connection' });
     expect((within(connectionEditor).getByLabelText('Connection type') as HTMLSelectElement).value).toBe('text');
@@ -2766,7 +2765,7 @@ describe('Tend Today preview', () => {
     const user = userEvent.setup();
     const data = createSamplePreviewData();
     data.peopleGroups = setPersonGroupMembership(
-      createPersonPickerGroups(),
+      setPersonGroupMembership(createPersonPickerGroups(), 'marriage', 'sample-person-avery', false),
       'friends',
       'sample-person-avery',
       true
@@ -2804,12 +2803,9 @@ describe('Tend Today preview', () => {
   it('edits optional Person details from People, preserves associations, and reloads the same profile', async () => {
     const user = userEvent.setup();
     const data = createSamplePreviewData();
-    data.peopleGroups = setPersonGroupMembership(
-      createPersonPickerGroups(),
-      'friends',
-      'sample-person-avery',
-      true
-    );
+    data.peopleGroups = createPersonPickerGroups().map(group => group.id === 'friends'
+      ? { ...group, memberIds: [...group.memberIds, 'sample-person-avery'] }
+      : group);
     data.friendships = addOrUpdateConnection(
       setFriendCadence(data.friendships, 'sample-person-avery', 'weekly', '2026-10-01'),
       {
@@ -2848,14 +2844,16 @@ describe('Tend Today preview', () => {
     expect(within(editor).queryByLabelText('Relationship')).toBeNull();
     expect(editor.querySelector('.person-details-editor__photo-preview img')?.getAttribute('src'))
       .toBe('data:image/jpeg;base64,/9j/2Q==');
-    expect(within(editor).getByText(/Saved date: February 29/)).toBeTruthy();
-    expect(within(editor).getByText(/Saved date: December 31/)).toBeTruthy();
-    await user.click(within(editor).getByLabelText('Category: Marriage, Friend'));
-    await user.click(within(editor).getByRole('checkbox', { name: 'Parenting' }));
+    expect((within(editor).getByLabelText('Birthday') as HTMLInputElement).value).toBe('Feb 29');
+    expect((within(editor).getByLabelText('Anniversary') as HTMLInputElement).value).toBe('Dec 31');
+    await user.click(within(editor).getByRole('combobox', { name: 'Category: Marriage' }));
+    await user.click(within(editor).getByRole('option', { name: 'Friend' }));
     fireEvent.change(within(editor).getByLabelText('Birthday'), { target: { value: '2000-02-29' } });
     fireEvent.change(within(editor).getByLabelText('Anniversary'), { target: { value: '2010-12-31' } });
-    await user.selectOptions(within(editor).getByLabelText('Love language'), 'wa');
-    await user.selectOptions(within(editor).getByLabelText('Connection cadence'), 'monthly');
+    await user.click(within(editor).getByRole('combobox', { name: 'Love language: Quality Time' }));
+    await user.click(within(editor).getByRole('option', { name: 'Words of Affirmation' }));
+    await user.click(within(editor).getByRole('combobox', { name: 'Connection cadence: Weekly' }));
+    await user.click(within(editor).getByRole('option', { name: 'Monthly' }));
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
     expect(document.activeElement).toBe(editButton);
 
@@ -2876,7 +2874,12 @@ describe('Tend Today preview', () => {
         photoDataUrl: 'data:image/jpeg;base64,/9j/2Q=='
       }]);
       expect(savedResult.envelope.data.peopleGroups).toEqual(
-        setPersonGroupMembership(groupsBefore, 'parenting', 'sample-person-avery', true)
+        setPersonGroupMembership(
+          setPersonGroupMembership(groupsBefore, 'marriage', 'sample-person-avery', false),
+          'friends',
+          'sample-person-avery',
+          true
+        )
       );
       expect(savedResult.envelope.data.friendships).toEqual(setFriendCadence(
         friendshipsBefore,
@@ -2890,9 +2893,12 @@ describe('Tend Today preview', () => {
     const updatedSettingsButton = within(profileForEdit).getByRole('button', { name: 'Person settings' });
     await user.click(updatedSettingsButton);
     editor = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
-    await user.click(within(editor).getByLabelText('Category: Marriage, Parenting, Friend'));
-    await user.click(within(editor).getByRole('checkbox', { name: 'Friend' }));
-    expect(editor.querySelector<HTMLSelectElement>('#person-details-cadence-sample-person-avery')?.disabled).toBe(true);
+    await user.click(within(editor).getByRole('combobox', { name: 'Category: Friend' }));
+    await user.click(within(editor).getByRole('option', { name: 'Marriage' }));
+    await user.click(within(editor).getByRole('combobox', { name: 'Connection cadence: Monthly' }));
+    await user.click(within(editor).getByRole('option', { name: 'Daily' }));
+    expect((within(editor).getByRole('combobox', { name: 'Connection cadence: Daily' }) as HTMLButtonElement).disabled)
+      .toBe(false);
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
     expect(document.activeElement).toBe(updatedSettingsButton);
     const afterFriendRemoval = parsePreviewBackup(
@@ -2901,18 +2907,23 @@ describe('Tend Today preview', () => {
     );
     expect(afterFriendRemoval.valid).toBe(true);
     if (afterFriendRemoval.valid) {
-      expect(afterFriendRemoval.envelope.data.peopleGroups).toEqual(
-        setPersonGroupMembership(
-          setPersonGroupMembership(groupsBefore, 'parenting', 'sample-person-avery', true),
+      const expectedGroups = setPersonGroupMembership(
+          setPersonGroupMembership(groupsBefore, 'marriage', 'sample-person-avery', true),
           'friends',
           'sample-person-avery',
           false
-        )
-      );
+        );
+      expect(afterFriendRemoval.envelope.data.peopleGroups.map(group => ({
+        ...group,
+        memberIds: [...group.memberIds].sort()
+      }))).toEqual(expectedGroups.map(group => ({
+        ...group,
+        memberIds: [...group.memberIds].sort()
+      })));
       expect(afterFriendRemoval.envelope.data.friendships).toEqual(setFriendCadence(
         friendshipsBefore,
         'sample-person-avery',
-        'monthly',
+        'daily',
         localDateString(new Date())
       ));
       expect(afterFriendRemoval.envelope.data.friendships.connections).toEqual(friendshipsBefore.connections);
@@ -2947,7 +2958,8 @@ describe('Tend Today preview', () => {
     editor = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
     fireEvent.change(within(editor).getByLabelText('Birthday'), { target: { value: '' } });
     fireEvent.change(within(editor).getByLabelText('Anniversary'), { target: { value: '' } });
-    await user.selectOptions(within(editor).getByLabelText('Love language'), '');
+    await user.click(within(editor).getByRole('combobox', { name: 'Love language: Words of Affirmation' }));
+    await user.click(within(editor).getByRole('option', { name: 'Not set' }));
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
     expect(document.activeElement).toBe(clearDetailsButton);
     expect(within(profileToClear).getByText('Spouse')).toBeTruthy();
@@ -2965,7 +2977,7 @@ describe('Tend Today preview', () => {
       expect(cleared.envelope.data.friendships).toEqual(setFriendCadence(
         friendshipsBefore,
         'sample-person-avery',
-        'monthly',
+        'daily',
         localDateString(new Date())
       ));
       expect(cleared.envelope.data.friendships.connections).toEqual(friendshipsBefore.connections);

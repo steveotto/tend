@@ -255,7 +255,7 @@ describe('Friendships view', () => {
     const morganCard = morganProfileLink.closest('article');
     expect(morganCard).toBeTruthy();
     expect(morganCard!.querySelector('.people-card__menu')).toBeNull();
-    expect(within(morganCard as HTMLElement).getByRole('button', { name: /Change connection cadence for Morgan Reed/ })).toBeTruthy();
+    expect(within(morganCard as HTMLElement).getByRole('combobox', { name: 'Connection cadence: Weekly' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'View connections (1)' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'View connections (1)' }));
     const history = screen.getByRole('dialog', { name: 'Morgan Reed · connection history' });
@@ -304,9 +304,8 @@ describe('Friendships view', () => {
     render(<FriendshipsHarness />);
 
     await user.click(screen.getByRole('tab', { name: 'Friends' }));
-    await user.click(screen.getByRole('button', { name: /Change connection cadence for Morgan Reed/ }));
-    const cadenceDialog = screen.getByRole('dialog', { name: 'Connection cadence · Morgan Reed' });
-    await user.click(within(cadenceDialog).getByRole('button', { name: 'Weekly' }));
+    await user.click(screen.getByRole('combobox', { name: 'Connection cadence: No cadence' }));
+    await user.click(within(screen.getByRole('listbox', { name: 'Connection cadence' })).getByRole('option', { name: 'Weekly' }));
 
     await user.click(screen.getByRole('button', { name: 'Call Morgan Reed' }));
     const editor = screen.getByRole('dialog', { name: 'Log connection' });
@@ -426,22 +425,31 @@ describe('Friendships view', () => {
     render(<FriendshipsHarness initialData={initialData} />);
     await user.click(screen.getByRole('tab', { name: 'Friends' }));
 
-    const cadenceButton = screen.getByRole('button', { name: /Change connection cadence for Morgan Reed/ });
+    const cadenceButton = screen.getByRole('combobox', { name: 'Connection cadence: Weekly' });
     await user.click(cadenceButton);
-    const dialog = screen.getByRole('dialog', { name: 'Connection cadence · Morgan Reed' });
-    for (const label of ['Daily', 'Weekly', 'Every two weeks', 'Monthly', 'No cadence']) {
-      expect(within(dialog).getByRole('button', { name: label })).toBeTruthy();
+    const listbox = screen.getByRole('listbox', { name: 'Connection cadence' });
+    for (const label of ['No cadence', 'Daily', 'Twice weekly', 'Weekly', 'Every 2 weeks', 'Monthly']) {
+      expect(within(listbox).getByRole('option', { name: label })).toBeTruthy();
     }
-    await user.click(within(dialog).getByRole('button', { name: 'Monthly' }));
+    await user.click(within(listbox).getByRole('option', { name: 'Monthly' }));
     expect(document.activeElement).toBe(cadenceButton);
     await user.click(cadenceButton);
-    await user.click(within(screen.getByRole('dialog', { name: 'Connection cadence · Morgan Reed' }))
-      .getByRole('button', { name: 'No cadence' }));
+    await user.click(within(screen.getByRole('listbox', { name: 'Connection cadence' })).getByRole('option', { name: 'No cadence' }));
 
-    expect(screen.getByRole('button', { name: /Current: No cadence/ })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Connection cadence: No cadence' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'View connections (1)' }));
     const history = screen.getByRole('dialog', { name: 'Morgan Reed · connection history' });
     expect(within(history).getByText('Text')).toBeTruthy();
+  });
+
+  it('shows unmet Twice weekly progress in the attention list without a due-date claim', () => {
+    const data = setFriendCadence(createFriendshipData(), 'sample-person-morgan', 'twice-weekly', '2026-10-19');
+    render(<FriendshipsHarness
+      initialData={data}
+      initialGroups={setPersonGroupMembership(createPersonPickerGroups(), 'friends', 'sample-person-morgan', true)}
+    />);
+    expect(screen.getByText('0 of 2 days this week')).toBeTruthy();
+    expect(screen.queryByText(/overdue|next due/i)).toBeNull();
   });
 
   it('moves focus to the selected tab when saving removes the due-row opener', async () => {

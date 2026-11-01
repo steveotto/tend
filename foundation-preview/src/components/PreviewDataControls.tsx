@@ -17,7 +17,7 @@ export type PreviewPersistenceStatus =
   | { kind: 'conflict' };
 
 type PendingAction =
-  | { kind: 'import'; data: PreviewData; hasArchiveStatus: boolean }
+  | { kind: 'import'; data: PreviewData; hasArchiveStatus: boolean; resolvedPersonCategories: number }
   | { kind: 'reset' }
   | { kind: 'replace-external' };
 
@@ -219,7 +219,8 @@ export function PreviewDataControls({
       setPendingAction({
         kind: 'import',
         data: result.envelope.data,
-        hasArchiveStatus: result.sourceSchemaVersion >= 3
+        hasArchiveStatus: result.sourceSchemaVersion >= 3,
+        resolvedPersonCategories: result.resolvedPersonCategories
       });
     };
     reader.readAsText(file);
@@ -761,6 +762,11 @@ export function PreviewDataControls({
           onClose={() => setPendingAction(null)}
         >
           <p className="preview-data-controls__help">Download a backup of the current preview before replacing it if you may need these changes later. Cancel leaves the current preview unchanged.</p>
+          {pendingAction.kind === 'import' && pendingAction.resolvedPersonCategories > 0 && (
+            <p className="preview-data-controls__help">
+              Multiple category memberships were resolved for {pendingAction.resolvedPersonCategories} {pendingAction.resolvedPersonCategories === 1 ? 'person' : 'people'} using Marriage, then Parenting, then Friend priority. The selected backup file remains unchanged.
+            </p>
+          )}
           <div className="money-goal-dialog__actions">
             <button type="button" className="btn mini ghost" onClick={exportCurrent}>Download current preview backup</button>
             <button type="button" className="btn mini" onClick={confirmPendingAction}>
@@ -784,6 +790,7 @@ export function PreviewDataControls({
           <dl className="legacy-import-report">
             <div><dt>Source People</dt><dd>{legacyDryRun.report.source.people}</dd></div>
             <div><dt>Converted People</dt><dd>{legacyDryRun.report.supported.people}</dd></div>
+            <div><dt>People with multiple categories resolved</dt><dd>{legacyDryRun.report.resolvedCategoryConflicts}</dd></div>
             <div><dt>Source Rhythms</dt><dd>{legacyDryRun.report.source.rhythms}</dd></div>
             <div><dt>Converted Rhythms / completions</dt><dd>{legacyDryRun.report.supported.rhythms} / {legacyDryRun.report.supported.rhythmCompletions}</dd></div>
             <div><dt>Source connection events</dt><dd>{legacyDryRun.report.source.events}</dd></div>

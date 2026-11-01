@@ -41,6 +41,7 @@ export type PersonDetails = {
 
 export type PersonDetailsDraft = {
   categoryIds: PersonPickerGroupId[];
+  categoryChanged: boolean;
   birthdayDate: string;
   birthdayYearUnknown: boolean;
   anniversaryDate: string;
@@ -75,6 +76,7 @@ export function personDetailsDraft(
 ): PersonDetailsDraft {
   return {
     categoryIds: [...categoryIds],
+    categoryChanged: false,
     birthdayDate: pickerDate(details?.birthday),
     birthdayYearUnknown: Boolean(details?.birthday && details.birthday.year === undefined),
     anniversaryDate: pickerDate(details?.anniversary),
@@ -87,7 +89,7 @@ export function personDetailsDraft(
 
 function pickerDate(value?: { monthDay: string; year?: number }): string {
   if (!value) return '';
-  if (value.year === undefined) return '';
+  if (value.year === undefined) return value.monthDay;
   return `${value.year.toString().padStart(4, '0')}-${value.monthDay}`;
 }
 
@@ -109,6 +111,12 @@ export function validatePersonDetailsDraft(
   const errors: PersonDetailsDraftErrors = {};
   if (!/^\d{4}-\d{2}-\d{2}$/.test(today) || !isValidCalendarDate(today)) {
     return { valid: false, errors: { birthdayDate: 'The current date is invalid.' } };
+  }
+  const supportedGroups = new Set<PersonPickerGroupId>(['marriage', 'parenting', 'friends']);
+  if (draft.categoryIds.some(group => !supportedGroups.has(group))
+    || new Set(draft.categoryIds).size !== draft.categoryIds.length
+    || draft.categoryIds.length > 1 && draft.categoryChanged) {
+    errors.categoryIds = 'Choose one supported category.';
   }
   const birthday = validatePickerDate(
     draft.birthdayDate,
@@ -156,6 +164,13 @@ function validatePickerDate(
 ): { monthDay: string; year?: number } | undefined {
   const date = value.trim();
   if (!date) return undefined;
+  if (yearUnknown && /^\d{2}-\d{2}$/.test(date)) {
+    if (!isValidMonthDay(date)) {
+      errors[field] = 'Choose a valid month and day.';
+      return undefined;
+    }
+    return { monthDay: date };
+  }
   const year = Number(date.slice(0, 4));
   const monthDay = datePickerMonthDay(date);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !isValidCalendarDate(date)) {
@@ -193,13 +208,7 @@ export function savePersonDetailsCommand(
   const previous = current.find(item => item.personId === personId);
   const nextDetails = {
     ...result.details,
-    ...(previous?.relationshipLabel === undefined ? {} : { relationshipLabel: previous.relationshipLabel }),
-    ...(draft.birthdayYearUnknown && !draft.birthdayDate && previous && previous.birthday?.year === undefined
-      ? { birthday: previous.birthday }
-      : {}),
-    ...(draft.anniversaryYearUnknown && !draft.anniversaryDate && previous && previous.anniversary?.year === undefined
-      ? { anniversary: previous.anniversary }
-      : {})
+    ...(previous?.relationshipLabel === undefined ? {} : { relationshipLabel: previous.relationshipLabel })
   };
   if (Object.keys(nextDetails).length > 0) remaining.push({ personId, ...nextDetails });
   return { valid: true, details: remaining };

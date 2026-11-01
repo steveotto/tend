@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
+import { connectionCadences } from '../domain/friendships.ts';
 import type { ConnectionCadence } from '../domain/friendships.ts';
+import { resolvePersonCategory } from '../domain/person-categories.ts';
 import type { PersonId, PersonPickerGroupId } from '../domain/preview-data.ts';
 import {
   connectionStyles,
@@ -12,21 +14,25 @@ import type {
   PersonDetailsDraft,
   PersonDetailsDraftErrors
 } from '../domain/person-details.ts';
+import { HelpPopover } from './HelpPopover.tsx';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { PersonAvatar } from './PersonBadge.tsx';
+import { PersonDateField } from './PersonDateField.tsx';
+import { PersonConnectionCadenceSelect } from './PersonConnectionCadenceSelect.tsx';
+import { StyledSelect } from './StyledSelect.tsx';
+import type { StyledSelectOption } from './StyledSelect.tsx';
 import { compressPersonPhoto } from './person-photo.ts';
 
-const cadenceOptions: readonly { value: ConnectionCadence; label: string }[] = [
-  { value: 'daily', label: 'Daily' },
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'two-weeks', label: 'Every 2 weeks' },
-  { value: 'monthly', label: 'Monthly' }
+const categoryOptions: readonly StyledSelectOption<string>[] = [
+  { value: 'not-set', label: 'Not set' },
+  { value: 'marriage', label: 'Marriage' },
+  { value: 'parenting', label: 'Parenting' },
+  { value: 'friends', label: 'Friend' }
 ];
 
-const categoryOptions: readonly { id: PersonPickerGroupId; label: string }[] = [
-  { id: 'marriage', label: 'Marriage' },
-  { id: 'parenting', label: 'Parenting' },
-  { id: 'friends', label: 'Friend' }
+const loveLanguageOptions: readonly StyledSelectOption<string>[] = [
+  { value: 'not-set', label: 'Not set' },
+  ...connectionStyles.map(style => ({ value: style.value, label: style.label }))
 ];
 
 export function PersonDetailsEditor({
@@ -55,7 +61,10 @@ export function PersonDetailsEditor({
   const [photoBusy, setPhotoBusy] = useState(false);
   const photoRequest = useRef(0);
   const titleId = `person-details-title-${personId}`;
-  const isFriend = draft.categoryIds.includes('friends');
+  const categoryValue = (draft.categoryChanged
+    ? draft.categoryIds[0]
+    : resolvePersonCategory(draft.categoryIds)) ?? 'not-set';
+  const currentCadence = connectionCadences.find(value => value === draft.connectionCadence) ?? null;
   const avatarPerson = {
     id: personId,
     displayName: personName,
@@ -70,12 +79,24 @@ export function PersonDetailsEditor({
 
   function changeDate(field: 'birthdayDate' | 'anniversaryDate', value: string) {
     update(field, value);
-    if (value) update(field === 'birthdayDate' ? 'birthdayYearUnknown' : 'anniversaryYearUnknown', false);
+    update(
+      field === 'birthdayDate' ? 'birthdayYearUnknown' : 'anniversaryYearUnknown',
+      !/^\d{4}-\d{2}-\d{2}$/.test(value)
+    );
   }
 
-  function clearDate(field: 'birthdayDate' | 'anniversaryDate') {
-    update(field, '');
-    update(field === 'birthdayDate' ? 'birthdayYearUnknown' : 'anniversaryYearUnknown', false);
+  function changeCategory(value: string) {
+    const categoryIds: PersonPickerGroupId[] = value === 'not-set'
+      ? []
+      : value === 'marriage' || value === 'parenting' || value === 'friends'
+        ? [value]
+        : [];
+    setDraft(current => ({ ...current, categoryIds, categoryChanged: true }));
+    setErrors(current => {
+      const { categoryIds: _categoryError, ...remaining } = current;
+      return remaining;
+    });
+    setSaveError('');
   }
 
   async function selectPhoto(event: ChangeEvent<HTMLInputElement>) {
@@ -146,101 +167,76 @@ export function PersonDetailsEditor({
                 <label className="btn mini ghost" htmlFor={`person-photo-${personId}`}>
                   Choose photo
                 </label>
-                {draft.photoDataUrl && (
-                  <button type="button" className="btn mini ghost" onClick={() => update('photoDataUrl', '')}>
-                    Remove photo
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className="btn mini ghost"
+                  disabled={!draft.photoDataUrl || photoBusy}
+                  onClick={() => update('photoDataUrl', '')}
+                >
+                  Remove photo
+                </button>
               </div>
-              <p className="person-details-editor__help">Photos are cropped to a circle and saved with this preview.</p>
+              <p className="person-details-editor__help">Crops to a circle for their card.</p>
               {photoBusy && <p className="person-details-editor__help" role="status">Preparing photo…</p>}
               {photoError && <p className="goal-field-error" role="alert">{photoError}</p>}
               {fieldError('photoDataUrl')}
             </div>
-            <div className="goal-field person-details-editor__category-field">
-              <span>Category</span>
-              <details className="person-details-editor__category-picker">
-                <summary
-                  id={`person-details-category-${personId}`}
-                  aria-label={`Category: ${categoryOptions
-                    .filter(option => draft.categoryIds.includes(option.id))
-                    .map(option => option.label)
-                    .join(', ') || 'none selected'}`}
-                >
-                  {categoryOptions
-                    .filter(option => draft.categoryIds.includes(option.id))
-                    .map(option => option.label)
-                    .join(', ') || 'Choose categories'}
-                </summary>
-                <fieldset>
-                  <legend>Select one or more categories</legend>
-                  {categoryOptions.map(option => (
-                    <label key={option.id}>
-                      <input
-                        type="checkbox"
-                        checked={draft.categoryIds.includes(option.id)}
-                        onChange={event => update(
-                          'categoryIds',
-                          event.currentTarget.checked
-                            ? [...draft.categoryIds, option.id]
-                            : draft.categoryIds.filter(id => id !== option.id)
-                        )}
-                      />
-                      {option.label}
-                    </label>
-                  ))}
-                </fieldset>
-              </details>
+            <div className="goal-field">
+              <label htmlFor={`person-details-category-${personId}`}>Category</label>
+              <StyledSelect
+                id={`person-details-category-${personId}`}
+                label="Category"
+                options={categoryOptions}
+                value={categoryValue}
+                onChange={changeCategory}
+                describedBy={errors.categoryIds ? 'person-details-error-categoryIds' : undefined}
+                invalid={Boolean(errors.categoryIds)}
+              />
+              {fieldError('categoryIds')}
             </div>
             <div className="person-details-editor__date-grid">
               <div className="goal-field">
                 <label htmlFor={`person-details-birthday-${personId}`}>Birthday</label>
-                <input
+                <PersonDateField
                   id={`person-details-birthday-${personId}`}
-                  type="date"
+                  label="Birthday"
                   value={draft.birthdayDate}
-                  aria-invalid={Boolean(errors.birthdayDate)}
-                  aria-describedby={[
+                  invalid={Boolean(errors.birthdayDate)}
+                  describedBy={[
                     errors.birthdayDate ? 'person-details-error-birthdayDate' : '',
-                    draft.birthdayYearUnknown && details?.birthday
+                    /^\d{2}-\d{2}$/.test(draft.birthdayDate)
                       ? `person-details-partial-birthday-${personId}`
                       : ''
                   ].filter(Boolean).join(' ') || undefined}
-                  onChange={event => changeDate('birthdayDate', event.currentTarget.value)}
+                  onChange={value => changeDate('birthdayDate', value)}
                 />
-                {draft.birthdayYearUnknown && details?.birthday && (
+                {/^\d{2}-\d{2}$/.test(draft.birthdayDate) && details?.birthday && (
                   <span className="person-details-editor__help" id={`person-details-partial-birthday-${personId}`}>
-                    Saved date: {formatPartialDate(details.birthday.monthDay)}. Choose a full date to replace it.
+                    Saved partial date. Delete to clear it, or enter a full date to replace it.
                   </span>
                 )}
-                <button type="button" className="btn mini ghost" onClick={() => clearDate('birthdayDate')}>
-                  Clear birthday
-                </button>
                 {fieldError('birthdayDate')}
               </div>
               <div className="goal-field">
                 <label htmlFor={`person-details-anniversary-${personId}`}>Anniversary</label>
-                <input
+                <PersonDateField
                   id={`person-details-anniversary-${personId}`}
-                  type="date"
+                  label="Anniversary"
                   value={draft.anniversaryDate}
-                  aria-invalid={Boolean(errors.anniversaryDate)}
-                  aria-describedby={[
+                  invalid={Boolean(errors.anniversaryDate)}
+                  describedBy={[
                     errors.anniversaryDate ? 'person-details-error-anniversaryDate' : '',
-                    draft.anniversaryYearUnknown && details?.anniversary
+                    /^\d{2}-\d{2}$/.test(draft.anniversaryDate)
                       ? `person-details-partial-anniversary-${personId}`
                       : ''
                   ].filter(Boolean).join(' ') || undefined}
-                  onChange={event => changeDate('anniversaryDate', event.currentTarget.value)}
+                  onChange={value => changeDate('anniversaryDate', value)}
                 />
-                {draft.anniversaryYearUnknown && details?.anniversary && (
+                {/^\d{2}-\d{2}$/.test(draft.anniversaryDate) && details?.anniversary && (
                   <span className="person-details-editor__help" id={`person-details-partial-anniversary-${personId}`}>
-                    Saved date: {formatPartialDate(details.anniversary.monthDay)}. Choose a full date to replace it.
+                    Saved partial date. Delete to clear it, or enter a full date to replace it.
                   </span>
                 )}
-                <button type="button" className="btn mini ghost" onClick={() => clearDate('anniversaryDate')}>
-                  Clear anniversary
-                </button>
                 {fieldError('anniversaryDate')}
               </div>
             </div>
@@ -248,42 +244,33 @@ export function PersonDetailsEditor({
           <section className="person-details-editor__section" aria-labelledby={`connection-section-${personId}`}>
             <h3 id={`connection-section-${personId}`}>Connection</h3>
             <div className="person-details-editor__date-grid">
-              <label className="goal-field" htmlFor={`person-details-cadence-${personId}`}>
-                <span>Connection cadence</span>
-                <select
+              <div className="goal-field">
+                <div className="person-details-editor__label-row">
+                  <label htmlFor={`person-details-cadence-${personId}`}>Connection cadence</label>
+                  <HelpPopover label="About connection cadence">
+                    Daily, weekly, every two weeks, and monthly use the selected interval from your latest logged connection. Twice weekly means connecting on any two different days from Monday through Sunday; multiple connections on one day count once. Unmet weekly progress is not an overdue date.
+                  </HelpPopover>
+                </div>
+                <PersonConnectionCadenceSelect
                   id={`person-details-cadence-${personId}`}
-                  value={draft.connectionCadence}
-                  disabled={!isFriend}
-                  aria-invalid={Boolean(errors.connectionCadence)}
-                  aria-describedby={!isFriend
-                    ? `person-details-cadence-help-${personId}`
-                    : errors.connectionCadence ? 'person-details-error-connectionCadence' : undefined}
-                  onChange={event => update('connectionCadence', event.currentTarget.value)}
-                >
-                  <option value="">Not set</option>
-                  {cadenceOptions.map(option => <option value={option.value} key={option.value}>{option.label}</option>)}
-                </select>
-                {!isFriend && (
-                  <span className="person-details-editor__help" id={`person-details-cadence-help-${personId}`}>
-                    Select Friend to edit this person’s connection cadence.
-                  </span>
-                )}
+                  value={currentCadence}
+                  onChange={value => update('connectionCadence', value ?? '')}
+                />
                 {fieldError('connectionCadence')}
-              </label>
-              <label className="goal-field" htmlFor={`person-details-style-${personId}`}>
-                <span>Love language</span>
-                <select
+              </div>
+              <div className="goal-field">
+                <label htmlFor={`person-details-style-${personId}`}>Love language</label>
+                <StyledSelect
                   id={`person-details-style-${personId}`}
-                  value={draft.connectionStyle}
-                  aria-invalid={Boolean(errors.connectionStyle)}
-                  aria-describedby={errors.connectionStyle ? 'person-details-error-connectionStyle' : undefined}
-                  onChange={event => update('connectionStyle', event.currentTarget.value)}
-                >
-                  <option value="">Not set</option>
-                  {connectionStyles.map(style => <option key={style.value} value={style.value}>{style.label}</option>)}
-                </select>
+                  label="Love language"
+                  options={loveLanguageOptions}
+                  value={draft.connectionStyle || 'not-set'}
+                  invalid={Boolean(errors.connectionStyle)}
+                  describedBy={errors.connectionStyle ? 'person-details-error-connectionStyle' : undefined}
+                  onChange={value => update('connectionStyle', value === 'not-set' ? '' : value)}
+                />
                 {fieldError('connectionStyle')}
-              </label>
+              </div>
             </div>
           </section>
         </div>
@@ -295,13 +282,4 @@ export function PersonDetailsEditor({
       </form>
     </MoneyGoalDialog>
   );
-}
-
-function formatPartialDate(monthDay: string): string {
-  const [month, day] = monthDay.split('-').map(Number);
-  return new Date(Date.UTC(2000, month! - 1, day!)).toLocaleDateString(undefined, {
-    month: 'long',
-    day: 'numeric',
-    timeZone: 'UTC'
-  });
 }

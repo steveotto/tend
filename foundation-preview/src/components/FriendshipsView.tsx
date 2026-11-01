@@ -52,7 +52,8 @@ const cadenceLabels: Record<ConnectionCadence, string> = {
   daily: 'Daily',
   weekly: 'Weekly',
   'two-weeks': 'Every two weeks',
-  monthly: 'Monthly'
+  monthly: 'Monthly',
+  'twice-weekly': 'Twice weekly'
 };
 type FriendshipsViewProps = {
   data: FriendshipData;
@@ -419,9 +420,11 @@ function DueFriendRow({
         <PersonBadge person={person} presentation="static" displayNameMode="full" />
         <div className="friendships-person__details">
           <p>{status.cadence ? cadenceLabels[status.cadence] : 'No cadence'}</p>
-          <p>{status.lastConnection
-            ? `Last connected ${formatFriendDate(status.lastConnection.date, today)}`
-            : 'No connections yet'}</p>
+          {status.weeklyProgress
+            ? <p>{status.weeklyProgress.label}</p>
+            : <p>{status.lastConnection
+              ? `Last connected ${formatFriendDate(status.lastConnection.date, today)}`
+              : 'No connections yet'}</p>}
         </div>
       </div>
       <button type="button" className="btn mini" onClick={onLog}>Log connection</button>

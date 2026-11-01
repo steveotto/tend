@@ -43,6 +43,7 @@ import {
   loadV30RecoveryCopy,
   loadV31RecoveryCopy,
   PREVIEW_V19_RECOVERY_KEY,
+  PREVIEW_CATEGORY_RECOVERY_KEY,
   PREVIEW_STORAGE_KEY,
   PREVIEW_V1_RECOVERY_KEY,
   PREVIEW_V2_RECOVERY_KEY,
@@ -2363,6 +2364,32 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(writePreview(storage, createSamplePreviewData(), first, { currentDate: '2026-10-21' }))
       .toEqual({ kind: 'conflict', actualRaw: second });
     expect(values.get(PREVIEW_STORAGE_KEY)).toBe(second);
+  });
+
+  it('keeps current-schema category conflicts read-only until save and preserves exact raw recovery before normalization', () => {
+    const data = createSamplePreviewData();
+    const personId = data.people[0]!.id;
+    data.peopleGroups = data.peopleGroups.map(group => ({
+      ...group,
+      memberIds: group.id === 'friends'
+        ? [...group.memberIds, personId]
+        : group.memberIds
+    }));
+    const raw = JSON.stringify(createPreviewEnvelope(data));
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.peopleGroups.filter(group => group.memberIds.includes(personId)).map(group => group.id))
+      .toEqual(['marriage']);
+
+    const saved = writePreview(storage, loaded.data, raw, { currentDate: '2026-10-21' });
+    expect(saved.kind).toBe('saved');
+    expect(values.get(PREVIEW_CATEGORY_RECOVERY_KEY)).toBe(raw);
+    const persisted = parsePreviewBackup(values.get(PREVIEW_STORAGE_KEY)!, '2026-10-21');
+    expect(persisted).toMatchObject({ valid: true, resolvedPersonCategories: 0 });
   });
 });
 

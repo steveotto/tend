@@ -8,12 +8,14 @@ export type StyledSelectOption<Value extends string> = {
 };
 
 type StyledSelectProps<Value extends string> = {
+  id?: string;
   label: string;
   options: readonly StyledSelectOption<Value>[];
   value: Value | '';
   placeholder?: string;
   describedBy?: string | undefined;
   invalid?: boolean | undefined;
+  disabled?: boolean | undefined;
   onChange: (value: Value) => void;
 };
 
@@ -25,15 +27,18 @@ type PopoverPosition = CSSProperties & {
 };
 
 export function StyledSelect<Value extends string>({
+  id: providedId,
   label,
   options,
   value,
   placeholder = 'Choose…',
   describedBy,
   invalid = false,
+  disabled = false,
   onChange
 }: StyledSelectProps<Value>) {
-  const id = useId();
+  const generatedId = useId();
+  const id = providedId ?? generatedId;
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const optionRefs = useRef<Array<HTMLDivElement | null>>([]);
@@ -89,9 +94,14 @@ export function StyledSelect<Value extends string>({
     optionRefs.current[next]?.focus();
   }
 
-  function openMenu(index = selectedIndex) {
-    if (firstEnabledIndex < 0) return;
-    setActiveIndex(index);
+  function openMenu(index = selectedIndex, direction: 1 | -1 = 1) {
+    if (disabled || firstEnabledIndex < 0) return;
+    let next = (index + options.length) % options.length;
+    for (let attempt = 0; options[next]?.disabled && attempt < options.length; attempt += 1) {
+      next = (next + direction + options.length) % options.length;
+    }
+    if (options[next]?.disabled) return;
+    setActiveIndex(next);
     updatePosition();
     setOpen(true);
   }
@@ -189,6 +199,7 @@ export function StyledSelect<Value extends string>({
         id={id}
         type="button"
         className="rhythm-select__trigger"
+        disabled={disabled}
         role="combobox"
         aria-label={`${label}: ${selectedOption?.label ?? placeholder}`}
         aria-haspopup="listbox"
@@ -206,10 +217,10 @@ export function StyledSelect<Value extends string>({
             openMenu(selectedIndex - 1);
           } else if (event.key === 'Home') {
             event.preventDefault();
-            openMenu(0);
+            openMenu(0, 1);
           } else if (event.key === 'End') {
             event.preventDefault();
-            openMenu(options.length - 1);
+            openMenu(options.length - 1, -1);
           } else if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
             openMenu();
@@ -247,7 +258,7 @@ export function StyledSelect<Value extends string>({
               className="rhythm-select__option"
               role="option"
               aria-selected={value === option.value}
-              aria-disabled={option.disabled || undefined}
+              aria-disabled={option.disabled ? true : false}
               tabIndex={-1}
               onFocus={() => setActiveIndex(index)}
               onClick={() => selectOption(index)}

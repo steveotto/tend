@@ -892,9 +892,9 @@ describe('Strength preview presentation', () => {
     await user.click(within(picker).getByRole('button', { name: 'Select Parenting people' }));
     expect(within(picker).getByRole('button', { name: 'Avery Brooks' }).getAttribute('aria-pressed')).toBe('true');
     await user.click(within(picker).getByRole('button', { name: 'Done' }));
-    expect(document.activeElement).toBe(within(editor).getByRole('button', { name: 'Choose people, Avery Brooks, Morgan Reed and Jordan Bell' }));
+    expect(document.activeElement).toBe(within(editor).getByRole('button', { name: 'Choose people, Avery Brooks and Jordan Bell' }));
     expect(within(editor).getAllByRole('img').map(badge => badge.getAttribute('aria-label')))
-      .toEqual(['Avery Brooks', 'Morgan Reed', 'Jordan Bell']);
+      .toEqual(['Avery Brooks', 'Jordan Bell']);
     expect(editor.scrollTop).toBe(137);
     expect(onChange).not.toHaveBeenCalled();
 
@@ -904,7 +904,7 @@ describe('Strength preview presentation', () => {
     expect(onChange.mock.calls[0]?.[0].savedWorkouts[0]).toMatchObject({
       name: 'My workout',
       muscleIds: ['chest'],
-      sharedWith: ['sample-person-avery', 'sample-person-morgan', 'sample-person-jordan']
+      sharedWith: ['sample-person-avery', 'sample-person-jordan']
     });
 
     cleanup();
@@ -912,7 +912,6 @@ describe('Strength preview presentation', () => {
     const reloaded = renderStrength(savedData);
     await user.click(screen.getByRole('tab', { name: 'Workouts' }));
     expect(screen.getByRole('img', { name: 'Avery Brooks' })).toBeTruthy();
-    expect(screen.getByRole('img', { name: 'Morgan Reed' })).toBeTruthy();
     expect(screen.getByRole('img', { name: 'Jordan Bell' })).toBeTruthy();
     expect(reloaded.onChange).not.toHaveBeenCalled();
   });

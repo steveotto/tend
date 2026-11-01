@@ -12,6 +12,7 @@ import type {
 } from './rhythm-schedule.ts';
 import { effectiveRhythmSchedule } from './rhythm-schedule.ts';
 import { selectNextScheduledOccurrence } from './rhythm-occurrences.ts';
+import { resolvePersonCategoryGroups } from './person-categories.ts';
 
 export type FoundationPreview = {
   id: string;
@@ -367,11 +368,14 @@ export function createSamplePeople(): PersonPreview[] {
   return syntheticPeople.map(person => ({ ...person }));
 }
 
-export const syntheticPersonPickerGroups: readonly PersonPickerGroup[] = [
+const samplePersonPickerGroups: readonly PersonPickerGroup[] = [
   { id: 'marriage', label: 'Marriage', memberIds: ['sample-person-avery', 'sample-person-morgan'] },
   { id: 'parenting', label: 'Parenting', memberIds: ['sample-person-morgan', 'sample-person-jordan'] },
   { id: 'friends', label: 'Friends', memberIds: ['sample-person-avery', 'sample-person-jordan'] }
 ];
+
+export const syntheticPersonPickerGroups: readonly PersonPickerGroup[] =
+  resolvePersonCategoryGroups(samplePersonPickerGroups).groups;
 
 export function createPersonPickerGroups(): PersonPickerGroup[] {
   return syntheticPersonPickerGroups.map(group => ({
@@ -393,13 +397,19 @@ export function setPersonGroupMembership(
   personId: PersonId,
   isMember: boolean
 ): PersonPickerGroup[] {
+  if (isMember) {
+    return groups.map(group => ({
+      ...group,
+      memberIds: group.id === groupId
+        ? group.memberIds.includes(personId) ? [...group.memberIds] : [...group.memberIds, personId]
+        : group.memberIds.filter(id => id !== personId)
+    }));
+  }
   return groups.map(group => {
     if (group.id !== groupId || group.memberIds.includes(personId) === isMember) return group;
     return {
       ...group,
-      memberIds: isMember
-        ? [...group.memberIds, personId]
-        : group.memberIds.filter(id => id !== personId)
+      memberIds: group.memberIds.filter(id => id !== personId)
     };
   });
 }
@@ -417,6 +427,18 @@ export function migrateLegacyFriendIdsIntoPeopleGroups(
 }
 
 export function validatePersonPickerGroups(
+  value: unknown,
+  people: readonly PersonPreview[] = syntheticPeople
+): value is PersonPickerGroup[] {
+  if (!validatePersonPickerGroupsStructure(value, people)) return false;
+  const personIds = new Set((value as PersonPickerGroup[]).flatMap(group => group.memberIds));
+  for (const personId of personIds) {
+    if ((value as PersonPickerGroup[]).filter(group => group.memberIds.includes(personId)).length > 1) return false;
+  }
+  return true;
+}
+
+export function validatePersonPickerGroupsStructure(
   value: unknown,
   people: readonly PersonPreview[] = syntheticPeople
 ): value is PersonPickerGroup[] {

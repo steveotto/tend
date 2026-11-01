@@ -71,6 +71,8 @@ export {
   PREVIEW_V31_RECOVERY_KEY
 };
 
+export const PREVIEW_CATEGORY_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:v32-category-recovery`;
+
 export type PreviewStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
 export type PreviewLoadResult =
@@ -152,6 +154,15 @@ export function writePreview(
                   : recovery.message
           };
         }
+      } else if (source.valid && source.resolvedPersonCategories > 0) {
+        const recovery = storage.getItem(PREVIEW_CATEGORY_RECOVERY_KEY);
+        if (recovery !== null && recovery !== expectedRaw) {
+          return {
+            kind: 'error',
+            message: 'The immutable category-resolution recovery copy already contains different data. No preview write was made.'
+          };
+        }
+        if (recovery === null) storage.setItem(PREVIEW_CATEGORY_RECOVERY_KEY, expectedRaw);
       } else if (sourceVersion === null
         && (!source.valid || source.sourceSchemaVersion !== PREVIEW_SCHEMA_VERSION)
         && !options.allowUnrecoverableReplacement) {

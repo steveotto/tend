@@ -224,6 +224,14 @@ describe('shared person profile', () => {
     expect(within(profile).getByRole('tab', { name: 'Notes' })).toBeTruthy();
   });
 
+  it('exposes the shared person-owned cadence control on an uncategorized profile', async () => {
+    const user = userEvent.setup();
+    render(<ProfileHarness personId="sample-person-morgan" />);
+    const profile = screen.getByRole('main', { name: 'Morgan Reed' });
+    await user.click(within(profile).getByRole('tab', { name: 'Connections' }));
+    expect(within(profile).getByRole('combobox', { name: 'Connection cadence: No cadence' })).toBeTruthy();
+  });
+
   it('retains shared Undo behavior for a completed person-linked Rhythm', async () => {
     const user = userEvent.setup();
     const undo = vi.fn();
@@ -307,11 +315,10 @@ describe('shared person profile', () => {
     expect(stored.connections).toHaveLength(1);
     expect(stored.connections[0]?.participantIds).toEqual(['sample-person-avery', 'sample-person-morgan']);
     expect(screen.getByRole('button', { name: 'Text Avery Brooks' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Change connection cadence for Avery Brooks/ })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Connection cadence: No cadence' })).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: /Change connection cadence for Avery Brooks/ }));
-    await user.click(within(screen.getByRole('dialog', { name: 'Connection cadence · Avery Brooks' }))
-      .getByRole('button', { name: 'Weekly' }));
+    await user.click(screen.getByRole('combobox', { name: 'Connection cadence: No cadence' }));
+    await user.click(within(screen.getByRole('listbox', { name: 'Connection cadence' })).getByRole('option', { name: 'Weekly' }));
     await user.click(screen.getByRole('button', { name: 'Edit' }));
     const edit = screen.getByRole('dialog', { name: 'Edit connection' });
     await user.click(within(edit).getAllByRole('checkbox')[0]!);

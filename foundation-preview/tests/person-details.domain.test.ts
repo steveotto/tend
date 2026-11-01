@@ -19,6 +19,7 @@ describe('person details domain', () => {
     const current = [{ personId: 'sample-person-avery', relationshipLabel: 'Sister' }];
     const draft = {
       categoryIds: [],
+      categoryChanged: false,
       birthdayDate: '2000-02-29',
       birthdayYearUnknown: true,
       anniversaryDate: '2000-12-31',
@@ -126,7 +127,7 @@ describe('person details domain', () => {
       personId: 'sample-person-avery',
       anniversary: { monthDay: '02-29' }
     });
-    expect(unknownAnniversary.anniversaryDate).toBe('');
+    expect(unknownAnniversary.anniversaryDate).toBe('02-29');
     expect(unknownAnniversary.anniversaryYearUnknown).toBe(true);
     expect(validatePersonDetailsCollection([{
       personId: 'sample-person-avery',
@@ -159,8 +160,8 @@ describe('person details domain', () => {
       anniversary: { monthDay: '03-15' }
     }];
     const draft = personDetailsDraft(partial[0]);
-    expect(draft.birthdayDate).toBe('');
-    expect(draft.anniversaryDate).toBe('');
+    expect(draft.birthdayDate).toBe('12-02');
+    expect(draft.anniversaryDate).toBe('03-15');
     expect(savePersonDetailsCommand(partial, 'sample-person-avery', {
       ...draft,
     }, '2026-10-31')).toEqual({
@@ -175,6 +176,55 @@ describe('person details domain', () => {
     expect(birthdayCardSummary({ monthDay: '10-31' }, '2026-10-31')?.countdownLabel).toBe('today');
     expect(birthdayCardSummary({ monthDay: '11-01' }, '2026-10-31')?.countdownLabel).toBe('tomorrow');
     expect(birthdayCardSummary({ monthDay: '02-29' }, '2026-02-28')?.countdownLabel).toBe('tomorrow');
+  });
+
+  it('validates explicit single-category replacement while preserving untouched multiple memberships', () => {
+    const current = [{ personId: 'sample-person-avery', relationshipLabel: 'Daughter' }];
+    const initial = personDetailsDraft(current[0], null, ['marriage', 'friends']);
+    expect(initial.categoryChanged).toBe(false);
+    expect(savePersonDetailsCommand(current, 'sample-person-avery', initial, '2026-10-31')).toMatchObject({
+      valid: true,
+      details: [{ personId: 'sample-person-avery', relationshipLabel: 'Daughter' }]
+    });
+
+    const selected = {
+      ...initial,
+      categoryIds: ['parenting'] as ('marriage' | 'parenting' | 'friends')[],
+      categoryChanged: true
+    };
+    expect(validatePersonDetailsDraft(selected, '2026-10-31').valid).toBe(true);
+    expect(validatePersonDetailsDraft({
+      ...selected,
+      categoryIds: ['marriage', 'friends']
+    }, '2026-10-31')).toMatchObject({
+      valid: false,
+      errors: { categoryIds: 'Choose one supported category.' }
+    });
+  });
+
+  it('validates and saves a yearless month/day directly without inventing a year', () => {
+    const draft = personDetailsDraft();
+    expect(validatePersonDetailsDraft({
+      ...draft,
+      birthdayDate: '02-29',
+      birthdayYearUnknown: true,
+      anniversaryDate: '12-02',
+      anniversaryYearUnknown: true
+    }, '2026-10-31')).toMatchObject({
+      valid: true,
+      details: {
+        birthday: { monthDay: '02-29' },
+        anniversary: { monthDay: '12-02' }
+      }
+    });
+    expect(validatePersonDetailsDraft({
+      ...draft,
+      birthdayDate: '02-30',
+      birthdayYearUnknown: true
+    }, '2026-10-31')).toMatchObject({
+      valid: false,
+      errors: { birthdayDate: 'Choose a valid month and day.' }
+    });
   });
 
   it('round-trips optional details in schema v31 and rejects unresolved or malformed records', () => {

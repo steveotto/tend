@@ -50,6 +50,91 @@ describe('Friendships cadence and connection history', () => {
     expect(friendConnectionStatus(data, avery, '2026-03-09').due).toBe(true);
   });
 
+  it('counts two distinct connection dates in the current Monday-to-Sunday week', () => {
+    let data = setFriendCadence(createFriendshipData(), avery, 'twice-weekly', '2026-03-02');
+    data = addOrUpdateConnection(data, event('monday-1', '2026-03-02', [avery]));
+    data = addOrUpdateConnection(data, event('monday-2', '2026-03-02', [avery]));
+    expect(friendConnectionStatus(data, avery, '2026-03-03').weeklyProgress).toMatchObject({
+      qualifyingDays: 1,
+      targetDays: 2,
+      weekStart: '2026-03-02',
+      weekEnd: '2026-03-08',
+      label: '1 of 2 days this week',
+      met: false
+    });
+
+    data = addOrUpdateConnection(data, event('tuesday', '2026-03-03', [avery]));
+    expect(friendConnectionStatus(data, avery, '2026-03-03')).toMatchObject({
+      nextDueDate: null,
+      due: false,
+      weeklyProgress: { qualifyingDays: 2, label: 'Weekly goal met', met: true }
+    });
+  });
+
+  it('accepts consecutive days and applies setup immediately to existing current-week events', () => {
+    let data = addOrUpdateConnection(createFriendshipData(), event('sunday', '2026-03-08', [avery]));
+    data = addOrUpdateConnection(data, event('monday', '2026-03-09', [avery]));
+    data = setFriendCadence(data, avery, 'twice-weekly', '2026-03-09');
+    expect(friendConnectionStatus(data, avery, '2026-03-09').weeklyProgress).toMatchObject({
+      qualifyingDays: 1,
+      weekStart: '2026-03-09',
+      weekEnd: '2026-03-15',
+      label: '1 of 2 days this week'
+    });
+    data = addOrUpdateConnection(data, event('tuesday', '2026-03-10', [avery]));
+    expect(friendConnectionStatus(data, avery, '2026-03-10').weeklyProgress?.label)
+      .toBe('Weekly goal met');
+  });
+
+  it('resets progress Monday, uses Sunday boundaries, and ignores future events', () => {
+    let data = setFriendCadence(createFriendshipData(), avery, 'twice-weekly', '2026-03-01');
+    data = addOrUpdateConnection(data, event('sunday', '2026-03-01', [avery]));
+    data = addOrUpdateConnection(data, event('future-tuesday', '2026-03-03', [avery]));
+    expect(friendConnectionStatus(data, avery, '2026-03-01').weeklyProgress).toMatchObject({
+      qualifyingDays: 1,
+      weekStart: '2026-02-23',
+      weekEnd: '2026-03-01'
+    });
+    expect(friendConnectionStatus(data, avery, '2026-03-02').weeklyProgress).toMatchObject({
+      qualifyingDays: 0,
+      weekStart: '2026-03-02',
+      weekEnd: '2026-03-08'
+    });
+
+    data = addOrUpdateConnection(data, event('wednesday', '2026-03-04', [avery]));
+    expect(friendConnectionStatus(data, avery, '2026-03-04').weeklyProgress?.qualifyingDays).toBe(2);
+  });
+
+  it('recalculates weekly progress from edited and deleted participant events', () => {
+    let data = setFriendCadence(createFriendshipData(), avery, 'twice-weekly', '2026-06-01');
+    data = addOrUpdateConnection(data, event('shared', '2026-06-01', [avery, morgan]));
+    data = addOrUpdateConnection(data, event('second', '2026-06-02', [avery]));
+    expect(friendConnectionStatus(data, avery, '2026-06-02').weeklyProgress?.qualifyingDays).toBe(2);
+    data = setFriendCadence(data, morgan, 'twice-weekly', '2026-06-01');
+    expect(friendConnectionStatus(data, morgan, '2026-06-02').weeklyProgress?.qualifyingDays).toBe(1);
+
+    data = addOrUpdateConnection(data, event('second', '2026-06-01', [avery]));
+    expect(friendConnectionStatus(data, avery, '2026-06-02').weeklyProgress?.qualifyingDays).toBe(1);
+    data = deleteConnection(data, 'shared');
+    expect(friendConnectionStatus(data, avery, '2026-06-02').weeklyProgress?.qualifyingDays).toBe(1);
+    expect(friendConnectionStatus(data, morgan, '2026-06-02').weeklyProgress?.qualifyingDays).toBe(0);
+  });
+
+  it('uses explicit local dates across DST and leaves interval next-due dates unchanged', () => {
+    const beforeDst = localDateInTimeZone(new Date('2026-03-08T04:30:00.000Z'), 'America/New_York');
+    const afterDst = localDateInTimeZone(new Date('2026-03-08T08:30:00.000Z'), 'America/New_York');
+    expect(beforeDst).toBe('2026-03-07');
+    expect(afterDst).toBe('2026-03-08');
+    let twiceWeekly = setFriendCadence(createFriendshipData(), avery, 'twice-weekly', beforeDst);
+    twiceWeekly = addOrUpdateConnection(twiceWeekly, event('dst-day-1', beforeDst, [avery]));
+    twiceWeekly = addOrUpdateConnection(twiceWeekly, event('dst-day-2', afterDst, [avery]));
+    expect(friendConnectionStatus(twiceWeekly, avery, afterDst).weeklyProgress?.qualifyingDays).toBe(2);
+    expect(friendConnectionStatus(twiceWeekly, avery, afterDst).nextDueDate).toBeNull();
+
+    const weekly = setFriendCadence(createFriendshipData(), avery, 'weekly', beforeDst);
+    expect(friendConnectionStatus(weekly, avery, '2026-03-08').nextDueDate).toBe('2026-03-14');
+  });
+
   it('keeps No cadence distinct from caught-up cadence state', () => {
     const data = createFriendshipData();
     expect(friendConnectionStatus(data, avery, '2026-03-01')).toMatchObject({

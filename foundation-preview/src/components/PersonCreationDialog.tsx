@@ -2,11 +2,14 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import type { PersonPickerGroupId, PersonPreview } from '../domain/preview-data.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
+import { StyledSelect } from './StyledSelect.tsx';
+import type { StyledSelectOption } from './StyledSelect.tsx';
 
-const classifications: readonly { id: PersonPickerGroupId; label: string }[] = [
-  { id: 'marriage', label: 'Marriage' },
-  { id: 'parenting', label: 'Parenting' },
-  { id: 'friends', label: 'Friends' }
+const categoryOptions: readonly StyledSelectOption<string>[] = [
+  { value: 'not-set', label: 'Not set' },
+  { value: 'marriage', label: 'Marriage' },
+  { value: 'parenting', label: 'Parenting' },
+  { value: 'friends', label: 'Friend' }
 ];
 
 export function PersonCreationDialog({
@@ -19,7 +22,7 @@ export function PersonCreationDialog({
   onClose: () => void;
 }) {
   const [name, setName] = useState('');
-  const [groupIds, setGroupIds] = useState<PersonPickerGroupId[]>([]);
+  const [category, setCategory] = useState('not-set');
   const [error, setError] = useState('');
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -34,6 +37,11 @@ export function PersonCreationDialog({
       setError('A person with this generated ID already exists. Try again.');
       return;
     }
+    const groupIds: PersonPickerGroupId[] = category === 'marriage'
+      || category === 'parenting'
+      || category === 'friends'
+      ? [category]
+      : [];
     const saveError = onCreate({ id, displayName }, groupIds);
     if (saveError) {
       setError(saveError);
@@ -70,27 +78,16 @@ export function PersonCreationDialog({
               }}
             />
           </label>
-          <fieldset className="person-create-classifications">
-            <legend>Classifications (optional)</legend>
-            <p>Choose only classifications that apply. You can change them later.</p>
-            <div className="person-create-classifications__choices">
-              {classifications.map(classification => {
-                const selected = groupIds.includes(classification.id);
-                return (
-                  <button
-                    key={classification.id}
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() => setGroupIds(current => selected
-                      ? current.filter(id => id !== classification.id)
-                      : [...current, classification.id])}
-                  >
-                    {classification.label}
-                  </button>
-                );
-              })}
-            </div>
-          </fieldset>
+          <div className="goal-field">
+            <label htmlFor="person-create-category">Category</label>
+            <StyledSelect
+              id="person-create-category"
+              label="Category"
+              options={categoryOptions}
+              value={category}
+              onChange={setCategory}
+            />
+          </div>
           {error && <p className="goal-field-error" id="person-create-error" role="alert">{error}</p>}
         </div>
         <div className="money-goal-dialog__actions">

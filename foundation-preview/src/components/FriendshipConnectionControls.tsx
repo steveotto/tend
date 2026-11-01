@@ -4,7 +4,7 @@ import { personById, syntheticPeople } from '../domain/preview-data.ts';
 import type { PersonId, PersonPreview } from '../domain/preview-data.ts';
 import {
   deleteConnection,
-  setFriendCadence
+  setPersonConnectionCadence
 } from '../domain/friendships.ts';
 import type {
   ConnectionCadence,
@@ -14,27 +14,13 @@ import type {
 } from '../domain/friendships.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { PersonBadge, PersonBadgeVisual } from './PersonBadge.tsx';
+import { PersonConnectionCadenceSelect } from './PersonConnectionCadenceSelect.tsx';
 
 export const connectionTypeLabels: Record<ConnectionType, string> = {
   text: 'Text',
   call: 'Call',
   'time-together': 'Time Together'
 };
-
-const cadenceLabels: Record<ConnectionCadence, string> = {
-  daily: 'Daily',
-  weekly: 'Weekly',
-  'two-weeks': 'Every two weeks',
-  monthly: 'Monthly'
-};
-
-const cadenceChoices: { value: ConnectionCadence | null; label: string }[] = [
-  { value: 'daily', label: 'Daily' },
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'two-weeks', label: 'Every two weeks' },
-  { value: 'monthly', label: 'Monthly' },
-  { value: null, label: 'No cadence' }
-];
 
 export function ConnectionTypeActions({
   personId,
@@ -79,65 +65,13 @@ export function FriendshipCadenceControl({
   data: FriendshipData;
   onChange: (data: FriendshipData) => void;
 }) {
-  const person = personById(people, personId);
-  const [open, setOpen] = useState(false);
-  const opener = useRef<HTMLButtonElement>(null);
-  const wasOpen = useRef(false);
-
-  useEffect(() => {
-    if (open) {
-      wasOpen.current = true;
-      return;
-    }
-    if (wasOpen.current) {
-      wasOpen.current = false;
-      opener.current?.focus();
-    }
-  }, [open]);
-
+  void people;
   return (
-    <>
-      <button
-        ref={opener}
-        type="button"
-        className="friendships-cadence-button"
-        aria-haspopup="dialog"
-        aria-label={`Change connection cadence for ${person.displayName}. Current: ${cadence ? cadenceLabels[cadence] : 'No cadence'}`}
-        onClick={() => setOpen(true)}
-      >
-        {cadence ? cadenceLabels[cadence] : 'No cadence'}
-        <span aria-hidden="true">⌄</span>
-      </button>
-      {open && (
-        <MoneyGoalDialog
-          title={`Connection cadence · ${person.displayName}`}
-          titleId="friendships-cadence-title"
-          labelledBy="friendships-cadence-title"
-          closeLabel="Close connection cadence"
-          onClose={() => setOpen(false)}
-        >
-          <div className="friendships-cadence-choices" role="group" aria-label="Connection cadence">
-            {cadenceChoices.map(choice => {
-              const selected = choice.value === cadence;
-              return (
-                <button
-                  key={choice.label}
-                  type="button"
-                  className={selected ? 'friendships-cadence-choice friendships-cadence-choice--selected' : 'friendships-cadence-choice'}
-                  aria-pressed={selected}
-                  onClick={() => {
-                    onChange(setFriendCadence(data, personId, choice.value, today));
-                    setOpen(false);
-                  }}
-                >
-                  {choice.label}
-                </button>
-              );
-            })}
-          </div>
-        </MoneyGoalDialog>
-      )}
-    </>
+    <PersonConnectionCadenceSelect
+      id={`friendships-cadence-${personId}`}
+      value={cadence}
+      onChange={next => onChange(setPersonConnectionCadence(data, personId, next, today))}
+    />
   );
 }
 
