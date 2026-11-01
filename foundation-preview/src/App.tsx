@@ -247,7 +247,13 @@ const defaultPreviewIdentity = import.meta.env.DEV
   ? DEVELOPMENT_PREVIEW_IDENTITY
   : PREVIEW_AUTH_PENDING;
 
-export function App({ identity = defaultPreviewIdentity }: { identity?: PreviewIdentityState } = {}) {
+export function App({
+  identity = defaultPreviewIdentity,
+  onSignOut
+}: {
+  identity?: PreviewIdentityState;
+  onSignOut?: () => void | Promise<void>;
+} = {}) {
   const resolvedIdentity = useMemo(() => validatePreviewIdentity(identity), [identity]);
   const identityKey = previewIdentityKey(resolvedIdentity);
   const activeIdentityKey = useRef(identityKey);
@@ -278,6 +284,7 @@ export function App({ identity = defaultPreviewIdentity }: { identity?: PreviewI
       key={identityKey}
       identity={resolvedIdentity}
       isIdentityCurrent={() => isIdentityCurrent(identityKey)}
+      {...(onSignOut ? { onSignOut } : {})}
     />
   );
 }
@@ -293,14 +300,17 @@ function PreviewAccessState({ title, message }: { title: string; message: string
 
 function PreviewWorkspace({
   identity,
-  isIdentityCurrent
+  isIdentityCurrent,
+  onSignOut
 }: {
   identity: Extract<PreviewIdentityState, { kind: 'development' | 'authenticated' }>;
   isIdentityCurrent: () => boolean;
+  onSignOut?: () => void | Promise<void>;
 }) {
   const scoringInstant = useScoringInstant();
   const previewStorage = useMemo(() => browserPreviewStorage(identity), [identity]);
   const initialPreviewData = () => identity.kind === 'development'
+    && import.meta.env.DEV
     ? createSamplePreviewData()
     : createEmptyPreviewData();
   const [destination, setDestination] = useState<Destination>('today');
@@ -312,7 +322,7 @@ function PreviewWorkspace({
   );
   const [todayFocus, setTodayFocus] = useState<TodayFocusId>('now');
   const [healthFitnessVisited, setHealthFitnessVisited] = useState(false);
-  const [previewData, setPreviewData] = useState<PreviewData>(createSamplePreviewData);
+  const [previewData, setPreviewData] = useState<PreviewData>(initialPreviewData);
   const [hydrated, setHydrated] = useState(false);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
   const [persistenceStatus, setPersistenceStatus] = useState<PreviewPersistenceStatus>({ kind: 'loading' });
@@ -2908,8 +2918,18 @@ function PreviewWorkspace({
         </p>
       )}
       <footer className="preview-footer">
-        <span>Synthetic preview data stays separate from Tend accounts.</span>
-        <a href="/preview.html">Component catalogue</a>
+        <span>
+          {import.meta.env.MODE === 'pages'
+            ? 'Preview data stays on this device for your account.'
+            : 'Synthetic preview data stays separate from Tend accounts.'}
+        </span>
+        {import.meta.env.MODE !== 'pages' && <a href="/preview.html">Component catalogue</a>}
+        <a href="https://steveotto.github.io/tend/">Open Tend Classic</a>
+        {onSignOut && (
+          <button type="button" className="preview-sign-out" onClick={() => void onSignOut()}>
+            Sign out
+          </button>
+        )}
       </footer>
       {activeRhythm && (
         <RhythmDetailsDialog

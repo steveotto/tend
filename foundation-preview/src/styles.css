@@ -5020,6 +5020,129 @@ a:focus-visible {
   color: var(--ink-soft, #66736b);
 }
 
+.preview-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-faint);
+  font-size: 11px;
+}
+
+.preview-footer a {
+  color: var(--forest);
+  font-weight: 600;
+}
+
+.preview-login {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  background: var(--tend-canvas, #f7f9f7);
+  color: var(--tend-ink, #25332b);
+}
+
+.preview-login__card {
+  width: min(100%, 440px);
+  padding: clamp(24px, 7vw, 40px);
+  border: 1px solid var(--line, #dce4dc);
+  border-radius: 20px;
+  background: var(--surface, #fff);
+  box-shadow: 0 16px 48px rgb(23 45 32 / 8%);
+}
+
+.preview-login__eyebrow {
+  margin: 0 0 8px;
+  color: var(--forest, #24694b);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.preview-login__card h1 {
+  margin: 0 0 12px;
+  font-family: var(--font-display, Georgia, serif);
+  font-size: clamp(28px, 7vw, 36px);
+}
+
+.preview-login__card > p:not(.preview-login__eyebrow) {
+  color: var(--ink-soft, #66736b);
+  line-height: 1.55;
+}
+
+.preview-login__form {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.preview-login__form label {
+  display: grid;
+  gap: 7px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.preview-login__form input {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid var(--line, #dce4dc);
+  border-radius: 10px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+}
+
+.preview-login__form input:focus-visible,
+.preview-login__form button:focus-visible,
+.preview-login__classic a:focus-visible,
+.preview-sign-out:focus-visible {
+  outline: 3px solid var(--forest, #24694b);
+  outline-offset: 3px;
+}
+
+.preview-login__form button {
+  min-height: 48px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--forest, #24694b);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+}
+
+.preview-login__form button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.preview-login__error {
+  color: #a33426;
+}
+
+.preview-login__classic {
+  margin: 24px 0 0;
+  font-size: 14px;
+}
+
+.preview-footer .preview-sign-out {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--forest);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .person-component-health-summary .health-score-measures__grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

@@ -2,6 +2,7 @@ import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
 import { CatalogApp } from './CatalogApp.tsx';
+import { PreviewIdentityHost } from './auth/PreviewIdentityHost.tsx';
 import {
   DEVELOPMENT_PREVIEW_IDENTITY,
   PREVIEW_AUTH_PENDING,
@@ -16,7 +17,8 @@ if (!rootElement) {
   throw new Error('Missing app root element.');
 }
 
-const isCatalog = window.location.pathname.endsWith('/preview.html');
+const isPagesBuild = import.meta.env.MODE === 'pages';
+const isCatalog = !isPagesBuild && window.location.pathname.endsWith('/preview.html');
 
 const syntheticAccountIds = {
   a: 'a0000000-0000-4000-8000-000000000001',
@@ -52,10 +54,12 @@ function DevelopmentPreviewHost() {
 
 createRoot(rootElement).render(
   <StrictMode>
-    {isCatalog
-      ? <CatalogApp />
-      : import.meta.env.DEV
-        ? <DevelopmentPreviewHost />
-        : <App identity={PREVIEW_AUTH_PENDING} />}
+    {isPagesBuild
+      ? <PreviewIdentityHost />
+      : isCatalog
+        ? <CatalogApp />
+        : import.meta.env.DEV
+          ? <DevelopmentPreviewHost />
+          : <App identity={PREVIEW_AUTH_PENDING} />}
   </StrictMode>
 );
