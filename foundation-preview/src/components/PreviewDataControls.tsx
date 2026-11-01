@@ -186,6 +186,7 @@ export function PreviewDataControls({
   const [legacyDryRun, setLegacyDryRun] = useState<LegacyImportDryRun | null>(null);
   const [legacyPackageDownloaded, setLegacyPackageDownloaded] = useState(false);
   const [legacyImportConfirmed, setLegacyImportConfirmed] = useState(false);
+  const [legacyExclusionsConfirmed, setLegacyExclusionsConfirmed] = useState(false);
   const [message, setMessage] = useState('');
 
   function exportCurrent() {
@@ -235,6 +236,7 @@ export function PreviewDataControls({
       setLegacyDryRun(dryRun);
       setLegacyPackageDownloaded(false);
       setLegacyImportConfirmed(false);
+      setLegacyExclusionsConfirmed(false);
       setMessage('');
     };
     reader.readAsText(file);
@@ -256,7 +258,8 @@ export function PreviewDataControls({
   }
 
   function confirmLegacyImport() {
-    if (!legacyDryRun?.candidate || !legacyPackageDownloaded || !legacyImportConfirmed) return;
+    if (!legacyDryRun?.candidate || !legacyPackageDownloaded || !legacyImportConfirmed
+      || legacyDryRun.report.excluded.length > 0 && !legacyExclusionsConfirmed) return;
     const error = onImport(legacyDryRun.candidate);
     if (error) {
       setMessage(error);
@@ -265,7 +268,8 @@ export function PreviewDataControls({
     setLegacyDryRun(null);
     setLegacyPackageDownloaded(false);
     setLegacyImportConfirmed(false);
-    setMessage('Supported People data imported into the synthetic preview.');
+    setLegacyExclusionsConfirmed(false);
+    setMessage('Supported Classic data imported into the synthetic preview.');
   }
 
   function confirmPendingAction() {
@@ -769,24 +773,35 @@ export function PreviewDataControls({
       {legacyDryRun && (
         <MoneyGoalDialog
           title="Review Classic Tend import"
-          intro="This dry run converts only People identities, supported details, and explicit classifications. No preview data has changed."
+          intro="This dry run converts only records with a supported, validated Preview representation. Unsupported source data remains in the exact-source recovery package; no preview data has changed."
           onClose={() => {
             setLegacyDryRun(null);
             setLegacyPackageDownloaded(false);
             setLegacyImportConfirmed(false);
+            setLegacyExclusionsConfirmed(false);
           }}
         >
           <dl className="legacy-import-report">
-            <div><dt>Supported People</dt><dd>{legacyDryRun.report.supported.people}</dd></div>
-            <div><dt>Supported details</dt><dd>{legacyDryRun.report.supported.details}</dd></div>
-            <div><dt>Explicit classifications</dt><dd>{legacyDryRun.report.supported.classifications}</dd></div>
+            <div><dt>Source People</dt><dd>{legacyDryRun.report.source.people}</dd></div>
+            <div><dt>Converted People</dt><dd>{legacyDryRun.report.supported.people}</dd></div>
+            <div><dt>Source Rhythms</dt><dd>{legacyDryRun.report.source.rhythms}</dd></div>
+            <div><dt>Converted Rhythms / completions</dt><dd>{legacyDryRun.report.supported.rhythms} / {legacyDryRun.report.supported.rhythmCompletions}</dd></div>
+            <div><dt>Source connection events</dt><dd>{legacyDryRun.report.source.events}</dd></div>
+            <div><dt>Converted connections / cadences</dt><dd>{legacyDryRun.report.supported.connections} / {legacyDryRun.report.supported.cadences}</dd></div>
+            <div><dt>Source plain Notes</dt><dd>{legacyDryRun.report.source.notes}</dd></div>
+            <div><dt>Converted plain Notes</dt><dd>{legacyDryRun.report.supported.notes}</dd></div>
+            <div><dt>Source Strength templates / logs</dt><dd>{legacyDryRun.report.source.strengthTemplates} / {legacyDryRun.report.source.strengthLogs}</dd></div>
+            <div><dt>Converted Strength templates / logs</dt><dd>{legacyDryRun.report.supported.strengthTemplates} / {legacyDryRun.report.supported.strengthLogs}</dd></div>
+            <div><dt>Source Cardio runs / Weight measurements</dt><dd>{legacyDryRun.report.source.cardioRuns} / {legacyDryRun.report.source.weightMeasurements}</dd></div>
+            <div><dt>Converted Cardio runs / Weight measurements</dt><dd>{legacyDryRun.report.supported.cardioRuns} / {legacyDryRun.report.supported.weightMeasurements}</dd></div>
             <div><dt>Unsupported sections or fields</dt><dd>{legacyDryRun.report.unsupported.reduce((sum, item) => sum + item.count, 0)}</dd></div>
+            <div><dt>Excluded and preserved records</dt><dd>{legacyDryRun.report.excluded.length}</dd></div>
             <div><dt>Ambiguous records</dt><dd>{legacyDryRun.report.ambiguous.reduce((sum, item) => sum + item.count, 0)}</dd></div>
             <div><dt>Invalid records</dt><dd>{legacyDryRun.report.invalid.reduce((sum, item) => sum + item.count, 0)}</dd></div>
           </dl>
           {legacyDryRun.report.unsupported.length > 0 && (
             <div className="preview-data-controls__help">
-              <p>Unsupported data stays only in the recovery package; it is not imported. Current limitations include linked Rhythms, notes, connection history, and Fitness records.</p>
+              <p>Unsupported data is not imported; it remains recoverable from the source-preserving package. Review these fields before replacing the current preview.</p>
               <ul>
                 {legacyDryRun.report.unsupported.map(item => (
                   <li key={item.path}>{item.path} ({item.count})</li>
@@ -796,12 +811,25 @@ export function PreviewDataControls({
           )}
           {legacyDryRun.report.ambiguous.length > 0 && (
             <p className="preview-data-controls__help" role="alert">
-              Ambiguous identity records prevent import. Resolve duplicate source IDs before retrying.
+              Ambiguous identities or links prevent replacement. Only explicitly listed unsupported historical records can be excluded; resolve other ambiguous source records before retrying.
             </p>
+          )}
+          {legacyDryRun.report.excluded.length > 0 && (
+            <div className="preview-data-controls__help" role="alert">
+              <p>{legacyDryRun.report.excluded.length} unsupported historical event{legacyDryRun.report.excluded.length === 1 ? '' : 's'} with unresolved Rhythm links will not be imported. Their exact records and source IDs are preserved in the recovery package.</p>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={legacyExclusionsConfirmed}
+                  onChange={event => setLegacyExclusionsConfirmed(event.currentTarget.checked)}
+                />
+                I understand these unresolved historical events will be excluded from this partial import.
+              </label>
+            </div>
           )}
           {legacyDryRun.report.invalid.length > 0 && (
             <p className="preview-data-controls__help" role="alert">
-              Invalid People data prevents import. Correct the source records and run the dry run again.
+              Invalid supported records prevent replacement. Correct the source records and run the dry run again.
             </p>
           )}
           <p className="preview-data-controls__help">
@@ -822,14 +850,16 @@ export function PreviewDataControls({
               type="button"
               className="btn mini"
               onClick={confirmLegacyImport}
-              disabled={!legacyDryRun.candidate || !legacyPackageDownloaded || !legacyImportConfirmed}
+              disabled={!legacyDryRun.candidate || !legacyPackageDownloaded || !legacyImportConfirmed
+                || legacyDryRun.report.excluded.length > 0 && !legacyExclusionsConfirmed}
             >
-              Import supported People data
+              Import supported data
             </button>
             <button type="button" className="btn mini ghost" onClick={() => {
               setLegacyDryRun(null);
               setLegacyPackageDownloaded(false);
               setLegacyImportConfirmed(false);
+              setLegacyExclusionsConfirmed(false);
             }}>Cancel</button>
           </div>
         </MoneyGoalDialog>

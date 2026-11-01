@@ -17,7 +17,6 @@ import {
   foundationCatalogue,
   setPersonGroupMembership
 } from '../src/domain/preview-data.ts';
-import type { PersonPickerGroup } from '../src/domain/preview-data.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
 import type { PersonId } from '../src/domain/preview-data.ts';
 import type { RhythmScoreResult } from '../src/domain/rhythm-scoring.ts';
@@ -78,7 +77,7 @@ function ProfileHarness({
   onUndo = vi.fn(),
   onRestoreRhythm = vi.fn(),
   onClose = vi.fn(),
-  onPeopleGroupsChange = vi.fn()
+  onEditPerson = vi.fn()
 }: {
   personId?: PersonId;
   initialNotes?: readonly PersonNote[];
@@ -94,7 +93,7 @@ function ProfileHarness({
   onUndo?: (id: string) => void;
   onRestoreRhythm?: (id: string) => void;
   onClose?: () => void;
-  onPeopleGroupsChange?: (groups: PersonPickerGroup[]) => void;
+  onEditPerson?: (personId: PersonId, event: ReactMouseEvent<HTMLButtonElement>) => void;
 }) {
   const [friendships, setFriendships] = useState<FriendshipData>(initialFriendships);
   const [personNotes, setPersonNotes] = useState<PersonNote[]>([...initialNotes]);
@@ -113,7 +112,7 @@ function ProfileHarness({
         completedRhythms={completed ? new Set([linkedRhythm.id]) : new Set()}
         undoableRhythms={completed ? new Set([linkedRhythm.id]) : new Set()}
         onFriendshipsChange={setFriendships}
-        onPeopleGroupsChange={onPeopleGroupsChange}
+        onEditPerson={onEditPerson}
         personNotes={personNotes}
         onCreatePersonNote={(ownerId: PersonId, draft: PersonNoteDraft) => {
           const now = '2026-10-31T12:00:00.000Z';
@@ -165,6 +164,16 @@ function ProfileHarness({
 }
 
 describe('shared person profile', () => {
+  it('keeps the profile content as a page section outside the legacy card selector', () => {
+    render(<ProfileHarness rhythms={[]} />);
+    const page = screen.getByRole('main', { name: 'Avery Brooks' });
+    const content = within(page).getByRole('region', { name: 'Avery Brooks' });
+
+    expect(content.parentElement).toBe(page);
+    expect(content.classList.contains('person-profile')).toBe(false);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
   it('shows only Rhythms associated with the stable Person ID and composes the shared card actions', async () => {
     const user = userEvent.setup();
     const addRhythm = vi.fn();
@@ -200,15 +209,19 @@ describe('shared person profile', () => {
     expect(rhythmHistory).toHaveBeenCalledOnce();
   });
 
-  it('uses the profile overflow menu to update the existing People-owned friend classification', async () => {
+  it('opens Person settings directly without an intermediate menu and preserves profile tabs', async () => {
     const user = userEvent.setup();
-    const onPeopleGroupsChange = vi.fn<(groups: PersonPickerGroup[]) => void>();
-    render(<ProfileHarness onPeopleGroupsChange={onPeopleGroupsChange} />);
-    await user.click(screen.getByLabelText('More actions for Avery Brooks'));
-    await user.click(screen.getByRole('button', { name: 'Remove friend' }));
-    expect(onPeopleGroupsChange).toHaveBeenCalledOnce();
-    expect(onPeopleGroupsChange.mock.calls[0]?.[0].find(group => group.id === 'friends')?.memberIds)
-      .not.toContain('sample-person-avery');
+    const onEditPerson = vi.fn();
+    render(<ProfileHarness onEditPerson={onEditPerson} />);
+    const profile = screen.getByRole('main', { name: 'Avery Brooks' });
+    const settingsButton = within(profile).getByRole('button', { name: 'Person settings' });
+    await user.click(settingsButton);
+    expect(onEditPerson).toHaveBeenCalledWith('sample-person-avery', expect.anything());
+    expect(within(profile).queryByRole('button', { name: 'Edit details' })).toBeNull();
+    expect(within(profile).queryByLabelText('More actions for Avery Brooks')).toBeNull();
+    expect(within(profile).getByRole('tab', { name: 'Rhythms' })).toBeTruthy();
+    expect(within(profile).getByRole('tab', { name: 'Connections' })).toBeTruthy();
+    expect(within(profile).getByRole('tab', { name: 'Notes' })).toBeTruthy();
   });
 
   it('retains shared Undo behavior for a completed person-linked Rhythm', async () => {
@@ -266,7 +279,6 @@ describe('shared person profile', () => {
             completedRhythms={new Set()}
             undoableRhythms={new Set()}
             onFriendshipsChange={setFriendships}
-            onPeopleGroupsChange={vi.fn()}
             onAddRhythm={vi.fn()}
             onEditRhythm={vi.fn()}
             onRhythmHistory={vi.fn()}

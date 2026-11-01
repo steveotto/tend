@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import type { MouseEvent } from 'react';
-import type { PersonId, PersonPickerGroup, PersonPickerGroupId, PersonPreview } from '../domain/preview-data.ts';
+import type { PersonId, PersonPickerGroup, PersonPreview } from '../domain/preview-data.ts';
+import { BirthdayCakeIcon } from './BirthdayCakeIcon.tsx';
 import { PersonAvatar } from './PersonBadge.tsx';
 
 type PersonBirthdayPresentation = {
@@ -17,8 +17,6 @@ export function PeopleCard({
   birthday,
   connectionRecency,
   onSelect,
-  onToggleClassification,
-  onEditPerson,
   className = '',
   identityClassName = '',
   connectionClassName = '',
@@ -27,12 +25,10 @@ export function PeopleCard({
   person: PersonPreview;
   classifications: readonly Pick<PersonPickerGroup, 'id' | 'label'>[];
   relationshipLabel?: string;
-  relationshipTone?: PersonPickerGroupId;
+  relationshipTone?: PersonPickerGroup['id'];
   birthday?: PersonBirthdayPresentation;
   connectionRecency?: string;
   onSelect: (personId: PersonId) => void;
-  onToggleClassification?: (groupId: PersonPickerGroupId, selected: boolean) => void;
-  onEditPerson?: (personId: PersonId, event: MouseEvent<HTMLButtonElement>) => void;
   className?: string;
   identityClassName?: string;
   connectionClassName?: string;
@@ -89,73 +85,19 @@ export function PeopleCard({
         </span>
         {(birthday?.age !== undefined || birthday) && (
           <span className="people-card__birthday-footer">
-            {birthday?.age !== undefined && <span className="people-card__age">Age {birthday.age}</span>}
+            {birthday?.age !== undefined && <strong className="people-card__age">Age {birthday.age}</strong>}
             {birthday && (
               <span className="people-card__birthday">
-                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <path d="M7 3v3m10-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z" />
-                  <path d="M8 13h2m4 0h2m-8 4h2m4 0h2" />
-                </svg>
+                <BirthdayCakeIcon />
                 <span className="people-card__birthday-date">{birthday.dateLabel}</span>
+                <span className="people-card__birthday-separator" aria-hidden="true">•</span>
                 <span className="people-card__birthday-countdown">{birthday.countdownLabel}</span>
               </span>
             )}
           </span>
         )}
       </button>
-      {(onToggleClassification || onEditPerson) && (
-        <details className="people-card__menu">
-          <summary aria-label={`More actions for ${person.displayName}`}>
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <circle cx="5" cy="12" r="1.5" />
-              <circle cx="12" cy="12" r="1.5" />
-              <circle cx="19" cy="12" r="1.5" />
-            </svg>
-          </summary>
-          <div className="people-card__menu-content">
-            {onEditPerson && (
-            <button
-              type="button"
-              aria-label={`Edit details for ${person.displayName}`}
-              onClick={event => onEditPerson(person.id, event)}
-            >
-              Edit details
-            </button>
-            )}
-            {onToggleClassification && (
-              <>
-                <span className="people-card__menu-label">Classifications</span>
-                {(['marriage', 'parenting', 'friends'] as const).map(groupId => {
-                  const group = classifications.find(item => item.id === groupId);
-                  const selected = group !== undefined;
-                  const label = group?.label ?? classificationLabel(groupId);
-                  return (
-                    <button
-                      key={groupId}
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={event => {
-                        onToggleClassification(groupId, !selected);
-                        const menu = event.currentTarget.closest('details');
-                        if (menu) menu.open = false;
-                      }}
-                    >
-                      {selected ? 'Remove' : 'Add'} {label}
-                    </button>
-                  );
-                })}
-              </>
-            )}
-          </div>
-        </details>
-      )}
       {children && <div className="people-card__actions">{children}</div>}
     </article>
   );
-}
-
-function classificationLabel(groupId: PersonPickerGroupId): string {
-  if (groupId === 'marriage') return 'Marriage';
-  if (groupId === 'parenting') return 'Parenting';
-  return 'Friends';
 }

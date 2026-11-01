@@ -21,7 +21,7 @@ function renderEditor(onSave = vi.fn(() => null), onClose = vi.fn()) {
       details={{ personId: 'sample-person-avery', photoDataUrl: originalPhoto }}
       today="2026-10-31"
       cadence="weekly"
-      isFriend
+      categoryIds={['friends']}
       onSave={onSave}
       onClose={onClose}
     />
@@ -30,38 +30,83 @@ function renderEditor(onSave = vi.fn(() => null), onClose = vi.fn()) {
 }
 
 describe('shared Person settings editor', () => {
-  it('does not invent a year when converting an unknown leap-day birthday to a full date', async () => {
+  it('preserves partial dates during unrelated edits and requires explicit replacement or clearing', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn(() => null);
+    const onClose = vi.fn();
+    render(
+      <PersonDetailsEditor
+        personId="sample-person-avery"
+        personName="Avery Brooks"
+        details={{
+          personId: 'sample-person-avery',
+          birthday: { monthDay: '02-29' },
+          anniversary: { monthDay: '12-02' }
+        }}
+        today="2026-10-31"
+        categoryIds={[]}
+        onSave={onSave}
+        onClose={onClose}
+      />
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
+    const birthday = within(dialog).getByLabelText('Birthday');
+    const anniversary = within(dialog).getByLabelText('Anniversary');
+    expect((birthday as HTMLInputElement).value).toBe('');
+    expect((anniversary as HTMLInputElement).value).toBe('');
+    expect(within(dialog).getByText(/Saved date: February 29/)).toBeTruthy();
+    expect(within(dialog).getByText(/Saved date: December 2/)).toBeTruthy();
+    expect(within(dialog).queryByText('Year unknown')).toBeNull();
+    expect(within(dialog).queryByLabelText('Relationship')).toBeNull();
+    await user.selectOptions(within(dialog).getByLabelText('Love language'), 'wa');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      categoryIds: [],
+      birthdayDate: '',
+      birthdayYearUnknown: true,
+      anniversaryDate: '',
+      anniversaryYearUnknown: true,
+      connectionStyle: 'wa'
+    }));
+    expect(onClose).toHaveBeenCalledOnce();
+
+    fireEvent.change(birthday, { target: { value: '1988-02-29' } });
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(onSave).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      birthdayDate: '1988-02-29',
+      birthdayYearUnknown: false,
+      anniversaryDate: '',
+      anniversaryYearUnknown: true
+    }));
+  });
+
+  it('provides explicit Clear actions for both combined date fields', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn(() => null);
     render(
       <PersonDetailsEditor
         personId="sample-person-avery"
         personName="Avery Brooks"
-        details={{ personId: 'sample-person-avery', birthday: { monthDay: '02-29' } }}
+        details={{
+          personId: 'sample-person-avery',
+          birthday: { monthDay: '02-29' },
+          anniversary: { monthDay: '12-02' }
+        }}
         today="2026-10-31"
-        isFriend={false}
+        categoryIds={[]}
         onSave={onSave}
         onClose={vi.fn()}
       />
     );
     const dialog = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
-    const birthday = within(dialog).getByLabelText('Birthday');
-    const yearUnknown = within(dialog).getAllByLabelText('Year unknown')[0] as HTMLInputElement;
-
-    expect((birthday as HTMLInputElement).value).toBe('2000-02-29');
-    expect(yearUnknown.checked).toBe(true);
-    await user.click(yearUnknown);
-    expect(yearUnknown.checked).toBe(true);
-    expect(within(dialog).getByText(/Choose a full date to set its year/)).toBeTruthy();
-    expect(onSave).not.toHaveBeenCalled();
-
-    fireEvent.change(birthday, { target: { value: '1988-02-29' } });
-    await user.click(yearUnknown);
-    expect(yearUnknown.checked).toBe(false);
+    await user.click(within(dialog).getByRole('button', { name: 'Clear birthday' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Clear anniversary' }));
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
-      birthdayDate: '1988-02-29',
-      birthdayYearUnknown: false
+      birthdayDate: '',
+      birthdayYearUnknown: false,
+      anniversaryDate: '',
+      anniversaryYearUnknown: false
     }));
   });
 
@@ -110,21 +155,101 @@ describe('shared Person settings editor', () => {
         details={{ personId: 'sample-person-avery', photoDataUrl: originalPhoto }}
         today="2026-10-31"
         cadence="weekly"
-        isFriend={false}
+        categoryIds={[]}
         onSave={onSave}
         onClose={vi.fn()}
       />
     );
     const dialog = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
     expect(dialog.querySelector<HTMLSelectElement>('#person-details-cadence-sample-person-avery')?.disabled).toBe(true);
-    expect(within(dialog).getByText(/classified as Friends/)).toBeTruthy();
     await user.click(within(dialog).getByRole('button', { name: 'Remove photo' }));
+    await user.click(within(dialog).getByLabelText('Category: none selected'));
+    const friendCheckbox = within(dialog).getByRole('checkbox', { name: 'Friend' });
+    await user.click(friendCheckbox);
+    expect(dialog.querySelector<HTMLSelectElement>('#person-details-cadence-sample-person-avery')?.disabled).toBe(false);
+    await user.selectOptions(within(dialog).getByLabelText('Connection cadence'), 'monthly');
     expect(dialog.querySelector('.person-details-editor__photo-preview img')).toBeNull();
     expect(onSave).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
-      connectionCadence: 'weekly',
+      categoryIds: ['friends'],
+      connectionCadence: 'monthly',
       photoDataUrl: ''
     }));
+  });
+
+  it('stages multiple categories and retains every field after a failed save', async () => {
+    const user = userEvent.setup();
+    vi.mocked(compressPersonPhoto).mockResolvedValueOnce(replacementPhoto);
+    const onSave = vi.fn(() => 'Preview storage changed in another tab. No person settings were saved.');
+    const onClose = vi.fn();
+    render(
+      <PersonDetailsEditor
+        personId="sample-person-avery"
+        personName="Avery Brooks"
+        details={{
+          personId: 'sample-person-avery',
+          relationshipLabel: 'Spouse',
+          birthday: { monthDay: '02-29' },
+          anniversary: { monthDay: '12-02' },
+          photoDataUrl: originalPhoto
+        }}
+        today="2026-10-31"
+        categoryIds={['marriage']}
+        onSave={onSave}
+        onClose={onClose}
+      />
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
+    await user.click(within(dialog).getByLabelText('Category: Marriage'));
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Parenting' }));
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Friend' }));
+    fireEvent.change(within(dialog).getByLabelText('Birthday'), { target: { value: '2000-02-29' } });
+    fireEvent.change(within(dialog).getByLabelText('Anniversary'), { target: { value: '2010-12-02' } });
+    await user.upload(
+      within(dialog).getByLabelText('Choose photo for Avery Brooks'),
+      new File(['synthetic-image'], 'synthetic.jpg', { type: 'image/jpeg' })
+    );
+    await waitFor(() => expect(
+      dialog.querySelector('.person-details-editor__photo-preview img')?.getAttribute('src')
+    ).toBe(replacementPhoto));
+    await user.selectOptions(within(dialog).getByLabelText('Connection cadence'), 'weekly');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    expect(within(dialog).getByRole('alert').textContent)
+      .toBe('Preview storage changed in another tab. No person settings were saved.');
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      categoryIds: ['marriage', 'parenting', 'friends'],
+      birthdayDate: '2000-02-29',
+      anniversaryDate: '2010-12-02',
+      connectionCadence: 'weekly',
+      photoDataUrl: replacementPhoto
+    }));
+    expect((within(dialog).getByLabelText('Birthday') as HTMLInputElement).value).toBe('2000-02-29');
+    expect((within(dialog).getByLabelText('Anniversary') as HTMLInputElement).value).toBe('2010-12-02');
+    expect(dialog.querySelector('.person-details-editor__photo-preview img')?.getAttribute('src')).toBe(replacementPhoto);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('discards unsaved category changes on Escape', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn(() => null);
+    const onClose = vi.fn();
+    render(
+      <PersonDetailsEditor
+        personId="sample-person-avery"
+        personName="Avery Brooks"
+        today="2026-10-31"
+        categoryIds={['marriage']}
+        onSave={onSave}
+        onClose={onClose}
+      />
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
+    await user.click(within(dialog).getByLabelText('Category: Marriage'));
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Parenting' }));
+    fireEvent(dialog, new Event('cancel', { bubbles: false, cancelable: true }));
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledOnce();
   });
 });

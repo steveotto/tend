@@ -24,7 +24,7 @@ export function CatalogApp() {
   const [financeLifecycle, setFinanceLifecycle] = useState<FoundationLifecycle>(financeFoundation.lifecycle);
   const [selectedPersonId, setSelectedPersonId] = useState<PersonId | null>(null);
   const [friendships, setFriendships] = useState<FriendshipData>(createFriendshipData);
-  const [peopleGroups, setPeopleGroups] = useState<PersonPickerGroup[]>(createPersonPickerGroups);
+  const peopleGroups: PersonPickerGroup[] = createPersonPickerGroups();
   const people = syntheticPeople;
   const financeFoundationView = { ...financeFoundation, lifecycle: financeLifecycle };
   const selectedPerson = selectedPersonId === null ? null : personById(people, selectedPersonId);
@@ -140,7 +140,6 @@ export function CatalogApp() {
           completedRhythms={new Set()}
           undoableRhythms={new Set()}
           onFriendshipsChange={setFriendships}
-          onPeopleGroupsChange={setPeopleGroups}
           onAddRhythm={() => undefined}
           onEditRhythm={() => undefined}
           onRhythmHistory={() => undefined}

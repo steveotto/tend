@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   annualDateSummary,
+  birthdayCardSummary,
   birthdaySummary,
   connectionStyleLabel,
   isStandardRelationship,
@@ -12,11 +13,12 @@ import {
 import { createSamplePreviewData, createPreviewEnvelope, parsePreviewBackup } from '../src/domain/preview-state.ts';
 
 describe('person details domain', () => {
-  it('saves optional person-owned details and clears every field without changing classifications', () => {
+  it('saves optional person-owned details, preserves relationship text, and clears editable fields', () => {
     const data = createSamplePreviewData();
     const groupsBefore = structuredClone(data.peopleGroups);
+    const current = [{ personId: 'sample-person-avery', relationshipLabel: 'Sister' }];
     const draft = {
-      relationshipLabel: '  Sister  ',
+      categoryIds: [],
       birthdayDate: '2000-02-29',
       birthdayYearUnknown: true,
       anniversaryDate: '2000-12-31',
@@ -25,7 +27,7 @@ describe('person details domain', () => {
       connectionCadence: '',
       photoDataUrl: ''
     };
-    const saved = savePersonDetailsCommand([], 'sample-person-avery', draft, '2026-10-31');
+    const saved = savePersonDetailsCommand(current, 'sample-person-avery', draft, '2026-10-31');
     expect(saved).toEqual({
       valid: true,
       details: [{
@@ -37,8 +39,16 @@ describe('person details domain', () => {
       }]
     });
     if (!saved.valid) throw new Error('Expected valid Person details draft.');
-    const cleared = savePersonDetailsCommand(saved.details, 'sample-person-avery', personDetailsDraft(), '2026-10-31');
-    expect(cleared).toEqual({ valid: true, details: [] });
+    const cleared = savePersonDetailsCommand(
+      saved.details,
+      'sample-person-avery',
+      personDetailsDraft(),
+      '2026-10-31'
+    );
+    expect(cleared).toEqual({
+      valid: true,
+      details: [{ personId: 'sample-person-avery', relationshipLabel: 'Sister' }]
+    });
     expect(data.peopleGroups).toEqual(groupsBefore);
     expect(data.friendships.connections).toEqual([]);
     expect(data.savedRhythms).toEqual([]);
@@ -116,7 +126,7 @@ describe('person details domain', () => {
       personId: 'sample-person-avery',
       anniversary: { monthDay: '02-29' }
     });
-    expect(unknownAnniversary.anniversaryDate).toBe('2000-02-29');
+    expect(unknownAnniversary.anniversaryDate).toBe('');
     expect(unknownAnniversary.anniversaryYearUnknown).toBe(true);
     expect(validatePersonDetailsCollection([{
       personId: 'sample-person-avery',
@@ -139,6 +149,32 @@ describe('person details domain', () => {
       personId: 'sample-person-avery',
       birthday: { monthDay: '02-29', year: 2000 }
     }], '2026-10-31')).toBe(true);
+  });
+
+  it('preserves partial dates during unrelated edits and exposes concise card countdown wording', () => {
+    const partial = [{
+      personId: 'sample-person-avery',
+      relationshipLabel: 'Sister',
+      birthday: { monthDay: '12-02' },
+      anniversary: { monthDay: '03-15' }
+    }];
+    const draft = personDetailsDraft(partial[0]);
+    expect(draft.birthdayDate).toBe('');
+    expect(draft.anniversaryDate).toBe('');
+    expect(savePersonDetailsCommand(partial, 'sample-person-avery', {
+      ...draft,
+    }, '2026-10-31')).toEqual({
+      valid: true,
+      details: [partial[0]]
+    });
+
+    expect(birthdayCardSummary({ monthDay: '12-02' }, '2026-10-31')).toMatchObject({
+      dateLabel: 'December 2',
+      countdownLabel: 'in 32d'
+    });
+    expect(birthdayCardSummary({ monthDay: '10-31' }, '2026-10-31')?.countdownLabel).toBe('today');
+    expect(birthdayCardSummary({ monthDay: '11-01' }, '2026-10-31')?.countdownLabel).toBe('tomorrow');
+    expect(birthdayCardSummary({ monthDay: '02-29' }, '2026-02-28')?.countdownLabel).toBe('tomorrow');
   });
 
   it('round-trips optional details in schema v31 and rejects unresolved or malformed records', () => {

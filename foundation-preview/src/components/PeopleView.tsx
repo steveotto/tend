@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import type { MouseEvent } from 'react';
 import { createSamplePeople } from '../domain/preview-data.ts';
 import type { PersonPickerGroup, PersonId, PersonPickerGroupId, PersonPreview } from '../domain/preview-data.ts';
-import { setPersonGroupMembership } from '../domain/preview-data.ts';
 import type { FriendshipData } from '../domain/friendships.ts';
 import { connectionsForPerson } from '../domain/friendships.ts';
 import { PeopleCard } from './PeopleCard.tsx';
@@ -26,9 +24,7 @@ export function PeopleView({
   friendships,
   today,
   personDetails = [],
-  onChangeGroups,
   onOpenPerson,
-  onEditPerson,
   onCreatePerson
 }: {
   people?: readonly PersonPreview[];
@@ -36,9 +32,7 @@ export function PeopleView({
   friendships: FriendshipData;
   today: string;
   personDetails?: readonly PersonDetails[];
-  onChangeGroups: (next: PersonPickerGroup[]) => void;
   onOpenPerson: (personId: PersonId) => void;
-  onEditPerson?: (personId: PersonId, event: MouseEvent<HTMLButtonElement>) => void;
   onCreatePerson?: (person: PersonPreview, groupIds: readonly PersonPickerGroupId[]) => string | null;
 }) {
   const [selectedFilter, setSelectedFilter] = useState<PersonPickerGroupId | 'all'>('all');
@@ -116,10 +110,6 @@ export function PeopleView({
                   ? { connectionRecency: formatConnectionRecency(lastConnection.date, today) }
                   : {})}
                 onSelect={onOpenPerson}
-                onToggleClassification={(groupId, selected) => onChangeGroups(
-                  setPersonGroupMembership(groups, groupId, person.id, selected)
-                )}
-                {...(onEditPerson ? { onEditPerson } : {})}
                 className="people-view__row"
               />
             );

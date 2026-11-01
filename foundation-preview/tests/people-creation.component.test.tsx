@@ -18,7 +18,6 @@ describe('People creation', () => {
         groups={createPersonPickerGroups()}
         friendships={createFriendshipData()}
         today="2026-10-31"
-        onChangeGroups={vi.fn()}
         onOpenPerson={vi.fn()}
         onCreatePerson={onCreatePerson}
       />
@@ -48,7 +47,6 @@ describe('People creation', () => {
         groups={createPersonPickerGroups()}
         friendships={createFriendshipData()}
         today="2026-10-31"
-        onChangeGroups={vi.fn()}
         onOpenPerson={vi.fn()}
         onCreatePerson={onCreatePerson}
       />

@@ -1,7 +1,7 @@
 import { connectionCadences } from './friendships.ts';
 import type { ConnectionCadence } from './friendships.ts';
 import { isValidPersonId } from './preview-data.ts';
-import type { PersonId } from './preview-data.ts';
+import type { PersonId, PersonPickerGroupId } from './preview-data.ts';
 
 export const relationshipGroups = [
   {
@@ -40,7 +40,7 @@ export type PersonDetails = {
 };
 
 export type PersonDetailsDraft = {
-  relationshipLabel: string;
+  categoryIds: PersonPickerGroupId[];
   birthdayDate: string;
   birthdayYearUnknown: boolean;
   anniversaryDate: string;
@@ -70,10 +70,11 @@ export function personDetailsForId(
 
 export function personDetailsDraft(
   details?: PersonDetails,
-  connectionCadence: ConnectionCadence | null = null
+  connectionCadence: ConnectionCadence | null = null,
+  categoryIds: readonly PersonPickerGroupId[] = []
 ): PersonDetailsDraft {
   return {
-    relationshipLabel: details?.relationshipLabel ?? '',
+    categoryIds: [...categoryIds],
     birthdayDate: pickerDate(details?.birthday),
     birthdayYearUnknown: Boolean(details?.birthday && details.birthday.year === undefined),
     anniversaryDate: pickerDate(details?.anniversary),
@@ -86,7 +87,8 @@ export function personDetailsDraft(
 
 function pickerDate(value?: { monthDay: string; year?: number }): string {
   if (!value) return '';
-  return `${(value.year ?? 2000).toString().padStart(4, '0')}-${value.monthDay}`;
+  if (value.year === undefined) return '';
+  return `${value.year.toString().padStart(4, '0')}-${value.monthDay}`;
 }
 
 function datePickerMonthDay(value: string): string {
@@ -106,10 +108,7 @@ export function validatePersonDetailsDraft(
 ): { valid: true; details?: Omit<PersonDetails, 'personId'> } | { valid: false; errors: PersonDetailsDraftErrors } {
   const errors: PersonDetailsDraftErrors = {};
   if (!/^\d{4}-\d{2}-\d{2}$/.test(today) || !isValidCalendarDate(today)) {
-    return { valid: false, errors: { relationshipLabel: 'The current date is invalid.' } };
-  }
-  if (draft.relationshipLabel.trim().length > 80) {
-    errors.relationshipLabel = 'Use 80 characters or fewer.';
+    return { valid: false, errors: { birthdayDate: 'The current date is invalid.' } };
   }
   const birthday = validatePickerDate(
     draft.birthdayDate,
@@ -139,7 +138,6 @@ export function validatePersonDetailsDraft(
   if (Object.keys(errors).length > 0) return { valid: false, errors };
 
   const result: Omit<PersonDetails, 'personId'> = {
-    ...(draft.relationshipLabel.trim() ? { relationshipLabel: draft.relationshipLabel.trim() } : {}),
     ...(birthday ? { birthday } : {}),
     ...(anniversary ? { anniversary } : {}),
     ...(draft.connectionStyle ? { connectionStyle: draft.connectionStyle as ConnectionStyle } : {}),
@@ -192,7 +190,18 @@ export function savePersonDetailsCommand(
   const result = validatePersonDetailsDraft(draft, today);
   if (!result.valid) return result;
   const remaining = current.filter(item => item.personId !== personId);
-  if (result.details) remaining.push({ personId, ...result.details });
+  const previous = current.find(item => item.personId === personId);
+  const nextDetails = {
+    ...result.details,
+    ...(previous?.relationshipLabel === undefined ? {} : { relationshipLabel: previous.relationshipLabel }),
+    ...(draft.birthdayYearUnknown && !draft.birthdayDate && previous && previous.birthday?.year === undefined
+      ? { birthday: previous.birthday }
+      : {}),
+    ...(draft.anniversaryYearUnknown && !draft.anniversaryDate && previous && previous.anniversary?.year === undefined
+      ? { anniversary: previous.anniversary }
+      : {})
+  };
+  if (Object.keys(nextDetails).length > 0) remaining.push({ personId, ...nextDetails });
   return { valid: true, details: remaining };
 }
 
@@ -275,13 +284,16 @@ export function birthdayCardSummary(
   const [year, month, day] = next.date.split('-').map(Number);
   const dateLabel = new Date(year!, month! - 1, day!, 12).toLocaleDateString(undefined, {
     month: 'long',
-    day: 'numeric'
+    day: 'numeric',
+    timeZone: 'UTC'
   });
   return {
     dateLabel,
     countdownLabel: next.daysUntil === 0
-      ? 'Birthday today'
-      : `Birthday in ${next.daysUntil} ${next.daysUntil === 1 ? 'day' : 'days'}`,
+      ? 'today'
+      : next.daysUntil === 1
+        ? 'tomorrow'
+        : `in ${next.daysUntil}d`,
     ...(summary.age === undefined ? {} : { age: summary.age })
   };
 }

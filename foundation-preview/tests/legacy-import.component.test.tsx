@@ -59,7 +59,8 @@ describe('Classic Tend import controls', () => {
     });
 
     const dialog = await screen.findByRole('dialog', { name: 'Review Classic Tend import' });
-    expect(within(dialog).getByText('2', { selector: 'dd' })).toBeTruthy();
+    expect(within(dialog).getByText('Source People').parentElement?.querySelector('dd')?.textContent).toBe('2');
+    expect(within(dialog).getByText('Converted People').parentElement?.querySelector('dd')?.textContent).toBe('2');
     expect(onImport).not.toHaveBeenCalled();
     expect(storage.setItem).not.toHaveBeenCalled();
 
@@ -67,7 +68,7 @@ describe('Classic Tend import controls', () => {
     await user.click(within(dialog).getByRole('checkbox', {
       name: 'I understand unsupported records will not be imported.'
     }));
-    await user.click(within(dialog).getByRole('button', { name: 'Import supported People data' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Import supported data' }));
 
     expect(onImport).toHaveBeenCalledOnce();
     expect(storage.setItem).toHaveBeenCalledOnce();
@@ -94,6 +95,50 @@ describe('Classic Tend import controls', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Review Classic Tend import' });
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(onImport).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog', { name: 'Review Classic Tend import' })).toBeNull();
+  });
+
+  it('requires explicit acknowledgment and recovery download before importing a partial candidate', async () => {
+    const user = userEvent.setup();
+    const onImport = vi.fn((_data: PreviewData) => null);
+    const createObjectURL = vi.fn(() => 'blob:recovery-package');
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL: vi.fn() });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    renderControls(onImport);
+
+    const source = JSON.stringify({
+      people: [{ id: 'person-one', name: 'Taylor' }],
+      rhythms: [{ id: 'rhythm-one', text: 'Check in', freq: 'weekly', tod: 'anytime' }],
+      events: [{
+        id: 'orphan-prayer', type: 'prayer', kind: 'prayer',
+        rhythmId: 'missing-rhythm', ts: Date.parse('2026-10-10T12:00:00Z')
+      }]
+    });
+    fireEvent.change(screen.getByLabelText('Dry-run Classic Tend import'), {
+      target: { files: [new File([source], 'classic-export.json', { type: 'application/json' })] }
+    });
+
+    const dialog = await screen.findByRole('dialog', { name: 'Review Classic Tend import' });
+    expect(within(dialog).getByText('Excluded and preserved records').parentElement
+      ?.querySelector('dd')?.textContent).toBe('1');
+    expect(onImport).not.toHaveBeenCalled();
+    const importButton = within(dialog).getByRole('button', { name: 'Import supported data' });
+    expect(importButton.matches(':disabled')).toBe(true);
+
+    await user.click(within(dialog).getByRole('button', { name: 'Download migration recovery package' }));
+    await user.click(within(dialog).getByRole('checkbox', {
+      name: 'I understand unsupported records will not be imported.'
+    }));
+    expect(importButton.matches(':disabled')).toBe(true);
+    await user.click(within(dialog).getByRole('checkbox', {
+      name: 'I understand these unresolved historical events will be excluded from this partial import.'
+    }));
+    expect(importButton.matches(':disabled')).toBe(false);
+    await user.click(importButton);
+
+    expect(onImport).toHaveBeenCalledOnce();
+    expect(onImport.mock.calls[0]![0].people).toEqual([{ id: 'person-one', displayName: 'Taylor' }]);
+    expect(onImport.mock.calls[0]![0].datedRhythmCompletions).toEqual([]);
     expect(screen.queryByRole('dialog', { name: 'Review Classic Tend import' })).toBeNull();
   });
 });

@@ -942,9 +942,14 @@ describe('shared Rhythm history', () => {
     render(<RhythmHistoryView rhythm={rhythm} />);
     const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
     await user.click(within(history).getByRole('button', { name: 'Show Seasons' }));
-    const segments = within(history).getAllByRole('button', { name: /Go to .*Oct/ });
+    const segments = within(history).getAllByRole('button', { name: /^Go to / });
     expect(segments).toHaveLength(2);
-    expect(segments[1]?.getAttribute('aria-label')).toContain(`${shortTestDate(currentDate)} to ${shortTestDate(currentDate)}`);
+    expect(segments[0]?.getAttribute('aria-label')).toContain(
+      `${shortTestDate(previousDate)} to ${shortTestDate(addCalendarDays(currentDate, -1))}`
+    );
+    expect(segments[1]?.getAttribute('aria-label')).toContain(
+      `${shortTestDate(currentDate)} to ${shortTestDate(currentDate)}`
+    );
     expect((segments[1] as HTMLButtonElement).style.flexGrow).toBe('1');
 
     const originalMatchMedia = window.matchMedia;

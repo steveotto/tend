@@ -1,12 +1,10 @@
 import { useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import type { ConnectionCadence } from '../domain/friendships.ts';
-import type { PersonId } from '../domain/preview-data.ts';
+import type { PersonId, PersonPickerGroupId } from '../domain/preview-data.ts';
 import {
   connectionStyles,
-  isStandardRelationship,
   personDetailsDraft,
-  relationshipGroups,
   validatePersonDetailsDraft
 } from '../domain/person-details.ts';
 import type {
@@ -25,13 +23,19 @@ const cadenceOptions: readonly { value: ConnectionCadence; label: string }[] = [
   { value: 'monthly', label: 'Monthly' }
 ];
 
+const categoryOptions: readonly { id: PersonPickerGroupId; label: string }[] = [
+  { id: 'marriage', label: 'Marriage' },
+  { id: 'parenting', label: 'Parenting' },
+  { id: 'friends', label: 'Friend' }
+];
+
 export function PersonDetailsEditor({
   personId,
   personName,
   details,
   today,
   cadence,
-  isFriend,
+  categoryIds = [],
   onSave,
   onClose
 }: {
@@ -40,22 +44,18 @@ export function PersonDetailsEditor({
   details?: PersonDetails;
   today: string;
   cadence?: ConnectionCadence | null;
-  isFriend: boolean;
+  categoryIds?: readonly PersonPickerGroupId[];
   onSave: (draft: PersonDetailsDraft) => string | null;
   onClose: () => void;
 }) {
-  const [draft, setDraft] = useState(() => personDetailsDraft(details, cadence));
+  const [draft, setDraft] = useState(() => personDetailsDraft(details, cadence, categoryIds));
   const [errors, setErrors] = useState<PersonDetailsDraftErrors>({});
   const [saveError, setSaveError] = useState('');
   const [photoError, setPhotoError] = useState('');
   const [photoBusy, setPhotoBusy] = useState(false);
-  const [dateYearConfirmed, setDateYearConfirmed] = useState(() => ({
-    birthday: details?.birthday?.year !== undefined,
-    anniversary: details?.anniversary?.year !== undefined
-  }));
   const photoRequest = useRef(0);
   const titleId = `person-details-title-${personId}`;
-  const relationshipIsStandard = isStandardRelationship(draft.relationshipLabel);
+  const isFriend = draft.categoryIds.includes('friends');
   const avatarPerson = {
     id: personId,
     displayName: personName,
@@ -68,31 +68,14 @@ export function PersonDetailsEditor({
     setSaveError('');
   }
 
-  function changeUnknownYear(
-    field: 'birthdayYearUnknown' | 'anniversaryYearUnknown',
-    dateField: 'birthdayDate' | 'anniversaryDate',
-    dateKind: 'birthday' | 'anniversary',
-    unknown: boolean
-  ) {
-    if (!unknown && draft[dateField] && !dateYearConfirmed[dateKind]) {
-      setErrors(current => ({
-        ...current,
-        [dateField]: 'Choose a full date to set its year, or leave Year unknown selected.'
-      }));
-      return;
-    }
-    update(field, unknown);
+  function changeDate(field: 'birthdayDate' | 'anniversaryDate', value: string) {
+    update(field, value);
+    if (value) update(field === 'birthdayDate' ? 'birthdayYearUnknown' : 'anniversaryYearUnknown', false);
   }
 
-  function changeDate(
-    field: 'birthdayDate' | 'anniversaryDate',
-    dateKind: 'birthday' | 'anniversary',
-    value: string
-  ) {
-    if (value && draft[field].slice(0, 4) !== value.slice(0, 4)) {
-      setDateYearConfirmed(current => ({ ...current, [dateKind]: true }));
-    }
-    update(field, value);
+  function clearDate(field: 'birthdayDate' | 'anniversaryDate') {
+    update(field, '');
+    update(field === 'birthdayDate' ? 'birthdayYearUnknown' : 'anniversaryYearUnknown', false);
   }
 
   async function selectPhoto(event: ChangeEvent<HTMLInputElement>) {
@@ -140,7 +123,7 @@ export function PersonDetailsEditor({
       titleId={titleId}
       labelledBy={titleId}
       dialogClassName="person-details-dialog"
-      initialFocusId={`person-details-relationship-${personId}`}
+      initialFocusId={`person-details-category-${personId}`}
       onClose={onClose}
     >
       <form className="person-details-editor" noValidate onSubmit={submit}>
@@ -174,46 +157,40 @@ export function PersonDetailsEditor({
               {photoError && <p className="goal-field-error" role="alert">{photoError}</p>}
               {fieldError('photoDataUrl')}
             </div>
-            <div className="goal-field">
-              <label htmlFor={`person-details-relationship-${personId}`}>Relationship</label>
-              <select
-                id={`person-details-relationship-${personId}`}
-                value={relationshipIsStandard ? draft.relationshipLabel : draft.relationshipLabel ? '__custom' : ''}
-                aria-invalid={Boolean(errors.relationshipLabel)}
-                aria-describedby={errors.relationshipLabel ? 'person-details-error-relationshipLabel' : undefined}
-                onChange={event => {
-                  const value = event.currentTarget.value;
-                  if (value === '__custom') {
-                    if (relationshipIsStandard) update('relationshipLabel', '');
-                  } else {
-                    update('relationshipLabel', value);
-                  }
-                }}
-              >
-                <option value="">Not set</option>
-                {relationshipGroups.map(group => (
-                  <optgroup key={group.label} label={group.label}>
-                    {group.values.map(value => <option key={value} value={value}>{value}</option>)}
-                  </optgroup>
-                ))}
-                {draft.relationshipLabel && !relationshipIsStandard && (
-                  <option value="__custom">{draft.relationshipLabel} (custom)</option>
-                )}
-                <option value="__custom">Custom…</option>
-              </select>
-              {fieldError('relationshipLabel')}
-              {!relationshipIsStandard && (
-                <input
-                  type="text"
-                  maxLength={80}
-                  aria-label="Custom relationship"
-                  placeholder="Type a custom relationship"
-                  value={draft.relationshipLabel}
-                  aria-invalid={Boolean(errors.relationshipLabel)}
-                  aria-describedby={errors.relationshipLabel ? 'person-details-error-relationshipLabel' : undefined}
-                  onChange={event => update('relationshipLabel', event.currentTarget.value)}
-                />
-              )}
+            <div className="goal-field person-details-editor__category-field">
+              <span>Category</span>
+              <details className="person-details-editor__category-picker">
+                <summary
+                  id={`person-details-category-${personId}`}
+                  aria-label={`Category: ${categoryOptions
+                    .filter(option => draft.categoryIds.includes(option.id))
+                    .map(option => option.label)
+                    .join(', ') || 'none selected'}`}
+                >
+                  {categoryOptions
+                    .filter(option => draft.categoryIds.includes(option.id))
+                    .map(option => option.label)
+                    .join(', ') || 'Choose categories'}
+                </summary>
+                <fieldset>
+                  <legend>Select one or more categories</legend>
+                  {categoryOptions.map(option => (
+                    <label key={option.id}>
+                      <input
+                        type="checkbox"
+                        checked={draft.categoryIds.includes(option.id)}
+                        onChange={event => update(
+                          'categoryIds',
+                          event.currentTarget.checked
+                            ? [...draft.categoryIds, option.id]
+                            : draft.categoryIds.filter(id => id !== option.id)
+                        )}
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </fieldset>
+              </details>
             </div>
             <div className="person-details-editor__date-grid">
               <div className="goal-field">
@@ -223,22 +200,22 @@ export function PersonDetailsEditor({
                   type="date"
                   value={draft.birthdayDate}
                   aria-invalid={Boolean(errors.birthdayDate)}
-                  aria-describedby={errors.birthdayDate ? 'person-details-error-birthdayDate' : undefined}
-                  onChange={event => changeDate('birthdayDate', 'birthday', event.currentTarget.value)}
+                  aria-describedby={[
+                    errors.birthdayDate ? 'person-details-error-birthdayDate' : '',
+                    draft.birthdayYearUnknown && details?.birthday
+                      ? `person-details-partial-birthday-${personId}`
+                      : ''
+                  ].filter(Boolean).join(' ') || undefined}
+                  onChange={event => changeDate('birthdayDate', event.currentTarget.value)}
                 />
-                <label className="person-details-editor__unknown-year">
-                  <input
-                    type="checkbox"
-                    checked={draft.birthdayYearUnknown}
-                    onChange={event => changeUnknownYear(
-                      'birthdayYearUnknown',
-                      'birthdayDate',
-                      'birthday',
-                      event.currentTarget.checked
-                    )}
-                  />
-                  Year unknown
-                </label>
+                {draft.birthdayYearUnknown && details?.birthday && (
+                  <span className="person-details-editor__help" id={`person-details-partial-birthday-${personId}`}>
+                    Saved date: {formatPartialDate(details.birthday.monthDay)}. Choose a full date to replace it.
+                  </span>
+                )}
+                <button type="button" className="btn mini ghost" onClick={() => clearDate('birthdayDate')}>
+                  Clear birthday
+                </button>
                 {fieldError('birthdayDate')}
               </div>
               <div className="goal-field">
@@ -248,22 +225,22 @@ export function PersonDetailsEditor({
                   type="date"
                   value={draft.anniversaryDate}
                   aria-invalid={Boolean(errors.anniversaryDate)}
-                  aria-describedby={errors.anniversaryDate ? 'person-details-error-anniversaryDate' : undefined}
-                  onChange={event => changeDate('anniversaryDate', 'anniversary', event.currentTarget.value)}
+                  aria-describedby={[
+                    errors.anniversaryDate ? 'person-details-error-anniversaryDate' : '',
+                    draft.anniversaryYearUnknown && details?.anniversary
+                      ? `person-details-partial-anniversary-${personId}`
+                      : ''
+                  ].filter(Boolean).join(' ') || undefined}
+                  onChange={event => changeDate('anniversaryDate', event.currentTarget.value)}
                 />
-                <label className="person-details-editor__unknown-year">
-                  <input
-                    type="checkbox"
-                    checked={draft.anniversaryYearUnknown}
-                    onChange={event => changeUnknownYear(
-                      'anniversaryYearUnknown',
-                      'anniversaryDate',
-                      'anniversary',
-                      event.currentTarget.checked
-                    )}
-                  />
-                  Year unknown
-                </label>
+                {draft.anniversaryYearUnknown && details?.anniversary && (
+                  <span className="person-details-editor__help" id={`person-details-partial-anniversary-${personId}`}>
+                    Saved date: {formatPartialDate(details.anniversary.monthDay)}. Choose a full date to replace it.
+                  </span>
+                )}
+                <button type="button" className="btn mini ghost" onClick={() => clearDate('anniversaryDate')}>
+                  Clear anniversary
+                </button>
                 {fieldError('anniversaryDate')}
               </div>
             </div>
@@ -288,7 +265,7 @@ export function PersonDetailsEditor({
                 </select>
                 {!isFriend && (
                   <span className="person-details-editor__help" id={`person-details-cadence-help-${personId}`}>
-                    Cadence is available for people classified as Friends. Change that classification separately to edit it.
+                    Select Friend to edit this person’s connection cadence.
                   </span>
                 )}
                 {fieldError('connectionCadence')}
@@ -318,4 +295,13 @@ export function PersonDetailsEditor({
       </form>
     </MoneyGoalDialog>
   );
+}
+
+function formatPartialDate(monthDay: string): string {
+  const [month, day] = monthDay.split('-').map(Number);
+  return new Date(Date.UTC(2000, month! - 1, day!)).toLocaleDateString(undefined, {
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC'
+  });
 }

@@ -335,11 +335,17 @@ describe('Tend Today preview', () => {
     await user.click(screen.getByRole('tab', { name: 'Friends' }));
     await user.click(within(screen.getByRole('tabpanel', { name: 'Friends' }))
       .getByRole('button', { name: 'Go to People' }));
-    const morganCard = document.querySelector<HTMLElement>(
-      '.people-view__list .people-card:nth-child(2)'
-    )!;
-    await user.click(within(morganCard).getByLabelText('More actions for Morgan Reed'));
-    await user.click(within(morganCard).getByRole('button', { name: 'Add Friends' }));
+    await user.click(screen.getByRole('button', { name: 'Open profile for Morgan Reed' }));
+    const morganProfile = screen.getByRole('main', { name: 'Morgan Reed' });
+    const settingsButton = within(morganProfile).getByRole('button', { name: 'Person settings' });
+    await user.click(settingsButton);
+    const settings = screen.getByRole('dialog', { name: 'Person settings — Morgan Reed' });
+    await user.click(within(settings).getByLabelText('Category: Marriage, Parenting'));
+    await user.click(within(settings).getByRole('checkbox', { name: 'Friend' }));
+    await user.click(within(settings).getByRole('button', { name: 'Save' }));
+    expect(document.activeElement).toBe(settingsButton);
+    expect(within(morganProfile).getByText('Friends')).toBeTruthy();
+    await user.click(within(morganProfile).getByRole('button', { name: 'Back to People' }));
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
       .getByRole('button', { name: 'Friendships' }));
     await user.click(screen.getByRole('tab', { name: 'Friends' }));
@@ -2813,6 +2819,14 @@ describe('Tend Today preview', () => {
         participantIds: ['sample-person-avery']
       }
     );
+    data.personDetails = [{
+      personId: 'sample-person-avery',
+      relationshipLabel: 'Spouse',
+      birthday: { monthDay: '02-29' },
+      anniversary: { monthDay: '12-31' },
+      connectionStyle: 'qt',
+      photoDataUrl: 'data:image/jpeg;base64,/9j/2Q=='
+    }];
     data.savedRhythms = [savedMarriageRhythm(
       'user-rhythm-88888888-8888-4888-8888-888888888888',
       'Preserved person rhythm',
@@ -2826,21 +2840,27 @@ describe('Tend Today preview', () => {
 
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
       .getByRole('button', { name: 'People' }));
-    await user.click(screen.getByLabelText('More actions for Avery Brooks'));
-    const editButton = screen.getByRole('button', { name: 'Edit details for Avery Brooks' });
+    await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
+    const profileForEdit = screen.getByRole('main', { name: 'Avery Brooks' });
+    const editButton = within(profileForEdit).getByRole('button', { name: 'Person settings' });
     await user.click(editButton);
     let editor = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
-    await user.selectOptions(within(editor).getByLabelText('Relationship'), 'Sister');
+    expect(within(editor).queryByLabelText('Relationship')).toBeNull();
+    expect(editor.querySelector('.person-details-editor__photo-preview img')?.getAttribute('src'))
+      .toBe('data:image/jpeg;base64,/9j/2Q==');
+    expect(within(editor).getByText(/Saved date: February 29/)).toBeTruthy();
+    expect(within(editor).getByText(/Saved date: December 31/)).toBeTruthy();
+    await user.click(within(editor).getByLabelText('Category: Marriage, Friend'));
+    await user.click(within(editor).getByRole('checkbox', { name: 'Parenting' }));
     fireEvent.change(within(editor).getByLabelText('Birthday'), { target: { value: '2000-02-29' } });
-    await user.click(within(editor).getAllByLabelText('Year unknown')[0]!);
     fireEvent.change(within(editor).getByLabelText('Anniversary'), { target: { value: '2010-12-31' } });
     await user.selectOptions(within(editor).getByLabelText('Love language'), 'wa');
     await user.selectOptions(within(editor).getByLabelText('Connection cadence'), 'monthly');
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
     expect(document.activeElement).toBe(editButton);
 
-    expect(screen.getByText('Sister')).toBeTruthy();
-    expect(screen.getByText(/^Birthday in/)).toBeTruthy();
+    expect(within(profileForEdit).getByText('Spouse')).toBeTruthy();
+    expect(within(profileForEdit).getByText(/Birthday in/)).toBeTruthy();
     const savedResult = parsePreviewBackup(
       window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
       localDateString(new Date())
@@ -2849,12 +2869,15 @@ describe('Tend Today preview', () => {
     if (savedResult.valid) {
       expect(savedResult.envelope.data.personDetails).toEqual([{
         personId: 'sample-person-avery',
-        relationshipLabel: 'Sister',
-        birthday: { monthDay: '02-29' },
+        relationshipLabel: 'Spouse',
+        birthday: { monthDay: '02-29', year: 2000 },
         anniversary: { monthDay: '12-31', year: 2010 },
-        connectionStyle: 'wa'
+        connectionStyle: 'wa',
+        photoDataUrl: 'data:image/jpeg;base64,/9j/2Q=='
       }]);
-      expect(savedResult.envelope.data.peopleGroups).toEqual(groupsBefore);
+      expect(savedResult.envelope.data.peopleGroups).toEqual(
+        setPersonGroupMembership(groupsBefore, 'parenting', 'sample-person-avery', true)
+      );
       expect(savedResult.envelope.data.friendships).toEqual(setFriendCadence(
         friendshipsBefore,
         'sample-person-avery',
@@ -2864,47 +2887,89 @@ describe('Tend Today preview', () => {
       expect(savedResult.envelope.data.savedRhythms).toEqual(rhythmsBefore);
     }
 
-    await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
-    const profile = screen.getByRole('main', { name: 'Avery Brooks' });
-    expect(within(profile).getByText('Sister')).toBeTruthy();
-    expect(within(profile).getByText(/^Birthday in/)).toBeTruthy();
+    const updatedSettingsButton = within(profileForEdit).getByRole('button', { name: 'Person settings' });
+    await user.click(updatedSettingsButton);
+    editor = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
+    await user.click(within(editor).getByLabelText('Category: Marriage, Parenting, Friend'));
+    await user.click(within(editor).getByRole('checkbox', { name: 'Friend' }));
+    expect(editor.querySelector<HTMLSelectElement>('#person-details-cadence-sample-person-avery')?.disabled).toBe(true);
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    expect(document.activeElement).toBe(updatedSettingsButton);
+    const afterFriendRemoval = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(afterFriendRemoval.valid).toBe(true);
+    if (afterFriendRemoval.valid) {
+      expect(afterFriendRemoval.envelope.data.peopleGroups).toEqual(
+        setPersonGroupMembership(
+          setPersonGroupMembership(groupsBefore, 'parenting', 'sample-person-avery', true),
+          'friends',
+          'sample-person-avery',
+          false
+        )
+      );
+      expect(afterFriendRemoval.envelope.data.friendships).toEqual(setFriendCadence(
+        friendshipsBefore,
+        'sample-person-avery',
+        'monthly',
+        localDateString(new Date())
+      ));
+      expect(afterFriendRemoval.envelope.data.friendships.connections).toEqual(friendshipsBefore.connections);
+    }
+
+    const profile = profileForEdit;
+    expect(within(profile).getByText('Spouse')).toBeTruthy();
+    expect(within(profile).getByText(/Birthday in/)).toBeTruthy();
     expect(within(profile).getByText(/^Anniversary in/)).toBeTruthy();
     expect(within(profile).getByText('Words of Affirmation')).toBeTruthy();
     expect(within(profile).getByRole('article', { name: 'Preserved person rhythm' })).toBeTruthy();
-    await user.click(within(profile).getByLabelText('More actions for Avery Brooks'));
-    const profileEditButton = within(profile).getByRole('button', { name: 'Edit details' });
+    const profileEditButton = within(profile).getByRole('button', { name: 'Person settings' });
     await user.click(profileEditButton);
     editor = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
     cancelNativeDialog(editor);
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Person settings — Avery Brooks' })).toBeNull());
     expect(document.activeElement).toBe(profileEditButton);
-    expect(within(profile).getByText('Sister')).toBeTruthy();
+    expect(within(profile).getByText('Spouse')).toBeTruthy();
     app.unmount();
 
     render(<App />);
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
       .getByRole('button', { name: 'People' }));
-    expect(screen.getByText('Sister')).toBeTruthy();
+    expect(screen.getByText('Spouse')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
     expect(screen.getByRole('main', { name: 'Avery Brooks' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Back to People' }));
-    const clearDetailsButton = screen.getByRole('button', { name: 'Edit details for Avery Brooks' });
+    await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
+    const profileToClear = screen.getByRole('main', { name: 'Avery Brooks' });
+    const clearDetailsButton = within(profileToClear).getByRole('button', { name: 'Person settings' });
     await user.click(clearDetailsButton);
     editor = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
-    await user.selectOptions(within(editor).getByLabelText('Relationship'), '');
     fireEvent.change(within(editor).getByLabelText('Birthday'), { target: { value: '' } });
     fireEvent.change(within(editor).getByLabelText('Anniversary'), { target: { value: '' } });
     await user.selectOptions(within(editor).getByLabelText('Love language'), '');
-    await user.selectOptions(within(editor).getByLabelText('Connection cadence'), '');
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
     expect(document.activeElement).toBe(clearDetailsButton);
-    expect(screen.queryByText('Sister')).toBeNull();
+    expect(within(profileToClear).getByText('Spouse')).toBeTruthy();
     const cleared = parsePreviewBackup(
       window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
       localDateString(new Date())
     );
     expect(cleared.valid).toBe(true);
-    if (cleared.valid) expect(cleared.envelope.data.personDetails).toEqual([]);
+    if (cleared.valid) expect(cleared.envelope.data.personDetails).toEqual([{
+      personId: 'sample-person-avery',
+      relationshipLabel: 'Spouse',
+      photoDataUrl: 'data:image/jpeg;base64,/9j/2Q=='
+    }]);
+    if (cleared.valid) {
+      expect(cleared.envelope.data.friendships).toEqual(setFriendCadence(
+        friendshipsBefore,
+        'sample-person-avery',
+        'monthly',
+        localDateString(new Date())
+      ));
+      expect(cleared.envelope.data.friendships.connections).toEqual(friendshipsBefore.connections);
+    }
   });
 
   it('saves one person-scoped connection through the profile and restores it after reload', async () => {

@@ -10,7 +10,7 @@ import type {
   FriendshipConnection,
   FriendshipData
 } from '../domain/friendships.ts';
-import { personById, personGroupMemberIds, setPersonGroupMembership, syntheticPeople } from '../domain/preview-data.ts';
+import { personById, personGroupMemberIds, syntheticPeople } from '../domain/preview-data.ts';
 import type {
   FoundationPreview,
   PersonId,
@@ -61,7 +61,6 @@ export function PersonProfileView({
   completedRhythms,
   undoableRhythms,
   onFriendshipsChange,
-  onPeopleGroupsChange,
   personDetails = [],
   personNotes = [],
   onCreatePersonNote,
@@ -94,7 +93,6 @@ export function PersonProfileView({
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
   onFriendshipsChange: (friendships: FriendshipData) => void;
-  onPeopleGroupsChange: (peopleGroups: PersonPickerGroup[]) => void;
   personDetails?: readonly PersonDetails[];
   personNotes?: readonly PersonNote[];
   onCreatePersonNote?: (personId: PersonId, draft: PersonNoteDraft) => string | null;
@@ -231,7 +229,7 @@ export function PersonProfileView({
       <div className="person-profile-page__back">
         <BackButton onClick={onClose}>Back to {returnLabel}</BackButton>
       </div>
-      <section className="person-profile" aria-labelledby="person-profile-title">
+      <section className="person-profile__content" aria-labelledby="person-profile-title">
           <header className="person-profile__identity">
             <PersonAvatar person={person} />
             <div className="person-profile__identity-copy">
@@ -259,31 +257,19 @@ export function PersonProfileView({
                 </div>
               )}
             </div>
-            <details className="person-profile__actions">
-              <summary aria-label={`More actions for ${person.displayName}`}>
+            {onEditPerson && (
+              <button
+                type="button"
+                className="person-profile__settings"
+                aria-label="Person settings"
+                aria-haspopup="dialog"
+                onClick={event => onEditPerson(personId, event)}
+              >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <circle cx="5" cy="12" r="1.5" />
-                  <circle cx="12" cy="12" r="1.5" />
-                  <circle cx="19" cy="12" r="1.5" />
+                  <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm0 1.8a1.7 1.7 0 1 1 0 3.4 1.7 1.7 0 0 1 0-3.4Zm7.3 1.7a7.3 7.3 0 0 0-.1-1l1.5-1.2-1.5-2.6-1.8.7a7 7 0 0 0-1.7-1L15.4 5h-3l-.4 1.9a7 7 0 0 0-1.7 1l-1.8-.7L7 9.8l1.5 1.2a7.3 7.3 0 0 0 0 2L7 14.2l1.5 2.6 1.8-.7a7 7 0 0 0 1.7 1l.4 1.9h3l.4-1.9a7 7 0 0 0 1.7-1l1.8.7 1.5-2.6-1.5-1.2a7.3 7.3 0 0 0 0-1Z" />
                 </svg>
-              </summary>
-              <div className="person-profile__action-menu">
-                {onEditPerson && (
-                  <button type="button" onClick={event => onEditPerson(personId, event)}>
-                    Edit details
-                  </button>
-                )}
-                <button
-                  type="button"
-                  aria-pressed={isFriend}
-                  onClick={() => onPeopleGroupsChange(
-                    setPersonGroupMembership(peopleGroups, 'friends', personId, !isFriend)
-                  )}
-                >
-                  {isFriend ? 'Remove friend' : 'Mark as friend'}
-                </button>
-              </div>
-            </details>
+              </button>
+            )}
           </header>
           <div className="faith-view-nav marriage-view-nav person-profile__nav" role="tablist" aria-label={`${person.displayName} profile`}>
             {profileTabs.map((item, index) => (

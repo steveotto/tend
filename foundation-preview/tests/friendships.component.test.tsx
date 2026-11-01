@@ -87,6 +87,35 @@ function FriendshipsHarness({
 }
 
 describe('Friendships view', () => {
+  it('uses one card-wide keyboard target and keeps quick actions outside profile navigation', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(
+      <PeopleCard
+        person={{ ...syntheticPeople[0]!, displayName: 'Alexandria Brooks-Williams' }}
+        classifications={[]}
+        birthday={{ dateLabel: 'December 2', countdownLabel: 'in 32d', age: 47 }}
+        onSelect={onSelect}
+      >
+        <button type="button" onClick={vi.fn()}>Log a connection</button>
+      </PeopleCard>
+    );
+    const navigation = screen.getByRole('button', { name: 'Open profile for Alexandria Brooks-Williams' });
+    expect(navigation.querySelector('.people-card__menu')).toBeNull();
+    expect(screen.queryByLabelText('More actions for Alexandria Brooks-Williams')).toBeNull();
+    expect(within(navigation).getByText('Age 47').tagName).toBe('STRONG');
+    expect(within(navigation).getByText('December 2')).toBeTruthy();
+    expect(within(navigation).getByText('in 32d')).toBeTruthy();
+    expect(navigation.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+
+    await user.tab();
+    expect(document.activeElement).toBe(navigation);
+    await user.keyboard('{Enter}');
+    expect(onSelect).toHaveBeenCalledWith(syntheticPeople[0]!.id);
+    await user.click(screen.getByRole('button', { name: 'Log a connection' }));
+    expect(onSelect).toHaveBeenCalledOnce();
+  });
+
   it('aligns multiple classifications beside recency without squeezing a long person name', () => {
     const person = {
       ...syntheticPeople[0]!,
@@ -126,7 +155,6 @@ describe('Friendships view', () => {
           relationshipLabel: 'Sister',
           birthday: { monthDay: '02-29' }
         }]}
-        onChangeGroups={vi.fn()}
         onOpenPerson={openPerson}
       />
     );
@@ -170,7 +198,7 @@ describe('Friendships view', () => {
     const row = screen.getByRole('article').closest('.friendships-friend-row');
     expect(row).toBeTruthy();
     expect(within(row as HTMLElement).getByText('A lifelong friend')).toBeTruthy();
-    expect(within(row as HTMLElement).getByText(/^Birthday in/)).toBeTruthy();
+    expect(within(row as HTMLElement).getByText('October 22')).toBeTruthy();
     expect(within(row as HTMLElement).getByRole('group', { name: 'Avery Brooks classifications' })).toBeTruthy();
   });
 
@@ -186,17 +214,15 @@ describe('Friendships view', () => {
       }
     );
     function IntegratedHarness() {
-      const [peopleGroups, setPeopleGroups] = useState(createPersonPickerGroups());
+      const peopleGroups = setPersonGroupMembership(
+        createPersonPickerGroups(),
+        'friends',
+        'sample-person-morgan',
+        true
+      );
       const [data, setData] = useState(initialData);
       return (
         <>
-          <PeopleView
-            groups={peopleGroups}
-            friendships={data}
-            today="2026-10-21"
-            onChangeGroups={setPeopleGroups}
-            onOpenPerson={vi.fn()}
-          />
           <FriendshipsView
             data={data}
             peopleGroups={peopleGroups}
@@ -224,22 +250,12 @@ describe('Friendships view', () => {
     }
 
     render(<IntegratedHarness />);
-    const peopleView = document.querySelector<HTMLElement>('.people-view')!;
-    const morganCard = peopleView.querySelector<HTMLElement>('.people-card:nth-child(2)')!;
-    expect(within(peopleView).getAllByText('Connected 1 wk ago')).toHaveLength(2);
-    await user.click(within(morganCard).getByLabelText('More actions for Morgan Reed'));
-    await user.click(within(morganCard).getByRole('button', { name: 'Add Friends' }));
-    expect(
-      within(screen.getByRole('group', { name: 'Morgan Reed classifications' })).getByText('Friends')
-    ).toBeTruthy();
     await user.click(screen.getByRole('tab', { name: 'Friends' }));
-    expect(screen.getByRole('button', { name: 'View connections (1)' })).toBeTruthy();
-
-    await user.click(within(morganCard).getByLabelText('More actions for Morgan Reed'));
-    await user.click(within(morganCard).getByRole('button', { name: 'Remove Friends' }));
-    expect(screen.queryByRole('button', { name: 'Text Morgan Reed' })).toBeNull();
-    await user.click(within(morganCard).getByLabelText('More actions for Morgan Reed'));
-    await user.click(within(morganCard).getByRole('button', { name: 'Add Friends' }));
+    const morganProfileLink = screen.getByRole('button', { name: 'Open profile for Morgan Reed' });
+    const morganCard = morganProfileLink.closest('article');
+    expect(morganCard).toBeTruthy();
+    expect(morganCard!.querySelector('.people-card__menu')).toBeNull();
+    expect(within(morganCard as HTMLElement).getByRole('button', { name: /Change connection cadence for Morgan Reed/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'View connections (1)' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'View connections (1)' }));
     const history = screen.getByRole('dialog', { name: 'Morgan Reed · connection history' });

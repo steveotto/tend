@@ -473,8 +473,11 @@ export function App() {
   const selectedDetailsEditorCadence = personDetailsEditorId === null
     ? null
     : previewData.friendships.cadenceSettings.find(item => item.personId === personDetailsEditorId)?.cadence ?? null;
-  const selectedDetailsEditorIsFriend = personDetailsEditorId !== null
-    && Boolean(previewData.peopleGroups.find(group => group.id === 'friends')?.memberIds.includes(personDetailsEditorId));
+  const selectedDetailsEditorCategoryIds = personDetailsEditorId === null
+    ? []
+    : previewData.peopleGroups
+        .filter(group => group.memberIds.includes(personDetailsEditorId))
+        .map(group => group.id);
   const profileRhythmCandidates = [...new Map(
     [...editableTodayRhythms, ...userRhythms].map(rhythm => [rhythm.id, rhythm])
   ).values()];
@@ -1004,11 +1007,26 @@ export function App() {
   function savePersonDetails(personId: PersonId, draft: PersonDetailsDraft): string | null {
     const result = savePersonDetailsCommand(previewData.personDetails, personId, draft, currentDate);
     if (!result.valid) return Object.values(result.errors)[0] ?? 'Person details are invalid.';
+    let peopleGroups = previewData.peopleGroups;
+    for (const group of previewData.peopleGroups) {
+      peopleGroups = setPersonGroupMembership(
+        peopleGroups,
+        group.id,
+        personId,
+        draft.categoryIds.includes(group.id)
+      );
+    }
     const cadence = connectionCadences.find(item => item === draft.connectionCadence) ?? null;
-    const friendships = selectedDetailsEditorIsFriend
+    const isFriend = draft.categoryIds.includes('friends');
+    const friendships = isFriend
       ? setFriendCadence(previewData.friendships, personId, cadence, currentDate)
       : previewData.friendships;
-    return persistSeasonHistory({ ...previewData, personDetails: result.details, friendships }, 'person settings');
+    return persistSeasonHistory({
+      ...previewData,
+      personDetails: result.details,
+      peopleGroups,
+      friendships
+    }, 'person settings');
   }
 
   function savePersonNote(personId: PersonId, draft: PersonNoteDraft): string | null {
@@ -2562,9 +2580,7 @@ export function App() {
                 friendships={previewData.friendships}
                 today={currentDate}
                 personDetails={previewData.personDetails}
-                onChangeGroups={peopleGroups => setPreviewData(previous => ({ ...previous, peopleGroups }))}
                 onOpenPerson={openPersonProfile}
-                onEditPerson={openPersonDetailsEditor}
                 onCreatePerson={createPerson}
               />
             )
@@ -2588,7 +2604,6 @@ export function App() {
           completedRhythms={completedRhythms}
           undoableRhythms={undoableRhythms}
           onFriendshipsChange={friendships => setPreviewData(previous => ({ ...previous, friendships }))}
-          onPeopleGroupsChange={peopleGroups => setPreviewData(previous => ({ ...previous, peopleGroups }))}
           onEditPerson={openPersonDetailsEditor}
           onAddRhythm={(event, personId) => openRhythmEditor(event, undefined, {
             initialDraft: { ...createRhythmDraft([]), personIds: [personId] }
@@ -2620,7 +2635,7 @@ export function App() {
           {...(selectedDetailsEditorDetails ? { details: selectedDetailsEditorDetails } : {})}
           today={currentDate}
           cadence={selectedDetailsEditorCadence}
-          isFriend={selectedDetailsEditorIsFriend}
+          categoryIds={selectedDetailsEditorCategoryIds}
           onSave={draft => savePersonDetails(selectedDetailsEditorPerson.id, draft)}
           onClose={closePersonDetailsEditor}
         />
