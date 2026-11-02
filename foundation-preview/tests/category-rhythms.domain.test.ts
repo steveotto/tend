@@ -5,6 +5,7 @@ import {
   isRhythmEligibleForToday,
   isRhythmRelevantOnDate,
   selectSatisfiedRhythmIds,
+  selectTendedRhythmDisplayIds,
   isValidSuggestionSourceId,
   legacySuggestionSourceForRhythmId,
   rhythmsForSuggestionSource
@@ -264,14 +265,51 @@ describe('Category Rhythm selectors', () => {
       status: 'Due today',
       cadence: 'Unsupported cadence'
     };
+    const threeTimesDescriptive: RhythmPreview = {
+      id: 'three-times-descriptive',
+      title: 'Three times a week',
+      automation: 'manual',
+      status: 'Due today',
+      cadence: '3 times a week'
+    };
+    const quarterly: RhythmPreview = {
+      id: 'quarterly',
+      title: 'Quarterly practice',
+      automation: 'manual',
+      status: 'Due today',
+      cadence: 'Quarterly',
+      schedule: {
+        frequency: 'quarterly',
+        monthInQuarter: 1,
+        pattern: { kind: 'dayOfMonth', day: 27 }
+      }
+    };
+    const quarterlyDescriptive: RhythmPreview = {
+      id: 'quarterly-descriptive',
+      title: 'Quarterly check-in',
+      automation: 'manual',
+      status: 'Due today',
+      cadence: 'Quarterly'
+    };
 
     expect(isRhythmEligibleForToday(mondayOnly, '2026-10-26')).toBe(true);
     expect(isRhythmEligibleForToday(mondayOnly, '2026-10-27')).toBe(false);
     expect(selectSatisfiedRhythmIds(
-      [daily, mondayOnly, unscheduled],
-      new Set(['daily', 'monday', 'unscheduled']),
+      [daily, mondayOnly, unscheduled, threeTimesDescriptive, quarterly],
+      new Set(['daily', 'monday', 'unscheduled', 'three-times-descriptive', 'quarterly']),
       rhythm => rhythm.id === 'monday' ? '2026-10-27' : '2026-10-26'
-    )).toEqual(new Set(['daily']));
+    )).toEqual(new Set(['daily', 'unscheduled', 'three-times-descriptive']));
+    expect(selectSatisfiedRhythmIds([quarterly], new Set(['quarterly']), () => '2026-10-27'))
+      .toEqual(new Set(['quarterly']));
+    expect(selectSatisfiedRhythmIds(
+      [threeTimesDescriptive, quarterlyDescriptive],
+      new Set(['three-times-descriptive', 'quarterly-descriptive']),
+      () => '2026-10-26'
+    )).toEqual(new Set(['three-times-descriptive', 'quarterly-descriptive']));
+    expect(selectTendedRhythmDisplayIds(
+      new Set(['three-times-descriptive', 'three-times-weekly']),
+      new Set(['quarterly', 'three-times-weekly'])
+    )).toEqual(new Set(['three-times-descriptive', 'quarterly', 'three-times-weekly']));
     expect(selectSatisfiedRhythmIds(
       [daily],
       new Set(),

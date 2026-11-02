@@ -26,6 +26,7 @@ import { TodayDateRow } from './TodayDateRow.tsx';
 import type { TodayWeatherController } from './useTodayWeather.ts';
 import { useTimeBlockSettings } from './TimeBlocksContext.tsx';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
+import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
 
 const planTypes: { id: TodayItemType; label: string }[] = [
   { id: 'scheduled', label: 'Scheduled' },
@@ -44,6 +45,7 @@ type TodayViewProps = {
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
   satisfiedRhythmIds?: ReadonlySet<string>;
+  tendedRhythmIds?: ReadonlySet<string>;
   showTended?: boolean;
   onShowTendedChange?: (show: boolean) => void;
   initializing?: boolean;
@@ -72,6 +74,7 @@ export function TodayView({
   completedRhythms,
   undoableRhythms,
   satisfiedRhythmIds = new Set(),
+  tendedRhythmIds: savedTendedRhythmIds,
   showTended = false,
   onShowTendedChange = () => undefined,
   initializing = false,
@@ -88,6 +91,8 @@ export function TodayView({
   onEditRhythm,
   onUndo,
 }: TodayViewProps) {
+  const tendedRhythmIds = savedTendedRhythmIds
+    ?? selectTendedRhythmDisplayIds(completedRhythms, satisfiedRhythmIds);
   const [planType, setPlanType] = useState<TodayItemType>('scheduled');
   const timeBlocks = useTimeBlockSettings();
   const focusPickerRef = useRef<HTMLDetailsElement>(null);
@@ -101,7 +106,7 @@ export function TodayView({
     [visibleRhythms, planType, focus, evaluationInstant, timeBlocks]
   );
   const planRhythms = planGroups.flatMap(group => group.rhythms);
-  const tendedCount = planRhythms.filter(rhythm => satisfiedRhythmIds.has(rhythm.id)).length;
+  const tendedCount = planRhythms.filter(rhythm => tendedRhythmIds.has(rhythm.id)).length;
   const currentLabel = todayFocusLabel(focus, evaluationInstant, timeBlocks);
   const focusContext = todayFocusContext(focus, planType, evaluationInstant, timeBlocks);
   const weatherTime = focus === 'now'
@@ -284,6 +289,7 @@ export function TodayView({
           )}
           <TendedRhythmList
             rhythms={planRhythms}
+            tendedRhythmIds={tendedRhythmIds}
             satisfiedRhythmIds={satisfiedRhythmIds}
             undoableRhythmIds={undoableRhythms}
             showTended={showTended}
@@ -292,7 +298,7 @@ export function TodayView({
             resetKey={`${planType}:${focus}:${search}`}
             initializing={initializing}
           >
-            {({ visibleRhythmIds, itemProps }) => {
+            {({ visibleRhythmIds, tendedRhythmIds: displayedTendedIds, itemProps }) => {
               const visiblePlanGroups = planGroups.flatMap(group => {
                 const rhythms = group.rhythms.filter(rhythm => visibleRhythmIds.has(rhythm.id));
                 return rhythms.length ? [{ ...group, rhythms }] : [];
@@ -314,7 +320,7 @@ export function TodayView({
                               onPersonSelect={onPersonSelect}
                               onOpenFoundation={onOpenFoundation}
                               onOpenCategory={categoryId => onNavigate(categoryId)}
-                              completed={completedRhythms.has(rhythm.id)}
+                              completed={displayedTendedIds.has(rhythm.id)}
                               healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
                               onTend={event => onTend(rhythm.id, event)}
                               {...(rhythm.categoryIds?.includes('health')

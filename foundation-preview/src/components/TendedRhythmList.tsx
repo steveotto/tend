@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode, FocusEvent } from 'react';
 import type { RhythmPreview } from '../domain/preview-data.ts';
 
@@ -11,6 +11,7 @@ type TendedNotice = {
 
 type TendedRhythmListRenderState = {
   visibleRhythmIds: ReadonlySet<string>;
+  tendedRhythmIds: ReadonlySet<string>;
   itemProps: (rhythmId: string) => {
     className: string;
     'data-tended-rhythm-item': string;
@@ -20,6 +21,7 @@ type TendedRhythmListRenderState = {
 
 type Props = {
   rhythms: readonly RhythmPreview[];
+  tendedRhythmIds: ReadonlySet<string>;
   satisfiedRhythmIds: ReadonlySet<string>;
   undoableRhythmIds: ReadonlySet<string>;
   showTended: boolean;
@@ -30,11 +32,13 @@ type Props = {
   children: (state: TendedRhythmListRenderState) => ReactNode;
 };
 
-const CARD_SETTLE_MS = 1400;
+const CARD_GRACE_MS = 5000;
+const CARD_FADE_MS = 220;
 const NOTICE_DURATION_MS = 5000;
 
 export function TendedRhythmList({
   rhythms,
+  tendedRhythmIds,
   satisfiedRhythmIds,
   undoableRhythmIds,
   showTended,
@@ -45,6 +49,7 @@ export function TendedRhythmList({
   children
 }: Props) {
   const [pendingRemovalIds, setPendingRemovalIds] = useState<ReadonlySet<string>>(new Set());
+  const [fadingIds, setFadingIds] = useState<ReadonlySet<string>>(new Set());
   const [notices, setNotices] = useState<readonly TendedNotice[]>([]);
   const removeTimers = useRef(new Map<string, number>());
   const noticeTimers = useRef(new Map<number, number>());
@@ -52,6 +57,8 @@ export function TendedRhythmList({
   const previousSatisfiedIds = useRef<ReadonlySet<string> | null>(null);
   const previousResetKey = useRef(resetKey);
   const previousItemIds = useRef('');
+  const previousShowTended = useRef(showTended);
+  const showTendedRef = useRef(showTended);
   const wasInitializing = useRef(initializing);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const lastFocusedRhythmId = useRef<string | null>(null);
@@ -59,7 +66,7 @@ export function TendedRhythmList({
   const itemIdsKey = rhythms.map(rhythm => rhythm.id).join('\u001f');
   const satisfactionKey = [...satisfiedRhythmIds].sort().join('\u001f');
   const undoableKey = [...undoableRhythmIds].sort().join('\u001f');
-  const satisfiedCount = rhythms.filter(rhythm => satisfiedRhythmIds.has(rhythm.id)).length;
+  const tendedCount = rhythms.filter(rhythm => tendedRhythmIds.has(rhythm.id)).length;
   const visibleRhythmIds = useMemo(
     () => new Set(rhythms
       .filter(rhythm => showTended || !satisfiedRhythmIds.has(rhythm.id)
@@ -75,11 +82,22 @@ export function TendedRhythmList({
     noticeTimers.current.clear();
   }
 
+  function clearRemovalTimers() {
+    for (const timer of removeTimers.current.values()) window.clearTimeout(timer);
+    removeTimers.current.clear();
+  }
+
   function clearForRhythm(rhythmId: string) {
     const timer = removeTimers.current.get(rhythmId);
     if (timer !== undefined) window.clearTimeout(timer);
     removeTimers.current.delete(rhythmId);
     setPendingRemovalIds(current => {
+      if (!current.has(rhythmId)) return current;
+      const next = new Set(current);
+      next.delete(rhythmId);
+      return next;
+    });
+    setFadingIds(current => {
       if (!current.has(rhythmId)) return current;
       const next = new Set(current);
       next.delete(rhythmId);
@@ -105,8 +123,18 @@ export function TendedRhythmList({
     }
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const currentSatisfied = new Set(satisfiedRhythmIds);
+    const showTendedEnabled = !previousShowTended.current && showTended;
+    previousShowTended.current = showTended;
+    showTendedRef.current = showTended;
+
+    if (showTendedEnabled) {
+      clearRemovalTimers();
+      setPendingRemovalIds(new Set());
+      setFadingIds(new Set());
+    }
+
     const filterChanged = previousResetKey.current !== resetKey
       || previousItemIds.current !== itemIdsKey;
 
@@ -122,6 +150,7 @@ export function TendedRhythmList({
       }
       clearTimers();
       setPendingRemovalIds(new Set());
+      setFadingIds(new Set());
       setNotices([]);
       previousSatisfiedIds.current = currentSatisfied;
       previousResetKey.current = resetKey;
@@ -152,16 +181,26 @@ export function TendedRhythmList({
 
       if (!showTended) {
         setPendingRemovalIds(current => new Set(current).add(rhythm.id));
-        const removeTimer = window.setTimeout(() => {
-          moveFocusBeforeRemoval(rhythm.id);
-          setPendingRemovalIds(current => {
-            const next = new Set(current);
-            next.delete(rhythm.id);
-            return next;
-          });
-          removeTimers.current.delete(rhythm.id);
-        }, CARD_SETTLE_MS);
-        removeTimers.current.set(rhythm.id, removeTimer);
+        const graceTimer = window.setTimeout(() => {
+          if (showTendedRef.current) return;
+          setFadingIds(current => new Set(current).add(rhythm.id));
+          const fadeTimer = window.setTimeout(() => {
+            moveFocusBeforeRemoval(rhythm.id);
+            setPendingRemovalIds(current => {
+              const next = new Set(current);
+              next.delete(rhythm.id);
+              return next;
+            });
+            setFadingIds(current => {
+              const next = new Set(current);
+              next.delete(rhythm.id);
+              return next;
+            });
+            removeTimers.current.delete(rhythm.id);
+          }, CARD_FADE_MS);
+          removeTimers.current.set(rhythm.id, fadeTimer);
+        }, CARD_GRACE_MS);
+        removeTimers.current.set(rhythm.id, graceTimer);
       }
     }
     previousSatisfiedIds.current = currentSatisfied;
@@ -185,7 +224,7 @@ export function TendedRhythmList({
 
   function itemProps(rhythmId: string) {
     return {
-      className: 'show-tended-list__item',
+      className: `show-tended-list__item${fadingIds.has(rhythmId) ? ' is-fading' : ''}`,
       'data-tended-rhythm-item': rhythmId,
       onFocusCapture: () => {
         lastFocusedRhythmId.current = rhythmId;
@@ -203,7 +242,7 @@ export function TendedRhythmList({
           aria-pressed={showTended}
           onClick={() => onShowTendedChange(!showTended)}
         >
-          Show tended ({satisfiedCount})
+          Show tended ({tendedCount})
         </button>
         {notices.map(notice => (
           <div className="show-tended-list__notice" key={notice.key} role="status" aria-live="polite" aria-atomic="true">
@@ -229,7 +268,7 @@ export function TendedRhythmList({
           </div>
         ))}
       </div>
-      {children({ visibleRhythmIds, itemProps })}
+      {children({ visibleRhythmIds, tendedRhythmIds, itemProps })}
     </>
   );
 }

@@ -26,6 +26,7 @@ import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
+import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
 
 type HealthFitnessTab = 'today' | 'rhythms' | 'progress';
 type ProgressTab = 'strength' | 'cardio' | 'weight';
@@ -43,6 +44,7 @@ type HealthFitnessViewProps = {
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
   satisfiedRhythmIds?: ReadonlySet<string>;
+  tendedRhythmIds?: ReadonlySet<string>;
   showTended?: boolean;
   onShowTendedChange?: (show: boolean) => void;
   initializing?: boolean;
@@ -83,6 +85,7 @@ export function HealthFitnessView({
   completedRhythms,
   undoableRhythms,
   satisfiedRhythmIds = new Set(),
+  tendedRhythmIds: savedTendedRhythmIds,
   showTended = false,
   onShowTendedChange = () => undefined,
   initializing = false,
@@ -97,6 +100,8 @@ export function HealthFitnessView({
   onOpenFoundation,
   onOpenCategory
 }: HealthFitnessViewProps) {
+  const tendedRhythmIds = savedTendedRhythmIds
+    ?? selectTendedRhythmDisplayIds(completedRhythms, satisfiedRhythmIds);
   const [selected, setSelected] = useState<HealthFitnessTab>('today');
   const [progressSelected, setProgressSelected] = useState<ProgressTab | null>(null);
   const [showArchivedRhythms, setShowArchivedRhythms] = useState(false);
@@ -292,11 +297,12 @@ export function HealthFitnessView({
             <header className="marriage-section-heading">
               <div>
                 <h3 id="health-today-heading">Today</h3>
-                <p>{todayRhythms.filter(rhythm => satisfiedRhythmIds.has(rhythm.id)).length} of {todayRhythms.length} Rhythms tended today</p>
+                <p>{todayRhythms.filter(rhythm => tendedRhythmIds.has(rhythm.id)).length} of {todayRhythms.length} Rhythms tended</p>
               </div>
             </header>
             <TendedRhythmList
               rhythms={todayRhythms}
+              tendedRhythmIds={tendedRhythmIds}
               satisfiedRhythmIds={satisfiedRhythmIds}
               undoableRhythmIds={undoableRhythms}
               showTended={showTended}
@@ -305,7 +311,7 @@ export function HealthFitnessView({
               resetKey={`${selected}:${todayDate}`}
               initializing={initializing}
             >
-              {({ visibleRhythmIds, itemProps }) => {
+              {({ visibleRhythmIds, tendedRhythmIds: displayedTendedIds, itemProps }) => {
                 const visibleRhythms = todayRhythms.filter(rhythm => visibleRhythmIds.has(rhythm.id));
                 return visibleRhythms.length > 0
                   ? (
@@ -315,7 +321,7 @@ export function HealthFitnessView({
                           <RhythmDetailsDialog
                             rhythm={rhythm}
                             inline
-                            completed={completedRhythms.has(rhythm.id)}
+                            completed={displayedTendedIds.has(rhythm.id)}
                             statusLabel={rhythmLastActivityLabel(rhythm, todayDate)}
                             people={peopleForRhythm(rhythm, people)}
                             foundations={foundations}

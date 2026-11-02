@@ -184,8 +184,16 @@ export function selectSatisfiedRhythmIds(
       if (effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence) !== undefined) {
         return completedRhythmIds.has(rhythm.id);
       }
-      if (rhythm.cadence === undefined) return completedRhythmIds.has(rhythm.id);
-      return false;
+      // Without a structured schedule, only the saved completion for this displayed
+      // date is authoritative; descriptive cadence does not define a recurrence period.
+      return completedRhythmIds.has(rhythm.id);
     })
     .map(rhythm => rhythm.id));
+}
+
+export function selectTendedRhythmDisplayIds(
+  completedTodayRhythmIds: ReadonlySet<string>,
+  satisfiedRhythmIds: ReadonlySet<string>
+): ReadonlySet<string> {
+  return new Set([...completedTodayRhythmIds, ...satisfiedRhythmIds]);
 }

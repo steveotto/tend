@@ -103,7 +103,7 @@ import {
 import { resolveSeedCompletionRecords } from './domain/rhythm-history.ts';
 import { localDateInTimeZone } from './domain/rhythm-scoring.ts';
 import { hasRhythmOccurrenceForCompletion } from './domain/rhythm-occurrences.ts';
-import { selectSatisfiedRhythmIds } from './domain/category-rhythms.ts';
+import { selectSatisfiedRhythmIds, selectTendedRhythmDisplayIds } from './domain/category-rhythms.ts';
 import { prepareDatedRhythmCompletion } from './domain/rhythm-completion.ts';
 import { validateStrengthData } from './domain/strength.ts';
 import type { StrengthMode } from './domain/strength.ts';
@@ -363,6 +363,7 @@ function PreviewWorkspace({
   const [healthFitnessVisited, setHealthFitnessVisited] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewData>(initialPreviewData);
   const [persistedSatisfiedRhythmIds, setPersistedSatisfiedRhythmIds] = useState<ReadonlySet<string>>(new Set());
+  const [persistedCompletedRhythmIds, setPersistedCompletedRhythmIds] = useState<ReadonlySet<string>>(new Set());
   const configuredRhythmTimeOptions = rhythmTimeOptionsForBlocks(previewData.timeBlocks);
   const [hydrated, setHydrated] = useState(false);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
@@ -508,7 +509,10 @@ function PreviewWorkspace({
       return { kind: 'error' as const, message: 'Preview identity changed. No changes were saved.' };
     }
     const written = writePreview(previewStorage, data, expected, options);
-    if (written.kind === 'saved') setPersistedSatisfiedRhythmIds(satisfiedRhythmIdsForData(data));
+    if (written.kind === 'saved') {
+      setPersistedSatisfiedRhythmIds(satisfiedRhythmIdsForData(data));
+      setPersistedCompletedRhythmIds(completedRhythmIdsForData(data));
+    }
     return written;
   }
 
@@ -567,6 +571,11 @@ function PreviewWorkspace({
     const rhythms = resolveTodayRhythms(data.savedRhythms)
       .map(rhythm => rhythmWithSavedCompletions(rhythm, data));
     return selectSatisfiedRhythmIds(rhythms, completedIdsForData(data, rhythms), date => dateForRhythm(date));
+  }
+  function completedRhythmIdsForData(data: PreviewData): ReadonlySet<string> {
+    const rhythms = resolveTodayRhythms(data.savedRhythms)
+      .map(rhythm => rhythmWithSavedCompletions(rhythm, data));
+    return completedIdsForData(data, rhythms);
   }
   const allTodayRhythms = resolveTodayRhythms(previewData.savedRhythms)
     .map(rhythm => rhythmWithSavedCompletions(rhythm));
@@ -701,6 +710,10 @@ function PreviewWorkspace({
   );
   const satisfiedRhythmIds = new Set(
     [...currentlySatisfiedRhythmIds].filter(id => persistedSatisfiedRhythmIds.has(id))
+  );
+  const tendedRhythmIds = selectTendedRhythmDisplayIds(
+    persistedCompletedRhythmIds,
+    satisfiedRhythmIds
   );
   const moneyGoals = previewData.goals;
 
@@ -1024,6 +1037,7 @@ function PreviewWorkspace({
       skipNextAutosave.current = true;
       setPreviewData(loaded.data);
       setPersistedSatisfiedRhythmIds(satisfiedRhythmIdsForData(loaded.data));
+      setPersistedCompletedRhythmIds(completedRhythmIdsForData(loaded.data));
       setPersistenceStatus({ kind: 'saved' });
       setAutoSaveEnabled(true);
     } else if (loaded.kind === 'missing') {
@@ -1031,6 +1045,7 @@ function PreviewWorkspace({
       const initialData = initialPreviewData();
       setPreviewData(initialData);
       setPersistedSatisfiedRhythmIds(new Set());
+      setPersistedCompletedRhythmIds(new Set());
       setPersistenceStatus({ kind: 'saving' });
       setAutoSaveEnabled(true);
     } else if (loaded.kind === 'corrupt' || loaded.kind === 'unsupported') {
@@ -2651,6 +2666,7 @@ function PreviewWorkspace({
       completedRhythms={completedRhythms}
       undoableRhythms={undoableRhythms}
       satisfiedRhythmIds={satisfiedRhythmIds}
+      tendedRhythmIds={tendedRhythmIds}
       showTended={previewData.showTended}
       onShowTendedChange={setShowTendedPreference}
       initializing={!hydrated}
@@ -2752,6 +2768,7 @@ function PreviewWorkspace({
               completedRhythms={completedRhythms}
               undoableRhythms={undoableRhythms}
               satisfiedRhythmIds={satisfiedRhythmIds}
+              tendedRhythmIds={tendedRhythmIds}
               showTended={previewData.showTended}
               onShowTendedChange={setShowTendedPreference}
               initializing={!hydrated}
@@ -2790,6 +2807,7 @@ function PreviewWorkspace({
                 completedRhythms={completedRhythms}
                 undoableRhythms={undoableRhythms}
                 satisfiedRhythmIds={satisfiedRhythmIds}
+                tendedRhythmIds={tendedRhythmIds}
                 showTended={previewData.showTended}
                 onShowTendedChange={setShowTendedPreference}
                 initializing={!hydrated}
@@ -2836,6 +2854,7 @@ function PreviewWorkspace({
                 completedRhythms={completedRhythms}
                 undoableRhythms={undoableRhythms}
                 satisfiedRhythmIds={satisfiedRhythmIds}
+                tendedRhythmIds={tendedRhythmIds}
                 showTended={previewData.showTended}
                 onShowTendedChange={setShowTendedPreference}
                 initializing={!hydrated}
@@ -2884,6 +2903,7 @@ function PreviewWorkspace({
                 completedRhythms={completedRhythms}
                 undoableRhythms={undoableRhythms}
                 satisfiedRhythmIds={satisfiedRhythmIds}
+                tendedRhythmIds={tendedRhythmIds}
                 showTended={previewData.showTended}
                 onShowTendedChange={setShowTendedPreference}
                 initializing={!hydrated}
@@ -2974,6 +2994,7 @@ function PreviewWorkspace({
           completedRhythms={completedRhythms}
           undoableRhythms={undoableRhythms}
           satisfiedRhythmIds={satisfiedRhythmIds}
+          tendedRhythmIds={tendedRhythmIds}
           showTended={previewData.showTended}
           onShowTendedChange={setShowTendedPreference}
           initializing={!hydrated}

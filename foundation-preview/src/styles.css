@@ -1090,7 +1090,20 @@ a:focus-visible {
 }
 
 .show-tended-list__item {
-  display: contents;
+  display: block;
+  min-width: 0;
+  transition: opacity 220ms ease-out;
+}
+
+.show-tended-list__item.is-fading {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .show-tended-list__item {
+    transition: none;
+  }
 }
 
 .home-plan-context-row {

@@ -48,6 +48,7 @@ import { resolvePersonCategoryGroups } from '../domain/person-categories.ts';
 import { PersonBadgeVisual } from './PersonBadge.tsx';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
+import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
 
 export type MarriageTab = 'today' | 'rhythms' | 'foundations';
 
@@ -115,6 +116,7 @@ type MarriageViewProps = {
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
   satisfiedRhythmIds?: ReadonlySet<string>;
+  tendedRhythmIds?: ReadonlySet<string>;
   showTended?: boolean;
   onShowTendedChange?: (show: boolean) => void;
   initializing?: boolean;
@@ -161,6 +163,7 @@ export function MarriageView({
   completedRhythms,
   undoableRhythms,
   satisfiedRhythmIds = new Set(),
+  tendedRhythmIds: savedTendedRhythmIds,
   showTended = false,
   onShowTendedChange = () => undefined,
   initializing = false,
@@ -170,6 +173,8 @@ export function MarriageView({
   foundationNavigationRequest = null,
   onFoundationNavigationHandled
 }: MarriageViewProps) {
+  const tendedRhythmIds = savedTendedRhythmIds
+    ?? selectTendedRhythmDisplayIds(completedRhythms, satisfiedRhythmIds);
   const timeOptions = useRhythmTimeOptions();
   const [activeTab, setActiveTab] = useState<MarriageTab>('today');
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -468,9 +473,9 @@ export function MarriageView({
           rhythms={todayRhythms}
           hasActiveRhythms={userRhythms.length > 0}
           rhythmScores={foundationRhythmScores}
-          completedRhythms={completedRhythms}
           undoableRhythms={undoableRhythms}
           satisfiedRhythmIds={satisfiedRhythmIds}
+          tendedRhythmIds={tendedRhythmIds}
           showTended={showTended}
           onShowTendedChange={onShowTendedChange}
           initializing={initializing}
@@ -601,9 +606,9 @@ function TodayTogether({
   rhythms,
   hasActiveRhythms,
   rhythmScores,
-  completedRhythms,
   undoableRhythms,
   satisfiedRhythmIds,
+  tendedRhythmIds,
   showTended,
   onShowTendedChange,
   initializing,
@@ -623,9 +628,9 @@ function TodayTogether({
   rhythms: readonly RhythmPreview[];
   hasActiveRhythms: boolean;
   rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
-  completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
   satisfiedRhythmIds: ReadonlySet<string>;
+  tendedRhythmIds: ReadonlySet<string>;
   showTended: boolean;
   onShowTendedChange: (show: boolean) => void;
   initializing: boolean;
@@ -641,17 +646,18 @@ function TodayTogether({
   todayDate: string;
   categoryToken: string;
 }) {
-  const completedCount = rhythms.filter(rhythm => satisfiedRhythmIds.has(rhythm.id)).length;
+  const completedCount = rhythms.filter(rhythm => tendedRhythmIds.has(rhythm.id)).length;
   return (
     <section className="marriage-today-section" aria-labelledby={`${categoryToken}-today-together-title`}>
       <div className="marriage-section-heading">
         <div>
           <h3 id={`${categoryToken}-today-together-title`}>Today</h3>
-          <p>{completedCount} of {rhythms.length} Rhythms tended today</p>
+          <p>{completedCount} of {rhythms.length} Rhythms tended</p>
         </div>
       </div>
       <TendedRhythmList
         rhythms={rhythms}
+        tendedRhythmIds={tendedRhythmIds}
         satisfiedRhythmIds={satisfiedRhythmIds}
         undoableRhythmIds={undoableRhythms}
         showTended={showTended}
@@ -660,7 +666,7 @@ function TodayTogether({
         resetKey={resetKey}
         initializing={initializing}
       >
-        {({ visibleRhythmIds, itemProps }) => {
+        {({ visibleRhythmIds, tendedRhythmIds: displayedTendedIds, itemProps }) => {
           const visibleRhythms = rhythms.filter(rhythm => visibleRhythmIds.has(rhythm.id));
           return visibleRhythms.length > 0
             ? (
@@ -670,7 +676,7 @@ function TodayTogether({
                     <RhythmDetailsDialog
                       rhythm={rhythm}
                       inline
-                      completed={completedRhythms.has(rhythm.id)}
+                      completed={displayedTendedIds.has(rhythm.id)}
                       statusLabel={rhythmLastActivityLabel(rhythm, todayDate)}
                       people={peopleForRhythm(rhythm, people)}
                       foundations={foundations}

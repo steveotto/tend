@@ -1872,7 +1872,7 @@ describe('Tend Today preview', () => {
     const originalCompletionIds = fixture.completionHistory?.map(record => record.id);
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
-    const card = screen.getByRole('article', { name: 'Daily connection' });
+    let card = screen.getByRole('article', { name: 'Daily connection' });
     await user.click(within(card).getByRole('button', { name: 'Edit Daily connection' }));
     const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
     await user.click(within(editor).getByRole('button', { name: 'Change frequency, currently Daily' }));
@@ -3258,7 +3258,7 @@ describe('Tend Today preview', () => {
     const user = userEvent.setup();
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
-    const card = screen.getByRole('article', { name: 'Take a walk' });
+    let card = screen.getByRole('article', { name: 'Take a walk' });
     const backdated = new Date();
     backdated.setDate(backdated.getDate() - 10);
     const backdatedDate = localDateString(backdated);
@@ -3291,6 +3291,7 @@ describe('Tend Today preview', () => {
     const todayDialog = screen.getByRole('dialog', { name: 'When did you tend it?' });
     await user.click(within(todayDialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => {
+      card = screen.getByRole('article', { name: 'Take a walk' });
       expect(within(card).getByRole('button', { name: 'Tended Take a walk' }).matches(':disabled')).toBe(true);
       expect(within(card).getByText('Today')).toBeTruthy();
     });
@@ -3393,7 +3394,7 @@ describe('Tend Today preview', () => {
     const user = userEvent.setup();
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
-    const card = screen.getByRole('article', { name: 'Daily connection' });
+    let card = screen.getByRole('article', { name: 'Daily connection' });
     const initialHealth = within(card).getByRole('button', {
       name: historyButtonName('View scores and history for Daily connection')
     }).querySelector('.today-rhythm-details__history-score')?.textContent;
@@ -3407,8 +3408,11 @@ describe('Tend Today preview', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }));
     expect(document.activeElement).toBe(within(history).getByRole('button', { name: '+ Log a moment' }));
     expect(within(history).getByText('Logged moments (4)')).toBeTruthy();
-    expect(within(card).getByRole('button', { name: 'Tended Daily connection' }).matches(':disabled')).toBe(true);
-    expect(within(card).getByText('Today')).toBeTruthy();
+    await waitFor(() => {
+      card = screen.getByRole('article', { name: 'Daily connection' });
+      expect(within(card).getByRole('button', { name: 'Tended Daily connection' }).matches(':disabled')).toBe(true);
+      expect(within(card).getByText('Today')).toBeTruthy();
+    });
     expect(within(card).queryByRole('button', { name: 'Undo completion for Daily connection' })).toBeNull();
     await waitFor(() => {
       const cardHealthButton = within(card).getByRole('button', {
@@ -4558,7 +4562,7 @@ describe('Tend Today preview', () => {
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Marriage' }));
 
     expect(screen.getByRole('heading', { name: 'Today' })).toBeTruthy();
-    expect(screen.getByText('0 of 0 Rhythms tended today')).toBeTruthy();
+    expect(screen.getByText('0 of 0 Rhythms tended')).toBeTruthy();
     expect(within(document.getElementById('marriage-panel-today')!).getByText('No active Rhythms.')).toBeTruthy();
     expect(screen.queryByText('Daily Connection')).toBeNull();
     expect(screen.queryByText('Weekly connection')).toBeNull();
@@ -4607,7 +4611,7 @@ describe('Tend Today preview', () => {
       .getByRole('button', { name: 'Marriage' }));
 
     expect(screen.getByText('All caught up. Nothing to tend to.')).toBeTruthy();
-    expect(screen.getByText('0 of 0 Rhythms tended today')).toBeTruthy();
+    expect(screen.getByText('0 of 0 Rhythms tended')).toBeTruthy();
     expect(screen.queryByText(/\d+ active/)).toBeNull();
     expect(screen.queryByRole('article', { name: 'Weekly check-in' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Add Rhythm' })).toBeNull();
@@ -5755,7 +5759,7 @@ describe('Tend Today preview', () => {
         .getByRole('button', { name: 'Health & Fitness' })
     );
     expect(document.querySelector('.health-fitness-today .marriage-section-heading p')?.textContent)
-      .toBe('0 of 2 Rhythms tended today');
+      .toBe('0 of 2 Rhythms tended');
     expect(screen.getByRole('button', { name: 'Log run Health cardio due' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Shared health-faith Rhythm' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Health weight later' })).toBeNull();

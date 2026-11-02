@@ -43,6 +43,7 @@ import { resolvePersonCategory } from '../domain/person-categories.ts';
 import { BirthdayCakeIcon } from './BirthdayCakeIcon.tsx';
 import { PersonHealthSummary } from './PersonHealthSummary.tsx';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
+import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
 import { PersonPrayerPanel } from './PersonPrayerPanel.tsx';
 import { selectPersonHealth, selectPersonRhythmHealth } from '../domain/person-health.ts';
 import type {
@@ -72,6 +73,7 @@ export function PersonProfileView({
   completedRhythms,
   undoableRhythms,
   satisfiedRhythmIds = new Set(),
+  tendedRhythmIds: savedTendedRhythmIds,
   showTended = false,
   onShowTendedChange = () => undefined,
   initializing = false,
@@ -114,6 +116,7 @@ export function PersonProfileView({
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
   satisfiedRhythmIds?: ReadonlySet<string>;
+  tendedRhythmIds?: ReadonlySet<string>;
   showTended?: boolean;
   onShowTendedChange?: (show: boolean) => void;
   initializing?: boolean;
@@ -154,6 +157,8 @@ export function PersonProfileView({
   returnLabel?: string;
   onClose: () => void;
 }) {
+  const tendedRhythmIds = savedTendedRhythmIds
+    ?? selectTendedRhythmDisplayIds(completedRhythms, satisfiedRhythmIds);
   const details = personDetailsForId(personDetails, personId);
   const person = personWithSavedPhoto(personById(people, personId), personDetails ?? []);
   const [tab, setTab] = useState<ProfileTab>('rhythms');
@@ -255,7 +260,7 @@ export function PersonProfileView({
     setConnectionEditor({ record });
   }
 
-  function renderPersonRhythm(rhythm: RhythmPreview) {
+  function renderPersonRhythm(rhythm: RhythmPreview, displayTended = completedRhythms.has(rhythm.id)) {
     return (
       <RhythmDetailsDialog
         key={rhythm.id}
@@ -267,7 +272,7 @@ export function PersonProfileView({
         onPersonSelect={onPersonSelect}
         onOpenFoundation={onOpenFoundation}
         onOpenCategory={onOpenCategory}
-        completed={completedRhythms.has(rhythm.id)}
+        completed={displayTended}
         healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
         onHistory={event => onRhythmHistory(rhythm.id, event)}
         {...(isEditableRhythmId(rhythm.id)
@@ -431,6 +436,7 @@ export function PersonProfileView({
             </div>
             <TendedRhythmList
               rhythms={duePersonRhythms}
+              tendedRhythmIds={tendedRhythmIds}
               satisfiedRhythmIds={satisfiedRhythmIds}
               undoableRhythmIds={undoableRhythms}
               showTended={showTended}
@@ -439,13 +445,15 @@ export function PersonProfileView({
               resetKey={`${personId}:${tab}:${today}`}
               initializing={initializing}
             >
-              {({ visibleRhythmIds, itemProps }) => {
+              {({ visibleRhythmIds, tendedRhythmIds: displayedTendedIds, itemProps }) => {
                 const visibleDueRhythms = duePersonRhythms.filter(rhythm => visibleRhythmIds.has(rhythm.id));
                 return visibleDueRhythms.length > 0
                   ? (
                     <div className="marriage-rhythm-list current-plan-item-group">
                       {visibleDueRhythms.map(rhythm => (
-                        <div key={rhythm.id} {...itemProps(rhythm.id)}>{renderPersonRhythm(rhythm)}</div>
+                        <div key={rhythm.id} {...itemProps(rhythm.id)}>
+                          {renderPersonRhythm(rhythm, displayedTendedIds.has(rhythm.id))}
+                        </div>
                       ))}
                     </div>
                   )
@@ -462,7 +470,7 @@ export function PersonProfileView({
               <section className="person-profile__other-rhythms" aria-labelledby="person-profile-other-rhythms">
                 <h4 id="person-profile-other-rhythms">Other Rhythms</h4>
                 <div className="marriage-rhythm-list current-plan-item-group">
-                  {otherPersonRhythms.map(renderPersonRhythm)}
+                  {otherPersonRhythms.map(rhythm => renderPersonRhythm(rhythm))}
                 </div>
               </section>
             )}
