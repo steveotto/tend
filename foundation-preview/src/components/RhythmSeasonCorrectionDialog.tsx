@@ -10,7 +10,7 @@ import type {
   RhythmScoringMetadata,
   RhythmTimeValue
 } from '../domain/rhythm-schedule.ts';
-import { formatRhythmSchedule, rhythmTimeLabel, rhythmTimeOptions } from '../domain/rhythm-schedule.ts';
+import { formatRhythmSchedule, rhythmTimeLabel } from '../domain/rhythm-schedule.ts';
 import type { SelectRhythmScoreInput } from '../domain/rhythm-scoring.ts';
 import { selectRhythmScore, selectRhythmSeasonScore } from '../domain/rhythm-scoring.ts';
 import { establishCurrentRhythmSeason } from '../domain/rhythm-season-edit.ts';
@@ -25,6 +25,7 @@ import { RhythmCalendarIcon } from './RhythmCalendarIcon.tsx';
 import { RhythmScheduleFields } from './RhythmScheduleFields.tsx';
 import type { RhythmScheduleFieldsDraft } from './RhythmScheduleFields.tsx';
 import { StyledSelect } from './StyledSelect.tsx';
+import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 
 function formatDate(date: string): string {
   return formatRhythmSeasonDate(date);
@@ -245,6 +246,7 @@ export function RhythmSeasonCorrectionDialog({
   onRequestDelete?: (draft: RhythmSeasonEditDialogDraft) => void;
   onClose: () => void;
 }) {
+  const timeOptions = useRhythmTimeOptions();
   const titleId = useId();
   const savedScheduleHeadingId = useId();
   const makeChangesHeadingId = useId();
@@ -320,7 +322,7 @@ export function RhythmSeasonCorrectionDialog({
   const savedTimeValue = savedSeason.kind === 'scheduled'
     ? savedSeason.timeOfDay ?? (savedSeasonIsCurrent ? rhythm.timeOfDay : undefined)
     : undefined;
-  const savedTimeLabel = savedTimeValue ? rhythmTimeLabel(savedTimeValue) : 'Time of day not recorded';
+  const savedTimeLabel = savedTimeValue ? rhythmTimeLabel(savedTimeValue, timeOptions) : 'Time of day not recorded';
   const savedScheduleText = savedSeason.kind === 'scheduled'
     ? formatRhythmSchedule(savedSeason.schedule, 'detailed').replace(/\.$/, '')
     : savedSeason.descriptiveCadence
@@ -331,7 +333,7 @@ export function RhythmSeasonCorrectionDialog({
     : 'Earlier schedule details unavailable';
   const savedComparison = savedSeason.kind === 'scheduled'
     ? `${formatScheduleComparison(savedSeason.schedule)} · ${savedTimeValue
-      ? rhythmTimeLabel(savedTimeValue)
+      ? rhythmTimeLabel(savedTimeValue, timeOptions)
       : 'Time not recorded'}`
     : `${savedScheduleText.replace(/\.$/, '')} · Time not recorded`;
   const savedPaletteAssignments = rhythmSeasonPaletteAssignments(scheduleHistory);
@@ -476,7 +478,7 @@ export function RhythmSeasonCorrectionDialog({
   if (summarySchedule) {
     summaryCadence = formatScheduleComparison(summarySchedule);
   }
-  const proposedSchedule = `${summaryCadence} · ${rhythmTimeLabel(timeOfDay)}`;
+  const proposedSchedule = `${summaryCadence} · ${rhythmTimeLabel(timeOfDay, timeOptions)}`;
   const validationMessage = scheduleDraft.validationMessage
     ?? (!schedule
       ? 'Choose a complete, valid schedule to preview its impact.'
@@ -640,7 +642,7 @@ export function RhythmSeasonCorrectionDialog({
                 <label>Time of day</label>
                 <StyledSelect
                   label="Time of day"
-                  options={rhythmTimeOptions}
+                  options={timeOptions}
                   value={timeOfDay}
                   onChange={setTimeOfDay}
                 />

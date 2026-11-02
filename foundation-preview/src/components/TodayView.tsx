@@ -16,15 +16,15 @@ import { CategoryHealthBadge, ScoreMeter } from './Cards.tsx';
 import type { Destination } from './AppNavigation.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 import {
-  DEFAULT_TODAY_BLOCKS,
-  currentTodayBlock,
   selectTodayPlanGroups,
   todayFocusContext,
   todayFocusLabel
 } from '../domain/today-plan.ts';
 import type { TodayFocusId, TodayItemType } from '../domain/today-plan.ts';
 import { TodayWeather } from './TodayWeather.tsx';
+import { TodayDateRow } from './TodayDateRow.tsx';
 import type { TodayWeatherController } from './useTodayWeather.ts';
+import { useTimeBlockSettings } from './TimeBlocksContext.tsx';
 
 const planTypes: { id: TodayItemType; label: string }[] = [
   { id: 'scheduled', label: 'Scheduled' },
@@ -35,7 +35,6 @@ const planTypes: { id: TodayItemType; label: string }[] = [
 type TodayViewProps = {
   people?: readonly PersonPreview[];
   greeting: string;
-  dateLabel: string;
   evaluationInstant: Date;
   localDate: string;
   focus: TodayFocusId;
@@ -60,7 +59,6 @@ type TodayViewProps = {
 export function TodayView({
   people = [],
   greeting,
-  dateLabel,
   evaluationInstant,
   localDate,
   focus,
@@ -82,6 +80,7 @@ export function TodayView({
   onUndo,
 }: TodayViewProps) {
   const [planType, setPlanType] = useState<TodayItemType>('scheduled');
+  const timeBlocks = useTimeBlockSettings();
   const focusPickerRef = useRef<HTMLDetailsElement>(null);
   const focusTriggerRef = useRef<HTMLElement>(null);
   const visibleRhythms = useMemo(() => {
@@ -89,23 +88,20 @@ export function TodayView({
     return query ? rhythms.filter(item => item.title.toLocaleLowerCase().includes(query)) : rhythms;
   }, [rhythms, search]);
   const planGroups = useMemo(
-    () => selectTodayPlanGroups(visibleRhythms, planType, focus, evaluationInstant),
-    [visibleRhythms, planType, focus, evaluationInstant]
+    () => selectTodayPlanGroups(visibleRhythms, planType, focus, evaluationInstant, timeBlocks),
+    [visibleRhythms, planType, focus, evaluationInstant, timeBlocks]
   );
   const planRhythms = planGroups.flatMap(group => group.rhythms);
   const tendedCount = planRhythms.filter(rhythm => completedRhythms.has(rhythm.id)).length;
-  const currentLabel = todayFocusLabel(focus, evaluationInstant);
-  const focusContext = todayFocusContext(focus, planType, evaluationInstant);
-  const selectedContext = planType === 'scheduled' && focus !== 'everything-today'
-    ? `${DEFAULT_TODAY_BLOCKS.find(block => block.id === (focus === 'now' ? currentTodayBlock(evaluationInstant) : focus))!.name} · ${focusContext}`
-    : focusContext;
+  const currentLabel = todayFocusLabel(focus, evaluationInstant, timeBlocks);
+  const focusContext = todayFocusContext(focus, planType, evaluationInstant, timeBlocks);
   const weatherTime = focus === 'now'
     ? null
     : focus === 'everything-today'
       ? undefined
-      : DEFAULT_TODAY_BLOCKS.find(block => block.id === focus)?.start;
+      : timeBlocks.blocks.find(block => block.id === focus)?.start;
   const scheduledItemCount = (timeFrame: TodayFocusId) =>
-    selectTodayPlanGroups(visibleRhythms, 'scheduled', timeFrame, evaluationInstant)
+    selectTodayPlanGroups(visibleRhythms, 'scheduled', timeFrame, evaluationInstant, timeBlocks)
       .reduce((count, group) => count + group.rhythms.length, 0);
   const itemCountLabel = (timeFrame: TodayFocusId) => {
     const count = scheduledItemCount(timeFrame);
@@ -140,7 +136,7 @@ export function TodayView({
   return (
     <main className="home-dashboard">
       <div className="sectiontitle dashboard-greeting">
-        <h2>{greeting}</h2><span className="hint">{dateLabel}</span>
+        <h2>{greeting}</h2>
       </div>
 
       <section className="card overall-card" aria-label="Overall health summary">
@@ -177,74 +173,10 @@ export function TodayView({
         </div>
       </section>
 
+      <TodayDateRow instant={evaluationInstant} localDate={localDate} />
+
       <section aria-label="Today's plan">
         <div className="card planblock current today-plan">
-          <div className="today-plan__header">
-            <details className="today-plan__focus-picker" ref={focusPickerRef}>
-              <summary
-                ref={focusTriggerRef}
-                className="today-plan__focus-trigger"
-                aria-label={`Choose a time frame, currently ${currentLabel}`}
-              >
-                <span>{currentLabel}</span>
-                <span className="today-plan__chevron" aria-hidden="true">⌄</span>
-              </summary>
-              <div className="today-plan__focus-options" role="group" aria-label="Time frames">
-                <div className="today-plan__focus-options-section">
-                  <span>View</span>
-                  {([
-                    ['now', 'Now', `${todayFocusContext('now', 'scheduled', evaluationInstant)} · ${itemCountLabel('now')}`],
-                    ['everything-today', 'Everything today', `Across every time block · ${itemCountLabel('everything-today')}`]
-                  ] as const).map(([id, label, range]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      aria-pressed={focus === id}
-                      onClick={() => {
-                        onFocusChange(id);
-                        if (focusPickerRef.current) focusPickerRef.current.open = false;
-                        focusTriggerRef.current?.focus();
-                      }}
-                    >
-                      <span>{label}</span><small>{range}</small>
-                    </button>
-                  ))}
-                </div>
-                <div className="today-plan__focus-options-section">
-                  <span>Specific time</span>
-                  {DEFAULT_TODAY_BLOCKS.map(block => (
-                    <button
-                      key={block.id}
-                      type="button"
-                      aria-pressed={focus === block.id}
-                      onClick={() => {
-                        onFocusChange(block.id);
-                        if (focusPickerRef.current) focusPickerRef.current.open = false;
-                        focusTriggerRef.current?.focus();
-                      }}
-                    >
-                      <span>{block.name}</span>
-                      <small>{todayFocusContext(block.id, 'scheduled', evaluationInstant)} · {itemCountLabel(block.id)}</small>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </details>
-            <span className="today-plan__tended-count" aria-live="polite">
-              {tendedCount} of {planRhythms.length} tended
-            </span>
-          </div>
-          {weatherController.city
-            && weatherController.weather.status === 'ready'
-            && focus !== 'everything-today'
-            && weatherTime !== undefined && (
-              <TodayWeather
-                report={weatherController.weather.report}
-                localDate={localDate}
-                time={weatherTime ?? null}
-                containerClassName="today-plan__weather"
-              />
-            )}
           <div className="faith-practice-tabs home-plan-type-tabs" role="tablist" aria-label="Plan items">
             {planTypes.map((type, index) => (
               <button
@@ -262,11 +194,85 @@ export function TodayView({
               </button>
             ))}
           </div>
-          <div className="home-plan-context-row">
-            <div className="home-plan-context">
-              {selectedContext}
+          {planType === 'scheduled' ? (
+            <>
+              <div className="today-plan__scheduled-controls">
+                <details className="today-plan__focus-picker" ref={focusPickerRef}>
+                  <summary
+                    ref={focusTriggerRef}
+                    className="today-plan__focus-trigger"
+                    aria-label={`Choose a time frame, currently ${currentLabel}`}
+                  >
+                    <span>{currentLabel}</span>
+                    <span className="today-plan__chevron" aria-hidden="true">⌄</span>
+                  </summary>
+                  <div className="today-plan__focus-options" role="group" aria-label="Time frames">
+                    <div className="today-plan__focus-options-section">
+                      <span>View</span>
+                      {([
+                        ['now', 'Now', `${todayFocusContext('now', 'scheduled', evaluationInstant, timeBlocks)} · ${itemCountLabel('now')}`],
+                        ['everything-today', 'Everything today', `Across every time block · ${itemCountLabel('everything-today')}`]
+                      ] as const).map(([id, label, range]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          aria-pressed={focus === id}
+                          onClick={() => {
+                            onFocusChange(id);
+                            if (focusPickerRef.current) focusPickerRef.current.open = false;
+                            focusTriggerRef.current?.focus();
+                          }}
+                        >
+                          <span>{label}</span><small>{range}</small>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="today-plan__focus-options-section">
+                      <span>Specific time</span>
+                      {timeBlocks.blocks.map(block => (
+                        <button
+                          key={block.id}
+                          type="button"
+                          aria-pressed={focus === block.id}
+                          onClick={() => {
+                            onFocusChange(block.id);
+                            if (focusPickerRef.current) focusPickerRef.current.open = false;
+                            focusTriggerRef.current?.focus();
+                          }}
+                        >
+                          <span>{block.name}</span>
+                          <small>{todayFocusContext(block.id, 'scheduled', evaluationInstant, timeBlocks)} · {itemCountLabel(block.id)}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </details>
+                {weatherController.city
+                  && weatherController.weather.status === 'ready'
+                  && focus !== 'everything-today'
+                  && weatherTime !== undefined && (
+                    <TodayWeather
+                      report={weatherController.weather.report}
+                      localDate={localDate}
+                      time={weatherTime ?? null}
+                      containerClassName="today-plan__weather"
+                    />
+                  )}
+              </div>
+              <div className="home-plan-context-row">
+                <div className="home-plan-context">{focusContext}</div>
+                <span className="today-plan__tended-count" aria-live="polite">
+                  {tendedCount} of {planRhythms.length} tended
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="home-plan-context-row home-plan-context-row--count-only">
+              <span className="today-plan__tended-count" aria-live="polite">
+                {tendedCount} of {planRhythms.length} tended
+              </span>
             </div>
-          </div>
+          )}
           <div className="current-plan-items" id="today-plan-items" role="tabpanel" aria-labelledby={`plan-tab-${planType}`}>
             {planGroups.length ? (
               planGroups.map(group => (

@@ -15,6 +15,7 @@ import { createWeightData } from '../src/domain/weight.ts';
 import { createCardioData } from '../src/domain/cardio.ts';
 import { createFriendshipData } from '../src/domain/friendships.ts';
 import { createPersonPickerGroups, createSamplePeople, setPersonGroupMembership } from '../src/domain/preview-data.ts';
+import { createDefaultTimeBlockSettings } from '../src/domain/time-blocks.ts';
 import type { StrengthSavedWorkout } from '../src/domain/strength.ts';
 import {
   browserPreviewStorage,
@@ -523,9 +524,9 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(values.get(PREVIEW_STORAGE_KEY)).toBe(externalRaw);
   });
 
-  it('migrates v32 with an empty Prayer collection and preserves its exact raw source before v33 writes', () => {
+  it('migrates v32 with an empty Prayer collection and preserves its exact raw source before current-version writes', () => {
     const current = createPreviewEnvelope(createSamplePreviewData());
-    const { prayerRequests: _prayerRequests, ...v32Data } = current.data;
+    const { prayerRequests: _prayerRequests, timeBlocks: _timeBlocks, ...v32Data } = current.data;
     const raw = JSON.stringify({ ...current, schemaVersion: 32, data: v32Data });
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
 
@@ -539,7 +540,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(values.get(PREVIEW_V32_RECOVERY_KEY)).toBe(raw);
     expect(loadV32RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
     const saved = JSON.parse(values.get(PREVIEW_STORAGE_KEY) ?? '{}') as { schemaVersion: number; data: { prayerRequests?: unknown[] } };
-    expect(saved.schemaVersion).toBe(33);
+    expect(saved.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
     expect(saved.data.prayerRequests).toEqual([]);
   });
 
@@ -1218,7 +1219,8 @@ describe('synthetic preview storage adapter and envelope', () => {
       peopleGroups: createPersonPickerGroups(),
       personDetails: [],
       personNotes: [],
-      prayerRequests: []
+      prayerRequests: [],
+      timeBlocks: createDefaultTimeBlockSettings()
     };
     const raw = JSON.stringify(createPreviewEnvelope(empty));
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
@@ -1276,7 +1278,8 @@ describe('synthetic preview storage adapter and envelope', () => {
       peopleGroups: createPersonPickerGroups(),
       personDetails: [],
       personNotes: [],
-      prayerRequests: []
+      prayerRequests: [],
+      timeBlocks: createDefaultTimeBlockSettings()
     });
   });
 
@@ -2737,13 +2740,68 @@ describe('preview backup controls', () => {
       });
     });
 
+    const savedEnvelope = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}') as {
+      schemaVersion?: number;
+      data?: { personNotes?: Array<Record<string, unknown>> };
+    };
+    expect(savedEnvelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+    expect(savedEnvelope.data?.personNotes).toHaveLength(1);
+    const savedAfterEdit = loadPreview(window.localStorage, new Date().toISOString().slice(0, 10));
+    expect(savedAfterEdit.kind).toBe('loaded');
+    if (savedAfterEdit.kind === 'loaded') {
+      expect(savedAfterEdit.data.personNotes).toMatchObject([{
+        personId: 'sample-person-avery',
+        sharedWith: ['sample-person-morgan'],
+        content: 'Edited from the shared profile'
+      }]);
+    }
+
     cleanup();
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
+    const reloaded = loadPreview(window.localStorage, new Date().toISOString().slice(0, 10));
+    expect(reloaded.kind).toBe('loaded');
+    if (reloaded.kind === 'loaded') {
+      expect(reloaded.data.personNotes).toMatchObject([{
+        personId: 'sample-person-avery',
+        sharedWith: ['sample-person-morgan'],
+        content: 'Edited from the shared profile'
+      }]);
+    }
     await openPerson('Avery Brooks');
     await user.click(screen.getByRole('button', { name: 'Notes (1)' }));
     expect(screen.getByRole('heading', { name: 'Notes (1)' })).toBeTruthy();
     expect(screen.getByText('Edited from the shared profile')).toBeTruthy();
+  });
+
+  it('migrates schema 33 to default Time blocks without changing Rhythm block assignments', () => {
+    const data = createSamplePreviewData();
+    const rhythmId = 'user-rhythm-11111111-1111-4111-8111-111111111111';
+    data.savedRhythms = [{
+      id: rhythmId,
+      title: 'Morning reflection',
+      cadence: 'Daily',
+      timeLabel: 'Early morning',
+      timeOfDay: 'early-morning',
+      personIds: [],
+      categoryIds: ['faith'],
+      schedule: { frequency: 'daily' }
+    }];
+    const current = createPreviewEnvelope(data);
+    const { timeBlocks: _timeBlocks, ...v33Data } = current.data;
+    const raw = JSON.stringify({ ...current, schemaVersion: 33, data: v33Data });
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const migrated = loadPreview(storage, '2026-10-21');
+    expect(migrated.kind).toBe('loaded');
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+    if (migrated.kind !== 'loaded') return;
+    expect(migrated.data.timeBlocks).toEqual(createDefaultTimeBlockSettings());
+    expect(migrated.data.savedRhythms).toMatchObject([{
+      id: rhythmId,
+      timeOfDay: 'early-morning',
+      timeLabel: 'Early morning'
+    }]);
   });
 
   it('persists shared Prayer requests without changing Rhythm records and separates unlink from owner deletion', async () => {

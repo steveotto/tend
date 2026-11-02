@@ -79,6 +79,34 @@ function WeatherHarness({ client, enabled = true }: {
 }
 
 describe('Today city weather flow', () => {
+  it('keeps the city picker dismissible and returns focus to its Settings trigger', async () => {
+    const user = userEvent.setup();
+    const client = new WeatherClient(vi.fn());
+    render(<WeatherHarness client={client} />);
+    const trigger = screen.getByRole('button', { name: 'Choose city' });
+
+    await user.click(trigger);
+    const dialog = screen.getByRole('dialog', { name: 'Choose a city' });
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(document.activeElement).toBe(screen.getByLabelText('City or postal code'));
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeTruthy();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Choose a city' })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+
+    await user.click(trigger);
+    await user.click(screen.getByRole('button', { name: 'Today' }));
+    expect(screen.queryByRole('dialog', { name: 'Choose a city' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    const reopenedTrigger = screen.getByRole('button', { name: 'Choose city' });
+    await user.click(reopenedTrigger);
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog', { name: 'Choose a city' })).toBeNull();
+    expect(document.activeElement).toBe(reopenedTrigger);
+  });
+
   it('keeps city setup in Settings and shows period-specific weather in Today only', async () => {
     const user = userEvent.setup();
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
@@ -152,6 +180,7 @@ describe('Today city weather flow', () => {
     await user.click(screen.getByRole('button', { name: 'Retry' }));
     expect(await screen.findByText(/Forecast updated/)).toBeTruthy();
     expect(fetcher).toHaveBeenCalledTimes(3);
+    await user.click(screen.getByRole('button', { name: 'Change city' }));
     expect(screen.getByText(/cleared when this preview reloads/)).toBeTruthy();
   });
 

@@ -16,7 +16,6 @@ import {
 import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
 import { rhythmDraftFrom, validateRhythmDraft } from '../domain/rhythm-editor.ts';
 import type { RhythmDraft, RhythmDraftErrors } from '../domain/rhythm-editor.ts';
-import { rhythmTimeOptions } from '../domain/rhythm-schedule.ts';
 import { formatRhythmSchedule } from '../domain/rhythm-schedule.ts';
 import { rhythmTimeLabel } from '../domain/rhythm-schedule.ts';
 import type { RhythmFrequencyRecommendation } from '../domain/rhythm-schedule.ts';
@@ -34,6 +33,7 @@ import { MarriageIcon } from './MarriageIcon.tsx';
 import { PeopleAssociationRow, PeopleBadgeSelectionPicker } from './PeopleAssociationControls.tsx';
 import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
 import { RhythmFoundationBadges } from './RhythmFoundationBadges.tsx';
+import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 
 function emptyDraft(): RhythmDraft {
   return {
@@ -115,6 +115,7 @@ export function RhythmEditor({
   onArchive,
   onClose
 }: RhythmEditorProps) {
+  const timeOptions = useRhythmTimeOptions();
   const [draft, setDraft] = useState<RhythmDraft>(() => initialDraft
     ? {
         ...initialDraft,
@@ -125,7 +126,7 @@ export function RhythmEditor({
           : { secondaryFoundationIds: [...initialDraft.secondaryFoundationIds] })
       }
     : rhythm
-      ? rhythmDraftFrom(rhythm, rhythm.categoryIds ?? [], asOfDate)
+      ? rhythmDraftFrom(rhythm, rhythm.categoryIds ?? [], asOfDate, timeOptions)
       : emptyDraft());
   const [errors, setErrors] = useState<RhythmDraftErrors>({});
   const [showArchiveConfirmation, setShowArchiveConfirmation] = useState(false);
@@ -309,7 +310,7 @@ export function RhythmEditor({
       : draft.schedule !== undefined;
     if (rhythm && (hasDatedCompletionHistory || hasPreservedSeasonHistory)
       && scheduleChanged && draft.schedule) {
-      const nextErrors = validateRhythmDraft(draft, undefined, people.map(person => person.id));
+      const nextErrors = validateRhythmDraft(draft, undefined, people.map(person => person.id), timeOptions);
       setErrors(nextErrors);
       if (Object.keys(nextErrors).length === 0) {
         if (scheduleFlowOpeningDraftRef.current === null) {
@@ -366,7 +367,7 @@ export function RhythmEditor({
       : null;
   }
 
-  const timeValue = rhythmTimeOptions.find(option => option.label === draft.timeLabel)?.value ?? '';
+  const timeValue = timeOptions.find(option => option.label === draft.timeLabel)?.value ?? '';
   const effectiveSchedule = draft.originalSchedule ?? draft.schedule;
   const hasProtectedScheduleHistory = Boolean(rhythm && (hasDatedCompletionHistory || hasPreservedSeasonHistory));
   const showCadenceDescription = Boolean(
@@ -408,8 +409,10 @@ export function RhythmEditor({
     ? rhythmSeasonForDate(draft.originalScoring?.scheduleHistory ?? [], asOfDate)
     : draft.originalScoring?.scheduleHistory.at(-1);
   const originalTimeLabel = originalSeason?.kind === 'scheduled' && originalSeason.timeOfDay
-    ? rhythmTimeLabel(originalSeason.timeOfDay)
-    : rhythm?.timeLabel ?? 'Anytime';
+    ? rhythmTimeLabel(originalSeason.timeOfDay, timeOptions)
+    : rhythm?.timeOfDay
+      ? rhythmTimeLabel(rhythm.timeOfDay, timeOptions)
+      : rhythm?.timeLabel ?? 'Anytime';
   const showScheduleTimeComparison = originalTimeLabel !== draft.timeLabel;
   const scheduleEffectiveDate = asOfDate ?? localDateString(new Date());
   const selectedCategories = areas
@@ -543,12 +546,12 @@ export function RhythmEditor({
       <label>Time of day</label>
       <StyledSelect
         label="Time of day"
-        options={rhythmTimeOptions}
+        options={timeOptions}
         value={timeValue}
         describedBy={errors.timeLabel ? 'rhythm-error-timeLabel' : undefined}
         invalid={Boolean(errors.timeLabel)}
         onChange={value => {
-          const option = rhythmTimeOptions.find(item => item.value === value);
+          const option = timeOptions.find(item => item.value === value);
           if (option) update('timeLabel', option.label);
         }}
       />

@@ -76,9 +76,15 @@ import { validatePersonNotesCollection } from './person-notes.ts';
 import type { PersonNote } from './person-notes.ts';
 import { validatePersonPrayerRequestsCollection } from './person-prayers.ts';
 import type { PersonPrayerRequest } from './person-prayers.ts';
+import {
+  createDefaultTimeBlockSettings,
+  isTimeBlockId,
+  validateTimeBlockSettings
+} from './time-blocks.ts';
+import type { TimeBlockSettings } from './time-blocks.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 33;
+export const PREVIEW_SCHEMA_VERSION = 34;
 
 export type PreviewData = {
   goals: MoneyGoal[];
@@ -99,6 +105,7 @@ export type PreviewData = {
   personDetails: PersonDetails[];
   personNotes: PersonNote[];
   prayerRequests: PersonPrayerRequest[];
+  timeBlocks: TimeBlockSettings;
   [key: string]: unknown;
 };
 
@@ -130,7 +137,7 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33; resolvedPersonCategories: number }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34; resolvedPersonCategories: number }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
 const goalKeys = [
@@ -172,6 +179,7 @@ const dataKeysV30 = [...dataKeysV29, 'personNotes'];
 const dataKeysV31 = [...dataKeysV30];
 const dataKeysV32 = [...dataKeysV31, 'people'];
 const dataKeysV33 = [...dataKeysV32, 'prayerRequests'];
+const dataKeysV34 = [...dataKeysV33, 'timeBlocks'];
 const envelopeKeys = ['format', 'schemaVersion', 'data'];
 const supportedRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 const builtInRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
@@ -205,7 +213,8 @@ export function createSamplePreviewData(): PreviewData {
     peopleGroups: createPersonPickerGroups(),
     personDetails: [],
     personNotes: [],
-    prayerRequests: []
+    prayerRequests: [],
+    timeBlocks: createDefaultTimeBlockSettings()
   };
 }
 
@@ -245,7 +254,9 @@ function hasOnlyKeysWithEmptyPrayerDefault(
   return Object.keys(record).every(key => allowed.includes(key)
     || key === 'prayerRequests'
       && Array.isArray(record[key])
-      && record[key].length === 0);
+      && record[key].length === 0
+    || key === 'timeBlocks'
+      && isRecord(record[key]));
 }
 
 function isNonEmptyText(value: unknown, maxLength = 160): value is string {
@@ -457,7 +468,11 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
         ...request,
         ...(request.sharedWith === undefined ? {} : { sharedWith: [...request.sharedWith] }),
         prayerLogs: request.prayerLogs.map(log => ({ ...log }))
-      }))
+      })),
+      timeBlocks: {
+        blocks: data.timeBlocks.blocks.map(block => ({ ...block })),
+        sleepStart: data.timeBlocks.sleepStart
+      }
     }
   };
 }
@@ -507,6 +522,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
       && value.schemaVersion !== 30
       && value.schemaVersion !== 31
       && value.schemaVersion !== 32
+      && value.schemaVersion !== 33
       && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
@@ -541,13 +557,27 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const isV29 = value.schemaVersion === 29;
   const isV30 = value.schemaVersion === 30;
   const isV31 = value.schemaVersion === 31;
-  const isV33 = value.schemaVersion === 33;
+  const isV34 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV33 = value.schemaVersion === 33 || isV34;
   const isV32 = value.schemaVersion === 32 || isV33;
-  const hasCurrentFriendshipsData = isV19 || isV20 || isV21 || isV22 || isV23 || isV24 || isV25 || isV26 || isV27 || isV28 || isV29 || isV30 || isV31 || isV32;
+  const isV31_compat = value.schemaVersion === 31 || isV32;
+  const isV30_compat = value.schemaVersion === 30 || isV31_compat;
+  const isV29_compat = value.schemaVersion === 29 || isV30_compat;
+  const isV28_compat = value.schemaVersion === 28 || isV29_compat;
+  const isV27_compat = value.schemaVersion === 27 || isV28_compat;
+  const isV26_compat = value.schemaVersion === 26 || isV27_compat;
+  const isV25_compat = value.schemaVersion === 25 || isV26_compat;
+  const isV24_compat = value.schemaVersion === 24 || isV25_compat;
+  const isV23_compat = value.schemaVersion === 23 || isV24_compat;
+  const isV22_compat = value.schemaVersion === 22 || isV23_compat;
+  const isV21_compat = value.schemaVersion === 21 || isV22_compat;
+  const isV20_compat = value.schemaVersion === 20 || isV21_compat;
+  const isV19_compat = value.schemaVersion === 19 || isV20_compat;
+  const hasCurrentFriendshipsData = isV19_compat || isV20_compat || isV21_compat || isV22_compat || isV23_compat || isV24_compat || isV25_compat || isV26_compat || isV27_compat || isV28_compat || isV29_compat || isV30_compat || isV31_compat || isV32;
   const hasCardio = isV18 || hasCurrentFriendshipsData;
   const allowedDataKeys = isV1 ? dataKeysV1 : isV2 ? dataKeysV2
     : isV3 || isV4 ? dataKeysV3
-      : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
+      : isV34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
         : isV11 || isV12 ? dataKeysV12 : isV10 ? dataKeysV10
       : isV8 || isV9 ? dataKeysV8 : isV7 ? dataKeysV7 : isV6 ? dataKeysV6 : dataKeysV5;
   if (!isRecord(value.data) || (!isV19 && !isV20 && !hasOnlyKeysWithEmptyPrayerDefault(value.data, allowedDataKeys))
@@ -562,10 +592,10 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   if ((isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18 || hasCurrentFriendshipsData) && !Array.isArray(value.data.rhythmHistoryIds)) {
     return { valid: false, kind: 'invalid', message: 'Rhythm history references must be a list.' };
   }
-  if ((isV29 || isV30 || isV31 || isV32) && !Array.isArray(value.data.personDetails)) {
+  if (isV29_compat && !Array.isArray(value.data.personDetails)) {
     return { valid: false, kind: 'invalid', message: 'Person details must be a list.' };
   }
-  if ((isV30 || isV31 || isV32) && !Array.isArray(value.data.personNotes)) {
+  if (isV30_compat && !Array.isArray(value.data.personNotes)) {
     return { valid: false, kind: 'invalid', message: 'Person notes must be a list.' };
   }
   if (isV32 && !validatePeopleCollection(value.data.people)) {
@@ -574,6 +604,13 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   if (isV33 && !validatePersonPrayerRequestsCollection(value.data.prayerRequests)) {
     return { valid: false, kind: 'invalid', message: 'Prayer requests contain invalid fields, history, or Person references.' };
   }
+  const timeBlockValidation = validateTimeBlockSettings(
+    isV34 ? value.data.timeBlocks : createDefaultTimeBlockSettings()
+  );
+  if (!timeBlockValidation.valid) {
+    return { valid: false, kind: 'invalid', message: 'Time block settings are invalid.' };
+  }
+  const timeBlocks = timeBlockValidation.settings;
   const people: PersonPreview[] = isV32 ? value.data.people as PersonPreview[] : createSamplePeople();
   if (!isV1 && !((isV4 || isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18 || hasCurrentFriendshipsData)
     ? isV18 || hasCurrentFriendshipsData ? validateSavedRhythmsV18(value.data.savedRhythms)
@@ -664,6 +701,23 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
       }
       savedRhythms.push({ ...rhythm, timeOfDay });
     }
+  }
+
+  const configuredTimeBlockIds = new Set(timeBlocks.blocks.map(block => block.id));
+  const timeValueIsConfigured = (value: unknown) => value === undefined
+    || value === 'anytime'
+    || value === 'all-day'
+    || isTimeBlockId(value) && configuredTimeBlockIds.has(value);
+  if (savedRhythms.some(rhythm =>
+    !timeValueIsConfigured(rhythm.timeOfDay)
+    || rhythm.scoring?.scheduleHistory.some(segment =>
+      segment.kind === 'scheduled' && !timeValueIsConfigured(segment.timeOfDay))
+  )) {
+    return {
+      valid: false,
+      kind: 'invalid',
+      message: 'A Rhythm schedule refers to a time block that is not configured.'
+    };
   }
 
   const datedRhythmCompletions: DatedRhythmCompletion[] = [];
@@ -925,11 +979,11 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   if (!validatePersonPickerGroups(peopleGroups, people)) {
     return { valid: false, kind: 'invalid', message: 'People categories must contain one category per person.' };
   }
-  const personDetails = isV29 || isV30 || isV31 || isV32 ? value.data.personDetails : [];
+  const personDetails = isV29_compat ? value.data.personDetails : [];
   if (!validatePersonDetailsCollection(personDetails, currentDate, people.map(person => person.id))) {
     return { valid: false, kind: 'invalid', message: 'Person details contain invalid fields, dates, styles, or unresolved Person IDs.' };
   }
-  const personNotes = isV30 || isV31 || isV32 ? value.data.personNotes : [];
+  const personNotes = isV30_compat ? value.data.personNotes : [];
   if (!validatePersonNotesCollection(personNotes, people.map(person => person.id))) {
     return { valid: false, kind: 'invalid', message: 'Person notes contain invalid fields, dates, duplicate IDs, or unresolved Person IDs.' };
   }
@@ -971,7 +1025,8 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     peopleGroups,
     personDetails,
     personNotes,
-    prayerRequests
+    prayerRequests,
+    timeBlocks
   };
 
   return {

@@ -13,6 +13,7 @@ import {
   rhythmTimeOptions,
   rhythmTimeLabel,
   rhythmTimeValueFromLabel,
+  isRhythmTimeValue,
   rhythmScheduleSummary,
   validateRhythmSchedule,
   validateRhythmScoringMetadata,
@@ -21,7 +22,13 @@ import {
   validateRhythmScoringMetadataV8,
   isValidTimeZone
 } from './rhythm-schedule.ts';
-import type { RhythmSchedule, RhythmScoringMetadata, RhythmTimeLabel, RhythmTimeValue } from './rhythm-schedule.ts';
+import type {
+  RhythmSchedule,
+  RhythmScoringMetadata,
+  RhythmTimeLabel,
+  RhythmTimeOption,
+  RhythmTimeValue
+} from './rhythm-schedule.ts';
 import {
   createRhythmSeason,
   createUnknownRhythmSeason,
@@ -264,12 +271,11 @@ function validateSavedRhythmsWithKeys(
 ): value is SavedRhythm[] {
   if (!Array.isArray(value)) return false;
   const ids = new Set<string>();
-  const labels = new Set<string>(rhythmTimeOptions.map(option => option.label));
   for (const record of value) {
     if (!isRecord(record) || !hasOnlyKeys(record, allowedKeys)) return false;
     if (typeof record.cadence !== 'string' || record.cadence.trim().length === 0 || record.cadence.length > 160) return false;
-    if (typeof record.timeLabel !== 'string' || !labels.has(record.timeLabel)) return false;
-    if (rhythmTimeValueFromLabel(record.timeLabel) !== record.timeOfDay) return false;
+    if (typeof record.timeLabel !== 'string' || record.timeLabel.trim().length === 0 || record.timeLabel.length > 80
+      || !isRhythmTimeValue(record.timeOfDay)) return false;
     if (record.personal !== undefined && typeof record.personal !== 'boolean') return false;
     if (record.schedule !== undefined
       && !validateRhythmSchedule(record.schedule, scoringVersion === 'v12').valid) return false;
@@ -318,7 +324,8 @@ function validateSavedRhythmsWithKeys(
 export function rhythmDraftFrom(
   rhythm: RhythmPreview,
   categoryIds: readonly RhythmCategoryId[] = [],
-  asOfDate?: string
+  asOfDate?: string,
+  timeOptions: readonly RhythmTimeOption[] = rhythmTimeOptions
 ): RhythmDraft {
   const currentSeason = asOfDate
     ? rhythmSeasonForDate(rhythm.scoring?.scheduleHistory ?? [], asOfDate)
@@ -333,7 +340,7 @@ export function rhythmDraftFrom(
     description: rhythm.description ?? '',
     cadence: rhythm.cadence ?? 'Daily',
     timeLabel: currentSeason?.kind === 'scheduled' && currentSeason.timeOfDay
-      ? rhythmTimeLabel(currentSeason.timeOfDay)
+      ? rhythmTimeLabel(currentSeason.timeOfDay, timeOptions)
       : rhythm.timeLabel ?? 'Anytime',
     personIds: [...(rhythm.personIds ?? [])],
     categoryIds: [...categoryIds],
@@ -356,7 +363,8 @@ export function rhythmDraftFrom(
 export function validateRhythmDraft(
   draft: RhythmDraft,
   foundations: readonly FoundationPreview[] = foundationCatalogue,
-  knownPersonIds?: readonly PersonId[]
+  knownPersonIds?: readonly PersonId[],
+  timeOptions: readonly RhythmTimeOption[] = rhythmTimeOptions
 ): RhythmDraftErrors {
   const errors: RhythmDraftErrors = {};
   if (!draft.title.trim()) errors.title = 'Enter a Rhythm title.';
@@ -366,7 +374,7 @@ export function validateRhythmDraft(
   if (typeof draft.cadence !== 'string' || draft.cadence.trim().length === 0 || draft.cadence.length > 160) {
     errors.cadence = 'Choose a supported cadence.';
   }
-  if (rhythmTimeValueFromLabel(draft.timeLabel) === undefined) errors.timeLabel = 'Choose a time of day.';
+  if (rhythmTimeValueFromLabel(draft.timeLabel, timeOptions) === undefined) errors.timeLabel = 'Choose a time of day.';
   if (draft.scheduleEditing && draft.schedule === undefined) {
     errors.schedule = 'Complete the schedule details before saving.';
   } else if (draft.schedule !== undefined && !validateRhythmSchedule(draft.schedule).valid) {
@@ -414,10 +422,11 @@ export function saveRhythmDraft(
     earliestDatedCompletionDate?: string;
   },
   foundations: readonly FoundationPreview[] = foundationCatalogue,
-  options: { suggestionSourceId?: string } = {},
+  options: { suggestionSourceId?: string; timeOptions?: readonly RhythmTimeOption[] } = {},
   knownPersonIds?: readonly PersonId[]
 ): { savedRhythms?: SavedRhythm[]; errors: RhythmDraftErrors } {
-  const errors = validateRhythmDraft(draft, foundations, knownPersonIds);
+  const timeOptions = options.timeOptions ?? rhythmTimeOptions;
+  const errors = validateRhythmDraft(draft, foundations, knownPersonIds, timeOptions);
   const hasSavedRecord = savedRhythms.some(rhythm => rhythm.id === id);
   if (mode === 'create') {
     if (!/^user-rhythm-[0-9a-f-]{36}$/i.test(id) || hasSavedRecord || existingEditableIds.has(id)) {
@@ -436,7 +445,7 @@ export function saveRhythmDraft(
     errors.title = 'This suggestion source is no longer available.';
     return { errors };
   }
-  const timeOfDay = rhythmTimeValueFromLabel(draft.timeLabel);
+  const timeOfDay = rhythmTimeValueFromLabel(draft.timeLabel, timeOptions);
   const originalSchedule = draft.originalSchedule ?? existing?.schedule;
   const scheduleChanged = draft.schedule !== undefined
     ? originalSchedule !== undefined

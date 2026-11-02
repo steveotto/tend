@@ -22,6 +22,8 @@ import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
 import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
 import type { Destination } from './AppNavigation.tsx';
 import { RhythmAssociationRows } from './RhythmAssociationRows.tsx';
+import { rhythmTimeLabel } from '../domain/rhythm-schedule.ts';
+import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 
 type RhythmDetailsDialogProps = {
   rhythm: RhythmPreview;
@@ -96,6 +98,7 @@ export function RhythmDetailsDialog({
   headingId,
   onClose
 }: RhythmDetailsDialogProps) {
+  const timeOptions = useRhythmTimeOptions();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -146,6 +149,9 @@ export function RhythmDetailsDialog({
     ?? rhythm.createdTimeZone
     ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const asOfDate = localDateInTimeZone(new Date(), scoringTimeZone);
+  const timeLabel = rhythm.timeOfDay
+    ? rhythmTimeLabel(rhythm.timeOfDay, timeOptions)
+    : rhythm.timeLabel;
 
   const detailsActions = (
     <div className="today-rhythm-details__actions">
@@ -311,7 +317,7 @@ export function RhythmDetailsDialog({
                   variant="footer"
                   cadence={rhythm.cadence}
                   schedule={rhythm.schedule}
-                  timeLabel={rhythm.timeLabel}
+                  timeLabel={timeLabel}
                   lastTended={statusLabel ?? rhythmLastActivityLabel(rhythm, asOfDate)}
                   rhythmTitle={rhythm.title}
                   completed={completed}

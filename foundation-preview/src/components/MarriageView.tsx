@@ -46,6 +46,7 @@ import type { RhythmCategoryId } from '../domain/rhythm-editor.ts';
 import type { RhythmFrequencyRecommendation } from '../domain/rhythm-schedule.ts';
 import { resolvePersonCategoryGroups } from '../domain/person-categories.ts';
 import { PersonBadgeVisual } from './PersonBadge.tsx';
+import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 
 export type MarriageTab = 'today' | 'rhythms' | 'foundations';
 
@@ -160,6 +161,7 @@ export function MarriageView({
   foundationNavigationRequest = null,
   onFoundationNavigationHandled
 }: MarriageViewProps) {
+  const timeOptions = useRhythmTimeOptions();
   const [activeTab, setActiveTab] = useState<MarriageTab>('today');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showArchivedRhythms, setShowArchivedRhythms] = useState(false);
@@ -351,8 +353,8 @@ export function MarriageView({
             const summary = schedule
               ? rhythmScheduleSummary(schedule).replace(/\.$/, '')
               : instance.cadence ?? 'Schedule unavailable';
-            const timeOfDay = instance.timeOfDay ?? rhythmTimeValueFromLabel(instance.timeLabel ?? '');
-            const timeLabel = timeOfDay ? rhythmTimeLabel(timeOfDay) : undefined;
+            const timeOfDay = instance.timeOfDay ?? rhythmTimeValueFromLabel(instance.timeLabel ?? '', timeOptions);
+            const timeLabel = timeOfDay ? rhythmTimeLabel(timeOfDay, timeOptions) : undefined;
             return {
               id: instance.id,
               title: instance.title,

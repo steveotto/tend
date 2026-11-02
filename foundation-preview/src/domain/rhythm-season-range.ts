@@ -2,7 +2,7 @@ import { isValidDate } from './money-goals.ts';
 import { addCalendarDays } from './rhythm-occurrences.ts';
 import {
   isValidTimeZone,
-  rhythmTimeOptions,
+  isRhythmTimeValue,
   validateRhythmSchedule,
   validateRhythmScoringMetadata
 } from './rhythm-schedule.ts';
@@ -166,7 +166,7 @@ export function resolveRhythmSeasonRange(input: {
     || (draft.endDate !== undefined && (!isValidDate(draft.endDate) || draft.endDate < draft.startDate))
     || !validateRhythmSchedule(currentSchedule).valid
     || !validateRhythmSchedule(draft.schedule).valid
-    || !rhythmTimeOptions.some(option => option.value === draft.timeOfDay)
+    || !isRhythmTimeValue(draft.timeOfDay)
     || draft.name.length > 80
     || !isValidTimeZone(timeZone)) {
     return { valid: false, error: 'Check the date range, schedule, time of day, and optional name.' };

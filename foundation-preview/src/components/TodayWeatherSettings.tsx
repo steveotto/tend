@@ -1,4 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react';
+import { AnchoredPopover } from './AnchoredPopover.tsx';
 import type { WeatherCity } from '../weather/open-meteo.ts';
 import type { TodayWeatherController } from './useTodayWeather.ts';
 
@@ -15,8 +16,8 @@ export function TodayWeatherSettings({
 }) {
   const [query, setQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
-  const pickerRef = useRef<HTMLDetailsElement>(null);
-  const triggerRef = useRef<HTMLElement>(null);
+  const [cityPickerOpen, setCityPickerOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const { city, weather, search, searchCities, selectCity, clearCity, retry } = controller;
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
@@ -32,8 +33,7 @@ export function TodayWeatherSettings({
   function chooseCity(result: WeatherCity) {
     selectCity(result);
     setQuery('');
-    if (pickerRef.current) pickerRef.current.open = false;
-    triggerRef.current?.focus();
+    setCityPickerOpen(false);
   }
 
   return (
@@ -41,56 +41,87 @@ export function TodayWeatherSettings({
       <div className="today-weather-panel__row">
         <div className="today-weather-panel__place">
           {city && <span className="today-weather-panel__city">{weatherCityLabel(city)}</span>}
-          <details className="today-weather-picker" ref={pickerRef}>
-            <summary ref={triggerRef} className="today-weather-picker__trigger">
+          <div className="today-weather-picker">
+            <button
+              ref={triggerRef}
+              type="button"
+              className="today-weather-picker__trigger"
+              aria-haspopup="dialog"
+              aria-expanded={cityPickerOpen}
+              aria-controls="today-weather-city-popover"
+              onClick={() => setCityPickerOpen(open => !open)}
+            >
               {city ? 'Change city' : 'Choose city'}
-            </summary>
-            <div className="today-weather-picker__popover">
-              <form className="today-weather-picker__form" onSubmit={submitSearch}>
-                <label htmlFor="today-weather-city-search">City or postal code</label>
-                <div className="today-weather-picker__search-row">
-                  <input
-                    id="today-weather-city-search"
-                    name="today-weather-city-search"
-                    type="search"
-                    autoComplete="off"
-                    value={query}
-                    onChange={event => setQuery(event.currentTarget.value)}
-                  />
-                  <button type="submit" disabled={search.status === 'loading'}>Search</button>
-                </div>
-              </form>
-              <p className="today-weather-picker__privacy">
-                City choice stays in memory and is cleared when this preview reloads.
-              </p>
-              {search.status === 'loading' && submittedQuery === query.trim() && (
-                <p className="today-weather-picker__message" role="status">Searching locations…</p>
-              )}
-              {search.message && submittedQuery === query.trim() && (
-                <p className="today-weather-picker__message" role="status">{search.message}</p>
-              )}
-              {search.status === 'error' && submittedQuery === query.trim() && (
-                <button type="button" className="today-weather-picker__retry" onClick={retrySearch}>
-                  Retry search
-                </button>
-              )}
-              {search.results.length > 0 && search.status === 'ready' && submittedQuery === query.trim() && (
-                <div className="today-weather-picker__results" role="group" aria-label="Matching locations">
-                  {search.results.map(result => (
+            </button>
+            {cityPickerOpen && (
+              <AnchoredPopover
+                anchorRef={triggerRef}
+                id="today-weather-city-popover"
+                label={city ? 'Choose a different city' : 'Choose a city'}
+                className="today-weather-picker__popover"
+                initialFocusSelector="#today-weather-city-search"
+                onClose={() => setCityPickerOpen(false)}
+              >
+                <div className="today-weather-picker__fixed">
+                  <div className="today-weather-picker__popover-heading">
+                    <strong>Choose a city</strong>
                     <button
                       type="button"
-                      className="today-weather-picker__result"
-                      key={`${result.id}:${result.latitude}:${result.longitude}`}
-                      onClick={() => chooseCity(result)}
+                      className="today-weather-picker__close"
+                      onClick={() => setCityPickerOpen(false)}
                     >
-                      <span>{result.name}</span>
-                      <small>{[result.admin1, result.country].filter(Boolean).join(', ')}</small>
+                      Close
                     </button>
-                  ))}
+                  </div>
+                    <form className="today-weather-picker__form" onSubmit={submitSearch}>
+                      <label htmlFor="today-weather-city-search">City or postal code</label>
+                      <div className="today-weather-picker__search-row">
+                        <input
+                          id="today-weather-city-search"
+                          name="today-weather-city-search"
+                          type="search"
+                          autoComplete="off"
+                          value={query}
+                          onChange={event => setQuery(event.currentTarget.value)}
+                        />
+                        <button type="submit" disabled={search.status === 'loading'}>Search</button>
+                      </div>
+                    </form>
                 </div>
-              )}
-            </div>
-          </details>
+                <div className="today-weather-picker__popover-content">
+                  <p className="today-weather-picker__privacy">
+                    City choice stays in memory and is cleared when this preview reloads.
+                  </p>
+                  {search.status === 'loading' && submittedQuery === query.trim() && (
+                    <p className="today-weather-picker__message" role="status">Searching locations…</p>
+                  )}
+                  {search.message && submittedQuery === query.trim() && (
+                    <p className="today-weather-picker__message" role="status">{search.message}</p>
+                  )}
+                  {search.status === 'error' && submittedQuery === query.trim() && (
+                    <button type="button" className="today-weather-picker__retry" onClick={retrySearch}>
+                      Retry search
+                    </button>
+                  )}
+                  {search.results.length > 0 && search.status === 'ready' && submittedQuery === query.trim() && (
+                    <div className="today-weather-picker__results" role="group" aria-label="Matching locations">
+                      {search.results.map(result => (
+                        <button
+                          type="button"
+                          className="today-weather-picker__result"
+                          key={`${result.id}:${result.latitude}:${result.longitude}`}
+                          onClick={() => chooseCity(result)}
+                        >
+                          <span>{result.name}</span>
+                          <small>{[result.admin1, result.country].filter(Boolean).join(', ')}</small>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </AnchoredPopover>
+            )}
+          </div>
           {city && (
             <button type="button" className="today-weather-picker__clear" onClick={clearCity}>
               Clear

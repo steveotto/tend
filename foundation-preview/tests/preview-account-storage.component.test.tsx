@@ -12,8 +12,7 @@ import {
   createEmptyPreviewData,
   createPreviewEnvelope,
   createSamplePreviewData,
-  parsePreviewBackup,
-  PREVIEW_SCHEMA_VERSION
+  parsePreviewBackup
 } from '../src/domain/preview-state.ts';
 import {
   createPreviewStorageScope,
@@ -95,10 +94,11 @@ describe('account-isolated Preview storage', () => {
     const v33 = createPreviewEnvelope(createEmptyPreviewData());
     const v32 = {
       ...v33,
-      schemaVersion: PREVIEW_SCHEMA_VERSION - 1,
+      schemaVersion: 32,
       data: { ...v33.data }
     };
     delete (v32.data as Record<string, unknown>).prayerRequests;
+    delete (v32.data as Record<string, unknown>).timeBlocks;
     const originalV32 = JSON.stringify(v32);
     scopeA.storage.setItem(PREVIEW_STORAGE_KEY, originalV32);
 

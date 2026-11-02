@@ -4,25 +4,67 @@ import { createPortal } from 'react-dom';
 
 type Props = {
   anchorRef: RefObject<HTMLElement | null>;
+  id?: string;
   label: string;
   role?: 'dialog' | 'menu';
   className: string;
+  initialFocusSelector?: string;
   children: ReactNode;
   onClose: () => void;
 };
 
+type Bounds = Pick<DOMRect, 'left' | 'top' | 'right' | 'bottom' | 'width' | 'height'>;
+type ViewportBounds = { left: number; top: number; width: number; height: number };
+type PopoverPosition = { top: number; left: number; maxHeight: number; maxWidth: number };
+
+export function calculateAnchoredPopoverPosition(
+  anchor: Bounds,
+  panel: Bounds,
+  viewport: ViewportBounds,
+  margin = 12,
+  gap = 6
+): PopoverPosition {
+  const maxWidth = Math.max(0, viewport.width - margin * 2);
+  const panelWidth = Math.min(panel.width || 280, maxWidth);
+  const left = Math.max(
+    viewport.left + margin,
+    Math.min(anchor.left, viewport.left + viewport.width - panelWidth - margin)
+  );
+  const viewportBottom = viewport.top + viewport.height;
+  const below = Math.max(0, viewportBottom - anchor.bottom - gap - margin);
+  const above = Math.max(0, anchor.top - viewport.top - gap - margin);
+  const panelHeight = panel.height || 240;
+  const placeAbove = below < panelHeight && above > below;
+  const availableHeight = Math.min(
+    Math.max(0, viewport.height - margin * 2),
+    placeAbove ? above : below
+  );
+  const visibleHeight = Math.min(panelHeight, availableHeight);
+  const desiredTop = placeAbove
+    ? anchor.top - gap - visibleHeight
+    : anchor.bottom + gap;
+  const maxTop = Math.max(
+    viewport.top + margin,
+    viewportBottom - margin - visibleHeight
+  );
+  const top = Math.min(Math.max(viewport.top + margin, desiredTop), maxTop);
+  return { top, left, maxHeight: availableHeight, maxWidth };
+}
+
 export function AnchoredPopover({
   anchorRef,
+  id,
   label,
   role = 'dialog',
   className,
+  initialFocusSelector,
   children,
   onClose
 }: Props) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
-  const [position, setPosition] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
+  const [position, setPosition] = useState<PopoverPosition | null>(null);
 
   useLayoutEffect(() => {
     function position() {
@@ -30,23 +72,29 @@ export function AnchoredPopover({
       const popover = popoverRef.current;
       if (!anchor || !popover) return;
       const bounds = anchor.getBoundingClientRect();
-      const panel = popover.getBoundingClientRect();
-      const margin = 12;
-      const gap = 6;
-      const viewportWidth = document.documentElement.clientWidth;
-      const viewportHeight = document.documentElement.clientHeight;
-      const width = panel.width || 280;
-      const height = panel.height || 240;
-      const left = Math.max(margin, Math.min(bounds.left, viewportWidth - width - margin));
-      const below = Math.max(0, viewportHeight - bounds.bottom - gap - margin);
-      const above = Math.max(0, bounds.top - gap - margin);
-      const placeAbove = below < height && above > below;
-      const availableHeight = placeAbove ? above : below;
-      const visibleHeight = Math.min(height, availableHeight);
-      const top = placeAbove
-        ? Math.max(margin, bounds.top - gap - visibleHeight)
-        : bounds.bottom + gap;
-      setPosition({ top, left, maxHeight: availableHeight });
+      const panelBounds = popover.getBoundingClientRect();
+      const panel = {
+        ...panelBounds,
+        height: Math.max(panelBounds.height, popover.scrollHeight)
+      };
+      const visibleViewport = window.visualViewport;
+      const next = calculateAnchoredPopoverPosition(
+        bounds,
+        panel,
+        {
+          left: visibleViewport?.offsetLeft ?? 0,
+          top: visibleViewport?.offsetTop ?? 0,
+          width: visibleViewport?.width ?? document.documentElement.clientWidth,
+          height: visibleViewport?.height ?? document.documentElement.clientHeight
+        }
+      );
+      setPosition(previous => previous
+        && previous.top === next.top
+        && previous.left === next.left
+        && previous.maxHeight === next.maxHeight
+        && previous.maxWidth === next.maxWidth
+        ? previous
+        : next);
     }
 
     position();
@@ -54,11 +102,23 @@ export function AnchoredPopover({
     window.addEventListener('scroll', position, true);
     window.visualViewport?.addEventListener('resize', position);
     window.visualViewport?.addEventListener('scroll', position);
-    popoverRef.current?.querySelector<HTMLElement>(
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(position);
+    if (anchorRef.current) observer?.observe(anchorRef.current);
+    if (popoverRef.current) observer?.observe(popoverRef.current);
+    const mutations = typeof MutationObserver === 'undefined' ? null : new MutationObserver(position);
+    if (popoverRef.current) {
+      mutations?.observe(popoverRef.current, { childList: true, characterData: true, subtree: true });
+    }
+    const firstFocusable = initialFocusSelector
+      ? popoverRef.current?.querySelector<HTMLElement>(initialFocusSelector)
+      : null;
+    (firstFocusable ?? popoverRef.current?.querySelector<HTMLElement>(
       role === 'menu' ? '[role="menuitem"]' : 'button, input, select, textarea'
-    )?.focus({ preventScroll: true });
+    ))?.focus({ preventScroll: true });
 
     return () => {
+      observer?.disconnect();
+      mutations?.disconnect();
       window.removeEventListener('resize', position);
       window.removeEventListener('scroll', position, true);
       window.visualViewport?.removeEventListener('resize', position);
@@ -106,13 +166,16 @@ export function AnchoredPopover({
     <div
       ref={popoverRef}
       className={className}
+      id={id}
       role={role}
       aria-label={label}
       style={{
+        boxSizing: 'border-box',
         position: 'fixed',
         top: position?.top ?? 0,
         left: position?.left ?? 0,
         maxHeight: position?.maxHeight ?? 0,
+        maxWidth: position?.maxWidth ?? 0,
         visibility: position ? 'visible' : 'hidden'
       }}
       onKeyDown={onKeyDown}

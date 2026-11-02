@@ -28,8 +28,7 @@ import type { SelectRhythmScoreInput } from '../domain/rhythm-scoring.ts';
 import {
   effectiveRhythmSchedule,
   formatRhythmSchedule,
-  rhythmTimeLabel,
-  rhythmTimeOptions
+  rhythmTimeLabel
 } from '../domain/rhythm-schedule.ts';
 import {
   rhythmSeasonInclusiveEndDate,
@@ -61,6 +60,7 @@ import type { RhythmSeasonEditDialogDraft } from './RhythmSeasonCorrectionDialog
 import { RhythmSeasonDeleteDialog } from './RhythmSeasonDeleteDialog.tsx';
 import { HealthWeightPanels } from './HealthWeightPanels.tsx';
 import type { Destination } from './AppNavigation.tsx';
+import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 
 const occurrenceKindByFrequency = {
   daily: 'eligible day',
@@ -127,6 +127,7 @@ export function RhythmHistoryView({
   onUndoSeasonRange?: () => string | null;
   onOpenCategory?: (categoryId: Destination, openerId: string) => void;
 }) {
+  const timeOptions = useRhythmTimeOptions();
   const historyRecords: readonly RhythmCompletion[] | undefined =
     rhythm.completionHistory === undefined && !completionHistoryAvailable && datedCompletions.length === 0
       ? undefined
@@ -195,8 +196,10 @@ export function RhythmHistoryView({
     ? currentHistorySeason.schedule
     : effectiveSchedule;
   const detailTimeLabel = currentHistorySeason?.kind === 'scheduled' && currentHistorySeason.timeOfDay
-    ? rhythmTimeLabel(currentHistorySeason.timeOfDay)
-    : rhythm.timeLabel ?? (rhythm.timeOfDay ? rhythmTimeLabel(rhythm.timeOfDay) : undefined);
+    ? rhythmTimeLabel(currentHistorySeason.timeOfDay, timeOptions)
+    : rhythm.timeOfDay
+      ? rhythmTimeLabel(rhythm.timeOfDay, timeOptions)
+      : rhythm.timeLabel;
   const displayOnlyCurrentSeason: SeasonCardSchedule | undefined = effectiveSchedule && !hasCurrentHistoricalSchedule
     ? {
         kind: 'scheduled',
@@ -1012,6 +1015,7 @@ function SeasonsHistory({
   editButtonRefs: Map<string, HTMLButtonElement>;
   onEditSeason: (season: RhythmSeasonEditTarget, opener: HTMLButtonElement) => void;
 }) {
+  const timeOptions = useRhythmTimeOptions();
   const [highlightedSeasonId, setHighlightedSeasonId] = useState<string | null>(null);
   const highlightTimerRef = useRef<number | null>(null);
   useEffect(() => () => {
@@ -1056,7 +1060,7 @@ function SeasonsHistory({
     })
     : [];
   const currentName = displayCurrent?.name?.trim();
-  const currentTimeLabel = currentDisplay ? seasonTimeLabel(currentDisplay) : undefined;
+  const currentTimeLabel = currentDisplay ? seasonTimeLabel(currentDisplay, timeOptions) : undefined;
   const focusSeasonCard = (seasonId: string) => {
     const body = historyBodyRef.current;
     const card = seasonCardRefs.get(seasonId);
@@ -1159,7 +1163,7 @@ function SeasonsHistory({
           <div className="rhythm-history-view__season-cards">
             {previous.map(({ season, index }) => {
               const endDate = rhythmSeasonInclusiveEndDate(seasons, index) ?? season.startDate;
-              const timeLabel = season.kind === 'scheduled' ? seasonTimeLabel(season) : undefined;
+              const timeLabel = season.kind === 'scheduled' ? seasonTimeLabel(season, timeOptions) : undefined;
               const heading = season.kind === 'unknown'
                 ? 'Earlier schedule needs details'
                 : season.name?.trim() || formatRhythmSchedule(season.schedule, 'compact');
@@ -1228,7 +1232,7 @@ function SeasonsHistory({
             {upcoming.map((season, offset) => {
               const index = currentIndex >= 0 ? currentIndex + 1 + offset : offset;
               const endDate = rhythmSeasonInclusiveEndDate(seasons, index);
-              const timeLabel = season.kind === 'scheduled' ? seasonTimeLabel(season) : undefined;
+              const timeLabel = season.kind === 'scheduled' ? seasonTimeLabel(season, timeOptions) : undefined;
               const heading = season.kind === 'unknown'
                 ? 'Upcoming schedule needs details'
                 : season.name?.trim() || formatRhythmSchedule(season.schedule, 'compact');
@@ -1346,9 +1350,12 @@ function SeasonEditButton(props: SeasonEditButtonProps) {
   );
 }
 
-function seasonTimeLabel(season: Pick<RhythmScheduleSegment, 'timeOfDay'>): string | undefined {
+function seasonTimeLabel(
+  season: Pick<RhythmScheduleSegment, 'timeOfDay'>,
+  timeOptions: ReturnType<typeof useRhythmTimeOptions>
+): string | undefined {
   if (!season.timeOfDay) return undefined;
-  return rhythmTimeOptions.find(option => option.value === season.timeOfDay)?.label;
+  return timeOptions.find(option => option.value === season.timeOfDay)?.label;
 }
 
 function ConsistencyScoreBreakdown({ metric }: { metric: ScoredConsistencyMetric }) {

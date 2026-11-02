@@ -12,8 +12,10 @@ export const rhythmTimeOptions = [
   { value: 'bedtime', label: 'Bedtime' }
 ] as const;
 
-export type RhythmTimeValue = (typeof rhythmTimeOptions)[number]['value'];
-export type RhythmTimeLabel = (typeof rhythmTimeOptions)[number]['label'];
+export type CustomTimeBlockValue = `custom-time-block:${string}`;
+export type RhythmTimeValue = (typeof rhythmTimeOptions)[number]['value'] | CustomTimeBlockValue;
+export type RhythmTimeLabel = string;
+export type RhythmTimeOption = { value: RhythmTimeValue; label: string };
 export type RhythmLocalDate = string;
 export type RhythmWeekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export type RhythmMonth = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
@@ -111,7 +113,7 @@ export type RhythmScheduleValidation =
 const timeValueByLabel = new Map<string, RhythmTimeValue>(
   rhythmTimeOptions.map(option => [option.label, option.value])
 );
-const labelByTimeValue: Record<RhythmTimeValue, RhythmTimeLabel> = {
+const labelByTimeValue: Record<(typeof rhythmTimeOptions)[number]['value'], RhythmTimeLabel> = {
   anytime: 'Anytime',
   'all-day': 'All day',
   'early-morning': 'Early morning',
@@ -282,7 +284,7 @@ export function validateRhythmScoringMetadata(
       || !rhythmSeasonPaletteTokens.includes(segment.paletteToken as RhythmSeasonPaletteToken)) return false;
     const knownSegment = segment.kind === 'scheduled'
       && validateRhythmSchedule(segment.schedule, allowSingleDaySelectDays).valid
-      && (segment.timeOfDay === undefined || rhythmTimeOptions.some(option => option.value === segment.timeOfDay))
+      && (segment.timeOfDay === undefined || isRhythmTimeValue(segment.timeOfDay))
       && segment.descriptiveCadence === undefined
       && (segment.contextCadence === undefined
         || typeof segment.contextCadence === 'string' && segment.contextCadence.length <= 160);
@@ -388,12 +390,27 @@ export function validateRhythmScoringMetadataV11(value: unknown): value is Rhyth
   return validateRhythmScoringMetadata(value, false);
 }
 
-export function rhythmTimeLabel(value: RhythmTimeValue): RhythmTimeLabel {
-  return labelByTimeValue[value];
+export function isRhythmTimeValue(value: unknown): value is RhythmTimeValue {
+  return typeof value === 'string'
+    && (rhythmTimeOptions.some(option => option.value === value)
+      || /^custom-time-block:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value));
 }
 
-export function rhythmTimeValueFromLabel(label: string): RhythmTimeValue | undefined {
-  return timeValueByLabel.get(label);
+export function rhythmTimeLabel(
+  value: RhythmTimeValue,
+  options: readonly RhythmTimeOption[] = rhythmTimeOptions
+): RhythmTimeLabel {
+  return options.find(option => option.value === value)?.label
+    ?? (value in labelByTimeValue
+      ? labelByTimeValue[value as keyof typeof labelByTimeValue]
+      : 'Time block unavailable');
+}
+
+export function rhythmTimeValueFromLabel(
+  label: string,
+  options: readonly RhythmTimeOption[] = rhythmTimeOptions
+): RhythmTimeValue | undefined {
+  return options.find(option => option.label === label)?.value ?? timeValueByLabel.get(label);
 }
 
 export function rhythmTimeValueFromLegacyLabel(label: string): RhythmTimeValue | undefined {

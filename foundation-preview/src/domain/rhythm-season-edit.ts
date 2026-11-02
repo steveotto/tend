@@ -7,8 +7,8 @@ import type {
   RhythmTimeValue
 } from './rhythm-schedule.ts';
 import {
+  isRhythmTimeValue,
   isValidTimeZone,
-  rhythmTimeOptions,
   validateRhythmSchedule,
   validateRhythmScoringMetadata
 } from './rhythm-schedule.ts';
@@ -54,7 +54,7 @@ export function editRhythmSeason(
   const index = scoring.scheduleHistory.findIndex(segment => segment.id === draft.segmentId);
   if (index < 0) return { valid: false, error: 'This schedule period is no longer available.' };
   if (!isValidDate(draft.startDate) || !validateRhythmSchedule(draft.schedule).valid
-    || !rhythmTimeOptions.some(option => option.value === draft.timeOfDay)
+    || !isRhythmTimeValue(draft.timeOfDay)
     || draft.name.length > 80) {
     return { valid: false, error: 'Check the schedule, starting date, time of day, and optional name.' };
   }
@@ -148,7 +148,7 @@ export function establishCurrentRhythmSeason(
 ): RhythmSeasonEditResult {
   if (!isValidDate(draft.startDate) || draft.startDate > asOfDate
     || !validateRhythmSchedule(draft.schedule).valid
-    || !rhythmTimeOptions.some(option => option.value === draft.timeOfDay)
+    || !isRhythmTimeValue(draft.timeOfDay)
     || draft.name.length > 80) {
     return { valid: false, error: 'Choose a valid starting date on or before today and check the schedule, time of day, and optional name.' };
   }

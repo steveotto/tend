@@ -1,5 +1,5 @@
 import type { RhythmSchedule, RhythmScheduleHistorySegment, RhythmScoringMetadata, RhythmTimeLabel, RhythmTimeValue } from './rhythm-schedule.ts';
-import { rhythmTimeOptions, validateRhythmSchedule, validateRhythmScoringMetadata } from './rhythm-schedule.ts';
+import { isRhythmTimeValue, validateRhythmSchedule, validateRhythmScoringMetadata } from './rhythm-schedule.ts';
 import { rhythmSchedulesEqual } from './rhythm-occurrences.ts';
 import { rhythmSeasonForDate, rhythmSeasonPaletteAssignments } from './rhythm-seasons.ts';
 import type { RhythmCompletionRecord } from './rhythm-completion.ts';
@@ -202,7 +202,7 @@ export function restoreDeletedRhythmSeason(
   })) {
     return { valid: false, error: 'Completion history is invalid, so this Season cannot be restored safely.' };
   }
-  if (!rhythmTimeOptions.some(option => option.value === undo.restoreTimeOfDay)
+  if (!isRhythmTimeValue(undo.restoreTimeOfDay)
     && undo.restoreTimeOfDay !== undefined) {
     return { valid: false, error: 'The saved time of day is no longer supported.' };
   }

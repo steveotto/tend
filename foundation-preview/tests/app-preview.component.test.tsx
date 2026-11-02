@@ -323,6 +323,43 @@ describe('Tend Today preview', () => {
     expect(document.querySelector('.today-plan__weather')).toBeNull();
   });
 
+  it('saves editable time blocks and reloads the same stable block for Today', async () => {
+    const user = userEvent.setup();
+    const { unmount } = testingRender(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await openPreviewSettings(user);
+
+    const settings = screen.getByRole('heading', { name: 'Time blocks' }).closest('section')!;
+    const timeBlockList = settings.querySelector('.time-block-settings__list') as HTMLElement;
+    const early = within(timeBlockList).getByRole('region', { name: 'Early morning time block' });
+    await user.clear(within(early).getByLabelText('Block name'));
+    await user.type(within(early).getByLabelText('Block name'), 'Dawn');
+    fireEvent.change(within(early).getByLabelText('Starts'), { target: { value: '06:30' } });
+    await user.click(within(settings).getByRole('button', { name: 'Save time blocks' }));
+
+    const saved = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    expect(saved.envelope.data.timeBlocks.blocks[0]).toEqual({
+      id: 'early-morning',
+      name: 'Dawn',
+      start: '06:30'
+    });
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'Today' }));
+    const trigger = screen.getByLabelText(/^Choose a time frame/);
+    await user.click(trigger);
+    await user.click(screen.getByRole('button', { name: /Dawn.*6:30am – 9:00am/ }));
+    expect(screen.getByText('6:30am – 9:00am')).toBeTruthy();
+
+    unmount();
+    testingRender(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await user.click(screen.getByLabelText(/^Choose a time frame/));
+    expect(screen.getByRole('button', { name: /Dawn.*6:30am – 9:00am/ })).toBeTruthy();
+  });
+
   it('integrates Friendships with category navigation and persists one shared connection across reload', async () => {
     const user = userEvent.setup();
     const today = localDateString(new Date());
@@ -2681,7 +2718,7 @@ describe('Tend Today preview', () => {
     expect(screen.queryByText(/invalid storage/i)).toBeNull();
   });
 
-  it('keeps the Tend tagline above the greeting while removing the duplicate header date', () => {
+  it('keeps the Tend tagline above the greeting and removes the date from the greeting row', () => {
     const { container } = render(<App />);
     const header = container.querySelector('.apphead')!;
     const greeting = screen.getByRole('heading', { name: /Good (morning|afternoon|evening)/ });
@@ -2689,19 +2726,22 @@ describe('Tend Today preview', () => {
     expect(header.querySelector('.brand-tagline')?.textContent).toBe('Tend to what matters');
     expect(header.querySelector('.sub')).toBeNull();
     expect(header.compareDocumentPosition(greeting) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(container.querySelector('.dashboard-greeting .hint')?.textContent).toMatch(/,\s+\w+\s+\d+/);
+    expect(container.querySelector('.dashboard-greeting .hint')).toBeNull();
   });
 
-  it('restores the original Today greeting without mountain artwork or reserved space', () => {
+  it('places the date row after Overall health and before Today’s time-frame controls', () => {
     const { container } = render(<App />);
     const greeting = container.querySelector('.home-dashboard > .sectiontitle.dashboard-greeting');
+    const overall = screen.getByRole('region', { name: 'Overall health summary' });
+    const date = container.querySelector('.today-date-row');
+    const plan = screen.getByRole('region', { name: "Today's plan" });
     expect(greeting?.tagName).toBe('DIV');
     expect(greeting?.querySelector('.today-greeting__mountains')).toBeNull();
     expect(greeting?.contains(screen.getByRole('heading', { name: /Good (morning|afternoon|evening)/ }))).toBe(true);
-    expect(greeting?.contains(screen.getByText(/\w+day, \w+ \d+/))).toBe(true);
-    const healthCard = screen.getByRole('region', { name: 'Overall health summary' });
-    const healthCardPosition = greeting?.compareDocumentPosition(healthCard) ?? 0;
-    expect(healthCardPosition & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(date?.tagName).toBe('TIME');
+    expect(date?.getAttribute('dateTime')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(overall.compareDocumentPosition(date!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(date!.compareDocumentPosition(plan) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(container.querySelector('.today-greeting__copy')).toBeNull();
     expect(container.querySelector('.today-greeting__mountains')).toBeNull();
   });

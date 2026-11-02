@@ -26,6 +26,8 @@ import { PeopleView } from './components/PeopleView.tsx';
 import { RhythmEditor } from './components/RhythmEditor.tsx';
 import { TodayView } from './components/TodayView.tsx';
 import { TodayWeatherSettings } from './components/TodayWeatherSettings.tsx';
+import { TimeBlocksProvider } from './components/TimeBlocksContext.tsx';
+import { TimeBlocksSettings } from './components/TimeBlocksSettings.tsx';
 import { useTodayWeather } from './components/useTodayWeather.ts';
 import type { TodayFocusId } from './domain/today-plan.ts';
 import { HealthFitnessView } from './components/HealthFitnessView.tsx';
@@ -137,6 +139,11 @@ import {
   rhythmTimeLabel,
   type RhythmFrequencyRecommendation
 } from './domain/rhythm-schedule.ts';
+import {
+  assignedTimeBlockIds,
+  rhythmTimeOptionsForBlocks,
+  validateTimeBlockSettings
+} from './domain/time-blocks.ts';
 import { rhythmSchedulesEqual } from './domain/rhythm-occurrences.ts';
 import {
   browserPreviewStorage,
@@ -340,6 +347,7 @@ function PreviewWorkspace({
   const [todayFocus, setTodayFocus] = useState<TodayFocusId>('now');
   const [healthFitnessVisited, setHealthFitnessVisited] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewData>(initialPreviewData);
+  const configuredRhythmTimeOptions = rhythmTimeOptionsForBlocks(previewData.timeBlocks);
   const [hydrated, setHydrated] = useState(false);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
   const [persistenceStatus, setPersistenceStatus] = useState<PreviewPersistenceStatus>({ kind: 'loading' });
@@ -485,11 +493,6 @@ function PreviewWorkspace({
     return writePreview(previewStorage, data, expected, options);
   }
 
-  const dateLabel = new Intl.DateTimeFormat('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric'
-  }).format(scoringInstant);
   const hour = scoringInstant.getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   function rhythmWithSavedCompletions(rhythm: RhythmPreview): RhythmPreview {
@@ -1528,7 +1531,8 @@ function PreviewWorkspace({
       {
         ...(rhythmEditor.suggestionSourceId
           ? { suggestionSourceId: rhythmEditor.suggestionSourceId }
-          : {})
+          : {}),
+        timeOptions: configuredRhythmTimeOptions
       },
       previewData.people.map(person => person.id)
     );
@@ -1617,6 +1621,21 @@ function PreviewWorkspace({
     setAutoSaveEnabled(true);
     setPersistenceStatus({ kind: 'saved' });
     return null;
+  }
+
+  function saveTimeBlockSettings(settings: PreviewData['timeBlocks']): string | null {
+    const validation = validateTimeBlockSettings(settings);
+    if (!validation.valid) return validation.errors[0] ?? 'Time block settings are invalid.';
+    const nextBlockIds = new Set(validation.settings.blocks.map(block => block.id));
+    const removedAssignedBlocks = [...assignedTimeBlockIds(previewData.savedRhythms)]
+      .filter(id => !nextBlockIds.has(id));
+    if (removedAssignedBlocks.length > 0) {
+      return 'A time block is still used by a current or historical Rhythm schedule. Keep the block to preserve those assignments.';
+    }
+    return persistSeasonHistory({
+      ...previewData,
+      timeBlocks: validation.settings
+    }, 'time block settings');
   }
 
   function saveStrengthData(strength: PreviewData['strength']): string | null {
@@ -1841,7 +1860,7 @@ function PreviewWorkspace({
         return withoutScoring;
       });
       const { originalScoring: _originalScoring, ...baseDraft } =
-        rhythmDraftFrom(rhythm, rhythm.categoryIds ?? []);
+        rhythmDraftFrom(rhythm, rhythm.categoryIds ?? [], undefined, configuredRhythmTimeOptions);
       const activeTime = result.activeTimeOfDay ?? rhythm.timeOfDay ?? draft.timeOfDay;
       const saved = saveRhythmDraft(
         sourceRhythms,
@@ -1850,14 +1869,14 @@ function PreviewWorkspace({
           schedule: result.schedule,
           scheduleEditing: true,
           originalSchedule: currentSchedule,
-          timeLabel: rhythmTimeLabel(activeTime),
+          timeLabel: rhythmTimeLabel(activeTime, configuredRhythmTimeOptions),
           seasonName: draft.name
         },
         rhythmId,
         'edit',
         undefined,
         undefined,
-        {},
+        { timeOptions: configuredRhythmTimeOptions },
         previewData.people.map(person => person.id)
       );
       if (!saved.savedRhythms) return Object.values(saved.errors)[0] ?? 'This Rhythm could not be saved.';
@@ -1869,7 +1888,7 @@ function PreviewWorkspace({
             schedule: result.schedule,
             scoring: result.scoring,
             timeOfDay: activeTime,
-            timeLabel: rhythmTimeLabel(activeTime)
+            timeLabel: rhythmTimeLabel(activeTime, configuredRhythmTimeOptions)
           });
       const changedRhythm = savedRhythms.find(entry => entry.id === rhythmId);
       if (!changedRhythm) return 'The updated Rhythm could not be found.';
@@ -1922,7 +1941,7 @@ function PreviewWorkspace({
       const {
         originalScoring: _originalScoring,
         ...baseDraft
-      } = rhythmDraftFrom(rhythm, rhythm.categoryIds ?? []);
+      } = rhythmDraftFrom(rhythm, rhythm.categoryIds ?? [], undefined, configuredRhythmTimeOptions);
       const saved = saveRhythmDraft(
         sourceRhythms,
         {
@@ -1930,14 +1949,14 @@ function PreviewWorkspace({
           schedule: draft.schedule,
           scheduleEditing: true,
           originalSchedule: currentSchedule,
-          timeLabel: rhythmTimeLabel(draft.timeOfDay),
+          timeLabel: rhythmTimeLabel(draft.timeOfDay, configuredRhythmTimeOptions),
           seasonName: draft.name
         },
         rhythmId,
         'edit',
         undefined,
         undefined,
-        {},
+        { timeOptions: configuredRhythmTimeOptions },
         previewData.people.map(person => person.id)
       );
       if (!saved.savedRhythms) return Object.values(saved.errors)[0] ?? 'This Rhythm could not be saved.';
@@ -1949,7 +1968,7 @@ function PreviewWorkspace({
             schedule: established.schedule,
             scoring: established.scoring,
             timeOfDay: established.activeTimeOfDay ?? draft.timeOfDay,
-            timeLabel: rhythmTimeLabel(established.activeTimeOfDay ?? draft.timeOfDay),
+            timeLabel: rhythmTimeLabel(established.activeTimeOfDay ?? draft.timeOfDay, configuredRhythmTimeOptions),
             ...(rhythm.createdLocalDate === undefined ? {} : { createdLocalDate: rhythm.createdLocalDate }),
             ...(rhythm.createdTimeZone === undefined ? {} : { createdTimeZone: rhythm.createdTimeZone }),
             ...(rhythm.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: rhythm.dailyBackfillAllowed })
@@ -1991,7 +2010,7 @@ function PreviewWorkspace({
           scoring: result.scoring,
           ...(result.activeTimeOfDay === undefined ? {} : {
             timeOfDay: result.activeTimeOfDay,
-            timeLabel: rhythmTimeLabel(result.activeTimeOfDay)
+            timeLabel: rhythmTimeLabel(result.activeTimeOfDay, configuredRhythmTimeOptions)
           })
         });
     const nextData: PreviewData = { ...previewData, savedRhythms };
@@ -2052,7 +2071,7 @@ function PreviewWorkspace({
     const nextTimeOfDay = result.activeTimeOfDay ?? rhythm.timeOfDay;
     const nextTimeLabel = result.activeTimeOfDay === undefined
       ? rhythm.timeLabel
-      : rhythmTimeLabel(result.activeTimeOfDay);
+      : rhythmTimeLabel(result.activeTimeOfDay, configuredRhythmTimeOptions);
     const savedRhythms = previewData.savedRhythms.map(entry => entry.id !== rhythmId
       ? entry
       : {
@@ -2569,6 +2588,7 @@ function PreviewWorkspace({
   }
 
   return (
+    <TimeBlocksProvider settings={previewData.timeBlocks}>
     <div className="wrap tend-app-preview" data-text-size={textSize}>
       <AppNavigation
         destination={destination}
@@ -2606,6 +2626,14 @@ function PreviewWorkspace({
                         <h3 id="weather-settings-title">Weather</h3>
                         <TodayWeatherSettings controller={todayWeather} timeZone={weatherTimeZone} />
                       </section>
+                      <section className="settings-section" aria-labelledby="time-block-settings-title">
+                        <h3 id="time-block-settings-title">Time blocks</h3>
+                        <TimeBlocksSettings
+                          settings={previewData.timeBlocks}
+                          assignedBlockIds={assignedTimeBlockIds(previewData.savedRhythms)}
+                          onSave={saveTimeBlockSettings}
+                        />
+                      </section>
                       <section className="settings-section" aria-labelledby="preview-data-title">
                       <h3 id="preview-data-title">Preview data</h3>
                       </section>
@@ -2630,7 +2658,6 @@ function PreviewWorkspace({
             <TodayView
               people={peopleWithPhotos}
               greeting={greeting}
-              dateLabel={dateLabel}
               evaluationInstant={scoringInstant}
               localDate={currentDate}
               focus={todayFocus}
@@ -3089,6 +3116,7 @@ function PreviewWorkspace({
         />
       )}
     </div>
+    </TimeBlocksProvider>
   );
 }
 
