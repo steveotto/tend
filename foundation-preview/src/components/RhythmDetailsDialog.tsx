@@ -225,108 +225,110 @@ export function RhythmDetailsDialog({
         </header>
         )}
 
-        {archived && !embedded && !inline && !showHistory && (
-          <p className="today-rhythm-details__archived-note" role="status">
-            Archived · not in active lists. This Rhythm’s identity, associations, and completion history are retained.
-          </p>
-        )}
-
-        {showCompletion && onSaveCompletion
-          ? (
-            <RhythmCompletionForm
-              rhythm={rhythm}
-              embedded
-              dialogLayout
-              headingId="rhythm-details-title"
-              onSave={record => {
-                return onSaveCompletion(record);
-              }}
-              onCancel={closeCompletion}
-              onSaved={onClose}
-            />
-          )
-          : showHistory
-          ? (
-            <RhythmHistoryView
-              rhythm={rhythm}
-              datedCompletions={datedCompletions}
-              completionHistoryAvailable={completionHistoryAvailable}
-              {...(onUpdateCompletion ? { onUpdateCompletion } : {})}
-              {...(onDeleteCompletion ? { onDeleteCompletion } : {})}
-              {...(onEditSeason ? { onEditSeason } : {})}
-              {...(onDeleteSeason ? { onDeleteSeason } : {})}
-              {...(seasonDeletionUndo !== undefined ? { seasonDeletionUndo } : {})}
-              {...(onUndoSeasonDeletion ? { onUndoSeasonDeletion } : {})}
-              {...(seasonRangeUndo !== undefined ? { seasonRangeUndo } : {})}
-              {...(onUndoSeasonRange ? { onUndoSeasonRange } : {})}
-              {...(onLogCompletion ? { onSaveCompletion: onLogCompletion } : {})}
-              {...(onEdit ? { onChooseSchedule: onEdit } : {})}
-              {...(people ? { people } : {})}
-              {...(onPersonSelect ? { onPersonSelect } : {})}
-              {...(onOpenCategory ? { onOpenCategory } : {})}
-              {...(foundations ? { foundations } : {})}
-              {...(onOpenFoundation ? { onOpenFoundation } : {})}
-              onClose={onClose}
-              closeButtonRef={closeButtonRef}
-              archived={archived}
-            />
-          )
-          : (
-            <>
-              {(!inline || hasPeople || hasCategories || hasFoundationLinks) && (
-                <div className="today-rhythm-details__content">
-                  {inline
-                    ? (
-                      <div
-                        className="today-rhythm-details__association-row"
-                        role="group"
-                        aria-label={`Associations for ${rhythm.title}`}
-                      >
-                        <RhythmAssociationRows
-                          rhythm={rhythm}
-                          {...(hasPeople && people ? { people } : {})}
-                          {...(foundations ? { foundations } : {})}
-                          {...(onPersonSelect ? { onPersonSelect } : {})}
-                          {...(onOpenCategory ? { onOpenCategory } : {})}
-                          {...(onOpenFoundation ? { onOpenFoundation } : {})}
-                          showFoundationLinks={!inline}
-                        />
-                      </div>
-                    )
-                    : (
-                      <div className="today-rhythm-details__summary">
-                        {rhythm.description?.trim() && (
-                          <p className="tend-type-description today-rhythm-details__description">{rhythm.description}</p>
-                        )}
-                        <RhythmAssociationRows
-                          rhythm={rhythm}
-                          {...(people ? { people } : {})}
-                          {...(foundations ? { foundations } : {})}
-                          {...(onPersonSelect ? { onPersonSelect } : {})}
-                          {...(onOpenCategory ? { onOpenCategory } : {})}
-                          {...(onOpenFoundation ? { onOpenFoundation } : {})}
-                          showFoundationLinks={!inline}
-                        />
-                      </div>
-                    )}
-                  {!inline && detailsActions}
-                </div>
-              )}
-              <footer className="today-rhythm-details__footer">
-                <RhythmMetadata
-                  variant="footer"
-                  cadence={rhythm.cadence}
-                  schedule={rhythm.schedule}
-                  timeLabel={timeLabel}
-                  lastTended={statusLabel ?? rhythmLastActivityLabel(rhythm, asOfDate)}
-                  rhythmTitle={rhythm.title}
-                  completed={completed}
-                  onUndo={onUndo}
-                  tendButtonRef={tendButtonRef}
-                />
-              </footer>
-            </>
+        <div className={`today-rhythm-details__body${showHistory ? ' today-rhythm-details__body--history' : ''}`}>
+          {archived && !embedded && !inline && !showHistory && (
+            <p className="today-rhythm-details__archived-note" role="status">
+              Archived · not in active lists. This Rhythm’s identity, associations, and completion history are retained.
+            </p>
           )}
+
+          {showCompletion && onSaveCompletion
+            ? (
+              <RhythmCompletionForm
+                rhythm={rhythm}
+                embedded
+                dialogLayout
+                headingId="rhythm-details-title"
+                onSave={record => {
+                  return onSaveCompletion(record);
+                }}
+                onCancel={closeCompletion}
+                onSaved={onClose}
+              />
+            )
+            : showHistory
+            ? (
+              <RhythmHistoryView
+                rhythm={rhythm}
+                datedCompletions={datedCompletions}
+                completionHistoryAvailable={completionHistoryAvailable}
+                {...(onUpdateCompletion ? { onUpdateCompletion } : {})}
+                {...(onDeleteCompletion ? { onDeleteCompletion } : {})}
+                {...(onEditSeason ? { onEditSeason } : {})}
+                {...(onDeleteSeason ? { onDeleteSeason } : {})}
+                {...(seasonDeletionUndo !== undefined ? { seasonDeletionUndo } : {})}
+                {...(onUndoSeasonDeletion ? { onUndoSeasonDeletion } : {})}
+                {...(seasonRangeUndo !== undefined ? { seasonRangeUndo } : {})}
+                {...(onUndoSeasonRange ? { onUndoSeasonRange } : {})}
+                {...(onLogCompletion ? { onSaveCompletion: onLogCompletion } : {})}
+                {...(onEdit ? { onChooseSchedule: onEdit } : {})}
+                {...(people ? { people } : {})}
+                {...(onPersonSelect ? { onPersonSelect } : {})}
+                {...(onOpenCategory ? { onOpenCategory } : {})}
+                {...(foundations ? { foundations } : {})}
+                {...(onOpenFoundation ? { onOpenFoundation } : {})}
+                onClose={onClose}
+                closeButtonRef={closeButtonRef}
+                archived={archived}
+              />
+            )
+            : (
+              <>
+                {(!inline || hasPeople || hasCategories || hasFoundationLinks) && (
+                  <div className="today-rhythm-details__content">
+                    {inline
+                      ? (
+                        <div
+                          className="today-rhythm-details__association-row"
+                          role="group"
+                          aria-label={`Associations for ${rhythm.title}`}
+                        >
+                          <RhythmAssociationRows
+                            rhythm={rhythm}
+                            {...(hasPeople && people ? { people } : {})}
+                            {...(foundations ? { foundations } : {})}
+                            {...(onPersonSelect ? { onPersonSelect } : {})}
+                            {...(onOpenCategory ? { onOpenCategory } : {})}
+                            {...(onOpenFoundation ? { onOpenFoundation } : {})}
+                            showFoundationLinks={!inline}
+                          />
+                        </div>
+                      )
+                      : (
+                        <div className="today-rhythm-details__summary">
+                          {rhythm.description?.trim() && (
+                            <p className="tend-type-description today-rhythm-details__description">{rhythm.description}</p>
+                          )}
+                          <RhythmAssociationRows
+                            rhythm={rhythm}
+                            {...(people ? { people } : {})}
+                            {...(foundations ? { foundations } : {})}
+                            {...(onPersonSelect ? { onPersonSelect } : {})}
+                            {...(onOpenCategory ? { onOpenCategory } : {})}
+                            {...(onOpenFoundation ? { onOpenFoundation } : {})}
+                            showFoundationLinks={!inline}
+                          />
+                        </div>
+                      )}
+                    {!inline && detailsActions}
+                  </div>
+                )}
+                <footer className="today-rhythm-details__footer">
+                  <RhythmMetadata
+                    variant="footer"
+                    cadence={rhythm.cadence}
+                    schedule={rhythm.schedule}
+                    timeLabel={timeLabel}
+                    lastTended={statusLabel ?? rhythmLastActivityLabel(rhythm, asOfDate)}
+                    rhythmTitle={rhythm.title}
+                    completed={completed}
+                    onUndo={onUndo}
+                    tendButtonRef={tendButtonRef}
+                  />
+                </footer>
+              </>
+            )}
+        </div>
     </div>
   );
 
@@ -356,7 +358,7 @@ export function RhythmDetailsDialog({
   return (
     <dialog
       ref={dialogRef}
-      className={`today-rhythm-details-dialog${showHistory ? ' today-rhythm-details-dialog--history' : ''}`}
+      className={`today-rhythm-details-dialog dialog--phone-fullscreen${showHistory ? ' today-rhythm-details-dialog--history' : ''}`}
       aria-labelledby="rhythm-details-title"
       tabIndex={-1}
       onClick={closeFromEvent}

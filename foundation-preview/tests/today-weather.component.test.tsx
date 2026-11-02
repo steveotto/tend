@@ -34,6 +34,35 @@ describe('Today weather adapter presentation', () => {
     expect(screen.getByRole('img').querySelector('svg')).toBeTruthy();
   });
 
+  it('keeps short and long condition labels grouped with two- and three-digit temperatures', () => {
+    const report: TodayWeatherReport = {
+      ...syntheticWeatherFixture,
+      current: { ...syntheticWeatherFixture.current, temperature: 72.2, code: 1 }
+    };
+    const { rerender } = render(<TodayWeather report={report} localDate="2026-10-31" time={null} />);
+
+    expect(screen.getByRole('img', { name: 'Current conditions: Mostly clear, 72 degrees' }))
+      .toBeTruthy();
+    expect(screen.getByText('72').parentElement?.querySelector('sup')?.textContent).toBe('°');
+    expect(screen.getByText('Mostly clear').parentElement?.className).toBe('today-weather__reading');
+
+    rerender(
+      <TodayWeather
+        report={{
+          ...report,
+          current: { ...report.current, temperature: 102.2, code: 95 }
+        }}
+        localDate="2026-10-31"
+        time={null}
+      />
+    );
+
+    expect(screen.getByRole('img', { name: 'Current conditions: Thunderstorms, 102 degrees' }))
+      .toBeTruthy();
+    expect(screen.getByText('102')).toBeTruthy();
+    expect(screen.getByText('Thunderstorms')).toBeTruthy();
+  });
+
   it('does not substitute weather from another date when the selected block has no forecast', () => {
     const { container } = render(
       <TodayWeather report={syntheticWeatherFixture} localDate="2026-11-02" time="18:00" />

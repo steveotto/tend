@@ -113,6 +113,7 @@ describe('shared preview components', () => {
     expect(badges.every(badge => badge.getAttribute('title') === badge.getAttribute('aria-label'))).toBe(true);
     expect(badges.every(badge => badge.getAttribute('data-tooltip') === badge.getAttribute('aria-label'))).toBe(true);
     expect(badges.every(badge => badge.querySelector('.rhythm-area-badge__visual .area-svg-icon'))).toBe(true);
+    expect(badges.every(badge => badge.querySelector('.rhythm-area-badge__visual > .area-svg-icon'))).toBe(true);
     expect(container.querySelectorAll('.rhythm-area-badge')).toHaveLength(6);
 
     const user = userEvent.setup();
@@ -1078,13 +1079,15 @@ describe('shared preview components', () => {
     const header = card.querySelector('.today-rhythm-details__header');
     const titleGroup = card.querySelector('.today-rhythm-details__title-group');
     const actions = card.querySelector('.today-rhythm-details__actions');
+    const body = card.querySelector('.today-rhythm-details__body');
     const content = card.querySelector('.today-rhythm-details__content');
     const associations = within(card).getByRole('group', { name: `Associations for ${rhythm.title}` });
     const footer = card.querySelector('.today-rhythm-details__footer');
 
     expect(within(titleGroup as HTMLElement).getByText(rhythm.description)).toBeTruthy();
     expect(actions?.parentElement).toBe(header);
-    expect(content?.previousElementSibling).toBe(header);
+    expect(body?.previousElementSibling).toBe(header);
+    expect(content?.parentElement).toBe(body);
     expect(associations.parentElement).toBe(content);
     expect(content?.querySelector('.today-rhythm-details__summary')).toBeNull();
     expect(content?.nextElementSibling).toBe(footer);

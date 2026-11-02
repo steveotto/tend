@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../src/App.tsx';
@@ -99,6 +99,7 @@ describe('account-isolated Preview storage', () => {
     };
     delete (v32.data as Record<string, unknown>).prayerRequests;
     delete (v32.data as Record<string, unknown>).timeBlocks;
+    delete (v32.data as Record<string, unknown>).showTended;
     const originalV32 = JSON.stringify(v32);
     scopeA.storage.setItem(PREVIEW_STORAGE_KEY, originalV32);
 
@@ -124,8 +125,8 @@ describe('account-isolated Preview storage', () => {
     const scopeA = createPreviewStorageScope(storage, accountA);
     const scopeB = createPreviewStorageScope(storage, accountB);
     if (!scopeA || !scopeB) return;
-    const dataA = accountData('Account A');
-    const dataB = accountData('Account B');
+    const dataA = { ...accountData('Account A'), showTended: true };
+    const dataB = { ...accountData('Account B'), showTended: false };
     const savedA = writePreview(scopeA.storage, dataA, null, { currentDate: '2026-11-01' });
     const savedB = writePreview(scopeB.storage, dataB, null, { currentDate: '2026-11-01' });
     expect(savedA.kind).toBe('saved');
@@ -141,7 +142,40 @@ describe('account-isolated Preview storage', () => {
     if (loadedA.kind !== 'loaded' || loadedB.kind !== 'loaded') return;
     expect(loadedA.data.people[0]?.displayName).toBe(storedAccountName('Account A'));
     expect(loadedB.data.people[0]?.displayName).toBe(storedAccountName('Account B'));
+    expect(loadedA.data.showTended).toBe(true);
+    expect(loadedB.data.showTended).toBe(false);
     expect(values.size).toBe(2);
+  });
+
+  it('saves the Today preference in the account envelope and restores it without creating completions', async () => {
+    const scope = createPreviewStorageScope({
+      getItem: key => window.localStorage.getItem(key),
+      setItem: (key, value) => window.localStorage.setItem(key, value)
+    }, accountA);
+    if (!scope) return;
+    const initialData = createEmptyPreviewData();
+    const saved = writePreview(scope.storage, initialData, null, { currentDate: '2026-11-01' });
+    expect(saved.kind).toBe('saved');
+
+    const firstRender = render(<App identity={accountA} />);
+    const toggle = await screen.findByRole('button', { name: 'Show tended (0)' });
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      const loaded = loadPreview(scope.storage, '2026-11-01');
+      expect(loaded.kind === 'loaded' && loaded.data.showTended).toBe(true);
+    });
+    firstRender.unmount();
+
+    render(<App identity={accountA} />);
+    expect((await screen.findByRole('button', { name: 'Show tended (0)' })).getAttribute('aria-pressed')).toBe('true');
+    const loadedAgain = loadPreview(scope.storage, '2026-11-01');
+    expect(loadedAgain.kind).toBe('loaded');
+    if (loadedAgain.kind === 'loaded') {
+      expect(loadedAgain.data.datedRhythmCompletions).toEqual([]);
+      expect(loadedAgain.data.activeRhythmCompletions).toEqual([]);
+      expect(loadedAgain.data.completedRhythmIds).toEqual([]);
+    }
   });
 
   it('scopes cross-tab change events to the active account key', () => {

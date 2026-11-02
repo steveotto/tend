@@ -19,19 +19,31 @@ export function PersonDateField({
   const partialDate = /^\d{2}-\d{2}$/.test(value);
 
   return (
-    <input
-      id={id}
-      type={partialDate ? 'text' : 'date'}
-      inputMode={partialDate ? 'numeric' : undefined}
-      placeholder={partialDate ? 'MM-DD' : undefined}
-      value={partialDate && !editingPartialDate ? formatPartialDate(value) : value}
-      aria-label={label}
-      aria-invalid={invalid || undefined}
-      aria-describedby={describedBy}
-      onFocus={() => setEditingPartialDate(true)}
-      onBlur={() => setEditingPartialDate(false)}
-      onChange={event => onChange(event.currentTarget.value)}
-    />
+    <div className={`person-date-field${value ? '' : ' person-date-field--empty'}`}>
+      <input
+        id={id}
+        type={partialDate ? 'text' : 'date'}
+        inputMode={partialDate ? 'numeric' : undefined}
+        placeholder={partialDate ? 'MM-DD' : undefined}
+        value={partialDate && !editingPartialDate ? formatPartialDate(value) : value}
+        aria-label={label}
+        aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
+        onFocus={() => setEditingPartialDate(true)}
+        onBlur={() => setEditingPartialDate(false)}
+        onChange={event => onChange(event.currentTarget.value)}
+      />
+      {value && (
+        <button
+          type="button"
+          className="person-date-field__clear"
+          aria-label={`Clear ${label.toLocaleLowerCase()}`}
+          onClick={() => onChange('')}
+        >
+          Clear
+        </button>
+      )}
+    </div>
   );
 }
 

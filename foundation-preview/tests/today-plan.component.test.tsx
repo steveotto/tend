@@ -22,9 +22,13 @@ const unavailableWeather: TodayWeatherController = {
 };
 
 function TodayHarness({
-  weatherController = unavailableWeather
+  weatherController = unavailableWeather,
+  satisfiedRhythmIds = new Set(['sample-pray-together']),
+  showTended = true
 }: {
   weatherController?: TodayWeatherController;
+  satisfiedRhythmIds?: ReadonlySet<string>;
+  showTended?: boolean;
 }) {
   const [focus, setFocus] = useState<TodayFocusId>('now');
   return (
@@ -38,6 +42,8 @@ function TodayHarness({
         weatherController={weatherController}
         completedRhythms={new Set(['sample-pray-together'])}
         undoableRhythms={new Set()}
+        satisfiedRhythmIds={satisfiedRhythmIds}
+        showTended={showTended}
         rhythms={todayRhythms}
         rhythmScores={new Map()}
         marriageHealthScore={null}
@@ -55,8 +61,14 @@ function TodayHarness({
   );
 }
 
-function renderToday(weatherController?: TodayWeatherController) {
-  return render(<TodayHarness {...(weatherController ? { weatherController } : {})} />);
+function renderToday(
+  weatherController?: TodayWeatherController,
+  options: { satisfiedRhythmIds?: ReadonlySet<string>; showTended?: boolean } = {}
+) {
+  return render(<TodayHarness
+    {...(weatherController ? { weatherController } : {})}
+    {...options}
+  />);
 }
 
 describe('Today time-frame interaction', () => {
@@ -99,6 +111,25 @@ describe('Today time-frame interaction', () => {
     await user.click(within(plan).getByRole('tab', { name: 'Anytime' }));
     expect(within(plan).getByRole('tab', { name: 'Anytime' }).getAttribute('aria-selected')).toBe('true');
     expect(within(plan).getByText('No eligible Anytime rhythms.')).toBeTruthy();
+  });
+
+  it('distinguishes an all-tended selection from an empty tab and keeps Show tended available', async () => {
+    const user = userEvent.setup();
+    renderToday(undefined, {
+      satisfiedRhythmIds: new Set(['sample-pray-together']),
+      showTended: false
+    });
+    const plan = screen.getByRole('region', { name: "Today's plan" });
+
+    expect(within(plan).getByText('1 of 1 tended')).toBeTruthy();
+    expect(within(plan).getByRole('button', { name: 'Show tended (1)' }).getAttribute('aria-pressed'))
+      .toBe('false');
+    expect(within(plan).getByRole('status').textContent).toBe('You’ve tended everything here.');
+
+    await user.click(within(plan).getByRole('tab', { name: 'Anytime' }));
+    expect(within(plan).getByText('No eligible Anytime rhythms.')).toBeTruthy();
+    expect(within(plan).queryByText('You’ve tended everything here.')).toBeNull();
+    expect(within(plan).getByRole('button', { name: 'Show tended (0)' })).toBeTruthy();
   });
 
   it('moves focus and activates Today plan tabs with arrows, Home, and End', async () => {

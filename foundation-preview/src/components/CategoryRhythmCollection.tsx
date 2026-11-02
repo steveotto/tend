@@ -155,7 +155,9 @@ export function CategoryRhythmCollection({
                         ? {
                             onTend: (event: MouseEvent<HTMLButtonElement>) => onTend(rhythm.id, event),
                             onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event),
-                            ...(undoableRhythms.has(rhythm.id) ? { onUndo: () => onUndo(rhythm.id) } : {})
+                            ...(undoableRhythms.has(rhythm.id) && !rhythm.healthLogCapability
+                              ? { onUndo: () => onUndo(rhythm.id) }
+                              : {})
                           }
                         : {})}
                       onClose={() => undefined}

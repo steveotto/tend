@@ -7,6 +7,7 @@ import type { PersonId, PersonPickerGroupId } from '../domain/preview-data.ts';
 import {
   connectionStyles,
   personDetailsDraft,
+  relationshipGroups,
   validatePersonDetailsDraft
 } from '../domain/person-details.ts';
 import type {
@@ -33,6 +34,16 @@ const categoryOptions: readonly StyledSelectOption<string>[] = [
 const loveLanguageOptions: readonly StyledSelectOption<string>[] = [
   { value: 'not-set', label: 'Not set' },
   ...connectionStyles.map(style => ({ value: style.value, label: style.label }))
+];
+
+const relationshipOptions: readonly StyledSelectOption<string>[] = [
+  { value: 'not-set', label: 'Not set' },
+  ...relationshipGroups.flatMap(group => group.values.map(value => ({
+    value,
+    label: value,
+    group: group.label
+  }))),
+  { value: 'custom', label: 'Custom...' }
 ];
 
 export function PersonDetailsEditor({
@@ -99,6 +110,31 @@ export function PersonDetailsEditor({
     setSaveError('');
   }
 
+  function changeRelationship(value: string) {
+    setDraft(current => ({
+      ...current,
+      relationshipChoice: value,
+      relationshipLabel: value === 'custom'
+        ? current.relationshipChoice === 'custom' ? current.relationshipLabel : ''
+        : value === 'not-set' ? '' : value,
+      relationshipChanged: true
+    }));
+    setErrors(current => {
+      const { relationshipChoice: _choiceError, relationshipLabel: _labelError, ...remaining } = current;
+      return remaining;
+    });
+    setSaveError('');
+  }
+
+  function changeRelationshipLabel(value: string) {
+    setDraft(current => ({ ...current, relationshipLabel: value, relationshipChanged: true }));
+    setErrors(current => {
+      const { relationshipLabel: _labelError, ...remaining } = current;
+      return remaining;
+    });
+    setSaveError('');
+  }
+
   async function selectPhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = '';
@@ -140,10 +176,13 @@ export function PersonDetailsEditor({
 
   return (
     <MoneyGoalDialog
-      title={`Person settings — ${personName}`}
       titleId={titleId}
       labelledBy={titleId}
       dialogClassName="person-details-dialog"
+      phoneFullScreen
+      title={`Person settings — ${personName}`}
+      intro={draft.relationshipLabel.trim() || 'Relationship not set'}
+      closeLabel="Close Person settings"
       initialFocusId={`person-details-category-${personId}`}
       onClose={onClose}
     >
@@ -181,18 +220,47 @@ export function PersonDetailsEditor({
               {photoError && <p className="goal-field-error" role="alert">{photoError}</p>}
               {fieldError('photoDataUrl')}
             </div>
-            <div className="goal-field">
-              <label htmlFor={`person-details-category-${personId}`}>Category</label>
-              <StyledSelect
-                id={`person-details-category-${personId}`}
-                label="Category"
-                options={categoryOptions}
-                value={categoryValue}
-                onChange={changeCategory}
-                describedBy={errors.categoryIds ? 'person-details-error-categoryIds' : undefined}
-                invalid={Boolean(errors.categoryIds)}
-              />
-              {fieldError('categoryIds')}
+            <div className="person-details-editor__date-grid">
+              <div className="goal-field">
+                <label htmlFor={`person-details-relationship-${personId}`}>Relationship</label>
+                <StyledSelect
+                  id={`person-details-relationship-${personId}`}
+                  label="Relationship"
+                  options={relationshipOptions}
+                  value={draft.relationshipChoice}
+                  onChange={changeRelationship}
+                  describedBy={[
+                    errors.relationshipChoice ? 'person-details-error-relationshipChoice' : '',
+                    errors.relationshipLabel ? 'person-details-error-relationshipLabel' : ''
+                  ].filter(Boolean).join(' ') || undefined}
+                  invalid={Boolean(errors.relationshipChoice || errors.relationshipLabel)}
+                />
+                {draft.relationshipChoice === 'custom' && (
+                  <input
+                    className="person-details-editor__custom-relationship"
+                    aria-label="Custom relationship"
+                    maxLength={80}
+                    value={draft.relationshipLabel}
+                    onChange={event => changeRelationshipLabel(event.currentTarget.value)}
+                    placeholder="Enter relationship"
+                  />
+                )}
+                {fieldError('relationshipChoice')}
+                {fieldError('relationshipLabel')}
+              </div>
+              <div className="goal-field">
+                <label htmlFor={`person-details-category-${personId}`}>Category</label>
+                <StyledSelect
+                  id={`person-details-category-${personId}`}
+                  label="Category"
+                  options={categoryOptions}
+                  value={categoryValue}
+                  onChange={changeCategory}
+                  describedBy={errors.categoryIds ? 'person-details-error-categoryIds' : undefined}
+                  invalid={Boolean(errors.categoryIds)}
+                />
+                {fieldError('categoryIds')}
+              </div>
             </div>
             <div className="person-details-editor__date-grid">
               <div className="goal-field">
@@ -212,7 +280,7 @@ export function PersonDetailsEditor({
                 />
                 {/^\d{2}-\d{2}$/.test(draft.birthdayDate) && details?.birthday && (
                   <span className="person-details-editor__help" id={`person-details-partial-birthday-${personId}`}>
-                    Saved partial date. Delete to clear it, or enter a full date to replace it.
+                    Clear the saved partial date or enter a full date to replace it.
                   </span>
                 )}
                 {fieldError('birthdayDate')}
@@ -234,7 +302,7 @@ export function PersonDetailsEditor({
                 />
                 {/^\d{2}-\d{2}$/.test(draft.anniversaryDate) && details?.anniversary && (
                   <span className="person-details-editor__help" id={`person-details-partial-anniversary-${personId}`}>
-                    Saved partial date. Delete to clear it, or enter a full date to replace it.
+                    Clear the saved partial date or enter a full date to replace it.
                   </span>
                 )}
                 {fieldError('anniversaryDate')}

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   activeIdForMarriageSuggestion,
   categoryRhythmGroup,
+  isRhythmEligibleForToday,
   isRhythmRelevantOnDate,
+  selectSatisfiedRhythmIds,
   isValidSuggestionSourceId,
   legacySuggestionSourceForRhythmId,
   rhythmsForSuggestionSource
@@ -236,6 +238,97 @@ describe('Category Rhythm selectors', () => {
       schedule: { frequency: 'weekly', weekdays: [1] }
     }, '2026-10-27')).toBe(false);
     expect(isRhythmRelevantOnDate({ cadence: 'Unsupported cadence' }, '2026-10-27')).toBe(false);
+  });
+
+  it('counts only completed Rhythms with an applicable occurrence in the displayed period', () => {
+    const daily: RhythmPreview = {
+      id: 'daily',
+      title: 'Daily practice',
+      automation: 'manual',
+      status: 'Due today',
+      cadence: 'Daily',
+      schedule: { frequency: 'daily' }
+    };
+    const mondayOnly: RhythmPreview = {
+      id: 'monday',
+      title: 'Monday practice',
+      automation: 'manual',
+      status: 'Due today',
+      cadence: 'Monday',
+      schedule: { frequency: 'weekly', weekdays: [1] }
+    };
+    const unscheduled: RhythmPreview = {
+      id: 'unscheduled',
+      title: 'Unresolved schedule',
+      automation: 'manual',
+      status: 'Due today',
+      cadence: 'Unsupported cadence'
+    };
+
+    expect(isRhythmEligibleForToday(mondayOnly, '2026-10-26')).toBe(true);
+    expect(isRhythmEligibleForToday(mondayOnly, '2026-10-27')).toBe(false);
+    expect(selectSatisfiedRhythmIds(
+      [daily, mondayOnly, unscheduled],
+      new Set(['daily', 'monday', 'unscheduled']),
+      rhythm => rhythm.id === 'monday' ? '2026-10-27' : '2026-10-26'
+    )).toEqual(new Set(['daily']));
+    expect(selectSatisfiedRhythmIds(
+      [daily],
+      new Set(),
+      () => '2026-10-26'
+    )).toEqual(new Set());
+  });
+
+  it('keeps multi-day weekly Rhythms visible until each scheduled occurrence in the week is complete', () => {
+    const rhythm: RhythmPreview = {
+      id: 'three-times-weekly',
+      title: 'Three times weekly',
+      automation: 'manual',
+      status: 'Due today',
+      cadence: '3 times a week',
+      createdLocalDate: '2026-11-02',
+      schedule: { frequency: 'weekly', weekdays: [1, 3, 5] },
+      completionHistory: [{ id: 'monday-tend', effectiveDate: '2026-11-02' }]
+    };
+
+    expect(selectSatisfiedRhythmIds([rhythm], new Set(), () => '2026-11-04')).toEqual(new Set());
+    expect(selectSatisfiedRhythmIds([{
+      ...rhythm,
+      completionHistory: [
+        ...rhythm.completionHistory!,
+        { id: 'friday-future-tend', effectiveDate: '2026-11-06' }
+      ]
+    }], new Set(['three-times-weekly']), () => '2026-11-04')).toEqual(new Set());
+    expect(selectSatisfiedRhythmIds([{
+      ...rhythm,
+      completionHistory: [
+        ...rhythm.completionHistory!,
+        { id: 'wednesday-tend', effectiveDate: '2026-11-04' }
+      ]
+    }], new Set(['three-times-weekly']), () => '2026-11-04')).toEqual(new Set());
+    expect(selectSatisfiedRhythmIds([{
+      ...rhythm,
+      completionHistory: [
+        ...rhythm.completionHistory!,
+        { id: 'wednesday-tend', effectiveDate: '2026-11-04' },
+        { id: 'friday-tend', effectiveDate: '2026-11-06' }
+      ]
+    }], new Set(['three-times-weekly']), () => '2026-11-06')).toEqual(new Set(['three-times-weekly']));
+  });
+
+  it('recognizes a backdated completion within a single weekly occurrence period', () => {
+    const rhythm: RhythmPreview = {
+      id: 'weekly-backfill',
+      title: 'Weekly practice',
+      automation: 'manual',
+      status: 'Due today',
+      cadence: 'Weekly',
+      schedule: { frequency: 'weekly', weekdays: [5] },
+      completionHistory: [{ id: 'wednesday-tend', effectiveDate: '2026-11-04' }]
+    };
+
+    expect(selectSatisfiedRhythmIds([rhythm], new Set(), () => '2026-11-06'))
+      .toEqual(new Set(['weekly-backfill']));
   });
 
   it('validates Foundation ownership from the catalogue for any Category', () => {

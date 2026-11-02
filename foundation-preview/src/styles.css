@@ -1048,6 +1048,51 @@ a:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+.show-tended-list__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.show-tended-list__toggle {
+  min-height: 32px;
+}
+
+.show-tended-list__notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.show-tended-list__undo {
+  padding: 3px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.show-tended-list__undo:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.show-tended-list__item {
+  display: contents;
+}
+
 .home-plan-context-row {
   display: flex;
   align-items: center;
@@ -1349,10 +1394,13 @@ a:focus-visible {
 .today-weather {
   --weather-gradient: linear-gradient(115deg, #0750df, #2397f4);
   --weather-icon: #3286dc;
-  display: inline-flex;
+  display: inline-grid;
+  grid-template-columns: 28px minmax(0, 1fr);
   min-height: 34px;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  max-width: 100%;
   color: var(--ink);
 }
 
@@ -1378,8 +1426,11 @@ a:focus-visible {
 
 .today-weather__reading {
   display: grid;
+  width: 100%;
+  min-width: 0;
   justify-items: center;
   line-height: 1;
+  text-align: center;
 }
 
 .today-weather__reading strong {
@@ -1401,11 +1452,14 @@ a:focus-visible {
 }
 
 .today-weather__reading > span {
+  min-width: 0;
+  max-width: 100%;
   margin-top: 3px;
   color: var(--ink-soft);
   font-size: 9px;
   font-weight: 600;
   text-align: center;
+  overflow-wrap: anywhere;
 }
 
   .home-plan-type-tabs {
@@ -7448,6 +7502,11 @@ a:focus-visible {
   flex-direction: column;
   min-width: 0;
   padding: 18px 0 0;
+}
+
+.today-rhythm-details__body,
+.today-rhythm-details__body--history {
+  display: contents;
 }
 
 .today-rhythm-details__surface--completion {
@@ -15808,8 +15867,8 @@ a:focus-visible {
   }
 }
 
-.tend-app-preview .rhythm-card .rhythm-card__badges .rhythm-area-badge,
-.tend-app-preview .today-rhythm-details__badges .rhythm-area-badge {
+.tend-app-preview .today-rhythm-details-dialog--inline
+  .today-rhythm-details__association-category-group > .rhythm-area-badge {
   border: 0;
   border-radius: var(--rhythm-category-badge-radius);
   background: transparent;
@@ -15823,5 +15882,192 @@ a:focus-visible {
     select
   ) {
     font-size: max(16px, 1em);
+  }
+
+  .tend-app-preview dialog.dialog--phone-fullscreen {
+    position: fixed;
+    inset: 0;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    overflow: hidden;
+    box-shadow: none;
+  }
+
+  .tend-app-preview dialog.dialog--phone-fullscreen::backdrop {
+    background: transparent;
+  }
+
+  .tend-app-preview .money-goal-dialog.dialog--phone-fullscreen > .money-goal-dialog__surface {
+    display: flex;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    flex-direction: column;
+    padding:
+      calc(env(safe-area-inset-top, 0px) + 18px)
+      max(16px, env(safe-area-inset-right, 0px))
+      calc(env(safe-area-inset-bottom, 0px) + 12px)
+      max(16px, env(safe-area-inset-left, 0px));
+    overflow: hidden;
+  }
+
+  .tend-app-preview .money-goal-dialog.dialog--phone-fullscreen .money-goal-dialog__close {
+    top: calc(env(safe-area-inset-top, 0px) + 12px);
+    right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  .tend-app-preview .person-details-dialog.dialog--phone-fullscreen .money-goal-dialog__surface > h2 {
+    padding-right: 52px;
+    overflow-wrap: anywhere;
+  }
+
+  .tend-app-preview .person-details-dialog.dialog--phone-fullscreen .money-goal-dialog__intro {
+    margin-right: 52px;
+    overflow-wrap: anywhere;
+  }
+
+  .tend-app-preview .person-details-editor__scroll {
+    flex: 1 1 auto;
+  }
+}
+
+.person-date-field {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.person-date-field > input {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.tend-app-preview .person-date-field.person-date-field--empty > input {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.tend-app-preview .person-date-field.person-date-field--empty > input::-webkit-datetime-edit,
+.tend-app-preview .person-date-field.person-date-field--empty > input::-webkit-datetime-edit-fields-wrapper,
+.tend-app-preview .person-date-field.person-date-field--empty > input::-webkit-datetime-edit-text,
+.tend-app-preview .person-date-field.person-date-field--empty > input::-webkit-datetime-edit-month-field,
+.tend-app-preview .person-date-field.person-date-field--empty > input::-webkit-datetime-edit-day-field,
+.tend-app-preview .person-date-field.person-date-field--empty > input::-webkit-datetime-edit-year-field {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  opacity: 0 !important;
+}
+
+.person-date-field__clear {
+  flex: none;
+  padding: 6px 9px;
+  border: 1px solid var(--line, #dce4dd);
+  border-radius: 8px;
+  background: var(--tend-surface, #f8faf8);
+  color: var(--forest-deep, #294c3a);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.person-date-field__clear:focus-visible {
+  outline: 2px solid var(--forest, #52715c);
+  outline-offset: 2px;
+}
+
+.rhythm-select__group {
+  display: grid;
+  gap: 2px;
+}
+
+.rhythm-select__group-label {
+  padding: 7px 10px 3px;
+  color: var(--ink-faint, #87928b);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 700px) {
+  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--canvas);
+  }
+
+  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen > .today-rhythm-details__surface {
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 16px);
+    overflow: hidden;
+  }
+
+  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen .today-rhythm-details__header {
+    flex: 0 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: calc(max(16px, env(safe-area-inset-right, 0px)) + 54px);
+  }
+
+  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen .today-rhythm-details__close {
+    top: 12px;
+    right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen .today-rhythm-details__body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  }
+
+  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen .today-rhythm-details__body--history {
+    overflow: hidden;
+    padding-bottom: 0;
+  }
+
+  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen .rhythm-history-view--dialog {
+    flex: 1 1 auto;
+    max-height: none;
+    padding-inline: max(16px, env(safe-area-inset-left, 0px))
+      max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen .rhythm-history-view__body--dialog {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  }
+
+  .tend-app-preview .rhythm-history-view--dialog .rhythm-history-view__rhythm-header {
+    position: relative;
+    padding-top: 4px;
+  }
+
+  .tend-app-preview .rhythm-history-view--dialog .today-rhythm-details__close--history {
+    position: absolute;
+    top: 0;
+    right: 0;
+  }
+
+  .tend-app-preview .rhythm-history-view--dialog .rhythm-history-view__body--dialog {
+    min-height: 0;
+    max-height: none;
   }
 }

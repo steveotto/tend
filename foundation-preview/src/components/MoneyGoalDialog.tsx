@@ -18,6 +18,7 @@ type MoneyGoalDialogProps = {
   dialogId?: string;
   dismissOnBackdrop?: boolean;
   dialogClassName?: string;
+  phoneFullScreen?: boolean;
   surfaceClassName?: string;
   bodyClassName?: string;
   onClose: () => void;
@@ -39,6 +40,7 @@ export function MoneyGoalDialog({
   dialogId,
   dismissOnBackdrop = false,
   dialogClassName,
+  phoneFullScreen = false,
   surfaceClassName,
   bodyClassName,
   onClose
@@ -62,7 +64,11 @@ export function MoneyGoalDialog({
     <dialog
       ref={dialogRef}
       id={dialogId}
-      className={['money-goal-dialog', dialogClassName].filter(Boolean).join(' ')}
+      className={[
+        'money-goal-dialog',
+        dialogClassName,
+        phoneFullScreen ? 'dialog--phone-fullscreen' : ''
+      ].filter(Boolean).join(' ')}
       aria-labelledby={labelledBy ?? 'money-goal-dialog-title'}
       onCancel={event => {
         event.preventDefault();

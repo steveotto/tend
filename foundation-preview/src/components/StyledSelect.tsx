@@ -4,6 +4,7 @@ import type { CSSProperties, KeyboardEvent } from 'react';
 export type StyledSelectOption<Value extends string> = {
   value: Value;
   label: string;
+  group?: string;
   disabled?: boolean;
 };
 
@@ -49,6 +50,16 @@ export function StyledSelect<Value extends string>({
   const [position, setPosition] = useState<PopoverPosition>();
   const selectedIndex = Math.max(0, options.findIndex(option => option.value === value));
   const selectedOption = options.find(option => option.value === value);
+  const optionGroups: Array<{ label: string; options: Array<{ option: StyledSelectOption<Value>; index: number }> }> = [];
+  options.forEach((option, index) => {
+    const label = option.group ?? '';
+    let group = optionGroups[optionGroups.length - 1];
+    if (!group || group.label !== label) {
+      group = { label, options: [] };
+      optionGroups.push(group);
+    }
+    group.options.push({ option, index });
+  });
   const firstEnabledIndex = options.findIndex(option => !option.disabled);
   let lastEnabledIndex = -1;
   for (let index = options.length - 1; index >= 0; index -= 1) {
@@ -251,26 +262,36 @@ export function StyledSelect<Value extends string>({
           style={position}
           onKeyDown={handleOptionKeyDown}
         >
-          {options.map((option, index) => (
-            <div
-              key={option.value}
-              ref={element => { optionRefs.current[index] = element; }}
-              className="rhythm-select__option"
-              role="option"
-              aria-selected={value === option.value}
-              aria-disabled={option.disabled ? true : false}
-              tabIndex={-1}
-              onFocus={() => setActiveIndex(index)}
-              onClick={() => selectOption(index)}
-            >
-              <span>{option.label}</span>
-              {value === option.value && (
-                <svg viewBox="0 0 20 20" aria-hidden="true">
-                  <path d="m4 10 4 4 8-8" />
-                </svg>
-              )}
-            </div>
-          ))}
+          {optionGroups.map(group => {
+            const choices = group.options.map(({ option, index }) => (
+              <div
+                key={option.value}
+                ref={element => { optionRefs.current[index] = element; }}
+                className="rhythm-select__option"
+                role="option"
+                aria-selected={value === option.value}
+                aria-disabled={option.disabled ? true : false}
+                tabIndex={-1}
+                onFocus={() => setActiveIndex(index)}
+                onClick={() => selectOption(index)}
+              >
+                <span>{option.label}</span>
+                {value === option.value && (
+                  <svg viewBox="0 0 20 20" aria-hidden="true">
+                    <path d="m4 10 4 4 8-8" />
+                  </svg>
+                )}
+              </div>
+            ));
+            return group.label
+              ? (
+                <div key={group.label} className="rhythm-select__group" role="group" aria-label={group.label}>
+                  <span className="rhythm-select__group-label" aria-hidden="true">{group.label}</span>
+                  {choices}
+                </div>
+              )
+              : choices;
+          })}
         </div>
       )}
     </div>

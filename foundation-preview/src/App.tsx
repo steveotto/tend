@@ -103,6 +103,7 @@ import {
 import { resolveSeedCompletionRecords } from './domain/rhythm-history.ts';
 import { localDateInTimeZone } from './domain/rhythm-scoring.ts';
 import { hasRhythmOccurrenceForCompletion } from './domain/rhythm-occurrences.ts';
+import { selectSatisfiedRhythmIds } from './domain/category-rhythms.ts';
 import { prepareDatedRhythmCompletion } from './domain/rhythm-completion.ts';
 import { validateStrengthData } from './domain/strength.ts';
 import type { StrengthMode } from './domain/strength.ts';
@@ -267,6 +268,20 @@ function isDatedCompletionRecord(record: RhythmCompletionRecord): record is Date
     && typeof record.recordedAt === 'string';
 }
 
+function isFitnessLinkedCompletion(data: PreviewData, completionId: string | undefined): boolean {
+  if (completionId === undefined) return false;
+  const records: readonly unknown[] = [
+    ...data.strength.workouts,
+    ...data.weight.weighIns,
+    ...data.cardio.runs
+  ];
+  return records.some(record => typeof record === 'object'
+    && record !== null
+    && !Array.isArray(record)
+    && 'completionId' in record
+    && record.completionId === completionId);
+}
+
 const defaultPreviewIdentity = import.meta.env.DEV
   ? DEVELOPMENT_PREVIEW_IDENTITY
   : PREVIEW_AUTH_PENDING;
@@ -347,6 +362,7 @@ function PreviewWorkspace({
   const [todayFocus, setTodayFocus] = useState<TodayFocusId>('now');
   const [healthFitnessVisited, setHealthFitnessVisited] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewData>(initialPreviewData);
+  const [persistedSatisfiedRhythmIds, setPersistedSatisfiedRhythmIds] = useState<ReadonlySet<string>>(new Set());
   const configuredRhythmTimeOptions = rhythmTimeOptionsForBlocks(previewData.timeBlocks);
   const [hydrated, setHydrated] = useState(false);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
@@ -474,6 +490,7 @@ function PreviewWorkspace({
   } | null>(null);
   const dialogOpener = useRef<HTMLButtonElement | null>(null);
   const completionDialogOpener = useRef<HTMLButtonElement | null>(null);
+  const wasCompletionDialogOpen = useRef(false);
   const rhythmEditorOpener = useRef<HTMLButtonElement | null>(null);
   const profileOpener = useRef<HTMLElement | null>(null);
   const profileReturnPersonId = useRef<PersonId | null>(null);
@@ -490,18 +507,23 @@ function PreviewWorkspace({
     if (!isIdentityCurrent()) {
       return { kind: 'error' as const, message: 'Preview identity changed. No changes were saved.' };
     }
-    return writePreview(previewStorage, data, expected, options);
+    const written = writePreview(previewStorage, data, expected, options);
+    if (written.kind === 'saved') setPersistedSatisfiedRhythmIds(satisfiedRhythmIdsForData(data));
+    return written;
   }
 
   const hour = scoringInstant.getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-  function rhythmWithSavedCompletions(rhythm: RhythmPreview): RhythmPreview {
+  function rhythmWithSavedCompletions(
+    rhythm: RhythmPreview,
+    data: PreviewData = previewData
+  ): RhythmPreview {
     const seededRecords = resolveSeedCompletionRecords(
       rhythm.completionHistory,
-      previewData.rhythmCompletionOverrides,
-      previewData.removedSeedCompletionIds
+      data.rhythmCompletionOverrides,
+      data.removedSeedCompletionIds
     );
-    const datedRecords = previewData.datedRhythmCompletions.filter(item => item.rhythmId === rhythm.id);
+    const datedRecords = data.datedRhythmCompletions.filter(item => item.rhythmId === rhythm.id);
     const completionHistory = seededRecords === undefined && datedRecords.length === 0
       ? undefined
       : [...(seededRecords ?? []), ...datedRecords];
@@ -526,7 +548,28 @@ function PreviewWorkspace({
       ...(scoring === undefined ? {} : { scoring })
     };
   }
-  const allTodayRhythms = resolveTodayRhythms(previewData.savedRhythms).map(rhythmWithSavedCompletions);
+  function dateForRhythm(rhythm: RhythmPreview, instant = new Date()): string {
+    const timeZone = rhythm.scoring?.timeZone
+      ?? rhythm.createdTimeZone
+      ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return localDateInTimeZone(instant, timeZone);
+  }
+  function completedIdsForData(data: PreviewData, rhythms: readonly RhythmPreview[]): ReadonlySet<string> {
+    return new Set(rhythms.filter(rhythm => rhythmCompletionStateForDate(
+      rhythm.id,
+      dateForRhythm(rhythm),
+      data.completedRhythmIds,
+      data.activeRhythmCompletions,
+      (rhythm.completionHistory ?? []).map(record => ({ ...record, rhythmId: rhythm.id }))
+    ).completed).map(rhythm => rhythm.id));
+  }
+  function satisfiedRhythmIdsForData(data: PreviewData): ReadonlySet<string> {
+    const rhythms = resolveTodayRhythms(data.savedRhythms)
+      .map(rhythm => rhythmWithSavedCompletions(rhythm, data));
+    return selectSatisfiedRhythmIds(rhythms, completedIdsForData(data, rhythms), date => dateForRhythm(date));
+  }
+  const allTodayRhythms = resolveTodayRhythms(previewData.savedRhythms)
+    .map(rhythm => rhythmWithSavedCompletions(rhythm));
   const editableTodayRhythms = activeTodayRhythms(allTodayRhythms, previewData.archivedRhythmIds);
   const archivedRhythms = archivedTodayRhythms(allTodayRhythms, previewData.archivedRhythmIds);
   const resolvedMarriageRhythms = marriageRhythms.map(rhythm =>
@@ -630,25 +673,34 @@ function PreviewWorkspace({
     : null;
   const currentDate = localDateString(scoringInstant);
   const initialLoadDate = useRef(currentDate).current;
-  const completionStates = new Map(allTodayRhythms.map(rhythm => {
-    const timeZone = rhythm.scoring?.timeZone
-      ?? rhythm.createdTimeZone
-      ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const effectiveDate = localDateInTimeZone(new Date(), timeZone);
-    const state = rhythmCompletionStateForDate(
+  const completionStates = new Map(allTodayRhythms.map(rhythm => [
+    rhythm.id,
+    rhythmCompletionStateForDate(
       rhythm.id,
-      effectiveDate,
+      dateForRhythm(rhythm),
       previewData.completedRhythmIds,
       previewData.activeRhythmCompletions,
       (rhythm.completionHistory ?? []).map(record => ({ ...record, rhythmId: rhythm.id }))
-    );
-    return [rhythm.id, state] as const;
-  }));
+    )
+  ] as const));
   const completedRhythms = new Set(
     [...completionStates].filter(([, state]) => state.completed).map(([id]) => id)
   );
   const undoableRhythms = new Set(
-    [...completionStates].filter(([, state]) => state.undoable).map(([id]) => id)
+    [...completionStates].filter(([id, state]) => {
+      if (!state.undoable) return false;
+      const activeCompletionId = previewData.activeRhythmCompletions
+        .find(item => item.rhythmId === id)?.completionId;
+      return !isFitnessLinkedCompletion(previewData, activeCompletionId);
+    }).map(([id]) => id)
+  );
+  const currentlySatisfiedRhythmIds = selectSatisfiedRhythmIds(
+    allTodayRhythms,
+    completedRhythms,
+    rhythm => dateForRhythm(rhythm)
+  );
+  const satisfiedRhythmIds = new Set(
+    [...currentlySatisfiedRhythmIds].filter(id => persistedSatisfiedRhythmIds.has(id))
   );
   const moneyGoals = previewData.goals;
 
@@ -971,11 +1023,14 @@ function PreviewWorkspace({
       expectedRaw.current = loaded.raw;
       skipNextAutosave.current = true;
       setPreviewData(loaded.data);
+      setPersistedSatisfiedRhythmIds(satisfiedRhythmIdsForData(loaded.data));
       setPersistenceStatus({ kind: 'saved' });
       setAutoSaveEnabled(true);
     } else if (loaded.kind === 'missing') {
       expectedRaw.current = null;
-      setPreviewData(initialPreviewData());
+      const initialData = initialPreviewData();
+      setPreviewData(initialData);
+      setPersistedSatisfiedRhythmIds(new Set());
       setPersistenceStatus({ kind: 'saving' });
       setAutoSaveEnabled(true);
     } else if (loaded.kind === 'corrupt' || loaded.kind === 'unsupported') {
@@ -1050,20 +1105,38 @@ function PreviewWorkspace({
   }, [activeRhythmId]);
 
   useEffect(() => {
-    if (completionDialogRhythmId !== null) return;
-    const opener = completionDialogOpener.current;
-    if (opener?.isConnected) {
-      if (opener.disabled) {
-        opener.closest('article')
-          ?.querySelector<HTMLButtonElement>(
-            '.today-rhythm-details__history-button, .today-rhythm-card__details-toggle'
-          )
-          ?.focus({ preventScroll: true });
-      } else {
-        opener.focus({ preventScroll: true });
-      }
+    if (completionDialogRhythmId !== null) {
+      wasCompletionDialogOpen.current = true;
+      return;
     }
+    if (!wasCompletionDialogOpen.current) return;
+    wasCompletionDialogOpen.current = false;
+    const opener = completionDialogOpener.current;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const focusTendedToggle = () => {
+        const toggles = [...document.querySelectorAll<HTMLButtonElement>('.show-tended-list__toggle')];
+        const toggle = toggles.find(item => item.closest('[hidden]') === null) ?? toggles[0];
+        toggle?.focus({ preventScroll: true });
+      };
+      if (opener?.isConnected) {
+        if (opener.disabled) {
+          const replacement = opener.closest('article')
+            ?.querySelector<HTMLButtonElement>(
+              '.today-rhythm-details__history-button, .today-rhythm-card__details-toggle'
+            );
+          if (replacement) replacement.focus({ preventScroll: true });
+          else focusTendedToggle();
+        } else {
+          opener.focus({ preventScroll: true });
+        }
+      } else {
+        focusTendedToggle();
+      }
+    });
     completionDialogOpener.current = null;
+    return () => { cancelled = true; };
   }, [completionDialogRhythmId]);
 
   useEffect(() => {
@@ -2299,6 +2372,9 @@ function PreviewWorkspace({
       const completionIndex = previous.completedRhythmIds.indexOf(id);
       if (completionIndex === -1
         || !resolveTodayRhythms(previous.savedRhythms).some(rhythm => rhythm.id === id)) return previous;
+      const activeCompletionId = previous.activeRhythmCompletions
+        .find(item => item.rhythmId === id)?.completionId;
+      if (isFitnessLinkedCompletion(previous, activeCompletionId)) return previous;
       const reversed = removeActionCompletion(
         previous.datedRhythmCompletions,
         previous.activeRhythmCompletions,
@@ -2314,6 +2390,12 @@ function PreviewWorkspace({
         ]
       };
     });
+  }
+
+  function setShowTendedPreference(showTended: boolean) {
+    setPreviewData(previous => previous.showTended === showTended
+      ? previous
+      : { ...previous, showTended });
   }
 
   function saveGoal(goal: MoneyGoal) {
@@ -2568,6 +2650,10 @@ function PreviewWorkspace({
       rhythmScores={rhythmScoreResults}
       completedRhythms={completedRhythms}
       undoableRhythms={undoableRhythms}
+      satisfiedRhythmIds={satisfiedRhythmIds}
+      showTended={previewData.showTended}
+      onShowTendedChange={setShowTendedPreference}
+      initializing={!hydrated}
       foundations={foundationCatalogue}
       onAddRhythm={event => openRhythmEditor(event, undefined, {
         initialDraft: createRhythmDraft(['health'])
@@ -2665,6 +2751,10 @@ function PreviewWorkspace({
               weatherController={todayWeather}
               completedRhythms={completedRhythms}
               undoableRhythms={undoableRhythms}
+              satisfiedRhythmIds={satisfiedRhythmIds}
+              showTended={previewData.showTended}
+              onShowTendedChange={setShowTendedPreference}
+              initializing={!hydrated}
               rhythms={editableTodayRhythms}
               rhythmScores={rhythmScoreResults}
               search={search}
@@ -2699,6 +2789,10 @@ function PreviewWorkspace({
                 archivedRhythmIds={previewData.archivedRhythmIds}
                 completedRhythms={completedRhythms}
                 undoableRhythms={undoableRhythms}
+                satisfiedRhythmIds={satisfiedRhythmIds}
+                showTended={previewData.showTended}
+                onShowTendedChange={setShowTendedPreference}
+                initializing={!hydrated}
                 onRhythmHistory={openRhythmHistory}
                 onEditRhythm={(rhythm, event, returnToSuggestions) => openRhythmEditor(event, rhythm, {
                   ...(returnToSuggestions ? { returnToSuggestions } : {})
@@ -2741,6 +2835,10 @@ function PreviewWorkspace({
                 archivedRhythmIds={previewData.archivedRhythmIds}
                 completedRhythms={completedRhythms}
                 undoableRhythms={undoableRhythms}
+                satisfiedRhythmIds={satisfiedRhythmIds}
+                showTended={previewData.showTended}
+                onShowTendedChange={setShowTendedPreference}
+                initializing={!hydrated}
                 onRhythmHistory={openRhythmHistory}
                 onEditRhythm={(rhythm, event, returnToSuggestions) => openRhythmEditor(event, rhythm, {
                   ...(returnToSuggestions ? { returnToSuggestions } : {})
@@ -2785,6 +2883,10 @@ function PreviewWorkspace({
                 archivedRhythmIds={previewData.archivedRhythmIds}
                 completedRhythms={completedRhythms}
                 undoableRhythms={undoableRhythms}
+                satisfiedRhythmIds={satisfiedRhythmIds}
+                showTended={previewData.showTended}
+                onShowTendedChange={setShowTendedPreference}
+                initializing={!hydrated}
                 onRhythmHistory={openRhythmHistory}
                 onEditRhythm={(rhythm, event, returnToSuggestions) => openRhythmEditor(event, rhythm, {
                   ...(returnToSuggestions ? { returnToSuggestions } : {})
@@ -2871,6 +2973,10 @@ function PreviewWorkspace({
           rhythmScores={rhythmScoreResults}
           completedRhythms={completedRhythms}
           undoableRhythms={undoableRhythms}
+          satisfiedRhythmIds={satisfiedRhythmIds}
+          showTended={previewData.showTended}
+          onShowTendedChange={setShowTendedPreference}
+          initializing={!hydrated}
           onFriendshipsChange={friendships => setPreviewData(previous => ({ ...previous, friendships }))}
           onEditPerson={openPersonDetailsEditor}
           onAddRhythm={(event, personId) => openRhythmEditor(event, undefined, {
@@ -3064,7 +3170,9 @@ function PreviewWorkspace({
                 ...(activeRhythm.categoryIds?.includes('health') && !activeRhythmIsArchived
                   ? { onTend: event => openCompletion(activeRhythm.id, event) }
                   : {}),
-                ...(undoableRhythms.has(activeRhythm.id) ? { onUndo: () => undoTend(activeRhythm.id) } : {}),
+                ...(undoableRhythms.has(activeRhythm.id) && !activeRhythm.healthLogCapability
+                  ? { onUndo: () => undoTend(activeRhythm.id) }
+                  : {}),
                 ...(isEditableRhythmId(activeRhythm.id)
                   ? {
                       onEdit: event => openRhythmEditor(event, activeRhythm)
@@ -3073,7 +3181,9 @@ function PreviewWorkspace({
               }
             : {
                 completed: completedRhythms.has(activeRhythm.id),
-                ...(undoableRhythms.has(activeRhythm.id) ? { onUndo: () => undoTend(activeRhythm.id) } : {})
+                ...(undoableRhythms.has(activeRhythm.id) && !activeRhythm.healthLogCapability
+                  ? { onUndo: () => undoTend(activeRhythm.id) }
+                  : {})
               })}
           onClose={() => setActiveRhythmId(null)}
         />

@@ -63,12 +63,15 @@ describe('shared Person settings editor', () => {
       }
     });
     const dialog = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
+    expect(dialog.classList.contains('dialog--phone-fullscreen')).toBe(true);
+    expect(within(dialog).getByRole('button', { name: 'Close Person settings' })).toBeTruthy();
     expect(within(dialog).getByRole('combobox', { name: 'Category: Marriage' })).toBeTruthy();
     expect((within(dialog).getByLabelText('Birthday') as HTMLInputElement).value).toBe('Feb 29');
     expect((within(dialog).getByLabelText('Anniversary') as HTMLInputElement).value).toBe('Dec 2');
-    expect(within(dialog).getAllByText(/Delete to clear it/)).toHaveLength(2);
+    expect(within(dialog).getAllByText(/Clear the saved partial date/)).toHaveLength(2);
     expect(within(dialog).queryByText('Year unknown')).toBeNull();
-    expect(within(dialog).queryByLabelText('Relationship')).toBeNull();
+    expect(within(dialog).getByRole('combobox', { name: 'Relationship: Spouse' })).toBeTruthy();
+    expect(dialog.querySelector('.money-goal-dialog__intro')?.textContent).toBe('Spouse');
 
     await chooseOption(user, dialog, 'Love language', 'Words of Affirmation');
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
@@ -103,35 +106,125 @@ describe('shared Person settings editor', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it('restores Classic relationship groups and saves Relationship independently of Category', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn(() => null);
+    renderEditor(onSave, vi.fn(), {
+      categoryIds: ['marriage'],
+      details: { personId: 'sample-person-avery', relationshipLabel: 'Aunt-by-choice' }
+    });
+    const dialog = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
+    expect(within(dialog).getByText('Aunt-by-choice')).toBeTruthy();
+    const relationship = within(dialog).getByRole('combobox', { name: 'Relationship: Custom...' });
+    await user.click(relationship);
+    const listbox = within(dialog).getByRole('listbox', { name: 'Relationship' });
+    const family = within(listbox).getByRole('group', { name: 'Family' });
+    expect(within(family).getAllByRole('option').map(option => option.textContent?.trim())).toEqual([
+      'Spouse', 'Son', 'Daughter', 'Bonus son', 'Bonus daughter', 'Father', 'Mother',
+      'Brother', 'Sister', 'Son-in-law', 'Daughter-in-law', 'Grandchild', 'Nephew',
+      'Niece', 'In-law'
+    ]);
+    const friends = within(listbox).getByRole('group', { name: 'Friends & others' });
+    expect(within(friends).getAllByRole('option').map(option => option.textContent?.trim())).toEqual([
+      'Family', 'Friend', 'Close friend', 'Mentor', 'Mentee', 'Coworker', 'Neighbor',
+      'Small group friend', 'Accountability partner', 'Pastor', 'Other'
+    ]);
+    await user.keyboard('{Escape}');
+    await chooseOption(user, dialog, 'Relationship', 'Son');
+    expect(dialog.querySelector('.money-goal-dialog__intro')?.textContent).toBe('Son');
+    expect(within(dialog).getByRole('combobox', { name: 'Category: Marriage' })).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      categoryIds: ['marriage'],
+      categoryChanged: false,
+      relationshipChoice: 'Son',
+      relationshipLabel: 'Son',
+      relationshipChanged: true
+    }));
+  });
+
+  it('supports a staged custom relationship, cancel, and failed-save draft retention', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn<(draft: PersonDetailsDraft) => string | null>(
+      () => 'Preview storage changed in another tab. No person settings were saved.'
+    );
+    const { onClose } = renderEditor(onSave);
+    const dialog = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
+    await chooseOption(user, dialog, 'Relationship', 'Custom...');
+    const custom = within(dialog).getByRole('textbox', { name: 'Custom relationship' });
+    await user.type(custom, 'Aunt-by-choice');
+    expect(within(dialog).getByText('Aunt-by-choice')).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(within(dialog).getByRole('alert').textContent)
+      .toBe('Preview storage changed in another tab. No person settings were saved.');
+    expect((within(dialog).getByRole('textbox', { name: 'Custom relationship' }) as HTMLInputElement).value)
+      .toBe('Aunt-by-choice');
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      relationshipChoice: 'custom',
+      relationshipLabel: 'Aunt-by-choice',
+      relationshipChanged: true
+    }));
+  });
+
+  it('saves edits to an imported custom relationship without changing Category', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn(() => null);
+    renderEditor(onSave, vi.fn(), {
+      categoryIds: ['parenting'],
+      details: { personId: 'sample-person-avery', relationshipLabel: 'Aunt-by-choice' }
+    });
+    const dialog = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
+    const custom = within(dialog).getByRole('textbox', { name: 'Custom relationship' });
+    await user.clear(custom);
+    await user.type(custom, 'Godmother');
+    expect(dialog.querySelector('.money-goal-dialog__intro')?.textContent).toBe('Godmother');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      categoryIds: ['parenting'],
+      categoryChanged: false,
+      relationshipChoice: 'custom',
+      relationshipLabel: 'Godmother',
+      relationshipChanged: true
+    }));
+  });
+
   it('discards category changes on Cancel and retains them after a failed save', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn<(draft: PersonDetailsDraft) => string | null>(
       () => 'Preview storage changed in another tab. No person settings were saved.'
     );
     const onClose = vi.fn();
-    const { rerender } = renderEditor(onSave, onClose, { categoryIds: ['marriage', 'friends'] });
+    const options = {
+      categoryIds: ['marriage', 'friends'] as ('marriage' | 'parenting' | 'friends')[],
+      details: {
+        personId: 'sample-person-avery' as const,
+        relationshipLabel: 'Spouse',
+        birthday: { monthDay: '02-29' }
+      }
+    };
+    const { unmount } = renderEditor(onSave, onClose, options);
     const dialog = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
     await chooseOption(user, dialog, 'Category', 'Parenting');
+    await chooseOption(user, dialog, 'Relationship', 'Son');
+    await user.click(within(dialog).getByRole('button', { name: 'Clear birthday' }));
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(onSave).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalledOnce();
 
-    rerender(
-      <PersonDetailsEditor
-        personId="sample-person-avery"
-        personName="Avery Brooks"
-        today="2026-10-31"
-        categoryIds={['marriage', 'friends']}
-        onSave={onSave}
-        onClose={onClose}
-      />
-    );
+    unmount();
+    renderEditor(onSave, onClose, options);
     const retryDialog = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
     await chooseOption(user, retryDialog, 'Category', 'Parenting');
+    await chooseOption(user, retryDialog, 'Relationship', 'Son');
+    await user.click(within(retryDialog).getByRole('button', { name: 'Clear birthday' }));
     await user.click(within(retryDialog).getByRole('button', { name: 'Save' }));
     expect(within(retryDialog).getByRole('alert').textContent)
       .toBe('Preview storage changed in another tab. No person settings were saved.');
     expect(within(retryDialog).getByRole('combobox', { name: 'Category: Parenting' })).toBeTruthy();
+    expect(within(retryDialog).getByRole('combobox', { name: 'Relationship: Son' })).toBeTruthy();
+    expect(within(retryDialog).getByLabelText('Birthday')).toHaveProperty('value', '');
+    expect(retryDialog.querySelector('.money-goal-dialog__intro')?.textContent).toBe('Son');
     expect(onClose).toHaveBeenCalledOnce();
   });
 
@@ -153,7 +246,7 @@ describe('shared Person settings editor', () => {
     const anniversary = within(dialog).getByLabelText('Anniversary');
     fireEvent.change(anniversary, { target: { value: '2010-12-02' } });
     expect(within(dialog).queryByRole('button', { name: 'Clear birthday' })).toBeNull();
-    expect(within(dialog).queryByRole('button', { name: 'Clear anniversary' })).toBeNull();
+    expect(within(dialog).getByRole('button', { name: 'Clear anniversary' })).toBeTruthy();
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
       birthdayDate: '',
@@ -161,6 +254,37 @@ describe('shared Person settings editor', () => {
       anniversaryYearUnknown: false
     }));
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('leaves empty optional dates empty on focus and dismissal and clears populated dates accessibly', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn(() => null);
+    renderEditor(onSave, vi.fn(), {
+      details: { personId: 'sample-person-avery' }
+    });
+    const dialog = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
+    const birthday = within(dialog).getByLabelText('Birthday') as HTMLInputElement;
+    const anniversary = within(dialog).getByLabelText('Anniversary') as HTMLInputElement;
+    expect(birthday.parentElement?.classList.contains('person-date-field--empty')).toBe(true);
+    expect(within(dialog).queryByRole('button', { name: 'Clear birthday' })).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: 'Clear anniversary' })).toBeNull();
+    await user.click(anniversary);
+    await user.tab();
+    expect(anniversary.value).toBe('');
+    expect(birthday.value).toBe('');
+
+    fireEvent.change(birthday, { target: { value: '2000-02-29' } });
+    expect(birthday.parentElement?.classList.contains('person-date-field--empty')).toBe(false);
+    expect(within(dialog).getByRole('button', { name: 'Clear birthday' })).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Clear birthday' }));
+    expect(birthday.value).toBe('');
+    expect(birthday.parentElement?.classList.contains('person-date-field--empty')).toBe(true);
+    expect(within(dialog).queryByRole('button', { name: 'Clear birthday' })).toBeNull();
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      birthdayDate: '',
+      anniversaryDate: ''
+    }));
   });
 
   it('stages the circular photo row and only saves a prepared replacement', async () => {

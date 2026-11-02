@@ -25,6 +25,7 @@ import { isRhythmRelevantOnDate } from '../domain/category-rhythms.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
+import { TendedRhythmList } from './TendedRhythmList.tsx';
 
 type HealthFitnessTab = 'today' | 'rhythms' | 'progress';
 type ProgressTab = 'strength' | 'cardio' | 'weight';
@@ -41,6 +42,10 @@ type HealthFitnessViewProps = {
   rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
+  satisfiedRhythmIds?: ReadonlySet<string>;
+  showTended?: boolean;
+  onShowTendedChange?: (show: boolean) => void;
+  initializing?: boolean;
   foundations: readonly FoundationPreview[];
   onAddRhythm: (event: MouseEvent<HTMLButtonElement>) => void;
   onEditRhythm: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
@@ -77,6 +82,10 @@ export function HealthFitnessView({
   rhythmScores,
   completedRhythms,
   undoableRhythms,
+  satisfiedRhythmIds = new Set(),
+  showTended = false,
+  onShowTendedChange = () => undefined,
+  initializing = false,
   foundations,
   onAddRhythm,
   onEditRhythm,
@@ -283,50 +292,69 @@ export function HealthFitnessView({
             <header className="marriage-section-heading">
               <div>
                 <h3 id="health-today-heading">Today</h3>
-                <p>{todayRhythms.filter(rhythm => completedRhythms.has(rhythm.id)).length} of {todayRhythms.length} Rhythms tended today</p>
+                <p>{todayRhythms.filter(rhythm => satisfiedRhythmIds.has(rhythm.id)).length} of {todayRhythms.length} Rhythms tended today</p>
               </div>
             </header>
-            {todayRhythms.length > 0
-              ? (
-                <div className="marriage-rhythm-list current-plan-item-group">
-                  {todayRhythms.map(rhythm => (
-                    <RhythmDetailsDialog
-                      key={rhythm.id}
-                      rhythm={rhythm}
-                      inline
-                      completed={completedRhythms.has(rhythm.id)}
-                      statusLabel={rhythmLastActivityLabel(rhythm, todayDate)}
-                      people={peopleForRhythm(rhythm, people)}
-                      foundations={foundations}
-                      onPersonSelect={onPersonSelect}
-                      onOpenFoundation={(id, openerId) => onOpenFoundation(id, openerId, 'today')}
-                      onOpenCategory={onOpenCategory}
-                      headingId={`health-today-rhythm-${rhythm.id}`}
-                      archived={false}
-                      healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
-                      onHistory={event => onRhythmHistory(rhythm.id, event, 'today')}
-                      {...(isEditableRhythmId(rhythm.id)
-                        ? {
-                            onTend: (event: MouseEvent<HTMLButtonElement>) => openRhythmLog(rhythm.id, event),
-                            onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event),
-                            ...(undoableRhythms.has(rhythm.id) ? { onUndo: () => onUndoRhythm(rhythm.id) } : {}),
-                            completionActionLabel: 'Log',
-                            completionActionAccessibleLabel: rhythm.healthLogCapability === 'cardio'
-                              ? 'Log run'
-                              : rhythm.healthLogCapability === 'weight' ? 'Log weigh-in' : 'Log workout',
-                            completedActionLabel: rhythm.healthLogCapability === 'weight' ? 'Weighed in' : 'Logged'
-                          }
-                        : {})}
-                      onClose={() => undefined}
-                    />
-                  ))}
-                </div>
-              )
-              : (
-                <div className="marriage-empty-state">
-                  <p>{rhythms.length > 0 ? 'All caught up. Nothing to tend to.' : 'No active Rhythms.'}</p>
-                </div>
-              )}
+            <TendedRhythmList
+              rhythms={todayRhythms}
+              satisfiedRhythmIds={satisfiedRhythmIds}
+              undoableRhythmIds={undoableRhythms}
+              showTended={showTended}
+              onShowTendedChange={onShowTendedChange}
+              onUndo={onUndoRhythm}
+              resetKey={`${selected}:${todayDate}`}
+              initializing={initializing}
+            >
+              {({ visibleRhythmIds, itemProps }) => {
+                const visibleRhythms = todayRhythms.filter(rhythm => visibleRhythmIds.has(rhythm.id));
+                return visibleRhythms.length > 0
+                  ? (
+                    <div className="marriage-rhythm-list current-plan-item-group">
+                      {visibleRhythms.map(rhythm => (
+                        <div key={rhythm.id} {...itemProps(rhythm.id)}>
+                          <RhythmDetailsDialog
+                            rhythm={rhythm}
+                            inline
+                            completed={completedRhythms.has(rhythm.id)}
+                            statusLabel={rhythmLastActivityLabel(rhythm, todayDate)}
+                            people={peopleForRhythm(rhythm, people)}
+                            foundations={foundations}
+                            onPersonSelect={onPersonSelect}
+                            onOpenFoundation={(id, openerId) => onOpenFoundation(id, openerId, 'today')}
+                            onOpenCategory={onOpenCategory}
+                            headingId={`health-today-rhythm-${rhythm.id}`}
+                            archived={false}
+                            healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
+                            onHistory={event => onRhythmHistory(rhythm.id, event, 'today')}
+                            {...(isEditableRhythmId(rhythm.id)
+                              ? {
+                                  onTend: (event: MouseEvent<HTMLButtonElement>) => openRhythmLog(rhythm.id, event),
+                                  onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event),
+                                  ...(undoableRhythms.has(rhythm.id) && !rhythm.healthLogCapability
+                                    ? { onUndo: () => onUndoRhythm(rhythm.id) }
+                                    : {}),
+                                  completionActionLabel: 'Log',
+                                  completionActionAccessibleLabel: rhythm.healthLogCapability === 'cardio'
+                                    ? 'Log run'
+                                    : rhythm.healthLogCapability === 'weight' ? 'Log weigh-in' : 'Log workout',
+                                  completedActionLabel: rhythm.healthLogCapability === 'weight' ? 'Weighed in' : 'Logged'
+                                }
+                              : {})}
+                            onClose={() => undefined}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )
+                  : todayRhythms.length > 0
+                    ? <div className="marriage-empty-state" role="status"><p>You’ve tended everything here.</p></div>
+                    : (
+                      <div className="marriage-empty-state">
+                        <p>{rhythms.length > 0 ? 'All caught up. Nothing to tend to.' : 'No active Rhythms.'}</p>
+                      </div>
+                    );
+              }}
+            </TendedRhythmList>
           </section>
           <div className="health-fitness-quick-actions" role="group" aria-label="Fitness quick actions">
             <button type="button" className="btn mini" onClick={startWorkout}>Start workout</button>

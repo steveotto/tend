@@ -34,6 +34,10 @@ import {
 } from '../src/domain/rhythm-seasons.ts';
 import { localDateString } from '../src/domain/money-goals.ts';
 import { formatRhythmSchedule } from '../src/domain/rhythm-schedule.ts';
+import {
+  latestOnTrackHistoryEntries,
+  ON_TRACK_SCORE_HISTORY_DISPLAY_LIMIT
+} from '../src/domain/rhythm-score-presentation.ts';
 import { historyButtonName } from './history-button-name.ts';
 
 afterEach(cleanup);
@@ -142,6 +146,30 @@ function EditableHistoryHarness() {
 }
 
 describe('shared Rhythm history', () => {
+  it('selects up to seven chronological On Track history entries, including Today when present', () => {
+    const makeEntries = (count: number) => Array.from({ length: count }, (_, index) => ({
+      kind: 'occurrence' as const,
+      key: `entry-${index + 1}`,
+      date: `2026-01-${String(index + 1).padStart(2, '0')}`,
+      status: index === count - 1 ? 'today' as const : 'missed' as const,
+      score: Math.max(0, 100 - (index + 1) * 10)
+    }));
+
+    const fewer = makeEntries(4);
+    const exactlySeven = makeEntries(7);
+    const more = makeEntries(10);
+
+    expect(latestOnTrackHistoryEntries(fewer, ON_TRACK_SCORE_HISTORY_DISPLAY_LIMIT)).toEqual(fewer);
+    expect(latestOnTrackHistoryEntries(exactlySeven, ON_TRACK_SCORE_HISTORY_DISPLAY_LIMIT)).toEqual(exactlySeven);
+    expect(latestOnTrackHistoryEntries(more, ON_TRACK_SCORE_HISTORY_DISPLAY_LIMIT)).toEqual(more.slice(-7));
+    expect(latestOnTrackHistoryEntries(more, ON_TRACK_SCORE_HISTORY_DISPLAY_LIMIT).map(entry =>
+      entry.kind === 'zero-score-span' ? entry.startDate : entry.date
+    ))
+      .toEqual(['2026-01-04', '2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09', '2026-01-10']);
+    const newest = latestOnTrackHistoryEntries(more, ON_TRACK_SCORE_HISTORY_DISPLAY_LIMIT).at(-1);
+    expect(newest?.kind === 'occurrence' ? newest.status : undefined).toBe('today');
+  });
+
   it('formats Season date ranges compactly while retaining full accessible dates', () => {
     expect(formatRhythmSeasonDateRange('2026-09-01', '2026-10-16')).toEqual({
       display: 'Sep 1 – Oct 16, 2026',
@@ -1602,7 +1630,7 @@ describe('shared Rhythm history', () => {
     expect(within(onTrackDetails).getByText(/Last tended/)).toBeTruthy();
     expect(within(onTrackDetails).queryByText('Today', { exact: true })).toBeNull();
     expect(within(onTrackDetails).queryByText('No deduction')).toBeNull();
-    const lastTendedDate = addCalendarDays(localDateInTimeZone(new Date(), 'UTC'), -4);
+    const lastTendedDate = records.at(-1)!.effectiveDate;
     expect(within(onTrackDetails).getAllByText(new RegExp(shortTestDate(lastTendedDate))).length).toBeGreaterThan(0);
     expect(within(onTrackDetails).getByText('3')).toBeTruthy();
     expect(within(onTrackDetails).getByText('Per miss')).toBeTruthy();
@@ -1616,16 +1644,20 @@ describe('shared Rhythm history', () => {
       const score = item.querySelector('strong')?.textContent;
       return `${label} ${score}`;
     });
-    expect(onTrackItems).toHaveLength(5);
-    expect(within(onTrackDetails).getByRole('button', { name: 'Show earlier steps' })).toBeTruthy();
-    expect(onTrackItems[0]).toBe(`${shortTestDate(lastTendedDate)} · Tended 100`);
-    expect(onTrackItems.slice(1, 4).every(item => item.includes(' · Missed '))).toBe(true);
+    expect(onTrackItems).toHaveLength(7);
+    expect(within(onTrackDetails).queryByRole('button', { name: 'Show earlier steps' })).toBeNull();
+    expect(within(onTrackDetails).queryByRole('button', { name: 'Show less' })).toBeNull();
+    expect(onTrackItems.slice(0, 3).every(item => item.includes(' · Tended '))).toBe(true);
+    expect(onTrackItems[2]).toBe(`${shortTestDate(lastTendedDate)} · Tended 100`);
+    expect(onTrackItems.slice(3, 6).every(item => item.includes(' · Missed '))).toBe(true);
     expect(onTrackItems.at(-1)).toBe(`Today · ${shortTestDate(localDateInTimeZone(new Date(), 'UTC'))} 70`);
     const completedEntry = within(onTrackDetails).getAllByRole('listitem')[0]!;
     expect(completedEntry.getAttribute('aria-label')).toMatch(
       /Qualifying completion on .* reset the missed-occurrence count and On Track score to 100/
     );
-    const missedEntry = within(onTrackDetails).getAllByRole('listitem')[1]!;
+    const missedEntry = within(onTrackDetails).getAllByRole('listitem').find(item =>
+      item.getAttribute('aria-label')?.startsWith('Missed scheduled occurrence')
+    )!;
     expect(missedEntry.getAttribute('aria-label')).toMatch(
       /Missed scheduled occurrence on .* 10-point deduction applied\. Resulting On Track score: \d+\./
     );
@@ -1776,10 +1808,10 @@ describe('shared Rhythm history', () => {
     expect(screen.queryByRole('meter', { name: 'On Track score' })).toBeNull();
   });
 
-  it('bounds On Track history, expands in batches, preserves totals and restores focus when collapsed', async () => {
+  it('limits displayed On Track history to seven without changing scores or exposing disclosure controls', async () => {
     const user = userEvent.setup();
     const asOfDate = localDateInTimeZone(new Date(), 'UTC');
-    const trackingStartDate = '1900-01-01';
+    const trackingStartDate = addCalendarDays(asOfDate, -20);
     const rhythm = rhythmForSchedule({ frequency: 'daily' }, trackingStartDate);
     const { rerender } = render(
       <RhythmHistoryView rhythm={rhythm} completionHistoryAvailable />
@@ -1789,37 +1821,15 @@ describe('shared Rhythm history', () => {
     const timeline = screen.getByRole('list', { name: 'On Track score changes' });
     const initialScore = screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow');
     const initialFormula = document.querySelector('.rhythm-history-view__score-details-column:last-child .rhythm-history-view__calculation')?.textContent;
-    const earlier = screen.getByRole('button', { name: 'Show earlier steps' });
-    expect(earlier.getAttribute('aria-controls')).toBe(timeline.id);
-    expect(earlier.getAttribute('aria-expanded')).toBe('false');
-    expect(within(timeline).getAllByRole('listitem')).toHaveLength(5);
+    const displayedEntries = within(timeline).getAllByRole('listitem');
+    expect(displayedEntries.length).toBeLessThanOrEqual(ON_TRACK_SCORE_HISTORY_DISPLAY_LIMIT);
+    expect(screen.queryByRole('button', { name: 'Show earlier steps' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Show less' })).toBeNull();
     expect(within(timeline).getAllByRole('listitem').at(-1)?.querySelector('span')?.textContent)
       .toBe(`Today · ${shortTestDate(asOfDate)}`);
-    expect(within(timeline).getAllByRole('listitem').map(item => item.textContent).join(' '))
+    expect(displayedEntries.map(item => item.textContent).join(' '))
       .toMatch(/more misses/);
 
-    earlier.focus();
-    await user.keyboard('{Enter}');
-    expect(earlier.getAttribute('aria-expanded')).toBe('true');
-    expect(within(timeline).getAllByRole('listitem')).toHaveLength(10);
-    await user.click(screen.getByRole('button', { name: 'Show earlier steps' }));
-    expect(within(timeline).getAllByRole('listitem').length).toBeLessThanOrEqual(15);
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show less' }));
-    expect(within(timeline).getAllByRole('listitem').some(item =>
-      item.getAttribute('aria-label')?.includes('additional missed occurrences')
-        && item.querySelector('strong')?.textContent === '0'
-    )).toBe(true);
-    expect(within(timeline).getAllByRole('listitem').some(item =>
-      item.querySelector('span')?.textContent?.includes('more misses ·')
-    )).toBe(true);
-
-    const showLess = screen.getByRole('button', { name: 'Show less' });
-    expect(showLess.getAttribute('aria-controls')).toBe(timeline.id);
-    expect(showLess.getAttribute('aria-expanded')).toBe('true');
-    showLess.focus();
-    await user.keyboard('{Enter}');
-    expect(within(timeline).getAllByRole('listitem')).toHaveLength(5);
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show earlier steps' }));
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe(initialScore);
     expect(document.querySelector('.rhythm-history-view__score-details-column:last-child .rhythm-history-view__calculation')?.textContent)
       .toBe(initialFormula);
@@ -1835,8 +1845,9 @@ describe('shared Rhythm history', () => {
     await user.click(screen.getByRole('button', { name: 'Show Consistency and On Track score details' }));
     expect(screen.getByRole('list', { name: 'On Track score changes' })).toBeTruthy();
     expect(within(screen.getByRole('list', { name: 'On Track score changes' })).getAllByRole('listitem'))
-      .toHaveLength(5);
-    expect(screen.getByRole('button', { name: 'Show earlier steps' }).getAttribute('aria-expanded')).toBe('false');
+      .toHaveLength(7);
+    expect(screen.queryByRole('button', { name: 'Show earlier steps' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Show less' })).toBeNull();
   });
 
   it('keeps a completed-today state visible when the short timeline has no disclosure', async () => {

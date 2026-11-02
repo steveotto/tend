@@ -42,6 +42,9 @@ export type PersonDetails = {
 export type PersonDetailsDraft = {
   categoryIds: PersonPickerGroupId[];
   categoryChanged: boolean;
+  relationshipChoice: string;
+  relationshipLabel: string;
+  relationshipChanged: boolean;
   birthdayDate: string;
   birthdayYearUnknown: boolean;
   anniversaryDate: string;
@@ -92,6 +95,11 @@ export function personDetailsDraft(
   return {
     categoryIds: [...categoryIds],
     categoryChanged: false,
+    relationshipChoice: details?.relationshipLabel
+      ? isStandardRelationship(details.relationshipLabel) ? details.relationshipLabel : 'custom'
+      : 'not-set',
+    relationshipLabel: details?.relationshipLabel ?? '',
+    relationshipChanged: false,
     birthdayDate: pickerDate(details?.birthday),
     birthdayYearUnknown: Boolean(details?.birthday && details.birthday.year === undefined),
     anniversaryDate: pickerDate(details?.anniversary),
@@ -133,6 +141,18 @@ export function validatePersonDetailsDraft(
     || draft.categoryIds.length > 1 && draft.categoryChanged) {
     errors.categoryIds = 'Choose one supported category.';
   }
+  if (draft.relationshipChanged) {
+    if (draft.relationshipChoice === 'custom') {
+      if (!draft.relationshipLabel.trim()) {
+        errors.relationshipLabel = 'Enter a custom relationship or choose an established option.';
+      } else if (draft.relationshipLabel.length > 80) {
+        errors.relationshipLabel = 'Relationship must be 80 characters or fewer.';
+      }
+    } else if (draft.relationshipChoice !== 'not-set'
+      && !isStandardRelationship(draft.relationshipChoice)) {
+      errors.relationshipChoice = 'Choose an established relationship or Custom.';
+    }
+  }
   const birthday = validatePickerDate(
     draft.birthdayDate,
     draft.birthdayYearUnknown,
@@ -163,6 +183,13 @@ export function validatePersonDetailsDraft(
   const result: Omit<PersonDetails, 'personId'> = {
     ...(birthday ? { birthday } : {}),
     ...(anniversary ? { anniversary } : {}),
+    ...(draft.relationshipChanged && draft.relationshipChoice !== 'not-set'
+      ? {
+          relationshipLabel: draft.relationshipChoice === 'custom'
+            ? draft.relationshipLabel.trim()
+            : draft.relationshipChoice
+        }
+      : {}),
     ...(draft.connectionStyle ? { connectionStyle: draft.connectionStyle as ConnectionStyle } : {}),
     ...(draft.photoDataUrl ? { photoDataUrl: draft.photoDataUrl } : {})
   };
@@ -223,7 +250,9 @@ export function savePersonDetailsCommand(
   const previous = current.find(item => item.personId === personId);
   const nextDetails = {
     ...result.details,
-    ...(previous?.relationshipLabel === undefined ? {} : { relationshipLabel: previous.relationshipLabel })
+    ...(!draft.relationshipChanged && previous?.relationshipLabel !== undefined
+      ? { relationshipLabel: previous.relationshipLabel }
+      : {})
   };
   if (Object.keys(nextDetails).length > 0) remaining.push({ personId, ...nextDetails });
   return { valid: true, details: remaining };

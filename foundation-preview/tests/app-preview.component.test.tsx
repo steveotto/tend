@@ -463,6 +463,8 @@ describe('Tend Today preview', () => {
     await user.click(within(screen.getByRole('article', { name: 'Pray together' })).getByRole('button', {
       name: historyButtonName('View scores and history for Pray together')
     }));
+    const rhythmDialog = screen.getByRole('dialog', { name: 'Pray together' });
+    expect(rhythmDialog.classList.contains('dialog--phone-fullscreen')).toBe(true);
     const history = screen.getByRole('region', { name: 'History for Pray together' });
     await user.click(within(history).getByRole('button', { name: 'Marriage: Connection' }));
     expect(await screen.findByRole('heading', { name: 'Linked Rhythms · 1', level: 3 })).toBeTruthy();
@@ -486,8 +488,12 @@ describe('Tend Today preview', () => {
     await screen.findByText('Preview data saved in this browser.');
     await showAnytime(user);
 
+    const todayCard = screen.getByRole('article', { name: 'Pray together' });
+    expect(todayCard.querySelector('.rhythm-area-badge__visual > .area-svg-icon')).toBeTruthy();
     await user.click(document.getElementById('rhythm-category-badge-sample-pray-together-parenting')!);
     expect(await screen.findByRole('heading', { name: 'Parenting' })).toBeTruthy();
+    const categoryCard = screen.getByRole('article', { name: 'Pray together' });
+    expect(categoryCard.querySelector('.rhythm-area-badge__visual > .area-svg-icon')).toBeTruthy();
   });
 
   it('restores the originating Marriage tab after opening a Foundation from shared Rhythm history', async () => {
@@ -509,6 +515,8 @@ describe('Tend Today preview', () => {
     await user.click(screen.getByRole('button', {
       name: historyButtonName('View scores and history for History navigation sample')
     }));
+    expect(screen.getByRole('dialog', { name: 'History navigation sample' })
+      .classList.contains('dialog--phone-fullscreen')).toBe(true);
     const history = screen.getByRole('region', { name: 'History for History navigation sample' });
     await user.click(within(history).getByRole('button', { name: 'Marriage: Connection' }));
     expect(await screen.findByRole('heading', { name: 'Connection', level: 3 })).toBeTruthy();
@@ -1796,7 +1804,9 @@ describe('Tend Today preview', () => {
     });
     await user.click(within(details).getByRole('button', { name: 'Close details' }));
 
-    await user.click(within(card).getByRole('button', { name: 'Edit Season flow test' }));
+    await user.click(screen.getByRole('button', { name: /Show tended/ }));
+    const tendedCard = screen.getByRole('article', { name: 'Season flow test' });
+    await user.click(within(tendedCard).getByRole('button', { name: 'Edit Season flow test' }));
     const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
     await user.click(within(editor).getByRole('button', { name: 'Change frequency, currently Daily' }));
     await user.click(within(editor).getByRole('combobox', { name: 'Frequency: Daily' }));
@@ -2969,13 +2979,16 @@ describe('Tend Today preview', () => {
     const editButton = within(profileForEdit).getByRole('button', { name: 'Person settings' });
     await user.click(editButton);
     let editor = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
-    expect(within(editor).queryByLabelText('Relationship')).toBeNull();
+    expect(within(editor).getByRole('combobox', { name: 'Relationship: Spouse' })).toBeTruthy();
     expect(editor.querySelector('.person-details-editor__photo-preview img')?.getAttribute('src'))
       .toBe('data:image/jpeg;base64,/9j/2Q==');
     expect((within(editor).getByLabelText('Birthday') as HTMLInputElement).value).toBe('Feb 29');
     expect((within(editor).getByLabelText('Anniversary') as HTMLInputElement).value).toBe('Dec 31');
     await user.click(within(editor).getByRole('combobox', { name: 'Category: Marriage' }));
     await user.click(within(editor).getByRole('option', { name: 'Friend' }));
+    await user.click(within(editor).getByRole('combobox', { name: 'Relationship: Spouse' }));
+    await user.click(within(editor).getByRole('option', { name: 'Son' }));
+    expect(editor.querySelector('.money-goal-dialog__intro')?.textContent).toBe('Son');
     fireEvent.change(within(editor).getByLabelText('Birthday'), { target: { value: '2000-02-29' } });
     fireEvent.change(within(editor).getByLabelText('Anniversary'), { target: { value: '2010-12-31' } });
     await user.click(within(editor).getByRole('combobox', { name: 'Love language: Quality Time' }));
@@ -2995,7 +3008,7 @@ describe('Tend Today preview', () => {
     if (savedResult.valid) {
       expect(savedResult.envelope.data.personDetails).toEqual([{
         personId: 'sample-person-avery',
-        relationshipLabel: 'Spouse',
+        relationshipLabel: 'Son',
         birthday: { monthDay: '02-29', year: 2000 },
         anniversary: { monthDay: '12-31', year: 2010 },
         connectionStyle: 'wa',
@@ -3021,6 +3034,7 @@ describe('Tend Today preview', () => {
     const updatedSettingsButton = within(profileForEdit).getByRole('button', { name: 'Person settings' });
     await user.click(updatedSettingsButton);
     editor = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
+    expect(within(editor).getByRole('combobox', { name: 'Relationship: Son' })).toBeTruthy();
     await user.click(within(editor).getByRole('combobox', { name: 'Category: Friend' }));
     await user.click(within(editor).getByRole('option', { name: 'Marriage' }));
     await user.click(within(editor).getByRole('combobox', { name: 'Connection cadence: Monthly' }));
@@ -3075,7 +3089,7 @@ describe('Tend Today preview', () => {
     render(<App />);
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
       .getByRole('button', { name: 'People' }));
-    expect(screen.getByText('Spouse')).toBeTruthy();
+    expect(screen.getByText('Son')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
     expect(screen.getByRole('main', { name: 'Avery Brooks' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Back to People' }));
@@ -3084,8 +3098,10 @@ describe('Tend Today preview', () => {
     const clearDetailsButton = within(profileToClear).getByRole('button', { name: 'Person settings' });
     await user.click(clearDetailsButton);
     editor = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
-    fireEvent.change(within(editor).getByLabelText('Birthday'), { target: { value: '' } });
-    fireEvent.change(within(editor).getByLabelText('Anniversary'), { target: { value: '' } });
+    await user.click(within(editor).getByRole('button', { name: 'Clear birthday' }));
+    await user.click(within(editor).getByRole('button', { name: 'Clear anniversary' }));
+    await user.click(within(editor).getByRole('combobox', { name: 'Relationship: Son' }));
+    await user.click(within(editor).getByRole('option', { name: 'Not set' }));
     await user.click(within(editor).getByRole('combobox', { name: 'Love language: Words of Affirmation' }));
     await user.click(within(editor).getByRole('option', { name: 'Not set' }));
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
@@ -3098,7 +3114,6 @@ describe('Tend Today preview', () => {
     expect(cleared.valid).toBe(true);
     if (cleared.valid) expect(cleared.envelope.data.personDetails).toEqual([{
       personId: 'sample-person-avery',
-      relationshipLabel: 'Spouse',
       photoDataUrl: 'data:image/jpeg;base64,/9j/2Q=='
     }]);
     if (cleared.valid) {
@@ -3203,9 +3218,15 @@ describe('Tend Today preview', () => {
     await user.click(within(completionDialog).getByRole('button', { name: 'Save' }));
     expect(screen.getByText('1 of 3 tended')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Tended Pray together' }).matches(':disabled')).toBe(true);
-    expect(document.activeElement).toBe(opener);
+    await waitFor(() => {
+      expect([opener, screen.getByRole('button', { name: /Show tended/ })]).toContain(document.activeElement);
+    });
 
-    await user.click(opener);
+    await user.click(screen.getByRole('button', { name: /Show tended/ }));
+    const tendedOpener = screen.getByRole('button', {
+      name: historyButtonName('View scores and history for Pray together')
+    });
+    await user.click(tendedOpener);
     const dialog = await screen.findByRole('dialog', { name: 'Pray together' });
     expect(screen.getByText('1 of 3 tended')).toBeTruthy();
     expect(within(dialog).getByRole('region', { name: 'History for Pray together' })).toBeTruthy();
@@ -3226,7 +3247,7 @@ describe('Tend Today preview', () => {
 
     await user.click(within(dialog).getByRole('button', { name: 'Close details' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(document.activeElement).toBe(opener);
+    expect(document.activeElement).toBe(tendedOpener);
 
     const undo = screen.getByRole('button', { name: 'Undo completion for Pray together' });
     await user.click(undo);
@@ -3738,6 +3759,11 @@ describe('Tend Today preview', () => {
 
     unmount();
     render(<App />);
+    const showTended = screen.getByRole('button', { name: /Show tended/ });
+    expect(showTended.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByRole('button', { name: 'Undo completion for Pray together' })).toBeNull();
+    await user.click(showTended);
+    expect(screen.getByRole('button', { name: /Show tended/ }).getAttribute('aria-pressed')).toBe('true');
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Tended Pray together' }).matches(':disabled')).toBe(true);
       expect(screen.getByRole('button', { name: 'Tended Daily connection' }).matches(':disabled')).toBe(true);
@@ -3758,11 +3784,36 @@ describe('Tend Today preview', () => {
 
     cleanup();
     render(<App />);
+    expect(screen.getByRole('button', { name: /Show tended/ }).getAttribute('aria-pressed')).toBe('true');
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Tend Pray together' }).matches(':disabled')).toBe(false);
       expect(screen.getByRole('button', { name: 'Tended Daily connection' }).matches(':disabled')).toBe(true);
     });
     expect(screen.getByText('1 of 3 tended')).toBeTruthy();
+  });
+
+  it('keeps a completed Today card visible until its completion is persisted', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+
+    const storage = window.localStorage as unknown as MemoryStorage;
+    const originalRaw = storage.getItem(PREVIEW_STORAGE_KEY);
+    const originalSetItem = storage.setItem.bind(storage);
+    const failingWrite = vi.spyOn(storage, 'setItem').mockImplementation((key, value) => {
+      if (key === PREVIEW_STORAGE_KEY) throw new Error('controlled Tend persistence failure');
+      originalSetItem(key, value);
+    });
+
+    await saveCardCompletion(user, 'Pray together');
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent)
+        .toContain('Preview data needs attention.');
+    });
+    expect(screen.getByRole('article', { name: 'Pray together' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Show tended (0)' })).toBeTruthy();
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    failingWrite.mockRestore();
   });
 
   it('uses the shared recording modal from inline cards and returns focus after Cancel and Close', async () => {
@@ -4061,6 +4112,7 @@ describe('Tend Today preview', () => {
     const user = userEvent.setup();
     render(<App />);
     await saveCardCompletion(user, 'Pray together');
+    await user.click(screen.getByRole('button', { name: /Show tended/ }));
     const originalCard = screen.getByRole('article', { name: 'Pray together' });
     await user.click(within(originalCard).getByRole('button', { name: 'Edit Pray together' }));
 
@@ -5930,6 +5982,12 @@ describe('Tend Today preview', () => {
     expect(log.completionId).toBeTruthy();
     expect(saved.envelope.data.datedRhythmCompletions.filter(item => item.id === log.completionId)).toHaveLength(1);
     expect(saved.envelope.data.activeRhythmCompletions.filter(item => item.completionId === log.completionId)).toHaveLength(1);
+
+    await user.click(screen.getByRole('tab', { name: 'Today' }));
+    await user.click(screen.getByRole('button', { name: 'Show tended (1)' }));
+    const linkedCard = screen.getByRole('heading', { name: 'Strength integration session' }).closest('article');
+    expect(linkedCard).toBeTruthy();
+    expect(within(linkedCard!).queryByRole('button', { name: /Undo completion/ })).toBeNull();
 
     await user.click(screen.getByRole('tab', { name: 'Progress' }));
     await user.click(screen.getByRole('tab', { name: 'Workouts' }));

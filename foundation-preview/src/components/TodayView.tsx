@@ -25,6 +25,7 @@ import { TodayWeather } from './TodayWeather.tsx';
 import { TodayDateRow } from './TodayDateRow.tsx';
 import type { TodayWeatherController } from './useTodayWeather.ts';
 import { useTimeBlockSettings } from './TimeBlocksContext.tsx';
+import { TendedRhythmList } from './TendedRhythmList.tsx';
 
 const planTypes: { id: TodayItemType; label: string }[] = [
   { id: 'scheduled', label: 'Scheduled' },
@@ -42,6 +43,10 @@ type TodayViewProps = {
   weatherController: TodayWeatherController;
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
+  satisfiedRhythmIds?: ReadonlySet<string>;
+  showTended?: boolean;
+  onShowTendedChange?: (show: boolean) => void;
+  initializing?: boolean;
   rhythms: readonly RhythmPreview[];
   rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
   search: string;
@@ -66,6 +71,10 @@ export function TodayView({
   weatherController,
   completedRhythms,
   undoableRhythms,
+  satisfiedRhythmIds = new Set(),
+  showTended = false,
+  onShowTendedChange = () => undefined,
+  initializing = false,
   rhythms,
   rhythmScores,
   search,
@@ -92,7 +101,7 @@ export function TodayView({
     [visibleRhythms, planType, focus, evaluationInstant, timeBlocks]
   );
   const planRhythms = planGroups.flatMap(group => group.rhythms);
-  const tendedCount = planRhythms.filter(rhythm => completedRhythms.has(rhythm.id)).length;
+  const tendedCount = planRhythms.filter(rhythm => satisfiedRhythmIds.has(rhythm.id)).length;
   const currentLabel = todayFocusLabel(focus, evaluationInstant, timeBlocks);
   const focusContext = todayFocusContext(focus, planType, evaluationInstant, timeBlocks);
   const weatherTime = focus === 'now'
@@ -273,54 +282,80 @@ export function TodayView({
               </span>
             </div>
           )}
-          <div className="current-plan-items" id="today-plan-items" role="tabpanel" aria-labelledby={`plan-tab-${planType}`}>
-            {planGroups.length ? (
-              planGroups.map(group => (
-                <div className="current-plan-item-group" key={group.id} aria-label={group.title || `${planType === 'scheduled' ? currentLabel : planType} Rhythms`}>
-                  {group.title && <h3 className="current-plan-item-group-title">{group.title}</h3>}
-                  {group.rhythms.map(rhythm => (
-                    <RhythmDetailsDialog
-                      key={rhythm.id}
-                      rhythm={rhythm}
-                      inline
-                      headingId={`today-rhythm-${rhythm.id}-title`}
-                      people={peopleForRhythm(rhythm, people)}
-                      foundations={foundations}
-                      onPersonSelect={onPersonSelect}
-                      onOpenFoundation={onOpenFoundation}
-                      onOpenCategory={categoryId => onNavigate(categoryId)}
-                      completed={completedRhythms.has(rhythm.id)}
-                      healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
-                      onTend={event => onTend(rhythm.id, event)}
-                      {...(rhythm.categoryIds?.includes('health')
-                        ? {
-                            completionActionLabel: 'Log',
-                            completionActionAccessibleLabel: rhythm.healthLogCapability === 'cardio'
-                              ? 'Log run'
-                              : rhythm.healthLogCapability === 'weight' ? 'Log weigh-in' : 'Log workout',
-                            completedActionLabel: rhythm.healthLogCapability === 'weight' ? 'Weighed in' : 'Logged'
-                          }
-                        : {})}
-                      onHistory={event => onHistory(rhythm.id, event)}
-                      {...(isEditableRhythmId(rhythm.id)
-                        ? { onEdit: event => onEditRhythm(rhythm, event) }
-                        : {})}
-                      {...(undoableRhythms.has(rhythm.id) ? { onUndo: () => onUndo(rhythm.id) } : {})}
-                      onClose={() => undefined}
-                    />
-                  ))}
+          <TendedRhythmList
+            rhythms={planRhythms}
+            satisfiedRhythmIds={satisfiedRhythmIds}
+            undoableRhythmIds={undoableRhythms}
+            showTended={showTended}
+            onShowTendedChange={onShowTendedChange}
+            onUndo={onUndo}
+            resetKey={`${planType}:${focus}:${search}`}
+            initializing={initializing}
+          >
+            {({ visibleRhythmIds, itemProps }) => {
+              const visiblePlanGroups = planGroups.flatMap(group => {
+                const rhythms = group.rhythms.filter(rhythm => visibleRhythmIds.has(rhythm.id));
+                return rhythms.length ? [{ ...group, rhythms }] : [];
+              });
+              return (
+                <div className="current-plan-items" id="today-plan-items" role="tabpanel" aria-labelledby={`plan-tab-${planType}`}>
+                  {visiblePlanGroups.length ? (
+                    visiblePlanGroups.map(group => (
+                      <div className="current-plan-item-group" key={group.id} aria-label={group.title || `${planType === 'scheduled' ? currentLabel : planType} Rhythms`}>
+                        {group.title && <h3 className="current-plan-item-group-title">{group.title}</h3>}
+                        {group.rhythms.map(rhythm => (
+                          <div key={rhythm.id} {...itemProps(rhythm.id)}>
+                            <RhythmDetailsDialog
+                              rhythm={rhythm}
+                              inline
+                              headingId={`today-rhythm-${rhythm.id}-title`}
+                              people={peopleForRhythm(rhythm, people)}
+                              foundations={foundations}
+                              onPersonSelect={onPersonSelect}
+                              onOpenFoundation={onOpenFoundation}
+                              onOpenCategory={categoryId => onNavigate(categoryId)}
+                              completed={completedRhythms.has(rhythm.id)}
+                              healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
+                              onTend={event => onTend(rhythm.id, event)}
+                              {...(rhythm.categoryIds?.includes('health')
+                                ? {
+                                    completionActionLabel: 'Log',
+                                    completionActionAccessibleLabel: rhythm.healthLogCapability === 'cardio'
+                                      ? 'Log run'
+                                      : rhythm.healthLogCapability === 'weight' ? 'Log weigh-in' : 'Log workout',
+                                    completedActionLabel: rhythm.healthLogCapability === 'weight' ? 'Weighed in' : 'Logged'
+                                  }
+                                : {})}
+                              onHistory={event => onHistory(rhythm.id, event)}
+                              {...(isEditableRhythmId(rhythm.id)
+                                ? { onEdit: event => onEditRhythm(rhythm, event) }
+                                : {})}
+                              {...(undoableRhythms.has(rhythm.id) && !rhythm.healthLogCapability
+                                ? { onUndo: () => onUndo(rhythm.id) }
+                                : {})}
+                              onClose={() => undefined}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ))
+                  ) : planRhythms.length > 0 ? (
+                    <div className="dashed-empty-state" role="status">
+                      <p>You’ve tended everything here.</p>
+                    </div>
+                  ) : (
+                    <div className="dashed-empty-state" role="status">
+                      <p>{planType === 'anytime'
+                        ? 'No eligible Anytime rhythms.'
+                        : planType === 'all-day'
+                          ? 'No eligible All-day rhythms.'
+                          : `No active Rhythms in ${focus === 'everything-today' ? 'today’s plan' : currentLabel}.`}</p>
+                    </div>
+                  )}
                 </div>
-              ))
-            ) : (
-              <div className="dashed-empty-state" role="status">
-                <p>{planType === 'anytime'
-                  ? 'No eligible Anytime rhythms.'
-                  : planType === 'all-day'
-                    ? 'No eligible All-day rhythms.'
-                    : `No active Rhythms in ${focus === 'everything-today' ? 'today’s plan' : currentLabel}.`}</p>
-              </div>
-            )}
-          </div>
+              );
+            }}
+          </TendedRhythmList>
         </div>
       </section>
 

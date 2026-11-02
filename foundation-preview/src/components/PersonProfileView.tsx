@@ -42,6 +42,7 @@ import type { PersonNote, PersonNoteDraft } from '../domain/person-notes.ts';
 import { resolvePersonCategory } from '../domain/person-categories.ts';
 import { BirthdayCakeIcon } from './BirthdayCakeIcon.tsx';
 import { PersonHealthSummary } from './PersonHealthSummary.tsx';
+import { TendedRhythmList } from './TendedRhythmList.tsx';
 import { PersonPrayerPanel } from './PersonPrayerPanel.tsx';
 import { selectPersonHealth, selectPersonRhythmHealth } from '../domain/person-health.ts';
 import type {
@@ -70,6 +71,10 @@ export function PersonProfileView({
   rhythmScores,
   completedRhythms,
   undoableRhythms,
+  satisfiedRhythmIds = new Set(),
+  showTended = false,
+  onShowTendedChange = () => undefined,
+  initializing = false,
   onFriendshipsChange,
   personDetails = [],
   personNotes = [],
@@ -108,6 +113,10 @@ export function PersonProfileView({
   rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
+  satisfiedRhythmIds?: ReadonlySet<string>;
+  showTended?: boolean;
+  onShowTendedChange?: (show: boolean) => void;
+  initializing?: boolean;
   onFriendshipsChange: (friendships: FriendshipData) => void;
   personDetails?: readonly PersonDetails[];
   personNotes?: readonly PersonNote[];
@@ -265,7 +274,7 @@ export function PersonProfileView({
           ? {
               onTend: (event: MouseEvent<HTMLButtonElement>) => onTend(rhythm.id, event),
               onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event),
-              ...(completedRhythms.has(rhythm.id) && undoableRhythms.has(rhythm.id)
+              ...(completedRhythms.has(rhythm.id) && undoableRhythms.has(rhythm.id) && !rhythm.healthLogCapability
                 ? { onUndo: () => onUndo(rhythm.id) }
                 : {})
             }
@@ -420,15 +429,35 @@ export function PersonProfileView({
                 </button>
               )}
             </div>
-            {duePersonRhythms.length > 0 ? (
-              <div className="marriage-rhythm-list current-plan-item-group">
-                {duePersonRhythms.map(renderPersonRhythm)}
-              </div>
-            ) : (
-              <p className="friendships-empty">
-                {personRhythms.length === 0 ? 'No Rhythms yet.' : 'No Rhythms due today.'}
-              </p>
-            )}
+            <TendedRhythmList
+              rhythms={duePersonRhythms}
+              satisfiedRhythmIds={satisfiedRhythmIds}
+              undoableRhythmIds={undoableRhythms}
+              showTended={showTended}
+              onShowTendedChange={onShowTendedChange}
+              onUndo={onUndo}
+              resetKey={`${personId}:${tab}:${today}`}
+              initializing={initializing}
+            >
+              {({ visibleRhythmIds, itemProps }) => {
+                const visibleDueRhythms = duePersonRhythms.filter(rhythm => visibleRhythmIds.has(rhythm.id));
+                return visibleDueRhythms.length > 0
+                  ? (
+                    <div className="marriage-rhythm-list current-plan-item-group">
+                      {visibleDueRhythms.map(rhythm => (
+                        <div key={rhythm.id} {...itemProps(rhythm.id)}>{renderPersonRhythm(rhythm)}</div>
+                      ))}
+                    </div>
+                  )
+                  : duePersonRhythms.length > 0
+                    ? <p className="friendships-empty" role="status">You’ve tended everything here.</p>
+                    : (
+                      <p className="friendships-empty">
+                        {personRhythms.length === 0 ? 'No Rhythms yet.' : 'No Rhythms due today.'}
+                      </p>
+                    );
+              }}
+            </TendedRhythmList>
             {otherPersonRhythms.length > 0 && (
               <section className="person-profile__other-rhythms" aria-labelledby="person-profile-other-rhythms">
                 <h4 id="person-profile-other-rhythms">Other Rhythms</h4>

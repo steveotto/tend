@@ -387,6 +387,33 @@ function setDownloadMocks() {
 }
 
 describe('synthetic preview storage adapter and envelope', () => {
+  it('persists Show tended in schema 35 and safely defaults schema 34 data to off', () => {
+    const data = createSamplePreviewData();
+    const current = createPreviewEnvelope({ ...data, showTended: true });
+    expect(current.schemaVersion).toBe(35);
+    expect(validatePreviewEnvelope(current, '2026-10-31')).toMatchObject({
+      valid: true,
+      envelope: { data: { showTended: true } }
+    });
+
+    const priorData = { ...current.data };
+    delete (priorData as Partial<typeof priorData>).showTended;
+    const migrated = validatePreviewEnvelope({
+      ...current,
+      schemaVersion: 34,
+      data: priorData
+    }, '2026-10-31');
+    expect(migrated).toMatchObject({
+      valid: true,
+      sourceSchemaVersion: 34,
+      envelope: { data: { showTended: false } }
+    });
+    expect(validatePreviewEnvelope({
+      ...current,
+      schemaVersion: 34
+    }, '2026-10-31').valid).toBe(false);
+  });
+
   it('migrates schema v28 without inventing Person details and preserves exact source recovery', () => {
     const data = createSamplePreviewData();
     const priorEnvelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
@@ -1220,7 +1247,8 @@ describe('synthetic preview storage adapter and envelope', () => {
       personDetails: [],
       personNotes: [],
       prayerRequests: [],
-      timeBlocks: createDefaultTimeBlockSettings()
+      timeBlocks: createDefaultTimeBlockSettings(),
+      showTended: false
     };
     const raw = JSON.stringify(createPreviewEnvelope(empty));
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
@@ -1279,7 +1307,8 @@ describe('synthetic preview storage adapter and envelope', () => {
       personDetails: [],
       personNotes: [],
       prayerRequests: [],
-      timeBlocks: createDefaultTimeBlockSettings()
+      timeBlocks: createDefaultTimeBlockSettings(),
+      showTended: false
     });
   });
 

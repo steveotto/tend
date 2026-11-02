@@ -20,6 +20,9 @@ describe('person details domain', () => {
     const draft = {
       categoryIds: [],
       categoryChanged: false,
+      relationshipChoice: 'not-set',
+      relationshipLabel: '',
+      relationshipChanged: false,
       birthdayDate: '2000-02-29',
       birthdayYearUnknown: true,
       anniversaryDate: '2000-12-31',
@@ -199,6 +202,63 @@ describe('person details domain', () => {
     }, '2026-10-31')).toMatchObject({
       valid: false,
       errors: { categoryIds: 'Choose one supported category.' }
+    });
+  });
+
+  it('saves, clears, and reloads standard or custom relationships independently of category membership', () => {
+    const current = [{ personId: 'sample-person-avery', relationshipLabel: 'Aunt-by-choice' }] as const;
+    const draft = personDetailsDraft(current[0], null, ['marriage']);
+    expect(draft.relationshipChoice).toBe('custom');
+    expect(savePersonDetailsCommand(current, 'sample-person-avery', draft, '2026-10-31')).toMatchObject({
+      valid: true,
+      details: [{ personId: 'sample-person-avery', relationshipLabel: 'Aunt-by-choice' }]
+    });
+
+    const chooseSon = {
+      ...draft,
+      relationshipChoice: 'Son',
+      relationshipLabel: 'Son',
+      relationshipChanged: true
+    };
+    const savedSon = savePersonDetailsCommand(current, 'sample-person-avery', chooseSon, '2026-10-31');
+    expect(savedSon).toMatchObject({
+      valid: true,
+      details: [{ personId: 'sample-person-avery', relationshipLabel: 'Son' }]
+    });
+
+    const custom = {
+      ...draft,
+      relationshipLabel: 'Aunt-by-choice',
+      relationshipChanged: true
+    };
+    const savedCustom = savePersonDetailsCommand(current, 'sample-person-avery', custom, '2026-10-31');
+    expect(savedCustom).toMatchObject({
+      valid: true,
+      details: [{ personId: 'sample-person-avery', relationshipLabel: 'Aunt-by-choice' }]
+    });
+
+    const editedCustom = {
+      ...draft,
+      relationshipLabel: 'Godmother',
+      relationshipChanged: true
+    };
+    expect(savePersonDetailsCommand(current, 'sample-person-avery', editedCustom, '2026-10-31'))
+      .toMatchObject({
+        valid: true,
+        details: [{ personId: 'sample-person-avery', relationshipLabel: 'Godmother' }]
+      });
+
+    const clear = { ...draft, relationshipChoice: 'not-set', relationshipChanged: true };
+    expect(savePersonDetailsCommand(current, 'sample-person-avery', clear, '2026-10-31'))
+      .toEqual({ valid: true, details: [] });
+    expect(validatePersonDetailsDraft({
+      ...draft,
+      relationshipChoice: 'custom',
+      relationshipLabel: '',
+      relationshipChanged: true
+    }, '2026-10-31')).toMatchObject({
+      valid: false,
+      errors: { relationshipLabel: 'Enter a custom relationship or choose an established option.' }
     });
   });
 

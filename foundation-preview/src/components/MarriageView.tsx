@@ -47,6 +47,7 @@ import type { RhythmFrequencyRecommendation } from '../domain/rhythm-schedule.ts
 import { resolvePersonCategoryGroups } from '../domain/person-categories.ts';
 import { PersonBadgeVisual } from './PersonBadge.tsx';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
+import { TendedRhythmList } from './TendedRhythmList.tsx';
 
 export type MarriageTab = 'today' | 'rhythms' | 'foundations';
 
@@ -113,6 +114,10 @@ type MarriageViewProps = {
   archivedRhythmIds: readonly string[];
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
+  satisfiedRhythmIds?: ReadonlySet<string>;
+  showTended?: boolean;
+  onShowTendedChange?: (show: boolean) => void;
+  initializing?: boolean;
   onTend: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   onUndo: (id: string) => void;
   onSaveFoundationAssociations: (
@@ -155,6 +160,10 @@ export function MarriageView({
   archivedRhythmIds,
   completedRhythms,
   undoableRhythms,
+  satisfiedRhythmIds = new Set(),
+  showTended = false,
+  onShowTendedChange = () => undefined,
+  initializing = false,
   onTend,
   onUndo,
   onSaveFoundationAssociations,
@@ -461,6 +470,11 @@ export function MarriageView({
           rhythmScores={foundationRhythmScores}
           completedRhythms={completedRhythms}
           undoableRhythms={undoableRhythms}
+          satisfiedRhythmIds={satisfiedRhythmIds}
+          showTended={showTended}
+          onShowTendedChange={onShowTendedChange}
+          initializing={initializing}
+          resetKey={`${activeTab}:${todayDate}`}
           onTend={onTend}
           onUndo={onUndo}
           onEditRhythm={onEditRhythm}
@@ -589,6 +603,11 @@ function TodayTogether({
   rhythmScores,
   completedRhythms,
   undoableRhythms,
+  satisfiedRhythmIds,
+  showTended,
+  onShowTendedChange,
+  initializing,
+  resetKey,
   onTend,
   onUndo,
   onEditRhythm,
@@ -606,6 +625,11 @@ function TodayTogether({
   rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
+  satisfiedRhythmIds: ReadonlySet<string>;
+  showTended: boolean;
+  onShowTendedChange: (show: boolean) => void;
+  initializing: boolean;
+  resetKey: string;
   onTend: MarriageViewProps['onTend'];
   onUndo: MarriageViewProps['onUndo'];
   onEditRhythm: MarriageViewProps['onEditRhythm'];
@@ -617,7 +641,7 @@ function TodayTogether({
   todayDate: string;
   categoryToken: string;
 }) {
-  const completedCount = rhythms.filter(rhythm => completedRhythms.has(rhythm.id)).length;
+  const completedCount = rhythms.filter(rhythm => satisfiedRhythmIds.has(rhythm.id)).length;
   return (
     <section className="marriage-today-section" aria-labelledby={`${categoryToken}-today-together-title`}>
       <div className="marriage-section-heading">
@@ -626,42 +650,61 @@ function TodayTogether({
           <p>{completedCount} of {rhythms.length} Rhythms tended today</p>
         </div>
       </div>
-      {rhythms.length > 0
-        ? (
-          <div className="marriage-rhythm-list current-plan-item-group">
-            {rhythms.map(rhythm => (
-              <RhythmDetailsDialog
-                key={rhythm.id}
-                rhythm={rhythm}
-                inline
-                completed={completedRhythms.has(rhythm.id)}
-                statusLabel={rhythmLastActivityLabel(rhythm, todayDate)}
-                people={peopleForRhythm(rhythm, people)}
-                foundations={foundations}
-                onPersonSelect={onPersonSelect}
-                onOpenFoundation={onOpenFoundation}
-                onOpenCategory={onOpenCategory}
-                headingId={`${categoryToken}-today-rhythm-${rhythm.id}`}
-                archived={false}
-                healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
-                onHistory={event => onRhythmHistory(rhythm.id, event)}
-                {...(isEditableRhythmId(rhythm.id)
-                  ? {
-                      onTend: (event: MouseEvent<HTMLButtonElement>) => onTend(rhythm.id, event),
-                      onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event),
-                      ...(undoableRhythms.has(rhythm.id) ? { onUndo: () => onUndo(rhythm.id) } : {})
-                    }
-                  : {})}
-                onClose={() => undefined}
-              />
-            ))}
-          </div>
-        )
-        : (
-          <div className="marriage-empty-state">
-            <p>{hasActiveRhythms ? 'All caught up. Nothing to tend to.' : 'No active Rhythms.'}</p>
-          </div>
-        )}
+      <TendedRhythmList
+        rhythms={rhythms}
+        satisfiedRhythmIds={satisfiedRhythmIds}
+        undoableRhythmIds={undoableRhythms}
+        showTended={showTended}
+        onShowTendedChange={onShowTendedChange}
+        onUndo={onUndo}
+        resetKey={resetKey}
+        initializing={initializing}
+      >
+        {({ visibleRhythmIds, itemProps }) => {
+          const visibleRhythms = rhythms.filter(rhythm => visibleRhythmIds.has(rhythm.id));
+          return visibleRhythms.length > 0
+            ? (
+              <div className="marriage-rhythm-list current-plan-item-group">
+                {visibleRhythms.map(rhythm => (
+                  <div key={rhythm.id} {...itemProps(rhythm.id)}>
+                    <RhythmDetailsDialog
+                      rhythm={rhythm}
+                      inline
+                      completed={completedRhythms.has(rhythm.id)}
+                      statusLabel={rhythmLastActivityLabel(rhythm, todayDate)}
+                      people={peopleForRhythm(rhythm, people)}
+                      foundations={foundations}
+                      onPersonSelect={onPersonSelect}
+                      onOpenFoundation={onOpenFoundation}
+                      onOpenCategory={onOpenCategory}
+                      headingId={`${categoryToken}-today-rhythm-${rhythm.id}`}
+                      archived={false}
+                      healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
+                      onHistory={event => onRhythmHistory(rhythm.id, event)}
+                      {...(isEditableRhythmId(rhythm.id)
+                        ? {
+                            onTend: (event: MouseEvent<HTMLButtonElement>) => onTend(rhythm.id, event),
+                            onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event),
+                            ...(undoableRhythms.has(rhythm.id) && !rhythm.healthLogCapability
+                              ? { onUndo: () => onUndo(rhythm.id) }
+                              : {})
+                          }
+                        : {})}
+                      onClose={() => undefined}
+                    />
+                  </div>
+                ))}
+              </div>
+            )
+            : rhythms.length > 0
+              ? <div className="marriage-empty-state" role="status"><p>You’ve tended everything here.</p></div>
+              : (
+                <div className="marriage-empty-state">
+                  <p>{hasActiveRhythms ? 'All caught up. Nothing to tend to.' : 'No active Rhythms.'}</p>
+                </div>
+              );
+        }}
+      </TendedRhythmList>
     </section>
   );
 }

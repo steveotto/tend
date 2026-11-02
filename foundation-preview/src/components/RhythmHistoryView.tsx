@@ -36,6 +36,7 @@ import {
   rhythmSeasonPaletteForOrdinal
 } from '../domain/rhythm-seasons.ts';
 import {
+  ON_TRACK_SCORE_HISTORY_DISPLAY_LIMIT,
   latestOnTrackHistoryEntries,
   onTrackHistoryDisplayEntries
 } from '../domain/rhythm-score-presentation.ts';
@@ -1426,13 +1427,8 @@ function ConsistencyScoreBreakdown({ metric }: { metric: ScoredConsistencyMetric
 function OnTrackScoreBreakdown({ metric }: { metric: ScoredOnTrackMetric }) {
   const evidence = metric.evidence;
   const historyId = useId();
-  const showEarlierButtonRef = useRef<HTMLButtonElement>(null);
-  const showLessButtonRef = useRef<HTMLButtonElement>(null);
-  const focusAfterDisclosureRef = useRef<'earlier' | 'less' | null>(null);
   const entries = onTrackHistoryDisplayEntries(evidence);
-  const [visibleEntryCount, setVisibleEntryCount] = useState(5);
-  const isExpanded = visibleEntryCount > 5;
-  const visibleEntries = latestOnTrackHistoryEntries(entries, visibleEntryCount);
+  const visibleEntries = latestOnTrackHistoryEntries(entries, ON_TRACK_SCORE_HISTORY_DISPLAY_LIMIT);
   const startingScore = 100;
   const deductedPoints = evidence.deduction;
   const rows = [
@@ -1442,11 +1438,6 @@ function OnTrackScoreBreakdown({ metric }: { metric: ScoredOnTrackMetric }) {
     { label: 'Missed occurrences', value: String(evidence.missedOccurrenceCount) },
     { label: 'Per miss', value: `${evidence.pointsPerMissedOccurrence} points` }
   ];
-  useEffect(() => {
-    if (focusAfterDisclosureRef.current === 'earlier') showEarlierButtonRef.current?.focus({ preventScroll: true });
-    if (focusAfterDisclosureRef.current === 'less') showLessButtonRef.current?.focus({ preventScroll: true });
-    focusAfterDisclosureRef.current = null;
-  }, [visibleEntryCount]);
   return (
     <>
       <BreakdownRows rows={rows} />
@@ -1469,41 +1460,6 @@ function OnTrackScoreBreakdown({ metric }: { metric: ScoredOnTrackMetric }) {
             </li>
           ))}
         </ol>
-        {(visibleEntryCount < entries.length || isExpanded) && (
-          <div className="rhythm-history-view__score-history-controls">
-            {visibleEntryCount < entries.length && (
-              <button
-                ref={showEarlierButtonRef}
-                type="button"
-                className="rhythm-history-view__score-history-toggle"
-                aria-controls={historyId}
-                aria-expanded={isExpanded}
-                onClick={() => {
-                  const nextCount = Math.min(visibleEntryCount + 5, entries.length);
-                  if (nextCount === entries.length) focusAfterDisclosureRef.current = 'less';
-                  setVisibleEntryCount(nextCount);
-                }}
-              >
-                Show earlier steps
-              </button>
-            )}
-            {isExpanded && (
-              <button
-                ref={showLessButtonRef}
-                type="button"
-                className="rhythm-history-view__score-history-toggle"
-                aria-controls={historyId}
-                aria-expanded={isExpanded}
-                onClick={() => {
-                  focusAfterDisclosureRef.current = 'earlier';
-                  setVisibleEntryCount(5);
-                }}
-              >
-                Show less
-              </button>
-            )}
-          </div>
-        )}
       </section>
     </>
   );

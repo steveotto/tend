@@ -84,7 +84,7 @@ import {
 import type { TimeBlockSettings } from './time-blocks.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 34;
+export const PREVIEW_SCHEMA_VERSION = 35;
 
 export type PreviewData = {
   goals: MoneyGoal[];
@@ -106,6 +106,7 @@ export type PreviewData = {
   personNotes: PersonNote[];
   prayerRequests: PersonPrayerRequest[];
   timeBlocks: TimeBlockSettings;
+  showTended: boolean;
   [key: string]: unknown;
 };
 
@@ -137,7 +138,7 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34; resolvedPersonCategories: number }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35; resolvedPersonCategories: number }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
 const goalKeys = [
@@ -180,6 +181,7 @@ const dataKeysV31 = [...dataKeysV30];
 const dataKeysV32 = [...dataKeysV31, 'people'];
 const dataKeysV33 = [...dataKeysV32, 'prayerRequests'];
 const dataKeysV34 = [...dataKeysV33, 'timeBlocks'];
+const dataKeysV35 = [...dataKeysV34, 'showTended'];
 const envelopeKeys = ['format', 'schemaVersion', 'data'];
 const supportedRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 const builtInRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
@@ -214,7 +216,8 @@ export function createSamplePreviewData(): PreviewData {
     personDetails: [],
     personNotes: [],
     prayerRequests: [],
-    timeBlocks: createDefaultTimeBlockSettings()
+    timeBlocks: createDefaultTimeBlockSettings(),
+    showTended: false
   };
 }
 
@@ -247,7 +250,7 @@ function hasOnlyKeys(record: Record<string, unknown>, allowed: readonly string[]
   return Object.keys(record).every(key => allowed.includes(key));
 }
 
-function hasOnlyKeysWithEmptyPrayerDefault(
+function hasOnlyKeysWithCompatibleDefaults(
   record: Record<string, unknown>,
   allowed: readonly string[]
 ): boolean {
@@ -256,7 +259,9 @@ function hasOnlyKeysWithEmptyPrayerDefault(
       && Array.isArray(record[key])
       && record[key].length === 0
     || key === 'timeBlocks'
-      && isRecord(record[key]));
+      && isRecord(record[key])
+    || key === 'showTended'
+      && record[key] === false);
 }
 
 function isNonEmptyText(value: unknown, maxLength = 160): value is string {
@@ -472,7 +477,8 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
       timeBlocks: {
         blocks: data.timeBlocks.blocks.map(block => ({ ...block })),
         sleepStart: data.timeBlocks.sleepStart
-      }
+      },
+      showTended: data.showTended
     }
   };
 }
@@ -523,6 +529,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
       && value.schemaVersion !== 31
       && value.schemaVersion !== 32
       && value.schemaVersion !== 33
+      && value.schemaVersion !== 34
       && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
@@ -557,7 +564,8 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const isV29 = value.schemaVersion === 29;
   const isV30 = value.schemaVersion === 30;
   const isV31 = value.schemaVersion === 31;
-  const isV34 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV35 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV34 = value.schemaVersion === 34 || isV35;
   const isV33 = value.schemaVersion === 33 || isV34;
   const isV32 = value.schemaVersion === 32 || isV33;
   const isV31_compat = value.schemaVersion === 31 || isV32;
@@ -577,10 +585,10 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const hasCardio = isV18 || hasCurrentFriendshipsData;
   const allowedDataKeys = isV1 ? dataKeysV1 : isV2 ? dataKeysV2
     : isV3 || isV4 ? dataKeysV3
-      : isV34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
+      : isV35 ? dataKeysV35 : isV34 && value.schemaVersion === 34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
         : isV11 || isV12 ? dataKeysV12 : isV10 ? dataKeysV10
       : isV8 || isV9 ? dataKeysV8 : isV7 ? dataKeysV7 : isV6 ? dataKeysV6 : dataKeysV5;
-  if (!isRecord(value.data) || (!isV19 && !isV20 && !hasOnlyKeysWithEmptyPrayerDefault(value.data, allowedDataKeys))
+  if (!isRecord(value.data) || (!isV19 && !isV20 && !hasOnlyKeysWithCompatibleDefaults(value.data, allowedDataKeys))
     || !Array.isArray(value.data.goals) || !Array.isArray(value.data.completedRhythmIds)
     || ((isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || hasCurrentFriendshipsData)
       && (!Array.isArray(value.data.datedRhythmCompletions)
@@ -603,6 +611,9 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   }
   if (isV33 && !validatePersonPrayerRequestsCollection(value.data.prayerRequests)) {
     return { valid: false, kind: 'invalid', message: 'Prayer requests contain invalid fields, history, or Person references.' };
+  }
+  if (isV35 && typeof value.data.showTended !== 'boolean') {
+    return { valid: false, kind: 'invalid', message: 'The Show tended preference must be a boolean.' };
   }
   const timeBlockValidation = validateTimeBlockSettings(
     isV34 ? value.data.timeBlocks : createDefaultTimeBlockSettings()
@@ -1026,7 +1037,8 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     personDetails,
     personNotes,
     prayerRequests,
-    timeBlocks
+    timeBlocks,
+    showTended: isV35 ? value.data.showTended as boolean : false
   };
 
   return {

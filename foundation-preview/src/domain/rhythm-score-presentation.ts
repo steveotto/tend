@@ -1,5 +1,7 @@
 import type { OnTrackEvidence } from './rhythm-scoring.ts';
 
+export const ON_TRACK_SCORE_HISTORY_DISPLAY_LIMIT = 7;
+
 export type OnTrackHistoryDisplayEntry =
   | {
       kind: 'occurrence';
