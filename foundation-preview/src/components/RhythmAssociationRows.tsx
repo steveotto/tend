@@ -8,12 +8,14 @@ import {
 } from '../domain/preview-data.ts';
 import {
   foundationCategoryId,
+  foundationRhythmIds,
   resolveRhythmFoundationLinks
 } from '../domain/foundation-rhythm-associations.ts';
 import type { Destination } from './AppNavigation.tsx';
 import { PersonBadgeList } from './PersonBadge.tsx';
 import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
 import { RhythmFoundationBadges } from './RhythmFoundationBadges.tsx';
+import { hasFoundationIcon } from './MarriageIcon.tsx';
 
 type RhythmAssociationRowsProps = {
   rhythm: RhythmPreview;
@@ -22,6 +24,7 @@ type RhythmAssociationRowsProps = {
   onPersonSelect?: (personId: PersonId) => void;
   onOpenCategory?: (categoryId: Destination, openerId: string) => void;
   onOpenFoundation?: (foundationId: string, openerId: string) => void;
+  showFoundationLinks?: boolean;
 };
 
 export function RhythmAssociationRows({
@@ -30,7 +33,8 @@ export function RhythmAssociationRows({
   foundations,
   onPersonSelect,
   onOpenCategory,
-  onOpenFoundation
+  onOpenFoundation,
+  showFoundationLinks = true
 }: RhythmAssociationRowsProps) {
   const categories = areas.filter(area => rhythm.categoryIds?.includes(area.id) === true);
   const resolvedLinks = foundations
@@ -46,20 +50,14 @@ export function RhythmAssociationRows({
     : associationTerms.some(term => term.singular === 'Practice')
       ? { singular: 'Practice and Foundation', plural: 'Practices and Foundations' }
       : foundationTerminologyForCategory();
-  const categoryGroups = categories.map(category => {
-    const categoryFoundations = resolvedLinks?.foundations.filter(foundation =>
-      foundationCategoryId(foundation.id, foundations) === category.id
-    ) ?? [];
-    return {
-      category,
-      rhythm: {
-        ...rhythm,
-        categoryIds: [category.id],
-        primaryFoundationId: categoryFoundations[0]?.id ?? null,
-        secondaryFoundationIds: categoryFoundations.slice(1).map(foundation => foundation.id)
-      } satisfies RhythmPreview
-    };
-  });
+  const categoryGroups = categories.map(category => ({
+    category,
+    rhythm: { ...rhythm, categoryIds: [category.id] } satisfies RhythmPreview
+  }));
+  const hasFoundationLinks = foundationRhythmIds(rhythm).length > 0;
+  const hasDisplayableFoundationLinks = resolvedLinks?.foundations.some(foundation =>
+    hasFoundationIcon(foundation.iconId ?? foundation.id)
+  ) ?? false;
   const ungroupedFoundationCount = resolvedLinks
     ? resolvedLinks.unresolvedIds.length + resolvedLinks.foundations.filter(foundation => {
       const categoryId = foundationCategoryId(foundation.id, foundations);
@@ -106,25 +104,17 @@ export function RhythmAssociationRows({
           ))}
         </div>
       ) : null}
-      {categoryGroups.length > 0 && foundations && onOpenFoundation && (
+      {showFoundationLinks && hasFoundationLinks && hasDisplayableFoundationLinks && foundations && (
         <div className="today-rhythm-details__association-foundations-row">
-          {categoryGroups.map(({ category, rhythm: categoryRhythm }) => (
-            <div
-              className="today-rhythm-details__association-category-group"
-              key={category.id}
-              role="group"
-              aria-label={`${category.label} linked ${foundationTerminologyForCategory(category.id).plural}`}
-            >
-              <RhythmFoundationBadges
-                rhythm={categoryRhythm}
-                foundations={foundations}
-                onOpenFoundation={onOpenFoundation}
-              />
-            </div>
-          ))}
+          <RhythmFoundationBadges
+            rhythm={rhythm}
+            foundations={foundations}
+            presentation={onOpenFoundation ? 'interactive' : 'static'}
+            {...(onOpenFoundation ? { onOpenFoundation } : {})}
+          />
         </div>
       )}
-      {foundations && onOpenFoundation && ungroupedFoundationCount > 0 && (
+      {showFoundationLinks && foundations && ungroupedFoundationCount > 0 && (
         <span className="visually-hidden">
           {ungroupedFoundationCount} linked {ungroupedFoundationCount === 1
             ? associationTerm.singular

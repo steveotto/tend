@@ -1,8 +1,9 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CatalogApp } from '../src/CatalogApp.tsx';
 import { AreaIcon } from '../src/components/AreaIcon.tsx';
+import marriageCategorySvg from '../src/assets/tend-approved-icons/categories/marriage.svg?raw';
 import { CategoryHealthBadge, FoundationCard, FoundationProgress, GoalCard, RhythmCard, ScoreMeter } from '../src/components/Cards.tsx';
 import { MarriageIcon } from '../src/components/MarriageIcon.tsx';
 import { RhythmCategoryBadges } from '../src/components/RhythmCategoryBadges.tsx';
@@ -142,6 +143,8 @@ describe('shared preview components', () => {
       expect(decodeURIComponent(icon.style.getPropertyValue('--area-icon')))
         .toContain(expectedSymbols[index]);
     });
+    expect(marriageCategorySvg).toContain('fill="none"');
+    expect(marriageCategorySvg).toContain('stroke="currentColor"');
   });
 
   it('uses crisp summary-only Category symbols without changing shared badge assets', () => {
@@ -165,7 +168,8 @@ describe('shared preview components', () => {
     expect(icons).toHaveLength(6);
     expect(summaryAssets[0]).toContain('stroke-width="2.75"');
     expect(summaryAssets[0]).toContain('M12 3v18M6 9h12');
-    expect(summaryAssets[1]).toMatch(/fill-opacity=['"]1['"]/);
+    expect(summaryAssets[1]).toMatch(/fill=['"]none['"]/);
+    expect(summaryAssets[1]).toContain('stroke=');
     expect(summaryAssets[2]).not.toContain('fill-opacity="0.12"');
     expect(summaryAssets[3]).not.toContain('fill-opacity="0.12"');
     expect(summaryAssets[4]).toContain('M12 2v20M17 5H9.5');
@@ -212,6 +216,99 @@ describe('shared preview components', () => {
     expect(badge.querySelector('.person-badge-avatar')?.textContent).toBe('MR');
     expect(badge.querySelector('.person-badge-name')?.textContent).toBe('Morgan');
     expect(container.querySelector('button')).toBeNull();
+  });
+
+  it('shows a saved Person photo in the shared badge and falls back to initials when it fails', () => {
+    const person = {
+      ...syntheticPeople[0]!,
+      avatarUrl: 'data:image/jpeg;base64,/9j/2Q=='
+    };
+    const { container } = render(<PersonBadge person={person} onSelect={() => undefined} />);
+    const badge = screen.getByRole('button', { name: 'Open synthetic profile for Avery Brooks' });
+    const image = container.querySelector<HTMLImageElement>('.person-badge-avatar img');
+
+    expect(image?.getAttribute('src')).toBe(person.avatarUrl);
+    fireEvent.error(image!);
+    expect(badge.querySelector('.person-badge-avatar')?.textContent).toBe('AB');
+    expect(badge.querySelector('.person-badge-name')?.textContent).toBe('Avery');
+    expect(badge.getAttribute('data-person-id')).toBe(person.id);
+  });
+
+  it('keeps Person badges and deduplicated Category badges together without Foundation badges on Rhythm cards', () => {
+    const rhythm = {
+      ...todayRhythms[0]!,
+      categoryIds: ['marriage', 'marriage', 'faith'] as const,
+      primaryFoundationId: 'connection',
+      secondaryFoundationIds: ['communication']
+    };
+    const onOpenCategory = vi.fn();
+    render(
+      <RhythmCard
+        rhythm={rhythm}
+        variant="simple"
+        people={syntheticPeople.slice(0, 2)}
+        onPersonSelect={vi.fn()}
+        onOpenCategory={onOpenCategory}
+        onDetails={vi.fn()}
+      />
+    );
+    const associations = screen.getByRole('group', {
+      name: `People and categories associated with ${rhythm.title}`
+    });
+    const personBadge = within(associations).getByRole('button', {
+      name: 'Open synthetic profile for Avery Brooks'
+    });
+    const categoryBadges = within(associations).getAllByRole('button', {
+      name: /^(Faith|Marriage)$/
+    });
+
+    expect(personBadge.compareDocumentPosition(categoryBadges[0]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(categoryBadges.map(badge => badge.getAttribute('aria-label'))).toEqual(['Faith', 'Marriage']);
+    expect(associations.querySelectorAll('.rhythm-foundation-badge')).toHaveLength(0);
+    expect(associations.querySelectorAll('.rhythm-area-badge__visual')).toHaveLength(2);
+    expect(categoryBadges.every(badge => badge.querySelector('.area-svg-icon') !== null)).toBe(true);
+    fireEvent.click(categoryBadges[0]!);
+    expect(onOpenCategory).toHaveBeenCalledWith(
+      'faith',
+      `rhythm-category-badge-${rhythm.id}-faith`
+    );
+  });
+
+  it('renders accessible Category badges in the catalogue RhythmCard variant', () => {
+    const rhythm = {
+      ...todayRhythms[0]!,
+      description: 'Catalogue variant description.',
+      automation: 'external' as const,
+      categoryIds: ['marriage', 'faith', 'marriage'] as const,
+      primaryFoundationId: 'connection',
+      secondaryFoundationIds: ['communication']
+    };
+    const onOpenCategory = vi.fn();
+    render(
+      <RhythmCard
+        rhythm={rhythm}
+        people={syntheticPeople.slice(0, 1)}
+        onPersonSelect={vi.fn()}
+        onOpenCategory={onOpenCategory}
+      />
+    );
+
+    const card = screen.getByRole('article', { name: rhythm.title });
+    expect(within(card).getByRole('heading', { name: rhythm.title })).toBeTruthy();
+    expect(within(card).getByText(rhythm.description)).toBeTruthy();
+    expect(within(card).getByText(/Automated at bank/)).toBeTruthy();
+    const associations = within(card).getByRole('group', {
+      name: `People and categories associated with ${rhythm.title}`
+    });
+    const person = within(associations).getByRole('button', {
+      name: 'Open synthetic profile for Avery Brooks'
+    });
+    const categories = within(associations).getAllByRole('button', { name: /^(Faith|Marriage)$/ });
+    expect(categories.map(category => category.getAttribute('aria-label'))).toEqual(['Faith', 'Marriage']);
+    expect(person.compareDocumentPosition(categories[0]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(associations.querySelectorAll('.rhythm-foundation-badge')).toHaveLength(0);
+    fireEvent.click(categories[0]!);
+    expect(onOpenCategory).toHaveBeenCalledWith('faith', `rhythm-category-badge-${rhythm.id}-faith`);
   });
 
   it('keeps person navigation independent from Info and Tend actions', async () => {
@@ -830,123 +927,85 @@ describe('shared preview components', () => {
     expect(within(categoriesOnlyAssociations).queryByRole('button')).toBeNull();
   });
 
-  it('places People before Category badges and keeps their Foundations in a lower row', async () => {
+  it('keeps inline card metadata to People and Categories and shows linked Foundations in Score/Chart details', async () => {
     const user = userEvent.setup();
-    const financeFoundations = Array.from({ length: 4 }, (_, index) => ({
-      ...marriageFoundations[0]!,
-      id: `finance-foundation-${index + 1}`,
-      category: 'Finances' as const,
-      categoryId: 'finances' as const,
-      name: `Finance Foundation ${index + 1}`
-    }));
-    const catalogue = [...financeFoundations, ...marriageFoundations];
     const rhythm = {
       ...todayRhythms[0]!,
-      id: 'grouped-associations',
-      title: 'Grouped associations',
-      categoryIds: ['finances', 'faith', 'marriage'] as const,
-      primaryFoundationId: 'finance-foundation-4',
-      secondaryFoundationIds: [...marriageFoundations.map(foundation => foundation.id), ...financeFoundations.slice(0, 3).map(foundation => foundation.id)]
+      id: 'card-and-chart-associations',
+      title: 'Card and chart associations',
+      categoryIds: ['faith', 'marriage'] as const,
+      primaryFoundationId: 'connection',
+      secondaryFoundationIds: marriageFoundations
+        .filter(foundation => foundation.id !== 'connection')
+        .map(foundation => foundation.id)
     };
-    render(
+    const props = {
+      rhythm,
+      people: syntheticPeople,
+      foundations: marriageFoundations,
+      onPersonSelect: () => undefined,
+      onOpenCategory: () => undefined,
+      onOpenFoundation: () => undefined,
+      onTend: () => undefined,
+      onClose: () => undefined
+    };
+    const { rerender } = render(
       <RhythmDetailsDialog
-        rhythm={rhythm}
+        {...props}
         inline
-        people={syntheticPeople}
-        foundations={catalogue}
-        onPersonSelect={() => undefined}
-        onOpenCategory={() => undefined}
-        onOpenFoundation={() => undefined}
-        onTend={() => undefined}
-        onClose={() => undefined}
       />
     );
 
     const associations = screen.getByRole('group', { name: `Associations for ${rhythm.title}` });
     const peopleRow = within(associations).getByRole('group', { name: `People associated with ${rhythm.title}` });
-    const categoryGroups = within(associations).getAllByRole('group', { name: / category$/ });
-    const metadataRow = associations.querySelector<HTMLElement>('.today-rhythm-details__association-metadata-row')!;
-    const foundationsRow = associations.querySelector<HTMLElement>('.today-rhythm-details__association-foundations-row')!;
-    expect(peopleRow.parentElement).toBe(metadataRow);
-    expect(categoryGroups.map(group => group.getAttribute('aria-label'))).toEqual([
-      'Faith category',
-      'Marriage category',
-      'Finances category'
-    ]);
-    expect(peopleRow.nextElementSibling).toBe(categoryGroups[0]);
-    expect(metadataRow.compareDocumentPosition(foundationsRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const linkedFoundationGroups = [...foundationsRow.querySelectorAll<HTMLElement>(
-      '.today-rhythm-details__association-category-group'
-    )];
-    expect(linkedFoundationGroups.map(group => group.getAttribute('aria-label'))).toEqual([
-      'Faith linked Practices',
-      'Marriage linked Foundations',
-      'Finances linked Foundations'
-    ]);
+    const categoryGroup = within(associations).getByRole('group', { name: 'Marriage category' });
+    expect(peopleRow.compareDocumentPosition(categoryGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(associations).getByRole('group', { name: 'Faith category' })).toBeTruthy();
+    expect(within(categoryGroup).getByRole('button', { name: 'Marriage' })).toBeTruthy();
+    expect(associations.querySelector('.today-rhythm-details__association-foundations-row')).toBeNull();
+    expect(associations.querySelector('.rhythm-foundation-badges')).toBeNull();
 
-    const faithGroup = categoryGroups[0]!;
-    const marriageGroup = categoryGroups[1]!;
-    const financeGroup = categoryGroups[2]!;
-    expect(within(faithGroup).getAllByRole('button').map(button => button.getAttribute('aria-label')))
-      .toEqual(['Faith']);
-    expect(within(marriageGroup).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
-      'Marriage'
-    ]);
-    expect(within(financeGroup).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
-      'Finances'
-    ]);
-    expect(within(linkedFoundationGroups[1]!).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
-      'Marriage: Connection',
-      'Marriage: Communication',
-      'Open 4 more linked Foundations'
-    ]);
-    expect(within(linkedFoundationGroups[2]!).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
-      'Finances: Finance Foundation 1',
-      'Finances: Finance Foundation 2',
-      'Open 2 more linked Foundations'
-    ]);
-    expect([...associations.querySelectorAll('.rhythm-foundation-badges')]).toHaveLength(2);
-    expect([...associations.querySelectorAll('.rhythm-foundation-badge--overflow')].map(button => button.textContent))
-      .toEqual(['+4', '+2']);
+    rerender(<RhythmDetailsDialog {...props} />);
+    const detailsDialog = screen.getByRole('dialog');
+    await user.click(within(detailsDialog).getByRole('button', {
+      name: `View scores and history for ${rhythm.title}`
+    }));
 
-    await user.click(within(linkedFoundationGroups[1]!).getByRole('button', { name: 'Open 4 more linked Foundations' }));
-    let popover = screen.getByRole('dialog', { name: '4 more linked Foundations' });
+    const chartAssociations = within(detailsDialog).getByRole('group', {
+      name: `People and categories associated with ${rhythm.title}`
+    });
+    expect(within(chartAssociations).getByRole('button', { name: 'Marriage' })).toBeTruthy();
+    expect(within(chartAssociations).getByRole('group', {
+      name: `People associated with ${rhythm.title}`
+    })).toBeTruthy();
+    const foundationRow = detailsDialog.querySelector('.today-rhythm-details__association-foundations-row');
+    expect(foundationRow).toBeTruthy();
+    expect(within(foundationRow as HTMLElement).getByRole('button', { name: 'Marriage: Connection' })).toBeTruthy();
+    expect(within(foundationRow as HTMLElement).getByRole('button', {
+      name: 'Open 4 more linked Foundations'
+    })).toBeTruthy();
+    await user.click(within(foundationRow as HTMLElement).getByRole('button', {
+      name: 'Open 4 more linked Foundations'
+    }));
+    const popover = screen.getByRole('dialog', { name: '4 more linked Foundations' });
     expect(within(popover).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
-      'Marriage: Fun & Adventure',
-      'Marriage: Spiritual Growth',
-      'Marriage: Partnership',
-      'Marriage: Intimacy'
-    ]);
-    await user.keyboard('{Escape}');
-
-    await user.click(within(linkedFoundationGroups[2]!).getByRole('button', { name: 'Open 2 more linked Foundations' }));
-    popover = screen.getByRole('dialog', { name: '2 more linked Foundations' });
-    expect(within(popover).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
-      'Finances: Finance Foundation 3',
-      'Finances: Finance Foundation 4'
+      ...marriageFoundations.slice(2).map(foundation => `Marriage: ${foundation.name}`)
     ]);
   });
 
-  it('does not present a linked Foundation under a Category it does not belong to', () => {
-    const financeFoundation = {
-      ...marriageFoundations[0]!,
-      id: 'finance-foundation',
-      category: 'Finances' as const,
-      categoryId: 'finances' as const,
-      name: 'Finance Foundation'
-    };
+  it('does not leave an empty visible Foundation row for an unresolved association', () => {
     const rhythm = {
       ...todayRhythms[0]!,
       id: 'unassigned-finance-foundation',
       title: 'Unassigned Foundation',
       categoryIds: ['marriage'] as const,
-      primaryFoundationId: financeFoundation.id
+      primaryFoundationId: 'missing-foundation'
     };
     render(
       <RhythmDetailsDialog
         rhythm={rhythm}
-        inline
-        foundations={[financeFoundation]}
+        initialView="history"
+        foundations={[]}
         onOpenFoundation={() => undefined}
         onOpenCategory={() => undefined}
         onTend={() => undefined}
@@ -954,10 +1013,14 @@ describe('shared preview components', () => {
       />
     );
 
-    const associations = screen.getByRole('group', { name: `Associations for ${rhythm.title}` });
+    const detailsDialog = screen.getByRole('dialog');
+    const associations = within(detailsDialog).getByRole('group', {
+      name: `People and categories associated with ${rhythm.title}`
+    });
     expect(within(associations).getByRole('button', { name: 'Marriage' })).toBeTruthy();
     expect(within(associations).queryByRole('button', { name: 'Finances: Finance Foundation' })).toBeNull();
-    expect(within(associations).getByText(/1 linked Foundation could not be associated with an assigned Category/))
+    expect(detailsDialog.querySelector('.today-rhythm-details__association-foundations-row')).toBeNull();
+    expect(within(detailsDialog).getByText(/1 linked Foundation could not be associated with an assigned Category/))
       .toBeTruthy();
   });
 

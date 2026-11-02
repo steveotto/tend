@@ -136,7 +136,15 @@ export function RhythmFoundationBadges({
     }
   }, [isOverflowOpen]);
 
-  if (displayableFoundations.length === 0 && unresolvedCount === 0) return null;
+  if (displayableFoundations.length === 0) {
+    return unresolvedCount > 0
+      ? (
+        <span className="visually-hidden" data-unresolved-foundation-count={unresolvedCount}>
+          {unresolvedCount} linked {unresolvedCount === 1 ? linkTerms.singular : termPlural} could not be resolved.
+        </span>
+      )
+      : null;
+  }
 
   function showPopover(event: MouseEvent<HTMLButtonElement>) {
     triggerRef.current = event.currentTarget;

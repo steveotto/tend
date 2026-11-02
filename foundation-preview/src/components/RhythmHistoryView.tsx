@@ -46,7 +46,6 @@ import type {
   ScoredOnTrackMetric,
   UnscoredMetric
 } from '../domain/rhythm-scoring.ts';
-import { PersonBadgeList } from './PersonBadge.tsx';
 import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
 import { RhythmScheduleSummary } from './RhythmMetadata.tsx';
 import { RhythmSeasonCard } from './RhythmSeasonCard.tsx';
@@ -56,8 +55,7 @@ import { HealthScoreBreakdown, HealthScoreMeasures } from './HealthScoreBreakdow
 export { HealthScoreMeter } from './HealthScoreBreakdown.tsx';
 import { RhythmCompletionHistoryChart } from './RhythmCompletionHistoryChart.tsx';
 import { RhythmCompletionForm } from './RhythmCompletionForm.tsx';
-import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
-import { RhythmFoundationBadges } from './RhythmFoundationBadges.tsx';
+import { RhythmAssociationRows } from './RhythmAssociationRows.tsx';
 import { RhythmSeasonCorrectionDialog } from './RhythmSeasonCorrectionDialog.tsx';
 import type { RhythmSeasonEditDialogDraft } from './RhythmSeasonCorrectionDialog.tsx';
 import { RhythmSeasonDeleteDialog } from './RhythmSeasonDeleteDialog.tsx';
@@ -527,22 +525,14 @@ export function RhythmHistoryView({
             {rhythm.description}
           </p>
         )}
-        {people && onPersonSelect && (
-          <div className="rhythm-history-view__people">
-            <PersonBadgeList people={people} rhythmTitle={rhythm.title} onSelect={onPersonSelect} />
-          </div>
-        )}
-        <RhythmCategoryBadges
+        <RhythmAssociationRows
           rhythm={rhythm}
+          {...(people ? { people } : {})}
+          {...(foundations ? { foundations } : {})}
+          {...(onPersonSelect ? { onPersonSelect } : {})}
           {...(onOpenCategory ? { onOpenCategory } : {})}
+          {...(onOpenFoundation ? { onOpenFoundation } : {})}
         />
-        {foundations && onOpenFoundation && (
-          <RhythmFoundationBadges
-            rhythm={rhythm}
-            foundations={foundations}
-            onOpenFoundation={onOpenFoundation}
-          />
-        )}
         {(rhythm.cadence || detailSchedule || detailTimeLabel) && (
           <div className="rhythm-history-view__schedule rhythm-metadata-footer">
             <RhythmScheduleSummary

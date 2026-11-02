@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useScoringInstant } from './components/useScoringInstant.ts';
 import type { MouseEvent } from 'react';
 import { AppNavigation } from './components/AppNavigation.tsx';
@@ -71,7 +71,11 @@ import {
   validatePreviewIdentity
 } from './domain/preview-identity.ts';
 import type { PreviewIdentityState } from './domain/preview-identity.ts';
-import { savePersonDetailsCommand, personDetailsForId } from './domain/person-details.ts';
+import {
+  peopleWithSavedPhotos,
+  savePersonDetailsCommand,
+  personDetailsForId
+} from './domain/person-details.ts';
 import type { PersonDetailsDraft } from './domain/person-details.ts';
 import {
   createPersonNote,
@@ -184,6 +188,19 @@ const destinationLabels: Record<Exclude<Destination, 'today'>, string> = {
   friendships: 'Friendships'
 };
 const personProfileHistoryKey = 'tendPersonProfileId';
+
+function restorePersonProfileFocus(opener: HTMLElement | null, personId: PersonId | null): void {
+  if (opener?.isConnected && !opener.closest('[hidden]')) {
+    opener.focus();
+    return;
+  }
+  const personButton = personId
+    ? [...document.querySelectorAll<HTMLButtonElement>('dialog [data-person-id]')]
+      .find(button => button.dataset.personId === personId)
+    : undefined;
+  if (personButton) personButton.focus();
+  else document.querySelector<HTMLButtonElement>('.utility-primary-button[aria-current="page"]')?.focus();
+}
 
 function categorySuggestionCatalogue(
   categoryId: CategoryId,
@@ -404,6 +421,8 @@ function PreviewWorkspace({
   const activeRhythmReturnTab = useRef<'today' | MarriageTab>('today');
   const [profilePersonId, setProfilePersonId] = useState<PersonId | null>(null);
   const profileReturnRhythmId = useRef<string | null>(null);
+  const profileReturnScrollTop = useRef<number | null>(null);
+  const profileReturnFocusRhythmId = useRef<string | null>(null);
   const [personDetailsEditorId, setPersonDetailsEditorId] = useState<PersonId | null>(null);
   const personDetailsEditorOpener = useRef<HTMLButtonElement | null>(null);
   const wasPersonDetailsEditorOpen = useRef(false);
@@ -565,7 +584,8 @@ function PreviewWorkspace({
     ...allTodayRhythms,
     ...resolvedMarriageRhythms
   ].find(rhythm => rhythm.id === activeRhythmId) ?? null;
-  const selectedProfilePerson = profilePersonId === null ? null : personById(previewData.people, profilePersonId) ?? null;
+  const peopleWithPhotos = peopleWithSavedPhotos(previewData.people, previewData.personDetails);
+  const selectedProfilePerson = profilePersonId === null ? null : personById(peopleWithPhotos, profilePersonId) ?? null;
   const selectedDetailsEditorPerson = personDetailsEditorId === null
     ? null
     : personById(previewData.people, personDetailsEditorId) ?? null;
@@ -1064,6 +1084,9 @@ function PreviewWorkspace({
       delete state[personProfileHistoryKey];
       window.history.replaceState(state, '', window.location.href);
       profileReturnRhythmId.current = null;
+      profileReturnScrollTop.current = null;
+      profileOpener.current = null;
+      profileReturnPersonId.current = null;
       setProfilePersonId(null);
     }
     setDestination(next);
@@ -1082,6 +1105,7 @@ function PreviewWorkspace({
         : null;
       profileReturnPersonId.current = personId;
       profileReturnRhythmId.current = activeRhythmId;
+      profileReturnScrollTop.current = (document.scrollingElement ?? document.documentElement).scrollTop;
       if (activeRhythmId !== null) setActiveRhythmId(null);
     }
     window.history.pushState(
@@ -1291,6 +1315,12 @@ function PreviewWorkspace({
     return () => window.removeEventListener('popstate', syncProfileFromHistory);
   }, []);
 
+  useLayoutEffect(() => {
+    if (profilePersonId !== null) {
+      (document.scrollingElement ?? document.documentElement).scrollTop = 0;
+    }
+  }, [profilePersonId]);
+
   useEffect(() => {
     if (profilePersonId !== null) {
       wasProfileOpen.current = true;
@@ -1300,23 +1330,35 @@ function PreviewWorkspace({
       wasProfileOpen.current = false;
       const returnRhythmId = profileReturnRhythmId.current;
       profileReturnRhythmId.current = null;
-      if (returnRhythmId !== null) setActiveRhythmId(returnRhythmId);
-      if (profileOpener.current?.isConnected) {
-        profileOpener.current.focus();
+      if (returnRhythmId !== null) {
+        profileReturnFocusRhythmId.current = returnRhythmId;
+        setActiveRhythmId(returnRhythmId);
       } else {
-        requestAnimationFrame(() => {
-          const restoredPersonButton = profileReturnPersonId.current
-            ? document.querySelector<HTMLButtonElement>(
-                `dialog[open] [data-person-id="${profileReturnPersonId.current}"]`
-              )
-            : null;
-          if (restoredPersonButton) restoredPersonButton.focus();
-          else document.querySelector<HTMLButtonElement>('.utility-primary-button[aria-current="page"]')?.focus();
-          profileReturnPersonId.current = null;
-        });
+        const returnScrollTop = profileReturnScrollTop.current;
+        profileReturnScrollTop.current = null;
+        if (returnScrollTop !== null) {
+          (document.scrollingElement ?? document.documentElement).scrollTop = returnScrollTop;
+        }
+        restorePersonProfileFocus(profileOpener.current, profileReturnPersonId.current);
+        profileOpener.current = null;
+        profileReturnPersonId.current = null;
       }
     }
   }, [profilePersonId]);
+
+  useEffect(() => {
+    const returnRhythmId = profileReturnFocusRhythmId.current;
+    if (returnRhythmId === null || activeRhythmId !== returnRhythmId) return;
+    const returnScrollTop = profileReturnScrollTop.current;
+    profileReturnFocusRhythmId.current = null;
+    profileReturnScrollTop.current = null;
+    if (returnScrollTop !== null) {
+      (document.scrollingElement ?? document.documentElement).scrollTop = returnScrollTop;
+    }
+    restorePersonProfileFocus(profileOpener.current, profileReturnPersonId.current);
+    profileOpener.current = null;
+    profileReturnPersonId.current = null;
+  }, [activeRhythmId]);
 
   function navigateToFoundation(foundationId: string, returnTab: 'today' | MarriageTab) {
     const categoryId = foundationCategoryId(foundationId);
@@ -2441,7 +2483,7 @@ function PreviewWorkspace({
 
   const healthFitnessView = hydrated && (healthFitnessVisited || destination === 'health') ? (
     <HealthFitnessView
-      people={previewData.people}
+      people={peopleWithPhotos}
       hidden={destination !== 'health' || profilePersonId !== null}
       strength={{
         data: previewData.strength,
@@ -2586,7 +2628,7 @@ function PreviewWorkspace({
           : destination === 'today'
           ? (
             <TodayView
-              people={previewData.people}
+              people={peopleWithPhotos}
               greeting={greeting}
               dateLabel={dateLabel}
               evaluationInstant={scoringInstant}
@@ -2613,9 +2655,8 @@ function PreviewWorkspace({
           : destination === 'marriage'
             ? (
               <MarriageView
-                people={previewData.people}
+                people={peopleWithPhotos}
                 peopleGroups={resolvedPeopleGroups}
-                personDetails={previewData.personDetails}
                 todayDate={currentDate}
                 onAddRhythm={event => openRhythmEditor(event)}
                 onAddSuggestion={openRhythmSuggestion}
@@ -2646,7 +2687,7 @@ function PreviewWorkspace({
           : destination === 'parenting'
             ? (
               <MarriageView
-                people={previewData.people}
+                people={peopleWithPhotos}
                 categoryConfig={{
                   categoryId: 'parenting',
                   label: 'Parenting',
@@ -2688,7 +2729,7 @@ function PreviewWorkspace({
           : destination === 'faith'
             ? (
               <MarriageView
-                people={previewData.people}
+                people={peopleWithPhotos}
                 categoryConfig={{
                   categoryId: 'faith',
                   label: 'Faith',
@@ -2735,7 +2776,7 @@ function PreviewWorkspace({
             ? (
               <FriendshipsView
                 data={previewData.friendships}
-                people={previewData.people}
+                people={peopleWithPhotos}
                 peopleGroups={resolvedPeopleGroups}
                 personDetails={previewData.personDetails}
                 today={localDateInTimeZone(new Date(), localTimeZone)}
@@ -2774,7 +2815,7 @@ function PreviewWorkspace({
           : destination === 'people'
             ? (
               <PeopleView
-                people={previewData.people}
+                people={peopleWithPhotos}
                 groups={resolvedPeopleGroups}
                 friendships={previewData.friendships}
                 today={currentDate}
@@ -2789,7 +2830,7 @@ function PreviewWorkspace({
       {selectedProfilePerson && (
         <PersonProfileView
           personId={selectedProfilePerson.id}
-          people={previewData.people}
+          people={peopleWithPhotos}
           returnLabel={destination === 'today' ? 'Today' : destinationLabels[destination]}
           peopleGroups={resolvedPeopleGroups}
           personDetails={previewData.personDetails}
@@ -2975,7 +3016,7 @@ function PreviewWorkspace({
           {...(seasonRangeUndo?.rhythmId === activeRhythm.id
             ? { onUndoSeasonRange: undoSeasonRange }
             : {})}
-          people={peopleForRhythm(activeRhythm, previewData.people)}
+          people={peopleForRhythm(activeRhythm, peopleWithPhotos)}
           foundations={foundationCatalogue}
           archived={activeRhythmIsArchived}
           onOpenFoundation={foundationId => {
@@ -3019,7 +3060,7 @@ function PreviewWorkspace({
       )}
       {rhythmEditor && (
         <RhythmEditor
-          people={previewData.people}
+          people={peopleWithPhotos}
           {...(rhythmEditor.rhythm ? { rhythm: rhythmEditor.rhythm } : {})}
           {...(rhythmEditor.initialDraft ? { initialDraft: rhythmEditor.initialDraft } : {})}
           {...(rhythmEditor.suggestionSourceId

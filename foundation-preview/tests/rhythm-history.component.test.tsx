@@ -2016,17 +2016,22 @@ describe('shared Rhythm history', () => {
     const header = document.querySelector('.rhythm-history-view__rhythm-header') as HTMLElement;
     expect(within(header).getByRole('heading', { name: 'Daily Connection' })).toBeTruthy();
     const description = within(metadata).getByText('Make a little room each day to connect in a way that fits your life.') as HTMLElement;
-    const people = within(metadata).getByRole('group', { name: 'People associated with Daily Connection' }) as HTMLElement;
-    const categories = within(metadata).getByRole('group', { name: 'Associated categories' }) as HTMLElement;
+    const associations = within(metadata).getByRole('group', {
+      name: 'People and categories associated with Daily Connection'
+    }) as HTMLElement;
+    const people = within(associations).getByRole('group', {
+      name: 'People associated with Daily Connection'
+    }) as HTMLElement;
+    const categories = within(associations).getAllByRole('group', { name: / category$/ });
     const schedule = within(metadata).getByText('5 times a week') as HTMLElement;
     const order = (before: Node, after: Node) => Boolean(
       before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING
     );
 
-    expect(description.nextElementSibling).toBe(people.parentElement);
-    expect(order(people, categories)).toBe(true);
-    expect(order(categories, schedule)).toBe(true);
-    expect(within(categories).getAllByRole('img').map(icon => icon.getAttribute('aria-label'))).toEqual([
+    expect(description.nextElementSibling).toBe(associations);
+    expect(order(people, categories[0]!)).toBe(true);
+    expect(order(associations, schedule)).toBe(true);
+    expect(within(associations).getAllByRole('img').map(icon => icon.getAttribute('aria-label'))).toEqual([
       'Faith',
       'Marriage'
     ]);

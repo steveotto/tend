@@ -1,7 +1,7 @@
 import { connectionCadences } from './friendships.ts';
 import type { ConnectionCadence } from './friendships.ts';
 import { isValidPersonId } from './preview-data.ts';
-import type { PersonId, PersonPickerGroupId } from './preview-data.ts';
+import type { PersonId, PersonPickerGroupId, PersonPreview } from './preview-data.ts';
 
 export const relationshipGroups = [
   {
@@ -67,6 +67,21 @@ export function personDetailsForId(
   personId: PersonId
 ): PersonDetails | undefined {
   return details.find(item => item.personId === personId);
+}
+
+export function personWithSavedPhoto(
+  person: PersonPreview,
+  details: readonly PersonDetails[]
+): PersonPreview {
+  const photoDataUrl = personDetailsForId(details, person.id)?.photoDataUrl;
+  return photoDataUrl ? { ...person, avatarUrl: photoDataUrl } : person;
+}
+
+export function peopleWithSavedPhotos(
+  people: readonly PersonPreview[],
+  details: readonly PersonDetails[]
+): PersonPreview[] {
+  return people.map(person => personWithSavedPhoto(person, details));
 }
 
 export function personDetailsDraft(

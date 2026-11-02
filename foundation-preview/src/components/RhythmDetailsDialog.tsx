@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import {
+  areas,
   rhythmLastActivityLabel,
   type FoundationPreview,
   type PersonId,
@@ -139,12 +140,8 @@ export function RhythmDetailsDialog({
   }
 
   const hasPeople = Boolean(people?.length && onPersonSelect);
-  const hasCategories = Boolean(rhythm.categoryIds?.length);
-  const hasFoundationLinks = Boolean(
-    foundations?.length
-    && onOpenFoundation
-    && foundationRhythmIds(rhythm).some(id => foundations.some(foundation => foundation.id === id))
-  );
+  const hasCategories = Boolean(rhythm.categoryIds?.some(id => areas.some(area => area.id === id)));
+  const hasFoundationLinks = Boolean(!inline && foundations && foundationRhythmIds(rhythm).length);
   const scoringTimeZone = rhythm.scoring?.timeZone
     ?? rhythm.createdTimeZone
     ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -286,6 +283,7 @@ export function RhythmDetailsDialog({
                           {...(onPersonSelect ? { onPersonSelect } : {})}
                           {...(onOpenCategory ? { onOpenCategory } : {})}
                           {...(onOpenFoundation ? { onOpenFoundation } : {})}
+                          showFoundationLinks={!inline}
                         />
                       </div>
                     )
@@ -301,6 +299,7 @@ export function RhythmDetailsDialog({
                           {...(onPersonSelect ? { onPersonSelect } : {})}
                           {...(onOpenCategory ? { onOpenCategory } : {})}
                           {...(onOpenFoundation ? { onOpenFoundation } : {})}
+                          showFoundationLinks={!inline}
                         />
                       </div>
                     )}

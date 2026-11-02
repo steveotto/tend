@@ -6,7 +6,8 @@ import { connectionsForPerson } from '../domain/friendships.ts';
 import { PeopleCard } from './PeopleCard.tsx';
 import {
   birthdayCardSummary,
-  personDetailsForId
+  personDetailsForId,
+  personWithSavedPhoto
 } from '../domain/person-details.ts';
 import type { PersonDetails } from '../domain/person-details.ts';
 import { PersonCreationDialog } from './PersonCreationDialog.tsx';
@@ -90,9 +91,7 @@ export function PeopleView({
           {visiblePeople.map(person => {
             const lastConnection = connectionsForPerson(friendships, person.id)[0];
             const details = personDetailsForId(personDetails, person.id);
-            const displayPerson = details?.photoDataUrl
-              ? { ...person, avatarUrl: details.photoDataUrl }
-              : person;
+            const displayPerson = personWithSavedPhoto(person, personDetails);
             const birthday = details?.birthday
               ? birthdayCardSummary(details.birthday, today) ?? undefined
               : undefined;

@@ -65,10 +65,13 @@ export function PersonBadgeVisual({
 }
 
 export function PersonAvatar({ person }: { person: PersonPreview }) {
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
+  const imageAvailable = person.avatarUrl !== undefined && failedImageUrl !== person.avatarUrl;
+
   return (
     <span className="person-badge-avatar" aria-hidden="true">
-      {person.avatarUrl
-        ? <img src={person.avatarUrl} alt="" />
+      {imageAvailable
+        ? <img src={person.avatarUrl} alt="" onError={() => setFailedImageUrl(person.avatarUrl ?? null)} />
         : <span>{personInitials(person.displayName)}</span>}
     </span>
   );

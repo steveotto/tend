@@ -32,7 +32,8 @@ import { selectPersonRhythmsDueToday } from '../domain/person-rhythms.ts';
 import type { Destination } from './AppNavigation.tsx';
 import {
   connectionStyleLabel,
-  personDetailsForId
+  personDetailsForId,
+  personWithSavedPhoto
 } from '../domain/person-details.ts';
 import type { PersonDetails } from '../domain/person-details.ts';
 import { PersonNotesPanel } from './PersonNotesPanel.tsx';
@@ -145,10 +146,7 @@ export function PersonProfileView({
   onClose: () => void;
 }) {
   const details = personDetailsForId(personDetails, personId);
-  const basePerson = personById(people, personId);
-  const person = details?.photoDataUrl
-    ? { ...basePerson, avatarUrl: details.photoDataUrl }
-    : basePerson;
+  const person = personWithSavedPhoto(personById(people, personId), personDetails ?? []);
   const [tab, setTab] = useState<ProfileTab>('rhythms');
   const [notesOpen, setNotesOpen] = useState(false);
   const [connectionEditor, setConnectionEditor] = useState<{

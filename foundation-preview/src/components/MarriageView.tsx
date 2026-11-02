@@ -45,8 +45,6 @@ import type { Destination } from './AppNavigation.tsx';
 import type { RhythmCategoryId } from '../domain/rhythm-editor.ts';
 import type { RhythmFrequencyRecommendation } from '../domain/rhythm-schedule.ts';
 import { resolvePersonCategoryGroups } from '../domain/person-categories.ts';
-import { personDetailsForId } from '../domain/person-details.ts';
-import type { PersonDetails } from '../domain/person-details.ts';
 import { PersonBadgeVisual } from './PersonBadge.tsx';
 
 export type MarriageTab = 'today' | 'rhythms' | 'foundations';
@@ -76,7 +74,6 @@ export type CategoryRhythmSuggestionCatalogue = {
 type MarriageViewProps = {
   people?: readonly PersonPreview[];
   peopleGroups?: readonly PersonPickerGroup[];
-  personDetails?: readonly PersonDetails[];
   categoryConfig?: {
     categoryId: RhythmCategoryId;
     label: string;
@@ -138,7 +135,6 @@ const tabs: readonly SegmentedTab<MarriageTab>[] = [
 export function MarriageView({
   people = [],
   peopleGroups = [],
-  personDetails = [],
   categoryConfig,
   todayDate,
   onAddRhythm,
@@ -279,10 +275,7 @@ export function MarriageView({
     resolvedPeople.find(group => group.id === 'marriage')?.memberIds ?? []
   );
   const marriagePeople = categoryId === 'marriage'
-    ? people.filter(person => marriagePersonIds.has(person.id)).map(person => {
-        const photo = personDetailsForId(personDetails, person.id)?.photoDataUrl;
-        return photo ? { ...person, avatarUrl: photo } : person;
-      })
+    ? people.filter(person => marriagePersonIds.has(person.id))
     : [];
   const todayRhythms = userRhythms.filter(rhythm => isRhythmRelevantOnDate(rhythm, todayDate));
   function browseSuggestions(event: MouseEvent<HTMLButtonElement>) {

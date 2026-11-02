@@ -21,13 +21,14 @@ import {
   type RhythmPreview
 } from '../domain/preview-data.ts';
 import { localDateInTimeZone } from '../domain/rhythm-occurrences.ts';
-import { PersonBadgeList } from './PersonBadge.tsx';
+import { RhythmAssociationRows } from './RhythmAssociationRows.tsx';
 import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
 import { RhythmPersonalBadge } from './RhythmPersonalBadge.tsx';
 import { RhythmMetadata } from './RhythmMetadata.tsx';
 import { RhythmCompletionActions } from './RhythmCompletionActions.tsx';
 import { TimelineChart } from './TimelineChart.tsx';
 import { scoreTone } from '../domain/score-tone.ts';
+import type { Destination } from './AppNavigation.tsx';
 
 type FoundationCardProps = {
   foundation: FoundationPreview;
@@ -422,6 +423,7 @@ type RhythmCardBaseProps = {
   headingId?: string;
   people?: readonly PersonPreview[];
   onPersonSelect?: (personId: PersonId) => void;
+  onOpenCategory?: (categoryId: Destination, openerId: string) => void;
 };
 
 type RhythmCardProps = RhythmCardBaseProps & (
@@ -477,7 +479,7 @@ export function ScoreMeter({
 }
 
 export function RhythmCard(props: RhythmCardProps) {
-  const { rhythm, headingId, people, onPersonSelect } = props;
+  const { rhythm, headingId, people, onPersonSelect, onOpenCategory } = props;
   const externallyAutomated = rhythm.automation === 'external';
 
   if (props.variant === 'simple') {
@@ -488,6 +490,7 @@ export function RhythmCard(props: RhythmCardProps) {
         externallyAutomated={externallyAutomated}
         people={people}
         onPersonSelect={onPersonSelect}
+        onOpenCategory={onOpenCategory}
         completed={props.completed === true}
         archived={props.archived === true}
         completionActionLabel={props.completionActionLabel}
@@ -506,6 +509,7 @@ export function RhythmCard(props: RhythmCardProps) {
         externallyAutomated={externallyAutomated}
         people={people}
         onPersonSelect={onPersonSelect}
+        onOpenCategory={onOpenCategory}
         suggestion
         icon={props.icon}
         onDetails={props.onDetails}
@@ -523,7 +527,12 @@ export function RhythmCard(props: RhythmCardProps) {
           headingId={headingId ?? `rhythm-${rhythm.id}`}
         />
         <p className="rhythm-cadence">{rhythm.cadence} · {rhythm.status}</p>
-        <RhythmPeople rhythm={rhythm} people={people} onPersonSelect={onPersonSelect} />
+        <RhythmCardAssociations
+          rhythm={rhythm}
+          people={people}
+          onPersonSelect={onPersonSelect}
+          onOpenCategory={onOpenCategory}
+        />
         {props.onDetails && <RhythmDetailsButton rhythm={rhythm} onDetails={props.onDetails} />}
       </div>
     </article>
@@ -536,6 +545,7 @@ function SimpleRhythmCard({
   externallyAutomated,
   people,
   onPersonSelect,
+  onOpenCategory,
   completed = false,
   archived = false,
   completionActionLabel,
@@ -551,6 +561,7 @@ function SimpleRhythmCard({
   externallyAutomated: boolean;
   people?: readonly PersonPreview[] | undefined;
   onPersonSelect?: ((personId: PersonId) => void) | undefined;
+  onOpenCategory?: ((categoryId: Destination, openerId: string) => void) | undefined;
   completed?: boolean;
   archived?: boolean;
   completionActionLabel?: string | undefined;
@@ -578,7 +589,12 @@ function SimpleRhythmCard({
           showDescription={false}
           archived={archived}
         />
-        <RhythmPeople rhythm={rhythm} people={people} onPersonSelect={onPersonSelect} />
+        <RhythmCardAssociations
+          rhythm={rhythm}
+          people={people}
+          onPersonSelect={onPersonSelect}
+          onOpenCategory={onOpenCategory}
+        />
       </div>
       <div className="rhythm-card__actions">
         <RhythmDetailsButton rhythm={rhythm} onDetails={onDetails} />
@@ -605,18 +621,26 @@ function SimpleRhythmCard({
   );
 }
 
-function RhythmPeople({
+function RhythmCardAssociations({
   rhythm,
   people,
-  onPersonSelect
+  onPersonSelect,
+  onOpenCategory
 }: {
   rhythm: RhythmPreview;
   people?: readonly PersonPreview[] | undefined;
   onPersonSelect?: ((personId: PersonId) => void) | undefined;
+  onOpenCategory?: ((categoryId: Destination, openerId: string) => void) | undefined;
 }) {
-  return people && onPersonSelect
-    ? <PersonBadgeList people={people} rhythmTitle={rhythm.title} onSelect={onPersonSelect} />
-    : null;
+  return (
+    <RhythmAssociationRows
+      rhythm={rhythm}
+      {...(people ? { people } : {})}
+      {...(onPersonSelect ? { onPersonSelect } : {})}
+      {...(onOpenCategory ? { onOpenCategory } : {})}
+      showFoundationLinks={false}
+    />
+  );
 }
 
 function RhythmDetailsButton({
