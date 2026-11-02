@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FoundationScoreSelection } from '../src/domain/foundation-scoring.ts';
 import { selectFoundationScore } from '../src/domain/foundation-scoring.ts';
-import { selectCategoryScore } from '../src/domain/category-scoring.ts';
+import { selectCategoryHealthScore, selectCategoryScore } from '../src/domain/category-scoring.ts';
 import { faithPractices, marriageRhythms, parentingFoundations } from '../src/domain/preview-data.ts';
 import type { RhythmScoreSelection } from '../src/domain/rhythm-scoring.ts';
 
@@ -66,6 +66,26 @@ function scoredRhythm(consistency: number, onTrack: number): RhythmScoreSelectio
 }
 
 describe('selecting equal-weight Marriage Category scores', () => {
+  it('uses the account selectors for Today and preserves a valid zero score', () => {
+    const foundation = parentingFoundations[0]!;
+    const rhythm = {
+      ...marriageRhythms[0]!,
+      id: 'account-derived-zero-rhythm',
+      categoryIds: ['parenting'] as const,
+      primaryFoundationId: foundation.id,
+      secondaryFoundationIds: []
+    };
+    const result = selectCategoryHealthScore(
+      [foundation],
+      [rhythm],
+      new Map([[rhythm.id, scoredRhythm(0, 0)]]),
+      []
+    );
+
+    expect(result.eligibleFoundationIds).toEqual([foundation.id]);
+    expect(result).toMatchObject({ consistency: 0, onTrack: 0, health: 0 });
+  });
+
   it('extends the shared equal-weight selectors to Faith Practices without a breadth penalty', () => {
     const firstRhythm = {
       ...marriageRhythms[0]!,

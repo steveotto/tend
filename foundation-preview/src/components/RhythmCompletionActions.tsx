@@ -5,6 +5,7 @@ type RhythmCompletionActionsProps = {
   rhythmTitle: string;
   completed: boolean;
   actionLabel?: string | undefined;
+  actionAccessibleLabel?: string | undefined;
   completedLabel?: string | undefined;
   onTend: (event: MouseEvent<HTMLButtonElement>) => void;
   tendButtonRef: RefObject<HTMLButtonElement | null>;
@@ -14,6 +15,7 @@ export function RhythmCompletionActions({
   rhythmTitle,
   completed,
   actionLabel = 'Tend',
+  actionAccessibleLabel = actionLabel,
   completedLabel = 'Tended',
   onTend,
   tendButtonRef
@@ -24,7 +26,7 @@ export function RhythmCompletionActions({
         ref={tendButtonRef}
         type="button"
         className="rhythm-card__tend"
-        aria-label={completed ? `${completedLabel} ${rhythmTitle}` : `${actionLabel} ${rhythmTitle}`}
+        aria-label={completed ? `${completedLabel} ${rhythmTitle}` : `${actionAccessibleLabel} ${rhythmTitle}`}
         disabled={completed}
         onClick={onTend}
       >

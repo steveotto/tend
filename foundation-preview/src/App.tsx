@@ -14,6 +14,7 @@ import { selectActiveUserRhythms, selectArchivedUserRhythms } from './domain/act
 import { foundationCategoryId, saveFoundationRhythmAssociations } from './domain/foundation-rhythm-associations.ts';
 import type { FoundationRhythmAssociationChange } from './domain/foundation-rhythm-associations.ts';
 import { selectFoundationRhythmScores } from './domain/foundation-scoring.ts';
+import { selectCategoryHealthScore } from './domain/category-scoring.ts';
 import { RhythmDetailsDialog } from './components/RhythmDetailsDialog.tsx';
 import { RhythmCompletionDialog } from './components/RhythmCompletionDialog.tsx';
 import { FinanceGoalsView } from './components/FinanceGoalsView.tsx';
@@ -44,7 +45,6 @@ import {
   type CategoryRhythmSuggestionGroupDefinition,
   type CategoryRhythmSuggestionTemplate,
   type CategoryId,
-  type MarriageExampleId,
   type PersonId,
   type PersonPickerGroupId,
   type PersonPreview,
@@ -395,7 +395,6 @@ function PreviewWorkspace({
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [textSize, setTextSize] = useState<TextSize>('small');
-  const [marriageExampleId, setMarriageExampleId] = useState<MarriageExampleId>('populated');
   const [foundationNavigationRequest, setFoundationNavigationRequest] = useState<{
     foundationId: string;
     requestId: number;
@@ -556,6 +555,12 @@ function PreviewWorkspace({
     scoringInstant,
     localTimeZone
   );
+  const marriageHealthScore = selectCategoryHealthScore(
+    foundationCatalogue.filter(foundation => foundation.categoryId === 'marriage'),
+    marriageCategoryRhythms,
+    rhythmScoreResults,
+    previewData.archivedRhythmIds
+  ).health;
   const activeRhythm = [
     ...allTodayRhythms,
     ...resolvedMarriageRhythms
@@ -2594,10 +2599,9 @@ function PreviewWorkspace({
               rhythms={editableTodayRhythms}
               rhythmScores={rhythmScoreResults}
               search={search}
-              marriageExampleId={marriageExampleId}
+              marriageHealthScore={marriageHealthScore}
               foundations={foundationCatalogue}
               onNavigate={navigate}
-              onMarriageExampleChange={setMarriageExampleId}
               onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
               onPersonSelect={openPersonProfile}
               onHistory={openRhythmHistory}
@@ -2610,13 +2614,13 @@ function PreviewWorkspace({
             ? (
               <MarriageView
                 people={previewData.people}
-                marriageExampleId={marriageExampleId}
-                onMarriageExampleChange={setMarriageExampleId}
+                peopleGroups={resolvedPeopleGroups}
+                personDetails={previewData.personDetails}
                 todayDate={currentDate}
                 onAddRhythm={event => openRhythmEditor(event)}
                 onAddSuggestion={openRhythmSuggestion}
                 onPersonSelect={openPersonProfile}
-                onPartnerProfile={() => navigate('people')}
+                onOpenPeople={() => navigate('people')}
                 onOpenCategory={categoryId => navigate(categoryId)}
                 userRhythms={marriageCategoryRhythms}
                 archivedRhythms={archivedMarriageRhythms}
@@ -2658,6 +2662,7 @@ function PreviewWorkspace({
                 })}
                 onAddSuggestion={openRhythmSuggestion}
                 onPersonSelect={openPersonProfile}
+                onOpenPeople={() => navigate('people')}
                 onOpenCategory={categoryId => navigate(categoryId)}
                 userRhythms={parentingCategoryRhythms}
                 archivedRhythms={archivedParentingRhythms}
@@ -2701,6 +2706,7 @@ function PreviewWorkspace({
                 })}
                 onAddSuggestion={openRhythmSuggestion}
                 onPersonSelect={openPersonProfile}
+                onOpenPeople={() => navigate('people')}
                 onOpenCategory={categoryId => navigate(categoryId)}
                 userRhythms={faithCategoryRhythms}
                 archivedRhythms={archivedFaithRhythms}

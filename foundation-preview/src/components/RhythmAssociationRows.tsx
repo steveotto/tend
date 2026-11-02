@@ -69,38 +69,57 @@ export function RhythmAssociationRows({
 
   return (
     <>
-      {people && people.length > 0 && onPersonSelect && (
-        <div className="today-rhythm-details__association-people-row" role="group" aria-label={`People associated with ${rhythm.title}`}>
-          <PersonBadgeList
-            people={people}
-            rhythmTitle={rhythm.title}
-            onSelect={onPersonSelect}
-            collapsedLimit={2}
-            itemsOnly
-          />
-        </div>
-      )}
-      {categoryGroups.length > 0 && (
-        <div className="today-rhythm-details__association-category-row">
+      {(people?.length && onPersonSelect) || categoryGroups.length > 0 ? (
+        <div
+          className="today-rhythm-details__association-metadata-row"
+          role="group"
+          aria-label={`People and categories associated with ${rhythm.title}`}
+        >
+          {people && people.length > 0 && onPersonSelect && (
+            <div
+              className="today-rhythm-details__association-people"
+              role="group"
+              aria-label={`People associated with ${rhythm.title}`}
+            >
+              <PersonBadgeList
+                people={people}
+                rhythmTitle={rhythm.title}
+                onSelect={onPersonSelect}
+                collapsedLimit={2}
+                itemsOnly
+              />
+            </div>
+          )}
           {categoryGroups.map(({ category, rhythm: categoryRhythm }) => (
             <div
-              className="today-rhythm-details__association-category-group"
+              className="today-rhythm-details__association-category"
               key={category.id}
               role="group"
-              aria-label={`${category.label} category and linked ${foundationTerminologyForCategory(category.id).plural}`}
+              aria-label={`${category.label} category`}
             >
               <RhythmCategoryBadges
                 rhythm={categoryRhythm}
                 itemsOnly
                 {...(onOpenCategory ? { onOpenCategory } : {})}
               />
-              {foundations && onOpenFoundation && (
-                <RhythmFoundationBadges
-                  rhythm={categoryRhythm}
-                  foundations={foundations}
-                  onOpenFoundation={onOpenFoundation}
-                />
-              )}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {categoryGroups.length > 0 && foundations && onOpenFoundation && (
+        <div className="today-rhythm-details__association-foundations-row">
+          {categoryGroups.map(({ category, rhythm: categoryRhythm }) => (
+            <div
+              className="today-rhythm-details__association-category-group"
+              key={category.id}
+              role="group"
+              aria-label={`${category.label} linked ${foundationTerminologyForCategory(category.id).plural}`}
+            >
+              <RhythmFoundationBadges
+                rhythm={categoryRhythm}
+                foundations={foundations}
+                onOpenFoundation={onOpenFoundation}
+              />
             </div>
           ))}
         </div>

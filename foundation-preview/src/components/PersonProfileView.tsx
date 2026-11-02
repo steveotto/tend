@@ -295,7 +295,22 @@ export function PersonProfileView({
           <header className="person-profile__identity">
             <PersonAvatar person={person} />
             <div className="person-profile__identity-copy">
-              <h2 id="person-profile-title">{person.displayName}</h2>
+              <div className="person-profile__identity-title-row">
+                <h2 id="person-profile-title">{person.displayName}</h2>
+                {onEditPerson && (
+                  <button
+                    type="button"
+                    className="person-profile__settings"
+                    aria-label="Person settings"
+                    aria-haspopup="dialog"
+                    onClick={event => onEditPerson(personId, event)}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm0 1.8a1.7 1.7 0 1 1 0 3.4 1.7 1.7 0 0 1 0-3.4Zm7.3 1.7a7.3 7.3 0 0 0-.1-1l1.5-1.2-1.5-2.6-1.8.7a7 7 0 0 0-1.7-1L15.4 5h-3l-.4 1.9a7 7 0 0 0-1.7 1l-1.8-.7L7 9.8l1.5 1.2a7.3 7.3 0 0 0 0 2L7 14.2l1.5 2.6 1.8-.7a7 7 0 0 0 1.7 1l.4 1.9h3l.4-1.9a7 7 0 0 0 1.7-1l1.8.7 1.5-2.6-1.5-1.2a7.3 7.3 0 0 0 0-1Z" />
+                    </svg>
+                  </button>
+                )}
+              </div>
               {categoryLabel && (
                 <span className="person-profile__category">
                   {resolvedCategory !== 'friends' && resolvedCategory && <AreaIcon id={resolvedCategory} />}
@@ -303,19 +318,6 @@ export function PersonProfileView({
                 </span>
               )}
             </div>
-            {onEditPerson && (
-              <button
-                type="button"
-                className="person-profile__settings"
-                aria-label="Person settings"
-                aria-haspopup="dialog"
-                onClick={event => onEditPerson(personId, event)}
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm0 1.8a1.7 1.7 0 1 1 0 3.4 1.7 1.7 0 0 1 0-3.4Zm7.3 1.7a7.3 7.3 0 0 0-.1-1l1.5-1.2-1.5-2.6-1.8.7a7 7 0 0 0-1.7-1L15.4 5h-3l-.4 1.9a7 7 0 0 0-1.7 1l-1.8-.7L7 9.8l1.5 1.2a7.3 7.3 0 0 0 0 2L7 14.2l1.5 2.6 1.8-.7a7 7 0 0 0 1.7 1l.4 1.9h3l.4-1.9a7 7 0 0 0 1.7-1l1.8.7 1.5-2.6-1.5-1.2a7.3 7.3 0 0 0 0-1Z" />
-                </svg>
-              </button>
-            )}
           </header>
           {(details?.connectionStyle || birthdayDateLabel || anniversaryDateLabel) && (
             <div className="person-profile__details" aria-label={`${person.displayName} personal details`}>

@@ -3,11 +3,7 @@ import type { KeyboardEvent, MouseEvent } from 'react';
 import {
   areas,
   peopleForRhythm,
-  syntheticPeople,
   type FoundationPreview,
-  todayAreaScore,
-  todayOverallIllustrativeScore,
-  type MarriageExampleId,
   type PersonId,
   type PersonPreview,
   type RhythmPreview
@@ -17,7 +13,6 @@ import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { AreaIcon } from './AreaIcon.tsx';
 import { CategoryHealthBadge, ScoreMeter } from './Cards.tsx';
-import { MarriageExampleSelector } from './MarriageExampleSelector.tsx';
 import type { Destination } from './AppNavigation.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 import {
@@ -51,9 +46,8 @@ type TodayViewProps = {
   rhythms: readonly RhythmPreview[];
   rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
   search: string;
-  marriageExampleId: MarriageExampleId;
+  marriageHealthScore: number | null;
   onNavigate: (destination: Destination) => void;
-  onMarriageExampleChange: (id: MarriageExampleId) => void;
   onPersonSelect: (personId: PersonId) => void;
   foundations: readonly FoundationPreview[];
   onOpenFoundation: (foundationId: string, openerId: string) => void;
@@ -64,7 +58,7 @@ type TodayViewProps = {
 };
 
 export function TodayView({
-  people = syntheticPeople,
+  people = [],
   greeting,
   dateLabel,
   evaluationInstant,
@@ -77,11 +71,10 @@ export function TodayView({
   rhythms,
   rhythmScores,
   search,
-  marriageExampleId,
+  marriageHealthScore,
   foundations,
   onOpenFoundation,
   onNavigate,
-  onMarriageExampleChange,
   onPersonSelect,
   onHistory,
   onTend,
@@ -152,25 +145,25 @@ export function TodayView({
 
       <section className="card overall-card" aria-label="Overall health summary">
         <div className="dashboard-overall-heading">
-          <h3>Overall health</h3><span className="ov-score" aria-hidden="true">{todayOverallIllustrativeScore}</span>
+          <h3>Overall health</h3><span className="ov-score" aria-hidden="true">—</span>
         </div>
         <ScoreMeter
-          label={`Overall health, illustrative sample score ${todayOverallIllustrativeScore} out of 100, not calculated`}
-          score={todayOverallIllustrativeScore}
+          label="Overall health: Not enough data"
+          score={null}
           markerPlacement="below"
         />
-        <div className="meta"><span className="sample-status">Illustrative sample · not calculated</span></div>
+        <p className="overall-health-unavailable">Overall Health is unavailable until an approved aggregate is defined.</p>
         <div className="menu-grid">
           {areas.map(area => {
-            const score = todayAreaScore(area.id, marriageExampleId);
+            const score = area.id === 'marriage' ? marriageHealthScore : null;
             return (
               <button
                 className="menu-area"
                 key={area.id}
                 type="button"
                 aria-description={score === null
-                  ? `${area.label} sample health score unavailable`
-                  : `${area.label} illustrative sample score ${score}, not calculated`}
+                  ? `${area.label} health score unavailable`
+                  : `${area.label} health score ${Math.round(score)} out of 100`}
                 onClick={() => onNavigate(area.id)}
               >
                 <span className="menu-area-icon" aria-hidden="true">
@@ -182,7 +175,6 @@ export function TodayView({
             );
           })}
         </div>
-        <MarriageExampleSelector value={marriageExampleId} onChange={onMarriageExampleChange} />
       </section>
 
       <section aria-label="Today's plan">
@@ -295,7 +287,13 @@ export function TodayView({
                       healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
                       onTend={event => onTend(rhythm.id, event)}
                       {...(rhythm.categoryIds?.includes('health')
-                        ? { completionActionLabel: 'Log workout', completedActionLabel: 'Logged' }
+                        ? {
+                            completionActionLabel: 'Log',
+                            completionActionAccessibleLabel: rhythm.healthLogCapability === 'cardio'
+                              ? 'Log run'
+                              : rhythm.healthLogCapability === 'weight' ? 'Log weigh-in' : 'Log workout',
+                            completedActionLabel: rhythm.healthLogCapability === 'weight' ? 'Weighed in' : 'Logged'
+                          }
                         : {})}
                       onHistory={event => onHistory(rhythm.id, event)}
                       {...(isEditableRhythmId(rhythm.id)

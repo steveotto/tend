@@ -1,6 +1,9 @@
 import type { FoundationPreview } from './preview-data.ts';
+import type { RhythmPreview } from './preview-data.ts';
 import type { FoundationScoreSelection } from './foundation-scoring.ts';
 import { aggregateHealthMeasures } from './health-scoring.ts';
+import { selectFoundationScore } from './foundation-scoring.ts';
+import type { RhythmScoreResult } from './rhythm-scoring.ts';
 
 export type CategoryScoreSelection = {
   foundationIds: readonly string[];
@@ -66,4 +69,17 @@ export function selectCategoryScore(
     unresolvedFoundationIds,
     ...aggregateHealthMeasures(eligible)
   };
+}
+
+export function selectCategoryHealthScore(
+  foundations: readonly Pick<FoundationPreview, 'id'>[],
+  rhythms: readonly RhythmPreview[],
+  rhythmScores: ReadonlyMap<string, RhythmScoreResult>,
+  archivedRhythmIds: readonly string[]
+): CategoryScoreSelection {
+  const foundationScores = new Map(foundations.map(foundation => [
+    foundation.id,
+    selectFoundationScore(foundation.id, rhythms, rhythmScores, archivedRhythmIds)
+  ]));
+  return selectCategoryScore(foundations, foundationScores);
 }

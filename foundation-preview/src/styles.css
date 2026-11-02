@@ -15232,3 +15232,259 @@ a:focus-visible {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.tend-app-preview .current-plan-item-group,
+.tend-app-preview .marriage-rhythm-list {
+  gap: 16px;
+}
+
+.tend-app-preview .today-rhythm-details-dialog--inline {
+  margin: 0;
+  border-color: #dce5de;
+  box-shadow: 0 1px 3px rgb(32 39 35 / 6%), 0 3px 8px rgb(32 39 35 / 3%);
+}
+
+.tend-app-preview .rhythm-card--simple {
+  border-color: var(--tend-line);
+  box-shadow: 0 1px 3px rgb(32 39 35 / 6%), 0 3px 8px rgb(32 39 35 / 3%);
+}
+
+.today-rhythm-details__association-metadata-row,
+.today-rhythm-details__association-foundations-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-width: 0;
+}
+
+.today-rhythm-details__association-people,
+.today-rhythm-details__association-category {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-width: 0;
+}
+
+.today-rhythm-details__association-metadata-row .rhythm-area-badge__visual .area-svg-icon {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  filter: none;
+}
+
+.rhythm-history-view__score-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+}
+
+.rhythm-history-view__score-card > .health-score-breakdown {
+  min-width: 0;
+}
+
+.rhythm-history-view__score-details-grid,
+.rhythm-history-view__health-calculation-disclosure {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-completion-form,
+.rhythm-completion-form__rhythm,
+.rhythm-completion-form__heading {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-completion-form__rhythm {
+  padding-right: 48px;
+  color: var(--tend-ink);
+  font-size: 19px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.person-profile__identity {
+  grid-template-columns: 92px minmax(0, 1fr);
+}
+
+.person-profile__identity-copy {
+  gap: 10px;
+}
+
+.person-profile__identity-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.person-profile__identity-title-row h2 {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.person-profile__identity-title-row .person-profile__settings {
+  flex: 0 0 36px;
+  margin: 0;
+}
+
+.marriage-people-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.marriage-person-shortcut {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 5px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 6px 0 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--tend-ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.marriage-person-shortcut .person-badge-visual {
+  min-height: 34px;
+}
+
+.marriage-person-shortcut__chevron {
+  color: var(--tend-secondary);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.marriage-people-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.marriage-people-empty p {
+  margin: 0;
+  color: var(--tend-secondary);
+  font-size: 13px;
+}
+
+.overall-health-unavailable {
+  margin: 8px 0 12px;
+  color: var(--tend-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.strength-goals-table,
+.strength-goals-row {
+  width: 100%;
+  min-width: 0;
+}
+
+.money-goal-dialog {
+  box-sizing: border-box;
+  inset: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  min-width: 0;
+  max-width: calc(100vw - 28px);
+  max-height: min(88dvh, 840px);
+  overscroll-behavior: contain;
+  scroll-padding-block: 16px;
+  scrollbar-gutter: stable;
+}
+
+@media (max-width: 640px) {
+  .strength-goals-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding-block: 10px;
+  }
+
+  .strength-goals-row > [role="rowheader"] {
+    grid-column: 1 / -1;
+    font-weight: 700;
+  }
+
+  .strength-goals-row > label,
+  .strength-goals-row__between-sets {
+    min-width: 0;
+  }
+
+  .strength-goals-row__field-label {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--tend-secondary);
+    font-size: .78rem;
+    line-height: 1.3;
+  }
+
+  .strength-goals-row__between-sets {
+    grid-column: 1 / -1;
+  }
+
+  .strength-goals-row--head {
+    display: none;
+  }
+
+  .strength-recommendation {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .strength-recommendation .btn {
+    align-self: flex-start;
+  }
+}
+
+@media (max-width: 600px) {
+  .marriage-page .category-header {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .marriage-page .category-header__copy h2 {
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  .marriage-page .category-header__trailing {
+    justify-content: flex-start;
+  }
+
+  .marriage-people-shortcuts {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .marriage-person-shortcut {
+    max-width: 100%;
+  }
+
+  .person-profile__identity {
+    grid-template-columns: 68px minmax(0, 1fr);
+    align-items: start;
+    gap: 12px;
+  }
+
+  .person-profile__identity > .person-badge-avatar {
+    flex-basis: 68px;
+    width: 68px;
+    height: 68px;
+    font-size: 21px;
+  }
+
+  .person-profile__identity h2 {
+    font-size: clamp(21px, 7vw, 28px);
+  }
+}

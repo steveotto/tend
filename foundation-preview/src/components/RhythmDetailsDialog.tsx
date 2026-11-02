@@ -8,7 +8,6 @@ import {
   type RhythmPreview
 } from '../domain/preview-data.ts';
 import { localDateInTimeZone } from '../domain/rhythm-occurrences.ts';
-import { PersonBadgeList } from './PersonBadge.tsx';
 import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
 import { RhythmPersonalBadge } from './RhythmPersonalBadge.tsx';
 import { RhythmMetadata } from './RhythmMetadata.tsx';
@@ -19,8 +18,6 @@ import type { DatedRhythmCompletion, RhythmCompletionRecord } from '../domain/rh
 import type { RhythmSeasonEditDraft } from '../domain/rhythm-season-edit.ts';
 import type { RhythmSeasonDeletionUndo } from '../domain/rhythm-season-delete.ts';
 import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
-import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
-import { RhythmFoundationBadges } from './RhythmFoundationBadges.tsx';
 import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
 import type { Destination } from './AppNavigation.tsx';
 import { RhythmAssociationRows } from './RhythmAssociationRows.tsx';
@@ -32,6 +29,7 @@ type RhythmDetailsDialogProps = {
   initialView?: 'details' | 'history';
   statusLabel?: string;
   completionActionLabel?: string;
+  completionActionAccessibleLabel?: string;
   completedActionLabel?: string;
   onTend?: (event: MouseEvent<HTMLButtonElement>) => void;
   onHistory?: (event: MouseEvent<HTMLButtonElement>) => void;
@@ -90,6 +88,7 @@ export function RhythmDetailsDialog({
   initialView = 'details',
   statusLabel,
   completionActionLabel,
+  completionActionAccessibleLabel,
   completedActionLabel,
   onTend,
   onHistory,
@@ -158,6 +157,7 @@ export function RhythmDetailsDialog({
           rhythmTitle={rhythm.title}
           completed={completed}
           actionLabel={completionActionLabel}
+          actionAccessibleLabel={completionActionAccessibleLabel}
           completedLabel={completedActionLabel}
           onTend={inline || onTend ? onTend! : () => setShowCompletion(true)}
           tendButtonRef={tendButtonRef}
@@ -294,20 +294,14 @@ export function RhythmDetailsDialog({
                         {rhythm.description?.trim() && (
                           <p className="tend-type-description today-rhythm-details__description">{rhythm.description}</p>
                         )}
-                        {people && onPersonSelect && (
-                          <PersonBadgeList people={people} rhythmTitle={rhythm.title} onSelect={onPersonSelect} />
-                        )}
-                        <RhythmCategoryBadges
+                        <RhythmAssociationRows
                           rhythm={rhythm}
+                          {...(people ? { people } : {})}
+                          {...(foundations ? { foundations } : {})}
+                          {...(onPersonSelect ? { onPersonSelect } : {})}
                           {...(onOpenCategory ? { onOpenCategory } : {})}
+                          {...(onOpenFoundation ? { onOpenFoundation } : {})}
                         />
-                        {foundations && onOpenFoundation && (
-                          <RhythmFoundationBadges
-                            rhythm={rhythm}
-                            foundations={foundations}
-                            onOpenFoundation={onOpenFoundation}
-                          />
-                        )}
                       </div>
                     )}
                   {!inline && detailsActions}

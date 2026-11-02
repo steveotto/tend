@@ -3039,31 +3039,28 @@ describe('Tend Today preview', () => {
     expect(within(card).getByRole('button', { name: 'Tend Pray together' })).toBeTruthy();
   });
 
-  it('shows Today category scores in color-coded badges without inventing unavailable values', () => {
+  it('shows account-derived category scores without inventing unavailable values', () => {
     render(<App />);
 
     const marriage = screen.getAllByRole('button', { name: 'Marriage' }).find(button => button.classList.contains('menu-area'))!;
-    expect(marriage.querySelector('.ma-score')?.textContent).toBe('78');
-    expect(marriage.querySelector('.ma-score')?.classList.contains('yellow')).toBe(true);
-    expect(marriage.getAttribute('aria-description')).toContain('illustrative sample score 78, not calculated');
+    expect(marriage.querySelector('.ma-score')?.textContent).toBe('—');
+    expect(marriage.querySelector('.ma-score')?.classList.contains('neutral')).toBe(true);
+    expect(marriage.getAttribute('aria-description')).toContain('health score unavailable');
 
     const faith = screen.getAllByRole('button', { name: 'Faith' }).find(button => button.classList.contains('menu-area'))!;
     expect(faith.querySelector('.ma-score')?.textContent).toBe('—');
     expect(faith.querySelector('.ma-score')?.classList.contains('neutral')).toBe(true);
-    expect(faith.getAttribute('aria-description')).toContain('sample health score unavailable');
+    expect(faith.getAttribute('aria-description')).toContain('Faith health score unavailable');
   });
 
-  it('shows the explicitly illustrative overall health meter with the requested sample value', () => {
+  it('keeps Overall Health unavailable until an aggregate is approved', () => {
     render(<App />);
 
-    expect(screen.getByText('87', { selector: '.ov-score' })).toBeTruthy();
-    const meter = screen.getByRole('meter', {
-      name: 'Overall health, illustrative sample score 87 out of 100, not calculated'
-    });
-    expect(meter.getAttribute('aria-valuenow')).toBe('87');
-    expect(meter.classList.contains('preview-score-meter--marker-below')).toBe(true);
-    expect(meter.querySelector('.preview-score-marker')?.getAttribute('style')).toContain('--score: 87%');
-    expect(screen.getByText('Illustrative sample · not calculated')).toBeTruthy();
+    expect(screen.getByText('—', { selector: '.ov-score' })).toBeTruthy();
+    const meter = screen.getByRole('meter', { name: 'Overall health: Not enough data' });
+    expect(meter.getAttribute('aria-valuenow')).toBeNull();
+    expect(meter.getAttribute('aria-valuetext')).toBe('Score unavailable');
+    expect(screen.getByText('Overall Health is unavailable until an approved aggregate is defined.')).toBeTruthy();
   });
 
   it('saves a dated completion from the inline card and opens its chart directly', async () => {
@@ -4270,16 +4267,17 @@ describe('Tend Today preview', () => {
     expect(screen.getByLabelText('Choose a time frame, currently Everything today')).toBeTruthy();
   });
 
-  it('shows unavailable calculated Marriage summary values and routes its partner shortcut to People', async () => {
+  it('shows unavailable account-derived Marriage values and links classified People to profiles', async () => {
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Marriage' }));
     expect(screen.getByRole('heading', { name: 'Marriage' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Marriage' }).closest('.category-header')).toBeTruthy();
-    expect(screen.getByText('Synthetic example')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Your partner/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Your partner/ }).closest('.category-header')).toBeTruthy();
+    expect(screen.queryByText('Synthetic example')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Your partner/ })).toBeNull();
+    const personShortcut = screen.getByRole('button', { name: 'Open profile for Avery Brooks' });
+    expect(personShortcut.closest('.category-header')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Marriage Health' })).toBeTruthy();
     expect(screen.getByText('No scored Foundations yet')).toBeTruthy();
     expect(screen.getByRole('meter', { name: 'Marriage Health score' }).getAttribute('aria-valuenow')).toBeNull();
@@ -4299,8 +4297,8 @@ describe('Tend Today preview', () => {
     const ids = [...page.querySelectorAll('[id]')].map(element => element.id);
     expect(new Set(ids).size).toBe(ids.length);
 
-    await user.click(screen.getByRole('button', { name: /Your partner/ }));
-    expect(screen.getByRole('heading', { name: 'People' })).toBeTruthy();
+    await user.click(personShortcut);
+    expect(screen.getByRole('main', { name: 'Avery Brooks' })).toBeTruthy();
   });
 
   it('keeps the shared score explanation scoped to the selected Category without changing saved data', async () => {
@@ -4338,9 +4336,10 @@ describe('Tend Today preview', () => {
       name: 'Show Foundation scoring explanation'
     });
     expect(heading.compareDocumentPosition(info) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(foundationsSection as HTMLElement).getByText('Ongoing areas of care.')).toBeTruthy();
+    expect(within(foundationsSection as HTMLElement)
+      .getByText('Ongoing areas of care; scores are unavailable without scored linked Rhythms.')).toBeTruthy();
     expect(foundationsSection.querySelector('.marriage-sample-tag')).toBeNull();
-    expect(screen.getByText('Synthetic example')).toBeTruthy();
+    expect(screen.queryByText('Synthetic example')).toBeNull();
 
     await user.click(info);
     expect(screen.getByRole('region', { name: 'Each rhythm counts equally.' })).toBeTruthy();
@@ -4843,8 +4842,9 @@ describe('Tend Today preview', () => {
       name: 'Show Foundation scoring explanation'
     })).toBe(showFoundationInfo);
     expect(foundationsSection.querySelector('.marriage-sample-tag')).toBeNull();
-    expect(within(foundationsSection as HTMLElement).getByText('Ongoing areas of care.')).toBeTruthy();
-    expect(screen.getByText('Synthetic example')).toBeTruthy();
+    expect(within(foundationsSection as HTMLElement)
+      .getByText('Ongoing areas of care; scores are unavailable without scored linked Rhythms.')).toBeTruthy();
+    expect(screen.queryByText('Synthetic example')).toBeNull();
     showFoundationInfo.focus();
     await user.keyboard('{Enter}');
     expect(document.activeElement).toBe(showFoundationInfo);
@@ -5036,39 +5036,24 @@ describe('Tend Today preview', () => {
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(savedBefore);
   });
 
-  it('shares the populated and empty Marriage example selector on Today and Marriage without persisting it', async () => {
+  it('keeps Today and Marriage free of sample selectors and uses only account-derived scores', async () => {
     const user = userEvent.setup();
     render(<App />);
     const areas = within(screen.getByRole('navigation', { name: 'Areas' }));
-    const selector = screen.getByRole('combobox', { name: 'Marriage example' });
-    expect((selector as HTMLSelectElement).value).toBe('populated');
-    const savedPreviewBeforeSelection = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
-
-    selector.focus();
-    await user.selectOptions(selector, 'empty');
-    expect((selector as HTMLSelectElement).value).toBe('empty');
-    expect(document.activeElement).toBe(selector);
+    expect(screen.queryByRole('combobox', { name: 'Marriage example' })).toBeNull();
     const getMarriageTodayButton = () => screen.getAllByRole('button', { name: 'Marriage' }).find(button => button.classList.contains('menu-area'))!;
-    let marriageTodayBadge = getMarriageTodayButton().querySelector('.ma-score');
+    const marriageTodayBadge = getMarriageTodayButton().querySelector('.ma-score');
     expect(marriageTodayBadge?.textContent).toBe('—');
     expect(getMarriageTodayButton().getAttribute('aria-description')).toContain('score unavailable');
-    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(savedPreviewBeforeSelection);
 
     await user.click(areas.getByRole('button', { name: 'Marriage' }));
-    expect((screen.getByRole('combobox', { name: 'Marriage example' }) as HTMLSelectElement).value).toBe('empty');
+    expect(screen.queryByRole('combobox', { name: 'Marriage example' })).toBeNull();
     expect(screen.getByRole('meter', { name: 'Marriage Health score' }).getAttribute('aria-valuenow')).toBeNull();
     expect(screen.getByText('No scored Foundations yet')).toBeTruthy();
-    expect(within(document.getElementById('marriage-panel-today')!).getByText('No active Rhythms.')).toBeTruthy();
-    expect(screen.queryByText('No sample invitation or topic is available.')).toBeNull();
     expect(screen.getByText('—', { selector: '.category-health-score' })).toBeTruthy();
-
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Marriage example' }), 'populated');
-    expect(screen.getByText('—', { selector: '.category-health-score' })).toBeTruthy();
-    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(savedPreviewBeforeSelection);
-    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' })).getByRole('button', { name: 'Today' }));
-    marriageTodayBadge = getMarriageTodayButton().querySelector('.ma-score');
-    expect(marriageTodayBadge?.textContent).toBe('78');
-    expect((screen.getByRole('combobox', { name: 'Marriage example' }) as HTMLSelectElement).value).toBe('populated');
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'Today' }));
+    expect(getMarriageTodayButton().querySelector('.ma-score')?.textContent).toBe('—');
   });
 
   it('keeps one fixture as the source for score coverage, associations, and weekly history', () => {
@@ -5092,11 +5077,10 @@ describe('Tend Today preview', () => {
     }
   });
 
-  it('renders the empty fixture with all six stable Foundations and explicit empty states', async () => {
+  it('renders six unscored Marriage Foundations with explicit empty states', async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Marriage' }));
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Marriage example' }), 'empty');
     await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
     expect(within(document.getElementById('marriage-panel-rhythms')!).getAllByText('No active Rhythms.'))
       .toHaveLength(3);

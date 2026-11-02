@@ -562,21 +562,6 @@ export function RhythmHistoryView({
 
       <section className="rhythm-history-view__score-section" aria-label="Health, Consistency, and On Track scores">
         <div className="rhythm-history-view__score-card">
-          <div className="rhythm-history-view__score-card-controls">
-            <button
-              type="button"
-              className="rhythm-history-view__score-info"
-              aria-label={`${scoreDetailsExpanded ? 'Hide' : 'Show'} Consistency and On Track score details`}
-              aria-expanded={scoreDetailsExpanded}
-              aria-controls={`${healthCalculationId} ${scoreDetailsId}`}
-              onClick={() => setScoreDetailsExpanded(expanded => !expanded)}
-            >
-              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                <circle cx="8" cy="8" r="6.25" />
-                <path d="M8 7.2v4M8 4.8h.01" />
-              </svg>
-            </button>
-          </div>
           <HealthScoreBreakdown
             title="Health"
             score={score.healthScore}
@@ -593,6 +578,21 @@ export function RhythmHistoryView({
             consistencyCaption={metricCopy.consistency.shortDescription}
             onTrackCaption={metricCopy.onTrack.shortDescription}
             ariaLabel="Health score summary"
+            headingAction={(
+              <button
+                type="button"
+                className="rhythm-history-view__score-info"
+                aria-label={`${scoreDetailsExpanded ? 'Hide' : 'Show'} Consistency and On Track score details`}
+                aria-expanded={scoreDetailsExpanded}
+                aria-controls={`${healthCalculationId} ${scoreDetailsId}`}
+                onClick={() => setScoreDetailsExpanded(expanded => !expanded)}
+              >
+                <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <circle cx="8" cy="8" r="6.25" />
+                  <path d="M8 7.2v4M8 4.8h.01" />
+                </svg>
+              </button>
+            )}
             showMeasures={false}
           />
           <div
@@ -1459,7 +1459,7 @@ function OnTrackScoreBreakdown({ metric }: { metric: ScoredOnTrackMetric }) {
         </span>
       </p>
       <section className="rhythm-history-view__score-details">
-        <h4>How it changed</h4>
+        <h4>Score history</h4>
         <ol id={historyId} className="rhythm-history-view__score-history" aria-label="On Track score changes">
           {visibleEntries.map(item => (
             <li

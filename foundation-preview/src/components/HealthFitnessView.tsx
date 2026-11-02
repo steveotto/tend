@@ -310,7 +310,8 @@ export function HealthFitnessView({
                             onTend: (event: MouseEvent<HTMLButtonElement>) => openRhythmLog(rhythm.id, event),
                             onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event),
                             ...(undoableRhythms.has(rhythm.id) ? { onUndo: () => onUndoRhythm(rhythm.id) } : {}),
-                            completionActionLabel: rhythm.healthLogCapability === 'cardio'
+                            completionActionLabel: 'Log',
+                            completionActionAccessibleLabel: rhythm.healthLogCapability === 'cardio'
                               ? 'Log run'
                               : rhythm.healthLogCapability === 'weight' ? 'Log weigh-in' : 'Log workout',
                             completedActionLabel: rhythm.healthLogCapability === 'weight' ? 'Weighed in' : 'Logged'
@@ -361,7 +362,8 @@ export function HealthFitnessView({
           onEditRhythm={onEditRhythm}
           onTend={openRhythmLog}
           onUndo={onUndoRhythm}
-          completionActionLabelFor={rhythm => rhythm.healthLogCapability === 'cardio'
+          completionActionLabelFor={() => 'Log'}
+          completionActionAccessibleLabelFor={rhythm => rhythm.healthLogCapability === 'cardio'
             ? 'Log run'
             : rhythm.healthLogCapability === 'weight' ? 'Log weigh-in' : 'Log workout'}
           completedActionLabelFor={rhythm => rhythm.healthLogCapability === 'weight' ? 'Weighed in' : 'Logged'}

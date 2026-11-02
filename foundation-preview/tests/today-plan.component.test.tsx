@@ -34,10 +34,9 @@ function TodayHarness() {
       undoableRhythms={new Set()}
       rhythms={todayRhythms}
       rhythmScores={new Map()}
+      marriageHealthScore={null}
       search=""
-      marriageExampleId="empty"
       onNavigate={vi.fn()}
-      onMarriageExampleChange={vi.fn()}
       onPersonSelect={vi.fn()}
       foundations={foundationCatalogue}
       onOpenFoundation={vi.fn()}
@@ -94,6 +93,45 @@ describe('Today time-frame interaction', () => {
     expect(within(plan).getByRole('tab', { name: 'Anytime' }).getAttribute('aria-selected')).toBe('true');
     expect(within(plan).getByText('No preferred time')).toBeTruthy();
     expect(within(plan).getByText('No eligible Anytime rhythms.')).toBeTruthy();
+  });
+
+  it('moves focus and activates Today plan tabs with arrows, Home, and End', async () => {
+    const user = userEvent.setup();
+    renderToday();
+    const plan = screen.getByRole('region', { name: "Today's plan" });
+    await user.click(within(plan).getByText('Now', { selector: 'summary span' }));
+    await user.click(within(plan).getByRole('button', { name: /Everything today/ }));
+
+    const tabList = within(plan).getByRole('tablist', { name: 'Plan items' });
+    const scheduled = within(tabList).getByRole('tab', { name: 'Scheduled' });
+    const anytime = within(tabList).getByRole('tab', { name: 'Anytime' });
+    const allDay = within(tabList).getByRole('tab', { name: 'All-day' });
+    const panel = within(plan).getByRole('tabpanel');
+
+    scheduled.focus();
+    await user.keyboard('{ArrowLeft}');
+    expect(document.activeElement).toBe(allDay);
+    expect(allDay.getAttribute('aria-selected')).toBe('true');
+    expect(allDay.tabIndex).toBe(0);
+    expect(scheduled.tabIndex).toBe(-1);
+    expect(panel.getAttribute('aria-labelledby')).toBe('plan-tab-all-day');
+
+    await user.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(scheduled);
+    expect(scheduled.getAttribute('aria-selected')).toBe('true');
+
+    await user.keyboard('{End}');
+    expect(document.activeElement).toBe(allDay);
+    expect(allDay.getAttribute('aria-selected')).toBe('true');
+
+    await user.keyboard('{Home}');
+    expect(document.activeElement).toBe(scheduled);
+    expect(scheduled.getAttribute('aria-selected')).toBe('true');
+
+    await user.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(anytime);
+    expect(anytime.getAttribute('aria-selected')).toBe('true');
+    expect(panel.getAttribute('aria-labelledby')).toBe('plan-tab-anytime');
   });
 
   it('keeps focus-frame hover and keyboard focus separate from activation', async () => {

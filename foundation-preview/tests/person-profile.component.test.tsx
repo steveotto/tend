@@ -268,6 +268,9 @@ describe('shared person profile', () => {
     render(<ProfileHarness onEditPerson={onEditPerson} />);
     const profile = screen.getByRole('main', { name: 'Avery Brooks' });
     const settingsButton = within(profile).getByRole('button', { name: 'Person settings' });
+    const identityTitleRow = profile.querySelector<HTMLElement>('.person-profile__identity-title-row')!;
+    expect(settingsButton.parentElement).toBe(identityTitleRow);
+    expect(within(identityTitleRow).getByRole('heading', { name: 'Avery Brooks' })).toBeTruthy();
     await user.click(settingsButton);
     expect(onEditPerson).toHaveBeenCalledWith('sample-person-avery', expect.anything());
     expect(within(profile).queryByRole('button', { name: 'Edit details' })).toBeNull();

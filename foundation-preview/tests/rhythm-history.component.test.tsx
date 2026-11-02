@@ -1638,7 +1638,7 @@ describe('shared Rhythm history', () => {
     expect(within(onTrackDetails).queryByText(/calendar-day span|floors at zero|rules for weekly/)).toBeNull();
     expect(within(healthDetails).queryByText(/76\.7|→/)).toBeNull();
     expect(within(details).getByRole('heading', { name: 'Your scheduled pattern' })).toBeTruthy();
-    expect(within(details).getByRole('heading', { name: 'How it changed' })).toBeTruthy();
+    expect(within(details).getByRole('heading', { name: 'Score history' })).toBeTruthy();
   });
 
   it('explains shared monthly-period credit while retaining every logged moment', async () => {

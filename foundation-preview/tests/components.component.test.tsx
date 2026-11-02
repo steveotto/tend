@@ -830,7 +830,7 @@ describe('shared preview components', () => {
     expect(within(categoriesOnlyAssociations).queryByRole('button')).toBeNull();
   });
 
-  it('keeps people in their own row and groups Category badges with owned Foundations', async () => {
+  it('places People before Category badges and keeps their Foundations in a lower row', async () => {
     const user = userEvent.setup();
     const financeFoundations = Array.from({ length: 4 }, (_, index) => ({
       ...marriageFoundations[0]!,
@@ -864,14 +864,24 @@ describe('shared preview components', () => {
 
     const associations = screen.getByRole('group', { name: `Associations for ${rhythm.title}` });
     const peopleRow = within(associations).getByRole('group', { name: `People associated with ${rhythm.title}` });
-    const categoryGroups = within(associations).getAllByRole('group', {
-      name: /category and linked (?:Practices|Foundations)/
-    });
-    expect(peopleRow.nextElementSibling).toBe(associations.querySelector('.today-rhythm-details__association-category-row'));
+    const categoryGroups = within(associations).getAllByRole('group', { name: / category$/ });
+    const metadataRow = associations.querySelector<HTMLElement>('.today-rhythm-details__association-metadata-row')!;
+    const foundationsRow = associations.querySelector<HTMLElement>('.today-rhythm-details__association-foundations-row')!;
+    expect(peopleRow.parentElement).toBe(metadataRow);
     expect(categoryGroups.map(group => group.getAttribute('aria-label'))).toEqual([
-      'Faith category and linked Practices',
-      'Marriage category and linked Foundations',
-      'Finances category and linked Foundations'
+      'Faith category',
+      'Marriage category',
+      'Finances category'
+    ]);
+    expect(peopleRow.nextElementSibling).toBe(categoryGroups[0]);
+    expect(metadataRow.compareDocumentPosition(foundationsRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const linkedFoundationGroups = [...foundationsRow.querySelectorAll<HTMLElement>(
+      '.today-rhythm-details__association-category-group'
+    )];
+    expect(linkedFoundationGroups.map(group => group.getAttribute('aria-label'))).toEqual([
+      'Faith linked Practices',
+      'Marriage linked Foundations',
+      'Finances linked Foundations'
     ]);
 
     const faithGroup = categoryGroups[0]!;
@@ -880,13 +890,17 @@ describe('shared preview components', () => {
     expect(within(faithGroup).getAllByRole('button').map(button => button.getAttribute('aria-label')))
       .toEqual(['Faith']);
     expect(within(marriageGroup).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
-      'Marriage',
+      'Marriage'
+    ]);
+    expect(within(financeGroup).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
+      'Finances'
+    ]);
+    expect(within(linkedFoundationGroups[1]!).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
       'Marriage: Connection',
       'Marriage: Communication',
       'Open 4 more linked Foundations'
     ]);
-    expect(within(financeGroup).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
-      'Finances',
+    expect(within(linkedFoundationGroups[2]!).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
       'Finances: Finance Foundation 1',
       'Finances: Finance Foundation 2',
       'Open 2 more linked Foundations'
@@ -895,7 +909,7 @@ describe('shared preview components', () => {
     expect([...associations.querySelectorAll('.rhythm-foundation-badge--overflow')].map(button => button.textContent))
       .toEqual(['+4', '+2']);
 
-    await user.click(within(marriageGroup).getByRole('button', { name: 'Open 4 more linked Foundations' }));
+    await user.click(within(linkedFoundationGroups[1]!).getByRole('button', { name: 'Open 4 more linked Foundations' }));
     let popover = screen.getByRole('dialog', { name: '4 more linked Foundations' });
     expect(within(popover).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
       'Marriage: Fun & Adventure',
@@ -905,7 +919,7 @@ describe('shared preview components', () => {
     ]);
     await user.keyboard('{Escape}');
 
-    await user.click(within(financeGroup).getByRole('button', { name: 'Open 2 more linked Foundations' }));
+    await user.click(within(linkedFoundationGroups[2]!).getByRole('button', { name: 'Open 2 more linked Foundations' }));
     popover = screen.getByRole('dialog', { name: '2 more linked Foundations' });
     expect(within(popover).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
       'Finances: Finance Foundation 3',
@@ -1081,8 +1095,9 @@ describe('shared preview components', () => {
     );
     const dialog = screen.getByRole('dialog', { name: rhythm.title });
     expect(within(dialog).getByRole('button', { name: 'Open synthetic profile for Avery Brooks' })).toBeTruthy();
-    const categoryGroup = within(dialog).getByRole('group', { name: 'Associated categories' });
-    expect(within(categoryGroup).getAllByRole('img').map(icon => icon.getAttribute('aria-label'))).toEqual([
+    const metadataRow = within(dialog).getByRole('group', { name: `People and categories associated with ${rhythm.title}` });
+    const categoryGroups = within(metadataRow).getAllByRole('group', { name: / category$/ });
+    expect(categoryGroups.flatMap(group => within(group).getAllByRole('img').map(icon => icon.getAttribute('aria-label')))).toEqual([
       'Faith',
       'Marriage'
     ]);

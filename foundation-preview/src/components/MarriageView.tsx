@@ -1,19 +1,17 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import {
-  marriageExampleFixtures,
   marriageRhythmGroups,
   marriageRhythmSuggestions,
   foundationCatalogue,
   foundationTerminologyForCategory,
   peopleForRhythm,
-  syntheticPeople,
   rhythmLastActivityLabel,
   type FoundationTerminology,
   type FoundationPreview,
   type PersonId,
+  type PersonPickerGroup,
   type PersonPreview,
-  type MarriageExampleId,
   type RhythmPreview,
   rhythmsSupportingFoundation
 } from '../domain/preview-data.ts';
@@ -39,7 +37,6 @@ import type { SegmentedTab } from './SegmentedTabs.tsx';
 import { ArchivedRhythmsDialog } from './ArchivedRhythmsDialog.tsx';
 import { FoundationRhythmAssociationDialog } from './FoundationRhythmAssociationDialog.tsx';
 import { MarriageIcon } from './MarriageIcon.tsx';
-import { MarriageExampleSelector } from './MarriageExampleSelector.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 import { CategoryRhythmCollection } from './CategoryRhythmCollection.tsx';
 import { RhythmSuggestionPicker } from './RhythmSuggestionPicker.tsx';
@@ -47,6 +44,10 @@ import type { RhythmSuggestionPickerGroup } from './RhythmSuggestionPicker.tsx';
 import type { Destination } from './AppNavigation.tsx';
 import type { RhythmCategoryId } from '../domain/rhythm-editor.ts';
 import type { RhythmFrequencyRecommendation } from '../domain/rhythm-schedule.ts';
+import { resolvePersonCategoryGroups } from '../domain/person-categories.ts';
+import { personDetailsForId } from '../domain/person-details.ts';
+import type { PersonDetails } from '../domain/person-details.ts';
+import { PersonBadgeVisual } from './PersonBadge.tsx';
 
 export type MarriageTab = 'today' | 'rhythms' | 'foundations';
 
@@ -74,8 +75,8 @@ export type CategoryRhythmSuggestionCatalogue = {
 
 type MarriageViewProps = {
   people?: readonly PersonPreview[];
-  marriageExampleId?: MarriageExampleId;
-  onMarriageExampleChange?: (id: MarriageExampleId) => void;
+  peopleGroups?: readonly PersonPickerGroup[];
+  personDetails?: readonly PersonDetails[];
   categoryConfig?: {
     categoryId: RhythmCategoryId;
     label: string;
@@ -96,7 +97,7 @@ type MarriageViewProps = {
     returnToSuggestions: (saved: boolean) => void
   ) => void;
   onPersonSelect: (personId: PersonId) => void;
-  onPartnerProfile?: () => void;
+  onOpenPeople: () => void;
   onOpenCategory: (categoryId: Destination, openerId: string) => void;
   onRhythmHistory: (id: string, event: MouseEvent<HTMLButtonElement>, returnTab?: MarriageTab) => void;
   onEditRhythm: (
@@ -135,15 +136,15 @@ const tabs: readonly SegmentedTab<MarriageTab>[] = [
 ];
 
 export function MarriageView({
-  people = syntheticPeople,
-  marriageExampleId,
-  onMarriageExampleChange,
+  people = [],
+  peopleGroups = [],
+  personDetails = [],
   categoryConfig,
   todayDate,
   onAddRhythm,
   onAddSuggestion,
   onPersonSelect,
-  onPartnerProfile,
+  onOpenPeople,
   onOpenCategory,
   onRhythmHistory,
   onEditRhythm,
@@ -177,13 +178,13 @@ export function MarriageView({
   const skipSuggestionsFocusRestore = useRef(false);
   const wasAssociationDialogOpen = useRef(false);
   const wasArchiveDialogOpen = useRef(false);
-  const fixture = marriageExampleFixtures[marriageExampleId ?? 'populated'];
   const categoryId = categoryConfig?.categoryId ?? 'marriage';
   const categoryLabel = categoryConfig?.label ?? 'Marriage';
   const categoryDescription = categoryConfig?.description ?? 'Structure beats good intentions.';
   const categoryToken = categoryId;
   const foundationTerm = categoryConfig?.foundationTerm ?? foundationTerminologyForCategory(categoryId);
-  const categoryFoundations = categoryConfig?.foundations ?? fixture.foundations;
+  const categoryFoundations = categoryConfig?.foundations
+    ?? foundationCatalogue.filter(foundation => foundation.categoryId === categoryId);
   const associationFoundation = categoryFoundations.find(item => item.id === associationFoundationId);
 
   useEffect(() => {
@@ -263,12 +264,6 @@ export function MarriageView({
     foundationOpener.current = null;
   }
 
-  function selectExample(id: MarriageExampleId) {
-    onMarriageExampleChange?.(id);
-    setSelectedFoundationId(null);
-    foundationOpener.current = null;
-  }
-
   function openAssociationDialog(id: string, event: MouseEvent<HTMLButtonElement>) {
     associationOpener.current = event.currentTarget;
     setAssociationFoundationId(id);
@@ -279,6 +274,16 @@ export function MarriageView({
     selectFoundationScore(foundation.id, foundationRhythms, foundationRhythmScores, archivedRhythmIds)
   ]));
   const categoryScore = selectCategoryScore(categoryFoundations, foundationScores);
+  const resolvedPeople = resolvePersonCategoryGroups(peopleGroups).groups;
+  const marriagePersonIds = new Set(
+    resolvedPeople.find(group => group.id === 'marriage')?.memberIds ?? []
+  );
+  const marriagePeople = categoryId === 'marriage'
+    ? people.filter(person => marriagePersonIds.has(person.id)).map(person => {
+        const photo = personDetailsForId(personDetails, person.id)?.photoDataUrl;
+        return photo ? { ...person, avatarUrl: photo } : person;
+      })
+    : [];
   const todayRhythms = userRhythms.filter(rhythm => isRhythmRelevantOnDate(rhythm, todayDate));
   function browseSuggestions(event: MouseEvent<HTMLButtonElement>) {
     suggestionsOpener.current = event.currentTarget;
@@ -393,23 +398,34 @@ export function MarriageView({
         title={categoryLabel}
         titleId={`${categoryToken}-title`}
         subtitle={categoryDescription}
-        trailing={onPartnerProfile || !categoryConfig ? (
-          <>
-            {onPartnerProfile && (
-              <button type="button" className="marriage-spouse-shortcut" onClick={onPartnerProfile}>
-                <span className="marriage-partner-avatar" aria-hidden="true">P</span>
-                <span>Your partner</span>
-                <span className="marriage-spouse-shortcut-chevron" aria-hidden="true">›</span>
-              </button>
-            )}
-            {!categoryConfig && <span className="marriage-sample-tag">Synthetic example</span>}
-          </>
+        trailing={categoryId === 'marriage' ? (
+          marriagePeople.length > 0
+            ? (
+              <div className="marriage-people-shortcuts" role="group" aria-label="People classified in Marriage">
+                {marriagePeople.map(person => (
+                  <button
+                    key={person.id}
+                    type="button"
+                    className="marriage-person-shortcut"
+                    aria-label={`Open profile for ${person.displayName}`}
+                    onClick={() => onPersonSelect(person.id)}
+                  >
+                    <PersonBadgeVisual person={person} displayNameMode="full" />
+                    <span className="marriage-person-shortcut__chevron" aria-hidden="true">›</span>
+                  </button>
+                ))}
+              </div>
+            )
+            : (
+              <div className="marriage-people-empty">
+                <p>No People are classified in Marriage.</p>
+                <button type="button" className="btn mini ghost" onClick={onOpenPeople}>
+                  Add or classify a Person
+                </button>
+              </div>
+            )
         ) : undefined}
       />
-
-      {!categoryConfig && (
-        <MarriageExampleSelector value={marriageExampleId ?? 'populated'} onChange={selectExample} />
-      )}
 
       <CategoryHealthSummary
         key={categoryConfig?.categoryId ?? 'marriage'}
@@ -510,9 +526,7 @@ export function MarriageView({
           categoryToken={categoryToken}
           categoryFoundations={categoryFoundations}
           emptyFoundationDescription={categoryConfig?.emptyFoundationDescription
-            ?? (fixture.id === 'empty'
-              ? 'Ongoing areas of care; scores are unavailable without scored linked Rhythms.'
-              : 'Ongoing areas of care.')}
+            ?? 'Ongoing areas of care; scores are unavailable without scored linked Rhythms.'}
           rhythms={foundationRhythms}
           rhythmScores={foundationRhythmScores}
           archivedRhythmIds={archivedRhythmIds}

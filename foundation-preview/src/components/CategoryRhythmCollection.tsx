@@ -35,6 +35,7 @@ type Props = {
   onTend: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   onUndo: (id: string) => void;
   completionActionLabelFor?: (rhythm: RhythmPreview) => string;
+  completionActionAccessibleLabelFor?: (rhythm: RhythmPreview) => string;
   completedActionLabelFor?: (rhythm: RhythmPreview) => string;
   renderAdditionalActions?: (rhythm: RhythmPreview) => ReactNode;
 };
@@ -70,6 +71,7 @@ export function CategoryRhythmCollection({
   onTend,
   onUndo,
   completionActionLabelFor,
+  completionActionAccessibleLabelFor,
   completedActionLabelFor,
   renderAdditionalActions
 }: Props) {
@@ -141,6 +143,9 @@ export function CategoryRhythmCollection({
                       healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
                       {...(completionActionLabelFor
                         ? { completionActionLabel: completionActionLabelFor(rhythm) }
+                        : {})}
+                      {...(completionActionAccessibleLabelFor
+                        ? { completionActionAccessibleLabel: completionActionAccessibleLabelFor(rhythm) }
                         : {})}
                       {...(completedActionLabelFor
                         ? { completedActionLabel: completedActionLabelFor(rhythm) }
