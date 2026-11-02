@@ -72,7 +72,11 @@ describe('Show tended list', () => {
 
     act(() => vi.advanceTimersByTime(5000));
     expect(screen.getByText('First Rhythm — Tended').closest('.show-tended-list__item')?.classList.contains('is-fading')).toBe(true);
-    act(() => vi.advanceTimersByTime(219));
+    act(() => vi.advanceTimersByTime(599));
+    expect(screen.getByText('First Rhythm — Tended')).toBeTruthy();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.getByText('First Rhythm — Tended').closest('.show-tended-list__item')?.classList.contains('is-collapsing')).toBe(true);
+    act(() => vi.advanceTimersByTime(259));
     expect(screen.getByText('First Rhythm — Tended')).toBeTruthy();
     act(() => vi.advanceTimersByTime(1));
     expect(screen.queryByText('First Rhythm — Tended')).toBeNull();
@@ -80,15 +84,17 @@ describe('Show tended list', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Show tended (1)' }));
     expect(screen.getByText('First Rhythm — Tended')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Hide tended (1)' }).getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: 'Undo card' }));
     expect(onUndo).toHaveBeenCalledWith('one');
     rerender(<Harness satisfiedRhythmIds={new Set()} undoableRhythmIds={new Set()} onUndo={onUndo} />);
     expect(screen.getByText('First Rhythm')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Hide tended (0)' }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.queryByRole('status')).toBeNull();
 
     rerender(<Harness satisfiedRhythmIds={new Set(['one'])} undoableRhythmIds={new Set()} onUndo={onUndo} />);
     expect(screen.getByText('First Rhythm — Tended')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Show tended (1)' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Hide tended (1)' }).getAttribute('aria-pressed')).toBe('true');
   });
 
   it('uses the same saved-today state for the card and count while an unsatisfied schedule stays visible', () => {
@@ -112,7 +118,7 @@ describe('Show tended list', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Show tended (1)' }));
     expect(screen.getByText('First Rhythm — Tended')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Show tended (1)' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Hide tended (1)' }).getAttribute('aria-pressed')).toBe('true');
   });
 
   it('does not restart the grace timer on rerender and cancels it when Show tended is enabled', () => {
@@ -130,7 +136,7 @@ describe('Show tended list', () => {
     expect(screen.getByText('First Rhythm — Tended').closest('.show-tended-list__item')?.classList.contains('is-fading')).toBe(false);
   });
 
-  it('keeps an accessible card Undo after the transient notice expires', () => {
+  it('keeps Undo available during the space-collapse phase', () => {
     vi.useFakeTimers();
     const onUndo = vi.fn();
     const { rerender } = render(<Harness satisfiedRhythmIds={new Set()} undoableRhythmIds={new Set(['one'])} onUndo={onUndo} />);
@@ -139,27 +145,70 @@ describe('Show tended list', () => {
       undoableRhythmIds={new Set(['one'])}
       onUndo={onUndo}
     />);
-    act(() => vi.advanceTimersByTime(5220));
-    fireEvent.click(screen.getByRole('button', { name: 'Show tended (1)' }));
-    expect(screen.getByText('First Rhythm — Tended')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Undo card' }));
-    expect(onUndo).toHaveBeenCalledWith('one');
+    act(() => vi.advanceTimersByTime(5600));
+    expect(screen.getByText('First Rhythm — Tended').closest('.show-tended-list__item')?.classList.contains('is-collapsing')).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Undo tending First Rhythm' }));
+    rerender(<Harness satisfiedRhythmIds={new Set()} undoableRhythmIds={new Set(['one'])} onUndo={onUndo} />);
+    act(() => vi.advanceTimersByTime(1000));
+    expect(screen.getByText('First Rhythm')).toBeTruthy();
+    expect(onUndo).toHaveBeenCalledTimes(1);
   });
 
-  it('cancels the removal timer when Undo is used during the grace period', () => {
+  it('cancels the fade when Undo is used during the animation', () => {
     vi.useFakeTimers();
     const onUndo = vi.fn();
     const { rerender } = render(<Harness satisfiedRhythmIds={new Set()} undoableRhythmIds={new Set(['one'])} onUndo={onUndo} />);
-    rerender(<Harness
-      satisfiedRhythmIds={new Set(['one'])}
-      undoableRhythmIds={new Set(['one'])}
-      onUndo={onUndo}
-    />);
+    rerender(<Harness satisfiedRhythmIds={new Set(['one'])} undoableRhythmIds={new Set(['one'])} onUndo={onUndo} />);
+    act(() => vi.advanceTimersByTime(5200));
     fireEvent.click(screen.getByRole('button', { name: 'Undo tending First Rhythm' }));
     rerender(<Harness satisfiedRhythmIds={new Set()} undoableRhythmIds={new Set()} onUndo={onUndo} />);
-    act(() => vi.advanceTimersByTime(6000));
+    act(() => vi.advanceTimersByTime(1000));
     expect(screen.getByText('First Rhythm')).toBeTruthy();
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(onUndo).toHaveBeenCalledTimes(1);
+  });
+
+  it('removes completed cards after the grace period without animating for reduced motion', () => {
+    vi.useFakeTimers();
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockReturnValue({ matches: true }) as typeof window.matchMedia;
+    try {
+      const { rerender } = render(<Harness satisfiedRhythmIds={new Set()} />);
+      rerender(<Harness satisfiedRhythmIds={new Set(['one'])} />);
+      act(() => vi.advanceTimersByTime(5000));
+      expect(screen.queryByText('First Rhythm — Tended')).toBeNull();
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
+  it('restores a removed Rhythm in its original order with Undo', () => {
+    vi.useFakeTimers();
+    const onUndo = vi.fn();
+    const { container, rerender } = render(<Harness satisfiedRhythmIds={new Set()} undoableRhythmIds={new Set(['two'])} onUndo={onUndo} />);
+    rerender(<Harness
+      satisfiedRhythmIds={new Set(['two'])}
+      undoableRhythmIds={new Set(['two'])}
+      onUndo={onUndo}
+    />);
+    act(() => vi.advanceTimersByTime(6070));
+    expect(screen.queryByText('Second Rhythm — Tended')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Show tended (1)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Undo card' }));
+    expect(onUndo).toHaveBeenCalledWith('two');
+    rerender(<Harness satisfiedRhythmIds={new Set()} undoableRhythmIds={new Set()} onUndo={onUndo} />);
+    expect(Array.from(container.querySelectorAll('[data-tended-rhythm-item]')).map(item => item.getAttribute('data-tended-rhythm-item')))
+      .toEqual(['one', 'two']);
+  });
+
+  it('keeps the completion Undo available briefly after the card is removed', () => {
+    vi.useFakeTimers();
+    const onUndo = vi.fn();
+    const { rerender } = render(<Harness satisfiedRhythmIds={new Set()} undoableRhythmIds={new Set(['one'])} onUndo={onUndo} />);
+    rerender(<Harness satisfiedRhythmIds={new Set(['one'])} undoableRhythmIds={new Set(['one'])} onUndo={onUndo} />);
+    act(() => vi.advanceTimersByTime(5860));
+    expect(screen.queryByText('First Rhythm — Tended')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Undo tending First Rhythm' }));
+    expect(onUndo).toHaveBeenCalledWith('one');
   });
 
   it('keeps rapid completions and undo actions associated with their own Rhythm', () => {
@@ -173,7 +222,7 @@ describe('Show tended list', () => {
     />);
     expect(screen.getByText('First Rhythm — Tended')).toBeTruthy();
     expect(screen.getByText('Second Rhythm — Tended')).toBeTruthy();
-    act(() => vi.advanceTimersByTime(5220));
+    act(() => vi.advanceTimersByTime(5860));
     expect(screen.queryByText('First Rhythm — Tended')).toBeNull();
     expect(screen.queryByText('Second Rhythm — Tended')).toBeNull();
 
@@ -190,7 +239,7 @@ describe('Show tended list', () => {
     card.focus();
 
     rerender(<Harness satisfiedRhythmIds={new Set(['one'])} undoableRhythmIds={new Set(['one'])} />);
-    act(() => vi.advanceTimersByTime(5220));
+    act(() => vi.advanceTimersByTime(5860));
 
     expect(screen.queryByText('First Rhythm — Tended')).toBeNull();
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show tended (1)' }));

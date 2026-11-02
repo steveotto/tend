@@ -1090,13 +1090,27 @@ a:focus-visible {
 }
 
 .show-tended-list__item {
-  display: block;
+  display: grid;
+  grid-template-rows: 1fr;
   min-width: 0;
-  transition: opacity 220ms ease-out;
+  transition: opacity 600ms ease-out, grid-template-rows 260ms ease-in-out, margin-block 260ms ease-in-out;
+}
+
+.show-tended-list__item > * {
+  min-height: 0;
 }
 
 .show-tended-list__item.is-fading {
   opacity: 0;
+}
+
+.show-tended-list__item.is-collapsing {
+  grid-template-rows: 0fr;
+  margin-block: calc(var(--show-tended-list-gap, 0px) / -2);
+}
+
+.show-tended-list__item.is-collapsing > * {
+  overflow: hidden;
   pointer-events: none;
 }
 
@@ -1522,6 +1536,7 @@ a:focus-visible {
   .current-plan-item-group {
     display: grid;
     gap: 8px;
+    --show-tended-list-gap: 8px;
   }
 
   .rhythm-card.today-rhythm-card {
@@ -4244,6 +4259,10 @@ a:focus-visible {
   display: grid;
   gap: 8px;
   min-width: 0;
+}
+
+.marriage-rhythm-list {
+  --show-tended-list-gap: 8px;
 }
 
 .money-goal-dialog--suggestion-picker {
@@ -15634,6 +15653,7 @@ a:focus-visible {
 .tend-app-preview .current-plan-item-group,
 .tend-app-preview .marriage-rhythm-list {
   gap: 16px;
+  --show-tended-list-gap: 16px;
 }
 
 .tend-app-preview .today-rhythm-details-dialog--inline {

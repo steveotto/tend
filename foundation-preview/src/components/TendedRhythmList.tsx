@@ -15,6 +15,7 @@ type TendedRhythmListRenderState = {
   itemProps: (rhythmId: string) => {
     className: string;
     'data-tended-rhythm-item': string;
+    inert: boolean;
     onFocusCapture: (event: FocusEvent<HTMLDivElement>) => void;
   };
 };
@@ -33,8 +34,9 @@ type Props = {
 };
 
 const CARD_GRACE_MS = 5000;
-const CARD_FADE_MS = 220;
-const NOTICE_DURATION_MS = 5000;
+const CARD_FADE_MS = 600;
+const CARD_COLLAPSE_MS = 260;
+const NOTICE_DURATION_MS = CARD_GRACE_MS + CARD_FADE_MS + CARD_COLLAPSE_MS + 5000;
 
 export function TendedRhythmList({
   rhythms,
@@ -50,6 +52,7 @@ export function TendedRhythmList({
 }: Props) {
   const [pendingRemovalIds, setPendingRemovalIds] = useState<ReadonlySet<string>>(new Set());
   const [fadingIds, setFadingIds] = useState<ReadonlySet<string>>(new Set());
+  const [collapsingIds, setCollapsingIds] = useState<ReadonlySet<string>>(new Set());
   const [notices, setNotices] = useState<readonly TendedNotice[]>([]);
   const removeTimers = useRef(new Map<string, number>());
   const noticeTimers = useRef(new Map<number, number>());
@@ -87,6 +90,10 @@ export function TendedRhythmList({
     removeTimers.current.clear();
   }
 
+  function prefersReducedMotion() {
+    return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  }
+
   function clearForRhythm(rhythmId: string) {
     const timer = removeTimers.current.get(rhythmId);
     if (timer !== undefined) window.clearTimeout(timer);
@@ -98,6 +105,12 @@ export function TendedRhythmList({
       return next;
     });
     setFadingIds(current => {
+      if (!current.has(rhythmId)) return current;
+      const next = new Set(current);
+      next.delete(rhythmId);
+      return next;
+    });
+    setCollapsingIds(current => {
       if (!current.has(rhythmId)) return current;
       const next = new Set(current);
       next.delete(rhythmId);
@@ -133,6 +146,7 @@ export function TendedRhythmList({
       clearRemovalTimers();
       setPendingRemovalIds(new Set());
       setFadingIds(new Set());
+      setCollapsingIds(new Set());
     }
 
     const filterChanged = previousResetKey.current !== resetKey
@@ -151,6 +165,7 @@ export function TendedRhythmList({
       clearTimers();
       setPendingRemovalIds(new Set());
       setFadingIds(new Set());
+      setCollapsingIds(new Set());
       setNotices([]);
       previousSatisfiedIds.current = currentSatisfied;
       previousResetKey.current = resetKey;
@@ -183,20 +198,39 @@ export function TendedRhythmList({
         setPendingRemovalIds(current => new Set(current).add(rhythm.id));
         const graceTimer = window.setTimeout(() => {
           if (showTendedRef.current) return;
-          setFadingIds(current => new Set(current).add(rhythm.id));
-          const fadeTimer = window.setTimeout(() => {
+          if (prefersReducedMotion()) {
             moveFocusBeforeRemoval(rhythm.id);
             setPendingRemovalIds(current => {
               const next = new Set(current);
               next.delete(rhythm.id);
               return next;
             });
-            setFadingIds(current => {
-              const next = new Set(current);
-              next.delete(rhythm.id);
-              return next;
-            });
             removeTimers.current.delete(rhythm.id);
+            return;
+          }
+          setFadingIds(current => new Set(current).add(rhythm.id));
+          const fadeTimer = window.setTimeout(() => {
+            moveFocusBeforeRemoval(rhythm.id);
+            setCollapsingIds(current => new Set(current).add(rhythm.id));
+            const collapseTimer = window.setTimeout(() => {
+              setPendingRemovalIds(current => {
+                const next = new Set(current);
+                next.delete(rhythm.id);
+                return next;
+              });
+              setFadingIds(current => {
+                const next = new Set(current);
+                next.delete(rhythm.id);
+                return next;
+              });
+              setCollapsingIds(current => {
+                const next = new Set(current);
+                next.delete(rhythm.id);
+                return next;
+              });
+              removeTimers.current.delete(rhythm.id);
+            }, CARD_COLLAPSE_MS);
+            removeTimers.current.set(rhythm.id, collapseTimer);
           }, CARD_FADE_MS);
           removeTimers.current.set(rhythm.id, fadeTimer);
         }, CARD_GRACE_MS);
@@ -224,8 +258,9 @@ export function TendedRhythmList({
 
   function itemProps(rhythmId: string) {
     return {
-      className: `show-tended-list__item${fadingIds.has(rhythmId) ? ' is-fading' : ''}`,
+      className: `show-tended-list__item${fadingIds.has(rhythmId) ? ' is-fading' : ''}${collapsingIds.has(rhythmId) ? ' is-collapsing' : ''}`,
       'data-tended-rhythm-item': rhythmId,
+      inert: collapsingIds.has(rhythmId),
       onFocusCapture: () => {
         lastFocusedRhythmId.current = rhythmId;
       }
@@ -242,7 +277,7 @@ export function TendedRhythmList({
           aria-pressed={showTended}
           onClick={() => onShowTendedChange(!showTended)}
         >
-          Show tended ({tendedCount})
+          {showTended ? 'Hide tended' : 'Show tended'} ({tendedCount})
         </button>
         {notices.map(notice => (
           <div className="show-tended-list__notice" key={notice.key} role="status" aria-live="polite" aria-atomic="true">

@@ -180,7 +180,7 @@ describe('account-isolated Preview storage', () => {
     firstRender.unmount();
 
     render(<App identity={accountA} />);
-    expect((await screen.findByRole('button', { name: 'Show tended (0)' })).getAttribute('aria-pressed')).toBe('true');
+    expect((await screen.findByRole('button', { name: 'Hide tended (0)' })).getAttribute('aria-pressed')).toBe('true');
     const loadedAgain = loadPreview(scope.storage, '2026-11-01');
     expect(loadedAgain.kind).toBe('loaded');
     if (loadedAgain.kind === 'loaded') {

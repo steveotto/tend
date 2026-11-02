@@ -3767,7 +3767,7 @@ describe('Tend Today preview', () => {
     expect(showTended.getAttribute('aria-pressed')).toBe('false');
     expect(screen.queryByRole('button', { name: 'Undo completion for Pray together' })).toBeNull();
     await user.click(showTended);
-    expect(screen.getByRole('button', { name: /Show tended/ }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: /Hide tended/ }).getAttribute('aria-pressed')).toBe('true');
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Tended Pray together' }).matches(':disabled')).toBe(true);
       expect(screen.getByRole('button', { name: 'Tended Daily connection' }).matches(':disabled')).toBe(true);
@@ -3788,7 +3788,7 @@ describe('Tend Today preview', () => {
 
     cleanup();
     render(<App />);
-    expect(screen.getByRole('button', { name: /Show tended/ }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: /Hide tended/ }).getAttribute('aria-pressed')).toBe('true');
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Tend Pray together' }).matches(':disabled')).toBe(false);
       expect(screen.getByRole('button', { name: 'Tended Daily connection' }).matches(':disabled')).toBe(true);
