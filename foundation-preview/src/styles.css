@@ -15250,8 +15250,7 @@ a:focus-visible {
   box-shadow: 0 1px 3px rgb(32 39 35 / 6%), 0 3px 8px rgb(32 39 35 / 3%);
 }
 
-.today-rhythm-details__association-metadata-row,
-.today-rhythm-details__association-foundations-row {
+.today-rhythm-details__association-metadata-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -15260,7 +15259,8 @@ a:focus-visible {
 }
 
 .today-rhythm-details__association-people,
-.today-rhythm-details__association-category {
+.today-rhythm-details__association-category-group,
+.today-rhythm-details__association-unmatched {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -15480,5 +15480,23 @@ a:focus-visible {
 
   .person-profile__identity h2 {
     font-size: clamp(21px, 7vw, 28px);
+  }
+}
+
+.tend-app-preview .rhythm-card .rhythm-card__badges .rhythm-area-badge,
+.tend-app-preview .today-rhythm-details__badges .rhythm-area-badge {
+  border: 0;
+  border-radius: var(--rhythm-category-badge-radius);
+  background: transparent;
+  box-shadow: none;
+}
+
+@media (max-width: 700px) {
+  .tend-app-preview :is(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="range"]):not([type="hidden"]):not([type="file"]):not([type="color"]),
+    textarea,
+    select
+  ) {
+    font-size: max(16px, 1em);
   }
 }

@@ -13,6 +13,7 @@ type RhythmFoundationBadgesProps = {
   rhythm: RhythmPreview;
   foundations: readonly FoundationPreview[];
   presentation?: 'interactive' | 'static';
+  accessibleLabel?: string;
   onOpenFoundation?: (foundationId: string, openerId: string) => void;
 };
 
@@ -20,16 +21,13 @@ export function RhythmFoundationBadges({
   rhythm,
   foundations,
   presentation = 'interactive',
+  accessibleLabel,
   onOpenFoundation
 }: RhythmFoundationBadgesProps) {
   const interactive = presentation === 'interactive' && onOpenFoundation !== undefined;
   const { foundations: resolvedFoundations, unresolvedIds } = resolveRhythmFoundationLinks(rhythm, foundations);
-  const displayableFoundations = resolvedFoundations.filter(foundation =>
-    hasFoundationIcon(foundation.iconId ?? foundation.id)
-  );
-  const displayableIds = new Set(displayableFoundations.map(foundation => foundation.id));
-  const unresolvedCount = unresolvedIds.length
-    + resolvedFoundations.filter(foundation => !displayableIds.has(foundation.id)).length;
+  const displayableFoundations = resolvedFoundations;
+  const unresolvedCount = unresolvedIds.length;
   const linkTerms = terminologyForLinks(
     resolvedFoundations,
     rhythm.categoryIds ?? []
@@ -182,7 +180,7 @@ export function RhythmFoundationBadges({
         const tooltipLabel = `${categoryLabel} · ${foundation.name}`;
         const visual = (
           <span className="rhythm-foundation-badge__visual" aria-hidden="true">
-            <MarriageIcon group="foundations" id={foundation.iconId ?? foundation.id} />
+            {foundationIconOrInitials(foundation)}
           </span>
         );
         return interactive
@@ -252,7 +250,7 @@ export function RhythmFoundationBadges({
       <div
         className="rhythm-foundation-badges"
         role="group"
-        aria-label={`${termPlural} linked to ${rhythm.title}`}
+        aria-label={accessibleLabel ?? `${termPlural} linked to ${rhythm.title}`}
         data-unresolved-foundation-count={unresolvedCount || undefined}
       >
         {badges}
@@ -262,7 +260,7 @@ export function RhythmFoundationBadges({
       <span
         className="rhythm-foundation-badges"
         role="group"
-        aria-label={`${termPlural} linked to ${rhythm.title}`}
+        aria-label={accessibleLabel ?? `${termPlural} linked to ${rhythm.title}`}
         data-unresolved-foundation-count={unresolvedCount || undefined}
       >
         {badges}
@@ -298,7 +296,7 @@ export function RhythmFoundationBadges({
                       onClick={() => openFoundation(foundation.id)}
                     >
                       <span className="rhythm-foundation-popover__icon" aria-hidden="true">
-                        <MarriageIcon group="foundations" id={foundation.iconId ?? foundation.id} />
+                        {foundationIconOrInitials(foundation)}
                       </span>
                       <span className="rhythm-foundation-popover__name">{foundation.name}</span>
                       <span className="rhythm-foundation-popover__chevron" aria-hidden="true">›</span>
@@ -313,6 +311,18 @@ export function RhythmFoundationBadges({
       )}
     </>
   );
+}
+
+function foundationIconOrInitials(foundation: FoundationPreview) {
+  const iconId = foundation.iconId ?? foundation.id;
+  return hasFoundationIcon(iconId)
+    ? <MarriageIcon group="foundations" id={iconId} />
+    : <span>{foundationInitials(foundation.name)}</span>;
+}
+
+function foundationInitials(name: string): string {
+  const initials = name.trim().split(/\s+/).slice(0, 2).map(part => [...part][0] ?? '').join('');
+  return initials.toLocaleUpperCase() || '?';
 }
 
 function terminologyForLinks(

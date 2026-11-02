@@ -208,6 +208,25 @@ describe('shared Rhythm Foundation badges', () => {
     expect(container.querySelector('.visually-hidden')?.textContent).toContain('could not be resolved');
   });
 
+  it('keeps a valid linked Foundation visible when its approved icon is unavailable', () => {
+    const foundation = {
+      ...marriageFoundations[0]!,
+      id: 'known-foundation-without-icon',
+      name: 'Unknown visual Foundation',
+      iconId: 'unmapped-icon'
+    };
+    const { container } = render(
+      <RhythmFoundationBadges
+        rhythm={rhythmWithFoundationIds([foundation.id])}
+        foundations={[foundation]}
+      />
+    );
+
+    expect(screen.getByRole('img', { name: 'Marriage: Unknown visual Foundation' })).toBeTruthy();
+    expect(container.querySelector('.rhythm-foundation-badge__visual')?.textContent).toBe('UV');
+    expect(container.querySelector('[data-unresolved-foundation-count]')).toBeNull();
+  });
+
   it('resolves cross-category records in catalogue order without repeating a stable Foundation ID', async () => {
     const financeFoundation = { ...marriageFoundations[0]!, id: 'finance-foundation', category: 'Finances' as const };
     const catalogue = [financeFoundation, ...marriageFoundations];

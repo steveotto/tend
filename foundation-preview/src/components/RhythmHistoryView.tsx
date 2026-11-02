@@ -299,7 +299,7 @@ export function RhythmHistoryView({
   }
 
   useEffect(() => {
-    historyViewRef.current?.focus();
+    historyViewRef.current?.focus({ preventScroll: true });
   }, []);
 
   useEffect(() => {
@@ -309,14 +309,14 @@ export function RhythmHistoryView({
   useEffect(() => {
     const previousId = previousEditingIdRef.current;
     if (previousId && !editingRecord) {
-      editButtonsRef.current.get(previousId)?.focus();
+      editButtonsRef.current.get(previousId)?.focus({ preventScroll: true });
     }
     previousEditingIdRef.current = editingRecord?.id ?? null;
   }, [editingRecord]);
 
   useEffect(() => {
     if (previousLoggingMomentRef.current && !loggingMoment) {
-      logMomentButtonRef.current?.focus();
+      logMomentButtonRef.current?.focus({ preventScroll: true });
     }
     previousLoggingMomentRef.current = loggingMoment;
   }, [loggingMoment]);
@@ -339,7 +339,7 @@ export function RhythmHistoryView({
       const target = deleteButtonsRef.current.get(targetId)
         ?? editButtonsRef.current.get(targetId)
         ?? loggedMomentsSummaryRef.current;
-      target?.focus();
+      target?.focus({ preventScroll: true });
       setFocusAfterDeleteId(null);
       setDeleteError('');
     }
@@ -347,23 +347,23 @@ export function RhythmHistoryView({
   }, [deletingRecordId, focusAfterDeleteId, completions]);
 
   useEffect(() => {
-    if (deletingRecordId) deleteCancelButtonRef.current?.focus();
+    if (deletingRecordId) deleteCancelButtonRef.current?.focus({ preventScroll: true });
   }, [deletingRecordId]);
 
   useEffect(() => {
     if (!editingSeasonId) {
       if (transitioningToDeleteRef.current) transitioningToDeleteRef.current = false;
-      else if (!pendingSeasonEditDraft) seasonEditOpenerRef.current?.focus();
+      else if (!pendingSeasonEditDraft) seasonEditOpenerRef.current?.focus({ preventScroll: true });
     }
   }, [editingSeasonId, pendingSeasonEditDraft]);
 
   useEffect(() => {
     if (previousDeletingSeasonIdRef.current && !deletingSeasonId) {
       if (seasonDeletionSavedRef.current) {
-        seasonUndoButtonRef.current?.focus();
+        seasonUndoButtonRef.current?.focus({ preventScroll: true });
         seasonDeletionSavedRef.current = false;
       } else if (!pendingSeasonEditDraft) {
-        seasonDeleteOpenerRef.current?.focus();
+        seasonDeleteOpenerRef.current?.focus({ preventScroll: true });
       }
     }
     previousDeletingSeasonIdRef.current = deletingSeasonId;
@@ -372,7 +372,7 @@ export function RhythmHistoryView({
   useEffect(() => {
     if (!focusRestoredSeasonId || availableSeasonUndo?.season.id === focusRestoredSeasonId) return;
     (seasonEditButtonsRef.current.get(focusRestoredSeasonId)
-      ?? historyViewRef.current)?.focus();
+      ?? historyViewRef.current)?.focus({ preventScroll: true });
     setFocusRestoredSeasonId(null);
   }, [focusRestoredSeasonId, availableSeasonUndo, scheduleSeasons]);
 
@@ -1436,8 +1436,8 @@ function OnTrackScoreBreakdown({ metric }: { metric: ScoredOnTrackMetric }) {
     { label: 'Per miss', value: `${evidence.pointsPerMissedOccurrence} points` }
   ];
   useEffect(() => {
-    if (focusAfterDisclosureRef.current === 'earlier') showEarlierButtonRef.current?.focus();
-    if (focusAfterDisclosureRef.current === 'less') showLessButtonRef.current?.focus();
+    if (focusAfterDisclosureRef.current === 'earlier') showEarlierButtonRef.current?.focus({ preventScroll: true });
+    if (focusAfterDisclosureRef.current === 'less') showLessButtonRef.current?.focus({ preventScroll: true });
     focusAfterDisclosureRef.current = null;
   }, [visibleEntryCount]);
   return (

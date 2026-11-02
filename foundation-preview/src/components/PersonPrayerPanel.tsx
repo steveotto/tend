@@ -79,8 +79,8 @@ export function PersonPrayerPanel({
     }
     if (dialogWasOpen.current) {
       dialogWasOpen.current = false;
-      if (returnTarget.current?.isConnected) returnTarget.current.focus();
-      else addButtonRef.current?.focus();
+      if (returnTarget.current?.isConnected) returnTarget.current.focus({ preventScroll: true });
+      else addButtonRef.current?.focus({ preventScroll: true });
     }
   }, [editor, confirmRequest]);
 
@@ -91,7 +91,7 @@ export function PersonPrayerPanel({
     }
     if (pickerWasOpen.current) {
       pickerWasOpen.current = false;
-      pickerOpener.current?.focus();
+      pickerOpener.current?.focus({ preventScroll: true });
     }
   }, [pickerOpen]);
 

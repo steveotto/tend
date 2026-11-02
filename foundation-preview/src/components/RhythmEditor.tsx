@@ -170,13 +170,13 @@ export function RhythmEditor({
   }, [activePicker]);
 
   useEffect(() => {
-    if (showArchiveConfirmation) archiveConfirmButtonRef.current?.focus();
-    else if (wasConfirmingArchiveRef.current) archiveButtonRef.current?.focus();
+    if (showArchiveConfirmation) archiveConfirmButtonRef.current?.focus({ preventScroll: true });
+    else if (wasConfirmingArchiveRef.current) archiveButtonRef.current?.focus({ preventScroll: true });
     wasConfirmingArchiveRef.current = showArchiveConfirmation;
   }, [showArchiveConfirmation]);
 
   useEffect(() => {
-    if (pendingCategoryRemoval) categoryRemovalButtonRef.current?.focus();
+    if (pendingCategoryRemoval) categoryRemovalButtonRef.current?.focus({ preventScroll: true });
   }, [pendingCategoryRemoval]);
 
   function update<K extends keyof RhythmDraft>(field: K, value: RhythmDraft[K]) {

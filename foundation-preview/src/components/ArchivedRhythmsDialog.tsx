@@ -46,7 +46,7 @@ export function ArchivedRhythmsDialog({
     if (!dialog) return;
     if (typeof dialog.showModal === 'function') dialog.showModal();
     else dialog.setAttribute('open', '');
-    closeButtonRef.current?.focus();
+    closeButtonRef.current?.focus({ preventScroll: true });
     return () => {
       if (dialog.open && typeof dialog.close === 'function') dialog.close();
     };
@@ -55,7 +55,7 @@ export function ArchivedRhythmsDialog({
   useEffect(() => {
     if (wasDetailOpenRef.current && selectedRhythmId === null) {
       const rhythmId = lastSelectedRhythmId.current;
-      if (rhythmId) detailsOpeners.current.get(rhythmId)?.focus();
+      if (rhythmId) detailsOpeners.current.get(rhythmId)?.focus({ preventScroll: true });
     }
     wasDetailOpenRef.current = selectedRhythmId !== null;
   }, [selectedRhythmId]);
@@ -65,11 +65,11 @@ export function ArchivedRhythmsDialog({
     if (restoredIndex === null) return;
     restoreIndexRef.current = null;
     if (rhythms.length === 0) {
-      emptyHeadingRef.current?.focus();
+      emptyHeadingRef.current?.focus({ preventScroll: true });
       return;
     }
     const nextRhythm = rhythms[Math.min(restoredIndex, rhythms.length - 1)];
-    if (nextRhythm) restoreButtons.current.get(nextRhythm.id)?.focus();
+    if (nextRhythm) restoreButtons.current.get(nextRhythm.id)?.focus({ preventScroll: true });
   }, [rhythms]);
 
   function openDetails(id: string, event: MouseEvent<HTMLButtonElement>) {

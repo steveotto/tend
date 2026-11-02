@@ -200,8 +200,8 @@ export function PersonProfileView({
     }
     if (wasEditorOpen.current) {
       wasEditorOpen.current = false;
-      if (connectionOpener.current?.isConnected) connectionOpener.current.focus();
-      else tabRefs.current[1]?.focus();
+      if (connectionOpener.current?.isConnected) connectionOpener.current.focus({ preventScroll: true });
+      else tabRefs.current[1]?.focus({ preventScroll: true });
     }
   }, [connectionEditor]);
 
@@ -212,7 +212,7 @@ export function PersonProfileView({
     }
     if (wasArchiveOpen.current) {
       wasArchiveOpen.current = false;
-      archiveOpener.current?.focus();
+      archiveOpener.current?.focus({ preventScroll: true });
     }
   }, [showArchived]);
 

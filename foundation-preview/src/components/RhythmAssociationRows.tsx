@@ -1,21 +1,17 @@
 import {
   areas,
-  foundationTerminologyForCategory,
   type FoundationPreview,
   type PersonId,
   type PersonPreview,
   type RhythmPreview
 } from '../domain/preview-data.ts';
 import {
-  foundationCategoryId,
-  foundationRhythmIds,
   resolveRhythmFoundationLinks
 } from '../domain/foundation-rhythm-associations.ts';
 import type { Destination } from './AppNavigation.tsx';
 import { PersonBadgeList } from './PersonBadge.tsx';
 import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
 import { RhythmFoundationBadges } from './RhythmFoundationBadges.tsx';
-import { hasFoundationIcon } from './MarriageIcon.tsx';
 
 type RhythmAssociationRowsProps = {
   rhythm: RhythmPreview;
@@ -41,37 +37,28 @@ export function RhythmAssociationRows({
     ? resolveRhythmFoundationLinks(rhythm, foundations)
     : undefined;
   const assignedCategoryIds = new Set(categories.map(category => category.id));
-  const associationTerms = [...new Map(categories.map(category => {
-    const term = foundationTerminologyForCategory(category.id);
-    return [term.singular, term] as const;
-  })).values()];
-  const associationTerm = associationTerms.length === 1
-    ? associationTerms[0]!
-    : associationTerms.some(term => term.singular === 'Practice')
-      ? { singular: 'Practice and Foundation', plural: 'Practices and Foundations' }
-      : foundationTerminologyForCategory();
   const categoryGroups = categories.map(category => ({
     category,
-    rhythm: { ...rhythm, categoryIds: [category.id] } satisfies RhythmPreview
+    linkedFoundations: resolvedLinks?.foundations.filter(foundation =>
+      foundation.categoryId === category.id
+    ) ?? []
   }));
-  const hasFoundationLinks = foundationRhythmIds(rhythm).length > 0;
-  const hasDisplayableFoundationLinks = resolvedLinks?.foundations.some(foundation =>
-    hasFoundationIcon(foundation.iconId ?? foundation.id)
-  ) ?? false;
-  const ungroupedFoundationCount = resolvedLinks
-    ? resolvedLinks.unresolvedIds.length + resolvedLinks.foundations.filter(foundation => {
-      const categoryId = foundationCategoryId(foundation.id, foundations);
-      return categoryId === undefined || !assignedCategoryIds.has(categoryId);
-    }).length
-    : 0;
+  const unmatchedFoundations = resolvedLinks?.foundations.filter(foundation =>
+    !assignedCategoryIds.has(foundation.categoryId)
+  ) ?? [];
+  const hasVisibleFoundationLinks = showFoundationLinks
+    && (categoryGroups.some(group => group.linkedFoundations.length > 0) || unmatchedFoundations.length > 0);
 
   return (
     <>
-      {(people?.length && onPersonSelect) || categoryGroups.length > 0 ? (
+      {((people?.length && onPersonSelect) || categoryGroups.length > 0
+        || (showFoundationLinks && (unmatchedFoundations.length > 0 || (resolvedLinks?.unresolvedIds.length ?? 0) > 0))) ? (
         <div
           className="today-rhythm-details__association-metadata-row"
           role="group"
-          aria-label={`People and categories associated with ${rhythm.title}`}
+          aria-label={hasVisibleFoundationLinks
+            ? `People, categories, and Foundations associated with ${rhythm.title}`
+            : `People and categories associated with ${rhythm.title}`}
         >
           {people && people.length > 0 && onPersonSelect && (
             <div
@@ -88,39 +75,65 @@ export function RhythmAssociationRows({
               />
             </div>
           )}
-          {categoryGroups.map(({ category, rhythm: categoryRhythm }) => (
+          {categoryGroups.map(({ category, linkedFoundations }) => (
             <div
-              className="today-rhythm-details__association-category"
+              className="today-rhythm-details__association-category-group"
               key={category.id}
               role="group"
-              aria-label={`${category.label} category`}
+              aria-label={showFoundationLinks && linkedFoundations.length > 0
+                ? `${category.label} category and linked Foundations`
+                : `${category.label} category`}
             >
               <RhythmCategoryBadges
-                rhythm={categoryRhythm}
+                rhythm={{ ...rhythm, categoryIds: [category.id] }}
                 itemsOnly
                 {...(onOpenCategory ? { onOpenCategory } : {})}
               />
+              {showFoundationLinks && foundations && linkedFoundations.length > 0 && (
+                <RhythmFoundationBadges
+                  rhythm={rhythmWithFoundationIds(rhythm, linkedFoundations.map(foundation => foundation.id))}
+                  foundations={foundations}
+                  presentation={onOpenFoundation ? 'interactive' : 'static'}
+                  accessibleLabel={`${category.label} Foundations linked to ${rhythm.title}`}
+                  {...(onOpenFoundation ? { onOpenFoundation } : {})}
+                />
+              )}
             </div>
           ))}
+          {showFoundationLinks && foundations && unmatchedFoundations.length > 0 && (
+            <div
+              className="today-rhythm-details__association-unmatched"
+            >
+              <RhythmFoundationBadges
+                rhythm={rhythmWithFoundationIds(rhythm, unmatchedFoundations.map(foundation => foundation.id))}
+                foundations={foundations}
+                presentation={onOpenFoundation ? 'interactive' : 'static'}
+                accessibleLabel={`Foundations without an assigned Category for ${rhythm.title}`}
+                {...(onOpenFoundation ? { onOpenFoundation } : {})}
+              />
+            </div>
+          )}
+          {showFoundationLinks && resolvedLinks && resolvedLinks.unresolvedIds.length > 0 && (
+            <span className="visually-hidden">
+              {`${resolvedLinks.unresolvedIds.length} linked Foundation ${
+                resolvedLinks.unresolvedIds.length === 1 ? 'reference could' : 'references could'
+              } not be resolved to a Foundation record.`}
+            </span>
+          )}
         </div>
       ) : null}
-      {showFoundationLinks && hasFoundationLinks && hasDisplayableFoundationLinks && foundations && (
-        <div className="today-rhythm-details__association-foundations-row">
-          <RhythmFoundationBadges
-            rhythm={rhythm}
-            foundations={foundations}
-            presentation={onOpenFoundation ? 'interactive' : 'static'}
-            {...(onOpenFoundation ? { onOpenFoundation } : {})}
-          />
-        </div>
-      )}
-      {showFoundationLinks && foundations && ungroupedFoundationCount > 0 && (
-        <span className="visually-hidden">
-          {ungroupedFoundationCount} linked {ungroupedFoundationCount === 1
-            ? associationTerm.singular
-            : associationTerm.plural} could not be associated with an assigned Category.
-        </span>
-      )}
     </>
   );
+}
+
+function rhythmWithFoundationIds(rhythm: RhythmPreview, foundationIds: readonly string[]): RhythmPreview {
+  const ids = new Set(foundationIds);
+  const primaryFoundationId = rhythm.primaryFoundationId && ids.has(rhythm.primaryFoundationId)
+    ? rhythm.primaryFoundationId
+    : foundationIds[0] ?? null;
+  return {
+    ...rhythm,
+    primaryFoundationId,
+    secondaryFoundationIds: foundationIds.filter(id => id !== primaryFoundationId)
+  };
 }

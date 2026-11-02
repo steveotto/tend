@@ -108,7 +108,7 @@ export function StyledSelect<Value extends string>({
 
   function closeMenu(restoreFocus = true) {
     setOpen(false);
-    if (restoreFocus) triggerRef.current?.focus();
+    if (restoreFocus) triggerRef.current?.focus({ preventScroll: true });
   }
 
   function selectOption(index: number) {

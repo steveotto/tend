@@ -63,7 +63,7 @@ export function CardioView({
   ];
 
   useEffect(() => {
-    if (!dialog && openerRef.current?.isConnected) openerRef.current.focus();
+    if (!dialog && openerRef.current?.isConnected) openerRef.current.focus({ preventScroll: true });
   }, [dialog]);
 
   useEffect(() => {

@@ -108,20 +108,20 @@ export function RhythmDetailsDialog({
   useEffect(() => {
     if (inline) return;
     if (embedded) {
-      titleRef.current?.focus();
+      titleRef.current?.focus({ preventScroll: true });
       return;
     }
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (typeof dialog.showModal === 'function') dialog.showModal();
     else dialog.setAttribute('open', '');
-    dialog.focus();
+    dialog.focus({ preventScroll: true });
   }, [embedded, inline]);
 
   useEffect(() => {
     if (!showCompletion && wasCompletionRef.current) {
-      if (completed) closeButtonRef.current?.focus();
-      else tendButtonRef.current?.focus();
+      if (completed) closeButtonRef.current?.focus({ preventScroll: true });
+      else tendButtonRef.current?.focus({ preventScroll: true });
     }
     wasCompletionRef.current = showCompletion;
   }, [showCompletion, completed]);
@@ -131,7 +131,7 @@ export function RhythmDetailsDialog({
   }
 
   useEffect(() => {
-    if (archived && !wasArchivedRef.current) closeButtonRef.current?.focus();
+    if (archived && !wasArchivedRef.current) closeButtonRef.current?.focus({ preventScroll: true });
     wasArchivedRef.current = archived;
   }, [archived]);
 

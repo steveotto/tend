@@ -55,8 +55,8 @@ export function PersonNotesPanel({
     }
     if (wasEditorOpen.current) {
       wasEditorOpen.current = false;
-      if (editorOpener.current?.isConnected) editorOpener.current.focus();
-      else addNoteOpener.current?.focus();
+      if (editorOpener.current?.isConnected) editorOpener.current.focus({ preventScroll: true });
+      else addNoteOpener.current?.focus({ preventScroll: true });
     }
   }, [editor]);
 
@@ -67,8 +67,8 @@ export function PersonNotesPanel({
     }
     if (wasDetailOpen.current) {
       wasDetailOpen.current = false;
-      if (detailOpener.current?.isConnected) detailOpener.current.focus();
-      else addNoteOpener.current?.focus();
+      if (detailOpener.current?.isConnected) detailOpener.current.focus({ preventScroll: true });
+      else addNoteOpener.current?.focus({ preventScroll: true });
     }
   }, [selectedNote]);
 
@@ -79,7 +79,7 @@ export function PersonNotesPanel({
     }
     if (wasDeleteOpen.current) {
       wasDeleteOpen.current = false;
-      deleteOpener.current?.focus();
+      deleteOpener.current?.focus({ preventScroll: true });
     }
   }, [deleteCandidate]);
 
@@ -253,7 +253,7 @@ function PersonNoteEditor({
     }
     if (wasPickerOpen.current) {
       wasPickerOpen.current = false;
-      sharePeopleOpener.current?.focus();
+      sharePeopleOpener.current?.focus({ preventScroll: true });
     }
   }, [pickerDraft]);
 

@@ -241,10 +241,10 @@ export function StrengthView({
   }, [data.workouts, dialog]);
 
   useEffect(() => {
-    if (confirmingLogDelete) historyDeleteCancelRef.current?.focus();
+    if (confirmingLogDelete) historyDeleteCancelRef.current?.focus({ preventScroll: true });
     else if (restoreDeleteActionFocusRef.current) {
       restoreDeleteActionFocusRef.current = false;
-      deleteLogButtonRef.current?.focus();
+      deleteLogButtonRef.current?.focus({ preventScroll: true });
     }
   }, [confirmingLogDelete]);
 

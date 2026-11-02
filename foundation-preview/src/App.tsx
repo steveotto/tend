@@ -191,15 +191,15 @@ const personProfileHistoryKey = 'tendPersonProfileId';
 
 function restorePersonProfileFocus(opener: HTMLElement | null, personId: PersonId | null): void {
   if (opener?.isConnected && !opener.closest('[hidden]')) {
-    opener.focus();
+    opener.focus({ preventScroll: true });
     return;
   }
   const personButton = personId
     ? [...document.querySelectorAll<HTMLButtonElement>('dialog [data-person-id]')]
       .find(button => button.dataset.personId === personId)
     : undefined;
-  if (personButton) personButton.focus();
-  else document.querySelector<HTMLButtonElement>('.utility-primary-button[aria-current="page"]')?.focus();
+  if (personButton) personButton.focus({ preventScroll: true });
+  else document.querySelector<HTMLButtonElement>('.utility-primary-button[aria-current="page"]')?.focus({ preventScroll: true });
 }
 
 function categorySuggestionCatalogue(
@@ -1042,8 +1042,8 @@ function PreviewWorkspace({
     }
     if (!wasDetailsOpen.current) return;
     wasDetailsOpen.current = false;
-    if (dialogOpener.current?.isConnected) dialogOpener.current.focus();
-    else document.querySelector<HTMLButtonElement>('.utility-primary-button[aria-current="page"]')?.focus();
+    if (dialogOpener.current?.isConnected) dialogOpener.current.focus({ preventScroll: true });
+    else document.querySelector<HTMLButtonElement>('.utility-primary-button[aria-current="page"]')?.focus({ preventScroll: true });
   }, [activeRhythmId]);
 
   useEffect(() => {
@@ -1055,9 +1055,9 @@ function PreviewWorkspace({
           ?.querySelector<HTMLButtonElement>(
             '.today-rhythm-details__history-button, .today-rhythm-card__details-toggle'
           )
-          ?.focus();
+          ?.focus({ preventScroll: true });
       } else {
-        opener.focus();
+        opener.focus({ preventScroll: true });
       }
     }
     completionDialogOpener.current = null;
@@ -1074,8 +1074,8 @@ function PreviewWorkspace({
       rhythmEditorReturnsToSuggestions.current = false;
       return;
     }
-    if (rhythmEditorOpener.current?.isConnected) rhythmEditorOpener.current.focus();
-    else document.querySelector<HTMLButtonElement>('.utility-primary-button[aria-current="page"]')?.focus();
+    if (rhythmEditorOpener.current?.isConnected) rhythmEditorOpener.current.focus({ preventScroll: true });
+    else document.querySelector<HTMLButtonElement>('.utility-primary-button[aria-current="page"]')?.focus({ preventScroll: true });
   }, [rhythmEditor]);
 
   function navigate(next: Destination) {
@@ -1292,7 +1292,7 @@ function PreviewWorkspace({
     }
     if (wasPersonDetailsEditorOpen.current) {
       wasPersonDetailsEditorOpen.current = false;
-      personDetailsEditorOpener.current?.focus();
+      personDetailsEditorOpener.current?.focus({ preventScroll: true });
     }
   }, [personDetailsEditorId]);
 
