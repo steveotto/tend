@@ -8,6 +8,7 @@ import {
 import type { PreviewIdentityState } from '../domain/preview-identity.ts';
 import {
   PREVIEW_STORAGE_KEY,
+  PREVIEW_RAW_RECOVERY_KEY,
   PREVIEW_V1_RECOVERY_KEY,
   PREVIEW_V2_RECOVERY_KEY,
   PREVIEW_V3_RECOVERY_KEY,
@@ -31,6 +32,7 @@ import {
   PREVIEW_V21_RECOVERY_KEY,
   PREVIEW_V22_RECOVERY_KEY,
   PREVIEW_V23_RECOVERY_KEY,
+  PREVIEW_V24_RECOVERY_KEY,
   PREVIEW_V25_RECOVERY_KEY,
   PREVIEW_V26_RECOVERY_KEY,
   PREVIEW_V27_RECOVERY_KEY,
@@ -39,12 +41,16 @@ import {
   PREVIEW_V30_RECOVERY_KEY,
   PREVIEW_V31_RECOVERY_KEY,
   PREVIEW_V32_RECOVERY_KEY,
+  PREVIEW_V33_RECOVERY_KEY,
+  PREVIEW_V34_RECOVERY_KEY,
   preserveProposedV4SourceRecovery,
+  proposedV4RecoveryKeyForRaw,
   proposedV4SourceVersionForRaw
 } from './preview-v4-recovery.ts';
 
 export {
   PREVIEW_STORAGE_KEY,
+  PREVIEW_RAW_RECOVERY_KEY,
   PREVIEW_V1_RECOVERY_KEY,
   PREVIEW_V2_RECOVERY_KEY,
   PREVIEW_V3_RECOVERY_KEY,
@@ -68,6 +74,7 @@ export {
   PREVIEW_V21_RECOVERY_KEY,
   PREVIEW_V22_RECOVERY_KEY,
   PREVIEW_V23_RECOVERY_KEY,
+  PREVIEW_V24_RECOVERY_KEY,
   PREVIEW_V25_RECOVERY_KEY,
   PREVIEW_V26_RECOVERY_KEY,
   PREVIEW_V27_RECOVERY_KEY,
@@ -75,7 +82,9 @@ export {
   PREVIEW_V29_RECOVERY_KEY,
   PREVIEW_V30_RECOVERY_KEY,
   PREVIEW_V31_RECOVERY_KEY,
-  PREVIEW_V32_RECOVERY_KEY
+  PREVIEW_V32_RECOVERY_KEY,
+  PREVIEW_V33_RECOVERY_KEY,
+  PREVIEW_V34_RECOVERY_KEY
 };
 
 export const PREVIEW_CATEGORY_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:v32-category-recovery`;
@@ -97,7 +106,7 @@ export type PreviewLoadResult =
 export type PreviewWriteResult =
   | { kind: 'saved'; raw: string }
   | { kind: 'conflict'; actualRaw: string | null }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; message: string; diagnostic?: PreviewStorageDiagnostic };
 
 export type RecoveryCopyReadResult =
   | { kind: 'loaded'; raw: string | null }
@@ -106,6 +115,19 @@ export type RecoveryCopyReadResult =
 export type PreviewWriteOptions = {
   allowUnrecoverableReplacement?: boolean;
   currentDate?: string;
+  operation?: 'save' | 'import' | 'reset' | 'replace';
+};
+
+export type PreviewStorageDiagnostic = {
+  operation: NonNullable<PreviewWriteOptions['operation']>;
+  sourceSchemaVersion: number | null;
+  applicationSchemaVersion: number;
+  rejectedRule: string;
+  recoveryKeyLookup: 'exact-copy-present' | 'available-not-created' | 'conflicting-copy' | 'no-supported-key' | 'not-required' | 'unavailable';
+  migrationValidation: 'valid' | 'invalid' | 'not-run';
+  concurrentModification: 'detected' | 'not-detected' | 'not-checked';
+  latestDraft: 'failed';
+  failureDetail?: string;
 };
 
 export function createPreviewStorageScope(
@@ -135,6 +157,85 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Browser storage is unavailable.';
 }
 
+type RawRecoveryResult =
+  | { kind: 'preserved' }
+  | { kind: 'conflict' }
+  | { kind: 'active-conflict' }
+  | { kind: 'error'; message: string };
+
+function preserveUnclassifiedSourceRecovery(storage: PreviewStorage, raw: string): RawRecoveryResult {
+  try {
+    if (storage.getItem(PREVIEW_STORAGE_KEY) !== raw) return { kind: 'active-conflict' };
+    const existing = storage.getItem(PREVIEW_RAW_RECOVERY_KEY);
+    if (existing !== null && existing !== raw) return { kind: 'conflict' };
+    if (existing === null) storage.setItem(PREVIEW_RAW_RECOVERY_KEY, raw);
+    if (storage.getItem(PREVIEW_STORAGE_KEY) !== raw) return { kind: 'active-conflict' };
+    if (storage.getItem(PREVIEW_RAW_RECOVERY_KEY) !== raw) {
+      return { kind: 'error', message: 'The exact raw recovery copy could not be verified.' };
+    }
+    return { kind: 'preserved' };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+function diagnosticForWriteFailure(
+  storage: PreviewStorage,
+  sourceRaw: string | null,
+  currentDate: string | undefined,
+  operation: NonNullable<PreviewWriteOptions['operation']>,
+  rejectedRule: string,
+  concurrentModification: PreviewStorageDiagnostic['concurrentModification'],
+  failureDetail?: string
+): PreviewStorageDiagnostic {
+  let sourceSchemaVersion: number | null = null;
+  if (sourceRaw !== null) {
+    try {
+      const source: unknown = JSON.parse(sourceRaw);
+      if (typeof source === 'object' && source !== null && !Array.isArray(source)
+        && 'schemaVersion' in source && typeof source.schemaVersion === 'number') {
+        sourceSchemaVersion = source.schemaVersion;
+      }
+    } catch {
+      sourceSchemaVersion = null;
+    }
+  }
+  const validation = sourceRaw !== null && currentDate
+    ? parsePreviewBackup(sourceRaw, currentDate)
+    : null;
+  const mappedRecoveryKey = sourceRaw === null ? null : proposedV4RecoveryKeyForRaw(sourceRaw);
+  const recoveryKey = mappedRecoveryKey
+    ?? (sourceRaw === null
+      ? null
+      : validation?.valid ? null : PREVIEW_RAW_RECOVERY_KEY);
+  let recoveryKeyLookup: PreviewStorageDiagnostic['recoveryKeyLookup'] = 'not-required';
+  if (recoveryKey !== null && sourceRaw !== null) {
+    try {
+      const existing = storage.getItem(recoveryKey);
+      recoveryKeyLookup = existing === sourceRaw
+        ? 'exact-copy-present'
+        : existing === null
+          ? 'available-not-created'
+          : 'conflicting-copy';
+    } catch {
+      recoveryKeyLookup = 'unavailable';
+    }
+  } else if (sourceRaw !== null && sourceSchemaVersion !== PREVIEW_SCHEMA_VERSION) {
+    recoveryKeyLookup = 'no-supported-key';
+  }
+  return {
+    operation,
+    sourceSchemaVersion,
+    applicationSchemaVersion: PREVIEW_SCHEMA_VERSION,
+    rejectedRule,
+    recoveryKeyLookup,
+    migrationValidation: validation === null ? 'not-run' : validation.valid ? 'valid' : 'invalid',
+    concurrentModification,
+    latestDraft: 'failed',
+    ...(failureDetail ? { failureDetail } : {})
+  };
+}
+
 export function loadPreview(storage: PreviewStorage, currentDate: string): PreviewLoadResult {
   let raw: string | null;
   try {
@@ -153,15 +254,27 @@ export function loadPreview(storage: PreviewStorage, currentDate: string): Previ
   return { kind: 'loaded', data: parsed.envelope.data, raw };
 }
 
+export function loadRawRecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_RAW_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
 export function writePreview(
   storage: PreviewStorage,
   data: PreviewData,
   expectedRaw: string | null,
   options: PreviewWriteOptions = {}
 ): PreviewWriteResult {
+  const operation = options.operation ?? 'save';
+  let rawRecoveryExpected: string | null = null;
+  let activeSourceCompared = false;
   try {
     const actualRaw = storage.getItem(PREVIEW_STORAGE_KEY);
     if (actualRaw !== expectedRaw) return { kind: 'conflict', actualRaw };
+    activeSourceCompared = true;
     const raw = JSON.stringify(createPreviewEnvelope(data));
 
     if (expectedRaw !== null) {
@@ -172,8 +285,39 @@ export function writePreview(
           kind: 'error',
           message: sourceVersion === 9 || sourceVersion === 10 || sourceVersion === 11
             ? 'The active preview data is malformed and cannot be replaced without an explicit raw backup.'
-            : 'The stored source value is invalid or cannot be checked. Download its raw recovery before explicitly replacing it.'
+            : 'The saved preview could not be verified, so no changes were written. Download its raw recovery before explicitly replacing it.',
+          diagnostic: diagnosticForWriteFailure(
+            storage,
+            expectedRaw,
+            options.currentDate,
+            operation,
+            'source-validation-failed',
+            'not-detected'
+          )
         };
+      }
+      if (!source.valid && sourceVersion === null && options.allowUnrecoverableReplacement) {
+        const recovery = preserveUnclassifiedSourceRecovery(storage, expectedRaw);
+        if (recovery.kind !== 'preserved') {
+          return {
+            kind: 'error',
+            message: 'The saved preview could not be safely replaced because its exact source could not be preserved.',
+            diagnostic: diagnosticForWriteFailure(
+              storage,
+              expectedRaw,
+              options.currentDate,
+              operation,
+              recovery.kind === 'conflict'
+                ? 'raw-recovery-copy-conflict'
+                : recovery.kind === 'active-conflict'
+                  ? 'source-changed-during-raw-recovery'
+                  : 'raw-recovery-copy-failed',
+              recovery.kind === 'active-conflict' ? 'detected' : 'not-detected',
+              recovery.kind === 'error' ? recovery.message : undefined
+            )
+          };
+        }
+        rawRecoveryExpected = expectedRaw;
       }
       if (sourceVersion !== null && sourceVersion < PREVIEW_SCHEMA_VERSION) {
         const recovery = preserveProposedV4SourceRecovery(storage, expectedRaw);
@@ -186,7 +330,22 @@ export function writePreview(
                 ? 'Preview storage changed before its recovery copy was made. No schema write was made.'
                 : recovery.kind === 'unsupported'
                   ? recovery.message
-                  : recovery.message
+                  : 'The original preview could not be preserved, so no changes were written.',
+            diagnostic: diagnosticForWriteFailure(
+              storage,
+              expectedRaw,
+              options.currentDate,
+              operation,
+              recovery.kind === 'conflict'
+                ? 'immutable-recovery-copy-conflict'
+                : recovery.kind === 'active-conflict'
+                  ? 'source-changed-during-recovery'
+                  : recovery.kind === 'unsupported'
+                    ? 'immutable-recovery-key-unavailable'
+                    : 'immutable-recovery-copy-failed',
+              recovery.kind === 'active-conflict' ? 'detected' : 'not-detected',
+              recovery.kind === 'error' ? recovery.message : undefined
+            )
           };
         }
         if (source.valid && source.resolvedPersonCategories > 0) {
@@ -194,36 +353,119 @@ export function writePreview(
           if (categoryRecovery !== null && categoryRecovery !== expectedRaw) {
             return {
               kind: 'error',
-              message: 'The immutable category-resolution recovery copy already contains different data. No preview write was made.'
+              message: 'The original preview could not be preserved, so no changes were written.',
+              diagnostic: diagnosticForWriteFailure(
+                storage,
+                expectedRaw,
+                options.currentDate,
+                operation,
+                'category-recovery-copy-conflict',
+                'not-detected',
+                'An existing immutable category-resolution recovery copy differs from the current source.'
+              )
             };
           }
-          if (categoryRecovery === null) storage.setItem(PREVIEW_CATEGORY_RECOVERY_KEY, expectedRaw);
+          if (categoryRecovery === null) {
+            storage.setItem(PREVIEW_CATEGORY_RECOVERY_KEY, expectedRaw);
+            if (storage.getItem(PREVIEW_CATEGORY_RECOVERY_KEY) !== expectedRaw) {
+              return {
+                kind: 'error',
+                message: 'The original preview could not be preserved, so no changes were written.',
+                diagnostic: diagnosticForWriteFailure(
+                  storage,
+                  expectedRaw,
+                  options.currentDate,
+                  operation,
+                  'category-recovery-copy-failed',
+                  'not-detected'
+                )
+              };
+            }
+          }
         }
       } else if (source.valid && source.resolvedPersonCategories > 0) {
         const recovery = storage.getItem(PREVIEW_CATEGORY_RECOVERY_KEY);
         if (recovery !== null && recovery !== expectedRaw) {
           return {
             kind: 'error',
-            message: 'The immutable category-resolution recovery copy already contains different data. No preview write was made.'
+            message: 'The original preview could not be preserved, so no changes were written.',
+            diagnostic: diagnosticForWriteFailure(
+              storage,
+              expectedRaw,
+              options.currentDate,
+              operation,
+              'category-recovery-copy-conflict',
+              'not-detected',
+              'An existing immutable category-resolution recovery copy differs from the current source.'
+            )
           };
         }
-        if (recovery === null) storage.setItem(PREVIEW_CATEGORY_RECOVERY_KEY, expectedRaw);
+        if (recovery === null) {
+          storage.setItem(PREVIEW_CATEGORY_RECOVERY_KEY, expectedRaw);
+          if (storage.getItem(PREVIEW_CATEGORY_RECOVERY_KEY) !== expectedRaw) {
+            return {
+              kind: 'error',
+              message: 'The original preview could not be preserved, so no changes were written.',
+              diagnostic: diagnosticForWriteFailure(
+                storage,
+                expectedRaw,
+                options.currentDate,
+                operation,
+                'category-recovery-copy-failed',
+                'not-detected'
+              )
+            };
+          }
+        }
       } else if (sourceVersion === null
         && (!source.valid || source.sourceSchemaVersion !== PREVIEW_SCHEMA_VERSION)
         && !options.allowUnrecoverableReplacement) {
         return {
           kind: 'error',
-          message: 'The stored value has no supported immutable recovery key. Download its raw recovery before explicitly replacing it.'
+          message: 'The saved preview could not be safely updated, so no changes were written. Download its raw recovery before explicitly replacing it.',
+          diagnostic: diagnosticForWriteFailure(
+            storage,
+            expectedRaw,
+            options.currentDate,
+            operation,
+            'immutable-recovery-key-unavailable',
+            'not-detected'
+          )
         };
       }
     }
-
     const finalRaw = storage.getItem(PREVIEW_STORAGE_KEY);
     if (finalRaw !== expectedRaw) return { kind: 'conflict', actualRaw: finalRaw };
+    if (rawRecoveryExpected !== null && storage.getItem(PREVIEW_RAW_RECOVERY_KEY) !== rawRecoveryExpected) {
+      return {
+        kind: 'error',
+        message: 'The exact raw recovery copy changed before replacement, so no changes were written.',
+        diagnostic: diagnosticForWriteFailure(
+          storage,
+          expectedRaw,
+          options.currentDate,
+          operation,
+          'raw-recovery-copy-changed-before-replacement',
+          'not-detected'
+        )
+      };
+    }
     storage.setItem(PREVIEW_STORAGE_KEY, raw);
     return { kind: 'saved', raw };
   } catch (error) {
-    return { kind: 'error', message: errorMessage(error) };
+    return {
+      kind: 'error',
+      message: 'The preview could not be saved on this device. Your changes remain in this tab; retry before leaving.',
+      diagnostic: diagnosticForWriteFailure(
+        storage,
+        expectedRaw,
+        options.currentDate,
+        operation,
+        'storage-operation-failed',
+        activeSourceCompared ? 'not-detected' : 'not-checked',
+        errorMessage(error)
+      )
+    };
   }
 }
 
@@ -422,6 +664,14 @@ export function loadV23RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadRe
   }
 }
 
+export function loadV24RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V24_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
 export function loadV25RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
   try {
     return { kind: 'loaded', raw: storage.getItem(PREVIEW_V25_RECOVERY_KEY) };
@@ -481,6 +731,22 @@ export function loadV31RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadRe
 export function loadV32RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
   try {
     return { kind: 'loaded', raw: storage.getItem(PREVIEW_V32_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV33RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V33_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV34RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V34_RECOVERY_KEY) };
   } catch (error) {
     return { kind: 'error', message: errorMessage(error) };
   }

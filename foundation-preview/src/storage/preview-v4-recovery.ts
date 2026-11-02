@@ -2,6 +2,7 @@ import { PREVIEW_BACKUP_FORMAT } from '../domain/preview-state.ts';
 import type { PreviewStorage } from './preview-storage.ts';
 
 export const PREVIEW_STORAGE_KEY = 'tend2:synthetic-preview';
+export const PREVIEW_RAW_RECOVERY_KEY = 'tend2:synthetic-preview:raw-recovery';
 export const PREVIEW_V1_RECOVERY_KEY = 'tend2:synthetic-preview:v1-recovery';
 export const PREVIEW_V2_RECOVERY_KEY = 'tend2:synthetic-preview:v2-recovery';
 export const PREVIEW_V3_RECOVERY_KEY = 'tend2:synthetic-preview:v3-recovery';
@@ -34,6 +35,12 @@ export const PREVIEW_V29_RECOVERY_KEY = 'tend2:synthetic-preview:v29-recovery';
 export const PREVIEW_V30_RECOVERY_KEY = 'tend2:synthetic-preview:v30-recovery';
 export const PREVIEW_V31_RECOVERY_KEY = 'tend2:synthetic-preview:v31-recovery';
 export const PREVIEW_V32_RECOVERY_KEY = 'tend2:synthetic-preview:v32-recovery';
+export const PREVIEW_V33_RECOVERY_KEY = 'tend2:synthetic-preview:v33-recovery';
+export const PREVIEW_V34_RECOVERY_KEY = 'tend2:synthetic-preview:v34-recovery';
+
+type RecoverablePreviewSchemaVersion =
+  | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17
+  | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34;
 
 const recoveryKeys = {
   1: PREVIEW_V1_RECOVERY_KEY,
@@ -67,8 +74,10 @@ const recoveryKeys = {
   29: PREVIEW_V29_RECOVERY_KEY,
   30: PREVIEW_V30_RECOVERY_KEY,
   31: PREVIEW_V31_RECOVERY_KEY,
-  32: PREVIEW_V32_RECOVERY_KEY
-} as const;
+  32: PREVIEW_V32_RECOVERY_KEY,
+  33: PREVIEW_V33_RECOVERY_KEY,
+  34: PREVIEW_V34_RECOVERY_KEY
+} as const satisfies Record<RecoverablePreviewSchemaVersion, string>;
 
 export type ProposedRecoveryResult =
   | { kind: 'preserved'; key: string; raw: string }
@@ -85,27 +94,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function isRecoverablePreviewSchemaVersion(value: unknown): value is RecoverablePreviewSchemaVersion {
+  return typeof value === 'number' && Object.hasOwn(recoveryKeys, value);
+}
+
 export function proposedV4SourceVersionForRaw(
   raw: string
-): 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | null {
+): RecoverablePreviewSchemaVersion | null {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!isRecord(parsed)) return null;
     const envelope = parsed;
     if (envelope.format !== PREVIEW_BACKUP_FORMAT) return null;
-    return envelope.schemaVersion === 1 || envelope.schemaVersion === 2
-      || envelope.schemaVersion === 3 || envelope.schemaVersion === 4 || envelope.schemaVersion === 5
-      || envelope.schemaVersion === 6 || envelope.schemaVersion === 7 || envelope.schemaVersion === 8
-      || envelope.schemaVersion === 9 || envelope.schemaVersion === 10 || envelope.schemaVersion === 11
-      || envelope.schemaVersion === 12 || envelope.schemaVersion === 13 || envelope.schemaVersion === 14
-      || envelope.schemaVersion === 15 || envelope.schemaVersion === 16 || envelope.schemaVersion === 17
-      || envelope.schemaVersion === 18 || envelope.schemaVersion === 19 || envelope.schemaVersion === 20
-      || envelope.schemaVersion === 21
-      || envelope.schemaVersion === 22 || envelope.schemaVersion === 23 || envelope.schemaVersion === 24
-      || envelope.schemaVersion === 25 || envelope.schemaVersion === 26 || envelope.schemaVersion === 27
-      || envelope.schemaVersion === 28 || envelope.schemaVersion === 29 || envelope.schemaVersion === 30 || envelope.schemaVersion === 31 || envelope.schemaVersion === 32
-      ? envelope.schemaVersion
-      : null;
+    return isRecoverablePreviewSchemaVersion(envelope.schemaVersion) ? envelope.schemaVersion : null;
   } catch {
     return null;
   }
@@ -127,6 +128,11 @@ export function preserveProposedV4SourceRecovery(
     if (existingRaw === raw) return { kind: 'preserved', key, raw };
     if (existingRaw !== null) return { kind: 'conflict', key, existingRaw };
     storage.setItem(key, raw);
+    const actualRawAfterCopy = storage.getItem(PREVIEW_STORAGE_KEY);
+    if (actualRawAfterCopy !== raw) return { kind: 'active-conflict', actualRaw: actualRawAfterCopy };
+    if (storage.getItem(key) !== raw) {
+      return { kind: 'error', message: 'The exact recovery copy could not be verified.' };
+    }
     return { kind: 'preserved', key, raw };
   } catch (error) {
     return { kind: 'error', message: errorMessage(error) };
@@ -135,11 +141,5 @@ export function preserveProposedV4SourceRecovery(
 
 export function proposedV4RecoveryKeyForRaw(raw: string): string | null {
   const version = proposedV4SourceVersionForRaw(raw);
-  return version === 1 || version === 2 || version === 3 || version === 4 || version === 5
-    || version === 6 || version === 7 || version === 8 || version === 9 || version === 10
-    || version === 11 || version === 12 || version === 13 || version === 14 || version === 15 || version === 16 || version === 17 || version === 18 || version === 19 || version === 20
-    || version === 21 || version === 22 || version === 23 || version === 24 || version === 25 || version === 26 || version === 27
-    || version === 28 || version === 29 || version === 30 || version === 31 || version === 32
-    ? recoveryKeys[version]
-    : null;
+  return version === null ? null : recoveryKeys[version];
 }

@@ -19,6 +19,7 @@ import {
   loadPreview,
   listenForPreviewChanges,
   PREVIEW_ACCOUNT_STORAGE_PREFIX,
+  PREVIEW_RAW_RECOVERY_KEY,
   PREVIEW_STORAGE_KEY,
   PREVIEW_V32_RECOVERY_KEY,
   writePreview
@@ -118,6 +119,17 @@ describe('account-isolated Preview storage', () => {
     expect(values.get(PREVIEW_STORAGE_KEY)).toBe('unbound-synthetic-data');
     expect(values.has(accountRootB)).toBe(false);
     expect([...values.keys()].every(key => !key.includes('@example.test'))).toBe(true);
+
+    const corruptRaw = '{"unreadable":';
+    scopeA.storage.setItem(PREVIEW_STORAGE_KEY, corruptRaw);
+    expect(writePreview(scopeA.storage, createEmptyPreviewData(), corruptRaw, {
+      allowUnrecoverableReplacement: true,
+      currentDate: '2026-11-01',
+      operation: 'reset'
+    }).kind).toBe('saved');
+    expect(values.get(`${accountRootA}:raw-recovery`)).toBe(corruptRaw);
+    expect(values.get(PREVIEW_RAW_RECOVERY_KEY) ?? null).toBeNull();
+    expect(scopeB.storage.getItem(PREVIEW_RAW_RECOVERY_KEY)).toBeNull();
   });
 
   it('keeps writes, reset candidates, and conflicts within the scoped account', () => {

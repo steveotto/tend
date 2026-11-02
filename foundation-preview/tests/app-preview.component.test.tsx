@@ -1754,7 +1754,7 @@ describe('Tend Today preview', () => {
       originalSetItem(key, value);
     });
     await user.click(within(review).getByRole('button', { name: 'Delete season' }));
-    expect(within(review).getByRole('alert').textContent).toContain('controlled storage failure');
+    expect(within(review).getByRole('alert').textContent).toContain('The preview could not be saved on this device');
     expect(screen.getByRole('dialog', { name: 'Remove this season?' })).toBe(review);
     expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
     failingWrite.mockRestore();
@@ -2660,7 +2660,7 @@ describe('Tend Today preview', () => {
     await user.type(title, 'Storage repair workflow');
     await user.click(within(initialEditor).getByRole('button', { name: 'Add Rhythm' }));
     const storageError = await screen.findByText(
-      /Preview could not save this Rhythm\. The stored source value is invalid or cannot be checked\./
+      /Preview could not save this Rhythm\. The saved preview could not be verified, so no changes were written\./
     );
     expect(storageError.getAttribute('role')).toBe('alert');
     expect(title.getAttribute('aria-invalid')).toBe('false');
@@ -3812,7 +3812,7 @@ describe('Tend Today preview', () => {
     await saveCardCompletion(user, 'Pray together');
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent)
-        .toContain('Preview data needs attention.');
+        .toContain('Preview data was not saved on this device.');
     });
     expect(screen.getByRole('article', { name: 'Pray together' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Show tended (0)' })).toBeTruthy();
@@ -5215,7 +5215,7 @@ describe('Tend Today preview', () => {
     const retainedCheckbox = within(editor).getByRole('checkbox', { name: /Dream Together/ });
     await user.click(retainedCheckbox);
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
-    expect(within(editor).getByRole('alert').textContent).toContain('Quota exceeded.');
+    expect(within(editor).getByRole('alert').textContent).toContain('The preview could not be saved on this device');
     expect((retainedCheckbox as HTMLInputElement).checked).toBe(true);
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(savedBefore);
   });
@@ -5465,7 +5465,8 @@ describe('Tend Today preview', () => {
 
     await user.click(within(editor).getByRole('button', { name: 'Add Rhythm' }));
     expect(screen.getByRole('dialog', { name: 'Add Rhythm' })).toBeTruthy();
-    expect(within(editor).getByRole('alert').textContent).toMatch(/Preview could not save this Rhythm\. Quota exceeded\./);
+    expect(within(editor).getByRole('alert').textContent)
+      .toContain('Preview could not save this Rhythm. The preview could not be saved on this device');
     expect((within(editor).getByLabelText('Title') as HTMLInputElement).value).toBe('Daily Connection');
     expect(within(editor).getByLabelText('Title').getAttribute('aria-invalid')).toBe('false');
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(before);

@@ -149,6 +149,7 @@ import { rhythmSchedulesEqual } from './domain/rhythm-occurrences.ts';
 import {
   browserPreviewStorage,
   listenForPreviewChanges,
+  loadRawRecoveryCopy,
   loadV2RecoveryCopy,
   loadV1RecoveryCopy,
   loadV3RecoveryCopy,
@@ -172,6 +173,7 @@ import {
   loadV21RecoveryCopy,
   loadV22RecoveryCopy,
   loadV23RecoveryCopy,
+  loadV24RecoveryCopy,
   loadV25RecoveryCopy,
   loadV26RecoveryCopy,
   loadV27RecoveryCopy,
@@ -180,6 +182,8 @@ import {
   loadV30RecoveryCopy,
   loadV31RecoveryCopy,
   loadV32RecoveryCopy,
+  loadV33RecoveryCopy,
+  loadV34RecoveryCopy,
   loadPreview,
   writePreview
 } from './storage/preview-storage.ts';
@@ -368,6 +372,8 @@ function PreviewWorkspace({
   const [hydrated, setHydrated] = useState(false);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
   const [persistenceStatus, setPersistenceStatus] = useState<PreviewPersistenceStatus>({ kind: 'loading' });
+  const [rawRecoveryCopy, setRawRecoveryCopy] = useState<string | null>(null);
+  const [rawRecoveryError, setRawRecoveryError] = useState<string | null>(null);
   const [v1RecoveryCopy, setV1RecoveryCopy] = useState<string | null>(null);
   const [v1RecoveryError, setV1RecoveryError] = useState<string | null>(null);
   const [v2RecoveryCopy, setV2RecoveryCopy] = useState<string | null>(null);
@@ -414,6 +420,8 @@ function PreviewWorkspace({
   const [v22RecoveryError, setV22RecoveryError] = useState<string | null>(null);
   const [v23RecoveryCopy, setV23RecoveryCopy] = useState<string | null>(null);
   const [v23RecoveryError, setV23RecoveryError] = useState<string | null>(null);
+  const [v24RecoveryCopy, setV24RecoveryCopy] = useState<string | null>(null);
+  const [v24RecoveryError, setV24RecoveryError] = useState<string | null>(null);
   const [v25RecoveryCopy, setV25RecoveryCopy] = useState<string | null>(null);
   const [v25RecoveryError, setV25RecoveryError] = useState<string | null>(null);
   const [v26RecoveryCopy, setV26RecoveryCopy] = useState<string | null>(null);
@@ -430,6 +438,10 @@ function PreviewWorkspace({
   const [v31RecoveryError, setV31RecoveryError] = useState<string | null>(null);
   const [v32RecoveryCopy, setV32RecoveryCopy] = useState<string | null>(null);
   const [v32RecoveryError, setV32RecoveryError] = useState<string | null>(null);
+  const [v33RecoveryCopy, setV33RecoveryCopy] = useState<string | null>(null);
+  const [v33RecoveryError, setV33RecoveryError] = useState<string | null>(null);
+  const [v34RecoveryCopy, setV34RecoveryCopy] = useState<string | null>(null);
+  const [v34RecoveryError, setV34RecoveryError] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -509,6 +521,7 @@ function PreviewWorkspace({
       return { kind: 'error' as const, message: 'Preview identity changed. No changes were saved.' };
     }
     const written = writePreview(previewStorage, data, expected, options);
+    refreshRawRecoveryCopy();
     if (written.kind === 'saved') {
       setPersistedSatisfiedRhythmIds(satisfiedRhythmIdsForData(data));
       setPersistedCompletedRhythmIds(completedRhythmIdsForData(data));
@@ -717,6 +730,17 @@ function PreviewWorkspace({
   );
   const moneyGoals = previewData.goals;
 
+  function refreshRawRecoveryCopy() {
+    const result = loadRawRecoveryCopy(previewStorage);
+    if (result.kind === 'loaded') {
+      setRawRecoveryCopy(result.raw);
+      setRawRecoveryError(null);
+    } else {
+      setRawRecoveryCopy(null);
+      setRawRecoveryError(result.message);
+    }
+  }
+
   function refreshV1RecoveryCopy() {
     const result = loadV1RecoveryCopy(previewStorage);
     if (result.kind === 'loaded') {
@@ -857,6 +881,22 @@ function PreviewWorkspace({
       setV32RecoveryCopy(null);
       setV32RecoveryError(latest.message);
     }
+    const v33 = loadV33RecoveryCopy(previewStorage);
+    if (v33.kind === 'loaded') {
+      setV33RecoveryCopy(v33.raw);
+      setV33RecoveryError(null);
+    } else {
+      setV33RecoveryCopy(null);
+      setV33RecoveryError(v33.message);
+    }
+    const v34 = loadV34RecoveryCopy(previewStorage);
+    if (v34.kind === 'loaded') {
+      setV34RecoveryCopy(v34.raw);
+      setV34RecoveryError(null);
+    } else {
+      setV34RecoveryCopy(null);
+      setV34RecoveryError(v34.message);
+    }
   }
 
   function refreshV10RecoveryCopy() {
@@ -984,6 +1024,14 @@ function PreviewWorkspace({
       setV23RecoveryCopy(null);
       setV23RecoveryError(v23.message);
     }
+    const v24 = loadV24RecoveryCopy(previewStorage);
+    if (v24.kind === 'loaded') {
+      setV24RecoveryCopy(v24.raw);
+      setV24RecoveryError(null);
+    } else {
+      setV24RecoveryCopy(null);
+      setV24RecoveryError(v24.message);
+    }
     const v25 = loadV25RecoveryCopy(previewStorage);
     if (v25.kind === 'loaded') {
       setV25RecoveryCopy(v25.raw);
@@ -1019,6 +1067,7 @@ function PreviewWorkspace({
   }
 
   useEffect(() => {
+    refreshRawRecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -1084,7 +1133,11 @@ function PreviewWorkspace({
       setPersistenceStatus({ kind: 'conflict' });
     } else {
       setAutoSaveEnabled(false);
-      setPersistenceStatus({ kind: 'error', message: saved.message });
+      setPersistenceStatus({
+        kind: 'error',
+        message: saved.message,
+        ...(saved.diagnostic ? { diagnostic: saved.diagnostic } : {})
+      });
     }
   }, [previewData, hydrated, autoSaveEnabled]);
 
@@ -1098,6 +1151,16 @@ function PreviewWorkspace({
       setPersistenceStatus({ kind: 'conflict' });
     }, identity);
   }, [hydrated]);
+
+  useEffect(() => {
+    if (persistenceStatus.kind !== 'error' && persistenceStatus.kind !== 'conflict') return;
+    function warnBeforeLeaving(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+    window.addEventListener('beforeunload', warnBeforeLeaving);
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving);
+  }, [persistenceStatus.kind]);
 
   useEffect(() => {
     document.documentElement.dataset.mobileTextSize = textSize === 'small' ? 'normal' : textSize === 'medium' ? 'large' : 'larger';
@@ -1664,7 +1727,11 @@ function PreviewWorkspace({
     }
     if (written.kind === 'error') {
       setAutoSaveEnabled(false);
-      setPersistenceStatus({ kind: 'error', message: written.message });
+      setPersistenceStatus({
+        kind: 'error',
+        message: written.message,
+        ...(written.diagnostic ? { diagnostic: written.diagnostic } : {})
+      });
       return { form: `Preview could not save this Rhythm. ${written.message}` };
     }
     expectedRaw.current = written.raw;
@@ -1699,7 +1766,11 @@ function PreviewWorkspace({
     }
     if (written.kind === 'error') {
       setAutoSaveEnabled(false);
-      setPersistenceStatus({ kind: 'error', message: written.message });
+      setPersistenceStatus({
+        kind: 'error',
+        message: written.message,
+        ...(written.diagnostic ? { diagnostic: written.diagnostic } : {})
+      });
       return `Preview could not save this ${action}. ${written.message}`;
     }
     expectedRaw.current = written.raw;
@@ -2464,15 +2535,24 @@ function PreviewWorkspace({
       setPersistenceStatus({ kind: 'conflict' });
     } else {
       setAutoSaveEnabled(false);
-      setPersistenceStatus({ kind: 'error', message: written.message });
+      setPersistenceStatus({
+        kind: 'error',
+        message: written.message,
+        ...(written.diagnostic ? { diagnostic: written.diagnostic } : {})
+      });
     }
     return result.errors;
   }
 
-  function finishWrite(resultData: PreviewData, allowUnrecoverableReplacement = false): string | null {
+  function finishWrite(
+    resultData: PreviewData,
+    allowUnrecoverableReplacement = false,
+    operation: 'save' | 'import' | 'reset' = 'save'
+  ): string | null {
     const written = writeCurrentPreview(resultData, expectedRaw.current, {
       allowUnrecoverableReplacement,
-      currentDate
+      currentDate,
+      operation
     });
     refreshV29RecoveryCopy();
     refreshV30RecoveryCopy();
@@ -2501,15 +2581,18 @@ function PreviewWorkspace({
       return 'Preview storage changed in another tab. No data was replaced.';
     }
     setAutoSaveEnabled(false);
-    setPersistenceStatus({ kind: 'error', message: written.message });
+    setPersistenceStatus({
+      kind: 'error',
+      message: written.message,
+      ...(written.diagnostic ? { diagnostic: written.diagnostic } : {})
+    });
     return written.message;
   }
 
   function reloadExternal(): string | null {
     const raw = externalRaw.current;
     if (raw === null) {
-      expectedRaw.current = null;
-      return finishWrite(initialPreviewData());
+      return 'The saved preview was removed in another tab. Your current preview remains open; no empty data was written. Download a backup or explicitly replace the removed value to save this tab.';
     }
     const parsed = parsePreviewBackup(raw, currentDate);
     if (!parsed.valid) {
@@ -2535,7 +2618,8 @@ function PreviewWorkspace({
   function replaceExternal(): string | null {
     const written = writeCurrentPreview(previewData, externalRaw.current, {
       allowUnrecoverableReplacement: true,
-      currentDate
+      currentDate,
+      operation: 'replace'
     });
     refreshV29RecoveryCopy();
     refreshV30RecoveryCopy();
@@ -2561,14 +2645,18 @@ function PreviewWorkspace({
       setPersistenceStatus({ kind: 'conflict' });
       return 'Preview storage changed again in another tab. No data was replaced.';
     }
-    setPersistenceStatus({ kind: 'error', message: written.message });
+    setPersistenceStatus({
+      kind: 'error',
+      message: written.message,
+      ...(written.diagnostic ? { diagnostic: written.diagnostic } : {})
+    });
     return written.message;
   }
 
   function retrySave() {
     skipNextAutosave.current = true;
     setAutoSaveEnabled(true);
-    const written = writeCurrentPreview(previewData, expectedRaw.current, { currentDate });
+    const written = writeCurrentPreview(previewData, expectedRaw.current, { currentDate, operation: 'save' });
     refreshV29RecoveryCopy();
     refreshV30RecoveryCopy();
     refreshV1RecoveryCopy();
@@ -2589,7 +2677,11 @@ function PreviewWorkspace({
       setPersistenceStatus({ kind: 'conflict' });
     } else {
       setAutoSaveEnabled(false);
-      setPersistenceStatus({ kind: 'error', message: written.message });
+      setPersistenceStatus({
+        kind: 'error',
+        message: written.message,
+        ...(written.diagnostic ? { diagnostic: written.diagnostic } : {})
+      });
     }
   }
 
@@ -3045,11 +3137,13 @@ function PreviewWorkspace({
         data={previewData}
         status={persistenceStatus}
         currentDate={currentDate}
-        onImport={data => finishWrite(data, true)}
-        onReset={() => finishWrite(initialPreviewData(), true)}
+        onImport={data => finishWrite(data, true, 'import')}
+        onReset={() => finishWrite(initialPreviewData(), true, 'reset')}
         onRetrySave={retrySave}
         onReloadExternal={reloadExternal}
         onReplaceExternal={replaceExternal}
+        rawRecoveryCopy={rawRecoveryCopy}
+        rawRecoveryError={rawRecoveryError}
         v1RecoveryCopy={v1RecoveryCopy}
         v1RecoveryError={v1RecoveryError}
         v2RecoveryCopy={v2RecoveryCopy}
@@ -3096,6 +3190,8 @@ function PreviewWorkspace({
         v22RecoveryError={v22RecoveryError}
         v23RecoveryCopy={v23RecoveryCopy}
         v23RecoveryError={v23RecoveryError}
+        v24RecoveryCopy={v24RecoveryCopy}
+        v24RecoveryError={v24RecoveryError}
         v25RecoveryCopy={v25RecoveryCopy}
         v25RecoveryError={v25RecoveryError}
         v26RecoveryCopy={v26RecoveryCopy}
@@ -3112,10 +3208,18 @@ function PreviewWorkspace({
         v31RecoveryError={v31RecoveryError}
         v32RecoveryCopy={v32RecoveryCopy}
         v32RecoveryError={v32RecoveryError}
+        v33RecoveryCopy={v33RecoveryCopy}
+        v33RecoveryError={v33RecoveryError}
+        v34RecoveryCopy={v34RecoveryCopy}
+        v34RecoveryError={v34RecoveryError}
       />
       {storageNeedsAttention && !isPreviewSettings && (
         <p className="preview-storage-alert" role="alert">
-          Preview data needs attention. Open More → Settings → Preview data to review recovery and storage options.
+          {persistenceStatus.kind === 'error'
+            ? 'Preview data was not saved on this device. Your changes remain in this tab; open More → Settings → Preview data to retry before leaving.'
+            : persistenceStatus.kind === 'conflict'
+              ? 'Another tab changed the saved preview. Your current changes remain here until you choose how to resolve it.'
+              : 'Preview data needs attention. Open More → Settings → Preview data to review recovery and storage options.'}
         </p>
       )}
       <footer className="preview-footer">
@@ -3127,7 +3231,11 @@ function PreviewWorkspace({
         {import.meta.env.MODE !== 'pages' && <a href="/preview.html">Component catalogue</a>}
         <a href="https://steveotto.github.io/tend/">Open Tend Classic</a>
         {onSignOut && (
-          <button type="button" className="preview-sign-out" onClick={() => void onSignOut()}>
+          <button type="button" className="preview-sign-out" onClick={() => {
+            if ((persistenceStatus.kind === 'error' || persistenceStatus.kind === 'conflict')
+              && !window.confirm('Preview changes are not saved. Sign out anyway? The current tab draft will not be transferred.')) return;
+            void onSignOut();
+          }}>
             Sign out
           </button>
         )}

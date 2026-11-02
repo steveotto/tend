@@ -20,6 +20,7 @@ import type { StrengthSavedWorkout } from '../src/domain/strength.ts';
 import {
   browserPreviewStorage,
   loadPreview,
+  loadRawRecoveryCopy,
   loadV1RecoveryCopy,
   loadV2RecoveryCopy,
   loadV3RecoveryCopy,
@@ -37,6 +38,7 @@ import {
   loadV18RecoveryCopy,
   loadV20RecoveryCopy,
   loadV21RecoveryCopy,
+  loadV24RecoveryCopy,
   loadV25RecoveryCopy,
   loadV27RecoveryCopy,
   loadV28RecoveryCopy,
@@ -44,7 +46,10 @@ import {
   loadV30RecoveryCopy,
   loadV31RecoveryCopy,
   loadV32RecoveryCopy,
+  loadV33RecoveryCopy,
+  loadV34RecoveryCopy,
   PREVIEW_V19_RECOVERY_KEY,
+  PREVIEW_RAW_RECOVERY_KEY,
   PREVIEW_CATEGORY_RECOVERY_KEY,
   PREVIEW_STORAGE_KEY,
   PREVIEW_V1_RECOVERY_KEY,
@@ -65,6 +70,7 @@ import {
   PREVIEW_V18_RECOVERY_KEY,
   PREVIEW_V20_RECOVERY_KEY,
   PREVIEW_V21_RECOVERY_KEY,
+  PREVIEW_V24_RECOVERY_KEY,
   PREVIEW_V25_RECOVERY_KEY,
   PREVIEW_V27_RECOVERY_KEY,
   PREVIEW_V28_RECOVERY_KEY,
@@ -72,6 +78,8 @@ import {
   PREVIEW_V30_RECOVERY_KEY,
   PREVIEW_V31_RECOVERY_KEY,
   PREVIEW_V32_RECOVERY_KEY,
+  PREVIEW_V33_RECOVERY_KEY,
+  PREVIEW_V34_RECOVERY_KEY,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -101,6 +109,7 @@ afterEach(() => {
   delete historyState.tendPersonProfileId;
   window.history.replaceState(historyState, '', window.location.href);
   window.localStorage.removeItem(PREVIEW_STORAGE_KEY);
+  window.localStorage.removeItem(PREVIEW_RAW_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V1_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V2_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V3_RECOVERY_KEY);
@@ -120,8 +129,12 @@ afterEach(() => {
   window.localStorage.removeItem(PREVIEW_V20_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V21_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V25_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V24_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V27_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V31_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V32_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V33_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V34_RECOVERY_KEY);
   vi.unstubAllGlobals();
 });
 
@@ -412,6 +425,93 @@ describe('synthetic preview storage adapter and envelope', () => {
       ...current,
       schemaVersion: 34
     }, '2026-10-31').valid).toBe(false);
+  });
+
+  it('migrates valid v33/v34 sources and preserves exact immutable recovery across retries', () => {
+    const current = createPreviewEnvelope(createSamplePreviewData());
+    for (const [schemaVersion, recoveryKey, loadRecoveryCopy] of [
+      [33, PREVIEW_V33_RECOVERY_KEY, loadV33RecoveryCopy],
+      [34, PREVIEW_V34_RECOVERY_KEY, loadV34RecoveryCopy]
+    ] as const) {
+      const priorData = { ...current.data };
+      delete (priorData as Partial<typeof priorData>).showTended;
+      if (schemaVersion === 33) {
+        delete (priorData as Partial<typeof priorData>).timeBlocks;
+      }
+      const raw = JSON.stringify({ ...current, schemaVersion, data: priorData });
+      const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+      const loaded = loadPreview(storage, '2026-10-31');
+      expect(loaded.kind, `schema ${schemaVersion} should be supported`).toBe('loaded');
+      if (loaded.kind !== 'loaded') continue;
+      expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+
+      const firstSave = writePreview(storage, { ...loaded.data, showTended: true }, loaded.raw, {
+        currentDate: '2026-10-31'
+      });
+      expect(firstSave.kind).toBe('saved');
+      expect(values.get(recoveryKey)).toBe(raw);
+      expect(loadRecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+      if (firstSave.kind !== 'saved') continue;
+
+      const saved = loadPreview(storage, '2026-10-31');
+      expect(saved.kind).toBe('loaded');
+      if (saved.kind !== 'loaded') continue;
+      const secondSave = writePreview(storage, saved.data, saved.raw, { currentDate: '2026-10-31' });
+      expect(secondSave.kind).toBe('saved');
+      expect(values.get(recoveryKey)).toBe(raw);
+      expect(values.get(PREVIEW_STORAGE_KEY)).not.toBe(raw);
+    }
+  });
+
+  it('exposes and preserves the immutable v24 recovery copy', () => {
+    const current = createPreviewEnvelope(createSamplePreviewData());
+    const priorData = { ...current.data };
+    delete (priorData as Partial<typeof priorData>).people;
+    delete (priorData as Partial<typeof priorData>).personDetails;
+    delete (priorData as Partial<typeof priorData>).personNotes;
+    delete (priorData as Partial<typeof priorData>).prayerRequests;
+    delete (priorData as Partial<typeof priorData>).timeBlocks;
+    delete (priorData as Partial<typeof priorData>).showTended;
+    const raw = JSON.stringify({ ...current, schemaVersion: 24, data: priorData });
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-10-31');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(writePreview(storage, loaded.data, loaded.raw, { currentDate: '2026-10-31' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V24_RECOVERY_KEY)).toBe(raw);
+    expect(loadV24RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+  });
+
+  it('saves an in-app confirmed change after loading either supported v33 or v34 data', async () => {
+    const user = userEvent.setup();
+    const current = createPreviewEnvelope(createSamplePreviewData());
+    for (const [schemaVersion, recoveryKey] of [
+      [33, PREVIEW_V33_RECOVERY_KEY],
+      [34, PREVIEW_V34_RECOVERY_KEY]
+    ] as const) {
+      cleanup();
+      window.localStorage.clear();
+      const priorData = { ...current.data };
+      delete (priorData as Partial<typeof priorData>).showTended;
+      if (schemaVersion === 33) delete (priorData as Partial<typeof priorData>).timeBlocks;
+      const raw = JSON.stringify({ ...current, schemaVersion, data: priorData });
+      window.localStorage.setItem(PREVIEW_STORAGE_KEY, raw);
+
+      render(<App />);
+      await screen.findByText('Preview data saved in this browser.');
+      await user.click(await screen.findByRole('button', { name: /Show tended/ }));
+      await waitFor(() => {
+        expect(JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}').schemaVersion)
+          .toBe(PREVIEW_SCHEMA_VERSION);
+      });
+      expect(window.localStorage.getItem(recoveryKey)).toBe(raw);
+      const reloaded = loadPreview(window.localStorage, '2026-10-31');
+      expect(reloaded.kind).toBe('loaded');
+      if (reloaded.kind === 'loaded') expect(reloaded.data.showTended).toBe(true);
+    }
+    cleanup();
   });
 
   it('migrates schema v28 without inventing Person details and preserves exact source recovery', () => {
@@ -1398,7 +1498,10 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(writePreview(failingStorage, createSamplePreviewData(), originalRaw, {
       currentDate: '2026-10-21'
     }))
-      .toMatchObject({ kind: 'error', message: 'Recovery write blocked' });
+      .toMatchObject({
+        kind: 'error',
+        diagnostic: { rejectedRule: 'immutable-recovery-copy-failed', failureDetail: 'Recovery write blocked' }
+      });
     expect(values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
     expect(values.has(PREVIEW_V3_RECOVERY_KEY)).toBe(false);
   });
@@ -1437,7 +1540,10 @@ describe('synthetic preview storage adapter and envelope', () => {
     };
     expect(writePreview(failingStorage, createSamplePreviewData(), originalRaw, {
       currentDate: '2026-10-21'
-    })).toMatchObject({ kind: 'error', message: 'v4 recovery write blocked' });
+    })).toMatchObject({
+      kind: 'error',
+      diagnostic: { rejectedRule: 'immutable-recovery-copy-failed', failureDetail: 'v4 recovery write blocked' }
+    });
     expect(failingValues.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
   });
 
@@ -1477,7 +1583,10 @@ describe('synthetic preview storage adapter and envelope', () => {
     };
     expect(writePreview(failingStorage, createSamplePreviewData(), originalRaw, {
       currentDate: '2026-10-21'
-    })).toMatchObject({ kind: 'error', message: 'v5 recovery write blocked' });
+    })).toMatchObject({
+      kind: 'error',
+      diagnostic: { rejectedRule: 'immutable-recovery-copy-failed', failureDetail: 'v5 recovery write blocked' }
+    });
     expect(failingValues.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
   });
 
@@ -1647,7 +1756,10 @@ describe('synthetic preview storage adapter and envelope', () => {
     };
     expect(writePreview(failingStorage, loaded.data, originalRaw, {
       currentDate: '2026-10-21'
-    })).toMatchObject({ kind: 'error', message: 'v8 recovery write blocked' });
+    })).toMatchObject({
+      kind: 'error',
+      diagnostic: { rejectedRule: 'immutable-recovery-copy-failed', failureDetail: 'v8 recovery write blocked' }
+    });
     expect(failingValues.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
   });
 
@@ -2081,7 +2193,10 @@ describe('synthetic preview storage adapter and envelope', () => {
       };
       expect(writePreview(failedRecoveryStorage, createSamplePreviewData(), originalRaw, {
         currentDate: '2026-10-21'
-      })).toMatchObject({ kind: 'error', message: 'v10 recovery write blocked' });
+      })).toMatchObject({
+        kind: 'error',
+        diagnostic: { rejectedRule: 'immutable-recovery-copy-failed', failureDetail: 'v10 recovery write blocked' }
+      });
       expect(values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
       expect(values.has(PREVIEW_V10_RECOVERY_KEY)).toBe(false);
     });
@@ -2340,6 +2455,32 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
   });
 
+  it('blocks explicit replacement when the immutable raw recovery slot contains different bytes', () => {
+    const raw = '{"unreadable":';
+    const priorRecovery = '{"prior recovery":"keep exactly"}';
+    const { storage, values } = storageFixture({
+      [PREVIEW_STORAGE_KEY]: raw,
+      [PREVIEW_RAW_RECOVERY_KEY]: priorRecovery
+    });
+
+    expect(writePreview(storage, createSamplePreviewData(), raw, {
+      allowUnrecoverableReplacement: true,
+      currentDate: '2026-10-21',
+      operation: 'reset'
+    })).toMatchObject({
+      kind: 'error',
+      diagnostic: {
+        operation: 'reset',
+        rejectedRule: 'raw-recovery-copy-conflict',
+        recoveryKeyLookup: 'conflicting-copy',
+        concurrentModification: 'not-detected',
+        latestDraft: 'failed'
+      }
+    });
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+    expect(values.get(PREVIEW_RAW_RECOVERY_KEY)).toBe(priorRecovery);
+  });
+
   it('touches only the isolated preview key, leaving existing Tend storage keys unchanged', () => {
     const legacyKeys = {
       'tend-state': '{"live":"unchanged"}',
@@ -2435,7 +2576,18 @@ describe('synthetic preview storage adapter and envelope', () => {
       removeItem: () => {}
     };
     expect(writePreview(quota, createSamplePreviewData(), null))
-      .toMatchObject({ kind: 'error', message: 'Quota exceeded' });
+      .toMatchObject({
+        kind: 'error',
+        diagnostic: {
+          rejectedRule: 'storage-operation-failed',
+          sourceSchemaVersion: null,
+          recoveryKeyLookup: 'not-required',
+          migrationValidation: 'not-run',
+          concurrentModification: 'not-detected',
+          latestDraft: 'failed',
+          failureDetail: 'Quota exceeded'
+        }
+      });
   });
 
   it('detects an external-tab write before replacing a stale value', () => {
@@ -2601,7 +2753,7 @@ describe('preview backup controls', () => {
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(original);
   });
 
-  it('preserves corrupt storage, offers raw recovery, and resets only the preview key after confirmation', async () => {
+  it('preserves corrupt storage in an immutable raw recovery copy before explicit reset', async () => {
     const user = userEvent.setup();
     const corruptRaw = '{"bad":';
     window.localStorage.setItem(PREVIEW_STORAGE_KEY, corruptRaw);
@@ -2622,6 +2774,9 @@ describe('preview backup controls', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Reset sample data' }));
     expect(await screen.findByText('Preview data saved in this browser.')).toBeTruthy();
     expect(loadPreview(browserPreviewStorage(), '2026-10-21').kind).toBe('loaded');
+    expect(window.localStorage.getItem(PREVIEW_RAW_RECOVERY_KEY)).toBe(corruptRaw);
+    expect(loadRawRecoveryCopy(browserPreviewStorage())).toEqual({ kind: 'loaded', raw: corruptRaw });
+    expect(screen.getByRole('button', { name: 'Download exact raw recovery copy' })).toBeTruthy();
     expect(window.localStorage.getItem('tend-state')).toBe('{"live":"keep"}');
   });
 
@@ -2985,6 +3140,30 @@ describe('preview backup controls', () => {
       .toBe('Another tab reserve');
   });
 
+  it('does not write default data when reloading after another tab removes the preview', async () => {
+    const user = userEvent.setup();
+    const initialData = createSamplePreviewData();
+    initialData.goals[0]!.title = 'Existing protected draft';
+    const initialRaw = JSON.stringify(createPreviewEnvelope(initialData));
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, initialRaw);
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+
+    window.localStorage.removeItem(PREVIEW_STORAGE_KEY);
+    const removalEvent = new Event('storage');
+    Object.defineProperties(removalEvent, {
+      key: { value: PREVIEW_STORAGE_KEY },
+      oldValue: { value: initialRaw },
+      newValue: { value: null }
+    });
+    window.dispatchEvent(removalEvent);
+    await openPreviewSettings(user);
+    await user.click(screen.getByRole('button', { name: 'Reload other tab’s preview' }));
+
+    expect(await screen.findByText(/removed in another tab/)).toBeTruthy();
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBeNull();
+  });
+
   it('reports blocked storage and quota errors without claiming that data was saved', async () => {
     const user = userEvent.setup();
     vi.spyOn(MemoryStorage.prototype, 'getItem').mockImplementation(() => { throw new Error('Storage access denied'); });
@@ -2997,10 +3176,31 @@ describe('preview backup controls', () => {
     vi.restoreAllMocks();
 
     vi.spyOn(MemoryStorage.prototype, 'setItem').mockImplementation(() => { throw new Error('Quota exceeded'); });
+    const { createObjectURL } = setDownloadMocks();
     render(<App />);
     expect(await screen.findByRole('alert')).toBeTruthy();
+    const beforeUnload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(beforeUnload);
+    expect(beforeUnload.defaultPrevented).toBe(true);
     await openPreviewSettings(user);
-    expect(screen.getByText(/Preview data was not saved\. Quota exceeded/)).toBeTruthy();
+    expect(screen.getByText(/Preview data was not saved on this device/)).toBeTruthy();
+    await user.click(screen.getByText('Technical save diagnostic'));
+    expect(screen.getByText('Quota exceeded')).toBeTruthy();
     expect(screen.queryByText('Preview data saved in this browser.')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Download privacy-safe diagnostic' }));
+    const diagnosticBlob = createObjectURL.mock.calls[0]![0] as Blob;
+    const diagnostic = JSON.parse(await diagnosticBlob.text()) as Record<string, unknown>;
+    expect(diagnostic).toMatchObject({
+      operation: 'save',
+      applicationSchemaVersion: PREVIEW_SCHEMA_VERSION,
+      rejectedRule: 'storage-operation-failed',
+      latestDraft: 'failed',
+      failureDetail: 'Quota exceeded'
+    });
+    expect(JSON.stringify(diagnostic)).not.toContain('Starter reserve');
+    vi.restoreAllMocks();
+    await user.click(screen.getByRole('button', { name: 'Retry saving' }));
+    expect(await screen.findByText('Preview data saved in this browser.')).toBeTruthy();
+    expect(loadPreview(window.localStorage, new Date().toISOString().slice(0, 10)).kind).toBe('loaded');
   });
 });

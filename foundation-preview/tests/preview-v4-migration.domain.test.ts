@@ -557,6 +557,19 @@ describe('v4 migration and recovery domain', () => {
     expect(stale.values.size).toBe(1);
   });
 
+  it('blocks schema replacement when a recovery write cannot be read back exactly', () => {
+    const raw = rawAtVersion(dataWithHistory(), 3);
+    const storage = {
+      getItem: (key: string) => key === PREVIEW_STORAGE_KEY ? raw : null,
+      setItem: () => undefined
+    };
+
+    expect(preserveProposedV4SourceRecovery(storage, raw)).toMatchObject({
+      kind: 'error',
+      message: 'The exact recovery copy could not be verified.'
+    });
+  });
+
   it('uses schema v25 for active preview serialization', () => {
     expect(createPreviewEnvelope(dataWithHistory()).schemaVersion).toBe(PROPOSED_PREVIEW_SCHEMA_VERSION);
   });

@@ -5,13 +5,14 @@ import type { PreviewData } from '../domain/preview-state.ts';
 import { analyzeLegacyTendImport } from '../domain/legacy-import.ts';
 import type { LegacyImportDryRun } from '../domain/legacy-import.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
+import type { PreviewStorageDiagnostic } from '../storage/preview-storage.ts';
 
 export type PreviewPersistenceStatus =
   | { kind: 'loading' }
   | { kind: 'saving' }
   | { kind: 'saved' }
   | { kind: 'unavailable'; message: string }
-  | { kind: 'error'; message: string }
+  | { kind: 'error'; message: string; diagnostic?: PreviewStorageDiagnostic }
   | { kind: 'corrupt'; message: string; raw: string }
   | { kind: 'unsupported'; message: string; raw: string }
   | { kind: 'conflict' };
@@ -26,6 +27,8 @@ type PreviewDataControlsProps = {
   data: PreviewData;
   status: PreviewPersistenceStatus;
   currentDate: string;
+  rawRecoveryCopy?: string | null;
+  rawRecoveryError?: string | null;
   onImport: (data: PreviewData) => string | null;
   onReset: () => string | null;
   onRetrySave: () => void;
@@ -77,6 +80,8 @@ type PreviewDataControlsProps = {
   v22RecoveryError?: string | null;
   v23RecoveryCopy?: string | null;
   v23RecoveryError?: string | null;
+  v24RecoveryCopy?: string | null;
+  v24RecoveryError?: string | null;
   v25RecoveryCopy?: string | null;
   v25RecoveryError?: string | null;
   v26RecoveryCopy?: string | null;
@@ -93,6 +98,10 @@ type PreviewDataControlsProps = {
   v31RecoveryError?: string | null;
   v32RecoveryCopy?: string | null;
   v32RecoveryError?: string | null;
+  v33RecoveryCopy?: string | null;
+  v33RecoveryError?: string | null;
+  v34RecoveryCopy?: string | null;
+  v34RecoveryError?: string | null;
 };
 
 function downloadText(filename: string, content: string, type: string): string | null {
@@ -117,6 +126,8 @@ export function PreviewDataControls({
   data,
   status,
   currentDate,
+  rawRecoveryCopy = null,
+  rawRecoveryError = null,
   onImport,
   onReset,
   onRetrySave,
@@ -168,6 +179,8 @@ export function PreviewDataControls({
   v22RecoveryError = null,
   v23RecoveryCopy = null,
   v23RecoveryError = null,
+  v24RecoveryCopy = null,
+  v24RecoveryError = null,
   v25RecoveryCopy = null,
   v25RecoveryError = null,
   v26RecoveryCopy = null,
@@ -183,7 +196,11 @@ export function PreviewDataControls({
   v31RecoveryCopy = null,
   v31RecoveryError = null,
   v32RecoveryCopy = null,
-  v32RecoveryError = null
+  v32RecoveryError = null,
+  v33RecoveryCopy = null,
+  v33RecoveryError = null,
+  v34RecoveryCopy = null,
+  v34RecoveryError = null
 }: PreviewDataControlsProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -326,7 +343,7 @@ export function PreviewDataControls({
         : status.kind === 'unavailable'
           ? `Browser storage is unavailable. Changes are not saved. ${status.message}`
           : status.kind === 'error'
-            ? `Preview data was not saved. ${status.message}`
+            ? 'Preview data was not saved on this device. Your changes remain open in this tab. Retry before leaving.'
             : status.kind === 'corrupt'
               ? `Saved preview data could not be read. The original value is preserved. ${status.message}`
               : status.kind === 'unsupported'
@@ -338,6 +355,9 @@ export function PreviewDataControls({
       <div className="preview-data-controls__copy">
         <p className="preview-data-controls__notice" role={status.kind === 'saved' ? 'status' : 'alert'}>
           <strong>{statusMessage}</strong> This is separate from your live Tend account and does not sync across devices.
+        </p>
+        <p className="preview-data-controls__help">
+          The preview backup contains the current confirmed app state; unconfirmed form drafts may not be included. Exact raw recovery is a separate immutable copy of the stored source.
         </p>
         {status.kind === 'conflict' && (
           <p className="preview-data-controls__help">Another preview tab changed this storage key. No further writes will occur until you choose what to do.</p>
@@ -626,6 +646,16 @@ export function PreviewDataControls({
             Download original v23 recovery backup
           </button>
         )}
+        {v24RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v24-recovery.json',
+              v24RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v24 recovery backup downloaded.')}>
+            Download original v24 recovery backup
+          </button>
+        )}
         {v25RecoveryCopy !== null && (
           <button type="button" className="btn mini ghost"
             onClick={() => setMessage(downloadText(
@@ -706,6 +736,26 @@ export function PreviewDataControls({
             Download original v32 recovery backup
           </button>
         )}
+        {v33RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v33-recovery.json',
+              v33RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v33 recovery backup downloaded.')}>
+            Download original v33 recovery backup
+          </button>
+        )}
+        {v34RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v34-recovery.json',
+              v34RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v34 recovery backup downloaded.')}>
+            Download original v34 recovery backup
+          </button>
+        )}
         <label className="btn mini ghost preview-data-controls__file-button">
           Import preview backup
           <input
@@ -737,6 +787,40 @@ export function PreviewDataControls({
         </button>
         {status.kind === 'error' && (
           <button type="button" className="btn mini ghost" onClick={onRetrySave}>Retry saving</button>
+        )}
+        {rawRecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost" onClick={() => setMessage(downloadText(
+            'tend-synthetic-preview-exact-raw-recovery.json',
+            rawRecoveryCopy,
+            'application/json'
+          ) ?? 'Exact raw recovery copy downloaded.')}>
+            Download exact raw recovery copy
+          </button>
+        )}
+        {status.kind === 'error' && status.diagnostic && (
+          <details className="preview-data-controls__diagnostic">
+            <summary>Technical save diagnostic</summary>
+            <dl>
+              <dt>Operation</dt><dd>{status.diagnostic.operation}</dd>
+              <dt>Source schema</dt><dd>{status.diagnostic.sourceSchemaVersion ?? 'unknown'}</dd>
+              <dt>Application schema</dt><dd>{status.diagnostic.applicationSchemaVersion}</dd>
+              <dt>Rejected rule</dt><dd>{status.diagnostic.rejectedRule}</dd>
+              <dt>Recovery-key lookup</dt><dd>{status.diagnostic.recoveryKeyLookup}</dd>
+              <dt>Migration validation</dt><dd>{status.diagnostic.migrationValidation}</dd>
+              <dt>Concurrent change</dt><dd>{status.diagnostic.concurrentModification}</dd>
+              <dt>Latest draft</dt><dd>{status.diagnostic.latestDraft}</dd>
+              {status.diagnostic.failureDetail && (
+                <><dt>Technical detail</dt><dd>{status.diagnostic.failureDetail}</dd></>
+              )}
+            </dl>
+            <button type="button" className="btn mini ghost" onClick={() => setMessage(downloadText(
+              'tend-preview-save-diagnostic.json',
+              JSON.stringify(status.diagnostic, null, 2),
+              'application/json'
+            ) ?? 'Privacy-safe save diagnostic downloaded.')}>
+              Download privacy-safe diagnostic
+            </button>
+          </details>
         )}
         {(status.kind === 'corrupt' || status.kind === 'unsupported') && (
           <>
@@ -776,6 +860,7 @@ export function PreviewDataControls({
       {v21RecoveryError && <p className="preview-data-controls__help" role="alert">The original v21 recovery copy could not be read: {v21RecoveryError}</p>}
       {v22RecoveryError && <p className="preview-data-controls__help" role="alert">The original v22 recovery copy could not be read: {v22RecoveryError}</p>}
       {v23RecoveryError && <p className="preview-data-controls__help" role="alert">The original v23 recovery copy could not be read: {v23RecoveryError}</p>}
+      {v24RecoveryError && <p className="preview-data-controls__help" role="alert">The original v24 recovery copy could not be read: {v24RecoveryError}</p>}
       {v25RecoveryError && <p className="preview-data-controls__help" role="alert">The original v25 recovery copy could not be read: {v25RecoveryError}</p>}
       {v26RecoveryError && <p className="preview-data-controls__help" role="alert">The original v26 recovery copy could not be read: {v26RecoveryError}</p>}
       {v27RecoveryError && <p className="preview-data-controls__help" role="alert">The original v27 recovery copy could not be read: {v27RecoveryError}</p>}
@@ -784,6 +869,9 @@ export function PreviewDataControls({
       {v30RecoveryError && <p className="preview-data-controls__help" role="alert">The original v30 recovery copy could not be read: {v30RecoveryError}</p>}
       {v31RecoveryError && <p className="preview-data-controls__help" role="alert">The original v31 recovery copy could not be read: {v31RecoveryError}</p>}
       {v32RecoveryError && <p className="preview-data-controls__help" role="alert">The original v32 recovery copy could not be read: {v32RecoveryError}</p>}
+      {v33RecoveryError && <p className="preview-data-controls__help" role="alert">The original v33 recovery copy could not be read: {v33RecoveryError}</p>}
+      {v34RecoveryError && <p className="preview-data-controls__help" role="alert">The original v34 recovery copy could not be read: {v34RecoveryError}</p>}
+      {rawRecoveryError && <p className="preview-data-controls__help" role="alert">The exact raw recovery copy could not be read: {rawRecoveryError}</p>}
       {message && <p className="preview-data-controls__message" role="status">{message}</p>}
       {pendingAction && (
         <MoneyGoalDialog
