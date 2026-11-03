@@ -1308,7 +1308,7 @@ describe('Tend Today preview', () => {
 
     const undoNotice = within(history).getByText('A Season change was saved. You can undo it.');
     expect(undoNotice).toBeTruthy();
-    await user.click(within(history).getByRole('button', { name: 'Undo' }));
+    await user.click(within(history).getByRole('button', { name: 'Undo season change' }));
     saved = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, asOfDate);
     expect(saved.valid).toBe(true);
     if (!saved.valid) return;
@@ -3194,6 +3194,98 @@ describe('Tend Today preview', () => {
     expect(faith.querySelector('.ma-score')?.textContent).toBe('—');
     expect(faith.querySelector('.ma-score')?.classList.contains('neutral')).toBe(true);
     expect(faith.getAttribute('aria-description')).toContain('Faith health score unavailable');
+  });
+
+  it('keeps Faith home and category scores in parity through Tend, Undo, and navigation', async () => {
+    const user = userEvent.setup();
+    const data = createSamplePreviewData();
+    const rhythm = savedSharedFaithMarriageRhythm(
+      'user-rhythm-84000000-0000-4000-8000-000000000022',
+      'Faith parity prayer'
+    );
+    const today = localDateString(new Date());
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const trackingStartDate = addCalendarDays(today, -29);
+    rhythm.categoryIds = ['faith'];
+    rhythm.primaryFoundationId = 'faith-prayer';
+    rhythm.secondaryFoundationIds = [];
+    rhythm.createdLocalDate = trackingStartDate;
+    rhythm.createdTimeZone = timeZone;
+    rhythm.scoring = {
+      trackingStartDate,
+      timeZone,
+      scheduleHistory: [createRhythmSeason(rhythm.id, trackingStartDate, { frequency: 'daily' })]
+    };
+    const completionDates = Array.from(
+      { length: 23 },
+      (_, index) => addCalendarDays(trackingStartDate, index)
+    );
+    data.datedRhythmCompletions = completionDates.map((effectiveDate, index) => {
+      const completedAt = localDateTimeInZone(effectiveDate, '12:00', timeZone).toISOString();
+      return {
+        id: `faith-score-parity-${index}`,
+        rhythmId: rhythm.id,
+        effectiveDate,
+        localTime: '12:00',
+        timeZone,
+        completedAt,
+        recordedAt: completedAt
+      };
+    });
+    data.savedRhythms = [rhythm];
+    data.rhythmHistoryIds.push(rhythm.id);
+    const savedRaw = JSON.stringify(createPreviewEnvelope(data));
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, savedRaw);
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await user.click(screen.getByRole('tab', { name: 'Anytime' }));
+
+    const faithHomeRow = () => screen.queryAllByRole('button', { name: 'Faith' })
+      .find(button => button.classList.contains('menu-area'));
+    const homeScore = () => faithHomeRow()?.querySelector('.ma-score')?.textContent;
+    function categoryScore() {
+      return document.querySelector('.category-health-summary .health-score-breakdown__header > span')
+        ?.textContent;
+    }
+    async function openFaithCategory() {
+      const currentHomeScore = homeScore();
+      expect(currentHomeScore).not.toBeUndefined();
+      await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+        .getByRole('button', { name: 'Faith' }));
+      expect(categoryScore()).toBe(currentHomeScore);
+      return currentHomeScore;
+    }
+    async function returnToToday(expectedScore: string | undefined) {
+      await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+        .getByRole('button', { name: 'Today' }));
+      await waitFor(() => expect(homeScore()).toBe(expectedScore));
+    }
+
+    const initialCategoryScore = await openFaithCategory();
+    await returnToToday(initialCategoryScore);
+    await showAnytime(user);
+    const initialScore = homeScore();
+    expect(initialScore).not.toBe('—');
+    expect(screen.getAllByRole('button', { name: 'Health & Fitness' })
+      .find(button => button.classList.contains('menu-area'))?.querySelector('.ma-score')?.textContent).toBe('—');
+
+    await user.click(screen.getByRole('button', { name: 'Tend Faith parity prayer' }));
+    const completionDialog = screen.getByRole('dialog', { name: 'When did you tend it?' });
+    await user.click(within(completionDialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      const saved = parsePreviewBackup(
+        window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+        localDateString(new Date())
+      );
+      expect(saved.valid && saved.envelope.data.activeRhythmCompletions)
+        .toContainEqual({ rhythmId: rhythm.id, completionId: expect.any(String) });
+      expect(homeScore()).not.toBe(initialScore);
+    });
+    await openFaithCategory();
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    await user.click(screen.getByRole('button', { name: 'Undo completion for Faith parity prayer' }));
+    await waitFor(() => expect(categoryScore()).toBe(initialScore));
+    await returnToToday(initialScore);
   });
 
   it('keeps Overall Health unavailable until an aggregate is approved', () => {

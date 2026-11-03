@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import type { KeyboardEventHandler, ReactNode } from 'react';
 import { scoreTone } from '../domain/score-tone.ts';
+import { formatScore } from '../domain/score-display.ts';
 import { RhythmScoreCircle } from './RhythmScoreCircle.tsx';
 
 export type HealthScoreMetric = {
@@ -48,7 +49,7 @@ export function HealthScoreBreakdown({
   onKeyDown,
   className = ''
 }: HealthScoreBreakdownProps) {
-  const displayScore = score !== null && Number.isFinite(score) ? Math.round(score) : null;
+  const displayScore = score === null || !Number.isFinite(score) ? null : formatScore(score);
 
   return (
     <section
@@ -127,7 +128,7 @@ export function HealthScoreMeter({
       aria-valuemin={available ? 0 : undefined}
       aria-valuemax={available ? 100 : undefined}
       aria-valuenow={available ? score : undefined}
-      aria-valuetext={available ? `${Math.round(score)} out of 100${illustrative ? ', illustrative blend' : ''}` : undefined}
+      aria-valuetext={available ? `${formatScore(score)} out of 100${illustrative ? ', illustrative blend' : ''}` : undefined}
     >
       <span
         className="health-score-meter__fill"

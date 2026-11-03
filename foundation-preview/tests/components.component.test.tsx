@@ -11,6 +11,7 @@ import { historyButtonName } from './history-button-name.ts';
 import { PersonBadge, PersonBadgeList } from '../src/components/PersonBadge.tsx';
 import { RhythmDetailsDialog } from '../src/components/RhythmDetailsDialog.tsx';
 import { RhythmSuggestionPicker } from '../src/components/RhythmSuggestionPicker.tsx';
+import { formatScore } from '../src/domain/score-display.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
 import {
   financeFoundation,
@@ -746,8 +747,10 @@ describe('shared preview components', () => {
     const toneCases = [
       { score: 0, tone: 'red' },
       { score: 49, tone: 'red' },
+      { score: 49.6, tone: 'red' },
       { score: 50, tone: 'yellow' },
       { score: 79, tone: 'yellow' },
+      { score: 79.6, tone: 'yellow' },
       { score: 80, tone: 'green' },
       { score: 100, tone: 'green' },
       { score: null, tone: 'neutral' }
@@ -788,17 +791,24 @@ describe('shared preview components', () => {
       </>
     );
 
-    expect(screen.getByRole('button', {
+    const scoreButton = screen.getByRole('button', {
       name: historyButtonName(`View scores and history for ${rhythm.title}, Health 43 out of 100`)
-    }).querySelector('.today-rhythm-details__history-score')?.textContent).toBe('43');
+    });
+    expect(scoreButton.querySelector('.today-rhythm-details__history-score')?.textContent).toBe('43');
+    expect(scoreButton.firstElementChild?.tagName).toBe('svg');
+    expect(scoreButton.querySelectorAll('svg.rhythm-metadata-icon--history rect')).toHaveLength(3);
+    expect(scoreButton.lastElementChild?.classList.contains('today-rhythm-details__history-score')).toBe(true);
     for (const { score, tone } of toneCases) {
       const toneButton = screen.getByRole('button', {
         name: historyButtonName(`View scores and history for Score ${score ?? 'unavailable'}`
-          + (score === null ? ', Health unavailable' : `, Health ${score} out of 100`))
+          + (score === null ? ', Health unavailable' : `, Health ${formatScore(score)} out of 100`))
       });
       expect(toneButton?.getAttribute('data-score-tone')).toBe(tone);
       expect(toneButton?.querySelector('.today-rhythm-details__history-score')?.textContent)
-        .toBe(score === null ? '—' : String(score));
+        .toBe(formatScore(score));
+      expect(toneButton.children[0]?.tagName).toBe('svg');
+      expect(toneButton.querySelectorAll('svg.rhythm-metadata-icon--history rect')).toHaveLength(3);
+      expect(toneButton.children[1]?.classList.contains('today-rhythm-details__history-score')).toBe(true);
       expect(toneButton.querySelectorAll('svg')).toHaveLength(1);
     }
   });
@@ -1389,10 +1399,32 @@ describe('shared preview components', () => {
     expect(badge?.textContent).toBe('30');
     expect(badge?.classList.contains('red')).toBe(true);
 
+    rerender(<CategoryHealthBadge score={36.25} />);
+    badge = container.querySelector('.ma-score');
+    expect(badge?.textContent).toBe('36');
+
     rerender(<CategoryHealthBadge score={null} />);
     badge = container.querySelector('.ma-score');
     expect(badge?.textContent).toBe('—');
     expect(badge?.classList.contains('neutral')).toBe(true);
+  });
+
+  it('formats a fractional shared Score/Chart button to a whole number and keeps the full-precision tone', () => {
+    const rhythm = todayRhythms[0]!;
+    render(
+      <RhythmDetailsDialog
+        rhythm={{ ...rhythm, id: 'fractional-score-inline' }}
+        inline
+        healthScore={49.6}
+        onClose={() => undefined}
+      />
+    );
+
+    const scoreButton = screen.getByRole('button', {
+      name: historyButtonName(`View scores and history for ${rhythm.title}, Health 50 out of 100`)
+    });
+    expect(scoreButton.getAttribute('data-score-tone')).toBe('red');
+    expect(scoreButton.querySelector('.today-rhythm-details__history-score')?.textContent).toBe('50');
   });
 
   it('shows only explicitly synthetic zero, midpoint, and full-scale catalogue meters', () => {

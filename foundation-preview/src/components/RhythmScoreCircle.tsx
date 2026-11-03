@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { scoreTone } from '../domain/score-tone.ts';
+import { formatScore } from '../domain/score-display.ts';
 
 export function RhythmScoreCircle({
   label,
@@ -14,7 +15,7 @@ export function RhythmScoreCircle({
 }) {
   const available = state === 'scored' && score !== null;
   const boundedScore = available ? Math.min(100, Math.max(0, score)) : 0;
-  const displayScore = available ? Math.round(score) : null;
+  const displayScore = available ? formatScore(score) : null;
   const valueText = available
     ? `${displayScore} out of 100`
     : state === 'unscored'

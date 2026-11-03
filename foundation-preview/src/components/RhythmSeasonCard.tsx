@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import type { ReactNode } from 'react';
 import type { RhythmScheduleHistorySegment, RhythmSchedule } from '../domain/rhythm-schedule.ts';
+import { formatScore } from '../domain/score-display.ts';
 import { CategoryHealthBadge } from './Cards.tsx';
 import { RhythmScheduleSummary } from './RhythmMetadata.tsx';
 
@@ -104,10 +105,9 @@ export function RhythmSeasonCard({
         </div>
         <CategoryHealthBadge
           score={healthScore}
-          displayScore={healthScore === null ? null : Math.round(healthScore)}
           accessibleLabel={healthScore === null
             ? 'Season Health unavailable'
-            : `Season Health: ${Math.round(healthScore)} out of 100`}
+            : `Season Health: ${formatScore(healthScore)} out of 100`}
           className="rhythm-history-view__season-health-badge"
           variant="neutral-labeled"
         />

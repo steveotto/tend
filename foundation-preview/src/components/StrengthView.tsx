@@ -13,7 +13,7 @@ import { StrengthExerciseResults } from './StrengthExerciseResults.tsx';
 import { StrengthGuidedSessionDialog } from './StrengthGuidedSessionDialog.tsx';
 import { FitnessScoreSummary } from './FitnessScoreSummary.tsx';
 import { SettingsGearButton } from './SettingsGearButton.tsx';
-import { roundFitnessScore } from '../domain/fitness-scoring.ts';
+import { formatScore } from '../domain/score-display.ts';
 import { SegmentedTabs } from './SegmentedTabs.tsx';
 import type { SegmentedTab } from './SegmentedTabs.tsx';
 import {
@@ -1016,10 +1016,10 @@ export function StrengthView({
                       type="button"
                       className="strength-muscle-row"
                       aria-pressed={selectedMuscleId === muscle.id}
-                      aria-label={`${muscle.name}, Health ${result.health === null ? 'score unavailable' : `${roundFitnessScore(result.health)} out of 100`}, ${result.status}`}
+                      aria-label={`${muscle.name}, Health ${result.health === null ? 'score unavailable' : `${formatScore(result.health)} out of 100`}, ${result.status}`}
                       onClick={() => chooseMuscle(muscle.id)}
                     >
-                      <span><strong>{muscle.name}</strong><b>{roundFitnessScore(result.health) ?? '—'}</b></span>
+                      <span><strong>{muscle.name}</strong><b>{formatScore(result.health)}</b></span>
                       <small>{result.status}</small>
                       <span className="strength-muscle-row__track" aria-hidden="true">
                         <i style={{ width: `${result.health === null ? 0 : Math.max(0, Math.min(100, result.health))}%` }} />
@@ -1825,7 +1825,7 @@ function StrengthBodyMap({
               tabIndex={0}
               role="button"
               aria-pressed={selectedId === id}
-              aria-label={`${names.get(id)}, Health ${result.health === null ? 'score unavailable' : `${roundFitnessScore(result.health)} out of 100`}, ${result.status}`}
+              aria-label={`${names.get(id)}, Health ${result.health === null ? 'score unavailable' : `${formatScore(result.health)} out of 100`}, ${result.status}`}
               onClick={() => onSelect(id)}
               onKeyDown={event => {
                 if (event.key === 'Enter' || event.key === ' ') {

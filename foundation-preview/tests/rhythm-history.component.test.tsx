@@ -146,6 +146,60 @@ function EditableHistoryHarness() {
 }
 
 describe('shared Rhythm history', () => {
+  it('orders history before Seasons and Logged moments, with the correct accessible Season Undo action', async () => {
+    const user = userEvent.setup();
+    const fixture = scoredTodayFixture();
+    const rhythm = {
+      ...fixture.rhythm,
+      title: 'A Long Rhythm Title That Must Wrap Without Colliding With Header Actions'
+    };
+    const onUndoSeasonDeletion = vi.fn(() => null);
+    function SeasonUndoHarness() {
+      const [undoAvailable, setUndoAvailable] = useState(true);
+      return (
+        <RhythmHistoryView
+          rhythm={rhythm}
+          onClose={() => undefined}
+          seasonRangeUndo={undoAvailable ? { rhythmId: rhythm.id } : null}
+          onUndoSeasonRange={() => {
+            setUndoAvailable(false);
+            return null;
+          }}
+          onUndoSeasonDeletion={onUndoSeasonDeletion}
+        />
+      );
+    }
+
+    render(<SeasonUndoHarness />);
+    const history = screen.getByRole('region', { name: `History for ${rhythm.title}` });
+    const body = history.querySelector('.rhythm-history-view__body')!;
+    const orderedSections = [
+      body.querySelector('.rhythm-history-view__score-section'),
+      body.querySelector('.rhythm-history-view__completions'),
+      body.querySelector('.rhythm-history-view__seasons'),
+      body.querySelector('.rhythm-history-view__logged-moments')
+    ];
+    const childOrder = [...body.children];
+    expect(orderedSections.every(section => section !== null)).toBe(true);
+    expect(orderedSections.map(section => childOrder.indexOf(section!)))
+      .toEqual([...orderedSections.map(section => childOrder.indexOf(section!))].sort((a, b) => a - b));
+
+    const header = history.querySelector('.rhythm-history-view__rhythm-header')!;
+    const actions = header.querySelector('.rhythm-history-view__header-actions')!;
+    expect([...actions.querySelectorAll('button')].map(button => button.getAttribute('aria-label')))
+      .toEqual(['Undo season change', 'Close details']);
+    expect(header.querySelector('.rhythm-history-view__undo-announcement')?.textContent)
+      .toContain('A Season change was saved. You can undo it.');
+    expect(header.querySelector('.rhythm-history-view__season-undo')).toBeNull();
+    expect(screen.getByRole('heading', { name: rhythm.title, level: 3 })).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Undo season change' }));
+    expect(onUndoSeasonDeletion).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Undo season change' })).toBeNull();
+    expect(header.querySelector('.rhythm-history-view__undo-announcement')?.textContent)
+      .toContain('Season change undone.');
+  });
+
   it('selects up to seven chronological On Track history entries, including Today when present', () => {
     const makeEntries = (count: number) => Array.from({ length: count }, (_, index) => ({
       kind: 'occurrence' as const,
@@ -1230,6 +1284,12 @@ describe('shared Rhythm history', () => {
     expect(meter.getAttribute('aria-valuetext')).toBe('0 out of 100');
     expect(screen.getByText('0')).toBeTruthy();
 
+    rerender(<RhythmScoreCircle label="Health" score={36.25} state="scored" />);
+    const fractionalMeter = screen.getByRole('meter', { name: 'Health score' });
+    expect(fractionalMeter.getAttribute('aria-valuenow')).toBe('36');
+    expect(fractionalMeter.getAttribute('aria-valuetext')).toBe('36 out of 100');
+    expect(screen.getByText('36')).toBeTruthy();
+
     rerender(<RhythmScoreCircle label="Health" score={null} state="unscored" />);
     expect(screen.getByRole('img', { name: 'Health: Unscored because there are no eligible due occurrences' }))
       .toBeTruthy();
@@ -1350,7 +1410,9 @@ describe('shared Rhythm history', () => {
     expect(scoreSection.compareDocumentPosition(completionSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(completionSection.compareDocumentPosition(seasonsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(completionSection.contains(seasonsHeading)).toBe(false);
-    expect(completionSection.querySelector('.rhythm-history-view__logged-moments')).toBeTruthy();
+    const loggedMoments = within(history).getByText(/Logged moments \(/).closest('details')!;
+    expect(completionSection.contains(loggedMoments)).toBe(false);
+    expect(seasonsHeading.compareDocumentPosition(loggedMoments) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     const chart = within(history).getByRole('list', { name: 'Recorded completion count by date' });
     const chartDates = [...chart.querySelectorAll('time')].map(time => time.getAttribute('dateTime'));

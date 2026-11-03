@@ -24,10 +24,6 @@ export function blendFitnessHealth(
   };
 }
 
-export function roundFitnessScore(score: number | null): number | null {
-  return isScore(score) ? Math.round(score) : null;
-}
-
 function isScore(value: number | null): value is number {
   return value !== null && Number.isFinite(value) && value >= 0 && value <= 100;
 }

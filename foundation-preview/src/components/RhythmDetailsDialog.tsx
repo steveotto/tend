@@ -19,6 +19,7 @@ import type { DatedRhythmCompletion, RhythmCompletionRecord } from '../domain/rh
 import type { RhythmSeasonEditDraft } from '../domain/rhythm-season-edit.ts';
 import type { RhythmSeasonDeletionUndo } from '../domain/rhythm-season-delete.ts';
 import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
+import { formatScore } from '../domain/score-display.ts';
 import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
 import type { Destination } from './AppNavigation.tsx';
 import { RhythmAssociationRows } from './RhythmAssociationRows.tsx';
@@ -174,12 +175,12 @@ export function RhythmDetailsDialog({
         aria-label={inline
           ? `View scores and history for ${rhythm.title}, Health ${healthScore === null
             ? 'unavailable'
-            : `${Math.round(healthScore)} out of 100`}`
+            : `${formatScore(healthScore)} out of 100`}`
           : `View scores and history for ${rhythm.title}`}
         onClick={inline ? event => onHistory?.(event) : () => setShowHistory(true)}
       >
-        {inline && <span className="today-rhythm-details__history-score">{healthScore === null ? '—' : Math.round(healthScore)}</span>}
         <RhythmMetadataIcon kind="history" />
+        {inline && <span className="today-rhythm-details__history-score">{formatScore(healthScore)}</span>}
       </button>
     </div>
   );

@@ -789,17 +789,17 @@ a:focus-visible {
 
 .home-dashboard .menu-area .ma-score.green {
   background: var(--score-green);
-  color: var(--score-label);
+  color: #fff;
 }
 
 .home-dashboard .menu-area .ma-score.yellow {
   background: var(--score-yellow);
-  color: var(--score-label);
+  color: #fff;
 }
 
 .home-dashboard .menu-area .ma-score.red {
   background: var(--score-red);
-  color: var(--score-label);
+  color: #fff;
 }
 
 .home-dashboard .menu-area .ma-score.neutral {
@@ -4542,7 +4542,7 @@ a:focus-visible {
   border: 1px solid var(--line, #e5e9e5);
   border-radius: 14px;
   background: #fff;
-  color: var(--ink-soft, #66736b);
+  color: var(--ink, #25332b);
   text-align: center;
 }
 
@@ -6389,19 +6389,19 @@ a:focus-visible {
 }
 
 .foundation-card__score.green {
-  color: var(--score-green-text);
+  color: #fff;
 }
 
 .foundation-card__score.yellow {
-  color: var(--score-yellow-text);
+  color: #fff;
 }
 
 .foundation-card__score.red {
-  color: var(--score-red-text);
+  color: #fff;
 }
 
 .foundation-card__score.neutral {
-  color: var(--score-neutral-text);
+  color: #fff;
 }
 
 .foundation-card__chevron {
@@ -7342,7 +7342,7 @@ a:focus-visible {
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__history-button {
   flex: none;
-  justify-content: space-between;
+  justify-content: center;
   width: 92px;
   min-width: 92px;
   height: 44px;
@@ -7351,20 +7351,23 @@ a:focus-visible {
   border-color: transparent;
   border-radius: 10px;
   background: var(--score-neutral);
-  color: #101010;
-  transition: filter 120ms ease-out, outline-color 120ms ease-out;
+  color: #fff;
+  transition: filter 120ms ease-out, outline-color 120ms ease-out, background-color 120ms ease-out;
 }
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="green"] {
   background: var(--score-green);
+  color: #fff;
 }
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="yellow"] {
   background: var(--score-yellow);
+  color: #fff;
 }
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="red"] {
   background: var(--score-red);
+  color: #fff;
 }
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__history-button:hover {
@@ -7373,6 +7376,26 @@ a:focus-visible {
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__history-button:active {
   filter: brightness(.88);
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="green"]:hover {
+  background: #0f9b61;
+  filter: none;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="green"]:active {
+  background: #0b8d56;
+  filter: none;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="red"]:hover {
+  background: #ed5644;
+  filter: none;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="red"]:active {
+  background: #d04a3c;
+  filter: none;
 }
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__history-score {
@@ -7578,6 +7601,11 @@ a:focus-visible {
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.8;
+}
+
+.today-rhythm-details__history-button svg.rhythm-metadata-icon--history {
+  fill: currentColor;
+  stroke: none;
 }
 
 .today-rhythm-details__content {
@@ -7939,7 +7967,7 @@ a:focus-visible {
 }
 
 .rhythm-history-view--dialog .rhythm-history-view__rhythm-header {
-  grid-template-columns: minmax(0, 1fr) 44px;
+  grid-template-columns: minmax(0, 1fr) auto;
   column-gap: 12px;
   align-items: start;
   flex: 0 0 auto;
@@ -7978,10 +8006,18 @@ a:focus-visible {
 
 .rhythm-history-view__title-row {
   display: flex;
-  align-items: flex-start;
   grid-column: 1;
+  align-items: flex-start;
   gap: 7px;
   min-width: 0;
+}
+
+.rhythm-history-view__header-actions {
+  display: flex;
+  grid-column: 2;
+  grid-row: 1;
+  align-items: center;
+  gap: 6px;
 }
 
 .rhythm-history-view__title-copy {
@@ -8006,9 +8042,56 @@ a:focus-visible {
 
 .today-rhythm-details__close--history {
   position: static;
-  grid-column: 2;
-  grid-row: 1;
   margin: 0;
+}
+
+.rhythm-history-view__season-range-undo {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 10px;
+  background: transparent;
+  color: var(--tend-ink, var(--ink));
+  cursor: pointer;
+}
+
+.rhythm-history-view__season-range-undo:hover {
+  background: var(--tend-surface, var(--card));
+}
+
+.rhythm-history-view__season-range-undo:focus-visible {
+  outline: 3px solid var(--tend-forest, var(--forest));
+  outline-offset: 2px;
+}
+
+.rhythm-history-view__season-range-undo svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.rhythm-history-view__undo-announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.rhythm-history-view__undo-error {
+  margin: 0;
+  color: var(--tend-danger, #a12616);
+  font-size: 13px;
 }
 
 .rhythm-history-view__completions > h3 {
@@ -9824,7 +9907,7 @@ a:focus-visible {
 .rhythm-score-circle::before {
   position: absolute;
   z-index: -1;
-  inset: 8px;
+  inset: 5px;
   border-radius: 50%;
   background: var(--tend-surface, var(--card));
   content: "";
@@ -15978,12 +16061,6 @@ a:focus-visible {
   .tend-app-preview .rhythm-history-view--dialog .rhythm-history-view__rhythm-header {
     position: relative;
     padding-top: 4px;
-  }
-
-  .tend-app-preview .rhythm-history-view--dialog .today-rhythm-details__close--history {
-    position: absolute;
-    top: 0;
-    right: 0;
   }
 
   .tend-app-preview .rhythm-history-view--dialog .rhythm-history-view__body--dialog {

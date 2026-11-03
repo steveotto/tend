@@ -51,6 +51,7 @@ import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
 import { RhythmScheduleSummary } from './RhythmMetadata.tsx';
 import { RhythmSeasonCard } from './RhythmSeasonCard.tsx';
 import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
+import { formatScore } from '../domain/score-display.ts';
 import { RhythmPersonalBadge } from './RhythmPersonalBadge.tsx';
 import { HealthScoreBreakdown, HealthScoreMeasures } from './HealthScoreBreakdown.tsx';
 export { HealthScoreMeter } from './HealthScoreBreakdown.tsx';
@@ -482,29 +483,36 @@ export function RhythmHistoryView({
           </div>
         </div>
         {onClose && (
-          <button
-            ref={closeButtonRef}
-            type="button"
-            className="today-rhythm-details__close today-rhythm-details__close--history"
-            aria-label={editingRecord ? 'Cancel editing logged moment' : 'Close details'}
-            onClick={editingRecord ? dismissEditingRecord : onClose}
-          >
-            ×
-          </button>
-        )}
-        {availableSeasonRangeUndo && onUndoSeasonRange && (
-          <div className="rhythm-history-view__season-undo" role="status" aria-live="polite">
-            <span>{seasonRangeUndoStatus || 'A Season change was saved. You can undo it.'}</span>
+          <div className="rhythm-history-view__header-actions">
+            {availableSeasonRangeUndo && onUndoSeasonRange && (
+              <button
+                type="button"
+                className="rhythm-history-view__season-range-undo"
+                aria-label="Undo season change"
+                title="Undo season change"
+                onClick={undoSeasonRange}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M9 14 4 9l5-5" />
+                  <path d="M4.5 9H14a6 6 0 0 1 0 12h-2" />
+                </svg>
+              </button>
+            )}
             <button
+              ref={closeButtonRef}
               type="button"
-              className="rhythm-history-view__season-edit"
-              onClick={undoSeasonRange}
+              className="today-rhythm-details__close today-rhythm-details__close--history"
+              aria-label={editingRecord ? 'Cancel editing logged moment' : 'Close details'}
+              onClick={editingRecord ? dismissEditingRecord : onClose}
             >
-              Undo
+              ×
             </button>
-            {seasonRangeUndoError && <span role="alert">{seasonRangeUndoError}</span>}
           </div>
         )}
+        <p className="rhythm-history-view__undo-announcement" aria-live="polite">
+          {seasonRangeUndoStatus
+            || (availableSeasonRangeUndo ? 'A Season change was saved. You can undo it.' : '')}
+        </p>
       </header>
       <div
         ref={historyBodyRef}
@@ -554,6 +562,9 @@ export function RhythmHistoryView({
           </div>
         )}
       </div>
+      {seasonRangeUndoError && (
+        <p className="rhythm-history-view__undo-error" role="alert">{seasonRangeUndoError}</p>
+      )}
 
       <section className="rhythm-history-view__score-section" aria-label="Health, Consistency, and On Track scores">
         <div className="rhythm-history-view__score-card">
@@ -703,115 +714,6 @@ export function RhythmHistoryView({
             Your story starts with the first Tend.
           </p>
         )}
-        <details
-          className="rhythm-history-view__logged-moments"
-          open={loggedMomentsExpanded}
-          onToggle={event => setLoggedMomentsExpanded(event.currentTarget.open)}
-        >
-          <summary ref={loggedMomentsSummaryRef}>Logged moments ({completions.kind === 'recorded' ? completions.count : 0})</summary>
-          {onSaveCompletion && (
-            <div className="rhythm-history-view__log-moment-row">
-              <button
-                ref={logMomentButtonRef}
-                type="button"
-                className="button button-secondary rhythm-history-view__log-moment"
-                onClick={() => {
-                  setLogAnnouncement('');
-                  setLoggedMomentsExpanded(true);
-                  setLoggingMoment(true);
-                }}
-              >
-                + Log a moment
-              </button>
-            </div>
-          )}
-          {completions.kind === 'recorded' ? (
-            <ol>
-              {completions.records.map(item => (
-                <li className="rhythm-history-view__logged-entry" key={item.id}>
-                  <div className="rhythm-history-view__logged-entry-content">
-                    <div className="rhythm-history-view__logged-entry-copy">
-                      <strong>{rhythm.title}</strong>
-                      <p className="rhythm-history-view__logged-entry-date">
-                        <time dateTime={item.effectiveDate}>{formatHistoryDate(item.effectiveDate)}</time>
-                        <span aria-hidden="true"> · </span>
-                        {item.localTime
-                          ? <time dateTime={item.completedAt ?? item.effectiveDate}>{formatLocalTime(item.localTime)}</time>
-                          : <span>Time not recorded</span>}
-                      </p>
-                      {item.memory && <p className="rhythm-history-view__logged-entry-memory">{item.memory}</p>}
-                    </div>
-                    {editableRecordIds.has(item.id) && (onUpdateCompletion || onDeleteCompletion) && (
-                      <div className="rhythm-history-view__logged-entry-actions">
-                        {onUpdateCompletion && <button
-                          ref={node => {
-                            if (node) editButtonsRef.current.set(item.id, node);
-                            else editButtonsRef.current.delete(item.id);
-                          }}
-                          type="button"
-                          className="rhythm-history-view__entry-action"
-                          aria-label={`Edit logged moment for ${rhythm.title}, ${formatHistoryDate(item.effectiveDate)}${item.localTime ? ` at ${formatLocalTime(item.localTime)}` : ''}`}
-                          onClick={() => {
-                            const record = historyRecords?.find(candidate => candidate.id === item.id);
-                            if (record) setEditingRecord({ ...record, rhythmId: rhythm.id });
-                          }}
-                        >
-                          <RhythmMetadataIcon kind="edit" />
-                        </button>}
-                        {onDeleteCompletion && <button
-                          ref={node => {
-                            if (node) deleteButtonsRef.current.set(item.id, node);
-                            else deleteButtonsRef.current.delete(item.id);
-                          }}
-                          type="button"
-                          className="rhythm-history-view__entry-action"
-                          aria-label={`Delete logged moment for ${rhythm.title}, ${formatHistoryDate(item.effectiveDate)}${item.localTime ? ` at ${formatLocalTime(item.localTime)}` : ''}`}
-                          onClick={() => {
-                            setDeleteError('');
-                            setDeletingRecordId(item.id);
-                          }}
-                        >
-                          <RhythmMetadataIcon kind="delete" />
-                        </button>}
-                      </div>
-                    )}
-                  </div>
-                  {deletingRecordId === item.id && (
-                    <div
-                      className="rhythm-history-view__delete-confirmation"
-                      role="alertdialog"
-                      aria-labelledby={`delete-logged-moment-${item.id}`}
-                    >
-                      <strong id={`delete-logged-moment-${item.id}`}>
-                        Delete {rhythm.title} from {formatHistoryDate(item.effectiveDate)}
-                        {item.localTime ? ` at ${formatLocalTime(item.localTime)}` : ''}?
-                      </strong>
-                      {deleteError && <p role="alert">{deleteError}</p>}
-                      <div className="rhythm-history-view__delete-actions">
-                        <button
-                          ref={deleteCancelButtonRef}
-                          type="button"
-                          className="btn mini ghost"
-                          onClick={() => setDeletingRecordId(null)}
-                        >
-                          Cancel
-                        </button>
-                        <button type="button" className="btn mini" onClick={confirmDelete}>
-                          Delete moment
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p>{completions.kind === 'unavailable' ? 'Dated moments are unavailable.' : 'No logged moments.'}</p>
-          )}
-        </details>
-        {logAnnouncement && (
-          <p className="visually-hidden" role="status" aria-live="polite">{logAnnouncement}</p>
-        )}
       </section>
       <section className="rhythm-history-view__seasons">
         <header className="rhythm-history-view__seasons-header">
@@ -887,6 +789,115 @@ export function RhythmHistoryView({
         </div>
         <div className="rhythm-history-view__seasons-divider" />
       </section>
+      <details
+        className="rhythm-history-view__logged-moments"
+        open={loggedMomentsExpanded}
+        onToggle={event => setLoggedMomentsExpanded(event.currentTarget.open)}
+      >
+        <summary ref={loggedMomentsSummaryRef}>Logged moments ({completions.kind === 'recorded' ? completions.count : 0})</summary>
+        {onSaveCompletion && (
+          <div className="rhythm-history-view__log-moment-row">
+            <button
+              ref={logMomentButtonRef}
+              type="button"
+              className="button button-secondary rhythm-history-view__log-moment"
+              onClick={() => {
+                setLogAnnouncement('');
+                setLoggedMomentsExpanded(true);
+                setLoggingMoment(true);
+              }}
+            >
+              + Log a moment
+            </button>
+          </div>
+        )}
+        {completions.kind === 'recorded' ? (
+          <ol>
+            {completions.records.map(item => (
+              <li className="rhythm-history-view__logged-entry" key={item.id}>
+                <div className="rhythm-history-view__logged-entry-content">
+                  <div className="rhythm-history-view__logged-entry-copy">
+                    <strong>{rhythm.title}</strong>
+                    <p className="rhythm-history-view__logged-entry-date">
+                      <time dateTime={item.effectiveDate}>{formatHistoryDate(item.effectiveDate)}</time>
+                      <span aria-hidden="true"> · </span>
+                      {item.localTime
+                        ? <time dateTime={item.completedAt ?? item.effectiveDate}>{formatLocalTime(item.localTime)}</time>
+                        : <span>Time not recorded</span>}
+                    </p>
+                    {item.memory && <p className="rhythm-history-view__logged-entry-memory">{item.memory}</p>}
+                  </div>
+                  {editableRecordIds.has(item.id) && (onUpdateCompletion || onDeleteCompletion) && (
+                    <div className="rhythm-history-view__logged-entry-actions">
+                      {onUpdateCompletion && <button
+                        ref={node => {
+                          if (node) editButtonsRef.current.set(item.id, node);
+                          else editButtonsRef.current.delete(item.id);
+                        }}
+                        type="button"
+                        className="rhythm-history-view__entry-action"
+                        aria-label={`Edit logged moment for ${rhythm.title}, ${formatHistoryDate(item.effectiveDate)}${item.localTime ? ` at ${formatLocalTime(item.localTime)}` : ''}`}
+                        onClick={() => {
+                          const record = historyRecords?.find(candidate => candidate.id === item.id);
+                          if (record) setEditingRecord({ ...record, rhythmId: rhythm.id });
+                        }}
+                      >
+                        <RhythmMetadataIcon kind="edit" />
+                      </button>}
+                      {onDeleteCompletion && <button
+                        ref={node => {
+                          if (node) deleteButtonsRef.current.set(item.id, node);
+                          else deleteButtonsRef.current.delete(item.id);
+                        }}
+                        type="button"
+                        className="rhythm-history-view__entry-action"
+                        aria-label={`Delete logged moment for ${rhythm.title}, ${formatHistoryDate(item.effectiveDate)}${item.localTime ? ` at ${formatLocalTime(item.localTime)}` : ''}`}
+                        onClick={() => {
+                          setDeleteError('');
+                          setDeletingRecordId(item.id);
+                        }}
+                      >
+                        <RhythmMetadataIcon kind="delete" />
+                      </button>}
+                    </div>
+                  )}
+                </div>
+                {deletingRecordId === item.id && (
+                  <div
+                    className="rhythm-history-view__delete-confirmation"
+                    role="alertdialog"
+                    aria-labelledby={`delete-logged-moment-${item.id}`}
+                  >
+                    <strong id={`delete-logged-moment-${item.id}`}>
+                      Delete {rhythm.title} from {formatHistoryDate(item.effectiveDate)}
+                      {item.localTime ? ` at ${formatLocalTime(item.localTime)}` : ''}?
+                    </strong>
+                    {deleteError && <p role="alert">{deleteError}</p>}
+                    <div className="rhythm-history-view__delete-actions">
+                      <button
+                        ref={deleteCancelButtonRef}
+                        type="button"
+                        className="btn mini ghost"
+                        onClick={() => setDeletingRecordId(null)}
+                      >
+                        Cancel
+                      </button>
+                      <button type="button" className="btn mini" onClick={confirmDelete}>
+                        Delete moment
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p>{completions.kind === 'unavailable' ? 'Dated moments are unavailable.' : 'No logged moments.'}</p>
+        )}
+      </details>
+      {logAnnouncement && (
+        <p className="visually-hidden" role="status" aria-live="polite">{logAnnouncement}</p>
+      )}
       {editingSeason && effectiveSchedule && onEditSeason && (
         <RhythmSeasonCorrectionDialog
           rhythm={{ ...rhythm, schedule: effectiveSchedule }}
@@ -1383,7 +1394,7 @@ function ConsistencyScoreBreakdown({
       <BreakdownRows rows={rows} />
       <p className="rhythm-history-view__calculation">
         <span>
-          {evidence.completedCount} ÷ {evidence.eligibleDueCount} × 100 = <strong>{Math.round(metric.score)}%</strong>
+          {evidence.completedCount} ÷ {evidence.eligibleDueCount} × 100 = <strong>{formatScore(metric.score)}%</strong>
         </span>
       </p>
       <section className="rhythm-history-view__score-details">
@@ -1461,7 +1472,7 @@ function OnTrackScoreBreakdown({ metric }: { metric: ScoredOnTrackMetric }) {
       <BreakdownRows rows={rows} />
       <p className="rhythm-history-view__calculation">
         <span>
-          {startingScore} − {deductedPoints} = <strong>{metric.score}</strong>
+          {startingScore} − {deductedPoints} = <strong>{formatScore(metric.score)}</strong>
         </span>
       </p>
       <section className="rhythm-history-view__score-details">
@@ -1474,7 +1485,7 @@ function OnTrackScoreBreakdown({ metric }: { metric: ScoredOnTrackMetric }) {
               aria-label={onTrackHistoryEntryDescription(item, evidence)}
             >
               <span>{onTrackHistoryEntryLabel(item)}</span>
-              <strong>{item.score}</strong>
+              <strong>{formatScore(item.score)}</strong>
             </li>
           ))}
         </ol>
@@ -1503,7 +1514,7 @@ function onTrackHistoryEntryDescription(
   evidence: ScoredOnTrackMetric['evidence']
 ): string {
   if (entry.kind === 'schedule-change') {
-    return `Schedule changed on ${formatHistoryDate(entry.date)}. On Track score at that point: ${entry.score}.`;
+    return `Schedule changed on ${formatHistoryDate(entry.date)}. On Track score at that point: ${formatScore(entry.score)}.`;
   }
   if (entry.kind === 'zero-score-span') {
     const unit = entry.occurrenceCount === 1 ? 'additional missed occurrence' : 'additional missed occurrences';
@@ -1518,11 +1529,11 @@ function onTrackHistoryEntryDescription(
   }
   if (entry.status === 'missed') {
     if (entry.periodStartDate && entry.eligibleEndDate) {
-      return `No completion was recorded in the eligible period, ${formatHistoryDate(entry.periodStartDate)}–${formatHistoryDate(entry.eligibleEndDate)}. This occurrence ended on ${formatHistoryDate(entry.eligibleEndDate)}; ${evidence.pointsPerMissedOccurrence}-point deduction applied. Resulting On Track score: ${entry.score}.`;
+      return `No completion was recorded in the eligible period, ${formatHistoryDate(entry.periodStartDate)}–${formatHistoryDate(entry.eligibleEndDate)}. This occurrence ended on ${formatHistoryDate(entry.eligibleEndDate)}; ${evidence.pointsPerMissedOccurrence}-point deduction applied. Resulting On Track score: ${formatScore(entry.score)}.`;
     }
-    return `Missed scheduled occurrence on ${date}; ${evidence.pointsPerMissedOccurrence}-point deduction applied. Resulting On Track score: ${entry.score}.`;
+    return `Missed scheduled occurrence on ${date}; ${evidence.pointsPerMissedOccurrence}-point deduction applied. Resulting On Track score: ${formatScore(entry.score)}.`;
   }
-  return `Current On Track state as of ${date}; today is pending and is not counted as missed. Current score: ${entry.score}.`;
+  return `Current On Track state as of ${date}; today is pending and is not counted as missed. Current score: ${formatScore(entry.score)}.`;
 }
 
 function UnscoredBreakdown({

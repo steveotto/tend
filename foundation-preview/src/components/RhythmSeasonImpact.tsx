@@ -7,6 +7,7 @@ import type {
 import { formatRhythmSchedule } from '../domain/rhythm-schedule.ts';
 import type { RhythmSchedule } from '../domain/rhythm-schedule.ts';
 import { isScheduledDate } from '../domain/rhythm-occurrences.ts';
+import { formatScore } from '../domain/score-display.ts';
 
 type MetricName = 'consistency' | 'onTrack' | 'health';
 type MetricValue =
@@ -41,7 +42,7 @@ function metricValue(result: RhythmScoreResult, name: MetricName): MetricValue {
           explanation: 'Health requires both Consistency and On Track to be available.',
           summary: 'A component score is unavailable.'
         }
-      : { score: Math.round(result.healthScore) };
+      : { score: result.healthScore };
   }
 
   if (name === 'consistency') {
@@ -59,7 +60,7 @@ function metricValue(result: RhythmScoreResult, name: MetricName): MetricValue {
 
 function consistencyValue(metric: ScoredConsistencyMetric): MetricValue {
   return {
-    score: Math.round(metric.score),
+    score: metric.score,
     eligible: metric.evidence.eligibleDueCount,
     completed: metric.evidence.completedCount
   };
@@ -340,7 +341,7 @@ function ImpactValue({
   return (
     <div className="rhythm-season-impact__available">
       <p className="rhythm-season-impact__score">
-        <strong>{value.score}</strong>
+        <strong>{formatScore(value.score)}</strong>
         <span className="visually-hidden">out of 100</span>
       </p>
       {showEvidence && 'eligible' in value && value.eligible !== undefined
@@ -509,7 +510,7 @@ export function RhythmSeasonImpact({
                         ? <span aria-label="Change unavailable">—</span>
                         : scoreChange === 0
                           ? <span>No change</span>
-                          : <span>{scoreChange > 0 ? '+' : '−'}{Math.abs(scoreChange)}</span>}
+                          : <span>{scoreChange > 0 ? '+' : '−'}{formatScore(Math.abs(scoreChange))}</span>}
                     </div>
                   )}
                   {!noScorableActivity && !detailsDisclosure && sameEvidence && 'eligible' in beforeValue && beforeValue.eligible !== undefined

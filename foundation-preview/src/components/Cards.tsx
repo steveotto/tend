@@ -28,6 +28,7 @@ import { RhythmMetadata } from './RhythmMetadata.tsx';
 import { RhythmCompletionActions } from './RhythmCompletionActions.tsx';
 import { TimelineChart } from './TimelineChart.tsx';
 import { scoreTone } from '../domain/score-tone.ts';
+import { formatScore } from '../domain/score-display.ts';
 import type { Destination } from './AppNavigation.tsx';
 
 type FoundationCardProps = {
@@ -169,7 +170,7 @@ export function FoundationCard({
           )}
         </CompactCardBody>
         <span className={`foundation-card__score ${scoreTone(displayScore ?? null)}`} aria-hidden="true">
-          {displayScore === null || displayScore === undefined ? '—' : Math.round(displayScore)}
+          {displayScore === undefined ? '—' : formatScore(displayScore)}
         </span>
         {onSelect && <span className="foundation-card__chevron" aria-hidden="true">›</span>}
         {children}
@@ -180,8 +181,8 @@ export function FoundationCard({
       const scoreName = displayScore === undefined || displayScore === null
         ? `${scoreLabel ?? 'score'} unavailable`
         : scoreLabel
-          ? `${scoreLabel} ${Math.round(displayScore)} out of 100`
-          : `illustrative score ${displayScore} out of 100`;
+          ? `${scoreLabel} ${formatScore(displayScore)} out of 100`
+          : `illustrative score ${formatScore(displayScore)} out of 100`;
       const coverageName = coverageText ? `, ${coverageText}` : '';
       return (
         <button
@@ -270,7 +271,9 @@ export function FoundationProgress({
       aria-label={decorative ? undefined : label}
       aria-valuemin={decorative ? undefined : 0}
       aria-valuemax={decorative ? undefined : 100}
-      {...(!decorative && clampedScore !== null ? { 'aria-valuenow': clampedScore } : {})}
+      {...(!decorative && clampedScore !== null
+        ? { 'aria-valuenow': clampedScore, 'aria-valuetext': `${formatScore(clampedScore)} out of 100` }
+        : {})}
       {...(!decorative && clampedScore === null ? { 'aria-valuetext': 'Score unavailable' } : {})}
     >
       <span
@@ -306,10 +309,10 @@ export function CategoryHealthBadge({
         ? (
           <>
             <span className="ma-score__label">Health</span>
-            <span className="ma-score__value">{displayScore ?? '—'}</span>
+            <span className="ma-score__value">{formatScore(displayScore)}</span>
           </>
         )
-        : displayScore ?? '—'}
+        : formatScore(displayScore)}
     </span>
   );
 }
@@ -464,7 +467,7 @@ export function ScoreMeter({
       aria-valuemax={100}
       {...(clampedScore === null
         ? { 'aria-valuetext': 'Score unavailable' }
-        : { 'aria-valuenow': clampedScore, 'aria-valuetext': `${clampedScore} out of 100` })}
+        : { 'aria-valuenow': clampedScore, 'aria-valuetext': `${formatScore(clampedScore)} out of 100` })}
     >
       <span className={`category-health-spectrum${clampedScore === null ? ' is-empty' : ''}`} aria-hidden="true" />
       {clampedScore !== null && (

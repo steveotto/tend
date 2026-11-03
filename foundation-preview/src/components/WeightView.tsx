@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, MouseEvent } from 'react';
+import { formatScore } from '../domain/score-display.ts';
 import {
   deleteWeightMeasurement,
   formatWeight,
@@ -136,7 +137,7 @@ export function WeightView({
                 <small>{progress.latest ? 'Goal-path estimate' : progress.status}</small>
               </div>
               <div><span>Progress score</span>
-                <strong>{progress.score === null ? '—' : `${Math.round(progress.score)} / 100`}</strong>
+                <strong>{progress.score === null ? '—' : `${formatScore(progress.score)} / 100`}</strong>
                 <small>{progress.goalStatus ?? progress.status}</small>
               </div>
               <div><span>Goal weight</span>

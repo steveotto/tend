@@ -62,7 +62,7 @@ describe('Show tended list', () => {
     vi.useFakeTimers();
     const onUndo = vi.fn();
     const { rerender } = render(<Harness satisfiedRhythmIds={new Set()} undoableRhythmIds={new Set(['one'])} onUndo={onUndo} />);
-    expect(screen.getByText('First Rhythm')).toBeTruthy();
+    const originalItem = screen.getByText('First Rhythm').closest('[data-tended-rhythm-item]');
 
     rerender(<Harness
       satisfiedRhythmIds={new Set(['one'])}
@@ -70,6 +70,9 @@ describe('Show tended list', () => {
       onUndo={onUndo}
     />);
     expect(screen.getByText('First Rhythm — Tended')).toBeTruthy();
+    expect(screen.getByText('First Rhythm — Tended').closest('[data-tended-rhythm-item]')).toBe(originalItem);
+    expect(originalItem?.getAttribute('hidden')).toBeNull();
+    expect(originalItem?.classList.contains('is-fading')).toBe(false);
     expect(screen.getByRole('status').textContent).toContain('Tended');
 
     act(() => vi.advanceTimersByTime(3000));

@@ -1,4 +1,5 @@
 import { useId, useState } from 'react';
+import { formatScore } from '../domain/score-display.ts';
 import type { RhythmPreview } from '../domain/preview-data.ts';
 import type { RhythmCompletionRecord } from '../domain/rhythm-completion.ts';
 import { isValidDate } from '../domain/money-goals.ts';
@@ -87,11 +88,11 @@ function scoreChangeSummaries(before: RhythmScoreResult, after: RhythmScoreResul
   const label = (result: RhythmScoreResult, metric: 'consistency' | 'onTrack' | 'health') => {
     if (metric === 'health') {
       return result.kind === 'rhythm-score' && result.healthScore !== null
-        ? String(Math.round(result.healthScore))
+        ? formatScore(result.healthScore)
         : 'unavailable';
     }
     const value = result[metric];
-    return value.kind === 'scored' ? String(Math.round(value.score)) : 'unavailable';
+    return value.kind === 'scored' ? formatScore(value.score) : 'unavailable';
   };
   return ([
     ['Consistency', 'consistency'],

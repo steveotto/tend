@@ -642,12 +642,22 @@ function PreviewWorkspace({
     scoringInstant,
     localTimeZone
   );
-  const marriageHealthScore = selectCategoryHealthScore(
-    foundationCatalogue.filter(foundation => foundation.categoryId === 'marriage'),
-    marriageCategoryRhythms,
-    rhythmScoreResults,
-    previewData.archivedRhythmIds
-  ).health;
+  const categoryRhythms = {
+    faith: faithCategoryRhythms,
+    marriage: marriageCategoryRhythms,
+    parenting: parentingCategoryRhythms
+  } as const;
+  const categoryHealthScores = new Map<CategoryId, number | null>(
+    (['faith', 'marriage', 'parenting'] as const).map(categoryId => [
+      categoryId,
+      selectCategoryHealthScore(
+        foundationCatalogue.filter(foundation => foundation.categoryId === categoryId),
+        categoryRhythms[categoryId],
+        rhythmScoreResults,
+        previewData.archivedRhythmIds
+      ).health
+    ])
+  );
   const activeRhythm = [
     ...allTodayRhythms,
     ...resolvedMarriageRhythms

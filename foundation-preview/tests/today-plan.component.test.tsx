@@ -51,7 +51,7 @@ function TodayHarness({
         onShowTendedChange={setTendedVisible}
         rhythms={todayRhythms}
         rhythmScores={new Map()}
-        marriageHealthScore={null}
+        categoryHealthScores={new Map()}
         search=""
         onNavigate={vi.fn()}
         onPersonSelect={vi.fn()}

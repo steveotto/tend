@@ -1,6 +1,7 @@
 import { useId, useRef } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { HealthScoreMeasures } from './HealthScoreBreakdown.tsx';
+import { formatScore } from '../domain/score-display.ts';
 
 type HealthScoreSummaryProps = {
   title: string;
@@ -148,7 +149,7 @@ function HealthSummaryValue({
   if (decorative) {
     return (
       <span className={`${className}${usableScore === null ? ' neutral' : ''}`} aria-hidden="true">
-        {usableScore === null ? '—' : Math.round(usableScore)}
+        {formatScore(usableScore)}
       </span>
     );
   }
@@ -162,9 +163,9 @@ function HealthSummaryValue({
       aria-valuemax={100}
       {...(usableScore === null
         ? { 'aria-valuetext': 'Score unavailable' }
-        : { 'aria-valuenow': usableScore, 'aria-valuetext': `${usableScore} out of 100` })}
+        : { 'aria-valuenow': usableScore, 'aria-valuetext': `${formatScore(usableScore)} out of 100` })}
     >
-      {usableScore === null ? '—' : Math.round(usableScore)}
+      {formatScore(usableScore)}
     </span>
   );
 }

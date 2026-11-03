@@ -76,10 +76,15 @@ export function TendedRhythmList({
   const undoableKey = [...undoableRhythmIds].sort().join('\u001f');
   const tendedCount = rhythms.filter(rhythm => tendedRhythmIds.has(rhythm.id)).length;
   const visibleRhythmIds = useMemo(
-    () => new Set(rhythms
-      .filter(rhythm => showTended || !satisfiedRhythmIds.has(rhythm.id)
-        || pendingRemovalIds.has(rhythm.id))
-      .map(rhythm => rhythm.id)),
+    () => {
+      const previousSatisfied = previousSatisfiedIds.current;
+      return new Set(rhythms
+        .filter(rhythm => showTended
+          || !satisfiedRhythmIds.has(rhythm.id)
+          || pendingRemovalIds.has(rhythm.id)
+          || previousSatisfied !== null && !previousSatisfied.has(rhythm.id))
+        .map(rhythm => rhythm.id));
+    },
     [rhythms, showTended, satisfiedRhythmIds, pendingRemovalIds]
   );
 

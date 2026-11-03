@@ -26,6 +26,7 @@ import type { TodayWeatherController } from './useTodayWeather.ts';
 import { useTimeBlockSettings } from './TimeBlocksContext.tsx';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
 import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
+import { formatScore } from '../domain/score-display.ts';
 
 const planTypes: { id: TodayItemType; label: string }[] = [
   { id: 'scheduled', label: 'Scheduled' },
@@ -51,7 +52,7 @@ type TodayViewProps = {
   rhythms: readonly RhythmPreview[];
   rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
   search: string;
-  marriageHealthScore: number | null;
+  categoryHealthScores: ReadonlyMap<string, number | null>;
   onNavigate: (destination: Destination) => void;
   onPersonSelect: (personId: PersonId) => void;
   foundations: readonly FoundationPreview[];
@@ -80,7 +81,7 @@ export function TodayView({
   rhythms,
   rhythmScores,
   search,
-  marriageHealthScore,
+  categoryHealthScores,
   foundations,
   onOpenFoundation,
   onNavigate,
@@ -162,7 +163,7 @@ export function TodayView({
         <p className="overall-health-unavailable">Overall Health is unavailable until an approved aggregate is defined.</p>
         <div className="menu-grid">
           {areas.map(area => {
-            const score = area.id === 'marriage' ? marriageHealthScore : null;
+            const score = categoryHealthScores.get(area.id) ?? null;
             return (
               <button
                 className="menu-area"
@@ -170,7 +171,7 @@ export function TodayView({
                 type="button"
                 aria-description={score === null
                   ? `${area.label} health score unavailable`
-                  : `${area.label} health score ${Math.round(score)} out of 100`}
+                  : `${area.label} health score ${formatScore(score)} out of 100`}
                 onClick={() => onNavigate(area.id)}
               >
                 <span className="menu-area-icon" aria-hidden="true">
