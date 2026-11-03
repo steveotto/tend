@@ -579,7 +579,7 @@ describe('shared Rhythm history', () => {
       const seasonsHeading = within(history).getByRole('heading', { name: 'Seasons' });
       expect(within(history).queryByRole('button', { name: /Delete Season/ })).toBeNull();
       const completionHeading = within(history).getByRole('heading', { name: 'All completion history' });
-      expect(seasonsHeading.compareDocumentPosition(completionHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(completionHeading.compareDocumentPosition(seasonsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       const info = within(history).getByRole('button', { name: 'Show Seasons' });
       expect(info.getAttribute('aria-expanded')).toBe('false');
       expect(info.getAttribute('aria-controls')).toBeTruthy();
@@ -1346,7 +1346,10 @@ describe('shared Rhythm history', () => {
     expect(screen.getByRole('status').textContent).not.toContain('Confirm when tracking starts');
     const scoreSection = within(history).getByRole('region', { name: 'Health, Consistency, and On Track scores' });
     const completionSection = within(history).getByRole('region', { name: 'All completion history' });
+    const seasonsHeading = within(history).getByRole('heading', { name: 'Seasons' });
     expect(scoreSection.compareDocumentPosition(completionSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(completionSection.compareDocumentPosition(seasonsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(completionSection.contains(seasonsHeading)).toBe(false);
     expect(completionSection.querySelector('.rhythm-history-view__logged-moments')).toBeTruthy();
 
     const chart = within(history).getByRole('list', { name: 'Recorded completion count by date' });
@@ -1725,13 +1728,48 @@ describe('shared Rhythm history', () => {
     expect(within(history).getByText('Logged moments (3)')).toBeTruthy();
   });
 
+  it('explains once-weekly credit by any day while retaining the planned weekday', async () => {
+    const user = userEvent.setup();
+    const asOfDate = localDateInTimeZone(new Date(), 'UTC');
+    const trackingStartDate = addCalendarDays(asOfDate, -2);
+    const schedule: RhythmSchedule = { frequency: 'weekly', weekdays: [5] };
+    const rhythm = rhythmForSchedule(schedule, trackingStartDate);
+    const completion: DatedRhythmCompletion = {
+      ...savedRecord('weekly-early', asOfDate, '12:00'),
+      rhythmId: rhythm.id
+    };
+    render(
+      <RhythmHistoryView
+        rhythm={rhythm}
+        datedCompletions={[completion]}
+        completionHistoryAvailable
+      />
+    );
+    const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
+    await user.click(within(history).getByRole('button', {
+      name: 'Show Consistency and On Track score details'
+    }));
+    const scoreDetails = within(history).getByRole('group', {
+      name: 'Consistency and On Track score details'
+    });
+    expect(within(scoreDetails).getByText(
+      /Once each week\. Any day counts; Friday is your planned day\. This completed week counts immediately\./
+    )).toBeTruthy();
+    expect(within(scoreDetails).getByRole('listitem', {
+      name: /completed weekly opportunity; eligible period/
+    })).toBeTruthy();
+    expect(within(scoreDetails).getByText(
+      'Any completion in its eligible calendar period counts once; extra logs stay in your history.'
+    )).toBeTruthy();
+  });
+
   it('renders eligible Consistency occurrences and independently scores Custom On Track', async () => {
     const user = userEvent.setup();
     const asOfDate = localDateInTimeZone(new Date(), 'UTC');
     const trackingStartDate = addCalendarDays(asOfDate, -900);
     const cases: { schedule: RhythmSchedule; expectedKind: string; weekday?: RegExp }[] = [
       { schedule: { frequency: 'weekly', weekdays: [1, 3, 5] }, expectedKind: 'scheduled day', weekday: /^(Monday|Wednesday|Friday),/ },
-      { schedule: { frequency: 'weekly', weekdays: [1] }, expectedKind: 'scheduled day', weekday: /^Monday,/ },
+      { schedule: { frequency: 'weekly', weekdays: [1] }, expectedKind: 'weekly opportunity', weekday: /^Monday,/ },
       { schedule: { frequency: 'weekly', weekdays: [1], weeklyMode: 'select-days' }, expectedKind: 'scheduled day', weekday: /^Monday,/ },
       { schedule: { frequency: 'monthly', pattern: { kind: 'dayOfMonth', day: 15 } }, expectedKind: 'due date' },
       { schedule: { frequency: 'quarterly', monthInQuarter: 1, pattern: { kind: 'dayOfMonth', day: 15 } }, expectedKind: 'due date' },

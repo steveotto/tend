@@ -277,11 +277,12 @@ export function HealthFitnessView({
       />
 
       <CategoryHealthSummary
-        categoryLabel="Health & Fitness"
+        title="Health & Fitness Health"
         score={summaryScore}
         itemTerm={{ singular: 'measure', plural: 'measures' }}
-        explanationIntro="Overall score not available yet."
+        explanation="Overall score not available yet."
         interpretationNote="Strength, Cardio, and Weight remain available as separate views."
+        describeRollup={false}
       />
 
       <SegmentedTabs

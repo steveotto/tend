@@ -29,12 +29,13 @@ type Props = {
   onShowTendedChange: (show: boolean) => void;
   onUndo: (rhythmId: string) => void;
   resetKey: string;
+  showProgress?: boolean;
   initializing?: boolean;
   children: (state: TendedRhythmListRenderState) => ReactNode;
 };
 
-const CARD_GRACE_MS = 5000;
-const CARD_FADE_MS = 600;
+const CARD_GRACE_MS = 3000;
+const CARD_FADE_MS = 800;
 const CARD_COLLAPSE_MS = 260;
 const NOTICE_DURATION_MS = CARD_GRACE_MS + CARD_FADE_MS + CARD_COLLAPSE_MS + 5000;
 
@@ -47,6 +48,7 @@ export function TendedRhythmList({
   onShowTendedChange,
   onUndo,
   resetKey,
+  showProgress = false,
   initializing = false,
   children
 }: Props) {
@@ -65,8 +67,11 @@ export function TendedRhythmList({
   const wasInitializing = useRef(initializing);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const lastFocusedRhythmId = useRef<string | null>(null);
-  const rhythmIds = useMemo(() => new Set(rhythms.map(rhythm => rhythm.id)), [rhythms]);
   const itemIdsKey = rhythms.map(rhythm => rhythm.id).join('\u001f');
+  const rhythmIds = useMemo(
+    () => new Set(itemIdsKey ? itemIdsKey.split('\u001f') : []),
+    [itemIdsKey]
+  );
   const satisfactionKey = [...satisfiedRhythmIds].sort().join('\u001f');
   const undoableKey = [...undoableRhythmIds].sort().join('\u001f');
   const tendedCount = rhythms.filter(rhythm => tendedRhythmIds.has(rhythm.id)).length;
@@ -248,9 +253,9 @@ export function TendedRhythmList({
     resetKey,
     initializing,
     showTended,
-    rhythms,
-    satisfiedRhythmIds,
-    undoableRhythmIds,
+    itemIdsKey,
+    satisfactionKey,
+    undoableKey,
     rhythmIds
   ]);
 
@@ -267,18 +272,33 @@ export function TendedRhythmList({
     };
   }
 
+  const toggle = (
+    <button
+      ref={toggleRef}
+      type="button"
+      className={`show-tended-list__toggle${showProgress ? ' show-tended-list__toggle--text' : ' btn mini ghost'}`}
+      aria-pressed={showTended}
+      onClick={() => onShowTendedChange(!showTended)}
+    >
+      {showTended ? 'Hide tended' : 'Show tended'}{showProgress ? '' : ` (${tendedCount})`}
+    </button>
+  );
+
   return (
     <>
-      <div className="show-tended-list__controls">
-        <button
-          ref={toggleRef}
-          type="button"
-          className="btn mini ghost show-tended-list__toggle"
-          aria-pressed={showTended}
-          onClick={() => onShowTendedChange(!showTended)}
-        >
-          {showTended ? 'Hide tended' : 'Show tended'} ({tendedCount})
-        </button>
+      <div className={`show-tended-list__controls${showProgress ? ' show-tended-list__controls--progress' : ''}`}>
+        {showProgress ? (
+          <div className="show-tended-list__progress-row">
+            <span className="show-tended-list__progress" aria-live="polite">
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <circle cx="8" cy="8" r="6.25" />
+                <path d="m4.8 8.1 2.1 2.1 4.3-4.4" />
+              </svg>
+              {tendedCount} of {rhythms.length} tended
+            </span>
+            {toggle}
+          </div>
+        ) : toggle}
         {notices.map(notice => (
           <div className="show-tended-list__notice" key={notice.key} role="status" aria-live="polite" aria-atomic="true">
             <span className="visually-hidden">

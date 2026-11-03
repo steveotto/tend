@@ -417,7 +417,7 @@ export function rhythmTimeValueFromLegacyLabel(label: string): RhythmTimeValue |
   return legacyTimeValues.get(label);
 }
 
-function weekdayName(weekday: RhythmWeekday): string {
+export function rhythmWeekdayName(weekday: RhythmWeekday): string {
   return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][weekday]!;
 }
 
@@ -441,7 +441,7 @@ function dayOrdinal(day: number): string {
 function patternDescription(pattern: RhythmPattern): string {
   return pattern.kind === 'dayOfMonth'
     ? pattern.day === 'last' ? 'last day' : `${dayOrdinal(pattern.day)} day`
-    : `${ordinalWord(pattern.ordinal)} ${weekdayName(pattern.weekday)}`;
+    : `${ordinalWord(pattern.ordinal)} ${rhythmWeekdayName(pattern.weekday)}`;
 }
 
 function naturalList(items: readonly string[]): string {
@@ -451,7 +451,7 @@ function naturalList(items: readonly string[]): string {
 }
 
 function weekdayListSummary(selected: readonly RhythmWeekday[]): string {
-  return naturalList([...selected].sort((left, right) => left - right).map(weekdayName));
+  return naturalList([...selected].sort((left, right) => left - right).map(rhythmWeekdayName));
 }
 
 function shortWeekdayName(weekday: RhythmWeekday): string {

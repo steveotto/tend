@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import type { ReactNode } from 'react';
+import type { KeyboardEventHandler, ReactNode } from 'react';
 import { scoreTone } from '../domain/score-tone.ts';
 import { RhythmScoreCircle } from './RhythmScoreCircle.tsx';
 
@@ -22,15 +22,19 @@ type HealthScoreMeasuresProps = {
 
 type HealthScoreBreakdownProps = Omit<HealthScoreMeasuresProps, 'healthScore'> & {
   title?: string;
+  titleId?: string;
   score: number | null;
   healthLabel?: string;
   ariaLabel?: string;
   headingAction?: ReactNode;
   showMeasures?: boolean;
+  children?: ReactNode;
+  onKeyDown?: KeyboardEventHandler<HTMLElement>;
 };
 
 export function HealthScoreBreakdown({
   title = 'Health',
+  titleId,
   score,
   consistency,
   onTrack,
@@ -40,14 +44,20 @@ export function HealthScoreBreakdown({
   ariaLabel = 'Health score breakdown',
   headingAction,
   showMeasures = true,
+  children,
+  onKeyDown,
   className = ''
 }: HealthScoreBreakdownProps) {
   const displayScore = score !== null && Number.isFinite(score) ? Math.round(score) : null;
 
   return (
-    <section className={`health-score-breakdown ${className}`.trim()} aria-label={ariaLabel}>
+    <section
+      className={`health-score-breakdown ${className}`.trim()}
+      aria-label={ariaLabel}
+      onKeyDown={onKeyDown}
+    >
       <header className="health-score-breakdown__header">
-        <h3>{title}</h3>
+        <h3 id={titleId}>{title}</h3>
         <span className={displayScore === null ? 'is-unavailable' : undefined}>
           {displayScore ?? '—'}
         </span>
@@ -65,6 +75,7 @@ export function HealthScoreBreakdown({
           showHealthMeter={false}
         />
       )}
+      {children}
     </section>
   );
 }

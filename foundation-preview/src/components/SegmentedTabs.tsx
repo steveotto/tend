@@ -13,13 +13,15 @@ export function SegmentedTabs<TabId extends string>({
   selectedTabId,
   ariaLabel,
   onChange,
-  variant = 'default'
+  variant = 'default',
+  onTabRef
 }: {
   tabs: readonly SegmentedTab<TabId>[];
   selectedTabId: TabId;
   ariaLabel: string;
   onChange: (tabId: TabId) => void;
   variant?: 'default' | 'compact';
+  onTabRef?: (tabId: TabId, element: HTMLButtonElement | null) => void;
 }) {
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -45,7 +47,10 @@ export function SegmentedTabs<TabId extends string>({
       {tabs.map((tab, index) => (
         <button
           key={tab.id}
-          ref={element => { tabRefs.current[index] = element; }}
+          ref={element => {
+            tabRefs.current[index] = element;
+            onTabRef?.(tab.id, element);
+          }}
           type="button"
           role="tab"
           id={tab.tabId}

@@ -7,6 +7,7 @@ import {
   dateParts,
   daysInMonth,
   isPeriodBasedRhythmSchedule,
+  isOnceWeeklyRhythmSchedule,
   isScheduledDate,
   rhythmOccurrencePeriod,
   rhythmSchedulesEqual
@@ -49,6 +50,7 @@ type ScoringOccurrence = ScheduledOccurrenceState & {
   eligibleEndDate: string;
   periodStartDate: string;
   periodBased: boolean;
+  onceWeeklyPeriod: boolean;
 };
 
 export type ConsistencyEvidence = {
@@ -60,6 +62,7 @@ export type ConsistencyEvidence = {
   notCompletedCount: number;
   limitedHistoryDays: number | null;
   todayIncluded: boolean;
+  currentWeeklyPeriodIncluded?: boolean;
   occurrences: readonly ScheduledOccurrenceState[];
 };
 
@@ -352,7 +355,9 @@ function buildScoringOccurrences(input: {
     }
     for (const record of matchedRecords) assignedRecordIds.add(record.id);
 
-    if (date > yesterday && matchedRecords.length === 0) continue;
+    if (matchedRecords.length === 0
+      && (date > yesterday
+        || isOnceWeeklyRhythmSchedule(schedule) && endDate >= input.asOfDate)) continue;
     const recordIds = matchedRecords.map(record => record.id);
     occurrences.push({
       date,
@@ -361,7 +366,8 @@ function buildScoringOccurrences(input: {
       completionDate: matchedRecords.map(record => record.effectiveDate).sort()[0] ?? null,
       eligibleEndDate: endDate,
       periodStartDate: startDate,
-      periodBased
+      periodBased,
+      onceWeeklyPeriod: isOnceWeeklyRhythmSchedule(schedule)
     });
   }
   return occurrences;
@@ -468,8 +474,26 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
       && isScheduledDate(scheduleForDate(record.effectiveDate)!, record.effectiveDate) === true);
     const maxWindowStartDate = maximumWindowStart(schedule, input.asOfDate);
     const windowStartDate = trackingStartDate > maxWindowStartDate ? trackingStartDate : maxWindowStartDate;
+    const currentSchedule = scheduleForDate(input.asOfDate);
+    const currentPeriod = currentSchedule
+      ? rhythmOccurrencePeriod(currentSchedule, input.asOfDate)
+      : null;
+    const currentSegment = rhythmSeasonForDate(segments, input.asOfDate);
+    const currentWeeklyPeriodIncluded = currentSchedule !== undefined
+      && isOnceWeeklyRhythmSchedule(currentSchedule)
+      && currentPeriod !== null
+      && datedRecords.some(record => {
+        if (record.effectiveDate < currentPeriod.startDate
+          || record.effectiveDate > input.asOfDate) return false;
+        const recordSchedule = scheduleForDate(record.effectiveDate);
+        const recordSegment = rhythmSeasonForDate(segments, record.effectiveDate);
+        return recordSchedule !== undefined
+          && isOnceWeeklyRhythmSchedule(recordSchedule)
+          && (recordSegment?.id ?? null) === (currentSegment?.id ?? null)
+          && rhythmOccurrencePeriod(recordSchedule, record.effectiveDate).startDate === currentPeriod.startDate;
+      });
     const todayIncluded = schedule.frequency === 'daily' && completedToday;
-    const windowEndDate = todayIncluded ? input.asOfDate : yesterday;
+    const windowEndDate = todayIncluded || currentWeeklyPeriodIncluded ? input.asOfDate : yesterday;
     if (windowStartDate > windowEndDate) {
       consistency = unscored(
         'no-eligible-occurrences',
@@ -523,6 +547,7 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
                   : calendarDaysInclusive(windowStartDate, windowEndDate)
                 : null,
               todayIncluded,
+              ...(currentWeeklyPeriodIncluded ? { currentWeeklyPeriodIncluded: true } : {}),
               occurrences: occurrences.map(occurrence => ({
                 date: occurrence.date,
                 status: occurrence.status,
@@ -652,9 +677,12 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
             flushZeroScoreSpan();
             missedOccurrenceCount = 0;
             previousScore = 100;
-            if (occurrence.date !== input.asOfDate || occurrence.completionDate !== input.asOfDate) {
+            const shouldRecordCompletion = occurrence.onceWeeklyPeriod
+              ? occurrence.completionDate !== input.asOfDate
+              : occurrence.date !== input.asOfDate || occurrence.completionDate !== input.asOfDate;
+            if (shouldRecordCompletion) {
               occurrences.push({
-                date: occurrence.date,
+                date: occurrence.onceWeeklyPeriod ? occurrence.completionDate! : occurrence.date,
                 status: 'completed',
                 score: previousScore,
                 ...(occurrence.periodBased

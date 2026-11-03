@@ -4,6 +4,7 @@ import { HealthScoreBreakdown } from './HealthScoreBreakdown.tsx';
 
 type FitnessScoreSummaryProps = {
   category: 'Strength' | 'Cardio';
+  healthTitle?: string;
   consistency: number | null;
   onTrack: number | null;
   health: number | null;
@@ -11,6 +12,9 @@ type FitnessScoreSummaryProps = {
   onTrackCaption: string;
   setupRequired?: boolean;
   statusMessage?: string | null;
+  summaryExplanation?: string;
+  compact?: boolean;
+  includeFormulaExplanation?: boolean;
   onSetup?: (event: MouseEvent<HTMLButtonElement>) => void;
   evidenceDetails?: ReactNode;
 };
@@ -28,6 +32,7 @@ const scoreExplanations = {
 
 export function FitnessScoreSummary({
   category,
+  healthTitle = 'Health',
   consistency,
   onTrack,
   health,
@@ -35,6 +40,9 @@ export function FitnessScoreSummary({
   onTrackCaption,
   setupRequired = false,
   statusMessage = null,
+  summaryExplanation,
+  compact = false,
+  includeFormulaExplanation = true,
   onSetup,
   evidenceDetails
 }: FitnessScoreSummaryProps) {
@@ -62,7 +70,7 @@ export function FitnessScoreSummary({
   return (
     <section className="fitness-score-summary" aria-label={`${category} scores`}>
       <HealthScoreBreakdown
-        title="Health"
+        title={healthTitle}
         score={health}
         healthLabel={`${category} Health`}
         ariaLabel={`${category} Health scores`}
@@ -71,13 +79,14 @@ export function FitnessScoreSummary({
         consistencyCaption={consistencyCaption}
         onTrackCaption={onTrackCaption}
         headingAction={infoButton}
+        showMeasures={!compact || expanded}
       />
       {message && (
         <div className="fitness-score-summary__status" role="status">
           <p>{message}</p>
           {setupRequired && onSetup && (
             <button type="button" className="btn mini ghost" onClick={onSetup}>
-              Set up tracking
+              {category === 'Strength' ? 'Strength settings' : 'Set up tracking'}
             </button>
           )}
         </div>
@@ -89,9 +98,14 @@ export function FitnessScoreSummary({
         aria-label={`${category} Health scoring details`}
         hidden={!expanded}
       >
-        <p><strong>Consistency</strong> {scoreExplanations[category].consistency}</p>
-        <p><strong>On Track</strong> {scoreExplanations[category].onTrack}</p>
-        <p><strong>Health</strong> 75% Consistency + 25% On Track.</p>
+        {summaryExplanation && <p>{summaryExplanation}</p>}
+        {includeFormulaExplanation && (
+          <>
+            <p><strong>Consistency</strong> {scoreExplanations[category].consistency}</p>
+            <p><strong>On Track</strong> {scoreExplanations[category].onTrack}</p>
+            <p><strong>Health</strong> 75% Consistency + 25% On Track.</p>
+          </>
+        )}
         {category === 'Strength' && <p>Rest readiness is shown separately.</p>}
         {evidenceDetails && (
           <details className="fitness-score-summary__evidence">

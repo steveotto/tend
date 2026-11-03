@@ -22,7 +22,6 @@ import {
 } from '../domain/today-plan.ts';
 import type { TodayFocusId, TodayItemType } from '../domain/today-plan.ts';
 import { TodayWeather } from './TodayWeather.tsx';
-import { TodayDateRow } from './TodayDateRow.tsx';
 import type { TodayWeatherController } from './useTodayWeather.ts';
 import { useTimeBlockSettings } from './TimeBlocksContext.tsx';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
@@ -106,9 +105,7 @@ export function TodayView({
     [visibleRhythms, planType, focus, evaluationInstant, timeBlocks]
   );
   const planRhythms = planGroups.flatMap(group => group.rhythms);
-  const tendedCount = planRhythms.filter(rhythm => tendedRhythmIds.has(rhythm.id)).length;
   const currentLabel = todayFocusLabel(focus, evaluationInstant, timeBlocks);
-  const focusContext = todayFocusContext(focus, planType, evaluationInstant, timeBlocks);
   const weatherTime = focus === 'now'
     ? null
     : focus === 'everything-today'
@@ -186,8 +183,6 @@ export function TodayView({
           })}
         </div>
       </section>
-
-      <TodayDateRow instant={evaluationInstant} localDate={localDate} />
 
       <section aria-label="Today's plan">
         <div className="card planblock current today-plan">
@@ -273,20 +268,8 @@ export function TodayView({
                     />
                   )}
               </div>
-              <div className="home-plan-context-row">
-                <div className="home-plan-context">{focusContext}</div>
-                <span className="today-plan__tended-count" aria-live="polite">
-                  {tendedCount} of {planRhythms.length} tended
-                </span>
-              </div>
             </>
-          ) : (
-            <div className="home-plan-context-row home-plan-context-row--count-only">
-              <span className="today-plan__tended-count" aria-live="polite">
-                {tendedCount} of {planRhythms.length} tended
-              </span>
-            </div>
-          )}
+          ) : null}
           <TendedRhythmList
             rhythms={planRhythms}
             tendedRhythmIds={tendedRhythmIds}
@@ -294,6 +277,7 @@ export function TodayView({
             undoableRhythmIds={undoableRhythms}
             showTended={showTended}
             onShowTendedChange={onShowTendedChange}
+            showProgress
             onUndo={onUndo}
             resetKey={`${planType}:${focus}:${search}`}
             initializing={initializing}

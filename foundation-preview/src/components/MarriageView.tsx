@@ -439,11 +439,9 @@ export function MarriageView({
       <CategoryHealthSummary
         key={categoryConfig?.categoryId ?? 'marriage'}
         score={categoryScore}
-        categoryLabel={categoryLabel}
+        title={`${categoryLabel} Health`}
         itemTerm={foundationTerm}
-        {...(categoryConfig?.scoreExplanationIntro
-          ? { explanationIntro: categoryConfig.scoreExplanationIntro }
-          : {})}
+        explanation={categoryConfig?.scoreExplanationIntro ?? ''}
         {...(categoryConfig?.scoreInterpretationNote
           ? { interpretationNote: categoryConfig.scoreInterpretationNote }
           : {})}

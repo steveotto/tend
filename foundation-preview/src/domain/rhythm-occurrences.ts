@@ -95,6 +95,14 @@ export function isPeriodBasedRhythmSchedule(schedule: RhythmSchedule): boolean {
       && schedule.weeklyMode !== 'select-days';
 }
 
+export function isOnceWeeklyRhythmSchedule(
+  schedule: RhythmSchedule
+): schedule is Extract<RhythmSchedule, { frequency: 'weekly' }> {
+  return schedule.frequency === 'weekly'
+    && schedule.weekdays.length === 1
+    && schedule.weeklyMode !== 'select-days';
+}
+
 export function hasRhythmOccurrenceForCompletion(
   schedule: RhythmSchedule,
   completionDate: string,

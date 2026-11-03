@@ -24,6 +24,7 @@ import type { Destination } from './AppNavigation.tsx';
 import { RhythmAssociationRows } from './RhythmAssociationRows.tsx';
 import { rhythmTimeLabel } from '../domain/rhythm-schedule.ts';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
+import { scoreTone } from '../domain/score-tone.ts';
 
 type RhythmDetailsDialogProps = {
   rhythm: RhythmPreview;
@@ -169,6 +170,7 @@ export function RhythmDetailsDialog({
       <button
         type="button"
         className="today-rhythm-details__history-button"
+        data-score-tone={inline ? scoreTone(healthScore) : undefined}
         aria-label={inline
           ? `View scores and history for ${rhythm.title}, Health ${healthScore === null
             ? 'unavailable'

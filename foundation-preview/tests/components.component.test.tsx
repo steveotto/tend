@@ -743,6 +743,15 @@ describe('shared preview components', () => {
 
   it('shows the rounded Health score as part of the shared history action name', () => {
     const rhythm = todayRhythms[0]!;
+    const toneCases = [
+      { score: 0, tone: 'red' },
+      { score: 49, tone: 'red' },
+      { score: 50, tone: 'yellow' },
+      { score: 79, tone: 'yellow' },
+      { score: 80, tone: 'green' },
+      { score: 100, tone: 'green' },
+      { score: null, tone: 'neutral' }
+    ] as const;
     render(
       <>
         <RhythmDetailsDialog
@@ -763,24 +772,34 @@ describe('shared preview components', () => {
           healthScore={null}
           onClose={() => undefined}
         />
+        {toneCases.map(({ score }) => (
+          <RhythmDetailsDialog
+            key={`tone-${score ?? 'unavailable'}`}
+            rhythm={{
+              ...rhythm,
+              id: `tone-${score ?? 'unavailable'}`,
+              title: `Score ${score ?? 'unavailable'}`
+            }}
+            inline
+            healthScore={score}
+            onClose={() => undefined}
+          />
+        ))}
       </>
     );
 
-    const scored = screen.getByRole('button', {
+    expect(screen.getByRole('button', {
       name: historyButtonName(`View scores and history for ${rhythm.title}, Health 43 out of 100`)
-    });
-    const zero = screen.getByRole('button', {
-      name: historyButtonName(`View scores and history for ${rhythm.title}, Health 0 out of 100`)
-    });
-    const unavailable = screen.getByRole('button', {
-      name: historyButtonName(`View scores and history for ${rhythm.title}, Health unavailable`)
-    });
-    expect(scored.querySelector('.today-rhythm-details__history-score')?.textContent).toBe('43');
-    expect(zero.querySelector('.today-rhythm-details__history-score')?.textContent).toBe('0');
-    expect(unavailable.querySelector('.today-rhythm-details__history-score')?.textContent).toBe('—');
-    for (const button of [scored, zero, unavailable]) {
-      expect(button.tagName).toBe('BUTTON');
-      expect(button.querySelectorAll('svg')).toHaveLength(1);
+    }).querySelector('.today-rhythm-details__history-score')?.textContent).toBe('43');
+    for (const { score, tone } of toneCases) {
+      const toneButton = screen.getByRole('button', {
+        name: historyButtonName(`View scores and history for Score ${score ?? 'unavailable'}`
+          + (score === null ? ', Health unavailable' : `, Health ${score} out of 100`))
+      });
+      expect(toneButton?.getAttribute('data-score-tone')).toBe(tone);
+      expect(toneButton?.querySelector('.today-rhythm-details__history-score')?.textContent)
+        .toBe(score === null ? '—' : String(score));
+      expect(toneButton.querySelectorAll('svg')).toHaveLength(1);
     }
   });
 

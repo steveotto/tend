@@ -10,12 +10,14 @@ const rhythms: readonly RhythmPreview[] = [
 ];
 
 function Harness({
+  rhythms: displayRhythms = rhythms,
   tendedRhythmIds,
   satisfiedRhythmIds,
   undoableRhythmIds = new Set<string>(),
   resetKey = 'today',
   onUndo = () => undefined
 }: {
+  rhythms?: readonly RhythmPreview[];
   tendedRhythmIds?: ReadonlySet<string>;
   satisfiedRhythmIds: ReadonlySet<string>;
   undoableRhythmIds?: ReadonlySet<string>;
@@ -25,7 +27,7 @@ function Harness({
   const [showTended, setShowTended] = useState(false);
   return (
     <TendedRhythmList
-      rhythms={rhythms}
+      rhythms={displayRhythms}
       tendedRhythmIds={tendedRhythmIds ?? satisfiedRhythmIds}
       satisfiedRhythmIds={satisfiedRhythmIds}
       undoableRhythmIds={undoableRhythmIds}
@@ -36,7 +38,7 @@ function Harness({
     >
       {({ visibleRhythmIds, tendedRhythmIds: displayIds, itemProps }) => (
         <div>
-          {rhythms.filter(rhythm => visibleRhythmIds.has(rhythm.id)).map(rhythm => (
+          {displayRhythms.filter(rhythm => visibleRhythmIds.has(rhythm.id)).map(rhythm => (
             <div key={rhythm.id} tabIndex={0} {...itemProps(rhythm.id)}>
               {rhythm.title}{displayIds.has(rhythm.id) ? ' — Tended' : ''}
               {displayIds.has(rhythm.id) && undoableRhythmIds.has(rhythm.id) && (
@@ -70,9 +72,9 @@ describe('Show tended list', () => {
     expect(screen.getByText('First Rhythm — Tended')).toBeTruthy();
     expect(screen.getByRole('status').textContent).toContain('Tended');
 
-    act(() => vi.advanceTimersByTime(5000));
+    act(() => vi.advanceTimersByTime(3000));
     expect(screen.getByText('First Rhythm — Tended').closest('.show-tended-list__item')?.classList.contains('is-fading')).toBe(true);
-    act(() => vi.advanceTimersByTime(599));
+    act(() => vi.advanceTimersByTime(799));
     expect(screen.getByText('First Rhythm — Tended')).toBeTruthy();
     act(() => vi.advanceTimersByTime(1));
     expect(screen.getByText('First Rhythm — Tended').closest('.show-tended-list__item')?.classList.contains('is-collapsing')).toBe(true);
@@ -121,19 +123,39 @@ describe('Show tended list', () => {
     expect(screen.getByRole('button', { name: 'Hide tended (1)' }).getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('does not restart the grace timer on rerender and cancels it when Show tended is enabled', () => {
+  it('does not restart the grace timer on state or object-reference churn and cancels removal when Show tended is enabled', () => {
     vi.useFakeTimers();
     const { rerender } = render(<Harness satisfiedRhythmIds={new Set()} />);
     rerender(<Harness satisfiedRhythmIds={new Set(['one'])} />);
-    act(() => vi.advanceTimersByTime(3000));
-    rerender(<Harness satisfiedRhythmIds={new Set(['one'])} />);
     act(() => vi.advanceTimersByTime(2000));
+    rerender(<Harness
+      rhythms={rhythms.map(rhythm => ({ ...rhythm }))}
+      satisfiedRhythmIds={new Set(['one'])}
+    />);
+    expect(vi.getTimerCount()).toBe(2);
+    act(() => vi.advanceTimersByTime(999));
+    expect(screen.getByText('First Rhythm — Tended').closest('.show-tended-list__item')?.classList.contains('is-fading')).toBe(false);
+    act(() => vi.advanceTimersByTime(1));
     expect(screen.getByText('First Rhythm — Tended').closest('.show-tended-list__item')?.classList.contains('is-fading')).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: 'Show tended (1)' }));
     act(() => vi.advanceTimersByTime(6000));
     expect(screen.getByText('First Rhythm — Tended')).toBeTruthy();
     expect(screen.getByText('First Rhythm — Tended').closest('.show-tended-list__item')?.classList.contains('is-fading')).toBe(false);
+  });
+
+  it('cancels the three-second grace delay when Undo is used before fading starts', () => {
+    vi.useFakeTimers();
+    const onUndo = vi.fn();
+    const { rerender } = render(<Harness satisfiedRhythmIds={new Set()} undoableRhythmIds={new Set(['one'])} onUndo={onUndo} />);
+    rerender(<Harness satisfiedRhythmIds={new Set(['one'])} undoableRhythmIds={new Set(['one'])} onUndo={onUndo} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Undo tending First Rhythm' }));
+    expect(onUndo).toHaveBeenCalledWith('one');
+
+    rerender(<Harness satisfiedRhythmIds={new Set()} undoableRhythmIds={new Set()} onUndo={onUndo} />);
+    act(() => vi.advanceTimersByTime(5000));
+    expect(screen.getByText('First Rhythm')).toBeTruthy();
+    expect(screen.getByText('First Rhythm').closest('.show-tended-list__item')?.classList.contains('is-fading')).toBe(false);
   });
 
   it('keeps Undo available during the space-collapse phase', () => {
@@ -145,7 +167,7 @@ describe('Show tended list', () => {
       undoableRhythmIds={new Set(['one'])}
       onUndo={onUndo}
     />);
-    act(() => vi.advanceTimersByTime(5600));
+    act(() => vi.advanceTimersByTime(3800));
     expect(screen.getByText('First Rhythm — Tended').closest('.show-tended-list__item')?.classList.contains('is-collapsing')).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Undo tending First Rhythm' }));
     rerender(<Harness satisfiedRhythmIds={new Set()} undoableRhythmIds={new Set(['one'])} onUndo={onUndo} />);
@@ -159,7 +181,7 @@ describe('Show tended list', () => {
     const onUndo = vi.fn();
     const { rerender } = render(<Harness satisfiedRhythmIds={new Set()} undoableRhythmIds={new Set(['one'])} onUndo={onUndo} />);
     rerender(<Harness satisfiedRhythmIds={new Set(['one'])} undoableRhythmIds={new Set(['one'])} onUndo={onUndo} />);
-    act(() => vi.advanceTimersByTime(5200));
+    act(() => vi.advanceTimersByTime(3200));
     fireEvent.click(screen.getByRole('button', { name: 'Undo tending First Rhythm' }));
     rerender(<Harness satisfiedRhythmIds={new Set()} undoableRhythmIds={new Set()} onUndo={onUndo} />);
     act(() => vi.advanceTimersByTime(1000));
@@ -174,7 +196,7 @@ describe('Show tended list', () => {
     try {
       const { rerender } = render(<Harness satisfiedRhythmIds={new Set()} />);
       rerender(<Harness satisfiedRhythmIds={new Set(['one'])} />);
-      act(() => vi.advanceTimersByTime(5000));
+      act(() => vi.advanceTimersByTime(3000));
       expect(screen.queryByText('First Rhythm — Tended')).toBeNull();
     } finally {
       window.matchMedia = originalMatchMedia;
@@ -190,7 +212,7 @@ describe('Show tended list', () => {
       undoableRhythmIds={new Set(['two'])}
       onUndo={onUndo}
     />);
-    act(() => vi.advanceTimersByTime(6070));
+    act(() => vi.advanceTimersByTime(4070));
     expect(screen.queryByText('Second Rhythm — Tended')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Show tended (1)' }));
     fireEvent.click(screen.getByRole('button', { name: 'Undo card' }));
@@ -205,7 +227,7 @@ describe('Show tended list', () => {
     const onUndo = vi.fn();
     const { rerender } = render(<Harness satisfiedRhythmIds={new Set()} undoableRhythmIds={new Set(['one'])} onUndo={onUndo} />);
     rerender(<Harness satisfiedRhythmIds={new Set(['one'])} undoableRhythmIds={new Set(['one'])} onUndo={onUndo} />);
-    act(() => vi.advanceTimersByTime(5860));
+    act(() => vi.advanceTimersByTime(4060));
     expect(screen.queryByText('First Rhythm — Tended')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Undo tending First Rhythm' }));
     expect(onUndo).toHaveBeenCalledWith('one');
@@ -222,13 +244,49 @@ describe('Show tended list', () => {
     />);
     expect(screen.getByText('First Rhythm — Tended')).toBeTruthy();
     expect(screen.getByText('Second Rhythm — Tended')).toBeTruthy();
-    act(() => vi.advanceTimersByTime(5860));
+    act(() => vi.advanceTimersByTime(4060));
     expect(screen.queryByText('First Rhythm — Tended')).toBeNull();
     expect(screen.queryByText('Second Rhythm — Tended')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Show tended (2)' }));
     fireEvent.click(screen.getAllByRole('button', { name: 'Undo card' })[1]!);
     expect(onUndo).toHaveBeenCalledTimes(1);
+    expect(onUndo).toHaveBeenCalledWith('two');
+  });
+
+  it('runs staggered completion timers independently', () => {
+    vi.useFakeTimers();
+    const onUndo = vi.fn();
+    const { rerender } = render(<Harness satisfiedRhythmIds={new Set()} undoableRhythmIds={new Set(['one', 'two'])} onUndo={onUndo} />);
+    rerender(<Harness
+      satisfiedRhythmIds={new Set(['one'])}
+      undoableRhythmIds={new Set(['one', 'two'])}
+      onUndo={onUndo}
+    />);
+    act(() => vi.advanceTimersByTime(1000));
+    rerender(<Harness
+      satisfiedRhythmIds={new Set(['one', 'two'])}
+      undoableRhythmIds={new Set(['one', 'two'])}
+      onUndo={onUndo}
+    />);
+
+    act(() => vi.advanceTimersByTime(2000));
+    const first = screen.getByText('First Rhythm — Tended').closest('.show-tended-list__item')!;
+    const second = screen.getByText('Second Rhythm — Tended').closest('.show-tended-list__item')!;
+    expect(first.classList.contains('is-fading')).toBe(true);
+    expect(second.classList.contains('is-fading')).toBe(false);
+
+    act(() => vi.advanceTimersByTime(1000));
+    expect(first.classList.contains('is-collapsing')).toBe(true);
+    expect(second.classList.contains('is-fading')).toBe(true);
+    act(() => vi.advanceTimersByTime(60));
+    expect(screen.queryByText('First Rhythm — Tended')).toBeNull();
+    expect(screen.getByText('Second Rhythm — Tended')).toBeTruthy();
+    act(() => vi.advanceTimersByTime(1000));
+    expect(screen.queryByText('Second Rhythm — Tended')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show tended (2)' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Undo card' })[1]!);
     expect(onUndo).toHaveBeenCalledWith('two');
   });
 
@@ -239,7 +297,7 @@ describe('Show tended list', () => {
     card.focus();
 
     rerender(<Harness satisfiedRhythmIds={new Set(['one'])} undoableRhythmIds={new Set(['one'])} />);
-    act(() => vi.advanceTimersByTime(5860));
+    act(() => vi.advanceTimersByTime(4060));
 
     expect(screen.queryByText('First Rhythm — Tended')).toBeNull();
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show tended (1)' }));

@@ -170,7 +170,7 @@ describe('account-isolated Preview storage', () => {
     expect(saved.kind).toBe('saved');
 
     const firstRender = render(<App identity={accountA} />);
-    const toggle = await screen.findByRole('button', { name: 'Show tended (0)' });
+    const toggle = await screen.findByRole('button', { name: 'Show tended' });
     expect(toggle.getAttribute('aria-pressed')).toBe('false');
     fireEvent.click(toggle);
     await waitFor(() => {
@@ -180,7 +180,7 @@ describe('account-isolated Preview storage', () => {
     firstRender.unmount();
 
     render(<App identity={accountA} />);
-    expect((await screen.findByRole('button', { name: 'Hide tended (0)' })).getAttribute('aria-pressed')).toBe('true');
+    expect((await screen.findByRole('button', { name: 'Hide tended' })).getAttribute('aria-pressed')).toBe('true');
     const loadedAgain = loadPreview(scope.storage, '2026-11-01');
     expect(loadedAgain.kind).toBe('loaded');
     if (loadedAgain.kind === 'loaded') {

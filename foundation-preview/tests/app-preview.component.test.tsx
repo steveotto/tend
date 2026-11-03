@@ -351,7 +351,9 @@ describe('Tend Today preview', () => {
     const trigger = screen.getByLabelText(/^Choose a time frame/);
     await user.click(trigger);
     await user.click(screen.getByRole('button', { name: /Dawn.*6:30am – 9:00am/ }));
-    expect(screen.getByText('6:30am – 9:00am')).toBeTruthy();
+    expect(trigger.querySelector('span')?.textContent).toBe('Dawn');
+    await user.click(trigger);
+    expect(screen.getByRole('button', { name: /Dawn.*6:30am – 9:00am/ })).toBeTruthy();
 
     unmount();
     testingRender(<App />);
@@ -539,7 +541,7 @@ describe('Tend Today preview', () => {
     expect(screen.getByRole('tablist', { name: 'Parenting content' })).toBeTruthy();
     expect(within(document.getElementById('parenting-panel-today')!).getByText('No active Rhythms.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Add Rhythm' })).toBeNull();
-    expect(screen.getByRole('meter', { name: 'Parenting Health score' }).getAttribute('aria-valuenow')).toBeNull();
+    expect(screen.getByRole('img', { name: 'Parenting Health: Not enough data' })).toBeTruthy();
     expect(screen.getByText('No scored Foundations yet')).toBeTruthy();
 
     await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
@@ -779,17 +781,18 @@ describe('Tend Today preview', () => {
     expect(within(document.getElementById('faith-panel-today')!).getByText('No active Rhythms.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Add Rhythm' })).toBeNull();
     expect(screen.getByText('No scored Practices yet')).toBeTruthy();
-    expect(screen.getByRole('meter', { name: 'Faith Health score' }).getAttribute('aria-valuenow')).toBeNull();
+    expect(screen.getByRole('img', { name: 'Faith Health: Not enough data' })).toBeTruthy();
     expect(screen.queryByText('No scored Foundations yet')).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: 'Show Faith scoring explanation' }));
-    const explanation = screen.getByRole('region', { name: 'Faith Health explanation' });
+    await user.click(screen.getByRole('button', { name: 'Show Faith Health scoring explanation' }));
+    const explanation = screen.getByRole('region', { name: 'Faith Health calculation details' });
     expect(within(explanation).getByText(
       'Your score reflects follow-through on your chosen practices—not the strength of your faith.'
     )).toBeTruthy();
-    expect(within(explanation).getByText('Each scored Practice counts equally.')).toBeTruthy();
-    expect(within(explanation).getByText('Practices need both scores to count.')).toBeTruthy();
-    expect(within(explanation).getByText('Health combines 75% Consistency and 25% On Track.')).toBeTruthy();
+    expect(within(explanation).getByText(/Each eligible Practice contributes equally/)).toBeTruthy();
+    expect(within(explanation).getByText(/Both scores must be available to count/)).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'How your Health score is calculated' }).textContent)
+      .toContain('75 percent Consistency and 25 percent On Track');
 
     await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
     expect(screen.getByRole('heading', { name: 'Start with a rhythm.' })).toBeTruthy();
@@ -2739,21 +2742,18 @@ describe('Tend Today preview', () => {
     expect(container.querySelector('.dashboard-greeting .hint')).toBeNull();
   });
 
-  it('places the date row after Overall health and before Today’s time-frame controls', () => {
+  it('keeps Today free of a separate visual date section', () => {
     const { container } = render(<App />);
     const greeting = container.querySelector('.home-dashboard > .sectiontitle.dashboard-greeting');
-    const overall = screen.getByRole('region', { name: 'Overall health summary' });
-    const date = container.querySelector('.today-date-row');
     const plan = screen.getByRole('region', { name: "Today's plan" });
     expect(greeting?.tagName).toBe('DIV');
     expect(greeting?.querySelector('.today-greeting__mountains')).toBeNull();
     expect(greeting?.contains(screen.getByRole('heading', { name: /Good (morning|afternoon|evening)/ }))).toBe(true);
-    expect(date?.tagName).toBe('TIME');
-    expect(date?.getAttribute('dateTime')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(overall.compareDocumentPosition(date!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(date!.compareDocumentPosition(plan) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(container.querySelector('.today-date-row')).toBeNull();
+    expect(container.querySelector('.today-date-row__tile')).toBeNull();
     expect(container.querySelector('.today-greeting__copy')).toBeNull();
     expect(container.querySelector('.today-greeting__mountains')).toBeNull();
+    expect(greeting && (greeting.compareDocumentPosition(plan) & Node.DOCUMENT_POSITION_FOLLOWING)).toBeTruthy();
   });
 
   it('uses shared full-detail cards on Today and preserves the catalogue RhythmCard', () => {
@@ -3815,7 +3815,7 @@ describe('Tend Today preview', () => {
         .toContain('Preview data was not saved on this device.');
     });
     expect(screen.getByRole('article', { name: 'Pray together' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Show tended (0)' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Show tended' })).toBeTruthy();
     expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
     failingWrite.mockRestore();
   });
@@ -4464,17 +4464,17 @@ describe('Tend Today preview', () => {
     expect(personShortcut.closest('.category-header')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Marriage Health' })).toBeTruthy();
     expect(screen.getByText('No scored Foundations yet')).toBeTruthy();
-    expect(screen.getByRole('meter', { name: 'Marriage Health score' }).getAttribute('aria-valuenow')).toBeNull();
-    expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBeNull();
-    expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBeNull();
+    const summary = screen.getByRole('region', { name: 'Marriage Health summary' });
+    expect(within(summary).getByRole('img', { name: 'Marriage Health: Not enough data' })).toBeTruthy();
+    expect(within(summary).getByRole('img', { name: 'Consistency: Score unavailable' })).toBeTruthy();
+    expect(within(summary).getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
     expect(screen.queryByText('Illustrative sample values · not calculated')).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Show Marriage scoring explanation' }));
-    const categoryExplanation = screen.getByRole('region', { name: 'Marriage Health explanation' });
-    expect(within(categoryExplanation).getByText('Each scored Foundation counts equally.')).toBeTruthy();
-    expect(within(categoryExplanation).getByText('Health combines 75% Consistency and 25% On Track.')).toBeTruthy();
-    expect(within(categoryExplanation).getByRole('img', { name: 'Consistency: Score unavailable' })).toBeTruthy();
-    expect(within(categoryExplanation).getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
-    expect(within(categoryExplanation).getByText('Foundations need both scores to count.')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Show Marriage Health scoring explanation' }));
+    const categoryExplanation = screen.getByRole('region', { name: 'Marriage Health calculation details' });
+    expect(within(categoryExplanation).getByText(/Each eligible Foundation contributes equally/)).toBeTruthy();
+    expect(within(categoryExplanation).getByText(/fixed 75% Consistency and 25% On Track weights/)).toBeTruthy();
+    expect(within(categoryExplanation).getByText(/Both scores must be available to count/)).toBeTruthy();
+    expect(within(summary).getByRole('region', { name: 'How your Health score is calculated' })).toBeTruthy();
     expect(within(categoryExplanation).queryByText(/Marriage Consistency and On Track average/)).toBeNull();
     expect(screen.getByRole('tab', { name: 'Today' }).getAttribute('aria-selected')).toBe('true');
     const page = screen.getByRole('main', { name: 'Marriage' });
@@ -4492,13 +4492,13 @@ describe('Tend Today preview', () => {
     const areas = within(screen.getByRole('navigation', { name: 'Areas' }));
 
     await user.click(areas.getByRole('button', { name: 'Marriage' }));
-    await user.click(screen.getByRole('button', { name: 'Show Marriage scoring explanation' }));
-    expect(screen.getByRole('region', { name: 'Marriage Health explanation' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Show Marriage Health scoring explanation' }));
+    expect(screen.getByRole('region', { name: 'Marriage Health calculation details' })).toBeTruthy();
 
     await user.click(areas.getByRole('button', { name: 'Parenting' }));
-    const parentingInfo = screen.getByRole('button', { name: 'Show Parenting scoring explanation' });
+    const parentingInfo = screen.getByRole('button', { name: 'Show Parenting Health scoring explanation' });
     expect(parentingInfo.getAttribute('aria-expanded')).toBe('false');
-    expect(screen.queryByRole('region', { name: 'Parenting Health explanation' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Parenting Health calculation details' })).toBeNull();
     expect(screen.getByText('No scored Foundations yet')).toBeTruthy();
     await user.click(parentingInfo);
     expect(screen.getByText(/These scores reflect follow-through on chosen Rhythms\./)).toBeTruthy();
@@ -4793,8 +4793,9 @@ describe('Tend Today preview', () => {
     await user.keyboard('{Enter}');
     expect(document.activeElement?.textContent).toBe('Connection');
     expect(screen.getByRole('img', { name: 'Connection Foundation Health: Not enough data' })).toBeTruthy();
-    expect(screen.getByRole('img', { name: 'Consistency: Score unavailable' })).toBeTruthy();
-    expect(screen.getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
+    const foundationScores = document.querySelector('.marriage-foundation-detail__scores') as HTMLElement;
+    expect(within(foundationScores).getByRole('img', { name: 'Consistency: Score unavailable' })).toBeTruthy();
+    expect(within(foundationScores).getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Linked Rhythms · 2', level: 3 })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Linked Rhythms · 2' })).toBeTruthy();
     const foundationDetail = document.querySelector('.marriage-foundation-detail') as HTMLElement;
@@ -5008,8 +5009,9 @@ describe('Tend Today preview', () => {
     expect(connection.querySelector('.foundation-card__score')?.textContent).toBe('85');
     expect(screen.getByText('1 of 6 Foundations scored')).toBeTruthy();
     expect(screen.getByRole('meter', { name: 'Marriage Health score' }).getAttribute('aria-valuenow')).toBe('85');
-    expect(screen.getByText('80', { selector: '.health-summary-score' })).toBeTruthy();
-    expect(screen.getByText('100', { selector: '.health-summary-score' })).toBeTruthy();
+    const categorySummary = screen.getByRole('region', { name: 'Marriage Health summary' });
+    expect(within(categorySummary).getByText('80', { selector: '.rhythm-score-circle__value' })).toBeTruthy();
+    expect(within(categorySummary).getByText('100', { selector: '.rhythm-score-circle__value' })).toBeTruthy();
     const unavailable = screen.getByRole('button', {
       name: /Open Partnership foundation details, Partnership Foundation Health score unavailable, No linked Rhythms/
     });
@@ -5083,8 +5085,9 @@ describe('Tend Today preview', () => {
     expect(within(updatedConnectionScores).getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('100');
     expect(screen.getByText('1 of 6 Foundations scored')).toBeTruthy();
     expect(screen.getByRole('meter', { name: 'Marriage Health score' }).getAttribute('aria-valuenow')).toBe('82.5');
-    expect(screen.getByText('77', { selector: '.health-summary-score' })).toBeTruthy();
-    expect(screen.getByText('100', { selector: '.health-summary-score' })).toBeTruthy();
+    const updatedSummary = screen.getByRole('region', { name: 'Marriage Health summary' });
+    expect(within(updatedSummary).getByText('77', { selector: '.rhythm-score-circle__value' })).toBeTruthy();
+    expect(within(updatedSummary).getByText('100', { selector: '.rhythm-score-circle__value' })).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'All Foundations' }));
     await user.click(screen.getByRole('button', {
@@ -5232,9 +5235,10 @@ describe('Tend Today preview', () => {
 
     await user.click(areas.getByRole('button', { name: 'Marriage' }));
     expect(screen.queryByRole('combobox', { name: 'Marriage example' })).toBeNull();
-    expect(screen.getByRole('meter', { name: 'Marriage Health score' }).getAttribute('aria-valuenow')).toBeNull();
+    expect(screen.getByRole('img', { name: 'Marriage Health: Not enough data' })).toBeTruthy();
     expect(screen.getByText('No scored Foundations yet')).toBeTruthy();
-    expect(screen.getByText('—', { selector: '.category-health-score' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Marriage Health summary' })
+      .querySelector('.health-score-breakdown__header > span')?.textContent).toBe('—');
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
       .getByRole('button', { name: 'Today' }));
     expect(getMarriageTodayButton().querySelector('.ma-score')?.textContent).toBe('—');
@@ -5781,6 +5785,7 @@ describe('Tend Today preview', () => {
     await waitFor(() => expect(document.activeElement).toBe(quickWeight));
 
     await user.click(screen.getByRole('button', { name: 'Start workout' }));
+    await user.click(screen.getByRole('tab', { name: 'Saved' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add workout' })).toBeTruthy());
     await user.click(screen.getByRole('tab', { name: 'Today' }));
 
@@ -5823,8 +5828,6 @@ describe('Tend Today preview', () => {
     await user.click(within(progressOverview).getByRole('button', {
       name: /Strength: Your training, workouts, and muscle balance/
     }));
-    expect(screen.getByText('Your training, at a glance.')).toBeTruthy();
-    await user.click(screen.getByRole('tab', { name: 'Training' }));
     expect(screen.getByRole('heading', { name: 'Your body, at a glance' })).toBeTruthy();
     const bodyMapControls = screen.getByRole('group', { name: 'Body map view' });
     const frontView = within(bodyMapControls).getByRole('button', { name: 'Front' });
@@ -5833,8 +5836,8 @@ describe('Tend Today preview', () => {
     expect(backView.getAttribute('aria-pressed')).toBe('true');
     await user.click(frontView);
     expect(frontView.getAttribute('aria-pressed')).toBe('true');
-    await user.click(screen.getByRole('tab', { name: 'Workouts' }));
-    expect(screen.getByRole('tab', { name: 'Saved Workouts' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Recommended' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Saved' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'History' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'All progress' }));
     await user.click(within(screen.getByRole('region', { name: 'Progress categories' }))
@@ -5995,7 +5998,7 @@ describe('Tend Today preview', () => {
     expect(within(linkedCard!).queryByRole('button', { name: /Undo completion/ })).toBeNull();
 
     await user.click(screen.getByRole('tab', { name: 'Progress' }));
-    await user.click(screen.getByRole('tab', { name: 'Workouts' }));
+    await user.click(screen.getByRole('tab', { name: 'Saved' }));
     await user.click(screen.getByRole('tab', { name: 'History' }));
     const history = screen.getByRole('tabpanel', { name: 'History' });
     await user.click(within(history).getByRole('button', { name: /View Custom workout/ }));

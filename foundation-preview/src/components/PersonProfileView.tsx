@@ -25,6 +25,7 @@ import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { ArchivedRhythmsDialog } from './ArchivedRhythmsDialog.tsx';
 import { AreaIcon } from './AreaIcon.tsx';
 import { BackButton } from './BackButton.tsx';
+import { SettingsGearButton } from './SettingsGearButton.tsx';
 import { ConnectionEditor, ConnectionHistoryList, ConnectionTypeActions, FriendshipCadenceControl } from './FriendshipConnectionControls.tsx';
 import { PersonAvatar } from './PersonBadge.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
@@ -310,17 +311,10 @@ export function PersonProfileView({
               <div className="person-profile__identity-title-row">
                 <h2 id="person-profile-title">{person.displayName}</h2>
                 {onEditPerson && (
-                  <button
-                    type="button"
-                    className="person-profile__settings"
-                    aria-label="Person settings"
-                    aria-haspopup="dialog"
+                  <SettingsGearButton
+                    label="Person settings"
                     onClick={event => onEditPerson(personId, event)}
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm0 1.8a1.7 1.7 0 1 1 0 3.4 1.7 1.7 0 0 1 0-3.4Zm7.3 1.7a7.3 7.3 0 0 0-.1-1l1.5-1.2-1.5-2.6-1.8.7a7 7 0 0 0-1.7-1L15.4 5h-3l-.4 1.9a7 7 0 0 0-1.7 1l-1.8-.7L7 9.8l1.5 1.2a7.3 7.3 0 0 0 0 2L7 14.2l1.5 2.6 1.8-.7a7 7 0 0 0 1.7 1l.4 1.9h3l.4-1.9a7 7 0 0 0 1.7-1l1.8.7 1.5-2.6-1.5-1.2a7.3 7.3 0 0 0 0-1Z" />
-                    </svg>
-                  </button>
+                  />
                 )}
               </div>
               {categoryLabel && (

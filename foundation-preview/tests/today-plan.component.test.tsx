@@ -8,6 +8,7 @@ import type { TodayFocusId } from '../src/domain/today-plan.ts';
 import { foundationCatalogue, todayRhythms } from '../src/domain/preview-data.ts';
 import { TimeBlocksProvider } from '../src/components/TimeBlocksContext.tsx';
 import { createDefaultTimeBlockSettings } from '../src/domain/time-blocks.ts';
+import type { TimeBlockSettings } from '../src/domain/time-blocks.ts';
 
 afterEach(cleanup);
 
@@ -24,15 +25,18 @@ const unavailableWeather: TodayWeatherController = {
 function TodayHarness({
   weatherController = unavailableWeather,
   satisfiedRhythmIds = new Set(['sample-pray-together']),
-  showTended = true
+  showTended = true,
+  timeBlockSettings = createDefaultTimeBlockSettings()
 }: {
   weatherController?: TodayWeatherController;
   satisfiedRhythmIds?: ReadonlySet<string>;
   showTended?: boolean;
+  timeBlockSettings?: TimeBlockSettings;
 }) {
   const [focus, setFocus] = useState<TodayFocusId>('now');
+  const [tendedVisible, setTendedVisible] = useState(showTended);
   return (
-    <TimeBlocksProvider settings={createDefaultTimeBlockSettings()}>
+    <TimeBlocksProvider settings={timeBlockSettings}>
       <TodayView
         greeting="Good morning"
         evaluationInstant={new Date(2026, 9, 31, 10, 0)}
@@ -43,7 +47,8 @@ function TodayHarness({
         completedRhythms={new Set(['sample-pray-together'])}
         undoableRhythms={new Set()}
         satisfiedRhythmIds={satisfiedRhythmIds}
-        showTended={showTended}
+        showTended={tendedVisible}
+        onShowTendedChange={setTendedVisible}
         rhythms={todayRhythms}
         rhythmScores={new Map()}
         marriageHealthScore={null}
@@ -63,7 +68,11 @@ function TodayHarness({
 
 function renderToday(
   weatherController?: TodayWeatherController,
-  options: { satisfiedRhythmIds?: ReadonlySet<string>; showTended?: boolean } = {}
+  options: {
+    satisfiedRhythmIds?: ReadonlySet<string>;
+    showTended?: boolean;
+    timeBlockSettings?: TimeBlockSettings;
+  } = {}
 ) {
   return render(<TodayHarness
     {...(weatherController ? { weatherController } : {})}
@@ -77,19 +86,21 @@ describe('Today time-frame interaction', () => {
     renderToday();
     const plan = screen.getByRole('region', { name: "Today's plan" });
     expect(within(plan).getByText('Now', { selector: 'summary span' })).toBeTruthy();
-    expect(within(plan).getByText('9:00am – 11:30am')).toBeTruthy();
     expect(within(plan).getByText('1 of 1 tended')).toBeTruthy();
     expect(within(plan).getByRole('article', { name: 'Pray together' })).toBeTruthy();
     expect(within(plan).queryByRole('article', { name: 'Daily connection' })).toBeNull();
     expect(within(plan).queryByRole('heading', { name: 'Your plan' })).toBeNull();
 
     await user.click(within(plan).getByText('Now', { selector: 'summary span' }));
+    expect(within(plan).getByRole('button', { name: /Now.*9:00am – 11:30am/ })).toBeTruthy();
     await user.click(within(plan).getByRole('button', { name: /Evening/ }));
 
-    expect(within(plan).getByText('6:00pm – 9:30pm')).toBeTruthy();
+    expect(within(plan).queryByText('6:00pm – 9:30pm')).toBeNull();
     expect(within(plan).getByText('0 of 1 tended')).toBeTruthy();
     expect(within(plan).getByRole('article', { name: 'Daily connection' })).toBeTruthy();
     expect(within(plan).queryByRole('article', { name: 'Pray together' })).toBeNull();
+    await user.click(within(plan).getByText('Evening', { selector: 'summary span' }));
+    expect(within(plan).getByRole('button', { name: /Evening.*6:00pm – 9:30pm/ })).toBeTruthy();
   });
 
   it('offers Everything today and the three preserved item-type tabs with ARIA selection', async () => {
@@ -122,14 +133,36 @@ describe('Today time-frame interaction', () => {
     const plan = screen.getByRole('region', { name: "Today's plan" });
 
     expect(within(plan).getByText('1 of 1 tended')).toBeTruthy();
-    expect(within(plan).getByRole('button', { name: 'Show tended (1)' }).getAttribute('aria-pressed'))
+    expect(within(plan).getByRole('button', { name: 'Show tended' }).getAttribute('aria-pressed'))
       .toBe('false');
     expect(within(plan).getByRole('status').textContent).toBe('You’ve tended everything here.');
 
     await user.click(within(plan).getByRole('tab', { name: 'Anytime' }));
     expect(within(plan).getByText('No eligible Anytime rhythms.')).toBeTruthy();
     expect(within(plan).queryByText('You’ve tended everything here.')).toBeNull();
-    expect(within(plan).getByRole('button', { name: 'Show tended (0)' })).toBeTruthy();
+    expect(within(plan).getByRole('button', { name: 'Show tended' })).toBeTruthy();
+  });
+
+  it('shows current progress with a compact, accessible Show/Hide action on every plan tab', async () => {
+    const user = userEvent.setup();
+    renderToday(undefined, { showTended: false });
+    const plan = screen.getByRole('region', { name: "Today's plan" });
+    const toggle = () => within(plan).getByRole('button', { name: 'Show tended' });
+
+    for (const tabName of ['Scheduled', 'Anytime', 'All-day']) {
+      await user.click(within(plan).getByRole('tab', { name: tabName }));
+      expect(within(plan).getByText(/\d+ of \d+ tended/).className)
+        .toContain('show-tended-list__progress');
+      expect(toggle().getAttribute('aria-pressed')).toBe('false');
+      expect(toggle().textContent).toBe('Show tended');
+      expect(plan.querySelector('.show-tended-list__progress svg')?.getAttribute('aria-hidden')).toBe('true');
+
+      await user.click(toggle());
+      const hideToggle = within(plan).getByRole('button', { name: 'Hide tended' });
+      expect(hideToggle.getAttribute('aria-pressed')).toBe('true');
+      expect(hideToggle.textContent).toBe('Hide tended');
+      await user.click(hideToggle);
+    }
   });
 
   it('moves focus and activates Today plan tabs with arrows, Home, and End', async () => {
@@ -237,7 +270,7 @@ describe('Today time-frame interaction', () => {
     await user.click(trigger);
     await user.click(within(plan).getByRole('button', { name: /Evening.*6:00pm – 9:30pm/ }));
     expect(within(plan).getByRole('img', { name: 'Forecast: Partly cloudy, 16 degrees' })).toBeTruthy();
-    expect(within(plan).getByText('6:00pm – 9:30pm')).toBeTruthy();
+    expect(within(plan).queryByText('6:00pm – 9:30pm')).toBeNull();
     expect(within(plan).getByText('0 of 1 tended')).toBeTruthy();
 
     for (const tabName of ['Anytime', 'All-day']) {
@@ -251,10 +284,51 @@ describe('Today time-frame interaction', () => {
 
     await user.click(within(plan).getByRole('tab', { name: 'Scheduled' }));
     expect(within(plan).getByText('Evening', { selector: 'summary span' })).toBeTruthy();
-    expect(within(plan).getByText('6:00pm – 9:30pm')).toBeTruthy();
     await user.click(trigger);
     await user.click(within(plan).getByRole('button', { name: /Everything today/ }));
     expect(within(plan).queryByRole('img')).toBeNull();
-    expect(within(plan).getByText('Across every time block')).toBeTruthy();
+    expect(within(plan).queryByText('Across every time block')).toBeNull();
+    await user.click(trigger);
+    expect(within(plan).getByRole('button', { name: /Everything today.*Across every time block/ })).toBeTruthy();
+  });
+
+  it('keeps long custom block names in the selector without losing the right-side forecast', async () => {
+    const user = userEvent.setup();
+    const timeBlockSettings = createDefaultTimeBlockSettings();
+    const longName = 'An intentionally long custom evening time block';
+    timeBlockSettings.blocks = timeBlockSettings.blocks.map(block =>
+      block.id === 'evening' ? { ...block, name: longName } : block
+    );
+    const weatherController: TodayWeatherController = {
+      ...unavailableWeather,
+      city: { id: 1, name: 'Example City', admin1: null, country: 'Example', countryCode: 'EX', latitude: 0, longitude: 0 },
+      weather: {
+        status: 'ready',
+        report: {
+          current: { date: '2026-10-31', time: '10:00', temperature: 18, code: 2, isDay: true },
+          hourly: [
+            { date: '2026-10-31', time: '10:00', temperature: 18, code: 2, isDay: true },
+            { date: '2026-10-31', time: '18:00', temperature: 16, code: 3, isDay: true }
+          ]
+        },
+        fetchedAt: 0,
+        message: null
+      }
+    };
+    renderToday(weatherController, { timeBlockSettings });
+    const plan = screen.getByRole('region', { name: "Today's plan" });
+    const trigger = within(plan).getByLabelText('Choose a time frame, currently Now');
+
+    await user.click(trigger);
+    const customOption = within(plan).getByRole('button', {
+      name: new RegExp(`${longName}.*6:00pm – 9:30pm`)
+    });
+    expect(customOption).toBeTruthy();
+    await user.click(customOption);
+
+    expect(trigger.getAttribute('aria-label')).toBe(`Choose a time frame, currently ${longName}`);
+    expect(trigger.querySelector('span')?.textContent).toBe(longName);
+    expect(within(plan).getByRole('img', { name: 'Forecast: Cloudy, 16 degrees' })).toBeTruthy();
+    expect(plan.querySelector('.today-plan__weather')).not.toBeNull();
   });
 });

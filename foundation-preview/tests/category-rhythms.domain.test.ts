@@ -354,7 +354,7 @@ describe('Category Rhythm selectors', () => {
     }], new Set(['three-times-weekly']), () => '2026-11-06')).toEqual(new Set(['three-times-weekly']));
   });
 
-  it('recognizes a backdated completion within a single weekly occurrence period', () => {
+  it('recognizes an early weekly completion on its planned day for satisfaction and Show tended', () => {
     const rhythm: RhythmPreview = {
       id: 'weekly-backfill',
       title: 'Weekly practice',
@@ -362,10 +362,13 @@ describe('Category Rhythm selectors', () => {
       status: 'Due today',
       cadence: 'Weekly',
       schedule: { frequency: 'weekly', weekdays: [5] },
-      completionHistory: [{ id: 'wednesday-tend', effectiveDate: '2026-11-04' }]
+      completionHistory: [{ id: 'monday-tend', effectiveDate: '2026-11-02' }]
     };
 
-    expect(selectSatisfiedRhythmIds([rhythm], new Set(), () => '2026-11-06'))
+    const satisfied = selectSatisfiedRhythmIds([rhythm], new Set(), () => '2026-11-06');
+    expect(satisfied)
+      .toEqual(new Set(['weekly-backfill']));
+    expect(selectTendedRhythmDisplayIds(new Set(), satisfied))
       .toEqual(new Set(['weekly-backfill']));
   });
 

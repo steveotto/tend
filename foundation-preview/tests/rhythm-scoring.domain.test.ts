@@ -1219,6 +1219,257 @@ describe('daily occurrence scoring', () => {
     });
   });
 
+  it('credits a once-weekly Rhythm on any day of its Monday–Sunday period and only once', () => {
+    const fridaySchedule: RhythmSchedule = { frequency: 'weekly', weekdays: [5] };
+    const start = '2026-10-19';
+    const history = [{ startDate: start, schedule: fridaySchedule }];
+    const cases = [
+      { date: '2026-10-19', id: 'monday' },
+      { date: '2026-10-22', id: 'thursday' },
+      { date: '2026-10-23', id: 'friday' }
+    ];
+
+    for (const testCase of cases) {
+      const result = scored(input({
+        schedule: fridaySchedule,
+        scoring: scoring(start, history),
+        createdLocalDate: start,
+        createdTimeZone: 'UTC',
+        asOfDate: testCase.date,
+        records: [record(testCase.id, testCase.date)]
+      }));
+      expect(result.consistency).toMatchObject({
+        kind: 'scored',
+        score: 100,
+        exactPercent: 100,
+        evidence: {
+          windowStartDate: start,
+          eligibleDueCount: 1,
+          completedCount: 1,
+          currentWeeklyPeriodIncluded: true,
+          occurrences: [{
+            date: '2026-10-23',
+            status: 'completed',
+            recordIds: [testCase.id],
+            periodStartDate: start,
+            eligibleEndDate: '2026-10-25'
+          }]
+        }
+      });
+      expect(result.onTrack).toMatchObject({
+        kind: 'scored',
+        score: 100,
+        evidence: { lastQualifyingCompletionDate: testCase.date, missedOccurrenceCount: 0 }
+      });
+      if (result.onTrack.kind !== 'scored') throw new Error('Expected scored On Track evidence.');
+      if (testCase.date !== '2026-10-23') {
+        expect(result.onTrack.evidence.occurrences).not.toContainEqual(expect.objectContaining({
+          date: '2026-10-23',
+          status: 'completed'
+        }));
+      }
+    }
+
+    const earlyCompletionHistory = scored(input({
+      schedule: fridaySchedule,
+      scoring: scoring(start, history),
+      createdLocalDate: start,
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-22',
+      records: [record('monday-before-friday', start)]
+    }));
+    expect(earlyCompletionHistory.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 100,
+      evidence: {
+        occurrences: [
+          {
+            date: start,
+            status: 'completed',
+            completionDate: start,
+            periodStartDate: start,
+            eligibleEndDate: '2026-10-25'
+          },
+          { date: '2026-10-22', status: 'today', score: 100 }
+        ]
+      }
+    });
+
+    const multipleTends = scored(input({
+      schedule: fridaySchedule,
+      scoring: scoring(start, history),
+      createdLocalDate: start,
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-23',
+      records: [
+        record('monday', '2026-10-19'),
+        record('thursday', '2026-10-22'),
+        record('friday', '2026-10-23')
+      ]
+    }));
+    expect(multipleTends.consistency).toMatchObject({
+      kind: 'scored',
+      score: 100,
+      evidence: {
+        eligibleDueCount: 1,
+        completedCount: 1,
+        occurrences: [{
+          date: '2026-10-23',
+          recordIds: ['monday', 'thursday', 'friday']
+        }]
+      }
+    });
+  });
+
+  it('excludes an unfinished current once-weekly period and counts it missed after Sunday', () => {
+    const mondaySchedule: RhythmSchedule = { frequency: 'weekly', weekdays: [1] };
+    const start = '2026-10-12';
+    const history = [{ startDate: start, schedule: mondaySchedule }];
+    const beforeCompletion = scored(input({
+      schedule: mondaySchedule,
+      scoring: scoring(start, history),
+      createdLocalDate: start,
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-20'
+    }));
+    expect(beforeCompletion.consistency).toMatchObject({
+      kind: 'scored',
+      score: 0,
+      evidence: {
+        windowStartDate: start,
+        eligibleDueCount: 1,
+        completedCount: 0,
+        notCompletedCount: 1,
+        occurrences: [{
+          date: start,
+          status: 'not-completed',
+          periodStartDate: start,
+          eligibleEndDate: '2026-10-18'
+        }]
+      }
+    });
+    expect(beforeCompletion.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 90,
+      evidence: { missedOccurrenceCount: 1 }
+    });
+
+    const atSunday = scored(input({
+      schedule: mondaySchedule,
+      scoring: scoring('2026-10-19', [{ startDate: '2026-10-19', schedule: mondaySchedule }]),
+      createdLocalDate: '2026-10-19',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-25'
+    }));
+    expect(atSunday.consistency).toMatchObject({
+      kind: 'unscored',
+      reasonCode: 'no-eligible-occurrences'
+    });
+    expect(atSunday.onTrack).toMatchObject({
+      kind: 'unscored',
+      reasonCode: 'ready-for-first-tend'
+    });
+
+    const mondayAfter = scored(input({
+      schedule: mondaySchedule,
+      scoring: scoring('2026-10-19', [{ startDate: '2026-10-19', schedule: mondaySchedule }]),
+      createdLocalDate: '2026-10-19',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-26'
+    }));
+    expect(mondayAfter.consistency).toMatchObject({
+      kind: 'scored',
+      score: 0,
+      evidence: {
+        eligibleDueCount: 1,
+        completedCount: 0,
+        occurrences: [{
+          date: '2026-10-19',
+          status: 'not-completed',
+          eligibleEndDate: '2026-10-25'
+        }]
+      }
+    });
+    expect(mondayAfter.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 90,
+      evidence: { missedOccurrenceCount: 1 }
+    });
+
+    const pacificSunday = localDateInTimeZone(new Date('2026-10-26T06:30:00.000Z'), 'America/Los_Angeles');
+    const pacificMonday = localDateInTimeZone(new Date('2026-10-26T07:30:00.000Z'), 'America/Los_Angeles');
+    expect(pacificSunday).toBe('2026-10-25');
+    expect(pacificMonday).toBe('2026-10-26');
+    const pacificHistory = [{ startDate: '2026-10-19', schedule: mondaySchedule }];
+    expect(scored(input({
+      schedule: mondaySchedule,
+      scoring: scoring('2026-10-19', pacificHistory, 'America/Los_Angeles'),
+      createdLocalDate: '2026-10-19',
+      createdTimeZone: 'America/Los_Angeles',
+      asOfDate: pacificSunday,
+      timeZone: 'America/Los_Angeles'
+    })).consistency).toMatchObject({ kind: 'unscored', reasonCode: 'no-eligible-occurrences' });
+    expect(scored(input({
+      schedule: mondaySchedule,
+      scoring: scoring('2026-10-19', pacificHistory, 'America/Los_Angeles'),
+      createdLocalDate: '2026-10-19',
+      createdTimeZone: 'America/Los_Angeles',
+      asOfDate: pacificMonday,
+      timeZone: 'America/Los_Angeles'
+    })).consistency).toMatchObject({
+      kind: 'scored',
+      score: 0,
+      evidence: { eligibleDueCount: 1, completedCount: 0 }
+    });
+  });
+
+  it('credits only tracked, non-future weekly records in their actual scoring week', () => {
+    const fridaySchedule: RhythmSchedule = { frequency: 'weekly', weekdays: [5] };
+    const start = '2026-10-21';
+    const history = [{ startDate: start, schedule: fridaySchedule }];
+    const trackedPartWeek = scored(input({
+      schedule: fridaySchedule,
+      scoring: scoring(start, history, 'America/Los_Angeles'),
+      createdLocalDate: start,
+      createdTimeZone: 'America/Los_Angeles',
+      asOfDate: '2026-10-22',
+      timeZone: 'America/Los_Angeles',
+      records: [
+        record('future', '2026-10-23')
+      ]
+    }));
+    expect(trackedPartWeek.consistency).toMatchObject({
+      kind: 'unscored',
+      reasonCode: 'no-eligible-occurrences'
+    });
+
+    const actualWeekTend = scored(input({
+      schedule: fridaySchedule,
+      scoring: scoring(start, history, 'America/Los_Angeles'),
+      createdLocalDate: start,
+      createdTimeZone: 'America/Los_Angeles',
+      asOfDate: '2026-10-22',
+      timeZone: 'America/Los_Angeles',
+      records: [
+        record('future', '2026-10-23'),
+        record('backdated-within-tracked-week', '2026-10-21')
+      ]
+    }));
+    expect(actualWeekTend.consistency).toMatchObject({
+      kind: 'scored',
+      score: 100,
+      evidence: {
+        eligibleDueCount: 1,
+        completedCount: 1,
+        currentWeeklyPeriodIncluded: true,
+        occurrences: [{
+          date: '2026-10-23',
+          recordIds: ['backdated-within-tracked-week']
+        }]
+      }
+    });
+  });
+
   it('does not carry records across period or Season boundaries and clips tracking starts', () => {
     const monthly: RhythmSchedule = {
       frequency: 'monthly',
@@ -1646,7 +1897,7 @@ describe('daily occurrence scoring', () => {
       {
         schedule: { frequency: 'weekly', weekdays: [1] },
         windowStart: '2026-07-31',
-        expectedDue: 12
+        expectedDue: 11
       },
       {
         schedule: { frequency: 'weekly', weekdays: [1], weeklyMode: 'select-days' },

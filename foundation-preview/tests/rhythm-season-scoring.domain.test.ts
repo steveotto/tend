@@ -130,16 +130,7 @@ describe('Season-scoped Health scoring', () => {
     expect(result).toMatchObject({
       kind: 'rhythm-score',
       asOfDate: '2026-10-21',
-      consistency: {
-        kind: 'scored',
-        evidence: {
-          occurrences: [{
-            date: '2026-10-19',
-            status: 'not-completed',
-            eligibleEndDate: '2026-10-21'
-          }]
-        }
-      },
+      consistency: { kind: 'unscored', reasonCode: 'no-eligible-occurrences' },
       onTrack: { kind: 'unscored', reasonCode: 'ready-for-first-tend' },
       healthScore: null
     });
