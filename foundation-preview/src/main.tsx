@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
 import { CatalogApp } from './CatalogApp.tsx';
 import { PreviewIdentityHost } from './auth/PreviewIdentityHost.tsx';
+import { PreviewAppErrorBoundary } from './PreviewAppErrorBoundary.tsx';
 import {
   DEVELOPMENT_PREVIEW_IDENTITY,
   PREVIEW_AUTH_PENDING,
@@ -54,12 +55,14 @@ function DevelopmentPreviewHost() {
 
 createRoot(rootElement).render(
   <StrictMode>
-    {isPagesBuild
-      ? <PreviewIdentityHost />
-      : isCatalog
-        ? <CatalogApp />
-        : import.meta.env.DEV
-          ? <DevelopmentPreviewHost />
-          : <App identity={PREVIEW_AUTH_PENDING} />}
+    <PreviewAppErrorBoundary>
+      {isPagesBuild
+        ? <PreviewIdentityHost />
+        : isCatalog
+          ? <CatalogApp />
+          : import.meta.env.DEV
+            ? <DevelopmentPreviewHost />
+            : <App identity={PREVIEW_AUTH_PENDING} />}
+    </PreviewAppErrorBoundary>
   </StrictMode>
 );

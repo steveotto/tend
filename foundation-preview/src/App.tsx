@@ -2877,7 +2877,7 @@ function PreviewWorkspace({
               rhythms={editableTodayRhythms}
               rhythmScores={rhythmScoreResults}
               search={search}
-              marriageHealthScore={marriageHealthScore}
+              categoryHealthScores={categoryHealthScores}
               foundations={foundationCatalogue}
               onNavigate={navigate}
               onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}

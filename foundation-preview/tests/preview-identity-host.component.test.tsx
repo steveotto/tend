@@ -7,10 +7,67 @@ import {
   type PreviewSession,
   type PreviewSupabaseClientFactory
 } from '../src/auth/PreviewIdentityHost.tsx';
+import { localDateString } from '../src/domain/money-goals.ts';
+import { localDateTimeInZone } from '../src/domain/rhythm-completion.ts';
+import { addCalendarDays } from '../src/domain/rhythm-scoring.ts';
+import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
+import type { SavedRhythm } from '../src/domain/rhythm-editor.ts';
+import {
+  createPreviewEnvelope,
+  createSamplePreviewData,
+  PREVIEW_SCHEMA_VERSION
+} from '../src/domain/preview-state.ts';
+import { PREVIEW_ACCOUNT_STORAGE_PREFIX } from '../src/storage/preview-storage.ts';
 import { installMemoryStorage } from './memory-storage.ts';
 
 const accountId = 'a0000000-0000-4000-8000-000000000001';
 const session: PreviewSession = { user: { id: accountId } };
+const accountStorageKey = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountId}`;
+
+function scoredFaithFixture() {
+  const today = localDateString(new Date());
+  const trackingStartDate = addCalendarDays(today, -29);
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const rhythmId = 'user-rhythm-84000000-0000-4000-8000-000000000022';
+  const data = createSamplePreviewData();
+  const rhythm: SavedRhythm = {
+    id: rhythmId,
+    title: 'Synthetic daily prayer',
+    cadence: 'Daily',
+    timeLabel: 'Anytime',
+    timeOfDay: 'anytime',
+    personIds: [],
+    categoryIds: ['faith'],
+    schedule: { frequency: 'daily' },
+    primaryFoundationId: 'faith-prayer',
+    secondaryFoundationIds: [],
+    scoring: {
+      trackingStartDate,
+      timeZone,
+      scheduleHistory: [
+        createRhythmSeason(rhythmId, trackingStartDate, { frequency: 'daily' })
+      ]
+    },
+    createdLocalDate: trackingStartDate,
+    createdTimeZone: timeZone
+  };
+  data.savedRhythms.push(rhythm);
+  data.rhythmHistoryIds.push(rhythmId);
+  for (let day = 0; day < 23; day += 1) {
+    const effectiveDate = addCalendarDays(trackingStartDate, day);
+    const completedAt = localDateTimeInZone(effectiveDate, '12:00', timeZone).toISOString();
+    data.datedRhythmCompletions.push({
+      id: `synthetic-faith-completion-${day}`,
+      rhythmId,
+      effectiveDate,
+      localTime: '12:00',
+      timeZone,
+      completedAt,
+      recordedAt: completedAt
+    });
+  }
+  return data;
+}
 
 function fakeAuth(
   initialSession: PreviewSession | null = null,
@@ -155,6 +212,92 @@ describe('PreviewIdentityHost', () => {
 
     await screen.findByRole('button', { name: 'Sign out' });
     expect(screen.queryByRole('heading', { name: 'Sign in with Tend' })).toBeNull();
+  });
+
+  it('renders the authenticated Today workspace when the account has no saved data', async () => {
+    const storage = installMemoryStorage();
+    storage.setItem('tend:supabase-auth', 'classic-session-sentinel');
+    const auth = fakeAuth(session);
+    render(
+      <PreviewIdentityHost
+        accessReady
+        supabaseUrl="https://project.supabase.co"
+        supabasePublishableKey="synthetic-public-key"
+        clientFactory={auth.clientFactory}
+      />
+    );
+
+    await screen.findByRole('button', { name: 'Sign out' });
+    expect(screen.getByRole('region', { name: "Today's plan" })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Preview could not open' })).toBeNull();
+    expect(storage.getItem('tend:supabase-auth')).toBe('classic-session-sentinel');
+  });
+
+  it('renders scored synthetic category data and preserves it when the session is restored again', async () => {
+    const storage = installMemoryStorage();
+    const data = scoredFaithFixture();
+    const originalRaw = JSON.stringify(createPreviewEnvelope(data));
+    storage.setItem(accountStorageKey, originalRaw);
+    const user = userEvent.setup();
+
+    const renderRestoredSession = () => {
+      const auth = fakeAuth(session);
+      render(
+        <PreviewIdentityHost
+          accessReady
+          supabaseUrl="https://project.supabase.co"
+          supabasePublishableKey="synthetic-public-key"
+          clientFactory={auth.clientFactory}
+        />
+      );
+    };
+
+    renderRestoredSession();
+    await screen.findByRole('button', { name: 'Sign out' });
+    await user.click(screen.getByRole('tab', { name: 'Anytime' }));
+    await screen.findByText('Synthetic daily prayer');
+    const faithRow = screen.getAllByRole('button', { name: 'Faith' })
+      .find(button => button.classList.contains('menu-area'));
+    expect(faithRow?.querySelector('.ma-score')?.textContent).not.toBe('—');
+    expect(storage.getItem(accountStorageKey)).toBe(originalRaw);
+
+    cleanup();
+    renderRestoredSession();
+    await screen.findByRole('button', { name: 'Sign out' });
+    await user.click(screen.getByRole('tab', { name: 'Anytime' }));
+    await screen.findByText('Synthetic daily prayer');
+    expect(screen.getByRole('region', { name: "Today's plan" })).toBeTruthy();
+    expect(storage.getItem(accountStorageKey)).toBe(originalRaw);
+  });
+
+  it('loads supported preceding-schema account data without losing its Rhythm history', async () => {
+    const storage = installMemoryStorage();
+    const data = scoredFaithFixture();
+    const precedingEnvelope = {
+      ...createPreviewEnvelope(data),
+      schemaVersion: PREVIEW_SCHEMA_VERSION - 1
+    };
+    const originalRaw = JSON.stringify(precedingEnvelope);
+    storage.setItem(accountStorageKey, originalRaw);
+    const user = userEvent.setup();
+    const auth = fakeAuth(session);
+    render(
+      <PreviewIdentityHost
+        accessReady
+        supabaseUrl="https://project.supabase.co"
+        supabasePublishableKey="synthetic-public-key"
+        clientFactory={auth.clientFactory}
+      />
+    );
+
+    await screen.findByRole('button', { name: 'Sign out' });
+    await user.click(screen.getByRole('tab', { name: 'Anytime' }));
+    await screen.findByText('Synthetic daily prayer');
+    const faithRow = screen.getAllByRole('button', { name: 'Faith' })
+      .find(button => button.classList.contains('menu-area'));
+    expect(faithRow?.querySelector('.ma-score')?.textContent).not.toBe('—');
+    expect(storage.getItem(accountStorageKey)).toBe(originalRaw);
+    expect(screen.queryByRole('heading', { name: 'Preview could not open' })).toBeNull();
   });
 
   it('sends password-reset requests back to the Preview root without revealing account existence', async () => {
