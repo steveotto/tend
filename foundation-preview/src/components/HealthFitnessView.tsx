@@ -9,27 +9,34 @@ import { BackButton } from './BackButton.tsx';
 import type { CardioViewProps } from './CardioView.tsx';
 import { CategoryHealthSummary } from './CategoryHealthSummary.tsx';
 import { CategoryHeader } from './CategoryHeader.tsx';
-import { AreaIcon } from './AreaIcon.tsx';
-import { DetailNavigationCard } from './Cards.tsx';
+import { MarriageIcon } from './MarriageIcon.tsx';
+import { FoundationCard } from './Cards.tsx';
+import { FoundationDetailHeader } from './FoundationDetailHeader.tsx';
 import { SegmentedTabs } from './SegmentedTabs.tsx';
 import type { SegmentedTab } from './SegmentedTabs.tsx';
 import { CategoryRhythmCollection } from './CategoryRhythmCollection.tsx';
 import { ArchivedRhythmsDialog } from './ArchivedRhythmsDialog.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
+import { RhythmSuggestionPicker } from './RhythmSuggestionPicker.tsx';
+import type { RhythmSuggestionPickerGroup } from './RhythmSuggestionPicker.tsx';
+import type { CategoryRhythmSuggestion, CategoryRhythmSuggestionCatalogue } from './MarriageView.tsx';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
-import type { Destination } from './AppNavigation.tsx';
-import { syntheticPeople } from '../domain/preview-data.ts';
+import type { CategoryTabNavigationRequest, Destination } from './AppNavigation.tsx';
+import { healthFoundationDefinitions, syntheticPeople } from '../domain/preview-data.ts';
 import type { FoundationPreview, PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
 import { peopleForRhythm, rhythmLastActivityLabel } from '../domain/preview-data.ts';
-import { isRhythmRelevantOnDate } from '../domain/category-rhythms.ts';
+import { isRhythmRelevantOnDate, rhythmsForSuggestionSource } from '../domain/category-rhythms.ts';
+import { effectiveRhythmSchedule, rhythmScheduleSummary, rhythmTimeLabel, rhythmTimeValueFromLabel } from '../domain/rhythm-schedule.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
 import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
+import { createHealthFitnessRollup } from './HealthRollupDiagram.tsx';
+import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 
 type HealthFitnessTab = 'today' | 'rhythms' | 'progress';
-type ProgressTab = 'strength' | 'cardio' | 'weight';
+type ProgressTab = (typeof healthFoundationDefinitions)[number]['progressId'];
 
 type HealthFitnessViewProps = {
   people?: readonly PersonPreview[];
@@ -49,8 +56,21 @@ type HealthFitnessViewProps = {
   onShowTendedChange?: (show: boolean) => void;
   initializing?: boolean;
   foundations: readonly FoundationPreview[];
+  suggestionCatalogue: CategoryRhythmSuggestionCatalogue;
+  categoryTabNavigationRequest?: CategoryTabNavigationRequest | null;
+  foundationNavigationRequest?: { foundationId: string; requestId: number } | null;
+  onFoundationNavigationHandled?: (requestId: number) => void;
   onAddRhythm: (event: MouseEvent<HTMLButtonElement>) => void;
-  onEditRhythm: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
+  onAddSuggestion?: (
+    suggestion: CategoryRhythmSuggestion,
+    event: MouseEvent<HTMLButtonElement>,
+    returnToSuggestions: (saved: boolean) => void
+  ) => void;
+  onEditRhythm: (
+    rhythm: RhythmPreview,
+    event: MouseEvent<HTMLButtonElement>,
+    returnToSuggestions?: (saved: boolean) => void
+  ) => void;
   onRhythmHistory: (id: string, event: MouseEvent<HTMLButtonElement>, returnTab: 'today' | 'rhythms') => void;
   onRestoreRhythm: (id: string) => void;
   onTendRhythm: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
@@ -58,19 +78,23 @@ type HealthFitnessViewProps = {
   onPersonSelect: (id: PersonId) => void;
   onOpenFoundation: (id: string, openerId: string, returnTab: 'today' | 'rhythms') => void;
   onOpenCategory: (id: Destination, openerId: string) => void;
+  healthScore: CategoryScoreSelection;
+  weightHealthScore: CategoryScoreSelection;
+  cardioHealthScore: CategoryScoreSelection;
 };
 
 const categoryTabs: readonly SegmentedTab<HealthFitnessTab>[] = [
+  { id: 'progress', label: 'Foundations', tabId: 'health-tab-foundations', panelId: 'health-panel-foundations' },
   { id: 'today', label: 'Today', tabId: 'health-tab-today', panelId: 'health-panel-today' },
-  { id: 'rhythms', label: 'Rhythms', tabId: 'health-tab-rhythms', panelId: 'health-panel-rhythms' },
-  { id: 'progress', label: 'Progress', tabId: 'health-tab-progress', panelId: 'health-panel-progress' }
+  { id: 'rhythms', label: 'Rhythms', tabId: 'health-tab-rhythms', panelId: 'health-panel-rhythms' }
 ];
 
-const progressDetails: readonly { id: ProgressTab; title: string; description: string }[] = [
-  { id: 'strength', title: 'Strength', description: 'Your training, workouts, and muscle balance.' },
-  { id: 'cardio', title: 'Cardio', description: 'Your activity and weekly goals.' },
-  { id: 'weight', title: 'Weight', description: 'Your measurements and goal progress.' }
-];
+const progressDetails = healthFoundationDefinitions.map(({ id: foundationId, progressId: id, title, description }) => ({
+  id,
+  foundationId,
+  title,
+  description
+}));
 
 export function HealthFitnessView({
   people = syntheticPeople,
@@ -90,7 +114,12 @@ export function HealthFitnessView({
   onShowTendedChange = () => undefined,
   initializing = false,
   foundations,
+  categoryTabNavigationRequest = null,
+  foundationNavigationRequest = null,
+  onFoundationNavigationHandled,
   onAddRhythm,
+  suggestionCatalogue,
+  onAddSuggestion,
   onEditRhythm,
   onRhythmHistory,
   onRestoreRhythm,
@@ -98,38 +127,46 @@ export function HealthFitnessView({
   onUndoRhythm,
   onPersonSelect,
   onOpenFoundation,
-  onOpenCategory
+  onOpenCategory,
+  healthScore,
+  weightHealthScore,
+  cardioHealthScore
 }: HealthFitnessViewProps) {
   const tendedRhythmIds = savedTendedRhythmIds
     ?? selectTendedRhythmDisplayIds(completedRhythms, satisfiedRhythmIds);
   const [selected, setSelected] = useState<HealthFitnessTab>('today');
   const [progressSelected, setProgressSelected] = useState<ProgressTab | null>(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [showArchivedRhythms, setShowArchivedRhythms] = useState(false);
-  const archiveOpenerRef = useRef<HTMLButtonElement | null>(null);
+  const suggestionsOpenerRef = useRef<HTMLButtonElement | null>(null);
+  const wasSuggestionsOpenRef = useRef(false);
+  const skipSuggestionsFocusRestoreRef = useRef(false);
+  const archiveOpenerRef = useRef<HTMLElement | null>(null);
   const wasArchiveOpenRef = useRef(false);
   const progressOpenerRef = useRef<HTMLButtonElement | null>(null);
   const progressScrollPositionRef = useRef<number | null>(null);
   const restoreProgressOverviewRef = useRef(false);
   const logReturnContextRef = useRef<{ tab: HealthFitnessTab; opener: HTMLButtonElement } | null>(null);
   const restoreLogFocusRef = useRef<HTMLButtonElement | null>(null);
-  const [startWorkoutRequest, setStartWorkoutRequest] = useState<{
-    requestId: number;
-    opener: HTMLButtonElement;
-  } | null>(null);
-  const [rhythmModeRequest, setRhythmModeRequest] = useState<
-    NonNullable<StrengthViewProps['pendingRhythmModeRequest']> | null
-  >(null);
-  const requestSequence = useRef(0);
+  const timeOptions = useRhythmTimeOptions();
+  const foundationDetailOpen = selected === 'progress' && progressSelected !== null;
   const todayRhythms = rhythms.filter(rhythm => isRhythmRelevantOnDate(rhythm, todayDate));
-  const summaryScore: CategoryScoreSelection = {
-    foundationIds: [],
-    eligibleFoundationIds: [],
-    excludedFoundationIds: [],
-    unresolvedFoundationIds: [],
-    consistency: null,
-    onTrack: null,
-    health: null
-  };
+  useEffect(() => {
+    if (categoryTabNavigationRequest?.categoryId !== 'health') return;
+    setProgressSelected(null);
+    setSelected('progress');
+  }, [categoryTabNavigationRequest?.requestId]);
+
+  useEffect(() => {
+    const request = foundationNavigationRequest;
+    if (!request) return;
+    const foundation = progressDetails.find(item => item.foundationId === request.foundationId);
+    if (foundation) {
+      setSelected('progress');
+      setProgressSelected(foundation.id);
+      onFoundationNavigationHandled?.(request.requestId);
+    }
+  }, [foundationNavigationRequest?.requestId]);
 
   useLayoutEffect(() => {
     if (progressSelected !== null || !restoreProgressOverviewRef.current) return;
@@ -152,6 +189,85 @@ export function HealthFitnessView({
     wasArchiveOpenRef.current = false;
     archiveOpenerRef.current?.focus({ preventScroll: true });
   }, [showArchivedRhythms]);
+
+  useEffect(() => {
+    if (showSuggestions) {
+      wasSuggestionsOpenRef.current = true;
+      return;
+    }
+    if (!wasSuggestionsOpenRef.current) return;
+    wasSuggestionsOpenRef.current = false;
+    if (skipSuggestionsFocusRestoreRef.current) {
+      skipSuggestionsFocusRestoreRef.current = false;
+      return;
+    }
+    suggestionsOpenerRef.current?.focus({ preventScroll: true });
+  }, [showSuggestions]);
+
+  function browseSuggestions(event: MouseEvent<HTMLButtonElement>) {
+    suggestionsOpenerRef.current = event.currentTarget;
+    setShowSuggestions(true);
+  }
+
+  function returnToSuggestions(saved: boolean) {
+    if (saved) setSelected('rhythms');
+    setShowSuggestions(true);
+  }
+
+  function beginSuggestionAdd(
+    suggestion: CategoryRhythmSuggestion,
+    event: MouseEvent<HTMLButtonElement>,
+    returnToPicker: (saved: boolean) => void
+  ) {
+    if (!onAddSuggestion) return;
+    skipSuggestionsFocusRestoreRef.current = true;
+    onAddSuggestion(suggestion, event, returnToPicker);
+  }
+
+  function beginSuggestionEdit(
+    rhythm: RhythmPreview,
+    event: MouseEvent<HTMLButtonElement>,
+    returnToPicker: (saved: boolean) => void
+  ) {
+    skipSuggestionsFocusRestoreRef.current = true;
+    onEditRhythm(rhythm, event, returnToPicker);
+  }
+
+  const archivedRhythmIds = new Set(archivedRhythms.map(rhythm => rhythm.id));
+  const suggestionPickerGroups: RhythmSuggestionPickerGroup[] = suggestionCatalogue.groups.map(group => ({
+    id: group.id,
+    title: group.title,
+    subtitle: group.subtitle,
+    items: group.suggestions.map(suggestion => ({
+      id: suggestion.sourceId,
+      title: suggestion.rhythm.title,
+      ...(suggestion.rhythm.description ? { description: suggestion.rhythm.description } : {}),
+      scheduleHint: suggestion.scheduleHint,
+      icon: suggestion.icon,
+      instances: rhythmsForSuggestionSource([...rhythms, ...archivedRhythms], suggestion.sourceId)
+        .map(instance => {
+          const archived = archivedRhythmIds.has(instance.id);
+          const schedule = effectiveRhythmSchedule(instance.schedule, instance.cadence);
+          const summary = schedule
+            ? rhythmScheduleSummary(schedule).replace(/\.$/, '')
+            : instance.cadence ?? 'Schedule unavailable';
+          const timeOfDay = instance.timeOfDay ?? rhythmTimeValueFromLabel(instance.timeLabel ?? '', timeOptions);
+          const timeLabel = timeOfDay ? rhythmTimeLabel(timeOfDay, timeOptions) : undefined;
+          return {
+            id: instance.id,
+            title: instance.title,
+            scheduleSummary: timeLabel && timeLabel !== 'Anytime' ? `${summary} · ${timeLabel}` : summary,
+            archived,
+            ...(!archived
+              ? { onEdit: (event: MouseEvent<HTMLButtonElement>, returnToPicker: (saved: boolean) => void) =>
+                  beginSuggestionEdit(instance, event, returnToPicker) }
+              : { onRestore: () => onRestoreRhythm(instance.id) })
+          };
+        }),
+      onAdd: (event: MouseEvent<HTMLButtonElement>, returnToPicker: (saved: boolean) => void) =>
+        beginSuggestionAdd(suggestion, event, returnToPicker)
+    }))
+  }));
 
   useEffect(() => {
     const pending = strength.pendingRhythmLog;
@@ -203,25 +319,6 @@ export function HealthFitnessView({
     setSelected(context.tab);
   }
 
-  function startWorkout(event: MouseEvent<HTMLButtonElement>) {
-    rememberLogContext(event.currentTarget);
-    requestSequence.current += 1;
-    setStartWorkoutRequest({ requestId: requestSequence.current, opener: event.currentTarget });
-    setSelected('progress');
-    setProgressSelected('strength');
-  }
-
-  function openQuickLog(
-    section: ProgressTab,
-    callback: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined,
-    event: MouseEvent<HTMLButtonElement>
-  ) {
-    rememberLogContext(event.currentTarget);
-    setSelected('progress');
-    setProgressSelected(section);
-    callback?.(event);
-  }
-
   function openRhythmLog(id: string, event: MouseEvent<HTMLButtonElement>) {
     const capability = rhythms.find(rhythm => rhythm.id === id)?.healthLogCapability;
     const section: ProgressTab = capability === 'cardio'
@@ -240,57 +337,62 @@ export function HealthFitnessView({
 
   function renderProgressOverviewLink() {
     return (
-      <BackButton onClick={returnToProgressOverview}>All progress</BackButton>
+      <BackButton onClick={returnToProgressOverview}>All Foundations</BackButton>
     );
   }
 
-  function renderStrengthRhythmAction(rhythm: RhythmPreview) {
-    const setting = strength.rhythms.find(item => item.rhythm.id === rhythm.id);
-    if (!setting) return null;
+  function renderFoundationHeading(foundationId: string) {
+    const foundation = foundations.find(item => item.id === foundationId);
+    if (!foundation) return null;
     return (
-      <button
-        type="button"
-        className="btn mini ghost"
-        onClick={event => {
-          rememberLogContext(event.currentTarget);
-          setSelected('progress');
-          setProgressSelected('strength');
-          requestSequence.current += 1;
-          setRhythmModeRequest({
-            requestId: requestSequence.current,
-            setting,
-            opener: event.currentTarget
-          });
-        }}
-      >
-        Workout mode
-      </button>
+      <FoundationDetailHeader
+        foundation={foundation}
+        headingId={`health-foundation-${foundation.id}-title`}
+      />
     );
   }
 
   return (
-    <main className="category-page category-page--with-header health-fitness-page" aria-labelledby="health-fitness-title" hidden={hidden}>
-      <CategoryHeader
-        title="Health & Fitness"
-        titleId="health-fitness-title"
-        subtitle="Structure beats good intentions"
-      />
+    <main
+      className={`category-page category-page--with-header health-fitness-page${foundationDetailOpen ? ' health-fitness-page--foundation-detail' : ''}`}
+      aria-labelledby={foundationDetailOpen ? undefined : 'health-fitness-title'}
+      aria-label={foundationDetailOpen ? 'Health & Fitness Foundation' : undefined}
+      hidden={hidden}
+    >
+      {!foundationDetailOpen && (
+        <>
+          <CategoryHeader
+            title="Health & Fitness"
+            titleId="health-fitness-title"
+            subtitle="Structure beats good intentions"
+          />
 
-      <CategoryHealthSummary
-        title="Health & Fitness Health"
-        score={summaryScore}
-        itemTerm={{ singular: 'measure', plural: 'measures' }}
-        explanation="Overall score not available yet."
-        interpretationNote="Strength, Cardio, and Weight remain available as separate views."
-        describeRollup={false}
-      />
+          <CategoryHealthSummary
+            title="Health & Fitness Health"
+            score={healthScore}
+            itemTerm={{ singular: 'measure', plural: 'measures' }}
+            explanation="Strength Health depends on eligible linked Rhythm completions; workouts do not automatically complete a Rhythm."
+            describeRollup={false}
+            coverageLabel={healthScore.consistency !== null && healthScore.onTrack !== null
+              ? 'Health & Fitness Consistency and On Track are both scored.'
+              : healthScore.consistency !== null
+                ? 'Health & Fitness Consistency is scored; On Track is unavailable.'
+                : healthScore.onTrack !== null
+                  ? 'Health & Fitness On Track is scored; Consistency is unavailable.'
+                  : 'Health & Fitness Consistency and On Track are unavailable.'}
+            consistencyDescription="The equal-weight average of available Strength, Cardio, and Weight Consistency measures."
+            onTrackDescription="The equal-weight average of available Strength, Cardio, and Weight On Track measures."
+            rollup={createHealthFitnessRollup('category', 'health-fitness')}
+          />
 
-      <SegmentedTabs
-        tabs={categoryTabs}
-        selectedTabId={selected}
-        ariaLabel="Health and Fitness"
-        onChange={setSelected}
-      />
+          <SegmentedTabs
+            tabs={categoryTabs}
+            selectedTabId={selected}
+            ariaLabel="Health and Fitness"
+            onChange={setSelected}
+          />
+        </>
+      )}
 
       <section id="health-panel-today" role="tabpanel" aria-labelledby="health-tab-today" hidden={selected !== 'today'}>
         <div className="health-fitness-today">
@@ -326,6 +428,7 @@ export function HealthFitnessView({
                             statusLabel={rhythmLastActivityLabel(rhythm, todayDate)}
                             people={peopleForRhythm(rhythm, people)}
                             foundations={foundations}
+                            relatedRhythms={rhythms}
                             onPersonSelect={onPersonSelect}
                             onOpenFoundation={(id, openerId) => onOpenFoundation(id, openerId, 'today')}
                             onOpenCategory={onOpenCategory}
@@ -363,13 +466,6 @@ export function HealthFitnessView({
               }}
             </TendedRhythmList>
           </section>
-          <div className="health-fitness-quick-actions" role="group" aria-label="Fitness quick actions">
-            <button type="button" className="btn mini" onClick={startWorkout}>Start workout</button>
-            <button type="button" className="btn mini ghost"
-              onClick={event => openQuickLog('cardio', cardio.onQuickLog, event)}>Log cardio</button>
-            <button type="button" className="btn mini ghost"
-              onClick={event => openQuickLog('weight', weight.onQuickLog, event)}>Weigh in</button>
-          </div>
         </div>
       </section>
 
@@ -388,7 +484,7 @@ export function HealthFitnessView({
           archivedRhythmsOpenerRef={archiveOpenerRef}
           showArchivedRhythms={showArchivedRhythms}
           onAddRhythm={onAddRhythm}
-          suggestionsUnavailableReason="Health & Fitness Rhythm suggestions are not available yet."
+          onBrowseSuggestions={browseSuggestions}
           onShowArchivedRhythms={() => setShowArchivedRhythms(true)}
           onPersonSelect={onPersonSelect}
           onOpenFoundation={(id, openerId) => onOpenFoundation(id, openerId, 'rhythms')}
@@ -401,52 +497,70 @@ export function HealthFitnessView({
           completionActionAccessibleLabelFor={rhythm => rhythm.healthLogCapability === 'cardio'
             ? 'Log run'
             : rhythm.healthLogCapability === 'weight' ? 'Log weigh-in' : 'Log workout'}
-          completedActionLabelFor={rhythm => rhythm.healthLogCapability === 'weight' ? 'Weighed in' : 'Logged'}
-          renderAdditionalActions={renderStrengthRhythmAction}
+            completedActionLabelFor={rhythm => rhythm.healthLogCapability === 'weight' ? 'Weighed in' : 'Logged'}
         />
       </section>
 
-      <section id="health-panel-progress" role="tabpanel" aria-labelledby="health-tab-progress" hidden={selected !== 'progress'}>
+      <section
+        id="health-panel-foundations"
+        {...(foundationDetailOpen
+          ? { role: 'region' as const, 'aria-label': 'Foundations' }
+          : { role: 'tabpanel' as const, 'aria-labelledby': 'health-tab-foundations' })}
+        hidden={selected !== 'progress'}
+      >
         <div className="health-fitness-progress">
-          <section className="health-fitness-progress__overview" aria-label="Progress categories" hidden={progressSelected !== null}>
+          <section className="health-fitness-progress__overview" aria-label="Foundations" hidden={progressSelected !== null}>
             <div className="marriage-foundation-list">
-              {progressDetails.map(detail => (
-                <DetailNavigationCard
-                  key={detail.id}
-                  title={detail.title}
-                  description={detail.description}
-                  icon={<AreaIcon id="health" />}
-                  onSelect={event => {
-                    progressOpenerRef.current = event.currentTarget;
-                    progressScrollPositionRef.current = document.scrollingElement?.scrollTop ?? null;
-                    restoreProgressOverviewRef.current = false;
-                    setProgressSelected(detail.id);
-                  }}
-                />
-              ))}
+              {progressDetails.map(detail => {
+                const foundation = foundations.find(item => item.id === detail.foundationId);
+                if (!foundation) return null;
+                const scores = {
+                  strength: strength.healthScore,
+                  cardio: cardioHealthScore,
+                  weight: weightHealthScore
+                };
+                return (
+                  <FoundationCard
+                    key={detail.id}
+                    foundation={foundation}
+                    variant="compact"
+                    score={scores[detail.id]?.health ?? null}
+                    scoreLabel={`${foundation.name} Health`}
+                    icon={<MarriageIcon group="foundations" id={foundation.id} />}
+                    onSelect={event => {
+                      progressOpenerRef.current = event.currentTarget;
+                      progressScrollPositionRef.current = document.scrollingElement?.scrollTop ?? null;
+                      restoreProgressOverviewRef.current = false;
+                      setProgressSelected(detail.id);
+                    }}
+                  />
+                );
+              })}
             </div>
           </section>
-          <section className="health-fitness-progress__detail tend-back-stack" aria-label="Strength progress" hidden={progressSelected !== 'strength'}>
+          <section className="health-fitness-progress__detail tend-back-stack" aria-label="Strength Foundation" hidden={progressSelected !== 'strength'}>
             {renderProgressOverviewLink()}
+            {renderFoundationHeading('health-strength')}
             <StrengthView
               {...strength}
-              quickStartRequest={startWorkoutRequest}
-              onQuickStartClosed={restoreLogContext}
-              pendingRhythmModeRequest={rhythmModeRequest}
-              onRhythmModeRequestOpened={requestId => {
-                setRhythmModeRequest(current => current?.requestId === requestId ? null : current);
-              }}
+              foundationNavigation
               onRhythmLogClosed={restoreLogContext}
-              onRhythmModeRequestClosed={restoreLogContext}
             />
           </section>
-          <section className="health-fitness-progress__detail tend-back-stack" aria-label="Cardio progress" hidden={progressSelected !== 'cardio'}>
+          <section className="health-fitness-progress__detail tend-back-stack" aria-label="Cardio Foundation" hidden={progressSelected !== 'cardio'}>
             {renderProgressOverviewLink()}
-            <CardioView {...cardio} onLogRequestClosed={restoreLogContext} />
+            {renderFoundationHeading('health-cardio')}
+            <CardioView {...cardio} foundationNavigation onLogRequestClosed={restoreLogContext} />
           </section>
-          <section className="health-fitness-progress__detail tend-back-stack" aria-label="Weight progress" hidden={progressSelected !== 'weight'}>
+          <section className="health-fitness-progress__detail tend-back-stack" aria-label="Weight Foundation" hidden={progressSelected !== 'weight'}>
             {renderProgressOverviewLink()}
-            <WeightView {...weight} onLogRequestClosed={restoreLogContext} />
+            {renderFoundationHeading('health-weight')}
+            <WeightView
+              {...weight}
+              healthScore={weightHealthScore}
+              foundationNavigation
+              onLogRequestClosed={restoreLogContext}
+            />
           </section>
         </div>
       </section>
@@ -470,6 +584,13 @@ export function HealthFitnessView({
           onClose={() => setShowArchivedRhythms(false)}
         />
       )}
+      <RhythmSuggestionPicker
+        title={suggestionCatalogue.title}
+        open={showSuggestions}
+        groups={suggestionPickerGroups}
+        onClose={() => setShowSuggestions(false)}
+        onReopen={returnToSuggestions}
+      />
     </main>
   );
 }

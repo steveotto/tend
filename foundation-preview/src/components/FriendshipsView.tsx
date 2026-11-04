@@ -28,6 +28,7 @@ import { ArchivedRhythmsDialog } from './ArchivedRhythmsDialog.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 import { PersonBadge } from './PersonBadge.tsx';
 import { PeopleCard } from './PeopleCard.tsx';
+import { ArchivedRhythmsControl } from './ArchivedRhythmsControl.tsx';
 import { AreaIcon } from './AreaIcon.tsx';
 import type { Destination } from './AppNavigation.tsx';
 import {
@@ -120,7 +121,7 @@ export function FriendshipsView({
   const wasHistoryOpen = useRef(false);
   const wasEditorOpen = useRef(false);
   const wasArchiveOpen = useRef(false);
-  const archiveOpener = useRef<HTMLButtonElement | null>(null);
+  const archiveOpener = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (historyPersonId !== null) {
       wasHistoryOpen.current = true;
@@ -332,6 +333,7 @@ export function FriendshipsView({
                 headingId={`friendships-rhythm-${rhythm.id}`}
                 people={peopleForRhythm(rhythm, people)}
                 foundations={foundations}
+                relatedRhythms={rhythms}
                 onPersonSelect={onPersonSelect}
                 onOpenFoundation={onOpenFoundation}
                 onOpenCategory={onOpenCategory}
@@ -354,15 +356,12 @@ export function FriendshipsView({
         ) : (
           <p className="friendships-empty">No active Rhythms yet.</p>
         )}
-        <button
-          ref={archiveOpener}
-          type="button"
-          className="category-archived-rhythms-toggle"
-          aria-haspopup="dialog"
-          onClick={() => setShowArchived(true)}
-        >
-          Archived rhythms ({archivedRhythms.length})
-        </button>
+        <ArchivedRhythmsControl
+          count={archivedRhythms.length}
+          openerRef={archiveOpener}
+          expanded={showArchived}
+          onOpen={() => setShowArchived(true)}
+        />
       </section>
 
       {historyPersonId !== null && !profileOpen && (

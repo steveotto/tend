@@ -4,6 +4,10 @@ import { AreaIcon } from './AreaIcon.tsx';
 
 export type Destination = 'today' | 'focus' | 'people' | 'more' | (typeof areas)[number]['id'];
 export type TextSize = 'small' | 'medium' | 'large';
+export type CategoryTabNavigationRequest = {
+  categoryId: Destination;
+  requestId: number;
+};
 
 type AppNavigationProps = {
   destination: Destination;

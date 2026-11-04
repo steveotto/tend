@@ -26,12 +26,14 @@ function TodayHarness({
   weatherController = unavailableWeather,
   satisfiedRhythmIds = new Set(['sample-pray-together']),
   showTended = true,
-  timeBlockSettings = createDefaultTimeBlockSettings()
+  timeBlockSettings = createDefaultTimeBlockSettings(),
+  categoryHealthScores = new Map()
 }: {
   weatherController?: TodayWeatherController;
   satisfiedRhythmIds?: ReadonlySet<string>;
   showTended?: boolean;
   timeBlockSettings?: TimeBlockSettings;
+  categoryHealthScores?: ReadonlyMap<string, number | null>;
 }) {
   const [focus, setFocus] = useState<TodayFocusId>('now');
   const [tendedVisible, setTendedVisible] = useState(showTended);
@@ -51,7 +53,7 @@ function TodayHarness({
         onShowTendedChange={setTendedVisible}
         rhythms={todayRhythms}
         rhythmScores={new Map()}
-        categoryHealthScores={new Map()}
+        categoryHealthScores={categoryHealthScores}
         search=""
         onNavigate={vi.fn()}
         onPersonSelect={vi.fn()}
@@ -72,6 +74,7 @@ function renderToday(
     satisfiedRhythmIds?: ReadonlySet<string>;
     showTended?: boolean;
     timeBlockSettings?: TimeBlockSettings;
+    categoryHealthScores?: ReadonlyMap<string, number | null>;
   } = {}
 ) {
   return render(<TodayHarness
@@ -81,6 +84,73 @@ function renderToday(
 }
 
 describe('Today time-frame interaction', () => {
+  it('shows the equal-weight average of available category Health values and synchronized coverage', () => {
+    renderToday(undefined, {
+      categoryHealthScores: new Map([
+        ['faith', 100],
+        ['marriage', 13],
+        ['parenting', 13]
+      ])
+    });
+
+    const overall = screen.getByRole('region', { name: 'Overall health summary' });
+    expect(within(overall).getByText('42', { selector: '.ov-score' })).toBeTruthy();
+    expect(within(overall).getByText('3 of 6 categories scored.')).toBeTruthy();
+    expect(within(overall).getByRole('meter', {
+      name: 'Overall health score 42 out of 100'
+    }).getAttribute('aria-valuenow')).toBe('42');
+    expect(within(overall).getByRole('button', { name: /Faith/ }).querySelector('.ma-score')?.textContent).toBe('100');
+    expect(within(overall).getByRole('button', { name: /Marriage/ }).querySelector('.ma-score')?.textContent).toBe('13');
+    expect(within(overall).getByRole('button', { name: /Parenting/ }).querySelector('.ma-score')?.textContent).toBe('13');
+  });
+
+  it('updates the displayed score, progress meter and coverage when Category scores change', () => {
+    const { rerender } = renderToday(undefined, {
+      categoryHealthScores: new Map([
+        ['faith', 100],
+        ['marriage', 13]
+      ])
+    });
+    const overall = screen.getByRole('region', { name: 'Overall health summary' });
+    expect(within(overall).getByText('57', { selector: '.ov-score' })).toBeTruthy();
+    expect(within(overall).getByText('2 of 6 categories scored.')).toBeTruthy();
+
+    rerender(<TodayHarness categoryHealthScores={new Map([
+      ['faith', 100],
+      ['marriage', 13],
+      ['parenting', 13]
+    ])} />);
+
+    expect(within(overall).getByText('42', { selector: '.ov-score' })).toBeTruthy();
+    expect(within(overall).getByText('3 of 6 categories scored.')).toBeTruthy();
+    expect(within(overall).getByRole('meter', { name: 'Overall health score 42 out of 100' })
+      .getAttribute('aria-valuenow')).toBe('42');
+  });
+
+  it('includes zero in the Today Overall Health average', () => {
+    renderToday(undefined, {
+      categoryHealthScores: new Map([['faith', 0]])
+    });
+
+    const overall = screen.getByRole('region', { name: 'Overall health summary' });
+    expect(within(overall).getByText('0', { selector: '.ov-score' })).toBeTruthy();
+    expect(within(overall).getByText('1 of 6 categories scored.')).toBeTruthy();
+    expect(within(overall).getByRole('meter', { name: 'Overall health score 0 out of 100' })
+      .getAttribute('aria-valuenow')).toBe('0');
+  });
+
+  it('shows a dash, empty meter and zero coverage when all category scores are unavailable', () => {
+    renderToday();
+
+    const overall = screen.getByRole('region', { name: 'Overall health summary' });
+    expect(within(overall).getByText('—', { selector: '.ov-score' })).toBeTruthy();
+    expect(within(overall).getByText('0 of 6 categories scored.')).toBeTruthy();
+    const meter = within(overall).getByRole('meter', { name: 'Overall health: Not enough data' });
+    expect(meter.getAttribute('aria-valuenow')).toBeNull();
+    expect(meter.getAttribute('aria-valuetext')).toBe('Score unavailable');
+    expect(meter.querySelector('.preview-score-marker')).toBeNull();
+  });
+
   it('defaults to Now, counts only the selected range, and keeps the selected block during the visit', async () => {
     const user = userEvent.setup();
     renderToday();
@@ -156,6 +226,10 @@ describe('Today time-frame interaction', () => {
       expect(toggle().getAttribute('aria-pressed')).toBe('false');
       expect(toggle().textContent).toBe('Show tended');
       expect(plan.querySelector('.show-tended-list__progress svg')?.getAttribute('aria-hidden')).toBe('true');
+      const tabList = within(plan).getByRole('tablist', { name: 'Plan items' });
+      const progressRow = plan.querySelector('.show-tended-list__progress-row');
+      expect(progressRow).toBeTruthy();
+      expect(tabList.compareDocumentPosition(progressRow!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
       await user.click(toggle());
       const hideToggle = within(plan).getByRole('button', { name: 'Hide tended' });
@@ -202,6 +276,31 @@ describe('Today time-frame interaction', () => {
     expect(document.activeElement).toBe(anytime);
     expect(anytime.getAttribute('aria-selected')).toBe('true');
     expect(panel.getAttribute('aria-labelledby')).toBe('plan-tab-anytime');
+  });
+
+  it('places the Scheduled time picker after the tended row and preserves tab-to-picker focus and filtering', async () => {
+    const user = userEvent.setup();
+    renderToday();
+    const plan = screen.getByRole('region', { name: "Today's plan" });
+    const tabList = within(plan).getByRole('tablist', { name: 'Plan items' });
+    const progressRow = plan.querySelector('.show-tended-list__progress-row')!;
+    const timePicker = within(plan).getByText('Now', { selector: 'summary span' }).closest('summary')!;
+    const panel = within(plan).getByRole('tabpanel');
+
+    expect(tabList.compareDocumentPosition(progressRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(progressRow.compareDocumentPosition(timePicker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(timePicker.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    within(tabList).getByRole('tab', { name: 'Scheduled' }).focus();
+    await user.tab();
+    expect(document.activeElement).toBe(within(plan).getByRole('button', { name: 'Hide tended' }));
+    await user.tab();
+    expect(document.activeElement).toBe(timePicker);
+
+    await user.click(timePicker);
+    await user.click(within(plan).getByRole('button', { name: /Morning/ }));
+    expect(within(plan).getByText('Morning', { selector: 'summary span' })).toBeTruthy();
+    expect(within(plan).getByRole('article', { name: 'Pray together' })).toBeTruthy();
   });
 
   it('keeps focus-frame hover and keyboard focus separate from activation', async () => {

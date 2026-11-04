@@ -1,4 +1,5 @@
 import {
+  areas,
   foundationCatalogue,
   foundationTerminologyForCategory,
   type FoundationPreview,
@@ -30,6 +31,53 @@ export function foundationCategoryId(
 ): RhythmCategoryId | undefined {
   const foundation = foundations.find(item => item.id === foundationId);
   return foundation?.categoryId;
+}
+
+export function requiredFoundationCategories(
+  categoryIds: readonly string[],
+  foundations: readonly FoundationPreview[] = foundationCatalogue
+): string[] {
+  return [...new Set(categoryIds)].filter(categoryId =>
+    foundations.some(foundation =>
+      foundation.categoryId === categoryId
+      && foundation.lifecycle === 'active'
+      && foundation.capabilities.rhythms
+    )
+  );
+}
+
+export function missingRequiredFoundationCategories(
+  categoryIds: readonly string[],
+  foundationIds: readonly string[],
+  foundations: readonly FoundationPreview[] = foundationCatalogue
+): string[] {
+  const required = requiredFoundationCategories(categoryIds, foundations);
+  return required.filter(categoryId => !foundationIds.some(id =>
+    foundations.some(foundation =>
+      foundation.id === id
+      && foundation.categoryId === categoryId
+      && foundation.lifecycle === 'active'
+      && foundation.capabilities.rhythms
+    )
+  ));
+}
+
+export function foundationRequirementMessage(categoryIds: readonly string[]): string {
+  const requirements = categoryIds.map(categoryId => {
+    const category = areas.find(area => area.id === categoryId)?.label ?? categoryId;
+    const term = foundationTerminologyForCategory(categoryId).singular;
+    return { category, term };
+  });
+  if (requirements.length === 1) {
+    const { category, term } = requirements[0]!;
+    return category === 'Faith'
+      ? 'Choose a Practice to include this Rhythm in Faith Health.'
+      : category === 'Health & Fitness'
+        ? 'Choose a Foundation for Health & Fitness to include this Rhythm in Health & Fitness scoring.'
+      : `Choose a ${term} for ${category} to include this Rhythm in ${category} Health.`;
+  }
+  const choices = requirements.map(({ category, term }) => `a ${term} for ${category}`);
+  return `Choose ${choices.slice(0, -1).join(', ')} and ${choices.at(-1)} to include this Rhythm in each category's Health.`;
 }
 
 export function foundationOwnershipError(
@@ -177,6 +225,10 @@ export function saveFoundationRhythmAssociations(
     const nextIds = linked ? [...existingIds, foundationId] : existingIds.filter(id => id !== foundationId);
     const ownershipError = foundationOwnershipError(existing.categoryIds, nextIds, foundations);
     if (ownershipError) return { error: ownershipError };
+    const missingCategories = missingRequiredFoundationCategories(existing.categoryIds, nextIds, foundations);
+    if (missingCategories.length > 0) {
+      return { error: foundationRequirementMessage(missingCategories) };
+    }
     const primaryFoundationId = rhythm.primaryFoundationId
       && nextIds.includes(rhythm.primaryFoundationId)
       ? rhythm.primaryFoundationId

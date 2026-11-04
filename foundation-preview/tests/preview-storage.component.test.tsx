@@ -400,17 +400,31 @@ function setDownloadMocks() {
 }
 
 describe('synthetic preview storage adapter and envelope', () => {
-  it('persists Show tended in schema 35 and safely defaults schema 34 data to off', () => {
+  it('persists Show tended and Calendar sources in schema 37 and migrates schemas 34/35', () => {
     const data = createSamplePreviewData();
     const current = createPreviewEnvelope({ ...data, showTended: true });
-    expect(current.schemaVersion).toBe(35);
+    expect(current.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
     expect(validatePreviewEnvelope(current, '2026-10-31')).toMatchObject({
       valid: true,
       envelope: { data: { showTended: true } }
     });
 
+    const schema35Data = { ...current.data } as Partial<typeof current.data>;
+    delete schema35Data.calendarSources;
+    const migrated35 = validatePreviewEnvelope({
+      ...current,
+      schemaVersion: 35,
+      data: schema35Data
+    }, '2026-10-31');
+    expect(migrated35).toMatchObject({
+      valid: true,
+      sourceSchemaVersion: 35,
+      envelope: { data: { showTended: true, calendarSources: [] } }
+    });
+
     const priorData = { ...current.data };
     delete (priorData as Partial<typeof priorData>).showTended;
+    delete (priorData as Partial<typeof priorData>).calendarSources;
     const migrated = validatePreviewEnvelope({
       ...current,
       schemaVersion: 34,
@@ -1348,7 +1362,8 @@ describe('synthetic preview storage adapter and envelope', () => {
       personNotes: [],
       prayerRequests: [],
       timeBlocks: createDefaultTimeBlockSettings(),
-      showTended: false
+      showTended: false,
+      calendarSources: []
     };
     const raw = JSON.stringify(createPreviewEnvelope(empty));
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
@@ -1408,7 +1423,8 @@ describe('synthetic preview storage adapter and envelope', () => {
       personNotes: [],
       prayerRequests: [],
       timeBlocks: createDefaultTimeBlockSettings(),
-      showTended: false
+      showTended: false,
+      calendarSources: []
     });
   });
 
@@ -2699,6 +2715,8 @@ describe('preview backup controls', () => {
     );
     const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     expect(within(dialog).getByText(/predates archive status, so its Rhythms will be restored as active/)).toBeTruthy();
+    expect(within(dialog).getByText(/1 active Rhythm lacks a required Practice\/Foundation link/)).toBeTruthy();
+    expect(within(dialog).getByText(/will still import unchanged, with no automatic link assignments/)).toBeTruthy();
     expect(onImport).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
     expect(onImport).toHaveBeenCalledWith({

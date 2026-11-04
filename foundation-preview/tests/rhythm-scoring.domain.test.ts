@@ -735,6 +735,41 @@ describe('daily occurrence scoring', () => {
       healthScore: null
     });
 
+    const dailyAfterCreationGrace = scored(input({
+      scoring: undefined,
+      records: [],
+      createdLocalDate: asOfDate,
+      createdTimeZone: 'UTC',
+      asOfDate: addCalendarDays(asOfDate, 1)
+    }));
+    expect(dailyAfterCreationGrace).toMatchObject({
+      consistency: {
+        kind: 'scored',
+        score: 0,
+        evidence: { eligibleDueCount: 1, completedCount: 0, notCompletedCount: 1 }
+      },
+      onTrack: { kind: 'scored', score: 90, evidence: { missedOccurrenceCount: 1 } },
+      healthScore: 22.5
+    });
+
+    const selectedWeekdayAfterCreationGrace = scored(input({
+      schedule: { frequency: 'weekly', weekdays: [5], weeklyMode: 'select-days' },
+      scoring: undefined,
+      records: [],
+      createdLocalDate: asOfDate,
+      createdTimeZone: 'UTC',
+      asOfDate: addCalendarDays(asOfDate, 1)
+    }));
+    expect(selectedWeekdayAfterCreationGrace).toMatchObject({
+      consistency: {
+        kind: 'scored',
+        score: 0,
+        evidence: { eligibleDueCount: 1, completedCount: 0, notCompletedCount: 1 }
+      },
+      onTrack: { kind: 'scored', score: 90, evidence: { missedOccurrenceCount: 1 } },
+      healthScore: 22.5
+    });
+
     const createdAndTendedToday = scored(input({
       scoring: undefined,
       records: [record('today', asOfDate)],

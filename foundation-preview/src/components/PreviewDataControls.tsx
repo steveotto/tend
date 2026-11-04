@@ -4,6 +4,10 @@ import { createPreviewEnvelope, parsePreviewBackup } from '../domain/preview-sta
 import type { PreviewData } from '../domain/preview-state.ts';
 import { analyzeLegacyTendImport } from '../domain/legacy-import.ts';
 import type { LegacyImportDryRun } from '../domain/legacy-import.ts';
+import {
+  foundationRhythmIds,
+  missingRequiredFoundationCategories
+} from '../domain/foundation-rhythm-associations.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import type { PreviewStorageDiagnostic } from '../storage/preview-storage.ts';
 
@@ -102,6 +106,10 @@ type PreviewDataControlsProps = {
   v33RecoveryError?: string | null;
   v34RecoveryCopy?: string | null;
   v34RecoveryError?: string | null;
+  v35RecoveryCopy?: string | null;
+  v35RecoveryError?: string | null;
+  v36RecoveryCopy?: string | null;
+  v36RecoveryError?: string | null;
 };
 
 function downloadText(filename: string, content: string, type: string): string | null {
@@ -200,7 +208,11 @@ export function PreviewDataControls({
   v33RecoveryCopy = null,
   v33RecoveryError = null,
   v34RecoveryCopy = null,
-  v34RecoveryError = null
+  v34RecoveryError = null,
+  v35RecoveryCopy = null,
+  v35RecoveryError = null,
+  v36RecoveryCopy = null,
+  v36RecoveryError = null
 }: PreviewDataControlsProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -211,6 +223,15 @@ export function PreviewDataControls({
   const [message, setMessage] = useState('');
   const activeRef = useRef(true);
   const readersRef = useRef(new Set<FileReader>());
+  const importedRhythmsMissingLinks = pendingAction?.kind === 'import'
+    ? pendingAction.data.savedRhythms.filter(rhythm =>
+        !pendingAction.data.archivedRhythmIds.includes(rhythm.id)
+        && missingRequiredFoundationCategories(
+          rhythm.categoryIds,
+          foundationRhythmIds(rhythm)
+        ).length > 0
+      )
+    : [];
 
   useEffect(() => {
     activeRef.current = true;
@@ -756,6 +777,26 @@ export function PreviewDataControls({
             Download original v34 recovery backup
           </button>
         )}
+        {v35RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v35-recovery.json',
+              v35RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v35 recovery backup downloaded.')}>
+            Download original v35 recovery backup
+          </button>
+        )}
+        {v36RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v36-recovery.json',
+              v36RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v36 recovery backup downloaded.')}>
+            Download original v36 recovery backup
+          </button>
+        )}
         <label className="btn mini ghost preview-data-controls__file-button">
           Import preview backup
           <input
@@ -871,6 +912,8 @@ export function PreviewDataControls({
       {v32RecoveryError && <p className="preview-data-controls__help" role="alert">The original v32 recovery copy could not be read: {v32RecoveryError}</p>}
       {v33RecoveryError && <p className="preview-data-controls__help" role="alert">The original v33 recovery copy could not be read: {v33RecoveryError}</p>}
       {v34RecoveryError && <p className="preview-data-controls__help" role="alert">The original v34 recovery copy could not be read: {v34RecoveryError}</p>}
+      {v35RecoveryError && <p className="preview-data-controls__help" role="alert">The original v35 recovery copy could not be read: {v35RecoveryError}</p>}
+      {v36RecoveryError && <p className="preview-data-controls__help" role="alert">The original v36 recovery copy could not be read: {v36RecoveryError}</p>}
       {rawRecoveryError && <p className="preview-data-controls__help" role="alert">The exact raw recovery copy could not be read: {rawRecoveryError}</p>}
       {message && <p className="preview-data-controls__message" role="status">{message}</p>}
       {pendingAction && (
@@ -886,6 +929,11 @@ export function PreviewDataControls({
           onClose={() => setPendingAction(null)}
         >
           <p className="preview-data-controls__help">Download a backup of the current preview before replacing it if you may need these changes later. Cancel leaves the current preview unchanged.</p>
+          {pendingAction.kind === 'import' && importedRhythmsMissingLinks.length > 0 && (
+            <p className="preview-data-controls__help" role="status">
+              {importedRhythmsMissingLinks.length} active {importedRhythmsMissingLinks.length === 1 ? 'Rhythm lacks' : 'Rhythms lack'} a required Practice/Foundation link. The backup will still import unchanged, with no automatic link assignments. After import, open the category Health explanation and edit each Rhythm to choose a matching Practice/Foundation.
+            </p>
+          )}
           {pendingAction.kind === 'import' && pendingAction.resolvedPersonCategories > 0 && (
             <p className="preview-data-controls__help">
               Multiple category memberships were resolved for {pendingAction.resolvedPersonCategories} {pendingAction.resolvedPersonCategories === 1 ? 'person' : 'people'} using Marriage, then Parenting, then Friend priority. The selected backup file remains unchanged.

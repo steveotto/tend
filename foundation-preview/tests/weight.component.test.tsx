@@ -2,6 +2,7 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WeightView } from '../src/components/WeightView.tsx';
+import type { CategoryScoreSelection } from '../src/domain/category-scoring.ts';
 import { createWeightData, poundsToKilograms } from '../src/domain/weight.ts';
 import type { WeightData } from '../src/domain/weight.ts';
 
@@ -10,17 +11,24 @@ afterEach(() => {
   document.querySelectorAll('[data-test-weight-opener]').forEach(element => element.remove());
 });
 
-function renderWeight(data: WeightData = createWeightData(), today = '2026-10-22') {
+function renderWeight(
+  data: WeightData = createWeightData(),
+  today = '2026-10-22',
+  healthScore?: CategoryScoreSelection,
+  foundationNavigation = false
+) {
   const onChange = vi.fn((_next: WeightData) => null);
   return {
     ...render(
     <WeightView
       data={data}
       today={today}
+      {...(healthScore ? { healthScore } : {})}
       rhythms={[]}
       archivedRhythmIds={new Set()}
       datedRhythmCompletions={[]}
       onChange={onChange}
+      foundationNavigation={foundationNavigation}
     />
     ),
     onChange
@@ -28,6 +36,47 @@ function renderWeight(data: WeightData = createWeightData(), today = '2026-10-22
 }
 
 describe('Weight preview presentation', () => {
+  it('shows independent Weight Health measures and the shared explanation on its Foundation page', async () => {
+    const user = userEvent.setup();
+    renderWeight(createWeightData(), '2026-10-22', {
+      foundationIds: ['health-weight'],
+      eligibleFoundationIds: ['health-weight'],
+      excludedFoundationIds: [],
+      unresolvedFoundationIds: [],
+      consistency: 80,
+      onTrack: 40,
+      health: 70
+    }, true);
+
+    expect(screen.getByRole('meter', { name: 'Weight Health score' }).getAttribute('aria-valuenow')).toBe('70');
+    expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('80');
+    expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('40');
+
+    await user.click(screen.getByRole('button', { name: 'Show Weight Health scoring details' }));
+    const dialog = screen.getByRole('dialog', { name: 'Weight Health details' });
+    expect(within(dialog).getByText(/75%/)).toBeTruthy();
+    expect(within(dialog).getByText(
+      'Weight Health reflects scheduled weigh-in Rhythms. Recorded weight, distance from the goal path, and the separate Goal Progress score do not affect it.'
+    )).toBeTruthy();
+    expect(within(dialog).getByText(/Goal Progress score do not affect it/)).toBeTruthy();
+  });
+
+  it('preserves a valid zero measure beside unavailable Weight Health values', () => {
+    renderWeight(createWeightData(), '2026-10-22', {
+      foundationIds: ['health-weight'],
+      eligibleFoundationIds: [],
+      excludedFoundationIds: ['health-weight'],
+      unresolvedFoundationIds: [],
+      consistency: 0,
+      onTrack: null,
+      health: null
+    }, true);
+
+    expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('0');
+    expect(screen.getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Weight Health: Not enough data' })).toBeTruthy();
+  });
+
   it('distinguishes recorded measurements, goal path, expected marker, and latest evidence', () => {
     const data: WeightData = {
       ...createWeightData(),
@@ -57,6 +106,9 @@ describe('Weight preview presentation', () => {
     expect(emptyProgress?.children[0]?.classList.contains('weight-progress-card')).toBe(true);
     expect(emptyProgress?.children[1]?.classList.contains('weight-history-card')).toBe(true);
     expect(screen.getByText('No valid weigh-ins to show.')).toBeTruthy();
+    const addWeighIn = screen.getByRole('button', { name: 'Add weigh-in' });
+    expect(screen.getAllByRole('button', { name: 'Add weigh-in' })).toHaveLength(1);
+    expect(addWeighIn.closest('.weight-history-card')).toBeTruthy();
 
     cleanup();
     const populated = renderWeight({
@@ -100,14 +152,14 @@ describe('Weight preview presentation', () => {
     const user = userEvent.setup();
     const { onChange } = renderWeight();
 
-    const opener = screen.getAllByRole('button', { name: 'Add weigh-in' })[0]!;
+    const opener = screen.getByRole('button', { name: 'Add weigh-in' });
     await user.click(opener);
     const dialog = screen.getByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(onChange).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(opener);
 
-    await user.click(screen.getAllByRole('button', { name: 'Add weigh-in' })[0]!);
+    await user.click(screen.getByRole('button', { name: 'Add weigh-in' }));
     const reopened = screen.getByRole('dialog');
     await user.selectOptions(within(reopened).getByLabelText('Weight unit'), 'lb');
     await user.type(within(reopened).getByLabelText('Weight (lb)'), '180');
@@ -173,7 +225,7 @@ describe('Weight preview presentation', () => {
   it('saves complete goals in canonical units and clears goals only after explicit save', async () => {
     const user = userEvent.setup();
     const { onChange } = renderWeight();
-    await user.click(screen.getByRole('button', { name: 'Edit goals' }));
+    await user.click(screen.getByRole('button', { name: 'Weight goal settings' }));
     const dialog = screen.getByRole('dialog');
     await user.type(within(dialog).getByLabelText('Starting weight (lb)'), '200');
     await user.type(within(dialog).getByLabelText('Starting date'), '2026-10-01');
@@ -194,7 +246,7 @@ describe('Weight preview presentation', () => {
   it('accepts fractional weight entry through the shared numeric control', async () => {
     const user = userEvent.setup();
     const { onChange } = renderWeight();
-    await user.click(screen.getByRole('button', { name: 'Edit goals' }));
+    await user.click(screen.getByRole('button', { name: 'Weight goal settings' }));
     const dialog = screen.getByRole('dialog', { name: 'Weight goals' });
     const start = within(dialog).getByLabelText('Starting weight (lb)') as HTMLInputElement;
     const target = within(dialog).getByLabelText('Target weight (lb)') as HTMLInputElement;
@@ -226,7 +278,7 @@ describe('Weight preview presentation', () => {
     };
     const { onChange } = renderWeight(data);
 
-    await user.click(screen.getByRole('button', { name: 'Edit goals' }));
+    await user.click(screen.getByRole('button', { name: 'Weight goal settings' }));
     const goals = screen.getByRole('dialog', { name: 'Weight goals' });
     await user.selectOptions(within(goals).getByLabelText('Weight unit'), 'lb');
     expect(within(goals).getByLabelText('Starting weight (lb)')).toHaveProperty('value', '198.42');
@@ -268,7 +320,7 @@ describe('Weight preview presentation', () => {
     };
     const { onChange } = renderWeight(fractional);
 
-    await user.click(screen.getByRole('button', { name: 'Edit goals' }));
+    await user.click(screen.getByRole('button', { name: 'Weight goal settings' }));
     const goals = screen.getByRole('dialog', { name: 'Weight goals' });
     const start = within(goals).getByLabelText('Starting weight (kg)') as HTMLInputElement;
     expect(start.value).toBe('90.12');
@@ -307,7 +359,7 @@ describe('Weight preview presentation', () => {
       weighIns: [{ id: 'step-record', date: '2026-10-20', weightKg: poundsToKilograms(173.5), notes: 'Keep note' }]
     };
     const { onChange } = renderWeight(data);
-    await user.click(screen.getByRole('button', { name: 'Edit goals' }));
+    await user.click(screen.getByRole('button', { name: 'Weight goal settings' }));
     const goals = screen.getByRole('dialog', { name: 'Weight goals' });
     const start = within(goals).getByLabelText('Starting weight (lb)') as HTMLInputElement;
     const target = within(goals).getByLabelText('Target weight (lb)') as HTMLInputElement;

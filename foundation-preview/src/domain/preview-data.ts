@@ -16,7 +16,7 @@ import { resolvePersonCategoryGroups } from './person-categories.ts';
 
 export type FoundationPreview = {
   id: string;
-  category: 'Faith' | 'Marriage' | 'Parenting' | 'Finances';
+  category: 'Faith' | 'Marriage' | 'Parenting' | 'Health & Fitness' | 'Finances';
   categoryId: CategoryId;
   name: string;
   description: string;
@@ -94,6 +94,115 @@ export type CategoryRhythmSuggestionTemplate = {
   secondaryFoundationIds: readonly string[];
   frequencyGuidance?: string;
 };
+
+export type HealthFitnessRhythmSuggestionTemplate = CategoryRhythmSuggestionTemplate & {
+  timeOfDay: RhythmTimeValue;
+  schedule?: RhythmSchedule;
+  healthLogCapability: 'weight' | 'cardio' | 'workout';
+  healthRunTarget?: HealthRunTarget;
+  healthWorkoutMode?: 'recommended' | 'specific';
+};
+
+export const healthFitnessRhythmSuggestionGroups: readonly CategoryRhythmSuggestionGroupDefinition[] = [
+  { id: 'daily', title: 'Daily', subtitle: 'Build simple routines around your health.' },
+  { id: 'weekly', title: 'Weekly', subtitle: 'Make regular time for strength and cardio.' },
+  { id: 'seasonal', title: 'Seasonal & Annual', subtitle: 'Plan check-ins and repeatable benchmarks.' }
+];
+
+export const healthFitnessRhythmSuggestions: readonly HealthFitnessRhythmSuggestionTemplate[] = [
+  {
+    sourceId: 'health.morning-weigh-in',
+    groupId: 'daily',
+    title: 'Morning weigh-in',
+    description: 'Record a weigh-in in your preferred unit.',
+    cadence: 'Daily',
+    scheduleHint: 'Daily · Early morning',
+    recommendedFrequency: 'daily',
+    iconId: 'health-weight',
+    primaryFoundationId: 'health-weight',
+    secondaryFoundationIds: [],
+    timeOfDay: 'early-morning',
+    schedule: { frequency: 'daily' },
+    healthLogCapability: 'weight'
+  },
+  {
+    sourceId: 'health.strength-training',
+    groupId: 'weekly',
+    title: 'Strength training',
+    description: 'Build a steady strength routine with a suggested or saved workout.',
+    cadence: 'Weekly',
+    scheduleHint: 'Monday–Thursday · Afternoon',
+    recommendedFrequency: 'weekly',
+    iconId: 'health-strength',
+    primaryFoundationId: 'health-strength',
+    secondaryFoundationIds: [],
+    timeOfDay: 'afternoon',
+    schedule: { frequency: 'weekly', weekdays: [1, 2, 3, 4] },
+    healthLogCapability: 'workout',
+    healthWorkoutMode: 'recommended'
+  },
+  {
+    sourceId: 'health.saturday-long-run',
+    groupId: 'weekly',
+    title: 'Saturday long run',
+    description: 'Set aside time for a run and record the distance you cover.',
+    cadence: 'Weekly',
+    scheduleHint: 'Saturday · Morning',
+    recommendedFrequency: 'weekly',
+    iconId: 'health-cardio',
+    primaryFoundationId: 'health-cardio',
+    secondaryFoundationIds: [],
+    timeOfDay: 'morning',
+    schedule: { frequency: 'weekly', weekdays: [6] },
+    healthLogCapability: 'cardio'
+  },
+  {
+    sourceId: 'health.easy-5k',
+    groupId: 'weekly',
+    title: 'Easy 5K',
+    description: 'Log an easy run and enter the distance you actually cover.',
+    cadence: 'Weekly',
+    scheduleHint: 'Wednesday · Afternoon · 5 km target',
+    recommendedFrequency: 'weekly',
+    iconId: 'health-cardio',
+    primaryFoundationId: 'health-cardio',
+    secondaryFoundationIds: [],
+    timeOfDay: 'afternoon',
+    schedule: { frequency: 'weekly', weekdays: [3] },
+    healthLogCapability: 'cardio',
+    healthRunTarget: { distance: 5, unit: 'km' }
+  },
+  {
+    sourceId: 'health.annual-10k',
+    groupId: 'seasonal',
+    title: 'Annual 10K',
+    description: 'Choose a date for your annual 10K and record the distance you run.',
+    cadence: 'Yearly',
+    scheduleHint: 'Annually · Morning · Choose a date',
+    recommendedFrequency: 'yearly',
+    iconId: 'health-cardio',
+    primaryFoundationId: 'health-cardio',
+    secondaryFoundationIds: [],
+    timeOfDay: 'morning',
+    healthLogCapability: 'cardio',
+    healthRunTarget: { distance: 10, unit: 'km' }
+  },
+  {
+    sourceId: 'health.seasonal-strength-check-in',
+    groupId: 'seasonal',
+    title: 'Seasonal strength check-in',
+    description: 'Choose a saved workout to repeat as a strength benchmark.',
+    cadence: 'Quarterly',
+    scheduleHint: 'Quarterly · Afternoon · Choose a start date',
+    recommendedFrequency: 'quarterly',
+    iconId: 'health-strength',
+    primaryFoundationId: 'health-strength',
+    secondaryFoundationIds: [],
+    timeOfDay: 'afternoon',
+    healthLogCapability: 'workout',
+    healthWorkoutMode: 'specific'
+  }
+];
 
 export const parentingRhythmSuggestionGroups: readonly CategoryRhythmSuggestionGroupDefinition[] = [
   { id: 'daily-connection', title: 'Daily Connection', subtitle: 'Small moments of attention and conversation.' },
@@ -350,6 +459,10 @@ export type PersonPreview = {
 
 export type PersonId = string;
 export type PersonPickerGroupId = 'marriage' | 'parenting' | 'friends';
+export type HealthRunTarget = {
+  distance: number;
+  unit: 'km' | 'mi';
+};
 
 export type PersonPickerGroup = {
   id: PersonPickerGroupId;
@@ -491,7 +604,8 @@ export type RhythmPreview = {
   dailyBackfillAllowed?: boolean;
   timeOfDay?: RhythmTimeValue;
   personal?: boolean;
-  healthLogCapability?: 'weight' | 'cardio';
+  healthLogCapability?: 'weight' | 'cardio' | 'workout' | null;
+  healthRunTarget?: HealthRunTarget | null;
 };
 
 export type RhythmCompletion = {
@@ -532,6 +646,38 @@ const ongoingMarriageCapabilities: FoundationCapabilities = {
   numericGoals: false,
   completion: 'ongoing'
 };
+
+export const healthFoundationDefinitions = [
+  {
+    id: 'health-strength',
+    progressId: 'strength',
+    title: 'Strength',
+    description: 'Your training, workouts, and muscle balance.'
+  },
+  {
+    id: 'health-cardio',
+    progressId: 'cardio',
+    title: 'Cardio',
+    description: 'Your activity and weekly goals.'
+  },
+  {
+    id: 'health-weight',
+    progressId: 'weight',
+    title: 'Weight',
+    description: 'Your measurements and goal progress.'
+  }
+] as const;
+
+export const healthFoundations: readonly FoundationPreview[] = healthFoundationDefinitions.map(definition => ({
+  id: definition.id,
+  category: 'Health & Fitness',
+  categoryId: 'health',
+  name: definition.title,
+  description: definition.description,
+  capabilities: ongoingMarriageCapabilities,
+  lifecycle: 'active',
+  iconId: definition.id
+}));
 
 export type MarriageExampleId = 'populated' | 'empty';
 
@@ -1260,6 +1406,7 @@ export const foundationCatalogue: readonly FoundationPreview[] = [
   ...marriageFoundations,
   ...parentingFoundations,
   ...faithPractices,
+  ...healthFoundations,
   financeFoundation
 ];
 

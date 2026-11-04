@@ -97,6 +97,7 @@ describe('Cardio domain', () => {
   it('accepts an explicit Cardio logging capability only for a Health & Fitness Rhythm', () => {
     const cardioDraft = createRhythmDraft(['health']);
     cardioDraft.title = 'Run logging';
+    cardioDraft.primaryFoundationId = 'health-cardio';
     cardioDraft.healthLogCapability = 'cardio';
     expect(validateRhythmDraft(cardioDraft)).toEqual({});
 
@@ -129,6 +130,48 @@ describe('Cardio domain', () => {
       runs: 3, miles: 10, runProgress: 100, mileageProgress: 100,
       score: 100, remainingRuns: 0, remainingMiles: 0
     });
+  });
+
+  it('gives a qualifying Rhythm-linked run the same single Cardio credit as a direct run', () => {
+    const data: CardioData = {
+      ...createCardioData(),
+      goals: { weeklyRunTarget: 2, weeklyMileTarget: 8 }
+    };
+    const direct = saveCardioRun(data, run({ id: 'direct-entry' }), today);
+    const linked = saveCardioRun(data, run({
+      id: 'rhythm-entry',
+      rhythmId: 'cardio-rhythm',
+      rhythmOccurrence: today,
+      completionId: 'completion-from-run'
+    }), today);
+
+    expect(direct.valid).toBe(true);
+    expect(linked.valid).toBe(true);
+    if (!direct.valid || !linked.valid) return;
+    expect(selectCardioProgress(direct.data, today)).toMatchObject({ runs: 1, miles: 3, score: 37.5 });
+    expect(selectCardioProgress(linked.data, today)).toMatchObject({ runs: 1, miles: 3, score: 37.5 });
+
+    const rhythmCompletedWithoutRun = {
+      ...data,
+      runs: [...data.runs]
+    };
+    expect(selectCardioProgress(rhythmCompletedWithoutRun, today))
+      .toMatchObject({ runs: 0, miles: 0, score: 0 });
+  });
+
+  it('does not add Cardio credit for a Rhythm completion without a saved run', () => {
+    const data: CardioData = {
+      ...createCardioData(),
+      goals: { weeklyRunTarget: 2, weeklyMileTarget: 8 }
+    };
+    const before = selectCardioProgress(data, today);
+    const result = command(data, data, { completions: [completion('completion-only', today)] });
+
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.completionState.datedRhythmCompletions).toHaveLength(1);
+    expect(result.cardio.runs).toEqual([]);
+    expect(selectCardioProgress(result.cardio, today)).toEqual(before);
   });
 
   it('blends four completed Cardio weeks with current-week progress without rounding', () => {

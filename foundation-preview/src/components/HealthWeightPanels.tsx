@@ -1,13 +1,22 @@
 import { HEALTH_CONSISTENCY_WEIGHT, HEALTH_ON_TRACK_WEIGHT } from '../domain/rhythm-history.ts';
+import { formatScore } from '../domain/score-display.ts';
 
 type HealthWeightPanelsProps = {
+  consistencyScore?: number | null;
+  onTrackScore?: number | null;
+  consistencyCaption?: string;
+  onTrackCaption?: string;
   consistencyDescription?: string;
   onTrackDescription?: string;
 };
 
 export function HealthWeightPanels({
-  consistencyDescription = 'Your longer-term pattern.',
-  onTrackDescription = 'Up to date'
+  consistencyScore,
+  onTrackScore,
+  consistencyCaption,
+  onTrackCaption,
+  consistencyDescription,
+  onTrackDescription
 }: HealthWeightPanelsProps) {
   const consistencyWeight = HEALTH_CONSISTENCY_WEIGHT * 100;
   const onTrackWeight = HEALTH_ON_TRACK_WEIGHT * 100;
@@ -23,8 +32,18 @@ export function HealthWeightPanels({
           <strong>{consistencyWeight}%</strong>
         </div>
         <span className="rhythm-history-view__health-weight-name">Consistency</span>
-        {consistencyDescription && (
-          <span className="rhythm-history-view__health-weight-subtitle">{consistencyDescription}</span>
+        {consistencyScore !== undefined && (
+          <span className="rhythm-history-view__health-weight-score">
+            {consistencyScore !== null && Number.isFinite(consistencyScore)
+              ? `${formatScore(consistencyScore)}%`
+              : '—'}
+          </span>
+        )}
+        <span className="rhythm-history-view__health-weight-subtitle">
+          {consistencyCaption ?? consistencyDescription ?? 'Your longer-term pattern.'}
+        </span>
+        {consistencyCaption && consistencyDescription && (
+          <span className="rhythm-history-view__health-weight-description">{consistencyDescription}</span>
         )}
       </div>
       <div className="rhythm-history-view__health-weight-panel rhythm-history-view__health-weight-panel--on-track">
@@ -36,8 +55,18 @@ export function HealthWeightPanels({
           <strong>{onTrackWeight}%</strong>
         </div>
         <span className="rhythm-history-view__health-weight-name">On Track</span>
-        {onTrackDescription && (
-          <span className="rhythm-history-view__health-weight-subtitle">{onTrackDescription}</span>
+        {onTrackScore !== undefined && (
+          <span className="rhythm-history-view__health-weight-score">
+            {onTrackScore !== null && Number.isFinite(onTrackScore)
+              ? `${formatScore(onTrackScore)}%`
+              : '—'}
+          </span>
+        )}
+        <span className="rhythm-history-view__health-weight-subtitle">
+          {onTrackCaption ?? onTrackDescription ?? 'Up to date'}
+        </span>
+        {onTrackCaption && onTrackDescription && (
+          <span className="rhythm-history-view__health-weight-description">{onTrackDescription}</span>
         )}
       </div>
     </div>

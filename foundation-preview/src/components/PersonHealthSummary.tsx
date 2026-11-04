@@ -47,12 +47,11 @@ export function PersonHealthSummary({
       coverage={coverage}
       expanded={expanded}
       onExpandedChange={setExpanded}
+      consistencyDescription={`The average Consistency score of eligible ${pluralTerm}.`}
+      onTrackDescription={`The average On Track score of eligible ${pluralTerm}.`}
     >
       <p className="category-health-summary__explanation">
         Each scored {itemTerm} counts equally.
-      </p>
-      <p className="category-health-summary__explanation">
-        Health combines 75% Consistency and 25% On Track.
       </p>
       <p className="category-health-summary__explanation">
         Only {pluralTerm} with both measures scored count; missing and unscored values are excluded, not treated as zero.

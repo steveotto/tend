@@ -2,7 +2,8 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useScoringInstant } from './useScoringInstant.ts';
 import type { MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
-import type { FoundationPreview, PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
+import { areas } from '../domain/preview-data.ts';
+import type { CategoryId, FoundationPreview, PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
 import { orderedCompletions } from '../domain/preview-data.ts';
 import type { RhythmCompletion } from '../domain/preview-data.ts';
 import type { DatedRhythmCompletion, RhythmCompletionRecord } from '../domain/rhythm-completion.ts';
@@ -53,7 +54,8 @@ import { RhythmSeasonCard } from './RhythmSeasonCard.tsx';
 import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
 import { formatScore } from '../domain/score-display.ts';
 import { RhythmPersonalBadge } from './RhythmPersonalBadge.tsx';
-import { HealthScoreBreakdown, HealthScoreMeasures } from './HealthScoreBreakdown.tsx';
+import { HealthScoreBreakdown, HealthScoreInfoButton, HealthScoreMeasures } from './HealthScoreBreakdown.tsx';
+import { HealthScoreDetailsDialog } from './HealthScoreDetailsDialog.tsx';
 export { HealthScoreMeter } from './HealthScoreBreakdown.tsx';
 import { RhythmCompletionHistoryChart } from './RhythmCompletionHistoryChart.tsx';
 import { RhythmCompletionForm } from './RhythmCompletionForm.tsx';
@@ -61,7 +63,9 @@ import { RhythmAssociationRows } from './RhythmAssociationRows.tsx';
 import { RhythmSeasonCorrectionDialog } from './RhythmSeasonCorrectionDialog.tsx';
 import type { RhythmSeasonEditDialogDraft } from './RhythmSeasonCorrectionDialog.tsx';
 import { RhythmSeasonDeleteDialog } from './RhythmSeasonDeleteDialog.tsx';
-import { HealthScoreExplanation } from './HealthScoreExplanation.tsx';
+import { HealthScoreDetailsContent } from './HealthScoreDetailsContent.tsx';
+import type { HealthRollupConfig } from './HealthRollupDiagram.tsx';
+import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
 import type { Destination } from './AppNavigation.tsx';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 
@@ -85,6 +89,10 @@ const metricCopy = {
   }
 } as const;
 
+function isCategoryId(value: string): value is CategoryId {
+  return areas.some(area => area.id === value);
+}
+
 export function RhythmHistoryView({
   rhythm,
   people,
@@ -106,11 +114,13 @@ export function RhythmHistoryView({
   onUndoSeasonRange,
   onOpenCategory,
   foundations,
+  relatedRhythms = [rhythm],
   onOpenFoundation
 }: {
   rhythm: RhythmPreview;
   people?: readonly PersonPreview[];
   foundations?: readonly FoundationPreview[];
+  relatedRhythms?: readonly RhythmPreview[];
   onPersonSelect?: (personId: PersonId) => void;
   onOpenFoundation?: (foundationId: string, openerId: string) => void;
   archived?: boolean;
@@ -164,6 +174,94 @@ export function RhythmHistoryView({
     timeZone: scoringTimeZone
   } as const;
   const score = selectRhythmScore(scoringInput);
+  const foundationById = new Map((foundations ?? []).map(foundation => [foundation.id, foundation]));
+  const linkedFoundationIds = foundationRhythmIds(rhythm);
+  const categoryLabels: Readonly<Record<string, string>> = {
+    faith: 'Faith',
+    marriage: 'Marriage',
+    parenting: 'Parenting',
+    health: 'Health & Fitness',
+    finances: 'Finances',
+    friendships: 'Friendships'
+  };
+  const candidateRhythms = [
+    rhythm,
+    ...relatedRhythms.filter(candidate => candidate.id !== rhythm.id)
+  ];
+  const linkedRhythmItems = candidateRhythms
+    .filter(candidate => candidate.id === rhythm.id
+      || linkedFoundationIds.some(id => foundationRhythmIds(candidate).includes(id)))
+    .map(candidate => ({
+      id: candidate.id,
+      label: candidate.title,
+      explanation: 'Health combines this Rhythm’s Consistency and On Track scores. Each measure uses this Rhythm’s schedule and eligible completion history; detailed scoring evidence is below.',
+      relatedItemIds: {
+        foundations: foundationRhythmIds(candidate),
+        categories: candidate.categoryIds ?? []
+      }
+    }));
+  const foundationItems = linkedFoundationIds.map(id => {
+    const foundation = foundationById.get(id);
+    return {
+      id,
+      label: foundation?.name ?? `${id} (unresolved)`,
+      ...(foundation ? { foundationIconId: foundation.iconId ?? foundation.id } : {}),
+      explanation: `This Rhythm is linked to ${foundation?.name ?? `unresolved item ${id}`}.`,
+      relatedItemIds: {
+        rhythms: candidateRhythms
+          .filter(candidate => foundationRhythmIds(candidate).includes(id))
+          .map(candidate => candidate.id),
+        categories: foundation ? [foundation.categoryId] : rhythm.categoryIds ?? []
+      }
+    };
+  });
+  const categoryIds = [...new Set([
+    ...(rhythm.categoryIds ?? []),
+    ...foundationItems.flatMap(item => {
+      const foundation = foundationById.get(item.id);
+      return foundation ? [foundation.categoryId] : [];
+    })
+  ])];
+  const categoryItems = categoryIds.map(id => {
+    const linkedFoundationItems = foundationItems.filter(item =>
+      foundationById.get(item.id)?.categoryId === id
+    );
+    return {
+      id,
+      label: categoryLabels[id] ?? `${id} (unresolved)`,
+      ...(isCategoryId(id) ? { categoryIconId: id } : {}),
+      explanation: `This Rhythm is associated with ${categoryLabels[id] ?? `unresolved category ${id}`}.`,
+      relatedItemIds: { foundations: linkedFoundationItems.map(item => item.id) }
+    };
+  });
+  const rhythmRollupGroups = [
+    {
+      id: 'rhythms',
+      label: 'Rhythms',
+      items: linkedRhythmItems,
+      emptyItem: {
+        id: 'no-rhythms',
+        label: 'No Rhythms',
+        explanation: 'No Rhythms are linked to the selected Foundation or Practice.',
+        usesStandardWeights: false
+      }
+    },
+    ...(foundationItems.length > 0
+      ? [{ id: 'foundations', label: 'Foundations or Practices', items: foundationItems }]
+      : []),
+    ...(categoryItems.length > 0
+      ? [{ id: 'categories', label: 'Categories', items: categoryItems }]
+      : [])
+  ];
+  const rhythmRollup: HealthRollupConfig = {
+    groups: rhythmRollupGroups,
+    initialGroupId: 'rhythms',
+    initialItemId: rhythm.id,
+    footer: [
+      'Health combines Consistency and On Track using the established Rhythm scoring policy.',
+      '— means unavailable; 0 is a valid score.'
+    ]
+  };
   const scheduleConversionHandler = !rhythm.schedule && rhythm.cadence !== 'Daily'
     ? onChooseSchedule
     : undefined;
@@ -180,11 +278,11 @@ export function RhythmHistoryView({
   const seasonUndoButtonRef = useRef<HTMLButtonElement>(null);
   const deleteButtonsRef = useRef(new Map<string, HTMLButtonElement>());
   const deleteCancelButtonRef = useRef<HTMLButtonElement>(null);
+  const scoreInfoButtonRef = useRef<HTMLButtonElement>(null);
   const previousEditingIdRef = useRef<string | null>(null);
   const previousLoggingMomentRef = useRef(false);
   const previousDeleteIdRef = useRef<string | null>(null);
   const scoreDetailsId = useId();
-  const healthCalculationId = useId();
   const seasonsDisclosureId = useId();
   const seasonsContentId = useId();
   const [seasonsDisclosure, setSeasonsDisclosure] = useState({
@@ -226,6 +324,10 @@ export function RhythmHistoryView({
   const [loggedMomentsExpanded, setLoggedMomentsExpanded] = useState(false);
   const [logAnnouncement, setLogAnnouncement] = useState('');
   const [scoreDetailsExpanded, setScoreDetailsExpanded] = useState(false);
+  const closeScoreDetails = () => {
+    setScoreDetailsExpanded(false);
+    requestAnimationFrame(() => scoreInfoButtonRef.current?.focus());
+  };
   const [editingSeasonId, setEditingSeasonId] = useState<string | null>(null);
   const [displayOnlyEditingSeason, setDisplayOnlyEditingSeason] = useState<SeasonCardSchedule | null>(null);
   const [pendingSeasonEditDraft, setPendingSeasonEditDraft] = useState<{
@@ -585,39 +687,16 @@ export function RhythmHistoryView({
             onTrackCaption={metricCopy.onTrack.shortDescription}
             ariaLabel="Health score summary"
             headingAction={(
-              <button
-                type="button"
-                className="rhythm-history-view__score-info"
-                aria-label={`${scoreDetailsExpanded ? 'Hide' : 'Show'} Consistency and On Track score details`}
-                aria-expanded={scoreDetailsExpanded}
-                aria-controls={`${healthCalculationId} ${scoreDetailsId}`}
+              <HealthScoreInfoButton
+                ref={scoreInfoButtonRef}
+                label="Show Consistency and On Track score details"
+                controls={scoreDetailsId}
+                expanded={scoreDetailsExpanded}
                 onClick={() => setScoreDetailsExpanded(expanded => !expanded)}
-              >
-                <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                  <circle cx="8" cy="8" r="6.25" />
-                  <path d="M8 7.2v4M8 4.8h.01" />
-                </svg>
-              </button>
+              />
             )}
             showMeasures={false}
           />
-          <div
-            id={healthCalculationId}
-            className="rhythm-history-view__health-calculation-disclosure"
-            hidden={!scoreDetailsExpanded}
-          >
-            {score.consistency.kind === 'scored'
-              && score.onTrack.kind === 'scored'
-              && score.healthScore !== null
-              ? (
-                <HealthScoreExplanation />
-              )
-              : (
-                <HealthScoreExplanation
-                  explanation={healthUnavailableExplanation(score.consistency, score.onTrack)}
-                />
-              )}
-          </div>
           <div className="rhythm-history-view__score-summary-divider" aria-hidden="true" />
           <HealthScoreMeasures
             healthScore={score.healthScore}
@@ -635,46 +714,77 @@ export function RhythmHistoryView({
             onTrackCaption={metricCopy.onTrack.shortDescription}
             showHealthMeter={false}
           />
-          <div
-            id={scoreDetailsId}
-            className="rhythm-history-view__score-details-grid"
-            role="group"
-            aria-label="Consistency and On Track score details"
-            hidden={!scoreDetailsExpanded}
-          >
-            {sharedUnscoredExplanation
-              ? scheduleConversionHandler && score.onTrack.kind === 'unscored'
-                ? (
-                  <div className="rhythm-history-view__score-details-columns">
-                    <div className="rhythm-history-view__score-details-column">
-                      <UnscoredBreakdown
-                        metric={score.onTrack}
-                        onChooseSchedule={scheduleConversionHandler}
-                      />
-                    </div>
-                  </div>
-                )
-                : null
-              : (
-              <div className="rhythm-history-view__score-details-columns">
-                <div className="rhythm-history-view__score-details-column">
-                  {score.consistency.kind === 'scored'
-                    ? <ConsistencyScoreBreakdown metric={score.consistency} schedule={effectiveSchedule} />
+          {scoreDetailsExpanded && (
+            <HealthScoreDetailsDialog
+              title="Rhythm Health details"
+              onClose={closeScoreDetails}
+              className="rhythm-history-view__health-details-dialog"
+            >
+              <HealthScoreDetailsContent
+                title="Health"
+                ariaLabel="Rhythm Health score details"
+                score={score.healthScore}
+                consistency={{
+                  score: score.consistency.kind === 'scored' ? score.consistency.score : null,
+                  state: score.consistency.kind,
+                  ...(score.consistency.kind === 'unscored' ? { explanation: score.consistency.explanation } : {})
+                }}
+                onTrack={{
+                  score: score.onTrack.kind === 'scored' ? score.onTrack.score : null,
+                  state: score.onTrack.kind,
+                  ...(score.onTrack.kind === 'unscored' ? { explanation: score.onTrack.explanation } : {})
+                }}
+                consistencyCaption={metricCopy.consistency.shortDescription}
+                onTrackCaption={metricCopy.onTrack.shortDescription}
+                rollup={rhythmRollup}
+                {...(score.consistency.kind === 'scored'
+                  && score.onTrack.kind === 'scored'
+                  && score.healthScore !== null
+                  ? {}
+                  : { unavailableExplanation: healthUnavailableExplanation(score.consistency, score.onTrack) })}
+              >
+                <div
+                  id={scoreDetailsId}
+                  className="rhythm-history-view__score-details-grid"
+                  role="group"
+                  aria-label="Consistency and On Track score details"
+                >
+                  {sharedUnscoredExplanation
+                    ? scheduleConversionHandler && score.onTrack.kind === 'unscored'
+                      ? (
+                        <div className="rhythm-history-view__score-details-columns">
+                          <div className="rhythm-history-view__score-details-column">
+                            <UnscoredBreakdown
+                              metric={score.onTrack}
+                              onChooseSchedule={scheduleConversionHandler}
+                            />
+                          </div>
+                        </div>
+                      )
+                      : null
                     : (
-                      <UnscoredBreakdown
-                        metric={score.consistency}
-                        {...(scheduleConversionHandler ? { onChooseSchedule: scheduleConversionHandler } : {})}
-                      />
+                      <div className="rhythm-history-view__score-details-columns">
+                        <div className="rhythm-history-view__score-details-column">
+                          {score.consistency.kind === 'scored'
+                            ? <ConsistencyScoreBreakdown metric={score.consistency} schedule={effectiveSchedule} />
+                            : (
+                              <UnscoredBreakdown
+                                metric={score.consistency}
+                                {...(scheduleConversionHandler ? { onChooseSchedule: scheduleConversionHandler } : {})}
+                              />
+                            )}
+                        </div>
+                        <div className="rhythm-history-view__score-details-column">
+                          {score.onTrack.kind === 'scored'
+                            ? <OnTrackScoreBreakdown key={rhythm.id} metric={score.onTrack} />
+                            : <UnscoredBreakdown metric={score.onTrack} />}
+                        </div>
+                      </div>
                     )}
                 </div>
-                <div className="rhythm-history-view__score-details-column">
-                  {score.onTrack.kind === 'scored'
-                    ? <OnTrackScoreBreakdown key={rhythm.id} metric={score.onTrack} />
-                    : <UnscoredBreakdown metric={score.onTrack} />}
-                </div>
-              </div>
-            )}
-          </div>
+              </HealthScoreDetailsContent>
+            </HealthScoreDetailsDialog>
+          )}
         </div>
         <p className="rhythm-history-view__sample-notice" role="status">
           {unknownSeason
@@ -738,26 +848,26 @@ export function RhythmHistoryView({
             </svg>
           </button>
         </header>
+        {!archived && onEditSeason && detailSchedule && (
+          <div className="rhythm-history-view__season-add-row">
+            <button
+              type="button"
+              className="btn mini ghost rhythm-history-view__season-add"
+              aria-label="Add a Season"
+              onClick={event => openAddSeason(event.currentTarget)}
+            >
+              + Add Season
+            </button>
+          </div>
+        )}
         <div
           id={seasonsContentId}
           className="rhythm-history-view__seasons-expanded"
           hidden={!seasonsInfoExpanded}
         >
-          <div className="rhythm-history-view__season-add-row">
-            <p className="rhythm-history-view__seasons-info-copy">
-              Seasons organize your schedule as it changes. Your logs stay saved, and each is scored using the schedule in place at the time.
-            </p>
-            {!archived && onEditSeason && detailSchedule && (
-              <button
-                type="button"
-                className="rhythm-history-view__season-add"
-                aria-label="Add a Season"
-                onClick={event => openAddSeason(event.currentTarget)}
-              >
-                + Add Season
-              </button>
-            )}
-          </div>
+          <p className="rhythm-history-view__seasons-info-copy">
+            Seasons organize your schedule as it changes. Your logs stay saved, and each is scored using the schedule in place at the time.
+          </p>
           <SeasonsHistory
             {...(displayOnlyCurrentSeason ? { displayOnlyCurrentSeason } : {})}
             seasons={scheduleSeasons}
@@ -800,7 +910,7 @@ export function RhythmHistoryView({
             <button
               ref={logMomentButtonRef}
               type="button"
-              className="button button-secondary rhythm-history-view__log-moment"
+              className="btn mini ghost rhythm-history-view__log-moment"
               onClick={() => {
                 setLogAnnouncement('');
                 setLoggedMomentsExpanded(true);

@@ -12,6 +12,8 @@ import { StrengthExerciseEditor } from './StrengthExerciseEditor.tsx';
 import { StrengthExerciseResults } from './StrengthExerciseResults.tsx';
 import { StrengthGuidedSessionDialog } from './StrengthGuidedSessionDialog.tsx';
 import { FitnessScoreSummary } from './FitnessScoreSummary.tsx';
+import { RhythmCalendarIcon } from './RhythmCalendarIcon.tsx';
+import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
 import { SettingsGearButton } from './SettingsGearButton.tsx';
 import { formatScore } from '../domain/score-display.ts';
 import { SegmentedTabs } from './SegmentedTabs.tsx';
@@ -70,6 +72,7 @@ type StrengthRhythm = {
 
 export type StrengthViewProps = {
   data: StrengthData;
+  healthScore?: CategoryScoreSelection;
   people?: readonly PersonPreview[];
   peopleGroups?: readonly PersonPickerGroup[];
   rhythms: readonly StrengthRhythm[];
@@ -94,11 +97,13 @@ export type StrengthViewProps = {
   } | null;
   onRhythmModeRequestOpened?: (requestId: number) => void;
   onRhythmModeRequestClosed?: () => void;
+  foundationNavigation?: boolean;
 };
 
 type WorkoutsTab = 'recommended' | 'saved' | 'history';
 type FitnessDialog =
   | { kind: 'goals' }
+  | { kind: 'rhythm-workout-picker'; rhythm: StrengthRhythm }
   | {
       kind: 'workout';
       workout?: StrengthSavedWorkout;
@@ -124,9 +129,13 @@ const workoutTabs = [
   { id: 'saved', label: 'Saved', tabId: 'strength-workout-tab-saved', panelId: 'strength-workout-panel-saved' },
   { id: 'history', label: 'History', tabId: 'strength-workout-tab-history', panelId: 'strength-workout-panel-history' }
 ] as const satisfies readonly SegmentedTab<WorkoutsTab>[];
+const strengthBodyMapPaintOrder: readonly StrengthMuscleId[] = [
+  'shoulders', 'chest', 'back', 'biceps', 'triceps', 'abs', 'quads', 'hamstrings', 'calves'
+];
 
 export function StrengthView({
   data,
+  healthScore,
   people = syntheticPeople,
   peopleGroups = syntheticPersonPickerGroups,
   rhythms,
@@ -140,7 +149,8 @@ export function StrengthView({
   onQuickStartClosed,
   pendingRhythmModeRequest = null,
   onRhythmModeRequestOpened,
-  onRhythmModeRequestClosed
+  onRhythmModeRequestClosed,
+  foundationNavigation = false
 }: StrengthViewProps) {
   const [workoutsTab, setWorkoutsTab] = useState<WorkoutsTab>('recommended');
   const [visibleHistoryLimit, setVisibleHistoryLimit] = useState(10);
@@ -153,6 +163,8 @@ export function StrengthView({
   const [error, setError] = useState('');
   const [betweenSetRestChoices, setBetweenSetRestChoices] = useState<Partial<Record<StrengthMuscleId, string>>>({});
   const [customBetweenSetSeconds, setCustomBetweenSetSeconds] = useState<Partial<Record<StrengthMuscleId, string>>>({});
+  const [settingsIntervalDrafts, setSettingsIntervalDrafts] = useState<Partial<Record<StrengthMuscleId, string>>>({});
+  const [settingsRestDayDrafts, setSettingsRestDayDrafts] = useState<Partial<Record<StrengthMuscleId, string>>>({});
   const [logTemplateSelection, setLogTemplateSelection] = useState('');
   const [logMuscleIds, setLogMuscleIds] = useState<StrengthMuscleId[]>([]);
   const [workoutPeople, setWorkoutPeople] = useState<PersonId[]>([]);
@@ -195,6 +207,7 @@ export function StrengthView({
   const trainingStatusScore = selectStrengthScore(scores);
   const recommendations = useMemo(() => rankStrengthWorkouts(scores, data.savedWorkouts), [data.savedWorkouts, scores]);
   const selected = scores.find(item => item.id === selectedMuscleId)!;
+  const visibleMuscles = visibleStrengthMuscles(bodyView);
   const history = useMemo(
     () => selectStrengthWorkoutHistory(data.workouts, visibleHistoryLimit),
     [data.workouts, visibleHistoryLimit]
@@ -270,41 +283,59 @@ export function StrengthView({
     if (!pendingRhythmLog || handledRhythmRequestRef.current === pendingRhythmLog.requestId) return;
     handledRhythmRequestRef.current = pendingRhythmLog.requestId;
     rhythmLogRequestIdRef.current = pendingRhythmLog.requestId;
-    const rhythm = rhythms.find(item => item.rhythm.id === pendingRhythmLog.rhythm.id);
-    if (!rhythm) return;
+    const rhythmEntry = rhythms.find(item => item.rhythm.id === pendingRhythmLog.rhythm.id);
+    if (!rhythmEntry) return;
     openerRef.current = pendingRhythmLog.opener
       ?? [...document.querySelectorAll<HTMLElement>('[data-strength-rhythm]')]
-      .find(element => element.dataset.strengthRhythm === rhythm.rhythm.id)
+      .find(element => element.dataset.strengthRhythm === rhythmEntry.rhythm.id)
       ?.querySelector<HTMLButtonElement>('button[aria-label^="Log workout"]') ?? null;
     guidedSessionOpenerRef.current = openerRef.current;
-    const configuredWorkoutId = pendingRhythmLog.mode === 'specific'
-      ? pendingRhythmLog.workoutId
-      : pendingRhythmLog.mode === 'recommended'
-        ? recommendations[0]?.id
-        : undefined;
-    const configuredWorkout = data.savedWorkouts.find(workout => workout.id === configuredWorkoutId);
-    if (configuredWorkout?.exercises?.length) {
-      const request: PendingGuidedStart = {
-        workout: configuredWorkout,
-        rhythm,
-        requestId: pendingRhythmLog.requestId
-      };
-      if (data.guidedSessionDraft) setPendingGuidedStart(request);
-      else if (!startGuidedWorkout(request)) setPendingGuidedStart(request);
+    const rhythmSetting: StrengthRhythm = {
+      rhythm: rhythmEntry.rhythm,
+      mode: pendingRhythmLog.mode,
+      ...(pendingRhythmLog.workoutId ? { workoutId: pendingRhythmLog.workoutId } : {})
+    };
+    if (pendingRhythmLog.mode === 'recommended') {
+      setDialog({ kind: 'rhythm-workout-picker', rhythm: rhythmSetting });
       onRhythmLogOpened?.(pendingRhythmLog.requestId);
       return;
     }
+    startRhythmWorkout(rhythmSetting, pendingRhythmLog.mode === 'specific'
+      ? pendingRhythmLog.workoutId
+      : undefined);
+    onRhythmLogOpened?.(pendingRhythmLog.requestId);
+  }, [pendingRhythmLog?.requestId]);
+
+  function startRhythmWorkout(rhythm: StrengthRhythm, workoutId?: string) {
+    const configuredWorkout = data.savedWorkouts.find(workout => workout.id === workoutId);
+    const selectedRhythm: StrengthRhythm = {
+      ...rhythm,
+      mode: workoutId ? 'specific' : 'custom',
+      ...(workoutId ? { workoutId } : {})
+    };
+    if (configuredWorkout?.exercises?.length) {
+      const request: PendingGuidedStart = {
+        workout: configuredWorkout,
+        rhythm: selectedRhythm,
+        ...(rhythmLogRequestIdRef.current === null
+          ? {}
+          : { requestId: rhythmLogRequestIdRef.current })
+      };
+      setDialog(null);
+      if (data.guidedSessionDraft) setPendingGuidedStart(request);
+      else if (!startGuidedWorkout(request)) setPendingGuidedStart(request);
+      return;
+    }
     setError('');
-    setLogTemplateSelection(configuredWorkoutId ?? '');
-    setLogMuscleIds(data.savedWorkouts.find(workout => workout.id === configuredWorkoutId)?.muscleIds ?? []);
+    setLogTemplateSelection(workoutId ?? '');
+    setLogMuscleIds(configuredWorkout?.muscleIds ?? []);
     draftLogIdRef.current = `strength-log-${globalThis.crypto.randomUUID()}`;
     setDialog({
       kind: 'log',
-      rhythm,
-      ...(configuredWorkoutId ? { templateId: configuredWorkoutId } : {})
+      rhythm: selectedRhythm,
+      ...(workoutId ? { templateId: workoutId } : {})
     });
-    onRhythmLogOpened?.(pendingRhythmLog.requestId);
-  }, [pendingRhythmLog?.requestId]);
+  }
 
   useEffect(() => {
     if (!quickStartRequest || handledQuickStartRequestRef.current === quickStartRequest.requestId) return;
@@ -497,6 +528,14 @@ export function StrengthView({
     focusOpener?: HTMLButtonElement
   ) {
     if (next.kind === 'goals') {
+      setSettingsIntervalDrafts(Object.fromEntries(strengthMuscles.map(muscle => [
+        muscle.id,
+        String(data.settings.muscleIntervals[muscle.id] ?? '')
+      ])));
+      setSettingsRestDayDrafts(Object.fromEntries(strengthMuscles.map(muscle => [
+        muscle.id,
+        String(data.settings.preferredRestDays[muscle.id] ?? (muscle.id === 'abs' ? 0 : 1))
+      ])));
       const currentPreferences = Object.fromEntries(strengthMuscles.map(muscle => [
         muscle.id,
         data.settings.betweenSetRestSeconds[muscle.id]
@@ -586,7 +625,8 @@ export function StrengthView({
 
   function closeDialog() {
     const returnToSuggestions = dialog?.kind === 'workout' && dialog.returnToSuggestions;
-    const closesRhythmLog = dialog?.kind === 'log' && Boolean(dialog.rhythm);
+    const closesRhythmLog = dialog?.kind === 'rhythm-workout-picker'
+      || dialog?.kind === 'log' && Boolean(dialog.rhythm);
     const closesRhythmMode = dialog?.kind === 'mode';
     setError('');
     draftWorkoutIdRef.current = null;
@@ -756,7 +796,10 @@ export function StrengthView({
     const firstError = strengthMuscles.find(muscle => errors[muscle.id]);
     if (firstError) {
       setError(`${firstError.name}: ${errors[firstError.id]}`);
-      form.querySelector<HTMLInputElement>(`[name="interval-${firstError.id}"]`)?.focus();
+      const firstInvalidField = form.querySelector<HTMLInputElement>(`[name="interval-${firstError.id}"]`);
+      const firstInvalidRow = firstInvalidField?.closest<HTMLDetailsElement>('.strength-setting-muscle');
+      if (firstInvalidRow) firstInvalidRow.open = true;
+      firstInvalidField?.focus();
       return;
     }
     if (!data.trackingStartDate && (!trackingStartDate || trackingStartDate > evaluationDate)) {
@@ -941,27 +984,39 @@ export function StrengthView({
     if (!muscle[bodyView]) setBodyView(muscle.front ? 'front' : 'back');
   }
 
+  function chooseBodyView(view: 'front' | 'back') {
+    const muscles = visibleStrengthMuscles(view);
+    if (!muscles.some(muscle => muscle.id === selectedMuscleId) && muscles[0]) {
+      setSelectedMuscleId(muscles[0].id);
+    }
+    setBodyView(view);
+  }
+
   return (
-    <main className="category-page strength-page" aria-labelledby="strength-title">
-      <header className="marriage-section-heading strength-page__heading">
-        <div>
-          <h3 id="strength-title">Strength</h3>
-          <p>Your training, at a glance.</p>
-        </div>
-      </header>
+    <section
+      className="category-page strength-page"
+      {...(!foundationNavigation && { 'aria-labelledby': 'strength-title' })}
+    >
+      {!foundationNavigation && (
+        <header className="marriage-section-heading strength-page__heading">
+          <div>
+            <h3 id="strength-title">Strength</h3>
+            <p>Your training, at a glance.</p>
+          </div>
+        </header>
+      )}
 
       <FitnessScoreSummary
         category="Strength"
         healthTitle="Strength Health"
-        consistency={null}
-        onTrack={null}
-        health={null}
-        consistencyCaption="Individual muscle Consistency is shown below."
-        onTrackCaption="Individual muscle On Track is shown below."
+        className={`rhythm-history-view__score-card${foundationNavigation ? ' foundation-health-card' : ''}`}
+        consistency={healthScore?.consistency ?? null}
+        onTrack={healthScore?.onTrack ?? null}
+        health={healthScore?.health ?? null}
+        consistencyCaption="Consistency across eligible Strength-linked Rhythms."
+        onTrackCaption="Whether eligible Strength-linked Rhythms are caught up."
         compact
-        includeFormulaExplanation={false}
-        statusMessage="No approved overall Strength Health aggregate is available."
-        summaryExplanation="Strength does not yet have an approved overall Health aggregate. Individual muscle scores and readiness remain available below."
+        summaryExplanation="Strength Health reflects eligible Strength-linked Rhythm scores. Your body, at a glance and its muscle scores and readiness remain training feedback and do not contribute."
       />
       <div
         className="strength-legacy-status"
@@ -1000,7 +1055,7 @@ export function StrengthView({
             </header>
             <div className="strength-map-toolbar" role="group" aria-label="Body map view">
               {(['front', 'back'] as const).map(view => (
-                <button key={view} type="button" aria-pressed={bodyView === view} onClick={() => setBodyView(view)}>
+                <button key={view} type="button" aria-pressed={bodyView === view} onClick={() => chooseBodyView(view)}>
                   {view === 'front' ? 'Front' : 'Back'}
                 </button>
               ))}
@@ -1008,21 +1063,37 @@ export function StrengthView({
             <div className="strength-map-layout">
               <StrengthBodyMap view={bodyView} scores={scores} selectedId={selectedMuscleId} onSelect={chooseMuscle} />
               <div className="strength-muscle-list" role="group" aria-label="Muscle training status">
-                {strengthMuscles.map(muscle => {
+                {visibleMuscles.map(muscle => {
                   const result = scores.find(item => item.id === muscle.id)!;
+                  const trainingStatus = strengthMuscleTrainingStatus(result);
+                  const lastWorkoutLabel = strengthLastWorkoutLabel(result);
+                  const nextDueLabel = strengthNextDueLabel(result);
                   return (
                     <button
                       key={muscle.id}
                       type="button"
                       className="strength-muscle-row"
                       aria-pressed={selectedMuscleId === muscle.id}
-                      aria-label={`${muscle.name}, Health ${result.health === null ? 'score unavailable' : `${formatScore(result.health)} out of 100`}, ${result.status}`}
+                      aria-label={`${muscle.name}. Training status: ${trainingStatus.label}. Last workout: ${lastWorkoutLabel}. ${
+                        nextDueLabel === '—' ? 'Next lift unavailable.' : `${nextDueLabel}.`
+                      }`}
                       onClick={() => chooseMuscle(muscle.id)}
                     >
-                      <span><strong>{muscle.name}</strong><b>{formatScore(result.health)}</b></span>
-                      <small>{result.status}</small>
-                      <span className="strength-muscle-row__track" aria-hidden="true">
-                        <i style={{ width: `${result.health === null ? 0 : Math.max(0, Math.min(100, result.health))}%` }} />
+                      <span className="strength-muscle-row__heading">
+                        <strong>{muscle.name}</strong>
+                        <span
+                          className={`strength-muscle-row__status strength-muscle-row__status--${trainingStatus.tone}`}
+                          role="img"
+                          aria-label={`Training status: ${trainingStatus.label}`}
+                          title={`Training status: ${trainingStatus.label}`}
+                        />
+                      </span>
+                      <span className="strength-muscle-row__timing">
+                        <span className="strength-muscle-row__last-workout">
+                          <RhythmCalendarIcon className="strength-muscle-row__calendar-icon" />
+                          <span>{lastWorkoutLabel}</span>
+                        </span>
+                        <span className="strength-muscle-row__next-due">{nextDueLabel}</span>
                       </span>
                     </button>
                   );
@@ -1030,49 +1101,7 @@ export function StrengthView({
               </div>
             </div>
             <div className="strength-muscle-detail" aria-live="polite">
-              <h3 className="strength-muscle-detail__title">{selected.name}</h3>
-              <FitnessScoreSummary
-                category="Strength"
-                consistency={selected.consistency}
-                onTrack={selected.onTrack}
-                health={selected.health}
-                consistencyCaption="How often you show up."
-                onTrackCaption="How recently you trained."
-                compact
-                setupRequired={
-                  (!data.trackingStartDate || !data.scoringSettingsHistory?.length)
-                  && selected.historyState !== 'invalid'
-                }
-                statusMessage={selected.historyState === 'invalid'
-                  ? 'Training history is unavailable.'
-                  : selected.health === null
-                    && data.trackingStartDate
-                    && data.scoringSettingsHistory?.length
-                    ? 'Your score will appear as tracking builds.'
-                    : null}
-                onSetup={event => openDialog({ kind: 'goals' }, event)}
-                evidenceDetails={(
-                  <>
-                    <p>Evaluated through {formatFitnessDate(evaluationDate)}.</p>
-                    {selected.eligibleConsistencyWindows > 0 && (
-                      <p>
-                        {selected.creditedConsistencyWindows} of {selected.eligibleConsistencyWindows}
-                        {' '}eligible periods credited.
-                      </p>
-                    )}
-                    {strengthConsistencyEvidence(selected.consistencyUnavailableReason) && (
-                      <p>{strengthConsistencyEvidence(selected.consistencyUnavailableReason)}</p>
-                    )}
-                    {selected.onTrackUnavailableReason && (
-                      <p>{strengthOnTrackEvidence(selected.onTrackUnavailableReason)}</p>
-                    )}
-                    {selected.lastPerformed && (
-                      <p>Last confirmed performance: {formatFitnessDate(selected.lastPerformed)}.</p>
-                    )}
-                    <p>Readiness uses logged workout dates; scoring requires confirmed performed sets.</p>
-                  </>
-                )}
-              />
+              <h3 className="strength-muscle-detail__title">{selected.name} details</h3>
               <dl className="strength-muscle-facts">
                 <div>
                   <dt>Training interval</dt>
@@ -1081,8 +1110,8 @@ export function StrengthView({
                     : `Every ${selected.intervalDays} ${selected.intervalDays === 1 ? 'day' : 'days'}`}</dd>
                 </div>
                 <div>
-                  <dt>Rest between training</dt>
-                  <dd>{selected.preferredRestDays} {selected.preferredRestDays === 1 ? 'day' : 'days'}</dd>
+                  <dt>Rest between workouts</dt>
+                  <dd><span className="strength-muscle-facts__compact">{selected.preferredRestDays} {selected.preferredRestDays === 1 ? 'day' : 'days'}</span></dd>
                 </div>
                 <div>
                   <dt>Readiness</dt>
@@ -1113,124 +1142,155 @@ export function StrengthView({
         />
         <section
           id="strength-workout-panel-recommended"
+          className="strength-workout-panel strength-workout-panel--recommended"
           role="tabpanel"
           aria-labelledby="strength-workout-tab-recommended"
           hidden={workoutsTab !== 'recommended'}
         >
           {workoutsTab === 'recommended' && (
-            <section className="card strength-card" aria-labelledby="strength-recommendations-heading">
-            <header className="strength-card-heading">
-              <div><h2 id="strength-recommendations-heading">Recommended workouts</h2><p>Suggested from your training goals and when you last trained each muscle group.</p></div>
-              <button type="button" className="btn mini" onClick={event => openDialog({ kind: 'log' }, event)}>Custom workout</button>
-            </header>
-            {recommendations.length ? (
-              <div className="strength-recommendations">
-                {recommendations.map(item => (
-                  <article key={item.id} className="strength-recommendation">
-                    <div><h3>{item.name}</h3><p>{item.reason}</p><small>{item.muscles.map(muscle => muscle.name).join(' · ')}</small></div>
-                    <button type="button" className="btn mini" onClick={event => openDialog({ kind: 'log', templateId: item.id }, event)}>Log workout</button>
-                  </article>
-                ))}
+            <>
+              <div className="category-rhythm-entry-actions">
+                <button
+                  type="button"
+                  className="btn mini"
+                  onClick={event => openDialog({ kind: 'log' }, event)}
+                >
+                  Custom workout
+                </button>
               </div>
-            ) : (
-              <div className="strength-empty">
-                {data.savedWorkouts.length === 0
-                  ? 'Save a workout to get recommendations, or log a custom workout.'
-                  : 'No saved workout is eligible right now. You can still log a custom workout.'}
+              {recommendations.length ? (
+                <div className="strength-recommendations">
+                  {recommendations.map(item => (
+                    <article key={item.id} className="strength-recommendation">
+                      <div>
+                        <h3>{item.name}</h3>
+                        <p>{item.reason}</p>
+                        <small>{item.muscles.map(muscle => muscle.name).join(' · ')}</small>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn mini"
+                        onClick={event => openDialog({ kind: 'log', templateId: item.id }, event)}
+                      >
+                        Log workout
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="strength-empty">
+                  {data.savedWorkouts.length === 0
+                    ? 'Save a workout to get recommendations, or log a custom workout.'
+                    : 'No saved workout is eligible right now. You can still log a custom workout.'}
+                </div>
+              )}
+            </>
+          )}
+        </section>
+        <section
+          id="strength-workout-panel-saved"
+          className="strength-workout-panel"
+          role="tabpanel"
+          aria-labelledby="strength-workout-tab-saved"
+          hidden={workoutsTab !== 'saved'}
+        >
+          {workoutsTab === 'saved' && (
+            <section className="strength-workout-section" aria-labelledby="saved-workouts-heading">
+              <header className="strength-card-heading">
+                <div>
+                  <h3 id="saved-workouts-heading">Saved workouts</h3>
+                  <p>Workout templates are separate from recorded activity.</p>
+                </div>
+              </header>
+              <div className="category-rhythm-entry-actions">
+                <button type="button" className="btn mini" onClick={event => openDialog({ kind: 'workout' }, event)}>
+                  Add workout
+                </button>
+                <button
+                  ref={suggestionPickerOpenerRef}
+                  type="button"
+                  className="btn mini ghost"
+                  onClick={() => {
+                    setSuggestionFocusSourceId(undefined);
+                    setSuggestionPickerOpen(true);
+                  }}
+                >
+                  Suggestions
+                </button>
               </div>
-            )}
+              {data.savedWorkouts.length ? (
+                <div className="strength-template-list">
+                  {data.savedWorkouts.map(workout => (
+                    <article key={workout.id} className="strength-template">
+                      <div className="strength-template__content">
+                        <h3>{workout.name}</h3>
+                        <p>{workout.muscleIds.map(id => muscleName(id)).join(' · ') || 'Muscle selection unavailable'}</p>
+                        {workout.exercises && workout.exercises.length > 0 && (
+                          <p className="strength-template__exercise-summary">
+                            {workout.exercises.length} {workout.exercises.length === 1 ? 'exercise' : 'exercises'} · {workout.exercises.reduce((total, exercise) => total + exercise.sets.length, 0)} planned sets
+                          </p>
+                        )}
+                        {workout.sharedWith.length > 0 && (
+                          <div className="strength-template__people" role="group" aria-label={`People associated with ${workout.name}`}>
+                            {workout.sharedWith.map(id => <PersonBadge key={id} person={personById(people, id)} presentation="static" />)}
+                          </div>
+                        )}
+                      </div>
+                      <details className="strength-template__menu">
+                        <summary aria-label={`Actions for ${workout.name}`}>⋯</summary>
+                        <div className="strength-template__menu-items">
+                          <button type="button" onClick={event => {
+                            openDialog({ kind: 'workout', workout }, event);
+                            event.currentTarget.closest('details')?.removeAttribute('open');
+                          }}>Edit workout</button>
+                          <button type="button" onClick={event => {
+                            removeTemplate(workout);
+                            event.currentTarget.closest('details')?.removeAttribute('open');
+                          }}>Delete workout</button>
+                        </div>
+                      </details>
+                      <div className="strength-template__actions">
+                        {workout.exercises && workout.exercises.length > 0 && (
+                          <button type="button" className="btn mini" onClick={event => startWorkoutFromButton(workout, event)}>Start workout</button>
+                        )}
+                        <button type="button" className="btn mini ghost" onClick={event => openDialog({ kind: 'log', templateId: workout.id }, event)}>Log workout</button>
+                        {(!workout.exercises || workout.exercises.length === 0) && (
+                          <button type="button" className="btn mini ghost"
+                            onClick={event => openDialog({ kind: 'workout', workout }, event)}>
+                            Add exercises
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : <p className="strength-empty">No saved workouts yet. Create one to quickly log your usual muscle groups.</p>}
             </section>
           )}
         </section>
-        <section id="strength-workout-panel-saved" role="tabpanel" aria-labelledby="strength-workout-tab-saved" hidden={workoutsTab !== 'saved'}>
-          {workoutsTab === 'saved' && (
-                <section className="card strength-card" aria-labelledby="saved-workouts-heading">
-                  <header className="strength-card-heading">
-                    <div><h2 id="saved-workouts-heading">Saved workouts</h2><p>Workout templates are separate from recorded activity.</p></div>
-                  </header>
-                  <div className="category-rhythm-entry-actions">
-                    <button type="button" className="btn mini" onClick={event => openDialog({ kind: 'workout' }, event)}>
-                      Add workout
-                    </button>
-                    <button
-                      ref={suggestionPickerOpenerRef}
-                      type="button"
-                      className="btn mini ghost"
-                      onClick={() => {
-                        setSuggestionFocusSourceId(undefined);
-                        setSuggestionPickerOpen(true);
-                      }}
-                    >
-                      Suggestions
-                    </button>
-                  </div>
-                  {data.savedWorkouts.length ? (
-                    <div className="strength-template-list">
-                      {data.savedWorkouts.map(workout => (
-                        <article key={workout.id} className="strength-template">
-                          <div className="strength-template__content">
-                            <h3>{workout.name}</h3>
-                            <p>{workout.muscleIds.map(id => muscleName(id)).join(' · ') || 'Muscle selection unavailable'}</p>
-                            {workout.exercises && workout.exercises.length > 0 && (
-                              <p className="strength-template__exercise-summary">
-                                {workout.exercises.length} {workout.exercises.length === 1 ? 'exercise' : 'exercises'} · {workout.exercises.reduce((total, exercise) => total + exercise.sets.length, 0)} planned sets
-                              </p>
-                            )}
-                            {workout.sharedWith.length > 0 && (
-                              <div className="strength-template__people" role="group" aria-label={`People associated with ${workout.name}`}>
-                                {workout.sharedWith.map(id => <PersonBadge key={id} person={personById(people, id)} presentation="static" />)}
-                              </div>
-                            )}
-                          </div>
-                          <details className="strength-template__menu">
-                            <summary aria-label={`Actions for ${workout.name}`}>⋯</summary>
-                            <div className="strength-template__menu-items">
-                              <button type="button" onClick={event => {
-                                openDialog({ kind: 'workout', workout }, event);
-                                event.currentTarget.closest('details')?.removeAttribute('open');
-                              }}>Edit workout</button>
-                              <button type="button" onClick={event => {
-                                removeTemplate(workout);
-                                event.currentTarget.closest('details')?.removeAttribute('open');
-                              }}>Delete workout</button>
-                            </div>
-                          </details>
-                          <div className="strength-template__actions">
-                            {workout.exercises && workout.exercises.length > 0 && (
-                              <button type="button" className="btn mini" onClick={event => startWorkoutFromButton(workout, event)}>Start workout</button>
-                            )}
-                            <button type="button" className="btn mini ghost" onClick={event => openDialog({ kind: 'log', templateId: workout.id }, event)}>Log workout</button>
-                            {(!workout.exercises || workout.exercises.length === 0) && (
-                              <button type="button" className="btn mini ghost"
-                                onClick={event => openDialog({ kind: 'workout', workout }, event)}>
-                                Add exercises
-                              </button>
-                            )}
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  ) : <p className="strength-empty">No saved workouts yet. Create one to quickly log your usual muscle groups.</p>}
-                </section>
-          )}
-        </section>
-        <section id="strength-workout-panel-history" role="tabpanel" aria-labelledby="strength-workout-tab-history" hidden={workoutsTab !== 'history'}>
+        <section
+          id="strength-workout-panel-history"
+          className="strength-workout-panel"
+          role="tabpanel"
+          aria-labelledby="strength-workout-tab-history"
+          hidden={workoutsTab !== 'history'}
+        >
           {workoutsTab === 'history' && (
-                <section className="card strength-card strength-history-page" aria-labelledby="strength-history-heading">
-                  <header className="strength-card-heading">
-                    <div>
-                      <h2 id="strength-history-heading">Workout history</h2>
-                      <p>{history.total} {history.total === 1 ? 'workout' : 'workouts'} logged</p>
-                    </div>
-                  </header>
-                  {historyAnnouncement && <p className="strength-history-status" role="status">{historyAnnouncement}</p>}
-                  <StrengthWorkoutHistory
-                    history={history}
-                    rowRefs={historyRowRefs}
-                    onOpen={openHistoryDetails}
-                    onShowMore={() => setVisibleHistoryLimit(limit => limit + 10)}
-                  />
-                </section>
+            <section className="strength-workout-section strength-history-page" aria-labelledby="strength-history-heading">
+              <header className="strength-card-heading">
+                <div>
+                  <h3 id="strength-history-heading">Workout history</h3>
+                  <p>{history.total} {history.total === 1 ? 'workout' : 'workouts'} logged</p>
+                </div>
+              </header>
+              {historyAnnouncement && <p className="strength-history-status" role="status">{historyAnnouncement}</p>}
+              <StrengthWorkoutHistory
+                history={history}
+                rowRefs={historyRowRefs}
+                onOpen={openHistoryDetails}
+                onShowMore={() => setVisibleHistoryLimit(limit => limit + 10)}
+              />
+            </section>
           )}
         </section>
       </section>
@@ -1250,71 +1310,117 @@ export function StrengthView({
         >
           <form className="strength-settings-form" onSubmit={saveSettings}>
             <div className="strength-settings-scroll">
-            <p className="strength-dialog-intro">Set how often to train each muscle, rest days between training, and rest between exercise sets. Rest days guide recommendations; they do not prevent manual workout logging.</p>
-            {!data.trackingStartDate ? (
-              <label className="strength-form-field">Start Strength tracking on
-                <input type="date" name="strength-tracking-start" max={evaluationDate} defaultValue={evaluationDate} required />
-              </label>
-            ) : (
-              <>
-                <p className="strength-dialog-intro">Strength tracking started {data.trackingStartDate}.</p>
-                <label className="strength-form-field">Training settings effective from
-                  <input type="date" name="strength-settings-effective-date"
-                    min={data.scoringSettingsHistory?.at(-1)?.effectiveDate ?? data.trackingStartDate}
-                    max={evaluationDate} defaultValue={evaluationDate} required />
-                </label>
-              </>
-            )}
-            <label className="strength-form-field">Strength weight unit
-              <select name="strength-weight-unit" defaultValue={data.settings.weightUnit}>
-                <option value="lb">lb</option>
-                <option value="kg">kg</option>
-              </select>
-            </label>
-            <div className="strength-goals-table" role="table" aria-label="Training intervals, rest days, and rest between sets">
-              <div className="strength-goals-row strength-goals-row--head" role="row"><span role="columnheader">Muscle group</span><span role="columnheader">Train every (days)</span><span role="columnheader">Rest days between training</span><span role="columnheader">Between sets</span></div>
-              {strengthMuscles.map(muscle => (
-                <div className="strength-goals-row" role="row" key={muscle.id}>
-                  <span role="rowheader">{muscle.name}</span>
-                  <label><span className="strength-goals-row__field-label">Train every (days)</span><input aria-label={`${muscle.name} training interval in days`} name={`interval-${muscle.id}`} type="number" min="1" max="365" defaultValue={data.settings.muscleIntervals[muscle.id] ?? ''} required /></label>
-                  <label><span className="strength-goals-row__field-label">Rest days between training</span><input aria-label={`${muscle.name} preferred rest days`} name={`rest-${muscle.id}`} type="number" min={muscle.id === 'abs' ? 0 : 1} max="364" defaultValue={data.settings.preferredRestDays[muscle.id] ?? (muscle.id === 'abs' ? 0 : 1)} required /></label>
-                  <div className="strength-goals-row__between-sets">
-                    <label className="visually-hidden" htmlFor={`between-sets-${muscle.id}`}>{muscle.name} rest between sets</label>
-                    <select id={`between-sets-${muscle.id}`} name={`between-sets-${muscle.id}`}
-                      value={betweenSetRestChoices[muscle.id]
-                        ?? String(data.settings.betweenSetRestSeconds[muscle.id] ?? defaultStrengthBetweenSetRestSeconds[muscle.id])}
-                      onChange={event => {
-                        const choice = event.currentTarget.value;
-                        setBetweenSetRestChoices(current => ({
-                          ...current,
-                          [muscle.id]: choice
-                        }));
-                      }}>
-                      {[60, 90, 120, 150, 180].map(seconds => (
-                        <option key={seconds} value={seconds}>{formatStrengthRest(seconds)}</option>
-                      ))}
-                      <option value="custom">Custom</option>
+              <section className="strength-settings-general" aria-label="General">
+                <h3>General</h3>
+                <div className="strength-settings-general__rows">
+                  {!data.trackingStartDate ? (
+                    <label className="strength-settings-general__row">
+                      <span>Effective date</span>
+                      <input type="date" name="strength-tracking-start" aria-label="Effective date"
+                        max={evaluationDate} defaultValue={evaluationDate} required />
+                    </label>
+                  ) : (
+                    <label className="strength-settings-general__row">
+                      <span>Effective date</span>
+                      <input type="date" name="strength-settings-effective-date" aria-label="Effective date"
+                        min={data.scoringSettingsHistory?.at(-1)?.effectiveDate ?? data.trackingStartDate}
+                        max={evaluationDate} defaultValue={evaluationDate} required />
+                    </label>
+                  )}
+                  <label className="strength-settings-general__row">
+                    <span>Weight unit</span>
+                    <select name="strength-weight-unit" aria-label="Weight unit" defaultValue={data.settings.weightUnit}>
+                      <option value="lb">lb</option>
+                      <option value="kg">kg</option>
                     </select>
-                    {betweenSetRestChoices[muscle.id] === 'custom' && (
-                      <label className="strength-goals-row__custom">
-                        <span className="visually-hidden">{muscle.name} custom rest between sets in seconds</span>
-                        <input name={`between-sets-custom-${muscle.id}`} type="number" min="0" max="3600"
-                          value={customBetweenSetSeconds[muscle.id]
-                            ?? String(data.settings.betweenSetRestSeconds[muscle.id] ?? defaultStrengthBetweenSetRestSeconds[muscle.id])}
-                          onChange={event => {
-                            const seconds = event.currentTarget.value;
-                            setCustomBetweenSetSeconds(current => ({
-                              ...current,
-                              [muscle.id]: seconds
-                            }));
-                          }} />
-                      </label>
-                    )}
-                  </div>
+                  </label>
                 </div>
-              ))}
-            </div>
-            {error && <p className="strength-form-error" role="alert">{error}</p>}
+              </section>
+              <section className="strength-settings-muscles" aria-labelledby="strength-settings-muscles-heading">
+                <h3 id="strength-settings-muscles-heading">Muscle groups</h3>
+                <p className="strength-dialog-intro">Rest days guide recommendations. You can log anytime.</p>
+                <div className="strength-settings-muscle-list">
+                  {strengthMuscles.map(muscle => {
+                    const interval = settingsIntervalDrafts[muscle.id] ?? String(data.settings.muscleIntervals[muscle.id] ?? '');
+                    const restDays = settingsRestDayDrafts[muscle.id]
+                      ?? String(data.settings.preferredRestDays[muscle.id] ?? (muscle.id === 'abs' ? 0 : 1));
+                    const restValue = Number(restDays);
+                    return (
+                      <details className="strength-setting-muscle" key={muscle.id}>
+                        <summary className="strength-setting-muscle__summary">
+                          <span className="strength-setting-muscle__name">{muscle.name}</span>
+                          <span className="strength-setting-muscle__values">
+                            {interval.trim() ? `Every ${interval} days` : 'Interval not set'}
+                            <span aria-hidden="true"> · </span>
+                            {restDays} rest {restValue === 1 ? 'day' : 'days'}
+                          </span>
+                          <span className="strength-setting-muscle__chevron" aria-hidden="true">⌄</span>
+                        </summary>
+                        <div className="strength-setting-muscle__fields">
+                          <label>
+                            <span className="strength-goals-row__field-label">Train every (days)</span>
+                            <input aria-label={`${muscle.name} training interval in days`} name={`interval-${muscle.id}`}
+                              type="number" min="1" max="365" value={interval} required
+                              onChange={event => {
+                                const value = event.currentTarget.value;
+                                setSettingsIntervalDrafts(current => ({ ...current, [muscle.id]: value }));
+                              }} />
+                          </label>
+                          <label>
+                            <span className="strength-goals-row__field-label">Rest days</span>
+                            <input aria-label={`${muscle.name} preferred rest days`} name={`rest-${muscle.id}`}
+                              type="number" min={muscle.id === 'abs' ? 0 : 1} max="364" value={restDays} required
+                              onChange={event => {
+                                const value = event.currentTarget.value;
+                                setSettingsRestDayDrafts(current => ({ ...current, [muscle.id]: value }));
+                              }} />
+                          </label>
+                          <div className="strength-goals-row__between-sets">
+                            <label className="strength-setting-muscle__rest-field" htmlFor={`between-sets-${muscle.id}`}>
+                              <span className="strength-goals-row__field-label">Rest between sets</span>
+                              <select id={`between-sets-${muscle.id}`} name={`between-sets-${muscle.id}`}
+                                aria-label={`${muscle.name} rest between sets`}
+                                value={betweenSetRestChoices[muscle.id]
+                                  ?? String(data.settings.betweenSetRestSeconds[muscle.id] ?? defaultStrengthBetweenSetRestSeconds[muscle.id])}
+                                onChange={event => {
+                                  const choice = event.currentTarget.value;
+                                  setBetweenSetRestChoices(current => ({
+                                    ...current,
+                                    [muscle.id]: choice
+                                  }));
+                                }}>
+                                {[60, 90, 120, 150, 180].map(seconds => (
+                                  <option key={seconds} value={seconds}>{formatStrengthRest(seconds)}</option>
+                                ))}
+                                <option value="custom">Custom</option>
+                              </select>
+                            </label>
+                            {betweenSetRestChoices[muscle.id] === 'custom' && (
+                              <label className="strength-goals-row__custom">
+                                <span className="visually-hidden">{muscle.name} custom rest between sets in seconds</span>
+                                <input name={`between-sets-custom-${muscle.id}`} type="number" min="0" max="3600"
+                                  value={customBetweenSetSeconds[muscle.id]
+                                    ?? String(data.settings.betweenSetRestSeconds[muscle.id] ?? defaultStrengthBetweenSetRestSeconds[muscle.id])}
+                                  onChange={event => {
+                                    const seconds = event.currentTarget.value;
+                                    setCustomBetweenSetSeconds(current => ({
+                                      ...current,
+                                      [muscle.id]: seconds
+                                    }));
+                                  }} />
+                              </label>
+                            )}
+                          </div>
+                        </div>
+                      </details>
+                    );
+                  })}
+                </div>
+                {data.trackingStartDate && (
+                  <p className="strength-settings-tracking-note">Tracking started {formatFitnessDate(data.trackingStartDate)}.</p>
+                )}
+              </section>
+              {error && <p className="strength-form-error" role="alert">{error}</p>}
             </div>
             <div className="money-goal-dialog__actions strength-settings-actions">
               <button type="submit" className="btn mini">Save settings</button>
@@ -1352,6 +1458,50 @@ export function StrengthView({
             {error && <p className="strength-form-error" role="alert">{error}</p>}
             <div className="money-goal-dialog__actions"><button type="submit" className="btn mini">Save mode</button><button type="button" className="btn mini ghost" onClick={closeDialog}>Cancel</button></div>
           </form>
+        </MoneyGoalDialog>
+      )}
+      {dialog?.kind === 'rhythm-workout-picker' && (
+        <MoneyGoalDialog
+          title={`Log workout for ${dialog.rhythm.rhythm.title}`}
+          labelledBy="strength-rhythm-workout-picker-title"
+          titleId="strength-rhythm-workout-picker-title"
+          closeLabel="Close workout choices"
+          dialogClassName="money-goal-dialog--strength-rhythm-workout-picker"
+          bodyClassName="strength-dialog-body"
+          phoneFullScreen
+          onClose={closeDialog}
+        >
+          <p>Choose a current recommendation or log a custom workout.</p>
+          {recommendations.length > 0 ? (
+            <div className="strength-rhythm-workout-choices" aria-label="Current workout recommendations">
+              {recommendations.slice(0, 3).map(recommendation => (
+                <article className="strength-rhythm-workout-choice" key={recommendation.id}>
+                  <div>
+                    <h3>{recommendation.name}</h3>
+                    <p>{recommendation.reason}</p>
+                    <small>{recommendation.muscles.map(muscle => muscle.name).join(' · ')}</small>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn mini"
+                    onClick={() => startRhythmWorkout(dialog.rhythm, recommendation.id)}
+                  >
+                    Log {recommendation.name}
+                  </button>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="strength-rhythm-workout-picker__empty" role="status">
+              No current recommendations. You can still log a custom workout.
+            </p>
+          )}
+          <div className="money-goal-dialog__actions">
+            <button type="button" className="btn mini" onClick={() => startRhythmWorkout(dialog.rhythm)}>
+              Custom workout
+            </button>
+            <button type="button" className="btn mini ghost" onClick={closeDialog}>Cancel</button>
+          </div>
         </MoneyGoalDialog>
       )}
       {dialog?.kind === 'workout' && (
@@ -1632,6 +1782,7 @@ export function StrengthView({
           titleId="strength-log-title"
           closeLabel="Close workout log"
           bodyClassName="strength-dialog-body"
+          phoneFullScreen={Boolean(dialog.rhythm)}
           onClose={closeDialog}
         >
           <form onSubmit={saveLog}>
@@ -1754,7 +1905,7 @@ export function StrengthView({
           }}
         />
       )}
-    </main>
+    </section>
   );
 }
 
@@ -1794,9 +1945,9 @@ function StrengthBodyMap({
   selectedId: StrengthMuscleId;
   onSelect: (id: StrengthMuscleId) => void;
 }) {
-  const visibleIds = view === 'front'
-    ? ['shoulders', 'chest', 'biceps', 'abs', 'quads', 'calves'] as const
-    : ['shoulders', 'back', 'triceps', 'hamstrings', 'calves'] as const;
+  const visibleIds = visibleStrengthMuscles(view)
+    .map(muscle => muscle.id)
+    .sort((left, right) => strengthBodyMapPaintOrder.indexOf(left) - strengthBodyMapPaintOrder.indexOf(right));
   const paths: Partial<Record<StrengthMuscleId, string>> = {
     shoulders: 'M93 79Q65 74 54 98L53 114L74 107L80 86Z M127 79Q155 74 166 98L167 114L146 107L140 86Z',
     chest: 'M81 89Q96 80 108 87L107 129Q86 137 76 122Z M139 89Q124 80 112 87L113 129Q134 137 144 122Z',
@@ -1860,7 +2011,7 @@ function StrengthWorkoutHistory({
           <h3 id={`strength-history-month-${group.key}`}>{group.label}</h3>
           <ol>
             {group.logs.map(log => (
-              <li key={log.id}>
+              <li key={log.id} className="strength-history-card">
                 <button
                   ref={element => {
                     if (element) rowRefs.current.set(log.id, element);
@@ -1893,6 +2044,10 @@ function scoreFill(score: number | null): string {
   return score >= 80 ? 'var(--score-green)' : score >= 50 ? 'var(--score-yellow)' : 'var(--score-red)';
 }
 
+function visibleStrengthMuscles(view: 'front' | 'back') {
+  return strengthMuscles.filter(muscle => muscle[view]);
+}
+
 function formatFitnessDate(value: string): string {
   const date = new Date(`${value}T12:00:00`);
   return Number.isFinite(date.getTime())
@@ -1908,26 +2063,40 @@ function strengthReadiness(score: StrengthMuscleScore): string {
   return 'Ready';
 }
 
-function strengthConsistencyEvidence(reason: string | null): string | null {
-  if (!reason) return null;
-  if (reason.includes('legacy') || reason.includes('incomplete')) {
-    return 'Some periods were excluded because their workout set details are incomplete.';
-  }
-  if (reason.includes('No complete interval')) {
-    return 'No complete training interval fits in the current 28-day window yet.';
-  }
-  if (reason.includes('not started')) return 'Strength tracking has not started yet.';
-  if (reason.includes('tracking start')) return 'Set a tracking start date and save training settings to begin.';
-  if (reason.includes('settings')) return 'Training settings are not available for this date.';
-  return 'Consistency evidence is unavailable.';
+function strengthLastWorkoutLabel(score: StrengthMuscleScore): string {
+  if (score.historyState === 'invalid') return 'Unavailable';
+  if (score.daysSince === null) return 'No log yet';
+  if (score.daysSince === 0) return 'Today';
+  return `${score.daysSince}d ago`;
 }
 
-function strengthOnTrackEvidence(reason: string): string {
-  if (reason.includes('confirmed performed set')) {
-    return 'No confirmed performed sets are recorded for this muscle group yet.';
+function strengthNextDueLabel(score: StrengthMuscleScore): string {
+  if (score.daysUntilDue === null) return '—';
+  if (score.daysUntilDue < 0) return `Overdue by ${Math.abs(score.daysUntilDue)}d`;
+  if (score.daysUntilDue === 0) return 'Due today';
+  return `Next lift in ${score.daysUntilDue}d`;
+}
+
+function strengthMuscleTrainingStatus(score: StrengthMuscleScore): {
+  label: string;
+  tone: 'current' | 'due' | 'overdue' | 'unavailable';
+} {
+  if (score.historyState === 'invalid') {
+    return { label: 'History unavailable', tone: 'unavailable' };
   }
-  if (reason.includes('settings')) return 'Training settings are not available for this date.';
-  return 'On Track evidence is unavailable.';
+  if (!score.lastTrained) return { label: 'No log', tone: 'unavailable' };
+  if (score.daysUntilDue === null) {
+    return { label: 'Interval unavailable', tone: 'unavailable' };
+  }
+  if (score.daysUntilDue < 0) {
+    const daysOverdue = Math.abs(score.daysUntilDue);
+    return {
+      label: `Overdue by ${daysOverdue} ${daysOverdue === 1 ? 'day' : 'days'}`,
+      tone: 'overdue'
+    };
+  }
+  if (score.daysUntilDue === 0) return { label: 'Due today', tone: 'due' };
+  return { label: 'Current', tone: 'current' };
 }
 
 function formatStrengthWorkoutDateTime(log: StrengthWorkoutLog): string {

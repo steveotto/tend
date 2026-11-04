@@ -19,6 +19,7 @@ type MoneyGoalDialogProps = {
   dismissOnBackdrop?: boolean;
   dialogClassName?: string;
   phoneFullScreen?: boolean;
+  inert?: boolean;
   surfaceClassName?: string;
   bodyClassName?: string;
   onClose: () => void;
@@ -41,6 +42,7 @@ export function MoneyGoalDialog({
   dismissOnBackdrop = false,
   dialogClassName,
   phoneFullScreen = false,
+  inert = false,
   surfaceClassName,
   bodyClassName,
   onClose
@@ -64,6 +66,7 @@ export function MoneyGoalDialog({
     <dialog
       ref={dialogRef}
       id={dialogId}
+      inert={inert}
       className={[
         'money-goal-dialog',
         dialogClassName,
@@ -101,7 +104,14 @@ export function MoneyGoalDialog({
           </button>
         )}
         {eyebrow && <p className="money-goal-dialog__eyebrow">{eyebrow}</p>}
-        {title && <h2 id={titleId ?? 'money-goal-dialog-title'}>{title}</h2>}
+        {title && (
+          <h2
+            id={titleId ?? 'money-goal-dialog-title'}
+            tabIndex={initialFocusId === (titleId ?? 'money-goal-dialog-title') ? -1 : undefined}
+          >
+            {title}
+          </h2>
+        )}
         {intro && <p className="money-goal-dialog__intro">{intro}</p>}
         {bodyClassName ? <div className={bodyClassName}>{children}</div> : children}
       </div>

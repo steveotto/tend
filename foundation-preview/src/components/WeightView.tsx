@@ -25,10 +25,14 @@ import type { DatedRhythmCompletion } from '../domain/rhythm-completion.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { ScoreMeter } from './Cards.tsx';
 import { NumericControl } from './NumericControl.tsx';
+import { FitnessScoreSummary } from './FitnessScoreSummary.tsx';
+import { SettingsGearButton } from './SettingsGearButton.tsx';
+import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
 
 export type WeightViewProps = {
   data: WeightData;
   today: string;
+  healthScore?: CategoryScoreSelection;
   rhythms: readonly RhythmPreview[];
   archivedRhythmIds: ReadonlySet<string>;
   datedRhythmCompletions: readonly DatedRhythmCompletion[];
@@ -37,6 +41,7 @@ export type WeightViewProps = {
   onLogRequestOpened?: (requestId: number) => void;
   onLogRequestClosed?: () => void;
   onQuickLog?: (event: MouseEvent<HTMLButtonElement>) => void;
+  foundationNavigation?: boolean;
 };
 
 type DialogState = { kind: 'goals' } | { kind: 'weigh-in'; measurement?: WeightMeasurement; rhythm?: RhythmPreview };
@@ -44,13 +49,15 @@ type DialogState = { kind: 'goals' } | { kind: 'weigh-in'; measurement?: WeightM
 export function WeightView({
   data,
   today,
+  healthScore,
   rhythms,
   archivedRhythmIds,
   datedRhythmCompletions,
   onChange,
   pendingLogRequest = null,
   onLogRequestOpened,
-  onLogRequestClosed
+  onLogRequestClosed,
+  foundationNavigation = false
 }: WeightViewProps) {
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [actionError, setActionError] = useState('');
@@ -101,13 +108,31 @@ export function WeightView({
   }
 
   return (
-    <main className="category-page weight-page" aria-labelledby="weight-title">
-      <header className="category-page-heading">
-        <div>
-          <h1 id="weight-title">Weight</h1>
-          <p>Recorded weigh-ins and a separate estimate along your goal path.</p>
-        </div>
-      </header>
+    <section
+      className="category-page weight-page"
+      {...(!foundationNavigation && { 'aria-labelledby': 'weight-title' })}
+    >
+      {!foundationNavigation && (
+        <header className="category-page-heading">
+          <div>
+            <h1 id="weight-title">Weight</h1>
+            <p>Recorded weigh-ins and a separate estimate along your goal path.</p>
+          </div>
+        </header>
+      )}
+      {foundationNavigation && (
+        <FitnessScoreSummary
+          category="Weight"
+          healthTitle="Weight Health"
+          className={`rhythm-history-view__score-card${foundationNavigation ? ' foundation-health-card' : ''}`}
+          consistency={healthScore?.consistency ?? null}
+          onTrack={healthScore?.onTrack ?? null}
+          health={healthScore?.health ?? null}
+          consistencyCaption="Scheduled Weight-linked weigh-in Rhythms."
+          onTrackCaption="Whether weigh-ins due on those Rhythms are caught up."
+          summaryExplanation="Weight Health reflects scheduled weigh-in Rhythms. Recorded weight, distance from the goal path, and the separate Goal Progress score do not affect it."
+        />
+      )}
       <section className="weight-progress">
           <section className="card weight-progress-card" aria-labelledby="weight-progress-heading">
             <header className="weight-card-heading">
@@ -116,8 +141,10 @@ export function WeightView({
                   ? `Latest recorded measurement · ${formatDate(progress.latest.date)}`
                   : 'No valid weigh-in recorded yet.'}</p>
               </div>
-              <button type="button" className="btn mini ghost"
-                onClick={event => openDialog({ kind: 'goals' }, event)}>Edit goals</button>
+              <SettingsGearButton
+                label="Weight goal settings"
+                onClick={event => openDialog({ kind: 'goals' }, event)}
+              />
             </header>
             {progress.latest && (
               <div className="weight-latest-record" aria-label="Latest recorded measurement">
@@ -191,9 +218,6 @@ export function WeightView({
               </ol>}
             {actionError && <p className="goal-field-error" role="alert">{actionError}</p>}
           </section>
-          <button type="button" className="money-goals-back" onClick={event => openDialog({ kind: 'weigh-in' }, event)}>
-            Add weigh-in
-          </button>
       </section>
       {issues.length > 0 && (
         <section className="weight-data-issues" role="status" aria-label="Weight data quality">
@@ -222,7 +246,7 @@ export function WeightView({
           onClose={closeDialog}
         />
       )}
-    </main>
+    </section>
   );
 }
 

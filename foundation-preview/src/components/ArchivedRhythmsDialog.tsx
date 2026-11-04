@@ -129,6 +129,7 @@ export function ArchivedRhythmsDialog({
             <RhythmDetailsDialog
               rhythm={selectedRhythm}
               {...(foundations ? { foundations } : {})}
+              relatedRhythms={rhythms}
               people={peopleForRhythm(selectedRhythm, people)}
               completed={completedRhythms.has(selectedRhythm.id)}
               archived
@@ -166,6 +167,8 @@ export function ArchivedRhythmsDialog({
                       rhythm={rhythm}
                       people={peopleForRhythm(rhythm, people)}
                       onPersonSelect={onPersonSelect}
+                      {...(navigateToFoundation ? { onOpenFoundation: navigateToFoundation } : {})}
+                      {...(navigateToCategory ? { onOpenCategory: navigateToCategory } : {})}
                       variant="simple"
                       completed={completedRhythms.has(rhythm.id)}
                       archived

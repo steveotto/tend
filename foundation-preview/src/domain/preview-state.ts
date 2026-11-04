@@ -29,7 +29,8 @@ import {
   validateSavedRhythmsV13,
   validateSavedRhythmsV14,
   validateSavedRhythmsV17,
-  validateSavedRhythmsV18
+  validateSavedRhythmsV18,
+  validateSavedRhythmsV19
 } from './rhythm-editor.ts';
 import { validateSavedRhythmsV10 } from './rhythm-editor.ts';
 import type { SavedRhythm } from './rhythm-editor.ts';
@@ -82,9 +83,11 @@ import {
   validateTimeBlockSettings
 } from './time-blocks.ts';
 import type { TimeBlockSettings } from './time-blocks.ts';
+import { validateCalendarSources } from './calendar-sources.ts';
+import type { CalendarSource } from './calendar-sources.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 35;
+export const PREVIEW_SCHEMA_VERSION = 37;
 
 export type PreviewData = {
   goals: MoneyGoal[];
@@ -107,6 +110,7 @@ export type PreviewData = {
   prayerRequests: PersonPrayerRequest[];
   timeBlocks: TimeBlockSettings;
   showTended: boolean;
+  calendarSources: CalendarSource[];
   [key: string]: unknown;
 };
 
@@ -138,7 +142,7 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35; resolvedPersonCategories: number }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37; resolvedPersonCategories: number }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
 const goalKeys = [
@@ -182,6 +186,8 @@ const dataKeysV32 = [...dataKeysV31, 'people'];
 const dataKeysV33 = [...dataKeysV32, 'prayerRequests'];
 const dataKeysV34 = [...dataKeysV33, 'timeBlocks'];
 const dataKeysV35 = [...dataKeysV34, 'showTended'];
+const dataKeysV36 = [...dataKeysV35, 'calendarSources'];
+const dataKeysV37 = dataKeysV36;
 const envelopeKeys = ['format', 'schemaVersion', 'data'];
 const supportedRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 const builtInRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
@@ -217,7 +223,8 @@ export function createSamplePreviewData(): PreviewData {
     personNotes: [],
     prayerRequests: [],
     timeBlocks: createDefaultTimeBlockSettings(),
-    showTended: false
+    showTended: false,
+    calendarSources: []
   };
 }
 
@@ -261,7 +268,10 @@ function hasOnlyKeysWithCompatibleDefaults(
     || key === 'timeBlocks'
       && isRecord(record[key])
     || key === 'showTended'
-      && record[key] === false);
+      && record[key] === false
+    || key === 'calendarSources'
+      && Array.isArray(record[key])
+      && record[key].length === 0);
 }
 
 function isNonEmptyText(value: unknown, maxLength = 160): value is string {
@@ -391,6 +401,9 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
           : { secondaryFoundationIds: [...rhythm.secondaryFoundationIds] }),
         ...(rhythm.suggestionSourceId === undefined ? {} : { suggestionSourceId: rhythm.suggestionSourceId }),
         ...(rhythm.healthLogCapability === undefined ? {} : { healthLogCapability: rhythm.healthLogCapability }),
+        ...(rhythm.healthRunTarget === undefined || rhythm.healthRunTarget === null
+          ? {}
+          : { healthRunTarget: { ...rhythm.healthRunTarget } }),
         ...(rhythm.scoring === undefined ? {} : { scoring: cloneRhythmScoring(rhythm.scoring) }),
         ...(rhythm.createdLocalDate === undefined ? {} : {
           createdLocalDate: rhythm.createdLocalDate,
@@ -478,7 +491,8 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
         blocks: data.timeBlocks.blocks.map(block => ({ ...block })),
         sleepStart: data.timeBlocks.sleepStart
       },
-      showTended: data.showTended
+      showTended: data.showTended,
+      calendarSources: data.calendarSources.map(source => ({ ...source }))
     }
   };
 }
@@ -530,6 +544,8 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
       && value.schemaVersion !== 32
       && value.schemaVersion !== 33
       && value.schemaVersion !== 34
+      && value.schemaVersion !== 35
+      && value.schemaVersion !== 36
       && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
@@ -564,7 +580,9 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const isV29 = value.schemaVersion === 29;
   const isV30 = value.schemaVersion === 30;
   const isV31 = value.schemaVersion === 31;
-  const isV35 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV37 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV36 = value.schemaVersion === 36 || isV37;
+  const isV35 = value.schemaVersion === 35 || isV36;
   const isV34 = value.schemaVersion === 34 || isV35;
   const isV33 = value.schemaVersion === 33 || isV34;
   const isV32 = value.schemaVersion === 32 || isV33;
@@ -581,11 +599,11 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const isV21_compat = value.schemaVersion === 21 || isV22_compat;
   const isV20_compat = value.schemaVersion === 20 || isV21_compat;
   const isV19_compat = value.schemaVersion === 19 || isV20_compat;
-  const hasCurrentFriendshipsData = isV19_compat || isV20_compat || isV21_compat || isV22_compat || isV23_compat || isV24_compat || isV25_compat || isV26_compat || isV27_compat || isV28_compat || isV29_compat || isV30_compat || isV31_compat || isV32;
+  const hasCurrentFriendshipsData = isV19_compat || isV20_compat || isV21_compat || isV22_compat || isV23_compat || isV24_compat || isV25_compat || isV26_compat || isV27_compat || isV28_compat || isV29_compat || isV30_compat || isV31_compat || isV32 || isV36;
   const hasCardio = isV18 || hasCurrentFriendshipsData;
   const allowedDataKeys = isV1 ? dataKeysV1 : isV2 ? dataKeysV2
     : isV3 || isV4 ? dataKeysV3
-      : isV35 ? dataKeysV35 : isV34 && value.schemaVersion === 34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
+      : isV37 ? dataKeysV37 : isV36 ? dataKeysV36 : value.schemaVersion === 35 ? dataKeysV35 : isV34 && value.schemaVersion === 34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
         : isV11 || isV12 ? dataKeysV12 : isV10 ? dataKeysV10
       : isV8 || isV9 ? dataKeysV8 : isV7 ? dataKeysV7 : isV6 ? dataKeysV6 : dataKeysV5;
   if (!isRecord(value.data) || (!isV19 && !isV20 && !hasOnlyKeysWithCompatibleDefaults(value.data, allowedDataKeys))
@@ -615,6 +633,10 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   if (isV35 && typeof value.data.showTended !== 'boolean') {
     return { valid: false, kind: 'invalid', message: 'The Show tended preference must be a boolean.' };
   }
+  const calendarSourcesResult = validateCalendarSources(isV36 ? value.data.calendarSources : []);
+  if (!calendarSourcesResult.valid) {
+    return { valid: false, kind: 'invalid', message: 'Calendar sources contain invalid links, names, or duplicate IDs.' };
+  }
   const timeBlockValidation = validateTimeBlockSettings(
     isV34 ? value.data.timeBlocks : createDefaultTimeBlockSettings()
   );
@@ -624,7 +646,8 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const timeBlocks = timeBlockValidation.settings;
   const people: PersonPreview[] = isV32 ? value.data.people as PersonPreview[] : createSamplePeople();
   if (!isV1 && !((isV4 || isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18 || hasCurrentFriendshipsData)
-    ? isV18 || hasCurrentFriendshipsData ? validateSavedRhythmsV18(value.data.savedRhythms)
+    ? isV37 ? validateSavedRhythmsV19(value.data.savedRhythms)
+      : isV18 || hasCurrentFriendshipsData ? validateSavedRhythmsV18(value.data.savedRhythms)
       : isV17 ? validateSavedRhythmsV17(value.data.savedRhythms)
       : isV14 || isV15 || isV16 ? validateSavedRhythmsV14(value.data.savedRhythms)
       : isV13 ? validateSavedRhythmsV13(value.data.savedRhythms)
@@ -676,7 +699,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   }
 
   let savedRhythms: SavedRhythm[];
-  if (hasCurrentFriendshipsData || isV18 || isV17 || isV16 || isV15 || isV14 || isV13 || isV12 || isV11 || isV10 || isV9) {
+  if (isV37 || hasCurrentFriendshipsData || isV18 || isV17 || isV16 || isV15 || isV14 || isV13 || isV12 || isV11 || isV10 || isV9) {
     savedRhythms = value.data.savedRhythms as SavedRhythm[];
   } else if (isV7 || isV8) {
     savedRhythms = (value.data.savedRhythms as SavedRhythm[]).map(rhythm => {
@@ -1038,7 +1061,8 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     personNotes,
     prayerRequests,
     timeBlocks,
-    showTended: isV35 ? value.data.showTended as boolean : false
+    showTended: isV35 ? value.data.showTended as boolean : false,
+    calendarSources: calendarSourcesResult.sources
   };
 
   return {

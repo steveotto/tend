@@ -16,6 +16,9 @@ import faithCommunityIcon from '../assets/tend-approved-icons/foundations/faith-
 import faithServiceIcon from '../assets/tend-approved-icons/foundations/faith-service.svg?url';
 import faithWitnessIcon from '../assets/tend-approved-icons/foundations/faith-witness.svg?url';
 import faithScriptureIcon from '../assets/tend-approved-icons/foundations/faith-scripture.svg?url';
+import healthStrengthIcon from '../assets/tend-approved-icons/foundations/health-strength.svg?url';
+import healthCardioIcon from '../assets/tend-approved-icons/foundations/health-cardio.svg?url';
+import healthWeightIcon from '../assets/tend-approved-icons/foundations/health-weight.svg?url';
 import dailyConnectionIcon from '../../../assets/tend-marriage-icons/rhythms/daily-connection.svg?url';
 import dateNightIcon from '../../../assets/tend-marriage-icons/rhythms/date-night.svg?url';
 import dreamTogetherIcon from '../../../assets/tend-marriage-icons/rhythms/dream-together.svg?url';
@@ -47,7 +50,10 @@ const foundationIcons: Record<string, string> = {
   'faith-community': faithCommunityIcon,
   'faith-service': faithServiceIcon,
   'faith-witness': faithWitnessIcon,
-  'faith-scripture': faithScriptureIcon
+  'faith-scripture': faithScriptureIcon,
+  'health-strength': healthStrengthIcon,
+  'health-cardio': healthCardioIcon,
+  'health-weight': healthWeightIcon
 };
 
 export function hasFoundationIcon(id: string): boolean {

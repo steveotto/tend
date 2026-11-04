@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -21,7 +21,7 @@ import {
   unavailableRhythmScoreExample
 } from '../src/domain/rhythm-history.ts';
 import { scoreTone } from '../src/domain/score-tone.ts';
-import { marriageRhythms, syntheticPeople, todayRhythms } from '../src/domain/preview-data.ts';
+import { foundationCatalogue, marriageRhythms, syntheticPeople, todayRhythms } from '../src/domain/preview-data.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
 import type { DatedRhythmCompletion } from '../src/domain/rhythm-completion.ts';
 import { addCalendarDays, localDateInTimeZone } from '../src/domain/rhythm-scoring.ts';
@@ -146,6 +146,58 @@ function EditableHistoryHarness() {
 }
 
 describe('shared Rhythm history', () => {
+  it('shows the Rhythm-specific static flow and its linked Foundations and categories', async () => {
+    const user = userEvent.setup();
+    const rhythm = {
+      ...todayConnection,
+      id: 'health-rollup-rhythm',
+      title: 'Move outside',
+      primaryFoundationId: 'health-cardio',
+      secondaryFoundationIds: ['health-weight'],
+      categoryIds: ['health'] as const
+    };
+    const cardioRhythm = {
+      ...rhythm,
+      id: 'cardio-linked-rhythm',
+      title: 'Cardio intervals',
+      primaryFoundationId: 'health-cardio',
+      secondaryFoundationIds: []
+    };
+    const weightRhythm = {
+      ...rhythm,
+      id: 'weight-linked-rhythm',
+      title: 'Weekly weigh-in',
+      primaryFoundationId: 'health-weight',
+      secondaryFoundationIds: []
+    };
+    const unrelatedRhythm = {
+      ...rhythm,
+      id: 'unrelated-rhythm',
+      title: 'Date night',
+      primaryFoundationId: 'connection',
+      secondaryFoundationIds: [],
+      categoryIds: ['marriage'] as const
+    };
+    render(
+      <RhythmHistoryView
+        rhythm={rhythm}
+        foundations={foundationCatalogue}
+        relatedRhythms={[cardioRhythm, weightRhythm, unrelatedRhythm]}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Show Consistency and On Track score details' }));
+    const dialog = screen.getByRole('dialog', { name: 'Rhythm Health details' });
+    expect(within(dialog).getByRole('heading', { name: 'Scheduled completions' })).toBeTruthy();
+    expect(within(dialog).getByText('Move outside')).toBeTruthy();
+    expect(within(dialog).getByText('Cardio')).toBeTruthy();
+    expect(within(dialog).getByText('Weight')).toBeTruthy();
+    expect(within(dialog).getByText('Health & Fitness')).toBeTruthy();
+    expect(within(dialog).queryByText('Date night')).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: /Next / })).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: /Previous / })).toBeNull();
+  });
+
   it('orders history before Seasons and Logged moments, with the correct accessible Season Undo action', async () => {
     const user = userEvent.setup();
     const fixture = scoredTodayFixture();
@@ -382,18 +434,20 @@ describe('shared Rhythm history', () => {
     const header = within(history).getByRole('heading', { name: 'Seasons' }).parentElement!;
     expect(header.querySelector('.rhythm-history-view__seasons-count')?.textContent).toBe('1 season');
     expect(within(header).getByRole('button', { name: 'Show Seasons' })).toBeTruthy();
-    expect(within(history).queryByRole('button', { name: 'Add a Season' })).toBeNull();
+    const addButton = within(history).getByRole('button', { name: 'Add a Season' });
+    const addRow = addButton.parentElement!;
+    expect(addRow.className).toContain('rhythm-history-view__season-add-row');
+    expect(header.compareDocumentPosition(addRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     const toggle = within(header).getByRole('button', { name: 'Show Seasons' });
     toggle.focus();
     await user.keyboard('{Enter}');
     const content = document.getElementById(toggle.getAttribute('aria-controls')!)!;
-    const addButton = within(content).getByRole('button', { name: 'Add a Season' });
-    expect(content.contains(addButton)).toBe(true);
-    const addRow = addButton.parentElement!;
-    expect(addRow.className).toContain('rhythm-history-view__season-add-row');
-    expect(addRow.querySelector('.rhythm-history-view__seasons-info-copy')?.textContent)
-      .toBe('Seasons organize your schedule as it changes. Your logs stay saved, and each is scored using the schedule in place at the time.');
+    expect(content.hidden).toBe(false);
+    expect(history.contains(addButton)).toBe(true);
+    expect(within(content).getByText(
+      'Seasons organize your schedule as it changes. Your logs stay saved, and each is scored using the schedule in place at the time.'
+    )).toBeTruthy();
     addButton.focus();
     await user.keyboard('{Enter}');
     expect(screen.getByRole('dialog', { name: 'Add a season' })).toBeTruthy();
@@ -1281,24 +1335,25 @@ describe('shared Rhythm history', () => {
     const { rerender } = render(<RhythmScoreCircle label="Health" score={0} state="scored" />);
     const meter = screen.getByRole('meter', { name: 'Health score' });
     expect(meter.getAttribute('aria-valuenow')).toBe('0');
-    expect(meter.getAttribute('aria-valuetext')).toBe('0 out of 100');
-    expect(screen.getByText('0')).toBeTruthy();
+    expect(meter.getAttribute('aria-valuetext')).toBe('0%');
+    expect(screen.getByText('0%')).toBeTruthy();
 
     rerender(<RhythmScoreCircle label="Health" score={36.25} state="scored" />);
     const fractionalMeter = screen.getByRole('meter', { name: 'Health score' });
     expect(fractionalMeter.getAttribute('aria-valuenow')).toBe('36');
-    expect(fractionalMeter.getAttribute('aria-valuetext')).toBe('36 out of 100');
-    expect(screen.getByText('36')).toBeTruthy();
+    expect(fractionalMeter.getAttribute('aria-valuetext')).toBe('36%');
+    expect(screen.getByText('36%')).toBeTruthy();
 
     rerender(<RhythmScoreCircle label="Health" score={null} state="unscored" />);
     expect(screen.getByRole('img', { name: 'Health: Unscored because there are no eligible due occurrences' }))
       .toBeTruthy();
-    expect(screen.getByText('unscored')).toBeTruthy();
+    expect(screen.getByText('—')).toBeTruthy();
+    expect(screen.queryByText('unscored')).toBeNull();
 
     rerender(<RhythmScoreCircle label="Health" score={null} state="unavailable" />);
     expect(screen.getByRole('img', { name: 'Health: Score unavailable' })).toBeTruthy();
     expect(screen.getByText('—')).toBeTruthy();
-    expect(screen.getByText('unavailable')).toBeTruthy();
+    expect(screen.queryByText('unavailable')).toBeNull();
     expect([scoreTone(80), scoreTone(79), scoreTone(50), scoreTone(0), scoreTone(null)]).toEqual([
       'green', 'yellow', 'yellow', 'red', 'neutral'
     ]);
@@ -1592,51 +1647,48 @@ describe('shared Rhythm history', () => {
     expect(screen.queryByText('75% Consistency · 25% On Track')).toBeNull();
     expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('79');
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('70');
-    expect(screen.getByText('How often you show up')).toBeTruthy();
-    expect(screen.getByText('How caught up you are')).toBeTruthy();
+    expect(screen.queryByText('How often you show up')).toBeNull();
+    expect(screen.queryByText('How caught up you are')).toBeNull();
     const consistency = screen.getByRole('region', { name: 'Consistency' });
     const onTrack = screen.getByRole('region', { name: 'On Track' });
     const info = screen.getByRole('button', { name: 'Show Consistency and On Track score details' });
-    const controlledIds = info.getAttribute('aria-controls')!.split(' ');
-    const healthCalculationDisclosure = document.getElementById(controlledIds[0]!)!;
-    const details = document.getElementById(controlledIds[1]!)!;
-    expect(controlledIds).toHaveLength(2);
-    expect(healthCalculationDisclosure.classList.contains('rhythm-history-view__health-calculation-disclosure')).toBe(true);
-    expect(details.hidden).toBe(true);
-    expect(healthCalculationDisclosure.hidden).toBe(true);
+    const detailsId = info.getAttribute('aria-controls')!;
     expect(document.querySelectorAll('.rhythm-history-view__score-card')).toHaveLength(1);
     expect(document.querySelectorAll('.health-score-measures__item')).toHaveLength(2);
     expect(document.querySelectorAll('.rhythm-history-view__score-summary-divider')).toHaveLength(1);
     expect(document.querySelectorAll('.rhythm-history-view__score-card .rhythm-history-view__score-info')).toHaveLength(1);
     expect(info.getAttribute('aria-expanded')).toBe('false');
-    expect(info.getAttribute('aria-controls')).toBe(`${healthCalculationDisclosure.id} ${details.id}`);
-    expect(getComputedStyle(healthCalculationDisclosure).display).toBe('none');
+    expect(detailsId).toBeTruthy();
+    expect(document.getElementById(detailsId)).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Rhythm Health details' })).toBeNull();
     expect(within(consistency).queryByText('30 moments')).toBeNull();
     expect(within(onTrack).queryByText('3 days')).toBeNull();
     await user.click(info);
-    expect(details.hidden).toBe(false);
-    expect(healthCalculationDisclosure.hidden).toBe(false);
     expect(info.getAttribute('aria-expanded')).toBe('true');
-    expect(document.activeElement).toBe(info);
-    expect(info.getAttribute('aria-label')).toBe('Hide Consistency and On Track score details');
-    expect(screen.getByRole('group', { name: 'Consistency and On Track score details' })).toBe(details);
-    const healthCalculation = healthCalculationDisclosure.querySelector('.rhythm-history-view__health-calculation') as HTMLElement;
-    expect(within(healthCalculation).getByRole('heading', { name: 'How your Health score is calculated' })).toBeTruthy();
-    const explanation = healthCalculation.querySelector('.visually-hidden') as HTMLElement;
-    expect(healthCalculation.getAttribute('aria-describedby')).toBe(explanation.id);
-    expect(screen.getByRole('region', { name: 'How your Health score is calculated' })).toBe(healthCalculation);
-    expect(explanation.textContent?.replace(/\s+/g, ' ').trim())
-      .toBe("Health is weighted 75 percent Consistency and 25 percent On Track. These are fixed formula weights, not this Rhythm's current scores.");
-    expect(within(healthCalculation).queryByText('Fixed formula weights')).toBeNull();
+    const dialog = screen.getByRole('dialog', { name: 'Rhythm Health details' });
+    const scoreDetails = within(dialog).getByRole('region', { name: 'Rhythm Health score details score summary' });
+    expect(within(scoreDetails).getByRole('meter', { name: 'Health score' }).getAttribute('aria-valuenow'))
+      .toBe(healthMeter.getAttribute('aria-valuenow'));
+    expect(scoreDetails.querySelector('.health-score-measures')).toBeNull();
+    const details = document.getElementById(detailsId)!;
+    expect(details.hidden).toBe(false);
+    expect(document.activeElement).toBe(within(dialog).getByRole('heading', { name: 'Rhythm Health details' }));
+    expect(info.getAttribute('aria-label')).toBe('Show Consistency and On Track score details');
+    expect(within(dialog).getByRole('group', { name: 'Consistency and On Track score details' }))
+      .toBe(details);
+    const healthCalculation = dialog.querySelector('.health-info-calculation') as HTMLElement;
+    expect(within(healthCalculation).getByRole('heading', { name: 'How Health is calculated' })).toBeTruthy();
+    expect(healthCalculation.getAttribute('aria-labelledby')).toBeTruthy();
     const weightPanels = [...healthCalculation.querySelectorAll('.rhythm-history-view__health-weight-panel')];
     expect(weightPanels).toHaveLength(2);
     expect(weightPanels.map(panel => [
       panel.querySelector('.rhythm-history-view__health-weight-value strong')?.textContent,
       panel.querySelector('.rhythm-history-view__health-weight-name')?.textContent,
+      panel.querySelector('.rhythm-history-view__health-weight-score')?.textContent,
       panel.querySelector('.rhythm-history-view__health-weight-subtitle')?.textContent
     ])).toEqual([
-      ['75%', 'Consistency', 'Your longer-term pattern.'],
-      ['25%', 'On Track', 'Up to date']
+      ['75%', 'Consistency', '79%', 'How regularly you follow through'],
+      ['25%', 'On Track', '70%', 'How caught up you are.']
     ]);
     expect(healthCalculation.querySelectorAll('.rhythm-history-view__health-weight-panel svg[aria-hidden="true"]')).toHaveLength(2);
     expect(healthCalculation.textContent).not.toMatch(/[×=]/);
@@ -1644,10 +1696,8 @@ describe('shared Rhythm history', () => {
     const orderedSections = [...scoreCard.children]
       .filter(element => element.classList.contains('rhythm-history-view__health-summary')
         || element.classList.contains('health-score-breakdown')
-        || element.classList.contains('rhythm-history-view__health-calculation-disclosure')
         || element.classList.contains('rhythm-history-view__score-summary-divider')
-        || element.classList.contains('health-score-measures')
-        || element.classList.contains('rhythm-history-view__score-details-grid'))
+        || element.classList.contains('health-score-measures'))
       .map(element => element.className.split(' ').find(className =>
         className.startsWith('rhythm-history-view__')
         || className === 'health-score-breakdown'
@@ -1655,10 +1705,8 @@ describe('shared Rhythm history', () => {
       ));
     expect(orderedSections).toEqual([
       'health-score-breakdown',
-      'rhythm-history-view__health-calculation-disclosure',
       'rhythm-history-view__score-summary-divider',
-      'health-score-measures',
-      'rhythm-history-view__score-details-grid'
+      'health-score-measures'
     ]);
     const healthDetails = details.querySelector('.rhythm-history-view__score-details-column:first-child') as HTMLElement;
     const onTrackDetails = details.querySelector('.rhythm-history-view__score-details-column:last-child') as HTMLElement;
@@ -1736,6 +1784,8 @@ describe('shared Rhythm history', () => {
     expect(within(healthDetails).queryByText(/76\.7|→/)).toBeNull();
     expect(within(details).getByRole('heading', { name: 'Your scheduled pattern' })).toBeTruthy();
     expect(within(details).getByRole('heading', { name: 'Score history' })).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Close Health details' }));
+    await waitFor(() => expect(document.activeElement).toBe(info));
   });
 
   it('explains shared monthly-period credit while retaining every logged moment', async () => {
@@ -1774,7 +1824,7 @@ describe('shared Rhythm history', () => {
     await user.click(within(history).getByRole('button', {
       name: 'Show Consistency and On Track score details'
     }));
-    const scoreDetails = within(history).getByRole('group', {
+    const scoreDetails = screen.getByRole('group', {
       name: 'Consistency and On Track score details'
     });
     expect(within(scoreDetails).getByText(
@@ -1811,7 +1861,7 @@ describe('shared Rhythm history', () => {
     await user.click(within(history).getByRole('button', {
       name: 'Show Consistency and On Track score details'
     }));
-    const scoreDetails = within(history).getByRole('group', {
+    const scoreDetails = screen.getByRole('group', {
       name: 'Consistency and On Track score details'
     });
     expect(within(scoreDetails).getByText(
@@ -1877,7 +1927,10 @@ describe('shared Rhythm history', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Show Consistency and On Track score details' }));
     expect(screen.getByText('Consistency for Custom intervals is unavailable because a lookback policy has not been approved.')).toBeTruthy();
-    expect(screen.getByRole('meter', { name: 'On Track score' })).toBeTruthy();
+    const onTrackValue = document.querySelector(
+      '.health-info-calculation .rhythm-history-view__health-weight-panel--on-track .rhythm-history-view__health-weight-score'
+    )?.textContent;
+    expect(onTrackValue).toMatch(/^\d+%$/);
     expect(screen.queryByRole('list', { name: /eligible .* occurrences from/ })).toBeNull();
     expect(screen.queryByText(/÷ .* × 100/)).toBeNull();
   });
@@ -1919,7 +1972,10 @@ describe('shared Rhythm history', () => {
     await user.click(screen.getByRole('button', { name: 'Show Consistency and On Track score details' }));
 
     const timeline = screen.getByRole('list', { name: 'On Track score changes' });
-    const initialScore = screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow');
+    const details = screen.getByRole('dialog', { name: 'Rhythm Health details' });
+    const initialScore = details.querySelector(
+      '.health-info-calculation .rhythm-history-view__health-weight-panel--on-track .rhythm-history-view__health-weight-score'
+    )?.textContent;
     const initialFormula = document.querySelector('.rhythm-history-view__score-details-column:last-child .rhythm-history-view__calculation')?.textContent;
     const displayedEntries = within(timeline).getAllByRole('listitem');
     expect(displayedEntries.length).toBeLessThanOrEqual(ON_TRACK_SCORE_HISTORY_DISPLAY_LIMIT);
@@ -1930,7 +1986,9 @@ describe('shared Rhythm history', () => {
     expect(displayedEntries.map(item => item.textContent).join(' '))
       .toMatch(/more misses/);
 
-    expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe(initialScore);
+    expect(details.querySelector(
+      '.health-info-calculation .rhythm-history-view__health-weight-panel--on-track .rhythm-history-view__health-weight-score'
+    )?.textContent).toBe(initialScore);
     expect(document.querySelector('.rhythm-history-view__score-details-column:last-child .rhythm-history-view__calculation')?.textContent)
       .toBe(initialFormula);
 
@@ -1975,7 +2033,9 @@ describe('shared Rhythm history', () => {
       /Qualifying completion on .* reset the missed-occurrence count and On Track score to 100/
     );
     expect(screen.queryByRole('button', { name: 'Show earlier steps' })).toBeNull();
-    expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('100');
+    expect(document.querySelector(
+      '.health-info-calculation .rhythm-history-view__health-weight-panel--on-track .rhythm-history-view__health-weight-score'
+    )?.textContent).toBe('100%');
   });
 
   it('labels a pending current date as current state rather than as a missed occurrence', async () => {
@@ -2028,30 +2088,26 @@ describe('shared Rhythm history', () => {
     const user = userEvent.setup();
     render(<RhythmHistoryView rhythm={todayConnection} />);
     const info = screen.getByRole('button', { name: 'Show Consistency and On Track score details' });
-    const [healthCalculationId, detailsId] = info.getAttribute('aria-controls')!.split(' ');
-    const healthCalculation = document.getElementById(healthCalculationId!)!;
-    const details = document.getElementById(detailsId!)!;
+    const detailsId = info.getAttribute('aria-controls')!;
 
     await user.click(info);
-    expect(details.hidden).toBe(false);
-    expect(healthCalculation.hidden).toBe(false);
+    expect(screen.getByRole('dialog', { name: 'Rhythm Health details' })).toBeTruthy();
+    expect(document.getElementById(detailsId)).toBeTruthy();
     expect(info.getAttribute('aria-expanded')).toBe('true');
-    expect(document.activeElement).toBe(info);
 
-    await user.click(info);
-    expect(details.hidden).toBe(true);
-    expect(healthCalculation.hidden).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Close Health details' }));
+    expect(screen.queryByRole('dialog', { name: 'Rhythm Health details' })).toBeNull();
     expect(info.getAttribute('aria-expanded')).toBe('false');
-    expect(document.activeElement).toBe(info);
+    await waitFor(() => expect(document.activeElement).toBe(info));
 
     await user.keyboard('{Enter}');
-    expect(details.hidden).toBe(false);
-    expect(healthCalculation.hidden).toBe(false);
+    expect(screen.getByRole('dialog', { name: 'Rhythm Health details' })).toBeTruthy();
     expect(info.getAttribute('aria-expanded')).toBe('true');
+    await user.click(screen.getByRole('button', { name: 'Close Health details' }));
+    await waitFor(() => expect(document.activeElement).toBe(info));
     await user.keyboard(' ');
-    expect(details.hidden).toBe(true);
-    expect(healthCalculation.hidden).toBe(true);
-    expect(info.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByRole('dialog', { name: 'Rhythm Health details' })).toBeTruthy();
+    expect(info.getAttribute('aria-expanded')).toBe('true');
   });
 
   it('derives the automatic start from the oldest dated completion and shows short-history context', async () => {
@@ -2211,12 +2267,14 @@ describe('shared Rhythm history', () => {
     expect(screen.queryByText('Your story starts with the first Tend.')).toBeNull();
     expect(screen.queryByRole('list', { name: 'Recorded completion count by date' })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Show Consistency and On Track score details' }));
-    const unavailableCalculation = document.querySelector('.rhythm-history-view__health-calculation') as HTMLElement;
-    expect(within(unavailableCalculation).getByRole('heading', { name: 'How your Health score is calculated' })).toBeTruthy();
-    expect(within(unavailableCalculation).getByText('75%', { exact: true })).toBeTruthy();
-    expect(within(unavailableCalculation).getByText('25%', { exact: true })).toBeTruthy();
+    const unavailableCalculation = document.querySelector('.health-info-calculation') as HTMLElement;
+    expect(within(unavailableCalculation).getByRole('heading', { name: 'How Health is calculated' })).toBeTruthy();
+    expect([...unavailableCalculation.querySelectorAll('.rhythm-history-view__health-weight-score')]
+      .map(value => value.textContent)).toEqual(['—', '—']);
+    expect(within(document.querySelector('.health-info-what-counts') as HTMLElement)
+      .getByRole('heading', { name: 'What counts' })).toBeTruthy();
     expect(within(unavailableCalculation).getByText(/Health requires both scores/)).toBeTruthy();
-    expect(unavailableCalculation.querySelectorAll('.rhythm-history-view__health-unavailable')).toHaveLength(1);
+    expect(unavailableCalculation.querySelectorAll('.health-info-calculation__note')).toHaveLength(1);
     expect(unavailableCalculation.textContent).not.toMatch(/[×=]/);
     rerender(<RhythmHistoryView rhythm={{ ...rhythmWithoutHistory, completionHistory: [] }} />);
     expect(screen.getByText('Your story starts with the first Tend.')).toBeTruthy();
@@ -2353,8 +2411,9 @@ describe('shared Rhythm history', () => {
       await user.click(screen.getByText('Logged moments (0)'));
       const history = screen.getByRole('region', { name: `History for ${todayConnection.title}` });
       const opener = screen.getByRole('button', { name: '+ Log a moment' });
-      expect(opener.classList.contains('button')).toBe(true);
-      expect(opener.classList.contains('button-secondary')).toBe(true);
+      expect(opener.classList.contains('btn')).toBe(true);
+      expect(opener.classList.contains('mini')).toBe(true);
+      expect(opener.classList.contains('ghost')).toBe(true);
       await user.click(opener);
       const recording = screen.getByRole('dialog', { name: 'When did you tend it?' });
       expect(recording.getAttribute('aria-modal')).toBe('true');

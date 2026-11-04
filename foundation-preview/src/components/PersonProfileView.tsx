@@ -38,6 +38,7 @@ import {
 } from '../domain/person-details.ts';
 import type { PersonDetails } from '../domain/person-details.ts';
 import { PersonNotesPanel } from './PersonNotesPanel.tsx';
+import { ArchivedRhythmsControl } from './ArchivedRhythmsControl.tsx';
 import { personNotesForPerson } from '../domain/person-notes.ts';
 import type { PersonNote, PersonNoteDraft } from '../domain/person-notes.ts';
 import { resolvePersonCategory } from '../domain/person-categories.ts';
@@ -174,7 +175,7 @@ export function PersonProfileView({
   const notesAccessRef = useRef<HTMLButtonElement | null>(null);
   const connectionOpener = useRef<HTMLButtonElement | null>(null);
   const wasEditorOpen = useRef(false);
-  const archiveOpener = useRef<HTMLButtonElement | null>(null);
+  const archiveOpener = useRef<HTMLElement | null>(null);
   const wasArchiveOpen = useRef(false);
   const connectionHistory = connectionsForPerson(friendships, personId);
   const personConnectionStatus = friendConnectionStatus(friendships, personId, today);
@@ -270,6 +271,7 @@ export function PersonProfileView({
         headingId={`person-profile-rhythm-${personId}-${rhythm.id}`}
         people={peopleForRhythm(rhythm, people)}
         foundations={foundations}
+        relatedRhythms={rhythms}
         onPersonSelect={onPersonSelect}
         onOpenFoundation={onOpenFoundation}
         onOpenCategory={onOpenCategory}
@@ -468,18 +470,15 @@ export function PersonProfileView({
                 </div>
               </section>
             )}
-            <button
-              ref={archiveOpener}
-              type="button"
-              className="category-archived-rhythms-toggle"
-              aria-haspopup="dialog"
-              onClick={() => {
+            <ArchivedRhythmsControl
+              count={personArchivedRhythms.length}
+              openerRef={archiveOpener}
+              expanded={showArchived}
+              onOpen={() => {
                 setArchivedPersonId(personId);
                 setShowArchived(true);
               }}
-            >
-              Archived rhythms ({personArchivedRhythms.length})
-            </button>
+            />
           </section>
           <section
             id="person-profile-panel-connections"

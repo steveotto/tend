@@ -111,8 +111,8 @@ describe('shared preview components', () => {
     expect(badges.map(badge => badge.getAttribute('aria-label'))).toEqual(
       areas.map(area => area.label)
     );
-    expect(badges.every(badge => badge.getAttribute('title') === badge.getAttribute('aria-label'))).toBe(true);
     expect(badges.every(badge => badge.getAttribute('data-tooltip') === badge.getAttribute('aria-label'))).toBe(true);
+    expect(badges.every(badge => badge.getAttribute('title') === null)).toBe(true);
     expect(badges.every(badge => badge.querySelector('.rhythm-area-badge__visual .area-svg-icon'))).toBe(true);
     expect(badges.every(badge => badge.querySelector('.rhythm-area-badge__visual > .area-svg-icon'))).toBe(true);
     expect(container.querySelectorAll('.rhythm-area-badge')).toHaveLength(6);
@@ -263,11 +263,12 @@ describe('shared preview components', () => {
       name: 'Open synthetic profile for Avery Brooks'
     });
     const categoryBadges = within(associations).getAllByRole('button', {
-      name: /^(Faith|Marriage)$/
+      name: /^(Faith|Marriage)( category|$)/
     });
 
     expect(personBadge.compareDocumentPosition(categoryBadges[0]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(categoryBadges.map(badge => badge.getAttribute('aria-label'))).toEqual(['Faith', 'Marriage']);
+    expect(categoryBadges.map(badge => badge.getAttribute('aria-label')?.replace(/ category.*$/, '')))
+      .toEqual(['Faith', 'Marriage']);
     expect(associations.querySelectorAll('.rhythm-foundation-badge')).toHaveLength(0);
     expect(associations.querySelectorAll('.rhythm-area-badge__visual')).toHaveLength(2);
     expect(categoryBadges.every(badge => badge.querySelector('.area-svg-icon') !== null)).toBe(true);
@@ -307,8 +308,9 @@ describe('shared preview components', () => {
     const person = within(associations).getByRole('button', {
       name: 'Open synthetic profile for Avery Brooks'
     });
-    const categories = within(associations).getAllByRole('button', { name: /^(Faith|Marriage)$/ });
-    expect(categories.map(category => category.getAttribute('aria-label'))).toEqual(['Faith', 'Marriage']);
+    const categories = within(associations).getAllByRole('button', { name: /^(Faith|Marriage)( category|$)/ });
+    expect(categories.map(category => category.getAttribute('aria-label')?.replace(/ category.*$/, '')))
+      .toEqual(['Faith', 'Marriage']);
     expect(person.compareDocumentPosition(categories[0]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(associations.querySelectorAll('.rhythm-foundation-badge')).toHaveLength(0);
     fireEvent.click(categories[0]!);
@@ -937,10 +939,9 @@ describe('shared preview components', () => {
     expect(foundationOnlyCard).toBeTruthy();
     expect(categoriesOnlyCard).toBeTruthy();
     const associationRow = within(card!).getByRole('group', { name: `Associations for ${rhythm.title}` });
-    expect(within(associationRow).getAllByRole('img').map(icon => icon.getAttribute('aria-label'))).toEqual([
-      'Faith',
-      'Marriage'
-    ]);
+    expect(within(associationRow).getAllByRole('img').map(icon =>
+      icon.getAttribute('aria-label')?.replace(/ category.*$/, '')
+    )).toEqual(['Faith', 'Marriage']);
     const people = within(associationRow).getAllByRole('button');
     const categoryIcons = within(associationRow).getAllByRole('img');
     expect(associationRow.classList.contains('today-rhythm-details__association-row')).toBe(true);
@@ -952,10 +953,9 @@ describe('shared preview components', () => {
     const categoriesOnlyAssociations = within(categoriesOnlyCard!).getByRole('group', {
       name: 'Associations for Categories only'
     });
-    expect(within(categoriesOnlyAssociations).getAllByRole('img').map(icon => icon.getAttribute('aria-label'))).toEqual([
-      'Faith',
-      'Marriage'
-    ]);
+    expect(within(categoriesOnlyAssociations).getAllByRole('img').map(icon =>
+      icon.getAttribute('aria-label')?.replace(/ category.*$/, '')
+    )).toEqual(['Faith', 'Marriage']);
     expect(within(categoriesOnlyAssociations).queryByRole('button')).toBeNull();
   });
 
@@ -998,7 +998,7 @@ describe('shared preview components', () => {
     const categoryGroup = within(associations).getByRole('group', { name: 'Marriage category' });
     expect(peopleRow.compareDocumentPosition(categoryGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(associations).getByRole('group', { name: 'Faith category' })).toBeTruthy();
-    expect(within(categoryGroup).getByRole('button', { name: 'Marriage' })).toBeTruthy();
+    expect(within(categoryGroup).getByRole('button', { name: /^Marriage category/ })).toBeTruthy();
     expect(associations.querySelector('.today-rhythm-details__association-foundations-row')).toBeNull();
     expect(associations.querySelector('.rhythm-foundation-badges')).toBeNull();
 
@@ -1014,13 +1014,13 @@ describe('shared preview components', () => {
     const peopleGroup = within(chartAssociations).getByRole('group', {
       name: `People associated with ${rhythm.title}`
     });
-    const faithGroup = within(chartAssociations).getByRole('group', { name: 'Faith category and linked Foundations' });
+    const faithGroup = within(chartAssociations).getByRole('group', { name: 'Faith category and linked Practices' });
     const marriageGroup = within(chartAssociations).getByRole('group', { name: 'Marriage category and linked Foundations' });
-    const faithCategory = within(faithGroup).getByRole('button', { name: 'Faith' });
+    const faithCategory = within(faithGroup).getByRole('button', { name: /^Faith category/ });
     const faithFoundation = within(faithGroup).getByRole('button', {
       name: `Faith Practice: ${faithPractice.name}`
     });
-    const marriageCategory = within(marriageGroup).getByRole('button', { name: 'Marriage' });
+    const marriageCategory = within(marriageGroup).getByRole('button', { name: /^Marriage category/ });
     const marriageFoundationGroup = within(marriageGroup).getByRole('group', {
       name: `Marriage Foundations linked to ${rhythm.title}`
     });
@@ -1076,7 +1076,7 @@ describe('shared preview components', () => {
     const associations = within(detailsDialog).getByRole('group', {
       name: `People and categories associated with ${rhythm.title}`
     });
-    expect(within(associations).getByRole('button', { name: 'Marriage' })).toBeTruthy();
+    expect(within(associations).getByRole('button', { name: /^Marriage(?: category|$)/ })).toBeTruthy();
     expect(within(associations).queryByRole('button', { name: 'Finances: Finance Foundation' })).toBeNull();
     expect(detailsDialog.querySelector('.today-rhythm-details__association-foundations-row')).toBeNull();
     expect(within(detailsDialog).getByText(/1 linked Foundation reference could not be resolved to a Foundation record/))
@@ -1220,11 +1220,10 @@ describe('shared preview components', () => {
     const dialog = screen.getByRole('dialog', { name: rhythm.title });
     expect(within(dialog).getByRole('button', { name: 'Open synthetic profile for Avery Brooks' })).toBeTruthy();
     const metadataRow = within(dialog).getByRole('group', { name: `People and categories associated with ${rhythm.title}` });
-    const categoryGroups = within(metadataRow).getAllByRole('group', { name: / category$/ });
-    expect(categoryGroups.flatMap(group => within(group).getAllByRole('img').map(icon => icon.getAttribute('aria-label')))).toEqual([
-      'Faith',
-      'Marriage'
-    ]);
+    const categoryGroups = within(metadataRow).getAllByRole('group', { name: / category/ });
+    expect(categoryGroups.flatMap(group => within(group).getAllByRole('img').map(icon =>
+      icon.getAttribute('aria-label')?.replace(/ category.*$/, '')
+    ))).toEqual(['Faith', 'Marriage']);
     const historyButton = within(dialog).getByRole('button', {
       name: historyButtonName('View scores and history for Pray Together')
     });
@@ -1315,6 +1314,7 @@ describe('shared preview components', () => {
     let fill = container.querySelector<HTMLElement>('.foundation-progress__fill');
     expect(meter.getAttribute('aria-valuenow')).toBe('0');
     expect(fill?.style.width).toBe('0%');
+    expect(fill?.classList.contains('red')).toBe(true);
     expect(container.querySelector('.preview-score-marker')).toBeNull();
 
     rerender(<FoundationProgress label="Foundation example score" score={46} />);
@@ -1322,6 +1322,7 @@ describe('shared preview components', () => {
     fill = container.querySelector<HTMLElement>('.foundation-progress__fill');
     expect(meter.getAttribute('aria-valuenow')).toBe('46');
     expect(fill?.style.width).toBe('46%');
+    expect(fill?.classList.contains('red')).toBe(true);
 
     rerender(<FoundationProgress label="Foundation example score" score={null} />);
     meter = screen.getByRole('meter', { name: 'Foundation example score' });
@@ -1329,7 +1330,40 @@ describe('shared preview components', () => {
     expect(meter.getAttribute('aria-valuenow')).toBeNull();
     expect(meter.getAttribute('aria-valuetext')).toBe('Score unavailable');
     expect(fill?.style.width).toBe('0%');
+    expect(fill?.classList.contains('neutral')).toBe(true);
     expect(container.querySelector('.preview-score-marker')).toBeNull();
+  });
+
+  it('uses the same score tone for compact Foundation numbers and fills across categories', () => {
+    const categories = [
+      { foundation: faithPractices[0]!, score: 100, tone: 'green' },
+      { foundation: marriageFoundations[0]!, score: 50, tone: 'yellow' },
+      { foundation: parentingFoundations[0]!, score: 18, tone: 'red' }
+    ] as const;
+    const { container } = render(
+      <>
+        {categories.map(({ foundation, score }) => (
+          <FoundationCard
+            key={foundation.id}
+            foundation={foundation}
+            variant="compact"
+            score={score}
+          />
+        ))}
+      </>
+    );
+
+    const cards = container.querySelectorAll('.foundation-card--compact');
+    expect(cards).toHaveLength(3);
+    categories.forEach(({ score, tone }, index) => {
+      const card = cards[index]!;
+      const number = card.querySelector('.foundation-card__score');
+      const fill = card.querySelector('.foundation-progress__fill');
+      expect(number?.textContent).toBe(String(score));
+      expect(number?.classList.contains(tone)).toBe(true);
+      expect(fill?.classList.contains(tone)).toBe(true);
+      expect(fill?.getAttribute('style')).toContain(`width: ${score}%`);
+    });
   });
 
   it('rounds calculated Foundation Health for display while preserving the exact meter value', () => {
@@ -1366,7 +1400,10 @@ describe('shared preview components', () => {
     const zeroScore = row.querySelector('.foundation-card__score');
     const zeroChevron = row.querySelector('.foundation-card__chevron');
     expect(zeroScore?.textContent).toBe('0');
-    expect(row.querySelector('.foundation-progress__fill')?.getAttribute('style')).toContain('width: 0%');
+    const zeroFill = row.querySelector('.foundation-progress__fill');
+    expect(zeroFill?.getAttribute('style')).toContain('width: 0%');
+    expect(zeroScore?.classList.contains('red')).toBe(true);
+    expect(zeroFill?.classList.contains('red')).toBe(true);
     expect(zeroChevron?.textContent).toBe('›');
     expect(Boolean(zeroScore && zeroChevron && (zeroScore.compareDocumentPosition(zeroChevron) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
     expect(row.querySelector('.preview-score-marker')).toBeNull();
@@ -1387,8 +1424,12 @@ describe('shared preview components', () => {
       />
     );
     row = screen.getByRole('button', { name: /Open Sample Foundation foundation details, score unavailable/ });
-    expect(row.querySelector('.foundation-card__score')?.textContent).toBe('—');
-    expect(row.querySelector('.foundation-progress__fill')?.getAttribute('style')).toContain('width: 0%');
+    const unavailableScore = row.querySelector('.foundation-card__score');
+    const unavailableFill = row.querySelector('.foundation-progress__fill');
+    expect(unavailableScore?.textContent).toBe('—');
+    expect(unavailableScore?.classList.contains('neutral')).toBe(true);
+    expect(unavailableFill?.getAttribute('style')).toContain('width: 0%');
+    expect(unavailableFill?.classList.contains('neutral')).toBe(true);
     expect(row.querySelector('.foundation-card__chevron')?.textContent).toBe('›');
     expect(container.querySelector('.preview-score-marker')).toBeNull();
   });

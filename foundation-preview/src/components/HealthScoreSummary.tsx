@@ -1,7 +1,9 @@
 import { useId, useRef } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
-import { HealthScoreMeasures } from './HealthScoreBreakdown.tsx';
+import { HealthScoreInfoButton, HealthScoreMeasures } from './HealthScoreBreakdown.tsx';
 import { formatScore } from '../domain/score-display.ts';
+import { HealthScoreDetailsDialog } from './HealthScoreDetailsDialog.tsx';
+import { HealthScoreDetailsContent } from './HealthScoreDetailsContent.tsx';
 
 type HealthScoreSummaryProps = {
   title: string;
@@ -18,6 +20,8 @@ type HealthScoreSummaryProps = {
   detailsLabel?: string;
   consistencyDetailCaption?: string;
   onTrackDetailCaption?: string;
+  consistencyDescription?: string;
+  onTrackDescription?: string;
 };
 
 export function HealthScoreSummary({
@@ -34,7 +38,9 @@ export function HealthScoreSummary({
   infoLabel = title,
   detailsLabel = `${title} scoring explanation`,
   consistencyDetailCaption = 'How regularly you show up.',
-  onTrackDetailCaption = 'How caught up you are.'
+  onTrackDetailCaption = 'How caught up you are.',
+  consistencyDescription,
+  onTrackDescription
 }: HealthScoreSummaryProps) {
   const id = useId();
   const headingId = `${id}-heading`;
@@ -43,15 +49,17 @@ export function HealthScoreSummary({
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key !== 'Escape' || !expanded) return;
-    event.preventDefault();
     event.stopPropagation();
+  }
+
+  function closeDetails() {
     onExpandedChange(false);
-    toggleRef.current?.focus();
+    requestAnimationFrame(() => toggleRef.current?.focus());
   }
 
   return (
     <section
-      className={`card category-health-card category-health-summary ${className}`.trim()}
+      className={`card category-health-card category-health-summary health-score-summary ${className}`.trim()}
       aria-label={ariaLabel}
       aria-labelledby={ariaLabel ? undefined : headingId}
       onKeyDown={handleKeyDown}
@@ -60,22 +68,14 @@ export function HealthScoreSummary({
         <div className="category-health-copy">
           <div className="category-health-summary__title-row">
             <h3 id={headingId}>{title}</h3>
-            <button
+            <HealthScoreInfoButton
               ref={toggleRef}
-              type="button"
-              className="rhythm-history-view__score-info"
-              aria-label={`${expanded ? 'Hide' : 'Show'} ${infoLabel} scoring explanation`}
-              aria-expanded={expanded}
-              aria-controls={detailsId}
+              label={`Show ${infoLabel} scoring explanation`}
+              expanded={expanded}
+              controls={detailsId}
               onClick={() => onExpandedChange(!expanded)}
-            >
-              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                <circle cx="8" cy="8" r="6.25" />
-                <path d="M8 7.2v4M8 4.8h.01" />
-              </svg>
-            </button>
+            />
           </div>
-          <p className="category-health-status">{coverage}</p>
         </div>
         <HealthSummaryValue
           label={`${title} score`}
@@ -85,49 +85,36 @@ export function HealthScoreSummary({
         />
       </div>
 
-      {!expanded && (
-        <div className="health-summary-breakdown" role="group" aria-label={`${title} summary measures`}>
-          <SummaryMeasure label="Consistency" score={consistency} description="How regularly you show up" />
-          <SummaryMeasure label="On Track" score={onTrack} description="How caught up you are" />
-        </div>
+      <HealthScoreMeasures
+        healthScore={score}
+        healthLabel={title}
+        consistency={{ score: consistency, state: consistency === null ? 'unavailable' : 'scored' }}
+        onTrack={{ score: onTrack, state: onTrack === null ? 'unavailable' : 'scored' }}
+        consistencyCaption={consistencyDetailCaption}
+        onTrackCaption={onTrackDetailCaption}
+        showHealthMeter={false}
+      />
+      {expanded && (
+        <HealthScoreDetailsDialog title={`${title} details`} onClose={closeDetails}>
+          <div id={detailsId} className="category-health-summary__details" role="region" aria-label={detailsLabel}>
+            <HealthScoreDetailsContent
+              title={title}
+              ariaLabel={detailsLabel}
+              score={score}
+              consistency={{ score: consistency }}
+              onTrack={{ score: onTrack }}
+              consistencyCaption={consistencyDetailCaption}
+              onTrackCaption={onTrackDetailCaption}
+              {...(consistencyDescription === undefined ? {} : { consistencyDescription })}
+              {...(onTrackDescription === undefined ? {} : { onTrackDescription })}
+            >
+              <p>{coverage}</p>
+              {children}
+            </HealthScoreDetailsContent>
+          </div>
+        </HealthScoreDetailsDialog>
       )}
-
-      <div
-        id={detailsId}
-        className="category-health-summary__details"
-        role="region"
-        aria-label={detailsLabel}
-        hidden={!expanded}
-      >
-        <HealthScoreMeasures
-          healthScore={score}
-          healthLabel={title}
-          consistency={{ score: consistency, state: consistency === null ? 'unavailable' : 'scored' }}
-          onTrack={{ score: onTrack, state: onTrack === null ? 'unavailable' : 'scored' }}
-          consistencyCaption={consistencyDetailCaption}
-          onTrackCaption={onTrackDetailCaption}
-        />
-        {children}
-      </div>
     </section>
-  );
-}
-
-function SummaryMeasure({
-  label,
-  score,
-  description
-}: {
-  label: string;
-  score: number | null;
-  description: string;
-}) {
-  return (
-    <div className="health-summary-item">
-      <span className="health-summary-label">{label}</span>
-      <HealthSummaryValue label={`${label} score`} score={score} className="health-summary-score" />
-      <span className="category-health-summary__measure-description">{description}</span>
-    </div>
   );
 }
 

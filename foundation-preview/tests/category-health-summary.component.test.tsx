@@ -1,8 +1,24 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it } from 'vitest';
+import type { MouseEvent } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CategoryScoreSelection } from '../src/domain/category-scoring.ts';
+import { todayRhythms } from '../src/domain/preview-data.ts';
+import type { RhythmPreview } from '../src/domain/preview-data.ts';
 import { CategoryHealthSummary } from '../src/components/CategoryHealthSummary.tsx';
+import type { HealthRollupConfig } from '../src/components/HealthRollupDiagram.tsx';
+
+function categoryRollup(title: string): HealthRollupConfig {
+  return {
+    groups: [{
+      id: 'category',
+      label: 'Category',
+      items: [{ id: title, label: title }]
+    }],
+    initialGroupId: 'category',
+    initialItemId: title
+  };
+}
 
 function categoryScore({
   foundationIds = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6'],
@@ -26,12 +42,16 @@ function renderCategory({
   title = 'Marriage Health',
   itemTerm = { singular: 'Foundation', plural: 'Foundations' },
   score = categoryScore(),
-  explanation = 'Eligible Foundations contribute according to the existing category rules.'
+  explanation = 'Eligible Foundations contribute according to the existing category rules.',
+  unlinkedRhythms = [],
+  onEditRhythm
 }: {
   title?: string;
   itemTerm?: { singular: string; plural: string };
   score?: CategoryScoreSelection;
   explanation?: string;
+  unlinkedRhythms?: readonly RhythmPreview[];
+  onEditRhythm?: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
 } = {}) {
   return render(
     <CategoryHealthSummary
@@ -39,6 +59,9 @@ function renderCategory({
       itemTerm={itemTerm}
       score={score}
       explanation={explanation}
+      unlinkedRhythms={unlinkedRhythms}
+      rollup={categoryRollup(title)}
+      {...(onEditRhythm ? { onEditRhythm } : {})}
     />
   );
 }
@@ -46,7 +69,7 @@ function renderCategory({
 describe('shared Category Health summary', () => {
   afterEach(cleanup);
 
-  it('uses the Rhythm Health header, bar, divider and side-by-side gauge order', () => {
+  it('keeps the Health heading, overall bar, and titled gauges compact', () => {
     renderCategory({
       score: categoryScore({
         eligibleFoundationIds: ['connection', 'trust'],
@@ -69,14 +92,14 @@ describe('shared Category Health summary', () => {
     expect(screen.getByRole('meter', { name: 'Marriage Health score' }).getAttribute('aria-valuenow')).toBe('86.875');
     expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('83');
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('100');
-    expect(screen.getByText('2 of 6 Foundations scored')).toBeTruthy();
-    expect(screen.getByText('How regularly you show up')).toBeTruthy();
-    expect(screen.getByText('Whether your Rhythms are up to date')).toBeTruthy();
+    expect(screen.queryByText('2 of 6 Foundations scored')).toBeNull();
+    expect(screen.queryByText('How regularly you show up')).toBeNull();
+    expect(screen.queryByText('Whether your Rhythms are up to date')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'How your Health score is calculated' })).toBeNull();
     expect(document.querySelectorAll('.preview-score-meter, .category-health-meter')).toHaveLength(0);
   });
 
-  it('shows the shared 75/25 explanation before the gauges and category details after them', async () => {
+  it('opens the shared scoring explanation and category counts in a focus-returning dialog', async () => {
     const user = userEvent.setup();
     renderCategory({
       score: categoryScore({
@@ -86,48 +109,78 @@ describe('shared Category Health summary', () => {
         health: 77.5
       })
     });
-    const info = screen.getByRole('button', { name: 'Show Marriage Health scoring explanation' });
-    const [calculationId, detailsId] = info.getAttribute('aria-controls')!.split(/\s+/);
-    expect(calculationId).toBeTruthy();
-    expect(detailsId).toBeTruthy();
-    const calculation = document.getElementById(calculationId!)!;
-    const details = document.getElementById(detailsId!)!;
-    expect(info.getAttribute('aria-expanded')).toBe('false');
-    expect(calculation.hasAttribute('hidden')).toBe(true);
-    expect(details.hasAttribute('hidden')).toBe(true);
 
-    info.focus();
-    await user.keyboard('{Enter}');
-    expect(document.activeElement).toBe(info);
+    const info = screen.getByRole('button', { name: 'Show Marriage Health scoring explanation' });
+    expect(info.querySelector('svg circle')).toBeTruthy();
+    expect(info.textContent).toBe('');
+    expect(info.getAttribute('aria-expanded')).toBe('false');
+
+    await user.click(info);
     expect(info.getAttribute('aria-expanded')).toBe('true');
-    expect(calculation.hasAttribute('hidden')).toBe(false);
-    expect(details.hasAttribute('hidden')).toBe(false);
-    expect(screen.getByRole('heading', { name: 'How your Health score is calculated' })).toBeTruthy();
-    expect(within(calculation).getByText(/75%/)).toBeTruthy();
-    expect(within(calculation).getByText(/25%/)).toBeTruthy();
+    const dialog = screen.getByRole('dialog', { name: 'Marriage Health details' });
+    expect(document.activeElement).toBe(within(dialog).getByRole('heading', { name: 'Marriage Health details' }));
+    const details = within(dialog).getByRole('region', { name: 'Marriage Health calculation details' });
+    expect(screen.getByRole('heading', { name: 'Overall Health' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'How Health is calculated' })).toBeTruthy();
+    expect(within(dialog).getByText('75%')).toBeTruthy();
+    expect(within(dialog).getByText('70%')).toBeTruthy();
+    expect(within(dialog).getByText('25%')).toBeTruthy();
+    expect(within(dialog).getByText('100%')).toBeTruthy();
+    expect(within(details).getByText('1 of 6 Foundations scored.')).toBeTruthy();
     expect(within(details).getByText(
       'Eligible Foundations contribute according to the existing category rules.'
     )).toBeTruthy();
     expect(within(details).getByText(/Each eligible Foundation contributes equally/)).toBeTruthy();
-    expect(within(details).getByText(/fixed 75% Consistency and 25% On Track weights/)).toBeTruthy();
     expect(within(details).getByText('— means unavailable; 0 is a valid score.')).toBeTruthy();
-    expect(calculation.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const measures = screen.getByRole('group', { name: 'Consistency and On Track' });
-    expect(details.compareDocumentPosition(measures) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    const breakdown = within(details).getByRole('region', { name: 'Marriage Health calculation details score summary' });
+    expect(within(breakdown).getByRole('meter', { name: 'Marriage Health score' }).getAttribute('aria-valuenow')).toBe('77.5');
+    expect(breakdown.querySelector('.health-score-measures')).toBeNull();
+    expect(dialog.querySelectorAll('.health-score-meter')).toHaveLength(1);
 
-    await user.keyboard('{Escape}');
+    await user.click(within(dialog).getByRole('button', { name: 'Close Health details' }));
+    await waitFor(() => expect(document.activeElement).toBe(info));
     expect(info.getAttribute('aria-expanded')).toBe('false');
-    expect(document.activeElement).toBe(info);
-    expect(calculation.hasAttribute('hidden')).toBe(true);
-    expect(details.hasAttribute('hidden')).toBe(true);
+    expect(screen.queryByRole('dialog', { name: 'Marriage Health details' })).toBeNull();
   });
 
-  it('keeps unavailable values distinct from valid zero scores', () => {
+  it('explains unlinked Rhythm exclusions and exposes an accessible edit action', async () => {
+    const user = userEvent.setup();
+    const rhythm = { ...todayRhythms[0]!, id: 'legacy-faith-rhythm', title: 'Legacy prayer' };
+    const onEditRhythm = vi.fn();
+    renderCategory({
+      title: 'Faith Health',
+      itemTerm: { singular: 'Practice', plural: 'Practices' },
+      unlinkedRhythms: [rhythm],
+      onEditRhythm
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Show Faith Health scoring explanation' }));
+    const details = screen.getByRole('region', { name: 'Faith Health calculation details' });
+    expect(within(details).getByText(/1 Rhythm isn’t included yet/)).toBeTruthy();
+    expect(within(details).getByText(/Each needs a matching Practice/)).toBeTruthy();
+    expect(within(details).getByRole('button', { name: 'Edit Legacy prayer' })).toBeTruthy();
+    await user.click(within(details).getByRole('button', { name: 'Edit Legacy prayer' }));
+    expect(onEditRhythm).toHaveBeenCalledOnce();
+    expect(onEditRhythm.mock.calls[0]?.[0]).toBe(rhythm);
+  });
+
+  it('keeps unavailable values distinct from valid zero scores in summaries and details', async () => {
+    const user = userEvent.setup();
     const { rerender } = renderCategory();
-    expect(screen.getByText('No scored Foundations yet')).toBeTruthy();
+    expect(screen.queryByText('No scored Foundations yet.')).toBeNull();
     for (const name of ['Marriage Health: Not enough data', 'Consistency: Score unavailable', 'On Track: Score unavailable']) {
       expect(screen.getByRole('img', { name })).toBeTruthy();
     }
+    await user.click(screen.getByRole('button', { name: 'Show Marriage Health scoring explanation' }));
+    const unavailableDialog = screen.getByRole('dialog', { name: 'Marriage Health details' });
+    const unavailableDetails = within(unavailableDialog).getByRole('region', {
+      name: 'Marriage Health calculation details score summary'
+    });
+    expect(within(unavailableDetails).getByRole('img', { name: 'Marriage Health: Not enough data' })).toBeTruthy();
+    expect(unavailableDetails.querySelector('.health-score-measures')).toBeNull();
+    expect([...unavailableDialog.querySelectorAll('.rhythm-history-view__health-weight-score')]
+      .map(value => value.textContent)).toEqual(['—', '—']);
+    await user.click(within(unavailableDialog).getByRole('button', { name: 'Close Health details' }));
 
     rerender(
       <CategoryHealthSummary
@@ -140,12 +193,22 @@ describe('shared Category Health summary', () => {
           health: 0
         })}
         explanation="Eligible Foundations contribute according to the existing category rules."
+        rollup={categoryRollup('Marriage Health')}
       />
     );
     for (const name of ['Marriage Health score', 'Consistency score', 'On Track score']) {
       expect(screen.getByRole('meter', { name }).getAttribute('aria-valuenow')).toBe('0');
     }
-    expect(screen.getByText('1 of 6 Foundations scored')).toBeTruthy();
+    expect(screen.getAllByText('0%')).toHaveLength(2);
+    await user.click(screen.getByRole('button', { name: 'Show Marriage Health scoring explanation' }));
+    const zeroDialog = screen.getByRole('dialog', { name: 'Marriage Health details' });
+    const zeroDetails = within(zeroDialog).getByRole('region', {
+      name: 'Marriage Health calculation details score summary'
+    });
+    expect(within(zeroDetails).getByRole('meter', { name: 'Marriage Health score' }).getAttribute('aria-valuenow')).toBe('0');
+    expect(zeroDetails.querySelector('.health-score-measures')).toBeNull();
+    expect([...zeroDialog.querySelectorAll('.rhythm-history-view__health-weight-score')]
+      .map(value => value.textContent)).toEqual(['0%', '0%']);
   });
 
   it('keeps long category titles accessible and Faith-specific Practice wording', async () => {
@@ -167,14 +230,33 @@ describe('shared Category Health summary', () => {
           onTrack: 100,
           health: 85
         })}
+        rollup={categoryRollup('Faith Health')}
       />
     );
-    expect(screen.getByText('2 of 9 Practices scored')).toBeTruthy();
+    expect(screen.queryByText('2 of 9 Practices scored.')).toBeNull();
     expect(screen.queryByText(/Foundations/)).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Show Faith Health scoring explanation' }));
-    const details = screen.getByRole('region', { name: 'Faith Health calculation details' });
+    const dialog = screen.getByRole('dialog', { name: 'Faith Health details' });
+    const details = within(dialog).getByRole('region', { name: 'Faith Health calculation details' });
+    expect(within(details).getByText('2 of 9 Practices scored.')).toBeTruthy();
     expect(within(details).getByText(/chosen practices—not the strength of your faith/)).toBeTruthy();
     expect(within(details).getByText(/Each eligible Practice contributes equally/)).toBeTruthy();
-    expect(screen.getByRole('meter', { name: 'Faith Health score' }).getAttribute('aria-valuenow')).toBe('85');
+    expect(within(dialog).getByRole('meter', { name: 'Faith Health score' }).getAttribute('aria-valuenow')).toBe('85');
+  });
+
+  it.each([
+    ['Faith Health', { singular: 'Practice', plural: 'Practices' }, 'Faith follows its selected Practices.'],
+    ['Marriage Health', { singular: 'Foundation', plural: 'Foundations' }, 'Marriage follows its selected Foundations.'],
+    ['Parenting Health', { singular: 'Foundation', plural: 'Foundations' }, 'Parenting follows its selected Foundations.'],
+    ['Health & Fitness Health', { singular: 'Foundation', plural: 'Foundations' }, 'Health & Fitness follows its selected Foundations.']
+  ])('uses the circled info button to open the %s explanation', async (title, itemTerm, explanation) => {
+    const user = userEvent.setup();
+    renderCategory({ title, itemTerm, explanation });
+    const button = screen.getByRole('button', { name: `Show ${title} scoring explanation` });
+    expect(button.querySelector('svg circle')).toBeTruthy();
+    await user.click(button);
+    const dialog = screen.getByRole('dialog', { name: `${title} details` });
+    expect(within(dialog).getByRole('region', { name: `${title} calculation details` }).textContent)
+      .toContain(explanation);
   });
 });

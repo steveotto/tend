@@ -332,6 +332,24 @@ describe('Marriage Foundation Rhythm associations', () => {
     });
   });
 
+  it('prevents association management from removing the final required Foundation link', () => {
+    const rhythm: RhythmPreview = {
+      ...marriageRhythms[0]!,
+      categoryIds: ['marriage'],
+      primaryFoundationId: 'connection',
+      secondaryFoundationIds: []
+    };
+    expect(saveFoundationRhythmAssociations(
+      [savedRhythmFor(rhythm)],
+      [rhythm],
+      [],
+      'connection',
+      [{ rhythmId: rhythm.id, linked: false }]
+    )).toEqual({
+      error: 'Choose a Foundation for Marriage to include this Rhythm in Marriage Health.'
+    });
+  });
+
   it('removes only links owned by the removed Category and retains unresolved references', () => {
     const result = removeFoundationLinksForCategory({
       primaryFoundationId: 'connection',

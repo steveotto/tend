@@ -2,11 +2,14 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { FitnessScoreSummary } from '../src/components/FitnessScoreSummary.tsx';
 import { StrengthView } from '../src/components/StrengthView.tsx';
+import type { CategoryScoreSelection } from '../src/domain/category-scoring.ts';
 import {
   createStrengthData,
   createStrengthGuidedSession,
   saveStrengthScoringSetup,
+  selectStrengthMuscleScores,
   strengthMuscleName,
   strengthWorkoutSuggestions
 } from '../src/domain/strength.ts';
@@ -30,7 +33,8 @@ function renderStrength(
   saveError: string | null = null,
   workoutId?: string,
   startRhythmLog = false,
-  evaluationDate = '2026-10-22'
+  evaluationDate = '2026-10-22',
+  healthScore?: CategoryScoreSelection
 ) {
   const onChange = vi.fn((_next: StrengthData) => saveError);
   const rhythm = {
@@ -46,6 +50,7 @@ function renderStrength(
   const result = render(
     <StrengthView
       data={data}
+      {...(healthScore ? { healthScore } : {})}
       rhythms={[{ rhythm, mode, ...(workoutId ? { workoutId } : {}) }]}
       evaluationDate={evaluationDate}
       onChange={onChange}
@@ -57,26 +62,30 @@ function renderStrength(
   return { ...result, onChange, rhythm, opener };
 }
 
-function confirmedChestLog(date: string, id: string): StrengthWorkoutLog {
+function confirmedWorkoutLog(
+  date: string,
+  id: string,
+  muscleIds: StrengthWorkoutLog['muscleIds'] = ['chest']
+): StrengthWorkoutLog {
   return {
     id,
     date,
-    muscleIds: ['chest'],
-    exercises: [{
-      id: `${id}-exercise`,
-      name: 'Bench Press',
-      muscleIds: ['chest'],
+    muscleIds,
+    exercises: muscleIds.map(muscleId => ({
+      id: `${id}-${muscleId}-exercise`,
+      name: muscleId === 'chest' ? 'Bench Press' : `${strengthMuscleName(muscleId)} exercise`,
+      muscleIds: [muscleId],
       equipment: 'Barbell',
       loadMeaning: 'total',
       restDurationSeconds: 60,
       sets: [{
-        id: `${id}-set`,
+        id: `${id}-${muscleId}-set`,
         targetReps: 8,
         status: 'performed',
         actualReps: 8,
         confirmedAt: `${date}T12:00:00.000Z`
       }]
-    }]
+    }))
   };
 }
 
@@ -128,11 +137,19 @@ async function expandMuscleDisclosure(
   }
 }
 
+function getSettingsMuscleSummary(dialog: HTMLElement, muscleName: string): HTMLElement {
+  const summary = Array.from(dialog.querySelectorAll<HTMLElement>('.strength-setting-muscle__summary'))
+    .find(element => element.querySelector('.strength-setting-muscle__name')?.textContent === muscleName);
+  if (!summary) throw new Error(`Missing ${muscleName} settings summary`);
+  return summary;
+}
+
 describe('Strength preview presentation', () => {
   it('uses the shared full-width action row for empty and populated Saved Workouts', () => {
     const empty = renderStrength();
     fireEvent.click(screen.getByRole('tab', { name: 'Saved' }));
     const savedWorkouts = screen.getByRole('region', { name: 'Saved workouts' });
+    expect(savedWorkouts.querySelector(':scope > .card')).toBeNull();
     const emptyActions = savedWorkouts.querySelector('.category-rhythm-entry-actions')!;
     expect([...emptyActions.querySelectorAll('button')].map(button => button.textContent?.trim()))
       .toEqual(['Add workout', 'Suggestions']);
@@ -152,12 +169,56 @@ describe('Strength preview presentation', () => {
     renderStrength(data);
     fireEvent.click(screen.getByRole('tab', { name: 'Saved' }));
     const populatedWorkouts = screen.getByRole('region', { name: 'Saved workouts' });
+    expect(populatedWorkouts.querySelector(':scope > .card')).toBeNull();
     const populatedActions = populatedWorkouts.querySelector('.category-rhythm-entry-actions')!;
     expect([...populatedActions.querySelectorAll('button')].map(button => button.textContent?.trim()))
       .toEqual(['Add workout', 'Suggestions']);
     expect(within(populatedWorkouts).getByRole('heading', { name: 'Synthetic upper body' })).toBeTruthy();
     expect(within(populatedWorkouts).queryByText('No saved workouts yet. Create one to quickly log your usual muscle groups.'))
       .toBeNull();
+  });
+
+  it('shows Recommended as standalone workout cards with logging actions above the results', async () => {
+    const empty = renderStrength();
+    const emptyPanel = screen.getByRole('tabpanel', { name: 'Recommended' });
+    expect(screen.getByRole('tab', { name: 'Recommended' }).getAttribute('aria-selected')).toBe('true');
+    expect(emptyPanel.querySelector(':scope > .card')).toBeNull();
+    expect(within(emptyPanel).getByRole('button', { name: 'Custom workout' })).toBeTruthy();
+    expect(within(emptyPanel).getByText('Save a workout to get recommendations, or log a custom workout.'))
+      .toBeTruthy();
+    expect(within(emptyPanel).queryByRole('heading', { name: 'Recommended workouts' })).toBeNull();
+    expect(within(emptyPanel).queryByText(/Suggested from your training goals/)).toBeNull();
+    empty.unmount();
+
+    const data = createStrengthData();
+    data.savedWorkouts = [{
+      id: 'recommended-upper',
+      name: 'Upper body',
+      muscleIds: ['chest', 'back'],
+      sharedWith: []
+    }];
+    const user = userEvent.setup();
+    renderStrength(data);
+    const panel = screen.getByRole('tabpanel', { name: 'Recommended' });
+    const action = within(panel).getByRole('button', { name: 'Custom workout' });
+    const results = panel.querySelector('.strength-recommendations')!;
+    expect(panel.querySelector(':scope > .card')).toBeNull();
+    expect(action.parentElement?.classList.contains('category-rhythm-entry-actions')).toBe(true);
+    expect(action.compareDocumentPosition(results) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const cards = results.querySelectorAll<HTMLElement>(':scope > .strength-recommendation');
+    expect(cards).toHaveLength(1);
+    const card = cards[0]!;
+    expect(within(card).getByRole('heading', { name: 'Upper body' })).toBeTruthy();
+    expect(within(card).getByText(/Targets two muscle groups/)).toBeTruthy();
+    expect(within(card).getByText('Chest · Back')).toBeTruthy();
+    await user.click(within(card).getByRole('button', { name: 'Log workout' }));
+    let dialog = screen.getByRole('dialog', { name: 'Log workout' });
+    expect(within(dialog).getByRole('checkbox', { name: 'Chest' })).toHaveProperty('checked', true);
+    expect(within(dialog).getByRole('checkbox', { name: 'Back' })).toHaveProperty('checked', true);
+    await user.click(within(dialog).getByRole('button', { name: 'Close workout log' }));
+    await user.click(action);
+    dialog = screen.getByRole('dialog', { name: 'Log workout' });
+    expect(within(dialog).getByRole('checkbox', { name: 'Chest' })).toHaveProperty('checked', false);
   });
 
   it('keeps Saved Workout cards on full-width rows with overflow actions and an Add exercises route', async () => {
@@ -266,98 +327,296 @@ describe('Strength preview presentation', () => {
     renderStrength();
 
     expect(screen.getByRole('group', { name: 'Front muscle training status map' })).toBeTruthy();
-    const map = screen.getByRole('group', { name: 'Front muscle training status map' });
+    const map = screen.getByRole('group', { name: 'Front muscle training status map' }) as HTMLElement;
     const chest = within(map).getByRole('button', { name: 'Chest, Health score unavailable, Not logged yet.' });
     chest.focus();
     await user.keyboard('{Enter}');
     expect(chest.getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('heading', { name: /Chest/ })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Chest details' })).toBeTruthy();
+    const muscleList = screen.getByRole('group', { name: 'Muscle training status' });
+    const frontRows = within(muscleList).getAllByRole('button');
+    expect(frontRows.map(row => row.querySelector('strong')?.textContent))
+      .toEqual(['Chest', 'Biceps', 'Shoulders', 'Abs', 'Quads', 'Calves']);
+    expect([...map.querySelectorAll<SVGPathElement>('[data-muscle]')].map(path => path.dataset.muscle).sort())
+      .toEqual(['abs', 'biceps', 'calves', 'chest', 'quads', 'shoulders']);
 
     await user.click(screen.getByRole('button', { name: 'Back' }));
-    expect(screen.getByRole('group', { name: 'Back muscle training status map' })).toBeTruthy();
-    expect(within(screen.getByRole('group', { name: 'Muscle training status' }))
-      .getByRole('button', { name: 'Back, Health score unavailable, Not logged yet.' })).toBeTruthy();
+    const backMap = screen.getByRole('group', { name: 'Back muscle training status map' });
+    const backRows = within(muscleList).getAllByRole('button');
+    expect(backRows.map(row => row.querySelector('strong')?.textContent))
+      .toEqual(['Back', 'Triceps', 'Shoulders', 'Hamstrings', 'Calves']);
+    const backRow = within(muscleList).getByRole('button', { name: /Back\. Training status: No log/ });
+    expect(backRow.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('heading', { name: 'Back details' })).toBeTruthy();
+    expect(backMap.querySelector('[data-muscle="back"]')?.getAttribute('aria-pressed')).toBe('true');
+
+    await user.click(within(muscleList).getByRole('button', { name: /Shoulders\. Training status: No log/ }));
+    await user.click(screen.getByRole('button', { name: 'Front' }));
+    expect(screen.getByRole('heading', { name: 'Shoulders details' })).toBeTruthy();
+    expect(within(muscleList).getByRole('button', { name: /Shoulders\. Training status: No log/ })
+      .getAttribute('aria-pressed')).toBe('true');
+
+    const calvesPath = screen.getByRole('group', { name: 'Front muscle training status map' })
+      .querySelector('[data-muscle="calves"]');
+    if (!calvesPath) throw new Error('Calves body-map path missing');
+    await user.click(calvesPath);
+    expect(screen.getByRole('heading', { name: 'Calves details' })).toBeTruthy();
+    expect(within(muscleList).getByRole('button', { name: /Calves\. Training status: No log/ })
+      .getAttribute('aria-pressed')).toBe('true');
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByRole('heading', { name: 'Calves details' })).toBeTruthy();
   });
 
-  it('keeps Strength Health and muscle breakdowns compact until details are requested', async () => {
+  it('shows compact Strength gauges and opens scoring details in a modal', async () => {
     const user = userEvent.setup();
     const data = createStrengthData();
     data.workouts = [{ id: 'legacy-chest', date: '2026-10-21', muscleIds: ['chest'] }];
     renderStrength(data);
 
-    expect(screen.getByRole('heading', { name: 'Chest' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Chest details' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Strength Health' })).toBeTruthy();
     const overallScores = document.querySelector('.strength-page > .fitness-score-summary') as HTMLElement;
+    expect(overallScores.classList.contains('rhythm-history-view__score-card')).toBe(true);
     expect(within(overallScores).getByRole('img', { name: 'Strength Health: Not enough data' })).toBeTruthy();
-    expect(screen.queryByRole('img', { name: 'Consistency: Score unavailable' })).toBeNull();
-    expect(screen.queryByRole('img', { name: 'On Track: Score unavailable' })).toBeNull();
-    expect(screen.getByText('No approved overall Strength Health aggregate is available.')).toBeTruthy();
+    expect(within(overallScores).getByRole('img', { name: 'Consistency: Score unavailable' })).toBeTruthy();
+    expect(within(overallScores).getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
+    expect(within(overallScores).queryByText('No approved overall Strength Health aggregate is available.')).toBeNull();
     expect(screen.queryByText(/effective-dated settings/i)).toBeNull();
 
     const details = within(overallScores).getByRole('button', { name: 'Show Strength Health scoring details' });
     expect(details.getAttribute('aria-expanded')).toBe('false');
     await user.click(details);
-    expect(screen.getByRole('img', { name: 'Consistency: Score unavailable' })).toBeTruthy();
-    expect(screen.getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
-    expect(screen.getByRole('region', { name: 'Strength Health scoring details' }).hidden).toBe(false);
-    await user.click(screen.getByRole('button', { name: 'Hide Strength Health scoring details' }));
-    expect(screen.queryByRole('img', { name: 'Consistency: Score unavailable' })).toBeNull();
+    const dialog = screen.getByRole('dialog', { name: 'Strength Health details' });
+    expect(dialog.classList.contains('dialog--phone-fullscreen')).toBe(false);
+    const explanation = within(dialog).getByRole('region', { name: 'Strength Health scoring details' });
+    expect(within(explanation).getByRole('img', { name: 'Strength Health: Not enough data' })).toBeTruthy();
+    expect(explanation.querySelector('.health-score-measures')).toBeNull();
+    expect([...explanation.querySelectorAll('.rhythm-history-view__health-weight-score')]
+      .map(value => value.textContent)).toEqual(['—', '—']);
+    expect(within(explanation).getByText(/Strength Health reflects eligible Strength-linked Rhythm scores/)).toBeTruthy();
+    expect(within(explanation).getByRole('heading', { name: 'How Health is calculated' })).toBeTruthy();
+    expect(within(explanation).getByText('75%')).toBeTruthy();
+    expect(within(explanation).getByText('25%')).toBeTruthy();
+    expect(within(explanation).getByRole('heading', { name: 'What counts' })).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Close Health details' }));
 
     const settingsButtons = screen.getAllByRole('button', { name: 'Strength settings' });
-    expect(settingsButtons).toHaveLength(2);
-    await user.click(settingsButtons[1]!);
+    expect(settingsButtons).toHaveLength(1);
+    await user.click(settingsButtons[0]!);
     expect(screen.getByRole('dialog', { name: 'Strength settings' })).toBeTruthy();
   });
 
-  it('distinguishes unavailable overall Strength Health from a numeric muscle Health score', async () => {
+  it('keeps the overall score once and shows actual measures in Fitness Health details', async () => {
     const user = userEvent.setup();
+    render(
+      <FitnessScoreSummary
+        category="Strength"
+        health={81.5}
+        consistency={75}
+        onTrack={100}
+        consistencyCaption="Consistency detail."
+        onTrackCaption="On Track detail."
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Show Strength Health scoring details' }));
+    const details = screen.getByRole('region', { name: 'Strength Health scoring details' });
+    const scores = within(details).getByRole('region', { name: 'Strength Health scoring details score summary' });
+    expect(within(scores).getByRole('meter', { name: 'Strength Health score' }).getAttribute('aria-valuenow')).toBe('81.5');
+    expect(scores.querySelector('.health-score-measures')).toBeNull();
+    expect([...details.querySelectorAll('.rhythm-history-view__health-weight-score')]
+      .map(value => value.textContent)).toEqual(['75%', '100%']);
+    expect(within(details).getByRole('heading', { name: 'How Health is calculated' })).toBeTruthy();
+  });
+
+  it('keeps unavailable overall Strength Health separate from muscle On Track scores', () => {
     const data = createStrengthData();
     data.settings.muscleIntervals.chest = 7;
     const configured = saveStrengthScoringSetup(data, '2026-09-01', '2026-09-01');
     configured.workouts = [
-      confirmedChestLog('2026-09-01', 'score-first-window'),
-      confirmedChestLog('2026-09-08', 'score-second-window'),
-      confirmedChestLog('2026-09-20', 'score-third-window')
+      confirmedWorkoutLog('2026-09-01', 'score-first-window'),
+      confirmedWorkoutLog('2026-09-08', 'score-second-window'),
+      confirmedWorkoutLog('2026-09-20', 'score-third-window')
     ];
     renderStrength(configured, 'recommended', null, undefined, false, '2026-09-28');
 
     const overall = document.querySelector('.strength-page > .fitness-score-summary') as HTMLElement;
     expect(within(overall).getByRole('img', { name: 'Strength Health: Not enough data' })).toBeTruthy();
+    expect(within(overall).getByRole('button', { name: 'Show Strength Health scoring details' })).toBeTruthy();
+    const muscleList = screen.getByRole('group', { name: 'Muscle training status' });
+    expect(within(muscleList).getByRole('button', { name: /Chest\. Training status: Overdue by 1 day/ })).toBeTruthy();
     const muscleDetail = document.querySelector('.strength-muscle-detail') as HTMLElement;
-    const muscleHealth = within(muscleDetail).getByRole('meter', { name: 'Strength Health score' });
-    expect(muscleHealth.getAttribute('aria-valuenow')).toBe('78.75');
+    expect(within(muscleDetail).queryByRole('meter')).toBeNull();
+    expect(within(muscleDetail).queryByRole('button', { name: 'Show Strength Health scoring details' })).toBeNull();
     expect(within(muscleDetail).queryByRole('heading', { name: 'Consistency' })).toBeNull();
-
-    await user.click(within(muscleDetail).getByRole('button', { name: 'Show Strength Health scoring details' }));
-    expect(within(muscleDetail).getByRole('heading', { name: 'Consistency' })).toBeTruthy();
-    expect(muscleDetail.querySelector('.health-score-measures__grid')).toBeTruthy();
+    expect(within(muscleDetail).queryByRole('heading', { name: 'On Track' })).toBeNull();
   });
 
-  it('shows compact training facts and separates logged readiness from score evidence', async () => {
+  it('keeps Strength Health separate when muscle-grid scoring inputs change', () => {
+    const data = createStrengthData();
+    data.settings.muscleIntervals.chest = 7;
+    const configured = saveStrengthScoringSetup(data, '2026-09-01', '2026-09-01');
+    configured.workouts = [
+      confirmedWorkoutLog('2026-09-01', 'separate-first-window'),
+      confirmedWorkoutLog('2026-09-08', 'separate-second-window'),
+      confirmedWorkoutLog('2026-09-20', 'separate-third-window')
+    ];
+    const healthScore: CategoryScoreSelection = {
+      foundationIds: ['health-strength'],
+      eligibleFoundationIds: ['health-strength'],
+      excludedFoundationIds: [],
+      unresolvedFoundationIds: [],
+      consistency: 40,
+      onTrack: 100,
+      health: 55
+    };
+    const view = renderStrength(configured, 'recommended', null, undefined, false, '2026-09-28', healthScore);
+    const summary = document.querySelector('.strength-page > .fitness-score-summary') as HTMLElement;
+    const healthMeter = within(summary).getByRole('meter', { name: 'Strength Health score' });
+    const muscleList = screen.getByRole('group', { name: 'Muscle training status' });
+
+    expect(healthMeter.getAttribute('aria-valuenow')).toBe('55');
+    expect(within(muscleList).getByRole('button', { name: /Chest\. Training status: Overdue by 1 day/ })).toBeTruthy();
+
+    const changedMuscleSetup = createStrengthData();
+    view.rerender(
+      <StrengthView
+        data={changedMuscleSetup}
+        healthScore={healthScore}
+        rhythms={[{ rhythm: view.rhythm, mode: 'recommended' }]}
+        evaluationDate="2026-09-28"
+        onChange={view.onChange}
+      />
+    );
+    expect(within(summary).getByRole('meter', { name: 'Strength Health score' }).getAttribute('aria-valuenow'))
+      .toBe('55');
+    expect(within(muscleList).getByRole('button', { name: /Chest\. Training status: No log/ })).toBeTruthy();
+  });
+
+  it('shows selected muscle details in full-width rows and updates them when selection changes', async () => {
     const user = userEvent.setup();
-    const data = saveStrengthScoringSetup(createStrengthData(), '2026-10-01', '2026-10-01');
-    data.workouts = [{ id: 'legacy-chest', date: '2026-10-21', muscleIds: ['chest'] }];
+    const data = createStrengthData();
+    data.settings.muscleIntervals.chest = 7;
+    data.settings.muscleIntervals.back = 14;
+    data.settings.preferredRestDays.back = 2;
+    data.workouts = [
+      { id: 'legacy-chest', date: '2026-10-20', muscleIds: ['chest'] },
+      { id: 'legacy-back', date: '2026-10-20', muscleIds: ['back'] }
+    ];
     renderStrength(data);
 
     const facts = document.querySelector('.strength-muscle-facts') as HTMLElement;
+    expect(screen.getByRole('heading', { name: 'Chest details' })).toBeTruthy();
     expect(within(facts).getByText('Training interval')).toBeTruthy();
     expect(within(facts).getByText('Every 7 days')).toBeTruthy();
-    expect(within(facts).getByText('Rest between training')).toBeTruthy();
+    expect(within(facts).getByText('Rest between workouts')).toBeTruthy();
     expect(within(facts).getByText('1 day')).toBeTruthy();
     expect(within(facts).getByText('Readiness')).toBeTruthy();
-    expect(within(facts).getByText('Ready tomorrow')).toBeTruthy();
+    expect(within(facts).getByText('Ready')).toBeTruthy();
     expect(within(facts).getByText('Last logged')).toBeTruthy();
-    expect(within(facts).getByText('Oct 21, 2026')).toBeTruthy();
-    expect(screen.getByText('Your score will appear as tracking builds.')).toBeTruthy();
+    expect(within(facts).getByText('Oct 20, 2026')).toBeTruthy();
+    expect(facts.querySelectorAll(':scope > div')).toHaveLength(4);
 
     const muscleDetail = document.querySelector('.strength-muscle-detail') as HTMLElement;
-    await user.click(within(muscleDetail).getByRole('button', { name: 'Show Strength Health scoring details' }));
-    const explanation = within(muscleDetail).getByRole('region', { name: 'Strength Health scoring details' });
-    expect(within(explanation).getByText('How often you trained in completed periods over the last 28 days.')).toBeTruthy();
-    expect(within(explanation).getByText('How recently you trained compared with your schedule.')).toBeTruthy();
-    expect(within(explanation).getByText('75% Consistency + 25% On Track.')).toBeTruthy();
-    await user.click(within(explanation).getByText('Details'));
-    expect(within(explanation).getByText('Readiness uses logged workout dates; scoring requires confirmed performed sets.')).toBeTruthy();
+    expect(within(muscleDetail).queryByRole('meter')).toBeNull();
+    expect(within(muscleDetail).queryByRole('button')).toBeNull();
+    const muscleList = screen.getByRole('group', { name: 'Muscle training status' });
+    expect(within(muscleList).getByRole('button', { name: /Chest\. Training status: Current/ })).toBeTruthy();
+    expect(within(muscleList).getByRole('button', { name: /Chest\. Training status: Current/ }).textContent)
+      .toContain('Next lift in 5d');
+
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByRole('heading', { name: 'Back details' })).toBeTruthy();
+    expect(within(facts).getByText('Every 14 days')).toBeTruthy();
+    expect(within(facts).getByText('2 days')).toBeTruthy();
+    expect(within(facts).getByText('Ready tomorrow')).toBeTruthy();
+    expect(within(facts).getByText('Oct 20, 2026')).toBeTruthy();
+    expect(within(muscleList).getByRole('button', { name: /Back\. Training status: Current/ }).textContent)
+      .toContain('Next lift in 12d');
+    await user.click(within(muscleList).getByRole('button', { name: /Shoulders\. Training status: No log/ }));
+    expect(screen.getByRole('heading', { name: 'Shoulders details' })).toBeTruthy();
+    expect(within(facts).getAllByText('Not logged yet')).toHaveLength(2);
+  });
+
+  it('shows status colors, last-workout labels, and next due dates for synthetic workouts', async () => {
+    const user = userEvent.setup();
+    const data = createStrengthData();
+    for (const muscle of ['chest', 'triceps', 'back', 'biceps', 'shoulders'] as const) {
+      data.settings.muscleIntervals[muscle] = 7;
+    }
+    const configured = saveStrengthScoringSetup(data, '2026-10-20', '2026-10-20');
+    configured.workouts = [
+      confirmedWorkoutLog('2026-10-22', 'today-chest-triceps', ['chest', 'triceps']),
+      confirmedWorkoutLog('2026-10-15', 'due-today-back', ['back']),
+      confirmedWorkoutLog('2026-10-14', 'overdue-biceps', ['biceps']),
+      confirmedWorkoutLog('2026-09-22', 'zero-shoulders', ['shoulders'])
+    ];
+    const scores = selectStrengthMuscleScores(configured, '2026-10-22');
+    expect(scores.find(score => score.id === 'chest')?.consistency).toBeNull();
+    expect(scores.find(score => score.id === 'chest')?.onTrack).toBe(100);
+    renderStrength(configured);
+
+    const muscleList = screen.getByRole('group', { name: 'Muscle training status' });
+    const current = within(muscleList).getByRole('button', { name: /Chest\. Training status: Current/ });
+    const frontNoLog = within(muscleList).getByRole('button', { name: /Abs\. Training status: No log/ });
+    expect(current.textContent).toContain('Chest');
+    expect(current.textContent).toContain('Today');
+    expect(current.textContent).toContain('Next lift in 7d');
+    expect(frontNoLog.textContent).toContain('No log yet');
+    expect(frontNoLog.textContent).toContain('—');
+    const overdue = within(muscleList).getByRole('button', { name: /Biceps\. Training status: Overdue by 1 day/ });
+    expect(overdue.textContent).toContain('8d ago');
+    expect(overdue.textContent).toContain('Overdue by 1d');
+
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    const due = within(muscleList).getByRole('button', { name: /Back\. Training status: Due today/ });
+    const noLog = within(muscleList).getByRole('button', { name: /Hamstrings\. Training status: No log/ });
+    expect(due.textContent).toContain('7d ago');
+    expect(due.textContent).toContain('Due today');
+    expect(noLog.textContent).toContain('No log yet');
+    expect(noLog.textContent).toContain('—');
+    expect(current.querySelector('[role="img"]')?.getAttribute('aria-label')).toBe('Training status: Current');
+    expect(due.querySelector('[role="img"]')?.getAttribute('aria-label')).toBe('Training status: Due today');
+    expect(overdue.querySelector('[role="img"]')?.getAttribute('aria-label')).toBe('Training status: Overdue by 1 day');
+    expect(noLog.querySelector('[role="img"]')?.getAttribute('aria-label')).toBe('Training status: No log');
+    expect(current.querySelector('.strength-muscle-row__status')?.classList.contains('strength-muscle-row__status--current'))
+      .toBe(true);
+    expect(due.querySelector('.strength-muscle-row__status')?.classList.contains('strength-muscle-row__status--due'))
+      .toBe(true);
+    expect(overdue.querySelector('.strength-muscle-row__status')?.classList.contains('strength-muscle-row__status--overdue'))
+      .toBe(true);
+    expect(noLog.querySelector('.strength-muscle-row__status')?.classList.contains('strength-muscle-row__status--unavailable'))
+      .toBe(true);
+    for (const row of [current, due, overdue, noLog]) {
+      expect(row.querySelector('.strength-muscle-row__score')).toBeNull();
+      expect(row.querySelector('.strength-muscle-row__track')).toBeNull();
+      expect(row.querySelector('small')).toBeNull();
+    }
+    expect(screen.getAllByRole('button', { name: 'Show Strength Health scoring details' })).toHaveLength(1);
+  });
+
+  it('refreshes muscle timing after a workout is logged', async () => {
+    const user = userEvent.setup();
+    const data = createStrengthData();
+    data.settings.muscleIntervals.chest = 7;
+    data.workouts = [{ id: 'previous-chest', date: '2026-10-15', muscleIds: ['chest'] }];
+    const { changes } = renderStatefulStrength(data);
+    const muscleList = screen.getByRole('group', { name: 'Muscle training status' });
+    const chest = within(muscleList).getByRole('button', { name: /Chest\. Training status: Due today/ });
+    expect(chest.textContent).toContain('7d ago');
+    expect(chest.textContent).toContain('Due today');
+
+    await user.click(screen.getByRole('button', { name: 'Custom workout' }));
+    const dialog = screen.getByRole('dialog', { name: 'Log workout' });
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Chest' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save workout' }));
+
+    expect(changes).toHaveLength(1);
+    const refreshedChest = within(muscleList).getByRole('button', { name: /Chest\. Training status: Current/ });
+    expect(refreshedChest.textContent).toContain('Today');
+    expect(refreshedChest.textContent).toContain('Next lift in 7d');
+    expect(within(document.querySelector('.strength-muscle-facts') as HTMLElement)
+      .getByText('Oct 22, 2026')).toBeTruthy();
   });
 
   it('keeps legacy training status separate from unavailable Fitness Health', () => {
@@ -368,8 +627,8 @@ describe('Strength preview presentation', () => {
 
     expect(screen.getByRole('meter', { name: 'Strength training status score' }).getAttribute('aria-valuenow')).toBe('0');
     const muscleList = screen.getByRole('group', { name: 'Muscle training status' });
-    expect(within(muscleList).getByRole('button', { name: 'Chest, Health score unavailable, 20 days overdue.' })).toBeTruthy();
-    expect(within(muscleList).getByRole('button', { name: 'Abs, Health score unavailable, Not logged yet.' })).toBeTruthy();
+    expect(within(muscleList).getByRole('button', { name: /Chest\. Training status: Overdue by 20 days/ })).toBeTruthy();
+    expect(within(muscleList).getByRole('button', { name: /Abs\. Training status: No log/ })).toBeTruthy();
   });
 
   it('saves training goals with validation and returns focus to the opener on cancel', async () => {
@@ -378,6 +637,7 @@ describe('Strength preview presentation', () => {
     const opener = document.querySelector('.strength-map-card .settings-icon-button') as HTMLElement;
     await user.click(opener);
     const dialog = screen.getByRole('dialog', { name: 'Strength settings' });
+    await user.click(getSettingsMuscleSummary(dialog, 'Chest'));
     const chestInterval = within(dialog).getByRole('spinbutton', { name: 'Chest training interval in days' });
     const chestRest = within(dialog).getByRole('spinbutton', { name: 'Chest preferred rest days' });
     await user.clear(chestInterval);
@@ -392,7 +652,7 @@ describe('Strength preview presentation', () => {
     expect(document.activeElement).toBe(opener);
   });
 
-  it('uses the same staged settings editor from the gear and setup link', async () => {
+  it('uses the same staged settings editor from the gear', async () => {
     const user = userEvent.setup();
     const { changes } = renderStatefulStrength();
     const opener = document.querySelector('.strength-map-card .settings-icon-button') as HTMLElement;
@@ -400,16 +660,22 @@ describe('Strength preview presentation', () => {
     await user.click(opener);
     let dialog = screen.getByRole('dialog', { name: 'Strength settings' });
     expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Close Strength settings' }));
-    expect(within(dialog).getByLabelText('Start Strength tracking on')).toHaveProperty('value', '2026-10-22');
+    expect(within(dialog).getByLabelText('Effective date')).toHaveProperty('value', '2026-10-22');
+    expect(within(dialog).getByLabelText('Weight unit')).toHaveProperty('value', 'lb');
+    expect(within(dialog).getByRole('heading', { name: 'Muscle groups' })).toBeTruthy();
+    expect(within(dialog).getByText('Rest days guide recommendations. You can log anytime.')).toBeTruthy();
+    expect(within(dialog).queryByText(/Tracking started/)).toBeNull();
+    const chestRow = getSettingsMuscleSummary(dialog, 'Chest').closest('details')!;
+    expect(chestRow.open).toBe(false);
+    expect(getSettingsMuscleSummary(dialog, 'Chest').tagName).toBe('SUMMARY');
     expect(changes).toHaveLength(0);
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(changes).toHaveLength(0);
 
-    const muscleDetail = document.querySelector('.strength-muscle-detail') as HTMLElement;
-    await user.click(within(muscleDetail).getByRole('button', { name: 'Strength settings' }));
+    await user.click(opener);
     dialog = screen.getByRole('dialog', { name: 'Strength settings' });
-    fireEvent.change(within(dialog).getByLabelText('Start Strength tracking on'), { target: { value: '2026-10-01' } });
-    await user.selectOptions(within(dialog).getByLabelText('Strength weight unit'), 'kg');
+    fireEvent.change(within(dialog).getByLabelText('Effective date'), { target: { value: '2026-10-01' } });
+    await user.selectOptions(within(dialog).getByLabelText('Weight unit'), 'kg');
     await user.click(within(dialog).getByRole('button', { name: 'Save settings' }));
 
     expect(changes).toHaveLength(1);
@@ -418,6 +684,59 @@ describe('Strength preview presentation', () => {
       settings: { weightUnit: 'kg' },
       scoringSettingsHistory: [expect.objectContaining({ effectiveDate: '2026-10-01' })]
     });
+  });
+
+  it('keeps muscle edits through collapse and reopen, reflects summaries, and saves the open row values', async () => {
+    const user = userEvent.setup();
+    const { changes } = renderStatefulStrength();
+    const opener = document.querySelector('.strength-map-card .settings-icon-button') as HTMLElement;
+    await user.click(opener);
+    const dialog = screen.getByRole('dialog', { name: 'Strength settings' });
+    const chestSummary = getSettingsMuscleSummary(dialog, 'Chest');
+    const chestRow = chestSummary.closest('details')!;
+
+    expect(chestRow.open).toBe(false);
+    expect(chestSummary.tagName).toBe('SUMMARY');
+    expect(chestSummary.textContent).toContain('Every 7 days');
+    expect(chestSummary.textContent).toContain('1 rest day');
+    await user.click(chestSummary);
+
+    const interval = within(chestRow).getByRole('spinbutton', { name: 'Chest training interval in days' });
+    const restDays = within(chestRow).getByRole('spinbutton', { name: 'Chest preferred rest days' });
+    const betweenSets = within(chestRow).getByRole('combobox', { name: 'Chest rest between sets' });
+    await user.clear(interval);
+    await user.type(interval, '10');
+    await user.clear(restDays);
+    await user.type(restDays, '2');
+    await user.selectOptions(betweenSets, 'custom');
+    const customRest = within(chestRow).getByRole('spinbutton', { name: 'Chest custom rest between sets in seconds' });
+    await user.clear(customRest);
+    await user.type(customRest, '240');
+
+    await user.click(chestSummary);
+    expect(chestRow.open).toBe(false);
+    expect(chestSummary.textContent).toContain('Every 10 days');
+    expect(chestSummary.textContent).toContain('2 rest days');
+    await user.click(chestSummary);
+    expect(within(chestRow).getByRole('spinbutton', { name: 'Chest training interval in days' })).toHaveProperty('value', '10');
+    expect(within(chestRow).getByRole('spinbutton', { name: 'Chest preferred rest days' })).toHaveProperty('value', '2');
+    expect(within(chestRow).getByRole('combobox', { name: 'Chest rest between sets' })).toHaveProperty('value', 'custom');
+    expect(within(chestRow).getByRole('spinbutton', { name: 'Chest custom rest between sets in seconds' })).toHaveProperty('value', '240');
+
+    await user.click(within(dialog).getByRole('button', { name: 'Save settings' }));
+    expect(changes).toHaveLength(1);
+    expect(changes[0]?.settings).toMatchObject({
+      muscleIntervals: { chest: 10 },
+      preferredRestDays: { chest: 2 },
+      betweenSetRestSeconds: { chest: 240 }
+    });
+
+    await user.click(opener);
+    const cancelledDialog = screen.getByRole('dialog', { name: 'Strength settings' });
+    expect(within(cancelledDialog).getByText('Tracking started Oct 22, 2026.')).toBeTruthy();
+    await user.selectOptions(within(cancelledDialog).getByLabelText('Weight unit'), 'kg');
+    await user.click(within(cancelledDialog).getByRole('button', { name: 'Cancel' }));
+    expect(changes).toHaveLength(1);
   });
 
   it('edits per-muscle between-set preferences without changing saved workouts or history', async () => {
@@ -445,6 +764,8 @@ describe('Strength preview presentation', () => {
 
     await user.click(document.querySelector('.strength-map-card .settings-icon-button') as HTMLElement);
     const dialog = screen.getByRole('dialog', { name: 'Strength settings' });
+    await user.click(getSettingsMuscleSummary(dialog, 'Chest'));
+    await user.click(getSettingsMuscleSummary(dialog, 'Abs'));
     const chestRest = within(dialog).getByRole('combobox', { name: 'Chest rest between sets' });
     const absRest = within(dialog).getByRole('combobox', { name: 'Abs rest between sets' });
     expect(chestRest).toHaveProperty('value', '180');
@@ -500,12 +821,39 @@ describe('Strength preview presentation', () => {
   it('opens a linked workout log from a dispatched Rhythm request and restores focus on cancellation', async () => {
     const user = userEvent.setup();
     const { onChange, opener } = renderStrength(createStrengthData(), 'recommended', null, undefined, true);
+    const picker = await screen.findByRole('dialog', { name: /Log workout for/ });
+    expect(within(picker).getByRole('button', { name: 'Custom workout' })).toBeTruthy();
+    await user.click(within(picker).getByRole('button', { name: 'Custom workout' }));
     const dialog = await screen.findByRole('dialog', { name: 'Log workout' });
     expect(within(dialog).getByLabelText('Workout date')).toHaveProperty('value', '2026-10-22');
     expect(within(dialog).getByLabelText('Saved workout (optional)')).toHaveProperty('value', '');
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(onChange).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(opener);
+  });
+
+  it('limits the linked Rhythm workout picker to three current recommendations and opens full-screen logging', async () => {
+    const data = createStrengthData();
+    data.savedWorkouts = [
+      { id: 'rhythm-pick-1', name: 'Chest plan', muscleIds: ['chest'], sharedWith: [] },
+      { id: 'rhythm-pick-2', name: 'Back plan', muscleIds: ['back'], sharedWith: [] },
+      { id: 'rhythm-pick-3', name: 'Leg plan', muscleIds: ['quads'], sharedWith: [] },
+      { id: 'rhythm-pick-4', name: 'Extra plan', muscleIds: ['calves'], sharedWith: [] }
+    ];
+    const user = userEvent.setup();
+    const { onChange } = renderStrength(data, 'recommended', null, undefined, true);
+
+    const picker = await screen.findByRole('dialog', { name: /Log workout for/ });
+    expect(picker.classList.contains('dialog--phone-fullscreen')).toBe(true);
+    const recommendations = picker.querySelectorAll<HTMLElement>('.strength-rhythm-workout-choice');
+    expect(recommendations).toHaveLength(3);
+    expect(within(picker).getByRole('button', { name: 'Custom workout' })).toBeTruthy();
+    await user.click(within(recommendations[0]!).getByRole('button', { name: /^Log / }));
+
+    const workoutDialog = await screen.findByRole('dialog', { name: 'Log workout' });
+    expect(workoutDialog.classList.contains('dialog--phone-fullscreen')).toBe(true);
+    await user.click(within(workoutDialog).getByRole('button', { name: 'Cancel' }));
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('preselects a contextual workout and lets the user edit the actual muscles trained', async () => {
@@ -678,6 +1026,7 @@ describe('Strength preview presentation', () => {
 
     const panel = screen.getByRole('tabpanel', { name: 'History' });
     expect((panel as HTMLElement).hidden).toBe(false);
+    expect(panel.querySelector(':scope > .card')).toBeNull();
     expect(within(panel).getByText('0 workouts logged')).toBeTruthy();
     expect(within(panel).getByText('No workouts logged yet.')).toBeTruthy();
     expect(within(list).getByRole('tab', { name: 'History' })).toBeTruthy();
@@ -714,7 +1063,10 @@ describe('Strength preview presentation', () => {
     await user.click(screen.getByRole('tab', { name: 'History' }));
     const panel = screen.getByRole('tabpanel', { name: 'History' });
     expect(within(panel).getByText('25 workouts logged')).toBeTruthy();
+    expect(panel.querySelector(':scope > .card')).toBeNull();
     expect(within(panel).getAllByRole('button', { name: /^View / })).toHaveLength(10);
+    expect(within(panel).getByRole('button', { name: /View An exceptionally long workout name/ })
+      .closest('li')?.classList.contains('strength-history-card')).toBe(true);
     expect(within(panel).getAllByRole('heading', { name: 'January 2026' })).toHaveLength(1);
     expect(within(panel).queryByRole('heading', { name: 'December 2025' })).toBeNull();
 

@@ -41,6 +41,7 @@ type RhythmDetailsDialogProps = {
   headingId?: string;
   people?: readonly PersonPreview[];
   foundations?: readonly FoundationPreview[];
+  relatedRhythms?: readonly RhythmPreview[];
   onPersonSelect?: (personId: PersonId) => void;
   onOpenFoundation?: (foundationId: string, openerId: string) => void;
   onOpenCategory?: (categoryId: Destination, openerId: string) => void;
@@ -69,6 +70,7 @@ export function RhythmDetailsDialog({
   healthScore = null,
   people,
   foundations,
+  relatedRhythms,
   onPersonSelect,
   onOpenFoundation,
   onOpenCategory,
@@ -211,6 +213,11 @@ export function RhythmDetailsDialog({
               {inline && rhythm.description?.trim() && (
                 <p className="tend-type-description today-rhythm-details__description">{rhythm.description}</p>
               )}
+              {rhythm.healthLogCapability === 'cardio' && rhythm.healthRunTarget && (
+                <p className="today-rhythm-details__activity-target">
+                  Run target · {rhythm.healthRunTarget.distance} {rhythm.healthRunTarget.unit}
+                </p>
+              )}
             </div>
           )}
           {inline && !showCompletion && detailsActions}
@@ -269,6 +276,7 @@ export function RhythmDetailsDialog({
                 {...(onPersonSelect ? { onPersonSelect } : {})}
                 {...(onOpenCategory ? { onOpenCategory } : {})}
                 {...(foundations ? { foundations } : {})}
+                {...(relatedRhythms ? { relatedRhythms } : {})}
                 {...(onOpenFoundation ? { onOpenFoundation } : {})}
                 onClose={onClose}
                 closeButtonRef={closeButtonRef}

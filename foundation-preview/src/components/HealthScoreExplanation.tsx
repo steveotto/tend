@@ -7,13 +7,15 @@ export function HealthScoreExplanation({
   subject = 'Rhythm',
   explanation,
   consistencyDescription,
-  onTrackDescription
+  onTrackDescription,
+  showPanels = true
 }: {
   title?: string;
   subject?: string;
   explanation?: string;
   consistencyDescription?: string;
   onTrackDescription?: string;
+  showPanels?: boolean;
 }) {
   const titleId = useId();
   const descriptionId = useId();
@@ -33,10 +35,12 @@ export function HealthScoreExplanation({
         Health is weighted {consistencyWeight} percent Consistency and {onTrackWeight} percent On Track.
         These are fixed formula weights, not this {subject}&apos;s current scores.
       </p>
-      <HealthWeightPanels
-        {...(consistencyDescription === undefined ? {} : { consistencyDescription })}
-        {...(onTrackDescription === undefined ? {} : { onTrackDescription })}
-      />
+      {showPanels && (
+        <HealthWeightPanels
+          {...(consistencyDescription === undefined ? {} : { consistencyDescription })}
+          {...(onTrackDescription === undefined ? {} : { onTrackDescription })}
+        />
+      )}
       {explanation && (
         <p className="rhythm-history-view__health-unavailable">{explanation}</p>
       )}

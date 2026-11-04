@@ -138,6 +138,7 @@ export function FoundationCard({
   const resolvedHeadingId = headingId ?? `foundation-${foundation.id}`;
   const foundationTerm = foundationTerminologyForCategory(foundation.categoryId);
   const displayScore = score === undefined ? illustrativeScore : score;
+  const displayScoreTone = scoreTone(displayScore ?? null);
   const displayScoreLabel = scoreLabel ?? `${foundation.name} illustrative score`;
   const coverageText = scoreEvidence ?? (rhythmCoverage
     ? rhythmCoverage.total === 0
@@ -164,12 +165,13 @@ export function FoundationCard({
               <FoundationProgress
                 label={displayScoreLabel}
                 score={displayScore}
+                tone={displayScoreTone}
                 decorative={Boolean(onSelect)}
               />
             </>
           )}
         </CompactCardBody>
-        <span className={`foundation-card__score ${scoreTone(displayScore ?? null)}`} aria-hidden="true">
+        <span className={`foundation-card__score ${displayScoreTone}`} aria-hidden="true">
           {displayScore === undefined ? '—' : formatScore(displayScore)}
         </span>
         {onSelect && <span className="foundation-card__chevron" aria-hidden="true">›</span>}
@@ -254,10 +256,12 @@ export function FoundationCard({
 export function FoundationProgress({
   label,
   score,
+  tone = scoreTone(score),
   decorative = false
 }: {
   label: string;
   score: number | null;
+  tone?: ReturnType<typeof scoreTone>;
   decorative?: boolean;
 }) {
   const clampedScore = score !== null && Number.isFinite(score)
@@ -277,7 +281,7 @@ export function FoundationProgress({
       {...(!decorative && clampedScore === null ? { 'aria-valuetext': 'Score unavailable' } : {})}
     >
       <span
-        className="foundation-progress__fill"
+        className={`foundation-progress__fill ${tone}`}
         style={{ width: `${clampedScore ?? 0}%` }}
         aria-hidden="true"
       />

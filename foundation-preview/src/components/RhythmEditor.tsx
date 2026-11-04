@@ -9,8 +9,11 @@ import {
 } from '../domain/preview-data.ts';
 import type { FoundationPreview, PersonId, PersonPickerGroup, PersonPreview } from '../domain/preview-data.ts';
 import type { RhythmPreview } from '../domain/preview-data.ts';
+import type { StrengthMode, StrengthSavedWorkout } from '../domain/strength.ts';
 import {
+  foundationRequirementMessage,
   foundationCategoryId,
+  missingRequiredFoundationCategories,
   removeFoundationLinksForCategory
 } from '../domain/foundation-rhythm-associations.ts';
 import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
@@ -49,6 +52,31 @@ function emptyDraft(): RhythmDraft {
   };
 }
 
+function RhythmSectionHeading({
+  id,
+  title,
+  icon
+}: {
+  id: string;
+  title: string;
+  icon: 'details' | 'timing' | 'connections';
+}) {
+  return (
+    <h3 id={id} className="rhythm-editor__section-heading">
+      <span className="rhythm-editor__section-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+          strokeLinecap="round" strokeLinejoin="round" focusable="false">
+          {icon === 'details' && <><path d="m14.5 5.5 4 4" /><path d="M4 20l4.8-1 10.4-10.4a2.1 2.1 0 0 0-3-3L5.8 16 4 20Z" /></>}
+          {icon === 'timing' && <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.2 2" /></>}
+          {icon === 'connections' && <><path d="m9.5 14.5-1.2 1.2a3.7 3.7 0 0 1-5.2-5.2l3.1-3.1a3.7 3.7 0 0 1 5.2 0" /><path d="m14.5 9.5 1.2-1.2a3.7 3.7 0 0 1 5.2 5.2l-3.1 3.1a3.7 3.7 0 0 1-5.2 0" /><path d="m8.8 15.2 6.4-6.4" /></>}
+        </svg>
+      </span>
+      <span className="rhythm-editor__section-title">{title}</span>
+      <span className="rhythm-editor__section-divider" aria-hidden="true" />
+    </h3>
+  );
+}
+
 type RhythmEditorProps = {
   rhythm?: RhythmPreview;
   initialDraft?: RhythmDraft;
@@ -59,16 +87,24 @@ type RhythmEditorProps = {
   people?: readonly PersonPreview[];
   peopleGroups?: readonly PersonPickerGroup[];
   hasDatedCompletionHistory?: boolean;
+  savedWorkouts?: readonly StrengthSavedWorkout[];
+  healthWorkoutSetting?: { mode: StrengthMode; workoutId?: string };
   onSave: (draft: RhythmDraft) => RhythmDraftErrors;
   onArchive?: (id: string) => void;
   onClose: () => void;
 };
 
-type AssociationKind = 'categories' | 'people' | 'foundations';
+type AssociationKind = 'categories' | 'people';
 type ScheduleDraftSnapshot = Pick<RhythmDraft, 'schedule' | 'scheduleEditing' | 'seasonName'>;
 
 function accessibleScheduleDescription(schedule: NonNullable<RhythmDraft['schedule']>) {
   return formatRhythmSchedule(schedule, 'detailed').replace(/\.+$/, '');
+}
+
+function rhythmEditorScrollRegion() {
+  return document.querySelector<HTMLElement>(
+    '.money-goal-dialog--rhythm-editor .rhythm-editor__scroll'
+  );
 }
 
 function RhythmAssociationRow({
@@ -76,12 +112,16 @@ function RhythmAssociationRow({
   accessibleName,
   openerRef,
   onChoose,
+  invalid = false,
+  describedBy,
   children
 }: {
   title: string;
   accessibleName: string;
   openerRef: RefObject<HTMLButtonElement | null>;
   onChoose: () => void;
+  invalid?: boolean;
+  describedBy?: string;
   children: ReactNode;
 }) {
   return (
@@ -90,6 +130,9 @@ function RhythmAssociationRow({
       type="button"
       className="rhythm-editor__association-row"
       aria-label={accessibleName}
+      aria-invalid={invalid || undefined}
+      aria-describedby={describedBy}
+      aria-errormessage={describedBy}
       onClick={onChoose}
     >
       <span className="rhythm-editor__association-row-content">
@@ -111,13 +154,16 @@ export function RhythmEditor({
   people = syntheticPeople,
   peopleGroups = syntheticPersonPickerGroups,
   hasDatedCompletionHistory = false,
+  savedWorkouts = [],
+  healthWorkoutSetting,
   onSave,
   onArchive,
   onClose
 }: RhythmEditorProps) {
   const timeOptions = useRhythmTimeOptions();
-  const [draft, setDraft] = useState<RhythmDraft>(() => initialDraft
-    ? {
+  const [draft, setDraft] = useState<RhythmDraft>(() => {
+    const openingDraft = initialDraft
+      ? {
         ...initialDraft,
         personIds: [...initialDraft.personIds],
         categoryIds: [...initialDraft.categoryIds],
@@ -125,9 +171,20 @@ export function RhythmEditor({
           ? {}
           : { secondaryFoundationIds: [...initialDraft.secondaryFoundationIds] })
       }
-    : rhythm
-      ? rhythmDraftFrom(rhythm, rhythm.categoryIds ?? [], asOfDate, timeOptions)
-      : emptyDraft());
+      : rhythm
+        ? rhythmDraftFrom(rhythm, rhythm.categoryIds ?? [], asOfDate, timeOptions)
+        : emptyDraft();
+    return openingDraft.categoryIds.includes('health') || openingDraft.healthLogCapability !== undefined
+      ? {
+          ...openingDraft,
+          healthLogCapability: openingDraft.healthLogCapability ?? 'workout',
+          healthWorkoutMode: healthWorkoutSetting?.mode ?? openingDraft.healthWorkoutMode ?? 'recommended',
+          ...((healthWorkoutSetting?.workoutId ?? openingDraft.healthWorkoutId)
+            ? { healthWorkoutId: healthWorkoutSetting?.workoutId ?? openingDraft.healthWorkoutId }
+            : {})
+        }
+      : openingDraft;
+  });
   const [errors, setErrors] = useState<RhythmDraftErrors>({});
   const [showArchiveConfirmation, setShowArchiveConfirmation] = useState(false);
   const [showScheduleConfirmation, setShowScheduleConfirmation] = useState(false);
@@ -140,7 +197,6 @@ export function RhythmEditor({
   const [categoryPickerFocusId, setCategoryPickerFocusId] = useState<string | null>(null);
   const categoryPickerOpenerRef = useRef<HTMLButtonElement>(null);
   const peoplePickerOpenerRef = useRef<HTMLButtonElement>(null);
-  const foundationPickerOpenerRef = useRef<HTMLButtonElement>(null);
   const protectedFrequencyButtonRef = useRef<HTMLButtonElement>(null);
   const restoreProtectedFrequencyFocusRef = useRef(false);
   const focusScheduleControlRef = useRef(false);
@@ -159,20 +215,24 @@ export function RhythmEditor({
 
   useLayoutEffect(() => {
     if (activePicker === null && restoreFocusToPickerOpenerRef.current) {
-      const dialog = document.querySelector<HTMLDialogElement>('.money-goal-dialog');
-      if (dialog) dialog.scrollTop = pickerScrollTopRef.current;
+      const scrollRegion = rhythmEditorScrollRegion();
+      if (scrollRegion) scrollRegion.scrollTop = pickerScrollTopRef.current;
       ({
         categories: categoryPickerOpenerRef.current,
-        people: peoplePickerOpenerRef.current,
-        foundations: foundationPickerOpenerRef.current
+        people: peoplePickerOpenerRef.current
       })[pickerOriginRef.current]?.focus({ preventScroll: true });
       restoreFocusToPickerOpenerRef.current = false;
     }
   }, [activePicker]);
 
   useEffect(() => {
-    if (showArchiveConfirmation) archiveConfirmButtonRef.current?.focus({ preventScroll: true });
-    else if (wasConfirmingArchiveRef.current) archiveButtonRef.current?.focus({ preventScroll: true });
+    if (showArchiveConfirmation) {
+      const scrollRegion = rhythmEditorScrollRegion();
+      if (scrollRegion) scrollRegion.scrollTop = scrollRegion.scrollHeight;
+      archiveConfirmButtonRef.current?.focus({ preventScroll: true });
+    } else if (wasConfirmingArchiveRef.current) {
+      archiveButtonRef.current?.focus({ preventScroll: true });
+    }
     wasConfirmingArchiveRef.current = showArchiveConfirmation;
   }, [showArchiveConfirmation]);
 
@@ -189,21 +249,14 @@ export function RhythmEditor({
       return next;
     });
   }
-
   function openPicker(kind: AssociationKind) {
-    const dialog = document.querySelector<HTMLDialogElement>('.money-goal-dialog');
-    pickerScrollTopRef.current = dialog?.scrollTop ?? 0;
+    pickerScrollTopRef.current = rhythmEditorScrollRegion()?.scrollTop ?? 0;
     pickerOriginRef.current = kind;
     setCategoryPickerFocusId(null);
     setPendingCategoryRemoval(null);
     setPickerSelection(kind === 'categories'
       ? [...draft.categoryIds]
-      : kind === 'people'
-        ? [...draft.personIds]
-        : [
-            ...(draft.primaryFoundationId ? [draft.primaryFoundationId] : []),
-            ...(draft.secondaryFoundationIds ?? [])
-          ]);
+      : [...draft.personIds]);
     setPickerFoundationSelection(foundationRhythmIds(draft));
     setActivePicker(kind);
   }
@@ -213,31 +266,30 @@ export function RhythmEditor({
     restoreFocusToPickerOpenerRef.current = true;
     if (apply) {
       if (activePicker === 'categories') {
-        setDraft(previous => ({
-          ...previous,
+        const nextDraft = {
+          ...draft,
           categoryIds: pickerSelection as RhythmDraft['categoryIds'],
           primaryFoundationId: pickerFoundationSelection[0] ?? null,
           secondaryFoundationIds: pickerFoundationSelection.slice(1)
-        }));
+        };
+        const nextCategoryErrors = validateRhythmDraft(
+          nextDraft,
+          undefined,
+          people.map(person => person.id),
+          timeOptions
+        );
+        setDraft(nextDraft);
         setErrors(previous => {
+          if (!previous.categoryIds && !previous.foundationIds) return previous;
           const next = { ...previous };
-          delete next.categoryIds;
-          delete next.foundationIds;
+          if (nextCategoryErrors.categoryIds) next.categoryIds = nextCategoryErrors.categoryIds;
+          else delete next.categoryIds;
+          if (nextCategoryErrors.foundationIds) next.foundationIds = nextCategoryErrors.foundationIds;
+          else delete next.foundationIds;
           return next;
         });
-      } else if (activePicker === 'people') {
-        update('personIds', pickerSelection as RhythmDraft['personIds']);
       } else {
-        setDraft(previous => ({
-          ...previous,
-          primaryFoundationId: pickerSelection[0] ?? null,
-          secondaryFoundationIds: pickerSelection.slice(1)
-        }));
-        setErrors(previous => {
-          const next = { ...previous };
-          delete next.foundationIds;
-          return next;
-        });
+        update('personIds', pickerSelection as RhythmDraft['personIds']);
       }
     }
     setPendingCategoryRemoval(null);
@@ -245,6 +297,13 @@ export function RhythmEditor({
   }
 
   function togglePickerItem(id: string) {
+    if (activePicker === 'categories'
+      && (pickerFoundationSelection.includes(id) || allFoundations.some(foundation => foundation.id === id))) {
+      setPickerFoundationSelection(current => current.includes(id)
+        ? current.filter(selected => selected !== id)
+        : [...current, id]);
+      return;
+    }
     if (activePicker === 'categories' && pickerSelection.includes(id)) {
       const category = areas.find(area => area.id === id);
       if (category) {
@@ -311,6 +370,11 @@ export function RhythmEditor({
     if (rhythm && (hasDatedCompletionHistory || hasPreservedSeasonHistory)
       && scheduleChanged && draft.schedule) {
       const nextErrors = validateRhythmDraft(draft, undefined, people.map(person => person.id), timeOptions);
+      if (draft.healthLogCapability === 'workout'
+        && draft.healthWorkoutMode === 'specific'
+        && !savedWorkouts.some(workout => workout.id === draft.healthWorkoutId)) {
+        nextErrors.healthWorkoutId = 'Select an available saved workout.';
+      }
       setErrors(nextErrors);
       if (Object.keys(nextErrors).length === 0) {
         if (scheduleFlowOpeningDraftRef.current === null) {
@@ -375,27 +439,27 @@ export function RhythmEditor({
   );
   useLayoutEffect(() => {
     if (restoreProtectedFrequencyFocusRef.current) {
-      const dialog = document.querySelector<HTMLDialogElement>('.money-goal-dialog--rhythm-editor');
-      if (dialog) dialog.scrollTop = scheduleDialogScrollTopRef.current;
+      const scrollRegion = rhythmEditorScrollRegion();
+      if (scrollRegion) scrollRegion.scrollTop = scheduleDialogScrollTopRef.current;
       const returnFocusTarget = protectedFrequencyButtonRef.current
-        ?? dialog?.querySelector<HTMLButtonElement>('.rhythm-schedule-fields__frequency .rhythm-select__trigger');
+        ?? scrollRegion?.querySelector<HTMLButtonElement>('.rhythm-schedule-fields__frequency .rhythm-select__trigger');
       returnFocusTarget?.focus({ preventScroll: true });
       restoreProtectedFrequencyFocusRef.current = false;
     }
     if (!showCadenceDescription && focusScheduleControlRef.current) {
-      const dialog = document.querySelector<HTMLDialogElement>('.money-goal-dialog--rhythm-editor');
-      const scheduleControl = dialog?.querySelector<HTMLButtonElement>(
+      const scrollRegion = rhythmEditorScrollRegion();
+      const scheduleControl = scrollRegion?.querySelector<HTMLButtonElement>(
         '.rhythm-schedule-fields .rhythm-select__trigger'
       );
-      if (dialog && scheduleControl) {
-        dialog.scrollTop = scheduleDialogScrollTopRef.current;
+      if (scrollRegion && scheduleControl) {
+        scrollRegion.scrollTop = scheduleDialogScrollTopRef.current;
         scheduleControl.focus({ preventScroll: true });
-        const dialogBounds = dialog.getBoundingClientRect();
+        const dialogBounds = scrollRegion.getBoundingClientRect();
         const controlBounds = scheduleControl.getBoundingClientRect();
         if (controlBounds.top < dialogBounds.top) {
-          dialog.scrollTop -= dialogBounds.top - controlBounds.top;
+          scrollRegion.scrollTop -= dialogBounds.top - controlBounds.top;
         } else if (controlBounds.bottom > dialogBounds.bottom) {
-          dialog.scrollTop += controlBounds.bottom - dialogBounds.bottom;
+          scrollRegion.scrollTop += controlBounds.bottom - dialogBounds.bottom;
         }
       }
       focusScheduleControlRef.current = false;
@@ -424,50 +488,16 @@ export function RhythmEditor({
     ...(draft.secondaryFoundationIds ?? [])
   ];
   const allFoundations = foundationCatalogue;
-  const foundationTerms = [...new Set(
-    selectedCategories.flatMap(category =>
-      allFoundations.some(foundation => foundation.categoryId === category.id)
-        ? [foundationTerminologyForCategory(category.id).plural]
-        : []
-    )
-  )];
-  const foundationPickerTitle = foundationTerms.length > 1
-    ? 'Choose Foundations and Practices'
-    : foundationTerms[0] === 'Practices'
-      ? 'Choose Practices'
-      : 'Choose Foundations';
-  const foundationRowTitle = foundationTerms.length > 1
-    ? 'Practices and Foundations'
-    : foundationTerms[0] === 'Practices'
-      ? 'Practices'
-      : 'Foundations';
-  const primaryFoundationTerm = foundationTerms.length === 1 && foundationTerms[0] === 'Practices'
-    ? foundationTerminologyForCategory('faith')
-    : foundationTerminologyForCategory();
-  const foundationLinkTerm = foundationTerms.length > 1
-    ? 'Practice and Foundation'
-    : primaryFoundationTerm.singular;
-  const eligibleFoundations = allFoundations.filter(foundation => {
-    const ownerCategoryId = foundationCategoryId(foundation.id, allFoundations);
-    return ownerCategoryId !== undefined
-      && foundation.lifecycle === 'active'
-      && foundation.capabilities.rhythms
-      && draft.categoryIds.includes(ownerCategoryId);
-  });
-  const ineligibleSelectedFoundations = allFoundations.filter(foundation =>
-    selectedFoundationIds.includes(foundation.id)
-      && !eligibleFoundations.some(eligible => eligible.id === foundation.id)
+  const missingRequiredCategories = missingRequiredFoundationCategories(
+    draft.categoryIds,
+    selectedFoundationIds,
+    allFoundations
   );
-  const foundationPickerItems = [
-    ...eligibleFoundations,
-    ...ineligibleSelectedFoundations
-  ];
-  const unavailableSelectedFoundationItems = selectedFoundationIds
-    .filter(id => !allFoundations.some(foundation => foundation.id === id))
-    .map(id => ({
-      id,
-      label: `Unresolved ${primaryFoundationTerm.singular} reference: ${id}`
-    }));
+  const categoryValidationField = errors.categoryIds ? 'categoryIds' : 'foundationIds';
+  const categoryValidationMessage = errors.categoryIds ?? errors.foundationIds;
+  const needsScheduleRemediation = Boolean(
+    rhythm && draft.originalSchedule === undefined && draft.schedule === undefined
+  );
   const invalidFoundationLinks = selectedFoundationIds.filter(id => {
     const ownerCategoryId = foundationCategoryId(id, allFoundations);
     return ownerCategoryId === undefined || !draft.categoryIds.includes(ownerCategoryId);
@@ -497,13 +527,34 @@ export function RhythmEditor({
       } satisfies RhythmPreview
     };
   }).filter(group => group.foundations.length > 0);
-  const categoriesWithoutFoundationDefinitions = selectedCategories.filter(category =>
-    !allFoundations.some(foundation =>
-      foundationCategoryId(foundation.id, allFoundations) === category.id
-        && foundation.capabilities.rhythms
-        && foundation.lifecycle === 'active'
-    )
-  );
+  const foundationLinksNeedingReview = selectedFoundationIds
+    .filter(id => {
+      const ownerCategoryId = foundationCategoryId(id, allFoundations);
+      return ownerCategoryId === undefined || !draft.categoryIds.includes(ownerCategoryId);
+    })
+    .map(id => {
+      const foundation = allFoundations.find(item => item.id === id);
+      return {
+        id,
+        label: foundation
+          ? `${foundation.name} (${foundation.category} category not selected)`
+          : `Unresolved Foundation reference: ${id}`
+      };
+    });
+  const pickerFoundationLinksNeedingReview = pickerFoundationSelection
+    .filter(id => {
+      const ownerCategoryId = foundationCategoryId(id, allFoundations);
+      return ownerCategoryId === undefined || !pickerSelection.includes(ownerCategoryId);
+    })
+    .map(id => {
+      const foundation = allFoundations.find(item => item.id === id);
+      return {
+        id,
+        label: foundation
+          ? `${foundation.name} (${foundation.category} category not selected)`
+          : `Unresolved Foundation reference: ${id}`
+      };
+    });
   const associationName = (title: string, selected: readonly string[], emptyState: string) => {
     const prefix = `Choose ${title.toLowerCase()}`;
     if (selected.length === 0) return emptyState;
@@ -512,21 +563,52 @@ export function RhythmEditor({
       : `${selected.slice(0, -1).join(', ')} and ${selected.at(-1)}`;
     return `${prefix}, ${selectedNames}`;
   };
-  const foundationEmptyState = selectedCategories.length === 0
-    ? 'Choose a category first'
-    : eligibleFoundations.length === 0
-      ? categoriesWithoutFoundationDefinitions.length > 0
-        ? `No ${foundationTerms[0] ?? 'Foundations'} are defined for ${categoriesWithoutFoundationDefinitions.map(category => category.label).join(', ')}`
-        : `No ${foundationTerms[0] ?? 'Foundations'} are available for the selected categories`
-      : foundationTerms.length === 1 && foundationTerms[0] === 'Practices'
-        ? 'Choose Practices'
-        : 'Choose foundations';
-  const selectedFoundationNames = [
-    ...selectedFoundationGroups.flatMap(group =>
-      group.foundations.map(foundation => `${group.area.label}: ${foundation.name}`)
-    ),
-    ...unavailableSelectedFoundationItems.map(item => `Unresolved: ${item.id}`)
-  ];
+  const foundationChoicesForCategory = (categoryId: string) => allFoundations.filter(foundation =>
+    foundationCategoryId(foundation.id, allFoundations) === categoryId
+    && ((foundation.lifecycle === 'active' && foundation.capabilities.rhythms)
+      || pickerFoundationSelection.includes(foundation.id))
+  );
+  const categoryHasFoundationChoices = (categoryId: string) =>
+    allFoundations.some(foundation =>
+      foundationCategoryId(foundation.id, allFoundations) === categoryId
+      && foundation.lifecycle === 'active'
+      && foundation.capabilities.rhythms
+    );
+  const foundationChoiceLabel = (foundation: FoundationPreview) =>
+    foundation.lifecycle === 'active' && foundation.capabilities.rhythms
+      ? foundation.name
+      : `${foundation.name} (inactive; retained)`;
+  const foundationChoiceGroup = (category: typeof areas[number]) => {
+    if (!categoryHasFoundationChoices(category.id)) return null;
+    const term = foundationTerminologyForCategory(category.id);
+    const choices = foundationChoicesForCategory(category.id);
+    return (
+      <div className="rhythm-association-picker__category-foundations">
+        <p>Choose one or more {term.plural.toLowerCase()} for {category.label}.</p>
+        <div role="group" aria-label={`${category.label} ${term.plural}, choose one or more`}>
+          <div className="rhythm-association-picker__foundation-options">
+            {choices.map(foundation => {
+              const selected = pickerFoundationSelection.includes(foundation.id);
+              const label = foundationChoiceLabel(foundation);
+              return (
+                <button
+                  key={foundation.id}
+                  type="button"
+                  className="rhythm-association-picker__option"
+                  aria-label={label}
+                  aria-pressed={selected}
+                  data-selected={selected ? 'true' : 'false'}
+                  onClick={() => togglePickerItem(foundation.id)}
+                >
+                  <span className="rhythm-association-picker__badge">{renderFoundationBadge(foundation)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  };
   const renderCategoryBadge = (area: typeof areas[number]) => (
     <>
       <span className="rhythm-association-picker__category-icon" aria-hidden="true"><AreaIcon id={area.id} /></span>
@@ -578,8 +660,7 @@ export function RhythmEditor({
   );
 
   function openProtectedScheduleEditor() {
-    const dialog = document.querySelector<HTMLDialogElement>('.money-goal-dialog--rhythm-editor');
-    scheduleDialogScrollTopRef.current = dialog?.scrollTop ?? 0;
+    scheduleDialogScrollTopRef.current = rhythmEditorScrollRegion()?.scrollTop ?? 0;
     scheduleFlowOpeningDraftRef.current = {
       ...(draft.originalSchedule === undefined
         ? draft.schedule === undefined ? {} : { schedule: draft.schedule }
@@ -605,164 +686,312 @@ export function RhythmEditor({
     <>
     <MoneyGoalDialog
       title={rhythm ? 'Edit Rhythm' : 'Add Rhythm'}
+      initialFocusId="money-goal-dialog-title"
+      closeLabel="Close Rhythm editor"
       dialogClassName="money-goal-dialog--rhythm-editor"
-      intro={suggestionSourceId
-        ? 'Suggested Rhythm draft. Nothing is saved until you choose Add Rhythm. Choose the schedule that fits; the catalogue hint is only a recommendation.'
-        : 'Synthetic preview only. Schedules are stored and displayed, but do not calculate due dates or control completion eligibility.'}
+      phoneFullScreen
+      inert={activePicker !== null}
       onClose={handleDialogEscape}
     >
       <form className="rhythm-editor" onSubmit={submit} noValidate>
-        <div className="goal-field rhythm-editor__title-field">
-          <label htmlFor="rhythm-title">Title</label>
-          <input
-            id="rhythm-title"
-            autoFocus
-            maxLength={80}
-            value={draft.title}
-            aria-invalid={Boolean(errors.title)}
-            aria-describedby={errors.title ? 'rhythm-error-title' : undefined}
-            onChange={event => update('title', event.currentTarget.value)}
-          />
-          {fieldError('title')}
-        </div>
-        <div className="goal-field rhythm-editor__description-field">
-          <label htmlFor="rhythm-description">Description (optional)</label>
-          <textarea
-            id="rhythm-description"
-            rows={2}
-            maxLength={1000}
-            value={draft.description}
-            aria-invalid={Boolean(errors.description)}
-            aria-describedby={errors.description ? 'rhythm-error-description' : undefined}
-            onChange={event => update('description', event.currentTarget.value)}
-          />
-          {fieldError('description')}
-        </div>
-
-        <RhythmScheduleFields
-          key={scheduleFieldsRevision}
-          schedule={draft.schedule ?? effectiveSchedule}
-          error={errors.schedule}
-          onChange={schedule => update('schedule', schedule)}
-          onEndDateValidationChange={message => {
-            endDateValidationMessageRef.current = message;
-          }}
-          requireExplicitChoices={initialDraft !== undefined || draft.originalSchedule === undefined}
-          showScheduleControls={!showCadenceDescription}
-          endDatePlacement="after-time"
-          {...(recommendedFrequency ? { initialFrequency: recommendedFrequency } : {})}
-          {...(frequencyGuidance ? { frequencyGuidance } : {})}
-        >
-          {showCadenceDescription
-            ? <>{protectedFrequencyField}{timeOfDayField}</>
-            : timeOfDayField}
-        </RhythmScheduleFields>
-        {rhythm && draft.originalSchedule === undefined && (
-          <button
-            type="button"
-            className="rhythm-editor__keep-descriptive"
-            onClick={() => {
-              update('scheduleEditing', false);
-              update('schedule', undefined);
-            }}
-          >
-            Keep descriptive cadence
-          </button>
+        <div className="rhythm-editor__scroll">
+        {suggestionSourceId && (
+          <p className="money-goal-dialog__intro">
+            Suggested Rhythm draft. Nothing is saved until you choose Save. The catalogue hint is only a recommendation.
+          </p>
         )}
+        <section className="rhythm-editor__section" aria-labelledby="rhythm-details-heading">
+          <RhythmSectionHeading id="rhythm-details-heading" title="Details" icon="details" />
+          <div className="goal-field rhythm-editor__title-field">
+            <label htmlFor="rhythm-title">Title</label>
+            <input
+              id="rhythm-title"
+              maxLength={80}
+              value={draft.title}
+              aria-invalid={Boolean(errors.title)}
+              aria-describedby={errors.title ? 'rhythm-error-title' : undefined}
+              onChange={event => update('title', event.currentTarget.value)}
+            />
+            {fieldError('title')}
+          </div>
+          <div className="goal-field rhythm-editor__description-field">
+            <label htmlFor="rhythm-description">Description (optional)</label>
+            <textarea
+              id="rhythm-description"
+              rows={2}
+              maxLength={1000}
+              value={draft.description}
+              aria-invalid={Boolean(errors.description)}
+              aria-describedby={errors.description ? 'rhythm-error-description' : undefined}
+              onChange={event => update('description', event.currentTarget.value)}
+            />
+            {fieldError('description')}
+          </div>
+        </section>
 
-        <section className="rhythm-editor__association" aria-label="Associations">
+        <section className="rhythm-editor__section" aria-labelledby="rhythm-timing-heading">
+          <RhythmSectionHeading id="rhythm-timing-heading" title="Timing" icon="timing" />
+          {needsScheduleRemediation && (
+            <p className="rhythm-editor__legacy-frequency" role="status">
+              Current frequency: “{rhythm?.cadence ?? 'Not recorded'}”. Choose a supported frequency and complete its details to save; this value does not specify a complete schedule.
+            </p>
+          )}
+          <RhythmScheduleFields
+            key={scheduleFieldsRevision}
+            schedule={draft.schedule ?? effectiveSchedule}
+            error={errors.schedule}
+            onChange={schedule => update('schedule', schedule)}
+            onEndDateValidationChange={message => {
+              endDateValidationMessageRef.current = message;
+            }}
+            requireExplicitChoices={initialDraft !== undefined || draft.originalSchedule === undefined}
+            showScheduleControls={!showCadenceDescription}
+            endDatePlacement="after-time"
+            {...(recommendedFrequency ? { initialFrequency: recommendedFrequency } : {})}
+            {...(frequencyGuidance ? { frequencyGuidance } : {})}
+          >
+            {showCadenceDescription
+              ? <>{protectedFrequencyField}{timeOfDayField}</>
+              : timeOfDayField}
+          </RhythmScheduleFields>
+        </section>
+
+        <section className="rhythm-editor__section" aria-labelledby="rhythm-connections-heading">
+          <RhythmSectionHeading id="rhythm-connections-heading" title="Connections" icon="connections" />
+          <section className="rhythm-editor__association" aria-label="Associations">
           <PeopleAssociationRow
             selectedPeople={selectedPeople}
             openerRef={peoplePickerOpenerRef}
             onChoose={() => openPicker('people')}
           />
-          <RhythmAssociationRow
-            title="Categories"
-            accessibleName={associationName('categories', selectedCategories.map(category => category.label), 'Choose categories')}
-            openerRef={categoryPickerOpenerRef}
-            onChoose={() => openPicker('categories')}
-          >
-            {selectedCategories.length > 0 ? (
-              <span className="rhythm-editor__association-categories">
-                <RhythmCategoryBadges rhythm={associationRhythm} itemsOnly presentation="static" />
-              </span>
-            ) : <span className="rhythm-editor__association-empty">Choose categories</span>}
-          </RhythmAssociationRow>
-          {(draft.categoryIds.includes('health') || draft.healthLogCapability !== undefined) && (
-            <div className="rhythm-editor__fitness-capabilities" aria-label="Health & Fitness logging">
-              <label className="rhythm-editor__fitness-capability">
-                <input type="checkbox" checked={draft.healthLogCapability === 'cardio'}
-                  onChange={event => update('healthLogCapability', event.currentTarget.checked ? 'cardio' : undefined)} />
-                <span>Can log a run</span>
-              </label>
-              <label className="rhythm-editor__fitness-capability">
-                <input type="checkbox" checked={draft.healthLogCapability === 'weight'}
-                  onChange={event => update('healthLogCapability', event.currentTarget.checked ? 'weight' : undefined)} />
-                <span>Can log a weigh-in</span>
-              </label>
-            </div>
-          )}
-          <RhythmAssociationRow
-            title={foundationRowTitle}
-            accessibleName={associationName(foundationRowTitle, selectedFoundationNames, foundationEmptyState)}
-            openerRef={foundationPickerOpenerRef}
-            onChoose={() => openPicker('foundations')}
-          >
-            {selectedFoundationIds.length > 0 ? (
-              <span className="rhythm-editor__association-foundations">
-                {selectedFoundationGroups.map(group => (
-                  <span key={group.area.id} className="rhythm-editor__association-foundation-group">
-                    <span className="rhythm-editor__association-foundation-category">
-                      {group.area.label} {foundationTerminologyForCategory(group.area.id).plural.toLowerCase()}
-                    </span>
-                    <RhythmFoundationBadges
-                      rhythm={group.rhythm}
-                      foundations={allFoundations}
-                      presentation="static"
-                    />
-                  </span>
-                ))}
-                {unavailableSelectedFoundationItems.map(item => (
-                  <span
-                    key={item.id}
-                    className="rhythm-editor__association-unresolved"
-                    role="img"
-                    aria-label={`Unresolved ${primaryFoundationTerm.singular} reference: ${item.id}`}
-                    title={`Unresolved ${primaryFoundationTerm.singular} reference: ${item.id}`}
-                  >
-                    Unresolved: {item.id}
-                  </span>
-                ))}
-              </span>
-            ) : <span className="rhythm-editor__association-empty">{foundationEmptyState}</span>}
-            {categoriesWithoutFoundationDefinitions.length > 0
-              && (eligibleFoundations.length > 0 || selectedFoundationIds.length > 0) && (
-              <span className="rhythm-editor__association-unavailable">
-                {categoriesWithoutFoundationDefinitions.map(category =>
-                  `No ${foundationTerminologyForCategory(category.id).plural} are defined for ${category.label}`
-                ).join('. ')}.
-              </span>
+          <div className={`rhythm-editor__category-field${categoryValidationMessage
+            ? ' rhythm-editor__category-field--invalid'
+            : ''}`}>
+            <RhythmAssociationRow
+              title="Categories"
+              accessibleName={associationName('categories', selectedCategories.map(category => category.label), 'Choose categories')}
+              openerRef={categoryPickerOpenerRef}
+              onChoose={() => openPicker('categories')}
+              invalid={Boolean(categoryValidationMessage)}
+              {...(categoryValidationMessage
+                ? { describedBy: `rhythm-error-${categoryValidationField}` }
+                : {})}
+            >
+              {selectedCategories.length > 0 ? (
+                <span className="rhythm-editor__association-category-list">
+                  {selectedCategories.map(category => {
+                    const group = selectedFoundationGroups.find(item => item.area.id === category.id);
+                    const categoryRhythm = {
+                      ...associationRhythm,
+                      categoryIds: [category.id]
+                    };
+                    return (
+                      <span
+                        key={category.id}
+                        className="rhythm-editor__association-category-row"
+                        role="group"
+                        aria-label={`${category.label} category${group ? ' and linked Foundations' : ''}`}
+                      >
+                        <RhythmCategoryBadges rhythm={categoryRhythm} itemsOnly presentation="static" />
+                        {group && (
+                          <RhythmFoundationBadges
+                            rhythm={group.rhythm}
+                            foundations={allFoundations}
+                            presentation="static"
+                            showAll
+                          />
+                        )}
+                      </span>
+                    );
+                  })}
+                </span>
+              ) : <span className="rhythm-editor__association-empty">Choose categories</span>}
+            </RhythmAssociationRow>
+            {categoryValidationMessage ? (
+              <p
+                className="goal-field-error rhythm-editor__category-error"
+                id={`rhythm-error-${categoryValidationField}`}
+                role="alert"
+              >
+                {categoryValidationMessage}
+              </p>
+            ) : missingRequiredCategories.length > 0 && (
+              <div className="rhythm-editor__foundation-requirement" role="status">
+                <p>
+                  {foundationRequirementMessage(missingRequiredCategories)}
+                  {' '}Choose matching selections in Categories before saving.
+                </p>
+              </div>
             )}
-          </RhythmAssociationRow>
+          </div>
+          {(draft.categoryIds.includes('health') || draft.healthLogCapability !== undefined) && (
+            <section
+              className="rhythm-editor__fitness-activity"
+              role="group"
+              aria-label="Health & Fitness logging"
+            >
+              <RhythmSectionHeading id="rhythm-fitness-activity-heading" title="Fitness activity" icon="timing" />
+              <div className="goal-field">
+                <label>Activity</label>
+                <StyledSelect
+                  label="Fitness activity"
+                  value={draft.healthLogCapability ?? 'workout'}
+                  options={[
+                    { value: 'workout', label: 'Workout' },
+                    { value: 'cardio', label: 'Run' },
+                    { value: 'weight', label: 'Weigh-in' }
+                  ]}
+                  onChange={value => {
+                    if (value !== 'workout' && value !== 'cardio' && value !== 'weight') return;
+                    update('healthLogCapability', value);
+                    if (value !== 'cardio') update('healthRunTarget', null);
+                  }}
+                />
+              </div>
+              {draft.healthLogCapability === 'workout' && (
+                <>
+                  <div className="goal-field">
+                    <label>Workout</label>
+                    <StyledSelect
+                      label="Workout"
+                      value={draft.healthWorkoutMode ?? 'recommended'}
+                      options={[
+                        { value: 'recommended', label: 'Recommended Workout' },
+                        { value: 'specific', label: 'Specific saved workout' },
+                        { value: 'custom', label: 'Custom workout' }
+                      ]}
+                      onChange={value => {
+                        if (value === 'recommended' || value === 'specific' || value === 'custom') {
+                          update('healthWorkoutMode', value);
+                        }
+                      }}
+                    />
+                  </div>
+                  {draft.healthWorkoutMode === 'specific' && (
+                    <div className="goal-field">
+                      <label>Saved workout</label>
+                      <StyledSelect
+                        label="Saved workout"
+                        value={draft.healthWorkoutId ?? ''}
+                        invalid={!savedWorkouts.some(workout => workout.id === draft.healthWorkoutId)}
+                        options={[
+                          { value: '', label: 'Select a saved workout' },
+                          ...(draft.healthWorkoutId && !savedWorkouts.some(workout => workout.id === draft.healthWorkoutId)
+                            ? [{ value: draft.healthWorkoutId, label: 'Saved workout unavailable' }]
+                            : []),
+                          ...savedWorkouts.map(workout => ({ value: workout.id, label: workout.name }))
+                        ]}
+                        onChange={value => update('healthWorkoutId', value)}
+                      />
+                      {fieldError('healthWorkoutId')}
+                    </div>
+                  )}
+                </>
+              )}
+              {draft.healthLogCapability === 'cardio' && (
+                <div className="rhythm-editor__fitness-run-target">
+                  <div className="goal-field">
+                    <label>Target distance (optional)</label>
+                    <input
+                      type="number"
+                      min="0.1"
+                      max="1000"
+                      step="0.1"
+                      value={draft.healthRunTarget?.distance ?? ''}
+                      aria-describedby={errors.healthRunTarget ? 'rhythm-error-healthRunTarget' : undefined}
+                      aria-invalid={Boolean(errors.healthRunTarget)}
+                      onChange={event => {
+                        const value = event.currentTarget.value;
+                        if (!value) {
+                          update('healthRunTarget', null);
+                          return;
+                        }
+                        update('healthRunTarget', {
+                          distance: Number(value),
+                          unit: draft.healthRunTarget?.unit ?? 'mi'
+                        });
+                      }}
+                    />
+                    {errors.healthRunTarget && <span className="goal-field-error" id="rhythm-error-healthRunTarget">
+                      {errors.healthRunTarget}
+                    </span>}
+                  </div>
+                  <div className="goal-field">
+                    <label>Distance unit</label>
+                    <StyledSelect
+                      label="Distance unit"
+                      value={draft.healthRunTarget?.unit ?? 'mi'}
+                      options={[
+                        { value: 'mi', label: 'Miles' },
+                        { value: 'km', label: 'Kilometers' }
+                      ]}
+                      onChange={value => {
+                        if (value !== 'mi' && value !== 'km') return;
+                        if (draft.healthRunTarget) {
+                          update('healthRunTarget', { ...draft.healthRunTarget, unit: value });
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+          {foundationLinksNeedingReview.length > 0 && (
+            <p className="rhythm-editor__association-unavailable">
+              Existing Foundation links that are unresolved or outside the selected categories are preserved. Review or remove them in Choose categories.
+            </p>
+          )}
+          </section>
         </section>
         <div className="rhythm-editor__association-errors">
           {fieldError('personIds')}
-          {fieldError('categoryIds')}
           {invalidFoundationLinks.some(id => allFoundations.some(foundation => foundation.id === id)) && (
             <p className="goal-field-error" role="status">
-            Some {foundationLinkTerm} links need their Category selected or must be explicitly removed.
+              Some existing Foundation or Practice links need their matching Category selected or must be explicitly removed.
             </p>
           )}
-          {fieldError('foundationIds')}
         </div>
 
         {errors.form && <p className="goal-form-error-summary" role="alert">{errors.form}</p>}
         {Object.keys(errors).some(field => field !== 'form') && (
           <p className="goal-form-error-summary" role="alert">Review the highlighted Rhythm fields.</p>
         )}
+        {showArchiveConfirmation && rhythm && onArchive && (
+          <section
+            className="rhythm-editor__archive-confirmation"
+            role="alertdialog"
+            aria-labelledby="rhythm-archive-confirmation-title"
+            aria-describedby="rhythm-archive-confirmation-description"
+          >
+            <h3 id="rhythm-archive-confirmation-title">Archive {rhythm.title}?</h3>
+            <p id="rhythm-archive-confirmation-description">
+              This Rhythm will leave active Today and category lists. Its identity, associations, and completion history will be retained.
+            </p>
+            <div className="money-goal-dialog__actions">
+              <button
+                ref={archiveConfirmButtonRef}
+                type="button"
+                className="rhythm-editor__archive-confirm"
+                aria-label={`Confirm archive ${rhythm.title}`}
+                onClick={() => onArchive(rhythm.id)}
+              >
+                Archive rhythm
+              </button>
+              <button
+                type="button"
+                className="btn mini ghost"
+                onClick={() => setShowArchiveConfirmation(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </section>
+        )}
+        </div>
         <div className="rhythm-editor__action-row">
           <div className="money-goal-dialog__actions rhythm-editor__primary-actions">
-            <button ref={saveButtonRef} type="submit" className="btn mini">{rhythm ? 'Save Rhythm' : 'Add Rhythm'}</button>
+            <button ref={saveButtonRef} type="submit" className="btn mini">Save</button>
             <button type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>
           </div>
           {rhythm && onArchive && (
@@ -778,37 +1007,6 @@ export function RhythmEditor({
           )}
         </div>
       </form>
-      {showArchiveConfirmation && rhythm && onArchive && (
-        <section
-          className="rhythm-editor__archive-confirmation"
-          role="alertdialog"
-          aria-labelledby="rhythm-archive-confirmation-title"
-          aria-describedby="rhythm-archive-confirmation-description"
-        >
-          <h3 id="rhythm-archive-confirmation-title">Archive {rhythm.title}?</h3>
-          <p id="rhythm-archive-confirmation-description">
-            This Rhythm will leave active Today and category lists. Its identity, associations, and completion history will be retained.
-          </p>
-          <div className="money-goal-dialog__actions">
-            <button
-              ref={archiveConfirmButtonRef}
-              type="button"
-              className="rhythm-editor__archive-confirm"
-              aria-label={`Confirm archive ${rhythm.title}`}
-              onClick={() => onArchive(rhythm.id)}
-            >
-              Archive rhythm
-            </button>
-            <button
-              type="button"
-              className="btn mini ghost"
-              onClick={() => setShowArchiveConfirmation(false)}
-            >
-              Cancel
-            </button>
-          </div>
-        </section>
-      )}
       {showScheduleConfirmation && rhythm && draft.schedule && (
         <MoneyGoalDialog
           title="Change schedule"
@@ -866,6 +1064,7 @@ export function RhythmEditor({
     </MoneyGoalDialog>
     {activePicker && (
       <MoneyGoalDialog
+        {...(activePicker === 'categories' ? { closeLabel: 'Close category picker' } : {})}
         labelledBy={activePicker === 'categories' && pendingCategoryRemoval
           ? 'rhythm-category-removal-title'
           : 'rhythm-association-picker-title'}
@@ -874,7 +1073,8 @@ export function RhythmEditor({
         )}
         stopEscapePropagation
         portalToBody
-        dialogClassName="money-goal-dialog--association-picker"
+        phoneFullScreen={activePicker === 'categories'}
+        dialogClassName={`money-goal-dialog--association-picker${activePicker === 'categories' ? ' money-goal-dialog--category-picker' : ''}`}
         onClose={() => closePicker(false)}
       >
         {activePicker === 'categories' && pendingCategoryRemoval ? (
@@ -922,10 +1122,17 @@ export function RhythmEditor({
         ) : activePicker === 'categories' ? (
           <BadgeSelectionPicker
             title="Choose categories"
+            description="Choose categories, then their Practices or Foundations."
             items={areas}
             selectedIds={pickerSelection}
             getLabel={area => area.label}
             renderBadge={renderCategoryBadge}
+            renderSelectedItemContent={foundationChoiceGroup}
+            unavailableSelectedItems={pickerFoundationLinksNeedingReview}
+            unavailableGroupLabel="Existing Foundation links needing review"
+            getUnavailableItemLabel={item => `Remove existing Foundation link ${item.label}`}
+            unavailableItemType="Foundation"
+            doneLabel="Apply"
             focusItemId={categoryPickerFocusId}
             onToggle={togglePickerItem}
             onDone={() => closePicker(true)}
@@ -943,26 +1150,7 @@ export function RhythmEditor({
             onDone={() => closePicker(true)}
             onCancel={() => closePicker(false)}
           />
-        ) : (
-          <BadgeSelectionPicker
-            title={foundationPickerTitle}
-            items={foundationPickerItems}
-            selectedIds={pickerSelection}
-            getLabel={foundation => eligibleFoundations.some(item => item.id === foundation.id)
-              ? foundation.name
-              : `${foundation.name} (currently linked; ${foundation.category} category not selected)`}
-            renderBadge={renderFoundationBadge}
-            emptyMessage={foundationEmptyState}
-            groupBy={foundation => foundation.categoryId === 'faith'
-              ? `${foundation.category} ${foundationTerminologyForCategory(foundation.categoryId).plural}`
-              : foundation.category}
-            unavailableSelectedItems={unavailableSelectedFoundationItems}
-            unavailableItemType={primaryFoundationTerm.singular}
-            onToggle={togglePickerItem}
-            onDone={() => closePicker(true)}
-            onCancel={() => closePicker(false)}
-          />
-        )}
+        ) : null}
       </MoneyGoalDialog>
     )}
     </>

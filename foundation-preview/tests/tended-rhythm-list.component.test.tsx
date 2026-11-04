@@ -15,6 +15,8 @@ function Harness({
   satisfiedRhythmIds,
   undoableRhythmIds = new Set<string>(),
   resetKey = 'today',
+  showProgress = false,
+  keepToggleWhenEmpty = false,
   onUndo = () => undefined
 }: {
   rhythms?: readonly RhythmPreview[];
@@ -22,6 +24,8 @@ function Harness({
   satisfiedRhythmIds: ReadonlySet<string>;
   undoableRhythmIds?: ReadonlySet<string>;
   resetKey?: string;
+  showProgress?: boolean;
+  keepToggleWhenEmpty?: boolean;
   onUndo?: (rhythmId: string) => void;
 }) {
   const [showTended, setShowTended] = useState(false);
@@ -35,6 +39,8 @@ function Harness({
       onShowTendedChange={setShowTended}
       onUndo={onUndo}
       resetKey={resetKey}
+      showProgress={showProgress}
+      keepToggleWhenEmpty={keepToggleWhenEmpty}
     >
       {({ visibleRhythmIds, tendedRhythmIds: displayIds, itemProps }) => (
         <div>
@@ -58,6 +64,27 @@ afterEach(() => {
 });
 
 describe('Show tended list', () => {
+  it('keeps an empty progress count as text and omits the inactive toggle', () => {
+    render(<Harness rhythms={[]} satisfiedRhythmIds={new Set()} showProgress />);
+
+    expect(screen.getByText('0 of 0 tended')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Show tended|Hide tended/ })).toBeNull();
+  });
+
+  it('omits empty-list controls outside Today while preserving Today empty-filter controls', () => {
+    const { rerender } = render(<Harness rhythms={[]} satisfiedRhythmIds={new Set()} />);
+    expect(screen.queryByRole('button', { name: /Show tended|Hide tended/ })).toBeNull();
+    expect(document.querySelector('.show-tended-list__controls')).toBeNull();
+
+    rerender(<Harness
+      rhythms={[]}
+      satisfiedRhythmIds={new Set()}
+      showProgress
+      keepToggleWhenEmpty
+    />);
+    expect(screen.getByRole('button', { name: 'Show tended' })).toBeTruthy();
+  });
+
   it('keeps a completed card briefly, then hides it while retaining an accessible undo action', () => {
     vi.useFakeTimers();
     const onUndo = vi.fn();

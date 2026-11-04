@@ -55,11 +55,17 @@ describe('Cardio preview presentation', () => {
       ]
     };
     const { container } = renderCardio(data);
+    const controls = screen.getByRole('group', { name: 'Cardio goal and tracking controls' });
+    expect(within(controls).getByRole('button', { name: 'Cardio tracking settings' })).toBeTruthy();
+    expect(within(controls).getByRole('button', { name: 'Set up tracking' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Set up tracking' })).toHaveLength(1);
+    expect(within(screen.getByRole('region', { name: 'Weekly cardio and run history' }))
+      .getAllByRole('button', { name: 'Log run' })).toHaveLength(1);
     expect(screen.getByText('Runs this week')).toBeTruthy();
     expect(screen.getByText('Miles this week')).toBeTruthy();
     const onTrack = screen.getByRole('meter', { name: 'On Track score' });
     expect(onTrack.getAttribute('aria-valuenow')).toBe('38');
-    expect(onTrack.getAttribute('style')).toContain('37.5%');
+    expect(onTrack.querySelector('.rhythm-score-circle__progress')?.getAttribute('stroke-dashoffset')).toBeTruthy();
     expect(screen.getByRole('img', { name: 'Cardio Health: Not enough data' })).toBeTruthy();
     expect(container.querySelector('.cardio-week-day.is-today')?.textContent).toContain('Today');
     expect(screen.getByText('Oct 16, 2026')).toBeTruthy();
@@ -73,7 +79,8 @@ describe('Cardio preview presentation', () => {
     renderCardio();
     expect(screen.getByText('Set up tracking to see your scores.')).toBeTruthy();
     expect(screen.queryByText(/Set both weekly run and mileage goals/)).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Set up tracking' }));
+    const controls = screen.getByRole('group', { name: 'Cardio goal and tracking controls' });
+    await user.click(within(controls).getByRole('button', { name: 'Set up tracking' }));
     expect(screen.getByRole('dialog', { name: 'Cardio goals' })).toBeTruthy();
 
     cleanup();
@@ -86,7 +93,8 @@ describe('Cardio preview presentation', () => {
     const details = screen.getByRole('region', { name: 'Cardio Health scoring details' });
     expect(within(details).getByText(/four most recently completed weeks/)).toBeTruthy();
     expect(within(details).getByText(/This week’s run and distance goal progress/)).toBeTruthy();
-    expect(within(details).getByText(/75% Consistency \+ 25% On Track/)).toBeTruthy();
+    expect(within(details).getByText('75%')).toBeTruthy();
+    expect(within(details).getByText('25%')).toBeTruthy();
     expect(within(details).queryByText(/training interval/i)).toBeNull();
     await user.click(within(details).getByText('Details'));
     expect(within(details).getByText(/Monday–Sunday weeks with known targets/)).toBeTruthy();
@@ -95,7 +103,7 @@ describe('Cardio preview presentation', () => {
   it('saves and clears complete weekly goals while rejecting a partial pair', async () => {
     const user = userEvent.setup();
     const { onChange } = renderCardio();
-    await user.click(screen.getByRole('button', { name: 'Edit goals' }));
+    await user.click(screen.getByRole('button', { name: 'Cardio tracking settings' }));
     const dialog = screen.getByRole('dialog', { name: 'Cardio goals' });
     await user.type(within(dialog).getByLabelText('Runs per week'), '2');
     await user.type(within(dialog).getByLabelText('Miles per week'), '8');
@@ -111,7 +119,7 @@ describe('Cardio preview presentation', () => {
         today="2026-10-22" rhythms={[]} archivedRhythmIds={new Set()}
         datedRhythmCompletions={[]} onChange={next} />
     );
-    await user.click(screen.getByRole('button', { name: 'Edit goals' }));
+    await user.click(screen.getByRole('button', { name: 'Cardio tracking settings' }));
     const edit = screen.getByRole('dialog', { name: 'Cardio goals' });
     await user.clear(within(edit).getByLabelText('Miles per week'));
     await user.click(within(edit).getByRole('button', { name: 'Save goals' }));
@@ -122,7 +130,7 @@ describe('Cardio preview presentation', () => {
   it('uses labeled integrated steppers for blank and fractional weekly goals', async () => {
     const user = userEvent.setup();
     const { onChange } = renderCardio();
-    await user.click(screen.getByRole('button', { name: 'Edit goals' }));
+    await user.click(screen.getByRole('button', { name: 'Cardio tracking settings' }));
     const dialog = screen.getByRole('dialog', { name: 'Cardio goals' });
     const runs = within(dialog).getByLabelText('Runs per week') as HTMLInputElement;
     const miles = within(dialog).getByLabelText('Miles per week') as HTMLInputElement;
@@ -148,7 +156,7 @@ describe('Cardio preview presentation', () => {
   it('keeps entered zero distinct from blank and exposes a field-level target error', async () => {
     const user = userEvent.setup();
     const { onChange } = renderCardio();
-    await user.click(screen.getByRole('button', { name: 'Edit goals' }));
+    await user.click(screen.getByRole('button', { name: 'Cardio tracking settings' }));
     const dialog = screen.getByRole('dialog', { name: 'Cardio goals' });
     const runs = within(dialog).getByLabelText('Runs per week') as HTMLInputElement;
     await user.type(runs, '0');

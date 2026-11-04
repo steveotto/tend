@@ -973,7 +973,7 @@ export function rankStrengthWorkouts(
     seenIds.add(item.id);
     seenCombinations.add(item.combination);
     return true;
-  }).slice(0, 2).map(({ combination: _combination, ...item }) => item);
+  }).slice(0, 3).map(({ combination: _combination, ...item }) => item);
 }
 
 export function createStrengthWorkout(

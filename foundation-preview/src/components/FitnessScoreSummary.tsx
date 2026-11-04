@@ -1,9 +1,13 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
-import { HealthScoreBreakdown } from './HealthScoreBreakdown.tsx';
+import { HealthScoreBreakdown, HealthScoreInfoButton } from './HealthScoreBreakdown.tsx';
+import { HealthScoreDetailsDialog } from './HealthScoreDetailsDialog.tsx';
+import { HealthScoreDetailsContent } from './HealthScoreDetailsContent.tsx';
+import { createHealthFitnessRollup } from './HealthRollupDiagram.tsx';
+import type { HealthRollupConfig } from './HealthRollupDiagram.tsx';
 
 type FitnessScoreSummaryProps = {
-  category: 'Strength' | 'Cardio';
+  category: 'Strength' | 'Cardio' | 'Weight';
   healthTitle?: string;
   consistency: number | null;
   onTrack: number | null;
@@ -13,10 +17,12 @@ type FitnessScoreSummaryProps = {
   setupRequired?: boolean;
   statusMessage?: string | null;
   summaryExplanation?: string;
+  className?: string;
   compact?: boolean;
-  includeFormulaExplanation?: boolean;
+  showSetupAction?: boolean;
   onSetup?: (event: MouseEvent<HTMLButtonElement>) => void;
   evidenceDetails?: ReactNode;
+  rollup?: HealthRollupConfig;
 };
 
 const scoreExplanations = {
@@ -27,6 +33,10 @@ const scoreExplanations = {
   Cardio: {
     consistency: 'How consistently you met both weekly run and distance goals across the four most recently completed weeks.',
     onTrack: 'This week’s run and distance goal progress.'
+  },
+  Weight: {
+    consistency: 'How consistently you completed scheduled weigh-in Rhythms.',
+    onTrack: 'Whether you are caught up with weigh-ins due on those Rhythms.'
   }
 } as const;
 
@@ -41,34 +51,48 @@ export function FitnessScoreSummary({
   setupRequired = false,
   statusMessage = null,
   summaryExplanation,
-  compact = false,
-  includeFormulaExplanation = true,
+  className = '',
+  showSetupAction = true,
   onSetup,
-  evidenceDetails
+  evidenceDetails,
+  rollup
 }: FitnessScoreSummaryProps) {
   const [expanded, setExpanded] = useState(false);
   const detailsId = useId();
+  const infoButtonRef = useRef<HTMLButtonElement>(null);
+  const defaultRollup = createHealthFitnessRollup('foundations', category.toLowerCase());
+  const activeRollup = rollup ?? {
+    ...defaultRollup,
+    groups: defaultRollup.groups.map(group => group.id === 'foundations'
+      ? {
+          ...group,
+          items: group.items.map(item => item.id === category.toLowerCase()
+            ? {
+                ...item,
+                details: [
+                  scoreExplanations[category].consistency,
+                  scoreExplanations[category].onTrack
+                ]
+              }
+            : item)
+        }
+      : group)
+  };
   const infoButton = (
-    <button
-      type="button"
-      className="rhythm-history-view__score-info fitness-score-summary__info"
-      aria-label={`${expanded ? 'Hide' : 'Show'} ${category} Health scoring details`}
-      aria-expanded={expanded}
-      aria-controls={detailsId}
+    <HealthScoreInfoButton
+      ref={infoButtonRef}
+      label={`Show ${category} Health scoring details`}
+      expanded={expanded}
+      controls={detailsId}
       onClick={() => setExpanded(value => !value)}
-    >
-      <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-        <circle cx="8" cy="8" r="6.25" />
-        <path d="M8 7.2v4M8 4.8h.01" />
-      </svg>
-    </button>
+    />
   );
   const message = setupRequired
     ? 'Set up tracking to see your scores.'
     : statusMessage;
 
   return (
-    <section className="fitness-score-summary" aria-label={`${category} scores`}>
+    <section className={`fitness-score-summary ${className}`.trim()} aria-label={`${category} scores`}>
       <HealthScoreBreakdown
         title={healthTitle}
         score={health}
@@ -79,41 +103,54 @@ export function FitnessScoreSummary({
         consistencyCaption={consistencyCaption}
         onTrackCaption={onTrackCaption}
         headingAction={infoButton}
-        showMeasures={!compact || expanded}
+        showMeasures
       />
       {message && (
         <div className="fitness-score-summary__status" role="status">
           <p>{message}</p>
-          {setupRequired && onSetup && (
+          {setupRequired && onSetup && showSetupAction && (
             <button type="button" className="btn mini ghost" onClick={onSetup}>
               {category === 'Strength' ? 'Strength settings' : 'Set up tracking'}
             </button>
           )}
         </div>
       )}
-      <div
-        id={detailsId}
-        className="fitness-score-summary__details"
-        role="region"
-        aria-label={`${category} Health scoring details`}
-        hidden={!expanded}
-      >
-        {summaryExplanation && <p>{summaryExplanation}</p>}
-        {includeFormulaExplanation && (
-          <>
-            <p><strong>Consistency</strong> {scoreExplanations[category].consistency}</p>
-            <p><strong>On Track</strong> {scoreExplanations[category].onTrack}</p>
-            <p><strong>Health</strong> 75% Consistency + 25% On Track.</p>
-          </>
-        )}
-        {category === 'Strength' && <p>Rest readiness is shown separately.</p>}
-        {evidenceDetails && (
-          <details className="fitness-score-summary__evidence">
-            <summary>Details</summary>
-            {evidenceDetails}
-          </details>
-        )}
-      </div>
+      {expanded && (
+        <HealthScoreDetailsDialog
+          title={`${category} Health details`}
+          phoneFullScreen={false}
+          onClose={() => {
+            setExpanded(false);
+            requestAnimationFrame(() => infoButtonRef.current?.focus());
+          }}
+        >
+          <div id={detailsId} className="fitness-score-summary__details" role="region"
+            aria-label={`${category} Health scoring details`}>
+            <HealthScoreDetailsContent
+              title={healthTitle}
+              ariaLabel={`${category} Health scoring details`}
+              score={health}
+              healthLabel={`${category} Health`}
+              consistency={{ score: consistency }}
+              onTrack={{ score: onTrack }}
+              consistencyCaption={consistencyCaption}
+              onTrackCaption={onTrackCaption}
+              consistencyDescription={scoreExplanations[category].consistency}
+              onTrackDescription={scoreExplanations[category].onTrack}
+              rollup={activeRollup}
+            >
+              {summaryExplanation && <p>{summaryExplanation}</p>}
+              {category === 'Strength' && <p>Rest readiness is shown separately.</p>}
+              {evidenceDetails && (
+                <details className="fitness-score-summary__evidence">
+                  <summary>Details</summary>
+                  {evidenceDetails}
+                </details>
+              )}
+            </HealthScoreDetailsContent>
+          </div>
+        </HealthScoreDetailsDialog>
+      )}
     </section>
   );
 }

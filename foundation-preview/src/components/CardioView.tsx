@@ -23,6 +23,7 @@ import type { DatedRhythmCompletion } from '../domain/rhythm-completion.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { NumericControl } from './NumericControl.tsx';
 import { FitnessScoreSummary } from './FitnessScoreSummary.tsx';
+import { SettingsGearButton } from './SettingsGearButton.tsx';
 
 export type CardioViewProps = {
   data: CardioData;
@@ -35,6 +36,7 @@ export type CardioViewProps = {
   onLogRequestOpened?: (requestId: number) => void;
   onLogRequestClosed?: () => void;
   onQuickLog?: (event: MouseEvent<HTMLButtonElement>) => void;
+  foundationNavigation?: boolean;
 };
 
 type DialogState = { kind: 'goals' } | { kind: 'run'; run?: CardioRun; rhythm?: RhythmPreview };
@@ -48,7 +50,8 @@ export function CardioView({
   onChange,
   pendingLogRequest = null,
   onLogRequestOpened,
-  onLogRequestClosed
+  onLogRequestClosed,
+  foundationNavigation = false
 }: CardioViewProps) {
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [actionError, setActionError] = useState('');
@@ -57,10 +60,59 @@ export function CardioView({
   const activeLogRequestRef = useRef<number | null>(null);
   const progress = selectCardioProgress(data, today);
   const runs = validatedCardioRuns(data, today).records;
+  const trackingSetupRequired = !data.trackingStartDate
+    || !data.targetHistory?.length
+    || progress.targetRuns === null
+    || progress.targetMiles === null;
   const issues = [
     ...cardioDataIssues(data, today),
     ...cardioLinkIssues(data, rhythms, archivedRhythmIds, datedRhythmCompletions)
   ];
+  const healthSummary = (
+    <FitnessScoreSummary
+      category="Cardio"
+      healthTitle="Cardio Health"
+      className={`rhythm-history-view__score-card${foundationNavigation ? ' foundation-health-card' : ''}`}
+      consistency={progress.consistency}
+      onTrack={progress.score}
+      health={progress.health}
+      consistencyCaption="Four completed weeks of run and distance goals."
+      onTrackCaption="This week’s goal progress."
+      setupRequired={trackingSetupRequired}
+      showSetupAction={false}
+      statusMessage={progress.health === null
+        && Boolean(data.trackingStartDate && data.targetHistory?.length)
+        && progress.targetRuns !== null
+        && progress.targetMiles !== null
+        ? 'Your score will appear as tracking builds.'
+        : null}
+      onSetup={event => openDialog({ kind: 'goals' }, event)}
+      summaryExplanation="Cardio Health combines Consistency and On Track using a 75%/25% blend. Linking or completing a Rhythm without a saved run does not add Cardio credit."
+      evidenceDetails={(
+        <>
+          {progress.eligibleConsistencyWeeks > 0 && (
+            <p>
+              {progress.eligibleConsistencyWeeks} completed week
+              {progress.eligibleConsistencyWeeks === 1 ? '' : 's'} have eligible targets.
+            </p>
+          )}
+          {progress.consistencyUnavailableReason && (
+            <p>
+              {progress.consistencyUnavailableReason.includes('tracking start')
+                ? 'Set a tracking start date and save weekly goals to begin.'
+                : 'No completed week in the four-week lookback has full tracking and trustworthy goals yet.'}
+            </p>
+          )}
+          <p>
+            Only complete Monday–Sunday weeks with known targets count. Goal changes
+            start the following Monday; first-time setup applies to this week’s progress,
+            but its partial week is excluded from Consistency. Unavailable recent weeks
+            are not replaced with older weeks.
+          </p>
+        </>
+      )}
+    />
+  );
 
   useEffect(() => {
     if (!dialog && openerRef.current?.isConnected) openerRef.current.focus({ preventScroll: true });
@@ -100,13 +152,19 @@ export function CardioView({
   }
 
   return (
-    <main className="category-page cardio-page" aria-labelledby="cardio-title">
-      <header className="category-page-heading">
-        <div>
-          <h1 id="cardio-title">Cardio</h1>
-          <p>Track weekly runs and mileage against the goals you set.</p>
-        </div>
-      </header>
+    <section
+      className="category-page cardio-page"
+      {...(!foundationNavigation && { 'aria-labelledby': 'cardio-title' })}
+    >
+      {!foundationNavigation && (
+        <header className="category-page-heading">
+          <div>
+            <h1 id="cardio-title">Cardio</h1>
+            <p>Track weekly runs and mileage against the goals you set.</p>
+          </div>
+        </header>
+      )}
+      {foundationNavigation && healthSummary}
       <section className="cardio-progress" aria-label="Weekly cardio and run history">
           <section className="card cardio-progress-card" aria-labelledby="cardio-progress-title">
             <header className="cardio-card-heading">
@@ -114,8 +172,16 @@ export function CardioView({
                 <h2 id="cardio-progress-title">Weekly cardio</h2>
                 <p>{formatDate(progress.weekStart)} – {formatDate(progress.weekEnd)} · Monday–Sunday</p>
               </div>
-              <button type="button" className="btn mini ghost"
-                onClick={event => openDialog({ kind: 'goals' }, event)}>Edit goals</button>
+              <div className="cardio-goal-controls" role="group" aria-label="Cardio goal and tracking controls">
+                {trackingSetupRequired && (
+                  <button type="button" className="btn mini ghost"
+                    onClick={event => openDialog({ kind: 'goals' }, event)}>Set up tracking</button>
+                )}
+                <SettingsGearButton
+                  label="Cardio tracking settings"
+                  onClick={event => openDialog({ kind: 'goals' }, event)}
+                />
+              </div>
             </header>
             {progress.targetRuns === null || progress.targetMiles === null ? (
               null
@@ -130,50 +196,7 @@ export function CardioView({
                 </div>
               </>
             )}
-            <FitnessScoreSummary
-                category="Cardio"
-                consistency={progress.consistency}
-                onTrack={progress.score}
-                health={progress.health}
-                consistencyCaption="Four completed weeks of run and distance goals."
-                onTrackCaption="This week’s goal progress."
-                setupRequired={
-                  !data.trackingStartDate
-                  || !data.targetHistory?.length
-                  || progress.targetRuns === null
-                  || progress.targetMiles === null
-                }
-                statusMessage={progress.health === null
-                  && Boolean(data.trackingStartDate && data.targetHistory?.length)
-                  && progress.targetRuns !== null
-                  && progress.targetMiles !== null
-                  ? 'Your score will appear as tracking builds.'
-                  : null}
-                onSetup={event => openDialog({ kind: 'goals' }, event)}
-                evidenceDetails={(
-                  <>
-                    {progress.eligibleConsistencyWeeks > 0 && (
-                      <p>
-                        {progress.eligibleConsistencyWeeks} completed week
-                        {progress.eligibleConsistencyWeeks === 1 ? '' : 's'} have eligible targets.
-                      </p>
-                    )}
-                    {progress.consistencyUnavailableReason && (
-                      <p>
-                        {progress.consistencyUnavailableReason.includes('tracking start')
-                          ? 'Set a tracking start date and save weekly goals to begin.'
-                          : 'No completed week in the four-week lookback has full tracking and trustworthy goals yet.'}
-                      </p>
-                    )}
-                    <p>
-                      Only complete Monday–Sunday weeks with known targets count. Goal changes
-                      start the following Monday; first-time setup applies to this week’s progress,
-                      but its partial week is excluded from Consistency. Unavailable recent weeks
-                      are not replaced with older weeks.
-                    </p>
-                  </>
-                )}
-            />
+            {!foundationNavigation && healthSummary}
             <div className="cardio-week-strip" role="group" aria-label="Run activity Monday through Sunday">
               {progress.days.map(day => (
                 <div key={day.date} className={`cardio-week-day${day.count ? ' has-run' : ''}${day.date === today ? ' is-today' : ''}`}
@@ -237,7 +260,7 @@ export function CardioView({
           <ul>{issues.map((issue, index) => <li key={`${issue}-${index}`}>{issue}</li>)}</ul>
         </section>
       )}
-    </main>
+    </section>
   );
 }
 
@@ -416,6 +439,9 @@ function CardioRunDialog({
 }) {
   const [date, setDate] = useState(run?.date ?? today);
   const [distance, setDistance] = useState(run ? String(run.distance) : '');
+  const [distanceUnit, setDistanceUnit] = useState<'mi' | 'km'>(
+    run ? 'mi' : initialRhythm?.healthRunTarget?.unit ?? 'mi'
+  );
   const [notes, setNotes] = useState(run?.notes ?? '');
   const [rhythmId, setRhythmId] = useState(run?.rhythmId ?? initialRhythm?.id ?? '');
   const [error, setError] = useState('');
@@ -449,10 +475,11 @@ function CardioRunDialog({
     const id = run?.id ?? `cardio-${globalThis.crypto.randomUUID()}`;
     const previous = data.runs.find((item): item is CardioRun => isCardioRun(item) && item.id === id);
     const sameLink = previous !== undefined && previous.rhythmId === rhythmId;
+    const distanceMiles = distanceUnit === 'km' ? numericDistance / 1.609344 : numericDistance;
     const saved = saveCardioRun(data, {
       id,
       date,
-      distance: numericDistance,
+      distance: distanceMiles,
       ...(notes.trim() ? { notes: notes.trim() } : {}),
       ...(rhythmId ? {
         rhythmId,
@@ -475,16 +502,32 @@ function CardioRunDialog({
 
   return (
     <MoneyGoalDialog title={run ? 'Edit run' : 'Log run'} labelledBy="cardio-run-title" titleId="cardio-run-title"
-      initialFocusId="cardio-run-date" onClose={onClose} closeLabel="Close run">
+      initialFocusId="cardio-run-date" onClose={onClose} closeLabel="Close run" phoneFullScreen>
       <form className="cardio-form" onSubmit={submit}>
         <label>Activity date
           <input id="cardio-run-date" type="date" max={today} value={date}
             onChange={event => setDate(event.currentTarget.value)} required />
         </label>
-        <label>Distance (miles)
+        <label>Distance ({distanceUnit === 'mi' ? 'miles' : 'km'})
           <input type="number" min="0.01" step="0.01" value={distance}
             onChange={event => setDistance(event.currentTarget.value)} required />
         </label>
+        <label>Distance unit
+          <select value={distanceUnit} onChange={event => {
+            if (event.currentTarget.value === 'mi' || event.currentTarget.value === 'km') {
+              setDistanceUnit(event.currentTarget.value);
+            }
+          }}>
+            <option value="mi">Miles</option>
+            <option value="km">Kilometers</option>
+          </select>
+        </label>
+        {selectedRhythm?.healthRunTarget && (
+          <p className="cardio-form__notice">
+            Rhythm target: {selectedRhythm.healthRunTarget.distance} {selectedRhythm.healthRunTarget.unit}.
+            Record the distance you actually ran.
+          </p>
+        )}
         <label>Notes (optional)
           <textarea rows={3} maxLength={1000} value={notes} onChange={event => setNotes(event.currentTarget.value)} />
         </label>

@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { forwardRef, useId } from 'react';
 import type { KeyboardEventHandler, ReactNode } from 'react';
 import { scoreTone } from '../domain/score-tone.ts';
 import { formatScore } from '../domain/score-display.ts';
@@ -9,6 +9,30 @@ export type HealthScoreMetric = {
   state?: 'scored' | 'unscored' | 'unavailable';
   explanation?: string;
 };
+
+export const HealthScoreInfoButton = forwardRef<HTMLButtonElement, {
+  label: string;
+  expanded: boolean;
+  controls: string;
+  onClick: () => void;
+}>(({ label, expanded, controls, onClick }, ref) => (
+  <button
+    ref={ref}
+    type="button"
+    className="rhythm-history-view__score-info"
+    aria-label={label}
+    aria-haspopup="dialog"
+    aria-expanded={expanded}
+    aria-controls={controls}
+    onClick={onClick}
+  >
+    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <circle cx="8" cy="8" r="6.25" />
+      <path d="M8 7.2v4M8 4.8h.01" />
+    </svg>
+  </button>
+));
+HealthScoreInfoButton.displayName = 'HealthScoreInfoButton';
 
 type HealthScoreMeasuresProps = {
   healthScore: number | null;
@@ -85,8 +109,6 @@ export function HealthScoreMeasures({
   healthScore,
   consistency,
   onTrack,
-  consistencyCaption,
-  onTrackCaption,
   healthLabel = 'Health',
   showHealthMeter = true,
   className = ''
@@ -98,12 +120,10 @@ export function HealthScoreMeasures({
         <HealthScoreMeasure
           label="Consistency"
           metric={consistency}
-          caption={consistencyCaption}
         />
         <HealthScoreMeasure
           label="On Track"
           metric={onTrack}
-          caption={onTrackCaption}
         />
       </div>
     </div>
@@ -141,12 +161,10 @@ export function HealthScoreMeter({
 
 function HealthScoreMeasure({
   label,
-  metric,
-  caption
+  metric
 }: {
   label: string;
   metric: HealthScoreMetric;
-  caption: string;
 }) {
   const headingId = useId();
   const state = metric.state ?? (metric.score === null ? 'unavailable' : 'scored');
@@ -160,7 +178,6 @@ function HealthScoreMeasure({
         state={state}
         {...(metric.explanation ? { explanation: metric.explanation } : {})}
       />
-      <p>{caption}</p>
     </section>
   );
 }

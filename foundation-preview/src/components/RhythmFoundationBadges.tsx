@@ -13,6 +13,7 @@ type RhythmFoundationBadgesProps = {
   rhythm: RhythmPreview;
   foundations: readonly FoundationPreview[];
   presentation?: 'interactive' | 'static';
+  showAll?: boolean;
   accessibleLabel?: string;
   onOpenFoundation?: (foundationId: string, openerId: string) => void;
 };
@@ -21,6 +22,7 @@ export function RhythmFoundationBadges({
   rhythm,
   foundations,
   presentation = 'interactive',
+  showAll = false,
   accessibleLabel,
   onOpenFoundation
 }: RhythmFoundationBadgesProps) {
@@ -33,7 +35,9 @@ export function RhythmFoundationBadges({
     rhythm.categoryIds ?? []
   );
   const termPlural = linkTerms.plural;
-  const visibleCount = displayableFoundations.length >= 4 ? 2 : displayableFoundations.length;
+  const visibleCount = showAll || displayableFoundations.length < 4
+    ? displayableFoundations.length
+    : 2;
   const visibleFoundations = displayableFoundations.slice(0, visibleCount);
   const overflowFoundations = displayableFoundations.slice(visibleCount);
   const overflowGroups = overflowFoundations.reduce<Array<{

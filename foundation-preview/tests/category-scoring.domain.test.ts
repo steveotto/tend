@@ -1,8 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import type { FoundationScoreSelection } from '../src/domain/foundation-scoring.ts';
 import { selectFoundationScore } from '../src/domain/foundation-scoring.ts';
-import { selectCategoryHealthScore, selectCategoryScore } from '../src/domain/category-scoring.ts';
-import { faithPractices, marriageRhythms, parentingFoundations } from '../src/domain/preview-data.ts';
+import {
+  aggregateCategoryHealthScores,
+  selectCardioCategoryScore,
+  selectCategoryHealthScore,
+  selectCategoryScore,
+  selectHealthFitnessCategoryScore,
+  selectStrengthCategoryScore,
+  selectWeightCategoryScore
+} from '../src/domain/category-scoring.ts';
+import { createCardioData, selectCardioProgress } from '../src/domain/cardio.ts';
+import { selectRhythmScore } from '../src/domain/rhythm-scoring.ts';
+import {
+  faithPractices,
+  marriageRhythms,
+  parentingFoundations,
+  todayRhythms,
+  type RhythmPreview
+} from '../src/domain/preview-data.ts';
 import type { RhythmScoreSelection } from '../src/domain/rhythm-scoring.ts';
 
 function foundationScore(
@@ -65,7 +81,385 @@ function scoredRhythm(consistency: number, onTrack: number): RhythmScoreSelectio
   };
 }
 
+function weightRhythm(id: string, overrides: Partial<RhythmPreview> = {}): RhythmPreview {
+  return {
+    ...todayRhythms[0]!,
+    id,
+    categoryIds: ['health'] as const,
+    primaryFoundationId: 'health-weight',
+    secondaryFoundationIds: [],
+    healthLogCapability: 'weight' as const,
+    ...overrides
+  };
+}
+
+function strengthRhythm(id: string, overrides: Partial<RhythmPreview> = {}): RhythmPreview {
+  return {
+    ...todayRhythms[0]!,
+    id,
+    categoryIds: ['health'] as const,
+    primaryFoundationId: 'health-strength',
+    secondaryFoundationIds: [],
+    ...overrides
+  };
+}
+
 describe('selecting equal-weight Marriage Category scores', () => {
+  it('uses the existing Cardio measures independently and keeps valid zero available', () => {
+    const data = {
+      ...createCardioData(),
+      goals: { weeklyRunTarget: 2, weeklyMileTarget: 8 },
+      trackingStartDate: '2026-09-01',
+      targetHistory: [{ effectiveDate: '2026-09-01', weeklyRunTarget: 2, weeklyMileTarget: 8 }],
+      runs: []
+    };
+    const score = selectCardioCategoryScore(selectCardioProgress(data, '2026-10-22'));
+
+    expect(score).toMatchObject({
+      foundationIds: ['health-cardio'],
+      eligibleFoundationIds: ['health-cardio'],
+      consistency: 0,
+      onTrack: 0,
+      health: 0
+    });
+
+    const partial = selectCardioCategoryScore(selectCardioProgress({
+      ...createCardioData(),
+      goals: { weeklyRunTarget: 2, weeklyMileTarget: 8 },
+      runs: []
+    }, '2026-10-22'));
+    expect(partial).toMatchObject({
+      eligibleFoundationIds: [],
+      consistency: null,
+      onTrack: 0,
+      health: null
+    });
+  });
+
+  it('scores Weight-linked Rhythm measures independently and averages only available values', () => {
+    const first = weightRhythm('weight-daily');
+    const second = weightRhythm('weight-weekly', {
+      healthLogCapability: 'weight',
+      primaryFoundationId: 'health-weight'
+    });
+    const partial = {
+      ...scoredRhythm(40, 100),
+      onTrack: {
+        kind: 'unscored' as const,
+        reasonCode: 'no-eligible-occurrences' as const,
+        explanation: 'No scheduled opportunity is available.'
+      }
+    };
+    const score = selectWeightCategoryScore(
+      [first, second],
+      new Map([
+        [first.id, scoredRhythm(80, 60)],
+        [second.id, partial]
+      ]),
+      []
+    );
+
+    expect(score).toMatchObject({
+      foundationIds: ['health-weight'],
+      eligibleFoundationIds: ['health-weight'],
+      consistency: 60,
+      onTrack: 60,
+      health: 60
+    });
+
+    expect(selectWeightCategoryScore([second], new Map([[second.id, partial]]), []))
+      .toMatchObject({
+        eligibleFoundationIds: [],
+        consistency: 40,
+        onTrack: null,
+        health: null
+      });
+  });
+
+  it('keeps Weight zero valid and excludes unlinked, non-Weight, and archived Rhythms', () => {
+    const zero = weightRhythm('weight-zero');
+    const unlinked = weightRhythm('weight-unlinked', { primaryFoundationId: null });
+    const cardio = weightRhythm('cardio-capability', { healthLogCapability: 'cardio' });
+    const archived = weightRhythm('weight-archived');
+    const result = selectWeightCategoryScore(
+      [zero, unlinked, cardio, archived],
+      new Map([
+        [zero.id, scoredRhythm(0, 0)],
+        [unlinked.id, scoredRhythm(100, 100)],
+        [cardio.id, scoredRhythm(100, 100)],
+        [archived.id, scoredRhythm(100, 100)]
+      ]),
+      [archived.id]
+    );
+
+    expect(result).toMatchObject({
+      eligibleFoundationIds: ['health-weight'],
+      consistency: 0,
+      onTrack: 0,
+      health: 0
+    });
+  });
+
+  it('uses the existing scheduled Rhythm scores after missed Weight check-ins', () => {
+    const rhythm = weightRhythm('weight-missed-checkins', {
+      cadence: 'Daily',
+      schedule: { frequency: 'daily' },
+      createdLocalDate: '2026-09-01',
+      createdTimeZone: 'UTC'
+    });
+    const rhythmScore = selectRhythmScore({
+      rhythmId: rhythm.id,
+      cadence: 'Daily',
+      schedule: { frequency: 'daily' },
+      createdLocalDate: '2026-09-01',
+      createdTimeZone: 'UTC',
+      records: [{
+        id: 'one-scheduled-weigh-in',
+        rhythmId: rhythm.id,
+        effectiveDate: '2026-09-01'
+      }],
+      recordsAvailable: true,
+      asOfDate: '2026-10-22',
+      timeZone: 'UTC'
+    });
+    expect(rhythmScore.kind).toBe('rhythm-score');
+    if (rhythmScore.kind !== 'rhythm-score') return;
+    expect(rhythmScore.consistency.kind).toBe('scored');
+    expect(rhythmScore.onTrack.kind).toBe('scored');
+    if (rhythmScore.consistency.kind !== 'scored' || rhythmScore.onTrack.kind !== 'scored') return;
+    expect(rhythmScore.consistency.score).toBeLessThan(100);
+    expect(rhythmScore.onTrack.score).toBeLessThan(100);
+
+    const health = selectWeightCategoryScore(
+      [rhythm],
+      new Map([[rhythm.id, rhythmScore]]),
+      []
+    );
+    expect(health.consistency).toBe(rhythmScore.consistency.score);
+    expect(health.onTrack).toBe(rhythmScore.onTrack.score);
+    expect(health.health).toBeCloseTo(
+      rhythmScore.consistency.score * 0.75 + rhythmScore.onTrack.score * 0.25
+    );
+  });
+
+  it('uses existing Foundation aggregation for completed, missed, and multiply linked Strength Rhythms', () => {
+    const completed = strengthRhythm('strength-completed', {
+      cadence: 'Daily',
+      schedule: { frequency: 'daily' },
+      createdLocalDate: '2026-10-20',
+      createdTimeZone: 'UTC'
+    });
+    const missed = strengthRhythm('strength-missed', {
+      cadence: 'Daily',
+      schedule: { frequency: 'daily' },
+      createdLocalDate: '2026-10-20',
+      createdTimeZone: 'UTC',
+      primaryFoundationId: null,
+      secondaryFoundationIds: ['health-strength']
+    });
+    const unlinked = strengthRhythm('strength-unlinked', {
+      primaryFoundationId: null,
+      secondaryFoundationIds: []
+    });
+    const completedScore = selectRhythmScore({
+      rhythmId: completed.id,
+      cadence: completed.cadence!,
+      schedule: completed.schedule!,
+      createdLocalDate: completed.createdLocalDate!,
+      createdTimeZone: completed.createdTimeZone!,
+      records: ['2026-10-20', '2026-10-21', '2026-10-22'].map((effectiveDate, index) => ({
+        id: `strength-completion-${index}`,
+        rhythmId: completed.id,
+        effectiveDate
+      })),
+      recordsAvailable: true,
+      asOfDate: '2026-10-22',
+      timeZone: 'UTC'
+    });
+    const missedScore = selectRhythmScore({
+      rhythmId: missed.id,
+      cadence: missed.cadence!,
+      schedule: missed.schedule!,
+      createdLocalDate: missed.createdLocalDate!,
+      createdTimeZone: missed.createdTimeZone!,
+      records: [],
+      recordsAvailable: true,
+      asOfDate: '2026-10-22',
+      timeZone: 'UTC'
+    });
+    expect(completedScore.kind).toBe('rhythm-score');
+    expect(missedScore.kind).toBe('rhythm-score');
+    if (completedScore.kind !== 'rhythm-score' || missedScore.kind !== 'rhythm-score') return;
+    expect(completedScore.consistency.kind).toBe('scored');
+    expect(missedScore.consistency.kind).toBe('scored');
+    if (completedScore.consistency.kind !== 'scored' || missedScore.consistency.kind !== 'scored') return;
+    expect(completedScore.consistency.score).toBeGreaterThan(missedScore.consistency.score);
+
+    const health = selectStrengthCategoryScore(
+      [completed, missed, completed, unlinked],
+      new Map([
+        [completed.id, completedScore],
+        [missed.id, missedScore],
+        [unlinked.id, scoredRhythm(100, 100)]
+      ]),
+      []
+    );
+    expect(health.foundationIds).toEqual(['health-strength']);
+    expect(health.eligibleFoundationIds).toEqual(['health-strength']);
+    expect(health.consistency).toBeCloseTo(
+      ((completedScore.consistency.kind === 'scored' ? completedScore.consistency.score : 0)
+        + (missedScore.consistency.kind === 'scored' ? missedScore.consistency.score : 0)) / 2
+    );
+    expect(health.health).toBe(health.consistency! * 0.75 + health.onTrack! * 0.25);
+  });
+
+  it('preserves Strength zero scores, excludes archived Rhythms, and leaves unresolved scores unavailable', () => {
+    const zero = strengthRhythm('strength-zero');
+    const unresolved = strengthRhythm('strength-unresolved');
+    const archived = strengthRhythm('strength-archived');
+    const score = selectStrengthCategoryScore(
+      [zero, unresolved, archived],
+      new Map([
+        [zero.id, scoredRhythm(0, 0)],
+        [archived.id, scoredRhythm(100, 100)]
+      ]),
+      [archived.id]
+    );
+
+    expect(score).toMatchObject({
+      eligibleFoundationIds: ['health-strength'],
+      consistency: 0,
+      onTrack: 0,
+      health: 0
+    });
+
+    expect(selectStrengthCategoryScore([unresolved], new Map(), [])).toMatchObject({
+      eligibleFoundationIds: [],
+      excludedFoundationIds: ['health-strength'],
+      consistency: null,
+      onTrack: null,
+      health: null
+    });
+    expect(selectStrengthCategoryScore([], new Map(), []).health).toBeNull();
+  });
+
+  it('averages Strength, Cardio, and Weight at the measure level and blends once', () => {
+    const completeRollup = selectHealthFitnessCategoryScore({
+      foundationIds: ['health-cardio'],
+      eligibleFoundationIds: ['health-cardio'],
+      excludedFoundationIds: [],
+      unresolvedFoundationIds: [],
+      consistency: 100,
+      onTrack: 60,
+      health: 90
+    }, {
+      foundationIds: ['health-weight'],
+      eligibleFoundationIds: ['health-weight'],
+      excludedFoundationIds: [],
+      unresolvedFoundationIds: [],
+      consistency: 60,
+      onTrack: 100,
+      health: 70
+    }, {
+      foundationIds: ['health-strength'],
+      eligibleFoundationIds: ['health-strength'],
+      excludedFoundationIds: [],
+      unresolvedFoundationIds: [],
+      consistency: 0,
+      onTrack: 80,
+      health: 20
+    });
+    expect(completeRollup).toMatchObject({
+      consistency: 160 / 3,
+      onTrack: 80,
+      health: 60
+    });
+
+    const cardio = {
+      foundationIds: ['health-cardio'],
+      eligibleFoundationIds: [],
+      excludedFoundationIds: [],
+      unresolvedFoundationIds: [],
+      consistency: 80,
+      onTrack: null,
+      health: null
+    };
+    const weight = {
+      foundationIds: ['health-weight'],
+      eligibleFoundationIds: [],
+      excludedFoundationIds: [],
+      unresolvedFoundationIds: [],
+      consistency: null,
+      onTrack: 40,
+      health: null
+    };
+
+    const unavailableStrength = {
+      foundationIds: ['health-strength'],
+      eligibleFoundationIds: [],
+      excludedFoundationIds: [],
+      unresolvedFoundationIds: [],
+      consistency: null,
+      onTrack: null,
+      health: null
+    };
+    expect(selectHealthFitnessCategoryScore(cardio, weight, unavailableStrength)).toEqual({
+      foundationIds: ['consistency', 'on-track'],
+      eligibleFoundationIds: ['consistency', 'on-track'],
+      excludedFoundationIds: [],
+      unresolvedFoundationIds: [],
+      consistency: 80,
+      onTrack: 40,
+      health: 70
+    });
+    expect(selectHealthFitnessCategoryScore({
+      ...cardio,
+      consistency: 0,
+      onTrack: 0
+    }, weight, unavailableStrength)).toMatchObject({
+      consistency: 0,
+      onTrack: 20,
+      health: 5
+    });
+  });
+
+  it('averages available Category Health values without rounding intermediate scores', () => {
+    const result = aggregateCategoryHealthScores([100, 13, 13, null, null, null]);
+
+    expect(result).toEqual({
+      health: 42,
+      scoredCategoryCount: 3,
+      categoryCount: 6
+    });
+  });
+
+  it('includes a valid zero Category Health value', () => {
+    const result = aggregateCategoryHealthScores([0, null, null, null, null, null]);
+
+    expect(result).toEqual({
+      health: 0,
+      scoredCategoryCount: 1,
+      categoryCount: 6
+    });
+  });
+
+  it('returns an unavailable score and zero coverage when all Categories are unavailable', () => {
+    const result = aggregateCategoryHealthScores([null, null, null, null, null, null]);
+
+    expect(result).toEqual({
+      health: null,
+      scoredCategoryCount: 0,
+      categoryCount: 6
+    });
+  });
+
+  it('keeps fractional Category scores unrounded until display', () => {
+    const result = aggregateCategoryHealthScores([100, 13, 12, null, null, null]);
+
+    expect(result.health).toBeCloseTo(41.6666667);
+    expect(Math.round(result.health!)).toBe(42);
+  });
+
   it('uses the account selectors for Today and preserves a valid zero score', () => {
     const foundation = parentingFoundations[0]!;
     const rhythm = {

@@ -31,9 +31,14 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
   groupBy,
   unavailableSelectedItems = [],
   unavailableItemType = 'Foundation',
+  unavailableGroupLabel,
+  getUnavailableItemLabel,
   focusItemId,
+  description,
+  renderSelectedItemContent,
   onToggle,
   onToggleGroup,
+  doneLabel = 'Done',
   onDone,
   onCancel
 }: {
@@ -47,9 +52,14 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
   groupBy?: (item: Item) => string | undefined;
   unavailableSelectedItems?: readonly { id: string; label: string }[];
   unavailableItemType?: string;
+  unavailableGroupLabel?: string;
+  getUnavailableItemLabel?: (item: { id: string; label: string }) => string;
   focusItemId?: string | null;
+  description?: ReactNode;
+  renderSelectedItemContent?: (item: Item) => ReactNode;
   onToggle: (id: Item['id']) => void;
   onToggleGroup?: (ids: readonly Item['id'][]) => void;
+  doneLabel?: string;
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -80,6 +90,7 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
       }}
     >
       <h3 id="rhythm-association-picker-title" ref={headingRef} tabIndex={-1}>{title}</h3>
+      {description && <p className="rhythm-association-picker__description">{description}</p>}
       {groups && onToggleGroup && (
         <div className="rhythm-association-picker__groups" role="group" aria-label="Select people by group">
           {groups.map(group => {
@@ -127,22 +138,31 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
       {items.length === 0 ? (
         <>
           <p className="rhythm-association-picker__empty">{emptyMessage}</p>
-          {unavailableSelectedItems.map(item => (
-            <button
-              key={item.id}
-              type="button"
-              className="rhythm-association-picker__option rhythm-association-picker__option--unavailable"
-              aria-label={`Remove unresolved ${unavailableItemType} link ${item.id}`}
-              aria-pressed="true"
-              data-selected="true"
-              onClick={() => onToggle(item.id)}
-            >
-              <span className="rhythm-association-picker__badge">{item.label}</span>
-            </button>
-          ))}
+          {unavailableSelectedItems.length > 0 && (
+            <div className="rhythm-association-picker__unavailable" role="group"
+              aria-label={unavailableGroupLabel ?? `Unresolved ${unavailableItemType} links`}>
+              {unavailableSelectedItems.map(item => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="rhythm-association-picker__option rhythm-association-picker__option--unavailable"
+                  aria-label={getUnavailableItemLabel?.(item) ?? `Remove unresolved ${unavailableItemType} link ${item.id}`}
+                  aria-pressed="true"
+                  data-selected="true"
+                  onClick={() => onToggle(item.id)}
+                >
+                  <span className="rhythm-association-picker__badge">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </>
       ) : (
-        <div className="rhythm-association-picker__options" role="group" aria-label={title}>
+        <div
+          className={`rhythm-association-picker__options${renderSelectedItemContent ? ' rhythm-association-picker__options--expanded' : ''}`}
+          role="group"
+          aria-label={title}
+        >
           {(groupBy
             ? [...new Set(items.map(groupBy))]
             : [undefined]
@@ -161,7 +181,10 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
                   {groupItems.map(item => {
                     const selected = selectedIds.includes(item.id);
                     const label = getLabel(item);
-                    return (
+                    const selectedContent = selected && renderSelectedItemContent
+                      ? renderSelectedItemContent(item)
+                      : null;
+                    const option = (
                       <button
                         key={item.id}
                         type="button"
@@ -169,34 +192,66 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
                         data-picker-item-id={item.id}
                         aria-label={label}
                         aria-pressed={selected}
+                        {...(renderSelectedItemContent
+                          ? {
+                              'aria-expanded': selectedContent !== null,
+                              ...(selectedContent !== null
+                                ? { 'aria-controls': `rhythm-association-item-content-${item.id}` }
+                                : {})
+                            }
+                          : {})}
                         data-selected={selected ? 'true' : 'false'}
                         onClick={() => onToggle(item.id)}
                       >
                         <span className="rhythm-association-picker__badge">{renderBadge(item)}</span>
                       </button>
                     );
+                    return renderSelectedItemContent
+                      ? (
+                        <div
+                          key={item.id}
+                          className="rhythm-association-picker__expanded-item"
+                          data-selected={selected ? 'true' : 'false'}
+                          data-expanded={selectedContent !== null ? 'true' : 'false'}
+                        >
+                          {option}
+                          {selectedContent !== null && (
+                            <div className="rhythm-association-picker__expanded-content">
+                              <div id={`rhythm-association-item-content-${item.id}`}>
+                                {selectedContent}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                      : option;
                   })}
                 </div>
               </section>
             );
           })}
-          {unavailableSelectedItems.map(item => (
-            <button
-              key={item.id}
-              type="button"
-              className="rhythm-association-picker__option rhythm-association-picker__option--unavailable"
-              aria-label={`Remove unresolved ${unavailableItemType} link ${item.id}`}
-              aria-pressed="true"
-              data-selected="true"
-              onClick={() => onToggle(item.id)}
-            >
-              <span className="rhythm-association-picker__badge">{item.label}</span>
-            </button>
-          ))}
+          {unavailableSelectedItems.length > 0 && (
+            <div className="rhythm-association-picker__unavailable" role="group"
+              aria-label={unavailableGroupLabel ?? `Unresolved ${unavailableItemType} links`}>
+              {unavailableSelectedItems.map(item => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="rhythm-association-picker__option rhythm-association-picker__option--unavailable"
+                  aria-label={getUnavailableItemLabel?.(item) ?? `Remove unresolved ${unavailableItemType} link ${item.id}`}
+                  aria-pressed="true"
+                  data-selected="true"
+                  onClick={() => onToggle(item.id)}
+                >
+                  <span className="rhythm-association-picker__badge">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
       <div className="money-goal-dialog__actions rhythm-association-picker__actions">
-        <button type="button" className="btn mini" onClick={onDone}>Done</button>
+        <button type="button" className="btn mini" onClick={onDone}>{doneLabel}</button>
         <button type="button" className="btn mini ghost" onClick={onCancel}>Cancel</button>
       </div>
     </section>

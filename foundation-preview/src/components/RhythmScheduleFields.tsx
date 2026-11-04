@@ -405,7 +405,7 @@ export function RhythmScheduleFields({
   const endDateControl = (
     <>
       <div className="rhythm-schedule-fields__end-date-row">
-        <label className="rhythm-schedule-fields__end-toggle">
+        <label className="rhythm-editor__checkbox-row rhythm-schedule-fields__end-toggle">
           <input
             type="checkbox"
             checked={form.hasEndDate}

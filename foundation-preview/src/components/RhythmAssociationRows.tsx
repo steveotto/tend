@@ -1,5 +1,6 @@
 import {
   areas,
+  foundationTerminologyForCategory,
   type FoundationPreview,
   type PersonId,
   type PersonPreview,
@@ -81,22 +82,33 @@ export function RhythmAssociationRows({
               key={category.id}
               role="group"
               aria-label={showFoundationLinks && linkedFoundations.length > 0
-                ? `${category.label} category and linked Foundations`
+                ? `${category.label} category and linked ${foundationTerminologyForCategory(category.id).plural}`
                 : `${category.label} category`}
             >
               <RhythmCategoryBadges
                 rhythm={{ ...rhythm, categoryIds: [category.id] }}
+                {...(foundations ? { foundations } : {})}
                 itemsOnly
                 {...(onOpenCategory ? { onOpenCategory } : {})}
               />
               {showFoundationLinks && foundations && linkedFoundations.length > 0 && (
-                <RhythmFoundationBadges
-                  rhythm={rhythmWithFoundationIds(rhythm, linkedFoundations.map(foundation => foundation.id))}
-                  foundations={foundations}
-                  presentation={onOpenFoundation ? 'interactive' : 'static'}
-                  accessibleLabel={`${category.label} Foundations linked to ${rhythm.title}`}
-                  {...(onOpenFoundation ? { onOpenFoundation } : {})}
-                />
+                <>
+                  <RhythmFoundationBadges
+                    rhythm={rhythmWithFoundationIds(rhythm, linkedFoundations.map(foundation => foundation.id))}
+                    foundations={foundations}
+                    presentation={onOpenFoundation ? 'interactive' : 'static'}
+                    accessibleLabel={`${category.label} Foundations linked to ${rhythm.title}`}
+                    {...(onOpenFoundation ? { onOpenFoundation } : {})}
+                  />
+                  <ul
+                    className="today-rhythm-details__category-foundation-names"
+                    aria-label={`${category.label} linked ${foundationTerminologyForCategory(category.id).plural}`}
+                  >
+                    {linkedFoundations.map(foundation => (
+                      <li key={foundation.id}>{foundation.name}</li>
+                    ))}
+                  </ul>
+                </>
               )}
             </div>
           ))}

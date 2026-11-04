@@ -132,6 +132,7 @@ describe('Category Rhythm selectors', () => {
       ...createRhythmDraft(['marriage']),
       title: 'Daily Connection',
       personIds: ['sample-person-avery'] as PersonId[],
+      primaryFoundationId: 'connection',
       schedule: { frequency: 'weekly' as const, weekdays: [1] as RhythmWeekday[] }
     };
     const first = saveRhythmDraft(
@@ -197,7 +198,8 @@ describe('Category Rhythm selectors', () => {
     const parenting = saveRhythmDraft([], {
       ...createRhythmDraft(['parenting']),
       title: 'Connection time',
-      personIds: []
+      personIds: [],
+      primaryFoundationId: 'parenting-connection-belonging'
     }, 'user-rhythm-33333333-3333-4333-8333-333333333333', 'create',
     undefined, undefined, { suggestionSourceId: 'parenting.test-recommendation' });
     expect(parenting.savedRhythms?.[0]?.suggestionSourceId).toBe('parenting.test-recommendation');
@@ -387,7 +389,14 @@ describe('Category Rhythm selectors', () => {
     expect(validateRhythmDraft(base).foundationIds)
       .toBe('Assign the Marriage category or unlink these Foundation links: Connection.');
     expect(validateRhythmDraft({ ...base, categoryIds: ['marriage', 'parenting'] }))
-      .toEqual({});
+      .toMatchObject({
+        foundationIds: 'Choose a Foundation for Parenting to include this Rhythm in Parenting Health.'
+      });
+    expect(validateRhythmDraft({
+      ...base,
+      categoryIds: ['marriage', 'parenting'],
+      secondaryFoundationIds: ['parenting-connection-belonging']
+    })).toEqual({});
 
     const financeFoundation = foundationCatalogue.find(item => item.id === 'finance-example-milestone')!;
     const fixtureCatalogue = [...foundationCatalogue, {

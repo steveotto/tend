@@ -1,4 +1,4 @@
-import type { MouseEvent, ReactNode, RefObject } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { syntheticPeople } from '../domain/preview-data.ts';
 import type { FoundationPreview, PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
 import type { CategoryRhythmGroupId } from '../domain/category-rhythms.ts';
@@ -9,6 +9,7 @@ import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
 import { peopleForRhythm, rhythmLastActivityLabel } from '../domain/preview-data.ts';
 import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
+import { ArchivedRhythmsControl } from './ArchivedRhythmsControl.tsx';
 
 type Props = {
   people?: readonly PersonPreview[];
@@ -21,7 +22,7 @@ type Props = {
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
   foundations: readonly FoundationPreview[];
-  archivedRhythmsOpenerRef: RefObject<HTMLButtonElement | null>;
+  archivedRhythmsOpenerRef: { current: HTMLElement | null };
   showArchivedRhythms: boolean;
   onAddRhythm: (event: MouseEvent<HTMLButtonElement>) => void;
   onBrowseSuggestions?: (event: MouseEvent<HTMLButtonElement>) => void;
@@ -95,31 +96,29 @@ export function CategoryRhythmCollection({
           <p>Active Rhythms connected to {categoryLabel}.</p>
         </div>
       </div>
-      <div className="marriage-empty-state">
-        <h4>{rhythms.length === 0 ? 'Start with a rhythm.' : 'Add a rhythm.'}</h4>
-        <div className="category-rhythm-entry-actions">
-          <button type="button" className="btn mini" onClick={onAddRhythm}>Add Rhythm</button>
-          <button
-            type="button"
-            className="btn mini ghost"
-            onClick={onBrowseSuggestions}
-            disabled={!onBrowseSuggestions}
-            {...(!onBrowseSuggestions && suggestionsUnavailableReason
-              ? {
-                  'aria-describedby': `${categoryToken}-suggestions-unavailable`,
-                  title: suggestionsUnavailableReason
-                }
-              : {})}
-          >
-            Suggestions
-          </button>
-          {!onBrowseSuggestions && suggestionsUnavailableReason && (
-            <span className="visually-hidden" id={`${categoryToken}-suggestions-unavailable`}>
-              {suggestionsUnavailableReason}
-            </span>
-          )}
-        </div>
+      <div className="category-rhythm-entry-actions">
+        <button type="button" className="btn mini" onClick={onAddRhythm}>Add Rhythm</button>
+        <button
+          type="button"
+          className="btn mini ghost"
+          onClick={onBrowseSuggestions}
+          disabled={!onBrowseSuggestions}
+          {...(!onBrowseSuggestions && suggestionsUnavailableReason
+            ? {
+                'aria-describedby': `${categoryToken}-suggestions-unavailable`,
+                title: suggestionsUnavailableReason
+              }
+            : {})}
+        >
+          Suggestions
+        </button>
+        {!onBrowseSuggestions && suggestionsUnavailableReason && (
+          <span className="visually-hidden" id={`${categoryToken}-suggestions-unavailable`}>
+            {suggestionsUnavailableReason}
+          </span>
+        )}
       </div>
+      {rhythms.length === 0 && <h4 className="marriage-empty-state">Start with a rhythm.</h4>}
       {groupedRhythms.map(group => (
         <section key={group.id} className="marriage-recommendation-group" aria-labelledby={`${categoryToken}-group-${group.id}`}>
           <header><h4 id={`${categoryToken}-group-${group.id}`}>{group.title}</h4><span>{group.rhythms.length}</span></header>
@@ -135,6 +134,7 @@ export function CategoryRhythmCollection({
                       completed={completedRhythms.has(rhythm.id)}
                       people={peopleForRhythm(rhythm, people)}
                       foundations={foundations}
+                      relatedRhythms={rhythms}
                       onPersonSelect={onPersonSelect}
                       onOpenFoundation={onOpenFoundation}
                       onOpenCategory={onOpenCategory}
@@ -170,17 +170,12 @@ export function CategoryRhythmCollection({
             : <p className="marriage-empty-state">No active Rhythms.</p>}
         </section>
       ))}
-      <button
-        ref={archivedRhythmsOpenerRef}
-        type="button"
-        className="category-archived-rhythms-toggle"
-        aria-expanded={showArchivedRhythms}
-        aria-haspopup="dialog"
-        aria-controls="archived-rhythms-dialog"
-        onClick={onShowArchivedRhythms}
-      >
-        Archived rhythms ({archivedRhythms.length})
-      </button>
+      <ArchivedRhythmsControl
+        count={archivedRhythms.length}
+        openerRef={archivedRhythmsOpenerRef}
+        expanded={showArchivedRhythms}
+        onOpen={onShowArchivedRhythms}
+      />
     </section>
   );
 }
