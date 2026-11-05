@@ -60,6 +60,13 @@ export const rhythmTimes = ['Morning', 'Afternoon', 'Evening', 'Anytime'] as con
 export type RhythmCadence = (typeof rhythmCadences)[number];
 export type RhythmTime = (typeof rhythmTimes)[number];
 export type RhythmCategoryId = CategoryId;
+export type RhythmHealthLogCapability = 'weight' | 'cardio' | 'workout';
+
+const healthFoundationByCapability: Record<RhythmHealthLogCapability, string> = {
+  workout: 'health-strength',
+  cardio: 'health-cardio',
+  weight: 'health-weight'
+};
 
 export type SavedRhythm = {
   id: string;
@@ -79,7 +86,7 @@ export type SavedRhythm = {
   primaryFoundationId?: string | null;
   secondaryFoundationIds?: string[];
   suggestionSourceId?: string;
-  healthLogCapability?: 'weight' | 'cardio' | 'workout' | null;
+  healthLogCapability?: RhythmHealthLogCapability | null;
   healthRunTarget?: HealthRunTarget | null;
 };
 
@@ -98,7 +105,7 @@ export type RhythmDraft = {
   seasonName?: string;
   primaryFoundationId?: string | null;
   secondaryFoundationIds?: string[];
-  healthLogCapability?: 'weight' | 'cardio' | 'workout' | null;
+  healthLogCapability?: RhythmHealthLogCapability | null;
   healthRunTarget?: HealthRunTarget | null;
   healthWorkoutMode?: 'recommended' | 'specific' | 'custom';
   healthWorkoutId?: string;
@@ -117,6 +124,33 @@ export function createRhythmDraft(categoryIds: readonly RhythmCategoryId[] = [])
     schedule: { frequency: 'daily' },
     scheduleEditing: true,
     personal: false
+  };
+}
+
+export function updateRhythmDraftFitnessActivity(
+  draft: RhythmDraft,
+  capability: RhythmHealthLogCapability
+): RhythmDraft {
+  const previousCapability = draft.healthLogCapability
+    ?? (draft.categoryIds.includes('health') ? 'workout' : undefined);
+  const previousFoundationId = previousCapability === undefined
+    ? undefined
+    : healthFoundationByCapability[previousCapability];
+  const nextFoundationId = healthFoundationByCapability[capability];
+  const foundationIds = [
+    ...(draft.primaryFoundationId ? [draft.primaryFoundationId] : []),
+    ...(draft.secondaryFoundationIds ?? [])
+  ];
+  const retainedFoundationIds = previousFoundationId && previousFoundationId !== nextFoundationId
+    ? foundationIds.filter(id => id !== previousFoundationId)
+    : foundationIds;
+  if (!retainedFoundationIds.includes(nextFoundationId)) retainedFoundationIds.push(nextFoundationId);
+
+  return {
+    ...draft,
+    healthLogCapability: capability,
+    primaryFoundationId: retainedFoundationIds[0] ?? null,
+    secondaryFoundationIds: retainedFoundationIds.slice(1)
   };
 }
 

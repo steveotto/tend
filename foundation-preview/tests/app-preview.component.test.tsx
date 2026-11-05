@@ -6305,7 +6305,8 @@ describe('Tend Today preview', () => {
     dialog = screen.getByRole('dialog', { name: 'Strength Health details' });
     expect(within(dialog).getByRole('heading', { name: 'What counts' })).toBeTruthy();
     expect(within(dialog).getByText('Strength')).toBeTruthy();
-    expect(within(dialog).getByText('Health & Fitness')).toBeTruthy();
+    expect(within(dialog).getByRole('heading', { name: 'Linked Rhythms' })).toBeTruthy();
+    expect(within(dialog).queryByText('Health & Fitness')).toBeNull();
     expect(within(dialog).queryByRole('button', { name: /Next / })).toBeNull();
     await user.click(within(dialog).getByRole('button', { name: 'Close Health details' }));
 
@@ -6315,7 +6316,8 @@ describe('Tend Today preview', () => {
     dialog = screen.getByRole('dialog', { name: 'Prayer Health details' });
     expect(within(dialog).getByRole('heading', { name: 'What counts' })).toBeTruthy();
     expect(within(dialog).getByText('Prayer')).toBeTruthy();
-    expect(within(dialog).getByText('Faith')).toBeTruthy();
+    expect(within(dialog).getByRole('heading', { name: 'Linked Rhythms' })).toBeTruthy();
+    expect(within(dialog).queryByText('Faith')).toBeNull();
     expect(within(dialog).queryByRole('button', { name: /Next / })).toBeNull();
   });
 

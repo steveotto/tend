@@ -2497,8 +2497,16 @@ a:focus-visible {
     .rhythm-editor__fitness-activity {
       display: grid;
       gap: 12px;
-      padding-top: 14px;
-      border-top: 1px solid var(--tend-line);
+    }
+
+    .rhythm-editor__fitness-activity-fields {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+      padding: 14px;
+      border: 1px solid var(--tend-line);
+      border-radius: 14px;
+      background: var(--tend-surface);
     }
 
     .rhythm-editor__fitness-run-target {
@@ -3790,49 +3798,57 @@ dialog.health-score-details-dialog[open] {
 .health-info-what-counts__arrow {
   display: grid;
   place-items: center;
-  min-height: 28px;
+  min-height: 20px;
   color: var(--tend-secondary, var(--ink-soft));
   font-size: 18px;
   line-height: 1;
 }
 
 .health-info-what-counts__group {
-  display: grid;
-  gap: 8px;
+  display: flex;
   min-width: 0;
-  padding: 10px;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
   border: 1px solid var(--tend-line, var(--line));
   border-radius: 12px;
   background: var(--tend-surface, #fff);
 }
 
 .health-info-what-counts__group > h4 {
+  min-width: 0;
   margin: 0;
   color: var(--tend-secondary, var(--ink-soft));
   font-size: 12px;
   font-weight: 600;
   line-height: 1.3;
-  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .health-info-what-counts__items {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
-  gap: 8px;
+  display: flex;
   min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.health-info-what-counts__items > strong {
+  color: var(--tend-ink, var(--ink));
+  font-size: 13px;
+  line-height: 1.3;
 }
 
 .health-info-what-counts__item {
-  display: grid;
-  justify-items: center;
-  align-content: start;
-  gap: 5px;
+  display: flex;
   min-width: 0;
-  padding: 8px;
-  border-radius: 8px;
-  background: var(--tend-canvas, #fff);
+  align-items: center;
+  gap: 7px;
   color: var(--tend-ink, var(--ink));
-  text-align: center;
   overflow-wrap: anywhere;
 }
 
@@ -3847,7 +3863,6 @@ dialog.health-score-details-dialog[open] {
   line-height: 1.3;
 }
 
-.health-info-what-counts__item > p,
 .health-info-what-counts__notes > p {
   margin: 0;
   color: var(--tend-secondary, var(--ink-soft));
@@ -3870,11 +3885,11 @@ html[data-mobile-text-size="large"] .health-info-what-counts__group > h4 {
   font-size: 14px;
 }
 
-html[data-mobile-text-size="large"] .health-info-what-counts__item > strong {
+html[data-mobile-text-size="large"] .health-info-what-counts__item > strong,
+html[data-mobile-text-size="large"] .health-info-what-counts__items > strong {
   font-size: 15px;
 }
 
-html[data-mobile-text-size="large"] .health-info-what-counts__item > p,
 html[data-mobile-text-size="large"] .health-info-what-counts__notes > p,
 html[data-mobile-text-size="large"] .rhythm-history-view__health-weight-description,
 html[data-mobile-text-size="large"] .health-info-calculation__note {
@@ -12127,31 +12142,43 @@ html[data-mobile-text-size-level="larger"] .health-rollup__feature .rhythm-histo
 }
 
 .strength-rest-timer__options-trigger {
-  flex: 0 0 auto;
-  min-height: 38px;
-  padding: 5px 10px;
+  display: grid;
+  flex: 0 0 44px;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  place-items: center;
   border: 1px solid #47544c;
-  border-radius: 999px;
+  border-radius: 50%;
   background: #202a24;
   color: #e3e9e4;
   cursor: pointer;
-  font: inherit;
-  font-size: .78rem;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+}
+
+.strength-rest-timer__options-trigger svg {
+  width: 20px;
+  height: 20px;
 }
 
 .strength-rest-timer__options {
   z-index: 10000;
   display: grid;
+  box-sizing: border-box;
   width: min(320px, calc(100vw - 24px));
+  min-width: 0;
+  min-height: 0;
   gap: 12px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 14px;
   border: 1px solid var(--tend-line);
   border-radius: 16px;
   background: var(--tend-surface);
   box-shadow: 0 12px 32px #10251d30;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .strength-rest-timer__option {
@@ -12209,6 +12236,41 @@ html[data-mobile-text-size-level="larger"] .health-rollup__feature .rhythm-histo
 .strength-rest-duration-picker__custom-fields .btn {
   grid-column: 1 / -1;
   min-height: 40px;
+}
+
+@media (max-width: 700px) {
+  .strength-rest-timer__options[data-mobile-sheet] {
+    width: 100vw;
+    gap: 14px;
+    padding:
+      18px
+      max(16px, env(safe-area-inset-right, 0px))
+      calc(16px + env(safe-area-inset-bottom, 0px))
+      max(16px, env(safe-area-inset-left, 0px));
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 20px 20px 0 0;
+  }
+
+  .strength-rest-timer__options .strength-rest-duration-picker__presets {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .strength-rest-timer__options .strength-rest-duration-picker__presets button {
+    flex: 1 1 64px;
+    min-width: 64px;
+  }
+
+  .strength-rest-duration-picker__custom-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .strength-rest-duration-picker__custom-fields .btn {
+    grid-column: 1;
+    width: 100%;
+  }
 }
 
 .strength-guided__exercise-menu {
@@ -13355,11 +13417,13 @@ html[data-mobile-text-size-level="larger"] .health-rollup__feature .rhythm-histo
   }
 
   .strength-guided-dialog .money-goal-dialog__surface {
+    display: flex;
+    flex-direction: column;
     box-sizing: border-box;
+    min-width: 0;
     min-height: 100%;
     height: 100%;
-    overflow-x: hidden;
-    overflow-y: auto;
+    overflow: hidden;
     padding:
       calc(env(safe-area-inset-top, 0px) + 10px)
       max(14px, env(safe-area-inset-right, 0px))
@@ -13367,6 +13431,23 @@ html[data-mobile-text-size-level="larger"] .health-rollup__feature .rhythm-histo
       max(14px, env(safe-area-inset-left, 0px));
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
+  }
+
+  .strength-guided-dialog .money-goal-dialog__surface > h2 {
+    flex: 0 0 auto;
+  }
+
+  .strength-guided-dialog .strength-dialog-body.strength-guided {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
   }
 
   .strength-guided-dialog .money-goal-dialog__close {
@@ -15345,284 +15426,287 @@ html[data-mobile-text-size="larger"] .strength-muscle-facts dd {
   }
 }
 
-.money-goal-dialog--strength-workout-editor,
-.money-goal-dialog--strength-exercise-editor {
-  box-sizing: border-box;
-  max-height: min(88dvh, 840px);
-  overflow: auto;
-  overscroll-behavior: contain;
+@media (max-width: 360px) {
+  .strength-workout-suggestion {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .strength-workout-suggestion > .btn {
+    justify-self: start;
+  }
 }
 
-.money-goal-dialog--strength-workout-editor .money-goal-dialog__surface,
-.money-goal-dialog--strength-exercise-editor .money-goal-dialog__surface {
-  min-width: 0;
-  padding: 20px;
-}
-
-.money-goal-dialog--strength-workout-editor .money-goal-dialog__surface > h2,
-.money-goal-dialog--strength-exercise-editor .money-goal-dialog__surface > h2 {
-  padding-right: 42px;
-  color: var(--tend-ink);
-  font-size: 1.24rem;
-  letter-spacing: -.02em;
-}
-
-.money-goal-dialog--strength-workout-editor .money-goal-dialog__close,
-.money-goal-dialog--strength-exercise-editor .money-goal-dialog__close {
-  top: 8px;
-  right: 8px;
-  color: var(--tend-secondary);
-}
-
-.money-goal-dialog--strength-workout-editor .money-goal-dialog__close:hover,
-.money-goal-dialog--strength-exercise-editor .money-goal-dialog__close:hover {
-  background: var(--tend-mist);
-  color: var(--tend-ink);
-}
-
-.strength-dialog-body form.strength-workout-editor {
-  gap: 13px;
-}
-
-.strength-muscle-disclosure,
-.strength-editor-disclosure {
-  min-width: 0;
-  border: 1px solid var(--tend-line);
-  border-radius: 11px;
-  background: var(--tend-surface);
-}
-
-.strength-muscle-disclosure > summary,
-.strength-editor-disclosure > summary {
+.health-fitness-today,
+.health-fitness-progress {
   display: grid;
-  min-height: 46px;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 11px;
-  color: var(--tend-ink);
-  cursor: pointer;
-  list-style: none;
+  gap: 16px;
+  min-width: 0;
 }
 
-.strength-muscle-disclosure > summary::-webkit-details-marker,
-.strength-editor-disclosure > summary::-webkit-details-marker,
-.strength-exercises__menu > summary::-webkit-details-marker {
+.health-fitness-page > [role="tabpanel"],
+.health-fitness-page [role="tabpanel"] {
+  min-width: 0;
+}
+
+.health-fitness-page [role="tabpanel"][hidden] {
   display: none;
 }
 
-.strength-muscle-disclosure__label,
-.strength-editor-disclosure > summary > span:first-child {
+.health-fitness-page[hidden],
+.health-fitness-page [hidden] {
+  display: none;
+}
+
+.health-fitness-page--foundation-detail {
+  box-sizing: border-box;
+  width: min(100%, 920px);
+  max-width: 920px;
+  margin-inline: auto;
+  padding: 0 24px 32px;
+  background: var(--tend-surface, #fff);
+}
+
+.health-fitness-page--foundation-detail .health-fitness-progress {
+  gap: 0;
+}
+
+.health-fitness-page--foundation-detail .health-fitness-progress__detail {
+  min-width: 0;
+}
+
+.health-fitness-page--foundation-detail .health-fitness-progress__detail > .category-page {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.health-fitness-page--foundation-detail .health-fitness-progress__detail > .tend-back-button {
+  margin-bottom: 16px;
+}
+
+.health-fitness-page--foundation-detail .cardio-progress,
+.health-fitness-page--foundation-detail .weight-progress {
+  gap: 0;
+}
+
+.health-fitness-page--foundation-detail .cardio-progress-card,
+.health-fitness-page--foundation-detail .cardio-history-card,
+.health-fitness-page--foundation-detail .weight-progress-card,
+.health-fitness-page--foundation-detail .weight-history-card {
+  padding: 18px 0;
+  border: 0;
+  border-bottom: 1px solid var(--tend-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.health-fitness-page--foundation-detail .cardio-goal-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.health-fitness-progress__detail > .category-page {
+  padding-top: 0;
+}
+
+.health-fitness-progress__detail > .category-page > .category-page-heading {
+  margin-top: 0;
+}
+
+.settings-page {
+  display: grid;
+  gap: 14px;
+  width: min(100%, 860px);
+  min-width: 0;
+  margin-inline: auto;
+}
+
+.settings-page__heading {
+  margin: 32px 0 0;
+}
+
+.settings-page__heading h2 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.settings-page__version {
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  text-align: center;
+}
+
+.settings-section {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--tend-line);
+  border-radius: 18px;
+  background: var(--tend-surface);
+  box-shadow: 0 6px 20px rgb(22 53 39 / 5%);
+}
+
+.settings-section h3 {
+  margin: 10px 0 0;
+  font-size: 17px;
+}
+
+.preview-account-backup__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preview-account-backup__note {
+  font-size: 12px !important;
+}
+
+.calendar-settings__intro,
+.calendar-settings__notice {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.calendar-settings__notice {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+
+.calendar-settings__list {
+  display: grid;
+  gap: 8px;
+}
+
+.calendar-settings__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.calendar-settings__row > div {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 3px;
+  min-width: 0;
+}
+
+.calendar-settings__row > div span {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.calendar-settings__editor {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.calendar-settings__editor label {
+  display: grid;
+  gap: 5px;
+}
+
+.calendar-settings__editor input {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+}
+
+.calendar-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.calendar-settings__errors {
+  margin: 0;
+  color: var(--danger, #a32626);
+}
+
+.calendar-settings__errors p {
+  margin: 0 0 4px;
+}
+
+.today-calendar__message {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.today-calendar__message p {
+  flex: 1 1 180px;
+  margin: 0;
+}
+
+.today-calendar__events {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 10px;
+  min-width: 0;
+}
+
+.today-calendar__event {
+  display: grid;
+  grid-template-columns: minmax(88px, auto) minmax(0, 1fr) minmax(0, auto);
+  align-items: baseline;
+  gap: 6px 12px;
+  min-width: 0;
+}
+
+.today-calendar__event-time,
+.today-calendar__event-calendar {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.today-calendar__event-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-weight: 600;
 }
 
-.strength-muscle-disclosure__selection {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--tend-secondary);
-  font-size: .9rem;
+.today-calendar__event-calendar {
   text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.strength-muscle-disclosure__chevron,
-.strength-editor-disclosure > summary > span:last-child {
-  color: var(--tend-secondary);
-  font-size: 1.2rem;
-  line-height: 1;
-  transition: transform 120ms ease;
-}
-
-.strength-muscle-disclosure[open] > summary .strength-muscle-disclosure__chevron,
-.strength-editor-disclosure[open] > summary > span:last-child {
-  transform: rotate(90deg);
-}
-
-.strength-muscle-disclosure .strength-muscle-selection {
-  margin: 0 10px 10px;
-  padding: 10px 0 0;
-  border-top: 1px solid var(--tend-line);
-}
-
-.strength-muscle-disclosure .strength-muscle-selection__tile:focus-within {
-  outline: none;
-}
-
-.strength-muscle-disclosure .strength-muscle-selection__tile input:focus-visible {
-  outline: 2px solid var(--tend-forest);
-  outline-offset: 3px;
-}
-
-.strength-exercises {
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-.strength-exercises__heading {
-  align-items: center;
-  gap: 10px;
-}
-
-.strength-exercises__heading h3,
-.strength-exercise-editor__group > h3 {
-  margin: 0;
-  color: var(--tend-ink);
-  font-size: 1rem;
-  font-weight: 650;
-  letter-spacing: -.01em;
-}
-
-.strength-exercises__heading > .btn {
-  min-height: 38px;
-  flex: none;
-  padding: 6px 10px;
-  white-space: nowrap;
-}
-
-.strength-exercises__list {
-  gap: 0;
-  margin: 0;
-  border-top: 1px solid var(--tend-line);
-}
-
-.strength-exercises__item {
-  position: relative;
-  display: grid;
-  min-width: 0;
-  grid-template-areas:
-    "exercise menu"
-    "superset superset";
-  grid-template-columns: minmax(0, 1fr) 40px;
-  align-items: start;
-  gap: 2px 5px;
-  padding: 7px 8px;
-  border: 1px solid var(--tend-line);
-  border-radius: 10px;
-  background: var(--tend-surface);
-}
-
-.strength-exercises__item--superset-first {
-  border-radius: 10px 10px 0 0;
-  border-bottom: 0;
-  background: #f0f5f1;
-}
-
-.strength-exercises__item--superset-second {
-  border-radius: 0 0 10px 10px;
-  background: #f0f5f1;
-}
-
-.strength-exercises__heading-name {
-  grid-area: exercise;
-  min-width: 0;
-  margin: 0;
-  font-size: inherit;
-}
-
-.strength-exercises__edit {
-  display: grid;
-  min-width: 0;
-  min-height: 54px;
-  flex: 1 1 auto;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-content: center;
-  gap: 2px 8px;
-  padding: 5px 2px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--tend-ink);
-  text-align: left;
-  cursor: pointer;
-}
-
-.strength-exercises__edit:hover {
-  background: var(--tend-mist);
-}
-
-.strength-exercises__name {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-weight: 650;
-}
-
-.strength-exercises__meta {
-  grid-column: 1;
-  min-width: 0;
-  color: var(--tend-secondary);
-  font-size: .82rem;
-  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
-.strength-exercises__chevron {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  align-self: center;
-  color: var(--tend-secondary);
-  font-size: 1.25rem;
-}
-
-.strength-exercises__menu {
-  position: relative;
-  grid-area: menu;
-  justify-self: end;
-  flex: none;
-}
-
-.strength-exercises__menu > summary {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  place-items: center;
-  border-radius: 9px;
-  color: var(--tend-secondary);
-  cursor: pointer;
-  font-size: 1.4rem;
-  font-weight: 700;
-  line-height: 1;
-  list-style: none;
-}
-
-.strength-exercises__menu > summary:hover,
-.strength-exercises__menu[open] > summary {
-  background: var(--tend-mist);
-  color: var(--tend-forest);
-}
-
-.strength-exercises__menu-items {
-  position: absolute;
-  z-index: 4;
-  top: calc(100% + 3px);
-  right: 0;
-  display: grid;
-  width: max-content;
-  min-width: 150px;
-  padding: 5px;
-  border: 1px solid var(--tend-line);
-  border-radius: 10px;
-  background: var(--tend-surface);
-  box-shadow: 0 8px 24px #10251d20;
-}
-
-.strength-exercises__menu-items button {
+.settings-page__back {
   min-height: 40px;
-  padding: 7px 9px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--tend-ink);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
 }
 
-.strength-exercises__menu-items button:hover:not(:disabled) {
+.settings-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+  cursor: pointer;
+  font-weight: 600;
+  text-align: left;
+}
+
+.settings-link:hover {
   background: var(--tend-mist);
 }
 
@@ -17434,201 +17518,289 @@ dialog.money-goal-dialog:not(.money-goal-dialog--rhythm-editor):not(.dialog--pho
   }
 }
 
-.tend-app-preview .today-rhythm-details-dialog--inline
-  .today-rhythm-details__association-category-group > .rhythm-area-badge {
-  border: 0;
-  border-radius: var(--rhythm-category-badge-radius);
-  background: transparent;
-  box-shadow: none;
-}
-
-@media (max-width: 700px) {
-  .tend-app-preview :is(
-    input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="range"]):not([type="hidden"]):not([type="file"]):not([type="color"]),
-    textarea,
-    select
-  ) {
-    font-size: max(16px, 1em);
-  }
-
-  .tend-app-preview dialog.dialog--phone-fullscreen {
-    position: fixed;
-    inset: 0;
-    box-sizing: border-box;
-    width: 100%;
-    min-width: 0;
-    max-width: none;
-    height: 100vh;
-    height: 100dvh;
-    max-height: none;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    overflow: hidden;
-    box-shadow: none;
-  }
-
-  .tend-app-preview dialog.dialog--phone-fullscreen::backdrop {
-    background: transparent;
-  }
-
-  .tend-app-preview .money-goal-dialog.dialog--phone-fullscreen > .money-goal-dialog__surface {
-    display: flex;
-    box-sizing: border-box;
-    width: 100%;
-    height: 100%;
-    max-height: none;
-    flex-direction: column;
-    padding:
-      calc(env(safe-area-inset-top, 0px) + 18px)
-      max(16px, env(safe-area-inset-right, 0px))
-      calc(env(safe-area-inset-bottom, 0px) + 12px)
-      max(16px, env(safe-area-inset-left, 0px));
-    overflow: hidden;
-  }
-
-  .tend-app-preview .money-goal-dialog.dialog--phone-fullscreen .money-goal-dialog__close {
-    top: calc(env(safe-area-inset-top, 0px) + 12px);
-    right: max(16px, env(safe-area-inset-right, 0px));
-  }
-
-  .tend-app-preview .person-details-dialog.dialog--phone-fullscreen .money-goal-dialog__surface > h2 {
-    padding-right: 52px;
-    overflow-wrap: anywhere;
-  }
-
-  .tend-app-preview .person-details-dialog.dialog--phone-fullscreen .money-goal-dialog__intro {
-    margin-right: 52px;
-    overflow-wrap: anywhere;
-  }
-
-  .tend-app-preview .person-details-editor__scroll {
-    flex: 1 1 auto;
-  }
-}
-
-.person-date-field {
+.today-calendar__heading {
   display: flex;
-  min-width: 0;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.person-date-field > input {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.tend-app-preview .person-date-field.person-date-field--empty > input {
-  color: transparent !important;
-  -webkit-text-fill-color: transparent !important;
-}
-
-.tend-app-preview .person-date-field.person-date-field--empty > input::-webkit-datetime-edit,
-.tend-app-preview .person-date-field.person-date-field--empty > input::-webkit-datetime-edit-fields-wrapper,
-.tend-app-preview .person-date-field.person-date-field--empty > input::-webkit-datetime-edit-text,
-.tend-app-preview .person-date-field.person-date-field--empty > input::-webkit-datetime-edit-month-field,
-.tend-app-preview .person-date-field.person-date-field--empty > input::-webkit-datetime-edit-day-field,
-.tend-app-preview .person-date-field.person-date-field--empty > input::-webkit-datetime-edit-year-field {
-  color: transparent !important;
-  -webkit-text-fill-color: transparent !important;
-  opacity: 0 !important;
-}
-
-.person-date-field__clear {
-  flex: none;
-  padding: 6px 9px;
-  border: 1px solid var(--line, #dce4dd);
+.category-archived-rhythms-toggle {
+  min-width: 44px;
+  min-height: 44px;
+  margin-left: auto;
+  padding: 8px 10px;
+  border: 0;
   border-radius: 8px;
-  background: var(--tend-surface, #f8faf8);
-  color: var(--forest-deep, #294c3a);
-  font: inherit;
-  font-size: 12px;
+  background: transparent;
+  color: var(--forest);
+  font: 650 13px/1.25 var(--sans);
+  text-align: right;
   cursor: pointer;
 }
 
-.person-date-field__clear:focus-visible {
-  outline: 2px solid var(--forest, #52715c);
+.category-archived-rhythms-toggle:hover {
+  background: var(--mist);
+}
+
+.category-archived-rhythms-toggle:focus-visible {
+  outline: 3px solid var(--forest);
   outline-offset: 2px;
 }
 
-.rhythm-select__group {
-  display: grid;
-  gap: 2px;
+.category-archived-rhythms-count {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  margin-left: auto;
+  padding: 8px 10px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.25;
+  text-align: right;
 }
 
-.rhythm-select__group-label {
-  padding: 7px 10px 3px;
-  color: var(--ink-faint, #87928b);
-  font-size: 11px;
+.tend-app-preview .money-goal-dialog--strength-settings {
+  display: flex;
+  overflow: hidden;
+}
+
+.tend-app-preview .money-goal-dialog--strength-settings > .money-goal-dialog__surface {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.tend-app-preview .money-goal-dialog--strength-settings > .money-goal-dialog__surface > h2 {
+  flex: 0 0 auto;
+  padding-right: 52px;
+}
+
+.tend-app-preview .strength-settings-body,
+.tend-app-preview .strength-settings-form {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.tend-app-preview .strength-settings-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 2px 2px 14px;
+}
+
+.tend-app-preview .strength-settings-general > h3,
+.tend-app-preview .strength-settings-muscles > h3 {
+  margin: 0 0 6px;
+  color: var(--tend-ink);
+  font-size: 16px;
+}
+
+.tend-app-preview .strength-settings-general__rows {
+  overflow: hidden;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+  background: var(--tend-surface);
+}
+
+.tend-app-preview .strength-settings-general__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 8px 12px;
+  color: var(--tend-ink);
+  font-weight: 600;
+}
+
+.tend-app-preview .strength-settings-general__row + .strength-settings-general__row {
+  border-top: 1px solid var(--tend-line);
+}
+
+.tend-app-preview .strength-settings-general__row input,
+.tend-app-preview .strength-settings-general__row select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 7px 9px;
+  border: 1px solid var(--tend-line);
+  border-radius: 9px;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+  font: inherit;
+}
+
+.tend-app-preview .strength-settings-muscles {
+  margin-top: 18px;
+}
+
+.tend-app-preview .strength-settings-muscles > h3 {
+  margin-bottom: 4px;
+}
+
+.tend-app-preview .strength-dialog-intro {
+  margin: 0 0 10px;
+  color: var(--tend-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.tend-app-preview .strength-settings-muscle-list {
+  overflow: hidden;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+  background: var(--tend-surface);
+}
+
+.tend-app-preview .strength-setting-muscle + .strength-setting-muscle {
+  border-top: 1px solid var(--tend-line);
+}
+
+.tend-app-preview .strength-setting-muscle__summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 16px;
+  align-items: center;
+  gap: 8px;
+  min-height: 54px;
+  padding: 8px 12px;
+  color: var(--tend-ink);
+  cursor: pointer;
+  list-style: none;
+}
+
+.tend-app-preview .strength-setting-muscle__summary::-webkit-details-marker {
+  display: none;
+}
+
+.tend-app-preview .strength-setting-muscle__summary::marker {
+  content: "";
+}
+
+.tend-app-preview .strength-setting-muscle__name {
+  min-width: 0;
   font-weight: 650;
-  letter-spacing: .04em;
-  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.tend-app-preview .strength-setting-muscle__values {
+  color: var(--tend-secondary);
+  font-size: 13px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.tend-app-preview .strength-setting-muscle__chevron {
+  color: var(--tend-secondary);
+  font-size: 19px;
+  line-height: 1;
+  text-align: center;
+  transition: transform 120ms ease;
+}
+
+.tend-app-preview .strength-setting-muscle[open] .strength-setting-muscle__chevron {
+  transform: rotate(180deg);
+}
+
+.tend-app-preview .strength-setting-muscle__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+
+.tend-app-preview .strength-setting-muscle__fields > label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  color: var(--tend-secondary);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.tend-app-preview .strength-setting-muscle__fields input,
+.tend-app-preview .strength-setting-muscle__fields select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 9px;
+  border: 1px solid var(--tend-line);
+  border-radius: 9px;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+  font: inherit;
+}
+
+.tend-app-preview .strength-setting-muscle__fields .strength-goals-row__between-sets {
+  grid-column: 1 / -1;
+}
+
+.tend-app-preview .strength-setting-muscle__rest-field {
+  display: grid;
+  gap: 4px;
+  color: var(--tend-secondary);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.tend-app-preview .strength-setting-muscle__fields .strength-goals-row__custom {
+  margin-top: 2px;
+}
+
+.tend-app-preview .strength-settings-tracking-note {
+  margin: 10px 0 0;
+  color: var(--tend-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.tend-app-preview .strength-settings-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  margin: 0;
+  padding: 10px 2px 2px;
+  border-top: 1px solid var(--tend-line);
+  background: var(--tend-surface);
 }
 
 @media (max-width: 700px) {
-  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    background: var(--canvas);
+  .tend-app-preview .strength-settings-general__row {
+    grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr);
+    gap: 8px;
+    padding-inline: 10px;
   }
 
-  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen > .today-rhythm-details__surface {
-    box-sizing: border-box;
-    width: 100%;
-    height: 100%;
-    min-height: 0;
-    max-height: none;
-    padding-top: calc(env(safe-area-inset-top, 0px) + 16px);
-    overflow: hidden;
+  .tend-app-preview .strength-setting-muscle__summary {
+    grid-template-columns: minmax(0, 1fr) auto 14px;
+    gap: 5px;
+    padding-inline: 10px;
   }
 
-  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen .today-rhythm-details__header {
-    flex: 0 0 auto;
-    padding-left: max(16px, env(safe-area-inset-left, 0px));
-    padding-right: calc(max(16px, env(safe-area-inset-right, 0px)) + 54px);
+  .tend-app-preview .strength-setting-muscle__values {
+    max-width: 190px;
   }
+}
 
-  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen .today-rhythm-details__close {
-    top: 12px;
-    right: max(16px, env(safe-area-inset-right, 0px));
-  }
+html[data-mobile-text-size="larger"] .tend-app-preview .strength-dialog-intro,
+html[data-mobile-text-size="larger"] .tend-app-preview .strength-setting-muscle__values {
+  font-size: 15px;
+}
 
-  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen .today-rhythm-details__body {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
-  }
+html[data-mobile-text-size="larger"] .tend-app-preview .strength-setting-muscle__fields > label,
+html[data-mobile-text-size="larger"] .tend-app-preview .strength-setting-muscle__rest-field {
+  font-size: 14px;
+}
 
-  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen .today-rhythm-details__body--history {
-    overflow: hidden;
-    padding-bottom: 0;
-  }
-
-  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen .rhythm-history-view--dialog {
-    flex: 1 1 auto;
-    max-height: none;
-    padding-inline: max(16px, env(safe-area-inset-left, 0px))
-      max(16px, env(safe-area-inset-right, 0px));
-  }
-
-  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen .rhythm-history-view__body--dialog {
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
-  }
-
-  .tend-app-preview .rhythm-history-view--dialog .rhythm-history-view__rhythm-header {
-    position: relative;
-    padding-top: 4px;
-  }
-
-  .tend-app-preview .rhythm-history-view--dialog .rhythm-history-view__body--dialog {
-    min-height: 0;
-    max-height: none;
-  }
+html[data-mobile-text-size="larger"] .tend-app-preview .strength-settings-tracking-note {
+  font-size: 14px;
 }

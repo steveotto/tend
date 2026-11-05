@@ -490,6 +490,7 @@ export function StrengthView({
     if (pendingGuidedStart) consumeRhythmRequest(pendingGuidedStart);
     setPendingGuidedStart(null);
     setConfirmingGuidedStartDiscard(false);
+    setGuidedSessionError('');
     if (rhythmLogRequestIdRef.current !== null) {
       rhythmLogRequestIdRef.current = null;
       onRhythmLogClosed?.();
@@ -499,7 +500,9 @@ export function StrengthView({
   function discardAndStartGuidedWorkout() {
     if (!pendingGuidedStart) return;
     const request = pendingGuidedStart;
-    startGuidedWorkout(request);
+    if (!startGuidedWorkout(request)) {
+      setGuidedSessionError('Could not start the new workout. Your current workout is unchanged.');
+    }
   }
 
   function startWorkoutFromButton(
@@ -1148,7 +1151,13 @@ export function StrengthView({
           hidden={workoutsTab !== 'recommended'}
         >
           {workoutsTab === 'recommended' && (
-            <>
+            <section className="strength-workout-section" aria-labelledby="strength-recommended-heading">
+              <header className="strength-card-heading">
+                <div>
+                  <h3 id="strength-recommended-heading">Recommended workouts</h3>
+                  <p>Suggestions based on your recent training.</p>
+                </div>
+              </header>
               <div className="category-rhythm-entry-actions">
                 <button
                   type="button"
@@ -1184,7 +1193,7 @@ export function StrengthView({
                     : 'No saved workout is eligible right now. You can still log a custom workout.'}
                 </div>
               )}
-            </>
+            </section>
           )}
         </section>
         <section
@@ -1204,7 +1213,7 @@ export function StrengthView({
               </header>
               <div className="category-rhythm-entry-actions">
                 <button type="button" className="btn mini" onClick={event => openDialog({ kind: 'workout' }, event)}>
-                  Add workout
+                  Create workout
                 </button>
                 <button
                   ref={suggestionPickerOpenerRef}
@@ -1280,7 +1289,7 @@ export function StrengthView({
               <header className="strength-card-heading">
                 <div>
                   <h3 id="strength-history-heading">Workout history</h3>
-                  <p>{history.total} {history.total === 1 ? 'workout' : 'workouts'} logged</p>
+                  <p>Review your past workouts and the muscle groups you trained.</p>
                 </div>
               </header>
               {historyAnnouncement && <p className="strength-history-status" role="status">{historyAnnouncement}</p>}
@@ -1831,29 +1840,52 @@ export function StrengthView({
       )}
       {pendingGuidedStart && !guidedSessionOpen && (
         <MoneyGoalDialog
-          title={data.guidedSessionDraft ? 'Workout in progress' : `Start ${pendingGuidedStart.workout.name}?`}
+          title={data.guidedSessionDraft
+            ? confirmingGuidedStartDiscard
+              ? `Discard ${data.guidedSessionDraft.workoutName}?`
+              : 'Workout in progress'
+            : `Start ${pendingGuidedStart.workout.name}?`}
           intro={data.guidedSessionDraft
-            ? 'A saved session must be resumed or explicitly discarded before another can start.'
+            ? confirmingGuidedStartDiscard
+              ? 'If the replacement saves, this workout’s unfinished progress will be removed.'
+              : `${data.guidedSessionDraft.workoutName} is in progress. Resume it or choose to start another workout.`
             : 'This workout will be saved as an in-progress draft until you finish and review it.'}
           labelledBy="strength-guided-start-title"
           titleId="strength-guided-start-title"
-          closeLabel="Close workout start options"
+          closeLabel={confirmingGuidedStartDiscard ? 'Cancel workout replacement' : 'Close workout start options'}
           bodyClassName="strength-dialog-body"
           onClose={cancelGuidedStart}
         >
           <div className="strength-guided-start">
             {guidedSessionError && <p className="strength-form-error" role="alert">{guidedSessionError}</p>}
             {data.guidedSessionDraft ? (
-              <>
-                <p>Current session: <strong>{data.guidedSessionDraft.workoutName}</strong></p>
-                {pendingGuidedStart.rhythm && data.guidedSessionDraft.rhythmId !== pendingGuidedStart.rhythm.rhythm.id
-                  && <p role="status">Resuming this session will leave {pendingGuidedStart.rhythm.rhythm.title} uncompleted.</p>}
-                <div className="money-goal-dialog__actions">
-                  <button type="button" className="btn mini" onClick={resumeGuidedWorkout}>Resume current workout</button>
-                  <button type="button" className="btn mini danger" onClick={() => setConfirmingGuidedStartDiscard(true)}>Discard and start selected workout</button>
-                  <button type="button" className="btn mini ghost" onClick={cancelGuidedStart}>Cancel</button>
-                </div>
-              </>
+              confirmingGuidedStartDiscard ? (
+                <>
+                  {pendingGuidedStart.workout.name.trim() && (
+                    <p>Start instead: <strong>{pendingGuidedStart.workout.name}</strong></p>
+                  )}
+                  <div className="money-goal-dialog__actions">
+                    <button type="button" className="btn mini danger" onClick={discardAndStartGuidedWorkout}>Discard and start</button>
+                    <button type="button" className="btn mini ghost" onClick={() => {
+                      setConfirmingGuidedStartDiscard(false);
+                      setGuidedSessionError('');
+                    }}>Keep workout</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {pendingGuidedStart.rhythm && data.guidedSessionDraft.rhythmId !== pendingGuidedStart.rhythm.rhythm.id
+                    && <p role="status">Resuming this session will leave {pendingGuidedStart.rhythm.rhythm.title} uncompleted.</p>}
+                  <div className="money-goal-dialog__actions">
+                    <button type="button" className="btn mini" onClick={resumeGuidedWorkout}>Resume</button>
+                    <button type="button" className="btn mini danger" onClick={() => {
+                      setGuidedSessionError('');
+                      setConfirmingGuidedStartDiscard(true);
+                    }}>Discard and start…</button>
+                    <button type="button" className="btn mini ghost" onClick={cancelGuidedStart}>Cancel</button>
+                  </div>
+                </>
+              )
             ) : (
               <div className="money-goal-dialog__actions">
                 {pendingGuidedStart.workout.exercises?.some(exercise => exercise.loadMeaning === undefined) && (
@@ -1866,16 +1898,6 @@ export function StrengthView({
                 <button type="button" className="btn mini" onClick={() => startGuidedWorkout(pendingGuidedStart)}>Retry start</button>
                 <button type="button" className="btn mini ghost" onClick={cancelGuidedStart}>Cancel</button>
               </div>
-            )}
-            {confirmingGuidedStartDiscard && (
-              <section className="strength-guided__discard" role="alertdialog" aria-labelledby="strength-guided-start-discard-title">
-                <h3 id="strength-guided-start-discard-title">Discard the current session?</h3>
-                <p>Its unfinished progress will be removed. The selected workout will start only if its draft saves successfully.</p>
-                <div className="money-goal-dialog__actions">
-                  <button type="button" className="btn mini danger" onClick={discardAndStartGuidedWorkout}>Discard and start</button>
-                  <button type="button" className="btn mini ghost" onClick={() => setConfirmingGuidedStartDiscard(false)}>Keep current session</button>
-                </div>
-              </section>
             )}
           </div>
         </MoneyGoalDialog>

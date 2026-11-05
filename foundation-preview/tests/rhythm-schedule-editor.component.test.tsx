@@ -347,7 +347,8 @@ describe('shared structured Rhythm editor', () => {
     expect(within(loggingGroup).getByText('Target distance (optional)')).toBeTruthy();
     expect((within(loggingGroup).getByRole('spinbutton') as HTMLInputElement).value).toBe('10');
     expect(within(loggingGroup).getByRole('combobox', { name: 'Distance unit: Kilometers' })).toBeTruthy();
-    expect(loggingGroup.children).toHaveLength(3);
+    expect(loggingGroup.children).toHaveLength(2);
+    expect(loggingGroup.classList.contains('rhythm-editor__fitness-activity-fields')).toBe(true);
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     const picker = associationPicker('Choose categories');
     const cardioFoundation = within(picker).getByRole('button', { name: 'Cardio' });
@@ -380,6 +381,113 @@ describe('shared structured Rhythm editor', () => {
     expect(within(reopenedLoggingGroup).getByText('Target distance (optional)')).toBeTruthy();
     expect((within(reopenedLoggingGroup).getByRole('spinbutton') as HTMLInputElement).value).toBe('10');
     expect(within(reopenedLoggingGroup).getByRole('combobox', { name: 'Distance unit: Kilometers' })).toBeTruthy();
+  });
+
+  it('updates Health & Fitness Foundation badges and saves the Foundation mapped to each Activity', async () => {
+    const user = userEvent.setup();
+    const activities = [
+      { option: 'Workout', capability: 'workout', foundationId: 'health-strength', badge: 'Health & Fitness: Strength' },
+      { option: 'Run', capability: 'cardio', foundationId: 'health-cardio', badge: 'Health & Fitness: Cardio' },
+      { option: 'Weigh-in', capability: 'weight', foundationId: 'health-weight', badge: 'Health & Fitness: Weight' }
+    ] as const;
+
+    for (const [index, activity] of activities.entries()) {
+      cleanup();
+      const id = `user-rhythm-55555555-5555-4555-8555-55555555555${index}`;
+      let persistedRhythms: SavedRhythm[] = [];
+      const onSave = vi.fn((draft: RhythmDraft) => {
+        const result = saveRhythmDraft(persistedRhythms, draft, id, 'create');
+        if (result.savedRhythms) persistedRhythms = result.savedRhythms;
+        return result.errors;
+      });
+      const editor = renderEditor(onSave);
+      await user.type(within(editor).getByLabelText('Title'), `Log ${activity.option}`);
+      await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
+      const picker = associationPicker('Choose categories');
+      await user.click(within(picker).getByRole('button', { name: 'Health & Fitness' }));
+      await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+
+      if (activity.option !== 'Workout') {
+        await choose(user, 'Fitness activity', activity.option);
+      }
+
+      const categoryRow = within(editor).getByRole('button', { name: /^Choose categories, Health & Fitness/ });
+      expect(within(categoryRow).getAllByRole('img').map(image => image.getAttribute('aria-label')))
+        .toEqual(['Health & Fitness', activity.badge]);
+      expect(onSave).not.toHaveBeenCalled();
+      expect(within(editor).getByRole('heading', { name: 'Fitness activity', level: 3 })).toBeTruthy();
+      expect(within(editor).getByRole('group', { name: 'Health & Fitness logging' })
+        .classList.contains('rhythm-editor__fitness-activity-fields')).toBe(true);
+
+      await user.click(within(editor).getByRole('button', { name: 'Save' }));
+      expect(onSave.mock.results.at(-1)?.value).toEqual({});
+      expect(persistedRhythms[0]).toMatchObject({
+        categoryIds: ['health'],
+        primaryFoundationId: activity.foundationId,
+        secondaryFoundationIds: [],
+        healthLogCapability: activity.capability
+      });
+    }
+  });
+
+  it('preserves existing links on Edit until Activity changes, then replaces only the prior activity link', async () => {
+    const user = userEvent.setup();
+    const rhythm: RhythmPreview = {
+      ...todayRhythms[0]!,
+      id: 'existing-strength-log-rhythm',
+      categoryIds: ['health'],
+      primaryFoundationId: 'health-strength',
+      secondaryFoundationIds: ['health-weight'],
+      healthLogCapability: 'workout'
+    };
+    const onSave = vi.fn((_draft: RhythmDraft) => ({}));
+    const editor = renderEditorForRhythm(rhythm, onSave);
+    const categoryRow = within(editor).getByRole('button', { name: /^Choose categories, Health & Fitness/ });
+    const badges = () => within(categoryRow).getAllByRole('img').map(image => image.getAttribute('aria-label'));
+
+    expect(badges()).toEqual([
+      'Health & Fitness',
+      'Health & Fitness: Strength',
+      'Health & Fitness: Weight'
+    ]);
+    expect(within(editor).getByRole('heading', { name: 'Fitness activity', level: 3 })).toBeTruthy();
+    expect(onSave).not.toHaveBeenCalled();
+
+    await choose(user, 'Fitness activity', 'Run');
+    expect(badges()).toEqual([
+      'Health & Fitness',
+      'Health & Fitness: Cardio',
+      'Health & Fitness: Weight'
+    ]);
+    await choose(user, 'Fitness activity', 'Weigh-in');
+    expect(badges()).toEqual([
+      'Health & Fitness',
+      'Health & Fitness: Weight'
+    ]);
+
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    expect(onSave.mock.calls.at(-1)?.[0]).toMatchObject({
+      categoryIds: ['health'],
+      primaryFoundationId: 'health-weight',
+      secondaryFoundationIds: [],
+      healthLogCapability: 'weight'
+    });
+  });
+
+  it('does not save an Add Rhythm when the user cancels after changing Activity', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn((_draft: RhythmDraft) => ({}));
+    const editor = renderEditor(onSave);
+    await user.type(within(editor).getByLabelText('Title'), 'Canceled run');
+    await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
+    const picker = associationPicker('Choose categories');
+    await user.click(within(picker).getByRole('button', { name: 'Health & Fitness' }));
+    await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+    await choose(user, 'Fitness activity', 'Run');
+    const categoryRow = within(editor).getByRole('button', { name: /^Choose categories, Health & Fitness/ });
+    expect(within(categoryRow).getByRole('img', { name: 'Health & Fitness: Cardio' })).toBeTruthy();
+    await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
+    expect(onSave).not.toHaveBeenCalled();
   });
 
   it('opens the People picker from its full row with the keyboard and restores focus on Escape', async () => {

@@ -146,7 +146,7 @@ function EditableHistoryHarness() {
 }
 
 describe('shared Rhythm history', () => {
-  it('shows the Rhythm-specific static flow and its linked Foundations and categories', async () => {
+  it('shows the selected Rhythm and only the scheduled-completion inputs to its score', async () => {
     const user = userEvent.setup();
     const rhythm = {
       ...todayConnection,
@@ -188,11 +188,12 @@ describe('shared Rhythm history', () => {
 
     await user.click(screen.getByRole('button', { name: 'Show Consistency and On Track score details' }));
     const dialog = screen.getByRole('dialog', { name: 'Rhythm Health details' });
+    expect(within(dialog).getByRole('heading', { name: 'Rhythm' })).toBeTruthy();
     expect(within(dialog).getByRole('heading', { name: 'Scheduled completions' })).toBeTruthy();
     expect(within(dialog).getByText('Move outside')).toBeTruthy();
-    expect(within(dialog).getByText('Cardio')).toBeTruthy();
-    expect(within(dialog).getByText('Weight')).toBeTruthy();
-    expect(within(dialog).getByText('Health & Fitness')).toBeTruthy();
+    expect(within(dialog).queryByText('Cardio')).toBeNull();
+    expect(within(dialog).queryByText('Weight')).toBeNull();
+    expect(within(dialog).queryByText('Health & Fitness')).toBeNull();
     expect(within(dialog).queryByText('Date night')).toBeNull();
     expect(within(dialog).queryByRole('button', { name: /Next / })).toBeNull();
     expect(within(dialog).queryByRole('button', { name: /Previous / })).toBeNull();

@@ -738,6 +738,7 @@ export function StrengthGuidedSessionDialog({
         closeLabel="Pause and close workout"
         bodyClassName="strength-dialog-body strength-guided"
         dialogClassName="strength-guided-dialog"
+        phoneFullScreen
         onClose={onClose}
       >
       {reviewing ? (
@@ -937,11 +938,17 @@ export function StrengthGuidedSessionDialog({
                 ref={timerOptionsButtonRef}
                 type="button"
                 className="strength-rest-timer__options-trigger"
-                aria-label={`Rest duration ${formatRestClock(restTimer.durationSeconds * 1000)}; timer options`}
+                aria-label="Rest timer settings"
                 aria-haspopup="dialog"
                 aria-expanded={timerOptionsOpen}
                 onClick={openTimerOptions}
-              >Rest · {formatRestClock(restTimer.durationSeconds * 1000)} ⌄</button>
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+                  strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+                  <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" />
+                  <path d="m19.4 15 .1.1a1.8 1.8 0 1 1-2.5 2.5l-.1-.1a1.8 1.8 0 0 0-3 .8v.2a1.8 1.8 0 1 1-3.6 0v-.2a1.8 1.8 0 0 0-3-.8l-.1.1a1.8 1.8 0 1 1-2.5-2.5l.1-.1a1.8 1.8 0 0 0-.8-3H4a1.8 1.8 0 1 1 0-3.6h.2a1.8 1.8 0 0 0 .8-3l-.1-.1a1.8 1.8 0 1 1 2.5-2.5l.1.1a1.8 1.8 0 0 0 3-.8V2a1.8 1.8 0 1 1 3.6 0v.2a1.8 1.8 0 0 0 3 .8l.1-.1a1.8 1.8 0 1 1 2.5 2.5l-.1.1a1.8 1.8 0 0 0 .8 3h.2a1.8 1.8 0 1 1 0 3.6H20a1.8 1.8 0 0 0-.6 2.9Z" />
+                </svg>
+              </button>
             </div>
             <p className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
               {[timerAnnouncement, soundMessage].filter(Boolean).join(' ')}
@@ -952,6 +959,7 @@ export function StrengthGuidedSessionDialog({
               anchorRef={timerOptionsButtonRef}
               label="Rest timer options"
               className="strength-rest-timer__options"
+              mobileSheet
               onClose={() => setTimerOptionsOpen(false)}
             >
               <div className="strength-rest-duration-picker__presets" role="group" aria-label="Rest duration presets">

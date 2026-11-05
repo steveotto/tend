@@ -48,13 +48,7 @@ function selectFlow(config: HealthRollupConfig): ReadonlyMap<string, readonly He
   return selected;
 }
 
-function FlowItem({
-  item,
-  showExplanation
-}: {
-  item: HealthRollupItem;
-  showExplanation: boolean;
-}) {
+function FlowItem({ item }: { item: HealthRollupItem }) {
   return (
     <div className="health-info-what-counts__item">
       {item.categoryIconId && <AreaIcon id={item.categoryIconId} />}
@@ -62,9 +56,66 @@ function FlowItem({
         <MarriageIcon group="foundations" id={item.foundationIconId} />
       )}
       <strong>{item.label}</strong>
-      {showExplanation && item.summary && <p>{item.summary}</p>}
     </div>
   );
+}
+
+type FlowLevel = {
+  label: string;
+  item?: HealthRollupItem;
+  value?: string;
+};
+
+function rhythmGroupLabel(group: HealthRollupGroup): string {
+  return group.id === 'rhythms' ? 'Linked Rhythms' : group.label;
+}
+
+function flowLevels(config: HealthRollupConfig): readonly FlowLevel[] {
+  const groups = config.groups;
+  const seedIndex = groups.findIndex(group => group.id === config.initialGroupId);
+  if (seedIndex < 0) return [];
+  const seedGroup = groups[seedIndex]!;
+  const selected = selectFlow(config);
+  const seedItem = selected.get(seedGroup.id)?.[0];
+
+  if (seedGroup.id === 'rhythms') {
+    return [
+      { label: 'Rhythm', ...(seedItem ? { item: seedItem } : {}) },
+      { label: 'Scheduled completions' }
+    ];
+  }
+
+  if (seedGroup.id === 'foundations') {
+    const rhythmGroup = groups.slice(0, seedIndex).find(group =>
+      group.id === 'rhythms' || group.id === 'rhythms-logs'
+    ) ?? groups[seedIndex - 1];
+    if (!rhythmGroup) return [{ label: seedGroup.label, ...(seedItem ? { item: seedItem } : {}) }];
+    const rhythmItems = selected.get(rhythmGroup.id) ?? [];
+    const hasNoRhythms = rhythmItems.some(item => item.id === rhythmGroup.emptyItem?.id);
+    const rhythmInputLabel = seedItem?.id === 'cardio'
+      ? 'Run logs'
+      : seedItem?.id === 'strength' || seedItem?.id === 'weight'
+        ? 'Linked Rhythms'
+        : rhythmGroupLabel(rhythmGroup);
+    return [
+      { label: seedGroup.label, ...(seedItem ? { item: seedItem } : {}) },
+      {
+        label: rhythmInputLabel,
+        ...(hasNoRhythms ? { value: 'No linked Rhythms' } : {})
+      }
+    ];
+  }
+
+  return groups
+    .slice(0, seedIndex + 1)
+    .reverse()
+    .map(group => {
+      const item = selected.get(group.id)?.[0];
+      return {
+        label: rhythmGroupLabel(group),
+        ...(group === seedGroup && item ? { item } : {})
+      };
+    });
 }
 
 export function HealthInfoWhatCounts({
@@ -75,36 +126,23 @@ export function HealthInfoWhatCounts({
   children?: ReactNode;
 }) {
   const headingId = useId();
-  const selected = selectFlow(config);
-  const groups = config.groups.filter(group => selected.has(group.id));
-  if (groups.length === 0) return null;
+  const levels = flowLevels(config);
+  if (levels.length === 0) return null;
 
   return (
     <section className="health-info-what-counts" aria-labelledby={headingId}>
       <h3 id={headingId}>What counts</h3>
       <div className="health-info-what-counts__flow">
-        {config.initialGroupId === 'rhythms' && (
-          <div className="health-info-what-counts__step">
-            <section className="health-info-what-counts__group">
-              <h4>Scheduled completions</h4>
-            </section>
-          </div>
-        )}
-        {groups.map((group, index) => (
-          <div className="health-info-what-counts__step" key={group.id}>
-            {(index > 0 || config.initialGroupId === 'rhythms') && (
+        {levels.map((level, index) => (
+          <div className="health-info-what-counts__step" key={`level-${index}`}>
+            {index > 0 && (
               <div className="health-info-what-counts__arrow" aria-hidden="true">↑</div>
             )}
             <section className="health-info-what-counts__group">
-              <h4>{group.label}</h4>
+              <h4>{level.label}</h4>
               <div className="health-info-what-counts__items">
-                {(selected.get(group.id) ?? []).map(item => (
-                  <FlowItem
-                    key={item.id}
-                    item={item}
-                    showExplanation={item.usesStandardWeights === false}
-                  />
-                ))}
+                {level.item && <FlowItem item={level.item} />}
+                {level.value && <strong>{level.value}</strong>}
               </div>
             </section>
           </div>

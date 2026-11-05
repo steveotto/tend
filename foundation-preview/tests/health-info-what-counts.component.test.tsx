@@ -63,23 +63,28 @@ const faithFlow: HealthRollupConfig = {
 afterEach(cleanup);
 
 describe('static Health Info content', () => {
-  it('shows the Category flow and all relationships without carousel controls', () => {
+  it('shows compact Category, Practices, and Linked Rhythms rows without individual examples', () => {
     render(<HealthInfoWhatCounts config={faithFlow} />);
 
     expect(screen.getByRole('heading', { name: 'What counts' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Rhythms' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Practices' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Category' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Linked Rhythms' })).toBeTruthy();
     expect(screen.getByText('Faith')).toBeTruthy();
-    expect(screen.getByText('Prayer')).toBeTruthy();
-    expect(screen.getByText('Scripture')).toBeTruthy();
-    expect(screen.getByText('Morning prayer')).toBeTruthy();
-    expect(screen.getByText('Scripture reading')).toBeTruthy();
+    expect(screen.queryByText('Prayer')).toBeNull();
+    expect(screen.queryByText('Scripture')).toBeNull();
+    expect(screen.queryByText('Morning prayer')).toBeNull();
+    expect(screen.queryByText('Scripture reading')).toBeNull();
+    expect(document.querySelectorAll('.health-info-what-counts__group')).toHaveLength(3);
+    expect(document.querySelectorAll('.health-info-what-counts__arrow')).toHaveLength(2);
+    expect([...document.querySelectorAll('.health-info-what-counts__group > h4')]
+      .map(heading => heading.textContent))
+      .toEqual(['Category', 'Practices', 'Linked Rhythms']);
     expect(screen.queryByRole('button')).toBeNull();
     expect(document.querySelector('.health-rollup__navigation')).toBeNull();
   });
 
-  it('opens a Foundation flow on that item and only its linked Rhythms', () => {
+  it('keeps the selected Practice identifiable and shows only its score inputs', () => {
     render(<HealthInfoWhatCounts config={{
       ...faithFlow,
       initialGroupId: 'foundations',
@@ -87,13 +92,16 @@ describe('static Health Info content', () => {
     }} />);
 
     expect(screen.getByText('Prayer')).toBeTruthy();
-    expect(screen.getByText('Morning prayer')).toBeTruthy();
-    expect(screen.getByText('Faith')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Linked Rhythms' })).toBeTruthy();
+    expect(screen.queryByText('Morning prayer')).toBeNull();
+    expect(screen.queryByText('Faith')).toBeNull();
+    expect(document.querySelectorAll('.health-info-what-counts__group')).toHaveLength(2);
+    expect(document.querySelectorAll('.health-info-what-counts__arrow')).toHaveLength(1);
     expect(screen.queryByText('Scripture')).toBeNull();
     expect(screen.queryByText('Scripture reading')).toBeNull();
   });
 
-  it('opens a Rhythm flow with scheduled completions and its linked destinations', () => {
+  it('keeps the selected Rhythm identifiable above scheduled completions only', () => {
     render(<HealthInfoWhatCounts config={{
       ...faithFlow,
       initialGroupId: 'rhythms',
@@ -102,20 +110,66 @@ describe('static Health Info content', () => {
 
     expect(screen.getByRole('heading', { name: 'Scheduled completions' })).toBeTruthy();
     expect(screen.getByText('Morning prayer')).toBeTruthy();
-    expect(screen.getByText('Prayer')).toBeTruthy();
-    expect(screen.getByText('Faith')).toBeTruthy();
+    expect(screen.queryByText('Prayer')).toBeNull();
+    expect(screen.queryByText('Faith')).toBeNull();
     expect(screen.queryByText('Scripture reading')).toBeNull();
+    expect(document.querySelectorAll('.health-info-what-counts__group')).toHaveLength(2);
+    expect(document.querySelectorAll('.health-info-what-counts__arrow')).toHaveLength(1);
   });
 
-  it('shows the Cardio run-log and weekly-goal inputs in the Foundation flow', () => {
+  it('shows concise, accurate run-log inputs in the Cardio Foundation flow', () => {
     const config = createHealthFitnessRollup('foundations', 'cardio');
     render(<HealthInfoWhatCounts config={config} />);
 
-    expect(screen.getByText('Runs → Cardio')).toBeTruthy();
-    expect(screen.getByText('Cardio uses saved run logs against weekly run and distance goals.')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Run logs' })).toBeTruthy();
     expect(screen.getByText('Cardio')).toBeTruthy();
+    expect(screen.queryByText(/Runs → Cardio/)).toBeNull();
     expect(screen.queryByText('Workouts → Strength')).toBeNull();
     expect(screen.queryByText('Weigh-ins → Weight')).toBeNull();
+  });
+
+  it.each([
+    ['strength', 'Strength'],
+    ['weight', 'Weight']
+  ] as const)('uses linked Rhythms as the %s Health input', (foundationId, label) => {
+    render(<HealthInfoWhatCounts config={createHealthFitnessRollup('foundations', foundationId)} />);
+
+    expect(screen.getByText(label)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Linked Rhythms' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Rhythms & logs' })).toBeNull();
+  });
+
+  it('places Health & Fitness, Foundations, and Rhythms & logs in scoring order', () => {
+    render(<HealthInfoWhatCounts config={createHealthFitnessRollup('category', 'health-fitness')} />);
+
+    expect([...document.querySelectorAll('.health-info-what-counts__group > h4')]
+      .map(heading => heading.textContent))
+      .toEqual(['Category', 'Foundations', 'Rhythms & logs']);
+    expect(screen.getByText('Health & Fitness')).toBeTruthy();
+    expect(screen.queryByText('Workouts → Strength')).toBeNull();
+    expect(screen.queryByText('Runs → Cardio')).toBeNull();
+  });
+
+  it.each([0, 1, 24])('keeps the category diagram at three rows with %s linked Rhythms', count => {
+    const config: HealthRollupConfig = {
+      ...faithFlow,
+      groups: faithFlow.groups.map(group => group.id === 'rhythms'
+        ? {
+            ...group,
+            items: Array.from({ length: count }, (_, index) => ({
+              id: `rhythm-${index}`,
+              label: `Synthetic Rhythm ${index + 1}`,
+              relatedItemIds: { foundations: ['prayer'], category: ['faith'] }
+            }))
+          }
+        : group)
+    };
+    render(<HealthInfoWhatCounts config={config} />);
+
+    expect(document.querySelectorAll('.health-info-what-counts__group')).toHaveLength(3);
+    expect(document.querySelectorAll('.health-info-what-counts__arrow')).toHaveLength(2);
+    expect(screen.getByRole('heading', { name: 'Linked Rhythms' })).toBeTruthy();
+    expect(screen.queryByText(/Synthetic Rhythm/)).toBeNull();
   });
 
   it.each([
