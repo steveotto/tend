@@ -72,6 +72,10 @@ const rhythmIcons: Record<string, string> = {
   'week-away-together': weekAwayTogetherIcon
 };
 
+export function hasRhythmIcon(id: string): boolean {
+  return Object.prototype.hasOwnProperty.call(rhythmIcons, id);
+}
+
 type MarriageIconProps = {
   group: 'foundations' | 'rhythms';
   id: string;

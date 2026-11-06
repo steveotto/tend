@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 type MoneyGoalDialogProps = {
   eyebrow?: string;
   title?: string;
+  titleLeadingAction?: ReactNode;
   intro?: string;
   children: ReactNode;
   closeLabel?: string;
@@ -28,6 +29,7 @@ type MoneyGoalDialogProps = {
 export function MoneyGoalDialog({
   eyebrow,
   title,
+  titleLeadingAction,
   intro,
   children,
   closeLabel,
@@ -104,7 +106,17 @@ export function MoneyGoalDialog({
           </button>
         )}
         {eyebrow && <p className="money-goal-dialog__eyebrow">{eyebrow}</p>}
-        {title && (
+        {title && titleLeadingAction ? (
+          <div className="money-goal-dialog__title-row">
+            {titleLeadingAction}
+            <h2
+              id={titleId ?? 'money-goal-dialog-title'}
+              tabIndex={initialFocusId === (titleId ?? 'money-goal-dialog-title') ? -1 : undefined}
+            >
+              {title}
+            </h2>
+          </div>
+        ) : title && (
           <h2
             id={titleId ?? 'money-goal-dialog-title'}
             tabIndex={initialFocusId === (titleId ?? 'money-goal-dialog-title') ? -1 : undefined}

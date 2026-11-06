@@ -15,6 +15,7 @@ import { foundationCategoryId, saveFoundationRhythmAssociations } from './domain
 import type { FoundationRhythmAssociationChange } from './domain/foundation-rhythm-associations.ts';
 import { selectFoundationRhythmScores } from './domain/foundation-scoring.ts';
 import {
+  aggregateCategoryHealthScores,
   selectCardioCategoryScore,
   selectCategoryHealthScore,
   selectHealthFitnessCategoryScore,
@@ -42,6 +43,7 @@ import { connectionCadences, setPersonConnectionCadence } from './domain/friends
 import { APP_DISPLAY_VERSION } from './domain/app-version.ts';
 import { resolvePersonCategory, resolvePersonCategoryGroups, setPersonCategory } from './domain/person-categories.ts';
 import {
+  areas,
   marriageRhythms,
   foundationCatalogue,
   faithRhythmSuggestionGroups,
@@ -337,7 +339,7 @@ const defaultPreviewIdentity = import.meta.env.DEV
 
 export function App({
   identity = defaultPreviewIdentity,
-  onSignOut
+  onSignOut,
 }: {
   identity?: PreviewIdentityState;
   onSignOut?: () => void | Promise<void>;
@@ -731,6 +733,9 @@ function PreviewWorkspace({
       ['health', healthFitnessCategoryScore.health]
     ]
   );
+  const overallHealthScore = aggregateCategoryHealthScores(
+    areas.map(area => categoryHealthScores.get(area.id) ?? null)
+  ).health;
   const activeRhythm = [
     ...allTodayRhythms,
     ...resolvedMarriageRhythms
@@ -2680,7 +2685,7 @@ function PreviewWorkspace({
   function finishWrite(
     resultData: PreviewData,
     allowUnrecoverableReplacement = false,
-    operation: 'save' | 'import' | 'reset' = 'save'
+    operation: 'save' | 'import' | 'reset' | 'replace' = 'save'
   ): string | null {
     const written = writeCurrentPreview(resultData, expectedRaw.current, {
       allowUnrecoverableReplacement,
@@ -2923,6 +2928,7 @@ function PreviewWorkspace({
       healthScore={healthFitnessCategoryScore}
       weightHealthScore={weightCategoryScore}
       cardioHealthScore={cardioCategoryScore}
+      overallHealthScore={overallHealthScore}
     />
   ) : null;
 
@@ -3035,6 +3041,7 @@ function PreviewWorkspace({
               <MarriageView
                 people={peopleWithPhotos}
                 peopleGroups={resolvedPeopleGroups}
+                overallHealthScore={overallHealthScore}
                 todayDate={currentDate}
                 onAddRhythm={event => openRhythmEditor(event)}
                 onAddLinkedRhythm={(foundationId, event) => openRhythmEditor(event, undefined, {
@@ -3079,6 +3086,7 @@ function PreviewWorkspace({
             ? (
               <MarriageView
                 people={peopleWithPhotos}
+                overallHealthScore={overallHealthScore}
                 categoryConfig={{
                   categoryId: 'parenting',
                   label: 'Parenting',
@@ -3133,6 +3141,7 @@ function PreviewWorkspace({
             ? (
               <MarriageView
                 people={peopleWithPhotos}
+                overallHealthScore={overallHealthScore}
                 categoryConfig={{
                   categoryId: 'faith',
                   label: 'Faith',
@@ -3422,6 +3431,25 @@ function PreviewWorkspace({
         <RhythmDetailsDialog
           key={activeRhythm.id}
           rhythm={activeRhythmForDetails!}
+          {...(activeRhythm.healthLogCapability === 'workout'
+            ? {
+                healthWorkoutSetting: (() => {
+                  const setting = previewData.strength.rhythmModes.find(item =>
+                    item.rhythmId === activeRhythm.id
+                  );
+                  return {
+                    mode: setting?.mode ?? 'recommended',
+                    ...(setting?.mode === 'specific' && setting.workoutId
+                      ? {
+                          workoutName: previewData.strength.savedWorkouts.find(workout =>
+                            workout.id === setting.workoutId
+                          )?.name ?? 'Unavailable saved workout'
+                        }
+                      : {})
+                  };
+                })()
+              }
+            : {})}
           initialView={detailsInitialView}
           datedCompletions={[]}
           completionHistoryAvailable={
@@ -3458,6 +3486,10 @@ function PreviewWorkspace({
             : {})}
           people={peopleForRhythm(activeRhythm, peopleWithPhotos)}
           foundations={foundationCatalogue}
+          relatedRhythms={scoredRhythms}
+          rhythmScores={rhythmScoreResults}
+          categoryHealthScores={categoryHealthScores}
+          archivedRhythmIds={previewData.archivedRhythmIds}
           archived={activeRhythmIsArchived}
           onOpenFoundation={foundationId => {
             setActiveRhythmId(null);

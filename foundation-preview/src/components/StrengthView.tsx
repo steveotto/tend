@@ -16,6 +16,8 @@ import { RhythmCalendarIcon } from './RhythmCalendarIcon.tsx';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
 import { SettingsGearButton } from './SettingsGearButton.tsx';
 import { formatScore } from '../domain/score-display.ts';
+import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
+import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 import { SegmentedTabs } from './SegmentedTabs.tsx';
 import type { SegmentedTab } from './SegmentedTabs.tsx';
 import {
@@ -73,6 +75,8 @@ type StrengthRhythm = {
 export type StrengthViewProps = {
   data: StrengthData;
   healthScore?: CategoryScoreSelection;
+  overallHealthScore?: number | null;
+  categoryHealthScore?: number | null;
   people?: readonly PersonPreview[];
   peopleGroups?: readonly PersonPickerGroup[];
   rhythms: readonly StrengthRhythm[];
@@ -98,6 +102,7 @@ export type StrengthViewProps = {
   onRhythmModeRequestOpened?: (requestId: number) => void;
   onRhythmModeRequestClosed?: () => void;
   foundationNavigation?: boolean;
+  healthScoringEvidence?: HealthAggregateEvidence;
 };
 
 type WorkoutsTab = 'recommended' | 'saved' | 'history';
@@ -136,6 +141,8 @@ const strengthBodyMapPaintOrder: readonly StrengthMuscleId[] = [
 export function StrengthView({
   data,
   healthScore,
+  overallHealthScore = null,
+  categoryHealthScore = null,
   people = syntheticPeople,
   peopleGroups = syntheticPersonPickerGroups,
   rhythms,
@@ -150,7 +157,8 @@ export function StrengthView({
   pendingRhythmModeRequest = null,
   onRhythmModeRequestOpened,
   onRhythmModeRequestClosed,
-  foundationNavigation = false
+  foundationNavigation = false,
+  healthScoringEvidence
 }: StrengthViewProps) {
   const [workoutsTab, setWorkoutsTab] = useState<WorkoutsTab>('recommended');
   const [visibleHistoryLimit, setVisibleHistoryLimit] = useState(10);
@@ -1018,6 +1026,10 @@ export function StrengthView({
         health={healthScore?.health ?? null}
         consistencyCaption="Consistency across eligible Strength-linked Rhythms."
         onTrackCaption="Whether eligible Strength-linked Rhythms are caught up."
+        overallHealthScore={overallHealthScore}
+        categoryHealthScore={categoryHealthScore}
+        linkedRhythmCount={rhythms.filter(item => foundationRhythmIds(item.rhythm).includes('health-strength')).length}
+        {...(healthScoringEvidence ? { scoringEvidence: healthScoringEvidence } : {})}
         compact
         summaryExplanation="Strength Health reflects eligible Strength-linked Rhythm scores. Your body, at a glance and its muscle scores and readiness remain training feedback and do not contribute."
       />

@@ -95,8 +95,8 @@ function render(ui: Parameters<typeof testingRender>[0]) {
   const trigger = result.container.querySelector('.today-plan__focus-trigger');
   if (trigger) {
     fireEvent.click(trigger);
-    const allDayOption = [...result.container.querySelectorAll('button')]
-      .find(button => button.textContent?.startsWith('Everything today'));
+    const allDayOption = [...result.container.querySelectorAll<HTMLElement>('[role="option"]')]
+      .find(option => option.textContent?.startsWith('Everything today'));
     if (allDayOption) fireEvent.click(allDayOption);
   }
   return result;

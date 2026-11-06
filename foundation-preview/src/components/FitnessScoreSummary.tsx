@@ -5,6 +5,7 @@ import { HealthScoreDetailsDialog } from './HealthScoreDetailsDialog.tsx';
 import { HealthScoreDetailsContent } from './HealthScoreDetailsContent.tsx';
 import { createHealthFitnessRollup } from './HealthRollupDiagram.tsx';
 import type { HealthRollupConfig } from './HealthRollupDiagram.tsx';
+import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 
 type FitnessScoreSummaryProps = {
   category: 'Strength' | 'Cardio' | 'Weight';
@@ -23,6 +24,11 @@ type FitnessScoreSummaryProps = {
   onSetup?: (event: MouseEvent<HTMLButtonElement>) => void;
   evidenceDetails?: ReactNode;
   rollup?: HealthRollupConfig;
+  overallHealthScore?: number | null;
+  categoryHealthScore?: number | null;
+  linkedRhythmCount?: number;
+  scoringEvidence?: HealthAggregateEvidence;
+  scoringExplanation?: ReactNode;
 };
 
 const scoreExplanations = {
@@ -55,7 +61,12 @@ export function FitnessScoreSummary({
   showSetupAction = true,
   onSetup,
   evidenceDetails,
-  rollup
+  rollup,
+  overallHealthScore = null,
+  categoryHealthScore = null,
+  linkedRhythmCount = 0,
+  scoringEvidence,
+  scoringExplanation
 }: FitnessScoreSummaryProps) {
   const [expanded, setExpanded] = useState(false);
   const detailsId = useId();
@@ -77,6 +88,67 @@ export function FitnessScoreSummary({
             : item)
         }
       : group)
+  };
+  const defaultContribution = {
+      heading: `How this ${category} Foundation contributes`,
+      highlightedGroup: 'foundations',
+      highlightedItemId: `health-${category.toLowerCase()}`,
+      scoringInfo: {
+        groupId: 'foundations',
+        triggerLabel: `About ${category} scoring`,
+        title: `${category} scoring`,
+        paragraphs: [
+          scoreExplanations[category].consistency,
+          scoreExplanations[category].onTrack
+        ]
+      },
+      overallScore: overallHealthScore,
+      categories: [{
+        id: 'health-fitness',
+        label: 'Health & Fitness',
+        score: categoryHealthScore,
+        categoryIconId: 'health'
+      }],
+      foundations: [{
+        id: `health-${category.toLowerCase()}`,
+        label: category,
+        score: health,
+        categoryLabel: 'Health & Fitness',
+        foundationIconId: `health-${category.toLowerCase()}`
+      }],
+      bottomGroupLabel: category === 'Cardio' ? 'Run logs' : 'Linked Rhythms',
+      bottomItem: {
+        id: category === 'Cardio' ? 'run-logs' : 'linked-rhythms',
+        label: category === 'Cardio'
+          ? 'Run logs'
+          : linkedRhythmCount > 0 ? 'Linked Rhythms' : 'No linked Rhythms',
+        score: null,
+        showScore: false
+      },
+      identity: {
+        name: category,
+        secondary: 'Health & Fitness',
+        icon: { kind: 'foundation', id: `health-${category.toLowerCase()}` }
+      }
+    } satisfies NonNullable<HealthRollupConfig['healthContribution']>;
+  const currentContribution = activeRollup.healthContribution ?? defaultContribution;
+  const contributionRollup: HealthRollupConfig = {
+    ...activeRollup,
+    healthContribution: {
+      ...currentContribution,
+      scoringInfo: {
+        ...(currentContribution.scoringInfo ?? {
+          groupId: 'foundations',
+          triggerLabel: `About ${category} scoring`,
+          title: `${category} scoring`,
+          paragraphs: []
+        }),
+        paragraphs: [
+          ...(summaryExplanation ? [summaryExplanation] : []),
+          ...(currentContribution.scoringInfo?.paragraphs ?? [])
+        ]
+      }
+    }
   };
   const infoButton = (
     <HealthScoreInfoButton
@@ -137,17 +209,23 @@ export function FitnessScoreSummary({
               onTrackCaption={onTrackCaption}
               consistencyDescription={scoreExplanations[category].consistency}
               onTrackDescription={scoreExplanations[category].onTrack}
-              rollup={activeRollup}
-            >
-              {summaryExplanation && <p>{summaryExplanation}</p>}
-              {category === 'Strength' && <p>Rest readiness is shown separately.</p>}
-              {evidenceDetails && (
-                <details className="fitness-score-summary__evidence">
-                  <summary>Details</summary>
-                  {evidenceDetails}
-                </details>
+              rollup={contributionRollup}
+              scoringDisclosureTitle={`How this ${category} Foundation was scored`}
+              {...(scoringEvidence ? { scoringEvidence } : {})}
+              initialContributionExpanded={false}
+              scoringExplanation={(
+                <>
+                  {summaryExplanation && <p>{summaryExplanation}</p>}
+                  {category === 'Strength' && <p>Rest readiness is shown separately.</p>}
+                  {scoringExplanation}
+                  {evidenceDetails && (
+                    <div className="fitness-score-summary__evidence">
+                      {evidenceDetails}
+                    </div>
+                  )}
+                </>
               )}
-            </HealthScoreDetailsContent>
+            />
           </div>
         </HealthScoreDetailsDialog>
       )}

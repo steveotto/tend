@@ -15,7 +15,7 @@ export function RhythmScoreCircle({
   const available = state === 'scored' && score !== null;
   const displayScore = available ? formatScore(score) : null;
   const valueText = available
-    ? `${displayScore}%`
+    ? `${score} out of 100`
     : state === 'unscored'
       ? `Unscored because ${explanation ?? 'there are no eligible due occurrences'}`
       : 'Score unavailable';
@@ -50,7 +50,7 @@ export function RhythmScoreCircle({
           )}
         </svg>
         <span className="rhythm-score-circle__value" aria-hidden="true">
-          {displayScore === null ? '—' : `${displayScore}%`}
+          {displayScore ?? '—'}
         </span>
     </span>
   );

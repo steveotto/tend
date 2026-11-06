@@ -1,6 +1,6 @@
 import { useId, useRef } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
-import { HealthScoreInfoButton, HealthScoreMeasures } from './HealthScoreBreakdown.tsx';
+import { HealthScoreInfoButton, HealthScoreMeasures, HealthScoreMeter } from './HealthScoreBreakdown.tsx';
 import { formatScore } from '../domain/score-display.ts';
 import { HealthScoreDetailsDialog } from './HealthScoreDetailsDialog.tsx';
 import { HealthScoreDetailsContent } from './HealthScoreDetailsContent.tsx';
@@ -14,10 +14,13 @@ type HealthScoreSummaryProps = {
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
   children: ReactNode;
+  summaryContent?: ReactNode;
   className?: string;
   ariaLabel?: string;
   infoLabel?: string;
   detailsLabel?: string;
+  showMeasures?: boolean;
+  showHealthMeter?: boolean;
   consistencyDetailCaption?: string;
   onTrackDetailCaption?: string;
   consistencyDescription?: string;
@@ -33,10 +36,13 @@ export function HealthScoreSummary({
   expanded,
   onExpandedChange,
   children,
+  summaryContent,
   className = '',
   ariaLabel,
   infoLabel = title,
   detailsLabel = `${title} scoring explanation`,
+  showMeasures = true,
+  showHealthMeter = false,
   consistencyDetailCaption = 'How regularly you show up.',
   onTrackDetailCaption = 'How caught up you are.',
   consistencyDescription,
@@ -85,15 +91,20 @@ export function HealthScoreSummary({
         />
       </div>
 
-      <HealthScoreMeasures
-        healthScore={score}
-        healthLabel={title}
-        consistency={{ score: consistency, state: consistency === null ? 'unavailable' : 'scored' }}
-        onTrack={{ score: onTrack, state: onTrack === null ? 'unavailable' : 'scored' }}
-        consistencyCaption={consistencyDetailCaption}
-        onTrackCaption={onTrackDetailCaption}
-        showHealthMeter={false}
-      />
+      {showMeasures ? (
+        <HealthScoreMeasures
+          healthScore={score}
+          healthLabel={title}
+          consistency={{ score: consistency, state: consistency === null ? 'unavailable' : 'scored' }}
+          onTrack={{ score: onTrack, state: onTrack === null ? 'unavailable' : 'scored' }}
+          consistencyCaption={consistencyDetailCaption}
+          onTrackCaption={onTrackDetailCaption}
+          showHealthMeter={showHealthMeter}
+        />
+      ) : showHealthMeter ? (
+        <HealthScoreMeter score={score} label={`${title} progress`} />
+      ) : null}
+      {summaryContent}
       {expanded && (
         <HealthScoreDetailsDialog title={`${title} details`} onClose={closeDetails}>
           <div id={detailsId} className="category-health-summary__details" role="region" aria-label={detailsLabel}>

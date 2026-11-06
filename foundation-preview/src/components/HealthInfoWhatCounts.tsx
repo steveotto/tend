@@ -1,8 +1,15 @@
-import { useId } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { CategoryHealthBadge } from './Cards.tsx';
 import { AreaIcon } from './AreaIcon.tsx';
 import type { HealthRollupConfig, HealthRollupGroup, HealthRollupItem } from './HealthRollupDiagram.tsx';
 import { MarriageIcon } from './MarriageIcon.tsx';
+import { RhythmRepeatIcon } from './RhythmMetadata.tsx';
+import { HealthScoreInfoButton } from './HealthScoreBreakdown.tsx';
+import { HealthDetailsExpandableHeader } from './HealthDetailsExpandableHeader.tsx';
+import { HealthScoreDetailsDialog, useHealthDetailsNestedDialog } from './HealthScoreDetailsDialog.tsx';
+import type { RhythmContributionItem } from '../domain/rhythm-contribution.ts';
+import type { HealthContributionDiagram } from '../domain/rhythm-contribution.ts';
 
 function connectedItems(
   group: HealthRollupGroup,
@@ -57,6 +64,184 @@ function FlowItem({ item }: { item: HealthRollupItem }) {
       )}
       <strong>{item.label}</strong>
     </div>
+  );
+}
+
+function ContributionItem({
+  item,
+  kind,
+  current
+}: {
+  item: RhythmContributionItem;
+  kind: 'overall' | 'category' | 'foundation' | 'rhythm' | 'linked-rhythms';
+  current: boolean;
+}) {
+  const scoreLabel = item.score === null
+    ? `${item.label} score unavailable`
+    : `${item.label} score ${Math.round(item.score)} out of 100`;
+  return (
+    <div className={`health-info-what-counts__contribution-item${current ? ' is-current' : ''}`}>
+      {item.categoryIconId && <AreaIcon id={item.categoryIconId} />}
+      {item.foundationIconId && (
+        <MarriageIcon group="foundations" id={item.foundationIconId} />
+      )}
+      {(kind === 'rhythm' || kind === 'linked-rhythms') && (
+        <span className="health-info-what-counts__rhythm-icon" aria-hidden="true">
+          <RhythmRepeatIcon />
+        </span>
+      )}
+      {kind === 'overall' && (
+        <span className="health-info-what-counts__overall-icon" aria-hidden="true">♥</span>
+      )}
+      <span className="health-info-what-counts__contribution-copy">
+        <strong>{item.label}</strong>
+        {current && <span className="visually-hidden">Current item</span>}
+        {item.categoryLabel && <span>{item.categoryLabel}</span>}
+      </span>
+      {item.showScore !== false && (
+        <CategoryHealthBadge
+          score={item.score}
+          appearance="rounded"
+          accessibleLabel={scoreLabel}
+        />
+      )}
+    </div>
+  );
+}
+
+function ContributionFlow({
+  diagram,
+  children,
+  initiallyExpanded
+}: {
+  diagram: HealthContributionDiagram;
+  children?: ReactNode;
+  initiallyExpanded: boolean;
+}) {
+  const headingId = useId();
+  const contentId = useId();
+  const scoringInfoId = useId();
+  const [expanded, setExpanded] = useState(initiallyExpanded);
+  const [scoringInfoOpen, setScoringInfoOpen] = useState(false);
+  const scoringInfoButtonRef = useRef<HTMLButtonElement>(null);
+  const setParentDialogInert = useHealthDetailsNestedDialog();
+  const scoringInfo = diagram.scoringInfo;
+  const groups = [
+    {
+      id: 'overall',
+      label: 'Overall Health',
+      items: [{ id: 'overall-health', label: 'Your overall Health', score: diagram.overallScore }],
+      kind: 'overall' as const,
+      emptyLabel: ''
+    },
+    {
+      id: 'categories',
+      label: 'Categories',
+      items: diagram.categories,
+      kind: 'category' as const,
+      emptyLabel: diagram.categories.some(item => item.label.includes('(unresolved)'))
+        || diagram.foundations.some(item => item.label.includes('(unresolved)'))
+        ? 'Category link unavailable for unresolved Foundations.'
+        : 'No linked Categories.'
+    },
+    {
+      id: 'foundations',
+      label: 'Practices & Foundations',
+      items: diagram.foundations,
+      kind: 'foundation' as const,
+      emptyLabel: 'No linked Practices or Foundations contribute to scoring.'
+    },
+    {
+      id: diagram.highlightedGroup === 'rhythm' ? 'rhythm' : 'linked-rhythms',
+      label: diagram.bottomGroupLabel,
+      items: [diagram.bottomItem],
+      kind: diagram.highlightedGroup === 'rhythm' ? 'rhythm' as const : 'linked-rhythms' as const,
+      emptyLabel: ''
+    }
+  ];
+
+  return (
+    <section
+      className="health-info-what-counts health-info-what-counts--rhythm"
+      aria-labelledby={headingId}
+    >
+      <HealthDetailsExpandableHeader
+        id={headingId}
+        contentId={contentId}
+        title={diagram.heading}
+        expanded={expanded}
+        onToggle={() => setExpanded(value => !value)}
+      />
+      <div id={contentId} hidden={!expanded}>
+        <div className="health-info-what-counts__contribution-flow">
+          {groups.map((group, index) => (
+            <div className="health-info-what-counts__contribution-step" key={group.id}>
+              {index > 0 && (
+                <div className="health-info-what-counts__contribution-arrow" aria-hidden="true">↑</div>
+              )}
+              <section className={`health-info-what-counts__contribution-group health-info-what-counts__contribution-group--${group.id}${group.id === diagram.highlightedGroup ? ' is-featured' : ''}`}>
+                <div className="health-info-what-counts__contribution-heading">
+                  <h4>{group.label}</h4>
+                  {scoringInfo?.groupId === group.id && (
+                    <HealthScoreInfoButton
+                      ref={scoringInfoButtonRef}
+                      label={scoringInfo.triggerLabel}
+                      expanded={scoringInfoOpen}
+                      controls={scoringInfoId}
+                      onClick={() => {
+                        setScoringInfoOpen(true);
+                        setParentDialogInert(true);
+                      }}
+                    />
+                  )}
+                </div>
+                <div className="health-info-what-counts__contribution-items">
+                  {group.items.map(item => (
+                    <ContributionItem
+                      key={item.id}
+                      item={item}
+                      kind={group.kind}
+                      current={group.id === diagram.highlightedGroup && item.id === diagram.highlightedItemId}
+                    />
+                  ))}
+                  {group.items.length === 0 && (
+                    <p className="health-info-what-counts__contribution-empty">{group.emptyLabel}</p>
+                  )}
+                </div>
+              </section>
+            </div>
+          ))}
+        </div>
+      </div>
+      {scoringInfoOpen && scoringInfo && (
+        <HealthScoreDetailsDialog
+          title={scoringInfo.title}
+          closeLabel="Close scoring explanation"
+          className="health-scoring-info-dialog"
+          phoneFullScreen={false}
+          onClose={() => {
+            setScoringInfoOpen(false);
+            setParentDialogInert(false);
+            requestAnimationFrame(() => scoringInfoButtonRef.current?.focus({ preventScroll: true }));
+          }}
+        >
+          <div
+            id={scoringInfoId}
+            className="health-scoring-info-dialog__content"
+            role="region"
+            aria-label={`${scoringInfo.title} details`}
+          >
+            {scoringInfo.coverage && (
+              <p className="health-scoring-info-dialog__coverage">{scoringInfo.coverage}</p>
+            )}
+            {scoringInfo.paragraphs?.map((paragraph, index) => (
+              <p key={`scoring-info-${index}`}>{paragraph}</p>
+            ))}
+            {children}
+          </div>
+        </HealthScoreDetailsDialog>
+      )}
+    </section>
   );
 }
 
@@ -120,12 +305,42 @@ function flowLevels(config: HealthRollupConfig): readonly FlowLevel[] {
 
 export function HealthInfoWhatCounts({
   config,
-  children
+  children,
+  initialContributionExpanded = true
 }: {
   config: HealthRollupConfig;
   children?: ReactNode;
+  initialContributionExpanded?: boolean;
 }) {
   const headingId = useId();
+  const diagram = config.healthContribution ?? (config.rhythmContribution
+    ? {
+        heading: 'How this Rhythm contributes',
+        highlightedGroup: 'rhythm' as const,
+        highlightedItemId: config.rhythmContribution.rhythm.id,
+        overallScore: config.rhythmContribution.overallScore,
+        categories: config.rhythmContribution.categories,
+        foundations: config.rhythmContribution.foundations,
+        bottomGroupLabel: 'Rhythm',
+        bottomItem: config.rhythmContribution.rhythm,
+        identity: {
+          name: config.rhythmContribution.rhythm.label,
+          icon: { kind: 'rhythm' as const }
+        },
+        ...(config.scoringInfo ? { scoringInfo: config.scoringInfo } : {})
+      }
+    : undefined);
+  if (diagram) {
+    return (
+      <ContributionFlow
+        key={`${diagram.highlightedGroup}:${diagram.identity.name}`}
+        diagram={diagram}
+        initiallyExpanded={initialContributionExpanded}
+      >
+        {children}
+      </ContributionFlow>
+    );
+  }
   const levels = flowLevels(config);
   if (levels.length === 0) return null;
 

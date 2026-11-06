@@ -5,6 +5,7 @@ import { CatalogApp } from '../src/CatalogApp.tsx';
 import { AreaIcon } from '../src/components/AreaIcon.tsx';
 import marriageCategorySvg from '../src/assets/tend-approved-icons/categories/marriage.svg?raw';
 import { CategoryHealthBadge, FoundationCard, FoundationProgress, GoalCard, RhythmCard, ScoreMeter } from '../src/components/Cards.tsx';
+import { FoundationDetailHeader } from '../src/components/FoundationDetailHeader.tsx';
 import { MarriageIcon } from '../src/components/MarriageIcon.tsx';
 import { RhythmCategoryBadges } from '../src/components/RhythmCategoryBadges.tsx';
 import { historyButtonName } from './history-button-name.ts';
@@ -724,14 +725,18 @@ describe('shared preview components', () => {
     const card = screen.getByRole('article', { name: todayRhythms[0]!.title });
     const header = card.querySelector('.today-rhythm-details__header');
     const actions = card.querySelector('.today-rhythm-details__actions');
+    const content = card.querySelector('.today-rhythm-details__content');
     expect(within(card).getByRole('heading', { name: todayRhythms[0]!.title, level: 3 })).toBeTruthy();
-    expect(actions?.parentElement).toBe(header);
-    expect(card.querySelector('.today-rhythm-details__content')?.contains(actions)).toBe(false);
+    expect(actions?.parentElement).toBe(content);
+    expect(actions?.classList.contains('today-rhythm-details__actions--inline')).toBe(true);
+    expect(header?.contains(actions)).toBe(false);
     expect(within(card).getByText(todayRhythms[0]!.description!)).toBeTruthy();
     expect(within(card).getByRole('group', { name: `Associations for ${todayRhythms[0]!.title}` })).toBeTruthy();
     expect(within(card).getByRole('button', { name: `Tend ${todayRhythms[0]!.title}` })).toBeTruthy();
     expect(within(card).getByRole('button', { name: historyButtonName(`View scores and history for ${todayRhythms[0]!.title}`) })).toBeTruthy();
     expect(within(card).getByRole('button', { name: `Edit ${todayRhythms[0]!.title}` })).toBeTruthy();
+    expect(actions?.firstElementChild?.classList.contains('today-rhythm-details__history-button')).toBe(true);
+    expect(actions?.children[1]?.classList.contains('rhythm-card__tend')).toBe(true);
     expect(within(card).queryByRole('button', { name: 'Close details' })).toBeNull();
     expect(within(card).queryByRole('button', { name: /^Back/ })).toBeNull();
 
@@ -815,7 +820,7 @@ describe('shared preview components', () => {
     }
   });
 
-  it('keeps the action column in the title row when description and associations are absent', () => {
+  it('keeps the bottom action row when description and associations are absent', () => {
     const rhythm = {
       id: 'sparse-layout-test',
       title: 'Simple Rhythm Test',
@@ -841,10 +846,13 @@ describe('shared preview components', () => {
     const header = card.querySelector('.today-rhythm-details__header');
     const actions = card.querySelector('.today-rhythm-details__actions');
     const body = card.querySelector('.today-rhythm-details__content');
-    expect(actions?.parentElement).toBe(header);
+    expect(actions?.parentElement).toBe(body);
+    expect(actions?.classList.contains('today-rhythm-details__actions--inline')).toBe(true);
+    expect(actions?.classList.contains('today-rhythm-details__actions--inline-with-associations')).toBe(false);
+    expect(header?.contains(actions)).toBe(false);
     expect(within(card).getByRole('button', { name: `Tend ${rhythm.title}` })).toBeTruthy();
     expect(within(card).getByRole('button', { name: historyButtonName(`View scores and history for ${rhythm.title}`) })).toBeTruthy();
-    expect(body).toBeNull();
+    expect(body).toBeTruthy();
   });
 
   it('wraps long inline copy, omits empty associations, and gives repeated cards unique heading IDs', () => {
@@ -880,7 +888,8 @@ describe('shared preview components', () => {
     expect(within(cards[0]!).getByText(rhythm.description)).toBeTruthy();
     expect(within(cards[0]!).queryByRole('group', { name: /People associated/ })).toBeNull();
     expect(within(cards[0]!).queryByRole('group', { name: 'Associated categories' })).toBeNull();
-    expect(cards[1]?.querySelector('.today-rhythm-details__summary')).toBeNull();
+    expect(cards[1]?.querySelector('.today-rhythm-details__description')).toBeNull();
+    expect(cards[1]?.querySelector('.today-rhythm-details__actions--inline')).toBeTruthy();
     expect(within(cards[2]!).queryByText(rhythm.description)).toBeNull();
     expect(within(cards[2]!).getByRole('group', {
       name: `Associations for ${rhythm.title}`
@@ -1083,11 +1092,11 @@ describe('shared preview components', () => {
       .toBeTruthy();
   });
 
-  it('places inline descriptions beside actions and associations across the full card body', () => {
+  it('orders the shared inline card as title, full-width description, associations, actions, and footer', () => {
     const rhythm = {
       ...todayRhythms[0]!,
       id: 'full-width-associations',
-      title: 'A deliberately long title that wraps naturally beside the action stack',
+      title: 'A deliberately long title that wraps naturally without colliding with Edit',
       description: 'A long description wraps within the upper content area without narrowing the associations below.',
       categoryIds: ['marriage'] as const,
       primaryFoundationId: 'connection'
@@ -1100,34 +1109,53 @@ describe('shared preview components', () => {
       onOpenCategory: () => undefined,
       foundations: marriageFoundations,
       onOpenFoundation: () => undefined,
+      onEdit: () => undefined,
       onTend: () => undefined,
+      onUndo: () => undefined,
       onClose: () => undefined
     };
     const { rerender } = render(<RhythmDetailsDialog {...props} />);
     const card = screen.getByRole('article', { name: rhythm.title });
     const header = card.querySelector('.today-rhythm-details__header');
     const titleGroup = card.querySelector('.today-rhythm-details__title-group');
+    const titleCopy = card.querySelector('.today-rhythm-details__title-copy');
     const actions = card.querySelector('.today-rhythm-details__actions');
     const body = card.querySelector('.today-rhythm-details__body');
     const content = card.querySelector('.today-rhythm-details__content');
     const associations = within(card).getByRole('group', { name: `Associations for ${rhythm.title}` });
     const footer = card.querySelector('.today-rhythm-details__footer');
 
-    expect(within(titleGroup as HTMLElement).getByText(rhythm.description)).toBeTruthy();
-    expect(actions?.parentElement).toBe(header);
+    expect(within(card).getByText(rhythm.description).parentElement).toBe(titleCopy);
+    expect(titleCopy?.parentElement).toBe(titleGroup);
+    expect(actions?.parentElement).toBe(content);
     expect(body?.previousElementSibling).toBe(header);
     expect(content?.parentElement).toBe(body);
     expect(associations.parentElement).toBe(content);
     expect(content?.querySelector('.today-rhythm-details__summary')).toBeNull();
     expect(content?.nextElementSibling).toBe(footer);
-    expect(actions!.compareDocumentPosition(associations) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(content?.firstElementChild).toBe(associations);
+    expect(actions?.classList.contains('today-rhythm-details__actions--inline')).toBe(true);
+    expect(actions?.classList.contains('today-rhythm-details__actions--inline-with-associations')).toBe(true);
+    expect(associations.compareDocumentPosition(actions!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(associations).getAllByRole('button').length).toBeGreaterThan(2);
     expect(within(card).getByRole('button', { name: `Tend ${rhythm.title}` })).toBeTruthy();
+    expect(within(card).getByRole('button', {
+      name: historyButtonName(`View scores and history for ${rhythm.title}`)
+    })).toBeTruthy();
+    expect(within(card).getByRole('button', { name: `Edit ${rhythm.title}` }).parentElement).toBe(header);
 
     rerender(<RhythmDetailsDialog {...props} archived />);
     expect(screen.queryByRole('button', { name: `Tend ${rhythm.title}` })).toBeNull();
     expect(within(screen.getByRole('article', { name: rhythm.title }))
       .getByRole('group', { name: `Associations for ${rhythm.title}` })).toBeTruthy();
+
+    rerender(<RhythmDetailsDialog {...props} completed />);
+    const completedCard = screen.getByRole('article', { name: rhythm.title });
+    expect(completedCard.querySelector('.today-rhythm-details__actions--inline')?.parentElement)
+      .toBe(completedCard.querySelector('.today-rhythm-details__content'));
+    expect(within(completedCard).getByRole('button', {
+      name: `Undo completion for ${rhythm.title}`
+    })).toBeTruthy();
   });
 
   it('keeps the quiet edit control beside short and long titles while Close stays separate', () => {
@@ -1435,19 +1463,64 @@ describe('shared preview components', () => {
   });
 
   it('uses a color-coded rounded health badge for available scores and a neutral dash when unavailable', () => {
-    const { rerender, container } = render(<CategoryHealthBadge score={30} />);
+    const { rerender, container } = render(<CategoryHealthBadge score={30} appearance="rounded" />);
     let badge = container.querySelector('.ma-score');
     expect(badge?.textContent).toBe('30');
     expect(badge?.classList.contains('red')).toBe(true);
+    expect(badge?.classList.contains('category-health-badge')).toBe(true);
 
-    rerender(<CategoryHealthBadge score={36.25} />);
+    rerender(<CategoryHealthBadge score={36.25} appearance="rounded" />);
     badge = container.querySelector('.ma-score');
     expect(badge?.textContent).toBe('36');
 
-    rerender(<CategoryHealthBadge score={null} />);
+    rerender(<CategoryHealthBadge score={null} appearance="rounded" />);
     badge = container.querySelector('.ma-score');
     expect(badge?.textContent).toBe('—');
     expect(badge?.classList.contains('neutral')).toBe(true);
+  });
+
+  it('places Community 23 and unavailable Sabbath badges beside their titles and Info actions', () => {
+    const community = faithPractices.find(item => item.id === 'faith-community')!;
+    const sabbath = faithPractices.find(item => item.id === 'faith-sabbath')!;
+    const { container } = render(
+      <>
+        <FoundationDetailHeader
+          foundation={community}
+          headingId="community-title"
+          score={23}
+          scoreLabel="Community Practice Health"
+          scoreAction={<button type="button" aria-label="Show Community Health details">Info</button>}
+        />
+        <FoundationDetailHeader
+          foundation={sabbath}
+          headingId="sabbath-title"
+          score={null}
+          scoreLabel="Sabbath Practice Health"
+          scoreAction={<button type="button" aria-label="Show Sabbath Health details">Info</button>}
+        />
+      </>
+    );
+
+    const [communityHeader, sabbathHeader] = container.querySelectorAll('.foundation-detail-header');
+    expect(within(communityHeader as HTMLElement).getByRole('heading', { name: 'Community' })).toBeTruthy();
+    const communityBadge = within(communityHeader as HTMLElement).getByRole('img', {
+      name: 'Community Practice Health 23 out of 100'
+    });
+    expect(communityBadge.textContent).toBe('23');
+    expect(communityBadge.classList.contains('category-health-badge')).toBe(true);
+    expect(communityBadge.classList.contains('red')).toBe(true);
+    expect(within(communityHeader as HTMLElement).getByRole('button', {
+      name: 'Show Community Health details'
+    })).toBeTruthy();
+    expect(communityHeader?.querySelector('.foundation-detail-header__actions')?.children)
+      .toHaveLength(2);
+    expect(within(sabbathHeader as HTMLElement).getByRole('img', {
+      name: 'Sabbath Practice Health score unavailable'
+    }).textContent).toBe('—');
+    expect(sabbathHeader?.querySelector('.category-health-badge.neutral')).toBeTruthy();
+    expect(within(sabbathHeader as HTMLElement).getByRole('button', {
+      name: 'Show Sabbath Health details'
+    })).toBeTruthy();
   });
 
   it('formats a fractional shared Score/Chart button to a whole number and keeps the full-precision tone', () => {

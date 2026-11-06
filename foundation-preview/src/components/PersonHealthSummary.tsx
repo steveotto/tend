@@ -1,6 +1,14 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import type { HealthMeasureAggregate } from '../domain/health-scoring.ts';
+import { formatScore } from '../domain/score-display.ts';
+import { scoreTone } from '../domain/score-tone.ts';
 import { HealthScoreSummary } from './HealthScoreSummary.tsx';
+
+export type PersonHealthComponentScore = {
+  label: string;
+  score: number | null;
+};
 
 type PersonHealthSummaryProps = {
   title: string;
@@ -14,6 +22,9 @@ type PersonHealthSummaryProps = {
   unscoredCount?: number;
   coverageLabel?: string;
   emptyMessage?: string;
+  showMeasures?: boolean;
+  showHealthMeter?: boolean;
+  summaryContent?: ReactNode;
 };
 
 export function PersonHealthSummary({
@@ -27,7 +38,10 @@ export function PersonHealthSummary({
   archivedCount = 0,
   unscoredCount = 0,
   coverageLabel,
-  emptyMessage
+  emptyMessage,
+  showMeasures = true,
+  showHealthMeter = false,
+  summaryContent
 }: PersonHealthSummaryProps) {
   const [expanded, setExpanded] = useState(false);
   const coverage = coverageLabel ?? (totalCount === 0
@@ -47,6 +61,9 @@ export function PersonHealthSummary({
       coverage={coverage}
       expanded={expanded}
       onExpandedChange={setExpanded}
+      showMeasures={showMeasures}
+      showHealthMeter={showHealthMeter}
+      summaryContent={summaryContent}
       consistencyDescription={`The average Consistency score of eligible ${pluralTerm}.`}
       onTrackDescription={`The average On Track score of eligible ${pluralTerm}.`}
     >
@@ -77,5 +94,35 @@ export function PersonHealthSummary({
         </p>
       )}
     </HealthScoreSummary>
+  );
+}
+
+export function PersonHealthComponentScores({
+  values
+}: {
+  values: readonly PersonHealthComponentScore[];
+}) {
+  return (
+    <div className="person-health-component-scores" role="group" aria-label="Health by area">
+      {values.map(({ label, score }) => {
+        const value = score !== null && Number.isFinite(score) ? score : null;
+        const available = value !== null;
+        return (
+          <div className={`person-health-component-score ${scoreTone(value)}`} key={label}>
+            <span
+              role={available ? 'meter' : 'img'}
+              aria-label={available ? `${label} Health score` : `${label} Health score: unavailable`}
+              aria-valuemin={available ? 0 : undefined}
+              aria-valuemax={available ? 100 : undefined}
+              aria-valuenow={value ?? undefined}
+              aria-valuetext={value === null ? undefined : `${formatScore(value)} out of 100`}
+            >
+              {formatScore(value)}
+            </span>
+            <span aria-hidden="true">{label}</span>
+          </div>
+        );
+      })}
+    </div>
   );
 }

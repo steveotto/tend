@@ -54,11 +54,18 @@ describe('Weight preview presentation', () => {
 
     await user.click(screen.getByRole('button', { name: 'Show Weight Health scoring details' }));
     const dialog = screen.getByRole('dialog', { name: 'Weight Health details' });
-    expect(within(dialog).getByText(/75%/)).toBeTruthy();
-    expect(within(dialog).getByText(
+    const scoringToggle = within(dialog).getByRole('button', { name: 'How this Weight Foundation was scored' });
+    expect(scoringToggle.getAttribute('aria-expanded')).toBe('false');
+    await user.click(scoringToggle);
+    expect(within(dialog).getByLabelText('75% times 80 equals 60 points')).toBeTruthy();
+    expect(within(dialog).getByLabelText('25% times 40 equals 10 points')).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'How this Weight Foundation contributes' }));
+    await user.click(within(dialog).getByRole('button', { name: 'About Weight scoring' }));
+    const scoringDialog = screen.getByRole('dialog', { name: 'Weight scoring' });
+    expect(within(scoringDialog).getByText(
       'Weight Health reflects scheduled weigh-in Rhythms. Recorded weight, distance from the goal path, and the separate Goal Progress score do not affect it.'
     )).toBeTruthy();
-    expect(within(dialog).getByText(/Goal Progress score do not affect it/)).toBeTruthy();
+    expect(within(scoringDialog).getByText(/Goal Progress score do not affect it/)).toBeTruthy();
   });
 
   it('preserves a valid zero measure beside unavailable Weight Health values', () => {

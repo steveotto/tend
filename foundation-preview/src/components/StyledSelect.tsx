@@ -4,6 +4,7 @@ import type { CSSProperties, KeyboardEvent } from 'react';
 export type StyledSelectOption<Value extends string> = {
   value: Value;
   label: string;
+  description?: string;
   group?: string;
   disabled?: boolean;
 };
@@ -17,6 +18,11 @@ type StyledSelectProps<Value extends string> = {
   describedBy?: string | undefined;
   invalid?: boolean | undefined;
   disabled?: boolean | undefined;
+  containerClassName?: string | undefined;
+  triggerClassName?: string | undefined;
+  triggerAriaLabel?: string | undefined;
+  sizeTriggerToOptions?: boolean | undefined;
+  popoverMinWidth?: number | undefined;
   onChange: (value: Value) => void;
 };
 
@@ -36,6 +42,11 @@ export function StyledSelect<Value extends string>({
   describedBy,
   invalid = false,
   disabled = false,
+  containerClassName,
+  triggerClassName,
+  triggerAriaLabel,
+  sizeTriggerToOptions = false,
+  popoverMinWidth = 280,
   onChange
 }: StyledSelectProps<Value>) {
   const generatedId = useId();
@@ -73,8 +84,9 @@ export function StyledSelect<Value extends string>({
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const viewportPadding = 12;
+    const minPopoverWidth = Math.min(popoverMinWidth, window.innerWidth - viewportPadding * 2);
     const width = Math.min(
-      Math.max(rect.width, Math.min(280, window.innerWidth - viewportPadding * 2)),
+      Math.max(rect.width, minPopoverWidth),
       window.innerWidth - viewportPadding * 2
     );
     const left = Math.min(
@@ -204,15 +216,17 @@ export function StyledSelect<Value extends string>({
   useEffect(() => () => window.clearTimeout(typeaheadTimerRef.current), []);
 
   return (
-    <div className="rhythm-select" ref={containerRef}>
+    <div className={['rhythm-select', containerClassName].filter(Boolean).join(' ')} ref={containerRef}>
       <button
         ref={triggerRef}
         id={id}
         type="button"
-        className="rhythm-select__trigger"
+        className={['rhythm-select__trigger', sizeTriggerToOptions && 'rhythm-select__trigger--size-to-options', triggerClassName]
+          .filter(Boolean)
+          .join(' ')}
         disabled={disabled}
         role="combobox"
-        aria-label={`${label}: ${selectedOption?.label ?? placeholder}`}
+        aria-label={triggerAriaLabel ?? `${label}: ${selectedOption?.label ?? placeholder}`}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={`${id}-listbox`}
@@ -249,6 +263,11 @@ export function StyledSelect<Value extends string>({
         }}
       >
         <span>{selectedOption?.label ?? placeholder}</span>
+        {sizeTriggerToOptions && (
+          <span className="rhythm-select__trigger-sizer" aria-hidden="true">
+            {options.map(option => <span key={option.value}>{option.label}</span>)}
+          </span>
+        )}
         <svg viewBox="0 0 20 20" aria-hidden="true">
           <path d="m5 7.5 5 5 5-5" />
         </svg>
@@ -275,7 +294,10 @@ export function StyledSelect<Value extends string>({
                 onFocus={() => setActiveIndex(index)}
                 onClick={() => selectOption(index)}
               >
-                <span>{option.label}</span>
+                <span className="rhythm-select__option-copy">
+                  <span>{option.label}</span>
+                  {option.description && <small>{option.description}</small>}
+                </span>
                 {value === option.value && (
                   <svg viewBox="0 0 20 20" aria-hidden="true">
                     <path d="m4 10 4 4 8-8" />

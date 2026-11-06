@@ -539,14 +539,24 @@ describe('Strength preview presentation', () => {
     expect(dialog.classList.contains('dialog--phone-fullscreen')).toBe(false);
     const explanation = within(dialog).getByRole('region', { name: 'Strength Health scoring details' });
     expect(within(explanation).getByRole('img', { name: 'Strength Health: Not enough data' })).toBeTruthy();
-    expect(explanation.querySelector('.health-score-measures')).toBeNull();
-    expect([...explanation.querySelectorAll('.rhythm-history-view__health-weight-score')]
-      .map(value => value.textContent)).toEqual(['—', '—']);
-    expect(within(explanation).getByText(/Strength Health reflects eligible Strength-linked Rhythm scores/)).toBeTruthy();
+    const breakdown = within(explanation).getByRole('region', { name: 'Strength Health scoring details score summary' });
+    expect(within(breakdown).getByRole('img', { name: 'Consistency: Score unavailable' })).toBeTruthy();
+    expect(within(breakdown).getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
+    expect(breakdown.querySelector('.rhythm-history-view__health-weight-score')).toBeNull();
+    const scoringToggle = within(explanation)
+      .getByRole('button', { name: 'How this Strength Foundation was scored' });
+    expect(scoringToggle.getAttribute('aria-expanded')).toBe('false');
+    await user.click(scoringToggle);
     expect(within(explanation).getByRole('heading', { name: 'How Health is calculated' })).toBeTruthy();
     expect(within(explanation).getByText('75%')).toBeTruthy();
     expect(within(explanation).getByText('25%')).toBeTruthy();
-    expect(within(explanation).getByRole('heading', { name: 'What counts' })).toBeTruthy();
+    expect(within(explanation).getByRole('heading', { name: 'How this Strength Foundation contributes' })).toBeTruthy();
+    await user.click(within(explanation).getByRole('button', { name: 'How this Strength Foundation contributes' }));
+    expect(within(explanation).getByRole('heading', { name: 'Linked Rhythms' })).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'About Strength scoring' }));
+    const scoringDialog = screen.getByRole('dialog', { name: 'Strength scoring' });
+    expect(within(scoringDialog).getByText(/Strength Health reflects eligible Strength-linked Rhythm scores/)).toBeTruthy();
+    await user.click(within(scoringDialog).getByRole('button', { name: 'Close scoring explanation' }));
     await user.click(within(dialog).getByRole('button', { name: 'Close Health details' }));
 
     const settingsButtons = screen.getAllByRole('button', { name: 'Strength settings' });
@@ -572,9 +582,10 @@ describe('Strength preview presentation', () => {
     const details = screen.getByRole('region', { name: 'Strength Health scoring details' });
     const scores = within(details).getByRole('region', { name: 'Strength Health scoring details score summary' });
     expect(within(scores).getByRole('meter', { name: 'Strength Health score' }).getAttribute('aria-valuenow')).toBe('81.5');
-    expect(scores.querySelector('.health-score-measures')).toBeNull();
-    expect([...details.querySelectorAll('.rhythm-history-view__health-weight-score')]
-      .map(value => value.textContent)).toEqual(['75%', '100%']);
+    expect(within(scores).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('75');
+    expect(within(scores).getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('100');
+    expect(scores.querySelector('.rhythm-history-view__health-weight-score')).toBeNull();
+    await user.click(within(details).getByRole('button', { name: 'How this Strength Foundation was scored' }));
     expect(within(details).getByRole('heading', { name: 'How Health is calculated' })).toBeTruthy();
   });
 

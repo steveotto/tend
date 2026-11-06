@@ -86,6 +86,7 @@ export type OnTrackZeroScoreSpan = {
   startDate: string;
   endDate: string;
   occurrenceCount: number;
+  recentOccurrenceDates: readonly string[];
 };
 
 export type OnTrackScheduleChange = {
@@ -613,9 +614,11 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
         const repeatedZeroScoreSpans: OnTrackZeroScoreSpan[] = [];
         const scheduleChanges: OnTrackScheduleChange[] = [];
         const occurrences: OnTrackOccurrence[] = [];
+        const recentHistoryStartDate = addCalendarDays(input.asOfDate, -29);
         let zeroScoreSpanStart: string | null = null;
         let zeroScoreSpanEnd: string | null = null;
         let zeroScoreSpanCount = 0;
+        let zeroScoreSpanRecentDates: string[] = [];
         let missedOccurrenceCount = 0;
         let previousScore = 100;
         const flushZeroScoreSpan = () => {
@@ -623,12 +626,14 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
             repeatedZeroScoreSpans.push({
               startDate: zeroScoreSpanStart,
               endDate: zeroScoreSpanEnd,
-              occurrenceCount: zeroScoreSpanCount
+              occurrenceCount: zeroScoreSpanCount,
+              recentOccurrenceDates: zeroScoreSpanRecentDates
             });
           }
           zeroScoreSpanStart = null;
           zeroScoreSpanEnd = null;
           zeroScoreSpanCount = 0;
+          zeroScoreSpanRecentDates = [];
         };
         type TrackEvent =
           | { kind: 'occurrence'; date: string; occurrence: ScoringOccurrence; status: 'completed' | 'missed' }
@@ -702,6 +707,9 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
             zeroScoreSpanStart ??= occurrence.date;
             zeroScoreSpanEnd = occurrence.date;
             zeroScoreSpanCount += 1;
+            if (occurrence.date >= recentHistoryStartDate && occurrence.date <= input.asOfDate) {
+              zeroScoreSpanRecentDates.push(occurrence.date);
+            }
           } else {
             flushZeroScoreSpan();
             occurrences.push({

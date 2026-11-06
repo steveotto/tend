@@ -27,6 +27,7 @@ import {
 } from '../domain/foundation-rhythm-associations.ts';
 import type { FoundationRhythmAssociationChange } from '../domain/foundation-rhythm-associations.ts';
 import { selectCategoryScore } from '../domain/category-scoring.ts';
+import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
 import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import { selectFoundationScore } from '../domain/foundation-scoring.ts';
 import type { FoundationScoreSelection } from '../domain/foundation-scoring.ts';
@@ -35,9 +36,10 @@ import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { FoundationCard } from './Cards.tsx';
 import { FoundationDetailHeader } from './FoundationDetailHeader.tsx';
 import { BackButton } from './BackButton.tsx';
-import { HealthScoreBreakdown, HealthScoreInfoButton } from './HealthScoreBreakdown.tsx';
+import { HealthScoreInfoButton } from './HealthScoreBreakdown.tsx';
 import { HealthScoreDetailsDialog } from './HealthScoreDetailsDialog.tsx';
 import { HealthScoreDetailsContent } from './HealthScoreDetailsContent.tsx';
+import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 import type { HealthRollupConfig, HealthRollupGroup } from './HealthRollupDiagram.tsx';
 import { CategoryHealthSummary } from './CategoryHealthSummary.tsx';
 import { CategoryHeader } from './CategoryHeader.tsx';
@@ -122,6 +124,7 @@ type MarriageViewProps = {
   suggestionRhythms: readonly RhythmPreview[];
   suggestionInstances: readonly RhythmPreview[];
   foundationRhythmScores: ReadonlyMap<string, RhythmScoreResult>;
+  overallHealthScore?: number | null;
   archivedRhythmIds: readonly string[];
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
@@ -171,6 +174,7 @@ export function MarriageView({
   suggestionRhythms,
   suggestionInstances,
   foundationRhythmScores,
+  overallHealthScore = null,
   archivedRhythmIds,
   completedRhythms,
   undoableRhythms,
@@ -308,13 +312,41 @@ export function MarriageView({
     selectFoundationScore(foundation.id, foundationRhythms, foundationRhythmScores, archivedRhythmIds)
   ]));
   const categoryScore = selectCategoryScore(categoryFoundations, foundationScores);
+  const categoryScoringEvidence: HealthAggregateEvidence = {
+    heading: `${foundationTerm.singular} scores`,
+    description: `Each eligible ${foundationTerm.singular.toLowerCase()} counts equally.`,
+    itemLabel: foundationTerm.singular,
+    rows: categoryScore.eligibleFoundationIds.flatMap(id => {
+      const foundation = categoryFoundations.find(item => item.id === id);
+      const score = foundationScores.get(id);
+      return foundation && score
+        ? [{ id, label: foundation.name, consistency: score.consistency, onTrack: score.onTrack }]
+        : [];
+    }),
+    otherCount: categoryScore.foundationIds.length - categoryScore.eligibleFoundationIds.length,
+    consistencyAverage: categoryScore.consistency,
+    consistencyCount: categoryScore.eligibleFoundationIds.length,
+    onTrackAverage: categoryScore.onTrack,
+    onTrackCount: categoryScore.eligibleFoundationIds.length,
+    coverage: `${categoryScore.eligibleFoundationIds.length} of ${categoryScore.foundationIds.length} ${foundationTerm.plural} scored.`,
+    notes: [
+      `Unscored ${foundationTerm.plural.toLowerCase()} are excluded from this average.`,
+      ...(categoryScore.unresolvedFoundationIds.length > 0
+        ? [`${categoryScore.unresolvedFoundationIds.length} ${foundationTerm.plural.toLowerCase()} could not be resolved.`]
+        : [])
+    ],
+    emptyState: `No eligible ${foundationTerm.plural.toLowerCase()} are available.`
+  };
   const categoryRollup = foundationHealthRollup({
     categoryId,
     categoryLabel,
     foundationLabel: foundationTerm.plural,
+    foundationSingular: foundationTerm.singular,
     foundations: categoryFoundations,
     rhythms: foundationRhythms,
     foundationScores,
+    categoryScore,
+    overallHealthScore,
     categoryExplanation: [
       `Each eligible ${foundationTerm.singular.toLowerCase()} contributes equally to available Consistency and On Track averages.`,
       categoryConfig?.scoreExplanationIntro,
@@ -493,6 +525,7 @@ export function MarriageView({
             title={`${categoryLabel} Health`}
             itemTerm={foundationTerm}
             explanation={categoryConfig?.scoreExplanationIntro ?? ''}
+            scoringEvidence={categoryScoringEvidence}
             rollup={categoryRollup}
             unlinkedRhythms={unlinkedCategoryRhythms}
             onEditRhythm={onEditRhythm}
@@ -601,6 +634,7 @@ export function MarriageView({
           rhythmScores={foundationRhythmScores}
           archivedRhythmIds={archivedRhythmIds}
           foundationScores={foundationScores}
+          overallHealthScore={overallHealthScore}
           selectedFoundationId={selectedFoundationId}
           onSelect={openFoundation}
           onBack={() => setSelectedFoundationId(null)}
@@ -783,6 +817,7 @@ function FoundationList({
   rhythmScores,
   archivedRhythmIds,
   foundationScores,
+  overallHealthScore,
   selectedFoundationId,
   onSelect,
   onBack,
@@ -808,6 +843,7 @@ function FoundationList({
   rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
   archivedRhythmIds: readonly string[];
   foundationScores: ReadonlyMap<string, FoundationScoreSelection>;
+  overallHealthScore: number | null;
   selectedFoundationId: string | null;
   onSelect: (id: string, openerId: string) => void;
   onBack: () => void;
@@ -831,20 +867,61 @@ function FoundationList({
   const selectedFoundationScore = selectedFoundation
     ? foundationScores.get(selectedFoundation.id) ?? null
     : null;
-  const selectedScoreEvidence = selectedFoundationScore
-    ? foundationScoreEvidence(selectedFoundationScore)
-    : undefined;
   const linkedRhythms = selectedFoundation
     ? rhythmsSupportingFoundation(rhythms, selectedFoundation.id)
     : [];
+  const foundationScoringEvidence: HealthAggregateEvidence | undefined = selectedFoundationScore
+    ? {
+        heading: 'Linked Rhythm scores',
+        description: 'Each eligible linked Rhythm counts equally.',
+        itemLabel: 'Rhythm',
+        rows: selectedFoundationScore.eligibleRhythmIds.flatMap(id => {
+          const rhythm = rhythms.find(item => item.id === id);
+          const result = rhythmScores.get(id);
+          return rhythm && result?.kind === 'rhythm-score'
+            && result.consistency.kind === 'scored'
+            && result.onTrack.kind === 'scored'
+            ? [{
+                id,
+                label: rhythm.title,
+                consistency: result.consistency.score,
+                onTrack: result.onTrack.score
+              }]
+            : [];
+        }),
+        otherCount: selectedFoundationScore.activeLinkedRhythmIds.length
+          - selectedFoundationScore.eligibleRhythmIds.length,
+        consistencyAverage: selectedFoundationScore.consistency,
+        consistencyCount: selectedFoundationScore.eligibleRhythmIds.length,
+        onTrackAverage: selectedFoundationScore.onTrack,
+        onTrackCount: selectedFoundationScore.eligibleRhythmIds.length,
+        coverage: `${selectedFoundationScore.eligibleRhythmIds.length} of ${selectedFoundationScore.activeLinkedRhythmIds.length} linked Rhythms scored.`,
+        notes: [
+          'Uses each Rhythm’s own scoring window and season schedules.',
+          ...(selectedFoundationScore.archivedRhythmIds.length > 0
+            ? [`${selectedFoundationScore.archivedRhythmIds.length} archived linked Rhythms are excluded.`]
+            : []),
+          ...(selectedFoundationScore.unresolvedRhythmIds.length > 0
+            ? [`${selectedFoundationScore.unresolvedRhythmIds.length} linked Rhythm scores could not be resolved.`]
+            : []),
+          ...(selectedFoundationScore.excludedRhythms.length > 0
+            ? ['Linked Rhythms without both scores are excluded from both averages.']
+            : [])
+        ],
+        emptyState: 'No eligible linked Rhythms have both scores available.'
+      }
+    : undefined;
   const foundationRollup = selectedFoundation
     ? foundationHealthRollup({
         categoryId: selectedFoundation.categoryId,
         categoryLabel,
         foundationLabel: foundationTerm.plural,
+        foundationSingular: foundationTerm.singular,
         foundations: categoryFoundations,
         rhythms,
         foundationScores,
+        categoryScore: selectCategoryScore(categoryFoundations, foundationScores),
+        overallHealthScore,
         categoryExplanation: `Each eligible ${foundationTerm.singular.toLowerCase()} contributes equally to available Consistency and On Track averages.`,
         initialGroupId: 'foundations',
         initialItemId: selectedFoundation.id
@@ -875,6 +952,7 @@ function FoundationList({
             aria-label={`${selectedFoundation.name} Health scoring details`}
           >
             <HealthScoreDetailsContent
+              key={selectedFoundation.id}
               title={`${selectedFoundation.name} Health`}
               ariaLabel={`${selectedFoundation.name} Health scoring details`}
               score={selectedFoundationScore?.health ?? null}
@@ -896,23 +974,10 @@ function FoundationList({
               consistencyDescription="The average Consistency score of eligible linked Rhythms."
               onTrackDescription="The average On Track score of eligible linked Rhythms."
               {...(foundationRollup ? { rollup: foundationRollup } : {})}
-            >
-              <p>Each linked Rhythm counts equally. A Rhythm needs both scores to contribute.</p>
-              {selectedFoundationScore && (
-                <>
-                  <p>{selectedScoreEvidence ?? `${selectedFoundationScore.eligibleRhythmIds.length} linked Rhythms scored`}</p>
-                  {selectedFoundationScore.archivedRhythmIds.length > 0 && (
-                    <p>{selectedFoundationScore.archivedRhythmIds.length} archived linked Rhythms are excluded.</p>
-                  )}
-                  {selectedFoundationScore.unresolvedRhythmIds.length > 0 && (
-                    <p>{selectedFoundationScore.unresolvedRhythmIds.length} linked Rhythm scores could not be resolved.</p>
-                  )}
-                  {selectedFoundationScore.excludedRhythms.length > 0 && (
-                    <p>Linked Rhythms without both scores are excluded from both averages.</p>
-                  )}
-                </>
-              )}
-            </HealthScoreDetailsContent>
+              scoringDisclosureTitle={`How this ${foundationTerm.singular} was scored`}
+              {...(foundationScoringEvidence ? { scoringEvidence: foundationScoringEvidence } : {})}
+              initialContributionExpanded={false}
+            />
           </div>
         </HealthScoreDetailsDialog>
       )}
@@ -928,17 +993,9 @@ function FoundationList({
             <FoundationDetailHeader
               foundation={selectedFoundation}
               headingId={`${categoryToken}-foundation-detail-title`}
-            />
-            <HealthScoreBreakdown
-              title={`${selectedFoundation.name} Health`}
               score={selectedFoundationScore?.health ?? null}
-              healthLabel={`${selectedFoundation.name} ${foundationTerm.singular} Health`}
-              ariaLabel={`${selectedFoundation.name} ${foundationTerm.singular} Health scores`}
-              consistency={{ score: selectedFoundationScore?.consistency ?? null }}
-              onTrack={{ score: selectedFoundationScore?.onTrack ?? null }}
-              consistencyCaption="How often you show up."
-              onTrackCaption="How caught up you are."
-              headingAction={(
+              scoreLabel={`${selectedFoundation.name} ${foundationTerm.singular} Health`}
+              scoreAction={(
                 <HealthScoreInfoButton
                   ref={scoreInfoButtonRef}
                   label={`Show ${selectedFoundation.name} Health scoring details`}
@@ -947,7 +1004,6 @@ function FoundationList({
                   onClick={() => setScoreInfoExpanded(expanded => !expanded)}
                 />
               )}
-              className="marriage-foundation-detail__scores foundation-health-card"
             />
             <div className="marriage-foundation-support">
                 <div className="marriage-foundation-support__heading">
@@ -1048,9 +1104,12 @@ function foundationHealthRollup({
   categoryId,
   categoryLabel,
   foundationLabel,
+  foundationSingular,
   foundations,
   rhythms,
   foundationScores,
+  categoryScore,
+  overallHealthScore,
   categoryExplanation,
   initialGroupId = 'category',
   initialItemId = categoryId
@@ -1058,9 +1117,12 @@ function foundationHealthRollup({
   categoryId: CategoryId;
   categoryLabel: string;
   foundationLabel: string;
+  foundationSingular: string;
   foundations: readonly FoundationPreview[];
   rhythms: readonly RhythmPreview[];
   foundationScores: ReadonlyMap<string, FoundationScoreSelection>;
+  categoryScore: CategoryScoreSelection;
+  overallHealthScore: number | null;
   categoryExplanation: string;
   initialGroupId?: string;
   initialItemId?: string;
@@ -1095,6 +1157,9 @@ function foundationHealthRollup({
     return {
       id: foundation.id,
       label: foundation.name,
+      score: score?.health ?? null,
+      categoryId,
+      categoryLabel,
       foundationIconId: foundation.iconId ?? foundation.id,
       details: [
         'The average Consistency score of eligible linked Rhythms.',
@@ -1116,6 +1181,67 @@ function foundationHealthRollup({
     };
   });
   const foundationIds = foundationItems.map(item => item.id);
+  const selectedFoundation = foundations.find(foundation => foundation.id === initialItemId);
+  const categoryLevelItem = {
+    id: categoryId,
+    label: categoryLabel,
+    score: categoryScore.health,
+    categoryIconId: categoryId
+  };
+  const selectedFoundationScore = selectedFoundation
+    ? foundationScores.get(selectedFoundation.id)
+    : undefined;
+  const selectedScoreEvidence = selectedFoundationScore
+    ? foundationScoreEvidence(selectedFoundationScore)
+    : undefined;
+  const hasLinkedRhythms = initialGroupId === 'foundations'
+    ? (selectedFoundationScore?.activeLinkedRhythmIds.length ?? 0) > 0
+    : categoryRhythms.length > 0;
+  const foundationLevelItems = initialGroupId === 'foundations'
+    ? foundationItems.filter(item => item.id === initialItemId)
+    : foundationItems;
+  const selectedFoundationName = selectedFoundation?.name ?? categoryLabel;
+  const contributionHeading = initialGroupId === 'foundations'
+    ? `How this ${foundationSingular} contributes`
+    : 'How this Category contributes';
+  const healthContribution = {
+    heading: contributionHeading,
+    highlightedGroup: initialGroupId === 'foundations' ? 'foundations' as const : 'categories' as const,
+    highlightedItemId: initialGroupId === 'foundations' ? initialItemId : categoryId,
+    scoringInfo: initialGroupId === 'foundations'
+      ? {
+          groupId: 'foundations' as const,
+          triggerLabel: `About ${foundationSingular} scoring`,
+          title: `${foundationSingular} scoring`,
+          ...(selectedScoreEvidence ? { coverage: selectedScoreEvidence } : {}),
+          paragraphs: ['Each linked Rhythm counts equally. A Rhythm needs both Consistency and On Track scores to contribute.']
+        }
+      : {
+          groupId: 'foundations' as const,
+          triggerLabel: `About ${foundationLabel.toLowerCase()} scoring`,
+          title: `${foundationLabel} scoring`
+        },
+    overallScore: overallHealthScore,
+    categories: [categoryLevelItem],
+    foundations: foundationLevelItems,
+    bottomGroupLabel: 'Linked Rhythms',
+    bottomItem: {
+      id: 'linked-rhythms',
+      label: hasLinkedRhythms ? 'Linked Rhythms' : 'No linked Rhythms',
+      score: null,
+      showScore: false
+    },
+    identity: initialGroupId === 'foundations'
+      ? {
+          name: selectedFoundationName,
+          secondary: categoryLabel,
+          icon: { kind: 'foundation' as const, id: selectedFoundation?.iconId ?? selectedFoundation?.id ?? '' }
+        }
+      : {
+          name: categoryLabel,
+          icon: { kind: 'category' as const, id: categoryId }
+        }
+  };
   const groups: HealthRollupGroup[] = [
     {
       id: 'rhythms',
@@ -1141,7 +1267,7 @@ function foundationHealthRollup({
       }]
     }
   ];
-  return { groups, initialGroupId, initialItemId };
+  return { groups, initialGroupId, initialItemId, healthContribution };
 }
 
 function foundationScoreEvidence(score: FoundationScoreSelection): string | undefined {
