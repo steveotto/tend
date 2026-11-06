@@ -27,6 +27,8 @@ import { RhythmCompletionDialog } from './components/RhythmCompletionDialog.tsx'
 import { FinanceGoalsView } from './components/FinanceGoalsView.tsx';
 import { PreviewDataControls } from './components/PreviewDataControls.tsx';
 import type { PreviewPersistenceStatus } from './components/PreviewDataControls.tsx';
+import { PreviewAccountBackupControls } from './components/PreviewAccountBackupControls.tsx';
+import type { PreviewAccountBackupApi } from './storage/preview-account-backup.ts';
 import { PersonProfileView } from './components/PersonProfileView.tsx';
 import { PersonDetailsEditor } from './components/PersonDetailsEditor.tsx';
 import { PeopleView } from './components/PeopleView.tsx';
@@ -197,6 +199,7 @@ import {
   loadV34RecoveryCopy,
   loadV35RecoveryCopy,
   loadV36RecoveryCopy,
+  loadCloudRestoreRecoveryCopy,
   loadPreview,
   writePreview
 } from './storage/preview-storage.ts';
@@ -340,9 +343,13 @@ const defaultPreviewIdentity = import.meta.env.DEV
 export function App({
   identity = defaultPreviewIdentity,
   onSignOut,
+  accountBackupApi,
+  isAccountBackupIdentityCurrent
 }: {
   identity?: PreviewIdentityState;
   onSignOut?: () => void | Promise<void>;
+  accountBackupApi?: PreviewAccountBackupApi;
+  isAccountBackupIdentityCurrent?: () => boolean;
 } = {}) {
   const resolvedIdentity = useMemo(() => validatePreviewIdentity(identity), [identity]);
   const identityKey = previewIdentityKey(resolvedIdentity);
@@ -374,6 +381,8 @@ export function App({
       key={identityKey}
       identity={resolvedIdentity}
       isIdentityCurrent={() => isIdentityCurrent(identityKey)}
+      {...(isAccountBackupIdentityCurrent ? { isAccountBackupIdentityCurrent } : {})}
+      {...(accountBackupApi ? { accountBackupApi } : {})}
       {...(onSignOut ? { onSignOut } : {})}
     />
   );
@@ -391,10 +400,14 @@ function PreviewAccessState({ title, message }: { title: string; message: string
 function PreviewWorkspace({
   identity,
   isIdentityCurrent,
+  isAccountBackupIdentityCurrent,
+  accountBackupApi,
   onSignOut
 }: {
   identity: Extract<PreviewIdentityState, { kind: 'development' | 'authenticated' }>;
   isIdentityCurrent: () => boolean;
+  isAccountBackupIdentityCurrent?: () => boolean;
+  accountBackupApi?: PreviewAccountBackupApi;
   onSignOut?: () => void | Promise<void>;
 }) {
   const scoringInstant = useScoringInstant();
@@ -421,6 +434,8 @@ function PreviewWorkspace({
   const [persistenceStatus, setPersistenceStatus] = useState<PreviewPersistenceStatus>({ kind: 'loading' });
   const [rawRecoveryCopy, setRawRecoveryCopy] = useState<string | null>(null);
   const [rawRecoveryError, setRawRecoveryError] = useState<string | null>(null);
+  const [cloudRestoreRecoveryCopy, setCloudRestoreRecoveryCopy] = useState<string | null>(null);
+  const [cloudRestoreRecoveryError, setCloudRestoreRecoveryError] = useState<string | null>(null);
   const [v1RecoveryCopy, setV1RecoveryCopy] = useState<string | null>(null);
   const [v1RecoveryError, setV1RecoveryError] = useState<string | null>(null);
   const [v2RecoveryCopy, setV2RecoveryCopy] = useState<string | null>(null);
@@ -829,6 +844,17 @@ function PreviewWorkspace({
     }
   }
 
+  function refreshCloudRestoreRecoveryCopy() {
+    const result = loadCloudRestoreRecoveryCopy(previewStorage);
+    if (result.kind === 'loaded') {
+      setCloudRestoreRecoveryCopy(result.raw);
+      setCloudRestoreRecoveryError(null);
+    } else {
+      setCloudRestoreRecoveryCopy(null);
+      setCloudRestoreRecoveryError(result.message);
+    }
+  }
+
   function refreshV1RecoveryCopy() {
     const result = loadV1RecoveryCopy(previewStorage);
     if (result.kind === 'loaded') {
@@ -1172,6 +1198,7 @@ function PreviewWorkspace({
 
   useEffect(() => {
     refreshRawRecoveryCopy();
+    refreshCloudRestoreRecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -3000,6 +3027,33 @@ function PreviewWorkspace({
                       </button>
                     </section>
                   )}
+                {!moreSettingsOpen && identity.kind === 'authenticated' && (
+                  <PreviewAccountBackupControls
+                    api={accountBackupApi ?? null}
+                    accountId={identity.accountId}
+                    storage={previewStorage}
+                    data={previewData}
+                    currentDate={currentDate}
+                    localRaw={expectedRaw.current}
+                    localRecoveryRaw={cloudRestoreRecoveryCopy}
+                    localRecoveryError={cloudRestoreRecoveryError}
+                    enabled={hydrated && autoSaveEnabled && persistenceStatus.kind === 'saved'}
+                    isIdentityCurrent={() => isIdentityCurrent()
+                      && (isAccountBackupIdentityCurrent?.() ?? true)}
+                    onRestore={(data, expectedLocalRaw) => {
+                      if (!isIdentityCurrent()) {
+                        return 'Preview identity changed. No local data was replaced.';
+                      }
+                      if (expectedRaw.current !== expectedLocalRaw) {
+                        return 'This browser’s preview changed after confirmation. No local data was replaced.';
+                      }
+                      const writeError = finishWrite(data, false, 'replace');
+                      if (!writeError) refreshCloudRestoreRecoveryCopy();
+                      return writeError;
+                    }}
+                    onRecoveryChanged={setCloudRestoreRecoveryCopy}
+                  />
+                )}
                 {!moreSettingsOpen && (
                   <p className="settings-page__version">Version {APP_DISPLAY_VERSION}</p>
                 )}

@@ -92,6 +92,7 @@ export {
 };
 
 export const PREVIEW_CATEGORY_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:v32-category-recovery`;
+export const PREVIEW_CLOUD_RESTORE_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:cloud-restore-recovery`;
 export const PREVIEW_ACCOUNT_STORAGE_PREFIX = 'tend2:preview:account';
 
 export type PreviewStorage = Pick<Storage, 'getItem' | 'setItem'>;
@@ -114,6 +115,12 @@ export type PreviewWriteResult =
 
 export type RecoveryCopyReadResult =
   | { kind: 'loaded'; raw: string | null }
+  | { kind: 'error'; message: string };
+
+export type CloudRestoreRecoveryResult =
+  | { kind: 'preserved' }
+  | { kind: 'not-needed' }
+  | { kind: 'conflict'; message: string }
   | { kind: 'error'; message: string };
 
 export type PreviewWriteOptions = {
@@ -263,6 +270,56 @@ export function loadRawRecoveryCopy(storage: PreviewStorage): RecoveryCopyReadRe
     return { kind: 'loaded', raw: storage.getItem(PREVIEW_RAW_RECOVERY_KEY) };
   } catch (error) {
     return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadCloudRestoreRecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function preservePreviewBeforeCloudRestore(
+  storage: PreviewStorage,
+  expectedRaw: string | null
+): CloudRestoreRecoveryResult {
+  try {
+    if (storage.getItem(PREVIEW_STORAGE_KEY) !== expectedRaw) {
+      return {
+        kind: 'conflict',
+        message: 'This browser’s preview changed before it could be preserved. Nothing was restored.'
+      };
+    }
+    if (expectedRaw === null) return { kind: 'not-needed' };
+
+    const existing = storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY);
+    if (existing !== null && existing !== expectedRaw) {
+      return {
+        kind: 'conflict',
+        message: 'An earlier pre-restore recovery copy contains different data. Download or preserve that copy before trying another restore.'
+      };
+    }
+    if (existing === null) storage.setItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, expectedRaw);
+    if (storage.getItem(PREVIEW_STORAGE_KEY) !== expectedRaw) {
+      return {
+        kind: 'conflict',
+        message: 'This browser’s preview changed while its recovery copy was being made. Nothing was restored.'
+      };
+    }
+    if (storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY) !== expectedRaw) {
+      return {
+        kind: 'error',
+        message: 'The exact pre-restore recovery copy could not be verified. Nothing was restored.'
+      };
+    }
+    return { kind: 'preserved' };
+  } catch (error) {
+    return {
+      kind: 'error',
+      message: `The pre-restore recovery copy could not be saved: ${errorMessage(error)}`
+    };
   }
 }
 
