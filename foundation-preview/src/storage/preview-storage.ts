@@ -93,9 +93,11 @@ export {
 
 export const PREVIEW_CATEGORY_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:v32-category-recovery`;
 export const PREVIEW_CLOUD_RESTORE_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:cloud-restore-recovery`;
+export const PREVIEW_IMPORT_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:import-recovery`;
 export const PREVIEW_ACCOUNT_STORAGE_PREFIX = 'tend2:preview:account';
+const previewImportRecoveryFormat = 'tend.preview-import-recovery';
 
-export type PreviewStorage = Pick<Storage, 'getItem' | 'setItem'>;
+export type PreviewStorage = Pick<Storage, 'getItem' | 'setItem'> & Partial<Pick<Storage, 'removeItem'>>;
 export type PreviewStorageScope = {
   key: string;
   storage: PreviewStorage;
@@ -123,9 +125,14 @@ export type CloudRestoreRecoveryResult =
   | { kind: 'conflict'; message: string }
   | { kind: 'error'; message: string };
 
+export type PreviewImportRecoveryReadResult =
+  | { kind: 'loaded'; latestRaw: string | null; latestSourceRaw: string | null; archiveRaw: string | null }
+  | { kind: 'error'; message: string };
+
 export type PreviewWriteOptions = {
   allowUnrecoverableReplacement?: boolean;
   currentDate?: string;
+  importSourceRaw?: string;
   operation?: 'save' | 'import' | 'reset' | 'replace';
 };
 
@@ -159,13 +166,50 @@ export function createPreviewStorageScope(
     key: accountRoot,
     storage: {
       getItem: key => storage.getItem(mapKey(key)),
-      setItem: (key, value) => storage.setItem(mapKey(key), value)
+      setItem: (key, value) => storage.setItem(mapKey(key), value),
+      ...(storage.removeItem ? { removeItem: (key: string) => storage.removeItem?.(mapKey(key)) } : {})
     }
   };
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Browser storage is unavailable.';
+}
+
+function parseImportRecoveryArchive(raw: string): { copies: string[]; sources: string[] } {
+  const parsed: unknown = JSON.parse(raw);
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('The saved import recovery archive is invalid and was not changed.');
+  }
+  const archive = parsed as Record<string, unknown>;
+  if (archive.format !== previewImportRecoveryFormat
+    || archive.schemaVersion !== 1
+    || !Array.isArray(archive.copies)
+    || !archive.copies.every(copy => typeof copy === 'string')
+    || !Array.isArray(archive.sources)
+    || !archive.sources.every(source => typeof source === 'string')
+    || Object.keys(archive).some(key => !['format', 'schemaVersion', 'copies', 'sources'].includes(key))) {
+    throw new Error('The saved import recovery archive is invalid and was not changed.');
+  }
+  return { copies: archive.copies, sources: archive.sources };
+}
+
+export function loadPreviewImportRecovery(storage: PreviewStorage): PreviewImportRecoveryReadResult {
+  try {
+    const archiveRaw = storage.getItem(PREVIEW_IMPORT_RECOVERY_KEY);
+    if (archiveRaw === null) {
+      return { kind: 'loaded', latestRaw: null, latestSourceRaw: null, archiveRaw: null };
+    }
+    const archive = parseImportRecoveryArchive(archiveRaw);
+    return {
+      kind: 'loaded',
+      latestRaw: archive.copies.length > 0 ? archive.copies[archive.copies.length - 1]! : null,
+      latestSourceRaw: archive.sources.length > 0 ? archive.sources[archive.sources.length - 1]! : null,
+      archiveRaw
+    };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
 }
 
 type RawRecoveryResult =
@@ -511,7 +555,86 @@ export function writePreview(
         )
       };
     }
-    storage.setItem(PREVIEW_STORAGE_KEY, raw);
+    if (operation === 'import') {
+      const sourceRaw = options.importSourceRaw;
+      if (sourceRaw === undefined || !options.currentDate) {
+        return {
+          kind: 'error',
+          message: 'The selected backup could not be verified, so no changes were written.',
+          diagnostic: diagnosticForWriteFailure(
+            storage,
+            expectedRaw,
+            options.currentDate,
+            operation,
+            'import-source-missing',
+            'not-detected'
+          )
+        };
+      }
+      const imported = parsePreviewBackup(sourceRaw, options.currentDate);
+      if (!imported.valid || JSON.stringify(imported.envelope.data) !== JSON.stringify(data)) {
+        return {
+          kind: 'error',
+          message: 'The selected backup could not be verified, so no changes were written.',
+          diagnostic: diagnosticForWriteFailure(
+            storage,
+            expectedRaw,
+            options.currentDate,
+            operation,
+            'import-source-validation-failed',
+            'not-detected',
+            imported.valid ? 'Parsed backup data did not match the requested import.' : imported.message
+          )
+        };
+      }
+      const previousArchiveRaw = storage.getItem(PREVIEW_IMPORT_RECOVERY_KEY);
+      const archive = previousArchiveRaw === null
+        ? { copies: [] as string[], sources: [] as string[] }
+        : parseImportRecoveryArchive(previousArchiveRaw);
+      if (expectedRaw !== null) archive.copies.push(expectedRaw);
+      archive.sources.push(sourceRaw);
+      const nextArchiveRaw = JSON.stringify({
+        format: previewImportRecoveryFormat,
+        schemaVersion: 1,
+        copies: archive.copies,
+        sources: archive.sources
+      });
+      storage.setItem(PREVIEW_IMPORT_RECOVERY_KEY, nextArchiveRaw);
+      if (storage.getItem(PREVIEW_IMPORT_RECOVERY_KEY) !== nextArchiveRaw
+        || storage.getItem(PREVIEW_STORAGE_KEY) !== expectedRaw) {
+        if (previousArchiveRaw === null) {
+          if (storage.removeItem) storage.removeItem(PREVIEW_IMPORT_RECOVERY_KEY);
+          else storage.setItem(PREVIEW_IMPORT_RECOVERY_KEY, JSON.stringify({
+            format: previewImportRecoveryFormat,
+            schemaVersion: 1,
+            copies: [],
+            sources: []
+          }));
+        }
+        else storage.setItem(PREVIEW_IMPORT_RECOVERY_KEY, previousArchiveRaw);
+        return {
+          kind: 'conflict',
+          actualRaw: storage.getItem(PREVIEW_STORAGE_KEY)
+        };
+      }
+      try {
+        storage.setItem(PREVIEW_STORAGE_KEY, raw);
+      } catch (error) {
+        if (previousArchiveRaw === null) {
+          if (storage.removeItem) storage.removeItem(PREVIEW_IMPORT_RECOVERY_KEY);
+          else storage.setItem(PREVIEW_IMPORT_RECOVERY_KEY, JSON.stringify({
+            format: previewImportRecoveryFormat,
+            schemaVersion: 1,
+            copies: [],
+            sources: []
+          }));
+        }
+        else storage.setItem(PREVIEW_IMPORT_RECOVERY_KEY, previousArchiveRaw);
+        throw error;
+      }
+    } else {
+      storage.setItem(PREVIEW_STORAGE_KEY, raw);
+    }
     return { kind: 'saved', raw };
   } catch (error) {
     return {
@@ -850,6 +973,7 @@ export function listenForPreviewChanges(
 function browserPreviewStorageBase(): PreviewStorage {
   return {
     getItem: key => window.localStorage.getItem(key),
-    setItem: (key, value) => window.localStorage.setItem(key, value)
+    setItem: (key, value) => window.localStorage.setItem(key, value),
+    removeItem: key => window.localStorage.removeItem(key)
   };
 }

@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render as testingRender, screen, waitFor, within } 
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../src/App.tsx';
+import { createAuthenticatedPreviewIdentity } from '../src/domain/preview-identity.ts';
+import type { PreviewAccountBackupApi } from '../src/storage/preview-account-backup.ts';
 import { PreviewDataControls } from '../src/components/PreviewDataControls.tsx';
 import {
   createPreviewEnvelope,
@@ -19,6 +21,7 @@ import { createDefaultTimeBlockSettings } from '../src/domain/time-blocks.ts';
 import type { StrengthSavedWorkout } from '../src/domain/strength.ts';
 import {
   browserPreviewStorage,
+  loadPreviewImportRecovery,
   loadPreview,
   loadRawRecoveryCopy,
   loadV1RecoveryCopy,
@@ -52,6 +55,7 @@ import {
   PREVIEW_RAW_RECOVERY_KEY,
   PREVIEW_CATEGORY_RECOVERY_KEY,
   PREVIEW_STORAGE_KEY,
+  PREVIEW_IMPORT_RECOVERY_KEY,
   PREVIEW_V1_RECOVERY_KEY,
   PREVIEW_V2_RECOVERY_KEY,
   PREVIEW_V3_RECOVERY_KEY,
@@ -1214,7 +1218,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     );
     const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
-    expect(onImport).toHaveBeenCalledWith(createPreviewEnvelope(data).data);
+    expect(onImport).toHaveBeenCalledWith(createPreviewEnvelope(data).data, backup);
   });
 
   it('offers exact v3 recovery bytes through the shared backup controls', async () => {
@@ -2606,6 +2610,46 @@ describe('synthetic preview storage adapter and envelope', () => {
       });
   });
 
+  it('archives exact local and source JSON before import and rolls back recovery metadata on save failure', () => {
+    const previous = createSamplePreviewData();
+    const imported = createSamplePreviewData();
+    imported.goals[0]!.title = 'Synthetic imported goal';
+    const previousRaw = JSON.stringify(createPreviewEnvelope(previous));
+    const sourceRaw = JSON.stringify(createPreviewEnvelope(imported), null, 2);
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: previousRaw });
+
+    const saved = writePreview(storage, imported, previousRaw, {
+      currentDate: '2026-10-21',
+      operation: 'import',
+      importSourceRaw: sourceRaw
+    });
+    expect(saved.kind).toBe('saved');
+    expect(loadPreviewImportRecovery(storage)).toMatchObject({
+      kind: 'loaded',
+      latestRaw: previousRaw,
+      latestSourceRaw: sourceRaw
+    });
+
+    values.set(PREVIEW_STORAGE_KEY, previousRaw);
+    values.delete(PREVIEW_IMPORT_RECOVERY_KEY);
+    const failingStorage = {
+      getItem: storage.getItem,
+      setItem: (key: string, value: string) => {
+        if (key === PREVIEW_STORAGE_KEY) throw new Error('Synthetic durable write failure');
+        storage.setItem(key, value);
+      },
+      removeItem: storage.removeItem
+    };
+    const failed = writePreview(failingStorage, imported, previousRaw, {
+      currentDate: '2026-10-21',
+      operation: 'import',
+      importSourceRaw: sourceRaw
+    });
+    expect(failed).toMatchObject({ kind: 'error' });
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(previousRaw);
+    expect(values.has(PREVIEW_IMPORT_RECOVERY_KEY)).toBe(false);
+  });
+
   it('detects an external-tab write before replacing a stale value', () => {
     const first = JSON.stringify(createPreviewEnvelope(createSamplePreviewData()));
     const secondData = sampleWithHistory();
@@ -2682,7 +2726,7 @@ describe('preview backup controls', () => {
     );
     const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
-    expect(onImport).toHaveBeenCalledWith(data);
+    expect(onImport).toHaveBeenCalledWith(data, exportedText);
   });
 
   it('imports v2 backups as active and explains the missing archive state before replacement', async () => {
@@ -2709,9 +2753,10 @@ describe('preview backup controls', () => {
         onReplaceExternal={() => null}
       />
     );
+    const legacyRaw = versionTwoRaw(legacyData);
     await user.upload(
       screen.getByLabelText('Import preview backup'),
-      new File([versionTwoRaw(legacyData)], 'v2-backup.json', { type: 'application/json' })
+      new File([legacyRaw], 'v2-backup.json', { type: 'application/json' })
     );
     const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     expect(within(dialog).getByText(/predates archive status, so its Rhythms will be restored as active/)).toBeTruthy();
@@ -2723,7 +2768,7 @@ describe('preview backup controls', () => {
       ...legacyData,
       savedRhythms: legacyData.savedRhythms.map(rhythm => ({ ...rhythm, timeOfDay: 'evening' })),
       archivedRhythmIds: []
-    });
+    }, legacyRaw);
   });
 
   it('imports only after validation and confirmation, and cancellation preserves current state', async () => {
@@ -2753,6 +2798,35 @@ describe('preview backup controls', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(onImport).not.toHaveBeenCalled();
     expect(screen.getByText('Preview data saved in this browser.')).toBeTruthy();
+  });
+
+  it('rejects malformed and unsupported backup files without opening replacement confirmation', async () => {
+    const user = userEvent.setup();
+    const onImport = vi.fn(() => null);
+    const { container } = render(
+      <PreviewDataControls
+        data={createSamplePreviewData()}
+        status={{ kind: 'saved' }}
+        currentDate="2026-10-21"
+        onImport={onImport}
+        onReset={() => null}
+        onRetrySave={() => {}}
+        onReloadExternal={() => null}
+        onReplaceExternal={() => null}
+      />
+    );
+    const input = within(container).getByLabelText('Import preview backup') as HTMLInputElement;
+    await user.upload(input, new File(['{"broken":'], 'malformed.json', { type: 'application/json' }));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    const unsupportedRaw = JSON.stringify({
+      ...createPreviewEnvelope(createSamplePreviewData()),
+      schemaVersion: PREVIEW_SCHEMA_VERSION + 1
+    });
+    await user.upload(input, new File([unsupportedRaw], 'unsupported.json', { type: 'application/json' }));
+    expect(await screen.findByText(/not supported/i)).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onImport).not.toHaveBeenCalled();
   });
 
   it('offers export before reset and preserves storage when the replacement is cancelled', async () => {
@@ -3220,5 +3294,54 @@ describe('preview backup controls', () => {
     await user.click(screen.getByRole('button', { name: 'Retry saving' }));
     expect(await screen.findByText('Preview data saved in this browser.')).toBeTruthy();
     expect(loadPreview(window.localStorage, new Date().toISOString().slice(0, 10)).kind).toBe('loaded');
+  });
+
+  it('imports locally from More while account backup reads fail and never uploads the import', async () => {
+    const user = userEvent.setup();
+    const identity = createAuthenticatedPreviewIdentity('11111111-1111-4111-8111-111111111111', 1);
+    if (identity.kind !== 'authenticated') throw new Error('Test identity was not authenticated.');
+    const storage = browserPreviewStorage(identity);
+    const previous = createSamplePreviewData();
+    const previousRaw = JSON.stringify(createPreviewEnvelope(previous));
+    storage.setItem(PREVIEW_STORAGE_KEY, previousRaw);
+    const imported = createSamplePreviewData();
+    imported.goals[0]!.title = 'Synthetic imported goal';
+    const sourceRaw = JSON.stringify(createPreviewEnvelope(imported), null, 2);
+    const accountBackupApi: PreviewAccountBackupApi = {
+      read: vi.fn(async () => { throw new Error('Synthetic cloud read failure'); }),
+      save: vi.fn(async () => 1)
+    };
+
+    const app = testingRender(
+      <App identity={identity} accountBackupApi={accountBackupApi} />
+    );
+    await user.click(screen.getByRole('button', { name: 'More, settings' }));
+    await waitFor(() => expect(accountBackupApi.read).toHaveBeenCalled());
+    const more = screen.getByRole('main', { name: 'More' });
+    const importInput = within(more).getByLabelText('Import preview backup');
+    await user.upload(importInput, new File([sourceRaw], 'synthetic-preview.json', { type: 'application/json' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
+    expect(within(dialog).getByText(/replaces this account’s local Preview data/)).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
+
+    expect(await screen.findByText('Preview backup imported.')).toBeTruthy();
+    expect(loadPreview(browserPreviewStorage(identity), '2026-10-21')).toMatchObject({
+      kind: 'loaded',
+      data: imported
+    });
+    expect(loadPreviewImportRecovery(storage)).toMatchObject({
+      kind: 'loaded',
+      latestRaw: previousRaw,
+      latestSourceRaw: sourceRaw
+    });
+    expect(accountBackupApi.save).not.toHaveBeenCalled();
+
+    app.unmount();
+    testingRender(<App identity={identity} accountBackupApi={accountBackupApi} />);
+    expect(loadPreview(browserPreviewStorage(identity), '2026-10-21')).toMatchObject({
+      kind: 'loaded',
+      data: imported
+    });
+    expect(accountBackupApi.save).not.toHaveBeenCalled();
   });
 });

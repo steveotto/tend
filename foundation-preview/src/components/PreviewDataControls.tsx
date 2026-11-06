@@ -1,15 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
-import { createPreviewEnvelope, parsePreviewBackup } from '../domain/preview-state.ts';
+import { createPreviewEnvelope } from '../domain/preview-state.ts';
 import type { PreviewData } from '../domain/preview-state.ts';
 import { analyzeLegacyTendImport } from '../domain/legacy-import.ts';
 import type { LegacyImportDryRun } from '../domain/legacy-import.ts';
-import {
-  foundationRhythmIds,
-  missingRequiredFoundationCategories
-} from '../domain/foundation-rhythm-associations.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import type { PreviewStorageDiagnostic } from '../storage/preview-storage.ts';
+import { PreviewBackupImportControl } from './PreviewBackupImportControl.tsx';
+import { downloadText } from './preview-download.ts';
 
 export type PreviewPersistenceStatus =
   | { kind: 'loading' }
@@ -22,7 +20,6 @@ export type PreviewPersistenceStatus =
   | { kind: 'conflict' };
 
 type PendingAction =
-  | { kind: 'import'; data: PreviewData; hasArchiveStatus: boolean; resolvedPersonCategories: number }
   | { kind: 'reset' }
   | { kind: 'replace-external' };
 
@@ -31,9 +28,13 @@ type PreviewDataControlsProps = {
   data: PreviewData;
   status: PreviewPersistenceStatus;
   currentDate: string;
+  importRecoveryRaw?: string | null;
+  importRecoverySourceRaw?: string | null;
+  importRecoveryArchiveRaw?: string | null;
+  importRecoveryError?: string | null;
   rawRecoveryCopy?: string | null;
   rawRecoveryError?: string | null;
-  onImport: (data: PreviewData) => string | null;
+  onImport: (data: PreviewData, sourceRaw?: string) => string | null;
   onReset: () => string | null;
   onRetrySave: () => void;
   onReloadExternal: () => string | null;
@@ -112,28 +113,15 @@ type PreviewDataControlsProps = {
   v36RecoveryError?: string | null;
 };
 
-function downloadText(filename: string, content: string, type: string): string | null {
-  try {
-    const url = URL.createObjectURL(new Blob([content], { type }));
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    anchor.style.display = 'none';
-    document.body.append(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-    return null;
-  } catch (error) {
-    return error instanceof Error ? error.message : 'The browser could not start the download.';
-  }
-}
-
 export function PreviewDataControls({
   hidden = false,
   data,
   status,
   currentDate,
+  importRecoveryRaw = null,
+  importRecoverySourceRaw = null,
+  importRecoveryArchiveRaw = null,
+  importRecoveryError = null,
   rawRecoveryCopy = null,
   rawRecoveryError = null,
   onImport,
@@ -214,7 +202,6 @@ export function PreviewDataControls({
   v36RecoveryCopy = null,
   v36RecoveryError = null
 }: PreviewDataControlsProps) {
-  const fileInput = useRef<HTMLInputElement>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [legacyDryRun, setLegacyDryRun] = useState<LegacyImportDryRun | null>(null);
   const [legacyPackageDownloaded, setLegacyPackageDownloaded] = useState(false);
@@ -223,16 +210,6 @@ export function PreviewDataControls({
   const [message, setMessage] = useState('');
   const activeRef = useRef(true);
   const readersRef = useRef(new Set<FileReader>());
-  const importedRhythmsMissingLinks = pendingAction?.kind === 'import'
-    ? pendingAction.data.savedRhythms.filter(rhythm =>
-        !pendingAction.data.archivedRhythmIds.includes(rhythm.id)
-        && missingRequiredFoundationCategories(
-          rhythm.categoryIds,
-          foundationRhythmIds(rhythm)
-        ).length > 0
-      )
-    : [];
-
   useEffect(() => {
     activeRef.current = true;
     return () => {
@@ -254,34 +231,6 @@ export function PreviewDataControls({
   function downloadRecovery(raw: string) {
     const error = downloadText('tend-synthetic-preview-recovery.txt', raw, 'text/plain');
     setMessage(error ?? 'Raw recovery file downloaded unchanged.');
-  }
-
-  function readImport(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = '';
-    if (!file) return;
-    const reader = new FileReader();
-    readersRef.current.add(reader);
-    reader.onloadend = () => readersRef.current.delete(reader);
-    reader.onerror = () => {
-      if (activeRef.current) setMessage('The selected backup could not be read.');
-    };
-    reader.onload = () => {
-      if (!activeRef.current) return;
-      const result = parsePreviewBackup(String(reader.result ?? ''), currentDate);
-      if (!result.valid) {
-        setMessage(result.message);
-        return;
-      }
-      setMessage('');
-      setPendingAction({
-        kind: 'import',
-        data: result.envelope.data,
-        hasArchiveStatus: result.sourceSchemaVersion >= 3,
-        resolvedPersonCategories: result.resolvedPersonCategories
-      });
-    };
-    reader.readAsText(file);
   }
 
   function readLegacyImport(event: ChangeEvent<HTMLInputElement>) {
@@ -338,18 +287,12 @@ export function PreviewDataControls({
 
   function confirmPendingAction() {
     if (!pendingAction) return;
-    const error = pendingAction.kind === 'import'
-      ? onImport(pendingAction.data)
-      : pendingAction.kind === 'reset'
-        ? onReset()
-        : onReplaceExternal();
+    const error = pendingAction.kind === 'reset' ? onReset() : onReplaceExternal();
     if (error) {
       setMessage(error);
       return;
     }
-    setMessage(pendingAction.kind === 'import'
-      ? 'Preview backup imported.'
-      : pendingAction.kind === 'reset'
+    setMessage(pendingAction.kind === 'reset'
         ? 'Sample data restored.'
         : 'This preview replaced the other tab’s saved data.');
     setPendingAction(null);
@@ -389,6 +332,16 @@ export function PreviewDataControls({
       </div>
       <div className="preview-data-controls__actions">
         <button type="button" className="btn mini ghost" onClick={exportCurrent} disabled={status.kind === 'loading'}>Export preview backup</button>
+        <PreviewBackupImportControl
+          data={data}
+          status={status}
+          currentDate={currentDate}
+          onImport={onImport}
+          recoveryRaw={importRecoveryRaw}
+          recoverySourceRaw={importRecoverySourceRaw}
+          recoveryArchiveRaw={importRecoveryArchiveRaw}
+          recoveryError={importRecoveryError}
+        />
         {v1RecoveryCopy !== null && (
           <button
             type="button"
@@ -798,17 +751,6 @@ export function PreviewDataControls({
           </button>
         )}
         <label className="btn mini ghost preview-data-controls__file-button">
-          Import preview backup
-          <input
-            ref={fileInput}
-            type="file"
-            accept="application/json,.json"
-            aria-label="Import preview backup"
-            onChange={readImport}
-            disabled={status.kind === 'loading'}
-          />
-        </label>
-        <label className="btn mini ghost preview-data-controls__file-button">
           Dry-run Classic Tend import
           <input
             type="file"
@@ -918,31 +860,19 @@ export function PreviewDataControls({
       {message && <p className="preview-data-controls__message" role="status">{message}</p>}
       {pendingAction && (
         <MoneyGoalDialog
-          title={pendingAction.kind === 'import' ? 'Replace preview data?' : pendingAction.kind === 'reset' ? 'Reset sample data?' : 'Replace the other tab?'}
-          intro={pendingAction.kind === 'import'
-            ? pendingAction.hasArchiveStatus
-              ? 'This replaces the current synthetic goals, check-ins, correction history, and Rhythm data with the validated backup.'
-              : 'This backup predates archive status, so its Rhythms will be restored as active. It replaces the current preview; download a backup first if needed.'
-            : pendingAction.kind === 'reset'
+          title={pendingAction.kind === 'reset' ? 'Reset sample data?' : 'Replace the other tab?'}
+          intro={pendingAction.kind === 'reset'
               ? 'This replaces the current synthetic preview state with the original examples, changing only this preview’s saved key.'
               : 'This overwrites the other tab’s saved preview with the data currently shown here.'}
           onClose={() => setPendingAction(null)}
         >
           <p className="preview-data-controls__help">Download a backup of the current preview before replacing it if you may need these changes later. Cancel leaves the current preview unchanged.</p>
-          {pendingAction.kind === 'import' && importedRhythmsMissingLinks.length > 0 && (
-            <p className="preview-data-controls__help" role="status">
-              {importedRhythmsMissingLinks.length} active {importedRhythmsMissingLinks.length === 1 ? 'Rhythm lacks' : 'Rhythms lack'} a required Practice/Foundation link. The backup will still import unchanged, with no automatic link assignments. After import, open the category Health explanation and edit each Rhythm to choose a matching Practice/Foundation.
-            </p>
-          )}
-          {pendingAction.kind === 'import' && pendingAction.resolvedPersonCategories > 0 && (
-            <p className="preview-data-controls__help">
-              Multiple category memberships were resolved for {pendingAction.resolvedPersonCategories} {pendingAction.resolvedPersonCategories === 1 ? 'person' : 'people'} using Marriage, then Parenting, then Friend priority. The selected backup file remains unchanged.
-            </p>
-          )}
           <div className="money-goal-dialog__actions">
-            <button type="button" className="btn mini ghost" onClick={exportCurrent}>Download current preview backup</button>
+            <button type="button" className="btn mini ghost" onClick={exportCurrent}>
+              Download current preview backup
+            </button>
             <button type="button" className="btn mini" onClick={confirmPendingAction}>
-              {pendingAction.kind === 'import' ? 'Replace with backup' : pendingAction.kind === 'reset' ? 'Reset sample data' : 'Replace other tab'}
+              {pendingAction.kind === 'reset' ? 'Reset sample data' : 'Replace other tab'}
             </button>
             <button type="button" className="btn mini ghost" onClick={() => setPendingAction(null)}>Cancel</button>
           </div>

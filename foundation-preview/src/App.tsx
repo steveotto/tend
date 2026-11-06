@@ -28,6 +28,7 @@ import { FinanceGoalsView } from './components/FinanceGoalsView.tsx';
 import { PreviewDataControls } from './components/PreviewDataControls.tsx';
 import type { PreviewPersistenceStatus } from './components/PreviewDataControls.tsx';
 import { PreviewAccountBackupControls } from './components/PreviewAccountBackupControls.tsx';
+import { PreviewBackupImportControl } from './components/PreviewBackupImportControl.tsx';
 import type { PreviewAccountBackupApi } from './storage/preview-account-backup.ts';
 import { PersonProfileView } from './components/PersonProfileView.tsx';
 import { PersonDetailsEditor } from './components/PersonDetailsEditor.tsx';
@@ -200,6 +201,7 @@ import {
   loadV35RecoveryCopy,
   loadV36RecoveryCopy,
   loadCloudRestoreRecoveryCopy,
+  loadPreviewImportRecovery,
   loadPreview,
   writePreview
 } from './storage/preview-storage.ts';
@@ -436,6 +438,10 @@ function PreviewWorkspace({
   const [rawRecoveryError, setRawRecoveryError] = useState<string | null>(null);
   const [cloudRestoreRecoveryCopy, setCloudRestoreRecoveryCopy] = useState<string | null>(null);
   const [cloudRestoreRecoveryError, setCloudRestoreRecoveryError] = useState<string | null>(null);
+  const [importRecoveryCopy, setImportRecoveryCopy] = useState<string | null>(null);
+  const [importRecoverySourceCopy, setImportRecoverySourceCopy] = useState<string | null>(null);
+  const [importRecoveryArchive, setImportRecoveryArchive] = useState<string | null>(null);
+  const [importRecoveryError, setImportRecoveryError] = useState<string | null>(null);
   const [v1RecoveryCopy, setV1RecoveryCopy] = useState<string | null>(null);
   const [v1RecoveryError, setV1RecoveryError] = useState<string | null>(null);
   const [v2RecoveryCopy, setV2RecoveryCopy] = useState<string | null>(null);
@@ -855,6 +861,21 @@ function PreviewWorkspace({
     }
   }
 
+  function refreshImportRecoveryCopy() {
+    const result = loadPreviewImportRecovery(previewStorage);
+    if (result.kind === 'loaded') {
+      setImportRecoveryCopy(result.latestRaw);
+      setImportRecoverySourceCopy(result.latestSourceRaw);
+      setImportRecoveryArchive(result.archiveRaw);
+      setImportRecoveryError(null);
+    } else {
+      setImportRecoveryCopy(null);
+      setImportRecoverySourceCopy(null);
+      setImportRecoveryArchive(null);
+      setImportRecoveryError(result.message);
+    }
+  }
+
   function refreshV1RecoveryCopy() {
     const result = loadV1RecoveryCopy(previewStorage);
     if (result.kind === 'loaded') {
@@ -1199,6 +1220,7 @@ function PreviewWorkspace({
   useEffect(() => {
     refreshRawRecoveryCopy();
     refreshCloudRestoreRecoveryCopy();
+    refreshImportRecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -2712,12 +2734,14 @@ function PreviewWorkspace({
   function finishWrite(
     resultData: PreviewData,
     allowUnrecoverableReplacement = false,
-    operation: 'save' | 'import' | 'reset' | 'replace' = 'save'
+    operation: 'save' | 'import' | 'reset' | 'replace' = 'save',
+    importSourceRaw?: string
   ): string | null {
     const written = writeCurrentPreview(resultData, expectedRaw.current, {
       allowUnrecoverableReplacement,
       currentDate,
-      operation
+      operation,
+      ...(importSourceRaw === undefined ? {} : { importSourceRaw })
     });
     refreshV29RecoveryCopy();
     refreshV30RecoveryCopy();
@@ -2730,6 +2754,7 @@ function PreviewWorkspace({
     refreshV7RecoveryCopy();
     refreshV8RecoveryCopy();
     refreshV9RecoveryCopy();
+    if (operation === 'import') refreshImportRecoveryCopy();
     if (written.kind === 'saved') {
       expectedRaw.current = written.raw;
       externalRaw.current = null;
@@ -3027,6 +3052,18 @@ function PreviewWorkspace({
                       </button>
                     </section>
                   )}
+                {!moreSettingsOpen && identity.kind === 'authenticated' && (
+                  <PreviewBackupImportControl
+                    data={previewData}
+                    status={persistenceStatus}
+                    currentDate={currentDate}
+                    onImport={(data, sourceRaw) => finishWrite(data, true, 'import', sourceRaw)}
+                    recoveryRaw={importRecoveryCopy}
+                    recoverySourceRaw={importRecoverySourceCopy}
+                    recoveryArchiveRaw={importRecoveryArchive}
+                    recoveryError={importRecoveryError}
+                  />
+                )}
                 {!moreSettingsOpen && identity.kind === 'authenticated' && (
                   <PreviewAccountBackupControls
                     api={accountBackupApi ?? null}
@@ -3374,7 +3411,11 @@ function PreviewWorkspace({
         data={previewData}
         status={persistenceStatus}
         currentDate={currentDate}
-        onImport={data => finishWrite(data, true, 'import')}
+        importRecoveryRaw={importRecoveryCopy}
+        importRecoverySourceRaw={importRecoverySourceCopy}
+        importRecoveryArchiveRaw={importRecoveryArchive}
+        importRecoveryError={importRecoveryError}
+        onImport={(data, sourceRaw) => finishWrite(data, true, 'import', sourceRaw)}
         onReset={() => finishWrite(initialPreviewData(), true, 'reset')}
         onRetrySave={retrySave}
         onReloadExternal={reloadExternal}
