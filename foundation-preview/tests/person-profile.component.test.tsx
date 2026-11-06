@@ -256,10 +256,10 @@ describe('shared person profile', () => {
     expect(addRhythm).toHaveBeenCalledWith(expect.anything(), 'sample-person-avery');
     const card = screen.getByRole('article', { name: 'Avery and Morgan walk' });
     await user.click(within(card).getByRole('button', { name: 'Tend Avery and Morgan walk' }));
-    await user.click(within(card).getByRole('button', { name: 'Edit Avery and Morgan walk' }));
+    expect(within(card).queryByRole('button', { name: 'Edit Avery and Morgan walk' })).toBeNull();
     await user.click(within(card).getByRole('button', { name: /View scores and history for Avery and Morgan walk/ }));
     expect(tend).toHaveBeenCalledOnce();
-    expect(editRhythm).toHaveBeenCalledOnce();
+    expect(editRhythm).not.toHaveBeenCalled();
     expect(rhythmHistory).toHaveBeenCalledOnce();
   });
 

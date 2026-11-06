@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import {
   areas,
@@ -11,39 +11,45 @@ import {
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
 import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
+import { isRhythmEligibleForToday } from '../domain/category-rhythms.ts';
 import { AreaIcon } from './AreaIcon.tsx';
 import { CategoryHealthBadge, ScoreMeter } from './Cards.tsx';
 import type { Destination } from './AppNavigation.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 import {
-  selectTodayPlanGroups,
-  todayFocusContext,
-  todayFocusLabel
+  currentTodayBlock,
+  selectTodayPlanSections,
+  todayBlockRange,
+  todayFocusContext
 } from '../domain/today-plan.ts';
-import type { TodayFocusId, TodayItemType } from '../domain/today-plan.ts';
+import type { TodayPlanSection, TodayViewId } from '../domain/today-plan.ts';
 import { TodayWeather } from './TodayWeather.tsx';
 import type { TodayWeatherController } from './useTodayWeather.ts';
 import { useTimeBlockSettings } from './TimeBlocksContext.tsx';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
+import { TodayTimeframeHeader } from './TodayTimeframeHeader.tsx';
 import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
 import { formatScore } from '../domain/score-display.ts';
 import { aggregateCategoryHealthScores } from '../domain/category-scoring.ts';
-import { StyledSelect } from './StyledSelect.tsx';
-import type { StyledSelectOption } from './StyledSelect.tsx';
 
-const planTypes: { id: TodayItemType; label: string }[] = [
-  { id: 'scheduled', label: 'Scheduled' },
-  { id: 'anytime', label: 'Anytime' },
-  { id: 'all-day', label: 'All-day' }
+const planTypes: { id: TodayViewId; label: string }[] = [
+  { id: 'now', label: 'Now' },
+  { id: 'flexible', label: 'Flexible' },
+  { id: 'all-today', label: 'All today' }
 ];
+
+function timeframeSubtitle(section: TodayPlanSection): string | undefined {
+  if (section.category === 'scheduled') return section.range;
+  return section.category === 'anytime' ? 'On your schedule' : 'Throughout the day';
+}
 
 type TodayViewProps = {
   people?: readonly PersonPreview[];
   greeting: string;
   evaluationInstant: Date;
   localDate: string;
-  focus: TodayFocusId;
-  onFocusChange: (focus: TodayFocusId) => void;
+  view: TodayViewId;
+  onViewChange: (view: TodayViewId) => void;
   weatherController: TodayWeatherController;
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
@@ -71,8 +77,8 @@ export function TodayView({
   greeting,
   evaluationInstant,
   localDate,
-  focus,
-  onFocusChange,
+  view,
+  onViewChange,
   weatherController,
   completedRhythms,
   undoableRhythms,
@@ -94,82 +100,40 @@ export function TodayView({
   onEditRhythm,
   onUndo,
 }: TodayViewProps) {
-  const restoreTimePickerFocus = useRef(false);
   const tendedRhythmIds = savedTendedRhythmIds
     ?? selectTendedRhythmDisplayIds(completedRhythms, satisfiedRhythmIds);
-  const [planType, setPlanType] = useState<TodayItemType>('scheduled');
   const timeBlocks = useTimeBlockSettings();
-  const visibleRhythms = useMemo(() => {
+  const [expandedSectionIds, setExpandedSectionIds] = useState<ReadonlySet<string>>(() => new Set());
+  const hasInitializedAllToday = useRef(false);
+  const sectionIdPrefix = useId();
+  const searchedRhythms = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     return query ? rhythms.filter(item => item.title.toLocaleLowerCase().includes(query)) : rhythms;
   }, [rhythms, search]);
-  const planGroups = useMemo(
-    () => selectTodayPlanGroups(visibleRhythms, planType, focus, evaluationInstant, timeBlocks),
-    [visibleRhythms, planType, focus, evaluationInstant, timeBlocks]
+  const eligibleRhythms = useMemo(
+    () => searchedRhythms.filter(rhythm => isRhythmEligibleForToday(rhythm, localDate)),
+    [searchedRhythms, localDate]
   );
-  const planRhythms = planGroups.flatMap(group => group.rhythms);
-  const currentLabel = todayFocusLabel(focus, evaluationInstant, timeBlocks);
-  const emptyPlanLabel = planType === 'scheduled'
-    ? focus === 'everything-today' ? 'today' : `in ${currentLabel}`
-    : `in ${planType === 'anytime' ? 'Anytime' : 'All-day'}`;
-  const selectedTimeRange = planType === 'scheduled' && focus !== 'everything-today'
-    ? todayFocusContext(focus, 'scheduled', evaluationInstant, timeBlocks)
+  const planSections = useMemo(
+    () => selectTodayPlanSections(eligibleRhythms, view, evaluationInstant, timeBlocks),
+    [eligibleRhythms, view, evaluationInstant, timeBlocks]
+  );
+  const planRhythms = planSections.flatMap(section => section.rhythms);
+  const currentBlockId = currentTodayBlock(evaluationInstant, timeBlocks);
+  const currentBlock = currentBlockId
+    ? timeBlocks.blocks.find(block => block.id === currentBlockId)
     : undefined;
-  useLayoutEffect(() => {
-    if (!restoreTimePickerFocus.current) return;
-    restoreTimePickerFocus.current = false;
-    document.getElementById('today-plan-time-select')?.focus();
-  }, [focus]);
-  function handleTimeFrameChange(nextFocus: TodayFocusId) {
-    restoreTimePickerFocus.current = true;
-    onFocusChange(nextFocus);
-  }
-  const weatherTime = focus === 'now'
-    ? null
-    : focus === 'everything-today'
-      ? undefined
-      : timeBlocks.blocks.find(block => block.id === focus)?.start;
-  const scheduledItemCount = (timeFrame: TodayFocusId) =>
-    selectTodayPlanGroups(visibleRhythms, 'scheduled', timeFrame, evaluationInstant, timeBlocks)
-      .reduce((count, group) => count + group.rhythms.length, 0);
-  const itemCountLabel = (timeFrame: TodayFocusId) => {
-    const count = scheduledItemCount(timeFrame);
-    return `${count} ${count === 1 ? 'item' : 'items'}`;
-  };
-  const timeFrameOptions: readonly StyledSelectOption<TodayFocusId>[] = [
-    {
-      value: 'now',
-      label: 'Now',
-      description: `${todayFocusContext('now', 'scheduled', evaluationInstant, timeBlocks)} · ${itemCountLabel('now')}`,
-      group: 'View'
-    },
-    {
-      value: 'everything-today',
-      label: 'Everything today',
-      description: `Across every time block · ${itemCountLabel('everything-today')}`,
-      group: 'View'
-    },
-    ...timeBlocks.blocks.map(block => ({
-      value: block.id,
-      label: block.name,
-      description: `${todayFocusContext(block.id, 'scheduled', evaluationInstant, timeBlocks)} · ${itemCountLabel(block.id)}`,
-      group: 'Specific time'
-    }))
-  ];
-  const timeFramePicker = (
-    <StyledSelect
-      id="today-plan-time-select"
-      label="Filter scheduled Rhythms by time"
-      triggerAriaLabel={`Filter scheduled Rhythms by time, currently ${currentLabel}`}
-      containerClassName="today-plan__focus-picker"
-      triggerClassName="today-plan__focus-trigger"
-      sizeTriggerToOptions
-      popoverMinWidth={320}
-      options={timeFrameOptions}
-      value={focus}
-      onChange={handleTimeFrameChange}
-    />
-  );
+  const currentBlockRange = currentBlockId
+    ? todayBlockRange(currentBlockId, timeBlocks)
+    : todayFocusContext('now', 'scheduled', evaluationInstant, timeBlocks);
+  useEffect(() => {
+    if (view !== 'all-today' || initializing || hasInitializedAllToday.current) return;
+    hasInitializedAllToday.current = true;
+    const currentSection = planSections.find(section =>
+      section.category === 'scheduled' && section.id === currentBlockId
+    );
+    setExpandedSectionIds(currentSection ? new Set([currentSection.id]) : new Set());
+  }, [initializing, view, planSections, currentBlockId]);
   const overallHealth = aggregateCategoryHealthScores(
     areas.map(area => categoryHealthScores.get(area.id) ?? null)
   );
@@ -199,7 +163,7 @@ export function TodayView({
     event.preventDefault();
     const tabs = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
     tabs?.[nextIndex]?.focus();
-    setPlanType(planTypes[nextIndex]!.id);
+    onViewChange(planTypes[nextIndex]!.id);
   }
 
   return (
@@ -218,9 +182,6 @@ export function TodayView({
           score={overallHealth.health}
           markerPlacement="below"
         />
-        <p className="overall-health-coverage">
-          {overallHealth.scoredCategoryCount} of {overallHealth.categoryCount} categories scored.
-        </p>
         <div className="menu-grid">
           {areas.map(area => {
             const score = categoryHealthScores.get(area.id) ?? null;
@@ -255,29 +216,72 @@ export function TodayView({
           onShowTendedChange={onShowTendedChange}
           showProgress
           progressDisclosure
-          keepToggleWhenEmpty={visibleRhythms.length > 0}
+          keepToggleWhenEmpty
           renderControls={false}
           onUndo={onUndo}
-          resetKey={`${planType}:${focus}:${search}:${planRhythms.length}`}
+          resetKey={`${search}:${planRhythms.map(rhythm => rhythm.id).join('\u001f')}`}
           initializing={initializing}
         >
           {({ visibleRhythmIds, tendedRhythmIds: displayedTendedIds, controls, itemProps }) => {
-              const visiblePlanGroups = planGroups.flatMap(group => {
-                const rhythms = group.rhythms.filter(rhythm => visibleRhythmIds.has(rhythm.id));
-                return rhythms.length ? [{ ...group, rhythms }] : [];
-              });
-              const everythingToday = planType === 'scheduled' && focus === 'everything-today';
-              const weather = planType === 'scheduled'
+              const allMatchingHidden = planRhythms.length > 0
+                && planRhythms.every(rhythm => !visibleRhythmIds.has(rhythm.id));
+              const weather = view === 'now'
                 && weatherController.city
                 && weatherController.weather.status === 'ready'
-                && weatherTime !== undefined && (
+                && (
                   <TodayWeather
                     report={weatherController.weather.report}
                     localDate={localDate}
-                    time={weatherTime ?? null}
+                    time={null}
                     containerClassName="today-plan__weather"
                   />
                 );
+              const renderRhythms = (sectionRhythms: readonly RhythmPreview[]) =>
+                sectionRhythms
+                  .filter(rhythm => visibleRhythmIds.has(rhythm.id))
+                  .map(rhythm => (
+                    <div key={rhythm.id} {...itemProps(rhythm.id)}>
+                      <RhythmDetailsDialog
+                        rhythm={rhythm}
+                        inline
+                        headingId={`today-rhythm-${rhythm.id}-title`}
+                        people={peopleForRhythm(rhythm, people)}
+                        foundations={foundations}
+                        relatedRhythms={rhythms}
+                        onPersonSelect={onPersonSelect}
+                        onOpenFoundation={onOpenFoundation}
+                        onOpenCategory={categoryId => onNavigate(categoryId)}
+                        completed={displayedTendedIds.has(rhythm.id)}
+                        healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
+                        onTend={event => onTend(rhythm.id, event)}
+                        {...(rhythm.categoryIds?.includes('health')
+                          ? {
+                              completionActionLabel: 'Log',
+                              completionActionAccessibleLabel: rhythm.healthLogCapability === 'cardio'
+                                ? 'Log run'
+                                : rhythm.healthLogCapability === 'weight' ? 'Log weigh-in' : 'Log workout',
+                              completedActionLabel: rhythm.healthLogCapability === 'weight' ? 'Weighed in' : 'Logged'
+                            }
+                          : {})}
+                        onHistory={event => onHistory(rhythm.id, event)}
+                        {...(isEditableRhythmId(rhythm.id)
+                          ? { onEdit: event => onEditRhythm(rhythm, event) }
+                          : {})}
+                        {...(undoableRhythms.has(rhythm.id) && !rhythm.healthLogCapability
+                          ? { onUndo: () => onUndo(rhythm.id) }
+                          : {})}
+                        onClose={() => undefined}
+                      />
+                    </div>
+                  ));
+              const emptyMessage = view === 'now'
+                ? 'No active Rhythms right now.'
+                : view === 'flexible' ? 'No flexible Rhythms due today.' : 'No Rhythms due today.';
+              const renderHiddenStatus = allMatchingHidden && (
+                <div className="dashed-empty-state" role="status">
+                  <p>You’ve tended everything here.</p>
+                </div>
+              );
               return (
                 <>
                   <div className="today-plan__title-row">
@@ -285,7 +289,7 @@ export function TodayView({
                     <div className="today-plan__title-progress">{controls}</div>
                   </div>
                   <div className="today-plan__controls">
-                    <div className="faith-practice-tabs home-plan-type-tabs" role="tablist" aria-label="Plan items">
+                    <div className="faith-practice-tabs home-plan-type-tabs" role="tablist" aria-label="Today views">
                       {planTypes.map((type, index) => (
                         <button
                           key={type.id}
@@ -293,9 +297,9 @@ export function TodayView({
                           role="tab"
                           id={`plan-tab-${type.id}`}
                           aria-controls="today-plan-items"
-                          aria-selected={planType === type.id}
-                          tabIndex={planType === type.id ? 0 : -1}
-                          onClick={() => setPlanType(type.id)}
+                          aria-selected={view === type.id}
+                          tabIndex={view === type.id ? 0 : -1}
+                          onClick={() => onViewChange(type.id)}
                           onKeyDown={event => handlePlanTabKeyDown(event, index)}
                         >
                           {type.label}
@@ -305,116 +309,116 @@ export function TodayView({
                   </div>
                   <div className="today-plan__results">
                     <div
-                      className="current-plan-items"
+                      className={`current-plan-items${view === 'flexible' ? ' current-plan-items--flexible' : ''}`}
                       id="today-plan-items"
                       role="tabpanel"
-                      aria-labelledby={`plan-tab-${planType}`}
+                      aria-labelledby={`plan-tab-${view}`}
                     >
-                {!everythingToday && (
-                  <div className="today-plan__view-heading-row">
-                    <div className="today-plan__left-column">
-                      <div className="today-plan__heading-range-row">
-                        <h4 className="today-plan__view-heading">
-                          {planType === 'scheduled' ? currentLabel : planType === 'anytime' ? 'Anytime' : 'All-day'}
-                        </h4>
-                        {selectedTimeRange && (
-                          <span className="today-plan__time-range">{selectedTimeRange}</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="today-plan__header-actions">
-                      {weather}
-                      {planType === 'scheduled' && timeFramePicker}
-                    </div>
-                  </div>
-                )}
-                {everythingToday && !visiblePlanGroups.length && (
-                  <div className="today-plan__view-heading-row today-plan__view-heading-row--picker-only">
-                    <div className="today-plan__header-actions">{timeFramePicker}</div>
-                  </div>
-                )}
-                {visiblePlanGroups.length ? (
-                  <>
-                    {visiblePlanGroups.map((group, index) => {
-                      const groupTimeBlock = planType === 'scheduled'
-                        ? timeBlocks.blocks.find(block => block.id === group.id)
-                        : undefined;
-                      const groupTimeRange = groupTimeBlock
-                        ? todayFocusContext(groupTimeBlock.id, 'scheduled', evaluationInstant, timeBlocks)
-                        : undefined;
-                      return (
-                        <div
-                          className="current-plan-item-group"
-                          key={group.id}
-                          aria-label={group.title || `${planType === 'scheduled' ? currentLabel : planType} Rhythms`}
-                        >
-                          {group.title && (
-                            <div className={`current-plan-item-group-heading-row${
-                              everythingToday && index === 0 ? ' current-plan-item-group-heading-row--with-picker' : ''
-                            }`}>
-                              <div className="today-plan__heading-range-row">
-                                <h4 className="current-plan-item-group-title">{group.title}</h4>
-                                {groupTimeRange && (
-                                  <span className="today-plan__time-range">{groupTimeRange}</span>
-                                )}
+                      {view === 'now' && (
+                        <>
+                          <TodayTimeframeHeader
+                            title={currentBlock?.name ?? 'Now'}
+                            timeRange={currentBlockRange}
+                            trailingContent={weather}
+                          />
+                          {renderHiddenStatus}
+                          {planSections.length > 0
+                            ? <div className="current-plan-item-group">{renderRhythms(planSections[0]!.rhythms)}</div>
+                            : (
+                              <div className="today-plan__empty-rhythms" role="status">
+                                <p>{emptyMessage}</p>
+                                <button type="button" className="today-plan__empty-action" onClick={() => onViewChange('all-today')}>
+                                  View all today
+                                </button>
                               </div>
-                              {everythingToday && index === 0 && (
-                                <div className="today-plan__header-actions">{timeFramePicker}</div>
-                              )}
+                            )}
+                        </>
+                      )}
+                      {view === 'flexible' && (
+                        <>
+                          {planSections.length > 0
+                            ? (
+                              <>
+                                {planSections.map(section => (
+                                  <section
+                                    className="today-plan__flexible-group"
+                                    key={section.id}
+                                    aria-labelledby={`${sectionIdPrefix}-${section.id}-heading`}
+                                  >
+                                    <TodayTimeframeHeader
+                                      headingId={`${sectionIdPrefix}-${section.id}-heading`}
+                                      title={section.title}
+                                      timeRange={timeframeSubtitle(section)}
+                                    />
+                                    <div className="current-plan-item-group">{renderRhythms(section.rhythms)}</div>
+                                  </section>
+                                ))}
+                                {renderHiddenStatus}
+                              </>
+                            )
+                            : (
+                              <div className="today-plan__empty-rhythms" role="status">
+                                <p>{emptyMessage}</p>
+                              </div>
+                            )}
+                        </>
+                      )}
+                      {view === 'all-today' && (
+                        planSections.length
+                          ? (
+                            <>
+                              <div className="today-plan__accordion-groups">
+                                {planSections.map(section => {
+                                  const expanded = expandedSectionIds.has(section.id);
+                                  const tendedCount = section.rhythms.filter(rhythm => tendedRhythmIds.has(rhythm.id)).length;
+                                  const panelId = `${sectionIdPrefix}-${section.id}-panel`;
+                                  const headingId = `${sectionIdPrefix}-${section.id}-disclosure`;
+                                  const rhythmCount = section.rhythms.length;
+                                  return (
+                                    <section
+                                      className="today-plan__accordion-group"
+                                      key={section.id}
+                                    >
+                                      <TodayTimeframeHeader
+                                        title={section.title}
+                                        timeRange={timeframeSubtitle(section)}
+                                        disclosure={{
+                                          id: headingId,
+                                          panelId,
+                                          expanded,
+                                          progress: `${tendedCount} of ${rhythmCount} tended`,
+                                          onToggle: () => setExpandedSectionIds(current => {
+                                            const next = new Set(current);
+                                            if (next.has(section.id)) next.delete(section.id);
+                                            else next.add(section.id);
+                                            return next;
+                                          })
+                                        }}
+                                      />
+                                      <div
+                                        className="today-plan__accordion-panel"
+                                        id={panelId}
+                                        role="region"
+                                        aria-labelledby={headingId}
+                                        hidden={!expanded}
+                                      >
+                                        <div className="today-plan__accordion-panel-content current-plan-item-group">
+                                          {renderRhythms(section.rhythms)}
+                                        </div>
+                                      </div>
+                                    </section>
+                                  );
+                                })}
+                              </div>
+                              {renderHiddenStatus}
+                            </>
+                          )
+                          : (
+                            <div className="today-plan__empty-rhythms" role="status">
+                              <p>{emptyMessage}</p>
                             </div>
-                          )}
-                          {group.rhythms.map(rhythm => (
-                            <div key={rhythm.id} {...itemProps(rhythm.id)}>
-                              <RhythmDetailsDialog
-                                rhythm={rhythm}
-                                inline
-                                headingId={`today-rhythm-${rhythm.id}-title`}
-                                people={peopleForRhythm(rhythm, people)}
-                                foundations={foundations}
-                                relatedRhythms={rhythms}
-                                onPersonSelect={onPersonSelect}
-                                onOpenFoundation={onOpenFoundation}
-                                onOpenCategory={categoryId => onNavigate(categoryId)}
-                                completed={displayedTendedIds.has(rhythm.id)}
-                                healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
-                                onTend={event => onTend(rhythm.id, event)}
-                                {...(rhythm.categoryIds?.includes('health')
-                                  ? {
-                                      completionActionLabel: 'Log',
-                                      completionActionAccessibleLabel: rhythm.healthLogCapability === 'cardio'
-                                        ? 'Log run'
-                                        : rhythm.healthLogCapability === 'weight' ? 'Log weigh-in' : 'Log workout',
-                                      completedActionLabel: rhythm.healthLogCapability === 'weight' ? 'Weighed in' : 'Logged'
-                                    }
-                                  : {})}
-                                onHistory={event => onHistory(rhythm.id, event)}
-                                {...(isEditableRhythmId(rhythm.id)
-                                  ? { onEdit: event => onEditRhythm(rhythm, event) }
-                                  : {})}
-                                {...(undoableRhythms.has(rhythm.id) && !rhythm.healthLogCapability
-                                  ? { onUndo: () => onUndo(rhythm.id) }
-                                  : {})}
-                                onClose={() => undefined}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })}
-                  </>
-                ) : (
-                  <>
-                    {planRhythms.length > 0 ? (
-                      <div className="dashed-empty-state" role="status">
-                        <p>You’ve tended everything here.</p>
-                      </div>
-                    ) : (
-                      <div className="today-plan__empty-rhythms" role="status">
-                        <p>No active Rhythms {emptyPlanLabel}.</p>
-                      </div>
-                    )}
-                  </>
-                )}
+                          )
+                      )}
                   </div>
                 </div>
                 </>

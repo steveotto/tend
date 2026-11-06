@@ -2,15 +2,17 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { TodayTimeFilter } from '../src/components/TodayTimeFilter.tsx';
+import { TimeBlocksProvider } from '../src/components/TimeBlocksContext.tsx';
 import { TodayView } from '../src/components/TodayView.tsx';
 import type { TodayWeatherController } from '../src/components/useTodayWeather.ts';
-import { todayFocusContext } from '../src/domain/today-plan.ts';
-import type { TodayFocusId } from '../src/domain/today-plan.ts';
-import { foundationCatalogue, todayRhythms } from '../src/domain/preview-data.ts';
-import type { RhythmPreview } from '../src/domain/preview-data.ts';
-import { TimeBlocksProvider } from '../src/components/TimeBlocksContext.tsx';
 import { createDefaultTimeBlockSettings } from '../src/domain/time-blocks.ts';
 import type { TimeBlockSettings } from '../src/domain/time-blocks.ts';
+import { foundationCatalogue, todayRhythms } from '../src/domain/preview-data.ts';
+import type { RhythmPreview } from '../src/domain/preview-data.ts';
+import type { TodayFocusId, TodayViewId } from '../src/domain/today-plan.ts';
+import { todayFocusContext } from '../src/domain/today-plan.ts';
+import { areas } from '../src/domain/preview-data.ts';
 
 afterEach(cleanup);
 
@@ -24,33 +26,45 @@ const unavailableWeather: TodayWeatherController = {
   retry: vi.fn()
 };
 
+const defaultTimeBlocks = createDefaultTimeBlockSettings();
+const defaultInstant = new Date(2026, 9, 31, 10, 0);
+
+function makeRhythm(id: string, title: string, timeOfDay: NonNullable<RhythmPreview['timeOfDay']>): RhythmPreview {
+  return { ...todayRhythms[0]!, id, title, timeOfDay };
+}
+
 function TodayHarness({
-  weatherController = unavailableWeather,
   satisfiedRhythmIds = new Set(['sample-pray-together']),
   showTended = true,
-  timeBlockSettings = createDefaultTimeBlockSettings(),
+  timeBlockSettings = defaultTimeBlocks,
   categoryHealthScores = new Map(),
-  rhythms = todayRhythms
+  rhythms = todayRhythms,
+  evaluationInstant = defaultInstant,
+  localDate = '2026-10-31',
+  initialView = 'now'
 }: {
-  weatherController?: TodayWeatherController;
   satisfiedRhythmIds?: ReadonlySet<string>;
   showTended?: boolean;
   timeBlockSettings?: TimeBlockSettings;
   categoryHealthScores?: ReadonlyMap<string, number | null>;
   rhythms?: readonly RhythmPreview[];
+  evaluationInstant?: Date;
+  localDate?: string;
+  initialView?: TodayViewId;
 }) {
-  const [focus, setFocus] = useState<TodayFocusId>('now');
+  const [view, setView] = useState<TodayViewId>(initialView);
   const [tendedVisible, setTendedVisible] = useState(showTended);
+  const completedRhythms = new Set<string>();
   return (
     <TimeBlocksProvider settings={timeBlockSettings}>
       <TodayView
         greeting="Good morning"
-        evaluationInstant={new Date(2026, 9, 31, 10, 0)}
-        localDate="2026-10-31"
-        focus={focus}
-        onFocusChange={setFocus}
-        weatherController={weatherController}
-        completedRhythms={new Set(['sample-pray-together'])}
+        evaluationInstant={evaluationInstant}
+        localDate={localDate}
+        view={view}
+        onViewChange={setView}
+        weatherController={unavailableWeather}
+        completedRhythms={completedRhythms}
         undoableRhythms={new Set()}
         satisfiedRhythmIds={satisfiedRhythmIds}
         showTended={tendedVisible}
@@ -72,660 +86,331 @@ function TodayHarness({
   );
 }
 
-function renderToday(
-  weatherController?: TodayWeatherController,
-  options: {
-    satisfiedRhythmIds?: ReadonlySet<string>;
-    showTended?: boolean;
-    timeBlockSettings?: TimeBlockSettings;
-    categoryHealthScores?: ReadonlyMap<string, number | null>;
-    rhythms?: readonly RhythmPreview[];
-  } = {}
-) {
-  return render(<TodayHarness
-    {...(weatherController ? { weatherController } : {})}
-    {...options}
-  />);
+function renderToday(options: {
+  satisfiedRhythmIds?: ReadonlySet<string>;
+  showTended?: boolean;
+  timeBlockSettings?: TimeBlockSettings;
+  categoryHealthScores?: ReadonlyMap<string, number | null>;
+  rhythms?: readonly RhythmPreview[];
+  evaluationInstant?: Date;
+  localDate?: string;
+  initialView?: TodayViewId;
+} = {}) {
+  return render(<TodayHarness {...options} />);
+}
+
+function TimeFilterHarness({
+  rhythms = todayRhythms,
+  timeBlockSettings = defaultTimeBlocks
+}: {
+  rhythms?: readonly RhythmPreview[];
+  timeBlockSettings?: TimeBlockSettings;
+}) {
+  const [focus, setFocus] = useState<TodayFocusId>('now');
+  return (
+    <TimeBlocksProvider settings={timeBlockSettings}>
+      <TodayTimeFilter
+        rhythms={rhythms}
+        focus={focus}
+        onFocusChange={setFocus}
+        evaluationInstant={defaultInstant}
+        timeBlocks={timeBlockSettings}
+      />
+    </TimeBlocksProvider>
+  );
+}
+
+function renderTimeFilter(options: {
+  rhythms?: readonly RhythmPreview[];
+  timeBlockSettings?: TimeBlockSettings;
+} = {}) {
+  return render(<TimeFilterHarness {...options} />);
+}
+
+function todayPlan() {
+  return screen.getByRole('region', { name: "Today's plan" });
+}
+
+function planTabs(plan: HTMLElement) {
+  return within(plan).getByRole('tablist', { name: 'Today views' });
 }
 
 describe('Today time-frame interaction', () => {
   it('keeps Overall Health category labels intact and in order beside their icon and score', () => {
     renderToday();
-
     const overall = screen.getByRole('region', { name: 'Overall health summary' });
     const categoryCards = within(overall).getAllByRole('button');
-    expect(categoryCards.map(card => card.querySelector('.ma-name')?.textContent)).toEqual([
-      'Faith',
-      'Marriage',
-      'Parenting',
-      'Health & Fitness',
-      'Finances',
-      'Friendships'
-    ]);
+    expect(categoryCards.map(card => card.querySelector('.ma-name')?.textContent))
+      .toEqual(areas.map(area => area.label));
     for (const card of categoryCards) {
       expect(card.querySelector('.menu-area-icon')?.getAttribute('aria-hidden')).toBe('true');
       expect(card.querySelector('.ma-score__value')).toBeTruthy();
     }
   });
 
-  it('shows the equal-weight average of available category Health values and synchronized coverage', () => {
-    renderToday(undefined, {
+  it('shows the equal-weight average of available category Health values without coverage text', () => {
+    renderToday({
       categoryHealthScores: new Map([
         ['faith', 100],
         ['marriage', 13],
         ['parenting', 13]
       ])
     });
-
     const overall = screen.getByRole('region', { name: 'Overall health summary' });
     expect(within(overall).getByText('42', { selector: '.ov-score' })).toBeTruthy();
-    expect(within(overall).getByText('3 of 6 categories scored.')).toBeTruthy();
+    expect(within(overall).queryByText(/categories scored/)).toBeNull();
+    expect(overall.querySelector('.overall-health-coverage')).toBeNull();
     expect(within(overall).getByRole('meter', {
       name: 'Overall health score 42 out of 100'
     }).getAttribute('aria-valuenow')).toBe('42');
-    expect(within(overall).getByRole('button', { name: /Faith/ }).querySelector('.ma-score')?.textContent).toBe('100');
-    expect(within(overall).getByRole('button', { name: /Marriage/ }).querySelector('.ma-score')?.textContent).toBe('13');
-    expect(within(overall).getByRole('button', { name: /Parenting/ }).querySelector('.ma-score')?.textContent).toBe('13');
-  });
-
-  it('updates the displayed score, progress meter and coverage when Category scores change', () => {
-    const { rerender } = renderToday(undefined, {
-      categoryHealthScores: new Map([
-        ['faith', 100],
-        ['marriage', 13]
-      ])
-    });
-    const overall = screen.getByRole('region', { name: 'Overall health summary' });
-    expect(within(overall).getByText('57', { selector: '.ov-score' })).toBeTruthy();
-    expect(within(overall).getByText('2 of 6 categories scored.')).toBeTruthy();
-
-    rerender(<TodayHarness categoryHealthScores={new Map([
-      ['faith', 100],
-      ['marriage', 13],
-      ['parenting', 13]
-    ])} />);
-
-    expect(within(overall).getByText('42', { selector: '.ov-score' })).toBeTruthy();
-    expect(within(overall).getByText('3 of 6 categories scored.')).toBeTruthy();
-    expect(within(overall).getByRole('meter', { name: 'Overall health score 42 out of 100' })
-      .getAttribute('aria-valuenow')).toBe('42');
   });
 
   it('includes zero in the Today Overall Health average', () => {
-    renderToday(undefined, {
-      categoryHealthScores: new Map([['faith', 0]])
-    });
-
+    renderToday({ categoryHealthScores: new Map([['faith', 0]]) });
     const overall = screen.getByRole('region', { name: 'Overall health summary' });
     expect(within(overall).getByText('0', { selector: '.ov-score' })).toBeTruthy();
-    expect(within(overall).getByText('1 of 6 categories scored.')).toBeTruthy();
+    expect(within(overall).queryByText(/categories scored/)).toBeNull();
+    expect(overall.querySelector('.overall-health-coverage')).toBeNull();
     expect(within(overall).getByRole('meter', { name: 'Overall health score 0 out of 100' })
       .getAttribute('aria-valuenow')).toBe('0');
   });
 
-  it('keeps zero, two-digit, and three-digit category scores in the shared numeric badge', () => {
-    renderToday(undefined, {
-      categoryHealthScores: new Map([
-        ['faith', 0],
-        ['marriage', 23],
-        ['parenting', 100]
-      ])
-    });
-
-    const overall = screen.getByRole('region', { name: 'Overall health summary' });
-    const values = ['Faith', 'Marriage', 'Parenting'].map(label => {
-      const badge = within(overall).getByRole('button', { name: new RegExp(label) })
-        .querySelector('.ma-score');
-      expect(badge).toBeTruthy();
-      expect(badge?.querySelector('.ma-score__value')).toBeTruthy();
-      return badge?.querySelector('.ma-score__value')?.textContent;
-    });
-
-    expect(values).toEqual(['0', '23', '100']);
-  });
-
-  it('shows a dash, empty meter and zero coverage when all category scores are unavailable', () => {
-    renderToday();
-
-    const overall = screen.getByRole('region', { name: 'Overall health summary' });
-    expect(within(overall).getByText('—', { selector: '.ov-score' })).toBeTruthy();
-    expect(within(overall).getByText('0 of 6 categories scored.')).toBeTruthy();
-    const meter = within(overall).getByRole('meter', { name: 'Overall health: Not enough data' });
-    expect(meter.getAttribute('aria-valuenow')).toBeNull();
-    expect(meter.getAttribute('aria-valuetext')).toBe('Score unavailable');
-    expect(meter.querySelector('.preview-score-marker')).toBeNull();
-  });
-
-  it('defaults to Now, counts only the selected range, and keeps the selected block during the visit', async () => {
-    const user = userEvent.setup();
-    renderToday();
-    const plan = screen.getByRole('region', { name: "Today's plan" });
-    expect(within(plan).getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Now/ })).toBeTruthy();
-    expect(within(plan).getByText('1 of 1 tended')).toBeTruthy();
-    expect(within(plan).getByRole('article', { name: 'Pray together' })).toBeTruthy();
-    expect(within(plan).queryByRole('article', { name: 'Daily connection' })).toBeNull();
-    expect(within(plan).queryByRole('heading', { name: 'Your plan' })).toBeNull();
-
-    await user.click(within(plan).getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Now/ }));
-    expect(within(plan).getByRole('option', { name: /Now.*9:00am – 11:30am/ })).toBeTruthy();
-    await user.click(within(plan).getByRole('option', { name: /Evening/ }));
-
-    expect(within(plan).getByText('6:00pm – 9:30pm', {
-      selector: '.today-plan__time-range'
-    })).toBeTruthy();
-    expect(within(plan).getByText('0 of 1 tended')).toBeTruthy();
-    expect(within(plan).getByRole('article', { name: 'Daily connection' })).toBeTruthy();
-    expect(within(plan).queryByRole('article', { name: 'Pray together' })).toBeNull();
-    await user.click(within(plan).getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Evening/ }));
-    expect(within(plan).getByRole('option', { name: /Evening.*6:00pm – 9:30pm/ })).toBeTruthy();
-  });
-
-  it('sizes the Today time trigger from all primary option labels, independent of selection', async () => {
-    const user = userEvent.setup();
-    renderToday();
-    const plan = screen.getByRole('region', { name: "Today's plan" });
-    const trigger = within(plan).getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Now/ });
-    const sizingLabels = () => [...trigger.querySelector('.rhythm-select__trigger-sizer')!.children]
-      .map(label => label.textContent ?? '');
-    const expectedLabels = [
-      'Now',
-      'Everything today',
-      ...createDefaultTimeBlockSettings().blocks.map(block => block.name)
+  it('defaults to Now and shows only today’s scheduled Rhythms in the current block', () => {
+    const rhythms = [
+      makeRhythm('morning-item', 'Morning item', 'morning'),
+      makeRhythm('afternoon-item', 'Afternoon item', 'afternoon'),
+      makeRhythm('anytime-item', 'Anytime item', 'anytime'),
+      makeRhythm('all-day-item', 'All-day item', 'all-day')
     ];
-
-    expect(trigger.classList.contains('rhythm-select__trigger--size-to-options')).toBe(true);
-    expect(sizingLabels()).toEqual(expectedLabels);
-    expect(trigger.querySelector('.rhythm-select__trigger-sizer')?.getAttribute('aria-hidden')).toBe('true');
-    expect(trigger.querySelector('.rhythm-select__trigger-sizer')?.textContent)
-      .not.toContain('Across every time block');
-
-    const selections: Array<[string, RegExp]> = [
-      ['Everything today', /Filter scheduled Rhythms by time, currently Everything today/],
-      ['Evening', /Filter scheduled Rhythms by time, currently Evening/]
-    ];
-    for (const [label, expectedTriggerName] of selections) {
-      await user.click(screen.getByRole('combobox', { name: /^Filter scheduled Rhythms by time/ }));
-      await user.click(within(plan).getByRole('option', { name: new RegExp(`^${label}`) }));
-      expect(within(plan).getByRole('combobox', { name: expectedTriggerName })).toBeTruthy();
-      expect(sizingLabels()).toEqual(expectedLabels);
-    }
+    renderToday({ rhythms, satisfiedRhythmIds: new Set() });
+    const plan = todayPlan();
+    expect(within(planTabs(plan)).getByRole('tab', { name: 'Now' }).getAttribute('aria-selected')).toBe('true');
+    expect(plan.querySelector('.today-timeframe-header .today-plan__view-heading')?.textContent).toBe('Morning');
+    expect(within(plan).getByText(todayFocusContext(
+      'now', 'scheduled', defaultInstant, defaultTimeBlocks
+    ), { selector: '.today-timeframe-header__range' })).toBeTruthy();
+    expect(within(plan).getByRole('article', { name: 'Morning item' })).toBeTruthy();
+    expect(within(plan).queryByRole('article', { name: 'Afternoon item' })).toBeNull();
+    expect(within(plan).queryByRole('article', { name: 'Anytime item' })).toBeNull();
+    expect(within(plan).queryByRole('article', { name: 'All-day item' })).toBeNull();
+    expect(within(plan).queryByRole('combobox')).toBeNull();
   });
 
-  it('offers Everything today and the three preserved item-type tabs with ARIA selection', async () => {
+  it('moves focus and activates tabs with arrows, Home, and End while keeping tab and panel ARIA in sync', async () => {
     const user = userEvent.setup();
     renderToday();
-    const plan = screen.getByRole('region', { name: "Today's plan" });
-    await user.click(within(plan).getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Now/ }));
-    await user.click(within(plan).getByRole('option', { name: /Everything today/ }));
+    const plan = todayPlan();
+    const tabList = planTabs(plan);
+    const now = within(tabList).getByRole('tab', { name: 'Now' });
+    const flexible = within(tabList).getByRole('tab', { name: 'Flexible' });
+    const allToday = within(tabList).getByRole('tab', { name: 'All today' });
+    const panel = within(plan).getByRole('tabpanel');
 
-    expect(within(plan).getByText('1 of 3 tended')).toBeTruthy();
-    for (const name of ['Pray together', 'Daily connection', 'Take a walk']) {
-      expect(within(plan).getByRole('article', { name })).toBeTruthy();
-    }
-    for (const tabName of ['Scheduled', 'Anytime', 'All-day']) {
-      expect(within(plan).getByRole('tab', { name: tabName })).toBeTruthy();
-    }
-    expect(within(plan).getByRole('tab', { name: 'Scheduled' }).getAttribute('aria-selected')).toBe('true');
+    now.focus();
+    await user.keyboard('{ArrowLeft}');
+    expect(document.activeElement).toBe(allToday);
+    expect(allToday.getAttribute('aria-selected')).toBe('true');
+    expect(allToday.tabIndex).toBe(0);
+    expect(now.tabIndex).toBe(-1);
+    expect(panel.getAttribute('aria-labelledby')).toBe('plan-tab-all-today');
 
-    await user.click(within(plan).getByRole('tab', { name: 'Anytime' }));
-    expect(within(plan).getByRole('tab', { name: 'Anytime' }).getAttribute('aria-selected')).toBe('true');
-    expect(within(plan).getByRole('status').textContent).toBe('No active Rhythms in Anytime.');
+    await user.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(now);
+    expect(now.getAttribute('aria-selected')).toBe('true');
+    await user.keyboard('{End}');
+    expect(document.activeElement).toBe(allToday);
+    await user.keyboard('{Home}');
+    expect(document.activeElement).toBe(now);
+    await user.click(flexible);
+    expect(flexible.getAttribute('aria-selected')).toBe('true');
+    expect(panel.getAttribute('aria-labelledby')).toBe('plan-tab-flexible');
   });
 
-  it('distinguishes an all-tended selection from an empty tab and keeps Show tended available', async () => {
+  it('shows Anytime and All-day groups in order on Flexible without scheduled Rhythms', async () => {
     const user = userEvent.setup();
-    renderToday(undefined, {
-      satisfiedRhythmIds: new Set(['sample-pray-together']),
+    const rhythms = [
+      makeRhythm('morning-item', 'Morning item', 'morning'),
+      makeRhythm('anytime-item', 'Anytime item', 'anytime'),
+      makeRhythm('all-day-item', 'All-day item', 'all-day')
+    ];
+    renderToday({ rhythms, satisfiedRhythmIds: new Set() });
+    const plan = todayPlan();
+    await user.click(within(planTabs(plan)).getByRole('tab', { name: 'Flexible' }));
+    const groupHeadings = [...plan.querySelectorAll('.today-plan__flexible-group .today-plan__view-heading')];
+    expect(groupHeadings.map(heading => heading.textContent)).toEqual(['Anytime', 'All-day']);
+    expect(within(plan).getByText('On your schedule', { selector: '.today-timeframe-header__range' })).toBeTruthy();
+    expect(within(plan).getByText('Throughout the day', { selector: '.today-timeframe-header__range' })).toBeTruthy();
+    expect(within(plan).getByRole('article', { name: 'Anytime item' })).toBeTruthy();
+    expect(within(plan).getByRole('article', { name: 'All-day item' })).toBeTruthy();
+    expect(within(plan).queryByRole('article', { name: 'Morning item' })).toBeNull();
+  });
+
+  it('offers the quiet View all today action when Now is empty and distinguishes hidden tended items', async () => {
+    const user = userEvent.setup();
+    const afternoon = makeRhythm('afternoon-item', 'Afternoon item', 'afternoon');
+    renderToday({ rhythms: [afternoon], satisfiedRhythmIds: new Set() });
+    const plan = todayPlan();
+    expect(within(plan).getByRole('status').textContent).toContain('No active Rhythms right now.');
+    await user.click(within(plan).getByRole('button', { name: 'View all today' }));
+    expect(within(planTabs(plan)).getByRole('tab', { name: 'All today' }).getAttribute('aria-selected')).toBe('true');
+
+    cleanup();
+    renderToday({
+      rhythms: [makeRhythm('morning-item', 'Morning item', 'morning')],
+      satisfiedRhythmIds: new Set(['morning-item']),
       showTended: false
     });
-    const plan = screen.getByRole('region', { name: "Today's plan" });
-
-    expect(within(plan).getByText('1 of 1 tended')).toBeTruthy();
-    expect(within(plan).getByRole('button', { name: 'Show tended Rhythms, 1 of 1 tended' }).getAttribute('aria-expanded'))
-      .toBe('false');
-    expect(within(plan).getByRole('status').textContent).toBe('You’ve tended everything here.');
-
-    await user.click(within(plan).getByRole('tab', { name: 'Anytime' }));
-    expect(within(plan).getByRole('status').textContent).toBe('No active Rhythms in Anytime.');
-    expect(within(plan).queryByText('You’ve tended everything here.')).toBeNull();
-    expect(within(plan).getByRole('button', { name: 'Show tended Rhythms, 0 of 0 tended' })).toBeTruthy();
+    const hiddenPlan = todayPlan();
+    expect(within(hiddenPlan).getByRole('status').textContent).toContain('You’ve tended everything here.');
+    expect(within(hiddenPlan).queryByText('No active Rhythms right now.')).toBeNull();
   });
 
-  it('renders a single card-style empty message using the selected view label', async () => {
-    const user = userEvent.setup();
-    renderToday(undefined, { rhythms: [] });
-    const plan = screen.getByRole('region', { name: "Today's plan" });
-    const emptyState = () => within(plan).getByRole('status');
-
-    expect(emptyState().textContent).toBe('No active Rhythms in Now.');
-    expect(emptyState().className).toContain('today-plan__empty-rhythms');
-    expect(emptyState().querySelectorAll('button, svg, img')).toHaveLength(0);
-
-    await user.click(within(plan).getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Now/ }));
-    await user.click(within(plan).getByRole('option', { name: /Everything today/ }));
-    expect(emptyState().textContent).toBe('No active Rhythms today.');
-    expect(within(plan).queryByRole('heading', { name: 'Everything today' })).toBeNull();
-    expect(within(plan).getByRole('combobox', {
-      name: 'Filter scheduled Rhythms by time, currently Everything today'
-    })).toBeTruthy();
-    expect(plan.querySelector('.today-plan__view-heading-row--picker-only')).toBeTruthy();
-
-    await user.click(within(plan).getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Everything today/ }));
-    await user.click(within(plan).getByRole('option', { name: /^Morning/ }));
-    expect(emptyState().textContent).toBe('No active Rhythms in Morning.');
-
-    await user.click(within(plan).getByRole('tab', { name: 'Anytime' }));
-    expect(emptyState().textContent).toBe('No active Rhythms in Anytime.');
-    await user.click(within(plan).getByRole('tab', { name: 'All-day' }));
-    expect(emptyState().textContent).toBe('No active Rhythms in All-day.');
-  });
-
-  it('keeps populated Rhythms visible without rendering the empty card', () => {
-    renderToday();
-    const plan = screen.getByRole('region', { name: "Today's plan" });
-    expect(within(plan).getByRole('article', { name: 'Pray together' })).toBeTruthy();
-    expect(plan.querySelector('.today-plan__empty-rhythms')).toBeNull();
-  });
-
-  it('shows the selected collection disclosure in the Today heading row on every plan tab', async () => {
-    const user = userEvent.setup();
-    renderToday(undefined, { showTended: false });
-    const plan = screen.getByRole('region', { name: "Today's plan" });
-    const toggle = () => within(plan).getByRole('button', { name: /Show tended Rhythms/ });
-    const titleRow = plan.querySelector<HTMLElement>('.today-plan__title-row')!;
-    const progressRow = plan.querySelector('.show-tended-list__progress-row')!;
-    const tabList = within(plan).getByRole('tablist', { name: 'Plan items' });
-
-    for (const tabName of ['Scheduled', 'Anytime', 'All-day']) {
-      await user.click(within(plan).getByRole('tab', { name: tabName }));
-      expect(within(plan).getByRole('heading', { name: tabName === 'Scheduled' ? 'Now' : tabName }))
-        .toBeTruthy();
-      expect(within(titleRow).getByRole('heading', { name: 'Today' })).toBeTruthy();
-      expect(titleRow.contains(progressRow)).toBe(true);
-      expect(titleRow.compareDocumentPosition(tabList) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(plan.querySelectorAll('.show-tended-list__progress-row')).toHaveLength(1);
-      expect(plan.querySelector('.show-tended-list__disclosure-content')?.className)
-        .toContain('show-tended-list__progress');
-      expect(toggle().getAttribute('aria-expanded')).toBe('false');
-      expect(toggle().textContent).toContain(`${within(plan).getByText(/\d+ of \d+ tended/).textContent}`);
-      expect(toggle().getAttribute('aria-expanded')).toBe('false');
-      const chevron = toggle().querySelector('.show-tended-list__disclosure-chevron path');
-      expect(chevron?.getAttribute('d')).toBe('m3 6 5 5 5-5');
-      expect(progressRow).toBeTruthy();
-      expect(plan.querySelector('.today-plan__left-column')?.contains(progressRow)).toBe(false);
-
-      await user.click(toggle());
-      const hideToggle = within(plan).getByRole('button', { name: /Hide tended Rhythms/ });
-      expect(hideToggle.getAttribute('aria-expanded')).toBe('true');
-      expect(hideToggle.querySelector('.show-tended-list__disclosure-chevron path')?.getAttribute('d'))
-        .toBe('m3 10 5-5 5 5');
-      await user.click(hideToggle);
-    }
-  });
-
-  it('uses one accessible keyboard-operable disclosure pill for Today progress', async () => {
-    const user = userEvent.setup();
-    renderToday(undefined, { showTended: false });
-    const plan = screen.getByRole('region', { name: "Today's plan" });
-    await user.click(within(plan).getByRole('tab', { name: 'Anytime' }));
-
-    const pill = within(plan).getByRole('button', { name: 'Show tended Rhythms, 0 of 0 tended' });
-    expect(pill.getAttribute('aria-expanded')).toBe('false');
-    expect(pill.textContent).toContain('0 of 0 tended');
-    expect(pill.querySelector('.show-tended-list__disclosure-chevron path')?.getAttribute('d'))
-      .toBe('m3 6 5 5 5-5');
-    expect(pill.getAttribute('type')).toBe('button');
-
-    pill.focus();
-    await user.keyboard('{Enter}');
-    const expandedPill = within(plan).getByRole('button', { name: 'Hide tended Rhythms, 0 of 0 tended' });
-    expect(expandedPill.getAttribute('aria-expanded')).toBe('true');
-    expect(expandedPill.querySelector('.show-tended-list__disclosure-chevron path')?.getAttribute('d'))
-      .toBe('m3 10 5-5 5 5');
-
-    await user.click(within(plan).getByRole('tab', { name: 'Scheduled' }));
-    expect(within(plan).getByRole('button', { name: 'Hide tended Rhythms, 1 of 1 tended' })).toBeTruthy();
-  });
-
-  it('moves focus and activates Today plan tabs with arrows, Home, and End', async () => {
-    const user = userEvent.setup();
-    renderToday();
-    const plan = screen.getByRole('region', { name: "Today's plan" });
-    await user.click(within(plan).getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Now/ }));
-    await user.click(within(plan).getByRole('option', { name: /Everything today/ }));
-
-    const tabList = within(plan).getByRole('tablist', { name: 'Plan items' });
-    const scheduled = within(tabList).getByRole('tab', { name: 'Scheduled' });
-    const anytime = within(tabList).getByRole('tab', { name: 'Anytime' });
-    const allDay = within(tabList).getByRole('tab', { name: 'All-day' });
-    const panel = within(plan).getByRole('tabpanel');
-
-    scheduled.focus();
-    await user.keyboard('{ArrowLeft}');
-    expect(document.activeElement).toBe(allDay);
-    expect(allDay.getAttribute('aria-selected')).toBe('true');
-    expect(allDay.tabIndex).toBe(0);
-    expect(scheduled.tabIndex).toBe(-1);
-    expect(panel.getAttribute('aria-labelledby')).toBe('plan-tab-all-day');
-
-    await user.keyboard('{ArrowRight}');
-    expect(document.activeElement).toBe(scheduled);
-    expect(scheduled.getAttribute('aria-selected')).toBe('true');
-
-    await user.keyboard('{End}');
-    expect(document.activeElement).toBe(allDay);
-    expect(allDay.getAttribute('aria-selected')).toBe('true');
-
-    await user.keyboard('{Home}');
-    expect(document.activeElement).toBe(scheduled);
-    expect(scheduled.getAttribute('aria-selected')).toBe('true');
-
-    await user.keyboard('{ArrowRight}');
-    expect(document.activeElement).toBe(anytime);
-    expect(anytime.getAttribute('aria-selected')).toBe('true');
-    expect(panel.getAttribute('aria-labelledby')).toBe('plan-tab-anytime');
-  });
-
-  it('places the Scheduled time picker beside the results heading and preserves tab-to-picker focus and filtering', async () => {
-    const user = userEvent.setup();
-    renderToday();
-    const plan = screen.getByRole('region', { name: "Today's plan" });
-    const tabList = within(plan).getByRole('tablist', { name: 'Plan items' });
-    const controls = plan.querySelector('.today-plan__controls')!;
-    const results = plan.querySelector('.today-plan__results')!;
-    const timePicker = within(plan).getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Now/ });
-    const viewHeading = plan.querySelector('.today-plan__view-heading')!;
-    const progressRow = plan.querySelector('.show-tended-list__progress-row')!;
-    const leftColumn = plan.querySelector('.today-plan__left-column')!;
-    const headerActions = plan.querySelector('.today-plan__header-actions')!;
-    const panel = within(plan).getByRole('tabpanel');
-
-    expect(plan.classList.contains('card')).toBe(false);
-    expect(controls.children).toHaveLength(1);
-    expect(controls.querySelector('.show-tended-list__progress-row')).toBeNull();
-    expect(controls.querySelector('.current-plan-items')).toBeNull();
-    expect(controls.contains(tabList)).toBe(true);
-    expect(controls.contains(timePicker)).toBe(false);
-    expect(controls.compareDocumentPosition(results) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(plan.querySelector('.today-plan__time-label')).toBeNull();
-    expect(timePicker.getAttribute('aria-label')).toBe('Filter scheduled Rhythms by time, currently Now');
-    expect(tabList.compareDocumentPosition(timePicker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const titleRow = plan.querySelector('.today-plan__title-row')!;
-    expect(titleRow.contains(plan.querySelector('.today-plan__heading'))).toBe(true);
-    expect(titleRow.contains(progressRow)).toBe(true);
-    expect(titleRow.compareDocumentPosition(tabList) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(leftColumn.contains(viewHeading)).toBe(true);
-    expect(leftColumn.contains(progressRow)).toBe(false);
-    expect(headerActions.contains(timePicker)).toBe(true);
-    expect(leftColumn.compareDocumentPosition(headerActions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(panel.querySelector('.today-rhythm-details-dialog--inline')!)
-      .toBeTruthy();
-    expect(results.compareDocumentPosition(panel.querySelector('.today-rhythm-details-dialog--inline')!)
-      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(controls.contains(panel)).toBe(false);
-    expect(progressRow.contains(progressRow.querySelector('.show-tended-list__disclosure'))).toBe(true);
-
-    within(tabList).getByRole('tab', { name: 'Scheduled' }).focus();
-    await user.tab();
-    expect(document.activeElement).toBe(timePicker);
-
-    await user.click(timePicker);
-    await user.click(within(plan).getByRole('option', { name: /^Morning/ }));
-    expect(within(plan).getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Morning/ })).toBeTruthy();
-    expect(within(plan).getByRole('article', { name: 'Pray together' })).toBeTruthy();
-  });
-
-  it('keeps focus-frame hover and keyboard focus separate from activation', async () => {
-    const user = userEvent.setup();
-    renderToday();
-    const plan = screen.getByRole('region', { name: "Today's plan" });
-    const trigger = within(plan).getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Now/ });
-    await user.click(trigger);
-
-    const evening = within(plan).getByRole('option', { name: /Evening.*6:00pm – 9:30pm.*1 item/ });
-    const initialTendedCount = within(plan).getByText('1 of 1 tended').textContent;
-    await user.hover(evening);
-    expect(evening.getAttribute('aria-selected')).toBe('false');
-    expect(within(plan).getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Now/ })).toBeTruthy();
-    expect(within(plan).getByText(initialTendedCount!)).toBeTruthy();
-    expect(within(plan).getByRole('article', { name: 'Pray together' })).toBeTruthy();
-    expect(within(plan).queryByRole('status')).toBeNull();
-    expect(plan.querySelector('.today-plan__weather')).toBeNull();
-
-    await user.unhover(evening);
-    expect(evening.getAttribute('aria-selected')).toBe('false');
-
-    await user.keyboard('{ArrowDown}');
-    const everythingOption = within(plan).getByRole('option', { name: /Everything today/ });
-    expect(document.activeElement).toBe(everythingOption);
-    expect(everythingOption.getAttribute('aria-selected')).toBe('false');
-    expect(within(plan).getByText(initialTendedCount!)).toBeTruthy();
-
-    await user.keyboard('{Enter}');
-    expect(within(plan).getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Everything today/ })).toBeTruthy();
-    expect(within(plan).getByText('1 of 3 tended')).toBeTruthy();
-    expect(within(plan).getByRole('article', { name: 'Daily connection' })).toBeTruthy();
-    expect(within(plan).queryByText(/Weather is unavailable/)).toBeNull();
-    expect(document.activeElement).toBe(within(plan).getByRole('combobox', {
-      name: 'Filter scheduled Rhythms by time, currently Everything today'
-    }));
-  });
-
-  it('counts only the active tab and time-filter results before hiding tended Rhythms', async () => {
-    const user = userEvent.setup();
-    const rhythms: RhythmPreview[] = [
-      { ...todayRhythms[0]!, id: 'synthetic-morning', title: 'Morning rhythm', timeOfDay: 'morning' },
-      { ...todayRhythms[1]!, id: 'synthetic-afternoon', title: 'Afternoon rhythm', timeOfDay: 'afternoon' },
-      { ...todayRhythms[2]!, id: 'synthetic-anytime', title: 'Anytime rhythm', timeOfDay: 'anytime' },
-      { ...todayRhythms[2]!, id: 'synthetic-all-day', title: 'All-day rhythm', timeOfDay: 'all-day' }
+  it('updates Now when the time advances and uses configured block labels and hours', () => {
+    const settings = createDefaultTimeBlockSettings();
+    settings.blocks = settings.blocks.map(block => block.id === 'lunch'
+      ? { ...block, name: 'Midday', start: '12:00', end: '13:00' }
+      : block);
+    const rhythms = [
+      makeRhythm('morning-item', 'Morning item', 'morning'),
+      makeRhythm('lunch-item', 'Lunch item', 'lunch')
     ];
-    renderToday(undefined, {
+    const { rerender } = render(<TodayHarness
+      rhythms={rhythms}
+      satisfiedRhythmIds={new Set()}
+      timeBlockSettings={settings}
+      evaluationInstant={new Date(2026, 9, 31, 10, 0)}
+    />);
+    const plan = todayPlan();
+    expect(plan.querySelector('.today-timeframe-header .today-plan__view-heading')?.textContent).toBe('Morning');
+    expect(within(plan).getByRole('article', { name: 'Morning item' })).toBeTruthy();
+
+    rerender(<TodayHarness
+      rhythms={rhythms}
+      satisfiedRhythmIds={new Set()}
+      timeBlockSettings={settings}
+      evaluationInstant={new Date(2026, 9, 31, 12, 15)}
+    />);
+    expect(plan.querySelector('.today-timeframe-header .today-plan__view-heading')?.textContent).toBe('Midday');
+    expect(within(plan).getByText(todayFocusContext(
+      'lunch', 'scheduled', new Date(2026, 9, 31, 12, 15), settings
+    ), { selector: '.today-timeframe-header__range' })).toBeTruthy();
+    expect(within(plan).getByRole('article', { name: 'Lunch item' })).toBeTruthy();
+    expect(within(plan).queryByRole('article', { name: 'Morning item' })).toBeNull();
+  });
+
+  it('keeps All today groups independently expandable and preserves expansion choices', async () => {
+    const user = userEvent.setup();
+    const rhythms = [
+      makeRhythm('morning-item', 'Morning item', 'morning'),
+      makeRhythm('lunch-item', 'Lunch item', 'lunch'),
+      makeRhythm('anytime-item', 'Anytime item', 'anytime'),
+      makeRhythm('all-day-item', 'All-day item', 'all-day')
+    ];
+    const { rerender } = renderToday({ rhythms, satisfiedRhythmIds: new Set() });
+    const plan = todayPlan();
+    await user.click(within(planTabs(plan)).getByRole('tab', { name: 'All today' }));
+    const morning = within(plan).getByRole('button', { name: /^Morning, .*0 of 1 tended$/ });
+    const lunch = within(plan).getByRole('button', { name: /^Lunch/ });
+    const anytime = within(plan).getByRole('button', { name: /^Anytime/ });
+    const morningPanel = document.getElementById(morning.getAttribute('aria-controls')!);
+    expect(morningPanel?.getAttribute('aria-labelledby')).toBe(morning.id);
+    expect(within(morning).getByText('Morning', { selector: '.today-plan__view-heading' })).toBeTruthy();
+    const morningProgress = within(morning).getByText('0 of 1 tended', { selector: '.today-plan__accordion-progress' });
+    expect(morningProgress.parentElement?.classList.contains('today-timeframe-header__meta')).toBe(true);
+    expect(within(morning).getByText(/9:00am/, { selector: '.today-timeframe-header__range' })).toBeTruthy();
+    expect(morning.textContent).not.toContain('Rhythm');
+    expect(morning.getAttribute('aria-expanded')).toBe('true');
+    expect(lunch.getAttribute('aria-expanded')).toBe('false');
+    expect(anytime.getAttribute('aria-expanded')).toBe('false');
+    expect(within(anytime).getByText('On your schedule', { selector: '.today-timeframe-header__range' })).toBeTruthy();
+    const allDay = within(plan).getByRole('button', { name: /^All-day/ });
+    expect(within(allDay).getByText('Throughout the day', { selector: '.today-timeframe-header__range' })).toBeTruthy();
+    expect(within(anytime).getByText('0 of 1 tended', { selector: '.today-plan__accordion-progress' })).toBeTruthy();
+    expect(within(plan).queryByRole('button', { name: /Expand all|Collapse all/ })).toBeNull();
+
+    await user.click(lunch);
+    await user.click(morning);
+    expect(morning.getAttribute('aria-expanded')).toBe('false');
+    expect(lunch.getAttribute('aria-expanded')).toBe('true');
+    await user.click(morning);
+    expect(morning.getAttribute('aria-expanded')).toBe('true');
+    expect(lunch.getAttribute('aria-expanded')).toBe('true');
+    expect(plan.querySelectorAll('.today-timeframe-header__disclosure[aria-expanded="true"]')).toHaveLength(2);
+
+    await user.click(within(planTabs(plan)).getByRole('tab', { name: 'Flexible' }));
+    await user.click(within(planTabs(plan)).getByRole('tab', { name: 'All today' }));
+    expect(plan.querySelectorAll('.today-timeframe-header__disclosure[aria-expanded="true"]')).toHaveLength(2);
+    rerender(<TodayHarness rhythms={rhythms} satisfiedRhythmIds={new Set()} />);
+    expect(plan.querySelectorAll('.today-timeframe-header__disclosure[aria-expanded="true"]')).toHaveLength(2);
+  });
+
+  it('shows collection counts before hiding tended Rhythms and keeps progress in collapsed summaries', async () => {
+    const user = userEvent.setup();
+    const rhythms = [
+      makeRhythm('morning-one', 'Morning one', 'morning'),
+      makeRhythm('morning-two', 'Morning two', 'morning'),
+      makeRhythm('lunch-one', 'Lunch one', 'lunch')
+    ];
+    renderToday({
       rhythms,
-      satisfiedRhythmIds: new Set(['synthetic-morning', 'synthetic-anytime']),
-      showTended: true
+      satisfiedRhythmIds: new Set(['morning-one']),
+      showTended: false
     });
-    const plan = screen.getByRole('region', { name: "Today's plan" });
-    expect(within(plan).getByText('1 of 1 tended')).toBeTruthy();
-    expect(within(plan).getByRole('heading', { name: 'Now' })).toBeTruthy();
-    const nowHeading = within(plan).getByRole('heading', { name: 'Now' });
-    const nowTimeRange = within(plan).getByText(todayFocusContext(
-      'now',
-      'scheduled',
-      new Date(2026, 9, 31, 10, 0),
-      createDefaultTimeBlockSettings()
-    ), { selector: '.today-plan__time-range' });
-    expect(nowHeading.parentElement?.classList.contains('today-plan__heading-range-row')).toBe(true);
-    expect(nowHeading.parentElement?.contains(nowTimeRange)).toBe(true);
-    expect(nowHeading.compareDocumentPosition(nowTimeRange) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-    await user.click(within(plan).getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Now/ }));
-    await user.click(within(plan).getByRole('option', { name: /Everything today/ }));
+    const plan = todayPlan();
     expect(within(plan).getByText('1 of 2 tended')).toBeTruthy();
-    expect(within(plan).getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Everything today/ })).toBeTruthy();
-    expect(within(plan).queryByRole('heading', { name: 'Everything today' })).toBeNull();
-    expect(plan.querySelector('.today-plan__view-heading-row')).toBeNull();
-    expect(plan.querySelector('.today-plan__results')).toBeTruthy();
-    expect(plan.querySelector('.current-plan-items--scheduled-everything')).toBeNull();
-    expect(within(plan).getByRole('heading', { name: 'Morning' })).toBeTruthy();
-    expect(within(plan).getByRole('heading', { name: 'Afternoon' })).toBeTruthy();
-    expect(within(plan).getAllByRole('heading', { name: 'Afternoon' })).toHaveLength(1);
-    for (const blockId of ['morning', 'afternoon'] as const) {
-      const groupHeading = within(plan).getByRole('heading', {
-        name: blockId === 'morning' ? 'Morning' : 'Afternoon'
-      });
-      const groupRange = within(plan).getByText(todayFocusContext(
-        blockId,
-        'scheduled',
-        new Date(2026, 9, 31, 10, 0),
-        createDefaultTimeBlockSettings()
-      ), { selector: '.today-plan__time-range' });
-      expect(groupHeading.parentElement?.classList.contains('today-plan__heading-range-row')).toBe(true);
-      expect(groupHeading.parentElement?.contains(groupRange)).toBe(true);
-      expect(groupHeading.compareDocumentPosition(groupRange) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    }
-    const firstGroupHeading = within(plan).getByRole('heading', { name: 'Morning' });
-    const progressRow = plan.querySelector<HTMLDivElement>('.show-tended-list__progress-row')!;
-    const firstGroupHeadingRow = firstGroupHeading.closest<HTMLElement>('.current-plan-item-group-heading-row')!;
-    const titleRow = plan.querySelector('.today-plan__title-row')!;
-    const timePicker = within(plan).getByRole('combobox', {
-      name: 'Filter scheduled Rhythms by time, currently Everything today'
-    });
-    expect(firstGroupHeadingRow.contains(timePicker)).toBe(true);
-    expect(titleRow.contains(progressRow)).toBe(true);
-    expect(titleRow.compareDocumentPosition(firstGroupHeadingRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(progressRow.contains(within(progressRow).getByRole('button', { name: 'Hide tended Rhythms, 1 of 2 tended' }))).toBe(true);
-    expect(plan.querySelectorAll('.current-plan-item-group-heading-row .today-plan__focus-picker')).toHaveLength(1);
-    expect(plan.querySelectorAll('.show-tended-list__progress-row')).toHaveLength(1);
+    expect(within(plan).getByRole('article', { name: 'Morning two' })).toBeTruthy();
+    expect(within(plan).queryByRole('article', { name: 'Morning one' })).toBeNull();
 
-    await user.click(within(plan).getByRole('button', { name: 'Hide tended Rhythms, 1 of 2 tended' }));
-    expect(within(plan).getByText('1 of 2 tended')).toBeTruthy();
-    expect(within(plan).getByRole('article', { name: 'Afternoon rhythm' })).toBeTruthy();
-    expect(within(plan).queryByRole('article', { name: 'Morning rhythm' })).toBeNull();
-    expect(plan.querySelectorAll('.show-tended-list__progress-row')).toHaveLength(1);
-
-    await user.click(within(plan).getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Everything today/ }));
-    await user.click(within(plan).getByRole('option', { name: /^Afternoon/ }));
-    expect(within(plan).getByRole('heading', { name: 'Afternoon' })).toBeTruthy();
-    expect(within(plan).getAllByText(todayFocusContext(
-      'afternoon',
-      'scheduled',
-      new Date(2026, 9, 31, 10, 0),
-      createDefaultTimeBlockSettings()
-    ), { selector: '.today-plan__time-range' })).toHaveLength(1);
-    expect(plan.querySelector('.today-plan__results')).toBeTruthy();
-    expect(within(plan).getByText('0 of 1 tended')).toBeTruthy();
-
-    await user.click(within(plan).getByRole('tab', { name: 'Anytime' }));
-    expect(within(plan).queryByRole('combobox', { name: /Filter scheduled Rhythms by time/ })).toBeNull();
-    expect(within(plan).getByRole('heading', { name: 'Anytime' })).toBeTruthy();
-    expect(plan.querySelector('.today-plan__time-range')).toBeNull();
-    expect(within(plan).getByText('1 of 1 tended')).toBeTruthy();
-    expect(within(plan).queryByRole('article', { name: 'Anytime rhythm' })).toBeNull();
-
-    await user.click(within(plan).getByRole('tab', { name: 'All-day' }));
-    expect(within(plan).queryByRole('combobox', { name: /Filter scheduled Rhythms by time/ })).toBeNull();
-    expect(within(plan).getByRole('heading', { name: 'All-day' })).toBeTruthy();
-    expect(plan.querySelector('.today-plan__time-range')).toBeNull();
-    expect(within(plan).getByText('0 of 1 tended')).toBeTruthy();
-    expect(within(plan).getByRole('article', { name: 'All-day rhythm' })).toBeTruthy();
+    await user.click(within(planTabs(plan)).getByRole('tab', { name: 'All today' }));
+    const morning = within(plan).getByRole('button', { name: /^Morning/ });
+    expect(morning.textContent).toContain('1 of 2 tended');
+    expect(morning.getAttribute('aria-expanded')).toBe('true');
+    await user.click(morning);
+    expect(morning.getAttribute('aria-expanded')).toBe('false');
+    expect(morning.textContent).toContain('1 of 2 tended');
   });
 
-  it('uses the same results layout when Afternoon is the first Everything today group', async () => {
+  it('renders 20-plus Rhythms without losing group counts or progress', async () => {
     const user = userEvent.setup();
-    renderToday(undefined, {
-      rhythms: [{
-        ...todayRhythms[1]!,
-        id: 'synthetic-afternoon-only',
-        title: 'Afternoon rhythm',
-        timeOfDay: 'afternoon'
-      }],
-      satisfiedRhythmIds: new Set()
-    });
-    const plan = screen.getByRole('region', { name: "Today's plan" });
-
-    await user.click(within(plan).getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Now/ }));
-    await user.click(within(plan).getByRole('option', { name: /Everything today/ }));
-
-    const results = plan.querySelector('.today-plan__results')!;
-    const groupHeadings = [...results.querySelectorAll('.current-plan-item-group-title')];
-    expect(groupHeadings.map(heading => heading.textContent)).toEqual(['Afternoon']);
-    expect(results.querySelector('.current-plan-items--scheduled-everything')).toBeNull();
-    expect(plan.querySelectorAll('.show-tended-list__progress-row')).toHaveLength(1);
-    expect(within(plan).getByRole('article', { name: 'Afternoon rhythm' })).toBeTruthy();
+    const rhythms = Array.from({ length: 24 }, (_, index) =>
+      makeRhythm(`item-${index}`, `Rhythm ${index + 1}`, index < 20 ? 'morning' : 'lunch'));
+    renderToday({ rhythms, satisfiedRhythmIds: new Set() });
+    const plan = todayPlan();
+    await user.click(within(planTabs(plan)).getByRole('tab', { name: 'All today' }));
+    const morning = within(plan).getByRole('button', { name: /^Morning, .*0 of 20 tended$/ });
+    const lunch = within(plan).getByRole('button', { name: /^Lunch, .*0 of 4 tended$/ });
+    expect(within(morning).getByText('0 of 20 tended')).toBeTruthy();
+    expect(within(lunch).getByText('0 of 4 tended')).toBeTruthy();
+    expect(within(plan).getAllByRole('article')).toHaveLength(20);
+    await user.click(lunch);
+    expect(within(plan).getAllByRole('article')).toHaveLength(24);
   });
 
-  it('keeps tabs first, hides scheduled controls from other tabs, and preserves the scheduled filter and count', async () => {
+  it('leaves sections collapsed when there is no current eligible scheduled group', async () => {
     const user = userEvent.setup();
-    const weatherController: TodayWeatherController = {
-      ...unavailableWeather,
-      city: { id: 1, name: 'Example City', admin1: null, country: 'Example', countryCode: 'EX', latitude: 0, longitude: 0 },
-      weather: {
-        status: 'ready',
-        report: {
-          current: { date: '2026-10-31', time: '10:00', temperature: 18, code: 0, isDay: true },
-          hourly: [
-            { date: '2026-10-31', time: '10:00', temperature: 18, code: 0, isDay: true },
-            { date: '2026-10-31', time: '18:00', temperature: 16, code: 2, isDay: true }
-          ]
-        },
-        fetchedAt: 0,
-        message: null
-      }
-    };
-    renderToday(weatherController);
-    const plan = screen.getByRole('region', { name: "Today's plan" });
-    const tabList = within(plan).getByRole('tablist', { name: 'Plan items' });
-    const trigger = within(plan).getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Now/ });
-    expect(tabList.compareDocumentPosition(trigger) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(plan).getByRole('img', { name: 'Current conditions: Clear, 18 degrees' })).toBeTruthy();
+    renderToday({
+      rhythms: [makeRhythm('morning-item', 'Morning item', 'morning')],
+      satisfiedRhythmIds: new Set(),
+      evaluationInstant: new Date(2026, 9, 31, 3, 0)
+    });
+    const plan = todayPlan();
+    expect(plan.querySelector('.today-timeframe-header .today-plan__view-heading')?.textContent).toBe('Now');
+    expect(within(plan).getByRole('status').textContent).toContain('No active Rhythms right now.');
+    await user.click(within(planTabs(plan)).getByRole('tab', { name: 'All today' }));
+    expect(plan.querySelectorAll('.today-timeframe-header__disclosure[aria-expanded="true"]')).toHaveLength(0);
+  });
 
+  it('retains the reusable time filter options and keyboard selection outside Today’s rendered layout', async () => {
+    const user = userEvent.setup();
+    renderTimeFilter();
+    const trigger = screen.getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Now/ });
     await user.click(trigger);
-    await user.click(within(plan).getByRole('option', { name: /Evening.*6:00pm – 9:30pm/ }));
-    expect(within(plan).getByRole('img', { name: 'Forecast: Partly cloudy, 16 degrees' })).toBeTruthy();
-    expect(within(plan).getByText('6:00pm – 9:30pm', {
-      selector: '.today-plan__time-range'
-    })).toBeTruthy();
-    expect(within(plan).getByText('0 of 1 tended')).toBeTruthy();
-
-    for (const tabName of ['Anytime', 'All-day']) {
-      const tab = within(plan).getByRole('tab', { name: tabName });
-      await user.click(tab);
-      expect(tab.getAttribute('aria-selected')).toBe('true');
-      expect(within(plan).queryByRole('listbox', { name: 'Filter scheduled Rhythms by time' })).toBeNull();
-      expect(plan.querySelector('.today-plan__weather')).toBeNull();
-      expect(within(plan).getByText(/\d+ of \d+ tended/)).toBeTruthy();
-    }
-
-    await user.click(within(plan).getByRole('tab', { name: 'Scheduled' }));
-    const scheduledTrigger = within(plan).getByRole('combobox', { name: /Filter scheduled Rhythms by time, currently Evening/ });
-    expect(scheduledTrigger).toBeTruthy();
-    await user.click(scheduledTrigger);
-    await user.click(within(plan).getByRole('option', { name: /Everything today/ }));
-    expect(within(plan).queryByRole('img')).toBeNull();
-    expect(within(plan).queryByText('Across every time block')).toBeNull();
-    await user.click(within(plan).getByRole('combobox', {
-      name: 'Filter scheduled Rhythms by time, currently Everything today'
-    }));
-    expect(within(plan).getByRole('option', { name: /Everything today.*Across every time block/ })).toBeTruthy();
-  });
-
-  it('keeps long custom block names in the selector without losing the right-side forecast', async () => {
-    const user = userEvent.setup();
-    const timeBlockSettings = createDefaultTimeBlockSettings();
-    const longName = 'An intentionally long custom evening time block';
-    timeBlockSettings.blocks = timeBlockSettings.blocks.map(block =>
-      block.id === 'evening' ? { ...block, name: longName } : block
-    );
-    const weatherController: TodayWeatherController = {
-      ...unavailableWeather,
-      city: { id: 1, name: 'Example City', admin1: null, country: 'Example', countryCode: 'EX', latitude: 0, longitude: 0 },
-      weather: {
-        status: 'ready',
-        report: {
-          current: { date: '2026-10-31', time: '10:00', temperature: 18, code: 2, isDay: true },
-          hourly: [
-            { date: '2026-10-31', time: '10:00', temperature: 18, code: 2, isDay: true },
-            { date: '2026-10-31', time: '18:00', temperature: 16, code: 3, isDay: true }
-          ]
-        },
-        fetchedAt: 0,
-        message: null
-      }
-    };
-    renderToday(weatherController, { timeBlockSettings });
-    const plan = screen.getByRole('region', { name: "Today's plan" });
-    const trigger = within(plan).getByLabelText(/Filter scheduled Rhythms by time, currently Now/);
-
-    await user.click(trigger);
-    const customOption = within(plan).getByRole('option', {
-      name: new RegExp(`${longName}.*6:00pm – 9:30pm`)
-    });
-    expect(customOption).toBeTruthy();
-    await user.click(customOption);
-
-    expect(trigger.getAttribute('aria-label')).toBe(`Filter scheduled Rhythms by time, currently ${longName}`);
-    expect(trigger.querySelector(':scope > span:first-child')?.textContent).toBe(longName);
-    expect(within(plan).getByRole('img', { name: 'Forecast: Cloudy, 16 degrees' })).toBeTruthy();
-    expect(plan.querySelector('.today-plan__weather')).not.toBeNull();
+    expect(screen.getByRole('option', { name: /Everything today.*Across every time block/ })).toBeTruthy();
+    expect(screen.getByRole('option', { name: /Morning.*9:00am – 11:30am/ })).toBeTruthy();
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(screen.getByRole('option', { name: /Everything today/ }));
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('combobox', { name: /currently Everything today/ })).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: /Filter scheduled Rhythms by time/ })).toBeTruthy();
   });
 });

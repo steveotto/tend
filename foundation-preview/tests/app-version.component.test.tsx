@@ -23,7 +23,7 @@ describe('app release label', () => {
     await user.click(screen.getByRole('button', { name: 'More, settings' }));
 
     const more = screen.getByRole('main', { name: 'More' });
-    const version = within(more).getByText('Version 1.4');
+    const version = within(more).getByText('Version 1.5');
     expect(more.lastElementChild).toBe(version);
   });
 });

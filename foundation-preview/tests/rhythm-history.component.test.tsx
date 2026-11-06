@@ -210,11 +210,12 @@ describe('shared Rhythm history', () => {
     expect(screen.queryByText(/Calculated from saved completion records/)).toBeNull();
     const rhythmDetailsCard = within(screen.getByRole('region', {
       name: `History for ${rhythm.title}`
-    })).getByRole('region', { name: 'Rhythm details' });
-    expect(rhythmDetailsCard.querySelector('.rhythm-history-view__activity-title')?.textContent)
-      .toBe('Rhythm');
+    })).getByRole('article', { name: rhythm.title });
+    expect(within(rhythmDetailsCard).getByRole('heading', { name: rhythm.title, level: 3 })).toBeTruthy();
+    expect(within(rhythmDetailsCard).queryByText('Rhythm', { exact: true })).toBeNull();
     expect(rhythmDetailsCard.querySelector('.rhythm-history-view__association-summary')).toBeNull();
     expect(rhythmDetailsCard.querySelector('.today-rhythm-details__association-category-group')).toBeTruthy();
+    expect(within(rhythmDetailsCard).queryByRole('button', { name: /Tend|Log|Tended|View scores/ })).toBeNull();
     await openRhythmScoringDetails(user);
     const dialog = screen.getByRole('dialog', { name: 'Rhythm Health details' });
     expect(within(dialog).getByRole('heading', { name: 'Overall Health', level: 4 })).toBeTruthy();
@@ -231,6 +232,48 @@ describe('shared Rhythm history', () => {
     expect(within(dialog).getByText('No linked Practices or Foundations contribute to scoring.')).toBeTruthy();
     expect(within(dialog).queryByRole('button', { name: /Next / })).toBeNull();
     expect(within(dialog).queryByRole('button', { name: /Previous / })).toBeNull();
+  });
+
+  it('uses the shared summary card content and edit action without duplicate card controls', async () => {
+    const user = userEvent.setup();
+    const title = 'A Long Rhythm Title That Wraps Without Colliding With the Edit Button';
+    const rhythm = {
+      ...connection,
+      title,
+      categoryIds: ['marriage', 'faith'] as const,
+      description: '',
+      automation: 'external' as const
+    };
+    const onEditRhythm = vi.fn();
+    render(
+      <RhythmHistoryView
+        rhythm={rhythm}
+        people={syntheticPeople.slice(0, 2)}
+        foundations={foundationCatalogue}
+        onPersonSelect={() => undefined}
+        onEditRhythm={onEditRhythm}
+        onClose={() => undefined}
+      />
+    );
+
+    const history = screen.getByRole('region', { name: `History for ${title}` });
+    const card = within(history).getByRole('article', { name: title });
+    expect(within(card).getByRole('heading', { name: title, level: 3 })).toBeTruthy();
+    expect(within(card).queryByText('Rhythm', { exact: true })).toBeNull();
+    expect(within(card).queryByText(/edit rhythm description/i)).toBeNull();
+    expect(within(card).getByText('Automated at bank')).toBeTruthy();
+    expect(within(card).getByRole('group', {
+      name: `People, categories, and Foundations associated with ${title}`
+    })).toBeTruthy();
+    expect(within(card).getByText('5 times a week')).toBeTruthy();
+    expect(within(card).queryByRole('button', { name: /Tend|Log|Tended|View scores/ })).toBeNull();
+    expect(within(history).queryByRole('button', { name: `Edit ${title}` })).toBe(card.querySelector('button'));
+    const headerActions = within(history.querySelector('.rhythm-history-view__header-actions')!);
+    expect(headerActions.getByRole('button', { name: 'Close details' })).toBeTruthy();
+    expect(headerActions.queryByRole('button', { name: `Edit ${title}` })).toBeNull();
+
+    await user.click(within(card).getByRole('button', { name: `Edit ${title}` }));
+    expect(onEditRhythm).toHaveBeenCalledOnce();
   });
 
   it('orders history before Seasons and Logged moments, with the correct accessible Season Undo action', async () => {
@@ -261,7 +304,7 @@ describe('shared Rhythm history', () => {
     const history = screen.getByRole('region', { name: `History for ${rhythm.title}` });
     const body = history.querySelector('.rhythm-history-view__body')!;
     const orderedSections = [
-      body.querySelector('.rhythm-history-view__details-card'),
+      body.querySelector('.rhythm-card--details-summary'),
       body.querySelector('.rhythm-history-view__score-section'),
       body.querySelector('.rhythm-history-view__completions'),
       body.querySelector('.rhythm-history-view__seasons'),
@@ -272,14 +315,14 @@ describe('shared Rhythm history', () => {
     expect(orderedSections.map(section => childOrder.indexOf(section!)))
       .toEqual([...orderedSections.map(section => childOrder.indexOf(section!))].sort((a, b) => a - b));
 
-    const header = history.querySelector('.rhythm-history-view__rhythm-header')!;
+    const header = history.querySelector('.rhythm-history-view__rhythm-header') as HTMLElement;
     const actions = header.querySelector('.rhythm-history-view__header-actions')!;
     expect([...actions.querySelectorAll('button')].map(button => button.getAttribute('aria-label')))
       .toEqual(['Undo season change', 'Close details']);
     expect(header.querySelector('.rhythm-history-view__undo-announcement')?.textContent)
       .toContain('A Season change was saved. You can undo it.');
     expect(header.querySelector('.rhythm-history-view__season-undo')).toBeNull();
-    expect(screen.getByRole('heading', { name: rhythm.title, level: 3 })).toBeTruthy();
+    expect(within(header).getByRole('heading', { name: rhythm.title, level: 3 })).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Undo season change' }));
     expect(onUndoSeasonDeletion).not.toHaveBeenCalled();
@@ -1583,8 +1626,9 @@ describe('shared Rhythm history', () => {
       />
     );
     const history = screen.getByRole('region', { name: 'History for Daily connection' });
-    const title = within(history).getByRole('heading', { name: 'Daily connection' });
-    const schedule = history.querySelector('.rhythm-history-view__schedule')!;
+    const title = within(history.querySelector('.rhythm-history-view__rhythm-header')!)
+      .getByRole('heading', { name: 'Daily connection' });
+    const schedule = history.querySelector('.rhythm-card__details-summary-footer')!;
     const description = within(history).getByText('Set aside a few minutes to share how your day went.');
     const people = within(history).getByRole('group', { name: 'People associated with Daily connection' });
     expect(title.compareDocumentPosition(description) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -1596,7 +1640,8 @@ describe('shared Rhythm history', () => {
       .filter(item => !item.classList.contains('visually-hidden'))
       .map(item => item.querySelector('span')?.textContent ?? item.textContent))
       .toEqual(['Daily', 'Evening']);
-    expect(schedule.querySelectorAll('svg')).toHaveLength(2);
+    expect(schedule.querySelectorAll('svg')).toHaveLength(3);
+    expect(schedule.querySelector('.rhythm-metadata-last-tended .rhythm-metadata-status')?.textContent).toBeTruthy();
     expect(within(history).getByText('Evening')).toBeTruthy();
     const completionSummary = history.querySelector('.rhythm-history-view__completion-summary')!;
     expect(completionSummary.querySelector('.rhythm-history-view__completion-total strong')?.textContent).toBe('3');
@@ -1709,17 +1754,18 @@ describe('shared Rhythm history', () => {
       </>
     );
     const history = screen.getByRole('region', { name: 'History for Schedule summary' });
-    const summary = history.querySelector('.rhythm-history-view__schedule')!;
+    const summary = history.querySelector('.rhythm-card__details-summary-footer')!;
     const group = summary.querySelector('.rhythm-metadata-schedule-group')!;
     const visibleLabels = [...group.children]
       .filter(item => !item.classList.contains('visually-hidden'))
       .map(item => item.querySelector('span')?.textContent ?? item.textContent);
     expect(formatRhythmSchedule(schedule, 'compact')).toBe(expected);
     expect(visibleLabels).toEqual([expected, timeLabel]);
-    expect(summary.querySelectorAll('svg')).toHaveLength(2);
+    expect(summary.querySelectorAll('svg')).toHaveLength(3);
+    expect(summary.textContent).toContain('Never');
     expect(summary.className).toContain('rhythm-metadata-footer');
     expect(group).toBeTruthy();
-    const footerGroup = document.querySelector('.rhythm-metadata-footer:not(.rhythm-history-view__schedule) .rhythm-metadata-schedule-group')!;
+    const footerGroup = document.querySelector('.rhythm-metadata-footer:not(.rhythm-card__details-summary-footer) .rhythm-metadata-schedule-group')!;
     const footerLabels = [...footerGroup.children]
       .filter(item => !item.classList.contains('visually-hidden'))
       .map(item => item.querySelector('span')?.textContent ?? item.textContent);
@@ -1757,7 +1803,7 @@ describe('shared Rhythm history', () => {
       />
     );
     const summary = screen.getByRole('region', { name: 'History for Season-backed schedule' })
-      .querySelector('.rhythm-history-view__schedule')!;
+      .querySelector('.rhythm-card__details-summary-footer')!;
     expect(summary.textContent).toContain(formatRhythmSchedule(currentSchedule, 'compact'));
     expect(summary.textContent).toContain('Bedtime');
     expect(summary.textContent).not.toContain('Stale time');
@@ -2582,7 +2628,7 @@ describe('shared Rhythm history', () => {
       />
     );
 
-    const metadata = document.querySelector('.rhythm-history-view__metadata') as HTMLElement;
+    const metadata = document.querySelector('.rhythm-card--details-summary') as HTMLElement;
     const header = document.querySelector('.rhythm-history-view__rhythm-header') as HTMLElement;
     expect(within(header).getByRole('heading', { name: 'Daily Connection' })).toBeTruthy();
     const description = within(metadata).getByText('Make a little room each day to connect in a way that fits your life.') as HTMLElement;
@@ -2598,7 +2644,7 @@ describe('shared Rhythm history', () => {
       before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING
     );
 
-    expect(description.nextElementSibling).toBe(associations);
+    expect(order(description, associations)).toBe(true);
     expect(order(people, categories[0]!)).toBe(true);
     expect(order(associations, schedule)).toBe(true);
     expect(within(associations).getAllByRole('img').map(icon => icon.getAttribute('aria-label'))).toEqual([
@@ -2628,25 +2674,26 @@ describe('shared Rhythm history', () => {
 
     const history = screen.getByRole('region', { name: 'History for Weekday Workout' });
     const body = history.querySelector('.rhythm-history-view__body')!;
-    const cards = body.querySelectorAll('.rhythm-history-view__card');
+    const cards = body.querySelectorAll('.rhythm-history-view__card, .rhythm-card--details-summary');
     expect(cards).toHaveLength(5);
     expect([...cards].map(card => card.classList[0])).toEqual([
-      'rhythm-history-view__details-card',
+      'rhythm-card',
       'rhythm-history-view__score-section',
       'rhythm-history-view__completions',
       'rhythm-history-view__seasons',
       'rhythm-history-view__logged-moments'
     ]);
 
-    const detailsCard = body.querySelector('.rhythm-history-view__details-card') as HTMLElement;
-    expect(detailsCard.querySelector('.rhythm-history-view__activity-title')?.textContent).toContain('Workout');
+    const detailsCard = body.querySelector('.rhythm-card--details-summary') as HTMLElement;
+    expect(detailsCard.querySelector('.rhythm-card__details-summary-title')?.textContent).toBe('Weekday Workout');
     expect(detailsCard.querySelector('.rhythm-history-view__association-summary')).toBeNull();
     expect(detailsCard.querySelector('.today-rhythm-details__association-category-group')).toBeTruthy();
     expect(within(detailsCard).getByRole('img', { name: 'Health & Fitness' })).toBeTruthy();
     expect(detailsCard.querySelector('.today-rhythm-details__category-foundation-names')?.textContent)
       .toBe('Strength');
-    expect(detailsCard.querySelector('.rhythm-history-view__activity-icon .marriage-svg-icon')).toBeTruthy();
-    expect(detailsCard.textContent).not.toContain('Weekday Workout');
+    expect(detailsCard.querySelector('.rhythm-card__suggestion-icon')).toBeNull();
+    expect(within(detailsCard).queryByRole('button', { name: /Tend|Log|Tended|View scores/ })).toBeNull();
+    expect(detailsCard.textContent).toContain('Weekday Workout');
     expect(within(detailsCard).getByText('Recommended')).toBeTruthy();
 
     rerender(
@@ -2680,7 +2727,7 @@ describe('shared Rhythm history', () => {
     expect(within(detailsCard).queryByText('Recommended')).toBeNull();
 
     rerender(<RhythmHistoryView rhythm={todayConnection} />);
-    expect(within(detailsCard).getByText('Rhythm')).toBeTruthy();
+    expect(within(detailsCard).queryByText('Rhythm', { exact: true })).toBeNull();
     expect(within(detailsCard).queryByText('Recommended')).toBeNull();
   });
 
@@ -2818,17 +2865,21 @@ describe('shared Rhythm history', () => {
       />
     );
 
-    const title = screen.getByRole('heading', { name: longTitle });
-    const people = screen.getByRole('group', { name: `People associated with ${longTitle}` });
+    const history = screen.getByRole('region', { name: `History for ${longTitle}` });
+    const card = within(history).getByRole('article', { name: longTitle });
+    const title = within(card).getByRole('heading', { name: longTitle });
+    const people = within(card).getByRole('group', { name: `People associated with ${longTitle}` });
     expect(title.compareDocumentPosition(people) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const titleRow = title.closest('.rhythm-history-view__title-row') as HTMLElement | null;
+    const titleRow = title.closest('.rhythm-title-row') as HTMLElement | null;
     expect(titleRow).toBeTruthy();
-    const header = titleRow!.parentElement as HTMLElement;
+    const header = history.querySelector('.rhythm-history-view__rhythm-header') as HTMLElement;
     expect(within(header).getByRole('button', { name: 'Close details' })).toBeTruthy();
     expect(titleRow!.querySelector('button')).toBeNull();
-    expect(document.querySelector('.rhythm-history-view__schedule')).toBeNull();
+    const footer = history.querySelector('.rhythm-card__details-summary-footer');
+    expect(footer).toBeTruthy();
+    expect(footer?.querySelector('.rhythm-metadata-schedule-group')?.textContent).toBe('');
     expect(document.querySelector('.rhythm-history-view__description')).toBeNull();
-    expect(screen.getAllByRole('heading', { name: longTitle })).toHaveLength(1);
+    expect(within(history).getAllByRole('heading', { name: longTitle })).toHaveLength(2);
   });
 
   it('prefills the shared editor, updates the full log while preserving identity, and restores Edit focus', async () => {
@@ -3142,11 +3193,10 @@ describe('shared Rhythm history', () => {
     expect(document.activeElement).toBe(history);
     expect(history.tabIndex).toBe(-1);
 
-    const title = screen.getByRole('heading', { name: 'Daily Connection' });
-    const titleRow = title.closest('.rhythm-history-view__title-row') as HTMLElement | null;
-    expect(titleRow).toBeTruthy();
+    const header = history.querySelector('.rhythm-history-view__rhythm-header') as HTMLElement;
+    expect(within(header).getByRole('heading', { name: 'Daily Connection' })).toBeTruthy();
     await user.tab();
-    const closeButton = within(titleRow!.parentElement as HTMLElement).getByRole('button', { name: 'Close details' });
+    const closeButton = within(header).getByRole('button', { name: 'Close details' });
     expect(document.activeElement).toBe(closeButton);
     await user.click(closeButton);
     expect(onClose).toHaveBeenCalledOnce();

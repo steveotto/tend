@@ -95,15 +95,13 @@ import { addCalendarDays } from '../src/domain/rhythm-occurrences.ts';
 import { installMemoryStorage, MemoryStorage } from './memory-storage.ts';
 
 function render(ui: Parameters<typeof testingRender>[0]) {
-  const result = testingRender(ui);
-  const trigger = result.container.querySelector('.today-plan__focus-trigger');
-  if (trigger) {
-    fireEvent.click(trigger);
-    const allDayOption = [...result.container.querySelectorAll<HTMLElement>('[role="option"]')]
-      .find(option => option.textContent?.startsWith('Everything today'));
-    if (allDayOption) fireEvent.click(allDayOption);
+  return testingRender(ui);
+}
+
+function expandAllTodayGroups() {
+  for (const button of document.querySelectorAll<HTMLButtonElement>('.today-timeframe-header__disclosure')) {
+    if (button.getAttribute('aria-expanded') === 'false') fireEvent.click(button);
   }
-  return result;
 }
 
 beforeEach(installMemoryStorage);
@@ -1367,6 +1365,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       prayerRequests: [],
       timeBlocks: createDefaultTimeBlockSettings(),
       showTended: false,
+      todayView: 'now' as const,
       calendarSources: []
     };
     const raw = JSON.stringify(createPreviewEnvelope(empty));
@@ -1428,8 +1427,31 @@ describe('synthetic preview storage adapter and envelope', () => {
       prayerRequests: [],
       timeBlocks: createDefaultTimeBlockSettings(),
       showTended: false,
+      todayView: 'now',
       calendarSources: []
     });
+  });
+
+  it('migrates obsolete Today selections to a valid view while parsing older envelopes', () => {
+    const previous = createPreviewEnvelope(createSamplePreviewData());
+    const legacyEnvelope = {
+      ...previous,
+      schemaVersion: 37,
+      data: { ...previous.data, todayView: 'anytime' }
+    };
+    const parsedFlexible = parsePreviewBackup(JSON.stringify(legacyEnvelope), '2026-10-21');
+    expect(parsedFlexible.valid).toBe(true);
+    if (parsedFlexible.valid) {
+      expect(parsedFlexible.sourceSchemaVersion).toBe(37);
+      expect(parsedFlexible.envelope.data.todayView).toBe('flexible');
+    }
+
+    const parsedFallback = parsePreviewBackup(JSON.stringify({
+      ...legacyEnvelope,
+      data: { ...legacyEnvelope.data, todayView: 'scheduled' }
+    }), '2026-10-21');
+    expect(parsedFallback.valid).toBe(true);
+    if (parsedFallback.valid) expect(parsedFallback.envelope.data.todayView).toBe('now');
   });
 
   it('migrates v2 previews with editable Rhythms and completions while making them active', () => {
@@ -2877,6 +2899,8 @@ describe('preview backup controls', () => {
     const openFinances = () => user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Finances' }));
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
+    await user.click(screen.getByRole('tab', { name: 'All today' }));
+    expandAllTodayGroups();
     await user.click(screen.getByRole('button', { name: 'Tend Pray together' }));
     const completionDialog = await screen.findByRole('dialog', { name: 'When did you tend it?' });
     await user.click(within(completionDialog).getByRole('button', { name: 'Save' }));
@@ -2913,6 +2937,8 @@ describe('preview backup controls', () => {
     const { createObjectURL } = setDownloadMocks();
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
+    await user.click(screen.getByRole('tab', { name: 'All today' }));
+    expandAllTodayGroups();
 
     const card = screen.getByRole('article', { name: 'Take a walk' });
     const pastDate = new Date();
@@ -2942,6 +2968,7 @@ describe('preview backup controls', () => {
     const importDialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     await user.click(within(importDialog).getByRole('button', { name: 'Replace with backup' }));
     await user.click(screen.getByRole('button', { name: 'Today' }));
+    expandAllTodayGroups();
     const restoredCard = screen.getByRole('article', { name: 'Take a walk' });
     await waitFor(() => {
       expect(within(restoredCard).getByRole('button', { name: 'Tend Take a walk' })).toBeTruthy();
@@ -2950,6 +2977,9 @@ describe('preview backup controls', () => {
 
     cleanup();
     render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await user.click(screen.getByRole('tab', { name: 'All today' }));
+    expandAllTodayGroups();
     const reloadedCard = await screen.findByRole('article', { name: 'Take a walk' });
     expect(within(reloadedCard).getByRole('button', { name: 'Tend Take a walk' })).toBeTruthy();
     expect(within(reloadedCard).getByText(dateLabel)).toBeTruthy();

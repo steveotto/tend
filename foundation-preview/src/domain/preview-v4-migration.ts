@@ -31,7 +31,7 @@ export type PreviewV4MigrationResult =
   | {
       valid: true;
       envelope: PreviewEnvelope;
-      sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37;
+      sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38;
     }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
@@ -54,6 +54,8 @@ export function migratePreviewToProposedV4(raw: string, currentDate: string): Pr
     || parsed.sourceSchemaVersion === 32 || parsed.sourceSchemaVersion === 33
     || parsed.sourceSchemaVersion === 34
     || parsed.sourceSchemaVersion === 35
+    || parsed.sourceSchemaVersion === 36
+    || parsed.sourceSchemaVersion === 37
     || parsed.sourceSchemaVersion === PREVIEW_SCHEMA_VERSION) {
     return { valid: true, envelope: parsed.envelope, sourceSchemaVersion: parsed.sourceSchemaVersion };
   }
@@ -122,6 +124,7 @@ export function migratePreviewToProposedV4(raw: string, currentDate: string): Pr
         prayerRequests: [],
         timeBlocks: createDefaultTimeBlockSettings(),
         showTended: false,
+        todayView: 'now',
         calendarSources: parsed.envelope.data.calendarSources
       }
     }

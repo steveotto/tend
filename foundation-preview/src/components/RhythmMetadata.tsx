@@ -18,6 +18,7 @@ type RhythmMetadataProps =
     schedule?: RhythmSchedule | undefined;
     timeLabel?: string | undefined;
     lastTended: string;
+    className?: string | undefined;
     rhythmTitle?: string;
     completed?: boolean;
     onUndo?: (() => void) | undefined;
@@ -38,7 +39,7 @@ export function RhythmMetadata(props: RhythmMetadataProps) {
   }
 
   return (
-    <div className="rhythm-metadata-footer">
+    <div className={`rhythm-metadata-footer${props.className ? ` ${props.className}` : ''}`}>
       <RhythmScheduleSummary
         cadence={props.cadence}
         schedule={props.schedule}

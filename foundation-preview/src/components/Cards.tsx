@@ -25,11 +25,13 @@ import { RhythmAssociationRows } from './RhythmAssociationRows.tsx';
 import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
 import { RhythmPersonalBadge } from './RhythmPersonalBadge.tsx';
 import { RhythmMetadata } from './RhythmMetadata.tsx';
+import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
 import { RhythmCompletionActions } from './RhythmCompletionActions.tsx';
 import { TimelineChart } from './TimelineChart.tsx';
 import { scoreTone } from '../domain/score-tone.ts';
 import { formatScore } from '../domain/score-display.ts';
 import type { Destination } from './AppNavigation.tsx';
+import type { RhythmSchedule } from '../domain/rhythm-schedule.ts';
 
 type FoundationCardProps = {
   foundation: FoundationPreview;
@@ -447,6 +449,22 @@ type RhythmCardProps = RhythmCardBaseProps & (
       onTend?: (event: MouseEvent<HTMLButtonElement>) => void;
       onUndo?: () => void;
     }
+  | {
+      variant: 'details-summary';
+      archived?: boolean;
+      cadence?: string;
+      schedule?: RhythmSchedule;
+      timeLabel?: string;
+      lastTended: string;
+      activityContext?: {
+        label: 'Workout' | 'Run' | 'Weigh-in';
+        badge?: 'Recommended';
+        detail?: string;
+      };
+      foundations?: readonly FoundationPreview[];
+      onOpenFoundation?: (foundationId: string, openerId: string) => void;
+      onEdit?: (event: MouseEvent<HTMLButtonElement>) => void;
+    }
   | { variant: 'suggestion'; icon?: ReactNode | undefined; onDetails: (event: MouseEvent<HTMLButtonElement>) => void }
 );
 
@@ -522,6 +540,27 @@ export function RhythmCard(props: RhythmCardProps) {
         suggestion
         icon={props.icon}
         onDetails={props.onDetails}
+      />
+    );
+  }
+  if (props.variant === 'details-summary') {
+    return (
+      <RhythmDetailsSummaryCard
+        rhythm={rhythm}
+        headingId={headingId ?? `rhythm-details-summary-${rhythm.id}`}
+        externallyAutomated={externallyAutomated}
+        people={people}
+        foundations={props.foundations}
+        onPersonSelect={onPersonSelect}
+        onOpenCategory={onOpenCategory}
+        onOpenFoundation={props.onOpenFoundation}
+        archived={props.archived === true}
+        cadence={props.cadence}
+        schedule={props.schedule}
+        timeLabel={props.timeLabel}
+        lastTended={props.lastTended}
+        activityContext={props.activityContext}
+        onEdit={props.onEdit}
       />
     );
   }
@@ -625,6 +664,107 @@ function SimpleRhythmCard({
         completed={completed}
         onUndo={suggestion ? undefined : onUndo}
         tendButtonRef={tendButtonRef}
+      />
+    </article>
+  );
+}
+
+function RhythmDetailsSummaryCard({
+  rhythm,
+  headingId,
+  externallyAutomated,
+  people,
+  foundations,
+  onPersonSelect,
+  onOpenCategory,
+  onOpenFoundation,
+  archived,
+  cadence,
+  schedule,
+  timeLabel,
+  lastTended,
+  activityContext,
+  onEdit
+}: {
+  rhythm: RhythmPreview;
+  headingId: string;
+  externallyAutomated: boolean;
+  people?: readonly PersonPreview[] | undefined;
+  foundations?: readonly FoundationPreview[] | undefined;
+  onPersonSelect?: ((personId: PersonId) => void) | undefined;
+  onOpenCategory?: ((categoryId: Destination, openerId: string) => void) | undefined;
+  onOpenFoundation?: ((foundationId: string, openerId: string) => void) | undefined;
+  archived: boolean;
+  cadence?: string | undefined;
+  schedule?: RhythmSchedule | undefined;
+  timeLabel?: string | undefined;
+  lastTended: string;
+  activityContext?: {
+    label: 'Workout' | 'Run' | 'Weigh-in';
+    badge?: 'Recommended';
+    detail?: string;
+  } | undefined;
+  onEdit?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+}) {
+  return (
+    <article
+      className="rhythm-card rhythm-card--details-summary"
+      aria-labelledby={headingId}
+    >
+      <div className="rhythm-card__details-summary-header">
+        <div className="rhythm-card__details-summary-copy">
+          <RhythmCardSummary
+            rhythm={rhythm}
+            externallyAutomated={externallyAutomated}
+            headingId={headingId}
+            titleClassName="rhythm-card__details-summary-title"
+            descriptionClassName="rhythm-card__details-summary-description"
+            archived={archived}
+          />
+        </div>
+        {onEdit && (
+          <button
+            type="button"
+            className="today-rhythm-details__edit-icon rhythm-card__details-summary-edit"
+            aria-label={`Edit ${rhythm.title}`}
+            title={`Edit ${rhythm.title}`}
+            onClick={event => onEdit(event)}
+          >
+            <span className="today-rhythm-details__edit-visual" aria-hidden="true">
+              <RhythmMetadataIcon kind="edit" />
+            </span>
+          </button>
+        )}
+      </div>
+      {activityContext && (
+        <div className="rhythm-card__details-summary-context">
+          <span>{activityContext.label}</span>
+          {activityContext.badge && (
+            <span className="rhythm-card__details-summary-badge">{activityContext.badge}</span>
+          )}
+          {activityContext.detail && (
+            <p className="rhythm-card__details-summary-note">{activityContext.detail}</p>
+          )}
+        </div>
+      )}
+      <div className="today-rhythm-details__association-row rhythm-card__details-summary-associations">
+        <RhythmAssociationRows
+          rhythm={rhythm}
+          {...(people ? { people } : {})}
+          {...(foundations ? { foundations } : {})}
+          {...(onPersonSelect ? { onPersonSelect } : {})}
+          {...(onOpenCategory ? { onOpenCategory } : {})}
+          {...(onOpenFoundation ? { onOpenFoundation } : {})}
+        />
+      </div>
+      <RhythmMetadata
+        variant="footer"
+        className="rhythm-card__details-summary-footer"
+        {...(!schedule && cadence ? { cadence } : {})}
+        {...(schedule ? { schedule } : {})}
+        {...(timeLabel ? { timeLabel } : {})}
+        lastTended={lastTended}
+        rhythmTitle={rhythm.title}
       />
     </article>
   );

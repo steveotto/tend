@@ -3,6 +3,7 @@ import { rhythmTimeValueFromLabel } from './rhythm-schedule.ts';
 import {
   createDefaultTimeBlockSettings,
   currentTimeBlock,
+  isTimeBlockId,
   rhythmTimeOptionsForBlocks,
   sleepTimeBlockRange,
   timeBlockRange
@@ -19,12 +20,26 @@ export const DEFAULT_TODAY_BLOCKS = defaultTimeBlocks.blocks.map(block => ({
 export type TodayBlockId = TimeBlockId;
 export type TodayFocusId = 'now' | 'everything-today' | TodayBlockId;
 export type TodayItemType = 'scheduled' | 'anytime' | 'all-day';
+export type TodayViewId = 'now' | 'flexible' | 'all-today';
 
 export type TodayPlanGroup = {
   id: string;
   title: string;
   rhythms: readonly RhythmPreview[];
 };
+
+export type TodayPlanSection = TodayPlanGroup & {
+  category: TodayItemType;
+  range?: string;
+};
+
+export function migrateTodayViewSelection(value: unknown): TodayViewId {
+  if (value === 'now' || value === 'flexible' || value === 'all-today') return value;
+  if (value === 'anytime') return 'flexible';
+  if (value === 'all-day' || value === 'all day' || value === 'everything-today'
+    || isTimeBlockId(value)) return 'all-today';
+  return 'now';
+}
 
 export function currentTodayBlock(instant: Date, settings: TimeBlockSettings = defaultTimeBlocks): TodayBlockId | null {
   return currentTimeBlock(instant, settings)?.id ?? null;
@@ -89,6 +104,36 @@ export function selectTodayPlanGroups(
     const items = rhythms.filter(rhythm => scheduledInBlock(rhythm, blockId, currentBlockId, settings));
     return items.length ? [{ id: blockId, title: focus === 'everything-today' ? block.name : '', rhythms: items }] : [];
   });
+}
+
+export function selectTodayPlanSections(
+  rhythms: readonly RhythmPreview[],
+  view: TodayViewId,
+  instant: Date,
+  settings: TimeBlockSettings = defaultTimeBlocks
+): TodayPlanSection[] {
+  const scheduledGroups = selectTodayPlanGroups(rhythms, 'scheduled', 'everything-today', instant, settings)
+    .map(group => {
+      const blockId = group.id as TodayBlockId;
+      return {
+        ...group,
+        category: 'scheduled' as const,
+        range: todayBlockRange(blockId, settings)
+      };
+    });
+  const anytimeGroups = selectTodayPlanGroups(rhythms, 'anytime', 'now', instant, settings)
+    .map(group => ({ ...group, title: 'Anytime', category: 'anytime' as const }));
+  const allDayGroups = selectTodayPlanGroups(rhythms, 'all-day', 'now', instant, settings)
+    .map(group => ({ ...group, title: 'All-day', category: 'all-day' as const }));
+
+  if (view === 'now') {
+    const currentBlockId = currentTodayBlock(instant, settings);
+    return currentBlockId
+      ? scheduledGroups.filter(group => group.id === currentBlockId)
+      : [];
+  }
+  if (view === 'flexible') return [...anytimeGroups, ...allDayGroups];
+  return [...scheduledGroups, ...anytimeGroups, ...allDayGroups];
 }
 
 export function todayFocusContext(

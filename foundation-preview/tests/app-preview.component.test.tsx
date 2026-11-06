@@ -10,6 +10,7 @@ import { cardioWeekStart } from '../src/domain/cardio.ts';
 import { formatScore } from '../src/domain/score-display.ts';
 import { localDateTimeInZone } from '../src/domain/rhythm-completion.ts';
 import { createRhythmSeason, rhythmSeasonPaletteForOrdinal } from '../src/domain/rhythm-seasons.ts';
+import type { RhythmWeekday } from '../src/domain/rhythm-schedule.ts';
 import { activeIdForMarriageSuggestion } from '../src/domain/category-rhythms.ts';
 import { addOrUpdateConnection, setFriendCadence } from '../src/domain/friendships.ts';
 import { hasFoundationIcon } from '../src/components/MarriageIcon.tsx';
@@ -54,14 +55,19 @@ import { historyButtonName } from './history-button-name.ts';
 
 function render(ui: Parameters<typeof testingRender>[0]) {
   const result = testingRender(ui);
-  const trigger = result.container.querySelector('.today-plan__focus-trigger');
-  if (trigger) {
-    fireEvent.click(trigger);
-    const targetOption = [...result.container.querySelectorAll<HTMLElement>('[role="option"]')]
-      .find(option => option.textContent?.startsWith('Everything today'));
-    if (targetOption) fireEvent.click(targetOption);
+  const allTodayTab = [...result.container.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
+    .find(tab => tab.textContent?.trim() === 'All today');
+  if (allTodayTab) {
+    fireEvent.click(allTodayTab);
+    expandAllTodayGroups(result.container);
   }
   return result;
+}
+
+function expandAllTodayGroups(container: ParentNode) {
+  for (const button of container.querySelectorAll<HTMLButtonElement>('.today-timeframe-header__disclosure')) {
+    if (button.getAttribute('aria-expanded') === 'false') fireEvent.click(button);
+  }
 }
 
 async function expandHealthDisclosure(
@@ -74,14 +80,16 @@ async function expandHealthDisclosure(
 }
 
 async function showAnytime(user: ReturnType<typeof userEvent.setup>) {
-  const tab = screen.getByRole('tab', { name: 'Anytime' });
+  const tab = screen.getByRole('tab', { name: 'Flexible' });
   if (tab.getAttribute('aria-selected') !== 'true') await user.click(tab);
   expect(tab.getAttribute('aria-selected')).toBe('true');
 }
 
-async function showEvening(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByLabelText(/^Filter scheduled Rhythms by time/));
-  await user.click(screen.getByRole('option', { name: /^Evening/ }));
+async function showAllToday(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('tab', { name: 'All today' }));
+  for (const section of document.querySelectorAll<HTMLButtonElement>('.today-timeframe-header__disclosure')) {
+    if (section.getAttribute('aria-expanded') === 'false') await user.click(section);
+  }
 }
 
 async function applyHealthFoundation(
@@ -118,6 +126,37 @@ async function saveCardCompletion(user: ReturnType<typeof userEvent.setup>, rhyt
   const dialog = await screen.findByRole('dialog', { name: 'When did you tend it?' });
   await user.click(within(dialog).getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'When did you tend it?' })).toBeNull());
+}
+
+function getTodayRhythmArticle(rhythmTitle: string): HTMLElement {
+  const article = screen.getAllByRole('article', { name: rhythmTitle })
+    .find(candidate => candidate.classList.contains('today-rhythm-details-dialog--inline'));
+  if (!article) throw new Error(`Could not find the Today card for ${rhythmTitle}.`);
+  return article;
+}
+
+function queryTodayRhythmArticle(rhythmTitle: string): HTMLElement | null {
+  return screen.queryAllByRole('article', { name: rhythmTitle })
+    .find(candidate => candidate.classList.contains('today-rhythm-details-dialog--inline')) ?? null;
+}
+
+async function openRhythmEditorFromScore(
+  user: ReturnType<typeof userEvent.setup>,
+  rhythmTitle: string
+): Promise<HTMLElement> {
+  let history = screen.queryByRole('region', { name: `History for ${rhythmTitle}` });
+  if (!history) {
+    const historyButton = screen.getByRole('button', {
+      name: historyButtonName(`View scores and history for ${rhythmTitle}`)
+    });
+    const card = historyButton.closest('article');
+    if (!card) throw new Error(`Could not find the standard card for ${rhythmTitle}.`);
+    expect(within(card).queryByRole('button', { name: `Edit ${rhythmTitle}` })).toBeNull();
+    await user.click(historyButton);
+    history = await screen.findByRole('region', { name: `History for ${rhythmTitle}` });
+  }
+  await user.click(within(history).getByRole('button', { name: `Edit ${rhythmTitle}` }));
+  return screen.getByRole('dialog', { name: 'Edit Rhythm' });
 }
 
 function inclusiveCalendarDays(startDate: string, endDate: string): number {
@@ -226,7 +265,10 @@ function seasonDeletionFixture() {
   const rhythmId = 'user-rhythm-60000000-0000-4000-8000-000000000001';
   const firstSchedule = { frequency: 'daily' as const };
   const middleSchedule = { frequency: 'weekly' as const, weekdays: [1, 3, 5] as (1 | 3 | 5)[] };
-  const currentSchedule = { frequency: 'weekly' as const, weekdays: [2, 4] as (2 | 4)[] };
+  const todayWeekday = new Date(`${today}T12:00:00Z`).getUTCDay() as RhythmWeekday;
+  const currentWeekdays = [...new Set<RhythmWeekday>([2, 4, todayWeekday])]
+    .sort((left, right) => left - right);
+  const currentSchedule = { frequency: 'weekly' as const, weekdays: currentWeekdays };
   const first = {
     ...createRhythmSeason(
       rhythmId,
@@ -264,10 +306,13 @@ function seasonDeletionFixture() {
     note: 'preserve current note'
   };
   const data = createSamplePreviewData();
+  data.todayView = 'all-today';
   data.savedRhythms.push({
     id: rhythmId,
     title: 'Season deletion fixture',
-    cadence: 'Every week on Tuesday and Thursday.',
+    cadence: `Every week on ${currentWeekdays.map(day =>
+      ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day]
+    ).join(', ')}.`,
     timeLabel: 'Evening',
     timeOfDay: 'evening',
     personIds: [],
@@ -307,28 +352,46 @@ function seasonDeletionFixture() {
 }
 
 describe('Tend Today preview', () => {
-  it('defaults to the current time frame and can switch to the full day', async () => {
+  it('returns from Rhythm editing to the shared details-card pencil without a duplicate header action', async () => {
+    const user = userEvent.setup();
+    testingRender(<App />);
+    await user.click(screen.getByRole('tab', { name: 'All today' }));
+    expandAllTodayGroups(document.body);
+
+    const editor = await openRhythmEditorFromScore(user, 'Take a walk');
+    const history = screen.getByRole('region', { name: 'History for Take a walk' });
+    const card = within(history).getByRole('article', { name: 'Take a walk' });
+    const editButton = within(card).getByRole('button', { name: 'Edit Take a walk' });
+    const headerActions = within(history.querySelector('.rhythm-history-view__header-actions')!);
+    expect(headerActions.getByRole('button', { name: 'Close details' })).toBeTruthy();
+    expect(headerActions.queryByRole('button', { name: 'Edit Take a walk' })).toBeNull();
+    expect(within(card).queryByRole('button', { name: /Tend|Log|Tended|View scores/ })).toBeNull();
+
+    await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit Rhythm' })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(editButton));
+  });
+
+  it('defaults to Now and can switch to All today while retaining the selected tab across navigation', async () => {
     const user = userEvent.setup();
     testingRender(<App />);
 
-    const trigger = screen.getByLabelText('Filter scheduled Rhythms by time, currently Now');
+    const nowTab = screen.getByRole('tab', { name: 'Now' });
+    expect(nowTab.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByText(/^\d+ of \d+ tended$/)).toBeTruthy();
     expect(document.querySelector('.today-plan__weather')).toBeNull();
     expect(screen.queryByText('Choose city')).toBeNull();
 
-    await user.click(trigger);
-    await user.click(screen.getByRole('option', { name: /Everything today/ }));
+    await user.click(screen.getByRole('tab', { name: 'All today' }));
     expect(screen.getByText('0 of 3 tended')).toBeTruthy();
     expect(document.querySelector('.today-plan__weather')).toBeNull();
-    expect(document.activeElement).toBe(
-      screen.getByLabelText('Filter scheduled Rhythms by time, currently Everything today')
-    );
+    expect(screen.queryByRole('combobox', { name: /Filter scheduled Rhythms by time/ })).toBeNull();
 
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
       .getByRole('button', { name: 'Faith' }));
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
       .getByRole('button', { name: 'Today' }));
-    expect(screen.getByLabelText('Filter scheduled Rhythms by time, currently Everything today')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'All today' }).getAttribute('aria-selected')).toBe('true');
   });
 
   it('moves weather configuration to More settings without reserving space in Today', async () => {
@@ -351,7 +414,7 @@ describe('Tend Today preview', () => {
     expect(document.querySelector('.today-plan__weather')).toBeNull();
   });
 
-  it('saves editable time blocks and reloads the same stable block for Today', async () => {
+  it('saves editable time blocks without rendering the reusable time filter on Today', async () => {
     const user = userEvent.setup();
     const { unmount } = testingRender(<App />);
     await screen.findByText('Preview data saved in this browser.');
@@ -376,18 +439,14 @@ describe('Tend Today preview', () => {
 
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
       .getByRole('button', { name: 'Today' }));
-    const trigger = screen.getByLabelText(/^Filter scheduled Rhythms by time/);
-    await user.click(trigger);
-    await user.click(screen.getByRole('option', { name: /Dawn.*6:30am – 9:00am/ }));
-    expect(trigger.querySelector(':scope > span:first-child')?.textContent).toBe('Dawn');
-    await user.click(trigger);
-    expect(screen.getByRole('option', { name: /Dawn.*6:30am – 9:00am/ })).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: /Filter scheduled Rhythms by time/ })).toBeNull();
 
     unmount();
     testingRender(<App />);
     await screen.findByText('Preview data saved in this browser.');
-    await user.click(screen.getByLabelText(/^Filter scheduled Rhythms by time/));
-    expect(screen.getByRole('option', { name: /Dawn.*6:30am – 9:00am/ })).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: /Filter scheduled Rhythms by time/ })).toBeNull();
+    const reloaded = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
+    expect(reloaded.valid && reloaded.envelope.data.timeBlocks.blocks[0]?.name).toBe('Dawn');
   });
 
   it('integrates Friendships with category navigation and persists one shared connection across reload', async () => {
@@ -441,7 +500,7 @@ describe('Tend Today preview', () => {
     });
 
     unmount();
-    render(<App />);
+    testingRender(<App />);
     await screen.findByText('Preview data saved in this browser.');
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
       .getByRole('button', { name: 'Friendships' }));
@@ -455,7 +514,7 @@ describe('Tend Today preview', () => {
     const envelope = createPreviewEnvelope(createSamplePreviewData());
     const originalRaw = JSON.stringify(envelope);
     window.localStorage.setItem(PREVIEW_STORAGE_KEY, originalRaw);
-    render(<App />);
+    testingRender(<App />);
     await screen.findByText('Preview data saved in this browser.');
 
     expect(screen.queryByRole('button', { name: 'Export preview backup' })).toBeNull();
@@ -641,7 +700,7 @@ describe('Tend Today preview', () => {
     const initialData = createSamplePreviewData();
     const initialRaw = JSON.stringify(createPreviewEnvelope(initialData));
     window.localStorage.setItem(PREVIEW_STORAGE_KEY, initialRaw);
-    render(<App />);
+    testingRender(<App />);
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
       .getByRole('button', { name: 'Parenting' }));
     await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
@@ -1060,7 +1119,7 @@ describe('Tend Today preview', () => {
     const initialData = createSamplePreviewData();
     const initialRaw = JSON.stringify(createPreviewEnvelope(initialData));
     window.localStorage.setItem(PREVIEW_STORAGE_KEY, initialRaw);
-    render(<App />);
+    testingRender(<App />);
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
       .getByRole('button', { name: 'Faith' }));
     await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
@@ -1125,7 +1184,7 @@ describe('Tend Today preview', () => {
     const initialData = createSamplePreviewData();
     const initialRaw = JSON.stringify(createPreviewEnvelope(initialData));
     window.localStorage.setItem(PREVIEW_STORAGE_KEY, initialRaw);
-    render(<App />);
+    testingRender(<App />);
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
       .getByRole('button', { name: 'Health & Fitness' }));
     await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
@@ -1479,21 +1538,19 @@ describe('Tend Today preview', () => {
     await user.click(within(history).getByRole('button', { name: 'Close details' }));
     await waitFor(() => expect(document.activeElement).toBe(historyOpener));
 
-    await user.click(within(screen.getByRole('article', { name: 'Morning prayer' }))
-      .getByRole('button', { name: 'Edit Morning prayer' }));
-    editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    editor = await openRhythmEditorFromScore(user, 'Morning prayer');
     await user.clear(within(editor).getByLabelText('Description (optional)'));
     await user.type(within(editor).getByLabelText('Description (optional)'), 'Keep making room to listen.');
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
-    expect(within(screen.getByRole('article', { name: 'Morning prayer' }))
+    expect(within(getTodayRhythmArticle('Morning prayer'))
       .getByText('Keep making room to listen.')).toBeTruthy();
 
-    await user.click(within(screen.getByRole('article', { name: 'Morning prayer' }))
-      .getByRole('button', { name: 'Edit Morning prayer' }));
-    editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    editor = await openRhythmEditorFromScore(user, 'Morning prayer');
     await user.click(within(editor).getByRole('button', { name: 'Archive Morning prayer' }));
     await user.click(screen.getByRole('button', { name: 'Confirm archive Morning prayer' }));
-    expect(screen.queryByRole('article', { name: 'Morning prayer' })).toBeNull();
+    await user.click(within(screen.getByRole('region', { name: 'History for Morning prayer' }))
+      .getByRole('button', { name: 'Close details' }));
+    await waitFor(() => expect(queryTodayRhythmArticle('Morning prayer')).toBeNull());
     await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
     await user.click(screen.getByRole('button', { name: 'Archived rhythms (1)' }));
     const archive = screen.getByRole('dialog', { name: 'Archived rhythms' });
@@ -1560,8 +1617,7 @@ describe('Tend Today preview', () => {
       .getByRole('button', { name: 'Marriage' }));
     await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
     expect(screen.getAllByRole('article', { name: 'Pray together' })).toHaveLength(1);
-    await user.click(screen.getByRole('button', { name: 'Edit Pray together' }));
-    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    const editor = await openRhythmEditorFromScore(user, 'Pray together');
     await user.click(within(editor).getByRole('button', { name: 'Choose categories, Faith and Marriage' }));
     const categoryPicker = associationPicker('Choose categories');
     await user.click(within(categoryPicker).getByRole('button', { name: 'Faith' }));
@@ -1691,21 +1747,19 @@ describe('Tend Today preview', () => {
     await user.click(screen.getByRole('tab', { name: 'Today' }));
     expect(screen.getByRole('article', { name: 'Parenting reading time' })).toBeTruthy();
     await saveCardCompletion(user, 'Parenting reading time');
-    const card = screen.getByRole('article', { name: 'Parenting reading time' });
-    await user.click(within(card).getByRole('button', { name: 'Edit Parenting reading time' }));
-    editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    editor = await openRhythmEditorFromScore(user, 'Parenting reading time');
     await user.clear(within(editor).getByLabelText('Description (optional)'));
     await user.type(within(editor).getByLabelText('Description (optional)'), 'Keep sharing books together.');
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
-    expect(within(screen.getByRole('article', { name: 'Parenting reading time' }))
+    expect(within(getTodayRhythmArticle('Parenting reading time'))
       .getByText('Keep sharing books together.')).toBeTruthy();
 
-    await user.click(within(screen.getByRole('article', { name: 'Parenting reading time' }))
-      .getByRole('button', { name: 'Edit Parenting reading time' }));
-    editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    editor = await openRhythmEditorFromScore(user, 'Parenting reading time');
     await user.click(within(editor).getByRole('button', { name: 'Archive Parenting reading time' }));
     await user.click(screen.getByRole('button', { name: 'Confirm archive Parenting reading time' }));
-    expect(screen.queryByRole('article', { name: 'Parenting reading time' })).toBeNull();
+    await user.click(within(screen.getByRole('region', { name: 'History for Parenting reading time' }))
+      .getByRole('button', { name: 'Close details' }));
+    await waitFor(() => expect(queryTodayRhythmArticle('Parenting reading time')).toBeNull());
 
     await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
     await user.click(screen.getByRole('button', { name: 'Archived rhythms (1)' }));
@@ -1819,7 +1873,8 @@ describe('Tend Today preview', () => {
     await user.click(within(history).getByRole('button', { name: 'Show Seasons explanation' }));
     expect(within(history).getByText('5 seasons')).toBeTruthy();
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(savedRaw);
-    expect(within(history).getAllByRole('article')).toHaveLength(5);
+    expect(history.querySelector('.rhythm-history-view__seasons')?.querySelectorAll('article'))
+      .toHaveLength(5);
   });
 
   it('persists name-only Season corrections, clears names explicitly, and keeps boundaries and logs intact', async () => {
@@ -2219,6 +2274,8 @@ describe('Tend Today preview', () => {
   it('keeps a logged completion through cancelled and confirmed Season creation and reload', async () => {
     const user = userEvent.setup();
     const today = localDateString(new Date());
+    const weekday = (new Date(`${today}T12:00:00`).getDay() || 7) as 1 | 2 | 3 | 4 | 5 | 6 | 7;
+    const weekdayName = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][weekday - 1]!;
     const trackingStartDate = addCalendarDays(today, -30);
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const rhythmId = 'user-rhythm-40000000-0000-4000-8000-000000000001';
@@ -2261,13 +2318,11 @@ describe('Tend Today preview', () => {
     await user.click(within(details).getByRole('button', { name: 'Close details' }));
 
     await user.click(screen.getByRole('button', { name: /Show tended/ }));
-    const tendedCard = screen.getByRole('article', { name: 'Season flow test' });
-    await user.click(within(tendedCard).getByRole('button', { name: 'Edit Season flow test' }));
-    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    const editor = await openRhythmEditorFromScore(user, 'Season flow test');
     await user.click(within(editor).getByRole('button', { name: 'Change frequency, currently Daily' }));
     await user.click(within(editor).getByRole('combobox', { name: 'Frequency: Daily' }));
     await user.click(within(editor).getByRole('option', { name: 'Select Days' }));
-    await user.click(within(editor).getByRole('checkbox', { name: 'Tuesday' }));
+    await user.click(within(editor).getByRole('checkbox', { name: weekdayName }));
     const beforeCancel = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
 
@@ -2279,7 +2334,7 @@ describe('Tend Today preview', () => {
     await user.click(within(editor).getByRole('button', { name: 'Change frequency, currently Daily' }));
     await user.click(within(editor).getByRole('combobox', { name: 'Frequency: Daily' }));
     await user.click(within(editor).getByRole('option', { name: 'Select Days' }));
-    await user.click(within(editor).getByRole('checkbox', { name: 'Tuesday' }));
+    await user.click(within(editor).getByRole('checkbox', { name: weekdayName }));
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
     confirmation = screen.getByRole('dialog', { name: 'Change schedule' });
     await user.type(within(confirmation).getByLabelText('Season name (optional)'), 'New cadence');
@@ -2297,7 +2352,7 @@ describe('Tend Today preview', () => {
     expect(saved.envelope.data.datedRhythmCompletions).toHaveLength(1);
     expect(rhythm.scoring?.scheduleHistory.map(season => season.kind === 'scheduled' ? season.schedule : undefined)).toEqual([
       { frequency: 'daily' },
-      { frequency: 'weekly', weekdays: [2], weeklyMode: 'select-days' }
+      { frequency: 'weekly', weekdays: [weekday], weeklyMode: 'select-days' }
     ]);
     const currentSeason = rhythm.scoring?.scheduleHistory[1];
     expect(currentSeason?.kind === 'scheduled' ? currentSeason.name : undefined).toBe('New cadence');
@@ -2328,9 +2383,7 @@ describe('Tend Today preview', () => {
     const originalCompletionIds = fixture.completionHistory?.map(record => record.id);
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
-    let card = screen.getByRole('article', { name: 'Daily connection' });
-    await user.click(within(card).getByRole('button', { name: 'Edit Daily connection' }));
-    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    const editor = await openRhythmEditorFromScore(user, 'Daily connection');
     await user.click(within(editor).getByRole('button', { name: 'Change frequency, currently Daily' }));
     await user.click(within(editor).getByRole('combobox', { name: /Frequency:/ }));
     await user.click(within(editor).getByRole('option', { name: 'Select Days' }));
@@ -2361,7 +2414,7 @@ describe('Tend Today preview', () => {
       expect(saved.valid && saved.envelope.data.savedRhythms
         .find(item => item.id === 'sample-connect')?.scoring?.scheduleHistory).toHaveLength(2);
     });
-    let saved = parsePreviewBackup(
+    const saved = parsePreviewBackup(
       window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
       localDateString(new Date())
     );
@@ -2382,42 +2435,17 @@ describe('Tend Today preview', () => {
     cleanup();
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
-    const reloadedCard = screen.getByRole('article', { name: 'Daily connection' });
-    expect(within(reloadedCard).queryByText('Due today')).toBeNull();
-    await user.click(within(reloadedCard).getByRole('button', {
-      name: historyButtonName('View scores and history for Daily connection')
-    }));
-    const history = within(screen.getByRole('dialog', { name: 'Daily connection' }))
-      .getByRole('region', { name: 'History for Daily connection' });
-    await user.click(within(history).getByRole('button', { name: 'Show Seasons explanation' }));
-    expect(within(history).getByRole('meter', { name: 'Health score' }).getAttribute('aria-valuenow'))
-      .toBe('43.125');
-    expect(within(history).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow'))
-      .toBe('38');
-    expect(within(history).getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow'))
-      .toBe('60');
-    expect(within(history).getByText('2 seasons')).toBeTruthy();
-    expect(within(history).getByRole('heading', { name: 'Daily' })).toBeTruthy();
-    expect(within(history).getByRole('heading', { name: 'Evening connection' })).toBeTruthy();
-    expect(within(history).getAllByText('Mon · Wed · Fri')).toHaveLength(2);
-    const editNamedSeason = within(history).getByRole('button', { name: 'Edit Evening connection' });
-    await user.click(editNamedSeason);
-    const correction = screen.getByRole('dialog', { name: 'Edit season' });
-    expect(within(correction).getByLabelText('Season name (optional)'))
-      .toHaveProperty('value', 'Evening connection');
-    await user.click(within(correction).getByRole('button', { name: 'Cancel' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit season' })).toBeNull());
-    expect(within(history).getByRole('button', { name: 'Logged moments (3)' })).toBeTruthy();
-    expect(fixture.completionHistory?.map(record => record.id)).toEqual(originalCompletionIds);
-    saved = parsePreviewBackup(
+    expect(screen.queryByRole('article', { name: 'Daily connection' })).toBeNull();
+    const reloaded = parsePreviewBackup(
       window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
       localDateString(new Date())
     );
-    expect(saved.valid).toBe(true);
-    if (saved.valid) {
-      expect(saved.envelope.data.savedRhythms.find(item => item.id === 'sample-connect')
+    expect(reloaded.valid).toBe(true);
+    if (reloaded.valid) {
+      expect(reloaded.envelope.data.savedRhythms.find(item => item.id === 'sample-connect')
         ?.scoring?.scheduleHistory).toHaveLength(2);
     }
+    expect(fixture.completionHistory?.map(record => record.id)).toEqual(originalCompletionIds);
   });
 
   it('opens the shared Season editor for Daily connection without creating a boundary and preserves the Rhythm editor pencil', async () => {
@@ -2450,8 +2478,7 @@ describe('Tend Today preview', () => {
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(before);
 
     await user.click(within(history).getByRole('button', { name: 'Close details' }));
-    await user.click(within(card).getByRole('button', { name: 'Edit Daily connection' }));
-    expect(screen.getByRole('dialog', { name: 'Edit Rhythm' })).toBeTruthy();
+    await openRhythmEditorFromScore(user, 'Daily connection');
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(before);
   });
 
@@ -2461,9 +2488,12 @@ describe('Tend Today preview', () => {
     const user = userEvent.setup();
     const fixture = todayRhythms.find(rhythm => rhythm.id === 'sample-connect')!;
     const originalCompletions = fixture.completionHistory?.map(record => ({ ...record }));
+    const data = createSamplePreviewData();
+    data.todayView = 'all-today';
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
-    await showEvening(user);
+    await showAllToday(user);
     const card = screen.getByRole('article', { name: 'Daily connection' });
     await user.click(within(card).getByRole('button', {
       name: historyButtonName('View scores and history for Daily connection')
@@ -2478,14 +2508,14 @@ describe('Tend Today preview', () => {
     await user.type(within(editor).getByLabelText('Season name (optional)'), 'Special Season');
     await user.click(within(editor).getByRole('combobox', { name: 'Frequency: Daily' }));
     await user.click(within(editor).getByRole('option', { name: 'Select Days' }));
-    await user.click(within(editor).getByRole('checkbox', { name: 'Monday' }));
+    await user.click(within(editor).getByRole('checkbox', { name: 'Sunday' }));
     await user.click(within(editor).getByRole('checkbox', { name: 'Set an end date' }));
 
     const endDate = within(editor).getByLabelText('End date');
     expect((endDate as HTMLInputElement).value).toBe('2026-10-25');
     const comparison = within(editor).getByRole('group', { name: 'Saved and proposed schedules' });
     expect(comparison.textContent).toContain('Proposed');
-    expect(comparison.textContent).toContain('Selected days: Monday');
+    expect(comparison.textContent).toContain('Selected days: Sunday');
     expect(within(editor).getAllByText('Oct 17, 2026 – Oct 25, 2026')).toHaveLength(2);
     const previewScores = ['Health', 'Consistency', 'On Track'].map(metric =>
       within(editor).getByRole('group', { name: `After ${metric}` })
@@ -2493,8 +2523,8 @@ describe('Tend Today preview', () => {
     );
     const calculationDetails = within(editor).getByText('Why the scores change').closest('details')!;
     await user.click(within(calculationDetails).getByText('Why the scores change'));
-    expect(calculationDetails.textContent).toContain('0 of 1 · 0%');
-    expect(calculationDetails.textContent).toContain('1 scheduled day · 0 completed');
+    expect(calculationDetails.textContent).toContain('1 of 1 · 100%');
+    expect(calculationDetails.textContent).toContain('1 scheduled day · 1 completed');
 
     await user.click(within(editor).getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit season' })).toBeNull());
@@ -2509,7 +2539,7 @@ describe('Tend Today preview', () => {
     let season = rhythm.scoring?.scheduleHistory?.[0];
     expect(rhythm.schedule).toMatchObject({
       frequency: 'weekly',
-      weekdays: [1],
+      weekdays: [0],
       weeklyMode: 'select-days',
       endDate: '2026-10-25'
     });
@@ -2518,7 +2548,7 @@ describe('Tend Today preview', () => {
       startDate: '2026-10-17',
       name: 'Special Season',
       timeOfDay: 'anytime',
-      schedule: { frequency: 'weekly', weekdays: [1], weeklyMode: 'select-days', endDate: '2026-10-25' }
+      schedule: { frequency: 'weekly', weekdays: [0], weeklyMode: 'select-days', endDate: '2026-10-25' }
     });
     expect(saved.envelope.data.datedRhythmCompletions).toHaveLength(0);
     expect(saved.envelope.data.rhythmCompletionOverrides).toHaveLength(0);
@@ -2527,12 +2557,12 @@ describe('Tend Today preview', () => {
     const scoreValues = ['Health', 'Consistency', 'On Track'].map(metric =>
       within(history).getByRole('meter', { name: `${metric} score` }).getAttribute('aria-valuenow')
     );
-    expect(scoreValues.map(Number)).toEqual([22.5, 0, 90]);
-    expect(previewScores).toEqual(['23', '0', '90']);
+    expect(scoreValues.map(Number)).toEqual([100, 100, 100]);
+    expect(previewScores).toEqual(['100', '100', '100']);
     cleanup();
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
-    await showAnytime(user);
+    await showAllToday(user);
     const reloadedCard = screen.getByRole('article', { name: 'Daily connection' });
     await user.click(within(reloadedCard).getByRole('button', {
       name: historyButtonName('View scores and history for Daily connection')
@@ -2549,7 +2579,7 @@ describe('Tend Today preview', () => {
       .toBe(scoreValues[2]);
     await user.click(within(reloadedHistory).getByRole('button', { name: 'Show Seasons explanation' }));
     expect(within(reloadedHistory).getByRole('heading', { name: 'Special Season' })).toBeTruthy();
-    expect(within(reloadedHistory).getAllByText('Select days · Mon')).toHaveLength(2);
+    expect(within(reloadedHistory).getAllByText('Select days · Sun')).toHaveLength(2);
     expect(within(reloadedHistory).getByRole('button', { name: 'Logged moments (3)' })).toBeTruthy();
     expect(fixture.completionHistory?.map(record => ({ ...record }))).toEqual(originalCompletions);
     saved = parsePreviewBackup(
@@ -2563,7 +2593,7 @@ describe('Tend Today preview', () => {
     expect(season).toMatchObject({
       kind: 'scheduled',
       name: 'Special Season',
-      schedule: { frequency: 'weekly', weekdays: [1], weeklyMode: 'select-days', endDate: '2026-10-25' }
+      schedule: { frequency: 'weekly', weekdays: [0], weeklyMode: 'select-days', endDate: '2026-10-25' }
     });
   });
 
@@ -2586,6 +2616,7 @@ describe('Tend Today preview', () => {
       };
     });
     const data = createSamplePreviewData();
+    data.todayView = 'all-today';
     data.savedRhythms.push({
       id: rhythmId,
       title: 'Season boundary fixture',
@@ -2700,6 +2731,7 @@ describe('Tend Today preview', () => {
       };
     });
     const data = createSamplePreviewData();
+    data.todayView = 'all-today';
     data.savedRhythms.push({
       id: rhythmId,
       title: 'Legacy history fixture',
@@ -2908,12 +2940,15 @@ describe('Tend Today preview', () => {
     const today = localDateString(new Date());
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const rhythmId = 'user-rhythm-30000000-0000-4000-8000-000000000001';
+    const date = new Date(`${today}T12:00:00`);
+    const monthInQuarter = ((date.getMonth() % 3) + 1) as 1 | 2 | 3;
     const schedule = {
       frequency: 'quarterly',
-      monthInQuarter: 1,
-      pattern: { kind: 'dayOfMonth', day: 1 }
+      monthInQuarter,
+      pattern: { kind: 'dayOfMonth', day: date.getDate() }
     } as const;
     const data = createSamplePreviewData();
+    data.todayView = 'all-today';
     data.savedRhythms.push({
       id: rhythmId,
       title: 'New quarterly rhythm',
@@ -2948,7 +2983,7 @@ describe('Tend Today preview', () => {
       'On Track: Starts with your first Tend.'
     );
     expect(within(history).getByRole('status').textContent).toContain(
-      'Consistency: No scheduled moments to measure yet.'
+      'Consistency: Ready for your first Tend.'
     );
     expect(within(history).getByText('Your story starts with the first Tend.')).toBeTruthy();
     expect(within(history).getByRole('button', { name: 'Logged moments (0)' })).toBeTruthy();
@@ -3026,13 +3061,11 @@ describe('Tend Today preview', () => {
     expect(screen.getByRole('dialog', { name: 'Quarterly preview habit' })).toBeTruthy();
   });
 
-  it('converts Take a walk from descriptive cadence to Quarterly and preserves the saved schedule after reload', async () => {
+  it('converts Take a walk to Quarterly and hides it on dates when it is not due', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const card = screen.getByRole('article', { name: 'Take a walk' });
-    await user.click(within(card).getByRole('button', { name: 'Edit Take a walk' }));
-    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    const editor = await openRhythmEditorFromScore(user, 'Take a walk');
     await user.click(within(editor).getByRole('combobox', { name: 'Frequency: Choose frequency' }));
     await user.click(within(editor).getByRole('option', { name: 'Quarterly' }));
     await user.click(within(editor).getByRole('combobox', { name: 'Quarter months: Choose months' }));
@@ -3043,9 +3076,8 @@ describe('Tend Today preview', () => {
     await user.click(within(editor).getByRole('option', { name: '1' }));
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
 
-    const updatedCard = screen.getByRole('article', { name: 'Take a walk' });
-    expect(within(updatedCard).getByText('Quarterly')).toBeTruthy();
-    expect(within(updatedCard).queryByText('3 times a week')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Close details' }));
+    expect(queryTodayRhythmArticle('Take a walk')).toBeNull();
 
     const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
     expect(raw).not.toBeNull();
@@ -3061,13 +3093,19 @@ describe('Tend Today preview', () => {
 
     cleanup();
     render(<App />);
-    const reloadedCard = screen.getByRole('article', { name: 'Take a walk' });
-    expect(within(reloadedCard).getByText('Quarterly')).toBeTruthy();
-    expect(within(reloadedCard).queryByText('3 times a week')).toBeNull();
-    await user.click(within(reloadedCard).getByRole('button', { name: historyButtonName('View scores and history for Take a walk') }));
-    const history = screen.getByRole('region', { name: 'History for Take a walk' });
-    expect(history.querySelector('.rhythm-history-view__schedule')?.textContent)
-      .toContain('1st day of the first month of every quarter');
+    expect(screen.queryByRole('article', { name: 'Take a walk' })).toBeNull();
+    const reloaded = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(reloaded.valid).toBe(true);
+    if (reloaded.valid) {
+      expect(reloaded.envelope.data.savedRhythms.find(rhythm => rhythm.id === 'sample-walk'))
+        .toMatchObject({
+          cadence: expect.stringContaining('quarter'),
+          schedule: { frequency: 'quarterly', monthInQuarter: 1, pattern: { kind: 'dayOfMonth', day: 1 } }
+        });
+    }
   });
 
   it('exposes the exact v5 recovery copy after explicitly replacing v5 preview data', async () => {
@@ -3165,9 +3203,8 @@ describe('Tend Today preview', () => {
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
       .getByRole('button', { name: 'Health & Fitness' }));
     await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
-    const savedCard = await screen.findByRole('article', { name: 'Storage repair workflow' });
-    await user.click(within(savedCard).getByRole('button', { name: 'Edit Storage repair workflow' }));
-    editor = await screen.findByRole('dialog', { name: 'Edit Rhythm' });
+    await screen.findByRole('article', { name: 'Storage repair workflow' });
+    editor = await openRhythmEditorFromScore(user, 'Storage repair workflow');
     const editedTitle = within(editor).getByLabelText('Title');
     await user.clear(editedTitle);
     await user.type(editedTitle, 'Storage repair persisted');
@@ -3329,7 +3366,7 @@ describe('Tend Today preview', () => {
     expect(within(screen.getByRole('dialog')).getByRole('button', {
       name: 'Open synthetic profile for Avery Brooks'
     })).toBe(document.activeElement);
-    expect(within(screen.getByRole('dialog')).getByRole('heading', { name: 'Pray together' })).toBeTruthy();
+    expect(screen.getAllByRole('heading', { name: 'Pray together' }).length).toBeGreaterThan(0);
   });
 
   it('supports browser Back and Forward while preserving the People origin', async () => {
@@ -3808,7 +3845,7 @@ describe('Tend Today preview', () => {
     window.localStorage.setItem(PREVIEW_STORAGE_KEY, savedRaw);
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
-    await user.click(screen.getByRole('tab', { name: 'Anytime' }));
+    await user.click(screen.getByRole('tab', { name: 'Flexible' }));
 
     const faithHomeRow = () => screen.queryAllByRole('button', { name: 'Faith' })
       .find(button => button.classList.contains('menu-area'));
@@ -3873,7 +3910,7 @@ describe('Tend Today preview', () => {
 
     expect(categoryValues).toHaveLength(6);
     expect(screen.getByText(displayedValue, { selector: '.ov-score' })).toBeTruthy();
-    expect(screen.getByText(`${availableValues.length} of 6 categories scored.`)).toBeTruthy();
+    expect(screen.queryByText(/categories scored\./)).toBeNull();
     const meter = screen.getByRole('meter', {
       name: rawAverage === null
         ? 'Overall health: Not enough data'
@@ -3910,9 +3947,9 @@ describe('Tend Today preview', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Pray together' });
     expect(screen.getByText('1 of 3 tended')).toBeTruthy();
     expect(within(dialog).getByRole('region', { name: 'History for Pray together' })).toBeTruthy();
-    expect(within(screen.getByRole('article', { name: 'Pray together' }))
+    expect(within(getTodayRhythmArticle('Pray together'))
       .getByRole('button', { name: 'Tended Pray together' }).matches(':disabled')).toBe(true);
-    expect(within(screen.getByRole('article', { name: 'Pray together' })).getByText('Today')).toBeTruthy();
+    expect(within(getTodayRhythmArticle('Pray together')).getByText('Today')).toBeTruthy();
     await waitFor(() => {
       const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
       expect(raw).not.toBeNull();
@@ -4074,7 +4111,7 @@ describe('Tend Today preview', () => {
     const user = userEvent.setup();
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
-    let card = screen.getByRole('article', { name: 'Daily connection' });
+    let card = getTodayRhythmArticle('Daily connection');
     const initialHealth = within(card).getByRole('button', {
       name: historyButtonName('View scores and history for Daily connection')
     }).querySelector('.today-rhythm-details__history-score')?.textContent;
@@ -4089,7 +4126,7 @@ describe('Tend Today preview', () => {
     expect(document.activeElement).toBe(within(history).getByRole('button', { name: '+ Log a moment' }));
     expect(within(history).getByRole('button', { name: 'Logged moments (4)' })).toBeTruthy();
     await waitFor(() => {
-      card = screen.getByRole('article', { name: 'Daily connection' });
+      card = getTodayRhythmArticle('Daily connection');
       expect(within(card).getByRole('button', { name: 'Tended Daily connection' }).matches(':disabled')).toBe(true);
       expect(within(card).getByText('Today')).toBeTruthy();
     });
@@ -4427,8 +4464,19 @@ describe('Tend Today preview', () => {
   it('undoes only the selected card completion and persists Tend and Undo across reloads', async () => {
     const user = userEvent.setup();
     const { unmount } = render(<App />);
+    await user.click(screen.getByRole('tab', { name: 'All today' }));
+    expandAllTodayGroups(document.body);
+    const allTodayGroups = () => [...document.querySelectorAll('.today-timeframe-header__disclosure')];
+    const expectAllTodayGroupsExpanded = () => {
+      expect(allTodayGroups().length).toBeGreaterThan(0);
+      expect(allTodayGroups().every(group => group.getAttribute('aria-expanded') === 'true')).toBe(true);
+    };
+    expectAllTodayGroupsExpanded();
+
     await saveCardCompletion(user, 'Pray together');
+    expectAllTodayGroupsExpanded();
     await saveCardCompletion(user, 'Daily connection');
+    expectAllTodayGroupsExpanded();
     await waitFor(() => {
       const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
       expect(raw).not.toBeNull();
@@ -4448,6 +4496,8 @@ describe('Tend Today preview', () => {
     expect(screen.queryByRole('button', { name: 'Undo completion for Pray together' })).toBeNull();
     await user.click(showTended);
     expect(screen.getByRole('button', { name: /Hide tended Rhythms/ }).getAttribute('aria-expanded')).toBe('true');
+    expandAllTodayGroups(document.body);
+    expectAllTodayGroupsExpanded();
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Tended Pray together' }).matches(':disabled')).toBe(true);
       expect(screen.getByRole('button', { name: 'Tended Daily connection' }).matches(':disabled')).toBe(true);
@@ -4458,6 +4508,7 @@ describe('Tend Today preview', () => {
     await user.keyboard('{Enter}');
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Tend Pray together' }));
     expect(screen.getByRole('button', { name: 'Tended Daily connection' }).matches(':disabled')).toBe(true);
+    expectAllTodayGroupsExpanded();
     await waitFor(() => {
       const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
       expect(raw).not.toBeNull();
@@ -4552,73 +4603,68 @@ describe('Tend Today preview', () => {
     ).valid).toBe(true);
   });
 
-  it('shows the selected empty placeholder for each Today tab based on its displayed Rhythms', async () => {
+  it('shows distinct compact empty states for Now, Flexible, and All today', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    testingRender(<App />);
 
     const panel = screen.getByRole('tabpanel');
     const expectOneEmptyPlaceholder = (expectedText: string) => {
-      expect(within(panel).getByRole('status').textContent).toBe(expectedText);
+      expect(within(panel).getByRole('status').textContent).toContain(expectedText);
       expect(panel.querySelectorAll('.today-plan__empty-rhythms')).toHaveLength(1);
-      expect(panel.querySelector('.today-plan__empty-rhythms')?.textContent).toBe(expectedText);
+      expect(panel.querySelector('.today-plan__empty-rhythms')?.textContent).toContain(expectedText);
     };
 
-    expect(within(panel).getAllByRole('article').length).toBeGreaterThan(0);
-    await user.click(screen.getByRole('tab', { name: 'Anytime' }));
-    expectOneEmptyPlaceholder('No active Rhythms in Anytime.');
-    await user.click(screen.getByRole('tab', { name: 'All-day' }));
-    expectOneEmptyPlaceholder('No active Rhythms in All-day.');
-
-    await user.click(screen.getByRole('tab', { name: 'Scheduled' }));
     const search = screen.getByRole('searchbox', { name: 'Search sample Rhythms' });
     await user.type(search, 'no matching Rhythm');
-    expectOneEmptyPlaceholder('No active Rhythms today.');
+    expectOneEmptyPlaceholder('No active Rhythms right now.');
+    expect(within(panel).getByRole('button', { name: 'View all today' })).toBeTruthy();
 
-    await user.click(screen.getByRole('tab', { name: 'Anytime' }));
-    expectOneEmptyPlaceholder('No active Rhythms in Anytime.');
-    await user.click(screen.getByRole('tab', { name: 'All-day' }));
-    expectOneEmptyPlaceholder('No active Rhythms in All-day.');
+    await user.click(screen.getByRole('tab', { name: 'Flexible' }));
+    expectOneEmptyPlaceholder('No flexible Rhythms due today.');
+    await user.click(screen.getByRole('tab', { name: 'All today' }));
+    expectOneEmptyPlaceholder('No Rhythms due today.');
 
     await user.clear(search);
-    await user.click(screen.getByRole('tab', { name: 'Scheduled' }));
-    expect(screen.getByRole('article', { name: 'Take a walk' })).toBeTruthy();
+    expandAllTodayGroups(document.body);
+    expect(within(panel).getAllByRole('article').length).toBeGreaterThan(0);
     expect(panel.querySelector('.today-plan__empty-rhythms')).toBeNull();
-    await user.click(screen.getByRole('tab', { name: 'Anytime' }));
-    expectOneEmptyPlaceholder('No active Rhythms in Anytime.');
   });
 
   it('moves focus and selection through plan tabs with arrows, Home, and End', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    testingRender(<App />);
 
-    const scheduled = screen.getByRole('tab', { name: 'Scheduled' });
-    const anytime = screen.getByRole('tab', { name: 'Anytime' });
-    const allDay = screen.getByRole('tab', { name: 'All-day' });
+    const now = screen.getByRole('tab', { name: 'Now' });
+    const flexible = screen.getByRole('tab', { name: 'Flexible' });
+    const allToday = screen.getByRole('tab', { name: 'All today' });
     const panel = screen.getByRole('tabpanel');
 
-    expect(scheduled.getAttribute('aria-selected')).toBe('true');
-    expect(scheduled.getAttribute('tabindex')).toBe('0');
-    expect(panel.getAttribute('aria-labelledby')).toBe(scheduled.id);
+    expect(now.getAttribute('aria-selected')).toBe('true');
+    expect(now.getAttribute('tabindex')).toBe('0');
+    expect(panel.getAttribute('aria-labelledby')).toBe(now.id);
 
-    scheduled.focus();
+    now.focus();
     await user.keyboard('{ArrowLeft}');
-    expect(document.activeElement).toBe(allDay);
-    expect(allDay.getAttribute('aria-selected')).toBe('true');
-    expect(allDay.getAttribute('tabindex')).toBe('0');
-    expect(scheduled.getAttribute('tabindex')).toBe('-1');
+    expect(document.activeElement).toBe(allToday);
+    expect(allToday.getAttribute('aria-selected')).toBe('true');
+    expect(allToday.getAttribute('tabindex')).toBe('0');
+    expect(now.getAttribute('tabindex')).toBe('-1');
 
     await user.keyboard('{ArrowRight}');
-    expect(document.activeElement).toBe(scheduled);
-    expect(scheduled.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(now);
+    expect(now.getAttribute('aria-selected')).toBe('true');
 
     await user.keyboard('{End}');
-    expect(document.activeElement).toBe(allDay);
-    expect(panel.getAttribute('aria-labelledby')).toBe(allDay.id);
+    expect(document.activeElement).toBe(allToday);
+    expect(panel.getAttribute('aria-labelledby')).toBe(allToday.id);
 
     await user.keyboard('{Home}');
-    expect(document.activeElement).toBe(scheduled);
-    expect(scheduled.getAttribute('aria-selected')).toBe('true');
-    expect(anytime.getAttribute('tabindex')).toBe('-1');
+    expect(document.activeElement).toBe(now);
+    expect(now.getAttribute('aria-selected')).toBe('true');
+    await user.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(flexible);
+    expect(flexible.getAttribute('aria-selected')).toBe('true');
+    expect(panel.getAttribute('aria-labelledby')).toBe(flexible.id);
   });
 
   it('creates and edits a synthetic Rhythm, preserving its identity and completion across reload', async () => {
@@ -4663,7 +4709,13 @@ describe('Tend Today preview', () => {
     expect(within(rhythmCard).getByRole('button', { name: 'Open synthetic profile for Avery Brooks' })).toBeTruthy();
     await saveCardCompletion(user, 'After-lunch walk');
 
-    const editButton = within(rhythmCard).getByRole('button', { name: 'Edit After-lunch walk' });
+    const historyButton = within(rhythmCard).getByRole('button', {
+      name: historyButtonName('View scores and history for After-lunch walk')
+    });
+    historyButton.focus();
+    await user.keyboard('{Enter}');
+    const history = screen.getByRole('region', { name: 'History for After-lunch walk' });
+    const editButton = within(history).getByRole('button', { name: 'Edit After-lunch walk' });
     editButton.focus();
     await user.keyboard('{Enter}');
     const edit = screen.getByRole('dialog', { name: 'Edit Rhythm' });
@@ -4677,7 +4729,7 @@ describe('Tend Today preview', () => {
     await user.click(within(edit).getByRole('button', { name: 'Save' }));
 
     expect(document.activeElement).toBe(editButton);
-    rhythmCard = screen.getByRole('article', { name: 'Walk after lunch' });
+    rhythmCard = getTodayRhythmArticle('Walk after lunch');
     expect(within(rhythmCard).getByRole('button', { name: 'Tended Walk after lunch' }).matches(':disabled')).toBe(true);
     expect(within(rhythmCard).getByRole('button', { name: 'Open synthetic profile for Avery Brooks' })).toBeTruthy();
     expect(within(rhythmCard).getByRole('button', { name: 'Open synthetic profile for Morgan Reed' })).toBeTruthy();
@@ -4723,7 +4775,7 @@ describe('Tend Today preview', () => {
       .toContain('Mon · Wed');
     expect(within(reloadedCard).getByRole('button', { name: 'Open synthetic profile for Morgan Reed' })).toBeTruthy();
     expect(within(reloadedCard).getByRole('button', { name: 'Open synthetic profile for Jordan Bell' })).toBeTruthy();
-    await user.click(within(reloadedCard).getByRole('button', { name: 'Edit Walk after lunch' }));
+    await openRhythmEditorFromScore(user, 'Walk after lunch');
     const reloadedEditor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
     expect(within(reloadedEditor).getByRole('button', {
       name: 'Change frequency, currently Mon · Wed'
@@ -4775,8 +4827,7 @@ describe('Tend Today preview', () => {
     render(<App />);
     await saveCardCompletion(user, 'Pray together');
     const card = screen.getByRole('article', { name: 'Pray together' });
-    await user.click(within(card).getByRole('button', { name: 'Edit Pray together' }));
-    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    const editor = await openRhythmEditorFromScore(user, 'Pray together');
     expect(within(editor).getByRole('button', { name: 'Change frequency, currently Daily' })).toBeTruthy();
     expect(within(editor).getByText('Daily')).toBeTruthy();
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
@@ -4795,13 +4846,13 @@ describe('Tend Today preview', () => {
 
   it('archives a saved fixture without saving cancelled edits, then restores its identity and history', async () => {
     const user = userEvent.setup();
+    const weekday = (new Date().getDay() || 7) as 1 | 2 | 3 | 4 | 5 | 6 | 7;
+    const weekdayName = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][weekday - 1]!;
+    const weekdayShortName = weekdayName.slice(0, 3);
     render(<App />);
     await saveCardCompletion(user, 'Pray together');
     await user.click(screen.getByRole('button', { name: /Show tended/ }));
-    const originalCard = screen.getByRole('article', { name: 'Pray together' });
-    await user.click(within(originalCard).getByRole('button', { name: 'Edit Pray together' }));
-
-    let editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    let editor = await openRhythmEditorFromScore(user, 'Pray together');
     const title = within(editor).getByLabelText('Title');
     await user.clear(title);
     await user.type(title, 'Updated prayer rhythm');
@@ -4814,15 +4865,14 @@ describe('Tend Today preview', () => {
     await user.click(within(editor).getByRole('button', { name: 'Change frequency, currently Daily' }));
     await user.click(within(editor).getByRole('combobox', { name: 'Frequency: Daily' }));
     await user.click(within(editor).getByRole('option', { name: 'Weekly' }));
-    await user.click(within(editor).getByRole('radio', { name: 'Monday' }));
+    await user.click(within(editor).getByRole('radio', { name: weekdayName }));
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
 
     await user.click(within(screen.getByRole('dialog', { name: 'Change schedule' }))
       .getByRole('button', { name: 'Apply' }));
-    const updatedCard = screen.getByRole('article', { name: 'Updated prayer rhythm' });
-    expect(updatedCard.querySelector('.rhythm-metadata-schedule-group')?.textContent).toContain('Every Mon');
-    await user.click(within(updatedCard).getByRole('button', { name: 'Edit Updated prayer rhythm' }));
-    editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    const updatedCard = getTodayRhythmArticle('Updated prayer rhythm');
+    expect(updatedCard.querySelector('.rhythm-metadata-schedule-group')?.textContent).toContain(`Every ${weekdayShortName}`);
+    editor = await openRhythmEditorFromScore(user, 'Updated prayer rhythm');
     const unsavedTitle = within(editor).getByLabelText('Title');
     await user.clear(unsavedTitle);
     await user.type(unsavedTitle, 'Unsaved title must not be archived');
@@ -4853,8 +4903,8 @@ describe('Tend Today preview', () => {
         title: 'Updated prayer rhythm',
         personIds: ['sample-person-avery', 'sample-person-morgan'],
         categoryIds: ['marriage'],
-        cadence: 'Every week on Monday.',
-        schedule: { frequency: 'weekly', weekdays: [1] },
+        cadence: `Every week on ${weekdayName}.`,
+        schedule: { frequency: 'weekly', weekdays: [weekday] },
       });
       expect(parsed.valid && parsed.envelope.data.archivedRhythmIds).toEqual([]);
     });
@@ -4866,7 +4916,11 @@ describe('Tend Today preview', () => {
     confirmArchiveButton.focus();
     await user.keyboard('{Enter}');
     expect(screen.queryByRole('dialog', { name: 'Edit Rhythm' })).toBeNull();
-    expect(screen.queryByRole('article', { name: 'Updated prayer rhythm' })).toBeNull();
+    const updatedRhythmHistory = screen.queryByRole('region', { name: 'History for Updated prayer rhythm' });
+    if (updatedRhythmHistory) {
+      await user.click(within(updatedRhythmHistory).getByRole('button', { name: 'Close details' }));
+    }
+    await waitFor(() => expect(queryTodayRhythmArticle('Updated prayer rhythm')).toBeNull());
     expect(document.activeElement).toBe(
       within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
         .getByRole('button', { name: 'Today' })
@@ -4881,8 +4935,8 @@ describe('Tend Today preview', () => {
         title: 'Updated prayer rhythm',
         personIds: ['sample-person-avery', 'sample-person-morgan'],
         categoryIds: ['marriage'],
-        cadence: 'Every week on Monday.',
-        schedule: { frequency: 'weekly', weekdays: [1] }
+        cadence: `Every week on ${weekdayName}.`,
+        schedule: { frequency: 'weekly', weekdays: [weekday] }
       });
       expect(parsed.valid && parsed.envelope.data.completedRhythmIds).toContain('sample-pray-together');
       expect(parsed.valid && parsed.envelope.data.archivedRhythmIds).toEqual(['sample-pray-together']);
@@ -4890,7 +4944,7 @@ describe('Tend Today preview', () => {
 
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Marriage' }));
     await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
-    expect(screen.queryByRole('article', { name: 'Updated prayer rhythm' })).toBeNull();
+    expect(queryTodayRhythmArticle('Updated prayer rhythm')).toBeNull();
     const archivedToggle = screen.getByRole('button', { name: 'Archived rhythms (1)' });
     await user.click(archivedToggle);
     const archiveDialog = screen.getByRole('dialog', { name: 'Archived rhythms' });
@@ -4913,7 +4967,7 @@ describe('Tend Today preview', () => {
     expect(within(archivedDetails).getByRole('button', {
       name: historyButtonName('View scores and history for Updated prayer rhythm')
     })).toBeTruthy();
-    expect(archivedDetails.querySelector('.rhythm-metadata-schedule-group')?.textContent).toContain('Every Mon');
+    expect(archivedDetails.querySelector('.rhythm-metadata-schedule-group')?.textContent).toContain(`Every ${weekdayShortName}`);
     expect(within(archivedDetails).queryByRole('button', { name: /^Edit / })).toBeNull();
     expect(within(archivedDetails).queryByRole('button', { name: 'Tend Updated prayer rhythm' })).toBeNull();
     expect(within(archivedDetails).queryByRole('button', { name: /Undo completion/ })).toBeNull();
@@ -4956,7 +5010,7 @@ describe('Tend Today preview', () => {
     const restoredCard = screen.getByRole('article', { name: 'Updated prayer rhythm' });
     expect(restoredCard).toBeTruthy();
     expect(within(screen.getByRole('article', { name: 'Updated prayer rhythm' })).queryByText('Archived', { exact: true })).toBeNull();
-    expect(restoredCard.querySelector('.rhythm-metadata-schedule-group')?.textContent).toContain('Every Mon');
+    expect(restoredCard.querySelector('.rhythm-metadata-schedule-group')?.textContent).toContain(`Every ${weekdayShortName}`);
     await waitFor(() => {
       const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
       expect(raw).not.toBeNull();
@@ -5110,7 +5164,7 @@ describe('Tend Today preview', () => {
     expect(screen.queryByText('This destination is not implemented in this preview.')).toBeNull();
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
       .getByRole('button', { name: 'Today' }));
-    expect(screen.getByLabelText('Filter scheduled Rhythms by time, currently Everything today')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'All today' }).getAttribute('aria-selected')).toBe('true');
   });
 
   it('shows unavailable account-derived Marriage values and links classified People to profiles', async () => {
@@ -5662,7 +5716,9 @@ describe('Tend Today preview', () => {
     expect(rhythmCard.querySelector('.rhythm-metadata-schedule-group')?.textContent?.trim()).toBe(todaySchedule);
     expect(rhythmCard.querySelector('.rhythm-metadata-status')?.textContent?.trim()).toBe(todayStatus);
 
-    const editButton = within(rhythmCard).getByRole('button', { name: `Edit ${longTitle}` });
+    const historyButton = within(rhythmCard).getByRole('button', {
+      name: historyButtonName(`View scores and history for ${longTitle}`)
+    });
     const tendButton = within(rhythmCard).getByRole('button', { name: `Tend ${longTitle}` });
     expect(tendButton.matches(':disabled')).toBe(false);
     await user.click(tendButton);
@@ -5671,6 +5727,9 @@ describe('Tend Today preview', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'When did you tend it?' })).toBeNull());
     expect(within(rhythmCard).getByRole('button', { name: `Tend ${longTitle}` })).toBeTruthy();
 
+    await user.click(historyButton);
+    const history = screen.getByRole('region', { name: `History for ${longTitle}` });
+    const editButton = within(history).getByRole('button', { name: `Edit ${longTitle}` });
     await user.click(editButton);
     const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
     await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
@@ -7379,7 +7438,7 @@ describe('Tend Today preview', () => {
       .find(button => button.classList.contains('menu-area'))!;
     expect(healthArea.getAttribute('aria-description')).toBe('Health & Fitness health score 100 out of 100');
     expect(healthArea.querySelector('.ma-score')?.textContent).toBe('100');
-    expect(screen.getByText('1 of 6 categories scored.')).toBeTruthy();
+    expect(screen.queryByText(/categories scored\./)).toBeNull();
     expect(screen.getByRole('meter', { name: 'Overall health score 100 out of 100' })
       .getAttribute('aria-valuenow')).toBe('100');
 
@@ -7486,7 +7545,7 @@ describe('Tend Today preview', () => {
       .find(button => button.classList.contains('menu-area'))!;
     expect(healthArea.getAttribute('aria-description')).toBe('Health & Fitness health score 9 out of 100');
     expect(healthArea.querySelector('.ma-score')?.textContent).toBe('9');
-    expect(screen.getByText('1 of 6 categories scored.')).toBeTruthy();
+    expect(screen.queryByText(/categories scored\./)).toBeNull();
     expect(screen.getByRole('meter', { name: 'Overall health score 9 out of 100' })
       .getAttribute('aria-valuenow')).toBe('9.375');
 

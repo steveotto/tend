@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -24,12 +24,19 @@ const accountId = 'a0000000-0000-4000-8000-000000000001';
 const session: PreviewSession = { user: { id: accountId } };
 const accountStorageKey = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountId}`;
 
+function expandAllTodayGroups() {
+  for (const button of document.querySelectorAll<HTMLButtonElement>('.today-timeframe-header__disclosure')) {
+    if (button.getAttribute('aria-expanded') === 'false') fireEvent.click(button);
+  }
+}
+
 function scoredFaithFixture() {
   const today = localDateString(new Date());
   const trackingStartDate = addCalendarDays(today, -29);
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   const rhythmId = 'user-rhythm-84000000-0000-4000-8000-000000000022';
   const data = createSamplePreviewData();
+  data.todayView = 'all-today';
   const rhythm: SavedRhythm = {
     id: rhythmId,
     title: 'Synthetic daily prayer',
@@ -290,7 +297,8 @@ describe('PreviewIdentityHost', () => {
 
     renderRestoredSession();
     await screen.findByRole('button', { name: 'Sign out' });
-    await user.click(screen.getByRole('tab', { name: 'Anytime' }));
+    await user.click(screen.getByRole('tab', { name: 'All today' }));
+    expandAllTodayGroups();
     await screen.findByText('Synthetic daily prayer');
     const faithRow = screen.getAllByRole('button', { name: 'Faith' })
       .find(button => button.classList.contains('menu-area'));
@@ -300,7 +308,8 @@ describe('PreviewIdentityHost', () => {
     cleanup();
     renderRestoredSession();
     await screen.findByRole('button', { name: 'Sign out' });
-    await user.click(screen.getByRole('tab', { name: 'Anytime' }));
+    await user.click(screen.getByRole('tab', { name: 'All today' }));
+    expandAllTodayGroups();
     await screen.findByText('Synthetic daily prayer');
     expect(screen.getByRole('region', { name: "Today's plan" })).toBeTruthy();
     expect(storage.getItem(accountStorageKey)).toBe(originalRaw);
@@ -327,7 +336,8 @@ describe('PreviewIdentityHost', () => {
     );
 
     await screen.findByRole('button', { name: 'Sign out' });
-    await user.click(screen.getByRole('tab', { name: 'Anytime' }));
+    await user.click(screen.getByRole('tab', { name: 'All today' }));
+    expandAllTodayGroups();
     await screen.findByText('Synthetic daily prayer');
     const faithRow = screen.getAllByRole('button', { name: 'Faith' })
       .find(button => button.classList.contains('menu-area'));

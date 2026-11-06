@@ -3,7 +3,7 @@ import { useScoringInstant } from './useScoringInstant.ts';
 import type { MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { FoundationPreview, PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
-import { orderedCompletions } from '../domain/preview-data.ts';
+import { orderedCompletions, rhythmLastActivityLabel } from '../domain/preview-data.ts';
 import type { RhythmCompletion } from '../domain/preview-data.ts';
 import type { DatedRhythmCompletion, RhythmCompletionRecord } from '../domain/rhythm-completion.ts';
 import type {
@@ -39,17 +39,14 @@ import type {
   ScoredOnTrackMetric,
   UnscoredMetric
 } from '../domain/rhythm-scoring.ts';
-import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
-import { RhythmScheduleSummary } from './RhythmMetadata.tsx';
+import { RhythmCard } from './Cards.tsx';
 import { RhythmSeasonCard } from './RhythmSeasonCard.tsx';
 import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
-import { RhythmPersonalBadge } from './RhythmPersonalBadge.tsx';
 import { HealthScoreBreakdown, HealthScoreInfoButton, HealthScoreMeasures } from './HealthScoreBreakdown.tsx';
 import { HealthScoreDetailsDialog } from './HealthScoreDetailsDialog.tsx';
 export { HealthScoreMeter } from './HealthScoreBreakdown.tsx';
 import { RhythmCompletionHistoryChart } from './RhythmCompletionHistoryChart.tsx';
 import { RhythmCompletionForm } from './RhythmCompletionForm.tsx';
-import { RhythmAssociationRows } from './RhythmAssociationRows.tsx';
 import { RhythmSeasonCorrectionDialog } from './RhythmSeasonCorrectionDialog.tsx';
 import type { RhythmSeasonEditDialogDraft } from './RhythmSeasonCorrectionDialog.tsx';
 import { RhythmSeasonDeleteDialog } from './RhythmSeasonDeleteDialog.tsx';
@@ -62,8 +59,6 @@ import type { Destination } from './AppNavigation.tsx';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 import { isValidDate } from '../domain/money-goals.ts';
 import type { StrengthMode } from '../domain/strength.ts';
-import { hasFoundationIcon, hasRhythmIcon, MarriageIcon } from './MarriageIcon.tsx';
-import { RhythmRepeatIcon } from './RhythmMetadata.tsx';
 
 const metricCopy = {
   consistency: {
@@ -90,6 +85,7 @@ export function RhythmHistoryView({
   onUpdateCompletion,
   onDeleteCompletion,
   onChooseSchedule,
+  onEditRhythm,
   onEditSeason,
   onDeleteSeason,
   seasonDeletionUndo,
@@ -123,6 +119,7 @@ export function RhythmHistoryView({
   onUpdateCompletion?: (record: RhythmCompletionRecord) => string | null;
   onDeleteCompletion?: (completionId: string) => string | null;
   onChooseSchedule?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onEditRhythm?: (event: MouseEvent<HTMLButtonElement>) => void;
   onEditSeason?: (rhythmId: string, draft: RhythmSeasonEditDraft) => string | null;
   onDeleteSeason?: (rhythmId: string, seasonId: string) => string | null;
   seasonDeletionUndo?: RhythmSeasonDeletionUndo | null;
@@ -278,12 +275,8 @@ export function RhythmHistoryView({
       : score.kind === 'invalid'
         ? `Scores unavailable: ${score.reason}`
         : score.reason.explanation;
-  const activityIconId = rhythm.iconId
-    ?? (rhythm.healthLogCapability === 'workout' ? 'health-strength'
-      : rhythm.healthLogCapability === 'cardio' ? 'health-cardio'
-        : rhythm.healthLogCapability === 'weight' ? 'health-weight'
-          : undefined);
-  const activityLabel = rhythm.healthLogCapability === 'workout' ? 'Workout'
+  const activityLabel: 'Workout' | 'Run' | 'Weigh-in' | 'Rhythm' =
+    rhythm.healthLogCapability === 'workout' ? 'Workout'
     : rhythm.healthLogCapability === 'cardio' ? 'Run'
       : rhythm.healthLogCapability === 'weight' ? 'Weigh-in'
         : 'Rhythm';
@@ -324,7 +317,16 @@ export function RhythmHistoryView({
   useEffect(() => {
     setSeasonsDisclosure({ rhythmId: rhythm.id, expanded: false });
   }, [rhythm.id]);
-  const hasDescription = Boolean(rhythm.description?.trim());
+  const activityContext = activityLabel === 'Rhythm'
+    ? undefined
+    : {
+        label: activityLabel,
+        ...(rhythm.healthLogCapability === 'workout'
+          && healthWorkoutSetting?.mode === 'recommended'
+          ? { badge: 'Recommended' as const }
+          : {}),
+        ...(workoutModeLabel ? { detail: workoutModeLabel } : {})
+      };
   const editableRecordIds = new Set((historyRecords ?? []).map(record => record.id));
   const editingSeason = scheduleSeasons.find(season => season.id === editingSeasonId)
     ?? (displayOnlyEditingSeason?.id === editingSeasonId ? displayOnlyEditingSeason : undefined);
@@ -609,61 +611,23 @@ export function RhythmHistoryView({
         />
       ) : (
         <>
-      <section className="rhythm-history-view__details-card rhythm-history-view__card" aria-label="Rhythm details">
-        <div className="rhythm-history-view__activity-summary">
-          <span className="rhythm-history-view__activity-icon" aria-hidden="true">
-            {activityIconId && hasFoundationIcon(activityIconId)
-              ? <MarriageIcon group="foundations" id={activityIconId} />
-              : activityIconId && hasRhythmIcon(activityIconId)
-                ? <MarriageIcon group="rhythms" id={activityIconId} />
-                : <RhythmRepeatIcon />}
-          </span>
-          <div className="rhythm-history-view__activity-copy">
-            <div className="rhythm-history-view__activity-title">
-              <span>{activityLabel}</span>
-              {rhythm.healthLogCapability === 'workout'
-                && healthWorkoutSetting?.mode === 'recommended'
-                && <span className="rhythm-history-view__recommended">Recommended</span>}
-            </div>
-            {workoutModeLabel && (
-              <p className="rhythm-history-view__activity-configuration">{workoutModeLabel}</p>
-            )}
-          </div>
-        </div>
-        <div className="rhythm-history-view__metadata">
-        {hasDescription && (
-          <p className="rhythm-history-view__description">
-            {rhythm.description}
-          </p>
-        )}
-        <RhythmAssociationRows
-          rhythm={rhythm}
-          {...(people ? { people } : {})}
-          {...(foundations ? { foundations } : {})}
-          {...(onPersonSelect ? { onPersonSelect } : {})}
-          {...(onOpenCategory ? { onOpenCategory } : {})}
-          {...(onOpenFoundation ? { onOpenFoundation } : {})}
-        />
-        {(rhythm.cadence || detailSchedule || detailTimeLabel) && (
-          <>
-            <div className="rhythm-history-view__metadata-divider" aria-hidden="true" />
-            <div className="rhythm-history-view__schedule rhythm-metadata-footer">
-              <RhythmScheduleSummary
-                {...(!detailSchedule ? { cadence: rhythm.cadence } : {})}
-                {...(detailSchedule ? { schedule: detailSchedule } : {})}
-                {...(detailTimeLabel ? { timeLabel: detailTimeLabel } : {})}
-              />
-            </div>
-          </>
-        )}
-        {(archived || rhythm.personal) && (
-          <div className="rhythm-history-view__badges">
-            {archived && <RhythmArchivedBadge />}
-            {rhythm.personal && <RhythmPersonalBadge />}
-          </div>
-        )}
-        </div>
-      </section>
+      <RhythmCard
+        variant="details-summary"
+        rhythm={rhythm}
+        headingId={`rhythm-history-summary-${rhythm.id}`}
+        {...(people ? { people } : {})}
+        {...(foundations ? { foundations } : {})}
+        {...(onPersonSelect ? { onPersonSelect } : {})}
+        {...(onOpenCategory ? { onOpenCategory } : {})}
+        {...(onOpenFoundation ? { onOpenFoundation } : {})}
+        {...(archived ? { archived } : {})}
+        {...(!detailSchedule && rhythm.cadence ? { cadence: rhythm.cadence } : {})}
+        {...(detailSchedule ? { schedule: detailSchedule } : {})}
+        {...(detailTimeLabel ? { timeLabel: detailTimeLabel } : {})}
+        lastTended={rhythmLastActivityLabel(rhythm, asOfDate)}
+        {...(activityContext ? { activityContext } : {})}
+        {...(onEditRhythm && !archived ? { onEdit: onEditRhythm } : {})}
+      />
       {seasonRangeUndoError && (
         <p className="rhythm-history-view__undo-error" role="alert">{seasonRangeUndoError}</p>
       )}

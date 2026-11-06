@@ -39,7 +39,7 @@ import { TodayWeatherSettings } from './components/TodayWeatherSettings.tsx';
 import { TimeBlocksProvider } from './components/TimeBlocksContext.tsx';
 import { TimeBlocksSettings } from './components/TimeBlocksSettings.tsx';
 import { useTodayWeather } from './components/useTodayWeather.ts';
-import type { TodayFocusId } from './domain/today-plan.ts';
+import type { TodayViewId } from './domain/today-plan.ts';
 import { HealthFitnessView } from './components/HealthFitnessView.tsx';
 import { FriendshipsView } from './components/FriendshipsView.tsx';
 import { connectionCadences, setPersonConnectionCadence } from './domain/friendships.ts';
@@ -425,7 +425,6 @@ function PreviewWorkspace({
     destination === 'today' || (destination === 'more' && moreSettingsOpen),
     weatherTimeZone
   );
-  const [todayFocus, setTodayFocus] = useState<TodayFocusId>('now');
   const [healthFitnessVisited, setHealthFitnessVisited] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewData>(initialPreviewData);
   const [persistedSatisfiedRhythmIds, setPersistedSatisfiedRhythmIds] = useState<ReadonlySet<string>>(new Set());
@@ -2671,6 +2670,12 @@ function PreviewWorkspace({
       : { ...previous, showTended });
   }
 
+  function setTodayViewPreference(todayView: TodayViewId) {
+    setPreviewData(previous => previous.todayView === todayView
+      ? previous
+      : { ...previous, todayView });
+  }
+
   function saveGoal(goal: MoneyGoal) {
     setPreviewData(previous => ({
       ...previous,
@@ -3103,8 +3108,8 @@ function PreviewWorkspace({
               greeting={greeting}
               evaluationInstant={scoringInstant}
               localDate={currentDate}
-              focus={todayFocus}
-              onFocusChange={setTodayFocus}
+              view={previewData.todayView}
+              onViewChange={setTodayViewPreference}
               weatherController={todayWeather}
               completedRhythms={completedRhythms}
               undoableRhythms={undoableRhythms}
