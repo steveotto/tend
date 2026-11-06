@@ -30,6 +30,7 @@ export type PreviewSupabaseClientFactory = (
     auth: {
       autoRefreshToken: true;
       detectSessionInUrl: true;
+      flowType: 'pkce';
       persistSession: true;
       storage: Storage;
       storageKey: typeof authStorageKey;
@@ -95,6 +96,7 @@ export function PreviewIdentityHost({
         auth: {
           autoRefreshToken: true,
           detectSessionInUrl: true,
+          flowType: 'pkce',
           persistSession: true,
           storage: window.localStorage,
           storageKey: authStorageKey
