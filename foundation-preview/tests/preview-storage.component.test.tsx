@@ -1,17 +1,29 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render as testingRender, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../src/App.tsx';
+import { createAuthenticatedPreviewIdentity } from '../src/domain/preview-identity.ts';
+import type { PreviewAccountBackupApi } from '../src/storage/preview-account-backup.ts';
 import { PreviewDataControls } from '../src/components/PreviewDataControls.tsx';
 import {
   createPreviewEnvelope,
   createSamplePreviewData,
   parsePreviewBackup,
+  PREVIEW_SCHEMA_VERSION,
   validatePreviewEnvelope
 } from '../src/domain/preview-state.ts';
+import { createStrengthData, createStrengthGuidedSession } from '../src/domain/strength.ts';
+import { createWeightData } from '../src/domain/weight.ts';
+import { createCardioData } from '../src/domain/cardio.ts';
+import { createFriendshipData } from '../src/domain/friendships.ts';
+import { createPersonPickerGroups, createSamplePeople, setPersonGroupMembership } from '../src/domain/preview-data.ts';
+import { createDefaultTimeBlockSettings } from '../src/domain/time-blocks.ts';
+import type { StrengthSavedWorkout } from '../src/domain/strength.ts';
 import {
   browserPreviewStorage,
+  loadPreviewImportRecovery,
   loadPreview,
+  loadRawRecoveryCopy,
   loadV1RecoveryCopy,
   loadV2RecoveryCopy,
   loadV3RecoveryCopy,
@@ -22,7 +34,28 @@ import {
   loadV8RecoveryCopy,
   loadV9RecoveryCopy,
   loadV11RecoveryCopy,
+  loadV12RecoveryCopy,
+  loadV14RecoveryCopy,
+  loadV16RecoveryCopy,
+  loadV17RecoveryCopy,
+  loadV18RecoveryCopy,
+  loadV20RecoveryCopy,
+  loadV21RecoveryCopy,
+  loadV24RecoveryCopy,
+  loadV25RecoveryCopy,
+  loadV27RecoveryCopy,
+  loadV28RecoveryCopy,
+  loadV29RecoveryCopy,
+  loadV30RecoveryCopy,
+  loadV31RecoveryCopy,
+  loadV32RecoveryCopy,
+  loadV33RecoveryCopy,
+  loadV34RecoveryCopy,
+  PREVIEW_V19_RECOVERY_KEY,
+  PREVIEW_RAW_RECOVERY_KEY,
+  PREVIEW_CATEGORY_RECOVERY_KEY,
   PREVIEW_STORAGE_KEY,
+  PREVIEW_IMPORT_RECOVERY_KEY,
   PREVIEW_V1_RECOVERY_KEY,
   PREVIEW_V2_RECOVERY_KEY,
   PREVIEW_V3_RECOVERY_KEY,
@@ -34,6 +67,23 @@ import {
   PREVIEW_V9_RECOVERY_KEY,
   PREVIEW_V10_RECOVERY_KEY,
   PREVIEW_V11_RECOVERY_KEY,
+  PREVIEW_V12_RECOVERY_KEY,
+  PREVIEW_V14_RECOVERY_KEY,
+  PREVIEW_V16_RECOVERY_KEY,
+  PREVIEW_V17_RECOVERY_KEY,
+  PREVIEW_V18_RECOVERY_KEY,
+  PREVIEW_V20_RECOVERY_KEY,
+  PREVIEW_V21_RECOVERY_KEY,
+  PREVIEW_V24_RECOVERY_KEY,
+  PREVIEW_V25_RECOVERY_KEY,
+  PREVIEW_V27_RECOVERY_KEY,
+  PREVIEW_V28_RECOVERY_KEY,
+  PREVIEW_V29_RECOVERY_KEY,
+  PREVIEW_V30_RECOVERY_KEY,
+  PREVIEW_V31_RECOVERY_KEY,
+  PREVIEW_V32_RECOVERY_KEY,
+  PREVIEW_V33_RECOVERY_KEY,
+  PREVIEW_V34_RECOVERY_KEY,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -44,10 +94,24 @@ import { localDateString } from '../src/domain/money-goals.ts';
 import { addCalendarDays } from '../src/domain/rhythm-occurrences.ts';
 import { installMemoryStorage, MemoryStorage } from './memory-storage.ts';
 
+function render(ui: Parameters<typeof testingRender>[0]) {
+  return testingRender(ui);
+}
+
+function expandAllTodayGroups() {
+  for (const button of document.querySelectorAll<HTMLButtonElement>('.today-timeframe-header__disclosure')) {
+    if (button.getAttribute('aria-expanded') === 'false') fireEvent.click(button);
+  }
+}
+
 beforeEach(installMemoryStorage);
 afterEach(() => {
   cleanup();
+  const historyState = { ...(window.history.state ?? {}) };
+  delete historyState.tendPersonProfileId;
+  window.history.replaceState(historyState, '', window.location.href);
   window.localStorage.removeItem(PREVIEW_STORAGE_KEY);
+  window.localStorage.removeItem(PREVIEW_RAW_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V1_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V2_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V3_RECOVERY_KEY);
@@ -59,6 +123,20 @@ afterEach(() => {
   window.localStorage.removeItem(PREVIEW_V9_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V10_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V11_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V12_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V14_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V16_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V17_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V18_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V20_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V21_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V25_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V24_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V27_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V31_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V32_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V33_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V34_RECOVERY_KEY);
   vi.unstubAllGlobals();
 });
 
@@ -145,7 +223,18 @@ function versionFiveRaw(data: PreviewData): string {
 
 function versionSixRaw(data: PreviewData): string {
   const envelope = createPreviewEnvelope(data);
-  const { rhythmHistoryIds: _rhythmHistoryIds, ...legacyData } = envelope.data;
+  const {
+    rhythmHistoryIds: _rhythmHistoryIds,
+    strength: _strength,
+    weight: _weight,
+    cardio: _cardio,
+    friendships: _friendships,
+    people: _people,
+    peopleGroups: _peopleGroups,
+    personDetails: _personDetails,
+    personNotes: _personNotes,
+    ...legacyData
+  } = envelope.data;
   return JSON.stringify({
     ...envelope,
     schemaVersion: 6,
@@ -161,11 +250,12 @@ function versionSixRaw(data: PreviewData): string {
 
 function versionSevenRaw(data: PreviewData): string {
   const envelope = JSON.parse(versionEightRaw(data)) as ReturnType<typeof createPreviewEnvelope>;
+  const { personNotes: _personNotes, ...legacyData } = envelope.data;
   return JSON.stringify({
     ...envelope,
     schemaVersion: 7,
     data: {
-      ...envelope.data,
+      ...legacyData,
       savedRhythms: envelope.data.savedRhythms.map(rhythm => {
         const {
           createdLocalDate: _createdLocalDate,
@@ -181,7 +271,18 @@ function versionSevenRaw(data: PreviewData): string {
 
 function versionEightRaw(data: PreviewData): string {
   const envelope = createPreviewEnvelope(data);
-  const { rhythmHistoryIds: _rhythmHistoryIds, ...legacyData } = envelope.data;
+  const {
+    rhythmHistoryIds: _rhythmHistoryIds,
+    strength: _strength,
+    weight: _weight,
+    cardio: _cardio,
+    friendships: _friendships,
+    people: _people,
+    peopleGroups: _peopleGroups,
+    personDetails: _personDetails,
+    personNotes: _personNotes,
+    ...legacyData
+  } = envelope.data;
   return JSON.stringify({
     ...envelope,
     schemaVersion: 8,
@@ -214,17 +315,39 @@ function versionEightRaw(data: PreviewData): string {
 
 function versionNineRaw(data: PreviewData): string {
   const envelope = createPreviewEnvelope(data);
-  const { rhythmHistoryIds: _rhythmHistoryIds, ...legacyData } = envelope.data;
+  const {
+    rhythmHistoryIds: _rhythmHistoryIds,
+    strength: _strength,
+    weight: _weight,
+    cardio: _cardio,
+    friendships: _friendships,
+    people: _people,
+    peopleGroups: _peopleGroups,
+    personDetails: _personDetails,
+    personNotes: _personNotes,
+    ...legacyData
+  } = envelope.data;
   return JSON.stringify({ ...envelope, schemaVersion: 9, data: legacyData });
 }
 
 function versionTenRaw(data: PreviewData): string {
   const envelope = createPreviewEnvelope(data);
+  const {
+    strength: _strength,
+    weight: _weight,
+    cardio: _cardio,
+    friendships: _friendships,
+    people: _people,
+    peopleGroups: _peopleGroups,
+    personDetails: _personDetails,
+    personNotes: _personNotes,
+    ...legacyData
+  } = envelope.data;
   return JSON.stringify({
     ...envelope,
     schemaVersion: 10,
     data: {
-      ...envelope.data,
+      ...legacyData,
       savedRhythms: envelope.data.savedRhythms.map(rhythm => ({
         ...rhythm,
         ...(rhythm.scoring === undefined ? {} : {
@@ -279,14 +402,396 @@ function setDownloadMocks() {
 }
 
 describe('synthetic preview storage adapter and envelope', () => {
-  it('round-trips the explicit versioned envelope with goals, check-ins, corrections, and Today completion', () => {
+  it('persists Show tended and Calendar sources in schema 37 and migrates schemas 34/35', () => {
+    const data = createSamplePreviewData();
+    const current = createPreviewEnvelope({ ...data, showTended: true });
+    expect(current.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+    expect(validatePreviewEnvelope(current, '2026-10-31')).toMatchObject({
+      valid: true,
+      envelope: { data: { showTended: true } }
+    });
+
+    const schema35Data = { ...current.data } as Partial<typeof current.data>;
+    delete schema35Data.calendarSources;
+    const migrated35 = validatePreviewEnvelope({
+      ...current,
+      schemaVersion: 35,
+      data: schema35Data
+    }, '2026-10-31');
+    expect(migrated35).toMatchObject({
+      valid: true,
+      sourceSchemaVersion: 35,
+      envelope: { data: { showTended: true, calendarSources: [] } }
+    });
+
+    const priorData = { ...current.data };
+    delete (priorData as Partial<typeof priorData>).showTended;
+    delete (priorData as Partial<typeof priorData>).calendarSources;
+    const migrated = validatePreviewEnvelope({
+      ...current,
+      schemaVersion: 34,
+      data: priorData
+    }, '2026-10-31');
+    expect(migrated).toMatchObject({
+      valid: true,
+      sourceSchemaVersion: 34,
+      envelope: { data: { showTended: false } }
+    });
+    expect(validatePreviewEnvelope({
+      ...current,
+      schemaVersion: 34
+    }, '2026-10-31').valid).toBe(false);
+  });
+
+  it('migrates valid v33/v34 sources and preserves exact immutable recovery across retries', () => {
+    const current = createPreviewEnvelope(createSamplePreviewData());
+    for (const [schemaVersion, recoveryKey, loadRecoveryCopy] of [
+      [33, PREVIEW_V33_RECOVERY_KEY, loadV33RecoveryCopy],
+      [34, PREVIEW_V34_RECOVERY_KEY, loadV34RecoveryCopy]
+    ] as const) {
+      const priorData = { ...current.data };
+      delete (priorData as Partial<typeof priorData>).showTended;
+      if (schemaVersion === 33) {
+        delete (priorData as Partial<typeof priorData>).timeBlocks;
+      }
+      const raw = JSON.stringify({ ...current, schemaVersion, data: priorData });
+      const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+      const loaded = loadPreview(storage, '2026-10-31');
+      expect(loaded.kind, `schema ${schemaVersion} should be supported`).toBe('loaded');
+      if (loaded.kind !== 'loaded') continue;
+      expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+
+      const firstSave = writePreview(storage, { ...loaded.data, showTended: true }, loaded.raw, {
+        currentDate: '2026-10-31'
+      });
+      expect(firstSave.kind).toBe('saved');
+      expect(values.get(recoveryKey)).toBe(raw);
+      expect(loadRecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+      if (firstSave.kind !== 'saved') continue;
+
+      const saved = loadPreview(storage, '2026-10-31');
+      expect(saved.kind).toBe('loaded');
+      if (saved.kind !== 'loaded') continue;
+      const secondSave = writePreview(storage, saved.data, saved.raw, { currentDate: '2026-10-31' });
+      expect(secondSave.kind).toBe('saved');
+      expect(values.get(recoveryKey)).toBe(raw);
+      expect(values.get(PREVIEW_STORAGE_KEY)).not.toBe(raw);
+    }
+  });
+
+  it('exposes and preserves the immutable v24 recovery copy', () => {
+    const current = createPreviewEnvelope(createSamplePreviewData());
+    const priorData = { ...current.data };
+    delete (priorData as Partial<typeof priorData>).people;
+    delete (priorData as Partial<typeof priorData>).personDetails;
+    delete (priorData as Partial<typeof priorData>).personNotes;
+    delete (priorData as Partial<typeof priorData>).prayerRequests;
+    delete (priorData as Partial<typeof priorData>).timeBlocks;
+    delete (priorData as Partial<typeof priorData>).showTended;
+    const raw = JSON.stringify({ ...current, schemaVersion: 24, data: priorData });
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-10-31');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(writePreview(storage, loaded.data, loaded.raw, { currentDate: '2026-10-31' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V24_RECOVERY_KEY)).toBe(raw);
+    expect(loadV24RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+  });
+
+  it('saves an in-app confirmed change after loading either supported v33 or v34 data', async () => {
+    const user = userEvent.setup();
+    const current = createPreviewEnvelope(createSamplePreviewData());
+    for (const [schemaVersion, recoveryKey] of [
+      [33, PREVIEW_V33_RECOVERY_KEY],
+      [34, PREVIEW_V34_RECOVERY_KEY]
+    ] as const) {
+      cleanup();
+      window.localStorage.clear();
+      const priorData = { ...current.data };
+      delete (priorData as Partial<typeof priorData>).showTended;
+      if (schemaVersion === 33) delete (priorData as Partial<typeof priorData>).timeBlocks;
+      const raw = JSON.stringify({ ...current, schemaVersion, data: priorData });
+      window.localStorage.setItem(PREVIEW_STORAGE_KEY, raw);
+
+      render(<App />);
+      await screen.findByText('Preview data saved in this browser.');
+      await user.click(await screen.findByRole('button', { name: /Show tended/ }));
+      await waitFor(() => {
+        expect(JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}').schemaVersion)
+          .toBe(PREVIEW_SCHEMA_VERSION);
+      });
+      expect(window.localStorage.getItem(recoveryKey)).toBe(raw);
+      const reloaded = loadPreview(window.localStorage, '2026-10-31');
+      expect(reloaded.kind).toBe('loaded');
+      if (reloaded.kind === 'loaded') expect(reloaded.data.showTended).toBe(true);
+    }
+    cleanup();
+  });
+
+  it('migrates schema v28 without inventing Person details and preserves exact source recovery', () => {
+    const data = createSamplePreviewData();
+    const priorEnvelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+      format: string;
+      schemaVersion: number;
+      data: Record<string, unknown>;
+    };
+    priorEnvelope.schemaVersion = 28;
+    delete priorEnvelope.data.people;
+    delete priorEnvelope.data.personDetails;
+    delete priorEnvelope.data.personNotes;
+    const raw = JSON.stringify(priorEnvelope);
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-10-31');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.personDetails).toEqual([]);
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+    expect(writePreview(storage, loaded.data, loaded.raw, { currentDate: '2026-10-31' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V28_RECOVERY_KEY)).toBe(raw);
+    expect(loadV28RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+  });
+
+  it('migrates schema v29 with an empty person-note collection and preserves exact raw recovery', () => {
+    const data = createSamplePreviewData();
+    const previous = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+      format: string;
+      schemaVersion: number;
+      data: Record<string, unknown>;
+    };
+    previous.schemaVersion = 29;
+    delete previous.data.people;
+    delete previous.data.personNotes;
+    const raw = ` \n${JSON.stringify(previous)}\n`;
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-10-31');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.personNotes).toEqual([]);
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+    expect(writePreview(storage, loaded.data, loaded.raw, { currentDate: '2026-10-31' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V29_RECOVERY_KEY)).toBe(raw);
+    expect(loadV29RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+  });
+
+  it('migrates schema v30 with photo and anniversary defaults and preserves exact raw recovery', () => {
+    const data = createSamplePreviewData();
+    data.personDetails = [{
+      personId: 'sample-person-avery',
+      birthday: { monthDay: '02-29' },
+      anniversary: { monthDay: '04-15' }
+    }];
+    const previous = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+      format: string;
+      schemaVersion: number;
+      data: Record<string, unknown>;
+    };
+    previous.schemaVersion = 30;
+    delete previous.data.people;
+    const raw = ` \n${JSON.stringify(previous)}\n`;
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-10-31');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.personDetails).toEqual(data.personDetails);
+    expect(writePreview(storage, loaded.data, loaded.raw, { currentDate: '2026-10-31' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V30_RECOVERY_KEY)).toBe(raw);
+    expect(loadV30RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+  });
+
+  it('migrates v31 sample identities losslessly and preserves the exact pre-identity schema', () => {
+    const data = createSamplePreviewData();
+    data.peopleGroups = setPersonGroupMembership(data.peopleGroups, 'friends', 'sample-person-morgan', true);
+    data.personDetails = [{
+      personId: 'sample-person-morgan',
+      relationshipLabel: 'Custom relationship',
+      birthday: { monthDay: '02-29' }
+    }];
+    const prior = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+      format: string;
+      schemaVersion: number;
+      data: Record<string, unknown>;
+    };
+    prior.schemaVersion = 31;
+    delete prior.data.people;
+    const raw = `\n${JSON.stringify(prior)}\n`;
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-10-31');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.people.map(person => person.id)).toEqual([
+      'sample-person-avery',
+      'sample-person-morgan',
+      'sample-person-jordan'
+    ]);
+    expect(loaded.data.personDetails).toEqual(data.personDetails);
+    expect(loaded.data.peopleGroups.find(group => group.id === 'friends')?.memberIds)
+      .toEqual(['sample-person-morgan']);
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+
+    expect(writePreview(storage, loaded.data, loaded.raw, { currentDate: '2026-10-31' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V31_RECOVERY_KEY)).toBe(raw);
+    expect(loadV31RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+  });
+
+  it('round-trips person notes and refuses a stale write that would replace a newer document', () => {
+    const data = createSamplePreviewData();
+    data.personNotes = [{
+      id: 'preview-note-one',
+      personId: 'sample-person-avery',
+      sharedWith: ['sample-person-morgan'],
+      content: 'A synthetic note\nwith retained formatting.',
+      createdAt: '2026-10-31T12:00:00.000Z',
+      updatedAt: '2026-10-31T12:00:00.000Z'
+    }];
+    const backup = JSON.stringify(createPreviewEnvelope(data));
+    const parsed = parsePreviewBackup(backup, '2026-10-31');
+    expect(parsed.valid).toBe(true);
+    if (!parsed.valid) return;
+    expect(parsed.envelope.data.personNotes).toEqual(data.personNotes);
+
+    const currentRaw = JSON.stringify(createPreviewEnvelope(createSamplePreviewData()));
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: currentRaw });
+    const externalRaw = JSON.stringify(createPreviewEnvelope({ ...createSamplePreviewData(), personNotes: [...data.personNotes] }));
+    values.set(PREVIEW_STORAGE_KEY, externalRaw);
+    expect(writePreview(storage, data, currentRaw, { currentDate: '2026-10-31' }))
+      .toEqual({ kind: 'conflict', actualRaw: externalRaw });
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(externalRaw);
+  });
+
+  it('migrates v32 with an empty Prayer collection and preserves its exact raw source before current-version writes', () => {
+    const current = createPreviewEnvelope(createSamplePreviewData());
+    const { prayerRequests: _prayerRequests, timeBlocks: _timeBlocks, ...v32Data } = current.data;
+    const raw = JSON.stringify({ ...current, schemaVersion: 32, data: v32Data });
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-10-31');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.prayerRequests).toEqual([]);
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+
+    expect(writePreview(storage, loaded.data, loaded.raw, { currentDate: '2026-10-31' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V32_RECOVERY_KEY)).toBe(raw);
+    expect(loadV32RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+    const saved = JSON.parse(values.get(PREVIEW_STORAGE_KEY) ?? '{}') as { schemaVersion: number; data: { prayerRequests?: unknown[] } };
+    expect(saved.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+    expect(saved.data.prayerRequests).toEqual([]);
+  });
+
+  it('round-trips typed Prayer request ownership and rejects unresolved Person references', () => {
+    const data = createSamplePreviewData();
+    data.prayerRequests = [{
+      id: 'preview-prayer-one',
+      personId: 'sample-person-avery',
+      sharedWith: ['sample-person-morgan'],
+      title: 'A synthetic request',
+      details: 'Keep this text plain.',
+      status: 'active',
+      createdAt: '2026-10-31T12:00:00.000Z',
+      updatedAt: '2026-10-31T12:00:00.000Z',
+      prayerLogs: [{ id: 'preview-prayer-log-one', prayedAt: '2026-10-31T13:00:00.000Z' }]
+    }];
+    const backup = JSON.stringify(createPreviewEnvelope(data));
+    const parsed = parsePreviewBackup(backup, '2026-10-31');
+    expect(parsed.valid).toBe(true);
+    if (!parsed.valid) return;
+    expect(parsed.envelope.data.prayerRequests).toEqual(data.prayerRequests);
+
+    const unresolved = JSON.parse(backup) as { data: { prayerRequests: Array<Record<string, unknown>> } };
+    unresolved.data.prayerRequests[0]!.sharedWith = ['missing-person'];
+    expect(validatePreviewEnvelope(unresolved, '2026-10-31')).toMatchObject({
+      valid: false,
+      kind: 'invalid'
+    });
+  });
+
+  it('accepts subsequent writes when a current-schema source contains an active Strength session draft', () => {
+    const data = createSamplePreviewData();
+    const workout: StrengthSavedWorkout = {
+      id: 'active-session-template',
+      name: 'Active session',
+      muscleIds: ['chest'],
+      sharedWith: [],
+      exercises: [{
+        id: 'active-session-exercise',
+        name: 'Bench Press',
+        muscleIds: ['chest'],
+        equipment: 'Barbell',
+        loadMeaning: 'total',
+        restDurationSeconds: 180,
+        restDurationOverridden: false,
+        sets: [{ id: 'active-session-set', targetReps: 8 }]
+      }],
+      supersetGroups: []
+    };
+    const started = createStrengthGuidedSession(workout, {
+      id: 'active-session-draft',
+      date: '2026-10-22',
+      startedAt: '2026-10-22T09:00:00.000Z',
+      timeZone: 'UTC'
+    });
+    expect(started.valid).toBe(true);
+    if (!started.valid) return;
+    data.strength.savedWorkouts = [workout];
+    data.strength.guidedSessionDraft = started.session;
+    const { storage } = storageFixture();
+
+    const initial = writePreview(storage, data, null);
+    expect(initial.kind).toBe('saved');
+    if (initial.kind !== 'saved') return;
+    expect(parsePreviewBackup(initial.raw, '2026-10-22')).toMatchObject({
+      valid: true,
+      sourceSchemaVersion: PREVIEW_SCHEMA_VERSION
+    });
+
+    const updated = {
+      ...data,
+      strength: {
+        ...data.strength,
+        guidedSessionDraft: { ...started.session, notes: 'Session progress remains resumable.' }
+      }
+    };
+    expect(writePreview(storage, updated, initial.raw, { currentDate: '2026-10-22' }).kind).toBe('saved');
+  });
+
+  it('round-trips the explicit versioned envelope including shared Friendships records', () => {
     const data = sampleWithHistory();
+    data.friendships = {
+      cadenceSettings: [{
+        personId: 'sample-person-morgan',
+        cadence: 'weekly',
+        setOn: '2026-10-19'
+      }],
+      connections: [{
+        id: 'friendship-connection-storage-test',
+        type: 'time-together',
+        date: '2026-10-20',
+        time: '17:30',
+        participantIds: ['sample-person-morgan', 'sample-person-avery'],
+        notes: 'One shared event, two actual participants.'
+      }]
+    };
+    data.peopleGroups = setPersonGroupMembership(
+      data.peopleGroups,
+      'friends',
+      'sample-person-morgan',
+      true
+    );
     const envelope = createPreviewEnvelope(data);
     const parsed = validatePreviewEnvelope(envelope, '2026-10-21');
     expect(parsed.valid).toBe(true);
     if (!parsed.valid) return;
     expect(parsed.envelope.format).toBe('tend.synthetic-preview');
-    expect(parsed.envelope.schemaVersion).toBe(12);
+    expect(parsed.envelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
     expect(parsed.envelope.data).toEqual(data);
 
     const { storage } = storageFixture();
@@ -294,6 +799,293 @@ describe('synthetic preview storage adapter and envelope', () => {
     const loaded = loadPreview(storage, '2026-10-21');
     expect(loaded.kind).toBe('loaded');
     if (loaded.kind === 'loaded') expect(loaded.data).toEqual(data);
+  });
+
+  it('round-trips arbitrary People identities and their linked model references', () => {
+    const data = createSamplePreviewData();
+    const firstId = 'account:person:0001';
+    const secondId = 'account:person:0002';
+    data.people = [
+      { id: firstId, displayName: 'Alex Example' },
+      { id: secondId, displayName: 'Alex Example' },
+      { id: 'legacy.person-03', displayName: 'Morgan Example' },
+      { id: 'arbitrary_04', displayName: 'Taylor Example' }
+    ];
+    data.peopleGroups = data.peopleGroups.map(group => ({
+      ...group,
+      memberIds: group.id === 'friends' ? [firstId, secondId] : []
+    }));
+    data.personDetails = [{ personId: firstId, relationshipLabel: 'Custom relationship' }];
+    data.savedRhythms = [{
+      id: 'user-rhythm-11111111-1111-4111-8111-111111111111',
+      title: 'Shared walk',
+      cadence: 'Weekly',
+      timeLabel: 'Evening',
+      personIds: [firstId, secondId],
+      categoryIds: ['friendships']
+    }];
+    data.friendships = {
+      cadenceSettings: [{ personId: firstId, cadence: 'weekly', setOn: '2026-10-01' }],
+      connections: [{
+        id: 'shared-connection',
+        type: 'time-together',
+        date: '2026-10-20',
+        participantIds: [firstId, secondId]
+      }]
+    };
+    data.personNotes = [{
+      id: 'shared-note',
+      personId: firstId,
+      sharedWith: [secondId],
+      content: 'Synthetic linked note.',
+      createdAt: '2026-10-20T12:00:00.000Z',
+      updatedAt: '2026-10-20T12:00:00.000Z'
+    }];
+    data.strength.savedWorkouts = [{
+      id: 'shared-workout-plan',
+      name: 'Shared plan',
+      muscleIds: ['chest'],
+      sharedWith: [firstId, secondId]
+    }];
+
+    const envelope = createPreviewEnvelope(data);
+    const validation = validatePreviewEnvelope(envelope, '2026-10-31');
+    if (!validation.valid) throw new Error(validation.message);
+    expect(validation.valid).toBe(true);
+    const backup = JSON.stringify(envelope);
+    const parsed = parsePreviewBackup(backup, '2026-10-31');
+    expect(parsed.valid).toBe(true);
+    if (!parsed.valid) return;
+    expect(parsed.envelope.data).toMatchObject(data);
+
+    const { storage } = storageFixture();
+    expect(writePreview(storage, data, null, { currentDate: '2026-10-31' }).kind).toBe('saved');
+    const reloaded = loadPreview(storage, '2026-10-31');
+    expect(reloaded.kind).toBe('loaded');
+    if (reloaded.kind !== 'loaded') return;
+    expect(reloaded.data.people).toEqual(data.people);
+    expect(reloaded.data.savedRhythms[0]?.personIds).toEqual([firstId, secondId]);
+    expect(reloaded.data.friendships.connections[0]?.participantIds).toEqual([firstId, secondId]);
+    expect(reloaded.data.personNotes[0]?.sharedWith).toEqual([secondId]);
+    expect(reloaded.data.strength.savedWorkouts[0]?.sharedWith).toEqual([firstId, secondId]);
+  });
+
+  it('migrates schema v19 friend selections exactly and preserves the raw v19 recovery copy', () => {
+    const data = createSamplePreviewData();
+    data.friendships = {
+      cadenceSettings: [{
+        personId: 'sample-person-morgan',
+        cadence: 'weekly',
+        setOn: '2026-10-01'
+      }],
+      connections: [{
+        id: 'legacy-friendship-event',
+        type: 'call',
+        date: '2026-10-10',
+        participantIds: ['sample-person-morgan'],
+        notes: 'Existing history is retained.'
+      }]
+    };
+    const legacyEnvelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+      schemaVersion: number;
+      data: Record<string, unknown> & { friendships: Record<string, unknown> };
+    };
+    legacyEnvelope.schemaVersion = 19;
+    delete legacyEnvelope.data.peopleGroups;
+    delete legacyEnvelope.data.personDetails;
+    delete legacyEnvelope.data.personNotes;
+    legacyEnvelope.data.friendships = {
+      ...data.friendships,
+      friendIds: ['sample-person-morgan']
+    };
+    const raw = JSON.stringify(legacyEnvelope);
+
+    const parsed = parsePreviewBackup(raw, '2026-10-21');
+    expect(parsed.valid).toBe(true);
+    if (!parsed.valid) return;
+    expect(parsed.sourceSchemaVersion).toBe(19);
+    expect(parsed.envelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+    expect(parsed.envelope.data.peopleGroups.find(group => group.id === 'friends')?.memberIds)
+      .toEqual(['sample-person-morgan']);
+    expect(parsed.envelope.data.friendships).toEqual(data.friendships);
+    expect(parsed.envelope.data.friendships.connections).toEqual(data.friendships.connections);
+
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(writePreview(storage, loaded.data, raw, { currentDate: '2026-10-21' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V19_RECOVERY_KEY)).toBe(raw);
+  });
+
+  it('migrates schema v20 Strength without fabricating exercise data and preserves exact recovery bytes', () => {
+    const data = createSamplePreviewData();
+    data.strength.savedWorkouts = [{
+      id: 'legacy-template-without-plan',
+      name: 'Existing workout',
+      muscleIds: ['chest'],
+      sharedWith: []
+    }];
+    data.strength.workouts = [{
+      id: 'legacy-date-only-log',
+      date: '2026-10-10',
+      muscleIds: ['chest'],
+      savedWorkoutId: 'legacy-template-without-plan',
+      workoutName: 'Existing workout'
+    }];
+    const legacyEnvelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+      schemaVersion: number;
+      data: Record<string, unknown>;
+    };
+    legacyEnvelope.schemaVersion = 20;
+    delete legacyEnvelope.data.personDetails;
+    delete legacyEnvelope.data.personNotes;
+    const legacyStrength = legacyEnvelope.data.strength as { settings: Record<string, unknown> };
+    delete legacyStrength.settings.weightUnit;
+    const raw = ` \n${JSON.stringify(legacyEnvelope)}\n`;
+
+    const parsed = parsePreviewBackup(raw, '2026-10-21');
+    expect(parsed.valid).toBe(true);
+    if (!parsed.valid) return;
+    expect(parsed.sourceSchemaVersion).toBe(20);
+    expect(parsed.envelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+    expect(parsed.envelope.data.strength.settings.weightUnit).toBe('lb');
+    expect(parsed.envelope.data.strength.savedWorkouts[0]).toEqual({
+      ...data.strength.savedWorkouts[0],
+      supersetGroups: []
+    });
+    expect(parsed.envelope.data.strength.workouts[0]).toEqual({
+      ...data.strength.workouts[0],
+      supersetGroups: []
+    });
+
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(writePreview(storage, loaded.data, raw, { currentDate: '2026-10-21' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V20_RECOVERY_KEY)).toBe(raw);
+    expect(loadV20RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+    const reloaded = loadPreview(storage, '2026-10-21');
+    expect(reloaded.kind).toBe('loaded');
+    if (reloaded.kind === 'loaded') {
+      expect(reloaded.data.strength.savedWorkouts[0]).toEqual({
+        ...data.strength.savedWorkouts[0],
+        supersetGroups: []
+      });
+      expect(reloaded.data.strength.workouts[0]).toEqual({
+        ...data.strength.workouts[0],
+        supersetGroups: []
+      });
+    }
+
+    const occupied = storageFixture({
+      [PREVIEW_STORAGE_KEY]: raw,
+      [PREVIEW_V20_RECOVERY_KEY]: 'different original bytes'
+    });
+    expect(writePreview(occupied.storage, data, raw, { currentDate: '2026-10-21' })).toMatchObject({
+      kind: 'error',
+      message: expect.stringContaining('recovery copy')
+    });
+    expect(occupied.values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+  });
+
+  it('round-trips nested Strength plans and immutable performance snapshots through preview backup', () => {
+    const data = createSamplePreviewData();
+    data.strength.savedWorkouts = [{
+      id: 'plan-roundtrip',
+      name: 'Push',
+      muscleIds: ['chest', 'triceps'],
+      sharedWith: ['sample-person-avery'],
+      exercises: [{
+        id: 'exercise-bench',
+        name: 'Bench Press',
+        muscleIds: ['chest'],
+        equipment: 'Barbell',
+        restDurationSeconds: 90,
+        sets: [{
+          id: 'bench-set-1',
+          targetReps: 8,
+          targetLoad: { kind: 'external', meaning: 'total', value: 135, unit: 'lb' }
+        }]
+      }]
+    }];
+    const active = createStrengthGuidedSession(data.strength.savedWorkouts[0]!, {
+      id: 'guided-session-roundtrip',
+      date: '2026-10-21',
+      startedAt: '2026-10-21T09:00:00.000Z',
+      timeZone: 'UTC'
+    });
+    expect(active.valid).toBe(true);
+    if (!active.valid) return;
+    data.strength.guidedSessionDraft = {
+      ...active.session,
+      autoStartRest: true,
+      restTimer: {
+        status: 'running',
+        durationSeconds: 90,
+        deadlineAt: '2026-10-21T09:01:30.000Z'
+      }
+    };
+    data.strength.workouts = [{
+      id: 'log-roundtrip',
+      date: '2026-10-21',
+      muscleIds: ['chest'],
+      savedWorkoutId: 'plan-roundtrip',
+      workoutName: 'Push',
+      startedAt: '2026-10-21T09:00:00.000Z',
+      finishedAt: '2026-10-21T09:30:00.000Z',
+      timeZone: 'UTC',
+      exercises: [{
+        id: 'exercise-bench',
+        name: 'Bench Press',
+        muscleIds: ['chest'],
+        equipment: 'Barbell',
+        restDurationSeconds: 90,
+        sets: [{
+          id: 'bench-set-1',
+          targetReps: 8,
+          targetLoad: { kind: 'external', meaning: 'total', value: 135, unit: 'lb' },
+          status: 'performed',
+          actualReps: 8,
+          actualLoad: { kind: 'external', meaning: 'total', value: 135, unit: 'lb' },
+          confirmedAt: '2026-10-21T09:10:00.000Z'
+        }]
+      }]
+    }];
+    const expectedStrength = createPreviewEnvelope(data).data.strength;
+    const backup = JSON.stringify(createPreviewEnvelope(data));
+    const parsed = parsePreviewBackup(backup, '2026-10-21');
+    expect(parsed.valid).toBe(true);
+    if (!parsed.valid) return;
+    expect(parsed.envelope.data.strength).toEqual(expectedStrength);
+
+    const { storage } = storageFixture();
+    expect(writePreview(storage, data, null).kind).toBe('saved');
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind === 'loaded') expect(loaded.data.strength).toEqual(expectedStrength);
+  });
+
+  it('preserves exact schema v21 bytes before writing the resumable timer-ready schema v25 draft shape', () => {
+    const data = createSamplePreviewData();
+    const current = createPreviewEnvelope(data);
+    const {
+      people: _people,
+      personDetails: _personDetails,
+      personNotes: _personNotes,
+      ...v21Data
+    } = current.data;
+    const v21Raw = ` \n${JSON.stringify({ ...current, schemaVersion: 21, data: v21Data })}\n`;
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: v21Raw });
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.strength.guidedSessionDraft).toBeUndefined();
+    expect(writePreview(storage, loaded.data, v21Raw, { currentDate: '2026-10-21' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V21_RECOVERY_KEY)).toBe(v21Raw);
+    expect(loadV21RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: v21Raw });
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
   });
 
   it('exports and imports structured schedules and Personal through the backup controls', async () => {
@@ -353,6 +1145,34 @@ describe('synthetic preview storage adapter and envelope', () => {
       memory: 'Date-only edit survives backup.'
     }];
     data.removedSeedCompletionIds = ['sample-connect-2026-10-18'];
+    data.friendships = {
+      cadenceSettings: [{
+        personId: 'sample-person-morgan',
+        cadence: 'monthly',
+        setOn: '2026-10-01'
+      }],
+      connections: [{
+        id: 'friendship-connection-export-test',
+        type: 'text',
+        date: '2026-10-20',
+        participantIds: ['sample-person-morgan'],
+        notes: 'Preserved through export and import.'
+      }]
+    };
+    data.peopleGroups = setPersonGroupMembership(
+      data.peopleGroups,
+      'friends',
+      'sample-person-morgan',
+      true
+    );
+    const savedStrengthTemplate: StrengthSavedWorkout = {
+      id: 'saved-strength-template',
+      name: 'Renamed strength day',
+      muscleIds: ['shoulders', 'quads'],
+      sharedWith: ['sample-person-avery'],
+      suggestionSourceId: 'strength.shoulders-quads'
+    };
+    data.strength.savedWorkouts = [Object.assign(savedStrengthTemplate, { futureTemplateMetadata: { revision: 3 } })];
     const onImport = vi.fn(() => null);
     const { createObjectURL } = setDownloadMocks();
     render(
@@ -371,12 +1191,20 @@ describe('synthetic preview storage adapter and envelope', () => {
     await user.click(screen.getByRole('button', { name: 'Export preview backup' }));
     const blob = createObjectURL.mock.calls[0]![0];
     const backup = await blob.text();
-    expect(JSON.parse(backup).schemaVersion).toBe(12);
+    expect(JSON.parse(backup).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
     expect(JSON.parse(backup).data.datedRhythmCompletions).toEqual(data.datedRhythmCompletions);
     expect(JSON.parse(backup).data.activeRhythmCompletions).toEqual(data.activeRhythmCompletions);
     expect(JSON.parse(backup).data.rhythmCompletionOverrides).toEqual(data.rhythmCompletionOverrides);
     expect(JSON.parse(backup).data.removedSeedCompletionIds).toEqual(data.removedSeedCompletionIds);
     expect(JSON.parse(backup).data.rhythmHistoryIds).toEqual(data.rhythmHistoryIds);
+    expect(JSON.parse(backup).data.friendships).toEqual(data.friendships);
+    expect(JSON.parse(backup).data.strength.savedWorkouts[0]).toMatchObject({
+      id: 'saved-strength-template',
+      name: 'Renamed strength day',
+      muscleIds: ['shoulders', 'quads'],
+      suggestionSourceId: 'strength.shoulders-quads',
+      futureTemplateMetadata: { revision: 3 }
+    });
     expect(JSON.parse(backup).data.savedRhythms[0].scoring.scheduleHistory[0]).toMatchObject({
       id: `season:${id}:2026-10-01`,
       name: 'A user label',
@@ -388,7 +1216,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     );
     const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
-    expect(onImport).toHaveBeenCalledWith(data);
+    expect(onImport).toHaveBeenCalledWith(createPreviewEnvelope(data).data, backup);
   });
 
   it('offers exact v3 recovery bytes through the shared backup controls', async () => {
@@ -413,6 +1241,108 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(await download.text()).toBe(raw);
   });
 
+  it('offers the exact v20 source envelope through the shared recovery controls', async () => {
+    const user = userEvent.setup();
+    const raw = ` \n${JSON.stringify({
+      ...createPreviewEnvelope(createSamplePreviewData()),
+      schemaVersion: 20
+    })}\n`;
+    const { createObjectURL } = setDownloadMocks();
+    render(
+      <PreviewDataControls
+        data={createSamplePreviewData()}
+        status={{ kind: 'saved' }}
+        currentDate="2026-10-21"
+        onImport={() => null}
+        onReset={() => null}
+        onRetrySave={() => {}}
+        onReloadExternal={() => null}
+        onReplaceExternal={() => null}
+        v20RecoveryCopy={raw}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'Download original v20 recovery backup' }));
+    const download = createObjectURL.mock.calls[0]![0];
+    expect(await download.text()).toBe(raw);
+  });
+
+  it('loads and exposes the exact v25 recovery envelope through the shared controls', async () => {
+    const user = userEvent.setup();
+    const raw = ` \n${JSON.stringify({
+      ...createPreviewEnvelope(createSamplePreviewData()),
+      schemaVersion: 25
+    })}\n`;
+    window.localStorage.setItem(PREVIEW_V25_RECOVERY_KEY, raw);
+    const recovered = loadV25RecoveryCopy(browserPreviewStorage());
+    expect(recovered).toEqual({ kind: 'loaded', raw });
+    const { createObjectURL } = setDownloadMocks();
+    render(
+      <PreviewDataControls
+        data={createSamplePreviewData()}
+        status={{ kind: 'saved' }}
+        currentDate="2026-10-21"
+        onImport={() => null}
+        onReset={() => null}
+        onRetrySave={() => {}}
+        onReloadExternal={() => null}
+        onReplaceExternal={() => null}
+        v25RecoveryCopy={raw}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'Download original v25 recovery backup' }));
+    expect(await createObjectURL.mock.calls[0]![0].text()).toBe(raw);
+  });
+
+  it('preserves and exposes the exact v27 source before schema-v28 scoring migration', async () => {
+    const data = createSamplePreviewData();
+    const legacy = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+      schemaVersion: number;
+      data: {
+        cardio: Record<string, unknown>;
+        strength: Record<string, unknown>;
+        people?: unknown;
+        personDetails?: unknown;
+        personNotes?: unknown;
+      };
+    };
+    legacy.schemaVersion = 27;
+    delete legacy.data.people;
+    delete legacy.data.personDetails;
+    delete legacy.data.personNotes;
+    delete legacy.data.cardio.trackingStartDate;
+    delete legacy.data.cardio.targetHistory;
+    delete legacy.data.strength.trackingStartDate;
+    delete legacy.data.strength.scoringSettingsHistory;
+    const raw = JSON.stringify(legacy);
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(writePreview(storage, loaded.data, raw, { currentDate: '2026-10-21' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V27_RECOVERY_KEY)).toBe(raw);
+
+    window.localStorage.setItem(PREVIEW_V27_RECOVERY_KEY, raw);
+    expect(loadV27RecoveryCopy(browserPreviewStorage())).toEqual({ kind: 'loaded', raw });
+    const user = userEvent.setup();
+    const { createObjectURL } = setDownloadMocks();
+    render(
+      <PreviewDataControls
+        data={createSamplePreviewData()}
+        status={{ kind: 'saved' }}
+        currentDate="2026-10-21"
+        onImport={() => null}
+        onReset={() => null}
+        onRetrySave={() => {}}
+        onReloadExternal={() => null}
+        onReplaceExternal={() => null}
+        v27RecoveryCopy={raw}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'Download original v27 recovery backup' }));
+    expect(await createObjectURL.mock.calls[0]![0].text()).toBe(raw);
+  });
+
   it('restores valid empty state without reinitializing sample goals or completions', () => {
     const empty = {
       goals: [],
@@ -423,7 +1353,20 @@ describe('synthetic preview storage adapter and envelope', () => {
       activeRhythmCompletions: [],
       rhythmCompletionOverrides: [],
       removedSeedCompletionIds: [],
-      rhythmHistoryIds: []
+      rhythmHistoryIds: [],
+      strength: createStrengthData(),
+      weight: createWeightData(),
+      cardio: createCardioData(),
+      friendships: createFriendshipData(),
+      people: createSamplePeople(),
+      peopleGroups: createPersonPickerGroups(),
+      personDetails: [],
+      personNotes: [],
+      prayerRequests: [],
+      timeBlocks: createDefaultTimeBlockSettings(),
+      showTended: false,
+      todayView: 'now' as const,
+      calendarSources: []
     };
     const raw = JSON.stringify(createPreviewEnvelope(empty));
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
@@ -450,7 +1393,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     const parsed = parsePreviewBackup(raw, '2026-10-21');
     expect(parsed.valid).toBe(true);
     if (parsed.valid) {
-      expect(parsed.envelope.schemaVersion).toBe(12);
+      expect(parsed.envelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
       expect(parsed.envelope.data).toEqual({ ...data, savedRhythms: [], archivedRhythmIds: [] });
       expect(parsed.envelope.data.goals[0]!.checkIns).toEqual(data.goals[0]!.checkIns);
       expect(parsed.envelope.data.goals[0]!.correctionHistory).toEqual(data.goals[0]!.correctionHistory);
@@ -472,8 +1415,43 @@ describe('synthetic preview storage adapter and envelope', () => {
       activeRhythmCompletions: [],
       rhythmCompletionOverrides: [],
       removedSeedCompletionIds: [],
-      rhythmHistoryIds: []
+      rhythmHistoryIds: [],
+      strength: createStrengthData(),
+      weight: createWeightData(),
+      cardio: createCardioData(),
+      friendships: createFriendshipData(),
+      people: createSamplePeople(),
+      peopleGroups: createPersonPickerGroups(),
+      personDetails: [],
+      personNotes: [],
+      prayerRequests: [],
+      timeBlocks: createDefaultTimeBlockSettings(),
+      showTended: false,
+      todayView: 'now',
+      calendarSources: []
     });
+  });
+
+  it('migrates obsolete Today selections to a valid view while parsing older envelopes', () => {
+    const previous = createPreviewEnvelope(createSamplePreviewData());
+    const legacyEnvelope = {
+      ...previous,
+      schemaVersion: 37,
+      data: { ...previous.data, todayView: 'anytime' }
+    };
+    const parsedFlexible = parsePreviewBackup(JSON.stringify(legacyEnvelope), '2026-10-21');
+    expect(parsedFlexible.valid).toBe(true);
+    if (parsedFlexible.valid) {
+      expect(parsedFlexible.sourceSchemaVersion).toBe(37);
+      expect(parsedFlexible.envelope.data.todayView).toBe('flexible');
+    }
+
+    const parsedFallback = parsePreviewBackup(JSON.stringify({
+      ...legacyEnvelope,
+      data: { ...legacyEnvelope.data, todayView: 'scheduled' }
+    }), '2026-10-21');
+    expect(parsedFallback.valid).toBe(true);
+    if (parsedFallback.valid) expect(parsedFallback.envelope.data.todayView).toBe('now');
   });
 
   it('migrates v2 previews with editable Rhythms and completions while making them active', () => {
@@ -491,7 +1469,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(parsed.valid).toBe(true);
     if (parsed.valid) {
       expect(parsed.sourceSchemaVersion).toBe(2);
-      expect(parsed.envelope.schemaVersion).toBe(12);
+      expect(parsed.envelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
       expect(parsed.envelope.data).toEqual({
         ...v2Data,
         savedRhythms: v2Data.savedRhythms.map(rhythm => ({ ...rhythm, timeOfDay: 'evening' })),
@@ -536,7 +1514,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(result.kind).toBe('saved');
     expect(values.get(PREVIEW_V3_RECOVERY_KEY)).toBe(originalRaw);
     expect(loadV3RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
-    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(12);
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
   });
 
   it('blocks v3 replacement on recovery conflicts or recovery storage failures', () => {
@@ -562,7 +1540,10 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(writePreview(failingStorage, createSamplePreviewData(), originalRaw, {
       currentDate: '2026-10-21'
     }))
-      .toMatchObject({ kind: 'error', message: 'Recovery write blocked' });
+      .toMatchObject({
+        kind: 'error',
+        diagnostic: { rejectedRule: 'immutable-recovery-copy-failed', failureDetail: 'Recovery write blocked' }
+      });
     expect(values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
     expect(values.has(PREVIEW_V3_RECOVERY_KEY)).toBe(false);
   });
@@ -579,7 +1560,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
     expect(values.get(PREVIEW_V4_RECOVERY_KEY)).toBe(originalRaw);
     expect(loadV4RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
-    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(12);
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
 
     const conflicting = storageFixture({
       [PREVIEW_STORAGE_KEY]: originalRaw,
@@ -601,7 +1582,10 @@ describe('synthetic preview storage adapter and envelope', () => {
     };
     expect(writePreview(failingStorage, createSamplePreviewData(), originalRaw, {
       currentDate: '2026-10-21'
-    })).toMatchObject({ kind: 'error', message: 'v4 recovery write blocked' });
+    })).toMatchObject({
+      kind: 'error',
+      diagnostic: { rejectedRule: 'immutable-recovery-copy-failed', failureDetail: 'v4 recovery write blocked' }
+    });
     expect(failingValues.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
   });
 
@@ -619,7 +1603,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
     expect(values.get(PREVIEW_V5_RECOVERY_KEY)).toBe(originalRaw);
     expect(loadV5RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
-    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(12);
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
 
     const conflicting = storageFixture({
       [PREVIEW_STORAGE_KEY]: originalRaw,
@@ -641,7 +1625,10 @@ describe('synthetic preview storage adapter and envelope', () => {
     };
     expect(writePreview(failingStorage, createSamplePreviewData(), originalRaw, {
       currentDate: '2026-10-21'
-    })).toMatchObject({ kind: 'error', message: 'v5 recovery write blocked' });
+    })).toMatchObject({
+      kind: 'error',
+      diagnostic: { rejectedRule: 'immutable-recovery-copy-failed', failureDetail: 'v5 recovery write blocked' }
+    });
     expect(failingValues.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
   });
 
@@ -658,7 +1645,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
     expect(values.get(PREVIEW_V6_RECOVERY_KEY)).toBe(originalRaw);
     expect(loadV6RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
-    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(12);
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
   });
 
   it('migrates schema v7 read-only and preserves its exact bytes before the first v9 write', () => {
@@ -698,7 +1685,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
     expect(values.get(PREVIEW_V7_RECOVERY_KEY)).toBe(originalRaw);
     expect(loadV7RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
-    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(12);
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
   });
 
   it('migrates v8 schedule history to stable Seasons in memory, then preserves exact bytes before write', () => {
@@ -811,7 +1798,10 @@ describe('synthetic preview storage adapter and envelope', () => {
     };
     expect(writePreview(failingStorage, loaded.data, originalRaw, {
       currentDate: '2026-10-21'
-    })).toMatchObject({ kind: 'error', message: 'v8 recovery write blocked' });
+    })).toMatchObject({
+      kind: 'error',
+      diagnostic: { rejectedRule: 'immutable-recovery-copy-failed', failureDetail: 'v8 recovery write blocked' }
+    });
     expect(failingValues.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
   });
 
@@ -886,7 +1876,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(values.get(PREVIEW_V1_RECOVERY_KEY)).toBe(originalRaw);
     const recoveryCopy = values.get(PREVIEW_V1_RECOVERY_KEY);
     const activeV2 = values.get(PREVIEW_STORAGE_KEY)!;
-    expect(JSON.parse(activeV2).schemaVersion).toBe(12);
+    expect(JSON.parse(activeV2).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
     expect(writePreview(storage, { ...updated, completedRhythmIds: [] }, activeV2, {
       currentDate: '2026-10-21'
     }).kind).toBe('saved');
@@ -925,7 +1915,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     }, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
     expect(values.get(PREVIEW_V2_RECOVERY_KEY)).toBe(originalRaw);
     expect(loadV2RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
-    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(12);
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
 
     const occupied = storageFixture({
       [PREVIEW_STORAGE_KEY]: originalRaw,
@@ -938,7 +1928,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(occupied.values.get(PREVIEW_V2_RECOVERY_KEY)).toBe('{"different":"v2"}');
   });
 
-  it('round-trips schema v11 creation and scoring metadata with prior records and goal history', () => {
+  it('round-trips legacy fitness records and leaves new scoring history unavailable', () => {
     const data = sampleWithHistory();
     const id = 'user-rhythm-11111111-1111-4111-8111-111111111111';
     data.savedRhythms = [{
@@ -963,8 +1953,31 @@ describe('synthetic preview storage adapter and envelope', () => {
       },
       personal: true,
       personIds: ['sample-person-morgan', 'sample-person-avery'],
-      categoryIds: ['marriage', 'friendships']
+      categoryIds: ['health', 'friendships'],
+      primaryFoundationId: 'connection',
+      secondaryFoundationIds: ['partnership'],
+      healthLogCapability: 'weight'
     }];
+    data.weight = {
+      displayUnit: 'kg',
+      goals: {
+        startWeightKg: 90.718474,
+        startDate: '2026-10-01',
+        targetWeightKg: 81.646626,
+        goalDate: '2027-01-01',
+        importedNote: 'Preserve this unknown field.'
+      },
+      weighIns: [
+        { id: 'preserved-weight-entry', date: '2026-10-20', weightKg: 88.4, legacyField: 'kept' },
+        { id: 'invalid-weight-entry', date: 'not-a-date', value: 'preserve raw record' }
+      ],
+      extraWeightField: { untouched: true }
+    };
+    data.cardio = {
+      goals: { weeklyRunTarget: 2, weeklyMileTarget: 8 },
+      runs: [{ id: 'preserved-cardio-run', date: '2026-10-20', distance: 3, legacyField: 'kept' }],
+      extraCardioField: { untouched: true }
+    };
     data.completedRhythmIds.push(id);
     data.archivedRhythmIds = [id];
     data.rhythmCompletionOverrides = [{
@@ -982,15 +1995,166 @@ describe('synthetic preview storage adapter and envelope', () => {
     const loaded = loadPreview(storage, '2026-10-21');
     expect(loaded.kind).toBe('loaded');
     if (loaded.kind !== 'loaded') return;
-    expect(loaded.data).toEqual(data);
+    expect(loaded.data).toMatchObject(data);
+    expect(loaded.data.cardio.targetHistory).toEqual([]);
+    expect(loaded.data.strength.trackingStartDate).toBeUndefined();
+    expect(loaded.data.strength.scoringSettingsHistory).toEqual([]);
     expect(parsePreviewBackup(saved.raw, '2026-10-21')).toMatchObject({
       valid: true,
-      sourceSchemaVersion: 12,
-      envelope: { schemaVersion: 12 }
+      sourceSchemaVersion: PREVIEW_SCHEMA_VERSION,
+      envelope: { schemaVersion: PREVIEW_SCHEMA_VERSION }
     });
+
   });
 
-    it('migrates v10 read-only and recovers exact source bytes before the first schema v12 save', () => {
+  it('hydrates v16 Weight with an empty default and saves the exact source bytes for recovery', () => {
+      const data = createSamplePreviewData();
+      const current = createPreviewEnvelope(data);
+      const {
+        weight: _weight,
+        cardio: _cardio,
+        friendships: _friendships,
+        people: _people,
+        peopleGroups: _peopleGroups,
+        personDetails: _personDetails,
+        personNotes: _personNotes,
+        ...v16Data
+      } = current.data;
+      const source = JSON.stringify({ ...current, schemaVersion: 16, data: v16Data });
+      const originalRaw = ` \n${source}\n`;
+      const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
+
+      const loaded = loadPreview(storage, '2026-10-21');
+      expect(loaded.kind).toBe('loaded');
+      expect(values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+      if (loaded.kind !== 'loaded') return;
+      expect(loaded.data.weight).toEqual(createWeightData());
+
+      expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
+      expect(values.get(PREVIEW_V16_RECOVERY_KEY)).toBe(originalRaw);
+      expect(loadV16RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
+  });
+
+  it('hydrates v17 Weight with empty Cardio and Friendships defaults and preserves exact bytes before schema v21 writes', () => {
+    const data = createSamplePreviewData();
+    data.weight = {
+      displayUnit: 'lb',
+      goals: { startWeightKg: 80, startDate: '2026-10-01', targetWeightKg: 75, goalDate: '2027-01-01' },
+      weighIns: [{ id: 'existing-v17-weigh-in', date: '2026-10-20', weightKg: 78 }]
+    };
+    const current = createPreviewEnvelope(data);
+    const {
+      cardio: _cardio,
+      friendships: _friendships,
+      people: _people,
+      peopleGroups: _peopleGroups,
+      personDetails: _personDetails,
+      personNotes: _personNotes,
+      ...v17Data
+    } = current.data;
+    const source = JSON.stringify({ ...current, schemaVersion: 17, data: v17Data });
+    const originalRaw = ` \n${source}\n`;
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
+
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.weight).toEqual(data.weight);
+    expect(loaded.data.cardio).toEqual(createCardioData());
+
+    expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V17_RECOVERY_KEY)).toBe(originalRaw);
+    expect(loadV17RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
+  });
+
+  it('hydrates v18 with empty Friendships and People defaults and preserves exact source bytes before schema v21 writes', () => {
+    const data = createSamplePreviewData();
+    const current = createPreviewEnvelope(data);
+    const {
+      friendships: _friendships,
+      people: _people,
+      peopleGroups: _peopleGroups,
+      personDetails: _personDetails,
+      personNotes: _personNotes,
+      ...v18Data
+    } = current.data;
+    const originalRaw = ` \n${JSON.stringify({ ...current, schemaVersion: 18, data: v18Data })}\n`;
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
+
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.friendships).toEqual(createFriendshipData());
+
+    expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V18_RECOVERY_KEY)).toBe(originalRaw);
+    expect(loadV18RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
+  });
+
+  it('hydrates v14 with default Strength, Weight, Friendships, and People data and preserves exact source bytes before schema v21 writes', () => {
+    const data = sampleWithHistory();
+    const envelope = createPreviewEnvelope(data);
+    const {
+      strength: _strength,
+      weight: _weight,
+      cardio: _cardio,
+      friendships: _friendships,
+      people: _people,
+      peopleGroups: _peopleGroups,
+      personDetails: _personDetails,
+      personNotes: _personNotes,
+      ...v14Data
+    } = envelope.data;
+    const originalRaw = JSON.stringify({ ...envelope, schemaVersion: 14, data: v14Data });
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
+
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    expect(loadV14RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: null });
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.strength).toEqual(createStrengthData());
+
+    expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V14_RECOVERY_KEY)).toBe(originalRaw);
+    expect(loadV14RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+  });
+
+  it('preserves exact v12 source bytes before the first association-schema v13 write', () => {
+    const data = createSamplePreviewData();
+    const current = createPreviewEnvelope(data);
+    const {
+      strength: _strength,
+      weight: _weight,
+      cardio: _cardio,
+      friendships: _friendships,
+      people: _people,
+      peopleGroups: _peopleGroups,
+      personDetails: _personDetails,
+      personNotes: _personNotes,
+      ...v12Data
+    } = current.data;
+    const source = JSON.stringify({
+      format: current.format,
+      schemaVersion: 12,
+      data: v12Data
+    });
+    const originalRaw = ` \n${source}\n`;
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+
+    expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
+    expect(values.get(PREVIEW_V12_RECOVERY_KEY)).toBe(originalRaw);
+    expect(loadV12RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+  });
+
+    it('migrates v10 read-only and recovers exact source bytes before the first schema v13 save', () => {
       const data = sampleWithHistory();
       const id = 'user-rhythm-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
       const daily = { frequency: 'daily' as const };
@@ -1045,7 +2209,7 @@ describe('synthetic preview storage adapter and envelope', () => {
 
       expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
       expect(values.get(PREVIEW_V10_RECOVERY_KEY)).toBe(originalRaw);
-      expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(12);
+      expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
     });
 
     it('blocks v10 replacement on exact-recovery conflicts and failed recovery writes', () => {
@@ -1071,12 +2235,15 @@ describe('synthetic preview storage adapter and envelope', () => {
       };
       expect(writePreview(failedRecoveryStorage, createSamplePreviewData(), originalRaw, {
         currentDate: '2026-10-21'
-      })).toMatchObject({ kind: 'error', message: 'v10 recovery write blocked' });
+      })).toMatchObject({
+        kind: 'error',
+        diagnostic: { rejectedRule: 'immutable-recovery-copy-failed', failureDetail: 'v10 recovery write blocked' }
+      });
       expect(values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
       expect(values.has(PREVIEW_V10_RECOVERY_KEY)).toBe(false);
     });
 
-    it('migrates v11 without guessing ambiguous single-day identity and preserves the exact source before saving v12', () => {
+    it('migrates v11 without guessing ambiguous single-day identity and preserves the exact source before saving v13', () => {
       const data = sampleWithHistory();
       const id = 'user-rhythm-cccccccc-cccc-4ccc-8ccc-cccccccccccc';
       const weekly = { frequency: 'weekly' as const, weekdays: [1] as (1)[] };
@@ -1105,7 +2272,22 @@ describe('synthetic preview storage adapter and envelope', () => {
       }];
       data.rhythmHistoryIds = [id];
       const versionTwelve = createPreviewEnvelope(data);
-      const originalRaw = ` \n${JSON.stringify({ ...versionTwelve, schemaVersion: 11 })}\n`;
+      const {
+        strength: _strength,
+        weight: _weight,
+        cardio: _cardio,
+        friendships: _friendships,
+        people: _people,
+        peopleGroups: _peopleGroups,
+        personDetails: _personDetails,
+        personNotes: _personNotes,
+        ...versionElevenData
+      } = versionTwelve.data;
+      const originalRaw = ` \n${JSON.stringify({
+        ...versionTwelve,
+        schemaVersion: 11,
+        data: versionElevenData
+      })}\n`;
       const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
       const setItem = vi.spyOn(storage, 'setItem');
 
@@ -1127,7 +2309,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       expect(reloaded.data.savedRhythms[0]!.schedule).toEqual(weekly);
       expect(reloaded.data.savedRhythms[0]!.scoring!.scheduleHistory).toEqual([season]);
       expect(reloaded.data.datedRhythmCompletions).toEqual(data.datedRhythmCompletions);
-      expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(12);
+      expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
     });
 
     it('round-trips the explicit single-day Select Days marker through saved Season metadata', () => {
@@ -1165,7 +2347,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       const { storage, values } = storageFixture();
 
       expect(writePreview(storage, data, null).kind).toBe('saved');
-      expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(12);
+      expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
       const loaded = loadPreview(storage, '2026-10-25');
       expect(loaded.kind).toBe('loaded');
       if (loaded.kind !== 'loaded') return;
@@ -1221,7 +2403,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       const backup = parsePreviewBackup(write.kind === 'saved' ? write.raw : '', '2026-10-21');
       expect(backup.valid).toBe(true);
       if (backup.valid) {
-        expect(backup.envelope.schemaVersion).toBe(12);
+        expect(backup.envelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
         expect(backup.envelope.data.savedRhythms[0]!.scoring!.scheduleHistory).toEqual([season]);
         expect(backup.envelope.data.datedRhythmCompletions).toEqual(data.datedRhythmCompletions);
       }
@@ -1269,13 +2451,13 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(writePreview(storage, loaded.data, originalRaw, { currentDate: '2026-10-21' }).kind).toBe('saved');
     expect(values.get(PREVIEW_V9_RECOVERY_KEY)).toBe(originalRaw);
     expect(loadV9RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw: originalRaw });
-    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(12);
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
   });
 
   it('does not overwrite an unsupported active envelope', () => {
     const unsupportedRaw = JSON.stringify({
       format: 'tend.synthetic-preview',
-      schemaVersion: 13,
+      schemaVersion: PREVIEW_SCHEMA_VERSION + 1,
       data: { goals: [], completedRhythmIds: [], savedRhythms: [], archivedRhythmIds: [] }
     });
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: unsupportedRaw });
@@ -1315,6 +2497,32 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
   });
 
+  it('blocks explicit replacement when the immutable raw recovery slot contains different bytes', () => {
+    const raw = '{"unreadable":';
+    const priorRecovery = '{"prior recovery":"keep exactly"}';
+    const { storage, values } = storageFixture({
+      [PREVIEW_STORAGE_KEY]: raw,
+      [PREVIEW_RAW_RECOVERY_KEY]: priorRecovery
+    });
+
+    expect(writePreview(storage, createSamplePreviewData(), raw, {
+      allowUnrecoverableReplacement: true,
+      currentDate: '2026-10-21',
+      operation: 'reset'
+    })).toMatchObject({
+      kind: 'error',
+      diagnostic: {
+        operation: 'reset',
+        rejectedRule: 'raw-recovery-copy-conflict',
+        recoveryKeyLookup: 'conflicting-copy',
+        concurrentModification: 'not-detected',
+        latestDraft: 'failed'
+      }
+    });
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+    expect(values.get(PREVIEW_RAW_RECOVERY_KEY)).toBe(priorRecovery);
+  });
+
   it('touches only the isolated preview key, leaving existing Tend storage keys unchanged', () => {
     const legacyKeys = {
       'tend-state': '{"live":"unchanged"}',
@@ -1333,7 +2541,7 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('rejects malformed JSON, unsupported versions, malformed records, duplicate IDs, and invalid references', () => {
     expect(parsePreviewBackup('{', '2026-10-21').valid).toBe(false);
     const unsupported = createPreviewEnvelope(sampleWithHistory());
-    expect(validatePreviewEnvelope({ ...unsupported, schemaVersion: 13 }, '2026-10-21')).toMatchObject({
+    expect(validatePreviewEnvelope({ ...unsupported, schemaVersion: PREVIEW_SCHEMA_VERSION + 1 }, '2026-10-21')).toMatchObject({
       valid: false,
       kind: 'unsupported'
     });
@@ -1410,7 +2618,58 @@ describe('synthetic preview storage adapter and envelope', () => {
       removeItem: () => {}
     };
     expect(writePreview(quota, createSamplePreviewData(), null))
-      .toMatchObject({ kind: 'error', message: 'Quota exceeded' });
+      .toMatchObject({
+        kind: 'error',
+        diagnostic: {
+          rejectedRule: 'storage-operation-failed',
+          sourceSchemaVersion: null,
+          recoveryKeyLookup: 'not-required',
+          migrationValidation: 'not-run',
+          concurrentModification: 'not-detected',
+          latestDraft: 'failed',
+          failureDetail: 'Quota exceeded'
+        }
+      });
+  });
+
+  it('archives exact local and source JSON before import and rolls back recovery metadata on save failure', () => {
+    const previous = createSamplePreviewData();
+    const imported = createSamplePreviewData();
+    imported.goals[0]!.title = 'Synthetic imported goal';
+    const previousRaw = JSON.stringify(createPreviewEnvelope(previous));
+    const sourceRaw = JSON.stringify(createPreviewEnvelope(imported), null, 2);
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: previousRaw });
+
+    const saved = writePreview(storage, imported, previousRaw, {
+      currentDate: '2026-10-21',
+      operation: 'import',
+      importSourceRaw: sourceRaw
+    });
+    expect(saved.kind).toBe('saved');
+    expect(loadPreviewImportRecovery(storage)).toMatchObject({
+      kind: 'loaded',
+      latestRaw: previousRaw,
+      latestSourceRaw: sourceRaw
+    });
+
+    values.set(PREVIEW_STORAGE_KEY, previousRaw);
+    values.delete(PREVIEW_IMPORT_RECOVERY_KEY);
+    const failingStorage = {
+      getItem: storage.getItem,
+      setItem: (key: string, value: string) => {
+        if (key === PREVIEW_STORAGE_KEY) throw new Error('Synthetic durable write failure');
+        storage.setItem(key, value);
+      },
+      removeItem: storage.removeItem
+    };
+    const failed = writePreview(failingStorage, imported, previousRaw, {
+      currentDate: '2026-10-21',
+      operation: 'import',
+      importSourceRaw: sourceRaw
+    });
+    expect(failed).toMatchObject({ kind: 'error' });
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(previousRaw);
+    expect(values.has(PREVIEW_IMPORT_RECOVERY_KEY)).toBe(false);
   });
 
   it('detects an external-tab write before replacing a stale value', () => {
@@ -1423,7 +2682,38 @@ describe('synthetic preview storage adapter and envelope', () => {
       .toEqual({ kind: 'conflict', actualRaw: second });
     expect(values.get(PREVIEW_STORAGE_KEY)).toBe(second);
   });
+
+  it('keeps current-schema category conflicts read-only until save and preserves exact raw recovery before normalization', () => {
+    const data = createSamplePreviewData();
+    const personId = data.people[0]!.id;
+    data.peopleGroups = data.peopleGroups.map(group => ({
+      ...group,
+      memberIds: group.id === 'friends'
+        ? [...group.memberIds, personId]
+        : group.memberIds
+    }));
+    const raw = JSON.stringify(createPreviewEnvelope(data));
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.peopleGroups.filter(group => group.memberIds.includes(personId)).map(group => group.id))
+      .toEqual(['marriage']);
+
+    const saved = writePreview(storage, loaded.data, raw, { currentDate: '2026-10-21' });
+    expect(saved.kind).toBe('saved');
+    expect(values.get(PREVIEW_CATEGORY_RECOVERY_KEY)).toBe(raw);
+    const persisted = parsePreviewBackup(values.get(PREVIEW_STORAGE_KEY)!, '2026-10-21');
+    expect(persisted).toMatchObject({ valid: true, resolvedPersonCategories: 0 });
+  });
 });
+
+async function openPreviewSettings(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(screen.getByRole('button', { name: 'More, settings' }));
+  await user.click(await screen.findByRole('button', { name: 'Settings' }));
+}
 
 describe('preview backup controls', () => {
   it('exports the explicit envelope and imports the backup through confirmation', async () => {
@@ -1450,7 +2740,7 @@ describe('preview backup controls', () => {
     const exported = JSON.parse(exportedText) as Record<string, unknown>;
     expect(Object.keys(exported).sort()).toEqual(['data', 'format', 'schemaVersion']);
     expect(exported.format).toBe('tend.synthetic-preview');
-    expect(exported.schemaVersion).toBe(12);
+    expect(exported.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
     expect((exported.data as PreviewData).archivedRhythmIds).toEqual(['sample-pray-together']);
     await user.upload(
       screen.getByLabelText('Import preview backup'),
@@ -1458,7 +2748,7 @@ describe('preview backup controls', () => {
     );
     const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
-    expect(onImport).toHaveBeenCalledWith(data);
+    expect(onImport).toHaveBeenCalledWith(data, exportedText);
   });
 
   it('imports v2 backups as active and explains the missing archive state before replacement', async () => {
@@ -1485,19 +2775,22 @@ describe('preview backup controls', () => {
         onReplaceExternal={() => null}
       />
     );
+    const legacyRaw = versionTwoRaw(legacyData);
     await user.upload(
       screen.getByLabelText('Import preview backup'),
-      new File([versionTwoRaw(legacyData)], 'v2-backup.json', { type: 'application/json' })
+      new File([legacyRaw], 'v2-backup.json', { type: 'application/json' })
     );
     const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     expect(within(dialog).getByText(/predates archive status, so its Rhythms will be restored as active/)).toBeTruthy();
+    expect(within(dialog).getByText(/1 active Rhythm lacks a required Practice\/Foundation link/)).toBeTruthy();
+    expect(within(dialog).getByText(/will still import unchanged, with no automatic link assignments/)).toBeTruthy();
     expect(onImport).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
     expect(onImport).toHaveBeenCalledWith({
       ...legacyData,
       savedRhythms: legacyData.savedRhythms.map(rhythm => ({ ...rhythm, timeOfDay: 'evening' })),
       archivedRhythmIds: []
-    });
+    }, legacyRaw);
   });
 
   it('imports only after validation and confirmation, and cancellation preserves current state', async () => {
@@ -1529,6 +2822,35 @@ describe('preview backup controls', () => {
     expect(screen.getByText('Preview data saved in this browser.')).toBeTruthy();
   });
 
+  it('rejects malformed and unsupported backup files without opening replacement confirmation', async () => {
+    const user = userEvent.setup();
+    const onImport = vi.fn(() => null);
+    const { container } = render(
+      <PreviewDataControls
+        data={createSamplePreviewData()}
+        status={{ kind: 'saved' }}
+        currentDate="2026-10-21"
+        onImport={onImport}
+        onReset={() => null}
+        onRetrySave={() => {}}
+        onReloadExternal={() => null}
+        onReplaceExternal={() => null}
+      />
+    );
+    const input = within(container).getByLabelText('Import preview backup') as HTMLInputElement;
+    await user.upload(input, new File(['{"broken":'], 'malformed.json', { type: 'application/json' }));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    const unsupportedRaw = JSON.stringify({
+      ...createPreviewEnvelope(createSamplePreviewData()),
+      schemaVersion: PREVIEW_SCHEMA_VERSION + 1
+    });
+    await user.upload(input, new File([unsupportedRaw], 'unsupported.json', { type: 'application/json' }));
+    expect(await screen.findByText(/not supported/i)).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onImport).not.toHaveBeenCalled();
+  });
+
   it('offers export before reset and preserves storage when the replacement is cancelled', async () => {
     const user = userEvent.setup();
     const original = JSON.stringify(createPreviewEnvelope(sampleWithHistory()));
@@ -1536,6 +2858,7 @@ describe('preview backup controls', () => {
     const { createObjectURL } = setDownloadMocks();
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
+    await openPreviewSettings(user);
     await user.click(screen.getByRole('button', { name: 'Reset sample data' }));
     const dialog = await screen.findByRole('dialog', { name: 'Reset sample data?' });
     await user.click(within(dialog).getByRole('button', { name: 'Download current preview backup' }));
@@ -1544,7 +2867,7 @@ describe('preview backup controls', () => {
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(original);
   });
 
-  it('preserves corrupt storage, offers raw recovery, and resets only the preview key after confirmation', async () => {
+  it('preserves corrupt storage in an immutable raw recovery copy before explicit reset', async () => {
     const user = userEvent.setup();
     const corruptRaw = '{"bad":';
     window.localStorage.setItem(PREVIEW_STORAGE_KEY, corruptRaw);
@@ -1554,6 +2877,7 @@ describe('preview backup controls', () => {
 
     expect(await screen.findByText(/original value is preserved/)).toBeTruthy();
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(corruptRaw);
+    await openPreviewSettings(user);
     await user.click(screen.getByRole('button', { name: 'Download raw recovery file' }));
     expect(createObjectURL).toHaveBeenCalledOnce();
     const recoveryBlob = createObjectURL.mock.calls[0]![0] as Blob;
@@ -1564,6 +2888,9 @@ describe('preview backup controls', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Reset sample data' }));
     expect(await screen.findByText('Preview data saved in this browser.')).toBeTruthy();
     expect(loadPreview(browserPreviewStorage(), '2026-10-21').kind).toBe('loaded');
+    expect(window.localStorage.getItem(PREVIEW_RAW_RECOVERY_KEY)).toBe(corruptRaw);
+    expect(loadRawRecoveryCopy(browserPreviewStorage())).toEqual({ kind: 'loaded', raw: corruptRaw });
+    expect(screen.getByRole('button', { name: 'Download exact raw recovery copy' })).toBeTruthy();
     expect(window.localStorage.getItem('tend-state')).toBe('{"live":"keep"}');
   });
 
@@ -1572,6 +2899,8 @@ describe('preview backup controls', () => {
     const openFinances = () => user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Finances' }));
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
+    await user.click(screen.getByRole('tab', { name: 'All today' }));
+    expandAllTodayGroups();
     await user.click(screen.getByRole('button', { name: 'Tend Pray together' }));
     const completionDialog = await screen.findByRole('dialog', { name: 'When did you tend it?' });
     await user.click(within(completionDialog).getByRole('button', { name: 'Save' }));
@@ -1585,7 +2914,6 @@ describe('preview backup controls', () => {
     await user.clear(balance);
     await user.type(balance, '1350.00');
     await user.click(within(correction).getByRole('button', { name: 'Save correction' }));
-    console.log('AFTER CORRECTION RAW', window.localStorage.getItem(PREVIEW_STORAGE_KEY));
     const beforeInvalidImport = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
     await user.upload(
       screen.getByLabelText('Import preview backup'),
@@ -1609,6 +2937,8 @@ describe('preview backup controls', () => {
     const { createObjectURL } = setDownloadMocks();
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
+    await user.click(screen.getByRole('tab', { name: 'All today' }));
+    expandAllTodayGroups();
 
     const card = screen.getByRole('article', { name: 'Take a walk' });
     const pastDate = new Date();
@@ -1625,9 +2955,10 @@ describe('preview backup controls', () => {
     await user.click(within(completionDialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => {
       expect(within(card).getByRole('button', { name: 'Tend Take a walk' })).toBeTruthy();
-      expect(within(card).getByText(`Last tended ${dateLabel}`)).toBeTruthy();
+      expect(within(card).getByText(dateLabel)).toBeTruthy();
     });
 
+    await openPreviewSettings(user);
     await user.click(screen.getByRole('button', { name: 'Export preview backup' }));
     const exportedText = await (createObjectURL.mock.calls[0]![0] as Blob).text();
     await user.upload(
@@ -1636,16 +2967,232 @@ describe('preview backup controls', () => {
     );
     const importDialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     await user.click(within(importDialog).getByRole('button', { name: 'Replace with backup' }));
+    await user.click(screen.getByRole('button', { name: 'Today' }));
+    expandAllTodayGroups();
+    const restoredCard = screen.getByRole('article', { name: 'Take a walk' });
     await waitFor(() => {
-      expect(within(card).getByRole('button', { name: 'Tend Take a walk' })).toBeTruthy();
-      expect(within(card).getByText(`Last tended ${dateLabel}`)).toBeTruthy();
+      expect(within(restoredCard).getByRole('button', { name: 'Tend Take a walk' })).toBeTruthy();
+      expect(within(restoredCard).getByText(dateLabel)).toBeTruthy();
     });
 
     cleanup();
     render(<App />);
-    const restoredCard = await screen.findByRole('article', { name: 'Take a walk' });
-    expect(within(restoredCard).getByRole('button', { name: 'Tend Take a walk' })).toBeTruthy();
-    expect(within(restoredCard).getByText(`Last tended ${dateLabel}`)).toBeTruthy();
+    await screen.findByText('Preview data saved in this browser.');
+    await user.click(screen.getByRole('tab', { name: 'All today' }));
+    expandAllTodayGroups();
+    const reloadedCard = await screen.findByRole('article', { name: 'Take a walk' });
+    expect(within(reloadedCard).getByRole('button', { name: 'Tend Take a walk' })).toBeTruthy();
+    expect(within(reloadedCard).getByText(dateLabel)).toBeTruthy();
+  });
+
+  it('creates, shares, edits from a linked profile, and reloads one stored person note in App', async () => {
+    const user = userEvent.setup();
+    window.localStorage.clear();
+    window.localStorage.setItem(
+      PREVIEW_STORAGE_KEY,
+      JSON.stringify(createPreviewEnvelope(createSamplePreviewData()))
+    );
+    const openPerson = async (name: string) => {
+      await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+        .getByRole('button', { name: 'People' }));
+      await user.click(screen.getByRole('button', { name: `Open profile for ${name}` }));
+    };
+
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await openPerson('Avery Brooks');
+    await user.click(screen.getByRole('button', { name: 'Notes (0)' }));
+    await user.click(screen.getByRole('button', { name: 'Add note' }));
+    const editor = screen.getByRole('dialog', { name: 'Add note for Avery Brooks' });
+    await user.type(within(editor).getByRole('textbox', { name: 'Note' }), 'App integration first line{Enter}second line');
+    await user.click(within(editor).getByRole('button', { name: 'Choose people' }));
+    const picker = screen.getByRole('dialog', { name: 'Share note' });
+    await user.click(within(picker).getByRole('button', { name: 'Morgan Reed' }));
+    await user.click(within(picker).getByRole('button', { name: 'Done' }));
+    await user.click(within(editor).getByRole('button', { name: 'Save note' }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}') as {
+        data?: { personNotes?: Array<Record<string, unknown>> };
+      };
+      expect(saved.data?.personNotes).toHaveLength(1);
+      expect(saved.data?.personNotes?.[0]).toMatchObject({
+        personId: 'sample-person-avery',
+        sharedWith: ['sample-person-morgan'],
+        content: 'App integration first line\nsecond line'
+      });
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Back to People' }));
+    await openPerson('Morgan Reed');
+    await user.click(screen.getByRole('button', { name: 'Notes (1)' }));
+    await user.click(screen.getByRole('button', { name: /Open note updated/ }));
+    const noteDetail = screen.getByRole('dialog', { name: 'Note' });
+    expect(within(noteDetail).getByText(/Primary person: Avery Brooks/)).toBeTruthy();
+    await user.click(within(noteDetail).getByRole('button', { name: 'Edit note' }));
+    const edit = screen.getByRole('dialog', { name: 'Edit note' });
+    await user.clear(within(edit).getByRole('textbox', { name: 'Note' }));
+    await user.type(within(edit).getByRole('textbox', { name: 'Note' }), 'Edited from the shared profile');
+    await user.click(within(edit).getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}') as {
+        data?: { personNotes?: Array<Record<string, unknown>> };
+      };
+      expect(saved.data?.personNotes).toHaveLength(1);
+      expect(saved.data?.personNotes?.[0]).toMatchObject({
+        personId: 'sample-person-avery',
+        sharedWith: ['sample-person-morgan'],
+        content: 'Edited from the shared profile'
+      });
+    });
+
+    const savedEnvelope = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}') as {
+      schemaVersion?: number;
+      data?: { personNotes?: Array<Record<string, unknown>> };
+    };
+    expect(savedEnvelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+    expect(savedEnvelope.data?.personNotes).toHaveLength(1);
+    const savedAfterEdit = loadPreview(window.localStorage, new Date().toISOString().slice(0, 10));
+    expect(savedAfterEdit.kind).toBe('loaded');
+    if (savedAfterEdit.kind === 'loaded') {
+      expect(savedAfterEdit.data.personNotes).toMatchObject([{
+        personId: 'sample-person-avery',
+        sharedWith: ['sample-person-morgan'],
+        content: 'Edited from the shared profile'
+      }]);
+    }
+
+    cleanup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    const reloaded = loadPreview(window.localStorage, new Date().toISOString().slice(0, 10));
+    expect(reloaded.kind).toBe('loaded');
+    if (reloaded.kind === 'loaded') {
+      expect(reloaded.data.personNotes).toMatchObject([{
+        personId: 'sample-person-avery',
+        sharedWith: ['sample-person-morgan'],
+        content: 'Edited from the shared profile'
+      }]);
+    }
+    await openPerson('Avery Brooks');
+    await user.click(screen.getByRole('button', { name: 'Notes (1)' }));
+    expect(screen.getByRole('heading', { name: 'Notes (1)' })).toBeTruthy();
+    expect(screen.getByText('Edited from the shared profile')).toBeTruthy();
+  });
+
+  it('migrates schema 33 to default Time blocks without changing Rhythm block assignments', () => {
+    const data = createSamplePreviewData();
+    const rhythmId = 'user-rhythm-11111111-1111-4111-8111-111111111111';
+    data.savedRhythms = [{
+      id: rhythmId,
+      title: 'Morning reflection',
+      cadence: 'Daily',
+      timeLabel: 'Early morning',
+      timeOfDay: 'early-morning',
+      personIds: [],
+      categoryIds: ['faith'],
+      schedule: { frequency: 'daily' }
+    }];
+    const current = createPreviewEnvelope(data);
+    const { timeBlocks: _timeBlocks, ...v33Data } = current.data;
+    const raw = JSON.stringify({ ...current, schemaVersion: 33, data: v33Data });
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const migrated = loadPreview(storage, '2026-10-21');
+    expect(migrated.kind).toBe('loaded');
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+    if (migrated.kind !== 'loaded') return;
+    expect(migrated.data.timeBlocks).toEqual(createDefaultTimeBlockSettings());
+    expect(migrated.data.savedRhythms).toMatchObject([{
+      id: rhythmId,
+      timeOfDay: 'early-morning',
+      timeLabel: 'Early morning'
+    }]);
+  });
+
+  it('persists shared Prayer requests without changing Rhythm records and separates unlink from owner deletion', async () => {
+    const user = userEvent.setup();
+    window.localStorage.clear();
+    const initialData = createSamplePreviewData();
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(initialData)));
+    const openPerson = async (name: string) => {
+      await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+        .getByRole('button', { name: 'People' }));
+      await user.click(screen.getByRole('button', { name: `Open profile for ${name}` }));
+      await user.click(screen.getByRole('tab', { name: 'Prayer' }));
+    };
+
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await openPerson('Avery Brooks');
+    await user.click(screen.getByRole('button', { name: 'Add prayer request' }));
+    const editor = screen.getByRole('dialog', { name: 'Add prayer request' });
+    await user.type(within(editor).getByRole('textbox', { name: 'Title' }), 'Pray about school');
+    await user.click(within(editor).getByRole('button', { name: 'Choose people' }));
+    const picker = screen.getByRole('dialog', { name: 'Choose people to share this request with' });
+    await user.click(within(picker).getByRole('button', { name: 'Morgan Reed' }));
+    await user.click(within(picker).getByRole('button', { name: 'Done' }));
+    await user.click(within(editor).getByRole('button', { name: 'Save request' }));
+    let saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}') as {
+      data?: {
+        prayerRequests?: Array<Record<string, unknown> & { prayerLogs: unknown[] }>;
+        completedRhythmIds?: string[];
+        datedRhythmCompletions?: unknown[];
+        activeRhythmCompletions?: unknown[];
+      };
+    };
+    expect(saved.data?.prayerRequests).toHaveLength(1);
+    expect(saved.data?.prayerRequests?.[0]).toMatchObject({
+      personId: 'sample-person-avery',
+      sharedWith: ['sample-person-morgan'],
+      status: 'active',
+      prayerLogs: []
+    });
+
+    const rhythmState = {
+      completed: saved.data?.completedRhythmIds,
+      dated: saved.data?.datedRhythmCompletions,
+      active: saved.data?.activeRhythmCompletions
+    };
+    await user.click(screen.getByRole('button', { name: 'Prayed' }));
+    await user.click(screen.getByRole('button', { name: 'Answer' }));
+    saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}');
+    expect(saved.data?.prayerRequests?.[0]?.status).toBe('answered');
+    expect(saved.data?.prayerRequests?.[0]?.prayerLogs).toHaveLength(1);
+    expect({
+      completed: saved.data?.completedRhythmIds,
+      dated: saved.data?.datedRhythmCompletions,
+      active: saved.data?.activeRhythmCompletions
+    }).toEqual(rhythmState);
+    await user.click(screen.getByRole('button', { name: 'Reopen' }));
+
+    await user.click(screen.getByRole('button', { name: 'Back to People' }));
+    await openPerson('Morgan Reed');
+    expect(screen.getByRole('tabpanel', { name: 'Prayer' })).toBeTruthy();
+    expect(screen.getByRole('listitem')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Remove Pray about school from this profile' }));
+    const unlink = screen.getByRole('dialog', { name: 'Remove this request from this profile?' });
+    await user.click(within(unlink).getByRole('button', { name: 'Remove from profile' }));
+    saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}');
+    expect(saved.data?.prayerRequests).toHaveLength(1);
+    expect(saved.data?.prayerRequests?.[0]).toMatchObject({
+      personId: 'sample-person-avery',
+      sharedWith: [],
+      prayerLogs: [{ id: expect.any(String), prayedAt: expect.any(String) }]
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Back to People' }));
+    await openPerson('Avery Brooks');
+    await user.click(screen.getByRole('button', { name: 'Delete Pray about school' }));
+    const deletion = screen.getByRole('dialog', { name: 'Delete this request?' });
+    await user.click(within(deletion).getByRole('button', { name: 'Delete request' }));
+    saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}');
+    expect(saved.data?.prayerRequests).toEqual([]);
+    expect({
+      completed: saved.data?.completedRhythmIds,
+      dated: saved.data?.datedRhythmCompletions,
+      active: saved.data?.activeRhythmCompletions
+    }).toEqual(rhythmState);
   });
 
   it('renders imported strings as text and persists the confirmed preview replacement', async () => {
@@ -1654,6 +3201,7 @@ describe('preview backup controls', () => {
     imported.goals[0]!.title = '<script>synthetic</script>';
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
+    await openPreviewSettings(user);
     await user.upload(
       screen.getByLabelText('Import preview backup'),
       new File([JSON.stringify(createPreviewEnvelope(imported))], 'safe-data.json', { type: 'application/json' })
@@ -1686,10 +3234,10 @@ describe('preview backup controls', () => {
       newValue: { value: newValue }
     });
     window.dispatchEvent(storageEvent);
+    await openPreviewSettings(user);
     expect(await screen.findByText(/changed in another tab/)).toBeTruthy();
-    await user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Finances' }));
-    expect(screen.getByRole('article', { name: 'Starter reserve' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Reload other tab’s preview' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Finances' }));
     expect(await screen.findByRole('article', { name: 'Another tab reserve' })).toBeTruthy();
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(newValue);
 
@@ -1704,6 +3252,7 @@ describe('preview backup controls', () => {
       newValue: { value: laterValue }
     });
     window.dispatchEvent(laterEvent);
+    await openPreviewSettings(user);
     await screen.findByText(/changed in another tab/);
     await user.click(screen.getByRole('button', { name: 'Replace other tab’s data' }));
     const replaceDialog = await screen.findByRole('dialog', { name: 'Replace the other tab?' });
@@ -1713,17 +3262,116 @@ describe('preview backup controls', () => {
       .toBe('Another tab reserve');
   });
 
+  it('does not write default data when reloading after another tab removes the preview', async () => {
+    const user = userEvent.setup();
+    const initialData = createSamplePreviewData();
+    initialData.goals[0]!.title = 'Existing protected draft';
+    const initialRaw = JSON.stringify(createPreviewEnvelope(initialData));
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, initialRaw);
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+
+    window.localStorage.removeItem(PREVIEW_STORAGE_KEY);
+    const removalEvent = new Event('storage');
+    Object.defineProperties(removalEvent, {
+      key: { value: PREVIEW_STORAGE_KEY },
+      oldValue: { value: initialRaw },
+      newValue: { value: null }
+    });
+    window.dispatchEvent(removalEvent);
+    await openPreviewSettings(user);
+    await user.click(screen.getByRole('button', { name: 'Reload other tab’s preview' }));
+
+    expect(await screen.findByText(/removed in another tab/)).toBeTruthy();
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBeNull();
+  });
+
   it('reports blocked storage and quota errors without claiming that data was saved', async () => {
+    const user = userEvent.setup();
     vi.spyOn(MemoryStorage.prototype, 'getItem').mockImplementation(() => { throw new Error('Storage access denied'); });
     render(<App />);
-    expect(await screen.findByText(/Browser storage is unavailable/)).toBeTruthy();
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    await openPreviewSettings(user);
+    expect(screen.getByText(/Browser storage is unavailable/)).toBeTruthy();
     expect(screen.queryByText('Preview data saved in this browser.')).toBeNull();
     cleanup();
     vi.restoreAllMocks();
 
     vi.spyOn(MemoryStorage.prototype, 'setItem').mockImplementation(() => { throw new Error('Quota exceeded'); });
+    const { createObjectURL } = setDownloadMocks();
     render(<App />);
-    expect(await screen.findByText(/Preview data was not saved\. Quota exceeded/)).toBeTruthy();
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    const beforeUnload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(beforeUnload);
+    expect(beforeUnload.defaultPrevented).toBe(true);
+    await openPreviewSettings(user);
+    expect(screen.getByText(/Preview data was not saved on this device/)).toBeTruthy();
+    await user.click(screen.getByText('Technical save diagnostic'));
+    expect(screen.getByText('Quota exceeded')).toBeTruthy();
     expect(screen.queryByText('Preview data saved in this browser.')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Download privacy-safe diagnostic' }));
+    const diagnosticBlob = createObjectURL.mock.calls[0]![0] as Blob;
+    const diagnostic = JSON.parse(await diagnosticBlob.text()) as Record<string, unknown>;
+    expect(diagnostic).toMatchObject({
+      operation: 'save',
+      applicationSchemaVersion: PREVIEW_SCHEMA_VERSION,
+      rejectedRule: 'storage-operation-failed',
+      latestDraft: 'failed',
+      failureDetail: 'Quota exceeded'
+    });
+    expect(JSON.stringify(diagnostic)).not.toContain('Starter reserve');
+    vi.restoreAllMocks();
+    await user.click(screen.getByRole('button', { name: 'Retry saving' }));
+    expect(await screen.findByText('Preview data saved in this browser.')).toBeTruthy();
+    expect(loadPreview(window.localStorage, new Date().toISOString().slice(0, 10)).kind).toBe('loaded');
+  });
+
+  it('imports locally from More while account backup reads fail and never uploads the import', async () => {
+    const user = userEvent.setup();
+    const identity = createAuthenticatedPreviewIdentity('11111111-1111-4111-8111-111111111111', 1);
+    if (identity.kind !== 'authenticated') throw new Error('Test identity was not authenticated.');
+    const storage = browserPreviewStorage(identity);
+    const previous = createSamplePreviewData();
+    const previousRaw = JSON.stringify(createPreviewEnvelope(previous));
+    storage.setItem(PREVIEW_STORAGE_KEY, previousRaw);
+    const imported = createSamplePreviewData();
+    imported.goals[0]!.title = 'Synthetic imported goal';
+    const sourceRaw = JSON.stringify(createPreviewEnvelope(imported), null, 2);
+    const accountBackupApi: PreviewAccountBackupApi = {
+      read: vi.fn(async () => { throw new Error('Synthetic cloud read failure'); }),
+      save: vi.fn(async () => 1)
+    };
+
+    const app = testingRender(
+      <App identity={identity} accountBackupApi={accountBackupApi} />
+    );
+    await user.click(screen.getByRole('button', { name: 'More, settings' }));
+    await waitFor(() => expect(accountBackupApi.read).toHaveBeenCalled());
+    const more = screen.getByRole('main', { name: 'More' });
+    const importInput = within(more).getByLabelText('Import preview backup');
+    await user.upload(importInput, new File([sourceRaw], 'synthetic-preview.json', { type: 'application/json' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
+    expect(within(dialog).getByText(/replaces this account’s local Preview data/)).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
+
+    expect(await screen.findByText('Preview backup imported.')).toBeTruthy();
+    expect(loadPreview(browserPreviewStorage(identity), '2026-10-21')).toMatchObject({
+      kind: 'loaded',
+      data: imported
+    });
+    expect(loadPreviewImportRecovery(storage)).toMatchObject({
+      kind: 'loaded',
+      latestRaw: previousRaw,
+      latestSourceRaw: sourceRaw
+    });
+    expect(accountBackupApi.save).not.toHaveBeenCalled();
+
+    app.unmount();
+    testingRender(<App identity={identity} accountBackupApi={accountBackupApi} />);
+    expect(loadPreview(browserPreviewStorage(identity), '2026-10-21')).toMatchObject({
+      kind: 'loaded',
+      data: imported
+    });
+    expect(accountBackupApi.save).not.toHaveBeenCalled();
   });
 });

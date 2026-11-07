@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { todayRhythms } from '../src/domain/preview-data.ts';
+import { foundationCatalogue, todayRhythms } from '../src/domain/preview-data.ts';
 import {
   activeTodayRhythms,
   archiveRhythmId,
   archivedTodayRhythms,
   isEditableRhythmId,
+  normalizeRhythmPersonIds,
   resolveTodayRhythms,
   rhythmDraftFrom,
   rhythmsForCategory,
@@ -25,13 +26,80 @@ import {
 const validDraft: RhythmDraft = {
   title: 'Walk after lunch',
   description: 'A short synthetic example.',
-  cadence: '3 times a week',
+  cadence: 'Every day.',
   timeLabel: 'Afternoon',
+  schedule: { frequency: 'daily' },
   personIds: ['sample-person-avery'],
-  categoryIds: ['marriage']
+  categoryIds: ['marriage'],
+  primaryFoundationId: 'connection',
+  secondaryFoundationIds: []
 };
 
 describe('synthetic Rhythm editor domain', () => {
+  it('requires matching Practices per Foundation-backed category while tolerating legacy records', () => {
+    const faithPractice = foundationCatalogue.find(foundation =>
+      foundation.categoryId === 'faith'
+      && foundation.lifecycle === 'active'
+      && foundation.capabilities.rhythms
+    )!;
+    const faithDraft: RhythmDraft = {
+      ...validDraft,
+      categoryIds: ['faith'],
+      primaryFoundationId: null,
+      secondaryFoundationIds: []
+    };
+    expect(validateRhythmDraft(faithDraft).foundationIds)
+      .toBe('Choose a Practice to include this Rhythm in Faith Health.');
+    expect(validateRhythmDraft({
+      ...faithDraft,
+      primaryFoundationId: faithPractice.id
+    })).toEqual({});
+    expect(validateRhythmDraft({
+      ...faithDraft,
+      primaryFoundationId: 'connection'
+    }).foundationIds).toBe('Assign the Marriage category or unlink these Foundation links: Connection.');
+
+    const multipleCategories: RhythmDraft = {
+      ...faithDraft,
+      categoryIds: ['faith', 'marriage'],
+      primaryFoundationId: faithPractice.id
+    };
+    expect(validateRhythmDraft(multipleCategories).foundationIds)
+      .toBe('Choose a Foundation for Marriage to include this Rhythm in Marriage Health.');
+    expect(validateRhythmDraft({
+      ...multipleCategories,
+      secondaryFoundationIds: ['connection']
+    })).toEqual({});
+    expect(validateRhythmDraft({
+      ...faithDraft,
+      categoryIds: ['health']
+    }).foundationIds).toBe('Choose a Foundation for Health & Fitness to include this Rhythm in Health & Fitness scoring.');
+    expect(validateRhythmDraft({
+      ...faithDraft,
+      categoryIds: ['health'],
+      primaryFoundationId: 'health-strength'
+    })).toEqual({});
+
+    const legacy: SavedRhythm = {
+      id: 'user-rhythm-33333333-3333-4333-8333-333333333333',
+      title: 'Legacy Faith rhythm',
+      cadence: 'Daily',
+      timeLabel: 'Morning',
+      personIds: [],
+      categoryIds: ['faith']
+    };
+    expect(validateSavedRhythms([legacy])).toBe(true);
+    const loaded = resolveTodayRhythms([legacy]).find(rhythm => rhythm.id === legacy.id)!;
+    expect(loaded.categoryIds).toEqual(['faith']);
+    const legacyDraft = rhythmDraftFrom(loaded, legacy.categoryIds);
+    expect(saveRhythmDraft([legacy], legacyDraft, legacy.id, 'edit').errors.foundationIds)
+      .toBe('Choose a Practice to include this Rhythm in Faith Health.');
+    expect(saveRhythmDraft([legacy], {
+      ...legacyDraft,
+      primaryFoundationId: faithPractice.id
+    }, legacy.id, 'edit').errors).toEqual({});
+  });
+
   it('validates title, description, cadence, time, and identity associations', () => {
     expect(validateRhythmDraft({ ...validDraft })).toEqual({});
     expect(validateRhythmDraft({
@@ -42,7 +110,11 @@ describe('synthetic Rhythm editor domain', () => {
       timeLabel: 'Overnight',
       personIds: ['not-a-synthetic-person'],
       categoryIds: ['not-a-category']
-    } as unknown as RhythmDraft)).toMatchObject({
+    } as unknown as RhythmDraft, undefined, [
+      'sample-person-avery',
+      'sample-person-morgan',
+      'sample-person-jordan'
+    ])).toMatchObject({
       title: expect.any(String),
       description: expect.any(String),
       cadence: expect.any(String),
@@ -50,6 +122,31 @@ describe('synthetic Rhythm editor domain', () => {
       personIds: expect.any(String),
       categoryIds: expect.any(String)
     });
+  });
+
+  it('distinguishes repeated and unavailable imported People IDs from category/Foundation errors', () => {
+    const amy = 'legacy-person-amy-01' as const;
+    const knownPersonIds = [amy, 'legacy-person-amy-02'];
+    expect(normalizeRhythmPersonIds([amy, amy, knownPersonIds[1]!]))
+      .toEqual([amy, knownPersonIds[1]]);
+    expect(validateRhythmDraft({
+      ...validDraft,
+      personIds: [amy, amy]
+    }, foundationCatalogue, knownPersonIds).personIds)
+      .toBe('Repeated People references must be resolved in Choose people.');
+
+    const unavailable = validateRhythmDraft({
+      ...validDraft,
+      personIds: [amy, 'retired-person-id'],
+      categoryIds: ['faith'],
+      primaryFoundationId: null,
+      secondaryFoundationIds: []
+    }, foundationCatalogue, knownPersonIds);
+    expect(unavailable).toMatchObject({
+      personIds: 'One or more selected people are unavailable. Open Choose people to remove or resolve these references.',
+      foundationIds: expect.stringContaining('Choose a Practice')
+    });
+    expect(unavailable.personIds).not.toContain('at most once');
   });
 
   it('creates a stable namespaced identity and resolves its category and people associations', () => {
@@ -108,7 +205,10 @@ describe('synthetic Rhythm editor domain', () => {
     };
     const result = saveRhythmDraft([existing], {
       ...validDraft,
-      title: 'Updated title'
+      title: 'Updated title',
+      schedule: existing.schedule,
+      originalSchedule: existing.schedule,
+      scheduleEditing: true
     }, id, 'edit');
     expect(result.errors).toEqual({});
     expect(result.savedRhythms?.[0]).toMatchObject({
@@ -142,9 +242,80 @@ describe('synthetic Rhythm editor domain', () => {
       timeLabel: fixture.timeLabel,
       personIds: fixture.personIds,
       categoryIds: [],
+      schedule: { frequency: 'daily' },
       originalSchedule: { frequency: 'daily' },
       scheduleEditing: false
     });
+  });
+
+  it('uses the supported effective schedule without persisting an unchanged legacy fallback', () => {
+    const fixture = todayRhythms[1]!;
+    expect(fixture.schedule).toBeUndefined();
+    const draft = rhythmDraftFrom(fixture);
+    expect(draft.schedule).toEqual({ frequency: 'daily' });
+    expect(draft.originalSchedule).toEqual({ frequency: 'daily' });
+
+    const saved = saveRhythmDraft([], {
+      ...draft,
+      title: 'Updated without changing frequency'
+    }, fixture.id, 'edit');
+    expect(saved.errors).toEqual({});
+    expect(saved.savedRhythms?.[0]?.schedule).toBeUndefined();
+  });
+
+  it('uses the active Season schedule and time of day as the editor effective values', () => {
+    const id = 'user-rhythm-123e4567-e89b-42d3-a456-426614174000';
+    const historicalSchedule = { frequency: 'daily' as const };
+    const activeSchedule = {
+      frequency: 'quarterly' as const,
+      monthInQuarter: 2 as const,
+      pattern: { kind: 'ordinalWeekday' as const, ordinal: 2 as const, weekday: 3 as const },
+      endDate: '2027-12-31'
+    };
+    const rhythm = {
+      ...todayRhythms[0]!,
+      id,
+      cadence: 'Daily',
+      schedule: historicalSchedule,
+      scoring: {
+        trackingStartDate: '2026-01-01',
+        timeZone: 'UTC',
+        scheduleHistory: [
+          createRhythmSeason(id, '2026-01-01', historicalSchedule, 'anytime'),
+          createRhythmSeason(id, '2026-06-01', activeSchedule, 'early-morning')
+        ]
+      }
+    };
+
+    const draft = rhythmDraftFrom(rhythm, [], '2026-10-28');
+    expect(draft.schedule).toEqual(activeSchedule);
+    expect(draft.originalSchedule).toEqual(activeSchedule);
+    expect(draft.timeLabel).toBe('Early morning');
+  });
+
+  it('does not infer a schedule from a descriptive cadence or an unknown active Season', () => {
+    const descriptive = { ...todayRhythms[2]!, cadence: '3 times a week' };
+    const descriptiveDraft = rhythmDraftFrom(descriptive);
+    expect(descriptiveDraft.schedule).toBeUndefined();
+    expect(descriptiveDraft.originalSchedule).toBeUndefined();
+    expect(descriptiveDraft.scheduleEditing).toBe(true);
+
+    const id = 'user-rhythm-123e4567-e89b-42d3-a456-426614174000';
+    const rhythm = {
+      ...todayRhythms[0]!,
+      id,
+      cadence: 'Daily',
+      schedule: { frequency: 'daily' as const },
+      scoring: {
+        trackingStartDate: '2026-01-01',
+        timeZone: 'UTC',
+        scheduleHistory: [createUnknownRhythmSeason(id, '2026-01-01', 'Daily')]
+      }
+    };
+    const unknownSeasonDraft = rhythmDraftFrom(rhythm, [], '2026-10-28');
+    expect(unknownSeasonDraft.schedule).toBeUndefined();
+    expect(unknownSeasonDraft.originalSchedule).toBeUndefined();
+    expect(unknownSeasonDraft.scheduleEditing).toBe(true);
   });
 
   it('keeps creation and scoring metadata out of an unconfirmed draft', () => {
@@ -547,8 +718,8 @@ describe('synthetic Rhythm editor domain', () => {
     expect(result.savedRhythms?.[0]?.schedule).toEqual(changedSchedule);
   });
 
-  it('preserves descriptive cadence when unrelated fields are saved', () => {
-    const fixture = todayRhythms[1]!;
+  it('requires an ambiguous legacy frequency to be resolved before saving unrelated edits', () => {
+    const fixture = todayRhythms[2]!;
     const originalCadence = fixture.cadence!;
     const draft = {
       ...rhythmDraftFrom(fixture),
@@ -557,17 +728,13 @@ describe('synthetic Rhythm editor domain', () => {
     };
 
     const result = saveRhythmDraft([], draft, fixture.id, 'edit');
-    expect(result.errors).toEqual({});
-    expect(result.savedRhythms?.[0]).toMatchObject({
-      id: fixture.id,
-      title: 'Updated title only',
-      cadence: originalCadence,
-      timeLabel: 'Evening'
-    });
-    expect(result.savedRhythms?.[0]?.schedule).toBeUndefined();
+    expect(result.errors.schedule).toBe('Complete the schedule details before saving.');
+    expect(result.savedRhythms).toBeUndefined();
+    expect(fixture.cadence).toBe(originalCadence);
+    expect(fixture.schedule).toBeUndefined();
   });
 
-  it('keeps supported v4 descriptive labels editable without converting them', () => {
+  it('preserves an imported ambiguous cadence until the user chooses a structured schedule', () => {
     const id = 'user-rhythm-11111111-1111-4111-8111-111111111111';
     const existing = {
       id,
@@ -589,16 +756,23 @@ describe('synthetic Rhythm editor domain', () => {
     };
     const result = saveRhythmDraft([existing], draft, id, 'edit');
 
-    expect(result.errors).toEqual({});
-    expect(result.savedRhythms?.[0]).toMatchObject({
-      cadence: 'Every other week'
-    });
-    expect(result.savedRhythms?.[0]?.schedule).toBeUndefined();
+    expect(result.errors.schedule).toBe('Complete the schedule details before saving.');
+    expect(result.savedRhythms).toBeUndefined();
+    expect(existing).toMatchObject({ cadence: 'Every other week' });
+    expect(Object.hasOwn(existing, 'schedule')).toBe(false);
+  });
+
+  it('requires a supported schedule in the shared command for new Rhythms', () => {
+    const { schedule: _schedule, ...withoutSchedule } = validDraft;
+    const result = saveRhythmDraft([], withoutSchedule, 'user-rhythm-123e4567-e89b-42d3-a456-426614174000', 'create');
+    expect(result.errors.schedule).toBe('Complete the schedule details before saving.');
+    expect(result.savedRhythms).toBeUndefined();
   });
 
   it('requires an explicit valid schedule when schedule editing is enabled', () => {
+    const { schedule: _schedule, ...withoutSchedule } = validDraft;
     expect(validateRhythmDraft({
-      ...validDraft,
+      ...withoutSchedule,
       scheduleEditing: true
     })).toMatchObject({ schedule: expect.any(String) });
     expect(validateRhythmDraft({

@@ -4,16 +4,25 @@ import type { CSSProperties, KeyboardEvent } from 'react';
 export type StyledSelectOption<Value extends string> = {
   value: Value;
   label: string;
+  description?: string;
+  group?: string;
   disabled?: boolean;
 };
 
 type StyledSelectProps<Value extends string> = {
+  id?: string;
   label: string;
   options: readonly StyledSelectOption<Value>[];
   value: Value | '';
   placeholder?: string;
   describedBy?: string | undefined;
   invalid?: boolean | undefined;
+  disabled?: boolean | undefined;
+  containerClassName?: string | undefined;
+  triggerClassName?: string | undefined;
+  triggerAriaLabel?: string | undefined;
+  sizeTriggerToOptions?: boolean | undefined;
+  popoverMinWidth?: number | undefined;
   onChange: (value: Value) => void;
 };
 
@@ -25,15 +34,23 @@ type PopoverPosition = CSSProperties & {
 };
 
 export function StyledSelect<Value extends string>({
+  id: providedId,
   label,
   options,
   value,
   placeholder = 'Choose…',
   describedBy,
   invalid = false,
+  disabled = false,
+  containerClassName,
+  triggerClassName,
+  triggerAriaLabel,
+  sizeTriggerToOptions = false,
+  popoverMinWidth = 280,
   onChange
 }: StyledSelectProps<Value>) {
-  const id = useId();
+  const generatedId = useId();
+  const id = providedId ?? generatedId;
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const optionRefs = useRef<Array<HTMLDivElement | null>>([]);
@@ -44,6 +61,16 @@ export function StyledSelect<Value extends string>({
   const [position, setPosition] = useState<PopoverPosition>();
   const selectedIndex = Math.max(0, options.findIndex(option => option.value === value));
   const selectedOption = options.find(option => option.value === value);
+  const optionGroups: Array<{ label: string; options: Array<{ option: StyledSelectOption<Value>; index: number }> }> = [];
+  options.forEach((option, index) => {
+    const label = option.group ?? '';
+    let group = optionGroups[optionGroups.length - 1];
+    if (!group || group.label !== label) {
+      group = { label, options: [] };
+      optionGroups.push(group);
+    }
+    group.options.push({ option, index });
+  });
   const firstEnabledIndex = options.findIndex(option => !option.disabled);
   let lastEnabledIndex = -1;
   for (let index = options.length - 1; index >= 0; index -= 1) {
@@ -57,8 +84,9 @@ export function StyledSelect<Value extends string>({
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const viewportPadding = 12;
+    const minPopoverWidth = Math.min(popoverMinWidth, window.innerWidth - viewportPadding * 2);
     const width = Math.min(
-      Math.max(rect.width, Math.min(280, window.innerWidth - viewportPadding * 2)),
+      Math.max(rect.width, minPopoverWidth),
       window.innerWidth - viewportPadding * 2
     );
     const left = Math.min(
@@ -89,16 +117,21 @@ export function StyledSelect<Value extends string>({
     optionRefs.current[next]?.focus();
   }
 
-  function openMenu(index = selectedIndex) {
-    if (firstEnabledIndex < 0) return;
-    setActiveIndex(index);
+  function openMenu(index = selectedIndex, direction: 1 | -1 = 1) {
+    if (disabled || firstEnabledIndex < 0) return;
+    let next = (index + options.length) % options.length;
+    for (let attempt = 0; options[next]?.disabled && attempt < options.length; attempt += 1) {
+      next = (next + direction + options.length) % options.length;
+    }
+    if (options[next]?.disabled) return;
+    setActiveIndex(next);
     updatePosition();
     setOpen(true);
   }
 
   function closeMenu(restoreFocus = true) {
     setOpen(false);
-    if (restoreFocus) triggerRef.current?.focus();
+    if (restoreFocus) triggerRef.current?.focus({ preventScroll: true });
   }
 
   function selectOption(index: number) {
@@ -183,14 +216,17 @@ export function StyledSelect<Value extends string>({
   useEffect(() => () => window.clearTimeout(typeaheadTimerRef.current), []);
 
   return (
-    <div className="rhythm-select" ref={containerRef}>
+    <div className={['rhythm-select', containerClassName].filter(Boolean).join(' ')} ref={containerRef}>
       <button
         ref={triggerRef}
         id={id}
         type="button"
-        className="rhythm-select__trigger"
+        className={['rhythm-select__trigger', sizeTriggerToOptions && 'rhythm-select__trigger--size-to-options', triggerClassName]
+          .filter(Boolean)
+          .join(' ')}
+        disabled={disabled}
         role="combobox"
-        aria-label={`${label}: ${selectedOption?.label ?? placeholder}`}
+        aria-label={triggerAriaLabel ?? `${label}: ${selectedOption?.label ?? placeholder}`}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={`${id}-listbox`}
@@ -206,10 +242,10 @@ export function StyledSelect<Value extends string>({
             openMenu(selectedIndex - 1);
           } else if (event.key === 'Home') {
             event.preventDefault();
-            openMenu(0);
+            openMenu(0, 1);
           } else if (event.key === 'End') {
             event.preventDefault();
-            openMenu(options.length - 1);
+            openMenu(options.length - 1, -1);
           } else if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
             openMenu();
@@ -227,6 +263,11 @@ export function StyledSelect<Value extends string>({
         }}
       >
         <span>{selectedOption?.label ?? placeholder}</span>
+        {sizeTriggerToOptions && (
+          <span className="rhythm-select__trigger-sizer" aria-hidden="true">
+            {options.map(option => <span key={option.value}>{option.label}</span>)}
+          </span>
+        )}
         <svg viewBox="0 0 20 20" aria-hidden="true">
           <path d="m5 7.5 5 5 5-5" />
         </svg>
@@ -240,26 +281,39 @@ export function StyledSelect<Value extends string>({
           style={position}
           onKeyDown={handleOptionKeyDown}
         >
-          {options.map((option, index) => (
-            <div
-              key={option.value}
-              ref={element => { optionRefs.current[index] = element; }}
-              className="rhythm-select__option"
-              role="option"
-              aria-selected={value === option.value}
-              aria-disabled={option.disabled || undefined}
-              tabIndex={-1}
-              onFocus={() => setActiveIndex(index)}
-              onClick={() => selectOption(index)}
-            >
-              <span>{option.label}</span>
-              {value === option.value && (
-                <svg viewBox="0 0 20 20" aria-hidden="true">
-                  <path d="m4 10 4 4 8-8" />
-                </svg>
-              )}
-            </div>
-          ))}
+          {optionGroups.map(group => {
+            const choices = group.options.map(({ option, index }) => (
+              <div
+                key={option.value}
+                ref={element => { optionRefs.current[index] = element; }}
+                className="rhythm-select__option"
+                role="option"
+                aria-selected={value === option.value}
+                aria-disabled={option.disabled ? true : false}
+                tabIndex={-1}
+                onFocus={() => setActiveIndex(index)}
+                onClick={() => selectOption(index)}
+              >
+                <span className="rhythm-select__option-copy">
+                  <span>{option.label}</span>
+                  {option.description && <small>{option.description}</small>}
+                </span>
+                {value === option.value && (
+                  <svg viewBox="0 0 20 20" aria-hidden="true">
+                    <path d="m4 10 4 4 8-8" />
+                  </svg>
+                )}
+              </div>
+            ));
+            return group.label
+              ? (
+                <div key={group.label} className="rhythm-select__group" role="group" aria-label={group.label}>
+                  <span className="rhythm-select__group-label" aria-hidden="true">{group.label}</span>
+                  {choices}
+                </div>
+              )
+              : choices;
+          })}
         </div>
       )}
     </div>

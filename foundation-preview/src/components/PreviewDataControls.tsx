@@ -1,29 +1,40 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
-import { createPreviewEnvelope, parsePreviewBackup } from '../domain/preview-state.ts';
+import { createPreviewEnvelope } from '../domain/preview-state.ts';
 import type { PreviewData } from '../domain/preview-state.ts';
+import { analyzeLegacyTendImport } from '../domain/legacy-import.ts';
+import type { LegacyImportDryRun } from '../domain/legacy-import.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
+import type { PreviewStorageDiagnostic } from '../storage/preview-storage.ts';
+import { PreviewBackupImportControl } from './PreviewBackupImportControl.tsx';
+import { downloadText } from './preview-download.ts';
 
 export type PreviewPersistenceStatus =
   | { kind: 'loading' }
   | { kind: 'saving' }
   | { kind: 'saved' }
   | { kind: 'unavailable'; message: string }
-  | { kind: 'error'; message: string }
+  | { kind: 'error'; message: string; diagnostic?: PreviewStorageDiagnostic }
   | { kind: 'corrupt'; message: string; raw: string }
   | { kind: 'unsupported'; message: string; raw: string }
   | { kind: 'conflict' };
 
 type PendingAction =
-  | { kind: 'import'; data: PreviewData; hasArchiveStatus: boolean }
   | { kind: 'reset' }
   | { kind: 'replace-external' };
 
 type PreviewDataControlsProps = {
+  hidden?: boolean;
   data: PreviewData;
   status: PreviewPersistenceStatus;
   currentDate: string;
-  onImport: (data: PreviewData) => string | null;
+  importRecoveryRaw?: string | null;
+  importRecoverySourceRaw?: string | null;
+  importRecoveryArchiveRaw?: string | null;
+  importRecoveryError?: string | null;
+  rawRecoveryCopy?: string | null;
+  rawRecoveryError?: string | null;
+  onImport: (data: PreviewData, sourceRaw?: string) => string | null;
   onReset: () => string | null;
   onRetrySave: () => void;
   onReloadExternal: () => string | null;
@@ -50,29 +61,69 @@ type PreviewDataControlsProps = {
   v10RecoveryError?: string | null;
   v11RecoveryCopy?: string | null;
   v11RecoveryError?: string | null;
+  v12RecoveryCopy?: string | null;
+  v12RecoveryError?: string | null;
+  v13RecoveryCopy?: string | null;
+  v13RecoveryError?: string | null;
+  v14RecoveryCopy?: string | null;
+  v14RecoveryError?: string | null;
+  v15RecoveryCopy?: string | null;
+  v15RecoveryError?: string | null;
+  v16RecoveryCopy?: string | null;
+  v16RecoveryError?: string | null;
+  v17RecoveryCopy?: string | null;
+  v17RecoveryError?: string | null;
+  v18RecoveryCopy?: string | null;
+  v18RecoveryError?: string | null;
+  v19RecoveryCopy?: string | null;
+  v19RecoveryError?: string | null;
+  v20RecoveryCopy?: string | null;
+  v20RecoveryError?: string | null;
+  v21RecoveryCopy?: string | null;
+  v21RecoveryError?: string | null;
+  v22RecoveryCopy?: string | null;
+  v22RecoveryError?: string | null;
+  v23RecoveryCopy?: string | null;
+  v23RecoveryError?: string | null;
+  v24RecoveryCopy?: string | null;
+  v24RecoveryError?: string | null;
+  v25RecoveryCopy?: string | null;
+  v25RecoveryError?: string | null;
+  v26RecoveryCopy?: string | null;
+  v26RecoveryError?: string | null;
+  v27RecoveryCopy?: string | null;
+  v27RecoveryError?: string | null;
+  v28RecoveryCopy?: string | null;
+  v28RecoveryError?: string | null;
+  v29RecoveryCopy?: string | null;
+  v29RecoveryError?: string | null;
+  v30RecoveryCopy?: string | null;
+  v30RecoveryError?: string | null;
+  v31RecoveryCopy?: string | null;
+  v31RecoveryError?: string | null;
+  v32RecoveryCopy?: string | null;
+  v32RecoveryError?: string | null;
+  v33RecoveryCopy?: string | null;
+  v33RecoveryError?: string | null;
+  v34RecoveryCopy?: string | null;
+  v34RecoveryError?: string | null;
+  v35RecoveryCopy?: string | null;
+  v35RecoveryError?: string | null;
+  v36RecoveryCopy?: string | null;
+  v36RecoveryError?: string | null;
 };
 
-function downloadText(filename: string, content: string, type: string): string | null {
-  try {
-    const url = URL.createObjectURL(new Blob([content], { type }));
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    anchor.style.display = 'none';
-    document.body.append(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-    return null;
-  } catch (error) {
-    return error instanceof Error ? error.message : 'The browser could not start the download.';
-  }
-}
-
 export function PreviewDataControls({
+  hidden = false,
   data,
   status,
   currentDate,
+  importRecoveryRaw = null,
+  importRecoverySourceRaw = null,
+  importRecoveryArchiveRaw = null,
+  importRecoveryError = null,
+  rawRecoveryCopy = null,
+  rawRecoveryError = null,
   onImport,
   onReset,
   onRetrySave,
@@ -99,11 +150,74 @@ export function PreviewDataControls({
   v10RecoveryCopy = null,
   v10RecoveryError = null,
   v11RecoveryCopy = null,
-  v11RecoveryError = null
+  v11RecoveryError = null,
+  v12RecoveryCopy = null,
+  v12RecoveryError = null,
+  v13RecoveryCopy = null,
+  v13RecoveryError = null,
+  v14RecoveryCopy = null,
+  v14RecoveryError = null,
+  v15RecoveryCopy = null,
+  v15RecoveryError = null,
+  v16RecoveryCopy = null,
+  v16RecoveryError = null,
+  v17RecoveryCopy = null,
+  v17RecoveryError = null,
+  v18RecoveryCopy = null,
+  v18RecoveryError = null,
+  v19RecoveryCopy = null,
+  v19RecoveryError = null,
+  v20RecoveryCopy = null,
+  v20RecoveryError = null,
+  v21RecoveryCopy = null,
+  v21RecoveryError = null,
+  v22RecoveryCopy = null,
+  v22RecoveryError = null,
+  v23RecoveryCopy = null,
+  v23RecoveryError = null,
+  v24RecoveryCopy = null,
+  v24RecoveryError = null,
+  v25RecoveryCopy = null,
+  v25RecoveryError = null,
+  v26RecoveryCopy = null,
+  v26RecoveryError = null,
+  v27RecoveryCopy = null,
+  v27RecoveryError = null,
+  v28RecoveryCopy = null,
+  v28RecoveryError = null,
+  v29RecoveryCopy = null,
+  v29RecoveryError = null,
+  v30RecoveryCopy = null,
+  v30RecoveryError = null,
+  v31RecoveryCopy = null,
+  v31RecoveryError = null,
+  v32RecoveryCopy = null,
+  v32RecoveryError = null,
+  v33RecoveryCopy = null,
+  v33RecoveryError = null,
+  v34RecoveryCopy = null,
+  v34RecoveryError = null,
+  v35RecoveryCopy = null,
+  v35RecoveryError = null,
+  v36RecoveryCopy = null,
+  v36RecoveryError = null
 }: PreviewDataControlsProps) {
-  const fileInput = useRef<HTMLInputElement>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [legacyDryRun, setLegacyDryRun] = useState<LegacyImportDryRun | null>(null);
+  const [legacyPackageDownloaded, setLegacyPackageDownloaded] = useState(false);
+  const [legacyImportConfirmed, setLegacyImportConfirmed] = useState(false);
+  const [legacyExclusionsConfirmed, setLegacyExclusionsConfirmed] = useState(false);
   const [message, setMessage] = useState('');
+  const activeRef = useRef(true);
+  const readersRef = useRef(new Set<FileReader>());
+  useEffect(() => {
+    activeRef.current = true;
+    return () => {
+      activeRef.current = false;
+      for (const reader of readersRef.current) reader.abort();
+      readersRef.current.clear();
+    };
+  }, []);
 
   function exportCurrent() {
     const error = downloadText(
@@ -119,42 +233,66 @@ export function PreviewDataControls({
     setMessage(error ?? 'Raw recovery file downloaded unchanged.');
   }
 
-  function readImport(event: ChangeEvent<HTMLInputElement>) {
+  function readLegacyImport(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = '';
     if (!file) return;
     const reader = new FileReader();
-    reader.onerror = () => setMessage('The selected backup could not be read.');
+    readersRef.current.add(reader);
+    reader.onloadend = () => readersRef.current.delete(reader);
+    reader.onerror = () => {
+      if (activeRef.current) setMessage('The selected Classic export could not be read.');
+    };
     reader.onload = () => {
-      const result = parsePreviewBackup(String(reader.result ?? ''), currentDate);
-      if (!result.valid) {
-        setMessage(result.message);
-        return;
-      }
+      if (!activeRef.current) return;
+      const dryRun = analyzeLegacyTendImport(String(reader.result ?? ''), currentDate);
+      setLegacyDryRun(dryRun);
+      setLegacyPackageDownloaded(false);
+      setLegacyImportConfirmed(false);
+      setLegacyExclusionsConfirmed(false);
       setMessage('');
-      setPendingAction({
-        kind: 'import',
-        data: result.envelope.data,
-        hasArchiveStatus: result.sourceSchemaVersion >= 3
-      });
     };
     reader.readAsText(file);
   }
 
-  function confirmPendingAction() {
-    if (!pendingAction) return;
-    const error = pendingAction.kind === 'import'
-      ? onImport(pendingAction.data)
-      : pendingAction.kind === 'reset'
-        ? onReset()
-        : onReplaceExternal();
+  function downloadLegacyRecoveryPackage() {
+    if (!legacyDryRun) return;
+    const error = downloadText(
+      'tend-classic-migration-recovery.json',
+      legacyDryRun.recoveryPackage,
+      'application/json'
+    );
     if (error) {
       setMessage(error);
       return;
     }
-    setMessage(pendingAction.kind === 'import'
-      ? 'Preview backup imported.'
-      : pendingAction.kind === 'reset'
+    setLegacyPackageDownloaded(true);
+    setMessage('Classic migration recovery package downloaded.');
+  }
+
+  function confirmLegacyImport() {
+    if (!legacyDryRun?.candidate || !legacyPackageDownloaded || !legacyImportConfirmed
+      || legacyDryRun.report.excluded.length > 0 && !legacyExclusionsConfirmed) return;
+    const error = onImport(legacyDryRun.candidate);
+    if (error) {
+      setMessage(error);
+      return;
+    }
+    setLegacyDryRun(null);
+    setLegacyPackageDownloaded(false);
+    setLegacyImportConfirmed(false);
+    setLegacyExclusionsConfirmed(false);
+    setMessage('Supported Classic data imported into the synthetic preview.');
+  }
+
+  function confirmPendingAction() {
+    if (!pendingAction) return;
+    const error = pendingAction.kind === 'reset' ? onReset() : onReplaceExternal();
+    if (error) {
+      setMessage(error);
+      return;
+    }
+    setMessage(pendingAction.kind === 'reset'
         ? 'Sample data restored.'
         : 'This preview replaced the other tab’s saved data.');
     setPendingAction(null);
@@ -169,7 +307,7 @@ export function PreviewDataControls({
         : status.kind === 'unavailable'
           ? `Browser storage is unavailable. Changes are not saved. ${status.message}`
           : status.kind === 'error'
-            ? `Preview data was not saved. ${status.message}`
+            ? 'Preview data was not saved on this device. Your changes remain open in this tab. Retry before leaving.'
             : status.kind === 'corrupt'
               ? `Saved preview data could not be read. The original value is preserved. ${status.message}`
               : status.kind === 'unsupported'
@@ -177,10 +315,13 @@ export function PreviewDataControls({
                 : 'This preview changed in another tab. Reload it or explicitly replace it after downloading a backup.';
 
   return (
-    <section className="preview-data-controls card" aria-label="Preview data and backups">
+    <section className="preview-data-controls card" aria-label="Preview data and backups" hidden={hidden}>
       <div className="preview-data-controls__copy">
         <p className="preview-data-controls__notice" role={status.kind === 'saved' ? 'status' : 'alert'}>
           <strong>{statusMessage}</strong> This is separate from your live Tend account and does not sync across devices.
+        </p>
+        <p className="preview-data-controls__help">
+          The preview backup contains the current confirmed app state; unconfirmed form drafts may not be included. Exact raw recovery is a separate immutable copy of the stored source.
         </p>
         {status.kind === 'conflict' && (
           <p className="preview-data-controls__help">Another preview tab changed this storage key. No further writes will occur until you choose what to do.</p>
@@ -191,6 +332,16 @@ export function PreviewDataControls({
       </div>
       <div className="preview-data-controls__actions">
         <button type="button" className="btn mini ghost" onClick={exportCurrent} disabled={status.kind === 'loading'}>Export preview backup</button>
+        <PreviewBackupImportControl
+          data={data}
+          status={status}
+          currentDate={currentDate}
+          onImport={onImport}
+          recoveryRaw={importRecoveryRaw}
+          recoverySourceRaw={importRecoverySourceRaw}
+          recoveryArchiveRaw={importRecoveryArchiveRaw}
+          recoveryError={importRecoveryError}
+        />
         {v1RecoveryCopy !== null && (
           <button
             type="button"
@@ -334,14 +485,278 @@ export function PreviewDataControls({
             Download original v11 recovery backup
           </button>
         )}
+        {v12RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v12-recovery.json',
+              v12RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v12 recovery backup downloaded.')}
+          >
+            Download original v12 recovery backup
+          </button>
+        )}
+        {v13RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v13-recovery.json',
+              v13RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v13 recovery backup downloaded.')}
+          >
+            Download original v13 recovery backup
+          </button>
+        )}
+        {v14RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v14-recovery.json',
+              v14RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v14 recovery backup downloaded.')}
+          >
+            Download original v14 recovery backup
+          </button>
+        )}
+        {v15RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v15-recovery.json',
+              v15RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v15 recovery backup downloaded.')}
+          >
+            Download original v15 recovery backup
+          </button>
+        )}
+        {v16RecoveryCopy !== null && (
+          <button
+            type="button"
+            className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v16-recovery.json',
+              v16RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v16 recovery backup downloaded.')}
+          >
+            Download original v16 recovery backup
+          </button>
+        )}
+        {v17RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v17-recovery.json',
+              v17RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v17 recovery backup downloaded.')}>
+            Download original v17 recovery backup
+          </button>
+        )}
+        {v18RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v18-recovery.json',
+              v18RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v18 recovery backup downloaded.')}>
+            Download original v18 recovery backup
+          </button>
+        )}
+        {v19RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v19-recovery.json',
+              v19RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v19 recovery backup downloaded.')}>
+            Download original v19 recovery backup
+          </button>
+        )}
+        {v20RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v20-recovery.json',
+              v20RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v20 recovery backup downloaded.')}>
+            Download original v20 recovery backup
+          </button>
+        )}
+        {v21RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v21-recovery.json',
+              v21RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v21 recovery backup downloaded.')}>
+            Download original v21 recovery backup
+          </button>
+        )}
+        {v22RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v22-recovery.json',
+              v22RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v22 recovery backup downloaded.')}>
+            Download original v22 recovery backup
+          </button>
+        )}
+        {v23RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v23-recovery.json',
+              v23RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v23 recovery backup downloaded.')}>
+            Download original v23 recovery backup
+          </button>
+        )}
+        {v24RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v24-recovery.json',
+              v24RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v24 recovery backup downloaded.')}>
+            Download original v24 recovery backup
+          </button>
+        )}
+        {v25RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v25-recovery.json',
+              v25RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v25 recovery backup downloaded.')}>
+            Download original v25 recovery backup
+          </button>
+        )}
+        {v26RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v26-recovery.json',
+              v26RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v26 recovery backup downloaded.')}>
+            Download original v26 recovery backup
+          </button>
+        )}
+        {v27RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v27-recovery.json',
+              v27RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v27 recovery backup downloaded.')}>
+            Download original v27 recovery backup
+          </button>
+        )}
+        {v28RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v28-recovery.json',
+              v28RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v28 recovery backup downloaded.')}>
+            Download original v28 recovery backup
+          </button>
+        )}
+        {v29RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v29-recovery.json',
+              v29RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v29 recovery backup downloaded.')}>
+            Download original v29 recovery backup
+          </button>
+        )}
+        {v30RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v30-recovery.json',
+              v30RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v30 recovery backup downloaded.')}>
+            Download original v30 recovery backup
+          </button>
+        )}
+        {v31RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v31-recovery.json',
+              v31RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v31 recovery backup downloaded.')}>
+            Download original v31 recovery backup
+          </button>
+        )}
+        {v32RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v32-recovery.json',
+              v32RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v32 recovery backup downloaded.')}>
+            Download original v32 recovery backup
+          </button>
+        )}
+        {v33RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v33-recovery.json',
+              v33RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v33 recovery backup downloaded.')}>
+            Download original v33 recovery backup
+          </button>
+        )}
+        {v34RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v34-recovery.json',
+              v34RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v34 recovery backup downloaded.')}>
+            Download original v34 recovery backup
+          </button>
+        )}
+        {v35RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v35-recovery.json',
+              v35RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v35 recovery backup downloaded.')}>
+            Download original v35 recovery backup
+          </button>
+        )}
+        {v36RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v36-recovery.json',
+              v36RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v36 recovery backup downloaded.')}>
+            Download original v36 recovery backup
+          </button>
+        )}
         <label className="btn mini ghost preview-data-controls__file-button">
-          Import preview backup
+          Dry-run Classic Tend import
           <input
-            ref={fileInput}
             type="file"
             accept="application/json,.json"
-            aria-label="Import preview backup"
-            onChange={readImport}
+            aria-label="Dry-run Classic Tend import"
+            onChange={readLegacyImport}
             disabled={status.kind === 'loading'}
           />
         </label>
@@ -355,6 +770,40 @@ export function PreviewDataControls({
         </button>
         {status.kind === 'error' && (
           <button type="button" className="btn mini ghost" onClick={onRetrySave}>Retry saving</button>
+        )}
+        {rawRecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost" onClick={() => setMessage(downloadText(
+            'tend-synthetic-preview-exact-raw-recovery.json',
+            rawRecoveryCopy,
+            'application/json'
+          ) ?? 'Exact raw recovery copy downloaded.')}>
+            Download exact raw recovery copy
+          </button>
+        )}
+        {status.kind === 'error' && status.diagnostic && (
+          <details className="preview-data-controls__diagnostic">
+            <summary>Technical save diagnostic</summary>
+            <dl>
+              <dt>Operation</dt><dd>{status.diagnostic.operation}</dd>
+              <dt>Source schema</dt><dd>{status.diagnostic.sourceSchemaVersion ?? 'unknown'}</dd>
+              <dt>Application schema</dt><dd>{status.diagnostic.applicationSchemaVersion}</dd>
+              <dt>Rejected rule</dt><dd>{status.diagnostic.rejectedRule}</dd>
+              <dt>Recovery-key lookup</dt><dd>{status.diagnostic.recoveryKeyLookup}</dd>
+              <dt>Migration validation</dt><dd>{status.diagnostic.migrationValidation}</dd>
+              <dt>Concurrent change</dt><dd>{status.diagnostic.concurrentModification}</dd>
+              <dt>Latest draft</dt><dd>{status.diagnostic.latestDraft}</dd>
+              {status.diagnostic.failureDetail && (
+                <><dt>Technical detail</dt><dd>{status.diagnostic.failureDetail}</dd></>
+              )}
+            </dl>
+            <button type="button" className="btn mini ghost" onClick={() => setMessage(downloadText(
+              'tend-preview-save-diagnostic.json',
+              JSON.stringify(status.diagnostic, null, 2),
+              'application/json'
+            ) ?? 'Privacy-safe save diagnostic downloaded.')}>
+              Download privacy-safe diagnostic
+            </button>
+          </details>
         )}
         {(status.kind === 'corrupt' || status.kind === 'unsupported') && (
           <>
@@ -382,26 +831,145 @@ export function PreviewDataControls({
       {v9RecoveryError && <p className="preview-data-controls__help" role="alert">The original v9 recovery copy could not be read: {v9RecoveryError}</p>}
       {v10RecoveryError && <p className="preview-data-controls__help" role="alert">The original v10 recovery copy could not be read: {v10RecoveryError}</p>}
       {v11RecoveryError && <p className="preview-data-controls__help" role="alert">The original v11 recovery copy could not be read: {v11RecoveryError}</p>}
+      {v12RecoveryError && <p className="preview-data-controls__help" role="alert">The original v12 recovery copy could not be read: {v12RecoveryError}</p>}
+      {v13RecoveryError && <p className="preview-data-controls__help" role="alert">The original v13 recovery copy could not be read: {v13RecoveryError}</p>}
+      {v14RecoveryError && <p className="preview-data-controls__help" role="alert">The original v14 recovery copy could not be read: {v14RecoveryError}</p>}
+      {v15RecoveryError && <p className="preview-data-controls__help" role="alert">The original v15 recovery copy could not be read: {v15RecoveryError}</p>}
+      {v16RecoveryError && <p className="preview-data-controls__help" role="alert">The original v16 recovery copy could not be read: {v16RecoveryError}</p>}
+      {v17RecoveryError && <p className="preview-data-controls__help" role="alert">The original v17 recovery copy could not be read: {v17RecoveryError}</p>}
+      {v18RecoveryError && <p className="preview-data-controls__help" role="alert">The original v18 recovery copy could not be read: {v18RecoveryError}</p>}
+      {v19RecoveryError && <p className="preview-data-controls__help" role="alert">The original v19 recovery copy could not be read: {v19RecoveryError}</p>}
+      {v20RecoveryError && <p className="preview-data-controls__help" role="alert">The original v20 recovery copy could not be read: {v20RecoveryError}</p>}
+      {v21RecoveryError && <p className="preview-data-controls__help" role="alert">The original v21 recovery copy could not be read: {v21RecoveryError}</p>}
+      {v22RecoveryError && <p className="preview-data-controls__help" role="alert">The original v22 recovery copy could not be read: {v22RecoveryError}</p>}
+      {v23RecoveryError && <p className="preview-data-controls__help" role="alert">The original v23 recovery copy could not be read: {v23RecoveryError}</p>}
+      {v24RecoveryError && <p className="preview-data-controls__help" role="alert">The original v24 recovery copy could not be read: {v24RecoveryError}</p>}
+      {v25RecoveryError && <p className="preview-data-controls__help" role="alert">The original v25 recovery copy could not be read: {v25RecoveryError}</p>}
+      {v26RecoveryError && <p className="preview-data-controls__help" role="alert">The original v26 recovery copy could not be read: {v26RecoveryError}</p>}
+      {v27RecoveryError && <p className="preview-data-controls__help" role="alert">The original v27 recovery copy could not be read: {v27RecoveryError}</p>}
+      {v28RecoveryError && <p className="preview-data-controls__help" role="alert">The original v28 recovery copy could not be read: {v28RecoveryError}</p>}
+      {v29RecoveryError && <p className="preview-data-controls__help" role="alert">The original v29 recovery copy could not be read: {v29RecoveryError}</p>}
+      {v30RecoveryError && <p className="preview-data-controls__help" role="alert">The original v30 recovery copy could not be read: {v30RecoveryError}</p>}
+      {v31RecoveryError && <p className="preview-data-controls__help" role="alert">The original v31 recovery copy could not be read: {v31RecoveryError}</p>}
+      {v32RecoveryError && <p className="preview-data-controls__help" role="alert">The original v32 recovery copy could not be read: {v32RecoveryError}</p>}
+      {v33RecoveryError && <p className="preview-data-controls__help" role="alert">The original v33 recovery copy could not be read: {v33RecoveryError}</p>}
+      {v34RecoveryError && <p className="preview-data-controls__help" role="alert">The original v34 recovery copy could not be read: {v34RecoveryError}</p>}
+      {v35RecoveryError && <p className="preview-data-controls__help" role="alert">The original v35 recovery copy could not be read: {v35RecoveryError}</p>}
+      {v36RecoveryError && <p className="preview-data-controls__help" role="alert">The original v36 recovery copy could not be read: {v36RecoveryError}</p>}
+      {rawRecoveryError && <p className="preview-data-controls__help" role="alert">The exact raw recovery copy could not be read: {rawRecoveryError}</p>}
       {message && <p className="preview-data-controls__message" role="status">{message}</p>}
       {pendingAction && (
         <MoneyGoalDialog
-          title={pendingAction.kind === 'import' ? 'Replace preview data?' : pendingAction.kind === 'reset' ? 'Reset sample data?' : 'Replace the other tab?'}
-          intro={pendingAction.kind === 'import'
-            ? pendingAction.hasArchiveStatus
-              ? 'This replaces the current synthetic goals, check-ins, correction history, and Rhythm data with the validated backup.'
-              : 'This backup predates archive status, so its Rhythms will be restored as active. It replaces the current preview; download a backup first if needed.'
-            : pendingAction.kind === 'reset'
+          title={pendingAction.kind === 'reset' ? 'Reset sample data?' : 'Replace the other tab?'}
+          intro={pendingAction.kind === 'reset'
               ? 'This replaces the current synthetic preview state with the original examples, changing only this preview’s saved key.'
               : 'This overwrites the other tab’s saved preview with the data currently shown here.'}
           onClose={() => setPendingAction(null)}
         >
           <p className="preview-data-controls__help">Download a backup of the current preview before replacing it if you may need these changes later. Cancel leaves the current preview unchanged.</p>
           <div className="money-goal-dialog__actions">
-            <button type="button" className="btn mini ghost" onClick={exportCurrent}>Download current preview backup</button>
+            <button type="button" className="btn mini ghost" onClick={exportCurrent}>
+              Download current preview backup
+            </button>
             <button type="button" className="btn mini" onClick={confirmPendingAction}>
-              {pendingAction.kind === 'import' ? 'Replace with backup' : pendingAction.kind === 'reset' ? 'Reset sample data' : 'Replace other tab'}
+              {pendingAction.kind === 'reset' ? 'Reset sample data' : 'Replace other tab'}
             </button>
             <button type="button" className="btn mini ghost" onClick={() => setPendingAction(null)}>Cancel</button>
+          </div>
+        </MoneyGoalDialog>
+      )}
+      {legacyDryRun && (
+        <MoneyGoalDialog
+          title="Review Classic Tend import"
+          intro="This dry run converts only records with a supported, validated Preview representation. Unsupported source data remains in the exact-source recovery package; no preview data has changed."
+          onClose={() => {
+            setLegacyDryRun(null);
+            setLegacyPackageDownloaded(false);
+            setLegacyImportConfirmed(false);
+            setLegacyExclusionsConfirmed(false);
+          }}
+        >
+          <dl className="legacy-import-report">
+            <div><dt>Source People</dt><dd>{legacyDryRun.report.source.people}</dd></div>
+            <div><dt>Converted People</dt><dd>{legacyDryRun.report.supported.people}</dd></div>
+            <div><dt>People with multiple categories resolved</dt><dd>{legacyDryRun.report.resolvedCategoryConflicts}</dd></div>
+            <div><dt>Source Rhythms</dt><dd>{legacyDryRun.report.source.rhythms}</dd></div>
+            <div><dt>Converted Rhythms / completions</dt><dd>{legacyDryRun.report.supported.rhythms} / {legacyDryRun.report.supported.rhythmCompletions}</dd></div>
+            <div><dt>Source connection events</dt><dd>{legacyDryRun.report.source.events}</dd></div>
+            <div><dt>Converted connections / cadences</dt><dd>{legacyDryRun.report.supported.connections} / {legacyDryRun.report.supported.cadences}</dd></div>
+            <div><dt>Source plain Notes</dt><dd>{legacyDryRun.report.source.notes}</dd></div>
+            <div><dt>Converted plain Notes</dt><dd>{legacyDryRun.report.supported.notes}</dd></div>
+            <div><dt>Source Strength templates / logs</dt><dd>{legacyDryRun.report.source.strengthTemplates} / {legacyDryRun.report.source.strengthLogs}</dd></div>
+            <div><dt>Converted Strength templates / logs</dt><dd>{legacyDryRun.report.supported.strengthTemplates} / {legacyDryRun.report.supported.strengthLogs}</dd></div>
+            <div><dt>Source Cardio runs / Weight measurements</dt><dd>{legacyDryRun.report.source.cardioRuns} / {legacyDryRun.report.source.weightMeasurements}</dd></div>
+            <div><dt>Converted Cardio runs / Weight measurements</dt><dd>{legacyDryRun.report.supported.cardioRuns} / {legacyDryRun.report.supported.weightMeasurements}</dd></div>
+            <div><dt>Unsupported sections or fields</dt><dd>{legacyDryRun.report.unsupported.reduce((sum, item) => sum + item.count, 0)}</dd></div>
+            <div><dt>Excluded and preserved records</dt><dd>{legacyDryRun.report.excluded.length}</dd></div>
+            <div><dt>Ambiguous records</dt><dd>{legacyDryRun.report.ambiguous.reduce((sum, item) => sum + item.count, 0)}</dd></div>
+            <div><dt>Invalid records</dt><dd>{legacyDryRun.report.invalid.reduce((sum, item) => sum + item.count, 0)}</dd></div>
+          </dl>
+          {legacyDryRun.report.unsupported.length > 0 && (
+            <div className="preview-data-controls__help">
+              <p>Unsupported data is not imported; it remains recoverable from the source-preserving package. Review these fields before replacing the current preview.</p>
+              <ul>
+                {legacyDryRun.report.unsupported.map(item => (
+                  <li key={item.path}>{item.path} ({item.count})</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {legacyDryRun.report.ambiguous.length > 0 && (
+            <p className="preview-data-controls__help" role="alert">
+              Ambiguous identities or links prevent replacement. Only explicitly listed unsupported historical records can be excluded; resolve other ambiguous source records before retrying.
+            </p>
+          )}
+          {legacyDryRun.report.excluded.length > 0 && (
+            <div className="preview-data-controls__help" role="alert">
+              <p>{legacyDryRun.report.excluded.length} unsupported historical event{legacyDryRun.report.excluded.length === 1 ? '' : 's'} with unresolved Rhythm links will not be imported. Their exact records and source IDs are preserved in the recovery package.</p>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={legacyExclusionsConfirmed}
+                  onChange={event => setLegacyExclusionsConfirmed(event.currentTarget.checked)}
+                />
+                I understand these unresolved historical events will be excluded from this partial import.
+              </label>
+            </div>
+          )}
+          {legacyDryRun.report.invalid.length > 0 && (
+            <p className="preview-data-controls__help" role="alert">
+              Invalid supported records prevent replacement. Correct the source records and run the dry run again.
+            </p>
+          )}
+          <p className="preview-data-controls__help">
+            Download the source-preserving recovery package before confirming. The current preview is replaced only once, after confirmation.
+          </p>
+          <label className="preview-data-controls__help">
+            <input
+              type="checkbox"
+              checked={legacyImportConfirmed}
+              onChange={event => setLegacyImportConfirmed(event.currentTarget.checked)}
+            />
+            I understand unsupported records will not be imported.
+          </label>
+          <div className="money-goal-dialog__actions">
+            <button type="button" className="btn mini ghost" onClick={exportCurrent}>Download current preview backup</button>
+            <button type="button" className="btn mini ghost" onClick={downloadLegacyRecoveryPackage}>Download migration recovery package</button>
+            <button
+              type="button"
+              className="btn mini"
+              onClick={confirmLegacyImport}
+              disabled={!legacyDryRun.candidate || !legacyPackageDownloaded || !legacyImportConfirmed
+                || legacyDryRun.report.excluded.length > 0 && !legacyExclusionsConfirmed}
+            >
+              Import supported data
+            </button>
+            <button type="button" className="btn mini ghost" onClick={() => {
+              setLegacyDryRun(null);
+              setLegacyPackageDownloaded(false);
+              setLegacyImportConfirmed(false);
+              setLegacyExclusionsConfirmed(false);
+            }}>Cancel</button>
           </div>
         </MoneyGoalDialog>
       )}

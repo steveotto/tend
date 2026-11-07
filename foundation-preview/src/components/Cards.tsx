@@ -12,15 +12,26 @@ import {
   type GoalCheckIn,
   type MoneyGoal
 } from '../domain/money-goals.ts';
-import { rhythmLastTendedLabel, type FoundationPreview, type PersonId, type PersonPreview, type RhythmPreview } from '../domain/preview-data.ts';
+import {
+  foundationTerminologyForCategory,
+  rhythmLastTendedLabel,
+  type FoundationPreview,
+  type PersonId,
+  type PersonPreview,
+  type RhythmPreview
+} from '../domain/preview-data.ts';
 import { localDateInTimeZone } from '../domain/rhythm-occurrences.ts';
-import { PersonBadgeList } from './PersonBadge.tsx';
+import { RhythmAssociationRows } from './RhythmAssociationRows.tsx';
 import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
 import { RhythmPersonalBadge } from './RhythmPersonalBadge.tsx';
 import { RhythmMetadata } from './RhythmMetadata.tsx';
+import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
 import { RhythmCompletionActions } from './RhythmCompletionActions.tsx';
 import { TimelineChart } from './TimelineChart.tsx';
 import { scoreTone } from '../domain/score-tone.ts';
+import { formatScore } from '../domain/score-display.ts';
+import type { Destination } from './AppNavigation.tsx';
+import type { RhythmSchedule } from '../domain/rhythm-schedule.ts';
 
 type FoundationCardProps = {
   foundation: FoundationPreview;
@@ -32,10 +43,79 @@ type FoundationCardProps = {
   onSelect?: (event: MouseEvent<HTMLButtonElement>) => void;
   headingId?: string;
   selectButtonId?: string;
+  score?: number | null;
+  scoreLabel?: string;
+  scoreEvidence?: string;
   illustrativeScore?: number | null;
   rhythmCoverage?: { scored: number; total: number };
+  reserveDescriptionSpace?: boolean;
   children?: ReactNode;
 };
+
+function CompactCardBody({
+  title,
+  description,
+  icon,
+  headingId,
+  interactive,
+  reserveDescriptionSpace,
+  children
+}: {
+  title: string;
+  description: string;
+  icon?: ReactNode;
+  headingId?: string;
+  interactive: boolean;
+  reserveDescriptionSpace: boolean;
+  children?: ReactNode;
+}) {
+  return (
+    <>
+      {icon && <span className="foundation-card__icon" aria-hidden="true">{icon}</span>}
+      <span className="foundation-card__content">
+        {interactive
+          ? <span className="foundation-card__title" id={headingId} role="heading" aria-level={3}>{title}</span>
+          : <h3 className="foundation-card__title" id={headingId} tabIndex={-1}>{title}</h3>}
+        <span className={`foundation-card__description${interactive || reserveDescriptionSpace
+          ? ' foundation-card__description--reserved'
+          : ''}`}>
+          {description}
+        </span>
+        {children}
+      </span>
+    </>
+  );
+}
+
+export function DetailNavigationCard({
+  title,
+  description,
+  icon,
+  onSelect
+}: {
+  title: string;
+  description: string;
+  icon?: ReactNode;
+  onSelect: (event: MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      className="foundation-card foundation-card--compact foundation-card--interactive"
+      type="button"
+      aria-label={`${title}: ${description}`}
+      onClick={onSelect}
+    >
+      <CompactCardBody
+        title={title}
+        description={description}
+        icon={icon}
+        interactive
+        reserveDescriptionSpace
+      />
+      <span className="foundation-card__chevron" aria-hidden="true">›</span>
+    </button>
+  );
+}
 
 export function FoundationCard({
   foundation,
@@ -47,42 +127,54 @@ export function FoundationCard({
   onSelect,
   headingId,
   selectButtonId,
+  score,
+  scoreLabel,
+  scoreEvidence,
   illustrativeScore,
   rhythmCoverage,
+  reserveDescriptionSpace = false,
   children
 }: FoundationCardProps) {
   const completable = foundation.capabilities.completion !== 'ongoing';
   const isCompleted = lifecycle === 'completed';
   const resolvedHeadingId = headingId ?? `foundation-${foundation.id}`;
+  const foundationTerm = foundationTerminologyForCategory(foundation.categoryId);
+  const displayScore = score === undefined ? illustrativeScore : score;
+  const displayScoreTone = scoreTone(displayScore ?? null);
+  const displayScoreLabel = scoreLabel ?? `${foundation.name} illustrative score`;
+  const coverageText = scoreEvidence ?? (rhythmCoverage
+    ? rhythmCoverage.total === 0
+      ? 'No linked sample Rhythms'
+      : `${rhythmCoverage.scored} of ${rhythmCoverage.total} linked Rhythms have sample values`
+    : undefined);
 
   if (variant === 'compact') {
     const content = (
       <>
-        {icon && <span className="foundation-card__icon" aria-hidden="true">{icon}</span>}
-        <span className="foundation-card__content">
-          {onSelect
-            ? <span className="foundation-card__title" id={headingId} role="heading" aria-level={3}>{foundation.name}</span>
-            : <h3 className="foundation-card__title" id={resolvedHeadingId} tabIndex={-1}>{foundation.name}</h3>}
-          <span className="foundation-card__description">{foundation.description}</span>
-          {illustrativeScore !== undefined && (
+        <CompactCardBody
+          title={foundation.name}
+          description={foundation.description}
+          icon={icon}
+          {...(onSelect
+            ? headingId ? { headingId } : {}
+            : { headingId: resolvedHeadingId })}
+          interactive={Boolean(onSelect)}
+          reserveDescriptionSpace={reserveDescriptionSpace}
+        >
+          {displayScore !== undefined && (
             <>
-              {rhythmCoverage && (
-                <span className="foundation-card__coverage">
-                  {rhythmCoverage.total === 0
-                    ? 'No supporting sample Rhythms'
-                    : `${rhythmCoverage.scored} of ${rhythmCoverage.total} supporting Rhythms have sample values`}
-                </span>
-              )}
+              {coverageText && <span className="foundation-card__coverage">{coverageText}</span>}
               <FoundationProgress
-                label={`${foundation.name} illustrative score`}
-                score={illustrativeScore}
+                label={displayScoreLabel}
+                score={displayScore}
+                tone={displayScoreTone}
                 decorative={Boolean(onSelect)}
               />
             </>
           )}
-        </span>
-        <span className={`foundation-card__score ${scoreTone(illustrativeScore ?? null)}`} aria-hidden="true">
-          {illustrativeScore ?? '—'}
+        </CompactCardBody>
+        <span className={`foundation-card__score ${displayScoreTone}`} aria-hidden="true">
+          {displayScore === undefined ? '—' : formatScore(displayScore)}
         </span>
         {onSelect && <span className="foundation-card__chevron" aria-hidden="true">›</span>}
         {children}
@@ -90,12 +182,12 @@ export function FoundationCard({
     );
 
     if (onSelect) {
-      const scoreName = illustrativeScore === undefined || illustrativeScore === null
-        ? 'score unavailable'
-        : `illustrative score ${illustrativeScore} out of 100`;
-      const coverageName = rhythmCoverage
-        ? `, ${rhythmCoverage.scored} of ${rhythmCoverage.total} supporting Rhythms have sample values`
-        : '';
+      const scoreName = displayScore === undefined || displayScore === null
+        ? `${scoreLabel ?? 'score'} unavailable`
+        : scoreLabel
+          ? `${scoreLabel} ${formatScore(displayScore)} out of 100`
+          : `illustrative score ${formatScore(displayScore)} out of 100`;
+      const coverageName = coverageText ? `, ${coverageText}` : '';
       return (
         <button
           id={selectButtonId}
@@ -103,7 +195,7 @@ export function FoundationCard({
           className="foundation-card foundation-card--compact foundation-card--interactive"
           type="button"
           onClick={onSelect}
-          aria-label={`Open ${foundation.name} foundation details, ${scoreName}${coverageName}`}
+          aria-label={`Open ${foundation.name} ${foundationTerm.singular.toLowerCase()} details, ${scoreName}${coverageName}`}
         >
           {content}
         </button>
@@ -124,7 +216,7 @@ export function FoundationCard({
     <article className="foundation-card" aria-labelledby={headingId ?? `foundation-${foundation.id}`}>
       <div className="card-heading">
         <div>
-          <p className="eyebrow">{foundation.category} foundation</p>
+          <p className="eyebrow">{foundation.category} {foundationTerm.singular.toLowerCase()}</p>
           <h3 id={headingId ?? `foundation-${foundation.id}`} tabIndex={onSelect || headingId ? -1 : undefined}>{foundation.name}</h3>
         </div>
         <span className={`lifecycle-badge${isCompleted ? ' is-complete' : ''}`} aria-live="polite">
@@ -132,7 +224,10 @@ export function FoundationCard({
         </span>
       </div>
       <p className="card-copy">{foundation.description}</p>
-      <CapabilityList capabilities={foundation.capabilities} />
+      <CapabilityList
+        capabilities={foundation.capabilities}
+        label={`${foundationTerm.singular} capabilities`}
+      />
       {children}
       {onSelect && (
         <button
@@ -163,10 +258,12 @@ export function FoundationCard({
 export function FoundationProgress({
   label,
   score,
+  tone = scoreTone(score),
   decorative = false
 }: {
   label: string;
   score: number | null;
+  tone?: ReturnType<typeof scoreTone>;
   decorative?: boolean;
 }) {
   const clampedScore = score !== null && Number.isFinite(score)
@@ -180,11 +277,13 @@ export function FoundationProgress({
       aria-label={decorative ? undefined : label}
       aria-valuemin={decorative ? undefined : 0}
       aria-valuemax={decorative ? undefined : 100}
-      {...(!decorative && clampedScore !== null ? { 'aria-valuenow': clampedScore } : {})}
+      {...(!decorative && clampedScore !== null
+        ? { 'aria-valuenow': clampedScore, 'aria-valuetext': `${formatScore(clampedScore)} out of 100` }
+        : {})}
       {...(!decorative && clampedScore === null ? { 'aria-valuetext': 'Score unavailable' } : {})}
     >
       <span
-        className="foundation-progress__fill"
+        className={`foundation-progress__fill ${tone}`}
         style={{ width: `${clampedScore ?? 0}%` }}
         aria-hidden="true"
       />
@@ -192,10 +291,36 @@ export function FoundationProgress({
   );
 }
 
-export function CategoryHealthBadge({ score }: { score: number | null }) {
+export function CategoryHealthBadge({
+  score,
+  accessibleLabel,
+  className,
+  displayScore = score,
+  variant = 'default',
+  appearance = 'standard'
+}: {
+  score: number | null;
+  accessibleLabel?: string;
+  className?: string;
+  displayScore?: number | null;
+  variant?: 'default' | 'neutral-labeled';
+  appearance?: 'standard' | 'rounded';
+}) {
   return (
-    <span className={`ma-score ${scoreTone(score)}`} aria-hidden="true">
-      {score ?? '—'}
+    <span
+      className={`ma-score${appearance === 'rounded' ? ' category-health-badge' : ''} ${scoreTone(score)}${className ? ` ${className}` : ''}`}
+      {...(accessibleLabel
+        ? { role: 'img', 'aria-label': accessibleLabel }
+        : { 'aria-hidden': true })}
+    >
+      {variant === 'neutral-labeled'
+        ? (
+          <>
+            <span className="ma-score__label">Health</span>
+            <span className="ma-score__value">{formatScore(displayScore)}</span>
+          </>
+        )
+        : <span className="ma-score__value">{formatScore(displayScore)}</span>}
     </span>
   );
 }
@@ -309,11 +434,37 @@ type RhythmCardBaseProps = {
   headingId?: string;
   people?: readonly PersonPreview[];
   onPersonSelect?: (personId: PersonId) => void;
+  onOpenCategory?: (categoryId: Destination, openerId: string) => void;
 };
 
 type RhythmCardProps = RhythmCardBaseProps & (
   | { variant?: 'catalogue'; icon?: ReactNode | undefined; onDetails?: (event: MouseEvent<HTMLButtonElement>) => void }
-  | { variant: 'simple'; completed?: boolean; archived?: boolean; onDetails: (event: MouseEvent<HTMLButtonElement>) => void; onTend?: (event: MouseEvent<HTMLButtonElement>) => void; onUndo?: () => void }
+  | {
+      variant: 'simple';
+      completed?: boolean;
+      archived?: boolean;
+      completionActionLabel?: string;
+      completedActionLabel?: string;
+      onDetails: (event: MouseEvent<HTMLButtonElement>) => void;
+      onTend?: (event: MouseEvent<HTMLButtonElement>) => void;
+      onUndo?: () => void;
+    }
+  | {
+      variant: 'details-summary';
+      archived?: boolean;
+      cadence?: string;
+      schedule?: RhythmSchedule;
+      timeLabel?: string;
+      lastTended: string;
+      activityContext?: {
+        label: 'Workout' | 'Run' | 'Weigh-in';
+        badge?: 'Recommended';
+        detail?: string;
+      };
+      foundations?: readonly FoundationPreview[];
+      onOpenFoundation?: (foundationId: string, openerId: string) => void;
+      onEdit?: (event: MouseEvent<HTMLButtonElement>) => void;
+    }
   | { variant: 'suggestion'; icon?: ReactNode | undefined; onDetails: (event: MouseEvent<HTMLButtonElement>) => void }
 );
 
@@ -340,7 +491,7 @@ export function ScoreMeter({
       aria-valuemax={100}
       {...(clampedScore === null
         ? { 'aria-valuetext': 'Score unavailable' }
-        : { 'aria-valuenow': clampedScore, 'aria-valuetext': `${clampedScore} out of 100` })}
+        : { 'aria-valuenow': clampedScore, 'aria-valuetext': `${formatScore(clampedScore)} out of 100` })}
     >
       <span className={`category-health-spectrum${clampedScore === null ? ' is-empty' : ''}`} aria-hidden="true" />
       {clampedScore !== null && (
@@ -355,7 +506,7 @@ export function ScoreMeter({
 }
 
 export function RhythmCard(props: RhythmCardProps) {
-  const { rhythm, headingId, people, onPersonSelect } = props;
+  const { rhythm, headingId, people, onPersonSelect, onOpenCategory } = props;
   const externallyAutomated = rhythm.automation === 'external';
 
   if (props.variant === 'simple') {
@@ -366,8 +517,11 @@ export function RhythmCard(props: RhythmCardProps) {
         externallyAutomated={externallyAutomated}
         people={people}
         onPersonSelect={onPersonSelect}
+        onOpenCategory={onOpenCategory}
         completed={props.completed === true}
         archived={props.archived === true}
+        completionActionLabel={props.completionActionLabel}
+        completedActionLabel={props.completedActionLabel}
         onDetails={props.onDetails}
         onTend={props.onTend}
         onUndo={props.onUndo}
@@ -382,9 +536,31 @@ export function RhythmCard(props: RhythmCardProps) {
         externallyAutomated={externallyAutomated}
         people={people}
         onPersonSelect={onPersonSelect}
+        onOpenCategory={onOpenCategory}
         suggestion
         icon={props.icon}
         onDetails={props.onDetails}
+      />
+    );
+  }
+  if (props.variant === 'details-summary') {
+    return (
+      <RhythmDetailsSummaryCard
+        rhythm={rhythm}
+        headingId={headingId ?? `rhythm-details-summary-${rhythm.id}`}
+        externallyAutomated={externallyAutomated}
+        people={people}
+        foundations={props.foundations}
+        onPersonSelect={onPersonSelect}
+        onOpenCategory={onOpenCategory}
+        onOpenFoundation={props.onOpenFoundation}
+        archived={props.archived === true}
+        cadence={props.cadence}
+        schedule={props.schedule}
+        timeLabel={props.timeLabel}
+        lastTended={props.lastTended}
+        activityContext={props.activityContext}
+        onEdit={props.onEdit}
       />
     );
   }
@@ -399,7 +575,12 @@ export function RhythmCard(props: RhythmCardProps) {
           headingId={headingId ?? `rhythm-${rhythm.id}`}
         />
         <p className="rhythm-cadence">{rhythm.cadence} · {rhythm.status}</p>
-        <RhythmPeople rhythm={rhythm} people={people} onPersonSelect={onPersonSelect} />
+        <RhythmCardAssociations
+          rhythm={rhythm}
+          people={people}
+          onPersonSelect={onPersonSelect}
+          onOpenCategory={onOpenCategory}
+        />
         {props.onDetails && <RhythmDetailsButton rhythm={rhythm} onDetails={props.onDetails} />}
       </div>
     </article>
@@ -412,8 +593,11 @@ function SimpleRhythmCard({
   externallyAutomated,
   people,
   onPersonSelect,
+  onOpenCategory,
   completed = false,
   archived = false,
+  completionActionLabel,
+  completedActionLabel,
   suggestion = false,
   icon,
   onDetails,
@@ -425,8 +609,11 @@ function SimpleRhythmCard({
   externallyAutomated: boolean;
   people?: readonly PersonPreview[] | undefined;
   onPersonSelect?: ((personId: PersonId) => void) | undefined;
+  onOpenCategory?: ((categoryId: Destination, openerId: string) => void) | undefined;
   completed?: boolean;
   archived?: boolean;
+  completionActionLabel?: string | undefined;
+  completedActionLabel?: string | undefined;
   suggestion?: boolean;
   icon?: ReactNode | undefined;
   onDetails: (event: MouseEvent<HTMLButtonElement>) => void;
@@ -450,7 +637,12 @@ function SimpleRhythmCard({
           showDescription={false}
           archived={archived}
         />
-        <RhythmPeople rhythm={rhythm} people={people} onPersonSelect={onPersonSelect} />
+        <RhythmCardAssociations
+          rhythm={rhythm}
+          people={people}
+          onPersonSelect={onPersonSelect}
+          onOpenCategory={onOpenCategory}
+        />
       </div>
       <div className="rhythm-card__actions">
         <RhythmDetailsButton rhythm={rhythm} onDetails={onDetails} />
@@ -458,6 +650,8 @@ function SimpleRhythmCard({
           <RhythmCompletionActions
             rhythmTitle={rhythm.title}
             completed={completed}
+            actionLabel={completionActionLabel}
+            completedLabel={completedActionLabel}
             onTend={onTend}
             tendButtonRef={tendButtonRef}
           />
@@ -475,18 +669,127 @@ function SimpleRhythmCard({
   );
 }
 
-function RhythmPeople({
+function RhythmDetailsSummaryCard({
+  rhythm,
+  headingId,
+  externallyAutomated,
+  people,
+  foundations,
+  onPersonSelect,
+  onOpenCategory,
+  onOpenFoundation,
+  archived,
+  cadence,
+  schedule,
+  timeLabel,
+  lastTended,
+  activityContext,
+  onEdit
+}: {
+  rhythm: RhythmPreview;
+  headingId: string;
+  externallyAutomated: boolean;
+  people?: readonly PersonPreview[] | undefined;
+  foundations?: readonly FoundationPreview[] | undefined;
+  onPersonSelect?: ((personId: PersonId) => void) | undefined;
+  onOpenCategory?: ((categoryId: Destination, openerId: string) => void) | undefined;
+  onOpenFoundation?: ((foundationId: string, openerId: string) => void) | undefined;
+  archived: boolean;
+  cadence?: string | undefined;
+  schedule?: RhythmSchedule | undefined;
+  timeLabel?: string | undefined;
+  lastTended: string;
+  activityContext?: {
+    label: 'Workout' | 'Run' | 'Weigh-in';
+    badge?: 'Recommended';
+    detail?: string;
+  } | undefined;
+  onEdit?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+}) {
+  return (
+    <article
+      className="rhythm-card rhythm-card--details-summary"
+      aria-labelledby={headingId}
+    >
+      <div className="rhythm-card__details-summary-header">
+        <div className="rhythm-card__details-summary-copy">
+          <RhythmCardSummary
+            rhythm={rhythm}
+            externallyAutomated={externallyAutomated}
+            headingId={headingId}
+            titleClassName="rhythm-card__details-summary-title"
+            descriptionClassName="rhythm-card__details-summary-description"
+            archived={archived}
+          />
+        </div>
+        {onEdit && (
+          <button
+            type="button"
+            className="today-rhythm-details__edit-icon rhythm-card__details-summary-edit"
+            aria-label={`Edit ${rhythm.title}`}
+            title={`Edit ${rhythm.title}`}
+            onClick={event => onEdit(event)}
+          >
+            <span className="today-rhythm-details__edit-visual" aria-hidden="true">
+              <RhythmMetadataIcon kind="edit" />
+            </span>
+          </button>
+        )}
+      </div>
+      {activityContext && (
+        <div className="rhythm-card__details-summary-context">
+          <span>{activityContext.label}</span>
+          {activityContext.badge && (
+            <span className="rhythm-card__details-summary-badge">{activityContext.badge}</span>
+          )}
+          {activityContext.detail && (
+            <p className="rhythm-card__details-summary-note">{activityContext.detail}</p>
+          )}
+        </div>
+      )}
+      <div className="today-rhythm-details__association-row rhythm-card__details-summary-associations">
+        <RhythmAssociationRows
+          rhythm={rhythm}
+          {...(people ? { people } : {})}
+          {...(foundations ? { foundations } : {})}
+          {...(onPersonSelect ? { onPersonSelect } : {})}
+          {...(onOpenCategory ? { onOpenCategory } : {})}
+          {...(onOpenFoundation ? { onOpenFoundation } : {})}
+        />
+      </div>
+      <RhythmMetadata
+        variant="footer"
+        className="rhythm-card__details-summary-footer"
+        {...(!schedule && cadence ? { cadence } : {})}
+        {...(schedule ? { schedule } : {})}
+        {...(timeLabel ? { timeLabel } : {})}
+        lastTended={lastTended}
+        rhythmTitle={rhythm.title}
+      />
+    </article>
+  );
+}
+
+function RhythmCardAssociations({
   rhythm,
   people,
-  onPersonSelect
+  onPersonSelect,
+  onOpenCategory
 }: {
   rhythm: RhythmPreview;
   people?: readonly PersonPreview[] | undefined;
   onPersonSelect?: ((personId: PersonId) => void) | undefined;
+  onOpenCategory?: ((categoryId: Destination, openerId: string) => void) | undefined;
 }) {
-  return people && onPersonSelect
-    ? <PersonBadgeList people={people} rhythmTitle={rhythm.title} onSelect={onPersonSelect} />
-    : null;
+  return (
+    <RhythmAssociationRows
+      rhythm={rhythm}
+      {...(people ? { people } : {})}
+      {...(onPersonSelect ? { onPersonSelect } : {})}
+      {...(onOpenCategory ? { onOpenCategory } : {})}
+      showFoundationLinks={false}
+    />
+  );
 }
 
 function RhythmDetailsButton({
@@ -546,7 +849,13 @@ function RhythmCardSummary({
   );
 }
 
-function CapabilityList({ capabilities }: { capabilities: FoundationCapabilities }) {
+function CapabilityList({
+  capabilities,
+  label
+}: {
+  capabilities: FoundationCapabilities;
+  label: string;
+}) {
   const labels = [
     capabilities.rhythms ? 'Supports Rhythms' : null,
     capabilities.numericGoals ? 'Supports numeric goals' : null,
@@ -554,7 +863,7 @@ function CapabilityList({ capabilities }: { capabilities: FoundationCapabilities
   ].filter((label): label is string => label !== null);
 
   return (
-    <ul className="capability-list" aria-label="Foundation capabilities">
+    <ul className="capability-list" aria-label={label}>
       {labels.map(label => <li key={label}>{label}</li>)}
     </ul>
   );

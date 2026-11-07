@@ -4,13 +4,20 @@ import type {
   RhythmAutomation
 } from '../../../src/domain/capabilities.ts';
 import type { MoneyGoal } from './money-goals.ts';
-import type { RhythmSchedule, RhythmScoringMetadata, RhythmTimeValue } from './rhythm-schedule.ts';
+import type {
+  RhythmFrequencyRecommendation,
+  RhythmSchedule,
+  RhythmScoringMetadata,
+  RhythmTimeValue
+} from './rhythm-schedule.ts';
 import { effectiveRhythmSchedule } from './rhythm-schedule.ts';
 import { selectNextScheduledOccurrence } from './rhythm-occurrences.ts';
+import { resolvePersonCategoryGroups } from './person-categories.ts';
 
 export type FoundationPreview = {
   id: string;
-  category: 'Marriage' | 'Finances';
+  category: 'Faith' | 'Marriage' | 'Parenting' | 'Health & Fitness' | 'Finances';
+  categoryId: CategoryId;
   name: string;
   description: string;
   capabilities: FoundationCapabilities;
@@ -20,9 +27,429 @@ export type FoundationPreview = {
   illustrativeScore?: number | null;
 };
 
+export type CategoryId = 'faith' | 'marriage' | 'parenting' | 'health' | 'finances' | 'friendships';
+
+export type FoundationTerminology = {
+  singular: string;
+  plural: string;
+};
+
+const foundationTerminology: FoundationTerminology = {
+  singular: 'Foundation',
+  plural: 'Foundations'
+};
+
+const faithPracticeTerminology: FoundationTerminology = {
+  singular: 'Practice',
+  plural: 'Practices'
+};
+
+export function foundationTerminologyForCategory(categoryId?: string): FoundationTerminology {
+  return categoryId === 'faith' ? faithPracticeTerminology : foundationTerminology;
+}
+
+export const marriageFoundationIds = [
+  'connection',
+  'communication',
+  'fun-adventure',
+  'spiritual-growth',
+  'partnership',
+  'intimacy'
+] as const;
+
+export type MarriageFoundationId = (typeof marriageFoundationIds)[number];
+
+export function isMarriageFoundationId(value: unknown): value is MarriageFoundationId {
+  return typeof value === 'string' && marriageFoundationIds.some(id => id === value);
+}
+
 export type GoalPreview = MoneyGoal;
 
 export type MarriageRhythmGroupId = 'daily' | 'weekly' | 'seasonal';
+export type MarriageRhythmSuggestion = {
+  templateId: string;
+  rhythm: RhythmPreview;
+  scheduleHint: string;
+  recommendedFrequency: RhythmFrequencyRecommendation;
+  frequencyGuidance?: string;
+  sourceSampleRhythmId?: string;
+};
+
+export type CategoryRhythmSuggestionGroupDefinition = {
+  id: string;
+  title: string;
+  subtitle: string;
+};
+
+export type CategoryRhythmSuggestionTemplate = {
+  sourceId: string;
+  groupId: string;
+  title: string;
+  description: string;
+  cadence: string;
+  scheduleHint: string;
+  recommendedFrequency: RhythmFrequencyRecommendation;
+  iconId: string;
+  primaryFoundationId: string;
+  secondaryFoundationIds: readonly string[];
+  frequencyGuidance?: string;
+};
+
+export type HealthFitnessRhythmSuggestionTemplate = CategoryRhythmSuggestionTemplate & {
+  timeOfDay: RhythmTimeValue;
+  schedule?: RhythmSchedule;
+  healthLogCapability: 'weight' | 'cardio' | 'workout';
+  healthRunTarget?: HealthRunTarget;
+  healthWorkoutMode?: 'recommended' | 'specific';
+};
+
+export const healthFitnessRhythmSuggestionGroups: readonly CategoryRhythmSuggestionGroupDefinition[] = [
+  { id: 'daily', title: 'Daily', subtitle: 'Build simple routines around your health.' },
+  { id: 'weekly', title: 'Weekly', subtitle: 'Make regular time for strength and cardio.' },
+  { id: 'seasonal', title: 'Seasonal & Annual', subtitle: 'Plan check-ins and repeatable benchmarks.' }
+];
+
+export const healthFitnessRhythmSuggestions: readonly HealthFitnessRhythmSuggestionTemplate[] = [
+  {
+    sourceId: 'health.morning-weigh-in',
+    groupId: 'daily',
+    title: 'Morning weigh-in',
+    description: 'Record a weigh-in in your preferred unit.',
+    cadence: 'Daily',
+    scheduleHint: 'Daily · Early morning',
+    recommendedFrequency: 'daily',
+    iconId: 'health-weight',
+    primaryFoundationId: 'health-weight',
+    secondaryFoundationIds: [],
+    timeOfDay: 'early-morning',
+    schedule: { frequency: 'daily' },
+    healthLogCapability: 'weight'
+  },
+  {
+    sourceId: 'health.strength-training',
+    groupId: 'weekly',
+    title: 'Strength training',
+    description: 'Build a steady strength routine with a suggested or saved workout.',
+    cadence: 'Weekly',
+    scheduleHint: 'Monday–Thursday · Afternoon',
+    recommendedFrequency: 'weekly',
+    iconId: 'health-strength',
+    primaryFoundationId: 'health-strength',
+    secondaryFoundationIds: [],
+    timeOfDay: 'afternoon',
+    schedule: { frequency: 'weekly', weekdays: [1, 2, 3, 4] },
+    healthLogCapability: 'workout',
+    healthWorkoutMode: 'recommended'
+  },
+  {
+    sourceId: 'health.saturday-long-run',
+    groupId: 'weekly',
+    title: 'Saturday long run',
+    description: 'Set aside time for a run and record the distance you cover.',
+    cadence: 'Weekly',
+    scheduleHint: 'Saturday · Morning',
+    recommendedFrequency: 'weekly',
+    iconId: 'health-cardio',
+    primaryFoundationId: 'health-cardio',
+    secondaryFoundationIds: [],
+    timeOfDay: 'morning',
+    schedule: { frequency: 'weekly', weekdays: [6] },
+    healthLogCapability: 'cardio'
+  },
+  {
+    sourceId: 'health.easy-5k',
+    groupId: 'weekly',
+    title: 'Easy 5K',
+    description: 'Log an easy run and enter the distance you actually cover.',
+    cadence: 'Weekly',
+    scheduleHint: 'Wednesday · Afternoon · 5 km target',
+    recommendedFrequency: 'weekly',
+    iconId: 'health-cardio',
+    primaryFoundationId: 'health-cardio',
+    secondaryFoundationIds: [],
+    timeOfDay: 'afternoon',
+    schedule: { frequency: 'weekly', weekdays: [3] },
+    healthLogCapability: 'cardio',
+    healthRunTarget: { distance: 5, unit: 'km' }
+  },
+  {
+    sourceId: 'health.annual-10k',
+    groupId: 'seasonal',
+    title: 'Annual 10K',
+    description: 'Choose a date for your annual 10K and record the distance you run.',
+    cadence: 'Yearly',
+    scheduleHint: 'Annually · Morning · Choose a date',
+    recommendedFrequency: 'yearly',
+    iconId: 'health-cardio',
+    primaryFoundationId: 'health-cardio',
+    secondaryFoundationIds: [],
+    timeOfDay: 'morning',
+    healthLogCapability: 'cardio',
+    healthRunTarget: { distance: 10, unit: 'km' }
+  },
+  {
+    sourceId: 'health.seasonal-strength-check-in',
+    groupId: 'seasonal',
+    title: 'Seasonal strength check-in',
+    description: 'Choose a saved workout to repeat as a strength benchmark.',
+    cadence: 'Quarterly',
+    scheduleHint: 'Quarterly · Afternoon · Choose a start date',
+    recommendedFrequency: 'quarterly',
+    iconId: 'health-strength',
+    primaryFoundationId: 'health-strength',
+    secondaryFoundationIds: [],
+    timeOfDay: 'afternoon',
+    healthLogCapability: 'workout',
+    healthWorkoutMode: 'specific'
+  }
+];
+
+export const parentingRhythmSuggestionGroups: readonly CategoryRhythmSuggestionGroupDefinition[] = [
+  { id: 'daily-connection', title: 'Daily Connection', subtitle: 'Small moments of attention and conversation.' },
+  { id: 'weekly-regular', title: 'Weekly & Regular', subtitle: 'Make room for steady connection and support.' },
+  { id: 'seasonal-annual', title: 'Seasonal & Annual', subtitle: 'Plan for meaningful time and milestones.' }
+];
+
+export const parentingRhythmSuggestions: readonly CategoryRhythmSuggestionTemplate[] = [
+  {
+    sourceId: 'parenting.daily-connection',
+    groupId: 'daily-connection',
+    title: 'Daily Connection',
+    description: 'Give your child a little undivided attention.',
+    cadence: 'Daily',
+    scheduleHint: 'Daily · Flexible',
+    recommendedFrequency: 'daily',
+    iconId: 'parenting-connection-belonging',
+    primaryFoundationId: 'parenting-connection-belonging',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'parenting.walk-together',
+    groupId: 'weekly-regular',
+    title: 'Walk Together',
+    description: 'Take a walk and make room for easy conversation.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Flexible',
+    recommendedFrequency: 'weekly',
+    iconId: 'parenting-connection-belonging',
+    primaryFoundationId: 'parenting-connection-belonging',
+    secondaryFoundationIds: ['parenting-communication-trust']
+  },
+  {
+    sourceId: 'parenting.prayer-conversation',
+    groupId: 'daily-connection',
+    title: 'Prayer & Conversation',
+    description: 'Share a prayer and talk about what matters.',
+    cadence: 'Daily',
+    scheduleHint: 'Daily · Flexible',
+    recommendedFrequency: 'daily',
+    iconId: 'parenting-spiritual-growth',
+    primaryFoundationId: 'parenting-spiritual-growth',
+    secondaryFoundationIds: ['parenting-communication-trust']
+  },
+  {
+    sourceId: 'parenting.one-on-one-time',
+    groupId: 'weekly-regular',
+    title: 'One-on-One Time',
+    description: 'Spend intentional time together doing something they enjoy.',
+    cadence: 'Every 2 weeks',
+    scheduleHint: 'Every 2 weeks · Flexible',
+    recommendedFrequency: 'every-two-weeks',
+    iconId: 'parenting-connection-belonging',
+    primaryFoundationId: 'parenting-connection-belonging',
+    secondaryFoundationIds: ['parenting-fun-memories']
+  },
+  {
+    sourceId: 'parenting.encouraging-text',
+    groupId: 'weekly-regular',
+    title: 'Encouraging Text',
+    description: 'Send a thoughtful message that recognizes their strengths or effort.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Flexible',
+    recommendedFrequency: 'weekly',
+    iconId: 'parenting-encouragement-affirmation',
+    primaryFoundationId: 'parenting-encouragement-affirmation',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'parenting.call-catch-up',
+    groupId: 'weekly-regular',
+    title: 'Call & Catch Up',
+    description: 'Make space to listen and hear how life is going.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Flexible',
+    recommendedFrequency: 'weekly',
+    iconId: 'parenting-communication-trust',
+    primaryFoundationId: 'parenting-communication-trust',
+    secondaryFoundationIds: ['parenting-connection-belonging']
+  },
+  {
+    sourceId: 'parenting.special-outing',
+    groupId: 'seasonal-annual',
+    title: 'Special Outing',
+    description: 'Plan an outing and make a memory together.',
+    cadence: 'Quarterly',
+    scheduleHint: 'Quarterly · Flexible',
+    recommendedFrequency: 'quarterly',
+    iconId: 'parenting-fun-memories',
+    primaryFoundationId: 'parenting-fun-memories',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'parenting.teach-life-skill',
+    groupId: 'seasonal-annual',
+    title: 'Teach a Life Skill',
+    description: 'Practice a useful skill together and share what you know.',
+    cadence: 'Quarterly',
+    scheduleHint: 'Quarterly · Flexible',
+    recommendedFrequency: 'quarterly',
+    iconId: 'parenting-guidance-equipping',
+    primaryFoundationId: 'parenting-guidance-equipping',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'parenting.life-stage-check-in',
+    groupId: 'weekly-regular',
+    title: 'Life-Stage Check-In',
+    description: 'Listen and offer support through a change or new responsibility.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Flexible recommendation',
+    recommendedFrequency: 'weekly',
+    frequencyGuidance: 'Weekly is a starting recommendation. Choose the day that works for you.',
+    iconId: 'parenting-guidance-equipping',
+    primaryFoundationId: 'parenting-guidance-equipping',
+    secondaryFoundationIds: ['parenting-communication-trust']
+  },
+  {
+    sourceId: 'parenting.trip-together',
+    groupId: 'seasonal-annual',
+    title: 'Trip Together',
+    description: 'Set aside a day or overnight for time away together.',
+    cadence: 'Yearly',
+    scheduleHint: 'Yearly · Flexible',
+    recommendedFrequency: 'yearly',
+    iconId: 'parenting-fun-memories',
+    primaryFoundationId: 'parenting-fun-memories',
+    secondaryFoundationIds: ['parenting-connection-belonging']
+  }
+];
+
+export const faithRhythmSuggestionGroups: readonly CategoryRhythmSuggestionGroupDefinition[] = [
+  { id: 'daily-regular', title: 'Daily & Regular', subtitle: 'Make room for daily practices and regular reflection.' },
+  { id: 'weekly', title: 'Weekly', subtitle: 'Set aside time for worship, fasting and service.' },
+  { id: 'monthly', title: 'Monthly', subtitle: 'Choose a recurring time for generous and faithful witness.' }
+];
+
+export const faithRhythmSuggestions: readonly CategoryRhythmSuggestionTemplate[] = [
+  {
+    sourceId: 'faith.sabbath',
+    groupId: 'weekly',
+    title: 'Sabbath',
+    description: 'A full day of rest, delight, and presence with God and others.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Flexible',
+    recommendedFrequency: 'weekly',
+    iconId: 'faith-sabbath',
+    primaryFoundationId: 'faith-sabbath',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'faith.pray-together',
+    groupId: 'daily-regular',
+    title: 'Pray Together',
+    description: 'Share gratitude and prayer requests.',
+    cadence: 'Daily',
+    scheduleHint: 'Daily · Flexible',
+    recommendedFrequency: 'daily',
+    iconId: 'faith-prayer',
+    primaryFoundationId: 'faith-prayer',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'faith.fasting',
+    groupId: 'weekly',
+    title: 'Fasting',
+    description: 'Voluntarily abstain from food to create space for God.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Flexible',
+    recommendedFrequency: 'weekly',
+    iconId: 'faith-fasting',
+    primaryFoundationId: 'faith-fasting',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'faith.solitude-silence',
+    groupId: 'daily-regular',
+    title: 'Solitude & Silence',
+    description: 'Withdraw from noise and distractions to be alone with God.',
+    cadence: 'Select Days',
+    scheduleHint: 'Select Days · Flexible',
+    recommendedFrequency: 'select-days',
+    iconId: 'faith-solitude',
+    primaryFoundationId: 'faith-solitude',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'faith.generosity-practice',
+    groupId: 'monthly',
+    title: 'Generosity Practice',
+    description: 'Give money, time, or resources as an act of worship.',
+    cadence: 'Monthly',
+    scheduleHint: 'Monthly · Flexible',
+    recommendedFrequency: 'monthly',
+    iconId: 'faith-generosity',
+    primaryFoundationId: 'faith-generosity',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'faith.community-gathering',
+    groupId: 'weekly',
+    title: 'Community Gathering',
+    description: 'Gather for worship, teaching, and life together.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Flexible',
+    recommendedFrequency: 'weekly',
+    iconId: 'faith-community',
+    primaryFoundationId: 'faith-community',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'faith.serve-someone',
+    groupId: 'weekly',
+    title: 'Serve Someone',
+    description: 'Use your gifts and time to serve others in love.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Flexible',
+    recommendedFrequency: 'weekly',
+    iconId: 'faith-service',
+    primaryFoundationId: 'faith-service',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'faith.share-your-story',
+    groupId: 'monthly',
+    title: 'Share Your Story',
+    description: 'Share your faith through words and actions.',
+    cadence: 'Monthly',
+    scheduleHint: 'Monthly · Flexible',
+    recommendedFrequency: 'monthly',
+    iconId: 'faith-witness',
+    primaryFoundationId: 'faith-witness',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'faith.bible-reading',
+    groupId: 'daily-regular',
+    title: 'Bible Reading',
+    description: 'Read and reflect on Scripture, optionally following a reading plan.',
+    cadence: 'Daily',
+    scheduleHint: 'Daily · Flexible',
+    recommendedFrequency: 'daily',
+    iconId: 'faith-scripture',
+    primaryFoundationId: 'faith-scripture',
+    secondaryFoundationIds: []
+  }
+];
 
 export type PersonPreview = {
   id: PersonId;
@@ -30,31 +457,127 @@ export type PersonPreview = {
   avatarUrl?: string;
 };
 
-export type PersonId = 'sample-person-avery' | 'sample-person-morgan' | 'sample-person-jordan';
+export type PersonId = string;
 export type PersonPickerGroupId = 'marriage' | 'parenting' | 'friends';
+export type HealthRunTarget = {
+  distance: number;
+  unit: 'km' | 'mi';
+};
 
 export type PersonPickerGroup = {
   id: PersonPickerGroupId;
   label: string;
   memberIds: readonly PersonId[];
+  [key: string]: unknown;
 };
 
-const syntheticPeopleById = {
-  'sample-person-avery': { id: 'sample-person-avery', displayName: 'Avery Brooks' },
-  'sample-person-morgan': { id: 'sample-person-morgan', displayName: 'Morgan Reed' },
-  'sample-person-jordan': { id: 'sample-person-jordan', displayName: 'Jordan Bell' }
-} satisfies Record<PersonId, PersonPreview>;
+export const syntheticPeople: readonly PersonPreview[] = [
+  { id: 'sample-person-avery', displayName: 'Avery Brooks' },
+  { id: 'sample-person-morgan', displayName: 'Morgan Reed' },
+  { id: 'sample-person-jordan', displayName: 'Jordan Bell' }
+];
 
-export const syntheticPeople = Object.values(syntheticPeopleById);
+export function createSamplePeople(): PersonPreview[] {
+  return syntheticPeople.map(person => ({ ...person }));
+}
 
-export const syntheticPersonPickerGroups: readonly PersonPickerGroup[] = [
+const samplePersonPickerGroups: readonly PersonPickerGroup[] = [
   { id: 'marriage', label: 'Marriage', memberIds: ['sample-person-avery', 'sample-person-morgan'] },
   { id: 'parenting', label: 'Parenting', memberIds: ['sample-person-morgan', 'sample-person-jordan'] },
   { id: 'friends', label: 'Friends', memberIds: ['sample-person-avery', 'sample-person-jordan'] }
 ];
 
-export function personById(id: PersonId): PersonPreview {
-  return syntheticPeopleById[id];
+export const syntheticPersonPickerGroups: readonly PersonPickerGroup[] =
+  resolvePersonCategoryGroups(samplePersonPickerGroups).groups;
+
+export function createPersonPickerGroups(): PersonPickerGroup[] {
+  return syntheticPersonPickerGroups.map(group => ({
+    ...group,
+    memberIds: group.id === 'friends' ? [] : [...group.memberIds]
+  }));
+}
+
+export function personGroupMemberIds(
+  groups: readonly PersonPickerGroup[],
+  groupId: PersonPickerGroupId
+): PersonId[] {
+  return [...(groups.find(group => group.id === groupId)?.memberIds ?? [])];
+}
+
+export function setPersonGroupMembership(
+  groups: readonly PersonPickerGroup[],
+  groupId: PersonPickerGroupId,
+  personId: PersonId,
+  isMember: boolean
+): PersonPickerGroup[] {
+  if (isMember) {
+    return groups.map(group => ({
+      ...group,
+      memberIds: group.id === groupId
+        ? group.memberIds.includes(personId) ? [...group.memberIds] : [...group.memberIds, personId]
+        : group.memberIds.filter(id => id !== personId)
+    }));
+  }
+  return groups.map(group => {
+    if (group.id !== groupId || group.memberIds.includes(personId) === isMember) return group;
+    return {
+      ...group,
+      memberIds: group.memberIds.filter(id => id !== personId)
+    };
+  });
+}
+
+export function migrateLegacyFriendIdsIntoPeopleGroups(
+  groups: readonly PersonPickerGroup[],
+  friendIds: readonly PersonId[]
+): PersonPickerGroup[] {
+  return groups.map(group => ({
+    ...group,
+    memberIds: group.id === 'friends'
+      ? [...friendIds]
+      : [...group.memberIds]
+  }));
+}
+
+export function validatePersonPickerGroups(
+  value: unknown,
+  people: readonly PersonPreview[] = syntheticPeople
+): value is PersonPickerGroup[] {
+  if (!validatePersonPickerGroupsStructure(value, people)) return false;
+  const personIds = new Set((value as PersonPickerGroup[]).flatMap(group => group.memberIds));
+  for (const personId of personIds) {
+    if ((value as PersonPickerGroup[]).filter(group => group.memberIds.includes(personId)).length > 1) return false;
+  }
+  return true;
+}
+
+export function validatePersonPickerGroupsStructure(
+  value: unknown,
+  people: readonly PersonPreview[] = syntheticPeople
+): value is PersonPickerGroup[] {
+  if (!Array.isArray(value) || value.length !== syntheticPersonPickerGroups.length) return false;
+  const knownIds = new Set<PersonPickerGroupId>(['marriage', 'parenting', 'friends']);
+  const knownPeople = new Set<PersonId>(people.map(person => person.id));
+  const seenGroups = new Set<PersonPickerGroupId>();
+  for (const candidate of value) {
+    if (typeof candidate !== 'object' || candidate === null || Array.isArray(candidate)) return false;
+    const group = candidate as Record<string, unknown>;
+    if (typeof group.id !== 'string' || !knownIds.has(group.id as PersonPickerGroupId)
+      || seenGroups.has(group.id as PersonPickerGroupId)
+      || typeof group.label !== 'string' || group.label.trim().length === 0 || group.label.length > 80
+      || !Array.isArray(group.memberIds)) return false;
+    const members = group.memberIds;
+    if (!members.every((id): id is PersonId => typeof id === 'string' && knownPeople.has(id as PersonId))
+      || new Set(members).size !== members.length) return false;
+    seenGroups.add(group.id as PersonPickerGroupId);
+  }
+  return seenGroups.size === knownIds.size;
+}
+
+export function personById(people: readonly PersonPreview[], id: PersonId): PersonPreview {
+  const person = people.find(candidate => candidate.id === id);
+  if (!person) throw new Error(`Unresolved Person ID: ${id}`);
+  return person;
 }
 
 export type RhythmPreview = {
@@ -65,14 +588,15 @@ export type RhythmPreview = {
   automation: RhythmAutomation;
   status: 'Not confirmed' | 'Due today';
   description?: string | undefined;
-  primaryFoundationId?: string;
+  primaryFoundationId?: string | null;
   secondaryFoundationIds?: readonly string[];
+  suggestionSourceId?: string;
   completionHistory?: readonly RhythmCompletion[] | undefined;
   marriageGroup?: MarriageRhythmGroupId;
   iconId?: string;
   illustrativeScore?: number | null | undefined;
   personIds?: readonly PersonId[];
-  categoryIds?: readonly ('faith' | 'marriage' | 'parenting' | 'health' | 'finances' | 'friendships')[];
+  categoryIds?: readonly CategoryId[];
   schedule?: RhythmSchedule;
   scoring?: RhythmScoringMetadata;
   createdLocalDate?: string;
@@ -80,6 +604,8 @@ export type RhythmPreview = {
   dailyBackfillAllowed?: boolean;
   timeOfDay?: RhythmTimeValue;
   personal?: boolean;
+  healthLogCapability?: 'weight' | 'cardio' | 'workout' | null;
+  healthRunTarget?: HealthRunTarget | null;
 };
 
 export type RhythmCompletion = {
@@ -104,6 +630,7 @@ export const areas = [
 export const marriageFoundation: FoundationPreview = {
   id: 'marriage-connection',
   category: 'Marriage',
+  categoryId: 'marriage',
   name: 'Connection',
   description: 'An ongoing foundation supported by small, intentional investments.',
   capabilities: {
@@ -119,6 +646,38 @@ const ongoingMarriageCapabilities: FoundationCapabilities = {
   numericGoals: false,
   completion: 'ongoing'
 };
+
+export const healthFoundationDefinitions = [
+  {
+    id: 'health-strength',
+    progressId: 'strength',
+    title: 'Strength',
+    description: 'Your training, workouts, and muscle balance.'
+  },
+  {
+    id: 'health-cardio',
+    progressId: 'cardio',
+    title: 'Cardio',
+    description: 'Your activity and weekly goals.'
+  },
+  {
+    id: 'health-weight',
+    progressId: 'weight',
+    title: 'Weight',
+    description: 'Your measurements and goal progress.'
+  }
+] as const;
+
+export const healthFoundations: readonly FoundationPreview[] = healthFoundationDefinitions.map(definition => ({
+  id: definition.id,
+  category: 'Health & Fitness',
+  categoryId: 'health',
+  name: definition.title,
+  description: definition.description,
+  capabilities: ongoingMarriageCapabilities,
+  lifecycle: 'active',
+  iconId: definition.id
+}));
 
 export type MarriageExampleId = 'populated' | 'empty';
 
@@ -146,6 +705,7 @@ const marriageFoundationDetails = [
   {
     id: 'connection',
     category: 'Marriage',
+    categoryId: 'marriage',
     name: 'Connection',
     description: 'Feeling known, loved, and emotionally close.',
     capabilities: ongoingMarriageCapabilities,
@@ -155,6 +715,7 @@ const marriageFoundationDetails = [
   {
     id: 'communication',
     category: 'Marriage',
+    categoryId: 'marriage',
     name: 'Communication',
     description: 'Listening, understanding, and navigating life together.',
     capabilities: ongoingMarriageCapabilities,
@@ -164,6 +725,7 @@ const marriageFoundationDetails = [
   {
     id: 'fun-adventure',
     category: 'Marriage',
+    categoryId: 'marriage',
     name: 'Fun & Adventure',
     description: 'Enjoying life together, laughter, and shared experiences.',
     capabilities: ongoingMarriageCapabilities,
@@ -173,6 +735,7 @@ const marriageFoundationDetails = [
   {
     id: 'spiritual-growth',
     category: 'Marriage',
+    categoryId: 'marriage',
     name: 'Spiritual Growth',
     description: 'Shared faith, prayer, and spiritual growth.',
     capabilities: ongoingMarriageCapabilities,
@@ -182,6 +745,7 @@ const marriageFoundationDetails = [
   {
     id: 'partnership',
     category: 'Marriage',
+    categoryId: 'marriage',
     name: 'Partnership',
     description: 'Teamwork, support, and shared responsibilities.',
     capabilities: ongoingMarriageCapabilities,
@@ -191,6 +755,7 @@ const marriageFoundationDetails = [
   {
     id: 'intimacy',
     category: 'Marriage',
+    categoryId: 'marriage',
     name: 'Intimacy',
     description: 'Affection, romance, and physical closeness.',
     capabilities: ongoingMarriageCapabilities,
@@ -213,7 +778,163 @@ const populatedMarriageFoundations: FoundationPreview[] = marriageFoundationDeta
   illustrativeScore: marriageFoundationScores[foundation.id] ?? null
 }));
 
-const populatedMarriageRhythms: RhythmPreview[] = [
+export const parentingFoundations: readonly FoundationPreview[] = [
+  {
+    id: 'parenting-connection-belonging',
+    category: 'Parenting',
+    categoryId: 'parenting',
+    name: 'Connection & Belonging',
+    description: 'Helping your child feel loved, included and connected.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'parenting-connection-belonging'
+  },
+  {
+    id: 'parenting-communication-trust',
+    category: 'Parenting',
+    categoryId: 'parenting',
+    name: 'Communication & Trust',
+    description: 'Listening well and making room for honest conversation.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'parenting-communication-trust'
+  },
+  {
+    id: 'parenting-fun-memories',
+    category: 'Parenting',
+    categoryId: 'parenting',
+    name: 'Fun & Memories',
+    description: 'Enjoying time together and making meaningful memories.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'parenting-fun-memories'
+  },
+  {
+    id: 'parenting-spiritual-growth',
+    category: 'Parenting',
+    categoryId: 'parenting',
+    name: 'Spiritual Growth',
+    description: 'Sharing prayer, Scripture and conversations about faith.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'parenting-spiritual-growth'
+  },
+  {
+    id: 'parenting-guidance-equipping',
+    category: 'Parenting',
+    categoryId: 'parenting',
+    name: 'Guidance & Equipping',
+    description: 'Offering practical skills, support and wisdom for life.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'parenting-guidance-equipping'
+  },
+  {
+    id: 'parenting-encouragement-affirmation',
+    category: 'Parenting',
+    categoryId: 'parenting',
+    name: 'Encouragement & Affirmation',
+    description: 'Recognizing your child’s strengths, effort and growth.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'parenting-encouragement-affirmation'
+  }
+];
+
+export const faithPractices: readonly FoundationPreview[] = [
+  {
+    id: 'faith-sabbath',
+    category: 'Faith',
+    categoryId: 'faith',
+    name: 'Sabbath',
+    description: 'Make room for rest, delight and time with God.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'faith-sabbath'
+  },
+  {
+    id: 'faith-prayer',
+    category: 'Faith',
+    categoryId: 'faith',
+    name: 'Prayer',
+    description: 'Build a steady rhythm of prayer and listening.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'faith-prayer'
+  },
+  {
+    id: 'faith-fasting',
+    category: 'Faith',
+    categoryId: 'faith',
+    name: 'Fasting',
+    description: 'Create space for God through intentional fasting.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'faith-fasting'
+  },
+  {
+    id: 'faith-solitude',
+    category: 'Faith',
+    categoryId: 'faith',
+    name: 'Solitude',
+    description: 'Make room for quiet, reflection and listening.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'faith-solitude'
+  },
+  {
+    id: 'faith-generosity',
+    category: 'Faith',
+    categoryId: 'faith',
+    name: 'Generosity',
+    description: 'Practice open-handed living with what you have.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'faith-generosity'
+  },
+  {
+    id: 'faith-community',
+    category: 'Faith',
+    categoryId: 'faith',
+    name: 'Community',
+    description: 'Share worship, belonging and life with others.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'faith-community'
+  },
+  {
+    id: 'faith-service',
+    category: 'Faith',
+    categoryId: 'faith',
+    name: 'Service',
+    description: 'Turn care for others into regular acts of service.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'faith-service'
+  },
+  {
+    id: 'faith-witness',
+    category: 'Faith',
+    categoryId: 'faith',
+    name: 'Witness',
+    description: 'Live and share your faith with the people around you.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'faith-witness'
+  },
+  {
+    id: 'faith-scripture',
+    category: 'Faith',
+    categoryId: 'faith',
+    name: 'Scripture',
+    description: 'Read and reflect on Scripture regularly.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'faith-scripture'
+  }
+];
+
+const populatedMarriageRhythms = ([
   {
     id: 'sample-marriage-connection',
     title: 'Daily Connection',
@@ -287,7 +1008,10 @@ const populatedMarriageRhythms: RhythmPreview[] = [
     ],
     marriageGroup: 'seasonal'
   }
-];
+] satisfies RhythmPreview[]).map<RhythmPreview>(rhythm => ({
+  ...rhythm,
+  categoryIds: ['marriage']
+}));
 
 export const marriageExampleFixtures: Record<MarriageExampleId, MarriageFixture> = {
   populated: {
@@ -332,22 +1056,235 @@ export const todayOverallIllustrativeScore = 87;
 export const marriageFoundations = marriageExampleFixtures.populated.foundations;
 export const marriageRhythms = marriageExampleFixtures.populated.rhythms;
 
-export const marriageRhythmGroups: { id: MarriageRhythmGroupId; title: string }[] = [
-  { id: 'daily', title: 'Daily Connection' },
-  { id: 'weekly', title: 'Weekly Investment' },
-  { id: 'seasonal', title: 'Seasonal & Annual' }
+const marriageSuggestionTemplateRows: {
+  templateId: string;
+  sourceSampleRhythmId?: string;
+  title: string;
+  description: string;
+  cadence: string;
+  timeLabel: string;
+  marriageGroup: MarriageRhythmGroupId;
+  iconId: string;
+  primaryFoundationId: string;
+  secondaryFoundationIds: string[];
+  scheduleHint: string;
+  recommendedFrequency: RhythmFrequencyRecommendation;
+  frequencyGuidance?: string;
+}[] = [
+  {
+    templateId: 'marriage.daily-connection',
+    sourceSampleRhythmId: 'sample-marriage-connection',
+    title: 'Daily Connection',
+    description: 'Make a little room each day to connect in a way that fits your life.',
+    cadence: '5 times a week',
+    timeLabel: 'Anytime',
+    marriageGroup: 'daily',
+    iconId: 'daily-connection',
+    primaryFoundationId: 'connection',
+    secondaryFoundationIds: ['communication', 'intimacy'],
+    scheduleHint: '5 times a week · Flexible',
+    recommendedFrequency: 'select-days',
+    frequencyGuidance: 'Choose the days you want; no weekdays are selected.'
+  },
+  {
+    templateId: 'marriage.pray-together',
+    sourceSampleRhythmId: 'sample-marriage-prayer',
+    title: 'Pray Together',
+    description: 'Bring gratitude and needs before God together.',
+    cadence: 'Daily',
+    timeLabel: 'Evening',
+    marriageGroup: 'daily',
+    iconId: 'pray-together',
+    primaryFoundationId: 'spiritual-growth',
+    secondaryFoundationIds: ['connection'],
+    scheduleHint: 'Daily · Evening',
+    recommendedFrequency: 'daily'
+  },
+  {
+    templateId: 'marriage.date-night',
+    sourceSampleRhythmId: 'sample-marriage-date-night',
+    title: 'Date Night',
+    description: 'Enjoy intentional time together beyond responsibilities and logistics.',
+    cadence: 'Weekly',
+    timeLabel: 'Evening',
+    marriageGroup: 'weekly',
+    iconId: 'date-night',
+    primaryFoundationId: 'fun-adventure',
+    secondaryFoundationIds: ['connection'],
+    scheduleHint: 'Weekly · Evening',
+    recommendedFrequency: 'weekly'
+  },
+  {
+    templateId: 'marriage.marriage-check-in',
+    title: 'Marriage Check-In',
+    description: 'Share appreciation, listen to concerns, and choose one supportive next step.',
+    cadence: 'Weekly',
+    timeLabel: 'Anytime',
+    marriageGroup: 'weekly',
+    iconId: 'marriage-check-in',
+    primaryFoundationId: 'communication',
+    secondaryFoundationIds: ['partnership'],
+    scheduleHint: 'Weekly · Flexible',
+    recommendedFrequency: 'weekly'
+  },
+  {
+    templateId: 'marriage.thoughtful-act-of-love',
+    title: 'Thoughtful Act of Love',
+    description: 'Choose a thoughtful action that helps your partner feel cared for.',
+    cadence: 'Weekly',
+    timeLabel: 'Anytime',
+    marriageGroup: 'weekly',
+    iconId: 'thoughtful-act-of-love',
+    primaryFoundationId: 'partnership',
+    secondaryFoundationIds: ['connection'],
+    scheduleHint: 'Weekly · Flexible',
+    recommendedFrequency: 'weekly'
+  },
+  {
+    templateId: 'marriage.dream-together',
+    sourceSampleRhythmId: 'sample-marriage-dream',
+    title: 'Dream Together',
+    description: 'Talk about hopes, plans, and the next season of life.',
+    cadence: 'Quarterly',
+    timeLabel: 'Anytime',
+    marriageGroup: 'seasonal',
+    iconId: 'dream-together',
+    primaryFoundationId: 'partnership',
+    secondaryFoundationIds: ['fun-adventure'],
+    scheduleHint: 'Quarterly · Flexible',
+    recommendedFrequency: 'quarterly'
+  },
+  {
+    templateId: 'marriage.overnight-away',
+    title: 'Overnight Away',
+    description: 'Protect time away from the normal routine to reconnect.',
+    cadence: 'Quarterly',
+    timeLabel: 'Anytime',
+    marriageGroup: 'seasonal',
+    iconId: 'overnight-away',
+    primaryFoundationId: 'fun-adventure',
+    secondaryFoundationIds: ['intimacy'],
+    scheduleHint: 'Quarterly · Flexible',
+    recommendedFrequency: 'quarterly'
+  },
+  {
+    templateId: 'marriage.marriage-enrichment',
+    title: 'Marriage Enrichment',
+    description: 'Make time to learn, reflect, and grow together.',
+    cadence: 'Yearly',
+    timeLabel: 'Anytime',
+    marriageGroup: 'seasonal',
+    iconId: 'marriage-enrichment',
+    primaryFoundationId: 'communication',
+    secondaryFoundationIds: ['partnership'],
+    scheduleHint: 'Yearly · Flexible',
+    recommendedFrequency: 'yearly'
+  },
+  {
+    templateId: 'marriage.week-away-together',
+    title: 'Week Away Together',
+    description: 'Protect extended time together for rest, enjoyment, and connection.',
+    cadence: 'Yearly',
+    timeLabel: 'Anytime',
+    marriageGroup: 'seasonal',
+    iconId: 'week-away-together',
+    primaryFoundationId: 'fun-adventure',
+    secondaryFoundationIds: ['connection'],
+    scheduleHint: 'Yearly · Flexible',
+    recommendedFrequency: 'yearly'
+  }
 ];
 
-export function marriageFoundationCoverage(fixture: MarriageFixture, foundationId: string) {
-  const associated = rhythmsSupportingFoundation(fixture.rhythms, foundationId);
+export const marriageRhythmSuggestions: readonly MarriageRhythmSuggestion[] =
+  marriageSuggestionTemplateRows.map(template => {
+    const source = template.sourceSampleRhythmId
+      ? marriageRhythms.find(rhythm => rhythm.id === template.sourceSampleRhythmId)
+      : undefined;
+    return {
+      templateId: template.templateId,
+      scheduleHint: template.scheduleHint,
+      recommendedFrequency: template.recommendedFrequency,
+      ...(template.frequencyGuidance ? { frequencyGuidance: template.frequencyGuidance } : {}),
+      ...(template.sourceSampleRhythmId ? { sourceSampleRhythmId: template.sourceSampleRhythmId } : {}),
+      rhythm: {
+        ...(source ?? {
+          id: template.templateId,
+          title: template.title,
+          cadence: template.cadence,
+          timeLabel: template.timeLabel,
+          automation: 'manual' as const,
+          status: 'Not confirmed' as const,
+          description: template.description,
+          iconId: template.iconId,
+          personIds: ['sample-person-avery', 'sample-person-morgan'] as PersonId[],
+          primaryFoundationId: template.primaryFoundationId,
+          secondaryFoundationIds: template.secondaryFoundationIds
+        }),
+        id: template.templateId,
+        title: template.title,
+        cadence: template.cadence,
+        timeLabel: template.timeLabel,
+        description: template.description,
+        iconId: template.iconId,
+        marriageGroup: template.marriageGroup,
+        personIds: ['sample-person-avery', 'sample-person-morgan'],
+        primaryFoundationId: template.primaryFoundationId,
+        secondaryFoundationIds: template.secondaryFoundationIds
+      }
+    };
+  });
+
+export const marriageRhythmGroups: {
+  id: MarriageRhythmGroupId;
+  title: string;
+  subtitle: string;
+}[] = [
+  { id: 'daily', title: 'Daily Connection', subtitle: 'The little things that matter most.' },
+  { id: 'weekly', title: 'Weekly Investment', subtitle: 'Protect time for your relationship.' },
+  { id: 'seasonal', title: 'Seasonal & Annual', subtitle: 'Make room for deeper connection.' }
+];
+
+export function marriageFoundationCoverage(
+  fixture: MarriageFixture,
+  foundationId: string,
+  rhythms: readonly RhythmPreview[] = fixture.rhythms
+) {
+  const associated = rhythmsSupportingFoundation(rhythms, foundationId);
   return {
     scored: associated.filter(rhythm => rhythm.illustrativeScore !== null && rhythm.illustrativeScore !== undefined).length,
     total: associated.length
   };
 }
 
-export function peopleForRhythm(rhythm: Pick<RhythmPreview, 'personIds'>): PersonPreview[] {
-  return (rhythm.personIds ?? []).map(personById);
+export function peopleForRhythm(
+  rhythm: Pick<RhythmPreview, 'personIds'>,
+  people: readonly PersonPreview[] = syntheticPeople
+): PersonPreview[] {
+  return (rhythm.personIds ?? []).flatMap(id => {
+    const person = people.find(candidate => candidate.id === id);
+    return person ? [person] : [];
+  });
+}
+
+export function isValidPersonId(value: unknown): value is PersonId {
+  return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(value);
+}
+
+export function validatePeopleCollection(value: unknown): value is PersonPreview[] {
+  if (!Array.isArray(value)) return false;
+  const seen = new Set<string>();
+  for (const candidate of value) {
+    if (typeof candidate !== 'object' || candidate === null || Array.isArray(candidate)) return false;
+    const person = candidate as Record<string, unknown>;
+    if (Object.keys(person).some(key => key !== 'id' && key !== 'displayName')
+      || !isValidPersonId(person.id)
+      || seen.has(person.id)
+      || typeof person.displayName !== 'string'
+      || person.displayName.trim().length === 0
+      || person.displayName.length > 120) return false;
+    seen.add(person.id);
+  }
+  return true;
 }
 
 export function marriageScoreCoverage(scores: readonly (number | null | undefined)[]) {
@@ -396,6 +1333,26 @@ export function orderedCompletions(
   );
 }
 
+export function rhythmLastActivityLabel(
+  rhythm: Pick<RhythmPreview, 'completionHistory'>,
+  asOfDate: string
+): string {
+  const latest = orderedCompletions(rhythm.completionHistory?.filter(record =>
+    record.effectiveDate <= asOfDate
+  ))[0];
+  if (!latest) return 'Never';
+  if (latest.effectiveDate === asOfDate) return 'Today';
+
+  const activityYear = Number(latest.effectiveDate.slice(0, 4));
+  const evaluationYear = Number(asOfDate.slice(0, 4));
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(activityYear !== evaluationYear ? { year: 'numeric' as const } : {}),
+    timeZone: 'UTC'
+  }).format(new Date(`${latest.effectiveDate}T12:00:00Z`));
+}
+
 export function rhythmLastTendedLabel(
   rhythm: Pick<RhythmPreview, 'completionHistory' | 'cadence' | 'schedule' | 'scoring' | 'createdLocalDate'>,
   completedToday = false,
@@ -433,6 +1390,7 @@ export function rhythmLastTendedLabel(
 export const financeFoundation: FoundationPreview = {
   id: 'finance-example-milestone',
   category: 'Finances',
+  categoryId: 'finances',
   name: 'Emergency reserve · example milestone',
   description: 'A sample completable milestone. This is illustrative, not a finalized Finances taxonomy.',
   capabilities: {
@@ -443,6 +1401,14 @@ export const financeFoundation: FoundationPreview = {
   lifecycle: 'active',
   sampleOnly: true
 };
+
+export const foundationCatalogue: readonly FoundationPreview[] = [
+  ...marriageFoundations,
+  ...parentingFoundations,
+  ...faithPractices,
+  ...healthFoundations,
+  financeFoundation
+];
 
 export const goals: GoalPreview[] = [
   {

@@ -4,6 +4,10 @@ import { AreaIcon } from './AreaIcon.tsx';
 
 export type Destination = 'today' | 'focus' | 'people' | 'more' | (typeof areas)[number]['id'];
 export type TextSize = 'small' | 'medium' | 'large';
+export type CategoryTabNavigationRequest = {
+  categoryId: Destination;
+  requestId: number;
+};
 
 type AppNavigationProps = {
   destination: Destination;
@@ -32,7 +36,11 @@ export function AppNavigation({
     <>
       <header className="apphead">
         <div className="brand">
-          <a href="/app-preview.html" aria-label="Tend Today" className="brand-home">
+          <a
+            href={import.meta.env.MODE === 'pages' ? '/' : '/app-preview.html'}
+            aria-label="Tend Today"
+            className="brand-home"
+          >
             <img src="/brand/tend-logo.png" alt="Tend" />
           </a>
           <div className="brand-copy">
@@ -81,7 +89,7 @@ export function AppNavigation({
                 id="tendSearch"
                 type="search"
                 placeholder="Search Tend..."
-                aria-label="Search sample Rhythms"
+                aria-label={import.meta.env.MODE === 'pages' ? 'Search your Rhythms' : 'Search sample Rhythms'}
                 value={search}
                 disabled={destination !== 'today'}
                 onChange={event => onSearchChange(event.currentTarget.value)}

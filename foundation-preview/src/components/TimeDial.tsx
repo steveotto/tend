@@ -8,13 +8,21 @@ export function TimeDial<Value extends string | number>({
   values,
   value,
   formatValue,
-  onChange
+  onChange,
+  shortcuts,
+  shortcutAriaLabel,
+  compactToggle = false,
+  className = ''
 }: {
   label: string;
   values: readonly Value[];
   value: Value;
   formatValue: (value: Value) => string;
   onChange: (value: Value) => void;
+  shortcuts?: readonly Value[];
+  shortcutAriaLabel?: (value: Value) => string;
+  compactToggle?: boolean;
+  className?: string;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
@@ -44,7 +52,7 @@ export function TimeDial<Value extends string | number>({
       if (usesAnimationFrame) window.cancelAnimationFrame(frame);
       else window.clearTimeout(frame);
     };
-  }, [selectedIndex]);
+  }, [selectedIndex, compactToggle]);
 
   function moveTo(index: number) {
     const boundedIndex = Math.max(0, Math.min(values.length - 1, index));
@@ -70,44 +78,87 @@ export function TimeDial<Value extends string | number>({
   }
 
   return (
-    <div className="time-dial">
-      <span className="time-dial__label" id={`time-dial-${label.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')}`}>
+    <div className={['time-dial', className, compactToggle ? 'time-dial--compact-toggle' : ''].filter(Boolean).join(' ')}>
+      <span
+        className="time-dial__label"
+        id={`time-dial-${label.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')}`}
+        aria-hidden={compactToggle || undefined}
+      >
         {label}
       </span>
-      <div
-        ref={scrollRef}
-        className="time-dial__viewport"
-        role="spinbutton"
-        aria-labelledby={`time-dial-${label.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')}`}
-        aria-valuemin={minimum}
-        aria-valuemax={maximum}
-        aria-valuenow={current}
-        aria-valuetext={formatValue(value)}
-        tabIndex={0}
-        onKeyDown={handleKeyDown}
-        onScroll={event => {
-          if (!initializedRef.current) return;
-          const nextIndex = Math.max(0, Math.min(values.length - 1,
-            Math.round(event.currentTarget.scrollTop / rowHeight)));
-          if (values[nextIndex] !== undefined && nextIndex !== selectedIndex) {
-            onChange(values[nextIndex]!);
-          }
-        }}
-      >
-        <div className="time-dial__selection" aria-hidden="true" />
-        <div className="time-dial__spacer" aria-hidden="true" />
-        {values.map((option, index) => (
-          <span
-            key={String(option)}
-            className={`time-dial__value${index === selectedIndex ? ' is-selected' : ''}`}
-            aria-hidden="true"
-            onClick={() => moveTo(index)}
-          >
-            {formatValue(option)}
-          </span>
-        ))}
-        <div className="time-dial__spacer" aria-hidden="true" />
-      </div>
+      {compactToggle ? (
+        <div
+          className="time-dial__period-toggle"
+          role="group"
+          aria-label={label}
+        >
+          {values.map(option => (
+            <button
+              key={String(option)}
+              type="button"
+              className="time-dial__period-option"
+              aria-pressed={option === value}
+              onClick={() => onChange(option)}
+            >
+              {formatValue(option)}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div
+          ref={scrollRef}
+          className="time-dial__viewport"
+          role="spinbutton"
+          aria-labelledby={`time-dial-${label.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')}`}
+          aria-valuemin={minimum}
+          aria-valuemax={maximum}
+          aria-valuenow={current}
+          aria-valuetext={formatValue(value)}
+          tabIndex={0}
+          onKeyDown={handleKeyDown}
+          onScroll={event => {
+            if (!initializedRef.current) return;
+            const nextIndex = Math.max(0, Math.min(values.length - 1,
+              Math.round(event.currentTarget.scrollTop / rowHeight)));
+            if (values[nextIndex] !== undefined && nextIndex !== selectedIndex) {
+              onChange(values[nextIndex]!);
+            }
+          }}
+        >
+          <div className="time-dial__selection" aria-hidden="true" />
+          <div className="time-dial__spacer" aria-hidden="true" />
+          {values.map((option, index) => (
+            <span
+              key={String(option)}
+              className={`time-dial__value${index === selectedIndex ? ' is-selected' : ''}`}
+              aria-hidden="true"
+              onClick={() => moveTo(index)}
+            >
+              {formatValue(option)}
+            </span>
+          ))}
+          <div className="time-dial__spacer" aria-hidden="true" />
+        </div>
+      )}
+      {shortcuts && shortcuts.length > 0 && (
+        <div className="time-dial__shortcuts" role="group" aria-label={`${label} shortcuts`}>
+          {shortcuts.map(shortcut => (
+            <button
+              key={String(shortcut)}
+              type="button"
+              className="time-dial__shortcut"
+              aria-label={shortcutAriaLabel?.(shortcut) ?? formatValue(shortcut)}
+              aria-pressed={shortcut === value}
+              onClick={() => {
+                const index = values.indexOf(shortcut);
+                if (index >= 0) moveTo(index);
+              }}
+            >
+              {formatValue(shortcut)}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -31,18 +31,50 @@ export function rhythmSeasonPaletteAssignments(
   seasons: readonly RhythmScheduleHistorySegment[]
 ): ReadonlyMap<string, RhythmScheduleSegment['paletteToken']> {
   const assignments = new Map<string, RhythmScheduleSegment['paletteToken']>();
-  let ordinal = 0;
-  for (const season of seasons) {
+  const recentPaletteColors: RhythmScheduleSegment['paletteToken'][] = [];
+  const chronologicalSeasons = [...seasons].sort((left, right) =>
+    left.startDate.localeCompare(right.startDate) || left.id.localeCompare(right.id)
+  );
+  let scheduledOrdinal = 0;
+  for (const season of chronologicalSeasons) {
     if (season.kind !== 'scheduled') continue;
-    const chronologicalPalette = rhythmSeasonPaletteForOrdinal(ordinal);
-    const paletteToken = season.paletteToken === rhythmSeasonPaletteForId(season.id)
-      && season.paletteToken !== chronologicalPalette
-      ? chronologicalPalette
-      : season.paletteToken;
+    if (recentPaletteColors.length === rhythmSeasonPaletteCycleTokens.length) {
+      recentPaletteColors.shift();
+    }
+    let paletteToken = season.paletteToken;
+    const idPaletteToken = rhythmSeasonPaletteForId(season.id);
+    const chronologicalPaletteToken = rhythmSeasonPaletteForOrdinal(scheduledOrdinal);
+    if (sameRhythmSeasonPaletteColor(paletteToken, idPaletteToken)
+      && !sameRhythmSeasonPaletteColor(paletteToken, chronologicalPaletteToken)) {
+      paletteToken = chronologicalPaletteToken;
+    }
+    if (recentPaletteColors.some(recent => sameRhythmSeasonPaletteColor(paletteToken, recent))) {
+      const startIndex = rhythmSeasonPaletteCycleTokens.findIndex(token =>
+        sameRhythmSeasonPaletteColor(token, chronologicalPaletteToken)
+      );
+      for (let offset = 0; offset < rhythmSeasonPaletteCycleTokens.length; offset += 1) {
+        const candidate = rhythmSeasonPaletteCycleTokens[
+          (Math.max(startIndex, 0) + offset) % rhythmSeasonPaletteCycleTokens.length
+        ]!;
+        if (!recentPaletteColors.some(recent => sameRhythmSeasonPaletteColor(candidate, recent))) {
+          paletteToken = candidate;
+          break;
+        }
+      }
+    }
     assignments.set(season.id, paletteToken);
-    ordinal += 1;
+    recentPaletteColors.push(paletteToken);
+    scheduledOrdinal += 1;
   }
   return assignments;
+}
+
+function sameRhythmSeasonPaletteColor(
+  left: RhythmScheduleSegment['paletteToken'] | undefined,
+  right: RhythmScheduleSegment['paletteToken'] | undefined
+): boolean {
+  if (left === undefined || right === undefined) return false;
+  return (left === 'clay' ? 'ocean' : left) === (right === 'clay' ? 'ocean' : right);
 }
 
 export function createRhythmSeason(
@@ -77,6 +109,22 @@ export function createUnknownRhythmSeason(
     ...(descriptiveCadence === undefined ? {} : { descriptiveCadence }),
     paletteToken: rhythmSeasonPaletteForId(id)
   };
+}
+
+export function ensureRhythmSeasonHistoryCoverage(
+  rhythmId: string,
+  seasons: readonly RhythmScheduleHistorySegment[],
+  startDate: RhythmLocalDate
+): RhythmScheduleHistorySegment[] {
+  if (!isValidDate(startDate)) {
+    throw new RangeError('Season history coverage start must be a valid date.');
+  }
+  const first = seasons[0];
+  if (!first || startDate >= first.startDate) return [...seasons];
+  if (first.kind === 'unknown') {
+    return [{ ...first, startDate }, ...seasons.slice(1)];
+  }
+  return [createUnknownRhythmSeason(rhythmId, startDate), ...seasons];
 }
 
 export function rhythmSeasonForDate(

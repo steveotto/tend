@@ -1,34 +1,57 @@
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 type MoneyGoalDialogProps = {
+  eyebrow?: string;
   title?: string;
+  titleLeadingAction?: ReactNode;
   intro?: string;
   children: ReactNode;
   closeLabel?: string;
+  closeButtonId?: string;
   labelledBy?: string;
+  titleId?: string;
   initialFocusId?: string;
   stopEscapePropagation?: boolean;
+  closeOnEscape?: boolean;
+  portalToBody?: boolean;
+  dialogId?: string;
+  dismissOnBackdrop?: boolean;
   dialogClassName?: string;
+  phoneFullScreen?: boolean;
+  inert?: boolean;
   surfaceClassName?: string;
+  bodyClassName?: string;
   onClose: () => void;
 };
 
 export function MoneyGoalDialog({
+  eyebrow,
   title,
+  titleLeadingAction,
   intro,
   children,
   closeLabel,
+  closeButtonId,
   labelledBy,
+  titleId,
   initialFocusId,
   stopEscapePropagation = false,
+  closeOnEscape = false,
+  portalToBody = false,
+  dialogId,
+  dismissOnBackdrop = false,
   dialogClassName,
+  phoneFullScreen = false,
+  inert = false,
   surfaceClassName,
+  bodyClassName,
   onClose
 }: MoneyGoalDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (typeof dialog.showModal === 'function') dialog.showModal();
@@ -41,10 +64,16 @@ export function MoneyGoalDialog({
     };
   }, [initialFocusId]);
 
-  return (
+  const dialog = (
     <dialog
       ref={dialogRef}
-      className={['money-goal-dialog', dialogClassName].filter(Boolean).join(' ')}
+      id={dialogId}
+      inert={inert}
+      className={[
+        'money-goal-dialog',
+        dialogClassName,
+        phoneFullScreen ? 'dialog--phone-fullscreen' : ''
+      ].filter(Boolean).join(' ')}
       aria-labelledby={labelledBy ?? 'money-goal-dialog-title'}
       onCancel={event => {
         event.preventDefault();
@@ -52,12 +81,22 @@ export function MoneyGoalDialog({
         onClose();
       }}
       onKeyDown={event => {
-        if (stopEscapePropagation && event.key === 'Escape') event.stopPropagation();
+        if (event.key === 'Escape' && closeOnEscape) {
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+        } else if (stopEscapePropagation && event.key === 'Escape') {
+          event.stopPropagation();
+        }
+      }}
+      onClick={event => {
+        if (dismissOnBackdrop && event.target === event.currentTarget) onClose();
       }}
     >
       <div className={['money-goal-dialog__surface', surfaceClassName].filter(Boolean).join(' ')}>
         {closeLabel && (
           <button
+            id={closeButtonId}
             type="button"
             className="money-goal-dialog__close"
             aria-label={closeLabel}
@@ -66,10 +105,29 @@ export function MoneyGoalDialog({
             ×
           </button>
         )}
-        {title && <h2 id="money-goal-dialog-title">{title}</h2>}
+        {eyebrow && <p className="money-goal-dialog__eyebrow">{eyebrow}</p>}
+        {title && titleLeadingAction ? (
+          <div className="money-goal-dialog__title-row">
+            {titleLeadingAction}
+            <h2
+              id={titleId ?? 'money-goal-dialog-title'}
+              tabIndex={initialFocusId === (titleId ?? 'money-goal-dialog-title') ? -1 : undefined}
+            >
+              {title}
+            </h2>
+          </div>
+        ) : title && (
+          <h2
+            id={titleId ?? 'money-goal-dialog-title'}
+            tabIndex={initialFocusId === (titleId ?? 'money-goal-dialog-title') ? -1 : undefined}
+          >
+            {title}
+          </h2>
+        )}
         {intro && <p className="money-goal-dialog__intro">{intro}</p>}
-        {children}
+        {bodyClassName ? <div className={bodyClassName}>{children}</div> : children}
       </div>
     </dialog>
   );
+  return portalToBody ? createPortal(dialog, document.body) : dialog;
 }

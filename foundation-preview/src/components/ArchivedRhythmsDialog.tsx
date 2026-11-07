@@ -1,22 +1,32 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
-import type { PersonId, RhythmPreview } from '../domain/preview-data.ts';
+import { syntheticPeople } from '../domain/preview-data.ts';
+import type { FoundationPreview, PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
+import type { Destination } from './AppNavigation.tsx';
 import { peopleForRhythm } from '../domain/preview-data.ts';
 import { RhythmCard } from './Cards.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 
 type ArchivedRhythmsDialogProps = {
   rhythms: readonly RhythmPreview[];
+  people?: readonly PersonPreview[];
+  foundations?: readonly FoundationPreview[];
   completedRhythms: ReadonlySet<string>;
   onPersonSelect: (personId: PersonId) => void;
+  onOpenFoundation?: (foundationId: string, openerId: string) => void;
+  onOpenCategory?: (categoryId: Destination, openerId: string) => void;
   onRestore: (id: string) => void;
   onClose: () => void;
 };
 
 export function ArchivedRhythmsDialog({
   rhythms,
+  people = syntheticPeople,
+  foundations,
   completedRhythms,
   onPersonSelect,
+  onOpenFoundation,
+  onOpenCategory,
   onRestore,
   onClose
 }: ArchivedRhythmsDialogProps) {
@@ -36,7 +46,7 @@ export function ArchivedRhythmsDialog({
     if (!dialog) return;
     if (typeof dialog.showModal === 'function') dialog.showModal();
     else dialog.setAttribute('open', '');
-    closeButtonRef.current?.focus();
+    closeButtonRef.current?.focus({ preventScroll: true });
     return () => {
       if (dialog.open && typeof dialog.close === 'function') dialog.close();
     };
@@ -45,7 +55,7 @@ export function ArchivedRhythmsDialog({
   useEffect(() => {
     if (wasDetailOpenRef.current && selectedRhythmId === null) {
       const rhythmId = lastSelectedRhythmId.current;
-      if (rhythmId) detailsOpeners.current.get(rhythmId)?.focus();
+      if (rhythmId) detailsOpeners.current.get(rhythmId)?.focus({ preventScroll: true });
     }
     wasDetailOpenRef.current = selectedRhythmId !== null;
   }, [selectedRhythmId]);
@@ -55,11 +65,11 @@ export function ArchivedRhythmsDialog({
     if (restoredIndex === null) return;
     restoreIndexRef.current = null;
     if (rhythms.length === 0) {
-      emptyHeadingRef.current?.focus();
+      emptyHeadingRef.current?.focus({ preventScroll: true });
       return;
     }
     const nextRhythm = rhythms[Math.min(restoredIndex, rhythms.length - 1)];
-    if (nextRhythm) restoreButtons.current.get(nextRhythm.id)?.focus();
+    if (nextRhythm) restoreButtons.current.get(nextRhythm.id)?.focus({ preventScroll: true });
   }, [rhythms]);
 
   function openDetails(id: string, event: MouseEvent<HTMLButtonElement>) {
@@ -67,6 +77,19 @@ export function ArchivedRhythmsDialog({
     detailsOpeners.current.set(id, event.currentTarget);
     setSelectedRhythmId(id);
   }
+
+  const navigateToFoundation = onOpenFoundation
+    ? (foundationId: string, openerId: string) => {
+        onClose();
+        onOpenFoundation(foundationId, openerId);
+      }
+    : undefined;
+  const navigateToCategory = onOpenCategory
+    ? (categoryId: Destination, openerId: string) => {
+        onClose();
+        onOpenCategory(categoryId, openerId);
+      }
+    : undefined;
 
   return (
     <dialog
@@ -105,11 +128,15 @@ export function ArchivedRhythmsDialog({
             </p>
             <RhythmDetailsDialog
               rhythm={selectedRhythm}
-              people={peopleForRhythm(selectedRhythm)}
+              {...(foundations ? { foundations } : {})}
+              relatedRhythms={rhythms}
+              people={peopleForRhythm(selectedRhythm, people)}
               completed={completedRhythms.has(selectedRhythm.id)}
               archived
               embedded
               onPersonSelect={onPersonSelect}
+              {...(navigateToFoundation ? { onOpenFoundation: navigateToFoundation } : {})}
+              {...(navigateToCategory ? { onOpenCategory: navigateToCategory } : {})}
               onClose={onClose}
             />
             <button
@@ -138,8 +165,10 @@ export function ArchivedRhythmsDialog({
                   <div className="archived-rhythms-dialog__item" key={rhythm.id}>
                     <RhythmCard
                       rhythm={rhythm}
-                      people={peopleForRhythm(rhythm)}
+                      people={peopleForRhythm(rhythm, people)}
                       onPersonSelect={onPersonSelect}
+                      {...(navigateToFoundation ? { onOpenFoundation: navigateToFoundation } : {})}
+                      {...(navigateToCategory ? { onOpenCategory: navigateToCategory } : {})}
                       variant="simple"
                       completed={completedRhythms.has(rhythm.id)}
                       archived

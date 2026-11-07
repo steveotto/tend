@@ -24,12 +24,13 @@ window.TimeWheelPicker = (function(){
   for(var minute=0;minute<60;minute+=minuteStep)minuteValues.push(minute);
   var values={hour:1,minute:0,period:"AM"},wheels={},viewports={},settleTimers={},programmaticTimers={},scrollFrames={},programmatic={},pendingHaptics={},lastHapticTime=0,drag=null,pointerGesture=null,suppressClickWheel=null,suppressClickTimer=null,destroyed=false,resizeObserver=null,windowResizeHandler=null;
   var labels={hour:"Hour",minute:"Minute",period:"AM / PM"};
+  var minuteShortcuts=[0,15,30,45];
   var listValues={hour:Array.from({length:12},function(_,index){return index+1;}),minute:minuteValues,period:["AM","PM"]};
   var live=document.createElement("span");live.className="time-wheel-live";live.setAttribute("aria-live","polite");live.setAttribute("aria-atomic","true");
   var markup='<div class="time-wheel-columns" role="group" aria-label="Time"><div class="time-wheel-labels">'+["hour","minute","period"].map(function(name){return '<span class="time-wheel-label">'+labels[name]+'</span>';}).join("")+'</div><div class="time-wheel-viewports">'+
    ["hour","minute","period"].map(function(name){
    return '<div class="time-wheel-viewport"><div class="time-wheel-selection-band" aria-hidden="true"></div><div class="time-wheel-column" data-wheel="'+name+'" role="spinbutton" tabindex="0" aria-label="'+labels[name]+'" aria-valuemin="'+(name==="hour"?1:name==="minute"?0:1)+'" aria-valuemax="'+(name==="hour"?12:name==="minute"?59:2)+'"><div class="time-wheel-options">'+listValues[name].map(function(value){return '<div class="time-wheel-option" data-value="'+value+'">'+(name==="period"?value:String(value).padStart(2,"0"))+'</div>';}).join("")+'</div></div></div>';
-  }).join("")+'</div></div>';
+  }).join("")+'</div><div class="time-wheel-shortcut-columns"><span aria-hidden="true"></span><div class="time-wheel-shortcuts" role="group" aria-label="Minute shortcuts">'+minuteShortcuts.map(function(minute){var label=String(minute).padStart(2,"0");return '<button type="button" class="time-wheel-shortcut" data-minute="'+minute+'" aria-label="Set minutes to '+label+'" aria-pressed="false">'+label+'</button>';}).join("")+'</div><span aria-hidden="true"></span></div></div>';
   root.innerHTML=markup;
   root.appendChild(live);
   if(options.accent)root.setAttribute("data-accent",options.accent);
@@ -53,6 +54,7 @@ window.TimeWheelPicker = (function(){
     }
     settle(name);
    });
+   wheel.addEventListener("wheel",function(){releaseProgrammatic(name);},{passive:true});
    wheel.addEventListener("click",function(event){
     if(suppressClickWheel===wheel){suppressClickWheel=null;clearTimeout(suppressClickTimer);return;}
     if(event.detail===0)return;
@@ -79,10 +81,10 @@ window.TimeWheelPicker = (function(){
     }
    });
    wheel.addEventListener("pointermove",function(event){
-    if(pointerGesture&&pointerGesture.wheel===wheel&&pointerGesture.pointerId===event.pointerId&&Math.abs(event.clientY-pointerGesture.startY)>5)pointerGesture.moved=true;
+    if(pointerGesture&&pointerGesture.wheel===wheel&&pointerGesture.pointerId===event.pointerId&&Math.abs(event.clientY-pointerGesture.startY)>5){pointerGesture.moved=true;releaseProgrammatic(name);}
     if(!drag||drag.wheel!==wheel)return;
     var distance=event.clientY-drag.startY;
-    if(Math.abs(distance)>4)drag.moved=true;
+    if(Math.abs(distance)>4){drag.moved=true;releaseProgrammatic(name);}
     if(drag.moved){wheel.scrollTop=drag.startTop-distance;event.preventDefault();}
    });
    ["pointerup","pointercancel","lostpointercapture"].forEach(function(type){
@@ -98,6 +100,12 @@ window.TimeWheelPicker = (function(){
     });
    });
   });
+  root.querySelectorAll(".time-wheel-shortcut").forEach(function(button){
+   button.addEventListener("click",function(){
+    var minute=Number(button.getAttribute("data-minute")),index=listValues.minute.indexOf(minute);
+    if(index>=0)select("minute",index,true,true);
+   });
+  });
   function announce(){
    live.textContent="Selected time "+timeString(values)+" "+values.period;
   }
@@ -111,6 +119,11 @@ window.TimeWheelPicker = (function(){
   function updateVisual(name){
    var wheel=wheels[name],selected=values[name],index=listValues[name].indexOf(selected);
    wheel.querySelectorAll(".time-wheel-option").forEach(function(option,optionIndex){var optionValue=name==="period"?option.getAttribute("data-value"):Number(option.getAttribute("data-value"));option.setAttribute("data-selected",String(optionValue===selected));option.setAttribute("data-distance",String(Math.abs(index-optionIndex)));});
+   if(name==="minute")root.querySelectorAll(".time-wheel-shortcut").forEach(function(button){
+    var isSelected=Number(button.getAttribute("data-minute"))===selected;
+    button.setAttribute("aria-pressed",String(isSelected));
+    button.setAttribute("data-selected",String(isSelected));
+   });
   }
   function updateAria(name){
    var wheel=wheels[name],selected=values[name],index=listValues[name].indexOf(selected);
@@ -163,6 +176,11 @@ window.TimeWheelPicker = (function(){
    else pendingHaptics[name]=false;
    announce();
   }
+  function releaseProgrammatic(name){
+   if(!programmatic[name])return;
+   clearTimeout(programmaticTimers[name]);
+   programmatic[name]=false;
+  }
   function select(name,index,smooth,fromUser){
    var list=listValues[name];
    index=(index%list.length+list.length)%list.length;
@@ -170,14 +188,21 @@ window.TimeWheelPicker = (function(){
    values[name]=list[index];updateAria(name);
    var animate=smooth&&!reducedMotion;
    clearTimeout(settleTimers[name]);clearTimeout(programmaticTimers[name]);
-   programmatic[name]=animate;
+   programmatic[name]=animate||fromUser;
    centerOption(name,index,animate?"smooth":"auto");
-   if(animate){
-    programmaticTimers[name]=setTimeout(function(){
+   if(programmatic[name]){
+    var settleAttempts=0,finishProgrammatic=function(){
      centerOption(name,listValues[name].indexOf(values[name]),"auto");
+     if(nearestIndex(name)!==listValues[name].indexOf(values[name])&&settleAttempts<8){
+      settleAttempts++;
+      programmaticTimers[name]=setTimeout(finishProgrammatic,50);
+      return;
+     }
+     if(nearestIndex(name)!==listValues[name].indexOf(values[name]))return;
      programmatic[name]=false;
      settle(name);
-    },400);
+    };
+    programmaticTimers[name]=setTimeout(finishProgrammatic,400);
    }else{
     programmatic[name]=false;
     if(fromUser)settleTimers[name]=setTimeout(function(){settle(name);},0);

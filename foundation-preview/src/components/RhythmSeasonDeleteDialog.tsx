@@ -44,11 +44,14 @@ export function RhythmSeasonDeleteDialog({
     ? rhythmSeasonInclusiveEndDate(scoring.scheduleHistory, index)
     : scoringInput.asOfDate;
   const before = selectRhythmScore(scoringInput);
-  const result = rhythm.schedule && previous?.kind === 'scheduled'
+  const result = rhythm.schedule
     ? deleteRhythmSeason(
+      rhythm.id,
       rhythm.schedule,
       scoring,
-      season.id
+      season.id,
+      records,
+      scoringInput.asOfDate
       )
     : undefined;
   const after = result?.valid
@@ -62,10 +65,21 @@ export function RhythmSeasonDeleteDialog({
     && record.effectiveDate >= season.startDate
     && (!next || record.effectiveDate < next.startDate));
   const affectedEnd = endDate ?? season.startDate;
-  const previousEnd = rhythmSeasonInclusiveEndDate(scoring.scheduleHistory, index - 1);
+  const previousEnd = index > 0
+    ? rhythmSeasonInclusiveEndDate(scoring.scheduleHistory, index - 1)
+    : undefined;
   const afterEnd = result?.valid
-    ? rhythmSeasonInclusiveEndDate(result.scoring.scheduleHistory, index - 1) ?? scoringInput.asOfDate
+    ? index === 0
+      ? rhythmSeasonInclusiveEndDate(result.scoring.scheduleHistory, 0) ?? scoringInput.asOfDate
+      : rhythmSeasonInclusiveEndDate(result.scoring.scheduleHistory, index - 1) ?? scoringInput.asOfDate
     : affectedEnd;
+  const deletingFirstSeason = index === 0;
+  const firstRemainingKnownSeason = result?.valid
+    ? result.scoring.scheduleHistory.find(
+        (segment): segment is Extract<RhythmScheduleHistorySegment, { kind: 'scheduled' }> =>
+          segment.kind === 'scheduled'
+      )
+    : undefined;
 
   function confirm() {
     if (!result?.valid) {
@@ -94,27 +108,36 @@ export function RhythmSeasonDeleteDialog({
           {season.name?.trim() || formatRhythmSchedule(season.schedule, 'compact')} · {formatDate(season.startDate)} – {formatDate(affectedEnd)}
         </p>
         <p className="rhythm-season-correction__warning">
-          The previous schedule will apply to these dates. Your logged moments will stay.
+          {deletingFirstSeason
+            ? 'This removes only this season. The next season will not extend backward, and these dates will no longer be treated as scheduled. All completion records stay saved.'
+            : 'The previous schedule will apply to these dates. Your logged moments will stay.'}
         </p>
         <div className="rhythm-season-correction__transition">
           <p>
             <strong>Before</strong>
             <span>
-              {previous?.kind === 'scheduled' ? `${formatDate(previous.startDate)} – ${formatDate(previousEnd ?? previous.startDate)}: ${formatRhythmSchedule(previous.schedule, 'detailed')}` : 'Earlier schedule needs details'}
-              {'; '}{formatDate(season.startDate)} – {formatDate(affectedEnd)}: {formatRhythmSchedule(season.schedule, 'detailed')}
+              {deletingFirstSeason
+                ? `${formatDate(season.startDate)} – ${formatDate(affectedEnd)}: ${formatRhythmSchedule(season.schedule, 'detailed')}`
+                : `${previous?.kind === 'scheduled' ? `${formatDate(previous.startDate)} – ${formatDate(previousEnd ?? previous.startDate)}: ${formatRhythmSchedule(previous.schedule, 'detailed')}` : 'Earlier schedule needs details'}; ${formatDate(season.startDate)} – ${formatDate(affectedEnd)}: ${formatRhythmSchedule(season.schedule, 'detailed')}`}
             </span>
           </p>
           <p>
             <strong>After</strong>
             <span>
-              {previous?.kind === 'scheduled' ? formatRhythmSchedule(previous.schedule, 'detailed') : 'Earlier schedule needs details'}
-              {' applies from '}{formatDate(previous?.startDate ?? season.startDate)} through {formatDate(afterEnd)}
-              {next && `; next Season starts ${formatDate(next.startDate)}`}
+              {deletingFirstSeason
+                ? `${firstRemainingKnownSeason
+                    ? `${formatRhythmSchedule(firstRemainingKnownSeason.schedule, 'detailed')} starts ${formatDate(firstRemainingKnownSeason.startDate)}`
+                    : 'No schedule is known yet'}; tracking starts ${formatDate(result?.valid ? result.scoring.trackingStartDate : scoring.trackingStartDate)}.`
+                : `${previous?.kind === 'scheduled' ? formatRhythmSchedule(previous.schedule, 'detailed') : 'Earlier schedule needs details'} applies from ${formatDate(previous?.startDate ?? season.startDate)} through ${formatDate(afterEnd)}${next ? `; next Season starts ${formatDate(next.startDate)}` : ''}`}
             </span>
           </p>
         </div>
         <p className="rhythm-season-correction__preserved">
-          {preservedLogs.length} logged {preservedLogs.length === 1 ? 'moment' : 'moments'} in this period will be preserved.
+          {deletingFirstSeason
+            ? preservedLogs.length === 0
+              ? 'No logged moments fall within this season. All completion records will be preserved.'
+              : `${preservedLogs.length} logged ${preservedLogs.length === 1 ? 'moment falls' : 'moments fall'} within this season; deletion is blocked.`
+            : `${preservedLogs.length} logged ${preservedLogs.length === 1 ? 'moment' : 'moments'} in this period will be preserved.`}
         </p>
         <RhythmSeasonImpact before={before} after={after} />
         {result && !result.valid && <p className="goal-field-error" role="alert">{result.error}</p>}

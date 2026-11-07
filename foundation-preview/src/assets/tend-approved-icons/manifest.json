@@ -1,0 +1,38 @@
+{
+  "source": "lucide-static@0.468.0",
+  "license": "ISC",
+  "icons": {
+    "categories": {
+      "faith": "simple-christian-cross",
+      "marriage": "heart",
+      "parenting": "house",
+      "health-fitness": "activity",
+      "finances": "dollar-sign",
+      "friendships": "users-round"
+    },
+    "foundations": {
+      "connection": "link",
+      "communication": "messages-square",
+      "fun-adventure": "compass",
+      "spiritual-growth": "sprout",
+      "partnership": "handshake",
+      "intimacy": "heart-handshake",
+      "parenting-connection-belonging": "link",
+      "parenting-communication-trust": "messages-square",
+      "parenting-fun-memories": "sparkles (original)",
+      "parenting-spiritual-growth": "sprout",
+      "parenting-guidance-equipping": "compass",
+      "parenting-encouragement-affirmation": "heart-plus (original)",
+      "faith-sabbath": "original: sunrise",
+      "faith-prayer": "original: praying hands",
+      "faith-fasting": "original: plate with cutlery",
+      "faith-solitude": "original: mountain",
+      "faith-generosity": "original: open hand with heart",
+      "faith-community": "original: people together",
+      "faith-service": "original: helping hand",
+      "faith-witness": "original: speech bubble with cross",
+      "faith-scripture": "original: open book"
+    }
+  },
+  "revision": "Faith cross and Finances dollar sign"
+}

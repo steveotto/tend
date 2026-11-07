@@ -7,16 +7,21 @@ import type {
   RhythmTimeValue
 } from './rhythm-schedule.ts';
 import {
+  isRhythmTimeValue,
   isValidTimeZone,
-  rhythmTimeOptions,
   validateRhythmSchedule,
   validateRhythmScoringMetadata
 } from './rhythm-schedule.ts';
-import { createRhythmSeason, rhythmSeasonPaletteForOrdinal } from './rhythm-seasons.ts';
+import {
+  createRhythmSeason,
+  ensureRhythmSeasonHistoryCoverage,
+  rhythmSeasonPaletteForOrdinal
+} from './rhythm-seasons.ts';
 
 export type RhythmSeasonEditDraft = {
   segmentId: string;
   startDate: string;
+  endDate?: string;
   schedule: RhythmSchedule;
   timeOfDay: RhythmTimeValue;
   name: string;
@@ -34,6 +39,12 @@ export type RhythmSeasonEditResult =
     }
   | { valid: false; error: string };
 
+export type RhythmSeasonHistoryCoverage = {
+  effectiveStartDate?: string;
+  earliestCompletionDate?: string;
+  previousTimeOfDay?: RhythmTimeValue;
+};
+
 export function editRhythmSeason(
   rhythmId: string,
   currentSchedule: RhythmSchedule,
@@ -43,7 +54,7 @@ export function editRhythmSeason(
   const index = scoring.scheduleHistory.findIndex(segment => segment.id === draft.segmentId);
   if (index < 0) return { valid: false, error: 'This schedule period is no longer available.' };
   if (!isValidDate(draft.startDate) || !validateRhythmSchedule(draft.schedule).valid
-    || !rhythmTimeOptions.some(option => option.value === draft.timeOfDay)
+    || !isRhythmTimeValue(draft.timeOfDay)
     || draft.name.length > 80) {
     return { valid: false, error: 'Check the schedule, starting date, time of day, and optional name.' };
   }
@@ -132,19 +143,33 @@ export function establishCurrentRhythmSeason(
   scoring: RhythmScoringMetadata | undefined,
   timeZone: string,
   asOfDate: string,
-  draft: RhythmSeasonEditDraft
+  draft: RhythmSeasonEditDraft,
+  coverage?: RhythmSeasonHistoryCoverage
 ): RhythmSeasonEditResult {
   if (!isValidDate(draft.startDate) || draft.startDate > asOfDate
     || !validateRhythmSchedule(draft.schedule).valid
-    || !rhythmTimeOptions.some(option => option.value === draft.timeOfDay)
+    || !isRhythmTimeValue(draft.timeOfDay)
     || draft.name.length > 80) {
     return { valid: false, error: 'Choose a valid starting date on or before today and check the schedule, time of day, and optional name.' };
   }
   if (!isValidTimeZone(timeZone) || !validateRhythmSchedule(currentSchedule).valid) {
     return { valid: false, error: 'The current schedule or time zone is unavailable.' };
   }
+  for (const date of [coverage?.effectiveStartDate, coverage?.earliestCompletionDate]) {
+    if (date !== undefined && !isValidDate(date)) {
+      return { valid: false, error: 'Earlier schedule history contains an invalid date.' };
+    }
+  }
 
-  const history = scoring?.scheduleHistory ?? [];
+  const coverageStart = [
+    coverage?.effectiveStartDate,
+    coverage?.earliestCompletionDate
+  ].filter((date): date is string => date !== undefined).sort()[0];
+  const history = scoring
+    ? coverageStart
+      ? ensureRhythmSeasonHistoryCoverage(rhythmId, scoring.scheduleHistory, coverageStart)
+      : [...scoring.scheduleHistory]
+    : [];
   const nextIndex = history.findIndex(segment => segment.startDate >= draft.startDate);
   const index = nextIndex < 0 ? history.length : nextIndex;
   const previous = history[index - 1];
@@ -175,7 +200,19 @@ export function establishCurrentRhythmSeason(
   const name = draft.name.trim();
   const namedSeason = name ? { ...season, name } : season;
   const scheduleHistory = [...history];
-  scheduleHistory.splice(index, 0, namedSeason);
+  if (!scoring && coverageStart && coverageStart < draft.startDate) {
+    const previousSeason = createRhythmSeason(
+      rhythmId,
+      coverageStart,
+      currentSchedule,
+      coverage?.previousTimeOfDay,
+      undefined,
+      rhythmSeasonPaletteForOrdinal(0)
+    );
+    scheduleHistory.splice(index, 0, previousSeason, namedSeason);
+  } else {
+    scheduleHistory.splice(index, 0, namedSeason);
+  }
   const firstScheduled = scheduleHistory.find(segment => segment.kind === 'scheduled');
   if (!firstScheduled) return { valid: false, error: 'A known current schedule is required.' };
 
