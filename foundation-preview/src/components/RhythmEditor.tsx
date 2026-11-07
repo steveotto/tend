@@ -18,6 +18,7 @@ import {
 } from '../domain/foundation-rhythm-associations.ts';
 import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
 import {
+  normalizeRhythmPersonIds,
   rhythmDraftFrom,
   updateRhythmDraftFitnessActivity,
   validateRhythmDraft
@@ -170,7 +171,7 @@ export function RhythmEditor({
     const openingDraft = initialDraft
       ? {
         ...initialDraft,
-        personIds: [...initialDraft.personIds],
+        personIds: normalizeRhythmPersonIds(initialDraft.personIds),
         categoryIds: [...initialDraft.categoryIds],
         ...(initialDraft.secondaryFoundationIds === undefined
           ? {}
@@ -281,7 +282,7 @@ export function RhythmEditor({
     setPendingCategoryRemoval(null);
     setPickerSelection(kind === 'categories'
       ? [...draft.categoryIds]
-      : [...draft.personIds]);
+      : normalizeRhythmPersonIds(draft.personIds));
     setPickerFoundationSelection(foundationRhythmIds(draft));
     setActivePicker(kind);
   }
@@ -319,7 +320,7 @@ export function RhythmEditor({
           return next;
         });
       } else {
-        update('personIds', pickerSelection as RhythmDraft['personIds']);
+        update('personIds', normalizeRhythmPersonIds(pickerSelection as RhythmDraft['personIds']));
       }
     }
     setPendingCategoryRemoval(null);
@@ -347,9 +348,14 @@ export function RhythmEditor({
         }
       }
     }
-    setPickerSelection(current => current.includes(id)
-      ? current.filter(selected => selected !== id)
-      : [...current, id]);
+    setPickerSelection(current => {
+      const selection = activePicker === 'people'
+        ? normalizeRhythmPersonIds(current as PersonId[])
+        : current;
+      return selection.includes(id)
+        ? selection.filter(selected => selected !== id)
+        : [...selection, id];
+    });
   }
 
   function confirmCategoryRemoval() {
@@ -374,7 +380,12 @@ export function RhythmEditor({
   }
 
   function selectPickerGroup(ids: readonly string[]) {
-    setPickerSelection(current => toggleBadgeGroup(current, ids));
+    setPickerSelection(current => {
+      const selection = toggleBadgeGroup(current, ids);
+      return activePicker === 'people'
+        ? normalizeRhythmPersonIds(selection as PersonId[])
+        : selection;
+    });
   }
 
   function handleDialogEscape() {
@@ -513,6 +524,13 @@ export function RhythmEditor({
     .filter(area => draft.categoryIds.includes(area.id));
   const selectedPeople = people
     .filter(person => draft.personIds.includes(person.id));
+  const knownPersonIds = new Set(people.map(person => person.id));
+  const unavailablePersonIds = normalizeRhythmPersonIds(
+    draft.personIds.filter(id => !knownPersonIds.has(id))
+  );
+  const pickerUnavailablePersonIds = normalizeRhythmPersonIds(
+    pickerSelection.filter(id => !knownPersonIds.has(id))
+  );
   const selectedFoundationIds = [
     ...(draft.primaryFoundationId ? [draft.primaryFoundationId] : []),
     ...(draft.secondaryFoundationIds ?? [])
@@ -791,6 +809,7 @@ export function RhythmEditor({
           <section className="rhythm-editor__association" aria-label="Associations">
           <PeopleAssociationRow
             selectedPeople={selectedPeople}
+            unavailableIds={unavailablePersonIds}
             openerRef={peoplePickerOpenerRef}
             onChoose={() => openPicker('people')}
           />
@@ -1171,9 +1190,8 @@ export function RhythmEditor({
         ) : activePicker === 'people' ? (
           <PeopleBadgeSelectionPicker
             people={people}
-            selectedIds={pickerSelection.filter((id): id is PersonId =>
-              people.some(person => person.id === id)
-            )}
+            selectedIds={normalizeRhythmPersonIds(pickerSelection as PersonId[])}
+            unavailableSelectedIds={pickerUnavailablePersonIds}
             onToggle={id => togglePickerItem(id)}
             onToggleGroup={selectPickerGroup}
             groups={peopleGroups}

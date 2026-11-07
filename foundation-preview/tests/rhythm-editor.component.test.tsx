@@ -5,6 +5,7 @@ import {
   archiveRhythmId,
   archivedTodayRhythms,
   isEditableRhythmId,
+  normalizeRhythmPersonIds,
   resolveTodayRhythms,
   rhythmDraftFrom,
   rhythmsForCategory,
@@ -121,6 +122,31 @@ describe('synthetic Rhythm editor domain', () => {
       personIds: expect.any(String),
       categoryIds: expect.any(String)
     });
+  });
+
+  it('distinguishes repeated and unavailable imported People IDs from category/Foundation errors', () => {
+    const amy = 'legacy-person-amy-01' as const;
+    const knownPersonIds = [amy, 'legacy-person-amy-02'];
+    expect(normalizeRhythmPersonIds([amy, amy, knownPersonIds[1]!]))
+      .toEqual([amy, knownPersonIds[1]]);
+    expect(validateRhythmDraft({
+      ...validDraft,
+      personIds: [amy, amy]
+    }, foundationCatalogue, knownPersonIds).personIds)
+      .toBe('Repeated People references must be resolved in Choose people.');
+
+    const unavailable = validateRhythmDraft({
+      ...validDraft,
+      personIds: [amy, 'retired-person-id'],
+      categoryIds: ['faith'],
+      primaryFoundationId: null,
+      secondaryFoundationIds: []
+    }, foundationCatalogue, knownPersonIds);
+    expect(unavailable).toMatchObject({
+      personIds: 'One or more selected people are unavailable. Open Choose people to remove or resolve these references.',
+      foundationIds: expect.stringContaining('Choose a Practice')
+    });
+    expect(unavailable.personIds).not.toContain('at most once');
   });
 
   it('creates a stable namespaced identity and resolves its category and people associations', () => {

@@ -3,8 +3,13 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RhythmEditor } from '../src/components/RhythmEditor.tsx';
 import { foundationCatalogue, todayRhythms } from '../src/domain/preview-data.ts';
+import type { PersonPreview } from '../src/domain/preview-data.ts';
 import type { RhythmDraft, SavedRhythm } from '../src/domain/rhythm-editor.ts';
-import { rhythmDraftFrom, saveRhythmDraft, validateRhythmDraft } from '../src/domain/rhythm-editor.ts';
+import {
+  rhythmDraftFrom,
+  saveRhythmDraft,
+  validateRhythmDraft
+} from '../src/domain/rhythm-editor.ts';
 import type { RhythmSchedule } from '../src/domain/rhythm-schedule.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -38,6 +43,166 @@ async function choose(user: ReturnType<typeof userEvent.setup>, label: string, o
 }
 
 describe('shared structured Rhythm editor', () => {
+  it('saves and reopens an Add Rhythm People selection using imported stable IDs', async () => {
+    const user = userEvent.setup();
+    const people: PersonPreview[] = [
+      { id: 'legacy-person-amy-01', displayName: 'Amy' },
+      { id: 'legacy-person-amy-02', displayName: 'Amy' },
+      { id: 'legacy-person-jordan-01', displayName: 'Jordan' }
+    ];
+    const knownPersonIds = people.map(person => person.id);
+    const rhythmId = 'user-rhythm-11111111-1111-4111-8111-111111111111';
+    let savedRhythms: SavedRhythm[] = [];
+    const save = (draft: RhythmDraft, mode: 'create' | 'edit', id = rhythmId) => {
+      const result = saveRhythmDraft(
+        savedRhythms,
+        draft,
+        id,
+        mode,
+        undefined,
+        foundationCatalogue,
+        {},
+        knownPersonIds
+      );
+      if (result.savedRhythms) savedRhythms = result.savedRhythms;
+      return result.errors;
+    };
+    const onSave = vi.fn((draft: RhythmDraft) => save(draft, 'create'));
+
+    render(
+      <RhythmEditor
+        people={people}
+        peopleGroups={[]}
+        onSave={onSave}
+        onClose={vi.fn()}
+      />
+    );
+    let editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+    await user.type(within(editor).getByLabelText('Title'), 'Imported Amy rhythm');
+    await user.click(within(editor).getByRole('button', { name: 'Choose people' }));
+    let picker = associationPicker('Choose people');
+    await user.click(within(picker).getAllByRole('button', { name: 'Amy' })[0]!);
+    await user.click(within(picker).getByRole('button', { name: 'Done' }));
+    expect(within(editor).getByRole('button', { name: 'Choose people, Amy' })).toBeTruthy();
+
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    expect(onSave.mock.results[0]?.value).toEqual({});
+    expect(savedRhythms[0]?.personIds).toEqual(['legacy-person-amy-01']);
+
+    cleanup();
+    const persistedRhythm = {
+      ...todayRhythms[0]!,
+      ...savedRhythms[0]!,
+      id: rhythmId,
+      personIds: savedRhythms[0]!.personIds
+    };
+    const editSave = vi.fn((draft: RhythmDraft) => save(draft, 'edit', rhythmId));
+    render(
+      <RhythmEditor
+        rhythm={persistedRhythm}
+        people={people}
+        peopleGroups={[]}
+        onSave={editSave}
+        onClose={vi.fn()}
+      />
+    );
+    editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    expect(within(editor).getByRole('button', { name: 'Choose people, Amy' })).toBeTruthy();
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    expect(editSave.mock.results[0]?.value).toEqual({});
+    expect(savedRhythms[0]?.personIds).toEqual(['legacy-person-amy-01']);
+  });
+
+  it('normalizes repeated imported IDs and lets an editor resolve unavailable person references', async () => {
+    const user = userEvent.setup();
+    const people: PersonPreview[] = [
+      { id: 'legacy-person-amy-01', displayName: 'Amy' },
+      { id: 'legacy-person-amy-02', displayName: 'Amy' },
+      { id: 'legacy-person-jordan-01', displayName: 'Jordan' }
+    ];
+    const knownPersonIds = people.map(person => person.id);
+    const rhythmId = 'user-rhythm-22222222-2222-4222-8222-222222222222';
+    const existing: SavedRhythm = {
+      id: rhythmId,
+      title: 'Imported associations',
+      cadence: 'Daily',
+      timeLabel: 'Morning',
+      personIds: [
+        'legacy-person-amy-01',
+        'legacy-person-amy-01',
+        'retired-person-id'
+      ],
+      categoryIds: []
+    };
+    let savedRhythms = [existing];
+    const onSave = vi.fn((draft: RhythmDraft) => {
+      const result = saveRhythmDraft(
+        savedRhythms,
+        draft,
+        rhythmId,
+        'edit',
+        undefined,
+        foundationCatalogue,
+        {},
+        knownPersonIds
+      );
+      if (result.savedRhythms) savedRhythms = result.savedRhythms;
+      return result.errors;
+    });
+    const rhythm = {
+      ...todayRhythms[0]!,
+      ...existing,
+      personIds: existing.personIds
+    } as typeof todayRhythms[number];
+    render(
+      <RhythmEditor
+        rhythm={rhythm}
+        people={people}
+        peopleGroups={[]}
+        onSave={onSave}
+        onClose={vi.fn()}
+      />
+    );
+    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    const peopleField = within(editor).getByRole('button', {
+      name: /Choose people, Amy and Unavailable person reference retired-person-id/
+    });
+    expect(within(peopleField).getAllByRole('img', { name: 'Amy' })).toHaveLength(1);
+    expect(within(peopleField).getByText(/Unavailable person: retired-person-id/)).toBeTruthy();
+
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    expect(onSave.mock.results[0]?.value).toMatchObject({
+      personIds: expect.stringContaining('unavailable')
+    });
+    expect((within(editor).getByLabelText('Title') as HTMLInputElement).value)
+      .toBe('Imported associations');
+    expect(within(editor).getByText(
+      'One or more selected people are unavailable. Open Choose people to remove or resolve these references.'
+    )).toBeTruthy();
+    expect(savedRhythms[0]?.personIds).toEqual(existing.personIds);
+
+    await user.click(within(editor).getByRole('button', { name: /Choose people,/ }));
+    const picker = associationPicker('Choose people');
+    const unavailable = within(picker).getByRole('button', {
+      name: 'Remove unavailable person reference retired-person-id'
+    });
+    await user.click(unavailable);
+    const amyOptions = within(picker).getAllByRole('button', { name: 'Amy' });
+    await user.click(amyOptions[0]!);
+    await user.click(amyOptions[0]!);
+    await user.click(amyOptions[1]!);
+    await user.click(within(picker).getByRole('button', { name: 'Done' }));
+
+    expect(within(editor).getAllByRole('img', { name: 'Amy' })).toHaveLength(2);
+    expect(within(editor).queryByText(/Unavailable person: retired-person-id/)).toBeNull();
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    expect(onSave.mock.results.at(-1)?.value).toEqual({});
+    expect(savedRhythms[0]?.personIds).toEqual([
+      'legacy-person-amy-01',
+      'legacy-person-amy-02'
+    ]);
+  });
+
   it('renders the shared People and combined Categories association rows', () => {
     const editor = renderEditor(vi.fn(() => ({})));
     const scrollRegion = editor.querySelector<HTMLElement>('.rhythm-editor__scroll');

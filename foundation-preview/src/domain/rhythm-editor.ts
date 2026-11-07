@@ -192,6 +192,10 @@ function isUniquePersonIds(value: unknown): value is PersonId[] {
     && new Set(value).size === value.length;
 }
 
+export function normalizeRhythmPersonIds(personIds: readonly PersonId[]): PersonId[] {
+  return [...new Set(personIds)];
+}
+
 export function isEditableRhythmId(id: string): boolean {
   return existingEditableIds.has(id) || /^user-rhythm-[0-9a-f-]{36}$/i.test(id);
 }
@@ -400,7 +404,7 @@ export function rhythmDraftFrom(
     timeLabel: currentSeason?.kind === 'scheduled' && currentSeason.timeOfDay
       ? rhythmTimeLabel(currentSeason.timeOfDay, timeOptions)
       : rhythm.timeLabel ?? 'Anytime',
-    personIds: [...(rhythm.personIds ?? [])],
+    personIds: normalizeRhythmPersonIds(rhythm.personIds ?? []),
     categoryIds: [...categoryIds],
     ...(originalSchedule === undefined ? {} : { schedule: originalSchedule }),
     ...(originalSchedule === undefined ? {} : { originalSchedule }),
@@ -439,9 +443,15 @@ export function validateRhythmDraft(
   } else if (draft.schedule !== undefined && !validateRhythmSchedule(draft.schedule).valid) {
     errors.schedule = 'Choose a valid schedule.';
   }
-  if (!isUniquePersonIds(draft.personIds)
-    || knownPersonIds !== undefined && draft.personIds.some(id => !knownPersonIds.includes(id))) {
-    errors.personIds = 'Choose each available person at most once.';
+  const hasRepeatedPeople = new Set(draft.personIds).size !== draft.personIds.length;
+  const hasUnavailablePeople = knownPersonIds !== undefined
+    && draft.personIds.some(id => !knownPersonIds.includes(id));
+  if (hasUnavailablePeople) {
+    errors.personIds = 'One or more selected people are unavailable. Open Choose people to remove or resolve these references.';
+  } else if (draft.personIds.some(id => !isValidPersonId(id))) {
+    errors.personIds = 'One or more selected People references are invalid. Review them in Choose people.';
+  } else if (hasRepeatedPeople) {
+    errors.personIds = 'Repeated People references must be resolved in Choose people.';
   }
 
   if (!isUniqueKnownValues<RhythmCategoryId>(draft.categoryIds, categoryIds)) {
