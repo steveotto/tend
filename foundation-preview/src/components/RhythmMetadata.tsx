@@ -44,6 +44,7 @@ export function RhythmMetadata(props: RhythmMetadataProps) {
         cadence={props.cadence}
         schedule={props.schedule}
         timeLabel={props.timeLabel}
+        presentation="card-footer"
       />
       <RhythmStatus
         className="rhythm-metadata-last-tended"
@@ -70,24 +71,32 @@ export function RhythmScheduleSummary({
   schedule?: RhythmSchedule | undefined;
   timeLabel?: string | undefined;
   timeAccessibleLabel?: string | undefined;
-  presentation?: 'compact' | 'detailed';
+  presentation?: 'compact' | 'card-footer' | 'detailed';
 }) {
   const fullScheduleId = useId();
   const scheduleText = schedule
     ? formatRhythmSchedule(schedule, presentation)
     : cadence;
-  const detailedSchedule = schedule && presentation === 'compact'
+  const detailedSchedule = schedule && presentation !== 'detailed'
     ? formatRhythmSchedule(schedule, 'detailed')
     : undefined;
   return (
     <span className="rhythm-metadata-schedule-group">
       {scheduleText && (
-        <span aria-describedby={detailedSchedule ? fullScheduleId : undefined}>
+        <span aria-describedby={presentation === 'compact' && detailedSchedule ? fullScheduleId : undefined}>
           <MetadataIcon kind="recurrence" />
-          <span>{scheduleText}</span>
+          <span
+            className={presentation === 'card-footer' ? 'rhythm-metadata-schedule-label' : undefined}
+            aria-hidden={presentation === 'card-footer' ? true : undefined}
+          >
+            {scheduleText}
+          </span>
+          {presentation === 'card-footer' && detailedSchedule && (
+            <span className="visually-hidden">Full schedule: {detailedSchedule}</span>
+          )}
         </span>
       )}
-      {detailedSchedule && (
+      {presentation === 'compact' && detailedSchedule && (
         <span id={fullScheduleId} className="visually-hidden">Full schedule: {detailedSchedule}</span>
       )}
       {timeLabel && (

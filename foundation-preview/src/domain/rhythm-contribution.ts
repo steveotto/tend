@@ -12,6 +12,7 @@ import {
   type RhythmPreview
 } from './preview-data.ts';
 import type { RhythmScoreResult } from './rhythm-scoring.ts';
+import type { PersonPreview } from './preview-data.ts';
 
 export type RhythmContributionItem = {
   id: string;
@@ -30,7 +31,9 @@ export type HealthInfoIdentity = {
   icon:
     | { kind: 'category'; id: CategoryId }
     | { kind: 'foundation'; id: string }
-    | { kind: 'rhythm' };
+    | { kind: 'rhythm' }
+    | { kind: 'person' };
+  person?: PersonPreview;
 };
 
 export type HealthContributionScoringInfo = {
@@ -43,7 +46,7 @@ export type HealthContributionScoringInfo = {
 
 export type HealthContributionDiagram = {
   heading: string;
-  highlightedGroup: 'overall' | 'categories' | 'foundations' | 'rhythm';
+  highlightedGroup: 'overall' | 'categories' | 'foundations' | 'rhythm' | 'person-area';
   highlightedItemId: string;
   overallScore: number | null;
   categories: readonly RhythmContributionItem[];
@@ -51,6 +54,12 @@ export type HealthContributionDiagram = {
   bottomGroupLabel: string;
   bottomItem: RhythmContributionItem & { showScore?: boolean };
   identity: HealthInfoIdentity;
+  personHealth?: {
+    name: string;
+    areaLabel: string;
+    areaScore: number | null;
+    contributes: boolean;
+  };
   scoringInfo?: HealthContributionScoringInfo;
 };
 

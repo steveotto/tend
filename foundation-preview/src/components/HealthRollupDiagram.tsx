@@ -62,6 +62,13 @@ export function createHealthFitnessRollup(
       foundationIconId: 'health-cardio',
       explanation: 'Cardio uses saved run logs to score weekly run and distance goals; completing a Rhythm alone is not a run.',
       relatedItemIds: { 'rhythms-logs': ['cardio-logs'], category: ['health-fitness'] }
+    },
+    {
+      id: 'flexibility',
+      label: 'Flexibility',
+      foundationIconId: 'health-flexibility',
+      explanation: 'Flexibility averages tracked stretch-region consistency scores; unlogged regions are unavailable.',
+      relatedItemIds: { 'rhythms-logs': ['stretch-logs'], category: ['health-fitness'] }
     }
   ] satisfies readonly HealthRollupItem[];
   return {
@@ -93,6 +100,14 @@ export function createHealthFitnessRollup(
             usesStandardWeights: false,
             explanation: 'Cardio Health uses saved run logs to calculate weekly run and distance goal progress.',
             relatedItemIds: { foundations: ['cardio'], category: ['health-fitness'] }
+          },
+          {
+            id: 'stretch-logs',
+            label: 'Stretch sessions → Flexibility',
+            summary: 'Stretch history determines region consistency scores.',
+            usesStandardWeights: false,
+            explanation: 'Each region uses its configured interval and most recent stretch date. Editing or deleting a session recalculates the affected region scores from history.',
+            relatedItemIds: { foundations: ['flexibility'], category: ['health-fitness'] }
           }
         ]
       },
@@ -108,7 +123,7 @@ export function createHealthFitnessRollup(
           id: 'health-fitness',
           label: 'Health & Fitness',
           categoryIconId: 'health',
-          explanation: 'Strength, Cardio, and Weight contribute equally to each available Consistency and On Track measure average.',
+          explanation: 'Available Strength, Cardio, Weight, and Flexibility scores contribute equally to Consistency. On Track averages the available Strength, Cardio, and Weight scores.',
           relatedItemIds: { foundations: foundationItems.map(item => item.id) }
         }]
       }
@@ -118,18 +133,59 @@ export function createHealthFitnessRollup(
   };
 }
 
+export function createPersonHealthRollup({
+  personName,
+  areaLabel,
+  areaScore,
+  overallScore,
+  contributes
+}: {
+  personName: string;
+  areaLabel: string;
+  areaScore: number | null;
+  overallScore: number | null;
+  contributes: boolean;
+}): HealthRollupConfig {
+  return {
+    groups: [],
+    initialGroupId: 'person-area',
+    initialItemId: 'person-area-health',
+    healthContribution: {
+      heading: `How ${areaLabel} Health contributes`,
+      highlightedGroup: 'person-area',
+      highlightedItemId: 'person-area-health',
+      overallScore,
+      categories: [],
+      foundations: [],
+      bottomGroupLabel: `${areaLabel} Health`,
+      bottomItem: {
+        id: 'person-area-health',
+        label: `${areaLabel} Health`,
+        score: areaScore
+      },
+      identity: {
+        name: personName,
+        icon: { kind: 'person' }
+      },
+      personHealth: { name: personName, areaLabel, areaScore, contributes }
+    }
+  };
+}
+
 export function createHealthFitnessHealthContribution({
   overallHealthScore,
   categoryHealthScore,
   strengthHealthScore,
   cardioHealthScore,
-  weightHealthScore
+  weightHealthScore,
+  flexibilityHealthScore = null
 }: {
   overallHealthScore: number | null;
   categoryHealthScore: number | null;
   strengthHealthScore: number | null;
   cardioHealthScore: number | null;
   weightHealthScore: number | null;
+  flexibilityHealthScore?: number | null;
 }): HealthContributionDiagram {
   return {
     heading: 'How this Category contributes',
@@ -145,7 +201,8 @@ export function createHealthFitnessHealthContribution({
     foundations: [
       { id: 'health-strength', label: 'Strength', score: strengthHealthScore, categoryLabel: 'Health & Fitness', foundationIconId: 'health-strength' },
       { id: 'health-cardio', label: 'Cardio', score: cardioHealthScore, categoryLabel: 'Health & Fitness', foundationIconId: 'health-cardio' },
-      { id: 'health-weight', label: 'Weight', score: weightHealthScore, categoryLabel: 'Health & Fitness', foundationIconId: 'health-weight' }
+      { id: 'health-weight', label: 'Weight', score: weightHealthScore, categoryLabel: 'Health & Fitness', foundationIconId: 'health-weight' },
+      { id: 'health-flexibility', label: 'Flexibility', score: flexibilityHealthScore, categoryLabel: 'Health & Fitness', foundationIconId: 'health-flexibility' }
     ],
     bottomGroupLabel: 'Rhythms & logs',
     bottomItem: {

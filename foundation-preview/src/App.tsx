@@ -5,6 +5,7 @@ import { AppNavigation } from './components/AppNavigation.tsx';
 import type { CategoryTabNavigationRequest, Destination, TextSize } from './components/AppNavigation.tsx';
 import {
   MarriageView,
+  createMarriageSuggestionCatalogue,
   type CategoryRhythmSuggestion,
   type CategoryRhythmSuggestionCatalogue,
   type MarriageTab
@@ -125,6 +126,11 @@ import {
   saveWeightDataCommand
 } from './domain/weight.ts';
 import { saveCardioDataCommand, selectCardioProgress } from './domain/cardio.ts';
+import {
+  selectFlexibilityConsistency,
+  selectFlexibilityRegionScores,
+  validateFlexibilityData
+} from './domain/flexibility.ts';
 import {
   activeTodayRhythms,
   applySavedRhythmOverrides,
@@ -276,6 +282,7 @@ const parentingSuggestionCatalogue = categorySuggestionCatalogue(
   parentingRhythmSuggestionGroups,
   parentingRhythmSuggestions
 );
+const marriageSuggestionCatalogue = createMarriageSuggestionCatalogue(marriageRhythms);
 const faithSuggestionCatalogue = categorySuggestionCatalogue(
   'faith',
   'Faith practice suggestions',
@@ -329,7 +336,8 @@ function isFitnessLinkedCompletion(data: PreviewData, completionId: string | und
   const records: readonly unknown[] = [
     ...data.strength.workouts,
     ...data.weight.weighIns,
-    ...data.cardio.runs
+    ...data.cardio.runs,
+    ...(data.flexibility.guidedSessions ?? [])
   ];
   return records.some(record => typeof record === 'object'
     && record !== null
@@ -560,6 +568,12 @@ function PreviewWorkspace({
     rhythm?: (typeof todayRhythms)[number];
   } | null>(null);
   const cardioLogRequestSequence = useRef(0);
+  const [flexibilityLogRequest, setFlexibilityLogRequest] = useState<{
+    requestId: number;
+    opener: HTMLButtonElement;
+    rhythm: (typeof todayRhythms)[number];
+  } | null>(null);
+  const flexibilityLogRequestSequence = useRef(0);
   const [weightLogRequest, setWeightLogRequest] = useState<{
     requestId: number;
     opener: HTMLButtonElement;
@@ -734,10 +748,25 @@ function PreviewWorkspace({
     rhythmScoreResults,
     previewData.archivedRhythmIds
   );
+  const flexibilityRegionScores = selectFlexibilityRegionScores(
+    previewData.flexibility,
+    localDateString(scoringInstant)
+  );
+  const flexibilityConsistency = selectFlexibilityConsistency(flexibilityRegionScores);
+  const flexibilityCategoryScore = {
+    foundationIds: ['health-flexibility'],
+    eligibleFoundationIds: flexibilityConsistency.score === null ? [] : ['health-flexibility'],
+    excludedFoundationIds: [],
+    unresolvedFoundationIds: [],
+    consistency: flexibilityConsistency.score,
+    onTrack: null,
+    health: flexibilityConsistency.score
+  };
   const healthFitnessCategoryScore = selectHealthFitnessCategoryScore(
     cardioCategoryScore,
     weightCategoryScore,
-    strengthCategoryScore
+    strengthCategoryScore,
+    flexibilityCategoryScore
   );
   const categoryHealthScores = new Map<CategoryId, number | null>(
     [
@@ -779,6 +808,18 @@ function PreviewWorkspace({
           .map(group => group.id)
       )].filter((category): category is PersonPickerGroupId => category !== null);
   const resolvedPeopleGroups = resolvePersonCategoryGroups(previewData.peopleGroups).groups;
+  const selectedProfileCategory = selectedProfilePerson
+    ? resolvePersonCategory(
+        resolvedPeopleGroups
+          .filter(group => group.memberIds.includes(selectedProfilePerson.id))
+          .map(group => group.id)
+      )
+    : null;
+  const selectedProfileSuggestionCatalogue = selectedProfileCategory === 'marriage'
+    ? marriageSuggestionCatalogue
+    : selectedProfileCategory === 'parenting'
+      ? parentingSuggestionCatalogue
+      : undefined;
   const profileRhythmCandidates = [...new Map(
     [...editableTodayRhythms, ...userRhythms].map(rhythm => [rhythm.id, rhythm])
   ).values()];
@@ -1720,6 +1761,16 @@ function PreviewWorkspace({
       || previewData.archivedRhythmIds.includes(id)) return;
     const rhythm = allTodayRhythms.find(item => item.id === id);
     if (rhythm?.categoryIds?.includes('health')) {
+      if (rhythm.healthLogCapability === 'flexibility') {
+        flexibilityLogRequestSequence.current += 1;
+        setFlexibilityLogRequest({
+          requestId: flexibilityLogRequestSequence.current,
+          opener: event.currentTarget,
+          rhythm
+        });
+        navigate('health', { categoryTabDefault: false });
+        return;
+      }
       if (rhythm.healthLogCapability === 'cardio') {
         cardioLogRequestSequence.current += 1;
         setCardioLogRequest({
@@ -1791,7 +1842,8 @@ function PreviewWorkspace({
   function openRhythmSuggestion(
     suggestion: CategoryRhythmSuggestion,
     event: MouseEvent<HTMLButtonElement>,
-    returnToSuggestions: (saved: boolean) => void
+    returnToSuggestions: (saved: boolean) => void,
+    initialPersonIds: readonly PersonId[] = []
   ) {
     const rhythm = suggestion.rhythm;
     const initialDraft: RhythmDraft = {
@@ -1799,7 +1851,7 @@ function PreviewWorkspace({
       description: rhythm.description ?? '',
       cadence: rhythm.cadence ?? 'Daily',
       timeLabel: rhythm.timeLabel ?? 'Anytime',
-      personIds: [],
+      personIds: [...initialPersonIds],
       categoryIds: [suggestion.categoryId],
       ...(rhythm.schedule
         ? { schedule: rhythm.schedule }
@@ -2140,6 +2192,79 @@ function PreviewWorkspace({
       cardio: result.cardio,
       ...result.completionState
     }, 'Cardio data');
+  }
+
+  function saveFlexibilityData(flexibility: PreviewData['flexibility']): string | null {
+    if (!validateFlexibilityData(flexibility, currentDate)) {
+      return 'Flexibility settings or stretch records are invalid. No changes were saved.';
+    }
+    let datedRhythmCompletions = [...previewData.datedRhythmCompletions];
+    let activeRhythmCompletions = [...previewData.activeRhythmCompletions];
+    let completedRhythmIds = [...previewData.completedRhythmIds];
+    let rhythmHistoryIds = [...previewData.rhythmHistoryIds];
+    const previousGuidedIds = new Set((previewData.flexibility.guidedSessions ?? []).map(session => session.id));
+    for (const session of flexibility.guidedSessions ?? []) {
+      if (previousGuidedIds.has(session.id) || !session.linkedRhythmId) continue;
+      const rhythm = allTodayRhythms.find(item => item.id === session.linkedRhythmId);
+      if (!rhythm || rhythm.healthLogCapability !== 'flexibility'
+        || !isEditableRhythmId(rhythm.id) || previewData.archivedRhythmIds.includes(rhythm.id)
+        || session.rhythmOccurrence !== session.date || !session.completionId) {
+        return 'The linked stretch Rhythm or its completion record is unavailable. No stretch changes were saved.';
+      }
+      const schedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
+      if (!schedule || !hasRhythmOccurrenceForCompletion(
+        schedule,
+        session.rhythmOccurrence,
+        rhythm.scoring?.trackingStartDate
+      )) {
+        return 'The stretch session date is not a scheduled occurrence for this Rhythm. No changes were saved.';
+      }
+      if (datedRhythmCompletions.some(item =>
+        item.id === session.completionId
+        || item.rhythmId === rhythm.id && item.effectiveDate === session.rhythmOccurrence)) {
+        return 'This stretch Rhythm occurrence already has a completion. No changes were saved.';
+      }
+      const timeParts = new Intl.DateTimeFormat('en-US', {
+        timeZone: session.timeZone,
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      }).formatToParts(new Date(session.startedAt));
+      const hour = Number(timeParts.find(part => part.type === 'hour')?.value);
+      const minute = Number(timeParts.find(part => part.type === 'minute')?.value);
+      const period = timeParts.find(part => part.type === 'dayPeriod')?.value.toUpperCase();
+      const completion = prepareDatedRhythmCompletion({
+        id: session.completionId,
+        rhythmId: rhythm.id,
+        effectiveDate: session.rhythmOccurrence,
+        hour,
+        minute,
+        period: period === 'PM' ? 'PM' : 'AM',
+        memory: '',
+        timeZone: session.timeZone
+      }, new Date());
+      if (!completion.valid) {
+        return completion.errors.time ?? completion.errors.effectiveDate
+          ?? 'The linked stretch completion time is invalid. No changes were saved.';
+      }
+      datedRhythmCompletions.push(completion.record);
+      if (!activeRhythmCompletions.some(item => item.completionId === session.completionId)) {
+        activeRhythmCompletions = [
+          ...activeRhythmCompletions.filter(item => item.rhythmId !== rhythm.id),
+          { rhythmId: rhythm.id, completionId: session.completionId }
+        ];
+        if (!completedRhythmIds.includes(rhythm.id)) completedRhythmIds.push(rhythm.id);
+      }
+      if (!rhythmHistoryIds.includes(rhythm.id)) rhythmHistoryIds.push(rhythm.id);
+    }
+    return persistSeasonHistory({
+      ...previewData,
+      flexibility,
+      datedRhythmCompletions,
+      activeRhythmCompletions,
+      completedRhythmIds,
+      rhythmHistoryIds
+    }, 'Flexibility data');
   }
 
   function saveFoundationAssociations(
@@ -2948,6 +3073,24 @@ function PreviewWorkspace({
           });
         }
       }}
+      flexibility={{
+        data: previewData.flexibility,
+        today: currentDate,
+        onChange: saveFlexibilityData,
+        pendingQuickLog: flexibilityLogRequest ? {
+          requestId: flexibilityLogRequest.requestId,
+          regionIds: [],
+          linkedRhythmId: flexibilityLogRequest.rhythm.id,
+          rhythmOccurrence: currentDate,
+          rhythmTitle: flexibilityLogRequest.rhythm.title,
+          opener: flexibilityLogRequest.opener
+        } : null,
+        onQuickLogOpened: requestId => {
+          setFlexibilityLogRequest(current =>
+            current?.requestId === requestId ? null : current
+          );
+        }
+      }}
       rhythms={healthCategoryRhythms}
       archivedRhythms={archivedHealthRhythms}
       todayDate={currentDate}
@@ -2985,6 +3128,8 @@ function PreviewWorkspace({
       healthScore={healthFitnessCategoryScore}
       weightHealthScore={weightCategoryScore}
       cardioHealthScore={cardioCategoryScore}
+      flexibilityHealthScore={flexibilityCategoryScore}
+      flexibilityTrackedCount={flexibilityConsistency.trackedCount}
       overallHealthScore={overallHealthScore}
     />
   ) : null;
@@ -3361,6 +3506,7 @@ function PreviewWorkspace({
           rhythms={personActiveRhythms}
           archivedRhythms={personArchivedRhythms}
           foundations={foundationCatalogue}
+          {...(selectedProfileSuggestionCatalogue ? { suggestionCatalogue: selectedProfileSuggestionCatalogue } : {})}
           rhythmScores={rhythmScoreResults}
           completedRhythms={completedRhythms}
           undoableRhythms={undoableRhythms}

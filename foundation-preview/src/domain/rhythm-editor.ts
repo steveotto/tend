@@ -60,12 +60,13 @@ export const rhythmTimes = ['Morning', 'Afternoon', 'Evening', 'Anytime'] as con
 export type RhythmCadence = (typeof rhythmCadences)[number];
 export type RhythmTime = (typeof rhythmTimes)[number];
 export type RhythmCategoryId = CategoryId;
-export type RhythmHealthLogCapability = 'weight' | 'cardio' | 'workout';
+export type RhythmHealthLogCapability = 'weight' | 'cardio' | 'workout' | 'flexibility';
 
 const healthFoundationByCapability: Record<RhythmHealthLogCapability, string> = {
   workout: 'health-strength',
   cardio: 'health-cardio',
-  weight: 'health-weight'
+  weight: 'health-weight',
+  flexibility: 'health-flexibility'
 };
 
 export type SavedRhythm = {
@@ -279,7 +280,8 @@ export function validateSavedRhythmsV18(value: unknown): value is SavedRhythm[] 
 }
 
 export function validateSavedRhythmsV19(value: unknown): value is SavedRhythm[] {
-  if (!validateSavedRhythmsWithCapability(value, savedRhythmV19Keys, 'weight', 'cardio', 'workout')) return false;
+  if (!validateSavedRhythmsWithCapability(value, savedRhythmV19Keys,
+    'weight', 'cardio', 'workout', 'flexibility')) return false;
   return value.every(record => record.healthRunTarget === undefined || (
     record.healthLogCapability === 'cardio'
     && isRecord(record.healthRunTarget)
@@ -295,7 +297,7 @@ export function validateSavedRhythmsV19(value: unknown): value is SavedRhythm[] 
 function validateSavedRhythmsWithCapability(
   value: unknown,
   allowedKeys: readonly string[],
-  ...capabilities: Array<'weight' | 'cardio' | 'workout'>
+  ...capabilities: Array<RhythmHealthLogCapability>
 ): value is SavedRhythm[] {
   if (!validateSavedRhythmsWithKeys(value, allowedKeys, 'v12', true)) return false;
   if (!validateFoundationAssociations(value)) return false;
@@ -460,7 +462,8 @@ export function validateRhythmDraft(
   if (draft.healthLogCapability !== undefined && draft.healthLogCapability !== null
     && ((draft.healthLogCapability !== 'weight'
       && draft.healthLogCapability !== 'cardio'
-      && draft.healthLogCapability !== 'workout')
+      && draft.healthLogCapability !== 'workout'
+      && draft.healthLogCapability !== 'flexibility')
       || !draft.categoryIds.includes('health'))) {
     errors.categoryIds = 'Fitness logging capability requires the Health & Fitness category.';
   }

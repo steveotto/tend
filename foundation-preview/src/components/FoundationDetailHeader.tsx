@@ -37,6 +37,7 @@ export function FoundationDetailHeader({
                     ? `${scoreName} ${formatScore(score)} out of 100`
                     : `${scoreName} score unavailable`}
                   appearance="rounded"
+                  className="foundation-detail-header__score-badge"
                 />
               )}
               {scoreAction}

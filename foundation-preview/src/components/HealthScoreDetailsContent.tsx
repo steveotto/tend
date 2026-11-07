@@ -28,7 +28,9 @@ export function HealthScoreDetailsContent({
   scoringEvidence,
   scoringExplanation,
   showScoreNote = true,
-  initialContributionExpanded = true
+  initialContributionExpanded = true,
+  summaryTitle,
+  showMeasures = true
 }: {
   title: string;
   ariaLabel: string;
@@ -52,6 +54,8 @@ export function HealthScoreDetailsContent({
   scoringExplanation?: ReactNode;
   showScoreNote?: boolean;
   initialContributionExpanded?: boolean;
+  summaryTitle?: string;
+  showMeasures?: boolean;
 }) {
   const calculationId = useId();
   const identity = healthIdentity
@@ -74,16 +78,16 @@ export function HealthScoreDetailsContent({
       {identity && <HealthInfoIdentityCard identity={identity} />}
       <section className="health-info-summary-card" aria-label="Health summary">
         <HealthScoreBreakdown
-          title="Overall Health"
+          title={summaryTitle ?? 'Overall Health'}
           score={score}
-          healthLabel={healthLabel}
+          healthLabel={healthLabel ?? summaryTitle ?? 'Overall Health'}
           ariaLabel={`${ariaLabel} score summary`}
           consistency={consistency}
           onTrack={onTrack}
           consistencyCaption="Follow-through over time"
           onTrackCaption="How caught up you are"
-          showMeasures
-          showMeasureCaptions
+          showMeasures={showMeasures}
+          showMeasureCaptions={showMeasures}
         />
         {!scoringCard && !scoringDisclosureTitle && (
           <>

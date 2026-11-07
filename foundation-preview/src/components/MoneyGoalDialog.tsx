@@ -1,6 +1,8 @@
 import { useLayoutEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import type { RefObject } from 'react';
+import { calculateAnchoredPopoverPosition } from './AnchoredPopover.tsx';
 
 type MoneyGoalDialogProps = {
   eyebrow?: string;
@@ -23,6 +25,7 @@ type MoneyGoalDialogProps = {
   inert?: boolean;
   surfaceClassName?: string;
   bodyClassName?: string;
+  anchorRef?: RefObject<HTMLElement | null>;
   onClose: () => void;
 };
 
@@ -47,22 +50,114 @@ export function MoneyGoalDialog({
   inert = false,
   surfaceClassName,
   bodyClassName,
+  anchorRef,
   onClose
 }: MoneyGoalDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useLayoutEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (typeof dialog.showModal === 'function') dialog.showModal();
-    else dialog.setAttribute('open', '');
+    const dialogElement = dialogRef.current;
+    if (!dialogElement) return;
+    const activeDialog: HTMLDialogElement = dialogElement;
+    if (typeof activeDialog.showModal === 'function') activeDialog.showModal();
+    else activeDialog.setAttribute('open', '');
     if (initialFocusId) {
       document.getElementById(initialFocusId)?.focus({ preventScroll: true });
     }
+
+    const anchorReference = anchorRef;
+    if (!anchorReference) {
+      return () => {
+        if (activeDialog.open && typeof activeDialog.close === 'function') activeDialog.close();
+      };
+    }
+    const activeAnchorReference: RefObject<HTMLElement | null> = anchorReference;
+
+    function syncPosition() {
+      const anchor = activeAnchorReference.current;
+      if (!anchor) return;
+      const visibleViewport = window.visualViewport;
+      const viewport = {
+        left: visibleViewport?.offsetLeft ?? 0,
+        top: visibleViewport?.offsetTop ?? 0,
+        width: visibleViewport?.width || window.innerWidth || document.documentElement.clientWidth,
+        height: visibleViewport?.height || window.innerHeight || document.documentElement.clientHeight
+      };
+      const panelBounds = activeDialog.getBoundingClientRect();
+      const panelHeight = Math.max(panelBounds.height, activeDialog.scrollHeight, 420);
+      const constrained = viewport.width <= 700 || viewport.height <= 560;
+
+      function center(fullScreen: boolean) {
+        activeDialog.dataset.anchorPlacement = 'center';
+        if (fullScreen) activeDialog.dataset.viewportConstrained = 'true';
+        else delete activeDialog.dataset.viewportConstrained;
+        const width = fullScreen ? viewport.width : Math.min(panelBounds.width || 360, viewport.width - 24);
+        const height = fullScreen ? viewport.height : Math.min(panelBounds.height || 420, viewport.height - 24);
+        activeDialog.style.position = 'fixed';
+        activeDialog.style.inset = 'auto';
+        activeDialog.style.left = `${viewport.left + Math.max(0, (viewport.width - width) / 2)}px`;
+        activeDialog.style.top = `${viewport.top + Math.max(0, (viewport.height - height) / 2)}px`;
+        activeDialog.style.right = 'auto';
+        activeDialog.style.bottom = 'auto';
+        activeDialog.style.margin = '0';
+        activeDialog.style.maxWidth = `${viewport.width}px`;
+        activeDialog.style.maxHeight = `${viewport.height}px`;
+        if (fullScreen) {
+          activeDialog.style.width = `${viewport.width}px`;
+          activeDialog.style.height = `${viewport.height}px`;
+        } else {
+          activeDialog.style.removeProperty('width');
+          activeDialog.style.removeProperty('height');
+        }
+      }
+
+      if (constrained) {
+        center(viewport.height <= 480);
+        return;
+      }
+
+      activeDialog.style.removeProperty('width');
+      activeDialog.style.removeProperty('height');
+      const position = calculateAnchoredPopoverPosition(
+        anchor.getBoundingClientRect(),
+        { ...panelBounds, height: panelHeight },
+        viewport
+      );
+      if (position.maxHeight < Math.min(panelHeight, 360)) {
+        center(false);
+        return;
+      }
+      delete activeDialog.dataset.viewportConstrained;
+      activeDialog.dataset.anchorPlacement = 'anchored';
+      activeDialog.style.position = 'fixed';
+      activeDialog.style.inset = 'auto';
+      activeDialog.style.left = `${position.left}px`;
+      activeDialog.style.top = `${position.top}px`;
+      activeDialog.style.right = 'auto';
+      activeDialog.style.bottom = 'auto';
+      activeDialog.style.margin = '0';
+      activeDialog.style.maxWidth = `${position.maxWidth}px`;
+      activeDialog.style.maxHeight = `${position.maxHeight}px`;
+    }
+
+    syncPosition();
+    window.addEventListener('resize', syncPosition);
+    window.addEventListener('scroll', syncPosition, true);
+    window.visualViewport?.addEventListener('resize', syncPosition);
+    window.visualViewport?.addEventListener('scroll', syncPosition);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(syncPosition);
+    observer?.observe(activeDialog);
+    observer?.observe(activeAnchorReference.current ?? activeDialog);
+
     return () => {
-      if (dialog.open && typeof dialog.close === 'function') dialog.close();
+      observer?.disconnect();
+      window.removeEventListener('resize', syncPosition);
+      window.removeEventListener('scroll', syncPosition, true);
+      window.visualViewport?.removeEventListener('resize', syncPosition);
+      window.visualViewport?.removeEventListener('scroll', syncPosition);
+      if (activeDialog.open && typeof activeDialog.close === 'function') activeDialog.close();
     };
-  }, [initialFocusId]);
+  }, [initialFocusId, anchorRef]);
 
   const dialog = (
     <dialog

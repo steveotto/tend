@@ -112,7 +112,8 @@ function renderDisplayOnlyCurrentSeason(
 function renderNewSeason(
   scheduleHistory: readonly RhythmScheduleHistorySegment[],
   onSave: (draft: RhythmSeasonEditDraft) => string | null = () => null,
-  records: readonly RhythmCompletionRecord[] = []
+  records: readonly RhythmCompletionRecord[] = [],
+  onClose: () => void = () => {}
 ) {
   const current = scheduleHistory.at(-1);
   if (current?.kind !== 'scheduled' || !current.timeOfDay) {
@@ -147,7 +148,7 @@ function renderNewSeason(
       records={records}
       canDelete={false}
       onSave={onSave}
-      onClose={() => {}}
+      onClose={onClose}
     />
   );
 }
@@ -215,7 +216,12 @@ describe('shared Season correction score preview', () => {
       makeRecord('future', '2026-10-28')
     ]);
 
-    expect(screen.getByRole('dialog', { name: 'Add a season' })).toBeTruthy();
+    const editor = screen.getByRole('dialog', { name: 'Add a season' });
+    expect(editor.classList.contains('dialog--phone-fullscreen')).toBe(true);
+    expect(document.activeElement).toBe(within(editor).getByRole('heading', { name: 'Add a season' }));
+    const scrollRegion = editor.querySelector('.rhythm-season-correction__scroll')!;
+    expect(scrollRegion.querySelectorAll('.rhythm-season-correction__step')).toHaveLength(3);
+    expect(scrollRegion.contains(editor.querySelector('.rhythm-season-correction__action-bar'))).toBe(false);
     expect(screen.getByText('Set a schedule for a date range. Existing seasons will adjust to fit.')).toBeTruthy();
     expect(screen.getByLabelText('Starting date')).toHaveProperty('value', asOfDate);
     await user.clear(screen.getByLabelText('Starting date'));
@@ -244,6 +250,44 @@ describe('shared Season correction score preview', () => {
       segmentId: `new-season:${rhythmId}`,
       startDate: '2026-10-17',
       endDate: '2026-10-20'
+    }));
+  });
+
+  it('keeps Add Season changes staged until Apply and cancels without saving', async () => {
+    const user = userEvent.setup();
+    const current = createRhythmSeason(rhythmId, '2026-10-01', daily, 'morning', 'season-current');
+    const onSave = vi.fn(() => null);
+    const onClose = vi.fn();
+    renderNewSeason([current], onSave, [], onClose);
+
+    await user.type(screen.getByLabelText('Season name (optional)'), 'Draft only');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(current).toEqual(expect.objectContaining({
+      id: 'season-current',
+      startDate: '2026-10-01',
+      schedule: daily
+    }));
+  });
+
+  it('keeps Add Season changes staged when the dialog Close control is used', async () => {
+    const user = userEvent.setup();
+    const current = createRhythmSeason(rhythmId, '2026-10-01', daily, 'morning', 'season-current');
+    const onSave = vi.fn(() => null);
+    const onClose = vi.fn();
+    renderNewSeason([current], onSave, [], onClose);
+
+    await user.type(screen.getByLabelText('Season name (optional)'), 'Draft only');
+    await user.click(screen.getByRole('button', { name: 'Cancel schedule correction' }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(current).toEqual(expect.objectContaining({
+      id: 'season-current',
+      startDate: '2026-10-01',
+      schedule: daily
     }));
   });
 

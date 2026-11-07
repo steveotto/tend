@@ -431,6 +431,58 @@ describe('selecting equal-weight Marriage Category scores', () => {
       scoredCategoryCount: 3,
       categoryCount: 6
     });
+
+  });
+
+  it('includes Flexibility in the equal Consistency average without inventing On Track', () => {
+    const cardio = {
+      foundationIds: ['health-cardio'],
+      eligibleFoundationIds: ['health-cardio'],
+      excludedFoundationIds: [],
+      unresolvedFoundationIds: [],
+      consistency: 80,
+      onTrack: 40,
+      health: 70
+    };
+    const unavailable = {
+      foundationIds: [],
+      eligibleFoundationIds: [],
+      excludedFoundationIds: [],
+      unresolvedFoundationIds: [],
+      consistency: null,
+      onTrack: null,
+      health: null
+    };
+    const flexibility = {
+      foundationIds: ['health-flexibility'],
+      eligibleFoundationIds: ['health-flexibility'],
+      excludedFoundationIds: [],
+      unresolvedFoundationIds: [],
+      consistency: 100,
+      onTrack: null,
+      health: 100
+    };
+
+    expect(selectHealthFitnessCategoryScore(cardio, unavailable, unavailable, flexibility))
+      .toMatchObject({
+        consistency: 90,
+        onTrack: 40,
+        health: 77.5
+      });
+    expect(selectHealthFitnessCategoryScore({
+      ...cardio,
+      consistency: null,
+      onTrack: null,
+      health: null
+    }, unavailable, unavailable, {
+      ...flexibility,
+      consistency: 0,
+      health: 0
+    })).toMatchObject({
+      consistency: 0,
+      onTrack: null,
+      health: null
+    });
   });
 
   it('includes a valid zero Category Health value', () => {

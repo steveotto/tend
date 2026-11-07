@@ -1,14 +1,17 @@
-import type { MouseEvent } from 'react';
+import type { MouseEvent, RefObject } from 'react';
 
 export function SettingsGearButton({
   label,
-  onClick
+  onClick,
+  buttonRef
 }: {
   label: string;
   onClick: (event: MouseEvent<HTMLButtonElement>) => void;
+  buttonRef?: RefObject<HTMLButtonElement | null>;
 }) {
   return (
     <button
+      ref={buttonRef}
       type="button"
       className="settings-icon-button"
       aria-label={label}

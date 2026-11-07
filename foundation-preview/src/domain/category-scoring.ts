@@ -194,12 +194,14 @@ export function selectStrengthCategoryScore(
 export function selectHealthFitnessCategoryScore(
   cardio: CategoryScoreSelection,
   weight: CategoryScoreSelection,
-  strength: CategoryScoreSelection
+  strength: CategoryScoreSelection,
+  flexibility: CategoryScoreSelection | null = null
 ): CategoryScoreSelection {
   const consistency = averageAvailableScores([
     cardio.consistency,
     weight.consistency,
-    strength.consistency
+    strength.consistency,
+    flexibility?.consistency ?? null
   ]);
   const onTrack = averageAvailableScores([
     cardio.onTrack,

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CatalogApp } from '../src/CatalogApp.tsx';
 import { AreaIcon } from '../src/components/AreaIcon.tsx';
 import marriageCategorySvg from '../src/assets/tend-approved-icons/categories/marriage.svg?raw';
+import healthFlexibilitySvg from '../src/assets/tend-approved-icons/foundations/health-flexibility.svg?raw';
 import { CategoryHealthBadge, FoundationCard, FoundationProgress, GoalCard, RhythmCard, ScoreMeter } from '../src/components/Cards.tsx';
 import { FoundationDetailHeader } from '../src/components/FoundationDetailHeader.tsx';
 import { MarriageIcon } from '../src/components/MarriageIcon.tsx';
@@ -11,9 +12,11 @@ import { RhythmCategoryBadges } from '../src/components/RhythmCategoryBadges.tsx
 import { historyButtonName } from './history-button-name.ts';
 import { PersonBadge, PersonBadgeList } from '../src/components/PersonBadge.tsx';
 import { RhythmDetailsDialog } from '../src/components/RhythmDetailsDialog.tsx';
+import { RhythmMetadata } from '../src/components/RhythmMetadata.tsx';
 import { RhythmSuggestionPicker } from '../src/components/RhythmSuggestionPicker.tsx';
 import { formatScore } from '../src/domain/score-display.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
+import type { RhythmSchedule } from '../src/domain/rhythm-schedule.ts';
 import {
   financeFoundation,
   areas,
@@ -682,10 +685,9 @@ describe('shared preview components', () => {
 
     const footer = document.querySelector('.rhythm-metadata-footer')!;
     const scheduleGroup = footer.querySelector('.rhythm-metadata-schedule-group')!;
-    const scheduleLabel = scheduleGroup.querySelector('span > span')!;
+    const scheduleLabel = scheduleGroup.querySelector('.rhythm-metadata-schedule-label')!;
     expect(scheduleLabel.textContent).toBe('Quarterly');
-    const fullScheduleId = scheduleLabel.getAttribute('aria-describedby')!;
-    expect(document.getElementById(fullScheduleId)?.textContent)
+    expect(scheduleGroup.querySelector('.visually-hidden')?.textContent)
       .toBe('Full schedule: The 15th day of the second month of every quarter.');
     expect(scheduleGroup.textContent).toContain('Afternoon');
     const icon = scheduleGroup.querySelector('svg')!;
@@ -699,6 +701,64 @@ describe('shared preview components', () => {
       'Full schedule: The 15th day of the second month of every quarter.'
     ).length).toBeGreaterThan(0);
     expect(within(history).getByText('Afternoon')).toBeTruthy();
+  });
+
+  it('uses compact weekday labels in shared card footers while exposing full names to assistive technology', () => {
+    const fixtures: readonly {
+      schedule: RhythmSchedule;
+      visible: string;
+      accessible: string;
+    }[] = [
+      {
+        schedule: { frequency: 'weekly', weekdays: [1, 2, 3, 4] },
+        visible: 'M · T · W · R',
+        accessible: 'Full schedule: Every week on Monday, Tuesday, Wednesday, and Thursday.'
+      },
+      {
+        schedule: { frequency: 'weekly', weekdays: [1, 2, 3, 4, 5, 6] },
+        visible: 'M · T · W · R · F · S',
+        accessible: 'Full schedule: Every week on Monday, Tuesday, Wednesday, Thursday, Friday, and Saturday.'
+      },
+      {
+        schedule: { frequency: 'weekly', weekdays: [6, 0] },
+        visible: 'Su · S',
+        accessible: 'Full schedule: Every week on Sunday and Saturday.'
+      },
+      {
+        schedule: { frequency: 'weekly', weekdays: [0] },
+        visible: 'Every Su',
+        accessible: 'Full schedule: Every week on Sunday.'
+      }
+    ];
+
+    render(
+      <>
+        {fixtures.map(({ schedule }, index) => (
+          <div
+            key={index}
+            className="tend-app-preview"
+            data-text-size={['small', 'medium', 'large'][index % 3]}
+            style={{ width: `${[320, 390, 430, 320][index]}px` }}
+          >
+            <RhythmMetadata
+              variant="footer"
+              schedule={schedule}
+              lastTended="Never"
+            />
+          </div>
+        ))}
+      </>
+    );
+
+    const footers = document.querySelectorAll('.rhythm-metadata-footer');
+    expect(footers).toHaveLength(fixtures.length);
+    footers.forEach((footer, index) => {
+      const visibleLabel = footer.querySelector('.rhythm-metadata-schedule-label')!;
+      expect(visibleLabel.textContent).toBe(fixtures[index]!.visible);
+      expect(visibleLabel.getAttribute('aria-hidden')).toBe('true');
+      expect(footer.querySelector('.rhythm-metadata-schedule-group .visually-hidden')?.textContent)
+        .toBe(fixtures[index]!.accessible);
+    });
   });
 
   it('renders shared full details inline with complete action targets and no modal controls', async () => {
@@ -726,32 +786,26 @@ describe('shared preview components', () => {
     const header = card.querySelector('.today-rhythm-details__header');
     const actions = card.querySelector('.today-rhythm-details__actions');
     const content = card.querySelector('.today-rhythm-details__content');
-    const scoreButton = within(card).getByRole('button', {
-      name: historyButtonName(`View scores and history for ${todayRhythms[0]!.title}`)
-    });
     expect(within(card).getByRole('heading', { name: todayRhythms[0]!.title, level: 3 })).toBeTruthy();
     expect(actions?.parentElement).toBe(content);
     expect(actions?.classList.contains('today-rhythm-details__actions--inline')).toBe(true);
     expect(header?.contains(actions)).toBe(false);
-    expect(header?.contains(scoreButton)).toBe(true);
     expect(within(card).getByText(todayRhythms[0]!.description!)).toBeTruthy();
     expect(within(card).getByRole('group', { name: `Associations for ${todayRhythms[0]!.title}` })).toBeTruthy();
     expect(within(card).getByRole('button', { name: `Tend ${todayRhythms[0]!.title}` })).toBeTruthy();
-    expect(within(card).queryByRole('button', { name: `Edit ${todayRhythms[0]!.title}` })).toBeNull();
-    expect(within(actions as HTMLElement).getByRole('button', {
-      name: `Tend ${todayRhythms[0]!.title}`
-    }).classList.contains('rhythm-card__tend')).toBe(true);
-    expect(within(actions as HTMLElement).queryByRole('button', {
-      name: historyButtonName(`View scores and history for ${todayRhythms[0]!.title}`)
-    })).toBeNull();
+    expect(within(card).getByRole('button', { name: historyButtonName(`View scores and history for ${todayRhythms[0]!.title}`) })).toBeTruthy();
+    expect(within(card).getByRole('button', { name: `Edit ${todayRhythms[0]!.title}` })).toBeTruthy();
+    expect(actions?.firstElementChild?.classList.contains('today-rhythm-details__history-button')).toBe(true);
+    expect(actions?.children[1]?.classList.contains('rhythm-card__tend')).toBe(true);
     expect(within(card).queryByRole('button', { name: 'Close details' })).toBeNull();
     expect(within(card).queryByRole('button', { name: /^Back/ })).toBeNull();
 
     await user.click(within(card).getByRole('button', { name: `Tend ${todayRhythms[0]!.title}` }));
-    await user.click(scoreButton);
+    await user.click(within(card).getByRole('button', { name: historyButtonName(`View scores and history for ${todayRhythms[0]!.title}`) }));
+    await user.click(within(card).getByRole('button', { name: `Edit ${todayRhythms[0]!.title}` }));
     expect(onTend).toHaveBeenCalledOnce();
     expect(onHistory).toHaveBeenCalledOnce();
-    expect(onEdit).not.toHaveBeenCalled();
+    expect(onEdit).toHaveBeenCalledOnce();
     expect(onUndo).not.toHaveBeenCalled();
   });
 
@@ -807,49 +861,23 @@ describe('shared preview components', () => {
     const scoreButton = screen.getByRole('button', {
       name: historyButtonName(`View scores and history for ${rhythm.title}, Health 43 out of 100`)
     });
-    expect(scoreButton.closest('.today-rhythm-details__header')).toBeTruthy();
     expect(scoreButton.querySelector('.today-rhythm-details__history-score')?.textContent).toBe('43');
-    expect(scoreButton.querySelector('.today-rhythm-details__history-content')).toBeTruthy();
-    expect(scoreButton.querySelector('.today-rhythm-details__history-content')?.firstElementChild?.tagName).toBe('svg');
+    expect(scoreButton.firstElementChild?.tagName).toBe('svg');
     expect(scoreButton.querySelectorAll('svg.rhythm-metadata-icon--history rect')).toHaveLength(3);
-    expect(scoreButton.querySelector('.today-rhythm-details__history-content')?.lastElementChild
-      ?.classList.contains('today-rhythm-details__history-score')).toBe(true);
+    expect(scoreButton.lastElementChild?.classList.contains('today-rhythm-details__history-score')).toBe(true);
     for (const { score, tone } of toneCases) {
       const toneButton = screen.getByRole('button', {
         name: historyButtonName(`View scores and history for Score ${score ?? 'unavailable'}`
           + (score === null ? ', Health unavailable' : `, Health ${formatScore(score)} out of 100`))
       });
       expect(toneButton?.getAttribute('data-score-tone')).toBe(tone);
-      expect(toneButton.closest('.today-rhythm-details__header')).toBeTruthy();
       expect(toneButton?.querySelector('.today-rhythm-details__history-score')?.textContent)
         .toBe(formatScore(score));
-      expect(toneButton.querySelector('.today-rhythm-details__history-content')?.firstElementChild?.tagName)
-        .toBe('svg');
+      expect(toneButton.children[0]?.tagName).toBe('svg');
       expect(toneButton.querySelectorAll('svg.rhythm-metadata-icon--history rect')).toHaveLength(3);
-      expect(toneButton.querySelector('.today-rhythm-details__history-content')?.lastElementChild
-        ?.classList.contains('today-rhythm-details__history-score')).toBe(true);
+      expect(toneButton.children[1]?.classList.contains('today-rhythm-details__history-score')).toBe(true);
       expect(toneButton.querySelectorAll('svg')).toHaveLength(1);
     }
-  });
-
-  it('keeps Rhythm editing in the score and history modal, not on the inline card', async () => {
-    const user = userEvent.setup();
-    const rhythm = todayRhythms[0]!;
-    const onEdit = vi.fn();
-    render(
-      <RhythmDetailsDialog
-        rhythm={rhythm}
-        initialView="history"
-        onEdit={onEdit}
-        onClose={() => undefined}
-      />
-    );
-
-    const history = screen.getByRole('region', { name: `History for ${rhythm.title}` });
-    const edit = within(history).getByRole('button', { name: `Edit ${rhythm.title}` });
-    expect(edit.classList.contains('today-rhythm-details__edit-icon')).toBe(true);
-    await user.click(edit);
-    expect(onEdit).toHaveBeenCalledOnce();
   });
 
   it('keeps the bottom action row when description and associations are absent', () => {
@@ -883,16 +911,14 @@ describe('shared preview components', () => {
     expect(actions?.classList.contains('today-rhythm-details__actions--inline-with-associations')).toBe(false);
     expect(header?.contains(actions)).toBe(false);
     expect(within(card).getByRole('button', { name: `Tend ${rhythm.title}` })).toBeTruthy();
-    expect(within(card).getByRole('button', {
-      name: historyButtonName(`View scores and history for ${rhythm.title}`)
-    }).closest('.today-rhythm-details__header')).toBeTruthy();
+    expect(within(card).getByRole('button', { name: historyButtonName(`View scores and history for ${rhythm.title}`) })).toBeTruthy();
     expect(body).toBeTruthy();
   });
 
   it('wraps long inline copy, omits empty associations, and gives repeated cards unique heading IDs', () => {
     const rhythm = {
       id: 'inline-empty-example',
-      title: 'An intentionally long Rhythm title that needs to wrap naturally without colliding with the Health score',
+      title: 'An intentionally long Rhythm title that needs to wrap naturally without colliding with Edit',
       description: 'A deliberately long description that should wrap naturally in the shared inline presentation without horizontal overflow or a reserved association row.',
       automation: 'manual' as const,
       status: 'Due today' as const
@@ -919,10 +945,6 @@ describe('shared preview components', () => {
     const cards = screen.getAllByRole('article');
     expect(cards).toHaveLength(3);
     expect(within(cards[0]!).getByRole('heading', { name: rhythm.title })).toBeTruthy();
-    expect(within(cards[0]!).getByRole('button', {
-      name: historyButtonName(`View scores and history for ${rhythm.title}`)
-    }).closest('.today-rhythm-details__header')).toBeTruthy();
-    expect(within(cards[0]!).queryByRole('button', { name: `Edit ${rhythm.title}` })).toBeNull();
     expect(within(cards[0]!).getByText(rhythm.description)).toBeTruthy();
     expect(within(cards[0]!).queryByRole('group', { name: /People associated/ })).toBeNull();
     expect(within(cards[0]!).queryByRole('group', { name: 'Associated categories' })).toBeNull();
@@ -1177,13 +1199,10 @@ describe('shared preview components', () => {
     expect(associations.compareDocumentPosition(actions!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(associations).getAllByRole('button').length).toBeGreaterThan(2);
     expect(within(card).getByRole('button', { name: `Tend ${rhythm.title}` })).toBeTruthy();
-    const scoreButton = within(card).getByRole('button', {
+    expect(within(card).getByRole('button', {
       name: historyButtonName(`View scores and history for ${rhythm.title}`)
-    });
-    expect(scoreButton.closest('.today-rhythm-details__header')).toBe(header);
-    expect(scoreButton.closest('.today-rhythm-details__title-score-row'))
-      .toBe(titleGroup?.querySelector('.today-rhythm-details__title-score-row'));
-    expect(within(card).queryByRole('button', { name: `Edit ${rhythm.title}` })).toBeNull();
+    })).toBeTruthy();
+    expect(within(card).getByRole('button', { name: `Edit ${rhythm.title}` }).parentElement).toBe(header);
 
     rerender(<RhythmDetailsDialog {...props} archived />);
     expect(screen.queryByRole('button', { name: `Tend ${rhythm.title}` })).toBeNull();
@@ -1609,6 +1628,41 @@ describe('shared preview components', () => {
     rerender(<MarriageIcon group="foundations" id="not-a-known-foundation" />);
     expect(container.querySelector('.marriage-svg-icon')).toBeNull();
     expect(container.querySelector('[aria-hidden="true"]')?.textContent).toBe('♡');
+  });
+
+  it('maps the supplied Flexibility line icon alongside the Health & Fitness foundation icons', () => {
+    const foundationIds = ['health-strength', 'health-cardio', 'health-weight', 'health-flexibility'];
+    const { container } = render(
+      <div>
+        {foundationIds.map(id => (
+          <MarriageIcon key={id} group="foundations" id={id} />
+        ))}
+      </div>
+    );
+    const icons = [...container.querySelectorAll<HTMLElement>('.marriage-svg-icon')];
+
+    expect(icons).toHaveLength(4);
+    expect(icons.every(icon => icon.getAttribute('aria-hidden') === 'true')).toBe(true);
+    expect(icons.every(icon => icon.className === 'marriage-svg-icon')).toBe(true);
+    const flexibilityIconSource = decodeURIComponent(
+      icons[3]!.style.getPropertyValue('--marriage-icon')
+    );
+    expect(flexibilityIconSource).toContain('<circle');
+    expect(flexibilityIconSource).toContain('<path');
+    expect(icons[3]!.classList.contains('marriage-svg-icon')).toBe(true);
+    expect(healthFlexibilitySvg).toContain('viewBox="0 0 32 32"');
+    expect(healthFlexibilitySvg).toContain('fill="none"');
+    expect(healthFlexibilitySvg).toContain('<circle');
+    expect(healthFlexibilitySvg).toContain('<path');
+    expect(healthFlexibilitySvg).not.toContain('<image');
+    expect(healthFlexibilitySvg).toContain('stroke="currentColor"');
+    expect(healthFlexibilitySvg).toContain('stroke-width="3.7"');
+    expect(healthFlexibilitySvg).toContain('M5 26 12 14 Q15 10 21 11');
+    expect(healthFlexibilitySvg).toContain('M12 15 18 26');
+    expect(healthFlexibilitySvg).toContain('M21 4 23 24');
+    expect(healthFlexibilitySvg).toContain('cx="27" cy="12" r="2.7"');
+    expect(flexibilityIconSource).toContain("viewBox='0 0 32 32'");
+    expect(flexibilityIconSource).toContain("stroke-width='3.7'");
   });
 
   it('provides approved icon mappings for each retained Marriage Foundation and populated Rhythm', () => {

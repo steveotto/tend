@@ -1,11 +1,20 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { HealthMeasureAggregate } from '../domain/health-scoring.ts';
+import type { PersonPreview } from '../domain/preview-data.ts';
+import type { HealthRollupConfig } from './HealthRollupDiagram.tsx';
+import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 import { formatScore } from '../domain/score-display.ts';
 import { scoreTone } from '../domain/score-tone.ts';
+import { CategoryHealthBadge } from './Cards.tsx';
+import { HealthScoreBreakdown } from './HealthScoreBreakdown.tsx';
+import { HealthScoreDetailsContent } from './HealthScoreDetailsContent.tsx';
+import { HealthInfoIdentityCard } from './HealthInfoIdentityCard.tsx';
+import { HealthScoringDetailsCard } from './HealthScoringDetailsCard.tsx';
 import { HealthScoreSummary } from './HealthScoreSummary.tsx';
 
 export type PersonHealthComponentScore = {
+  id?: 'rhythms' | 'connections' | 'prayer';
   label: string;
   score: number | null;
 };
@@ -23,8 +32,12 @@ type PersonHealthSummaryProps = {
   coverageLabel?: string;
   emptyMessage?: string;
   showMeasures?: boolean;
+  showMeasureCaptions?: boolean;
   showHealthMeter?: boolean;
   summaryContent?: ReactNode;
+  detailsContent?: ReactNode;
+  detailsDialogTitle?: string;
+  detailsLabel?: string;
 };
 
 export function PersonHealthSummary({
@@ -40,8 +53,12 @@ export function PersonHealthSummary({
   coverageLabel,
   emptyMessage,
   showMeasures = true,
+  showMeasureCaptions = false,
   showHealthMeter = false,
-  summaryContent
+  summaryContent,
+  detailsContent,
+  detailsDialogTitle,
+  detailsLabel
 }: PersonHealthSummaryProps) {
   const [expanded, setExpanded] = useState(false);
   const coverage = coverageLabel ?? (totalCount === 0
@@ -59,11 +76,17 @@ export function PersonHealthSummary({
       consistency={health.consistency}
       onTrack={health.onTrack}
       coverage={coverage}
+      consistencyDetailCaption="Follow-through over time"
+      onTrackDetailCaption="How caught up you are"
       expanded={expanded}
       onExpandedChange={setExpanded}
       showMeasures={showMeasures}
+      showMeasureCaptions={showMeasureCaptions}
       showHealthMeter={showHealthMeter}
       summaryContent={summaryContent}
+      {...(detailsContent === undefined ? {} : { detailsContent })}
+      {...(detailsDialogTitle === undefined ? {} : { detailsDialogTitle })}
+      {...(detailsLabel === undefined ? {} : { detailsLabel })}
       consistencyDescription={`The average Consistency score of eligible ${pluralTerm}.`}
       onTrackDescription={`The average On Track score of eligible ${pluralTerm}.`}
     >
@@ -98,15 +121,51 @@ export function PersonHealthSummary({
 }
 
 export function PersonHealthComponentScores({
-  values
+  values,
+  expandedArea,
+  controlIds,
+  onSelectArea
 }: {
   values: readonly PersonHealthComponentScore[];
+  expandedArea?: 'rhythms' | 'connections' | 'prayer' | null;
+  controlIds?: Readonly<Record<'rhythms' | 'connections' | 'prayer', string>>;
+  onSelectArea?: (area: 'rhythms' | 'connections' | 'prayer') => void;
 }) {
   return (
     <div className="person-health-component-scores" role="group" aria-label="Health by area">
-      {values.map(({ label, score }) => {
+      {values.map(({ id, label, score }) => {
         const value = score !== null && Number.isFinite(score) ? score : null;
         const available = value !== null;
+        const content = (
+          <>
+            <CategoryHealthBadge
+              score={value}
+              appearance="rounded"
+              className="person-health-component-score__badge"
+            />
+            <span className="person-health-component-score__label">
+              {label}
+            </span>
+          </>
+        );
+        if (id && onSelectArea && controlIds) {
+          return (
+            <button
+              type="button"
+              className={`person-health-component-score ${scoreTone(value)}`}
+              aria-label={`${label} Health ${value === null ? 'unavailable' : formatScore(value)}`}
+              aria-controls={controlIds[id]}
+              aria-expanded={expandedArea === id}
+              key={id}
+              onClick={() => onSelectArea(id)}
+            >
+              {content}
+              <span className="visually-hidden">
+                {expandedArea === id ? 'Health card open' : 'Health card closed'}
+              </span>
+            </button>
+          );
+        }
         return (
           <div className={`person-health-component-score ${scoreTone(value)}`} key={label}>
             <span
@@ -117,12 +176,178 @@ export function PersonHealthComponentScores({
               aria-valuenow={value ?? undefined}
               aria-valuetext={value === null ? undefined : `${formatScore(value)} out of 100`}
             >
-              {formatScore(value)}
+              {content}
             </span>
-            <span aria-hidden="true">{label}</span>
           </div>
         );
       })}
     </div>
+  );
+}
+
+export type PersonOverallHealthArea = {
+  id: 'rhythms' | 'connections' | 'prayer';
+  label: string;
+  score: number | null;
+};
+
+export function formatPersonOverallHealthFormula(
+  areas: readonly PersonOverallHealthArea[],
+  overallScore: number | null
+): string | null {
+  const eligible = areas.filter(area => area.score !== null && Number.isFinite(area.score));
+  if (eligible.length === 0 || overallScore === null || !Number.isFinite(overallScore)) return null;
+
+  if (eligible.length === 1) {
+    const area = eligible[0]!;
+    return `${area.label} ${formatFormulaScore(area.score!)} → Overall ${formatFormulaScore(overallScore)}`;
+  }
+
+  const displayedScores = eligible.map(area => formatFormulaScore(area.score!));
+  const displayedMean = displayedScores.reduce((total, score) => total + Number(score), 0)
+    / displayedScores.length;
+  const displayedOverall = Number(formatFormulaScore(overallScore));
+  const operator = Math.abs(displayedMean - displayedOverall) < 1e-10 ? '=' : '≈';
+  return `(${displayedScores.join(' + ')}) ÷ ${displayedScores.length} ${operator} ${formatFormulaScore(overallScore)}`;
+}
+
+function formatFormulaScore(score: number): string {
+  return score.toFixed(1).replace(/\.0$/, '');
+}
+
+export function PersonOverallHealthDetails({
+  person,
+  overallScore,
+  areas
+}: {
+  person: PersonPreview;
+  overallScore: number | null;
+  areas: readonly PersonOverallHealthArea[];
+}) {
+  const formula = formatPersonOverallHealthFormula(areas, overallScore);
+  const eligibleAreas = areas.filter(area => area.score !== null && Number.isFinite(area.score));
+
+  return (
+    <div className="health-score-details-content person-overall-health-details">
+      <HealthInfoIdentityCard
+        identity={{ name: person.displayName, icon: { kind: 'person' }, person }}
+      />
+      <section className="health-info-summary-card" aria-label="Overall Health summary">
+        <HealthScoreBreakdown
+          title="Overall Health"
+          score={overallScore}
+          healthLabel="Overall Health"
+          ariaLabel="Overall Health score summary"
+          consistency={{ score: null, state: 'unavailable' }}
+          onTrack={{ score: null, state: 'unavailable' }}
+          consistencyCaption="Follow-through over time"
+          onTrackCaption="How caught up you are"
+          showMeasures={false}
+        >
+          <PersonHealthComponentScores values={areas} />
+        </HealthScoreBreakdown>
+      </section>
+      <HealthScoringDetailsCard
+        title="How Overall Health was scored"
+        healthScore={overallScore}
+        consistencyScore={null}
+        onTrackScore={null}
+        formulaContent={(
+          <section className="person-overall-health-formula" aria-label="Eligible area scores and formula">
+          <h4>Eligible area scores</h4>
+          {eligibleAreas.length > 0 ? (
+              <>
+                <ul>
+                  {eligibleAreas.map(area => (
+                    <li key={area.id}>
+                      <span>{area.label}</span>
+                      <strong>{formatFormulaScore(area.score!)}</strong>
+                    </li>
+                  ))}
+                </ul>
+                <p className="rhythm-health-scoring-card__formula rhythm-health-scoring-card__formula--total">
+                  {formula}
+                </p>
+              </>
+            ) : (
+              <p className="health-aggregate-evidence__empty">No areas have scored data yet.</p>
+            )}
+            <p className="person-overall-health-formula__note">
+              Available areas count equally. Unavailable areas are left out.
+            </p>
+          </section>
+        )}
+      />
+    </div>
+  );
+}
+
+export function PersonHealthAreaDetails({
+  person,
+  areaLabel,
+  health,
+  supportsMeasures,
+  rollup,
+  evidence,
+  unavailableExplanation,
+  unavailableInputs
+}: {
+  person: PersonPreview;
+  areaLabel: 'Rhythm' | 'Connection' | 'Prayer';
+  health: HealthMeasureAggregate;
+  supportsMeasures: boolean;
+  rollup: HealthRollupConfig;
+  evidence?: HealthAggregateEvidence;
+  unavailableExplanation?: string;
+  unavailableInputs?: ReactNode;
+}) {
+  const title = `${areaLabel} Health`;
+  const measure = (score: number | null) => ({
+    score,
+    state: score === null || !supportsMeasures ? 'unavailable' as const : 'scored' as const
+  });
+
+  return (
+    <HealthScoreDetailsContent
+      title={title}
+      summaryTitle={title}
+      ariaLabel={`${person.displayName}’s ${title} details`}
+      score={health.health}
+      healthLabel={title}
+      consistency={measure(health.consistency)}
+      onTrack={measure(health.onTrack)}
+      consistencyCaption="Follow-through over time"
+      onTrackCaption="How caught up you are"
+      healthIdentity={{
+        name: person.displayName,
+        secondary: title,
+        icon: { kind: 'person' },
+        person
+      }}
+      showMeasures={supportsMeasures}
+      showScoreNote={false}
+      scoringCard={(
+        <HealthScoringDetailsCard
+          title={`How ${title} was scored`}
+          healthScore={health.health}
+          consistencyScore={supportsMeasures ? health.consistency : null}
+          onTrackScore={supportsMeasures ? health.onTrack : null}
+          maxFractionDigits={1}
+          {...(evidence ? { evidence } : {})}
+          {...(supportsMeasures ? {} : {
+            formulaContent: (
+              <section className="health-aggregate-evidence">
+                <p className="health-aggregate-evidence__empty">
+                  {unavailableExplanation ?? `${title} scoring is unavailable in this preview.`}
+                </p>
+                {unavailableInputs}
+              </section>
+            )
+          })}
+        />
+      )}
+      rollup={rollup}
+      initialContributionExpanded={false}
+    />
   );
 }

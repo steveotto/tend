@@ -12,10 +12,10 @@ import { StrengthExerciseEditor } from './StrengthExerciseEditor.tsx';
 import { StrengthExerciseResults } from './StrengthExerciseResults.tsx';
 import { StrengthGuidedSessionDialog } from './StrengthGuidedSessionDialog.tsx';
 import { FitnessScoreSummary } from './FitnessScoreSummary.tsx';
+import { createStrengthBodyMapConfig, FitnessBodyMapLayout } from './FitnessBodyMap.tsx';
 import { RhythmCalendarIcon } from './RhythmCalendarIcon.tsx';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
 import { SettingsGearButton } from './SettingsGearButton.tsx';
-import { formatScore } from '../domain/score-display.ts';
 import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
 import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 import { SegmentedTabs } from './SegmentedTabs.tsx';
@@ -103,6 +103,10 @@ export type StrengthViewProps = {
   onRhythmModeRequestClosed?: () => void;
   foundationNavigation?: boolean;
   healthScoringEvidence?: HealthAggregateEvidence;
+  onStretchAfter?: (
+    muscleIds: readonly StrengthMuscleId[],
+    event: MouseEvent<HTMLButtonElement>
+  ) => void;
 };
 
 type WorkoutsTab = 'recommended' | 'saved' | 'history';
@@ -134,10 +138,6 @@ const workoutTabs = [
   { id: 'saved', label: 'Saved', tabId: 'strength-workout-tab-saved', panelId: 'strength-workout-panel-saved' },
   { id: 'history', label: 'History', tabId: 'strength-workout-tab-history', panelId: 'strength-workout-panel-history' }
 ] as const satisfies readonly SegmentedTab<WorkoutsTab>[];
-const strengthBodyMapPaintOrder: readonly StrengthMuscleId[] = [
-  'shoulders', 'chest', 'back', 'biceps', 'triceps', 'abs', 'quads', 'hamstrings', 'calves'
-];
-
 export function StrengthView({
   data,
   healthScore,
@@ -158,7 +158,8 @@ export function StrengthView({
   onRhythmModeRequestOpened,
   onRhythmModeRequestClosed,
   foundationNavigation = false,
-  healthScoringEvidence
+  healthScoringEvidence,
+  onStretchAfter
 }: StrengthViewProps) {
   const [workoutsTab, setWorkoutsTab] = useState<WorkoutsTab>('recommended');
   const [visibleHistoryLimit, setVisibleHistoryLimit] = useState(10);
@@ -1075,9 +1076,13 @@ export function StrengthView({
                 </button>
               ))}
             </div>
-            <div className="strength-map-layout">
-              <StrengthBodyMap view={bodyView} scores={scores} selectedId={selectedMuscleId} onSelect={chooseMuscle} />
-              <div className="strength-muscle-list" role="group" aria-label="Muscle training status">
+            <FitnessBodyMapLayout
+                config={createStrengthBodyMapConfig(scores)}
+                view={bodyView}
+                selectedId={selectedMuscleId}
+                onSelect={chooseMuscle}
+                listLabel="Muscle training status"
+              >
                 {visibleMuscles.map(muscle => {
                   const result = scores.find(item => item.id === muscle.id)!;
                   const trainingStatus = strengthMuscleTrainingStatus(result);
@@ -1113,8 +1118,7 @@ export function StrengthView({
                     </button>
                   );
                 })}
-              </div>
-            </div>
+            </FitnessBodyMapLayout>
             <div className="strength-muscle-detail" aria-live="polite">
               <h3 className="strength-muscle-detail__title">{selected.name} details</h3>
               <dl className="strength-muscle-facts">
@@ -1837,7 +1841,22 @@ export function StrengthView({
             />
             <label className="strength-form-field">Notes<textarea name="notes" maxLength={1000} defaultValue={dialog.log?.notes ?? ''} /></label>
             {error && <p className="strength-form-error" role="alert">{error}</p>}
-            <div className="money-goal-dialog__actions"><button type="submit" className="btn mini">Save workout</button><button type="button" className="btn mini ghost" onClick={closeDialog}>Cancel</button></div>
+            <div className="money-goal-dialog__actions">
+              {onStretchAfter && logMuscleIds.length > 0 && (
+                <button
+                  type="button"
+                  className="btn mini ghost"
+                  onClick={event => {
+                    onStretchAfter(logMuscleIds, event);
+                    closeDialog();
+                  }}
+                >
+                  Stretch after?
+                </button>
+              )}
+              <button type="submit" className="btn mini">Save workout</button>
+              <button type="button" className="btn mini ghost" onClick={closeDialog}>Cancel</button>
+            </div>
           </form>
         </MoneyGoalDialog>
       )}
@@ -1968,64 +1987,6 @@ function formatPlannedSetSummary(sets: StrengthWorkoutExercise['sets']): string 
   return `${sets.length} sets · ${formatted.join(' / ')}`;
 }
 
-function StrengthBodyMap({
-  view,
-  scores,
-  selectedId,
-  onSelect
-}: {
-  view: 'front' | 'back';
-  scores: readonly StrengthMuscleScore[];
-  selectedId: StrengthMuscleId;
-  onSelect: (id: StrengthMuscleId) => void;
-}) {
-  const visibleIds = visibleStrengthMuscles(view)
-    .map(muscle => muscle.id)
-    .sort((left, right) => strengthBodyMapPaintOrder.indexOf(left) - strengthBodyMapPaintOrder.indexOf(right));
-  const paths: Partial<Record<StrengthMuscleId, string>> = {
-    shoulders: 'M93 79Q65 74 54 98L53 114L74 107L80 86Z M127 79Q155 74 166 98L167 114L146 107L140 86Z',
-    chest: 'M81 89Q96 80 108 87L107 129Q86 137 76 122Z M139 89Q124 80 112 87L113 129Q134 137 144 122Z',
-    back: 'M81 89L107 81L107 193L91 195L81 158L76 117Z M139 89L113 81L113 193L129 195L139 158L144 117Z',
-    biceps: 'M52 116L71 112L66 145L57 162L44 153Z M168 116L149 112L154 145L163 162L176 153Z',
-    triceps: 'M52 116L71 112L66 145L57 162L44 153Z M168 116L149 112L154 145L163 162L176 153Z',
-    abs: 'M89 139L107 137L107 190L90 197L83 163Z M131 139L113 137L113 190L130 197L137 163Z',
-    quads: 'M73 206L105 205L101 265L83 272L74 259Z M147 206L115 205L119 265L137 272L146 259Z',
-    hamstrings: 'M73 213L105 214L101 265L83 272L74 259Z M147 213L115 214L119 265L137 272L146 259Z',
-    calves: 'M79 284L100 279L95 317L82 318Z M141 284L120 279L125 317L138 318Z'
-  };
-  const names = new Map(strengthMuscles.map(muscle => [muscle.id, muscle.name]));
-  return (
-    <div className="strength-map-wrap">
-      <svg className="strength-body-svg" viewBox="0 0 220 350" role="group" aria-label={`${view === 'front' ? 'Front' : 'Back'} muscle training status map`}>
-        <g fill="var(--tend-mist)" aria-hidden="true"><ellipse cx="110" cy="36" rx="23" ry="28" /><path d="M98 60L97 73Q57 72 48 99L30 181L23 207Q22 218 34 220L47 202L64 139L72 162L69 210L74 294L78 335L99 335L107 244L113 244L121 335L142 335L146 294L151 210L148 162L156 139L173 202L186 220Q198 218 197 207L190 181L172 99Q163 72 123 73L122 60Z" /></g>
-        {visibleIds.map(id => {
-          const result = scores.find(item => item.id === id)!;
-          return (
-            <path
-              key={id}
-              className="strength-body-muscle"
-              data-muscle={id}
-              d={paths[id]}
-              fill={scoreFill(result.health)}
-              tabIndex={0}
-              role="button"
-              aria-pressed={selectedId === id}
-              aria-label={`${names.get(id)}, Health ${result.health === null ? 'score unavailable' : `${formatScore(result.health)} out of 100`}, ${result.status}`}
-              onClick={() => onSelect(id)}
-              onKeyDown={event => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  onSelect(id);
-                }
-              }}
-            />
-          );
-        })}
-      </svg>
-    </div>
-  );
-}
-
 function StrengthWorkoutHistory({
   history,
   rowRefs,
@@ -2071,11 +2032,6 @@ function StrengthWorkoutHistory({
       {history.hasMore && <button type="button" className="btn mini ghost strength-history-more" onClick={onShowMore}>Show 10 more</button>}
     </div>
   );
-}
-
-function scoreFill(score: number | null): string {
-  if (score === null) return 'var(--score-neutral)';
-  return score >= 80 ? 'var(--score-green)' : score >= 50 ? 'var(--score-yellow)' : 'var(--score-red)';
 }
 
 function visibleStrengthMuscles(view: 'front' | 'back') {

@@ -91,9 +91,11 @@ describe('Health scoring rollup diagram', () => {
     expect(fitness.groups[0]?.items.map(item => item.label)).toEqual([
       'Workouts → Strength',
       'Weigh-ins → Weight',
-      'Runs → Cardio'
+      'Runs → Cardio',
+      'Stretch sessions → Flexibility'
     ]);
     expect(fitness.groups[0]?.items[2]?.explanation).toContain('saved run logs');
+    expect(fitness.groups[0]?.items[3]?.explanation).toContain('most recent stretch date');
     expect(fitness.groups[2]?.items[0]?.categoryIconId).toBe('health');
     expect(fitness.groups[1]?.items[0]?.foundationIconId).toBe('health-strength');
   });

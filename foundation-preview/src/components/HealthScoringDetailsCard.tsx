@@ -4,17 +4,26 @@ import { formatScore } from '../domain/score-display.ts';
 import { HEALTH_CONSISTENCY_WEIGHT, HEALTH_ON_TRACK_WEIGHT } from '../domain/rhythm-history.ts';
 import { HealthDetailsExpandableHeader } from './HealthDetailsExpandableHeader.tsx';
 import { HealthWeightPanels, formatTruthfulWeightedSum } from './HealthWeightPanels.tsx';
+import { CategoryHealthBadge } from './Cards.tsx';
 
 export type HealthScoringEvidenceRow = {
   id: string;
   label: string;
   consistency: number | null;
   onTrack: number | null;
+  context?: string;
+};
+
+export type HealthScoringExcludedEvidenceRow = {
+  id: string;
+  label: string;
+  context?: string;
+  reason: string;
 };
 
 export type HealthAggregateEvidence = {
   heading: string;
-  description: string;
+  description?: string;
   itemLabel: string;
   rows: readonly HealthScoringEvidenceRow[];
   otherCount?: number;
@@ -22,9 +31,12 @@ export type HealthAggregateEvidence = {
   consistencyCount: number;
   onTrackAverage: number | null;
   onTrackCount: number;
-  coverage: string;
+  coverage?: string;
+  excludedRows?: readonly HealthScoringExcludedEvidenceRow[];
   notes?: readonly string[];
   emptyState?: string;
+  presentation?: 'person-rhythm';
+  countLabel?: string;
 };
 
 export function HealthScoringDetailsCard({
@@ -33,16 +45,20 @@ export function HealthScoringDetailsCard({
   consistencyScore,
   onTrackScore,
   evidence,
+  formulaContent,
   children,
-  initialExpanded = false
+  initialExpanded = false,
+  maxFractionDigits
 }: {
   title: string;
   healthScore: number | null;
   consistencyScore: number | null;
   onTrackScore: number | null;
   evidence?: HealthAggregateEvidence;
+  formulaContent?: ReactNode;
   children?: ReactNode;
   initialExpanded?: boolean;
+  maxFractionDigits?: number;
 }) {
   const headingId = useId();
   const contentId = useId();
@@ -52,7 +68,8 @@ export function HealthScoringDetailsCard({
     : formatTruthfulWeightedSum(
         consistencyScore * HEALTH_CONSISTENCY_WEIGHT,
         onTrackScore * HEALTH_ON_TRACK_WEIGHT,
-        healthScore
+        healthScore,
+        maxFractionDigits
       );
 
   return (
@@ -65,33 +82,63 @@ export function HealthScoringDetailsCard({
         onToggle={() => setExpanded(value => !value)}
       />
       <div id={contentId} className="rhythm-health-scoring-card__content" hidden={!expanded}>
-        <section className="rhythm-health-scoring-card__calculation health-scoring-details-card__calculation">
-          <h4>How Health is calculated</h4>
-          <p>Consistency counts three times as much as On Track.</p>
-          <HealthWeightPanels
-            consistencyScore={consistencyScore}
-            onTrackScore={onTrackScore}
+        {formulaContent ?? (
+          <section className="rhythm-health-scoring-card__calculation health-scoring-details-card__calculation">
+            <h4>How Health is calculated</h4>
+            <p>Consistency counts three times as much as On Track.</p>
+            <HealthWeightPanels
+              consistencyScore={consistencyScore}
+              onTrackScore={onTrackScore}
+              {...(maxFractionDigits === undefined ? {} : { maxFractionDigits })}
+            />
+            <p className="rhythm-health-scoring-card__formula rhythm-health-scoring-card__formula--total">
+              {weightedValues
+                ? <><span>{weightedValues[0]} + {weightedValues[1]} {weightedValues[3]} </span><strong>{weightedValues[2]}</strong></>
+                : <span>One or both component scores are unavailable.</span>}
+            </p>
+          </section>
+        )}
+        {evidence && (
+          <AggregateEvidence
+            evidence={evidence}
+            {...(maxFractionDigits === undefined ? {} : { maxFractionDigits })}
           />
-          <p className="rhythm-health-scoring-card__formula rhythm-health-scoring-card__formula--total">
-            {weightedValues
-              ? <><span>{weightedValues[0]} + {weightedValues[1]} = </span><strong>{weightedValues[2]}</strong></>
-              : <span>One or both component scores are unavailable.</span>}
-          </p>
-        </section>
-        {evidence && <AggregateEvidence evidence={evidence} />}
+        )}
         {children}
       </div>
     </section>
   );
 }
 
-function AggregateEvidence({ evidence }: { evidence: HealthAggregateEvidence }) {
+function AggregateEvidence({
+  evidence,
+  maxFractionDigits = 10
+}: {
+  evidence: HealthAggregateEvidence;
+  maxFractionDigits?: number;
+}) {
   const { rows, otherCount = 0 } = evidence;
+  const personRhythmPresentation = evidence.presentation === 'person-rhythm';
+  const excludedRows = evidence.excludedRows ?? [];
   return (
-    <section className="health-aggregate-evidence" aria-label={evidence.heading}>
+    <section
+      className={`health-aggregate-evidence${personRhythmPresentation ? ' health-aggregate-evidence--person-rhythm' : ''}`}
+      aria-label={evidence.heading}
+    >
       <div className="health-aggregate-evidence__heading">
         <h4>{evidence.heading}</h4>
-        <p>{evidence.description}</p>
+        {evidence.countLabel && (
+          <div className="health-aggregate-evidence__heading-meta">
+            <span className="health-aggregate-evidence__count">{evidence.countLabel}</span>
+            {personRhythmPresentation && (
+              <details className="health-aggregate-evidence__info">
+                <summary aria-label="Scored Rhythm eligibility information">i</summary>
+                <span>Active linked Rhythms with both scores available count equally.</span>
+              </details>
+            )}
+          </div>
+        )}
+        {evidence.description && <p>{evidence.description}</p>}
       </div>
       {rows.length > 0 || otherCount > 0 ? (
         <>
@@ -107,9 +154,28 @@ function AggregateEvidence({ evidence }: { evidence: HealthAggregateEvidence }) 
               <tbody>
                 {rows.map(row => (
                   <tr key={row.id}>
-                    <th scope="row">{row.label}</th>
-                    <td>{displayEvidenceScore(row.consistency)}</td>
-                    <td>{displayEvidenceScore(row.onTrack)}</td>
+                    <th scope="row">
+                      <span>{row.label}</span>
+                      {!personRhythmPresentation && row.context && <small>{row.context}</small>}
+                    </th>
+                    <td>{personRhythmPresentation
+                      ? <CategoryHealthBadge
+                          score={row.consistency}
+                          appearance="rounded"
+                          className="health-aggregate-evidence__score"
+                          accessibleLabel={`${row.label} Consistency: ${displayEvidenceScore(row.consistency)}`}
+                        />
+                      : displayEvidenceScore(row.consistency)}
+                    </td>
+                    <td>{personRhythmPresentation
+                      ? <CategoryHealthBadge
+                          score={row.onTrack}
+                          appearance="rounded"
+                          className="health-aggregate-evidence__score"
+                          accessibleLabel={`${row.label} On Track: ${displayEvidenceScore(row.onTrack)}`}
+                        />
+                      : displayEvidenceScore(row.onTrack)}
+                    </td>
                   </tr>
                 ))}
                 {otherCount > 0 && (
@@ -135,6 +201,32 @@ function AggregateEvidence({ evidence }: { evidence: HealthAggregateEvidence }) 
           {evidence.emptyState ?? `No eligible ${evidence.itemLabel.toLowerCase()} inputs are available.`}
         </p>
       )}
+      {excludedRows.length > 0 && (personRhythmPresentation ? (
+        <details className="health-aggregate-evidence__not-scored">
+          <summary>Not scored ({excludedRows.length})</summary>
+          <ul>
+            {excludedRows.map(row => (
+              <li key={row.id}>
+                <strong>{row.label}</strong>
+                <span>{row.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : (
+        <section className="health-aggregate-evidence__excluded" aria-label="Excluded inputs">
+          <h5>Excluded inputs</h5>
+          <ul>
+            {excludedRows.map(row => (
+              <li key={row.id}>
+                <strong>{row.label}</strong>
+                {row.context && <span>{row.context}</span>}
+                <span>{row.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
       <div className="health-aggregate-evidence__averages">
         <AverageRow
           label="Consistency average"
@@ -142,6 +234,8 @@ function AggregateEvidence({ evidence }: { evidence: HealthAggregateEvidence }) 
           measure="consistency"
           count={evidence.consistencyCount}
           average={evidence.consistencyAverage}
+          maxFractionDigits={maxFractionDigits}
+          compact={personRhythmPresentation}
         />
         <AverageRow
           label="On Track average"
@@ -149,10 +243,14 @@ function AggregateEvidence({ evidence }: { evidence: HealthAggregateEvidence }) 
           measure="onTrack"
           count={evidence.onTrackCount}
           average={evidence.onTrackAverage}
+          maxFractionDigits={maxFractionDigits}
+          compact={personRhythmPresentation}
         />
       </div>
-      <p className="health-aggregate-evidence__coverage">{evidence.coverage}</p>
-      {evidence.notes?.map(note => (
+      {!personRhythmPresentation && evidence.coverage && (
+        <p className="health-aggregate-evidence__coverage">{evidence.coverage}</p>
+      )}
+      {!personRhythmPresentation && evidence.notes?.map(note => (
         <p className="health-aggregate-evidence__note" key={note}>{note}</p>
       ))}
     </section>
@@ -164,26 +262,39 @@ function AverageRow({
   rows,
   measure,
   count,
-  average
+  average,
+  maxFractionDigits,
+  compact
 }: {
   label: string;
   rows: readonly HealthScoringEvidenceRow[];
   measure: 'consistency' | 'onTrack';
   count: number;
   average: number | null;
+  maxFractionDigits: number;
+  compact: boolean;
 }) {
   const values = rows
     .map(row => row[measure])
     .filter((value): value is number => value !== null && Number.isFinite(value));
+  const formattedValues = values.map(value => formatExact(value, maxFractionDigits));
+  const formattedAverage = average === null ? null : formatExact(average, maxFractionDigits);
+  const displayedMean = formattedValues.length === 0
+    ? null
+    : formattedValues.reduce((total, value) => total + Number(value), 0) / formattedValues.length;
+  const operator = displayedMean !== null && formattedAverage !== null
+    && Math.abs(displayedMean - Number(formattedAverage)) < 1e-10
+    ? '='
+    : '≈';
   const formula = average === null || count === 0
     ? '—'
     : values.length !== count || values.length > 2
-      ? `Σ ${count} eligible scores ÷ ${count} = ${formatExact(average)}`
-      : `${values.map(formatExact).join(' + ')}${values.length > 1 ? ` ÷ ${count}` : ` ÷ ${count}`} = ${formatExact(average)}`;
+      ? `Σ ${count} eligible scores ÷ ${count} ${operator} ${formattedAverage}`
+      : `${formattedValues.join(' + ')} ÷ ${count} ${operator} ${formattedAverage}`;
   return (
     <p>
       <span>{label}</span>
-      <strong>{formula}</strong>
+      <strong>{compact ? (formattedAverage ?? '—') : formula}</strong>
     </p>
   );
 }
@@ -192,6 +303,6 @@ function displayEvidenceScore(score: number | null): string {
   return score === null || !Number.isFinite(score) ? '—' : formatScore(score);
 }
 
-function formatExact(value: number): string {
-  return value.toLocaleString('en-US', { maximumFractionDigits: 10 });
+function formatExact(value: number, maxFractionDigits = 10): string {
+  return value.toLocaleString('en-US', { maximumFractionDigits: maxFractionDigits });
 }

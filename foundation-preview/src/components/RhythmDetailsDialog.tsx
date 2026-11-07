@@ -193,26 +193,18 @@ export function RhythmDetailsDialog({
         : `View scores and history for ${rhythm.title}`}
       onClick={inline ? event => onHistory?.(event) : () => setShowHistory(true)}
     >
-      <span className="today-rhythm-details__history-content">
-        <RhythmMetadataIcon kind="history" />
-        {inline && <span className="today-rhythm-details__history-score">{formatScore(healthScore)}</span>}
-      </span>
+      <RhythmMetadataIcon kind="history" />
+      {inline && <span className="today-rhythm-details__history-score">{formatScore(healthScore)}</span>}
     </button>
   );
-  const detailsActions = inline
-    ? completionAction && (
-      <div className={`today-rhythm-details__actions today-rhythm-details__actions--inline${
-        hasAssociations ? ' today-rhythm-details__actions--inline-with-associations' : ''
-      }`}>
-        {completionAction}
-      </div>
-    )
-    : (
-      <div className="today-rhythm-details__actions">
-        {completionAction}
-        {historyAction}
-      </div>
-    );
+  const detailsActions = (
+    <div className={`today-rhythm-details__actions${inline
+      ? ` today-rhythm-details__actions--inline${hasAssociations ? ' today-rhythm-details__actions--inline-with-associations' : ''}`
+      : ''}`}
+    >
+      {inline ? <>{historyAction}{completionAction}</> : <>{completionAction}{historyAction}</>}
+    </div>
+  );
   const editButton = (!embedded || inline) && onEdit && (
     <button
       type="button"
@@ -236,10 +228,7 @@ export function RhythmDetailsDialog({
               {inline
                 ? (
                   <div className="today-rhythm-details__title-copy">
-                    <div className="today-rhythm-details__title-score-row">
-                      <h3 ref={titleRef} id={titleId}>{rhythm.title}</h3>
-                      {historyAction}
-                    </div>
+                    <h3 ref={titleRef} id={titleId}>{rhythm.title}</h3>
                     {hasInlineDescription && (
                       <p className="today-rhythm-details__description">{rhythm.description}</p>
                     )}
@@ -256,6 +245,7 @@ export function RhythmDetailsDialog({
               )}
             </div>
           )}
+          {!showCompletion && inline && editButton}
           {!embedded && !inline && (
             <button
               ref={closeButtonRef}
@@ -308,7 +298,6 @@ export function RhythmDetailsDialog({
                 {...(onUndoSeasonRange ? { onUndoSeasonRange } : {})}
                 {...(onLogCompletion ? { onSaveCompletion: onLogCompletion } : {})}
                 {...(onEdit ? { onChooseSchedule: onEdit } : {})}
-                {...(onEdit ? { onEditRhythm: onEdit } : {})}
                 {...(people ? { people } : {})}
                 {...(onPersonSelect ? { onPersonSelect } : {})}
                 {...(onOpenCategory ? { onOpenCategory } : {})}

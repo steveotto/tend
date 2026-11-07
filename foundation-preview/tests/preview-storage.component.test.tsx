@@ -15,6 +15,7 @@ import {
 import { createStrengthData, createStrengthGuidedSession } from '../src/domain/strength.ts';
 import { createWeightData } from '../src/domain/weight.ts';
 import { createCardioData } from '../src/domain/cardio.ts';
+import { createFlexibilityData } from '../src/domain/flexibility.ts';
 import { createFriendshipData } from '../src/domain/friendships.ts';
 import { createPersonPickerGroups, createSamplePeople, setPersonGroupMembership } from '../src/domain/preview-data.ts';
 import { createDefaultTimeBlockSettings } from '../src/domain/time-blocks.ts';
@@ -1357,6 +1358,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       strength: createStrengthData(),
       weight: createWeightData(),
       cardio: createCardioData(),
+      flexibility: createFlexibilityData(),
       friendships: createFriendshipData(),
       people: createSamplePeople(),
       peopleGroups: createPersonPickerGroups(),
@@ -1419,6 +1421,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       strength: createStrengthData(),
       weight: createWeightData(),
       cardio: createCardioData(),
+      flexibility: createFlexibilityData(),
       friendships: createFriendshipData(),
       people: createSamplePeople(),
       peopleGroups: createPersonPickerGroups(),
@@ -1452,6 +1455,43 @@ describe('synthetic preview storage adapter and envelope', () => {
     }), '2026-10-21');
     expect(parsedFallback.valid).toBe(true);
     if (parsedFallback.valid) expect(parsedFallback.envelope.data.todayView).toBe('now');
+  });
+
+  it('preserves both released and prior schema-38 data shapes', () => {
+    const data = sampleWithHistory();
+    const releasedShapeData = { ...data };
+    Reflect.deleteProperty(releasedShapeData, 'flexibility');
+    const releasedShape = parsePreviewBackup(JSON.stringify({
+      format: 'tend.synthetic-preview',
+      schemaVersion: 38,
+      data: releasedShapeData
+    }), '2026-10-21');
+    expect(releasedShape.valid).toBe(true);
+    if (releasedShape.valid) {
+      expect(releasedShape.sourceSchemaVersion).toBe(38);
+      expect(releasedShape.envelope.data.todayView).toBe(data.todayView);
+      expect(releasedShape.envelope.data.flexibility).toEqual(createFlexibilityData());
+      expect(releasedShape.envelope.data.people).toEqual(data.people);
+      expect(releasedShape.envelope.data.savedRhythms).toEqual(data.savedRhythms);
+      expect(releasedShape.envelope.data.datedRhythmCompletions).toEqual(data.datedRhythmCompletions);
+      expect(releasedShape.envelope.data.strength).toEqual(data.strength);
+    }
+
+    const priorFlexibilityShapeData = { ...data };
+    Reflect.deleteProperty(priorFlexibilityShapeData, 'todayView');
+    const priorFlexibilityShape = parsePreviewBackup(JSON.stringify({
+      format: 'tend.synthetic-preview',
+      schemaVersion: 38,
+      data: priorFlexibilityShapeData
+    }), '2026-10-21');
+    expect(priorFlexibilityShape.valid).toBe(true);
+    if (priorFlexibilityShape.valid) {
+      expect(priorFlexibilityShape.sourceSchemaVersion).toBe(38);
+      expect(priorFlexibilityShape.envelope.data.todayView).toBe('now');
+      expect(priorFlexibilityShape.envelope.data.flexibility).toEqual(data.flexibility);
+      expect(priorFlexibilityShape.envelope.data.peopleGroups).toEqual(data.peopleGroups);
+      expect(priorFlexibilityShape.envelope.data.friendships).toEqual(data.friendships);
+    }
   });
 
   it('migrates v2 previews with editable Rhythms and completions while making them active', () => {

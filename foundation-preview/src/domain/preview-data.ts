@@ -604,7 +604,7 @@ export type RhythmPreview = {
   dailyBackfillAllowed?: boolean;
   timeOfDay?: RhythmTimeValue;
   personal?: boolean;
-  healthLogCapability?: 'weight' | 'cardio' | 'workout' | null;
+  healthLogCapability?: 'weight' | 'cardio' | 'workout' | 'flexibility' | null;
   healthRunTarget?: HealthRunTarget | null;
 };
 
@@ -665,6 +665,12 @@ export const healthFoundationDefinitions = [
     progressId: 'weight',
     title: 'Weight',
     description: 'Your measurements and goal progress.'
+  },
+  {
+    id: 'health-flexibility',
+    progressId: 'flexibility',
+    title: 'Flexibility',
+    description: 'Consistency with your stretch schedule.'
   }
 ] as const;
 

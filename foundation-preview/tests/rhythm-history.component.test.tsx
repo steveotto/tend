@@ -1715,25 +1715,27 @@ describe('shared Rhythm history', () => {
   });
 
   it.each([
-    ['daily', { frequency: 'daily' } satisfies RhythmSchedule, 'Daily', 'Morning'],
+    ['daily', { frequency: 'daily' } satisfies RhythmSchedule, 'Daily', 'Daily', 'Morning'],
     ['selected days', {
       frequency: 'weekly',
       weeklyMode: 'select-days',
       weekdays: [1, 3, 5]
-    } satisfies RhythmSchedule, 'Select days · Mon · Wed · Fri', 'Evening'],
+    } satisfies RhythmSchedule, 'Select days · Mon · Wed · Fri', 'Select days · M · W · F', 'Evening'],
     ['Monday, Wednesday, Friday', {
       frequency: 'weekly',
       weekdays: [1, 3, 5]
-    } satisfies RhythmSchedule, 'Mon · Wed · Fri', 'Evening'],
+    } satisfies RhythmSchedule, 'Mon · Wed · Fri', 'M · W · F', 'Evening'],
     ['weekday frequency', {
       frequency: 'weekly',
       weekdays: [1, 2, 3, 4, 5]
-    } satisfies RhythmSchedule, 'Weekdays', 'Afternoon'],
+    } satisfies RhythmSchedule, 'Weekdays', 'M · T · W · R · F', 'Afternoon'],
     ['monthly', {
       frequency: 'monthly',
       pattern: { kind: 'dayOfMonth', day: 15 }
-    } satisfies RhythmSchedule, 'Monthly · 15th', 'Bedtime']
-  ])('uses the compact Rhythm footer wording for %s schedules', (_label, schedule, expected, timeLabel) => {
+    } satisfies RhythmSchedule, 'Monthly · 15th', 'Monthly · 15th', 'Bedtime']
+  ])('uses compact accessible Rhythm footer wording for %s schedules', (
+    _label, schedule, expected, visibleExpected, timeLabel
+  ) => {
     const rhythm = {
       id: 'schedule-summary-contract',
       title: 'Schedule summary',
@@ -1760,7 +1762,7 @@ describe('shared Rhythm history', () => {
       .filter(item => !item.classList.contains('visually-hidden'))
       .map(item => item.querySelector('span')?.textContent ?? item.textContent);
     expect(formatRhythmSchedule(schedule, 'compact')).toBe(expected);
-    expect(visibleLabels).toEqual([expected, timeLabel]);
+    expect(visibleLabels).toEqual([visibleExpected, timeLabel]);
     expect(summary.querySelectorAll('svg')).toHaveLength(3);
     expect(summary.textContent).toContain('Never');
     expect(summary.className).toContain('rhythm-metadata-footer');
@@ -1804,7 +1806,8 @@ describe('shared Rhythm history', () => {
     );
     const summary = screen.getByRole('region', { name: 'History for Season-backed schedule' })
       .querySelector('.rhythm-card__details-summary-footer')!;
-    expect(summary.textContent).toContain(formatRhythmSchedule(currentSchedule, 'compact'));
+    expect(summary.textContent).toContain(formatRhythmSchedule(currentSchedule, 'card-footer'));
+    expect(summary.textContent).toContain(`Full schedule: ${formatRhythmSchedule(currentSchedule, 'detailed')}`);
     expect(summary.textContent).toContain('Bedtime');
     expect(summary.textContent).not.toContain('Stale time');
   });

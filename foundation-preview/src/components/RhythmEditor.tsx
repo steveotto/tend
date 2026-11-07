@@ -256,7 +256,7 @@ export function RhythmEditor({
     });
   }
 
-  function updateFitnessActivity(value: 'workout' | 'cardio' | 'weight') {
+  function updateFitnessActivity(value: 'workout' | 'cardio' | 'weight' | 'flexibility') {
     const nextDraft = updateRhythmDraftFitnessActivity(draft, value);
     if (value !== 'cardio') nextDraft.healthRunTarget = null;
     const nextErrors = validateRhythmDraft(
@@ -827,7 +827,7 @@ export function RhythmEditor({
                 : {})}
             >
               {selectedCategories.length > 0 ? (
-                <span className="rhythm-editor__association-category-list">
+                <span className={`rhythm-editor__association-category-list${rhythm ? ' rhythm-editor__association-category-list--labeled' : ''}`}>
                   {selectedCategories.map(category => {
                     const group = selectedFoundationGroups.find(item => item.area.id === category.id);
                     const categoryRhythm = {
@@ -839,14 +839,20 @@ export function RhythmEditor({
                         key={category.id}
                         className="rhythm-editor__association-category-row"
                         role="group"
-                        aria-label={`${category.label} category${group ? ' and linked Foundations' : ''}`}
+                        aria-label={`${category.label} category${group
+                          ? ` and linked ${foundationTerminologyForCategory(category.id).plural}`
+                          : ''}`}
                       >
-                        <RhythmCategoryBadges rhythm={categoryRhythm} itemsOnly presentation="static" />
+                        <RhythmCategoryBadges
+                          rhythm={categoryRhythm}
+                          itemsOnly
+                          presentation={rhythm ? 'edit-labeled' : 'static'}
+                        />
                         {group && (
                           <RhythmFoundationBadges
                             rhythm={group.rhythm}
                             foundations={allFoundations}
-                            presentation="static"
+                            presentation={rhythm ? 'edit-labeled' : 'static'}
                             showAll
                           />
                         )}
@@ -886,13 +892,16 @@ export function RhythmEditor({
                 <StyledSelect
                   label="Fitness activity"
                   value={draft.healthLogCapability ?? 'workout'}
+                  matchTriggerWidth
                   options={[
                     { value: 'workout', label: 'Workout' },
-                    { value: 'cardio', label: 'Run' },
-                    { value: 'weight', label: 'Weigh-in' }
+                    { value: 'cardio', label: 'Cardio' },
+                    { value: 'weight', label: 'Weigh-in' },
+                    { value: 'flexibility', label: 'Stretch routine' }
                   ]}
                   onChange={value => {
-                    if (value !== 'workout' && value !== 'cardio' && value !== 'weight') return;
+                    if (value !== 'workout' && value !== 'cardio' && value !== 'weight'
+                      && value !== 'flexibility') return;
                     updateFitnessActivity(value);
                   }}
                 />

@@ -15,11 +15,14 @@ type HealthScoreSummaryProps = {
   onExpandedChange: (expanded: boolean) => void;
   children: ReactNode;
   summaryContent?: ReactNode;
+  detailsContent?: ReactNode;
+  detailsDialogTitle?: string;
   className?: string;
   ariaLabel?: string;
   infoLabel?: string;
   detailsLabel?: string;
   showMeasures?: boolean;
+  showMeasureCaptions?: boolean;
   showHealthMeter?: boolean;
   consistencyDetailCaption?: string;
   onTrackDetailCaption?: string;
@@ -37,11 +40,14 @@ export function HealthScoreSummary({
   onExpandedChange,
   children,
   summaryContent,
+  detailsContent,
+  detailsDialogTitle = `${title} details`,
   className = '',
   ariaLabel,
   infoLabel = title,
   detailsLabel = `${title} scoring explanation`,
   showMeasures = true,
+  showMeasureCaptions = false,
   showHealthMeter = false,
   consistencyDetailCaption = 'How regularly you show up.',
   onTrackDetailCaption = 'How caught up you are.',
@@ -100,28 +106,31 @@ export function HealthScoreSummary({
           consistencyCaption={consistencyDetailCaption}
           onTrackCaption={onTrackDetailCaption}
           showHealthMeter={showHealthMeter}
+          showCaptions={showMeasureCaptions}
         />
       ) : showHealthMeter ? (
         <HealthScoreMeter score={score} label={`${title} progress`} />
       ) : null}
       {summaryContent}
       {expanded && (
-        <HealthScoreDetailsDialog title={`${title} details`} onClose={closeDetails}>
+        <HealthScoreDetailsDialog title={detailsDialogTitle} onClose={closeDetails}>
           <div id={detailsId} className="category-health-summary__details" role="region" aria-label={detailsLabel}>
-            <HealthScoreDetailsContent
-              title={title}
-              ariaLabel={detailsLabel}
-              score={score}
-              consistency={{ score: consistency }}
-              onTrack={{ score: onTrack }}
-              consistencyCaption={consistencyDetailCaption}
-              onTrackCaption={onTrackDetailCaption}
-              {...(consistencyDescription === undefined ? {} : { consistencyDescription })}
-              {...(onTrackDescription === undefined ? {} : { onTrackDescription })}
-            >
-              <p>{coverage}</p>
-              {children}
-            </HealthScoreDetailsContent>
+            {detailsContent ?? (
+              <HealthScoreDetailsContent
+                title={title}
+                ariaLabel={detailsLabel}
+                score={score}
+                consistency={{ score: consistency }}
+                onTrack={{ score: onTrack }}
+                consistencyCaption={consistencyDetailCaption}
+                onTrackCaption={onTrackDetailCaption}
+                {...(consistencyDescription === undefined ? {} : { consistencyDescription })}
+                {...(onTrackDescription === undefined ? {} : { onTrackDescription })}
+              >
+                <p>{coverage}</p>
+                {children}
+              </HealthScoreDetailsContent>
+            )}
           </div>
         </HealthScoreDetailsDialog>
       )}

@@ -4,6 +4,7 @@ import { formatScore } from '../domain/score-display.ts';
 type HealthWeightPanelsProps = {
   consistencyScore?: number | null;
   onTrackScore?: number | null;
+  maxFractionDigits?: number;
   consistencyCaption?: string;
   onTrackCaption?: string;
   consistencyDescription?: string;
@@ -27,9 +28,10 @@ export function healthWeightContributions(
 export function formatTruthfulWeightedSum(
   consistency: number,
   onTrack: number,
-  total: number
-): readonly [string, string, string] {
-  for (let precision = 0; precision <= 10; precision += 1) {
+  total: number,
+  maxFractionDigits?: number
+): readonly [string, string, string, '=' | '≈'] {
+  for (let precision = 0; precision <= Math.min(maxFractionDigits ?? 10, 10); precision += 1) {
     const scale = 10 ** precision;
     const consistencyUnits = Math.round(consistency * scale);
     const onTrackUnits = Math.round(onTrack * scale);
@@ -43,11 +45,22 @@ export function formatTruthfulWeightedSum(
       return [
         formatAtPrecision(consistencyUnits / scale, precision),
         formatAtPrecision(onTrackUnits / scale, precision),
-        formatAtPrecision(totalUnits / scale, precision)
+        formatAtPrecision(totalUnits / scale, precision),
+        '='
       ];
     }
   }
-  return [String(consistency), String(onTrack), String(total)];
+  if (maxFractionDigits === undefined) {
+    return [String(consistency), String(onTrack), String(total), '='];
+  }
+  const precision = Math.max(0, Math.min(maxFractionDigits, 10));
+  const displayedConsistency = formatAtPrecision(consistency, precision);
+  const displayedOnTrack = formatAtPrecision(onTrack, precision);
+  const displayedTotal = formatAtPrecision(total, precision);
+  const operator = Number(displayedConsistency) + Number(displayedOnTrack) === Number(displayedTotal)
+    ? '='
+    : '≈';
+  return [displayedConsistency, displayedOnTrack, displayedTotal, operator];
 }
 
 function formatAtPrecision(value: number, precision: number): string {
@@ -62,9 +75,10 @@ function isCloseToPrecision(value: number, rounded: number): boolean {
 function weightedProductFormula(
   score: number,
   contribution: number,
-  weight: number
-): { score: string; contribution: string } {
-  for (let precision = 0; precision <= 10; precision += 1) {
+  weight: number,
+  maxFractionDigits?: number
+): { score: string; contribution: string; operator: '=' | '≈' } {
+  for (let precision = 0; precision <= Math.min(maxFractionDigits ?? 10, 10); precision += 1) {
     const scale = 10 ** precision;
     const scoreUnits = Math.round(score * scale);
     const contributionUnits = Math.round(contribution * scale);
@@ -77,16 +91,27 @@ function weightedProductFormula(
     ) {
       return {
         score: formatAtPrecision(displayedScore, precision),
-        contribution: formatAtPrecision(displayedContribution, precision)
+        contribution: formatAtPrecision(displayedContribution, precision),
+        operator: '='
       };
     }
   }
-  return { score: String(score), contribution: String(contribution) };
+  if (maxFractionDigits === undefined) {
+    return { score: String(score), contribution: String(contribution), operator: '=' };
+  }
+  const precision = Math.max(0, Math.min(maxFractionDigits, 10));
+  const displayedScore = formatAtPrecision(score, precision);
+  const displayedContribution = formatAtPrecision(contribution, precision);
+  const operator = Number(displayedScore) * weight === Number(displayedContribution)
+    ? '='
+    : '≈';
+  return { score: displayedScore, contribution: displayedContribution, operator };
 }
 
 export function HealthWeightPanels({
   consistencyScore,
   onTrackScore,
+  maxFractionDigits,
   consistencyCaption,
   onTrackCaption,
   consistencyDescription,
@@ -100,17 +125,29 @@ export function HealthWeightPanels({
   const consistencyFormula = consistencyScore !== undefined
     && consistencyScore !== null
     && consistencyContribution !== null
-    ? weightedProductFormula(consistencyScore, consistencyContribution!, HEALTH_CONSISTENCY_WEIGHT)
+    ? weightedProductFormula(
+        consistencyScore,
+        consistencyContribution!,
+        HEALTH_CONSISTENCY_WEIGHT,
+        maxFractionDigits
+      )
     : null;
   const onTrackFormula = onTrackScore !== undefined
     && onTrackScore !== null
     && onTrackContribution !== null
-    ? weightedProductFormula(onTrackScore, onTrackContribution!, HEALTH_ON_TRACK_WEIGHT)
+    ? weightedProductFormula(
+        onTrackScore,
+        onTrackContribution!,
+        HEALTH_ON_TRACK_WEIGHT,
+        maxFractionDigits
+      )
     : null;
   const accessibleScore = (score: number | null | undefined) =>
     score !== null && score !== undefined && Number.isFinite(score)
-      ? score.toString()
+      ? maxFractionDigits === undefined ? String(score) : formatAtPrecision(score, maxFractionDigits)
       : 'unavailable';
+  const formattedContribution = (value: number) =>
+    maxFractionDigits === undefined ? String(value) : formatAtPrecision(value, maxFractionDigits);
 
   return (
     <div className="rhythm-history-view__health-weight-panels">
@@ -126,9 +163,9 @@ export function HealthWeightPanels({
         {consistencyContribution !== undefined ? (
           <span
             className="rhythm-history-view__health-weight-formula"
-            aria-label={`${consistencyWeight}% times ${accessibleScore(consistencyScore)} equals ${consistencyContribution === null ? 'unavailable' : `${consistencyContribution.toString()} points`}`}
+            aria-label={`${consistencyWeight}% times ${accessibleScore(consistencyScore)} ${consistencyFormula?.operator === '≈' ? 'approximately equals' : 'equals'} ${consistencyContribution === null ? 'unavailable' : `${formattedContribution(consistencyContribution)} points`}`}
           >
-            <span>{consistencyWeight}% × {consistencyFormula?.score ?? '—'} = </span>
+            <span>{consistencyWeight}% × {consistencyFormula?.score ?? '—'} {consistencyFormula?.operator ?? '='} </span>
             <strong>{consistencyFormula ? `${consistencyFormula.contribution} points` : '—'}</strong>
           </span>
         ) : consistencyScore !== undefined && (
@@ -162,9 +199,9 @@ export function HealthWeightPanels({
         {onTrackContribution !== undefined ? (
           <span
             className="rhythm-history-view__health-weight-formula"
-            aria-label={`${onTrackWeight}% times ${accessibleScore(onTrackScore)} equals ${onTrackContribution === null ? 'unavailable' : `${onTrackContribution.toString()} points`}`}
+            aria-label={`${onTrackWeight}% times ${accessibleScore(onTrackScore)} ${onTrackFormula?.operator === '≈' ? 'approximately equals' : 'equals'} ${onTrackContribution === null ? 'unavailable' : `${formattedContribution(onTrackContribution)} points`}`}
           >
-            <span>{onTrackWeight}% × {onTrackFormula?.score ?? '—'} = </span>
+            <span>{onTrackWeight}% × {onTrackFormula?.score ?? '—'} {onTrackFormula?.operator ?? '='} </span>
             <strong>{onTrackFormula ? `${onTrackFormula.contribution} points` : '—'}</strong>
           </span>
         ) : onTrackScore !== undefined && (

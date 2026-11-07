@@ -86,6 +86,43 @@ export type CategoryRhythmSuggestionCatalogue = {
   groups: readonly CategoryRhythmSuggestionGroup[];
 };
 
+export function createMarriageSuggestionCatalogue(
+  suggestionRhythms: readonly RhythmPreview[]
+): CategoryRhythmSuggestionCatalogue {
+  const suggestionById = new Map(suggestionRhythms.map(rhythm => [rhythm.id, rhythm]));
+  return {
+    title: 'Marriage rhythms',
+    groups: marriageRhythmGroups.map(group => ({
+      id: group.id,
+      title: group.title,
+      subtitle: group.subtitle,
+      suggestions: marriageRhythmSuggestions
+        .filter(suggestion => suggestion.rhythm.marriageGroup === group.id)
+        .map(suggestion => {
+          const source = suggestion.sourceSampleRhythmId
+            ? suggestionById.get(suggestion.sourceSampleRhythmId)
+            : undefined;
+          return {
+            sourceId: suggestion.templateId,
+            categoryId: 'marriage',
+            rhythm: {
+              ...suggestion.rhythm,
+              ...(source ? {
+                description: source.description ?? suggestion.rhythm.description,
+                primaryFoundationId: source.primaryFoundationId ?? suggestion.rhythm.primaryFoundationId,
+                secondaryFoundationIds: source.secondaryFoundationIds ?? suggestion.rhythm.secondaryFoundationIds
+              } : {})
+            },
+            scheduleHint: suggestion.scheduleHint,
+            icon: <MarriageIcon group="rhythms" id={suggestion.rhythm.iconId ?? suggestion.templateId} />,
+            recommendedFrequency: suggestion.recommendedFrequency,
+            ...(suggestion.frequencyGuidance ? { frequencyGuidance: suggestion.frequencyGuidance } : {})
+          };
+        })
+    }))
+  };
+}
+
 type MarriageViewProps = {
   people?: readonly PersonPreview[];
   peopleGroups?: readonly PersonPickerGroup[];
@@ -397,38 +434,7 @@ export function MarriageView({
     onEditRhythm(rhythm, event, returnToPicker);
   }
 
-  const suggestionById = new Map(suggestionRhythms.map(rhythm => [rhythm.id, rhythm]));
-  const defaultSuggestionCatalogue: CategoryRhythmSuggestionCatalogue = {
-    title: 'Marriage rhythms',
-    groups: marriageRhythmGroups.map(group => ({
-      id: group.id,
-      title: group.title,
-      subtitle: group.subtitle,
-      suggestions: marriageRhythmSuggestions
-        .filter(suggestion => suggestion.rhythm.marriageGroup === group.id)
-        .map(suggestion => {
-          const source = suggestion.sourceSampleRhythmId
-            ? suggestionById.get(suggestion.sourceSampleRhythmId)
-            : undefined;
-          return {
-            sourceId: suggestion.templateId,
-            categoryId: 'marriage',
-            rhythm: {
-              ...suggestion.rhythm,
-              ...(source ? {
-                description: source.description ?? suggestion.rhythm.description,
-                primaryFoundationId: source.primaryFoundationId ?? suggestion.rhythm.primaryFoundationId,
-                secondaryFoundationIds: source.secondaryFoundationIds ?? suggestion.rhythm.secondaryFoundationIds
-              } : {})
-            },
-            scheduleHint: suggestion.scheduleHint,
-            icon: <MarriageIcon group="rhythms" id={suggestion.rhythm.iconId ?? suggestion.templateId} />,
-            recommendedFrequency: suggestion.recommendedFrequency,
-            ...(suggestion.frequencyGuidance ? { frequencyGuidance: suggestion.frequencyGuidance } : {})
-          };
-        })
-    }))
-  };
+  const defaultSuggestionCatalogue = createMarriageSuggestionCatalogue(suggestionRhythms);
   const suggestionCatalogue = categoryConfig?.suggestionCatalogue
     ?? (!categoryConfig ? defaultSuggestionCatalogue : undefined);
   const suggestionPickerGroups: RhythmSuggestionPickerGroup[] = (suggestionCatalogue?.groups ?? []).map(group => ({

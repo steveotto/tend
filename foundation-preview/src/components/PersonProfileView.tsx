@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import {
   addOrUpdateConnection,
@@ -27,7 +27,7 @@ import { AreaIcon } from './AreaIcon.tsx';
 import { BackButton } from './BackButton.tsx';
 import { SettingsGearButton } from './SettingsGearButton.tsx';
 import { ConnectionEditor, ConnectionHistoryList, ConnectionTypeActions, FriendshipCadenceControl } from './FriendshipConnectionControls.tsx';
-import { PersonAvatar } from './PersonBadge.tsx';
+import { PersonAvatar, personFirstName } from './PersonBadge.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 import { selectPersonRhythmsDueToday } from '../domain/person-rhythms.ts';
 import type { Destination } from './AppNavigation.tsx';
@@ -43,11 +43,20 @@ import { personNotesForPerson } from '../domain/person-notes.ts';
 import type { PersonNote, PersonNoteDraft } from '../domain/person-notes.ts';
 import { resolvePersonCategory } from '../domain/person-categories.ts';
 import { BirthdayCakeIcon } from './BirthdayCakeIcon.tsx';
-import { PersonHealthComponentScores, PersonHealthSummary } from './PersonHealthSummary.tsx';
+import {
+  PersonHealthComponentScores,
+  PersonHealthSummary,
+  PersonHealthAreaDetails,
+  PersonOverallHealthDetails
+} from './PersonHealthSummary.tsx';
+import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
+import { createPersonHealthRollup } from './HealthRollupDiagram.tsx';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
 import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
 import { PersonPrayerPanel } from './PersonPrayerPanel.tsx';
 import { selectPersonHealth, selectPersonRhythmHealth } from '../domain/person-health.ts';
+import { personPrayerRequestsForPerson } from '../domain/person-prayers.ts';
+import { connectionCadenceOptions } from './PersonConnectionCadenceSelect.tsx';
 import type {
   PersonPrayerRequest,
   PersonPrayerRequestDraft,
@@ -61,6 +70,17 @@ const profileTabs: { id: ProfileTab; label: string }[] = [
   { id: 'connections', label: 'Connections' },
   { id: 'prayer', label: 'Prayer' }
 ];
+
+function excludedRhythmReason(score: RhythmScoreResult | undefined): string {
+  if (!score || score.kind !== 'rhythm-score') return 'Needs scoring data';
+  const missingMeasures = [
+    ...(score.consistency.kind === 'scored' && Number.isFinite(score.consistency.score) ? [] : ['Consistency']),
+    ...(score.onTrack.kind === 'scored' && Number.isFinite(score.onTrack.score) ? [] : ['On Track'])
+  ];
+  return missingMeasures.length === 2
+    ? 'Needs scoring data'
+    : `Needs ${missingMeasures[0]} score`;
+}
 
 export function PersonProfileView({
   personId,
@@ -163,7 +183,12 @@ export function PersonProfileView({
     ?? selectTendedRhythmDisplayIds(completedRhythms, satisfiedRhythmIds);
   const details = personDetailsForId(personDetails, personId);
   const person = personWithSavedPhoto(personById(people, personId), personDetails ?? []);
+  const componentId = useId();
   const [tab, setTab] = useState<ProfileTab>('rhythms');
+  const [healthCardDisclosure, setHealthCardDisclosure] = useState<{
+    personId: PersonId;
+    area: ProfileTab | null;
+  }>({ personId, area: null });
   const [notesOpen, setNotesOpen] = useState(false);
   const [connectionEditor, setConnectionEditor] = useState<{
     record?: FriendshipConnection;
@@ -177,6 +202,14 @@ export function PersonProfileView({
   const wasEditorOpen = useRef(false);
   const archiveOpener = useRef<HTMLElement | null>(null);
   const wasArchiveOpen = useRef(false);
+  const openHealthCard = healthCardDisclosure.personId === personId
+    ? healthCardDisclosure.area
+    : null;
+  const healthCardControlIds: Readonly<Record<ProfileTab, string>> = {
+    rhythms: `${componentId}-rhythm-health-card`,
+    connections: `${componentId}-connection-health-card`,
+    prayer: `${componentId}-prayer-health-card`
+  };
   const connectionHistory = connectionsForPerson(friendships, personId);
   const personConnectionStatus = friendConnectionStatus(friendships, personId, today);
   const classifications = peopleGroups.filter(group => group.memberIds.includes(personId));
@@ -206,10 +239,144 @@ export function PersonProfileView({
     { id: 'prayer', consistency: null, onTrack: null, scoringStatus: 'unavailable' }
   ]);
   const componentScores = [
-    { label: 'Rhythms', score: personRhythmHealth.health },
-    { label: 'Connections', score: null },
-    { label: 'Prayer', score: null }
+    { id: 'rhythms', label: 'Rhythms', score: personRhythmHealth.health },
+    { id: 'connections', label: 'Connections', score: null },
+    { id: 'prayer', label: 'Prayer', score: null }
   ] as const;
+  const connectionCadenceLabel = personConnectionStatus.cadence
+    ? connectionCadenceOptions.find(option => option.value === personConnectionStatus.cadence)?.label
+      ?? personConnectionStatus.cadence
+    : 'No cadence configured';
+  const personPrayerRecords = personPrayerRequestsForPerson(prayerRequests, personId);
+  const personPrayerLogCount = personPrayerRecords.reduce(
+    (count, request) => count + request.prayerLogs.length,
+    0
+  );
+  const personRhythmById = new Map([...rhythms, ...archivedRhythms]
+    .filter(rhythm => rhythm.personIds?.includes(personId))
+    .map(rhythm => [rhythm.id, rhythm]));
+  const rhythmEvidenceRows = personRhythmHealth.eligibleRhythmIds.flatMap(id => {
+    const rhythm = personRhythmById.get(id);
+    const score = rhythmScores.get(id);
+    return rhythm && score?.kind === 'rhythm-score'
+      && score.consistency.kind === 'scored'
+      && score.onTrack.kind === 'scored'
+      ? [{
+          id,
+          label: rhythm.title,
+          consistency: score.consistency.score,
+          onTrack: score.onTrack.score
+        }]
+      : [];
+  });
+  const excludedRhythmEvidenceRows = [
+    ...personRhythmHealth.excludedRhythmIds.map(id => ({
+      id,
+      reason: excludedRhythmReason(rhythmScores.get(id))
+    })),
+    ...personRhythmHealth.unresolvedRhythmIds.map(id => ({
+      id,
+      reason: 'Needs scoring data'
+    }))
+  ].map(row => ({
+    ...row,
+    label: personRhythmById.get(row.id)?.title ?? row.id
+  }));
+  const personRhythmScoringEvidence: HealthAggregateEvidence = {
+    heading: 'Scored Rhythms',
+    itemLabel: 'Rhythm',
+    rows: rhythmEvidenceRows,
+    excludedRows: excludedRhythmEvidenceRows,
+    consistencyAverage: personRhythmHealth.consistency,
+    consistencyCount: rhythmEvidenceRows.length,
+    onTrackAverage: personRhythmHealth.onTrack,
+    onTrackCount: rhythmEvidenceRows.length,
+    presentation: 'person-rhythm',
+    countLabel: `${rhythmEvidenceRows.length} of ${personRhythmHealth.activeRhythmIds.length}`,
+    emptyState: 'No Rhythms have both scores available.'
+  };
+  const personAreaHealth = {
+    rhythms: { label: 'Rhythm' as const, health: personRhythmHealth, supportsMeasures: true },
+    connections: {
+      label: 'Connection' as const,
+      health: { consistency: null, onTrack: null, health: null },
+      supportsMeasures: false
+    },
+    prayer: {
+      label: 'Prayer' as const,
+      health: { consistency: null, onTrack: null, health: null },
+      supportsMeasures: false
+    }
+  };
+  const latestConnectionDate = connectionHistory
+    .map(connection => connection.date)
+    .filter((date): date is string => Boolean(date))
+    .sort()
+    .at(-1);
+  const latestPrayerDate = personPrayerRecords
+    .flatMap(request => request.prayerLogs.map(log => log.prayedAt))
+    .sort()
+    .at(-1);
+
+  function healthDetailsFor(area: ProfileTab) {
+    const config = personAreaHealth[area];
+    const areaScoreId = area === 'connections' ? 'connection' : area;
+    const areaScore = componentScores.find(score => score.id === area)?.score ?? null;
+    const contributes = overallHealth.eligibleComponentIds.includes(areaScoreId);
+    const inputRows = area === 'connections'
+      ? [
+          ['Logged connections', String(connectionHistory.length)],
+          ['Configured cadence', connectionCadenceLabel],
+          ['Most recent connection', latestConnectionDate ?? '—']
+        ] as const
+      : area === 'prayer'
+        ? [
+            ['Prayer requests', String(personPrayerRecords.length)],
+            ['Prayer logs', String(personPrayerLogCount)],
+            ['Most recent prayer', latestPrayerDate ?? '—']
+          ] as const
+        : [];
+    const unavailableInputs = inputRows.length > 0
+      ? <PersonHealthInputFacts rows={inputRows} />
+      : undefined;
+    return (
+      <PersonHealthAreaDetails
+        person={person}
+        areaLabel={config.label}
+        health={config.health}
+        supportsMeasures={config.supportsMeasures}
+        rollup={createPersonHealthRollup({
+          personName: personFirstName(person.displayName),
+          areaLabel: config.label,
+          areaScore,
+          overallScore: overallHealth.health,
+          contributes
+        })}
+        {...(area === 'rhythms' ? { evidence: personRhythmScoringEvidence } : {})}
+        {...(!config.supportsMeasures ? {
+          unavailableExplanation: `${config.label} Health has no scoring rule in this preview; these inputs are not converted into a score.`,
+          ...(unavailableInputs ? { unavailableInputs } : {})
+        } : {})}
+      />
+    );
+  }
+
+  function PersonHealthInputFacts({
+    rows
+  }: {
+    rows: readonly (readonly [string, string])[];
+  }) {
+    return (
+      <dl className="person-health-input-facts">
+        {rows.map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+    );
+  }
   const duePersonRhythms = selectPersonRhythmsDueToday(personRhythms, personId, today);
   const dueRhythmIds = new Set(duePersonRhythms.map(rhythm => rhythm.id));
   const otherPersonRhythms = personRhythms.filter(rhythm => !dueRhythmIds.has(rhythm.id));
@@ -241,6 +408,19 @@ export function PersonProfileView({
   function selectTab(next: ProfileTab) {
     setTab(next);
     setNotesOpen(false);
+    setHealthCardDisclosure(previous => ({
+      personId,
+      area: previous.personId === personId && previous.area !== null ? next : null
+    }));
+  }
+
+  function toggleHealthCard(area: ProfileTab) {
+    setTab(area);
+    setNotesOpen(false);
+    setHealthCardDisclosure(previous => ({
+      personId,
+      area: previous.personId === personId && previous.area === area ? null : area
+    }));
   }
 
   function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
@@ -251,7 +431,7 @@ export function PersonProfileView({
     else if (event.key === 'End') target = profileTabs.length - 1;
     if (target === null) return;
     event.preventDefault();
-    setTab(profileTabs[target]!.id);
+    selectTab(profileTabs[target]!.id);
     tabRefs.current[target]?.focus();
   }
 
@@ -305,6 +485,38 @@ export function PersonProfileView({
       day: 'numeric',
       timeZone: 'UTC'
     });
+  }
+
+  function renderAreaHealthSummary(area: ProfileTab) {
+    const config = personAreaHealth[area];
+    const title = `${config.label} Health`;
+    const totalCount = area === 'rhythms'
+      ? personRhythmHealth.activeRhythmIds.length
+      : area === 'connections'
+        ? connectionHistory.length
+        : personPrayerRecords.length;
+    return (
+      <PersonHealthSummary
+        key={`${personId}:${area}-health`}
+        title={title}
+        health={config.health}
+        itemTerm={config.label}
+        totalCount={totalCount}
+        eligibleCount={area === 'rhythms' ? personRhythmHealth.eligibleRhythmIds.length : 0}
+        excludedCount={area === 'rhythms' ? personRhythmHealth.excludedRhythmIds.length : 0}
+        unresolvedCount={area === 'rhythms' ? personRhythmHealth.unresolvedRhythmIds.length : 0}
+        archivedCount={area === 'rhythms' ? personRhythmHealth.archivedRhythmIds.length : 0}
+        coverageLabel={area === 'rhythms'
+          ? `${personRhythmHealth.eligibleRhythmIds.length} of ${personRhythmHealth.activeRhythmIds.length} active associated Rhythms scored.`
+          : `${config.label} Health scoring is unavailable in this preview.`}
+        showMeasures={config.supportsMeasures}
+        showMeasureCaptions={config.supportsMeasures}
+        showHealthMeter
+        detailsDialogTitle={`${personFirstName(person.displayName)}’s ${title} details`}
+        detailsLabel={`${person.displayName}’s ${title} details`}
+        detailsContent={healthDetailsFor(area)}
+      />
+    );
   }
 
   return (
@@ -376,9 +588,35 @@ export function PersonProfileView({
               unscoredCount={overallHealth.unscoredComponentIds.length}
               showMeasures={false}
               showHealthMeter
-              summaryContent={<PersonHealthComponentScores values={componentScores} />}
+              detailsDialogTitle={`${personFirstName(person.displayName)}’s Overall Health details`}
+              detailsLabel={`${person.displayName}’s Overall Health scoring explanation`}
+              detailsContent={(
+                <PersonOverallHealthDetails
+                  person={person}
+                  overallScore={overallHealth.health}
+                  areas={componentScores}
+                />
+              )}
+              summaryContent={(
+                <PersonHealthComponentScores
+                  values={componentScores}
+                  expandedArea={openHealthCard}
+                  controlIds={healthCardControlIds}
+                  onSelectArea={toggleHealthCard}
+                />
+              )}
             />
           </div>
+          {profileTabs.map(item => (
+            <div
+              key={item.id}
+              id={healthCardControlIds[item.id]}
+              className="person-profile__health-disclosure"
+              hidden={openHealthCard !== item.id}
+            >
+              {openHealthCard === item.id && renderAreaHealthSummary(item.id)}
+            </div>
+          ))}
           <div className="faith-view-nav marriage-view-nav person-profile__nav" role="tablist" aria-label={`${person.displayName} profile`}>
             {profileTabs.map((item, index) => (
               <button
@@ -397,18 +635,6 @@ export function PersonProfileView({
               </button>
             ))}
           </div>
-          <div className="person-profile__notes-access">
-            <button
-              ref={notesAccessRef}
-              type="button"
-              className="btn mini ghost"
-              aria-controls={`person-profile-notes-view-${personId}`}
-              aria-expanded={notesOpen}
-              onClick={() => setNotesOpen(true)}
-            >
-              Notes ({profileNotes.length})
-            </button>
-          </div>
           <section
             id="person-profile-panel-rhythms"
             className="person-profile__panel marriage-view-panel"
@@ -418,7 +644,7 @@ export function PersonProfileView({
           >
             <div className="person-profile__section-heading">
               <div className="person-profile__queue-heading">
-                <h3>Today with {person.displayName}</h3>
+                <h3>Today with {personFirstName(person.displayName)}</h3>
                 <span
                   className="person-profile__queue-count"
                   aria-label={`${duePersonRhythms.length} ${duePersonRhythms.length === 1 ? 'Rhythm' : 'Rhythms'} in queue`}
@@ -485,22 +711,6 @@ export function PersonProfileView({
                 setShowArchived(true);
               }}
             />
-            <PersonHealthSummary
-              key={`${personId}:rhythm-health`}
-              title="Rhythm Health"
-              health={personRhythmHealth}
-              itemTerm="Rhythm"
-              totalCount={personRhythmHealth.activeRhythmIds.length}
-              eligibleCount={personRhythmHealth.eligibleRhythmIds.length}
-              excludedCount={personRhythmHealth.excludedRhythmIds.length}
-              unresolvedCount={personRhythmHealth.unresolvedRhythmIds.length}
-              archivedCount={personRhythmHealth.archivedRhythmIds.length}
-              coverageLabel={personRhythmHealth.activeRhythmIds.length === 0
-                ? personRhythmHealth.archivedRhythmIds.length > 0
-                  ? 'No active associated Rhythms; archived Rhythms are excluded.'
-                  : 'No associated Rhythms.'
-                : `${personRhythmHealth.eligibleRhythmIds.length} of ${personRhythmHealth.activeRhythmIds.length} active associated Rhythms scored.`}
-            />
           </section>
           <section
             id="person-profile-panel-connections"
@@ -509,15 +719,6 @@ export function PersonProfileView({
             aria-labelledby="person-profile-tab-connections"
             hidden={notesOpen || tab !== 'connections'}
           >
-            <PersonHealthSummary
-              key={`${personId}:connection-health`}
-              title="Connection Health"
-              health={{ consistency: null, onTrack: null, health: null }}
-              itemTerm="component"
-              totalCount={1}
-              eligibleCount={0}
-              coverageLabel="Connection scoring is not defined yet."
-            />
             <div className="person-profile__section-heading">
               <h3>Connections</h3>
               <ConnectionTypeActions
@@ -552,15 +753,6 @@ export function PersonProfileView({
             aria-labelledby="person-profile-tab-prayer"
             hidden={notesOpen || tab !== 'prayer'}
           >
-            <PersonHealthSummary
-              key={`${personId}:prayer-health`}
-              title="Prayer Health"
-              health={{ consistency: null, onTrack: null, health: null }}
-              itemTerm="component"
-              totalCount={1}
-              eligibleCount={0}
-              coverageLabel="Prayer scoring is not defined yet."
-            />
             <PersonPrayerPanel
               personId={personId}
               people={people}
@@ -583,6 +775,18 @@ export function PersonProfileView({
                 : 'Prayer requests are unavailable.'}
             />
           </section>
+          <div className="person-profile__notes-access">
+            <button
+              ref={notesAccessRef}
+              type="button"
+              className="btn mini ghost"
+              aria-controls={`person-profile-notes-view-${personId}`}
+              aria-expanded={notesOpen}
+              onClick={() => setNotesOpen(true)}
+            >
+              Notes ({profileNotes.length})
+            </button>
+          </div>
           <section
             id={`person-profile-notes-view-${personId}`}
             className="person-profile__notes-view"

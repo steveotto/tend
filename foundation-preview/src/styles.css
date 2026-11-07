@@ -21,31 +21,6 @@
   --rhythm-category-badge-radius: 8px;
 }
 
-.rhythm-history-view__health-weight-formula {
-  display: block;
-  margin-top: 10px;
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
-.rhythm-history-view__health-weight-formula strong {
-  color: var(--tend-ink, var(--ink));
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.rhythm-history-view__health-weight-plus {
-  display: grid;
-  align-self: center;
-  place-items: center;
-  color: var(--tend-ink, var(--ink));
-  font-size: calc(1.875rem * var(--app-text-scale, 1));
-  font-weight: 800;
-  line-height: 1;
-}
-
 * {
   box-sizing: border-box;
 }
@@ -2368,10 +2343,6 @@ a:focus-visible {
       pointer-events: none;
     }
 
-    .rhythm-history-view__score-details-grid:not([hidden]) {
-      border-top: 1px solid var(--tend-line, var(--line));
-    }
-
     .rhythm-schedule-fields__weekday input:checked + span {
       border-color: var(--tend-forest);
       background: color-mix(in srgb, var(--tend-mist) 62%, white);
@@ -3672,39 +3643,6 @@ dialog.health-score-details-dialog[open] {
   overflow-wrap: anywhere;
 }
 
-.rhythm-history-view__health-details-dialog .money-goal-dialog__title-row > h2 {
-  padding-right: 0;
-}
-
-.rhythm-history-view__health-details-back {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: var(--tend-mist, #e5f2eb);
-  color: var(--tend-forest, var(--forest));
-  cursor: pointer;
-}
-
-.rhythm-history-view__health-details-back svg {
-  width: 22px;
-  height: 22px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.8;
-}
-
-.rhythm-history-view__health-details-back:focus-visible {
-  outline: 2px solid var(--tend-forest, var(--forest));
-  outline-offset: 2px;
-}
-
 .health-score-details-dialog__body {
   min-height: 0;
   flex: 1 1 auto;
@@ -3755,11 +3693,6 @@ dialog.health-score-details-dialog[open] {
 
 .health-score-breakdown__header > .is-unavailable {
   color: var(--tend-secondary, var(--ink-soft));
-}
-
-.health-score-breakdown__header .rhythm-history-view__score-info {
-  width: 40px;
-  height: 40px;
 }
 
 .health-score-meter {
@@ -3975,6 +3908,21 @@ dialog.health-score-details-dialog[open] {
   color: var(--tend-secondary, var(--ink-soft));
 }
 
+.health-aggregate-evidence__excluded > h4 {
+  margin: 0;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.875rem * var(--app-text-scale, 1));
+  font-weight: 600;
+}
+
+.health-aggregate-evidence__exclusion-reason {
+  display: block;
+  margin-top: 3px;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  font-weight: 400;
+}
+
 .health-aggregate-evidence__averages {
   display: grid;
   min-width: 0;
@@ -4004,28 +3952,8 @@ dialog.health-score-details-dialog[open] {
   overflow-wrap: anywhere;
 }
 
-.health-scoring-details-card .rhythm-history-view__health-weight-panels {
-  grid-template-columns: minmax(120px, 1.45fr) 24px minmax(120px, 1fr);
-  gap: 8px;
-}
-
 .health-scoring-details-card__calculation {
   container-type: inline-size;
-}
-
-.health-scoring-details-card .rhythm-history-view__health-weight-value strong {
-  white-space: nowrap;
-}
-
-@container (max-width: 380px) {
-  .rhythm-health-scoring-card.health-scoring-details-card .rhythm-history-view__health-weight-panels {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .rhythm-health-scoring-card.health-scoring-details-card .rhythm-history-view__health-weight-plus {
-    line-height: 1;
-    transform: rotate(90deg);
-  }
 }
 
 .rhythm-health-scoring-card__calculation,
@@ -4058,48 +3986,6 @@ dialog.health-score-details-dialog[open] {
   font-size: calc(0.8125rem * var(--app-text-scale, 1));
   line-height: 1.45;
   overflow-wrap: anywhere;
-}
-
-.rhythm-health-scoring-card .rhythm-history-view__health-weight-panels {
-  grid-template-columns: minmax(0, 1.6fr) 28px minmax(0, 1fr);
-  align-items: stretch;
-  gap: 7px;
-}
-
-.rhythm-health-scoring-card .rhythm-history-view__health-weight-panel {
-  padding: 18px 16px;
-  border-radius: 12px;
-}
-
-.rhythm-health-scoring-card .rhythm-history-view__health-weight-value {
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.rhythm-health-scoring-card .rhythm-history-view__health-weight-value svg {
-  width: 20px;
-  height: 20px;
-}
-
-.rhythm-health-scoring-card .rhythm-history-view__health-weight-value strong {
-  font-size: clamp(calc(1.625rem * var(--app-text-scale, 1)), 7vw, calc(2.5rem * var(--app-text-scale, 1)));
-  font-weight: 600;
-}
-
-.rhythm-health-scoring-card .rhythm-history-view__health-weight-name {
-  font-size: calc(1rem * var(--app-text-scale, 1));
-  font-weight: 500;
-}
-
-.rhythm-health-scoring-card .rhythm-history-view__health-weight-formula {
-  margin-top: 12px;
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
-  line-height: 1.45;
-}
-
-.rhythm-health-scoring-card .rhythm-history-view__health-weight-plus {
-  font-size: calc(1.875rem * var(--app-text-scale, 1));
-  font-weight: 700;
 }
 
 .rhythm-health-scoring-card__formula {
@@ -4167,27 +4053,6 @@ dialog.health-score-details-dialog[open] {
   flex: 0 0 64px;
   border-radius: 12px;
   font-size: calc(1.25rem * var(--app-text-scale, 1));
-}
-
-.rhythm-health-scoring-card .rhythm-history-view__breakdown-rows {
-  font-size: calc(0.875rem * var(--app-text-scale, 1));
-}
-
-.rhythm-health-scoring-card .rhythm-history-view__breakdown-rows > div {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
-  align-items: baseline;
-  gap: 10px;
-  padding: 5px 0;
-}
-
-.rhythm-health-scoring-card .rhythm-history-view__breakdown-rows dt {
-  min-width: 0;
-}
-
-.rhythm-health-scoring-card .rhythm-history-view__breakdown-rows dd {
-  min-width: 0;
-  font-weight: 700;
 }
 
 .rhythm-health-scoring-card__history {
@@ -4359,30 +4224,6 @@ dialog.health-score-details-dialog[open] {
   color: var(--tend-ink, var(--ink));
   font-size: calc(1rem * var(--app-text-scale, 1));
   line-height: 1.3;
-}
-
-.health-info-calculation .rhythm-history-view__health-weight-panels,
-.health-rollup__feature .rhythm-history-view__health-weight-panels {
-  grid-template-columns: minmax(0, 1.1fr) 20px minmax(0, 0.9fr);
-}
-
-.rhythm-history-view__health-weight-score {
-  display: block;
-  margin-top: 2px;
-  color: var(--tend-ink, var(--ink));
-  font-size: calc(1.0625rem * var(--app-text-scale, 1));
-  font-weight: 700;
-  line-height: 1.2;
-}
-
-.rhythm-history-view__health-weight-description,
-.health-info-calculation__note {
-  display: block;
-  margin-top: 4px;
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.6875rem * var(--app-text-scale, 1));
-  line-height: 1.4;
-  overflow-wrap: anywhere;
 }
 
 .health-info-what-counts__flow {
@@ -4800,11 +4641,6 @@ dialog.health-score-details-dialog[open] {
   line-height: 1.45;
 }
 
-.health-rollup__feature .rhythm-history-view__health-weight-panels {
-  margin-top: 0;
-  grid-template-columns: minmax(0, 1.1fr) 20px minmax(0, 0.9fr);
-}
-
 html[data-mobile-text-size="large"] .health-info-summary-card,
 html[data-mobile-text-size="large"] .health-info-contribution-card {
   padding: 20px 14px;
@@ -5122,10 +4958,6 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   overflow-wrap: anywhere;
 }
 
-.marriage-foundation-score-info__content .rhythm-history-view__health-weight-panels {
-  margin-top: 2px;
-}
-
 .marriage-foundation-score-info__content .marriage-foundation-score-info__note {
   font-size: calc(0.6875rem * var(--app-text-scale, 1));
 }
@@ -5270,13 +5102,6 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 .marriage-foundations-section__title-row h3 {
   min-width: 0;
   flex: 1;
-}
-
-.marriage-foundations-section__title-row .rhythm-history-view__score-info {
-  position: absolute;
-  top: 50%;
-  right: 0;
-  transform: translateY(-50%);
 }
 
 .marriage-section-heading h3,
@@ -6583,39 +6408,22 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   margin: 0;
 }
 
-.person-profile-health-overview .category-health-heading {
+.person-profile-health-overview .health-score-breakdown__header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 8px;
-  min-width: 0;
-}
-
-.person-profile-health-overview .category-health-copy {
-  min-width: 0;
-}
-
-.person-profile-health-overview .category-health-summary__title-row {
-  display: flex;
+  grid-template-columns: minmax(0, 1fr) auto 40px;
   align-items: center;
   gap: 8px;
   min-width: 0;
 }
 
-.person-profile-health-overview .category-health-summary__title-row h3 {
+.person-profile-health-overview .health-score-breakdown__header h3 {
   min-width: 0;
   margin: 0;
   font-size: clamp(calc(1.25rem * var(--app-text-scale, 1)), 5vw, calc(1.75rem * var(--app-text-scale, 1)));
   overflow-wrap: anywhere;
 }
 
-.person-profile-health-overview .category-health-summary__title-row .rhythm-history-view__score-info {
-  flex: 0 0 40px;
-  width: 40px;
-  height: 40px;
-}
-
-.person-profile-health-overview .category-health-score {
+.person-profile-health-overview .health-score-breakdown__header > span {
   color: var(--tend-ink, var(--ink));
   font-size: clamp(calc(2.25rem * var(--app-text-scale, 1)), 9vw, calc(3.25rem * var(--app-text-scale, 1)));
   font-weight: 700;
@@ -6623,7 +6431,7 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   font-variant-numeric: tabular-nums;
 }
 
-.person-profile-health-overview .category-health-score.neutral {
+.person-profile-health-overview .health-score-breakdown__header > .is-unavailable {
   color: var(--tend-secondary, var(--ink-soft));
 }
 
@@ -6643,41 +6451,71 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   justify-items: center;
   align-content: start;
   gap: 4px;
+  width: 100%;
   min-width: 0;
+  min-height: 44px;
   padding: 10px 6px 0;
+  border: 0;
   color: var(--tend-secondary, var(--ink-soft));
+  background: transparent;
+  font: inherit;
   font-size: calc(0.8125rem * var(--app-text-scale, 1));
   font-weight: 600;
   line-height: 1.3;
   text-align: center;
   overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.person-health-component-score:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 3px solid var(--tend-forest, var(--forest));
+  outline-offset: -2px;
+  border-radius: 6px;
 }
 
 .person-health-component-score + .person-health-component-score {
   border-left: 1px solid var(--tend-line, var(--line));
 }
 
-.person-health-component-score > :first-child {
+.person-health-component-score__value {
   color: var(--tend-ink, var(--ink));
   font-size: calc(1.25rem * var(--app-text-scale, 1));
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
-.person-health-component-score.red > :first-child {
+.person-health-component-score.red .person-health-component-score__value {
   color: var(--score-red);
 }
 
-.person-health-component-score.yellow > :first-child {
+.person-health-component-score.yellow .person-health-component-score__value {
   color: var(--score-yellow);
 }
 
-.person-health-component-score.green > :first-child {
+.person-health-component-score.green .person-health-component-score__value {
   color: var(--score-green);
 }
 
-.person-health-component-score.neutral > :first-child {
+.person-health-component-score.neutral .person-health-component-score__value {
   color: var(--tend-secondary, var(--ink-soft));
+}
+
+.person-health-component-score__chevron {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+  transition: transform 140ms ease;
+}
+
+.person-health-component-score[aria-expanded="true"] .person-health-component-score__chevron {
+  transform: rotate(180deg);
 }
 
 .person-profile__queue-heading {
@@ -6705,6 +6543,14 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.person-profile__rhythm-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .person-component-health-summary {
@@ -6895,7 +6741,6 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 .person-profile__notes-access {
   display: flex;
   justify-content: flex-end;
-  margin-top: -18px;
 }
 
 .person-profile__notes-view {
@@ -7629,16 +7474,60 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   font-size: calc(1rem * var(--app-text-scale, 1));
 }
 
-.person-profile__other-rhythms {
+.person-profile__all-rhythms {
   display: grid;
   gap: 10px;
 }
 
-.person-profile__other-rhythms h4 {
-  margin: 0;
+.person-profile__all-rhythms-toggle {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border: 0;
+  border-top: 1px solid var(--tend-line, var(--line));
+  background: transparent;
+  color: var(--tend-ink, var(--ink));
+  font: 600 calc(0.875rem * var(--app-text-scale, 1))/1.3 var(--tend-font-ui, var(--sans));
+  text-align: left;
+  cursor: pointer;
+}
+
+.person-profile__all-rhythms-toggle:focus-visible {
+  outline: 3px solid var(--tend-forest, var(--forest));
+  outline-offset: 3px;
+}
+
+.person-profile__all-rhythms-toggle > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.person-profile__all-rhythms-count {
+  margin-left: auto;
   color: var(--ink-soft, #66736b);
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
   font-weight: 600;
+  white-space: nowrap;
+}
+
+.person-profile__all-rhythms-chevron {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+  transition: transform 140ms ease;
+}
+
+.person-profile__all-rhythms-toggle[aria-expanded="true"] .person-profile__all-rhythms-chevron {
+  transform: rotate(180deg);
 }
 
 .person-profile__cadence {
@@ -7911,6 +7800,10 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   flex: 0 0 auto;
   align-items: center;
   gap: 2px;
+}
+
+.foundation-detail-header .category-health-badge .ma-score__value {
+  color: #fff;
 }
 
 .foundation-detail-header__copy p {
@@ -8746,35 +8639,6 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   overflow: hidden;
 }
 
-.today-rhythm-details-dialog--inline {
-  --rhythm-details-horizontal-padding: 16px;
-  --rhythm-card-title-size: var(--tend-type-today-heading);
-  --rhythm-card-description-size: calc(0.9375rem * var(--app-text-scale, 1));
-  --rhythm-card-people-size: calc(0.75rem * var(--app-text-scale, 1));
-  --rhythm-card-metadata-size: calc(0.8125rem * var(--app-text-scale, 1));
-  --rhythm-card-action-size: calc(0.875rem * var(--app-text-scale, 1));
-  --rhythm-card-score-value-size: var(--rhythm-card-title-size);
-  --rhythm-card-badge-height: calc(2rem * var(--app-text-scale, 1));
-  --rhythm-card-avatar-size: calc(1.5rem * var(--app-text-scale, 1));
-  --rhythm-card-footer-row-height: calc(2rem * var(--app-text-scale, 1));
-  --rhythm-card-score-width: calc(76px * var(--app-text-scale, 1));
-  --rhythm-card-score-icon-size: var(--rhythm-card-title-size);
-  --rhythm-card-title-description-gap: calc(8px * var(--app-text-scale, 1));
-  --rhythm-card-description-content-gap: calc(2px * var(--app-text-scale, 1));
-  --rhythm-card-badge-action-gap: calc(12px * var(--app-text-scale, 1));
-  --rhythm-card-action-footer-gap: calc(10px * var(--app-text-scale, 1));
-  width: 100%;
-  max-width: none;
-  max-height: none;
-  margin: 0 0 8px;
-  padding: 0;
-  overflow: visible;
-  border: 1px solid #d3ded6;
-  border-radius: 23px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(32, 39, 35, .07), 0 6px 16px rgba(32, 39, 35, .05);
-}
-
 .today-rhythm-details-dialog--inline:last-child {
   margin-bottom: 0;
 }
@@ -8782,39 +8646,6 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 .today-rhythm-details-dialog--inline .today-rhythm-details__surface {
   padding-top: 16px;
   border-radius: inherit;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__header {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
-  padding-block: 0;
-  padding-inline: var(--rhythm-details-horizontal-padding);
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__title-group {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--rhythm-card-score-width);
-  grid-template-rows: auto;
-  align-items: start;
-  column-gap: calc(8px * var(--app-text-scale, 1));
-  row-gap: var(--rhythm-card-title-description-gap);
-  width: 100%;
-  min-width: 0;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__title-copy {
-  display: contents;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__title-score-row {
-  display: contents;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__title-group > :not(.today-rhythm-details__title-copy) {
-  grid-column: 1 / -1;
-  min-width: 0;
 }
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__actions {
@@ -8829,29 +8660,6 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   margin-top: 12px;
   padding: 0 var(--rhythm-details-horizontal-padding) var(--rhythm-card-action-footer-gap);
   overflow: visible;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__title-group h3 {
-  display: block;
-  grid-column: 1;
-  grid-row: 1;
-  width: 100%;
-  min-width: 0;
-  font-size: var(--rhythm-card-title-size);
-  font-weight: 600;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__description {
-  grid-column: 1;
-  grid-row: 2;
-  width: 100%;
-  max-width: none;
-  margin: 0 0 var(--rhythm-card-description-content-gap);
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: var(--rhythm-card-description-size);
-  line-height: 1.5;
 }
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__activity-target {
@@ -8932,19 +8740,6 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   height: calc(18px * var(--app-text-scale, 1));
 }
 
-.today-rhythm-details-dialog--inline .today-rhythm-details__actions--inline {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-end;
-  width: 100%;
-  min-width: 0;
-  min-height: 44px;
-  margin-top: 0;
-  gap: 8px;
-  background: transparent;
-}
-
 .today-rhythm-details-dialog--inline .today-rhythm-details__actions--inline-with-associations {
   margin-top: max(
     0px,
@@ -8971,68 +8766,6 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   border-color: #D7DAD8;
   background: #F1F2F1;
   color: #5E6B63;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button {
-  box-sizing: border-box;
-  display: inline-flex;
-  grid-column: 2;
-  grid-row: 1;
-  align-self: baseline;
-  justify-self: end;
-  align-items: baseline;
-  justify-content: flex-end;
-  flex: 0 0 var(--rhythm-card-score-width);
-  width: var(--rhythm-card-score-width);
-  min-width: var(--rhythm-card-score-width);
-  height: max(44px, calc(44px * var(--app-text-scale, 1)));
-  min-height: max(44px, calc(44px * var(--app-text-scale, 1)));
-  margin-block-start: 0;
-  margin-block-end: calc(1.3em - max(44px, calc(44px * var(--app-text-scale, 1))));
-  padding: 0 calc(4px * var(--app-text-scale, 1)) 0 calc(8px * var(--app-text-scale, 1));
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  box-shadow: none;
-  color: var(--rhythm-card-score-color, var(--score-neutral-text));
-  font-size: var(--rhythm-card-title-size);
-  line-height: 1.3;
-  white-space: nowrap;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="green"] {
-  --rhythm-card-score-color: var(--score-green);
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="yellow"] {
-  --rhythm-card-score-color: var(--score-yellow);
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="red"] {
-  --rhythm-card-score-color: var(--score-red);
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button .rhythm-metadata-icon--history {
-  position: relative;
-  display: inline-block;
-  align-self: center;
-  width: var(--rhythm-card-score-icon-size);
-  height: var(--rhythm-card-score-icon-size);
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-content {
-  display: inline-flex;
-  flex-direction: row-reverse;
-  align-items: baseline;
-  gap: calc(6px * var(--app-text-scale, 1));
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-score {
-  margin: 0;
-  white-space: nowrap;
-  font-size: var(--rhythm-card-score-value-size);
-  font-weight: 600;
-  line-height: 1.3;
 }
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__history-button:focus-visible,
@@ -9599,513 +9332,9 @@ html[data-mobile-text-size="larger"] .today-rhythm-details-dialog--inline .today
   font-variant-numeric: tabular-nums;
 }
 
-.today-rhythm-details__history-button:focus-visible,
-.rhythm-history-view__entry-action:focus-visible,
-.rhythm-history-view__delete-actions button:focus-visible,
-.rhythm-history-view__chart-scroll:focus-visible {
-  outline: 3px solid var(--tend-forest, var(--forest));
-  outline-offset: 2px;
-}
-
-.rhythm-history-view {
-  display: grid;
-  gap: 14px;
-  min-width: 0;
-  margin-top: 14px;
-  padding: 0 var(--rhythm-details-horizontal-padding, 16px) var(--rhythm-details-horizontal-padding, 16px);
-}
-
-.rhythm-history-view--dialog {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  min-height: 0;
-  max-height: min(calc(85vh - 36px), 784px);
-  padding: 0 var(--rhythm-details-horizontal-padding, 16px);
-  margin-top: 0;
-}
-
-.rhythm-history-view--dialog:focus {
-  outline: none;
-}
-
-.rhythm-history-view__rhythm-header {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.rhythm-history-view--dialog .rhythm-history-view__rhythm-header {
-  grid-template-columns: minmax(0, 1fr) auto;
-  column-gap: 12px;
-  align-items: start;
-  flex: 0 0 auto;
-  padding: 0;
-  background: var(--canvas);
-}
-
-.rhythm-history-view__body {
-  display: grid;
-  gap: 14px;
-  min-width: 0;
-}
-
-.rhythm-history-view__body--dialog {
-  display: block;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  margin-right: calc(-1 * var(--rhythm-details-horizontal-padding, 16px) + 2px);
-  padding: 10px 16px 16px 0;
-  scrollbar-gutter: stable;
-}
-
-.rhythm-history-view__title-row {
-  display: flex;
-  grid-column: 1;
-  align-items: flex-start;
-  gap: 7px;
-  min-width: 0;
-}
-
-.rhythm-history-view__header-actions {
-  display: flex;
-  grid-column: 2;
-  grid-row: 1;
-  align-items: center;
-  gap: 6px;
-}
-
-.rhythm-history-view__title-copy {
-  display: flex;
-  flex: 1 1 0;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 7px;
-  min-width: 0;
-}
-
-.rhythm-history-view__title-row h3 {
-  flex: 0 1 auto;
-  min-width: 0;
-  margin: 0;
-  color: var(--tend-ink, var(--ink));
-  font-size: calc(1.375rem * var(--app-text-scale, 1));
-  font-weight: 750;
-  line-height: 1.2;
-  overflow-wrap: anywhere;
-}
-
 .today-rhythm-details__close--history {
   position: static;
   margin: 0;
-}
-
-.rhythm-history-view__season-range-undo {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
-  place-items: center;
-  padding: 0;
-  border: 1px solid var(--tend-line, var(--line));
-  border-radius: 10px;
-  background: transparent;
-  color: var(--tend-ink, var(--ink));
-  cursor: pointer;
-}
-
-.rhythm-history-view__season-range-undo:hover {
-  background: var(--tend-surface, var(--card));
-}
-
-.rhythm-history-view__season-range-undo:focus-visible {
-  outline: 3px solid var(--tend-forest, var(--forest));
-  outline-offset: 2px;
-}
-
-.rhythm-history-view__season-range-undo svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.8;
-}
-
-.rhythm-history-view__undo-announcement {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  clip-path: inset(50%);
-}
-
-.rhythm-history-view__undo-error {
-  margin: 0;
-  color: var(--tend-danger, #a12616);
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
-}
-
-.rhythm-history-view__completions > h3 {
-  margin: 0;
-  color: var(--tend-ink, var(--ink));
-  font-size: calc(1.0625rem * var(--app-text-scale, 1));
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-}
-
-.rhythm-history-view__seasons {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.rhythm-history-view__seasons-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 44px;
-  padding: 0;
-}
-
-.rhythm-history-view__season-add {
-  min-height: 44px;
-  max-width: 100%;
-  white-space: normal;
-  text-align: left;
-}
-
-.rhythm-history-view__season-add-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.rhythm-history-view__season-add-row > .rhythm-history-view__seasons-info-copy {
-  flex: 1 1 260px;
-  min-width: 0;
-}
-
-.rhythm-history-view__season-add-row > .rhythm-history-view__season-add {
-  flex: 0 0 auto;
-  margin-left: 0;
-}
-
-.rhythm-history-view__seasons-header > h3 {
-  margin: 0;
-  color: var(--tend-ink, var(--ink));
-  font-size: calc(1.0625rem * var(--app-text-scale, 1));
-  font-weight: 700;
-  line-height: 1.3;
-}
-
-.rhythm-history-view__season-edit:focus-visible,
-.rhythm-history-view__unknown-schedule-action:focus-visible {
-  outline: 2px solid var(--tend-accent, #198754);
-  outline-offset: 2px;
-}
-
-.rhythm-history-view__seasons-count {
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: #f1f4f1;
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.6875rem * var(--app-text-scale, 1));
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.rhythm-history-view__seasons-info {
-  margin-left: auto;
-}
-
-.rhythm-history-view__seasons-info-copy {
-  margin: 0;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: #f4f7f4;
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-.rhythm-history-view__seasons-explanation {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.rhythm-history-view__seasons-explanation[hidden] {
-  display: none;
-}
-
-.rhythm-history-view__seasons-content {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-}
-
-.rhythm-history-view__season-note {
-  margin: 0;
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-.rhythm-history-view__seasons-timeline {
-  display: flex;
-  gap: 3px;
-  min-width: 0;
-  flex-wrap: wrap;
-}
-
-.rhythm-history-view__season-timeline-segment {
-  position: relative;
-  flex: 1 1 44px;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  cursor: pointer;
-}
-
-.rhythm-history-view__season-timeline-segment::before {
-  position: absolute;
-  top: 50%;
-  right: 0;
-  left: 0;
-  height: 10px;
-  border-radius: 999px;
-  background: var(--rhythm-season-color);
-  content: "";
-  transform: translateY(-50%);
-}
-
-.rhythm-history-view__season-timeline-segment:focus-visible {
-  outline: 3px solid var(--tend-forest, var(--forest));
-  outline-offset: 1px;
-}
-
-.rhythm-history-view__season-visual--fern { --rhythm-season-color: #2F8CFF; }
-.rhythm-history-view__season-visual--sage { --rhythm-season-color: #20B99A; }
-.rhythm-history-view__season-visual--sky { --rhythm-season-color: #FFD039; }
-.rhythm-history-view__season-visual--ocean { --rhythm-season-color: #FF7954; }
-.rhythm-history-view__season-visual--plum { --rhythm-season-color: #A653F5; }
-.rhythm-history-view__season-visual--clay { --rhythm-season-color: #FF7954; }
-.rhythm-history-view__season-visual--unknown { --rhythm-season-color: #a5a9a6; }
-
-.rhythm-history-view__season-card {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  padding: 11px 12px;
-  border: 2px solid var(--rhythm-season-color);
-  border-radius: 10px;
-  background: var(--tend-surface, var(--card, #fff));
-  scroll-margin-block: 12px;
-  transition: box-shadow 160ms ease, border-color 160ms ease;
-}
-
-.rhythm-history-view__season-card--highlighted {
-  border-color: var(--rhythm-season-color);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rhythm-season-color) 24%, transparent);
-}
-
-.rhythm-history-view__season-card:focus {
-  outline: 2px solid var(--rhythm-season-color);
-  outline-offset: 2px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rhythm-history-view__season-card {
-    transition: none;
-  }
-}
-
-.rhythm-history-view__season-card-header {
-  display: flex;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-width: 0;
-}
-
-.rhythm-history-view__season-card-title-row {
-  display: flex;
-  flex: 1 1 160px;
-  align-items: flex-start;
-  gap: 6px;
-  min-width: 0;
-}
-
-.rhythm-history-view__season-card h4 {
-  flex: 0 1 auto;
-  min-width: 0;
-  margin: 0;
-  color: var(--tend-ink, var(--ink));
-  font-size: calc(1.1875rem * var(--app-text-scale, 1));
-  font-weight: 650;
-  line-height: 1.25;
-  overflow-wrap: anywhere;
-}
-
-.rhythm-history-view__season-group-title {
-  margin: 0 0 2px;
-  color: var(--tend-ink, var(--ink));
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
-  line-height: 1.4;
-}
-
-.rhythm-history-view__season-card-actions {
-  display: flex;
-  flex: none;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0;
-  min-width: 44px;
-}
-
-.rhythm-history-view__season-card-footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  column-gap: 12px;
-  row-gap: 6px;
-  min-width: 0;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--tend-line, var(--line));
-  color: var(--tend-ink-soft, var(--ink-soft));
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
-  line-height: 1.35;
-}
-
-.rhythm-history-view__season-card-metadata {
-  display: flex;
-  flex: 1 1 150px;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 12px;
-  min-width: 0;
-}
-
-.rhythm-history-view__season-card-timeframe {
-  flex: 0 1 auto;
-  min-width: 0;
-  margin-left: auto;
-  color: var(--tend-secondary, var(--ink-soft));
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-
-.rhythm-history-view__season-card-footer svg {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.7;
-}
-
-.rhythm-history-view__season-health-badge {
-  box-sizing: border-box;
-  display: flex;
-  flex: 0 0 58px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 58px;
-  min-width: 58px;
-  height: 44px;
-  margin-left: auto;
-  padding: 3px 5px;
-  border: 0;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--tend-ink, var(--ink)) 8%, var(--tend-surface, var(--card, #fff)));
-  color: var(--tend-ink, var(--ink));
-  font-size: calc(0.875rem * var(--app-text-scale, 1));
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-
-.rhythm-history-view__season-health-badge.ma-score {
-  background: color-mix(in srgb, var(--tend-ink, var(--ink)) 8%, var(--tend-surface, var(--card, #fff)));
-  color: var(--tend-ink, var(--ink));
-}
-
-.rhythm-history-view__season-health-badge .ma-score__label {
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.5625rem * var(--app-text-scale, 1));
-  font-weight: 600;
-  line-height: 1.1;
-}
-
-.rhythm-history-view__season-health-badge .ma-score__value {
-  line-height: 1.2;
-}
-
-.rhythm-history-view__season-edit,
-.rhythm-history-view__season-delete,
-.rhythm-history-view__unknown-schedule-action {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 5px;
-  border: 1px solid var(--tend-line, var(--line));
-  border-radius: 7px;
-  background: transparent;
-  color: var(--tend-ink, var(--ink));
-  font: inherit;
-  font-size: calc(0.6875rem * var(--app-text-scale, 1));
-  cursor: pointer;
-}
-
-.rhythm-history-view__season-delete {
-  min-height: 44px;
-  padding: 5px 8px;
-  border: 1px solid var(--tend-line, var(--line));
-  border-radius: 7px;
-  background: transparent;
-  color: var(--tend-ink, var(--ink));
-  font: inherit;
-  font-size: calc(0.6875rem * var(--app-text-scale, 1));
-  cursor: pointer;
-}
-
-.rhythm-history-view__unknown-schedule-action {
-  justify-self: start;
-  min-width: 44px;
-  padding: 5px 10px;
-}
-
-.rhythm-history-view__season-undo {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
-  line-height: 1.4;
 }
 
 .rhythm-season-correction {
@@ -10919,26 +10148,6 @@ html[data-mobile-text-size="larger"] .today-rhythm-details-dialog--inline .today
   box-shadow: none;
 }
 
-.rhythm-season-correction__saved-card .rhythm-history-view__season-card {
-  border-color: var(--tend-line);
-  background: var(--tend-surface);
-  box-shadow: none;
-}
-
-.rhythm-history-view__season-card-status {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  min-height: 22px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--tend-mist);
-  color: var(--tend-forest);
-  font-size: calc(0.625rem * var(--app-text-scale, 1));
-  font-weight: 600;
-  line-height: 1.2;
-}
-
 .rhythm-season-correction__name {
   margin: 0;
 }
@@ -11205,310 +10414,11 @@ html[data-mobile-text-size="larger"] .today-rhythm-details-dialog--inline .today
   }
 }
 
-.rhythm-history-view__season-group {
-  display: grid;
-  gap: 0;
-  min-width: 0;
-}
-
-.rhythm-history-view__season-cards {
-  display: grid;
-  gap: 16px;
-  min-width: 0;
-}
-
-.rhythm-history-view__season-note {
-  margin-top: 5px;
-}
-
-.rhythm-history-view__seasons-divider {
-  height: 1px;
-  margin-top: 2px;
-  background: var(--tend-line, var(--line));
-}
-
-.rhythm-history-view__chart-section > p,
-.rhythm-history-view__empty {
-  margin: 0;
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.rhythm-history-view__score-section,
-.rhythm-history-view__completions {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-  padding-top: 14px;
-  border-top: 1px solid var(--tend-line, var(--line));
-}
-
-.rhythm-history-view__score-section {
-  gap: 10px;
-}
-
-.rhythm-history-view__body--dialog > .rhythm-history-view__score-section {
-  margin-bottom: 16px;
-  border-top: 0;
-}
-
-.rhythm-history-view__score-card {
-  position: relative;
-  min-width: 0;
-  border: 1px solid var(--tend-line, var(--line));
-  border-radius: 20px;
-  background: var(--tend-surface, var(--card));
-}
-
 .foundation-health-card {
   margin: 14px 0;
   border: 1px solid var(--tend-line, var(--line));
   border-radius: 14px;
   background: var(--tend-surface, #fff);
-}
-
-.rhythm-history-view__score-card-controls {
-  position: absolute;
-  z-index: 2;
-  top: 11px;
-  right: 11px;
-}
-
-.rhythm-history-view__score-details-grid {
-  padding: 12px 0 0;
-  border-top: 1px solid var(--tend-line, var(--line));
-}
-
-.rhythm-history-view__score-details-columns {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-  gap: 0;
-  min-width: 0;
-}
-
-.rhythm-history-view__score-details-columns::before {
-  position: absolute;
-  z-index: 1;
-  inset-block: 0 18px;
-  left: 50%;
-  width: 1px;
-  background: var(--tend-line, var(--line));
-  content: "";
-  pointer-events: none;
-}
-
-.rhythm-history-view__score-details-columns {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-  gap: 0;
-  min-width: 0;
-}
-
-.rhythm-history-view__score-summary-divider {
-  margin: 16px 16px 0;
-  border-top: 1px solid var(--tend-line, var(--line));
-}
-
-.rhythm-history-view__score-details-column {
-  min-width: 0;
-  padding: 0 16px 18px;
-}
-
-.rhythm-history-view__score-details-grid[hidden] {
-  display: none;
-}
-
-.rhythm-history-view__health-calculation-disclosure[hidden] {
-  display: none;
-}
-
-.rhythm-history-view__health-calculation-disclosure:not([hidden]) {
-  margin-top: 16px;
-}
-
-.rhythm-history-view__health-calculation {
-  container-type: inline-size;
-  display: grid;
-  gap: 8px;
-  margin: 0 16px 12px;
-  padding: 0;
-  border-radius: 14px;
-  background: var(--tend-surface, var(--card));
-}
-
-.rhythm-history-view__health-calculation-heading {
-  display: flex;
-  align-items: baseline;
-}
-
-.rhythm-history-view__health-calculation-heading h4 {
-  margin: 0;
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
-  font-weight: 500;
-}
-
-.rhythm-history-view__health-weight-panels {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) 20px minmax(0, 0.9fr);
-  align-items: stretch;
-  gap: 6px;
-  min-width: 0;
-}
-
-.rhythm-history-view__health-weight-panel {
-  position: relative;
-  min-width: 0;
-  padding: 14px 10px;
-  border-radius: 12px;
-}
-
-.rhythm-history-view__health-weight-panel::before {
-  position: absolute;
-  inset: 0 0 auto;
-  height: 4px;
-  border-radius: 12px 12px 0 0;
-  content: "";
-}
-
-.rhythm-history-view__health-weight-panel--consistency {
-  background: #e9f8ef;
-}
-
-.rhythm-history-view__health-weight-panel--consistency::before {
-  background: #13c77c;
-}
-
-.rhythm-history-view__health-weight-panel--on-track {
-  background: #edf6ff;
-}
-
-.rhythm-history-view__health-weight-panel--on-track::before {
-  background: #389ef5;
-}
-
-.rhythm-history-view__health-weight-value {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-bottom: 5px;
-}
-
-.rhythm-history-view__health-weight-value svg {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.75;
-}
-
-.rhythm-history-view__health-weight-panel--consistency svg {
-  color: #13a967;
-}
-
-.rhythm-history-view__health-weight-panel--on-track svg {
-  color: #2588dd;
-}
-
-.rhythm-history-view__health-weight-value strong {
-  color: var(--tend-ink, var(--ink));
-  font-size: calc(1.25rem * var(--app-text-scale, 1));
-  font-weight: 600;
-  letter-spacing: -0.4px;
-  line-height: 1.1;
-}
-
-.rhythm-history-view__health-weight-name,
-.rhythm-history-view__health-weight-subtitle {
-  display: block;
-  overflow-wrap: anywhere;
-}
-
-.rhythm-history-view__health-weight-name {
-  color: var(--tend-ink, var(--ink));
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
-  font-weight: 600;
-  line-height: 1.3;
-}
-
-.rhythm-history-view__health-weight-subtitle {
-  margin-top: 2px;
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.6875rem * var(--app-text-scale, 1));
-  line-height: 1.35;
-}
-
-.rhythm-history-view__health-unavailable {
-  margin: 0;
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-
-@container (max-width: 320px) {
-  .rhythm-history-view__health-weight-panel--on-track {
-    padding-right: 4px;
-    padding-left: 4px;
-  }
-
-  .rhythm-history-view__health-weight-panel--on-track .rhythm-history-view__health-weight-value {
-    gap: 3px;
-  }
-
-  .rhythm-history-view__health-weight-panel--on-track .rhythm-history-view__health-weight-value svg {
-    width: 12px;
-    height: 12px;
-  }
-}
-
-.rhythm-history-view__score-info {
-  position: relative;
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--tend-secondary, var(--ink-soft));
-  cursor: pointer;
-}
-
-.rhythm-history-view__score-info::before {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  z-index: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: transparent;
-  content: "";
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-}
-
-.rhythm-history-view__score-info svg {
-  position: relative;
-  z-index: 1;
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.25;
 }
 
 .disclosure-chevron {
@@ -11521,28 +10431,6 @@ html[data-mobile-text-size="larger"] .today-rhythm-details-dialog--inline .today
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.75;
-}
-
-.rhythm-history-view__score-info svg.disclosure-chevron {
-  stroke-width: 1.75;
-}
-
-.rhythm-history-view__score-info:hover {
-  background: transparent;
-  color: var(--tend-forest, var(--forest));
-}
-
-.rhythm-history-view__score-info:hover::before,
-.rhythm-history-view__score-info:focus-visible::before {
-  background: var(--tend-mist, #e5f2eb);
-}
-
-.rhythm-history-view__score-info:focus-visible {
-  outline: none;
-}
-
-.rhythm-history-view__score-info:focus:not(:focus-visible) {
-  outline: none;
 }
 
 .rhythm-score-circle {
@@ -11604,579 +10492,6 @@ html[data-mobile-text-size="larger"] .today-rhythm-details-dialog--inline .today
   line-height: 1;
 }
 
-.rhythm-history-view__sample-notice {
-  margin: 0;
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.6875rem * var(--app-text-scale, 1));
-  line-height: 1.4;
-  text-align: center;
-}
-
-.rhythm-history-view__breakdown-rows {
-  display: grid;
-  width: 100%;
-  margin: 0;
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
-  line-height: 1.4;
-}
-
-.rhythm-history-view__breakdown-rows > div {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 6px 0;
-}
-
-.rhythm-history-view__breakdown-rows dt {
-  flex: 1 1 auto;
-  min-width: 0;
-  color: var(--tend-secondary, var(--ink-soft));
-  overflow-wrap: anywhere;
-}
-
-.rhythm-history-view__breakdown-rows dd {
-  flex: none;
-  margin: 0;
-  color: var(--tend-ink, var(--ink));
-  font-weight: 600;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-
-.rhythm-history-view__calculation {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-content: center;
-  justify-items: center;
-  width: 100%;
-  min-width: 0;
-  margin: 4px 0 0;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: var(--tend-mist, #e5f2eb);
-  color: var(--tend-forest, #246b52);
-  font-size: calc(0.875rem * var(--app-text-scale, 1));
-  font-weight: 400;
-  line-height: 1.35;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-
-.rhythm-history-view__calculation > span {
-  width: 100%;
-  min-width: 0;
-  text-align: center;
-}
-
-.rhythm-history-view__calculation strong {
-  font-weight: 700;
-}
-
-.rhythm-history-view__score-details {
-  width: 100%;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.rhythm-history-view__score-details h4 {
-  margin: 16px 0 0;
-  color: var(--tend-forest, var(--forest));
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
-  font-weight: 650;
-  line-height: 1.4;
-}
-
-.rhythm-history-view__logged-moments summary:focus-visible {
-  outline: 3px solid var(--tend-forest, var(--forest));
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-.rhythm-history-view__logged-moments summary:focus:not(:focus-visible) {
-  outline: none;
-}
-
-.rhythm-history-view__health-pattern {
-  display: grid;
-  grid-template-columns: repeat(10, minmax(0, 1fr));
-  gap: 4px;
-  width: 100%;
-  margin: 12px 0;
-}
-
-.rhythm-history-view__health-pattern-day {
-  height: 13px;
-  border-radius: 3px;
-  background: var(--score-green, #16885a);
-}
-
-.rhythm-history-view__health-pattern-day--missed {
-  background: var(--tend-line, var(--line));
-}
-
-.rhythm-history-view__pattern-legend {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 5px 10px;
-  margin: 0;
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.6875rem * var(--app-text-scale, 1));
-}
-
-.rhythm-history-view__pattern-legend > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.rhythm-history-view__pattern-key {
-  flex: none;
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  background: var(--score-green, #16885a);
-}
-
-.rhythm-history-view__pattern-key--missed {
-  background: var(--tend-line, var(--line));
-}
-
-.rhythm-history-view__score-history {
-  display: grid;
-  gap: 6px;
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.rhythm-history-view__score-history > li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: 8px;
-  padding: 3px 0;
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
-}
-
-.rhythm-history-view__score-history > li > span {
-  min-width: 0;
-  color: var(--tend-secondary, var(--ink-soft));
-  overflow-wrap: anywhere;
-}
-
-.rhythm-history-view__score-history > li > strong {
-  color: var(--tend-ink, var(--ink));
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.rhythm-history-view__score-history > li:last-child > strong {
-  color: var(--tend-forest, var(--forest));
-}
-
-.rhythm-history-view__score-history-toggle {
-  min-height: 32px;
-  padding: 4px 0;
-  border: 0;
-  background: transparent;
-  color: var(--tend-forest, var(--forest));
-  font: 600 calc(12px * var(--app-text-scale, 1))/1.3 var(--tend-font-ui, var(--sans));
-  text-align: left;
-  cursor: pointer;
-}
-
-.rhythm-history-view__score-history-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0 12px;
-  margin-top: 4px;
-}
-
-.rhythm-history-view__score-history-toggle:focus-visible {
-  outline: 2px solid var(--tend-forest, var(--forest));
-  outline-offset: 2px;
-  border-radius: 3px;
-}
-
-.rhythm-history-view__score-history-toggle:focus:not(:focus-visible) {
-  outline: none;
-}
-
-.rhythm-history-view__score-explanation {
-  margin: 10px 0 0;
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-  text-wrap: pretty;
-}
-
-.rhythm-history-view__score-explanation + .rhythm-history-view__score-explanation {
-  margin-top: 8px;
-}
-
-@media (max-width: 440px) {
-  .rhythm-history-view__breakdown-rows > div {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .rhythm-history-view__breakdown-rows dd {
-    text-align: left;
-  }
-}
-
-.rhythm-history-view__completion-summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 8px;
-  margin: 0;
-  color: var(--tend-ink, var(--ink));
-}
-
-.rhythm-history-view__completion-total {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: calc(1rem * var(--app-text-scale, 1));
-}
-
-.rhythm-history-view__completion-total strong {
-  color: var(--tend-forest, var(--forest));
-  font-size: calc(1.8125rem * var(--app-text-scale, 1));
-  line-height: 1;
-}
-
-.rhythm-history-view__completion-span {
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
-}
-
-.rhythm-history-view__chart-section {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.rhythm-history-view__chart-placeholder {
-  height: 224px;
-  padding: 4px 2px 8px;
-}
-
-.rhythm-history-view__chart-placeholder-plot {
-  height: 200px;
-  border-radius: 8px;
-  background: var(--score-track, #f0f4f1);
-}
-
-.rhythm-history-view__chart-scroll {
-  display: flex;
-  max-width: 100%;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  padding: 4px 2px 8px;
-  scrollbar-width: thin;
-}
-
-.rhythm-history-view__chart {
-  display: flex;
-  align-items: end;
-  gap: 16px;
-  width: max-content;
-  min-width: max-content;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.rhythm-history-view__chart li {
-  display: grid;
-  grid-template-rows: 200px auto;
-  justify-items: center;
-  gap: 4px;
-  width: 46px;
-  height: 100%;
-  color: var(--tend-ink, var(--ink));
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
-  text-align: center;
-}
-
-.rhythm-history-view__completion-bar-area {
-  position: relative;
-  display: flex;
-  align-items: end;
-  justify-content: center;
-  width: 46px;
-  height: 200px;
-}
-
-.rhythm-history-view__completion-track {
-  position: absolute;
-  inset: 0;
-  border-radius: 8px;
-  background: #e8f5ef;
-}
-
-.rhythm-history-view__completion-bar {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  flex: none;
-  box-sizing: border-box;
-  width: 46px;
-  padding-top: 5px;
-  border-radius: 8px;
-  background: var(--completion-green);
-}
-
-.rhythm-history-view__completion-zero {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  place-items: center;
-  width: 46px;
-  height: 14px;
-  border-radius: 5px;
-  background: #dce8e1;
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.6875rem * var(--app-text-scale, 1));
-  line-height: 1;
-}
-
-.rhythm-history-view__bar-value {
-  color: #fff;
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
-  font-weight: 700;
-  line-height: 16px;
-  text-align: center;
-}
-
-.rhythm-history-view__chart li time {
-  white-space: nowrap;
-}
-
-.rhythm-history-view__chart-hint {
-  margin: 0;
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.6875rem * var(--app-text-scale, 1));
-  line-height: 1.4;
-}
-
-.rhythm-history-view__empty-notice {
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: #e8f5ef;
-  color: var(--tend-forest, var(--forest));
-}
-
-.rhythm-history-view__logged-moments {
-  padding-top: 8px;
-  border-top: 1px solid var(--tend-line, var(--line));
-}
-
-.rhythm-history-view__log-moment-row {
-  display: flex;
-  justify-content: flex-start;
-  margin: 12px 0;
-}
-
-.rhythm-history-view__logged-moments ol {
-  display: grid;
-  gap: 7px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.rhythm-history-view__log-moment {
-  max-width: 100%;
-  min-height: 44px;
-  white-space: normal;
-  text-align: center;
-}
-
-.rhythm-history-view__log-dialog {
-  position: fixed;
-  inset: 0;
-  box-sizing: border-box;
-  width: min(440px, calc(100vw - 32px));
-  max-width: calc(100vw - 32px);
-  max-height: min(85vh, 760px);
-  margin: auto;
-  padding: 0;
-  overflow: auto;
-  border: 1px solid var(--tend-line, var(--line));
-  border-radius: 20px;
-  background: var(--tend-surface, var(--card));
-  color: var(--tend-ink, var(--ink));
-  box-shadow: 0 22px 70px #10251d45;
-}
-
-.rhythm-history-view__log-dialog::backdrop {
-  background: #10251d9c;
-}
-
-.rhythm-history-view__log-dialog-header {
-  position: sticky;
-  z-index: 1;
-  top: 0;
-  display: flex;
-  justify-content: flex-end;
-  min-height: 44px;
-  padding: 8px 8px 0;
-  background: var(--tend-surface, var(--card));
-}
-
-.rhythm-history-view__log-dialog .rhythm-completion-form--embedded {
-  padding: 4px 20px 20px;
-}
-
-@media (max-width: 380px) {
-  .rhythm-history-view__log-dialog .rhythm-completion-form--embedded {
-    padding-right: 14px;
-    padding-left: 14px;
-  }
-}
-
-.rhythm-history-view__logged-moments li {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--tend-line, var(--line));
-  border-radius: 12px;
-  background: var(--tend-surface, var(--card));
-  color: var(--tend-ink, var(--ink));
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
-}
-
-.rhythm-history-view__logged-entry-content {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-}
-
-.rhythm-history-view__logged-entry-copy {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.rhythm-history-view__logged-entry-copy > strong {
-  display: block;
-  color: var(--tend-ink, var(--ink));
-  font-weight: 700;
-  overflow-wrap: anywhere;
-}
-
-.rhythm-history-view__logged-entry-date,
-.rhythm-history-view__logged-entry-memory {
-  margin: 4px 0 0;
-}
-
-.rhythm-history-view__logged-entry-date,
-.rhythm-history-view__logged-entry-copy time {
-  color: var(--tend-secondary, var(--ink-soft));
-}
-
-.rhythm-history-view__logged-entry-memory {
-  color: var(--tend-ink, var(--ink));
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.rhythm-history-view__logged-entry-actions {
-  display: flex;
-  flex: none;
-  align-items: flex-start;
-  gap: 2px;
-  margin: -2px -3px 0 0;
-}
-
-.rhythm-history-view__entry-action {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
-  min-height: 44px;
-  padding: 0;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--tend-secondary, var(--ink-soft));
-  cursor: pointer;
-}
-
-.rhythm-history-view__entry-action:hover,
-.rhythm-history-view__entry-action:focus-visible {
-  background: color-mix(in srgb, var(--tend-forest, var(--forest)) 10%, var(--tend-surface, var(--card)));
-  color: var(--tend-forest, var(--forest));
-}
-
-.rhythm-history-view__entry-action svg {
-  width: 17px;
-  height: 17px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.7;
-}
-
-.rhythm-history-view__delete-confirmation {
-  display: grid;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--tend-line, var(--line));
-}
-
-.rhythm-history-view__delete-confirmation > strong {
-  color: var(--tend-ink, var(--ink));
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
-  overflow-wrap: anywhere;
-}
-
-.rhythm-history-view__delete-confirmation > p {
-  margin: 0;
-  color: #a52c22;
-}
-
-.rhythm-history-view__delete-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.rhythm-history-view__delete-actions button {
-  min-width: 44px;
-  min-height: 44px;
-}
-
-@media (max-width: 380px) {
-  .rhythm-history-view__logged-entry-content {
-    flex-wrap: wrap;
-  }
-
-  .rhythm-history-view__logged-entry-actions {
-    margin: 0 0 0 auto;
-  }
-}
-
 .today-rhythm-details__footer {
   margin-top: 15px;
   padding: 12px var(--rhythm-details-horizontal-padding);
@@ -12208,6 +10523,11 @@ html[data-mobile-text-size="larger"] .today-rhythm-details-dialog--inline .today
   gap: 6px;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.rhythm-metadata-schedule-label {
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .rhythm-metadata-schedule-group > .visually-hidden {
@@ -12300,10 +10620,6 @@ html[data-mobile-text-size="larger"] .today-rhythm-details-dialog--inline .today
   outline-offset: 2px;
 }
 
-.tend-app-preview .marriage-page .rhythm-history-view__score-info:focus-visible {
-  outline: none;
-}
-
 @media (max-width: 640px) {
   .foundation-card--compact {
     grid-template-columns: auto minmax(0, 1fr) auto auto;
@@ -12370,26 +10686,6 @@ html[data-mobile-text-size="larger"] .today-rhythm-details-dialog--inline .today
     gap: 2px 4px;
   }
 
-}
-
-@media (max-width: 400px) {
-  .rhythm-history-view__score-details-column:first-child {
-    border-bottom: 1px solid var(--tend-line, var(--line));
-  }
-
-  .rhythm-history-view__score-details-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 440px) {
-  .rhythm-history-view__score-details-columns {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .rhythm-history-view__score-details-columns::before {
-    display: none;
-  }
 }
 
 .rhythm-completion-form {
@@ -14154,14 +12450,6 @@ html[data-mobile-text-size="larger"] .today-rhythm-details-dialog--inline .today
   margin-top: 5px;
   font-size: calc(.78rem * var(--app-text-scale, 1));
   text-align: center;
-}
-
-.strength-guided__add-set {
-  justify-self: start;
-  min-height: 40px !important;
-  border: 0;
-  background: transparent;
-  color: var(--tend-forest);
 }
 
 .strength-guided__footer {
@@ -17648,116 +15936,6 @@ html[data-mobile-text-size="larger"] .today-rhythm-details-dialog--inline .today
   box-shadow: 0 1px 3px rgb(32 39 35 / 6%), 0 3px 8px rgb(32 39 35 / 3%);
 }
 
-.tend-app-preview .rhythm-card--details-summary {
-  display: grid;
-  gap: calc(8px * var(--app-text-scale, 1));
-  min-width: 0;
-  padding: 11px 14px;
-  border: 1px solid var(--tend-line);
-  border-radius: 15px;
-  background: var(--tend-surface, white);
-  box-shadow: 0 1px 3px rgb(32 39 35 / 6%), 0 3px 8px rgb(32 39 35 / 3%);
-}
-
-.rhythm-card__details-summary-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 44px;
-  align-items: start;
-  gap: 8px;
-  min-width: 0;
-}
-
-.rhythm-card__details-summary-copy,
-.rhythm-card__details-summary-copy .rhythm-title-row {
-  min-width: 0;
-}
-
-.rhythm-card--details-summary .rhythm-title-row {
-  align-items: flex-start;
-  gap: 6px;
-  margin: 0;
-}
-
-.rhythm-card--details-summary .rhythm-title-row h3 {
-  flex: 0 1 auto;
-  min-width: 0;
-  margin: 0;
-  font-size: calc(1.1875rem * var(--app-text-scale, 1));
-  line-height: 1.25;
-  overflow-wrap: anywhere;
-}
-
-.rhythm-card__details-summary-description {
-  margin: 4px 0 0;
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.875rem * var(--app-text-scale, 1));
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-.rhythm-card__details-summary-edit {
-  box-sizing: border-box;
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
-  min-height: 44px;
-  margin: 0;
-  border-radius: 10px;
-}
-
-.rhythm-card__details-summary-edit .today-rhythm-details__edit-visual {
-  top: 0;
-}
-
-.rhythm-card--details-summary .rhythm-card__details-summary-edit:focus-visible {
-  outline: 2px solid var(--tend-forest, var(--forest));
-  outline-offset: 2px;
-}
-
-.rhythm-card__details-summary-context {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  min-width: 0;
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
-  overflow-wrap: anywhere;
-}
-
-.rhythm-card__details-summary-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--tend-mist, #e8f5ef);
-  color: var(--tend-forest, var(--forest));
-  font-size: calc(0.6875rem * var(--app-text-scale, 1));
-  font-weight: 650;
-  line-height: 1.3;
-}
-
-.rhythm-card__details-summary-note {
-  flex-basis: 100%;
-  margin: 0;
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-.rhythm-card__details-summary-associations {
-  min-width: 0;
-}
-
-.rhythm-card__details-summary-footer {
-  min-width: 0;
-  padding-top: 8px;
-  border-top: 1px solid var(--tend-line, var(--line));
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
-}
-
 .today-rhythm-details__association-metadata-row {
   display: flex;
   flex-wrap: wrap;
@@ -17793,17 +15971,6 @@ html[data-mobile-text-size="larger"] .today-rhythm-details-dialog--inline .today
 .today-rhythm-details__category-foundation-names li {
   min-width: 0;
   overflow-wrap: anywhere;
-}
-
-.rhythm-history-view__score-card {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-  padding: 14px;
-}
-
-.rhythm-history-view__score-card > .health-score-breakdown {
-  min-width: 0;
 }
 
 .category-health-summary__unlinked {
@@ -17867,12 +16034,6 @@ html[data-mobile-text-size="larger"] .today-rhythm-details-dialog--inline .today
 .category-health-summary__edit-rhythm:focus-visible {
   outline: 2px solid var(--tend-forest, var(--forest));
   outline-offset: 2px;
-}
-
-.rhythm-history-view__score-details-grid,
-.rhythm-history-view__health-calculation-disclosure {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .rhythm-completion-form,
@@ -18273,27 +16434,6 @@ dialog.money-goal-dialog:not(.money-goal-dialog--rhythm-editor):not(.dialog--pho
   .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen .today-rhythm-details__body--history {
     overflow: hidden;
     padding-bottom: 0;
-  }
-
-  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen .rhythm-history-view--dialog {
-    flex: 1 1 auto;
-    max-height: none;
-    padding-inline: max(16px, env(safe-area-inset-left, 0px))
-      max(16px, env(safe-area-inset-right, 0px));
-  }
-
-  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen .rhythm-history-view__body--dialog {
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
-  }
-
-  .tend-app-preview .rhythm-history-view--dialog .rhythm-history-view__rhythm-header {
-    position: relative;
-    padding-top: 4px;
-  }
-
-  .tend-app-preview .rhythm-history-view--dialog .rhythm-history-view__body--dialog {
-    min-height: 0;
-    max-height: none;
   }
 }
 
@@ -18887,135 +17027,6 @@ dialog.money-goal-dialog:not(.money-goal-dialog--rhythm-editor):not(.dialog--pho
 
   .tend-app-preview .strength-setting-muscle__values {
     max-width: 190px;
-  }
-}
-
-.tend-app-preview .rhythm-history-view__body--dialog {
-  display: grid;
-  align-content: start;
-  gap: 16px;
-}
-
-.tend-app-preview .rhythm-history-view__card {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-  margin: 0;
-  padding: 18px 16px;
-  border: 1px solid var(--tend-line, var(--line));
-  border-radius: 18px;
-  background: var(--tend-surface, var(--card));
-  box-shadow: none;
-}
-
-.tend-app-preview .rhythm-history-view__score-section {
-  align-content: start;
-  gap: 12px;
-}
-
-.tend-app-preview .rhythm-history-view__body--dialog > .rhythm-history-view__score-section {
-  margin-bottom: 0;
-}
-
-.tend-app-preview .rhythm-history-view__score-section > .rhythm-history-view__score-card {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
-}
-
-.tend-app-preview .rhythm-history-view__completions {
-  align-content: start;
-  gap: 12px;
-}
-
-.tend-app-preview .rhythm-history-view__completions > h3,
-.tend-app-preview .rhythm-history-view__seasons-header > h3 {
-  font-size: calc(1.125rem * var(--app-text-scale, 1));
-  font-weight: 650;
-  line-height: 1.35;
-}
-
-.tend-app-preview .rhythm-history-view__completion-summary {
-  margin: 0;
-}
-
-.tend-app-preview .rhythm-history-view__empty-notice {
-  padding: 10px 12px;
-}
-
-.tend-app-preview .rhythm-history-view__seasons {
-  align-content: start;
-  gap: 12px;
-}
-
-.tend-app-preview .rhythm-history-view__seasons-header {
-  min-height: 44px;
-}
-
-.tend-app-preview .rhythm-history-view__season-add-row {
-  margin: 0;
-}
-
-.tend-app-preview .rhythm-history-view__logged-moments {
-  align-content: start;
-  gap: 12px;
-}
-
-.tend-app-preview .rhythm-history-view__logged-moments > summary {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  min-height: 44px;
-  cursor: pointer;
-  list-style: none;
-}
-
-.tend-app-preview .rhythm-history-view__logged-moments > summary::-webkit-details-marker {
-  display: none;
-}
-
-.tend-app-preview .rhythm-history-view__logged-heading {
-  min-width: 0;
-  color: var(--tend-ink, var(--ink));
-  font-size: calc(1.125rem * var(--app-text-scale, 1));
-  font-weight: 650;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
-.tend-app-preview .rhythm-history-view__logged-count {
-  flex: 0 0 auto;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: var(--tend-mist, #f1f4f1);
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.6875rem * var(--app-text-scale, 1));
-  font-weight: 600;
-  line-height: 1.3;
-  font-variant-numeric: tabular-nums;
-}
-
-.tend-app-preview .rhythm-history-view__logged-moments > summary > .disclosure-chevron {
-  flex: 0 0 16px;
-  margin-left: auto;
-  transition: transform 140ms ease;
-}
-
-.tend-app-preview .rhythm-history-view__logged-moments > summary > .disclosure-chevron--expanded {
-  transform: rotate(180deg);
-}
-
-.tend-app-preview .rhythm-history-view__logged-moments > summary:focus-visible {
-  outline: 3px solid var(--tend-forest, var(--forest));
-  outline-offset: 2px;
-  border-radius: 6px;
-}
-
-@media (max-width: 520px) {
-  .tend-app-preview .rhythm-history-view__card {
-    padding: 16px 14px;
   }
 }
 
@@ -19631,33 +17642,10 @@ html[data-mobile-text-size="larger"] .rhythm-editor__association-category-list--
   height: calc(26px * var(--app-text-scale));
 }
 
-.rhythm-metadata-status-group > svg,
-.rhythm-metadata-footer svg,
-.today-rhythm-details__edit-visual svg,
-.today-rhythm-details__history-button svg,
-.rhythm-history-view__score-info svg,
-.today-plan-section .today-plan__focus-trigger > svg,
-.today-plan-section .today-plan__focus-picker .rhythm-select__option > svg,
-.settings-icon-button svg {
-  width: calc(16px * var(--app-text-scale));
-  height: calc(16px * var(--app-text-scale));
-}
-
 .tend-app-preview .today-rhythm-details-dialog--inline .today-rhythm-details__actions--inline > .rhythm-card__tend {
   flex-basis: calc(92px * var(--app-text-scale));
   width: calc(92px * var(--app-text-scale));
   min-width: calc(92px * var(--app-text-scale));
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button {
-  flex-basis: var(--rhythm-card-score-width);
-  width: var(--rhythm-card-score-width);
-  min-width: var(--rhythm-card-score-width);
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button .rhythm-metadata-icon--history {
-  width: var(--rhythm-card-score-icon-size);
-  height: var(--rhythm-card-score-icon-size);
 }
 
 .rhythm-score-circle {
@@ -19761,4 +17749,3498 @@ html[data-mobile-text-size="larger"] .rhythm-editor__association-category-list--
 
 .today-plan-section .today-plan__empty-rhythms p {
   flex: 1 1 auto;
+}
+
+.money-goal-dialog--strength-rest-settings {
+  display: flex;
+  box-sizing: border-box;
+  width: min(360px, calc(100vw - 24px));
+  min-width: 0;
+  max-width: calc(100vw - 24px);
+  max-height: min(84dvh, 520px);
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--tend-line);
+  border-radius: 18px;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+  box-shadow: 0 18px 56px #10251d40;
+}
+
+.money-goal-dialog--strength-rest-settings::backdrop {
+  background: #10251d88;
+}
+
+.money-goal-dialog--strength-rest-settings > .money-goal-dialog__surface {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0;
+  padding:
+    max(16px, env(safe-area-inset-top, 0px))
+    max(16px, env(safe-area-inset-right, 0px))
+    max(12px, env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
+  overflow: hidden;
+}
+
+.money-goal-dialog--strength-rest-settings > .money-goal-dialog__surface > h2 {
+  margin: 0 48px 14px 0;
+  color: var(--tend-ink);
+  font-size: calc(1.12rem * var(--app-text-scale, 1));
+  font-weight: 700;
+}
+
+.money-goal-dialog--strength-rest-settings .strength-rest-settings__content {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  align-content: start;
+  gap: 14px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 2px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.money-goal-dialog--strength-rest-settings .strength-rest-settings__actions {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: stretch;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--tend-line);
+  background: var(--tend-surface);
+}
+
+.money-goal-dialog--strength-rest-settings .strength-rest-settings__apply {
+  width: 100%;
+  min-height: 48px;
+}
+
+.money-goal-dialog--strength-rest-settings[data-viewport-constrained] {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.money-goal-dialog--strength-rest-settings .strength-rest-duration-picker__presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@media (max-width: 700px) {
+  .money-goal-dialog--strength-rest-settings:not([data-viewport-constrained]) {
+      max-height: min(84dvh, 520px);
+    }
+}
+
+@media (max-height: 560px) {
+  .money-goal-dialog--strength-rest-settings {
+      max-height: 100dvh;
+    }
+}
+
+.strength-guided__exercise-timer {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+  padding: 14px;
+  border-radius: 16px;
+  background: #111915;
+  color: #e3e9e4;
+}
+
+.strength-guided__exercise-timer > p {
+  margin: 0;
+  font-size: calc(.82rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+}
+
+.strength-guided__exercise-timer > strong {
+  color: #ff9d42;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: clamp(calc(2.1rem * var(--app-text-scale, 1)), 8vw, calc(3.2rem * var(--app-text-scale, 1)));
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .08em;
+  line-height: 1.05;
+}
+
+.strength-guided__duration-entry {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.strength-guided__duration-entry .strength-form-field {
+  color: #e3e9e4;
+}
+
+.strength-guided__duration-entry input {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px;
+  border: 1px solid #536157;
+  border-radius: 9px;
+  background: #19231d;
+  color: #fff;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 360px) {
+  .strength-guided__duration-entry {
+      grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.health-aggregate-evidence--person-rhythm .health-aggregate-evidence__heading {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.health-aggregate-evidence__heading-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.health-aggregate-evidence--person-rhythm .health-aggregate-evidence__heading h4 {
+  font-size: calc(1rem * var(--app-text-scale, 1));
+}
+
+.health-aggregate-evidence__count {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #15875a 8%, var(--tend-surface, #fff));
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.health-aggregate-evidence__info {
+  position: relative;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+}
+
+.health-aggregate-evidence__info summary {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: calc(0.6875rem * var(--app-text-scale, 1));
+  font-weight: 700;
+  list-style: none;
+}
+
+.health-aggregate-evidence__info summary::-webkit-details-marker {
+  display: none;
+}
+
+.health-aggregate-evidence__info > span {
+  position: absolute;
+  z-index: 1;
+  top: calc(100% + 6px);
+  right: 0;
+  width: min(250px, calc(100vw - 48px));
+  padding: 8px 10px;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 8px;
+  background: var(--tend-surface, #fff);
+  box-shadow: 0 4px 14px rgb(23 37 30 / 12%);
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.health-aggregate-evidence__table tbody th > span {
+  display: block;
+}
+
+.health-aggregate-evidence__table tbody th small {
+  display: block;
+  margin-top: 3px;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.health-aggregate-evidence--person-rhythm .health-aggregate-evidence__table {
+  table-layout: fixed;
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+}
+
+.health-aggregate-evidence--person-rhythm .health-aggregate-evidence__table th,
+.health-aggregate-evidence--person-rhythm .health-aggregate-evidence__table td {
+  padding: 7px 4px;
+}
+
+.health-aggregate-evidence--person-rhythm .health-aggregate-evidence__table thead th {
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+}
+
+.health-aggregate-evidence--person-rhythm .health-aggregate-evidence__table tr > :first-child {
+  width: 52%;
+}
+
+.health-aggregate-evidence--person-rhythm .health-aggregate-evidence__table tbody th > span {
+  overflow-wrap: anywhere;
+}
+
+.health-aggregate-evidence__score.category-health-badge {
+  min-width: 34px;
+  min-height: 28px;
+  padding: 3px 7px;
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1;
+}
+
+.health-aggregate-evidence__not-scored {
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+}
+
+.health-aggregate-evidence__not-scored summary {
+  width: fit-content;
+  padding: 4px 0;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.health-aggregate-evidence__not-scored ul {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0 0 0 16px;
+  list-style: none;
+}
+
+.health-aggregate-evidence__not-scored li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.health-aggregate-evidence__not-scored li strong {
+  color: var(--tend-ink, var(--ink));
+  font-weight: 500;
+}
+
+.health-aggregate-evidence--person-rhythm .health-aggregate-evidence__averages {
+  gap: 7px;
+  padding: 9px 12px;
+}
+
+.health-aggregate-evidence--person-rhythm .health-aggregate-evidence__averages p {
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+}
+
+.health-aggregate-evidence__excluded {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 12px;
+}
+
+.health-aggregate-evidence__excluded h5,
+.health-aggregate-evidence__excluded ul {
+  margin: 0;
+}
+
+.health-aggregate-evidence__excluded h5 {
+  font-size: calc(0.875rem * var(--app-text-scale, 1));
+}
+
+.health-aggregate-evidence__excluded ul {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.health-aggregate-evidence__excluded li {
+  display: grid;
+  gap: 2px;
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.health-aggregate-evidence__excluded li > span {
+  color: var(--tend-secondary, var(--ink-soft));
+}
+
+.health-info-what-counts__contribution-group--rhythm,
+.health-info-what-counts__contribution-group--linked-rhythms,
+.health-info-what-counts__contribution-group--person-area {
+  width: 88%;
+}
+
+.health-info-what-counts__contribution-group--person-area {
+  border-color: color-mix(in srgb, var(--tend-forest, var(--forest)) 35%, var(--tend-line, var(--line)));
+}
+
+.money-goal-dialog.flexibility-routine-editor {
+  box-sizing: border-box;
+  width: min(600px, calc(100vw - 24px));
+  max-height: min(88dvh, 840px);
+  overflow: hidden;
+  border-color: var(--tend-line);
+  border-radius: 16px;
+  background: var(--tend-canvas);
+}
+
+.money-goal-dialog.flexibility-routine-editor > .money-goal-dialog__surface {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  padding: 20px;
+  overflow: hidden;
+}
+
+.money-goal-dialog.flexibility-routine-editor .money-goal-dialog__surface > h2 {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 48px 14px 0;
+  border-bottom: 1px solid var(--tend-line);
+  color: var(--tend-ink);
+  font-size: calc(1.24rem * var(--app-text-scale, 1));
+  letter-spacing: -.02em;
+  overflow-wrap: anywhere;
+}
+
+.money-goal-dialog.flexibility-routine-editor .money-goal-dialog__close {
+  top: 8px;
+  right: 8px;
+  color: var(--tend-secondary);
+}
+
+.money-goal-dialog.flexibility-routine-editor .money-goal-dialog__close:hover {
+  background: var(--tend-mist);
+  color: var(--tend-ink);
+}
+
+.flexibility-routine-editor__form {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+}
+
+.flexibility-routine-editor__body {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-content: start;
+  gap: 12px;
+  padding: 14px 2px 12px 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+.flexibility-routine-editor__details,
+.flexibility-routine-editor__stretch {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+  background: var(--tend-surface);
+}
+
+.flexibility-routine-editor__details {
+  display: grid;
+  gap: 10px;
+}
+
+.flexibility-routine-editor .strength-form-field {
+  min-width: 0;
+  gap: 5px;
+  color: var(--tend-secondary);
+  font-size: calc(.84rem * var(--app-text-scale, 1));
+  font-weight: 600;
+}
+
+.flexibility-routine-editor .strength-form-field input,
+.flexibility-routine-editor .strength-form-field select,
+.flexibility-routine-editor .strength-form-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 7px 9px;
+  border: 1px solid var(--tend-line);
+  border-radius: 9px;
+  background-color: var(--tend-surface);
+  color: var(--tend-ink);
+  font: inherit;
+  font-weight: 400;
+}
+
+.flexibility-routine-editor .strength-form-field textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.flexibility-routine-editor .strength-form-field input:focus-visible,
+.flexibility-routine-editor .strength-form-field select:focus-visible,
+.flexibility-routine-editor .strength-form-field textarea:focus-visible,
+.flexibility-routine-editor__stretch-summary:focus-visible,
+.flexibility-routine-editor__region-chip:focus-within {
+  outline: 2px solid var(--tend-forest);
+  outline-offset: 2px;
+}
+
+.flexibility-routine-editor .strength-form-field [aria-invalid="true"] {
+  border-color: var(--score-red-text);
+}
+
+.flexibility-routine-editor__select .rhythm-select__trigger {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  border-color: var(--tend-line);
+  border-radius: 9px;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+  font: inherit;
+  font-weight: 400;
+}
+
+.flexibility-routine-editor__estimate {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--tend-secondary);
+  font-size: calc(.86rem * var(--app-text-scale, 1));
+}
+
+.flexibility-routine-editor__clock {
+  color: var(--tend-forest);
+  font-size: calc(1.2rem * var(--app-text-scale, 1));
+  line-height: 1;
+}
+
+.flexibility-routine-editor__stretches {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.flexibility-routine-editor__stretch {
+  padding: 0;
+}
+
+.flexibility-routine-editor__stretch-summary {
+  display: grid;
+  min-height: 58px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  color: var(--tend-ink);
+  cursor: pointer;
+  list-style: none;
+}
+
+.flexibility-routine-editor__stretch-summary::-webkit-details-marker {
+  display: none;
+}
+
+.flexibility-routine-editor__number {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--tend-mist);
+  color: var(--tend-forest);
+  font-size: calc(.8rem * var(--app-text-scale, 1));
+  font-weight: 700;
+}
+
+.flexibility-routine-editor__summary-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.flexibility-routine-editor__summary-copy strong {
+  color: var(--tend-forest);
+  font-size: calc(.98rem * var(--app-text-scale, 1));
+  overflow-wrap: anywhere;
+}
+
+.flexibility-routine-editor__summary-copy > span {
+  color: var(--tend-secondary);
+  font-size: calc(.78rem * var(--app-text-scale, 1));
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.flexibility-routine-editor__chevron {
+  color: var(--tend-secondary);
+  font-size: calc(1.15rem * var(--app-text-scale, 1));
+  line-height: 1;
+  transition: transform 120ms ease;
+}
+
+.flexibility-routine-editor__stretch[open] .flexibility-routine-editor__chevron {
+  transform: rotate(180deg);
+}
+
+.flexibility-routine-editor__stretch-content {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  margin: 0 11px 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--tend-line);
+}
+
+.flexibility-routine-editor__field-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.flexibility-routine-editor__region-field {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.flexibility-routine-editor__region-field legend {
+  margin-bottom: 8px;
+  color: var(--tend-secondary);
+  font-size: calc(.84rem * var(--app-text-scale, 1));
+  font-weight: 600;
+}
+
+.flexibility-routine-editor__regions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.flexibility-routine-editor__region-chip {
+  position: relative;
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid var(--tend-line);
+  border-radius: 999px;
+  background: var(--tend-surface);
+  color: var(--tend-secondary);
+  font-size: calc(.8rem * var(--app-text-scale, 1));
+  cursor: pointer;
+}
+
+.flexibility-routine-editor__region-chip.is-selected {
+  border-color: var(--tend-forest);
+  background: #e5f1e9;
+  color: var(--tend-forest);
+  font-weight: 600;
+}
+
+.flexibility-routine-editor__region-chip input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.flexibility-routine-editor__region-chip > span {
+  display: inline-grid;
+  width: 15px;
+  height: 15px;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.flexibility-routine-editor__field-error {
+  margin: -4px 0 0;
+  color: var(--score-red-text);
+  font-size: calc(.78rem * var(--app-text-scale, 1));
+}
+
+.money-goal-dialog.flexibility-routine-editor .flexibility-routine-editor__actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0 -20px -20px;
+  padding: 12px 20px calc(14px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--tend-line);
+  background: color-mix(in srgb, var(--tend-canvas) 94%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.money-goal-dialog.flexibility-routine-editor .flexibility-routine-editor__actions .btn {
+  min-height: 44px;
+}
+
+@media (max-width: 700px) {
+  .money-goal-dialog.flexibility-routine-editor.dialog--phone-fullscreen {
+    inset: 0;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    max-width: none;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 700px) {
+
+  .money-goal-dialog.flexibility-routine-editor > .money-goal-dialog__surface {
+    padding:
+      calc(env(safe-area-inset-top, 0px) + 18px)
+      max(16px, env(safe-area-inset-right, 0px))
+      calc(env(safe-area-inset-bottom, 0px) + 12px)
+      max(16px, env(safe-area-inset-left, 0px));
+  }
+}
+
+@media (max-width: 700px) {
+
+  .money-goal-dialog.flexibility-routine-editor .money-goal-dialog__close {
+    top: calc(env(safe-area-inset-top, 0px) + 12px);
+    right: max(16px, env(safe-area-inset-right, 0px));
+  }
+}
+
+@media (max-width: 700px) {
+
+  .money-goal-dialog.flexibility-routine-editor .flexibility-routine-editor__actions {
+    margin: 0 -16px -12px;
+    padding: 10px max(16px, env(safe-area-inset-right, 0px))
+      calc(12px + env(safe-area-inset-bottom, 0px))
+      max(16px, env(safe-area-inset-left, 0px));
+  }
+}
+
+@media (max-width: 420px) {
+  .money-goal-dialog.flexibility-routine-editor > .money-goal-dialog__surface {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+}
+
+@media (max-width: 420px) {
+
+  .money-goal-dialog.flexibility-routine-editor .flexibility-routine-editor__actions {
+    margin-right: -12px;
+    margin-left: -12px;
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+}
+
+.person-profile__health-disclosure[hidden] {
+  display: none;
+}
+
+.person-profile__health-disclosure > .person-component-health-summary {
+  margin: 0;
+}
+
+.person-health-component-score__badge.category-health-badge {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 42px;
+  height: 28px;
+  margin: 0;
+  padding: 0 8px;
+  font-size: calc(0.875rem * var(--app-text-scale, 1));
+}
+
+.person-health-component-score__label {
+  display: inline;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+button.person-health-component-score {
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+button.person-health-component-score:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--tend-forest, var(--forest));
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+
+.person-health-input-facts {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+}
+
+.person-health-input-facts > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  gap: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--tend-line, var(--line));
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.35;
+}
+
+.person-health-input-facts dt {
+  color: var(--tend-secondary, var(--ink-soft));
+}
+
+.person-health-input-facts dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.today-rhythm-details-dialog--inline {
+  --rhythm-details-horizontal-padding: 16px;
+  --rhythm-card-title-size: var(--tend-type-today-heading);
+  --rhythm-card-description-size: calc(0.9375rem * var(--app-text-scale, 1));
+  --rhythm-card-people-size: calc(0.75rem * var(--app-text-scale, 1));
+  --rhythm-card-metadata-size: calc(0.8125rem * var(--app-text-scale, 1));
+  --rhythm-card-action-size: calc(0.875rem * var(--app-text-scale, 1));
+  --rhythm-card-score-value-size: calc(0.875rem * var(--app-text-scale, 1));
+  --rhythm-card-badge-height: calc(2rem * var(--app-text-scale, 1));
+  --rhythm-card-avatar-size: calc(1.5rem * var(--app-text-scale, 1));
+  --rhythm-card-footer-row-height: calc(2rem * var(--app-text-scale, 1));
+  --rhythm-card-score-width: calc(68px * var(--app-text-scale, 1));
+  --rhythm-card-score-height: var(--rhythm-card-badge-height);
+  --rhythm-card-score-icon-size: calc(14px * var(--app-text-scale, 1));
+  --rhythm-card-title-description-gap: calc(8px * var(--app-text-scale, 1));
+  --rhythm-card-description-content-gap: calc(2px * var(--app-text-scale, 1));
+  --rhythm-card-badge-action-gap: calc(12px * var(--app-text-scale, 1));
+  --rhythm-card-action-footer-gap: calc(10px * var(--app-text-scale, 1));
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0 0 8px;
+  padding: 0;
+  overflow: visible;
+  border: 1px solid #d3ded6;
+  border-radius: 23px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(32, 39, 35, .07), 0 6px 16px rgba(32, 39, 35, .05);
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__header {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: start;
+  gap: 8px;
+  padding-block: 0;
+  padding-inline: var(--rhythm-details-horizontal-padding);
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__title-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__title-copy {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  min-width: 0;
+  gap: var(--rhythm-card-title-description-gap);
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__title-group h3 {
+  display: block;
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  font-size: var(--rhythm-card-title-size);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__edit-icon {
+  position: relative;
+  display: flex;
+  align-self: start;
+  justify-self: end;
+  align-items: flex-start;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  margin: 0;
+  font-size: var(--rhythm-card-title-size);
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__edit-visual {
+  position: relative;
+  top: calc((1.3em - 24px) / 2);
+  left: auto;
+  width: 28px;
+  height: 24px;
+  transform: none;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__edit-visual svg {
+  width: calc(16px * var(--app-text-scale, 1));
+  height: calc(16px * var(--app-text-scale, 1));
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__description {
+  margin: 0 0 var(--rhythm-card-description-content-gap);
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: var(--rhythm-card-description-size);
+  line-height: 1.5;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__actions--inline {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin-top: 0;
+  gap: 8px;
+  background: transparent;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button {
+  position: relative;
+  isolation: isolate;
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 var(--rhythm-card-score-width);
+  align-items: center;
+  justify-content: center;
+  gap: calc(6px * var(--app-text-scale, 1));
+  width: var(--rhythm-card-score-width);
+  min-width: var(--rhythm-card-score-width);
+  height: max(44px, calc(44px * var(--app-text-scale, 1)));
+  min-height: max(44px, calc(44px * var(--app-text-scale, 1)));
+  padding: 0 calc(8px * var(--app-text-scale, 1));
+  border-color: transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #fff;
+  transition: filter 120ms ease-out, outline-color 120ms ease-out;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button::before {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: 50%;
+  width: var(--rhythm-card-score-width);
+  height: var(--rhythm-card-score-height);
+  border-radius: inherit;
+  background: var(--score-neutral);
+  content: "";
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="green"] {
+  background: transparent;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="green"]::before {
+  background: var(--score-green);
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="yellow"] {
+  background: transparent;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="yellow"]::before {
+  background: var(--score-yellow);
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="red"] {
+  background: transparent;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="red"]::before {
+  background: var(--score-red);
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button:hover {
+  filter: brightness(.94);
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button:active {
+  filter: brightness(.88);
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="green"]:hover {
+  background: transparent;
+  filter: none;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="green"]:hover::before {
+  background: #0f9b61;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="green"]:active {
+  background: transparent;
+  filter: none;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="green"]:active::before {
+  background: #0b8d56;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="red"]:hover {
+  background: transparent;
+  filter: none;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="red"]:hover::before {
+  background: #ed5644;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="red"]:active {
+  background: transparent;
+  filter: none;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="red"]:active::before {
+  background: #d04a3c;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button .rhythm-metadata-icon--history {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 var(--rhythm-card-score-icon-size);
+  width: var(--rhythm-card-score-icon-size);
+  height: var(--rhythm-card-score-icon-size);
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-score {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  min-width: 2ch;
+  font-size: var(--rhythm-card-score-value-size);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.strength-guided__set--add {
+  border-style: dashed;
+  background: var(--tend-surface);
+  color: var(--tend-forest);
+}
+
+.strength-guided__set--add:hover {
+  background: #e5f1e9;
+}
+
+.strength-guided__set--add > span {
+  font-size: calc(1.7rem * var(--app-text-scale, 1));
+  line-height: 1;
+}
+
+.strength-guided__side-indicator {
+  margin: 3px 0 0;
+  color: var(--tend-forest);
+  font-size: clamp(calc(1.55rem * var(--app-text-scale, 1)), 6vw, calc(2rem * var(--app-text-scale, 1)));
+  font-weight: 600;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 700px) {
+
+  .strength-guided__side-indicator {
+    font-size: clamp(calc(1.35rem * var(--app-text-scale, 1)), 6vw, calc(1.8rem * var(--app-text-scale, 1)));
+  }
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button {
+  flex-basis: var(--rhythm-card-score-width);
+  width: var(--rhythm-card-score-width);
+  min-width: var(--rhythm-card-score-width);
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-button .rhythm-metadata-icon--history {
+  width: var(--rhythm-card-score-icon-size);
+  height: var(--rhythm-card-score-icon-size);
+}
+
+.health-fitness-flexibility-summary {
+  display: grid;
+  gap: 8px;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--tend-border, #e6e9e6);
+}
+
+.health-fitness-flexibility-summary > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.health-fitness-flexibility-summary > div > span {
+  font-size: 1.1em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.health-fitness-flexibility-summary .health-score-meter {
+  height: 7px;
+}
+
+.health-fitness-flexibility-summary p {
+  margin: 0;
+  color: var(--tend-text-muted, #68736b);
+  font-size: .9em;
+}
+
+.flexibility-summary__count {
+  display: grid;
+  margin-top: 8px;
+  color: var(--tend-text-muted, #68736b);
+  font-size: calc(.875rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+}
+
+.flexibility-form__region-group h3 {
+  margin: 0 0 7px;
+  color: var(--tend-text-muted, #68736b);
+  font-size: .85em;
+  font-weight: 700;
+}
+
+.flexibility-history__list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.flexibility-region {
+  width: 100%;
+}
+
+.flexibility-map-card > .btn {
+  margin-top: 14px;
+}
+
+.flexibility-history__list > li {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.flexibility-history__list > li > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.flexibility-history__list > li > div:first-child > span {
+  overflow-wrap: anywhere;
+}
+
+.flexibility-history__actions,
+.flexibility-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.flexibility-settings > p {
+  color: var(--tend-text-muted, #68736b);
+}
+
+.flexibility-form,
+.flexibility-settings {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.flexibility-form > label,
+.flexibility-settings fieldset > label {
+  display: grid;
+  gap: 6px;
+}
+
+.flexibility-form input:not([type="checkbox"]),
+.flexibility-form textarea,
+.flexibility-settings input {
+  width: 100%;
+  min-width: 0;
+}
+
+.flexibility-form fieldset,
+.flexibility-settings fieldset {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--tend-border, #e6e9e6);
+  border-radius: 12px;
+}
+
+.flexibility-form__region-group > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.flexibility-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.flexibility-settings fieldset > label {
+  grid-template-columns: minmax(0, 1fr) minmax(70px, 90px) auto;
+  align-items: center;
+}
+
+.flexibility-error {
+  margin: 0;
+  color: var(--tend-danger, #a63b34);
+}
+
+@media (max-width: 420px) {
+  .flexibility-history__list > li {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 420px) {
+
+  .flexibility-history__actions {
+    flex-direction: column;
+  }
+}
+
+.flexibility-routine-collection,
+.flexibility-routine-list,
+.flexibility-routine-editor__form,
+.flexibility-guided__controls,
+.flexibility-guided__early-confirm,
+.flexibility-timer-settings__content,
+.flexibility-linked-rhythm {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.flexibility-routine-collection {
+  gap: 0;
+}
+
+.flexibility-routine-resume {
+  justify-content: flex-start;
+}
+
+.flexibility-routine-list {
+  margin-top: 14px;
+}
+
+.money-goal-dialog.flexibility-routine-editor > .money-goal-dialog__surface {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.flexibility-routine-editor__form {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-content: start;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+}
+
+.flexibility-routine-card {
+  min-width: 0;
+}
+
+.flexibility-routine-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.flexibility-routine-editor__form > label,
+.flexibility-routine-editor__stretch > label,
+.flexibility-timer-settings__content > label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.flexibility-routine-editor__form input:not([type="checkbox"]),
+.flexibility-routine-editor__form textarea,
+.flexibility-routine-editor__form select,
+.flexibility-guided__controls input,
+.flexibility-guided__controls select,
+.flexibility-guided__early-confirm input,
+.flexibility-timer-settings__content input[type="number"],
+.flexibility-timer-settings__content select {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+}
+
+.flexibility-routine-editor__estimate,
+.flexibility-guided__target,
+.flexibility-guided__instruction,
+.flexibility-timer-settings__content > p,
+.flexibility-linked-rhythm > p {
+  margin: 0;
+  color: var(--tend-secondary);
+  font-size: calc(.9rem * var(--app-text-scale, 1));
+  line-height: 1.45;
+}
+
+.flexibility-linked-rhythm {
+  padding: 12px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+  background: var(--tend-mist);
+}
+
+.flexibility-linked-rhythm label {
+  display: grid;
+  gap: 6px;
+}
+
+.flexibility-linked-rhythm select {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+}
+
+.flexibility-routine-editor__stretch,
+.flexibility-routine-editor__stretch > fieldset {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+}
+
+.flexibility-routine-editor__regions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.flexibility-routine-editor__regions label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.flexibility-guided__controls {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.flexibility-guided__controls > label,
+.flexibility-guided__early-confirm > label {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  color: var(--tend-secondary);
+  font-size: calc(.85rem * var(--app-text-scale, 1));
+}
+
+.flexibility-guided__rounds {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.flexibility-guided__timer {
+  min-width: 0;
+}
+
+.flexibility-guided__timer .settings-icon-button {
+  color: #e3e9e4;
+}
+
+.flexibility-guided__timer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.flexibility-guided__early-confirm {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+}
+
+.flexibility-timer-settings__content .strength-rest-duration-picker__presets {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.flexibility-timer-settings__duration {
+  gap: 12px;
+}
+
+.flexibility-timer-settings__custom-field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.flexibility-timer-settings__custom-field input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+}
+
+.flexibility-timer-settings__select {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.flexibility-timer-settings__direction {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.flexibility-timer-settings__direction legend {
+  grid-column: 1 / -1;
+  margin-bottom: 6px;
+  color: var(--tend-ink);
+  font-weight: 600;
+}
+
+.flexibility-timer-settings__direction label {
+  display: flex;
+  min-width: 0;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--tend-line);
+  border-radius: 10px;
+  background: var(--tend-surface);
+  color: var(--tend-secondary);
+  text-align: center;
+  cursor: pointer;
+}
+
+.flexibility-timer-settings__direction label:has(input:checked) {
+  border-color: var(--tend-forest);
+  background: #e5f1e9;
+  color: var(--tend-forest);
+  font-weight: 600;
+}
+
+.flexibility-timer-settings__direction input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  margin: 0;
+  accent-color: var(--tend-forest);
+}
+
+.money-goal-dialog--strength-rest-settings.flexibility-timer-settings
+  .strength-rest-settings__actions {
+  gap: 8px;
+}
+
+.flexibility-timer-settings__cancel,
+.money-goal-dialog--strength-rest-settings .flexibility-timer-settings__apply {
+  flex: 1 1 0;
+  width: auto;
+  min-height: 48px;
+}
+
+.flexibility-timer-settings__content .strength-rest-settings__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 520px) {
+  .flexibility-routine-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 520px) {
+
+  .flexibility-routine-card__actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+
+  .flexibility-guided__early-confirm {
+    grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  }
+}
+
+@media (max-width: 520px) {
+
+  .flexibility-guided__early-confirm > label {
+    grid-column: 1 / -1;
+  }
+}
+
+.money-goal-dialog.flexibility-routine-editor .flexibility-routine-editor__form {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.money-goal-dialog.flexibility-routine-editor .flexibility-routine-editor__body {
+  min-height: 0;
+}
+
+.money-goal-dialog.flexibility-routine-editor .flexibility-routine-editor__stretch {
+  display: block;
+  padding: 0;
+}
+
+.money-goal-dialog.flexibility-routine-editor .flexibility-routine-editor__regions {
+  gap: 7px;
+}
+
+.rhythm-history-view__health-weight-formula {
+  display: block;
+  margin-top: 10px;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__health-weight-formula strong {
+  color: var(--tend-ink, var(--ink));
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rhythm-history-view__health-weight-plus {
+  display: grid;
+  align-self: center;
+  place-items: center;
+  color: var(--tend-ink, var(--ink));
+  font-size: calc(1.875rem * var(--app-text-scale, 1));
+  font-weight: 800;
+  line-height: 1;
+}
+
+    .rhythm-history-view__score-details-grid:not([hidden]) {
+      border-top: 1px solid var(--tend-line, var(--line));
+    }
+
+.rhythm-history-view__health-details-dialog .money-goal-dialog__title-row > h2 {
+  padding-right: 0;
+}
+
+.rhythm-history-view__health-details-back {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--tend-mist, #e5f2eb);
+  color: var(--tend-forest, var(--forest));
+  cursor: pointer;
+}
+
+.rhythm-history-view__health-details-back svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.rhythm-history-view__health-details-back:focus-visible {
+  outline: 2px solid var(--tend-forest, var(--forest));
+  outline-offset: 2px;
+}
+
+.health-score-breakdown__header .rhythm-history-view__score-info {
+  width: 40px;
+  height: 40px;
+}
+
+.health-scoring-details-card .rhythm-history-view__health-weight-panels {
+  grid-template-columns: minmax(120px, 1.45fr) 24px minmax(120px, 1fr);
+  gap: 8px;
+}
+
+.health-scoring-details-card .rhythm-history-view__health-weight-value strong {
+  white-space: nowrap;
+}
+
+@container (max-width: 380px) {
+  .rhythm-health-scoring-card.health-scoring-details-card .rhythm-history-view__health-weight-panels {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (max-width: 380px) {
+
+  .rhythm-health-scoring-card.health-scoring-details-card .rhythm-history-view__health-weight-plus {
+    line-height: 1;
+    transform: rotate(90deg);
+  }
+}
+
+.rhythm-health-scoring-card .rhythm-history-view__health-weight-panels {
+  grid-template-columns: minmax(0, 1.6fr) 28px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 7px;
+}
+
+.rhythm-health-scoring-card .rhythm-history-view__health-weight-panel {
+  padding: 18px 16px;
+  border-radius: 12px;
+}
+
+.rhythm-health-scoring-card .rhythm-history-view__health-weight-value {
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.rhythm-health-scoring-card .rhythm-history-view__health-weight-value svg {
+  width: 20px;
+  height: 20px;
+}
+
+.rhythm-health-scoring-card .rhythm-history-view__health-weight-value strong {
+  font-size: clamp(calc(1.625rem * var(--app-text-scale, 1)), 7vw, calc(2.5rem * var(--app-text-scale, 1)));
+  font-weight: 600;
+}
+
+.rhythm-health-scoring-card .rhythm-history-view__health-weight-name {
+  font-size: calc(1rem * var(--app-text-scale, 1));
+  font-weight: 500;
+}
+
+.rhythm-health-scoring-card .rhythm-history-view__health-weight-formula {
+  margin-top: 12px;
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.45;
+}
+
+.rhythm-health-scoring-card .rhythm-history-view__health-weight-plus {
+  font-size: calc(1.875rem * var(--app-text-scale, 1));
+  font-weight: 700;
+}
+
+.rhythm-health-scoring-card .rhythm-history-view__breakdown-rows {
+  font-size: calc(0.875rem * var(--app-text-scale, 1));
+}
+
+.rhythm-health-scoring-card .rhythm-history-view__breakdown-rows > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 0;
+}
+
+.rhythm-health-scoring-card .rhythm-history-view__breakdown-rows dt {
+  min-width: 0;
+}
+
+.rhythm-health-scoring-card .rhythm-history-view__breakdown-rows dd {
+  min-width: 0;
+  font-weight: 700;
+}
+
+.health-info-calculation .rhythm-history-view__health-weight-panels,
+.health-rollup__feature .rhythm-history-view__health-weight-panels {
+  grid-template-columns: minmax(0, 1.1fr) 20px minmax(0, 0.9fr);
+}
+
+.rhythm-history-view__health-weight-score {
+  display: block;
+  margin-top: 2px;
+  color: var(--tend-ink, var(--ink));
+  font-size: calc(1.0625rem * var(--app-text-scale, 1));
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.rhythm-history-view__health-weight-description,
+.health-info-calculation__note {
+  display: block;
+  margin-top: 4px;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.6875rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.health-rollup__feature .rhythm-history-view__health-weight-panels {
+  margin-top: 0;
+  grid-template-columns: minmax(0, 1.1fr) 20px minmax(0, 0.9fr);
+}
+
+.marriage-foundation-score-info__content .rhythm-history-view__health-weight-panels {
+  margin-top: 2px;
+}
+
+.marriage-foundations-section__title-row .rhythm-history-view__score-info {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+}
+
+.person-profile-health-overview .category-health-summary__title-row .rhythm-history-view__score-info {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+}
+
+.today-rhythm-details__history-button:focus-visible,
+.rhythm-history-view__entry-action:focus-visible,
+.rhythm-history-view__delete-actions button:focus-visible,
+.rhythm-history-view__chart-scroll:focus-visible {
+  outline: 3px solid var(--tend-forest, var(--forest));
+  outline-offset: 2px;
+}
+
+.rhythm-history-view {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  margin-top: 14px;
+  padding: 0 var(--rhythm-details-horizontal-padding, 16px) var(--rhythm-details-horizontal-padding, 16px);
+}
+
+.rhythm-history-view--dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+  max-height: min(calc(85vh - 36px), 784px);
+  padding: 0 var(--rhythm-details-horizontal-padding, 16px);
+  margin-top: 0;
+}
+
+.rhythm-history-view--dialog:focus {
+  outline: none;
+}
+
+.rhythm-history-view__rhythm-header {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rhythm-history-view--dialog .rhythm-history-view__rhythm-header {
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 12px;
+  align-items: start;
+  flex: 0 0 auto;
+  padding: 0;
+  background: var(--canvas);
+}
+
+.rhythm-history-view__body {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.rhythm-history-view__body--dialog {
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin-right: calc(-1 * var(--rhythm-details-horizontal-padding, 16px) + 2px);
+  padding: 10px 16px 16px 0;
+  scrollbar-gutter: stable;
+}
+
+.rhythm-history-view__title-row {
+  display: flex;
+  grid-column: 1;
+  align-items: flex-start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.rhythm-history-view__header-actions {
+  display: flex;
+  grid-column: 2;
+  grid-row: 1;
+  align-items: center;
+  gap: 6px;
+}
+
+.rhythm-history-view__title-copy {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.rhythm-history-view__title-row h3 {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--tend-ink, var(--ink));
+  font-size: calc(1.375rem * var(--app-text-scale, 1));
+  font-weight: 750;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__season-range-undo {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 10px;
+  background: transparent;
+  color: var(--tend-ink, var(--ink));
+  cursor: pointer;
+}
+
+.rhythm-history-view__season-range-undo:hover {
+  background: var(--tend-surface, var(--card));
+}
+
+.rhythm-history-view__season-range-undo:focus-visible {
+  outline: 3px solid var(--tend-forest, var(--forest));
+  outline-offset: 2px;
+}
+
+.rhythm-history-view__season-range-undo svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.rhythm-history-view__undo-announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.rhythm-history-view__undo-error {
+  margin: 0;
+  color: var(--tend-danger, #a12616);
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+}
+
+.rhythm-history-view__completions > h3 {
+  margin: 0;
+  color: var(--tend-ink, var(--ink));
+  font-size: calc(1.0625rem * var(--app-text-scale, 1));
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__seasons {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rhythm-history-view__seasons-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+}
+
+.rhythm-history-view__season-add {
+  min-height: 44px;
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+
+.rhythm-history-view__season-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rhythm-history-view__season-add-row > .rhythm-history-view__seasons-info-copy {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.rhythm-history-view__season-add-row > .rhythm-history-view__season-add {
+  flex: 0 0 auto;
+  margin-left: 0;
+}
+
+.rhythm-history-view__seasons-header > h3 {
+  margin: 0;
+  color: var(--tend-ink, var(--ink));
+  font-size: calc(1.0625rem * var(--app-text-scale, 1));
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.rhythm-history-view__season-edit:focus-visible,
+.rhythm-history-view__unknown-schedule-action:focus-visible {
+  outline: 2px solid var(--tend-accent, #198754);
+  outline-offset: 2px;
+}
+
+.rhythm-history-view__seasons-count {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #f1f4f1;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.6875rem * var(--app-text-scale, 1));
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rhythm-history-view__seasons-info {
+  margin-left: auto;
+}
+
+.rhythm-history-view__seasons-info-copy {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f4f7f4;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__seasons-explanation {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rhythm-history-view__seasons-explanation[hidden] {
+  display: none;
+}
+
+.rhythm-history-view__seasons-content {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.rhythm-history-view__season-note {
+  margin: 0;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__seasons-timeline {
+  display: flex;
+  gap: 3px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.rhythm-history-view__season-timeline-segment {
+  position: relative;
+  flex: 1 1 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.rhythm-history-view__season-timeline-segment::before {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--rhythm-season-color);
+  content: "";
+  transform: translateY(-50%);
+}
+
+.rhythm-history-view__season-timeline-segment:focus-visible {
+  outline: 3px solid var(--tend-forest, var(--forest));
+  outline-offset: 1px;
+}
+
+.rhythm-history-view__season-visual--fern { --rhythm-season-color: #2F8CFF; }
+.rhythm-history-view__season-visual--sage { --rhythm-season-color: #20B99A; }
+.rhythm-history-view__season-visual--sky { --rhythm-season-color: #FFD039; }
+.rhythm-history-view__season-visual--ocean { --rhythm-season-color: #FF7954; }
+.rhythm-history-view__season-visual--plum { --rhythm-season-color: #A653F5; }
+.rhythm-history-view__season-visual--clay { --rhythm-season-color: #FF7954; }
+.rhythm-history-view__season-visual--unknown { --rhythm-season-color: #a5a9a6; }
+
+.rhythm-history-view__season-card {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 2px solid var(--rhythm-season-color);
+  border-radius: 10px;
+  background: var(--tend-surface, var(--card, #fff));
+  scroll-margin-block: 12px;
+  transition: box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.rhythm-history-view__season-card--highlighted {
+  border-color: var(--rhythm-season-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rhythm-season-color) 24%, transparent);
+}
+
+.rhythm-history-view__season-card:focus {
+  outline: 2px solid var(--rhythm-season-color);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rhythm-history-view__season-card {
+    transition: none;
+  }
+}
+
+.rhythm-history-view__season-card-header {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rhythm-history-view__season-card-title-row {
+  display: flex;
+  flex: 1 1 160px;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rhythm-history-view__season-card h4 {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--tend-ink, var(--ink));
+  font-size: calc(1.1875rem * var(--app-text-scale, 1));
+  font-weight: 650;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__season-group-title {
+  margin: 0 0 2px;
+  color: var(--tend-ink, var(--ink));
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+}
+
+.rhythm-history-view__season-card-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0;
+  min-width: 44px;
+}
+
+.rhythm-history-view__season-card-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  column-gap: 12px;
+  row-gap: 6px;
+  min-width: 0;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--tend-line, var(--line));
+  color: var(--tend-ink-soft, var(--ink-soft));
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.35;
+}
+
+.rhythm-history-view__season-card-metadata {
+  display: flex;
+  flex: 1 1 150px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-width: 0;
+}
+
+.rhythm-history-view__season-card-timeframe {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  color: var(--tend-secondary, var(--ink-soft));
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__season-card-footer svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.rhythm-history-view__season-health-badge {
+  box-sizing: border-box;
+  display: flex;
+  flex: 0 0 58px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  min-width: 58px;
+  height: 44px;
+  margin-left: auto;
+  padding: 3px 5px;
+  border: 0;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--tend-ink, var(--ink)) 8%, var(--tend-surface, var(--card, #fff)));
+  color: var(--tend-ink, var(--ink));
+  font-size: calc(0.875rem * var(--app-text-scale, 1));
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.rhythm-history-view__season-health-badge.ma-score {
+  background: color-mix(in srgb, var(--tend-ink, var(--ink)) 8%, var(--tend-surface, var(--card, #fff)));
+  color: var(--tend-ink, var(--ink));
+}
+
+.rhythm-history-view__season-health-badge .ma-score__label {
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.5625rem * var(--app-text-scale, 1));
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.rhythm-history-view__season-health-badge .ma-score__value {
+  line-height: 1.2;
+}
+
+.rhythm-history-view__season-edit,
+.rhythm-history-view__season-delete,
+.rhythm-history-view__unknown-schedule-action {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 5px;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tend-ink, var(--ink));
+  font: inherit;
+  font-size: calc(0.6875rem * var(--app-text-scale, 1));
+  cursor: pointer;
+}
+
+.rhythm-history-view__season-delete {
+  min-height: 44px;
+  padding: 5px 8px;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tend-ink, var(--ink));
+  font: inherit;
+  font-size: calc(0.6875rem * var(--app-text-scale, 1));
+  cursor: pointer;
+}
+
+.rhythm-history-view__unknown-schedule-action {
+  justify-self: start;
+  min-width: 44px;
+  padding: 5px 10px;
+}
+
+.rhythm-history-view__season-undo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+}
+
+.rhythm-season-correction__saved-card .rhythm-history-view__season-card {
+  border-color: var(--tend-line);
+  background: var(--tend-surface);
+  box-shadow: none;
+}
+
+.rhythm-history-view__season-card-status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--tend-mist);
+  color: var(--tend-forest);
+  font-size: calc(0.625rem * var(--app-text-scale, 1));
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.rhythm-history-view__season-group {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+.rhythm-history-view__season-cards {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.rhythm-history-view__season-note {
+  margin-top: 5px;
+}
+
+.rhythm-history-view__seasons-divider {
+  height: 1px;
+  margin-top: 2px;
+  background: var(--tend-line, var(--line));
+}
+
+.rhythm-history-view__chart-section > p,
+.rhythm-history-view__empty {
+  margin: 0;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__score-section,
+.rhythm-history-view__completions {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--tend-line, var(--line));
+}
+
+.rhythm-history-view__score-section {
+  gap: 10px;
+}
+
+.rhythm-history-view__body--dialog > .rhythm-history-view__score-section {
+  margin-bottom: 16px;
+  border-top: 0;
+}
+
+.rhythm-history-view__score-card {
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 20px;
+  background: var(--tend-surface, var(--card));
+}
+
+.rhythm-history-view__score-card-controls {
+  position: absolute;
+  z-index: 2;
+  top: 11px;
+  right: 11px;
+}
+
+.rhythm-history-view__score-details-grid {
+  padding: 12px 0 0;
+  border-top: 1px solid var(--tend-line, var(--line));
+}
+
+.rhythm-history-view__score-details-columns {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 0;
+  min-width: 0;
+}
+
+.rhythm-history-view__score-details-columns::before {
+  position: absolute;
+  z-index: 1;
+  inset-block: 0 18px;
+  left: 50%;
+  width: 1px;
+  background: var(--tend-line, var(--line));
+  content: "";
+  pointer-events: none;
+}
+
+.rhythm-history-view__score-details-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 0;
+  min-width: 0;
+}
+
+.rhythm-history-view__score-summary-divider {
+  margin: 16px 16px 0;
+  border-top: 1px solid var(--tend-line, var(--line));
+}
+
+.rhythm-history-view__score-details-column {
+  min-width: 0;
+  padding: 0 16px 18px;
+}
+
+.rhythm-history-view__score-details-grid[hidden] {
+  display: none;
+}
+
+.rhythm-history-view__health-calculation-disclosure[hidden] {
+  display: none;
+}
+
+.rhythm-history-view__health-calculation-disclosure:not([hidden]) {
+  margin-top: 16px;
+}
+
+.rhythm-history-view__health-calculation {
+  container-type: inline-size;
+  display: grid;
+  gap: 8px;
+  margin: 0 16px 12px;
+  padding: 0;
+  border-radius: 14px;
+  background: var(--tend-surface, var(--card));
+}
+
+.rhythm-history-view__health-calculation-heading {
+  display: flex;
+  align-items: baseline;
+}
+
+.rhythm-history-view__health-calculation-heading h4 {
+  margin: 0;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  font-weight: 500;
+}
+
+.rhythm-history-view__health-weight-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) 20px minmax(0, 0.9fr);
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rhythm-history-view__health-weight-panel {
+  position: relative;
+  min-width: 0;
+  padding: 14px 10px;
+  border-radius: 12px;
+}
+
+.rhythm-history-view__health-weight-panel::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  border-radius: 12px 12px 0 0;
+  content: "";
+}
+
+.rhythm-history-view__health-weight-panel--consistency {
+  background: #e9f8ef;
+}
+
+.rhythm-history-view__health-weight-panel--consistency::before {
+  background: #13c77c;
+}
+
+.rhythm-history-view__health-weight-panel--on-track {
+  background: #edf6ff;
+}
+
+.rhythm-history-view__health-weight-panel--on-track::before {
+  background: #389ef5;
+}
+
+.rhythm-history-view__health-weight-value {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 5px;
+}
+
+.rhythm-history-view__health-weight-value svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.75;
+}
+
+.rhythm-history-view__health-weight-panel--consistency svg {
+  color: #13a967;
+}
+
+.rhythm-history-view__health-weight-panel--on-track svg {
+  color: #2588dd;
+}
+
+.rhythm-history-view__health-weight-value strong {
+  color: var(--tend-ink, var(--ink));
+  font-size: calc(1.25rem * var(--app-text-scale, 1));
+  font-weight: 600;
+  letter-spacing: -0.4px;
+  line-height: 1.1;
+}
+
+.rhythm-history-view__health-weight-name,
+.rhythm-history-view__health-weight-subtitle {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__health-weight-name {
+  color: var(--tend-ink, var(--ink));
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.rhythm-history-view__health-weight-subtitle {
+  margin-top: 2px;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.6875rem * var(--app-text-scale, 1));
+  line-height: 1.35;
+}
+
+.rhythm-history-view__health-unavailable {
+  margin: 0;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+@container (max-width: 320px) {
+  .rhythm-history-view__health-weight-panel--on-track {
+    padding-right: 4px;
+    padding-left: 4px;
+  }
+}
+
+@container (max-width: 320px) {
+
+  .rhythm-history-view__health-weight-panel--on-track .rhythm-history-view__health-weight-value {
+    gap: 3px;
+  }
+}
+
+@container (max-width: 320px) {
+
+  .rhythm-history-view__health-weight-panel--on-track .rhythm-history-view__health-weight-value svg {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+.rhythm-history-view__score-info {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--tend-secondary, var(--ink-soft));
+  cursor: pointer;
+}
+
+.rhythm-history-view__score-info::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: transparent;
+  content: "";
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.rhythm-history-view__score-info svg {
+  position: relative;
+  z-index: 1;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.25;
+}
+
+.rhythm-history-view__score-info svg.disclosure-chevron {
+  stroke-width: 1.75;
+}
+
+.rhythm-history-view__score-info:hover {
+  background: transparent;
+  color: var(--tend-forest, var(--forest));
+}
+
+.rhythm-history-view__score-info:hover::before,
+.rhythm-history-view__score-info:focus-visible::before {
+  background: var(--tend-mist, #e5f2eb);
+}
+
+.rhythm-history-view__score-info:focus-visible {
+  outline: none;
+}
+
+.rhythm-history-view__score-info:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.rhythm-history-view__sample-notice {
+  margin: 0;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.6875rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+  text-align: center;
+}
+
+.rhythm-history-view__breakdown-rows {
+  display: grid;
+  width: 100%;
+  margin: 0;
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+}
+
+.rhythm-history-view__breakdown-rows > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.rhythm-history-view__breakdown-rows dt {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--tend-secondary, var(--ink-soft));
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__breakdown-rows dd {
+  flex: none;
+  margin: 0;
+  color: var(--tend-ink, var(--ink));
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__calculation {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  justify-items: center;
+  width: 100%;
+  min-width: 0;
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--tend-mist, #e5f2eb);
+  color: var(--tend-forest, #246b52);
+  font-size: calc(0.875rem * var(--app-text-scale, 1));
+  font-weight: 400;
+  line-height: 1.35;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__calculation > span {
+  width: 100%;
+  min-width: 0;
+  text-align: center;
+}
+
+.rhythm-history-view__calculation strong {
+  font-weight: 700;
+}
+
+.rhythm-history-view__score-details {
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__score-details h4 {
+  margin: 16px 0 0;
+  color: var(--tend-forest, var(--forest));
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.rhythm-history-view__logged-moments summary:focus-visible {
+  outline: 3px solid var(--tend-forest, var(--forest));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.rhythm-history-view__logged-moments summary:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.rhythm-history-view__health-pattern {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 4px;
+  width: 100%;
+  margin: 12px 0;
+}
+
+.rhythm-history-view__health-pattern-day {
+  height: 13px;
+  border-radius: 3px;
+  background: var(--score-green, #16885a);
+}
+
+.rhythm-history-view__health-pattern-day--missed {
+  background: var(--tend-line, var(--line));
+}
+
+.rhythm-history-view__pattern-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 5px 10px;
+  margin: 0;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.6875rem * var(--app-text-scale, 1));
+}
+
+.rhythm-history-view__pattern-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__pattern-key {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--score-green, #16885a);
+}
+
+.rhythm-history-view__pattern-key--missed {
+  background: var(--tend-line, var(--line));
+}
+
+.rhythm-history-view__score-history {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rhythm-history-view__score-history > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+}
+
+.rhythm-history-view__score-history > li > span {
+  min-width: 0;
+  color: var(--tend-secondary, var(--ink-soft));
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__score-history > li > strong {
+  color: var(--tend-ink, var(--ink));
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.rhythm-history-view__score-history > li:last-child > strong {
+  color: var(--tend-forest, var(--forest));
+}
+
+.rhythm-history-view__score-history-toggle {
+  min-height: 32px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--tend-forest, var(--forest));
+  font: 600 calc(12px * var(--app-text-scale, 1))/1.3 var(--tend-font-ui, var(--sans));
+  text-align: left;
+  cursor: pointer;
+}
+
+.rhythm-history-view__score-history-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 12px;
+  margin-top: 4px;
+}
+
+.rhythm-history-view__score-history-toggle:focus-visible {
+  outline: 2px solid var(--tend-forest, var(--forest));
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.rhythm-history-view__score-history-toggle:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.rhythm-history-view__score-explanation {
+  margin: 10px 0 0;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.rhythm-history-view__score-explanation + .rhythm-history-view__score-explanation {
+  margin-top: 8px;
+}
+
+@media (max-width: 440px) {
+  .rhythm-history-view__breakdown-rows > div {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+}
+
+@media (max-width: 440px) {
+
+  .rhythm-history-view__breakdown-rows dd {
+    text-align: left;
+  }
+}
+
+.rhythm-history-view__completion-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0;
+  color: var(--tend-ink, var(--ink));
+}
+
+.rhythm-history-view__completion-total {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: calc(1rem * var(--app-text-scale, 1));
+}
+
+.rhythm-history-view__completion-total strong {
+  color: var(--tend-forest, var(--forest));
+  font-size: calc(1.8125rem * var(--app-text-scale, 1));
+  line-height: 1;
+}
+
+.rhythm-history-view__completion-span {
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+}
+
+.rhythm-history-view__chart-section {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rhythm-history-view__chart-placeholder {
+  height: 224px;
+  padding: 4px 2px 8px;
+}
+
+.rhythm-history-view__chart-placeholder-plot {
+  height: 200px;
+  border-radius: 8px;
+  background: var(--score-track, #f0f4f1);
+}
+
+.rhythm-history-view__chart-scroll {
+  display: flex;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 4px 2px 8px;
+  scrollbar-width: thin;
+}
+
+.rhythm-history-view__chart {
+  display: flex;
+  align-items: end;
+  gap: 16px;
+  width: max-content;
+  min-width: max-content;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rhythm-history-view__chart li {
+  display: grid;
+  grid-template-rows: 200px auto;
+  justify-items: center;
+  gap: 4px;
+  width: 46px;
+  height: 100%;
+  color: var(--tend-ink, var(--ink));
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  text-align: center;
+}
+
+.rhythm-history-view__completion-bar-area {
+  position: relative;
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  width: 46px;
+  height: 200px;
+}
+
+.rhythm-history-view__completion-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  background: #e8f5ef;
+}
+
+.rhythm-history-view__completion-bar {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  flex: none;
+  box-sizing: border-box;
+  width: 46px;
+  padding-top: 5px;
+  border-radius: 8px;
+  background: var(--completion-green);
+}
+
+.rhythm-history-view__completion-zero {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 14px;
+  border-radius: 5px;
+  background: #dce8e1;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.6875rem * var(--app-text-scale, 1));
+  line-height: 1;
+}
+
+.rhythm-history-view__bar-value {
+  color: #fff;
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.rhythm-history-view__chart li time {
+  white-space: nowrap;
+}
+
+.rhythm-history-view__chart-hint {
+  margin: 0;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.6875rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+}
+
+.rhythm-history-view__empty-notice {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #e8f5ef;
+  color: var(--tend-forest, var(--forest));
+}
+
+.rhythm-history-view__logged-moments {
+  padding-top: 8px;
+  border-top: 1px solid var(--tend-line, var(--line));
+}
+
+.rhythm-history-view__log-moment-row {
+  display: flex;
+  justify-content: flex-start;
+  margin: 12px 0;
+}
+
+.rhythm-history-view__logged-moments ol {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rhythm-history-view__log-moment {
+  max-width: 100%;
+  min-height: 44px;
+  white-space: normal;
+  text-align: center;
+}
+
+.rhythm-history-view__log-dialog {
+  position: fixed;
+  inset: 0;
+  box-sizing: border-box;
+  width: min(440px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: min(85vh, 760px);
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 20px;
+  background: var(--tend-surface, var(--card));
+  color: var(--tend-ink, var(--ink));
+  box-shadow: 0 22px 70px #10251d45;
+}
+
+.rhythm-history-view__log-dialog::backdrop {
+  background: #10251d9c;
+}
+
+.rhythm-history-view__log-dialog-header {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  justify-content: flex-end;
+  min-height: 44px;
+  padding: 8px 8px 0;
+  background: var(--tend-surface, var(--card));
+}
+
+.rhythm-history-view__log-dialog .rhythm-completion-form--embedded {
+  padding: 4px 20px 20px;
+}
+
+@media (max-width: 380px) {
+  .rhythm-history-view__log-dialog .rhythm-completion-form--embedded {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+}
+
+.rhythm-history-view__logged-moments li {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 12px;
+  background: var(--tend-surface, var(--card));
+  color: var(--tend-ink, var(--ink));
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+}
+
+.rhythm-history-view__logged-entry-content {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rhythm-history-view__logged-entry-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rhythm-history-view__logged-entry-copy > strong {
+  display: block;
+  color: var(--tend-ink, var(--ink));
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__logged-entry-date,
+.rhythm-history-view__logged-entry-memory {
+  margin: 4px 0 0;
+}
+
+.rhythm-history-view__logged-entry-date,
+.rhythm-history-view__logged-entry-copy time {
+  color: var(--tend-secondary, var(--ink-soft));
+}
+
+.rhythm-history-view__logged-entry-memory {
+  color: var(--tend-ink, var(--ink));
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__logged-entry-actions {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 2px;
+  margin: -2px -3px 0 0;
+}
+
+.rhythm-history-view__entry-action {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--tend-secondary, var(--ink-soft));
+  cursor: pointer;
+}
+
+.rhythm-history-view__entry-action:hover,
+.rhythm-history-view__entry-action:focus-visible {
+  background: color-mix(in srgb, var(--tend-forest, var(--forest)) 10%, var(--tend-surface, var(--card)));
+  color: var(--tend-forest, var(--forest));
+}
+
+.rhythm-history-view__entry-action svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.rhythm-history-view__delete-confirmation {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--tend-line, var(--line));
+}
+
+.rhythm-history-view__delete-confirmation > strong {
+  color: var(--tend-ink, var(--ink));
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  overflow-wrap: anywhere;
+}
+
+.rhythm-history-view__delete-confirmation > p {
+  margin: 0;
+  color: #a52c22;
+}
+
+.rhythm-history-view__delete-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rhythm-history-view__delete-actions button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+@media (max-width: 380px) {
+  .rhythm-history-view__logged-entry-content {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 380px) {
+
+  .rhythm-history-view__logged-entry-actions {
+    margin: 0 0 0 auto;
+  }
+}
+
+.tend-app-preview .marriage-page .rhythm-history-view__score-info:focus-visible {
+  outline: none;
+}
+
+@media (max-width: 400px) {
+  .rhythm-history-view__score-details-column:first-child {
+    border-bottom: 1px solid var(--tend-line, var(--line));
+  }
+}
+
+@media (max-width: 400px) {
+
+  .rhythm-history-view__score-details-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 440px) {
+  .rhythm-history-view__score-details-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 440px) {
+
+  .rhythm-history-view__score-details-columns::before {
+    display: none;
+  }
+}
+
+.tend-app-preview .rhythm-card--details-summary {
+  display: grid;
+  gap: calc(8px * var(--app-text-scale, 1));
+  min-width: 0;
+  padding: 11px 14px;
+  border: 1px solid var(--tend-line);
+  border-radius: 15px;
+  background: var(--tend-surface, white);
+  box-shadow: 0 1px 3px rgb(32 39 35 / 6%), 0 3px 8px rgb(32 39 35 / 3%);
+}
+
+.rhythm-card__details-summary-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rhythm-card__details-summary-copy,
+.rhythm-card__details-summary-copy .rhythm-title-row {
+  min-width: 0;
+}
+
+.rhythm-card--details-summary .rhythm-title-row {
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+}
+
+.rhythm-card--details-summary .rhythm-title-row h3 {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: calc(1.1875rem * var(--app-text-scale, 1));
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-card__details-summary-description {
+  margin: 4px 0 0;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.875rem * var(--app-text-scale, 1));
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-card__details-summary-edit {
+  box-sizing: border-box;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  margin: 0;
+  border-radius: 10px;
+}
+
+.rhythm-card__details-summary-edit .today-rhythm-details__edit-visual {
+  top: 0;
+}
+
+.rhythm-card--details-summary .rhythm-card__details-summary-edit:focus-visible {
+  outline: 2px solid var(--tend-forest, var(--forest));
+  outline-offset: 2px;
+}
+
+.rhythm-card__details-summary-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  overflow-wrap: anywhere;
+}
+
+.rhythm-card__details-summary-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--tend-mist, #e8f5ef);
+  color: var(--tend-forest, var(--forest));
+  font-size: calc(0.6875rem * var(--app-text-scale, 1));
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.rhythm-card__details-summary-note {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-card__details-summary-associations {
+  min-width: 0;
+}
+
+.rhythm-card__details-summary-footer {
+  min-width: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--tend-line, var(--line));
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+}
+
+.rhythm-history-view__score-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+}
+
+.rhythm-history-view__score-card > .health-score-breakdown {
+  min-width: 0;
+}
+
+.rhythm-history-view__score-details-grid,
+.rhythm-history-view__health-calculation-disclosure {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 700px) {
+
+  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen .rhythm-history-view--dialog {
+    flex: 1 1 auto;
+    max-height: none;
+    padding-inline: max(16px, env(safe-area-inset-left, 0px))
+      max(16px, env(safe-area-inset-right, 0px));
+  }
+}
+
+@media (max-width: 700px) {
+
+  .tend-app-preview .today-rhythm-details-dialog.dialog--phone-fullscreen .rhythm-history-view__body--dialog {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  }
+}
+
+@media (max-width: 700px) {
+
+  .tend-app-preview .rhythm-history-view--dialog .rhythm-history-view__rhythm-header {
+    position: relative;
+    padding-top: 4px;
+  }
+}
+
+@media (max-width: 700px) {
+
+  .tend-app-preview .rhythm-history-view--dialog .rhythm-history-view__body--dialog {
+    min-height: 0;
+    max-height: none;
+  }
+}
+
+.tend-app-preview .rhythm-history-view__body--dialog {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+
+.tend-app-preview .rhythm-history-view__card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 18px 16px;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 18px;
+  background: var(--tend-surface, var(--card));
+  box-shadow: none;
+}
+
+.tend-app-preview .rhythm-history-view__score-section {
+  align-content: start;
+  gap: 12px;
+}
+
+.tend-app-preview .rhythm-history-view__body--dialog > .rhythm-history-view__score-section {
+  margin-bottom: 0;
+}
+
+.tend-app-preview .rhythm-history-view__score-section > .rhythm-history-view__score-card {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.tend-app-preview .rhythm-history-view__completions {
+  align-content: start;
+  gap: 12px;
+}
+
+.tend-app-preview .rhythm-history-view__completions > h3,
+.tend-app-preview .rhythm-history-view__seasons-header > h3 {
+  font-size: calc(1.125rem * var(--app-text-scale, 1));
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.tend-app-preview .rhythm-history-view__completion-summary {
+  margin: 0;
+}
+
+.tend-app-preview .rhythm-history-view__empty-notice {
+  padding: 10px 12px;
+}
+
+.tend-app-preview .rhythm-history-view__seasons {
+  align-content: start;
+  gap: 12px;
+}
+
+.tend-app-preview .rhythm-history-view__seasons-header {
+  min-height: 44px;
+}
+
+.tend-app-preview .rhythm-history-view__season-add-row {
+  margin: 0;
+}
+
+.tend-app-preview .rhythm-history-view__logged-moments {
+  align-content: start;
+  gap: 12px;
+}
+
+.tend-app-preview .rhythm-history-view__logged-moments > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.tend-app-preview .rhythm-history-view__logged-moments > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tend-app-preview .rhythm-history-view__logged-heading {
+  min-width: 0;
+  color: var(--tend-ink, var(--ink));
+  font-size: calc(1.125rem * var(--app-text-scale, 1));
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.tend-app-preview .rhythm-history-view__logged-count {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--tend-mist, #f1f4f1);
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.6875rem * var(--app-text-scale, 1));
+  font-weight: 600;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+.tend-app-preview .rhythm-history-view__logged-moments > summary > .disclosure-chevron {
+  flex: 0 0 16px;
+  margin-left: auto;
+  transition: transform 140ms ease;
+}
+
+.tend-app-preview .rhythm-history-view__logged-moments > summary > .disclosure-chevron--expanded {
+  transform: rotate(180deg);
+}
+
+.tend-app-preview .rhythm-history-view__logged-moments > summary:focus-visible {
+  outline: 3px solid var(--tend-forest, var(--forest));
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (max-width: 520px) {
+  .tend-app-preview .rhythm-history-view__card {
+    padding: 16px 14px;
+  }
+}
+
+.rhythm-metadata-status-group > svg,
+.rhythm-metadata-footer svg,
+.today-rhythm-details__edit-visual svg,
+.today-rhythm-details__history-button svg,
+.rhythm-history-view__score-info svg,
+.today-plan-section .today-plan__focus-trigger > svg,
+.today-plan-section .today-plan__focus-picker .rhythm-select__option > svg,
+.settings-icon-button svg {
+  width: calc(16px * var(--app-text-scale));
+  height: calc(16px * var(--app-text-scale));
 }

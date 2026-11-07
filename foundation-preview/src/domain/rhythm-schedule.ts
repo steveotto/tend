@@ -458,14 +458,17 @@ function shortWeekdayName(weekday: RhythmWeekday): string {
   return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][weekday]!;
 }
 
-function compactPatternSummary(pattern: RhythmPattern): string {
+function compactPatternSummary(
+  pattern: RhythmPattern,
+  weekdayName: (weekday: RhythmWeekday) => string = shortWeekdayName
+): string {
   if (pattern.kind === 'dayOfMonth') {
     return pattern.day === 'last' ? 'Last day' : dayOrdinal(pattern.day);
   }
   const ordinal = pattern.ordinal === 'last'
     ? 'Last'
     : ['First', 'Second', 'Third', 'Fourth'][pattern.ordinal - 1]!;
-  return `${ordinal} ${shortWeekdayName(pattern.weekday)}`;
+  return `${ordinal} ${weekdayName(pattern.weekday)}`;
 }
 
 function compactWeekdaysSummary(selected: readonly RhythmWeekday[]): string {
@@ -475,6 +478,17 @@ function compactWeekdaysSummary(selected: readonly RhythmWeekday[]): string {
   if (sorted.join(',') === '0,6') return 'Weekends';
   if (sorted.length === 1) return `Every ${shortWeekdayName(sorted[0]!)}`;
   return sorted.map(shortWeekdayName).join(' · ');
+}
+
+function cardFooterWeekdayName(weekday: RhythmWeekday): string {
+  return ['Su', 'M', 'T', 'W', 'R', 'F', 'S'][weekday]!;
+}
+
+function cardFooterWeekdaysSummary(selected: readonly RhythmWeekday[]): string {
+  const sorted = [...selected].sort((left, right) => left - right);
+  if (sorted.length === 7) return 'Daily';
+  if (sorted.length === 1) return `Every ${cardFooterWeekdayName(sorted[0]!)}`;
+  return sorted.map(cardFooterWeekdayName).join(' · ');
 }
 
 function formatLocalDate(value: RhythmLocalDate): string {
@@ -488,9 +502,10 @@ function formatLocalDate(value: RhythmLocalDate): string {
 
 export function formatRhythmSchedule(
   schedule: RhythmSchedule,
-  mode: 'compact' | 'detailed' = 'detailed'
+  mode: 'compact' | 'card-footer' | 'detailed' = 'detailed'
 ): string {
-  if (mode === 'compact') {
+  if (mode !== 'detailed') {
+    const cardFooter = mode === 'card-footer';
     let compact: string;
     switch (schedule.frequency) {
       case 'daily':
@@ -498,11 +513,16 @@ export function formatRhythmSchedule(
         break;
       case 'weekly':
         compact = schedule.weeklyMode === 'select-days'
-          ? `Select days · ${schedule.weekdays.map(shortWeekdayName).join(' · ')}`
-          : compactWeekdaysSummary(schedule.weekdays);
+          ? `Select days · ${schedule.weekdays.map(cardFooter ? cardFooterWeekdayName : shortWeekdayName).join(' · ')}`
+          : cardFooter
+            ? cardFooterWeekdaysSummary(schedule.weekdays)
+            : compactWeekdaysSummary(schedule.weekdays);
         break;
       case 'monthly':
-        compact = `Monthly · ${compactPatternSummary(schedule.pattern)}`;
+        compact = `Monthly · ${compactPatternSummary(
+          schedule.pattern,
+          cardFooter ? cardFooterWeekdayName : shortWeekdayName
+        )}`;
         break;
       case 'quarterly':
         compact = 'Quarterly';
@@ -511,8 +531,8 @@ export function formatRhythmSchedule(
         compact = schedule.pattern.kind === 'dayOfMonth'
           ? `Yearly · ${monthName(schedule.month).slice(0, 3)} ${schedule.pattern.day === 'last' ? 'Last day' : schedule.pattern.day}`
           : `Yearly · ${schedule.pattern.ordinal === 'last'
-            ? `Last ${shortWeekdayName(schedule.pattern.weekday)}`
-            : `${dayOrdinal(schedule.pattern.ordinal)} ${shortWeekdayName(schedule.pattern.weekday)}`} · ${monthName(schedule.month).slice(0, 3)}`;
+            ? `Last ${(cardFooter ? cardFooterWeekdayName : shortWeekdayName)(schedule.pattern.weekday)}`
+            : `${dayOrdinal(schedule.pattern.ordinal)} ${(cardFooter ? cardFooterWeekdayName : shortWeekdayName)(schedule.pattern.weekday)}`} · ${monthName(schedule.month).slice(0, 3)}`;
         break;
       case 'custom':
         if (schedule.unit === 'days') {
@@ -520,11 +540,19 @@ export function formatRhythmSchedule(
         } else if (schedule.unit === 'weeks') {
           compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'week' : 'weeks'}`
             + (schedule.weekdays.length ? ` · ${schedule.weekdays
-              .slice().sort((left, right) => left - right).map(shortWeekdayName).join(' · ')}` : '');
+              .slice().sort((left, right) => left - right)
+              .map(cardFooter ? cardFooterWeekdayName : shortWeekdayName)
+              .join(' · ')}` : '');
         } else if (schedule.unit === 'months') {
-          compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'month' : 'months'} · ${compactPatternSummary(schedule.pattern)}`;
+          compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'month' : 'months'} · ${compactPatternSummary(
+            schedule.pattern,
+            cardFooter ? cardFooterWeekdayName : shortWeekdayName
+          )}`;
         } else {
-          compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'year' : 'years'} · ${monthName(schedule.month).slice(0, 3)} ${compactPatternSummary(schedule.pattern)}`;
+          compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'year' : 'years'} · ${monthName(schedule.month).slice(0, 3)} ${compactPatternSummary(
+            schedule.pattern,
+            cardFooter ? cardFooterWeekdayName : shortWeekdayName
+          )}`;
         }
         break;
     }

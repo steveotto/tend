@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from 'react';
-import type { MouseEvent } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
 import type { RhythmPreview } from '../domain/preview-data.ts';
 import { HealthScoreBreakdown, HealthScoreInfoButton, HealthScoreMeasures } from './HealthScoreBreakdown.tsx';
@@ -25,6 +25,7 @@ type CategoryHealthSummaryProps = {
   consistencyDescription?: string;
   onTrackDescription?: string;
   scoringEvidence?: HealthAggregateEvidence;
+  summaryContent?: ReactNode;
   rollup: HealthRollupConfig;
 };
 
@@ -41,6 +42,7 @@ export function CategoryHealthSummary({
   consistencyDescription,
   onTrackDescription,
   scoringEvidence,
+  summaryContent,
   rollup
 }: CategoryHealthSummaryProps) {
   const [expanded, setExpanded] = useState(false);
@@ -125,6 +127,7 @@ export function CategoryHealthSummary({
         onTrackCaption="Whether your Rhythms are up to date"
         showHealthMeter={false}
       />
+      {summaryContent}
       {expanded && (
         <HealthScoreDetailsDialog title={`${title} details`} onClose={closeDetails}>
           <div id={detailsId} className="category-health-summary__details" role="region" aria-label={`${title} calculation details`}>

@@ -73,7 +73,7 @@ function ContributionItem({
   current
 }: {
   item: RhythmContributionItem;
-  kind: 'overall' | 'category' | 'foundation' | 'rhythm' | 'linked-rhythms';
+  kind: 'overall' | 'category' | 'foundation' | 'rhythm' | 'linked-rhythms' | 'person-area';
   current: boolean;
 }) {
   const scoreLabel = item.score === null
@@ -126,39 +126,64 @@ function ContributionFlow({
   const scoringInfoButtonRef = useRef<HTMLButtonElement>(null);
   const setParentDialogInert = useHealthDetailsNestedDialog();
   const scoringInfo = diagram.scoringInfo;
-  const groups = [
-    {
-      id: 'overall',
-      label: 'Overall Health',
-      items: [{ id: 'overall-health', label: 'Your overall Health', score: diagram.overallScore }],
-      kind: 'overall' as const,
-      emptyLabel: ''
-    },
-    {
-      id: 'categories',
-      label: 'Categories',
-      items: diagram.categories,
-      kind: 'category' as const,
-      emptyLabel: diagram.categories.some(item => item.label.includes('(unresolved)'))
-        || diagram.foundations.some(item => item.label.includes('(unresolved)'))
-        ? 'Category link unavailable for unresolved Foundations.'
-        : 'No linked Categories.'
-    },
-    {
-      id: 'foundations',
-      label: 'Practices & Foundations',
-      items: diagram.foundations,
-      kind: 'foundation' as const,
-      emptyLabel: 'No linked Practices or Foundations contribute to scoring.'
-    },
-    {
-      id: diagram.highlightedGroup === 'rhythm' ? 'rhythm' : 'linked-rhythms',
-      label: diagram.bottomGroupLabel,
-      items: [diagram.bottomItem],
-      kind: diagram.highlightedGroup === 'rhythm' ? 'rhythm' as const : 'linked-rhythms' as const,
-      emptyLabel: ''
-    }
-  ];
+  const groups = diagram.personHealth
+    ? [
+        {
+          id: 'overall',
+          label: 'Overall Health',
+          items: [{
+            id: 'person-overall-health',
+            label: `${diagram.personHealth.name}’s Overall Health`,
+            score: diagram.overallScore
+          }],
+          kind: 'overall' as const,
+          emptyLabel: ''
+        },
+        {
+          id: 'person-area',
+          label: `${diagram.personHealth.areaLabel} Health`,
+          items: [{
+            id: 'person-area-health',
+            label: `${diagram.personHealth.areaLabel} Health`,
+            score: diagram.personHealth.areaScore
+          }],
+          kind: 'person-area' as const,
+          emptyLabel: ''
+        }
+      ]
+    : [
+        {
+          id: 'overall',
+          label: 'Overall Health',
+          items: [{ id: 'overall-health', label: 'Your overall Health', score: diagram.overallScore }],
+          kind: 'overall' as const,
+          emptyLabel: ''
+        },
+        {
+          id: 'categories',
+          label: 'Categories',
+          items: diagram.categories,
+          kind: 'category' as const,
+          emptyLabel: diagram.categories.some(item => item.label.includes('(unresolved)'))
+            || diagram.foundations.some(item => item.label.includes('(unresolved)'))
+            ? 'Category link unavailable for unresolved Foundations.'
+            : 'No linked Categories.'
+        },
+        {
+          id: 'foundations',
+          label: 'Practices & Foundations',
+          items: diagram.foundations,
+          kind: 'foundation' as const,
+          emptyLabel: 'No linked Practices or Foundations contribute to scoring.'
+        },
+        {
+          id: diagram.highlightedGroup === 'rhythm' ? 'rhythm' : 'linked-rhythms',
+          label: diagram.bottomGroupLabel,
+          items: [diagram.bottomItem],
+          kind: diagram.highlightedGroup === 'rhythm' ? 'rhythm' as const : 'linked-rhythms' as const,
+          emptyLabel: ''
+        }
+      ];
 
   return (
     <section
@@ -212,6 +237,11 @@ function ContributionFlow({
             </div>
           ))}
         </div>
+        {diagram.personHealth && !diagram.personHealth.contributes && (
+          <p className="health-info-what-counts__person-unavailable">
+            {diagram.personHealth.areaLabel} Health is unavailable and is left out of Overall Health.
+          </p>
+        )}
       </div>
       {scoringInfoOpen && scoringInfo && (
         <HealthScoreDetailsDialog
