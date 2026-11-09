@@ -116,6 +116,7 @@ import { localDateInTimeZone } from './domain/rhythm-scoring.ts';
 import { hasRhythmOccurrenceForCompletion } from './domain/rhythm-occurrences.ts';
 import { selectSatisfiedRhythmIds, selectTendedRhythmDisplayIds } from './domain/category-rhythms.ts';
 import { prepareDatedRhythmCompletion } from './domain/rhythm-completion.ts';
+import { selectPersonOverallHealth, selectPersonRhythmHealth } from './domain/person-health.ts';
 import { validateStrengthData } from './domain/strength.ts';
 import type { StrengthMode } from './domain/strength.ts';
 import {
@@ -765,6 +766,21 @@ function PreviewWorkspace({
   const archivedProfileRhythmCandidates = [...new Map(
     [...archivedRhythms, ...archivedUserRhythms].map(rhythm => [rhythm.id, rhythm])
   ).values()];
+  const personOverallHealthScores = new Map(peopleWithPhotos.map(person => {
+    const active = profileRhythmCandidates.filter(rhythm =>
+      rhythm.personIds?.includes(person.id) && !previewData.archivedRhythmIds.includes(rhythm.id)
+    );
+    const archived = archivedProfileRhythmCandidates.filter(rhythm =>
+      rhythm.personIds?.includes(person.id)
+    );
+    const rhythmHealth = selectPersonRhythmHealth(
+      person.id,
+      [...active, ...archived],
+      rhythmScoreResults,
+      new Set(archived.map(rhythm => rhythm.id))
+    );
+    return [person.id, selectPersonOverallHealth(rhythmHealth).health] as const;
+  }));
   const personActiveRhythms = profilePersonId === null
     ? []
     : profileRhythmCandidates.filter(rhythm =>
@@ -3203,6 +3219,7 @@ function PreviewWorkspace({
                 people={peopleWithPhotos}
                 peopleGroups={resolvedPeopleGroups}
                 personDetails={previewData.personDetails}
+                healthScores={personOverallHealthScores}
                 today={localDateInTimeZone(new Date(), localTimeZone)}
                 rhythms={friendshipCategoryRhythms}
                 archivedRhythms={archivedFriendshipRhythms}
@@ -3244,6 +3261,7 @@ function PreviewWorkspace({
                 friendships={previewData.friendships}
                 today={currentDate}
                 personDetails={previewData.personDetails}
+                healthScores={personOverallHealthScores}
                 onOpenPerson={openPersonProfile}
                 onCreatePerson={createPerson}
               />

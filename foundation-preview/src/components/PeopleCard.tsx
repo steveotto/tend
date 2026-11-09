@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
 import type { PersonId, PersonPickerGroup, PersonPreview } from '../domain/preview-data.ts';
+import { resolvePersonCategory } from '../domain/person-categories.ts';
+import { CategoryHealthBadge } from './Cards.tsx';
 import { BirthdayCakeIcon } from './BirthdayCakeIcon.tsx';
-import { PersonAvatar } from './PersonBadge.tsx';
+import { personFirstName, PersonAvatar } from './PersonBadge.tsx';
 
 type PersonBirthdayPresentation = {
   dateLabel: string;
@@ -16,10 +18,10 @@ export function PeopleCard({
   relationshipTone,
   birthday,
   connectionRecency,
+  score,
   onSelect,
   className = '',
   identityClassName = '',
-  connectionClassName = '',
   children
 }: {
   person: PersonPreview;
@@ -27,13 +29,19 @@ export function PeopleCard({
   relationshipLabel?: string;
   relationshipTone?: PersonPickerGroup['id'];
   birthday?: PersonBirthdayPresentation;
-  connectionRecency?: string;
+  connectionRecency?: { date: string; label: string };
+  score?: number | null;
   onSelect: (personId: PersonId) => void;
   className?: string;
   identityClassName?: string;
-  connectionClassName?: string;
   children?: ReactNode;
 }) {
+  const displayScore = score !== null && score !== undefined && Number.isFinite(score) ? score : null;
+  const relationshipGroupId = resolvePersonCategory(classifications.map(group => group.id));
+  const relationshipGroup = relationshipGroupId
+    ? classifications.find(group => group.id === relationshipGroupId)
+    : undefined;
+
   return (
     <article className={`people-card ${className}`.trim()}>
       <button
@@ -46,7 +54,7 @@ export function PeopleCard({
           <span className="people-card__identity">
             <PersonAvatar person={person} />
             <span className="people-card__identity-copy">
-              <span className="people-card__name">{person.displayName}</span>
+              <span className="people-card__name">{personFirstName(person.displayName)}</span>
               {relationshipLabel && (
                 <span className="people-card__relationship">
                   {relationshipTone && (
@@ -60,29 +68,41 @@ export function PeopleCard({
               )}
             </span>
           </span>
-          <span className="people-card__score" aria-label="Person score unavailable">—</span>
+          <CategoryHealthBadge
+            score={displayScore}
+            appearance="rounded"
+            className="people-card__score"
+            accessibleLabel={`Person Health ${displayScore === null ? 'unavailable' : displayScore}`}
+          />
         </span>
-        <span className="people-card__health">
-          <span className="people-card__health-track" aria-hidden="true" />
-          <span className="people-card__health-status">Score unavailable</span>
-        </span>
-        <span className="people-card__connection-block">
+        {(connectionRecency || relationshipGroup) && (
           <span className="people-card__meta-row">
-            <span className={`people-card__connection ${connectionClassName}`.trim()}>
-              {connectionRecency ?? 'No connections yet'}
-            </span>
-            {classifications.length > 0 && (
-              <span className="people-card__classifications" role="group" aria-label={`${person.displayName} classifications`}>
-                {classifications.map(group => (
-                  <span className={`people-card__classification people-card__classification--${group.id}`} key={group.id}>
-                    <span aria-hidden="true" />
-                    {group.label}
-                  </span>
-                ))}
+            {connectionRecency && (
+              <span className="people-card__connection-detail">
+                <span className="people-card__connection-icon" aria-hidden="true">
+                  <svg viewBox="0 0 20 20" fill="none" focusable="false">
+                    <path d="M4.25 4.75h11.5v8H9l-3.5 2.5v-2.5H4.25z" />
+                    <path d="M7 8h6M7 10.5h4" />
+                  </svg>
+                </span>
+                <span className="people-card__connection-copy">
+                  <span className="people-card__connection-label">Connected</span>
+                  <time className="people-card__connection-time" dateTime={connectionRecency.date}>
+                    {connectionRecency.label}
+                  </time>
+                </span>
+              </span>
+            )}
+            {relationshipGroup && (
+              <span className="people-card__classifications" role="group" aria-label={`${person.displayName} relationship group`}>
+                <span className={`people-card__classification people-card__classification--${relationshipGroup.id}`}>
+                  <span aria-hidden="true" />
+                  {relationshipGroup.label}
+                </span>
               </span>
             )}
           </span>
-        </span>
+        )}
         {(birthday?.age !== undefined || birthday) && (
           <span className="people-card__birthday-footer">
             {birthday?.age !== undefined && <strong className="people-card__age">Age {birthday.age}</strong>}

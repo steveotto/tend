@@ -348,7 +348,13 @@ describe('shared person profile', () => {
     const profile = screen.getByRole('main', { name: 'Avery Brooks' });
     const overall = within(profile).getByRole('region', { name: 'Overall Health summary' });
     const rhythmSummary = within(profile).getByRole('region', { name: 'Rhythm Health summary' });
+    const overallHeader = overall.querySelector('.health-score-breakdown__header');
 
+    expect(overallHeader?.querySelector('h3')?.textContent).toBe('Overall Health');
+    expect(overallHeader?.children[1]?.getAttribute('aria-label')).toBe('Overall Health score');
+    expect(overallHeader?.lastElementChild).toBe(
+      within(overall).getByRole('button', { name: 'Show Overall Health scoring explanation' })
+    );
     expect(within(overall).getByRole('button', { name: 'Show Overall Health scoring explanation' })
       .getAttribute('aria-expanded')).toBe('false');
     expect(within(overall).queryByRole('group', { name: 'Consistency and On Track' })).toBeNull();

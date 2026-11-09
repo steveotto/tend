@@ -25,6 +25,7 @@ type PersonHealthSummaryProps = {
   showMeasures?: boolean;
   showHealthMeter?: boolean;
   summaryContent?: ReactNode;
+  headerStyle?: 'summary' | 'category';
 };
 
 export function PersonHealthSummary({
@@ -41,7 +42,8 @@ export function PersonHealthSummary({
   emptyMessage,
   showMeasures = true,
   showHealthMeter = false,
-  summaryContent
+  summaryContent,
+  headerStyle = 'summary'
 }: PersonHealthSummaryProps) {
   const [expanded, setExpanded] = useState(false);
   const coverage = coverageLabel ?? (totalCount === 0
@@ -63,6 +65,7 @@ export function PersonHealthSummary({
       onExpandedChange={setExpanded}
       showMeasures={showMeasures}
       showHealthMeter={showHealthMeter}
+      headerStyle={headerStyle}
       summaryContent={summaryContent}
       consistencyDescription={`The average Consistency score of eligible ${pluralTerm}.`}
       onTrackDescription={`The average On Track score of eligible ${pluralTerm}.`}
