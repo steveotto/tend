@@ -421,6 +421,28 @@ describe('selecting equal-weight Marriage Category scores', () => {
       onTrack: 20,
       health: 5
     });
+    expect(selectHealthFitnessCategoryScore(cardio, weight, unavailableStrength, {
+      foundationIds: ['health-flexibility'],
+      eligibleFoundationIds: ['health-flexibility'],
+      excludedFoundationIds: [],
+      unresolvedFoundationIds: [],
+      consistency: 40,
+      onTrack: null,
+      health: null
+    })).toMatchObject({
+      consistency: 60,
+      onTrack: 40,
+      health: 55
+    });
+    expect(selectHealthFitnessCategoryScore(cardio, weight, unavailableStrength, {
+      foundationIds: ['health-flexibility'],
+      eligibleFoundationIds: ['health-flexibility'],
+      excludedFoundationIds: [],
+      unresolvedFoundationIds: [],
+      consistency: 0,
+      onTrack: null,
+      health: null
+    }).consistency).toBe(40);
   });
 
   it('averages available Category Health values without rounding intermediate scores', () => {

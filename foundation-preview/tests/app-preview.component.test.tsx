@@ -6479,9 +6479,16 @@ describe('Tend Today preview', () => {
     expect(within(measures).getByRole('row', { name: /Strength/ })).toBeTruthy();
     expect(within(measures).getByRole('row', { name: /Cardio/ })).toBeTruthy();
     expect(within(measures).getByRole('row', { name: /Weight/ })).toBeTruthy();
-    expect(within(measures).getByText(
-      '0 of 3 measures have Consistency scores; 0 of 3 have On Track scores.'
-    )).toBeTruthy();
+    expect(within(measures).getByRole('row', { name: 'Flexibility — —' })).toBeTruthy();
+    expect(within(measures).getByText('Available scores are averaged separately.')).toBeTruthy();
+    expect(within(measures).getByRole('status').textContent).toBe('No scores available yet.');
+    expect(within(measures).getByText('Unavailable scores are excluded.')).toBeTruthy();
+    const areaScoringToggle = within(measures).getByRole('button', { name: 'How each area is scored' });
+    expect(areaScoringToggle.getAttribute('aria-expanded')).toBe('false');
+    areaScoringToggle.focus();
+    await user.keyboard('{Enter}');
+    expect(areaScoringToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(within(measures).getByText(/Cardio:/)).toBeTruthy();
     await expandHealthDisclosure(user, dialog, 'How this Category contributes');
     expect(within(dialog).getByRole('heading', { name: 'How this Category contributes' })).toBeTruthy();
     expect(within(dialog).getByRole('group', { name: 'Category identity: Health & Fitness' })).toBeTruthy();

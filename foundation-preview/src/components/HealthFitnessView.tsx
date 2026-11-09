@@ -83,6 +83,7 @@ type HealthFitnessViewProps = {
   healthScore: CategoryScoreSelection;
   weightHealthScore: CategoryScoreSelection;
   cardioHealthScore: CategoryScoreSelection;
+  flexibilityHealthScore?: CategoryScoreSelection | null;
   overallHealthScore?: number | null;
 };
 
@@ -187,6 +188,7 @@ export function HealthFitnessView({
   healthScore,
   weightHealthScore,
   cardioHealthScore,
+  flexibilityHealthScore = null,
   overallHealthScore = null
 }: HealthFitnessViewProps) {
   const tendedRhythmIds = savedTendedRhythmIds
@@ -213,6 +215,12 @@ export function HealthFitnessView({
       label: 'Weight',
       consistency: weightHealthScore.consistency,
       onTrack: weightHealthScore.onTrack
+    },
+    {
+      id: 'flexibility',
+      label: 'Flexibility',
+      consistency: flexibilityHealthScore?.consistency ?? null,
+      onTrack: null
     }
   ] satisfies HealthAggregateEvidence['rows'];
   const fitnessConsistencyCount = fitnessMeasureRows
@@ -221,19 +229,39 @@ export function HealthFitnessView({
     .filter(row => row.onTrack !== null && Number.isFinite(row.onTrack)).length;
   const fitnessMeasureEvidence: HealthAggregateEvidence = {
     heading: 'Health & Fitness measure scores',
-    description: 'Available Strength, Cardio, and Weight measures are averaged independently for each score.',
+    description: 'Available scores are averaged separately.',
     itemLabel: 'Measure',
     rows: fitnessMeasureRows,
     consistencyAverage: healthScore.consistency,
     consistencyCount: fitnessConsistencyCount,
     onTrackAverage: healthScore.onTrack,
     onTrackCount: fitnessOnTrackCount,
-    coverage: `${fitnessConsistencyCount} of 3 measures have Consistency scores; ${fitnessOnTrackCount} of 3 have On Track scores.`,
-    notes: [
-      'Unscored measures are excluded from each average.',
-      'Cardio uses run logs and weekly goals; Strength and Weight use their existing scoring inputs.'
-    ],
-    emptyState: 'No eligible Health & Fitness measures are available.'
+    averageLabels: {
+      consistency: 'Average Consistency',
+      onTrack: 'Average On Track'
+    },
+    notes: ['Unavailable scores are excluded.'],
+    emptyState: 'No scores available yet.',
+    showEmptyStateWhenNoAverages: true,
+    weightSummary: null,
+    areaExplanations: [
+      {
+        label: 'Strength',
+        explanation: 'Averages active linked Strength Rhythms that have both Consistency and On Track scores.'
+      },
+      {
+        label: 'Cardio',
+        explanation: 'Consistency averages completed weeks in the four-week lookback with a tracking start and trustworthy targets. On Track is the lower of weekly run-count and mileage progress (max 100%).'
+      },
+      {
+        label: 'Weight',
+        explanation: 'Averages available scores from active linked Weight Rhythms separately for each measure.'
+      },
+      {
+        label: 'Flexibility',
+        explanation: 'Consistency averages regions with valid stretch history; each region loses 10 points per day overdue beyond its interval. On Track is not scored.'
+      }
+    ]
   };
   const strengthScoringEvidence = linkedRhythmEvidence('health-strength', rhythms, archivedRhythms, rhythmScores);
   const weightScoringEvidence = linkedRhythmEvidence('health-weight', rhythms, archivedRhythms, rhythmScores);

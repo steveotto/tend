@@ -155,4 +155,142 @@ describe('shared Health scoring details card', () => {
     expect(screen.getByText('66.666 + 33.333 ÷ 2 = 49.9995')).toBeTruthy();
     expect(screen.getByText('100 + 100 ÷ 2 = 100')).toBeTruthy();
   });
+
+  it('shows concise Health & Fitness evidence for unavailable, partial, complete, and zero scores', async () => {
+    const user = userEvent.setup();
+    const allUnavailable: HealthAggregateEvidence = {
+      heading: 'Health & Fitness measure scores',
+      description: 'Available scores are averaged separately.',
+      itemLabel: 'Measure',
+      rows: [
+        { id: 'strength', label: 'Strength', consistency: null, onTrack: null },
+        { id: 'cardio', label: 'Cardio', consistency: null, onTrack: null },
+        { id: 'weight', label: 'Weight', consistency: null, onTrack: null },
+        { id: 'flexibility', label: 'Flexibility', consistency: null, onTrack: null }
+      ],
+      consistencyAverage: null,
+      consistencyCount: 0,
+      onTrackAverage: null,
+      onTrackCount: 0,
+      averageLabels: {
+        consistency: 'Average Consistency',
+        onTrack: 'Average On Track'
+      },
+      notes: ['Unavailable scores are excluded.'],
+      emptyState: 'No scores available yet.',
+      showEmptyStateWhenNoAverages: true,
+      weightSummary: null,
+      areaExplanations: [
+        { label: 'Strength', explanation: 'Active linked Strength Rhythm scores.' },
+        { label: 'Cardio', explanation: 'Completed weeks with valid tracking inputs.' },
+        { label: 'Weight', explanation: 'Active linked Weight Rhythm scores.' },
+        { label: 'Flexibility', explanation: 'Valid stretch-history scores; On Track is not scored.' }
+      ]
+    };
+    const { rerender } = render(
+      <HealthScoringDetailsCard
+        title="How this Category was scored"
+        healthScore={null}
+        consistencyScore={null}
+        onTrackScore={null}
+        evidence={allUnavailable}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'How this Category was scored' }));
+    const evidence = screen.getByRole('region', { name: 'Health & Fitness measure scores' });
+    expect(within(evidence).getByText('Available scores are averaged separately.')).toBeTruthy();
+    expect(within(evidence).getByRole('columnheader', { name: 'Measure' })).toBeTruthy();
+    expect(within(evidence).getByRole('columnheader', { name: 'Consistency' })).toBeTruthy();
+    expect(within(evidence).getByRole('columnheader', { name: 'On Track' })).toBeTruthy();
+    expect(within(evidence).getByRole('row', { name: 'Flexibility — —' })).toBeTruthy();
+    expect(within(evidence).getByText('Average Consistency')).toBeTruthy();
+    expect(within(evidence).getByText('Average On Track')).toBeTruthy();
+    expect(within(evidence).getByText('Unavailable scores are excluded.')).toBeTruthy();
+    expect(within(evidence).getByRole('status').textContent).toBe('No scores available yet.');
+    expect(within(evidence).queryByText(/of 4/)).toBeNull();
+    expect(within(evidence).queryByText('Consistency counts three times as much as On Track.')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'How Health is calculated' })).toBeTruthy();
+    expect(screen.getByText('One or both component scores are unavailable.')).toBeTruthy();
+
+    const areaToggle = within(evidence).getByRole('button', { name: 'How each area is scored' });
+    expect(areaToggle.getAttribute('aria-expanded')).toBe('false');
+    const areaContent = document.getElementById(areaToggle.getAttribute('aria-controls')!);
+    expect(areaContent?.hasAttribute('hidden')).toBe(true);
+    areaToggle.focus();
+    await user.keyboard('{Enter}');
+    expect(areaToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(areaContent?.hasAttribute('hidden')).toBe(false);
+    for (const label of ['Strength:', 'Cardio:', 'Weight:', 'Flexibility:']) {
+      expect(within(evidence).getByText(label)).toBeTruthy();
+    }
+
+    rerender(
+      <HealthScoringDetailsCard
+        title="How this Category was scored"
+        healthScore={null}
+        consistencyScore={40}
+        onTrackScore={null}
+        evidence={{
+          ...allUnavailable,
+          rows: [
+            { id: 'strength', label: 'Strength', consistency: 40, onTrack: null },
+            ...allUnavailable.rows.slice(1)
+          ],
+          consistencyAverage: 40,
+          consistencyCount: 1
+        }}
+      />
+    );
+    expect(screen.getByRole('row', { name: 'Strength 40 —' })).toBeTruthy();
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByText('One or both component scores are unavailable.')).toBeTruthy();
+
+    rerender(
+      <HealthScoringDetailsCard
+        title="How this Category was scored"
+        healthScore={70}
+        consistencyScore={60}
+        onTrackScore={100}
+        evidence={{
+          ...allUnavailable,
+          rows: [
+            { id: 'strength', label: 'Strength', consistency: 60, onTrack: 100 },
+            { id: 'cardio', label: 'Cardio', consistency: 60, onTrack: 100 },
+            { id: 'weight', label: 'Weight', consistency: 60, onTrack: 100 },
+            { id: 'flexibility', label: 'Flexibility', consistency: 60, onTrack: null }
+          ],
+          consistencyAverage: 60,
+          consistencyCount: 4,
+          onTrackAverage: 100,
+          onTrackCount: 3
+        }}
+      />
+    );
+    expect(screen.getByRole('row', { name: 'Flexibility 60 —' })).toBeTruthy();
+    expect(screen.getByText('Σ 4 eligible scores ÷ 4 = 60')).toBeTruthy();
+    expect(screen.getByText('Σ 3 eligible scores ÷ 3 = 100')).toBeTruthy();
+
+    rerender(
+      <HealthScoringDetailsCard
+        title="How this Category was scored"
+        healthScore={0}
+        consistencyScore={0}
+        onTrackScore={0}
+        evidence={{
+          ...allUnavailable,
+          rows: [
+            { id: 'strength', label: 'Strength', consistency: 0, onTrack: 0 },
+            ...allUnavailable.rows.slice(1)
+          ],
+          consistencyAverage: 0,
+          consistencyCount: 1,
+          onTrackAverage: 0,
+          onTrackCount: 1
+        }}
+      />
+    );
+    expect(screen.getByRole('row', { name: 'Strength 0 0' })).toBeTruthy();
+    expect(screen.getAllByText('0 ÷ 1 = 0')).toHaveLength(2);
+    expect(screen.queryByRole('status')).toBeNull();
+  });
 });

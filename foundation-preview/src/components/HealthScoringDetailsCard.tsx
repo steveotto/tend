@@ -12,9 +12,14 @@ export type HealthScoringEvidenceRow = {
   onTrack: number | null;
 };
 
+export type HealthAreaScoringExplanation = {
+  label: string;
+  explanation: string;
+};
+
 export type HealthAggregateEvidence = {
   heading: string;
-  description: string;
+  description?: string;
   itemLabel: string;
   rows: readonly HealthScoringEvidenceRow[];
   otherCount?: number;
@@ -22,9 +27,16 @@ export type HealthAggregateEvidence = {
   consistencyCount: number;
   onTrackAverage: number | null;
   onTrackCount: number;
-  coverage: string;
+  coverage?: string;
   notes?: readonly string[];
   emptyState?: string;
+  showEmptyStateWhenNoAverages?: boolean;
+  averageLabels?: {
+    consistency: string;
+    onTrack: string;
+  };
+  weightSummary?: string | null;
+  areaExplanations?: readonly HealthAreaScoringExplanation[];
 };
 
 export function HealthScoringDetailsCard({
@@ -67,7 +79,9 @@ export function HealthScoringDetailsCard({
       <div id={contentId} className="rhythm-health-scoring-card__content" hidden={!expanded}>
         <section className="rhythm-health-scoring-card__calculation health-scoring-details-card__calculation">
           <h4>How Health is calculated</h4>
-          <p>Consistency counts three times as much as On Track.</p>
+          {evidence?.weightSummary !== null && (
+            <p>{evidence?.weightSummary ?? 'Consistency counts three times as much as On Track.'}</p>
+          )}
           <HealthWeightPanels
             consistencyScore={consistencyScore}
             onTrackScore={onTrackScore}
@@ -87,11 +101,12 @@ export function HealthScoringDetailsCard({
 
 function AggregateEvidence({ evidence }: { evidence: HealthAggregateEvidence }) {
   const { rows, otherCount = 0 } = evidence;
+  const noAveragesAvailable = evidence.consistencyAverage === null && evidence.onTrackAverage === null;
   return (
     <section className="health-aggregate-evidence" aria-label={evidence.heading}>
       <div className="health-aggregate-evidence__heading">
         <h4>{evidence.heading}</h4>
-        <p>{evidence.description}</p>
+        {evidence.description && <p>{evidence.description}</p>}
       </div>
       {rows.length > 0 || otherCount > 0 ? (
         <>
@@ -135,26 +150,64 @@ function AggregateEvidence({ evidence }: { evidence: HealthAggregateEvidence }) 
           {evidence.emptyState ?? `No eligible ${evidence.itemLabel.toLowerCase()} inputs are available.`}
         </p>
       )}
+      {evidence.showEmptyStateWhenNoAverages && noAveragesAvailable && rows.length > 0 && (
+        <p className="health-aggregate-evidence__empty" role="status">
+          {evidence.emptyState ?? 'No scores available yet.'}
+        </p>
+      )}
       <div className="health-aggregate-evidence__averages">
         <AverageRow
-          label="Consistency average"
+          label={evidence.averageLabels?.consistency ?? 'Consistency average'}
           rows={rows}
           measure="consistency"
           count={evidence.consistencyCount}
           average={evidence.consistencyAverage}
         />
         <AverageRow
-          label="On Track average"
+          label={evidence.averageLabels?.onTrack ?? 'On Track average'}
           rows={rows}
           measure="onTrack"
           count={evidence.onTrackCount}
           average={evidence.onTrackAverage}
         />
       </div>
-      <p className="health-aggregate-evidence__coverage">{evidence.coverage}</p>
+      {evidence.coverage && (
+        <p className="health-aggregate-evidence__coverage">{evidence.coverage}</p>
+      )}
       {evidence.notes?.map(note => (
         <p className="health-aggregate-evidence__note" key={note}>{note}</p>
       ))}
+      {evidence.areaExplanations && evidence.areaExplanations.length > 0 && (
+        <AreaScoringDisclosure explanations={evidence.areaExplanations} />
+      )}
+    </section>
+  );
+}
+
+function AreaScoringDisclosure({
+  explanations
+}: {
+  explanations: readonly HealthAreaScoringExplanation[];
+}) {
+  const headingId = useId();
+  const contentId = useId();
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <section className="health-scoring-details-card__area-scoring" aria-labelledby={headingId}>
+      <HealthDetailsExpandableHeader
+        id={headingId}
+        contentId={contentId}
+        title="How each area is scored"
+        expanded={expanded}
+        onToggle={() => setExpanded(value => !value)}
+        headingLevel="h5"
+      />
+      <div id={contentId} className="rhythm-health-scoring-card__content" hidden={!expanded}>
+        {explanations.map(({ label, explanation }) => (
+          <p key={label}><strong>{label}:</strong> {explanation}</p>
+        ))}
+      </div>
     </section>
   );
 }
