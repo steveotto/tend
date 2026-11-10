@@ -785,6 +785,7 @@ describe('shared preview components', () => {
 
     const card = screen.getByRole('article', { name: todayRhythms[0]!.title });
     const header = card.querySelector('.today-rhythm-details__header');
+    const titleScoreRow = card.querySelector('.today-rhythm-details__title-score-row');
     const actions = card.querySelector('.today-rhythm-details__actions');
     const content = card.querySelector('.today-rhythm-details__content');
     expect(within(card).getByRole('heading', { name: todayRhythms[0]!.title, level: 3 })).toBeTruthy();
@@ -794,19 +795,21 @@ describe('shared preview components', () => {
     expect(within(card).getByText(todayRhythms[0]!.description!)).toBeTruthy();
     expect(within(card).getByRole('group', { name: `Associations for ${todayRhythms[0]!.title}` })).toBeTruthy();
     expect(within(card).getByRole('button', { name: `Tend ${todayRhythms[0]!.title}` })).toBeTruthy();
-    expect(within(card).getByRole('button', { name: historyButtonName(`View scores and history for ${todayRhythms[0]!.title}`) })).toBeTruthy();
-    expect(within(card).getByRole('button', { name: `Edit ${todayRhythms[0]!.title}` })).toBeTruthy();
-    expect(actions?.firstElementChild?.classList.contains('today-rhythm-details__history-button')).toBe(true);
-    expect(actions?.children[1]?.classList.contains('rhythm-card__tend')).toBe(true);
+    const historyButton = within(card).getByRole('button', {
+      name: historyButtonName(`View scores and history for ${todayRhythms[0]!.title}`)
+    });
+    expect(historyButton.closest('.today-rhythm-details__header')).toBe(header);
+    expect(historyButton.closest('.today-rhythm-details__title-score-row')).toBe(titleScoreRow);
+    expect(within(card).queryByRole('button', { name: `Edit ${todayRhythms[0]!.title}` })).toBeNull();
+    expect(actions?.firstElementChild?.classList.contains('rhythm-card__tend')).toBe(true);
     expect(within(card).queryByRole('button', { name: 'Close details' })).toBeNull();
     expect(within(card).queryByRole('button', { name: /^Back/ })).toBeNull();
 
     await user.click(within(card).getByRole('button', { name: `Tend ${todayRhythms[0]!.title}` }));
-    await user.click(within(card).getByRole('button', { name: historyButtonName(`View scores and history for ${todayRhythms[0]!.title}`) }));
-    await user.click(within(card).getByRole('button', { name: `Edit ${todayRhythms[0]!.title}` }));
+    await user.click(historyButton);
     expect(onTend).toHaveBeenCalledOnce();
     expect(onHistory).toHaveBeenCalledOnce();
-    expect(onEdit).toHaveBeenCalledOnce();
+    expect(onEdit).not.toHaveBeenCalled();
     expect(onUndo).not.toHaveBeenCalled();
   });
 
@@ -862,10 +865,12 @@ describe('shared preview components', () => {
     const scoreButton = screen.getByRole('button', {
       name: historyButtonName(`View scores and history for ${rhythm.title}, Health 43 out of 100`)
     });
+
     expect(scoreButton.querySelector('.today-rhythm-details__history-score')?.textContent).toBe('43');
-    expect(scoreButton.firstElementChild?.tagName).toBe('svg');
+    expect(scoreButton.querySelector('.today-rhythm-details__history-content')).toBeTruthy();
     expect(scoreButton.querySelectorAll('svg.rhythm-metadata-icon--history rect')).toHaveLength(3);
-    expect(scoreButton.lastElementChild?.classList.contains('today-rhythm-details__history-score')).toBe(true);
+    expect(scoreButton.querySelector('.today-rhythm-details__history-content')
+      ?.lastElementChild?.classList.contains('today-rhythm-details__history-score')).toBe(true);
     for (const { score, tone } of toneCases) {
       const toneButton = screen.getByRole('button', {
         name: historyButtonName(`View scores and history for Score ${score ?? 'unavailable'}`
@@ -874,11 +879,32 @@ describe('shared preview components', () => {
       expect(toneButton?.getAttribute('data-score-tone')).toBe(tone);
       expect(toneButton?.querySelector('.today-rhythm-details__history-score')?.textContent)
         .toBe(formatScore(score));
-      expect(toneButton.children[0]?.tagName).toBe('svg');
+      expect(toneButton.querySelector('.today-rhythm-details__history-content')).toBeTruthy();
       expect(toneButton.querySelectorAll('svg.rhythm-metadata-icon--history rect')).toHaveLength(3);
-      expect(toneButton.children[1]?.classList.contains('today-rhythm-details__history-score')).toBe(true);
+      expect(toneButton.querySelector('.today-rhythm-details__history-content')
+        ?.lastElementChild?.classList.contains('today-rhythm-details__history-score')).toBe(true);
       expect(toneButton.querySelectorAll('svg')).toHaveLength(1);
     }
+  });
+
+  it('keeps Rhythm editing in the score and history modal, not on the inline card', async () => {
+    const user = userEvent.setup();
+    const rhythm = todayRhythms[0]!;
+    const onEdit = vi.fn();
+    render(
+      <RhythmDetailsDialog
+        rhythm={rhythm}
+        initialView="history"
+        onEdit={onEdit}
+        onClose={() => undefined}
+      />
+    );
+
+    const history = screen.getByRole('region', { name: `History for ${rhythm.title}` });
+    const edit = within(history).getByRole('button', { name: `Edit ${rhythm.title}` });
+    expect(edit.classList.contains('today-rhythm-details__edit-icon')).toBe(true);
+    await user.click(edit);
+    expect(onEdit).toHaveBeenCalledOnce();
   });
 
   it('keeps the bottom action row when description and associations are absent', () => {
@@ -1202,8 +1228,8 @@ describe('shared preview components', () => {
     expect(within(card).getByRole('button', { name: `Tend ${rhythm.title}` })).toBeTruthy();
     expect(within(card).getByRole('button', {
       name: historyButtonName(`View scores and history for ${rhythm.title}`)
-    })).toBeTruthy();
-    expect(within(card).getByRole('button', { name: `Edit ${rhythm.title}` }).parentElement).toBe(header);
+    }).closest('.today-rhythm-details__header')).toBe(header);
+    expect(within(card).queryByRole('button', { name: `Edit ${rhythm.title}` })).toBeNull();
 
     rerender(<RhythmDetailsDialog {...props} archived />);
     expect(screen.queryByRole('button', { name: `Tend ${rhythm.title}` })).toBeNull();

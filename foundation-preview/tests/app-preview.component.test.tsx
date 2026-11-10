@@ -141,14 +141,32 @@ function queryTodayRhythmArticle(rhythmTitle: string): HTMLElement | null {
     .find(candidate => candidate.classList.contains('today-rhythm-details-dialog--inline')) ?? null;
 }
 
+async function findPageRhythmArticle(rhythmTitle: string): Promise<HTMLElement> {
+  let pageArticles: HTMLElement[] = [];
+  await waitFor(() => {
+    pageArticles = screen.getAllByRole('article', { name: rhythmTitle })
+      .filter(candidate => !candidate.closest('.rhythm-history-view'));
+    expect(pageArticles).toHaveLength(1);
+  });
+  return pageArticles[0]!;
+}
+
 async function openRhythmEditorFromScore(
   user: ReturnType<typeof userEvent.setup>,
   rhythmTitle: string
 ): Promise<HTMLElement> {
-  const card = screen.getAllByRole('article', { name: rhythmTitle })
-    .find(candidate => within(candidate).queryByRole('button', { name: `Edit ${rhythmTitle}` }));
-  if (!card) throw new Error(`Could not find an editable card for ${rhythmTitle}.`);
-  await user.click(within(card).getByRole('button', { name: `Edit ${rhythmTitle}` }));
+  let history = screen.queryByRole('region', { name: `History for ${rhythmTitle}` });
+  if (!history) {
+    const historyButton = screen.getByRole('button', {
+      name: historyButtonName(`View scores and history for ${rhythmTitle}`)
+    });
+    const card = historyButton.closest('article');
+    if (!card) throw new Error(`Could not find the shared card for ${rhythmTitle}.`);
+    expect(within(card).queryByRole('button', { name: `Edit ${rhythmTitle}` })).toBeNull();
+    await user.click(historyButton);
+    history = await screen.findByRole('region', { name: `History for ${rhythmTitle}` });
+  }
+  await user.click(within(history).getByRole('button', { name: `Edit ${rhythmTitle}` }));
   return screen.getByRole('dialog', { name: 'Edit Rhythm' });
 }
 
@@ -351,16 +369,20 @@ function seasonDeletionFixture(middleIncludesToday = false) {
 }
 
 describe('Tend Today preview', () => {
-  it('returns from Rhythm editing to the shared details-card pencil without a duplicate header action', async () => {
+  it('returns from Rhythm editing to the score and history card without an inline edit action', async () => {
     const user = userEvent.setup();
     testingRender(<App />);
     await user.click(screen.getByRole('tab', { name: 'All today' }));
     expandAllTodayGroups(document.body);
 
-    const card = getTodayRhythmArticle('Take a walk');
-    const editButton = within(card).getByRole('button', { name: 'Edit Take a walk' });
-    expect(screen.getAllByRole('button', { name: 'Edit Take a walk' })).toHaveLength(1);
     const editor = await openRhythmEditorFromScore(user, 'Take a walk');
+    const history = screen.getByRole('region', { name: 'History for Take a walk' });
+    const card = within(history).getByRole('article', { name: 'Take a walk' });
+    const editButton = within(card).getByRole('button', { name: 'Edit Take a walk' });
+    const headerActions = within(history.querySelector('.rhythm-history-view__header-actions')!);
+    expect(headerActions.getByRole('button', { name: 'Close details' })).toBeTruthy();
+    expect(headerActions.queryByRole('button', { name: 'Edit Take a walk' })).toBeNull();
+    expect(within(card).queryByRole('button', { name: /Tend|Log|Tended|View scores/ })).toBeNull();
 
     await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit Rhythm' })).toBeNull());
@@ -1548,7 +1570,7 @@ describe('Tend Today preview', () => {
     await user.click(screen.getByRole('button', { name: 'Archived rhythms (1)' }));
     const archive = screen.getByRole('dialog', { name: 'Archived rhythms' });
     await user.click(within(archive).getByRole('button', { name: 'Restore rhythm Morning prayer' }));
-    expect(await screen.findByRole('article', { name: 'Morning prayer' })).toBeTruthy();
+    expect(await findPageRhythmArticle('Morning prayer')).toBeTruthy();
 
     cleanup();
     render(<App />);
@@ -1756,7 +1778,7 @@ describe('Tend Today preview', () => {
     await user.click(screen.getByRole('button', { name: 'Archived rhythms (1)' }));
     const archive = screen.getByRole('dialog', { name: 'Archived rhythms' });
     await user.click(within(archive).getByRole('button', { name: 'Restore rhythm Parenting reading time' }));
-    expect(await screen.findByRole('article', { name: 'Parenting reading time' })).toBeTruthy();
+    expect(await findPageRhythmArticle('Parenting reading time')).toBeTruthy();
     const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY)!;
     const saved = parsePreviewBackup(raw, localDateString(new Date()));
     expect(saved.valid).toBe(true);
@@ -4700,7 +4722,11 @@ describe('Tend Today preview', () => {
     expect(within(rhythmCard).getByRole('button', { name: 'Open synthetic profile for Avery Brooks' })).toBeTruthy();
     await saveCardCompletion(user, 'After-lunch walk');
 
-    const editButton = within(rhythmCard).getByRole('button', { name: 'Edit After-lunch walk' });
+    await user.click(within(rhythmCard).getByRole('button', {
+      name: historyButtonName('View scores and history for After-lunch walk')
+    }));
+    const history = screen.getByRole('region', { name: 'History for After-lunch walk' });
+    const editButton = within(history).getByRole('button', { name: 'Edit After-lunch walk' });
     editButton.focus();
     await user.keyboard('{Enter}');
     const edit = screen.getByRole('dialog', { name: 'Edit Rhythm' });
@@ -5715,7 +5741,11 @@ describe('Tend Today preview', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'When did you tend it?' })).toBeNull());
     expect(within(rhythmCard).getByRole('button', { name: `Tend ${longTitle}` })).toBeTruthy();
 
-    const editButton = within(rhythmCard).getByRole('button', { name: `Edit ${longTitle}` });
+    await user.click(within(rhythmCard).getByRole('button', {
+      name: historyButtonName(`View scores and history for ${longTitle}`)
+    }));
+    const history = screen.getByRole('region', { name: `History for ${longTitle}` });
+    const editButton = within(history).getByRole('button', { name: `Edit ${longTitle}` });
     await user.click(editButton);
     const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
     await user.click(within(editor).getByRole('button', { name: 'Cancel' }));

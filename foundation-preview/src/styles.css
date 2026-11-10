@@ -816,6 +816,13 @@ a:focus-visible {
   font-weight: 800;
 }
 
+.ma-score.green .ma-score__value,
+.ma-score.yellow .ma-score__value,
+.ma-score.red .ma-score__value,
+.ma-score.neutral .ma-score__value {
+  color: #FFFFFF;
+}
+
 .category-health-badge.green {
   background: var(--score-green);
   color: #fff;
@@ -18620,13 +18627,13 @@ button.person-health-component-score:focus-visible {
   --rhythm-card-people-size: calc(0.75rem * var(--app-text-scale, 1));
   --rhythm-card-metadata-size: calc(0.8125rem * var(--app-text-scale, 1));
   --rhythm-card-action-size: calc(0.875rem * var(--app-text-scale, 1));
-  --rhythm-card-score-value-size: calc(0.875rem * var(--app-text-scale, 1));
+  --rhythm-card-score-value-size: var(--rhythm-card-title-size);
   --rhythm-card-badge-height: calc(2rem * var(--app-text-scale, 1));
   --rhythm-card-avatar-size: calc(1.5rem * var(--app-text-scale, 1));
   --rhythm-card-footer-row-height: calc(2rem * var(--app-text-scale, 1));
-  --rhythm-card-score-width: calc(68px * var(--app-text-scale, 1));
+  --rhythm-card-score-width: calc(76px * var(--app-text-scale, 1));
   --rhythm-card-score-height: var(--rhythm-card-badge-height);
-  --rhythm-card-score-icon-size: calc(14px * var(--app-text-scale, 1));
+  --rhythm-card-score-icon-size: var(--rhythm-card-title-size);
   --rhythm-card-title-description-gap: calc(8px * var(--app-text-scale, 1));
   --rhythm-card-description-content-gap: calc(2px * var(--app-text-scale, 1));
   --rhythm-card-badge-action-gap: calc(12px * var(--app-text-scale, 1));
@@ -18637,41 +18644,68 @@ button.person-health-component-score:focus-visible {
   margin: 0 0 8px;
   padding: 0;
   overflow: visible;
+  min-height: min-content;
   border: 1px solid #d3ded6;
   border-radius: 23px;
   background: #fff;
   box-shadow: 0 1px 3px rgba(32, 39, 35, .07), 0 6px 16px rgba(32, 39, 35, .05);
 }
 
+.show-tended-list__item.is-collapsing > .today-rhythm-details-dialog--inline {
+  min-height: 0;
+}
+
 .today-rhythm-details-dialog--inline .today-rhythm-details__header {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 44px;
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  gap: 8px;
   padding-block: 0;
   padding-inline: var(--rhythm-details-horizontal-padding);
 }
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__title-group {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rhythm-card-score-width);
+  grid-template-rows: auto;
+  align-items: start;
+  column-gap: calc(8px * var(--app-text-scale, 1));
+  row-gap: var(--rhythm-card-title-description-gap);
+  width: 100%;
   min-width: 0;
 }
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__title-copy {
-  display: flex;
-  flex: 1 1 100%;
-  flex-direction: column;
+  display: contents;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__title-score-row {
+  display: contents;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__title-group > :not(.today-rhythm-details__title-copy) {
+  grid-column: 1 / -1;
   min-width: 0;
-  gap: var(--rhythm-card-title-description-gap);
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__actions {
+  position: static;
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__content {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  margin-top: 12px;
+  padding: 0 var(--rhythm-details-horizontal-padding) var(--rhythm-card-action-footer-gap);
+  overflow: visible;
 }
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__title-group h3 {
   display: block;
-  flex: none;
+  grid-column: 1;
+  grid-row: 1;
   width: 100%;
   min-width: 0;
   font-size: var(--rhythm-card-title-size);
@@ -18680,38 +18714,11 @@ button.person-health-component-score:focus-visible {
   overflow-wrap: anywhere;
 }
 
-.today-rhythm-details-dialog--inline .today-rhythm-details__edit-icon {
-  position: relative;
-  display: flex;
-  align-self: start;
-  justify-self: end;
-  align-items: flex-start;
-  justify-content: center;
-  box-sizing: border-box;
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
-  min-height: 44px;
-  padding: 0;
-  margin: 0;
-  font-size: var(--rhythm-card-title-size);
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__edit-visual {
-  position: relative;
-  top: calc((1.3em - 24px) / 2);
-  left: auto;
-  width: 28px;
-  height: 24px;
-  transform: none;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__edit-visual svg {
-  width: calc(16px * var(--app-text-scale, 1));
-  height: calc(16px * var(--app-text-scale, 1));
-}
-
 .today-rhythm-details-dialog--inline .today-rhythm-details__description {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  width: 100%;
+  max-width: none;
   margin: 0 0 var(--rhythm-card-description-content-gap);
   color: var(--tend-secondary, var(--ink-soft));
   font-size: var(--rhythm-card-description-size);
@@ -18722,7 +18729,7 @@ button.person-health-component-score:focus-visible {
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   width: 100%;
   min-width: 0;
   min-height: 44px;
@@ -18732,124 +18739,65 @@ button.person-health-component-score:focus-visible {
 }
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__history-button {
-  position: relative;
-  isolation: isolate;
   box-sizing: border-box;
   display: inline-flex;
+  grid-column: 2;
+  grid-row: 1;
+  align-self: baseline;
+  justify-self: end;
+  align-items: baseline;
+  justify-content: flex-end;
   flex: 0 0 var(--rhythm-card-score-width);
-  align-items: center;
-  justify-content: center;
-  gap: calc(6px * var(--app-text-scale, 1));
   width: var(--rhythm-card-score-width);
   min-width: var(--rhythm-card-score-width);
   height: max(44px, calc(44px * var(--app-text-scale, 1)));
   min-height: max(44px, calc(44px * var(--app-text-scale, 1)));
-  padding: 0 calc(8px * var(--app-text-scale, 1));
-  border-color: transparent;
-  border-radius: 10px;
+  margin-block-start: 0;
+  margin-block-end: calc(1.3em - max(44px, calc(44px * var(--app-text-scale, 1))));
+  padding: 0 0 0 calc(8px * var(--app-text-scale, 1));
+  border: 0;
+  border-radius: 8px;
   background: transparent;
-  color: #fff;
-  transition: filter 120ms ease-out, outline-color 120ms ease-out;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button::before {
-  position: absolute;
-  z-index: 0;
-  top: 50%;
-  left: 50%;
-  width: var(--rhythm-card-score-width);
-  height: var(--rhythm-card-score-height);
-  border-radius: inherit;
-  background: var(--score-neutral);
-  content: "";
-  pointer-events: none;
-  transform: translate(-50%, -50%);
+  box-shadow: none;
+  color: var(--rhythm-card-score-color, var(--score-neutral-text));
+  font-size: var(--rhythm-card-title-size);
+  line-height: 1.3;
+  white-space: nowrap;
 }
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="green"] {
-  background: transparent;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="green"]::before {
-  background: var(--score-green);
+  --rhythm-card-score-color: var(--score-green);
 }
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="yellow"] {
-  background: transparent;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="yellow"]::before {
-  background: var(--score-yellow);
+  --rhythm-card-score-color: var(--score-yellow);
 }
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="red"] {
-  background: transparent;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="red"]::before {
-  background: var(--score-red);
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button:hover {
-  filter: brightness(.94);
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button:active {
-  filter: brightness(.88);
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="green"]:hover {
-  background: transparent;
-  filter: none;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="green"]:hover::before {
-  background: #0f9b61;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="green"]:active {
-  background: transparent;
-  filter: none;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="green"]:active::before {
-  background: #0b8d56;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="red"]:hover {
-  background: transparent;
-  filter: none;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="red"]:hover::before {
-  background: #ed5644;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="red"]:active {
-  background: transparent;
-  filter: none;
-}
-
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button[data-score-tone="red"]:active::before {
-  background: #d04a3c;
+  --rhythm-card-score-color: var(--score-red);
 }
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__history-button .rhythm-metadata-icon--history {
   position: relative;
-  z-index: 1;
-  flex: 0 0 var(--rhythm-card-score-icon-size);
+  display: inline-block;
+  align-self: center;
   width: var(--rhythm-card-score-icon-size);
   height: var(--rhythm-card-score-icon-size);
 }
 
+.today-rhythm-details-dialog--inline .today-rhythm-details__history-content {
+  display: inline-flex;
+  flex-direction: row-reverse;
+  align-items: baseline;
+  gap: calc(6px * var(--app-text-scale, 1));
+}
+
 .today-rhythm-details-dialog--inline .today-rhythm-details__history-score {
-  position: relative;
-  z-index: 1;
-  flex: none;
-  min-width: 2ch;
+  margin: 0;
+  white-space: nowrap;
   font-size: var(--rhythm-card-score-value-size);
   font-weight: 600;
-  line-height: 1;
+  line-height: 1.3;
 }
 
 .strength-guided__set--add {

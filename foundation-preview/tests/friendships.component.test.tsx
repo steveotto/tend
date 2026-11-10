@@ -712,8 +712,8 @@ describe('Friendships view', () => {
     await user.click(screen.getByRole('button', { name: 'Add Rhythm' }));
     expect(addRhythm).toHaveBeenCalledOnce();
     expect(screen.queryByText('No active Rhythms yet.')).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Edit Monthly breakfast' }));
-    expect(editRhythm).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('button', { name: 'Edit Monthly breakfast' })).toBeNull();
+    expect(editRhythm).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Tend Monthly breakfast' }));
     expect(tend).toHaveBeenCalledWith(rhythm.id, expect.anything());
     await user.click(screen.getByRole('button', { name: 'View scores and history for Monthly breakfast, Health 0 out of 100' }));
