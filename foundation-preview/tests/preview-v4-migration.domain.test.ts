@@ -5,6 +5,8 @@ import { migratePreviewToProposedV4, PROPOSED_PREVIEW_SCHEMA_VERSION } from '../
 import { loadPreview, PREVIEW_STORAGE_KEY, writePreview } from '../src/storage/preview-storage.ts';
 import {
   PREVIEW_V3_RECOVERY_KEY,
+  PREVIEW_V37_RECOVERY_KEY,
+  PREVIEW_V38_RECOVERY_KEY,
   preserveProposedV4SourceRecovery,
   proposedV4RecoveryKeyForRaw
 } from '../src/storage/preview-v4-recovery.ts';
@@ -484,6 +486,58 @@ describe('v4 migration and recovery domain', () => {
       expect(values.get(expectedKeys[version])).toBe(raw);
       expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
       expect([...values.keys()]).toEqual([PREVIEW_STORAGE_KEY, expectedKeys[version]]);
+    }
+  });
+
+  it('preserves exact v37 and v38 bytes before a guarded replacement', () => {
+    const currentData = createSamplePreviewData();
+    const currentEnvelope = createPreviewEnvelope(currentData);
+    const v37Data = { ...currentEnvelope.data };
+    delete (v37Data as Partial<typeof currentEnvelope.data>).todayView;
+    delete (v37Data as Partial<typeof currentEnvelope.data>).flexibility;
+    const sources = [
+      {
+        version: 37,
+        key: PREVIEW_V37_RECOVERY_KEY,
+        data: v37Data
+      },
+      {
+        version: 38,
+        key: PREVIEW_V38_RECOVERY_KEY,
+        data: currentEnvelope.data
+      }
+    ] as const;
+
+    for (const source of sources) {
+      const originalRaw = ` \n${JSON.stringify({
+        format: currentEnvelope.format,
+        schemaVersion: source.version,
+        data: source.data
+      })}\n`;
+      const parsed = parsePreviewBackup(originalRaw, currentDate);
+      expect(parsed.valid).toBe(true);
+      expect(proposedV4RecoveryKeyForRaw(originalRaw)).toBe(source.key);
+      const { storage, values } = storageFixture(originalRaw);
+
+      const saved = writePreview(storage, currentData, originalRaw, {
+        currentDate,
+        operation: 'replace'
+      });
+
+      expect(saved.kind).toBe('saved');
+      if (saved.kind !== 'saved') continue;
+      expect(values.get(source.key)).toBe(originalRaw);
+      expect(values.get(PREVIEW_STORAGE_KEY)).toBe(saved.raw);
+      expect(values.get(PREVIEW_STORAGE_KEY)).not.toBe(originalRaw);
+
+      const conflicted = storageFixture(originalRaw);
+      conflicted.values.set(source.key, '{"different":"recovery"}');
+      expect(writePreview(conflicted.storage, currentData, originalRaw, {
+        currentDate,
+        operation: 'replace'
+      })).toMatchObject({ kind: 'error' });
+      expect(conflicted.values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+      expect(conflicted.values.get(source.key)).toBe('{"different":"recovery"}');
     }
   });
 
