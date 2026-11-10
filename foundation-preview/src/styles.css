@@ -3695,6 +3695,10 @@ dialog.health-score-details-dialog[open] {
   color: var(--tend-secondary, var(--ink-soft));
 }
 
+.health-score-breakdown__header > .neutral {
+  color: var(--tend-secondary, var(--ink-soft));
+}
+
 .health-score-meter {
   box-sizing: border-box;
   width: 100%;
@@ -4369,6 +4373,13 @@ dialog.health-score-details-dialog[open] {
   align-items: center;
   justify-content: space-between;
   gap: 4px;
+}
+
+.health-info-what-counts__person-unavailable {
+  margin: 8px 0 0;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.4;
 }
 
 .health-info-what-counts__contribution-heading > h4 {
@@ -6036,7 +6047,7 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 .people-card__open {
   display: grid;
   align-content: start;
-  gap: 16px;
+  gap: 12px;
   width: 100%;
   min-width: 0;
   min-height: 0;
@@ -7534,6 +7545,18 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 
 .person-profile__all-rhythms-toggle[aria-expanded="true"] .person-profile__all-rhythms-chevron {
   transform: rotate(180deg);
+}
+
+.person-profile__other-rhythms {
+  display: grid;
+  gap: 10px;
+}
+
+.person-profile__other-rhythms h4 {
+  margin: 0;
+  color: var(--ink-soft, #66736b);
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  font-weight: 600;
 }
 
 .person-profile__cadence {
@@ -18520,6 +18543,47 @@ button.person-health-component-score:focus-visible {
   outline: 2px solid var(--tend-forest, var(--forest));
   outline-offset: -2px;
   border-radius: 8px;
+}
+
+.person-overall-health-formula {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.person-overall-health-formula h4,
+.person-overall-health-formula ul,
+.person-overall-health-formula p {
+  margin: 0;
+}
+
+.person-overall-health-formula ul {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.person-overall-health-formula li {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--tend-mist, #e8f0ea) 35%, var(--tend-surface, #fff));
+  font-size: calc(0.875rem * var(--app-text-scale, 1));
+}
+
+.person-overall-health-formula li strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.person-overall-health-formula__note {
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.4;
 }
 
 .person-health-input-facts {

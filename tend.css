@@ -2059,7 +2059,6 @@ nav.tabs .utility-menu button:hover,nav.tabs .utility-menu button.active{backgro
  html[data-mobile-text-size="large"] .home-dashboard .calendar-breathing-icon svg{width:27px;height:27px}
  html[data-mobile-text-size="large"] .home-dashboard .calendar-breathing-room strong{}
  html[data-mobile-text-size="large"] .home-dashboard .calendar-breathing-room p{}
-}
 .tend-row-content .plan-pills{display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap;margin:0;vertical-align:middle}
 .tend-row-content .pill{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
 .tend-row-content .pill .collection-icon{width:14px;height:14px}
