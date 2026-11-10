@@ -16,8 +16,6 @@ import { RhythmCalendarIcon } from './RhythmCalendarIcon.tsx';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
 import { SettingsGearButton } from './SettingsGearButton.tsx';
 import { formatScore } from '../domain/score-display.ts';
-import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
-import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 import { SegmentedTabs } from './SegmentedTabs.tsx';
 import type { SegmentedTab } from './SegmentedTabs.tsx';
 import {
@@ -75,8 +73,6 @@ type StrengthRhythm = {
 export type StrengthViewProps = {
   data: StrengthData;
   healthScore?: CategoryScoreSelection;
-  overallHealthScore?: number | null;
-  categoryHealthScore?: number | null;
   people?: readonly PersonPreview[];
   peopleGroups?: readonly PersonPickerGroup[];
   rhythms: readonly StrengthRhythm[];
@@ -102,7 +98,6 @@ export type StrengthViewProps = {
   onRhythmModeRequestOpened?: (requestId: number) => void;
   onRhythmModeRequestClosed?: () => void;
   foundationNavigation?: boolean;
-  healthScoringEvidence?: HealthAggregateEvidence;
 };
 
 type WorkoutsTab = 'recommended' | 'saved' | 'history';
@@ -141,8 +136,6 @@ const strengthBodyMapPaintOrder: readonly StrengthMuscleId[] = [
 export function StrengthView({
   data,
   healthScore,
-  overallHealthScore = null,
-  categoryHealthScore = null,
   people = syntheticPeople,
   peopleGroups = syntheticPersonPickerGroups,
   rhythms,
@@ -157,8 +150,7 @@ export function StrengthView({
   pendingRhythmModeRequest = null,
   onRhythmModeRequestOpened,
   onRhythmModeRequestClosed,
-  foundationNavigation = false,
-  healthScoringEvidence
+  foundationNavigation = false
 }: StrengthViewProps) {
   const [workoutsTab, setWorkoutsTab] = useState<WorkoutsTab>('recommended');
   const [visibleHistoryLimit, setVisibleHistoryLimit] = useState(10);
@@ -498,7 +490,6 @@ export function StrengthView({
     if (pendingGuidedStart) consumeRhythmRequest(pendingGuidedStart);
     setPendingGuidedStart(null);
     setConfirmingGuidedStartDiscard(false);
-    setGuidedSessionError('');
     if (rhythmLogRequestIdRef.current !== null) {
       rhythmLogRequestIdRef.current = null;
       onRhythmLogClosed?.();
@@ -508,9 +499,7 @@ export function StrengthView({
   function discardAndStartGuidedWorkout() {
     if (!pendingGuidedStart) return;
     const request = pendingGuidedStart;
-    if (!startGuidedWorkout(request)) {
-      setGuidedSessionError('Could not start the new workout. Your current workout is unchanged.');
-    }
+    startGuidedWorkout(request);
   }
 
   function startWorkoutFromButton(
@@ -1026,10 +1015,6 @@ export function StrengthView({
         health={healthScore?.health ?? null}
         consistencyCaption="Consistency across eligible Strength-linked Rhythms."
         onTrackCaption="Whether eligible Strength-linked Rhythms are caught up."
-        overallHealthScore={overallHealthScore}
-        categoryHealthScore={categoryHealthScore}
-        linkedRhythmCount={rhythms.filter(item => foundationRhythmIds(item.rhythm).includes('health-strength')).length}
-        {...(healthScoringEvidence ? { scoringEvidence: healthScoringEvidence } : {})}
         compact
         summaryExplanation="Strength Health reflects eligible Strength-linked Rhythm scores. Your body, at a glance and its muscle scores and readiness remain training feedback and do not contribute."
       />
@@ -1163,13 +1148,7 @@ export function StrengthView({
           hidden={workoutsTab !== 'recommended'}
         >
           {workoutsTab === 'recommended' && (
-            <section className="strength-workout-section" aria-labelledby="strength-recommended-heading">
-              <header className="strength-card-heading">
-                <div>
-                  <h3 id="strength-recommended-heading">Recommended workouts</h3>
-                  <p>Suggestions based on your recent training.</p>
-                </div>
-              </header>
+            <>
               <div className="category-rhythm-entry-actions">
                 <button
                   type="button"
@@ -1205,7 +1184,7 @@ export function StrengthView({
                     : 'No saved workout is eligible right now. You can still log a custom workout.'}
                 </div>
               )}
-            </section>
+            </>
           )}
         </section>
         <section
@@ -1225,7 +1204,7 @@ export function StrengthView({
               </header>
               <div className="category-rhythm-entry-actions">
                 <button type="button" className="btn mini" onClick={event => openDialog({ kind: 'workout' }, event)}>
-                  Create workout
+                  Add workout
                 </button>
                 <button
                   ref={suggestionPickerOpenerRef}
@@ -1301,7 +1280,7 @@ export function StrengthView({
               <header className="strength-card-heading">
                 <div>
                   <h3 id="strength-history-heading">Workout history</h3>
-                  <p>Review your past workouts and the muscle groups you trained.</p>
+                  <p>{history.total} {history.total === 1 ? 'workout' : 'workouts'} logged</p>
                 </div>
               </header>
               {historyAnnouncement && <p className="strength-history-status" role="status">{historyAnnouncement}</p>}
@@ -1852,52 +1831,29 @@ export function StrengthView({
       )}
       {pendingGuidedStart && !guidedSessionOpen && (
         <MoneyGoalDialog
-          title={data.guidedSessionDraft
-            ? confirmingGuidedStartDiscard
-              ? `Discard ${data.guidedSessionDraft.workoutName}?`
-              : 'Workout in progress'
-            : `Start ${pendingGuidedStart.workout.name}?`}
+          title={data.guidedSessionDraft ? 'Workout in progress' : `Start ${pendingGuidedStart.workout.name}?`}
           intro={data.guidedSessionDraft
-            ? confirmingGuidedStartDiscard
-              ? 'If the replacement saves, this workout’s unfinished progress will be removed.'
-              : `${data.guidedSessionDraft.workoutName} is in progress. Resume it or choose to start another workout.`
+            ? 'A saved session must be resumed or explicitly discarded before another can start.'
             : 'This workout will be saved as an in-progress draft until you finish and review it.'}
           labelledBy="strength-guided-start-title"
           titleId="strength-guided-start-title"
-          closeLabel={confirmingGuidedStartDiscard ? 'Cancel workout replacement' : 'Close workout start options'}
+          closeLabel="Close workout start options"
           bodyClassName="strength-dialog-body"
           onClose={cancelGuidedStart}
         >
           <div className="strength-guided-start">
             {guidedSessionError && <p className="strength-form-error" role="alert">{guidedSessionError}</p>}
             {data.guidedSessionDraft ? (
-              confirmingGuidedStartDiscard ? (
-                <>
-                  {pendingGuidedStart.workout.name.trim() && (
-                    <p>Start instead: <strong>{pendingGuidedStart.workout.name}</strong></p>
-                  )}
-                  <div className="money-goal-dialog__actions">
-                    <button type="button" className="btn mini danger" onClick={discardAndStartGuidedWorkout}>Discard and start</button>
-                    <button type="button" className="btn mini ghost" onClick={() => {
-                      setConfirmingGuidedStartDiscard(false);
-                      setGuidedSessionError('');
-                    }}>Keep workout</button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  {pendingGuidedStart.rhythm && data.guidedSessionDraft.rhythmId !== pendingGuidedStart.rhythm.rhythm.id
-                    && <p role="status">Resuming this session will leave {pendingGuidedStart.rhythm.rhythm.title} uncompleted.</p>}
-                  <div className="money-goal-dialog__actions">
-                    <button type="button" className="btn mini" onClick={resumeGuidedWorkout}>Resume</button>
-                    <button type="button" className="btn mini danger" onClick={() => {
-                      setGuidedSessionError('');
-                      setConfirmingGuidedStartDiscard(true);
-                    }}>Discard and start…</button>
-                    <button type="button" className="btn mini ghost" onClick={cancelGuidedStart}>Cancel</button>
-                  </div>
-                </>
-              )
+              <>
+                <p>Current session: <strong>{data.guidedSessionDraft.workoutName}</strong></p>
+                {pendingGuidedStart.rhythm && data.guidedSessionDraft.rhythmId !== pendingGuidedStart.rhythm.rhythm.id
+                  && <p role="status">Resuming this session will leave {pendingGuidedStart.rhythm.rhythm.title} uncompleted.</p>}
+                <div className="money-goal-dialog__actions">
+                  <button type="button" className="btn mini" onClick={resumeGuidedWorkout}>Resume current workout</button>
+                  <button type="button" className="btn mini danger" onClick={() => setConfirmingGuidedStartDiscard(true)}>Discard and start selected workout</button>
+                  <button type="button" className="btn mini ghost" onClick={cancelGuidedStart}>Cancel</button>
+                </div>
+              </>
             ) : (
               <div className="money-goal-dialog__actions">
                 {pendingGuidedStart.workout.exercises?.some(exercise => exercise.loadMeaning === undefined) && (
@@ -1910,6 +1866,16 @@ export function StrengthView({
                 <button type="button" className="btn mini" onClick={() => startGuidedWorkout(pendingGuidedStart)}>Retry start</button>
                 <button type="button" className="btn mini ghost" onClick={cancelGuidedStart}>Cancel</button>
               </div>
+            )}
+            {confirmingGuidedStartDiscard && (
+              <section className="strength-guided__discard" role="alertdialog" aria-labelledby="strength-guided-start-discard-title">
+                <h3 id="strength-guided-start-discard-title">Discard the current session?</h3>
+                <p>Its unfinished progress will be removed. The selected workout will start only if its draft saves successfully.</p>
+                <div className="money-goal-dialog__actions">
+                  <button type="button" className="btn mini danger" onClick={discardAndStartGuidedWorkout}>Discard and start</button>
+                  <button type="button" className="btn mini ghost" onClick={() => setConfirmingGuidedStartDiscard(false)}>Keep current session</button>
+                </div>
+              </section>
             )}
           </div>
         </MoneyGoalDialog>

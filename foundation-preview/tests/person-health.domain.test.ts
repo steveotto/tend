@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { selectCategoryScore } from '../src/domain/category-scoring.ts';
 import { aggregateHealthMeasures } from '../src/domain/health-scoring.ts';
-import {
-  selectPersonHealth,
-  selectPersonOverallHealth,
-  selectPersonRhythmHealth
-} from '../src/domain/person-health.ts';
+import { selectPersonHealth, selectPersonRhythmHealth } from '../src/domain/person-health.ts';
 import { marriageRhythms } from '../src/domain/preview-data.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
 import type { RhythmScoreResult, RhythmScoreSelection } from '../src/domain/rhythm-scoring.ts';
@@ -202,31 +198,5 @@ describe('person Health selectors', () => {
     expect(result.excludedComponentIds).toEqual([]);
     expect(result.unscoredComponentIds).toEqual(['connection', 'prayer']);
     expect(result).toMatchObject({ consistency: 70, onTrack: 90, health: 75 });
-  });
-
-  it('uses the profile Overall Health selector for list scores, including zero and unavailable', () => {
-    const rhythm: RhythmPreview = {
-      ...marriageRhythms[0]!,
-      id: 'person-health-rhythm-score-parity',
-      personIds: ['sample-person-avery']
-    };
-    const scored = selectPersonRhythmHealth(
-      'sample-person-avery',
-      [rhythm],
-      new Map([[rhythm.id, scoredRhythm(20, 80)]]),
-      new Set()
-    );
-    const zero = selectPersonRhythmHealth(
-      'sample-person-avery',
-      [rhythm],
-      new Map([[rhythm.id, scoredRhythm(0, 0)]]),
-      new Set()
-    );
-    const unavailable = selectPersonRhythmHealth('sample-person-avery', [rhythm], new Map(), new Set());
-
-    expect(selectPersonOverallHealth(scored).health).toBe(scored.health);
-    expect(selectPersonOverallHealth(scored).health).toBe(35);
-    expect(selectPersonOverallHealth(zero).health).toBe(0);
-    expect(selectPersonOverallHealth(unavailable).health).toBeNull();
   });
 });

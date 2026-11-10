@@ -43,11 +43,11 @@ import { personNotesForPerson } from '../domain/person-notes.ts';
 import type { PersonNote, PersonNoteDraft } from '../domain/person-notes.ts';
 import { resolvePersonCategory } from '../domain/person-categories.ts';
 import { BirthdayCakeIcon } from './BirthdayCakeIcon.tsx';
-import { PersonHealthComponentScores, PersonHealthSummary } from './PersonHealthSummary.tsx';
+import { PersonHealthSummary } from './PersonHealthSummary.tsx';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
 import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
 import { PersonPrayerPanel } from './PersonPrayerPanel.tsx';
-import { selectPersonOverallHealth, selectPersonRhythmHealth } from '../domain/person-health.ts';
+import { selectPersonHealth, selectPersonRhythmHealth } from '../domain/person-health.ts';
 import type {
   PersonPrayerRequest,
   PersonPrayerRequestDraft,
@@ -191,7 +191,6 @@ export function PersonProfileView({
   const profileNotes = personNotesForPerson(personNotes, personId);
   const birthdayDateLabel = details?.birthday ? personDateLabel(details.birthday.monthDay) : null;
   const anniversaryDateLabel = details?.anniversary ? personDateLabel(details.anniversary.monthDay) : null;
-  const hasCategoryChip = Boolean(categoryLabel && details?.relationshipLabel);
   const personRhythms = rhythms.filter(rhythm => rhythm.personIds?.includes(personId));
   const archivedRhythmIds = new Set(archivedRhythms.map(rhythm => rhythm.id));
   const personRhythmHealth = selectPersonRhythmHealth(
@@ -200,12 +199,11 @@ export function PersonProfileView({
     rhythmScores,
     archivedRhythmIds
   );
-  const overallHealth = selectPersonOverallHealth(personRhythmHealth);
-  const componentScores = [
-    { label: 'Rhythms', score: personRhythmHealth.health },
-    { label: 'Connections', score: null },
-    { label: 'Prayer', score: null }
-  ] as const;
+  const overallHealth = selectPersonHealth([
+    { id: 'rhythms', consistency: personRhythmHealth.consistency, onTrack: personRhythmHealth.onTrack },
+    { id: 'connection', consistency: null, onTrack: null, scoringStatus: 'unavailable' },
+    { id: 'prayer', consistency: null, onTrack: null, scoringStatus: 'unavailable' }
+  ]);
   const duePersonRhythms = selectPersonRhythmsDueToday(personRhythms, personId, today);
   const dueRhythmIds = new Set(duePersonRhythms.map(rhythm => rhythm.id));
   const otherPersonRhythms = personRhythms.filter(rhythm => !dueRhythmIds.has(rhythm.id));
@@ -314,28 +312,23 @@ export function PersonProfileView({
             <div className="person-profile__identity-copy">
               <div className="person-profile__identity-title-row">
                 <h2 id="person-profile-title">{person.displayName}</h2>
+                {onEditPerson && (
+                  <SettingsGearButton
+                    label="Person settings"
+                    onClick={event => onEditPerson(personId, event)}
+                  />
+                )}
               </div>
-              {(details?.relationshipLabel || categoryLabel) && (
-                <p className="person-profile__relationship">
-                  {details?.relationshipLabel ?? categoryLabel}
-                </p>
-              )}
-            </div>
-            {onEditPerson && (
-              <SettingsGearButton
-                label="Person settings"
-                onClick={event => onEditPerson(personId, event)}
-              />
-            )}
-          </header>
-          {(hasCategoryChip || details?.connectionStyle || birthdayDateLabel || anniversaryDateLabel) && (
-            <div className="person-profile__details" aria-label={`${person.displayName} personal details`}>
-              {categoryLabel && details?.relationshipLabel && (
+              {categoryLabel && (
                 <span className="person-profile__category">
                   {resolvedCategory !== 'friends' && resolvedCategory && <AreaIcon id={resolvedCategory} />}
                   {categoryLabel}
                 </span>
               )}
+            </div>
+          </header>
+          {(details?.connectionStyle || birthdayDateLabel || anniversaryDateLabel) && (
+            <div className="person-profile__details" aria-label={`${person.displayName} personal details`}>
               {details?.connectionStyle && (
                 <span className="person-profile__detail" aria-label={`Love language: ${connectionStyleLabel(details.connectionStyle)}`}>
                   <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -370,10 +363,6 @@ export function PersonProfileView({
               eligibleCount={overallHealth.eligibleComponentIds.length}
               excludedCount={overallHealth.excludedComponentIds.length}
               unscoredCount={overallHealth.unscoredComponentIds.length}
-              showMeasures={false}
-              showHealthMeter
-              headerStyle="category"
-              summaryContent={<PersonHealthComponentScores values={componentScores} />}
             />
           </div>
           <div className="faith-view-nav marriage-view-nav person-profile__nav" role="tablist" aria-label={`${person.displayName} profile`}>
@@ -413,16 +402,24 @@ export function PersonProfileView({
             aria-labelledby="person-profile-tab-rhythms"
             hidden={notesOpen || tab !== 'rhythms'}
           >
+            <PersonHealthSummary
+              key={`${personId}:rhythm-health`}
+              title="Rhythm Health"
+              health={personRhythmHealth}
+              itemTerm="Rhythm"
+              totalCount={personRhythmHealth.activeRhythmIds.length}
+              eligibleCount={personRhythmHealth.eligibleRhythmIds.length}
+              excludedCount={personRhythmHealth.excludedRhythmIds.length}
+              unresolvedCount={personRhythmHealth.unresolvedRhythmIds.length}
+              archivedCount={personRhythmHealth.archivedRhythmIds.length}
+              coverageLabel={personRhythmHealth.activeRhythmIds.length === 0
+                ? personRhythmHealth.archivedRhythmIds.length > 0
+                  ? 'No active associated Rhythms; archived Rhythms are excluded.'
+                  : 'No associated Rhythms.'
+                : `${personRhythmHealth.eligibleRhythmIds.length} of ${personRhythmHealth.activeRhythmIds.length} active associated Rhythms scored.`}
+            />
             <div className="person-profile__section-heading">
-              <div className="person-profile__queue-heading">
-                <h3>Today with {person.displayName}</h3>
-                <span
-                  className="person-profile__queue-count"
-                  aria-label={`${duePersonRhythms.length} ${duePersonRhythms.length === 1 ? 'Rhythm' : 'Rhythms'} in queue`}
-                >
-                  {duePersonRhythms.length} in queue
-                </span>
-              </div>
+              <h3>Today with {person.displayName}</h3>
               {showAddRhythm && (
                 <button
                   type="button"
@@ -481,22 +478,6 @@ export function PersonProfileView({
                 setArchivedPersonId(personId);
                 setShowArchived(true);
               }}
-            />
-            <PersonHealthSummary
-              key={`${personId}:rhythm-health`}
-              title="Rhythm Health"
-              health={personRhythmHealth}
-              itemTerm="Rhythm"
-              totalCount={personRhythmHealth.activeRhythmIds.length}
-              eligibleCount={personRhythmHealth.eligibleRhythmIds.length}
-              excludedCount={personRhythmHealth.excludedRhythmIds.length}
-              unresolvedCount={personRhythmHealth.unresolvedRhythmIds.length}
-              archivedCount={personRhythmHealth.archivedRhythmIds.length}
-              coverageLabel={personRhythmHealth.activeRhythmIds.length === 0
-                ? personRhythmHealth.archivedRhythmIds.length > 0
-                  ? 'No active associated Rhythms; archived Rhythms are excluded.'
-                  : 'No associated Rhythms.'
-                : `${personRhythmHealth.eligibleRhythmIds.length} of ${personRhythmHealth.activeRhythmIds.length} active associated Rhythms scored.`}
             />
           </section>
           <section

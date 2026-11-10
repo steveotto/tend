@@ -1,15 +1,8 @@
 import type { OnTrackEvidence } from './rhythm-scoring.ts';
-import { addCalendarDays } from './rhythm-occurrences.ts';
 
-export const ON_TRACK_SCORE_HISTORY_DISPLAY_LIMIT = 5;
+export const ON_TRACK_SCORE_HISTORY_DISPLAY_LIMIT = 7;
 
 export type OnTrackHistoryDisplayEntry =
-  | {
-      kind: 'created';
-      key: string;
-      date: string;
-      score: number | null;
-    }
   | {
       kind: 'occurrence';
       key: string;
@@ -26,7 +19,6 @@ export type OnTrackHistoryDisplayEntry =
       startDate: string;
       endDate: string;
       occurrenceCount: number;
-      recentOccurrenceDates: readonly string[];
       score: 0;
     }
   | {
@@ -36,18 +28,8 @@ export type OnTrackHistoryDisplayEntry =
       score: number;
     };
 
-export function onTrackHistoryDisplayEntries(
-  evidence: OnTrackEvidence,
-  createdLocalDate?: string,
-  createdOnTrackScore: number | null = null
-): readonly OnTrackHistoryDisplayEntry[] {
+export function onTrackHistoryDisplayEntries(evidence: OnTrackEvidence): readonly OnTrackHistoryDisplayEntry[] {
   const entries: OnTrackHistoryDisplayEntry[] = [
-    ...(createdLocalDate ? [{
-      kind: 'created' as const,
-      key: `created-${createdLocalDate}`,
-      date: createdLocalDate,
-      score: createdOnTrackScore
-    }] : []),
     ...evidence.scheduleChanges.map(item => ({
       kind: 'schedule-change' as const,
       key: `schedule-change-${item.date}`,
@@ -76,54 +58,15 @@ export function onTrackHistoryDisplayEntries(
       startDate: item.startDate,
       endDate: item.endDate,
       occurrenceCount: item.occurrenceCount,
-      recentOccurrenceDates: item.recentOccurrenceDates,
       score: 0 as const
     }))
   ];
-  return sortOnTrackHistoryEntries(entries);
-}
-
-export function recentOnTrackHistoryEntries(
-  entries: readonly OnTrackHistoryDisplayEntry[],
-  asOfDate: string
-): readonly OnTrackHistoryDisplayEntry[] {
-  const firstDate = addCalendarDays(asOfDate, -29);
-  const recentEntries: OnTrackHistoryDisplayEntry[] = [];
-  for (const entry of entries) {
-    if (entry.kind === 'zero-score-span') {
-      const recentDates = entry.recentOccurrenceDates.filter(date => date >= firstDate && date <= asOfDate);
-      if (recentDates.length === 0) continue;
-      const startDate = recentDates[0]!;
-      const endDate = recentDates[recentDates.length - 1]!;
-      if (startDate === entry.startDate
-        && endDate === entry.endDate
-        && recentDates.length === entry.occurrenceCount) {
-        recentEntries.push(entry);
-        continue;
-      }
-      recentEntries.push({
-        ...entry,
-        startDate,
-        endDate,
-        occurrenceCount: recentDates.length
-      });
-      continue;
-    }
-    if (entry.date >= firstDate && entry.date <= asOfDate) recentEntries.push(entry);
-  }
-  return sortOnTrackHistoryEntries(recentEntries);
-}
-
-function sortOnTrackHistoryEntries(
-  entries: readonly OnTrackHistoryDisplayEntry[]
-): readonly OnTrackHistoryDisplayEntry[] {
-  return [...entries].sort((left, right) => {
+  return entries.sort((left, right) => {
     const leftDate = left.kind === 'zero-score-span' ? left.startDate : left.date;
     const rightDate = right.kind === 'zero-score-span' ? right.startDate : right.date;
     if (leftDate !== rightDate) return leftDate.localeCompare(rightDate);
     if (left.kind === right.kind) return left.key.localeCompare(right.key);
-    const tieOrder = { created: 0, 'schedule-change': 1, occurrence: 2, 'zero-score-span': 3 } as const;
-    return tieOrder[left.kind] - tieOrder[right.kind];
+    return left.kind === 'schedule-change' ? -1 : right.kind === 'schedule-change' ? 1 : 0;
   });
 }
 

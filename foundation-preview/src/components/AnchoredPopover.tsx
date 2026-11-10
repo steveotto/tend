@@ -8,7 +8,6 @@ type Props = {
   label: string;
   role?: 'dialog' | 'menu';
   className: string;
-  mobileSheet?: boolean;
   initialFocusSelector?: string;
   children: ReactNode;
   onClose: () => void;
@@ -23,20 +22,8 @@ export function calculateAnchoredPopoverPosition(
   panel: Bounds,
   viewport: ViewportBounds,
   margin = 12,
-  gap = 6,
-  mobileSheet = false
+  gap = 6
 ): PopoverPosition {
-  if (mobileSheet && viewport.width <= 700) {
-    const maxHeight = Math.max(0, viewport.height - margin);
-    const visibleHeight = Math.min(panel.height || 240, maxHeight);
-    return {
-      top: viewport.top + viewport.height - visibleHeight,
-      left: viewport.left,
-      maxHeight,
-      maxWidth: viewport.width
-    };
-  }
-
   const maxWidth = Math.max(0, viewport.width - margin * 2);
   const panelWidth = Math.min(panel.width || 280, maxWidth);
   const left = Math.max(
@@ -70,7 +57,6 @@ export function AnchoredPopover({
   label,
   role = 'dialog',
   className,
-  mobileSheet = false,
   initialFocusSelector,
   children,
   onClose
@@ -100,10 +86,7 @@ export function AnchoredPopover({
           top: visibleViewport?.offsetTop ?? 0,
           width: visibleViewport?.width ?? document.documentElement.clientWidth,
           height: visibleViewport?.height ?? document.documentElement.clientHeight
-        },
-        12,
-        6,
-        mobileSheet
+        }
       );
       setPosition(previous => previous
         && previous.top === next.top
@@ -142,7 +125,7 @@ export function AnchoredPopover({
       window.visualViewport?.removeEventListener('scroll', position);
       anchorRef.current?.focus({ preventScroll: true });
     };
-  }, [anchorRef, mobileSheet, role]);
+  }, [anchorRef, role]);
 
   useLayoutEffect(() => {
     function dismissOutside(event: PointerEvent) {
@@ -186,7 +169,6 @@ export function AnchoredPopover({
       id={id}
       role={role}
       aria-label={label}
-      data-mobile-sheet={mobileSheet || undefined}
       style={{
         boxSizing: 'border-box',
         position: 'fixed',

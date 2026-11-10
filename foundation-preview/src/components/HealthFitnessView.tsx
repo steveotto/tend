@@ -21,7 +21,6 @@ import { RhythmSuggestionPicker } from './RhythmSuggestionPicker.tsx';
 import type { RhythmSuggestionPickerGroup } from './RhythmSuggestionPicker.tsx';
 import type { CategoryRhythmSuggestion, CategoryRhythmSuggestionCatalogue } from './MarriageView.tsx';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
-import { selectFoundationScore } from '../domain/foundation-scoring.ts';
 import type { CategoryTabNavigationRequest, Destination } from './AppNavigation.tsx';
 import { healthFoundationDefinitions, syntheticPeople } from '../domain/preview-data.ts';
 import type { FoundationPreview, PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
@@ -33,9 +32,8 @@ import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
 import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
-import { createHealthFitnessHealthContribution, createHealthFitnessRollup } from './HealthRollupDiagram.tsx';
+import { createHealthFitnessRollup } from './HealthRollupDiagram.tsx';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
-import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 
 type HealthFitnessTab = 'today' | 'rhythms' | 'progress';
 type ProgressTab = (typeof healthFoundationDefinitions)[number]['progressId'];
@@ -83,8 +81,6 @@ type HealthFitnessViewProps = {
   healthScore: CategoryScoreSelection;
   weightHealthScore: CategoryScoreSelection;
   cardioHealthScore: CategoryScoreSelection;
-  flexibilityHealthScore?: CategoryScoreSelection | null;
-  overallHealthScore?: number | null;
 };
 
 const categoryTabs: readonly SegmentedTab<HealthFitnessTab>[] = [
@@ -99,59 +95,6 @@ const progressDetails = healthFoundationDefinitions.map(({ id: foundationId, pro
   title,
   description
 }));
-
-function linkedRhythmEvidence(
-  foundationId: string,
-  rhythms: readonly RhythmPreview[],
-  archivedRhythms: readonly RhythmPreview[],
-  rhythmScores: ReadonlyMap<string, RhythmScoreResult>
-): HealthAggregateEvidence {
-  const selection = selectFoundationScore(
-    foundationId,
-    rhythms,
-    rhythmScores,
-    archivedRhythms.map(rhythm => rhythm.id)
-  );
-  const rows = selection.eligibleRhythmIds.flatMap(id => {
-    const rhythm = rhythms.find(item => item.id === id);
-    const result = rhythmScores.get(id);
-    return rhythm && result?.kind === 'rhythm-score'
-      && result.consistency.kind === 'scored'
-      && result.onTrack.kind === 'scored'
-      ? [{
-          id,
-          label: rhythm.title,
-          consistency: result.consistency.score,
-          onTrack: result.onTrack.score
-        }]
-      : [];
-  });
-  return {
-    heading: 'Linked Rhythm scores',
-    description: 'Each eligible linked Rhythm counts equally.',
-    itemLabel: 'Rhythm',
-    rows,
-    otherCount: selection.activeLinkedRhythmIds.length - selection.eligibleRhythmIds.length,
-    consistencyAverage: selection.consistency,
-    consistencyCount: selection.eligibleRhythmIds.length,
-    onTrackAverage: selection.onTrack,
-    onTrackCount: selection.eligibleRhythmIds.length,
-    coverage: `${selection.eligibleRhythmIds.length} of ${selection.activeLinkedRhythmIds.length} linked Rhythms scored.`,
-    notes: [
-      'Uses each Rhythm’s own scoring window and season schedules.',
-      ...(selection.archivedRhythmIds.length > 0
-        ? [`${selection.archivedRhythmIds.length} archived linked Rhythms are excluded.`]
-        : []),
-      ...(selection.unresolvedRhythmIds.length > 0
-        ? [`${selection.unresolvedRhythmIds.length} linked Rhythm scores could not be resolved.`]
-        : []),
-      ...(selection.excludedRhythms.length > 0
-        ? ['Linked Rhythms without both scores are excluded from both averages.']
-        : [])
-    ],
-    emptyState: 'No eligible linked Rhythms have both scores available.'
-  };
-}
 
 export function HealthFitnessView({
   people = syntheticPeople,
@@ -187,9 +130,7 @@ export function HealthFitnessView({
   onOpenCategory,
   healthScore,
   weightHealthScore,
-  cardioHealthScore,
-  flexibilityHealthScore = null,
-  overallHealthScore = null
+  cardioHealthScore
 }: HealthFitnessViewProps) {
   const tendedRhythmIds = savedTendedRhythmIds
     ?? selectTendedRhythmDisplayIds(completedRhythms, satisfiedRhythmIds);
@@ -197,74 +138,6 @@ export function HealthFitnessView({
   const [progressSelected, setProgressSelected] = useState<ProgressTab | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showArchivedRhythms, setShowArchivedRhythms] = useState(false);
-  const fitnessMeasureRows = [
-    {
-      id: 'strength',
-      label: 'Strength',
-      consistency: strength.healthScore?.consistency ?? null,
-      onTrack: strength.healthScore?.onTrack ?? null
-    },
-    {
-      id: 'cardio',
-      label: 'Cardio',
-      consistency: cardioHealthScore.consistency,
-      onTrack: cardioHealthScore.onTrack
-    },
-    {
-      id: 'weight',
-      label: 'Weight',
-      consistency: weightHealthScore.consistency,
-      onTrack: weightHealthScore.onTrack
-    },
-    {
-      id: 'flexibility',
-      label: 'Flexibility',
-      consistency: flexibilityHealthScore?.consistency ?? null,
-      onTrack: null
-    }
-  ] satisfies HealthAggregateEvidence['rows'];
-  const fitnessConsistencyCount = fitnessMeasureRows
-    .filter(row => row.consistency !== null && Number.isFinite(row.consistency)).length;
-  const fitnessOnTrackCount = fitnessMeasureRows
-    .filter(row => row.onTrack !== null && Number.isFinite(row.onTrack)).length;
-  const fitnessMeasureEvidence: HealthAggregateEvidence = {
-    heading: 'Health & Fitness measure scores',
-    description: 'Available scores are averaged separately.',
-    itemLabel: 'Measure',
-    rows: fitnessMeasureRows,
-    consistencyAverage: healthScore.consistency,
-    consistencyCount: fitnessConsistencyCount,
-    onTrackAverage: healthScore.onTrack,
-    onTrackCount: fitnessOnTrackCount,
-    averageLabels: {
-      consistency: 'Average Consistency',
-      onTrack: 'Average On Track'
-    },
-    notes: ['Unavailable scores are excluded.'],
-    emptyState: 'No scores available yet.',
-    showEmptyStateWhenNoAverages: true,
-    weightSummary: null,
-    areaExplanations: [
-      {
-        label: 'Strength',
-        explanation: 'Averages active linked Strength Rhythms that have both Consistency and On Track scores.'
-      },
-      {
-        label: 'Cardio',
-        explanation: 'Consistency averages completed weeks in the four-week lookback with a tracking start and trustworthy targets. On Track is the lower of weekly run-count and mileage progress (max 100%).'
-      },
-      {
-        label: 'Weight',
-        explanation: 'Averages available scores from active linked Weight Rhythms separately for each measure.'
-      },
-      {
-        label: 'Flexibility',
-        explanation: 'Consistency averages regions with valid stretch history; each region loses 10 points per day overdue beyond its interval. On Track is not scored.'
-      }
-    ]
-  };
-  const strengthScoringEvidence = linkedRhythmEvidence('health-strength', rhythms, archivedRhythms, rhythmScores);
-  const weightScoringEvidence = linkedRhythmEvidence('health-weight', rhythms, archivedRhythms, rhythmScores);
   const suggestionsOpenerRef = useRef<HTMLButtonElement | null>(null);
   const wasSuggestionsOpenRef = useRef(false);
   const skipSuggestionsFocusRestoreRef = useRef(false);
@@ -498,8 +371,7 @@ export function HealthFitnessView({
             title="Health & Fitness Health"
             score={healthScore}
             itemTerm={{ singular: 'measure', plural: 'measures' }}
-            explanation="Health & Fitness Health averages available Strength, Cardio, and Weight measures; each measure uses its own eligible evidence."
-            scoringEvidence={fitnessMeasureEvidence}
+            explanation="Strength Health depends on eligible linked Rhythm completions; workouts do not automatically complete a Rhythm."
             describeRollup={false}
             coverageLabel={healthScore.consistency !== null && healthScore.onTrack !== null
               ? 'Health & Fitness Consistency and On Track are both scored.'
@@ -510,16 +382,7 @@ export function HealthFitnessView({
                   : 'Health & Fitness Consistency and On Track are unavailable.'}
             consistencyDescription="The equal-weight average of available Strength, Cardio, and Weight Consistency measures."
             onTrackDescription="The equal-weight average of available Strength, Cardio, and Weight On Track measures."
-            rollup={{
-              ...createHealthFitnessRollup('category', 'health-fitness'),
-              healthContribution: createHealthFitnessHealthContribution({
-                overallHealthScore,
-                categoryHealthScore: healthScore.health,
-                strengthHealthScore: strength.healthScore?.health ?? null,
-                cardioHealthScore: cardioHealthScore.health,
-                weightHealthScore: weightHealthScore.health
-              })
-            }}
+            rollup={createHealthFitnessRollup('category', 'health-fitness')}
           />
 
           <SegmentedTabs
@@ -680,9 +543,6 @@ export function HealthFitnessView({
             {renderFoundationHeading('health-strength')}
             <StrengthView
               {...strength}
-              healthScoringEvidence={strengthScoringEvidence}
-              overallHealthScore={overallHealthScore}
-              categoryHealthScore={healthScore.health}
               foundationNavigation
               onRhythmLogClosed={restoreLogContext}
             />
@@ -690,23 +550,14 @@ export function HealthFitnessView({
           <section className="health-fitness-progress__detail tend-back-stack" aria-label="Cardio Foundation" hidden={progressSelected !== 'cardio'}>
             {renderProgressOverviewLink()}
             {renderFoundationHeading('health-cardio')}
-            <CardioView
-              {...cardio}
-              overallHealthScore={overallHealthScore}
-              categoryHealthScore={healthScore.health}
-              foundationNavigation
-              onLogRequestClosed={restoreLogContext}
-            />
+            <CardioView {...cardio} foundationNavigation onLogRequestClosed={restoreLogContext} />
           </section>
           <section className="health-fitness-progress__detail tend-back-stack" aria-label="Weight Foundation" hidden={progressSelected !== 'weight'}>
             {renderProgressOverviewLink()}
             {renderFoundationHeading('health-weight')}
             <WeightView
               {...weight}
-              healthScoringEvidence={weightScoringEvidence}
               healthScore={weightHealthScore}
-              overallHealthScore={overallHealthScore}
-              categoryHealthScore={healthScore.health}
               foundationNavigation
               onLogRequestClosed={restoreLogContext}
             />

@@ -2,11 +2,13 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useScoringInstant } from './useScoringInstant.ts';
 import type { MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
-import type { FoundationPreview, PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
+import { areas } from '../domain/preview-data.ts';
+import type { CategoryId, FoundationPreview, PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
 import { orderedCompletions } from '../domain/preview-data.ts';
 import type { RhythmCompletion } from '../domain/preview-data.ts';
 import type { DatedRhythmCompletion, RhythmCompletionRecord } from '../domain/rhythm-completion.ts';
 import type {
+  RhythmSchedule,
   RhythmScheduleHistorySegment,
   RhythmScheduleSegment
 } from '../domain/rhythm-schedule.ts';
@@ -22,10 +24,12 @@ import {
   selectRhythmScore,
   selectRhythmSeasonScore
 } from '../domain/rhythm-scoring.ts';
+import { isOnceWeeklyRhythmSchedule } from '../domain/rhythm-occurrences.ts';
 import type { SelectRhythmScoreInput } from '../domain/rhythm-scoring.ts';
 import {
   effectiveRhythmSchedule,
   formatRhythmSchedule,
+  rhythmWeekdayName,
   rhythmTimeLabel
 } from '../domain/rhythm-schedule.ts';
 import {
@@ -33,6 +37,11 @@ import {
   rhythmSeasonPaletteAssignments,
   rhythmSeasonPaletteForOrdinal
 } from '../domain/rhythm-seasons.ts';
+import {
+  ON_TRACK_SCORE_HISTORY_DISPLAY_LIMIT,
+  latestOnTrackHistoryEntries,
+  onTrackHistoryDisplayEntries
+} from '../domain/rhythm-score-presentation.ts';
 import { isValidTimeZone } from '../domain/rhythm-schedule.ts';
 import type {
   ScoredConsistencyMetric,
@@ -43,6 +52,7 @@ import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
 import { RhythmScheduleSummary } from './RhythmMetadata.tsx';
 import { RhythmSeasonCard } from './RhythmSeasonCard.tsx';
 import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
+import { formatScore } from '../domain/score-display.ts';
 import { RhythmPersonalBadge } from './RhythmPersonalBadge.tsx';
 import { HealthScoreBreakdown, HealthScoreInfoButton, HealthScoreMeasures } from './HealthScoreBreakdown.tsx';
 import { HealthScoreDetailsDialog } from './HealthScoreDetailsDialog.tsx';
@@ -54,21 +64,24 @@ import { RhythmSeasonCorrectionDialog } from './RhythmSeasonCorrectionDialog.tsx
 import type { RhythmSeasonEditDialogDraft } from './RhythmSeasonCorrectionDialog.tsx';
 import { RhythmSeasonDeleteDialog } from './RhythmSeasonDeleteDialog.tsx';
 import { HealthScoreDetailsContent } from './HealthScoreDetailsContent.tsx';
-import { RhythmHealthScoringDetails } from './RhythmHealthScoringDetails.tsx';
 import type { HealthRollupConfig } from './HealthRollupDiagram.tsx';
-import { selectRhythmContribution } from '../domain/rhythm-contribution.ts';
-import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
+import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
 import type { Destination } from './AppNavigation.tsx';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
-import { isValidDate } from '../domain/money-goals.ts';
-import type { StrengthMode } from '../domain/strength.ts';
-import { hasFoundationIcon, hasRhythmIcon, MarriageIcon } from './MarriageIcon.tsx';
-import { RhythmRepeatIcon } from './RhythmMetadata.tsx';
+
+const occurrenceKindByFrequency = {
+  daily: 'eligible day',
+  weekly: 'scheduled day',
+  monthly: 'due date',
+  quarterly: 'due date',
+  yearly: 'due date',
+  custom: 'scheduled occurrence'
+} as const;
 
 const metricCopy = {
   consistency: {
     title: 'Consistency',
-    shortDescription: 'Follow-through over time'
+    shortDescription: 'How often you show up'
   },
   onTrack: {
     title: 'On Track',
@@ -76,9 +89,12 @@ const metricCopy = {
   }
 } as const;
 
+function isCategoryId(value: string): value is CategoryId {
+  return areas.some(area => area.id === value);
+}
+
 export function RhythmHistoryView({
   rhythm,
-  healthWorkoutSetting,
   people,
   onPersonSelect,
   archived = false,
@@ -98,20 +114,13 @@ export function RhythmHistoryView({
   onUndoSeasonRange,
   onOpenCategory,
   foundations,
-  rhythmScores,
-  categoryHealthScores,
-  archivedRhythmIds,
   relatedRhythms = [rhythm],
   onOpenFoundation
 }: {
   rhythm: RhythmPreview;
-  healthWorkoutSetting?: { mode: StrengthMode; workoutName?: string };
   people?: readonly PersonPreview[];
   foundations?: readonly FoundationPreview[];
   relatedRhythms?: readonly RhythmPreview[];
-  rhythmScores?: ReadonlyMap<string, RhythmScoreResult>;
-  categoryHealthScores?: ReadonlyMap<string, number | null>;
-  archivedRhythmIds?: readonly string[];
   onPersonSelect?: (personId: PersonId) => void;
   onOpenFoundation?: (foundationId: string, openerId: string) => void;
   archived?: boolean;
@@ -145,8 +154,6 @@ export function RhythmHistoryView({
     : Intl.DateTimeFormat().resolvedOptions().timeZone;
   const asOfDate = localDateInTimeZone(scoringInstant, asOfTimeZone);
   const completions = prepareCompletionHistory(historyRecords, asOfDate);
-  const completionCount = completions.kind === 'recorded' ? completions.count : 0;
-  const loggedMomentsCount = completions.kind === 'unavailable' ? '—' : String(completionCount);
   const scoringRecords: RhythmCompletionRecord[] = (historyRecords ?? []).map(record => ({
     ...record,
     rhythmId: rhythm.id
@@ -167,48 +174,93 @@ export function RhythmHistoryView({
     timeZone: scoringTimeZone
   } as const;
   const score = selectRhythmScore(scoringInput);
-  const reliableCreatedLocalDate = rhythm.createdLocalDate
-    && isValidDate(rhythm.createdLocalDate)
-    && rhythm.createdLocalDate <= asOfDate
-    ? rhythm.createdLocalDate
-    : undefined;
-  const createdDateScore = reliableCreatedLocalDate
-    ? selectRhythmScore({
-        ...scoringInput,
-        asOfDate: reliableCreatedLocalDate,
-        timeZone: rhythm.createdTimeZone && isValidTimeZone(rhythm.createdTimeZone)
-          ? rhythm.createdTimeZone
-          : asOfTimeZone
-      })
-    : null;
-  const createdOnTrackScore = createdDateScore?.kind === 'rhythm-score'
-    && createdDateScore.onTrack.kind === 'scored'
-    ? createdDateScore.onTrack.score
-    : null;
-  const contributionScores = new Map(rhythmScores ?? []);
-  contributionScores.set(rhythm.id, score);
-  const rhythmContribution = selectRhythmContribution({
+  const foundationById = new Map((foundations ?? []).map(foundation => [foundation.id, foundation]));
+  const linkedFoundationIds = foundationRhythmIds(rhythm);
+  const categoryLabels: Readonly<Record<string, string>> = {
+    faith: 'Faith',
+    marriage: 'Marriage',
+    parenting: 'Parenting',
+    health: 'Health & Fitness',
+    finances: 'Finances',
+    friendships: 'Friendships'
+  };
+  const candidateRhythms = [
     rhythm,
-    foundations: foundations ?? [],
-    relatedRhythms,
-    rhythmScores: contributionScores,
-    archivedRhythmIds: archived
-      ? [...new Set([rhythm.id, ...(archivedRhythmIds ?? [])])]
-      : archivedRhythmIds ?? [],
-    categoryHealthScores: categoryHealthScores ?? new Map(),
-    rhythmHealthScore: score.healthScore
+    ...relatedRhythms.filter(candidate => candidate.id !== rhythm.id)
+  ];
+  const linkedRhythmItems = candidateRhythms
+    .filter(candidate => candidate.id === rhythm.id
+      || linkedFoundationIds.some(id => foundationRhythmIds(candidate).includes(id)))
+    .map(candidate => ({
+      id: candidate.id,
+      label: candidate.title,
+      explanation: 'Health combines this Rhythm’s Consistency and On Track scores. Each measure uses this Rhythm’s schedule and eligible completion history; detailed scoring evidence is below.',
+      relatedItemIds: {
+        foundations: foundationRhythmIds(candidate),
+        categories: candidate.categoryIds ?? []
+      }
+    }));
+  const foundationItems = linkedFoundationIds.map(id => {
+    const foundation = foundationById.get(id);
+    return {
+      id,
+      label: foundation?.name ?? `${id} (unresolved)`,
+      ...(foundation ? { foundationIconId: foundation.iconId ?? foundation.id } : {}),
+      explanation: `This Rhythm is linked to ${foundation?.name ?? `unresolved item ${id}`}.`,
+      relatedItemIds: {
+        rhythms: candidateRhythms
+          .filter(candidate => foundationRhythmIds(candidate).includes(id))
+          .map(candidate => candidate.id),
+        categories: foundation ? [foundation.categoryId] : rhythm.categoryIds ?? []
+      }
+    };
   });
+  const categoryIds = [...new Set([
+    ...(rhythm.categoryIds ?? []),
+    ...foundationItems.flatMap(item => {
+      const foundation = foundationById.get(item.id);
+      return foundation ? [foundation.categoryId] : [];
+    })
+  ])];
+  const categoryItems = categoryIds.map(id => {
+    const linkedFoundationItems = foundationItems.filter(item =>
+      foundationById.get(item.id)?.categoryId === id
+    );
+    return {
+      id,
+      label: categoryLabels[id] ?? `${id} (unresolved)`,
+      ...(isCategoryId(id) ? { categoryIconId: id } : {}),
+      explanation: `This Rhythm is associated with ${categoryLabels[id] ?? `unresolved category ${id}`}.`,
+      relatedItemIds: { foundations: linkedFoundationItems.map(item => item.id) }
+    };
+  });
+  const rhythmRollupGroups = [
+    {
+      id: 'rhythms',
+      label: 'Rhythms',
+      items: linkedRhythmItems,
+      emptyItem: {
+        id: 'no-rhythms',
+        label: 'No Rhythms',
+        explanation: 'No Rhythms are linked to the selected Foundation or Practice.',
+        usesStandardWeights: false
+      }
+    },
+    ...(foundationItems.length > 0
+      ? [{ id: 'foundations', label: 'Foundations or Practices', items: foundationItems }]
+      : []),
+    ...(categoryItems.length > 0
+      ? [{ id: 'categories', label: 'Categories', items: categoryItems }]
+      : [])
+  ];
   const rhythmRollup: HealthRollupConfig = {
-    groups: [],
+    groups: rhythmRollupGroups,
     initialGroupId: 'rhythms',
     initialItemId: rhythm.id,
-    rhythmContribution,
-    scoringInfo: {
-      groupId: 'rhythm',
-      triggerLabel: 'About Rhythm scoring',
-      title: 'Rhythm scoring',
-      paragraphs: ['Health combines Consistency and On Track using the established Rhythm scoring policy.']
-    }
+    footer: [
+      'Health combines Consistency and On Track using the established Rhythm scoring policy.',
+      '— means unavailable; 0 is a valid score.'
+    ]
   };
   const scheduleConversionHandler = !rhythm.schedule && rhythm.cadence !== 'Daily'
     ? onChooseSchedule
@@ -249,10 +301,6 @@ export function RhythmHistoryView({
     : rhythm.timeOfDay
       ? rhythmTimeLabel(rhythm.timeOfDay, timeOptions)
       : rhythm.timeLabel;
-  const rhythmIdentitySchedule = [
-    detailSchedule ? formatRhythmSchedule(detailSchedule, 'compact') : rhythm.cadence,
-    detailTimeLabel
-  ].filter((part): part is string => Boolean(part)).join(' · ');
   const displayOnlyCurrentSeason: SeasonCardSchedule | undefined = effectiveSchedule && !hasCurrentHistoricalSchedule
     ? {
         kind: 'scheduled',
@@ -269,31 +317,8 @@ export function RhythmHistoryView({
   const seasonCount = scheduleSeasons.length
     + (effectiveSchedule && !hasCurrentHistoricalSchedule ? 1 : 0);
   const unknownSeason = scheduleSeasons.find(season => season.kind === 'unknown');
-  const scoreNotice = unknownSeason
-    ? 'Some earlier dates have no known schedule. Use the action in Seasons to review those logs.'
-    : score.kind === 'rhythm-score'
-      ? score.healthScore === null
-        ? `${score.consistency.kind === 'unscored' ? `Consistency: ${score.consistency.explanation}` : ''}${score.consistency.kind === 'unscored' && score.onTrack.kind === 'unscored' ? ' ' : ''}${score.onTrack.kind === 'unscored' ? `On Track: ${score.onTrack.explanation}` : ''} Health requires both scores.`
-        : null
-      : score.kind === 'invalid'
-        ? `Scores unavailable: ${score.reason}`
-        : score.reason.explanation;
-  const activityIconId = rhythm.iconId
-    ?? (rhythm.healthLogCapability === 'workout' ? 'health-strength'
-      : rhythm.healthLogCapability === 'cardio' ? 'health-cardio'
-        : rhythm.healthLogCapability === 'weight' ? 'health-weight'
-          : undefined);
-  const activityLabel = rhythm.healthLogCapability === 'workout' ? 'Workout'
-    : rhythm.healthLogCapability === 'cardio' ? 'Run'
-      : rhythm.healthLogCapability === 'weight' ? 'Weigh-in'
-        : 'Rhythm';
-  const workoutModeLabel = rhythm.healthLogCapability === 'workout'
-    && healthWorkoutSetting?.mode === 'specific'
-    ? `Specific workout${healthWorkoutSetting.workoutName ? ` · ${healthWorkoutSetting.workoutName}` : ''}`
-    : rhythm.healthLogCapability === 'workout'
-      && healthWorkoutSetting?.mode === 'custom'
-      ? 'Custom workout'
-      : undefined;
+  const sharedUnscoredExplanation = score.consistency.kind === 'unscored' && score.onTrack.kind === 'unscored'
+    && score.consistency.explanation === score.onTrack.explanation;
   const [editingRecord, setEditingRecord] = useState<RhythmCompletionRecord | null>(null);
   const [loggingMoment, setLoggingMoment] = useState(false);
   const [loggedMomentsExpanded, setLoggedMomentsExpanded] = useState(false);
@@ -609,28 +634,7 @@ export function RhythmHistoryView({
         />
       ) : (
         <>
-      <section className="rhythm-history-view__details-card rhythm-history-view__card" aria-label="Rhythm details">
-        <div className="rhythm-history-view__activity-summary">
-          <span className="rhythm-history-view__activity-icon" aria-hidden="true">
-            {activityIconId && hasFoundationIcon(activityIconId)
-              ? <MarriageIcon group="foundations" id={activityIconId} />
-              : activityIconId && hasRhythmIcon(activityIconId)
-                ? <MarriageIcon group="rhythms" id={activityIconId} />
-                : <RhythmRepeatIcon />}
-          </span>
-          <div className="rhythm-history-view__activity-copy">
-            <div className="rhythm-history-view__activity-title">
-              <span>{activityLabel}</span>
-              {rhythm.healthLogCapability === 'workout'
-                && healthWorkoutSetting?.mode === 'recommended'
-                && <span className="rhythm-history-view__recommended">Recommended</span>}
-            </div>
-            {workoutModeLabel && (
-              <p className="rhythm-history-view__activity-configuration">{workoutModeLabel}</p>
-            )}
-          </div>
-        </div>
-        <div className="rhythm-history-view__metadata">
+      <div className="rhythm-history-view__metadata">
         {hasDescription && (
           <p className="rhythm-history-view__description">
             {rhythm.description}
@@ -645,16 +649,13 @@ export function RhythmHistoryView({
           {...(onOpenFoundation ? { onOpenFoundation } : {})}
         />
         {(rhythm.cadence || detailSchedule || detailTimeLabel) && (
-          <>
-            <div className="rhythm-history-view__metadata-divider" aria-hidden="true" />
-            <div className="rhythm-history-view__schedule rhythm-metadata-footer">
-              <RhythmScheduleSummary
-                {...(!detailSchedule ? { cadence: rhythm.cadence } : {})}
-                {...(detailSchedule ? { schedule: detailSchedule } : {})}
-                {...(detailTimeLabel ? { timeLabel: detailTimeLabel } : {})}
-              />
-            </div>
-          </>
+          <div className="rhythm-history-view__schedule rhythm-metadata-footer">
+            <RhythmScheduleSummary
+              {...(!detailSchedule ? { cadence: rhythm.cadence } : {})}
+              {...(detailSchedule ? { schedule: detailSchedule } : {})}
+              {...(detailTimeLabel ? { timeLabel: detailTimeLabel } : {})}
+            />
+          </div>
         )}
         {(archived || rhythm.personal) && (
           <div className="rhythm-history-view__badges">
@@ -662,13 +663,12 @@ export function RhythmHistoryView({
             {rhythm.personal && <RhythmPersonalBadge />}
           </div>
         )}
-        </div>
-      </section>
+      </div>
       {seasonRangeUndoError && (
         <p className="rhythm-history-view__undo-error" role="alert">{seasonRangeUndoError}</p>
       )}
 
-      <section className="rhythm-history-view__score-section rhythm-history-view__card" aria-label="Health, Consistency, and On Track scores">
+      <section className="rhythm-history-view__score-section" aria-label="Health, Consistency, and On Track scores">
         <div className="rhythm-history-view__score-card">
           <HealthScoreBreakdown
             title="Health"
@@ -713,29 +713,14 @@ export function RhythmHistoryView({
             consistencyCaption={metricCopy.consistency.shortDescription}
             onTrackCaption={metricCopy.onTrack.shortDescription}
             showHealthMeter={false}
-            showCaptions
           />
           {scoreDetailsExpanded && (
             <HealthScoreDetailsDialog
               title="Rhythm Health details"
-              titleLeadingAction={(
-                <button
-                  type="button"
-                  className="rhythm-history-view__health-details-back"
-                  aria-label="Back to Rhythm details"
-                  onClick={closeScoreDetails}
-                >
-                  <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                    <path d="m10.5 3.5-4.5 4.5 4.5 4.5" />
-                  </svg>
-                </button>
-              )}
-              showCloseButton={false}
               onClose={closeScoreDetails}
               className="rhythm-history-view__health-details-dialog"
             >
               <HealthScoreDetailsContent
-                key={rhythm.id}
                 title="Health"
                 ariaLabel="Rhythm Health score details"
                 score={score.healthScore}
@@ -752,63 +737,85 @@ export function RhythmHistoryView({
                 consistencyCaption={metricCopy.consistency.shortDescription}
                 onTrackCaption={metricCopy.onTrack.shortDescription}
                 rollup={rhythmRollup}
-                rhythmIdentity={{
-                  name: rhythm.title,
-                  ...(rhythmIdentitySchedule ? { schedule: rhythmIdentitySchedule } : {})
-                }}
-                showScoreNote={false}
-                initialContributionExpanded={false}
-                scoringCard={(
-                  <RhythmHealthScoringDetails
-                    id={scoreDetailsId}
-                    consistency={score.consistency}
-                    onTrack={score.onTrack}
-                    healthScore={score.healthScore}
-                    {...(score.consistency.kind === 'scored'
-                      && score.onTrack.kind === 'scored'
-                      && score.healthScore !== null
-                      ? {}
-                      : { unavailableExplanation: healthUnavailableExplanation(score.consistency, score.onTrack) })}
-                    {...(effectiveSchedule ? { schedule: effectiveSchedule } : {})}
-                    asOfDate={asOfDate}
-                    {...(reliableCreatedLocalDate
-                      ? { createdLocalDate: reliableCreatedLocalDate }
-                      : {})}
-                    createdOnTrackScore={createdOnTrackScore}
-                    {...(scheduleConversionHandler
-                      ? { onChooseSchedule: scheduleConversionHandler }
-                      : {})}
-                    formatDate={formatHistoryDate}
-                    initiallyExpanded={false}
-                  />
-                )}
-              />
+                {...(score.consistency.kind === 'scored'
+                  && score.onTrack.kind === 'scored'
+                  && score.healthScore !== null
+                  ? {}
+                  : { unavailableExplanation: healthUnavailableExplanation(score.consistency, score.onTrack) })}
+              >
+                <div
+                  id={scoreDetailsId}
+                  className="rhythm-history-view__score-details-grid"
+                  role="group"
+                  aria-label="Consistency and On Track score details"
+                >
+                  {sharedUnscoredExplanation
+                    ? scheduleConversionHandler && score.onTrack.kind === 'unscored'
+                      ? (
+                        <div className="rhythm-history-view__score-details-columns">
+                          <div className="rhythm-history-view__score-details-column">
+                            <UnscoredBreakdown
+                              metric={score.onTrack}
+                              onChooseSchedule={scheduleConversionHandler}
+                            />
+                          </div>
+                        </div>
+                      )
+                      : null
+                    : (
+                      <div className="rhythm-history-view__score-details-columns">
+                        <div className="rhythm-history-view__score-details-column">
+                          {score.consistency.kind === 'scored'
+                            ? <ConsistencyScoreBreakdown metric={score.consistency} schedule={effectiveSchedule} />
+                            : (
+                              <UnscoredBreakdown
+                                metric={score.consistency}
+                                {...(scheduleConversionHandler ? { onChooseSchedule: scheduleConversionHandler } : {})}
+                              />
+                            )}
+                        </div>
+                        <div className="rhythm-history-view__score-details-column">
+                          {score.onTrack.kind === 'scored'
+                            ? <OnTrackScoreBreakdown key={rhythm.id} metric={score.onTrack} />
+                            : <UnscoredBreakdown metric={score.onTrack} />}
+                        </div>
+                      </div>
+                    )}
+                </div>
+              </HealthScoreDetailsContent>
             </HealthScoreDetailsDialog>
           )}
         </div>
-        {scoreNotice && (
-          <p className="rhythm-history-view__sample-notice" role="status">{scoreNotice}</p>
-        )}
+        <p className="rhythm-history-view__sample-notice" role="status">
+          {unknownSeason
+            ? 'Some earlier dates have no known schedule. Use the action in Seasons to review those logs.'
+            : score.kind === 'rhythm-score'
+            ? score.healthScore !== null
+              ? `Calculated from saved completion records · as of ${formatHistoryDate(score.asOfDate, false)}, ${new Date(`${score.asOfDate}T12:00:00`).getFullYear()}.`
+              : `${score.consistency.kind === 'unscored' ? `Consistency: ${score.consistency.explanation}` : ''}${score.consistency.kind === 'unscored' && score.onTrack.kind === 'unscored' ? ' ' : ''}${score.onTrack.kind === 'unscored' ? `On Track: ${score.onTrack.explanation}` : ''} Health requires both scores.`
+            : score.kind === 'invalid'
+              ? `Scores unavailable: ${score.reason}`
+              : score.reason.explanation}
+        </p>
       </section>
 
-      <section className="rhythm-history-view__completions rhythm-history-view__card" aria-labelledby="rhythm-history-completions-title">
+      <section className="rhythm-history-view__completions" aria-labelledby="rhythm-history-completions-title">
         <h3 id="rhythm-history-completions-title">All completion history</h3>
-        {(completions.kind === 'recorded' || completions.kind === 'empty') && (
-          <p className="rhythm-history-view__completion-summary" aria-label={`${completionCount} ${completionCount === 1 ? 'moment' : 'moments'} tended${completions.kind === 'recorded' ? ` across ${completions.dailyCounts.length} ${completions.dailyCounts.length === 1 ? 'day' : 'days'}` : ''}`}>
+        {completions.kind === 'recorded' && (
+          <p className="rhythm-history-view__completion-summary" aria-label={`${completions.count} ${completions.count === 1 ? 'moment' : 'moments'} tended across ${completions.dailyCounts.length} ${completions.dailyCounts.length === 1 ? 'day' : 'days'}`}>
             <span className="rhythm-history-view__completion-total">
-              <strong>{completionCount}</strong>
-              <span>{completionCount === 1 ? 'moment tended' : 'moments tended'}</span>
+              <strong>{completions.count}</strong>
+              <span>{completions.count === 1 ? 'moment tended' : 'moments tended'}</span>
             </span>
-            {completions.kind === 'recorded' && (
-              <span className="rhythm-history-view__completion-span">
-                across {completions.dailyCounts.length} {completions.dailyCounts.length === 1 ? 'day' : 'days'}
-              </span>
-            )}
+            <span className="rhythm-history-view__completion-span">
+              across {completions.dailyCounts.length} {completions.dailyCounts.length === 1 ? 'day' : 'days'}
+            </span>
           </p>
         )}
-        {completions.kind === 'recorded' && (
-          <RhythmCompletionHistoryChart dailyCounts={completions.dailyCounts} todayDate={asOfDate} />
-        )}
+        <RhythmCompletionHistoryChart
+          dailyCounts={completions.kind === 'recorded' ? completions.dailyCounts : []}
+          todayDate={asOfDate}
+        />
         {completions.kind === 'unavailable' && (
           <p className="rhythm-history-view__empty">Dated completion history is unavailable for this Rhythm.</p>
         )}
@@ -818,7 +825,7 @@ export function RhythmHistoryView({
           </p>
         )}
       </section>
-      <section className="rhythm-history-view__seasons rhythm-history-view__card">
+      <section className="rhythm-history-view__seasons">
         <header className="rhythm-history-view__seasons-header">
           <h3 id={seasonsDisclosureId}>Seasons</h3>
           <span className="rhythm-history-view__seasons-count">
@@ -827,7 +834,7 @@ export function RhythmHistoryView({
           <button
             type="button"
             className="rhythm-history-view__score-info rhythm-history-view__seasons-info"
-            aria-label={`${seasonsInfoExpanded ? 'Hide' : 'Show'} Seasons explanation`}
+            aria-label={`${seasonsInfoExpanded ? 'Hide' : 'Show'} Seasons`}
             aria-expanded={seasonsInfoExpanded}
             aria-controls={seasonsContentId}
             onClick={() => setSeasonsDisclosure({
@@ -835,48 +842,12 @@ export function RhythmHistoryView({
               expanded: !seasonsInfoExpanded
             })}
           >
-            <svg className="disclosure-chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-              <path d={seasonsInfoExpanded ? 'm3 10 5-5 5 5' : 'm3 6 5 5 5-5'} />
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <circle cx="8" cy="8" r="6.25" />
+              <path d="M8 7.1v4M8 4.85h.01" />
             </svg>
           </button>
         </header>
-        <div
-          id={seasonsContentId}
-          className="rhythm-history-view__seasons-explanation"
-          hidden={!seasonsInfoExpanded}
-        >
-          <p className="rhythm-history-view__seasons-info-copy">
-            Seasons organize your schedule as it changes. Your logs stay saved, and each is scored using the schedule in place at the time.
-          </p>
-        </div>
-        <SeasonsHistory
-          {...(displayOnlyCurrentSeason ? { displayOnlyCurrentSeason } : {})}
-          seasons={scheduleSeasons}
-          asOfDate={asOfDate}
-          scoreInput={scoringInput}
-          overallHealthScore={score.healthScore}
-          {...(onChooseSchedule ? { onChooseSchedule } : {})}
-          canChooseSchedule={!archived && Boolean(onChooseSchedule)}
-          historyBodyRef={historyBodyRef}
-          seasonCardRefs={seasonCardRefs.current}
-          canEdit={!archived && Boolean(onEditSeason)}
-          editButtonRefs={seasonEditButtonsRef.current}
-          onEditSeason={(season, opener) => openSeasonEditor(season, opener)}
-        />
-        {availableSeasonUndo && onUndoSeasonDeletion && (
-          <div className="rhythm-history-view__season-undo" role="status" aria-live="polite">
-            <span>{seasonDeleteStatus || 'A Season was removed. You can undo this change.'}</span>
-            <button
-              ref={seasonUndoButtonRef}
-              type="button"
-              className="rhythm-history-view__season-edit"
-              onClick={undoSeasonDeletion}
-            >
-              Undo
-            </button>
-            {seasonUndoError && <span role="alert">{seasonUndoError}</span>}
-          </div>
-        )}
         {!archived && onEditSeason && detailSchedule && (
           <div className="rhythm-history-view__season-add-row">
             <button
@@ -889,31 +860,51 @@ export function RhythmHistoryView({
             </button>
           </div>
         )}
+        <div
+          id={seasonsContentId}
+          className="rhythm-history-view__seasons-expanded"
+          hidden={!seasonsInfoExpanded}
+        >
+          <p className="rhythm-history-view__seasons-info-copy">
+            Seasons organize your schedule as it changes. Your logs stay saved, and each is scored using the schedule in place at the time.
+          </p>
+          <SeasonsHistory
+            {...(displayOnlyCurrentSeason ? { displayOnlyCurrentSeason } : {})}
+            seasons={scheduleSeasons}
+            asOfDate={asOfDate}
+            scoreInput={scoringInput}
+            overallHealthScore={score.healthScore}
+            {...(onChooseSchedule ? { onChooseSchedule } : {})}
+            canChooseSchedule={!archived && Boolean(onChooseSchedule)}
+            historyBodyRef={historyBodyRef}
+            seasonCardRefs={seasonCardRefs.current}
+            canEdit={!archived && Boolean(onEditSeason)}
+            editButtonRefs={seasonEditButtonsRef.current}
+            onEditSeason={(season, opener) => openSeasonEditor(season, opener)}
+          />
+          {availableSeasonUndo && onUndoSeasonDeletion && (
+            <div className="rhythm-history-view__season-undo" role="status" aria-live="polite">
+              <span>{seasonDeleteStatus || 'A Season was removed. You can undo this change.'}</span>
+              <button
+                ref={seasonUndoButtonRef}
+                type="button"
+                className="rhythm-history-view__season-edit"
+                onClick={undoSeasonDeletion}
+              >
+                Undo
+              </button>
+              {seasonUndoError && <span role="alert">{seasonUndoError}</span>}
+            </div>
+          )}
+        </div>
+        <div className="rhythm-history-view__seasons-divider" />
       </section>
       <details
-        className="rhythm-history-view__logged-moments rhythm-history-view__card"
+        className="rhythm-history-view__logged-moments"
         open={loggedMomentsExpanded}
         onToggle={event => setLoggedMomentsExpanded(event.currentTarget.open)}
       >
-        <summary
-          ref={loggedMomentsSummaryRef}
-          role="button"
-          aria-label={`Logged moments (${completions.kind === 'unavailable' ? 'unavailable' : completionCount})`}
-          aria-expanded={loggedMomentsExpanded}
-        >
-          <span className="rhythm-history-view__logged-heading">Logged moments</span>
-          <span className="rhythm-history-view__logged-count" aria-hidden="true">
-            {loggedMomentsCount}
-          </span>
-          <svg
-            className={`disclosure-chevron${loggedMomentsExpanded ? ' disclosure-chevron--expanded' : ''}`}
-            viewBox="0 0 16 16"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <path d="m3 6 5 5 5-5" />
-          </svg>
-        </summary>
+        <summary ref={loggedMomentsSummaryRef}>Logged moments ({completions.kind === 'recorded' ? completions.count : 0})</summary>
         {onSaveCompletion && (
           <div className="rhythm-history-view__log-moment-row">
             <button
@@ -1289,9 +1280,6 @@ function SeasonsHistory({
           </div>
         </section>
       )}
-      {currentDisplay && previous.length > 0 && (
-        <div className="rhythm-history-view__seasons-divider" aria-hidden="true" />
-      )}
       {previous.length > 0 && (
         <section className="rhythm-history-view__season-group">
           <h4 className="rhythm-history-view__season-group-title">Earlier Seasons</h4>
@@ -1491,6 +1479,207 @@ function seasonTimeLabel(
 ): string | undefined {
   if (!season.timeOfDay) return undefined;
   return timeOptions.find(option => option.value === season.timeOfDay)?.label;
+}
+
+function ConsistencyScoreBreakdown({
+  metric,
+  schedule
+}: {
+  metric: ScoredConsistencyMetric;
+  schedule: RhythmSchedule | undefined;
+}) {
+  const evidence = metric.evidence;
+  const firstDate = evidence.occurrences[0]?.date;
+  const lastDate = evidence.occurrences.at(-1)?.date;
+  const plannedWeekday = schedule && isOnceWeeklyRhythmSchedule(schedule)
+    ? rhythmWeekdayName(schedule.weekdays[0]!)
+    : null;
+  const rows = [
+    { label: 'Dates', value: `${formatHistoryDate(evidence.windowStartDate, false)}–${formatHistoryDate(evidence.windowEndDate, false)}` },
+    { label: 'Completed', value: String(evidence.completedCount) },
+    { label: 'Scheduled', value: String(evidence.eligibleDueCount) }
+  ];
+  return (
+    <>
+      <BreakdownRows rows={rows} />
+      <p className="rhythm-history-view__calculation">
+        <span>
+          {evidence.completedCount} ÷ {evidence.eligibleDueCount} × 100 = <strong>{formatScore(metric.score)}%</strong>
+        </span>
+      </p>
+      <section className="rhythm-history-view__score-details">
+        <h4>Your scheduled pattern</h4>
+        <div
+          className="rhythm-history-view__health-pattern"
+          role="list"
+          aria-label={`${evidence.eligibleDueCount} eligible ${evidence.frequency} occurrences from ${evidence.windowStartDate} through ${evidence.windowEndDate}: ${evidence.completedCount} completed and ${evidence.notCompletedCount} not completed.`}
+        >
+          {evidence.occurrences.map(item => {
+            const occurrenceKind = evidence.frequency === 'weekly' && item.periodStartDate
+              ? 'weekly opportunity'
+              : occurrenceKindByFrequency[evidence.frequency];
+            return (
+              <span
+                key={item.date}
+                role="listitem"
+                aria-label={`${formatHistoryDate(item.date, true)}: ${item.status === 'completed' ? 'completed' : 'not completed'} ${occurrenceKind}${
+                  item.periodStartDate && item.eligibleEndDate
+                    ? `; eligible period ${formatHistoryDate(item.periodStartDate, true)} through ${formatHistoryDate(item.eligibleEndDate, true)}`
+                    : ''}`}
+                className={item.status === 'completed'
+                  ? 'rhythm-history-view__health-pattern-day'
+                  : 'rhythm-history-view__health-pattern-day rhythm-history-view__health-pattern-day--missed'}
+              />
+            );
+          })}
+        </div>
+        <div className="rhythm-history-view__pattern-legend" aria-hidden="true">
+          <span><i className="rhythm-history-view__pattern-key" />{evidence.completedCount} completed</span>
+          <span><i className="rhythm-history-view__pattern-key rhythm-history-view__pattern-key--missed" />{evidence.notCompletedCount} not completed</span>
+        </div>
+        {firstDate && lastDate && (
+          <p className="rhythm-history-view__score-explanation">
+            {evidence.limitedHistoryDays !== null
+              ? `Based on ${evidence.limitedHistoryDays} ${evidence.limitedHistoryDays === 1 ? 'day' : 'days'} of tracking. `
+              : ''}
+            {formatHistoryDate(firstDate, false)}–{formatHistoryDate(lastDate, false)}. {
+              plannedWeekday
+                ? evidence.currentWeeklyPeriodIncluded
+                    ? `Once each week. Any day counts; ${plannedWeekday} is your planned day. This completed week counts immediately.`
+                    : `Once each week. Any day counts; ${plannedWeekday} is your planned day. An unfinished current week is excluded until the week ends.`
+                : evidence.frequency === 'daily'
+                  ? evidence.todayIncluded ? 'Today’s completed occurrence is included.' : 'Today is pending and excluded.'
+                  : 'Today is excluded.'
+            }
+          </p>
+        )}
+        {evidence.occurrences.some(item => item.periodStartDate !== undefined) && (
+          <p className="rhythm-history-view__score-explanation">
+            Any completion in its eligible calendar period counts once; extra logs stay in your history.
+          </p>
+        )}
+      </section>
+    </>
+  );
+}
+
+function OnTrackScoreBreakdown({ metric }: { metric: ScoredOnTrackMetric }) {
+  const evidence = metric.evidence;
+  const historyId = useId();
+  const entries = onTrackHistoryDisplayEntries(evidence);
+  const visibleEntries = latestOnTrackHistoryEntries(entries, ON_TRACK_SCORE_HISTORY_DISPLAY_LIMIT);
+  const startingScore = 100;
+  const deductedPoints = evidence.deduction;
+  const rows = [
+    { label: 'Last tended', value: evidence.lastQualifyingCompletionDate
+      ? formatHistoryDate(evidence.lastQualifyingCompletionDate, false)
+      : 'None yet' },
+    { label: 'Missed occurrences', value: String(evidence.missedOccurrenceCount) },
+    { label: 'Per miss', value: `${evidence.pointsPerMissedOccurrence} points` }
+  ];
+  return (
+    <>
+      <BreakdownRows rows={rows} />
+      <p className="rhythm-history-view__calculation">
+        <span>
+          {startingScore} − {deductedPoints} = <strong>{formatScore(metric.score)}</strong>
+        </span>
+      </p>
+      <section className="rhythm-history-view__score-details">
+        <h4>Score history</h4>
+        <ol id={historyId} className="rhythm-history-view__score-history" aria-label="On Track score changes">
+          {visibleEntries.map(item => (
+            <li
+              key={item.key}
+              className={`rhythm-history-view__score-history-entry--${item.kind}`}
+              aria-label={onTrackHistoryEntryDescription(item, evidence)}
+            >
+              <span>{onTrackHistoryEntryLabel(item)}</span>
+              <strong>{formatScore(item.score)}</strong>
+            </li>
+          ))}
+        </ol>
+      </section>
+    </>
+  );
+}
+
+function onTrackHistoryEntryLabel(
+  entry: ReturnType<typeof onTrackHistoryDisplayEntries>[number]
+): string {
+  if (entry.kind === 'schedule-change') {
+    return `${formatHistoryDate(entry.date, false)} · Schedule changed`;
+  }
+  if (entry.kind === 'zero-score-span') {
+    return `${entry.occurrenceCount} more misses · ${formatHistoryDate(entry.startDate, false)}–${formatHistoryDate(entry.endDate, false)}`;
+  }
+  if (entry.status === 'today') {
+    return `Today · ${formatHistoryDate(entry.date, false)}`;
+  }
+  return `${formatHistoryDate(entry.date, false)} · ${entry.status === 'completed' ? 'Tended' : 'Missed'}`;
+}
+
+function onTrackHistoryEntryDescription(
+  entry: ReturnType<typeof onTrackHistoryDisplayEntries>[number],
+  evidence: ScoredOnTrackMetric['evidence']
+): string {
+  if (entry.kind === 'schedule-change') {
+    return `Schedule changed on ${formatHistoryDate(entry.date)}. On Track score at that point: ${formatScore(entry.score)}.`;
+  }
+  if (entry.kind === 'zero-score-span') {
+    const unit = entry.occurrenceCount === 1 ? 'additional missed occurrence' : 'additional missed occurrences';
+    return `On Track remained at 0 through ${entry.occurrenceCount} ${unit} from ${formatHistoryDate(entry.startDate)} through ${formatHistoryDate(entry.endDate)}.`;
+  }
+  const date = formatHistoryDate(entry.date);
+  if (entry.status === 'completed') {
+    if (entry.periodStartDate && entry.eligibleEndDate && entry.completionDate) {
+      return `Completion on ${formatHistoryDate(entry.completionDate)} satisfied the occurrence due ${date} within its eligible period, ${formatHistoryDate(entry.periodStartDate)}–${formatHistoryDate(entry.eligibleEndDate)}. Extra logs stay in your history.`;
+    }
+    return `Qualifying completion on ${date} reset the missed-occurrence count and On Track score to 100.`;
+  }
+  if (entry.status === 'missed') {
+    if (entry.periodStartDate && entry.eligibleEndDate) {
+      return `No completion was recorded in the eligible period, ${formatHistoryDate(entry.periodStartDate)}–${formatHistoryDate(entry.eligibleEndDate)}. This occurrence ended on ${formatHistoryDate(entry.eligibleEndDate)}; ${evidence.pointsPerMissedOccurrence}-point deduction applied. Resulting On Track score: ${formatScore(entry.score)}.`;
+    }
+    return `Missed scheduled occurrence on ${date}; ${evidence.pointsPerMissedOccurrence}-point deduction applied. Resulting On Track score: ${formatScore(entry.score)}.`;
+  }
+  return `Current On Track state as of ${date}; today is pending and is not counted as missed. Current score: ${formatScore(entry.score)}.`;
+}
+
+function UnscoredBreakdown({
+  metric,
+  onChooseSchedule
+}: {
+  metric: UnscoredMetric;
+  onChooseSchedule?: (event: MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <section className="rhythm-history-view__score-details">
+      <p className="rhythm-history-view__score-explanation">{metric.explanation}</p>
+      {onChooseSchedule && (
+        <button
+          type="button"
+          className="rhythm-history-view__score-history-toggle"
+          onClick={onChooseSchedule}
+        >
+          Choose a schedule to calculate On Track
+        </button>
+      )}
+    </section>
+  );
+}
+
+function BreakdownRows({ rows }: { rows: readonly { label: string; value: string }[] }) {
+  return (
+    <dl className="rhythm-history-view__breakdown-rows">
+      {rows.map(row => (
+        <div key={row.label}>
+          <dt>{row.label}</dt>
+          <dd>{row.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 
 function formatHistoryDate(value: string, long = true): string {

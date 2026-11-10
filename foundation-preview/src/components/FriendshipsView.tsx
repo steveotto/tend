@@ -3,9 +3,7 @@ import type { KeyboardEvent, MouseEvent } from 'react';
 import {
   addOrUpdateConnection,
   connectionsForPerson,
-  formatConnectionRecency,
   friendConnectionStatus,
-  latestValidConnection,
   selectFriendStatuses,
 } from '../domain/friendships.ts';
 import type {
@@ -63,7 +61,6 @@ type FriendshipsViewProps = {
   people?: readonly PersonPreview[];
   peopleGroups?: readonly PersonPickerGroup[];
   personDetails?: readonly PersonDetails[];
-  healthScores?: ReadonlyMap<PersonId, number | null>;
   today: string;
   rhythms: readonly RhythmPreview[];
   archivedRhythms: readonly RhythmPreview[];
@@ -90,7 +87,6 @@ export function FriendshipsView({
   people = syntheticPeople,
   peopleGroups = syntheticPersonPickerGroups,
   personDetails = [],
-  healthScores,
   today,
   rhythms,
   archivedRhythms,
@@ -301,7 +297,6 @@ export function FriendshipsView({
                   people={people}
                   status={status}
                   today={today}
-                  {...(healthScores ? { healthScores } : {})}
                   connections={connectionsForPerson(data, status.personId)}
                   classifications={peopleGroups.filter(group => group.memberIds.includes(status.personId))}
                   {...(details ? { details } : {})}
@@ -440,7 +435,6 @@ function FriendRow({
   status,
   people = syntheticPeople,
   today,
-  healthScores,
   connections,
   classifications,
   details,
@@ -453,7 +447,6 @@ function FriendRow({
   status: ReturnType<typeof friendConnectionStatus>;
   people?: readonly PersonPreview[];
   today: string;
-  healthScores?: ReadonlyMap<PersonId, number | null>;
   connections: FriendshipConnection[];
   classifications: readonly Pick<PersonPickerGroup, 'id' | 'label'>[];
   details?: PersonDetails;
@@ -464,20 +457,19 @@ function FriendRow({
   onQuickLog: (type: ConnectionType, event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const person = personById(people, status.personId);
-  const last = latestValidConnection(connections);
+  const last = connections[0] ?? null;
   const birthday = details?.birthday ? birthdayCardSummary(details.birthday, today) : null;
-  const recency = last ? formatConnectionRecency(last.date, today) : null;
   return (
     <PeopleCard
       person={person}
       classifications={classifications}
-      score={healthScores?.get(status.personId) ?? null}
       {...(details?.relationshipLabel ? { relationshipLabel: details.relationshipLabel } : {})}
       {...(birthday ? { birthday } : {})}
-      {...(last && recency ? { connectionRecency: { date: last.date, label: recency } } : {})}
+      {...(last ? { connectionRecency: `Last connected ${formatFriendDate(last.date, today)}` } : {})}
       onSelect={onPersonSelect}
       className="friendships-friend-row"
       identityClassName="friendships-friend-row__identity"
+      connectionClassName="friendships-friend-row__last"
     >
       <FriendshipCadenceControl
         personId={status.personId}

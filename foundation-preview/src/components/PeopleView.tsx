@@ -2,11 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createSamplePeople } from '../domain/preview-data.ts';
 import type { PersonPickerGroup, PersonId, PersonPickerGroupId, PersonPreview } from '../domain/preview-data.ts';
 import type { FriendshipData } from '../domain/friendships.ts';
-import {
-  formatConnectionRecency,
-  latestValidConnectionForPerson
-} from '../domain/friendships.ts';
-import { resolvePersonCategory } from '../domain/person-categories.ts';
+import { connectionsForPerson } from '../domain/friendships.ts';
 import { PeopleCard } from './PeopleCard.tsx';
 import {
   birthdayCardSummary,
@@ -29,7 +25,6 @@ export function PeopleView({
   friendships,
   today,
   personDetails = [],
-  healthScores,
   onOpenPerson,
   onCreatePerson
 }: {
@@ -38,7 +33,6 @@ export function PeopleView({
   friendships: FriendshipData;
   today: string;
   personDetails?: readonly PersonDetails[];
-  healthScores?: ReadonlyMap<PersonId, number | null>;
   onOpenPerson: (personId: PersonId) => void;
   onCreatePerson?: (person: PersonPreview, groupIds: readonly PersonPickerGroupId[]) => string | null;
 }) {
@@ -95,17 +89,14 @@ export function PeopleView({
       {visiblePeople.length > 0 ? (
         <div className="people-view__list">
           {visiblePeople.map(person => {
-            const lastConnection = latestValidConnectionForPerson(friendships, person.id);
-            const connectionLabel = lastConnection
-              ? formatConnectionRecency(lastConnection.date, today)
-              : null;
+            const lastConnection = connectionsForPerson(friendships, person.id)[0];
             const details = personDetailsForId(personDetails, person.id);
             const displayPerson = personWithSavedPhoto(person, personDetails);
             const birthday = details?.birthday
               ? birthdayCardSummary(details.birthday, today) ?? undefined
               : undefined;
             const personClassifications = groups.filter(group => group.memberIds.includes(person.id));
-            const tone = resolvePersonCategory(personClassifications.map(group => group.id)) ?? undefined;
+            const tone = personClassifications[0]?.id;
             return (
               <PeopleCard
                 key={person.id}
@@ -114,13 +105,9 @@ export function PeopleView({
                 {...(details?.relationshipLabel ? { relationshipLabel: details.relationshipLabel } : {})}
                 {...(tone ? { relationshipTone: tone } : {})}
                 {...(birthday ? { birthday } : {})}
-                {...(lastConnection && connectionLabel
-                  ? { connectionRecency: {
-                      date: lastConnection.date,
-                      label: connectionLabel
-                    } }
+                {...(lastConnection
+                  ? { connectionRecency: formatConnectionRecency(lastConnection.date, today) }
                   : {})}
-                score={healthScores?.get(person.id) ?? null}
                 onSelect={onOpenPerson}
                 className="people-view__row"
               />
@@ -139,4 +126,19 @@ export function PeopleView({
       )}
     </main>
   );
+}
+
+function formatConnectionRecency(value: string, today: string): string {
+  const [year, month, day] = value.split('-').map(Number);
+  const [todayYear, todayMonth, todayDay] = today.split('-').map(Number);
+  const date = Date.UTC(year!, month! - 1, day!);
+  const current = Date.UTC(todayYear!, todayMonth! - 1, todayDay!);
+  const days = Math.floor((current - date) / 86_400_000);
+  if (days < 0) return `Connected ${new Date(year!, month! - 1, day!, 12).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+  if (days === 0) return 'Connected today';
+  if (days === 1) return 'Connected yesterday';
+  if (days < 7) return `Connected ${days} days ago`;
+  if (days < 35) return `Connected ${Math.floor(days / 7)} wk ago`;
+  if (days < 365) return `Connected ${Math.floor(days / 30)} mo ago`;
+  return `Connected ${Math.floor(days / 365)} yr ago`;
 }

@@ -28,15 +28,11 @@ import { NumericControl } from './NumericControl.tsx';
 import { FitnessScoreSummary } from './FitnessScoreSummary.tsx';
 import { SettingsGearButton } from './SettingsGearButton.tsx';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
-import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
-import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 
 export type WeightViewProps = {
   data: WeightData;
   today: string;
   healthScore?: CategoryScoreSelection;
-  overallHealthScore?: number | null;
-  categoryHealthScore?: number | null;
   rhythms: readonly RhythmPreview[];
   archivedRhythmIds: ReadonlySet<string>;
   datedRhythmCompletions: readonly DatedRhythmCompletion[];
@@ -46,7 +42,6 @@ export type WeightViewProps = {
   onLogRequestClosed?: () => void;
   onQuickLog?: (event: MouseEvent<HTMLButtonElement>) => void;
   foundationNavigation?: boolean;
-  healthScoringEvidence?: HealthAggregateEvidence;
 };
 
 type DialogState = { kind: 'goals' } | { kind: 'weigh-in'; measurement?: WeightMeasurement; rhythm?: RhythmPreview };
@@ -55,8 +50,6 @@ export function WeightView({
   data,
   today,
   healthScore,
-  overallHealthScore = null,
-  categoryHealthScore = null,
   rhythms,
   archivedRhythmIds,
   datedRhythmCompletions,
@@ -64,8 +57,7 @@ export function WeightView({
   pendingLogRequest = null,
   onLogRequestOpened,
   onLogRequestClosed,
-  foundationNavigation = false,
-  healthScoringEvidence
+  foundationNavigation = false
 }: WeightViewProps) {
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [actionError, setActionError] = useState('');
@@ -138,10 +130,6 @@ export function WeightView({
           health={healthScore?.health ?? null}
           consistencyCaption="Scheduled Weight-linked weigh-in Rhythms."
           onTrackCaption="Whether weigh-ins due on those Rhythms are caught up."
-          overallHealthScore={overallHealthScore}
-          categoryHealthScore={categoryHealthScore}
-          linkedRhythmCount={rhythms.filter(rhythm => foundationRhythmIds(rhythm).includes('health-weight')).length}
-          {...(healthScoringEvidence ? { scoringEvidence: healthScoringEvidence } : {})}
           summaryExplanation="Weight Health reflects scheduled weigh-in Rhythms. Recorded weight, distance from the goal path, and the separate Goal Progress score do not affect it."
         />
       )}

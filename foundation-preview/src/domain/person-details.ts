@@ -56,7 +56,6 @@ export type PersonDetailsDraft = {
 
 export type PersonDetailsDraftErrors = Partial<Record<keyof PersonDetailsDraft, string>>;
 export const PERSON_PHOTO_MAX_DATA_URL_LENGTH = 450_000;
-const MAX_RELIABLE_DISPLAY_AGE = 130;
 
 const connectionStyleValues = new Set<string>(connectionStyles.map(style => style.value));
 const connectionCadenceValues = new Set<string>(connectionCadences);
@@ -322,12 +321,9 @@ export function birthdaySummary(
   const birthdayLabel = daysUntil === 0
     ? 'Birthday today'
     : `Birthday in ${daysUntil} ${daysUntil === 1 ? 'day' : 'days'}`;
-  if (birthday.year === undefined || !Number.isInteger(birthday.year)) {
-    return { label: birthdayLabel };
-  }
+  if (birthday.year === undefined) return { label: birthdayLabel };
   let age = todayYear! - birthday.year;
   if (dateFromCalendar(today) < observed) age -= 1;
-  if (age < 0 || age > MAX_RELIABLE_DISPLAY_AGE) return { label: birthdayLabel };
   return { label: `${age} · ${birthdayLabel}`, age };
 }
 
@@ -339,8 +335,8 @@ export function birthdayCardSummary(
   const summary = birthdaySummary(birthday, today);
   if (!next || !summary) return null;
   const [year, month, day] = next.date.split('-').map(Number);
-  const dateLabel = new Date(Date.UTC(year!, month! - 1, day!)).toLocaleDateString('en-US', {
-    month: 'short',
+  const dateLabel = new Date(year!, month! - 1, day!, 12).toLocaleDateString(undefined, {
+    month: 'long',
     day: 'numeric',
     timeZone: 'UTC'
   });

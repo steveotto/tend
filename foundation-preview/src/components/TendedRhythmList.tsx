@@ -12,7 +12,6 @@ type TendedNotice = {
 type TendedRhythmListRenderState = {
   visibleRhythmIds: ReadonlySet<string>;
   tendedRhythmIds: ReadonlySet<string>;
-  controls: ReactNode;
   itemProps: (rhythmId: string) => {
     className: string;
     'data-tended-rhythm-item': string;
@@ -31,9 +30,7 @@ type Props = {
   onUndo: (rhythmId: string) => void;
   resetKey: string;
   showProgress?: boolean;
-  progressDisclosure?: boolean;
   keepToggleWhenEmpty?: boolean;
-  renderControls?: boolean;
   initializing?: boolean;
   children: (state: TendedRhythmListRenderState) => ReactNode;
 };
@@ -53,9 +50,7 @@ export function TendedRhythmList({
   onUndo,
   resetKey,
   showProgress = false,
-  progressDisclosure = false,
   keepToggleWhenEmpty = false,
-  renderControls = true,
   initializing = false,
   children
 }: Props) {
@@ -297,31 +292,12 @@ export function TendedRhythmList({
     </button>
   ) : null;
 
-  const controls = (showProgress || hasToggle || notices.length > 0) ? (
-    <div className={`show-tended-list__controls${showProgress ? ' show-tended-list__controls--progress' : ''}`}>
-      {showProgress ? (
-        <div className="show-tended-list__progress-row">
-          {progressDisclosure && hasToggle ? (
-            <button
-              type="button"
-              className="show-tended-list__disclosure"
-              aria-label={`${showTended ? 'Hide' : 'Show'} tended Rhythms, ${tendedCount} of ${rhythms.length} tended`}
-              aria-expanded={showTended}
-              onClick={() => onShowTendedChange(!showTended)}
-            >
-              <span className="show-tended-list__progress show-tended-list__disclosure-content" aria-live="polite">
-                <svg className="show-tended-list__progress-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                  <circle cx="8" cy="8" r="6.25" />
-                  <path d="m4.8 8.1 2.1 2.1 4.3-4.4" />
-                </svg>
-                <span>{tendedCount} of {rhythms.length} tended</span>
-                <svg className="show-tended-list__disclosure-chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                  <path d={showTended ? 'm3 10 5-5 5 5' : 'm3 6 5 5 5-5'} />
-                </svg>
-              </span>
-            </button>
-          ) : (
-            <>
+  return (
+    <>
+      {(showProgress || hasToggle || notices.length > 0) && (
+        <div className={`show-tended-list__controls${showProgress ? ' show-tended-list__controls--progress' : ''}`}>
+          {showProgress ? (
+            <div className="show-tended-list__progress-row">
               <span className="show-tended-list__progress" aria-live="polite">
                 <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
                   <circle cx="8" cy="8" r="6.25" />
@@ -330,40 +306,34 @@ export function TendedRhythmList({
                 {tendedCount} of {rhythms.length} tended
               </span>
               {toggle}
-            </>
-          )}
+            </div>
+          ) : toggle}
+          {notices.map(notice => (
+            <div className="show-tended-list__notice" key={notice.key} role="status" aria-live="polite" aria-atomic="true">
+              <span className="visually-hidden">
+                Tended {notice.title}. {showTended
+                  ? 'The completed Rhythm remains visible.'
+                  : 'It will be removed from the active list shortly.'}
+              </span>
+              <span aria-hidden="true">Tended{notice.undoable ? ' · ' : ''}</span>
+              {notice.undoable && (
+                <button
+                  type="button"
+                  className="show-tended-list__undo"
+                  aria-label={`Undo tending ${notice.title}`}
+                  onClick={() => {
+                    clearForRhythm(notice.rhythmId);
+                    onUndo(notice.rhythmId);
+                  }}
+                >
+                  Undo
+                </button>
+              )}
+            </div>
+          ))}
         </div>
-      ) : toggle}
-      {notices.map(notice => (
-        <div className="show-tended-list__notice" key={notice.key} role="status" aria-live="polite" aria-atomic="true">
-          <span className="visually-hidden">
-            Tended {notice.title}. {showTended
-              ? 'The completed Rhythm remains visible.'
-              : 'It will be removed from the active list shortly.'}
-          </span>
-          <span aria-hidden="true">Tended{notice.undoable ? ' · ' : ''}</span>
-          {notice.undoable && (
-            <button
-              type="button"
-              className="show-tended-list__undo"
-              aria-label={`Undo tending ${notice.title}`}
-              onClick={() => {
-                clearForRhythm(notice.rhythmId);
-                onUndo(notice.rhythmId);
-              }}
-            >
-              Undo
-            </button>
-          )}
-        </div>
-      ))}
-    </div>
-  ) : null;
-
-  return renderControls ? (
-    <>
-      {controls}
-      {children({ visibleRhythmIds, tendedRhythmIds, controls, itemProps })}
+      )}
+      {children({ visibleRhythmIds, tendedRhythmIds, itemProps })}
     </>
-  ) : children({ visibleRhythmIds, tendedRhythmIds, controls, itemProps });
+  );
 }

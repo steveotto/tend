@@ -26,13 +26,10 @@ import { RhythmAssociationRows } from './RhythmAssociationRows.tsx';
 import { rhythmTimeLabel } from '../domain/rhythm-schedule.ts';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 import { scoreTone } from '../domain/score-tone.ts';
-import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
-import type { StrengthMode } from '../domain/strength.ts';
 
 type RhythmDetailsDialogProps = {
   rhythm: RhythmPreview;
   healthScore?: number | null;
-  healthWorkoutSetting?: { mode: StrengthMode; workoutName?: string };
   inline?: boolean;
   initialView?: 'details' | 'history';
   statusLabel?: string;
@@ -45,9 +42,6 @@ type RhythmDetailsDialogProps = {
   people?: readonly PersonPreview[];
   foundations?: readonly FoundationPreview[];
   relatedRhythms?: readonly RhythmPreview[];
-  rhythmScores?: ReadonlyMap<string, RhythmScoreResult>;
-  categoryHealthScores?: ReadonlyMap<string, number | null>;
-  archivedRhythmIds?: readonly string[];
   onPersonSelect?: (personId: PersonId) => void;
   onOpenFoundation?: (foundationId: string, openerId: string) => void;
   onOpenCategory?: (categoryId: Destination, openerId: string) => void;
@@ -74,13 +68,9 @@ type RhythmDetailsDialogProps = {
 export function RhythmDetailsDialog({
   rhythm,
   healthScore = null,
-  healthWorkoutSetting,
   people,
   foundations,
   relatedRhythms,
-  rhythmScores,
-  categoryHealthScores,
-  archivedRhythmIds,
   onPersonSelect,
   onOpenFoundation,
   onOpenCategory,
@@ -167,57 +157,35 @@ export function RhythmDetailsDialog({
     ? rhythmTimeLabel(rhythm.timeOfDay, timeOptions)
     : rhythm.timeLabel;
 
-  const completionAction = ((inline && onTend) || (!inline && (onSaveCompletion || onTend))) && !archived
-    ? (
-      <RhythmCompletionActions
-        rhythmTitle={rhythm.title}
-        completed={completed}
-        actionLabel={completionActionLabel}
-        actionAccessibleLabel={completionActionAccessibleLabel}
-        completedLabel={completedActionLabel}
-        onTend={inline || onTend ? onTend! : () => setShowCompletion(true)}
-        tendButtonRef={tendButtonRef}
-      />
-    )
-    : null;
-  const hasAssociations = hasPeople || hasCategories || hasFoundationLinks;
-  const historyAction = (
-    <button
-      type="button"
-      className="today-rhythm-details__history-button"
-      data-score-tone={inline ? scoreTone(healthScore) : undefined}
-      aria-label={inline
-        ? `View scores and history for ${rhythm.title}, Health ${healthScore === null
-          ? 'unavailable'
-          : `${formatScore(healthScore)} out of 100`}`
-        : `View scores and history for ${rhythm.title}`}
-      onClick={inline ? event => onHistory?.(event) : () => setShowHistory(true)}
-    >
-      <RhythmMetadataIcon kind="history" />
-      {inline && <span className="today-rhythm-details__history-score">{formatScore(healthScore)}</span>}
-    </button>
-  );
   const detailsActions = (
-    <div className={`today-rhythm-details__actions${inline
-      ? ` today-rhythm-details__actions--inline${hasAssociations ? ' today-rhythm-details__actions--inline-with-associations' : ''}`
-      : ''}`}
-    >
-      {inline ? <>{historyAction}{completionAction}</> : <>{completionAction}{historyAction}</>}
+    <div className="today-rhythm-details__actions">
+      {((inline && onTend) || (!inline && (onSaveCompletion || onTend))) && !archived && (
+        <RhythmCompletionActions
+          rhythmTitle={rhythm.title}
+          completed={completed}
+          actionLabel={completionActionLabel}
+          actionAccessibleLabel={completionActionAccessibleLabel}
+          completedLabel={completedActionLabel}
+          onTend={inline || onTend ? onTend! : () => setShowCompletion(true)}
+          tendButtonRef={tendButtonRef}
+        />
+      )}
+      <button
+        type="button"
+        className="today-rhythm-details__history-button"
+        data-score-tone={inline ? scoreTone(healthScore) : undefined}
+        aria-label={inline
+          ? `View scores and history for ${rhythm.title}, Health ${healthScore === null
+            ? 'unavailable'
+            : `${formatScore(healthScore)} out of 100`}`
+          : `View scores and history for ${rhythm.title}`}
+        onClick={inline ? event => onHistory?.(event) : () => setShowHistory(true)}
+      >
+        <RhythmMetadataIcon kind="history" />
+        {inline && <span className="today-rhythm-details__history-score">{formatScore(healthScore)}</span>}
+      </button>
     </div>
   );
-  const editButton = (!embedded || inline) && onEdit && (
-    <button
-      type="button"
-      className="today-rhythm-details__edit-icon"
-      aria-label={`Edit ${rhythm.title}`}
-      onClick={event => onEdit(event)}
-    >
-      <span className="today-rhythm-details__edit-visual" aria-hidden="true">
-        <RhythmMetadataIcon kind="edit" />
-      </span>
-    </button>
-  );
-  const hasInlineDescription = Boolean(rhythm.description?.trim());
 
   const surface = (
     <div className={`today-rhythm-details__surface${showCompletion ? ' today-rhythm-details__surface--completion' : ''}`}>
@@ -226,26 +194,33 @@ export function RhythmDetailsDialog({
           {!showHistory && !showCompletion && (
             <div className="today-rhythm-details__title-group">
               {inline
-                ? (
-                  <div className="today-rhythm-details__title-copy">
-                    <h3 ref={titleRef} id={titleId}>{rhythm.title}</h3>
-                    {hasInlineDescription && (
-                      <p className="today-rhythm-details__description">{rhythm.description}</p>
-                    )}
-                  </div>
-                )
+                ? <h3 ref={titleRef} id={titleId}>{rhythm.title}</h3>
                 : <h2 ref={titleRef} id={titleId} tabIndex={embedded ? -1 : undefined}>{rhythm.title}</h2>}
-              {!inline && editButton}
+              {(!embedded || inline) && onEdit && (
+                <button
+                  type="button"
+                  className="today-rhythm-details__edit-icon"
+                  aria-label={`Edit ${rhythm.title}`}
+                  onClick={event => onEdit(event)}
+                >
+                  <span className="today-rhythm-details__edit-visual" aria-hidden="true">
+                    <RhythmMetadataIcon kind="edit" />
+                  </span>
+                </button>
+              )}
               {archived && <RhythmArchivedBadge />}
               {rhythm.personal && <RhythmPersonalBadge />}
-              {!inline && rhythm.healthLogCapability === 'cardio' && rhythm.healthRunTarget && (
+              {inline && rhythm.description?.trim() && (
+                <p className="tend-type-description today-rhythm-details__description">{rhythm.description}</p>
+              )}
+              {rhythm.healthLogCapability === 'cardio' && rhythm.healthRunTarget && (
                 <p className="today-rhythm-details__activity-target">
                   Run target · {rhythm.healthRunTarget.distance} {rhythm.healthRunTarget.unit}
                 </p>
               )}
             </div>
           )}
-          {!showCompletion && inline && editButton}
+          {inline && !showCompletion && detailsActions}
           {!embedded && !inline && (
             <button
               ref={closeButtonRef}
@@ -285,7 +260,6 @@ export function RhythmDetailsDialog({
             ? (
               <RhythmHistoryView
                 rhythm={rhythm}
-                {...(healthWorkoutSetting ? { healthWorkoutSetting } : {})}
                 datedCompletions={datedCompletions}
                 completionHistoryAvailable={completionHistoryAvailable}
                 {...(onUpdateCompletion ? { onUpdateCompletion } : {})}
@@ -303,9 +277,6 @@ export function RhythmDetailsDialog({
                 {...(onOpenCategory ? { onOpenCategory } : {})}
                 {...(foundations ? { foundations } : {})}
                 {...(relatedRhythms ? { relatedRhythms } : {})}
-                {...(rhythmScores ? { rhythmScores } : {})}
-                {...(categoryHealthScores ? { categoryHealthScores } : {})}
-                {...(archivedRhythmIds ? { archivedRhythmIds } : {})}
                 {...(onOpenFoundation ? { onOpenFoundation } : {})}
                 onClose={onClose}
                 closeButtonRef={closeButtonRef}
@@ -314,17 +285,10 @@ export function RhythmDetailsDialog({
             )
             : (
               <>
-                <div
-                  className={`today-rhythm-details__content${inline ? ' today-rhythm-details__content--inline' : ''}`}
-                >
-                  {inline ? (
-                    <>
-                      {rhythm.healthLogCapability === 'cardio' && rhythm.healthRunTarget && (
-                        <p className="today-rhythm-details__activity-target">
-                          Run target · {rhythm.healthRunTarget.distance} {rhythm.healthRunTarget.unit}
-                        </p>
-                      )}
-                      {hasAssociations && (
+                {(!inline || hasPeople || hasCategories || hasFoundationLinks) && (
+                  <div className="today-rhythm-details__content">
+                    {inline
+                      ? (
                         <div
                           className="today-rhythm-details__association-row"
                           role="group"
@@ -340,29 +304,26 @@ export function RhythmDetailsDialog({
                             showFoundationLinks={!inline}
                           />
                         </div>
+                      )
+                      : (
+                        <div className="today-rhythm-details__summary">
+                          {rhythm.description?.trim() && (
+                            <p className="tend-type-description today-rhythm-details__description">{rhythm.description}</p>
+                          )}
+                          <RhythmAssociationRows
+                            rhythm={rhythm}
+                            {...(people ? { people } : {})}
+                            {...(foundations ? { foundations } : {})}
+                            {...(onPersonSelect ? { onPersonSelect } : {})}
+                            {...(onOpenCategory ? { onOpenCategory } : {})}
+                            {...(onOpenFoundation ? { onOpenFoundation } : {})}
+                            showFoundationLinks={!inline}
+                          />
+                        </div>
                       )}
-                      {!showCompletion && detailsActions}
-                    </>
-                  ) : (
-                    <>
-                      <div className="today-rhythm-details__summary">
-                        {rhythm.description?.trim() && (
-                          <p className="tend-type-description today-rhythm-details__description">{rhythm.description}</p>
-                        )}
-                        <RhythmAssociationRows
-                          rhythm={rhythm}
-                          {...(people ? { people } : {})}
-                          {...(foundations ? { foundations } : {})}
-                          {...(onPersonSelect ? { onPersonSelect } : {})}
-                          {...(onOpenCategory ? { onOpenCategory } : {})}
-                          {...(onOpenFoundation ? { onOpenFoundation } : {})}
-                          showFoundationLinks={!inline}
-                        />
-                      </div>
-                      {detailsActions}
-                    </>
-                  )}
-                </div>
+                    {!inline && detailsActions}
+                  </div>
+                )}
                 <footer className="today-rhythm-details__footer">
                   <RhythmMetadata
                     variant="footer"

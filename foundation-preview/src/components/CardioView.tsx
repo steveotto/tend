@@ -37,8 +37,6 @@ export type CardioViewProps = {
   onLogRequestClosed?: () => void;
   onQuickLog?: (event: MouseEvent<HTMLButtonElement>) => void;
   foundationNavigation?: boolean;
-  overallHealthScore?: number | null;
-  categoryHealthScore?: number | null;
 };
 
 type DialogState = { kind: 'goals' } | { kind: 'run'; run?: CardioRun; rhythm?: RhythmPreview };
@@ -53,9 +51,7 @@ export function CardioView({
   pendingLogRequest = null,
   onLogRequestOpened,
   onLogRequestClosed,
-  foundationNavigation = false,
-  overallHealthScore = null,
-  categoryHealthScore = null
+  foundationNavigation = false
 }: CardioViewProps) {
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [actionError, setActionError] = useState('');
@@ -82,9 +78,6 @@ export function CardioView({
       health={progress.health}
       consistencyCaption="Four completed weeks of run and distance goals."
       onTrackCaption="This week’s goal progress."
-      overallHealthScore={overallHealthScore}
-      categoryHealthScore={categoryHealthScore}
-      linkedRhythmCount={0}
       setupRequired={trackingSetupRequired}
       showSetupAction={false}
       statusMessage={progress.health === null
@@ -94,15 +87,15 @@ export function CardioView({
         ? 'Your score will appear as tracking builds.'
         : null}
       onSetup={event => openDialog({ kind: 'goals' }, event)}
-      summaryExplanation="Cardio Health uses run logs and saved weekly goals. Linking or completing a Rhythm without a saved run does not add Cardio credit."
-      scoringExplanation={(
+      summaryExplanation="Cardio Health combines Consistency and On Track using a 75%/25% blend. Linking or completing a Rhythm without a saved run does not add Cardio credit."
+      evidenceDetails={(
         <>
-          <p>
-            Current week ({progress.weekStart}–{progress.weekEnd}): {progress.runs} of
-            {' '}{progress.targetRuns ?? '—'} runs and {formatNumber(progress.miles)} of
-            {' '}{progress.targetMiles === null ? '—' : formatNumber(progress.targetMiles)} miles.
-          </p>
-          <p>{progress.eligibleConsistencyWeeks} completed weeks have eligible goals for Consistency.</p>
+          {progress.eligibleConsistencyWeeks > 0 && (
+            <p>
+              {progress.eligibleConsistencyWeeks} completed week
+              {progress.eligibleConsistencyWeeks === 1 ? '' : 's'} have eligible targets.
+            </p>
+          )}
           {progress.consistencyUnavailableReason && (
             <p>
               {progress.consistencyUnavailableReason.includes('tracking start')

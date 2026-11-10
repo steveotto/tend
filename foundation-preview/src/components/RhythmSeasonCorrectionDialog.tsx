@@ -255,11 +255,6 @@ export function RhythmSeasonCorrectionDialog({
   const scoring = rhythm.scoring ?? scoringInput.scoring;
   const scheduleHistory = scoring?.scheduleHistory ?? [];
   const isAddingSeason = season.id === `new-season:${rhythm.id}`;
-  const initialFocusId = isAddingSeason
-    ? titleId
-    : initialDraft
-      ? 'rhythm-season-delete-from-editor'
-      : 'rhythm-season-name';
   const requiresStartDate = season.startDate === undefined;
   const defaultStartDate = requiresStartDate
     ? isAddingSeason
@@ -537,21 +532,17 @@ export function RhythmSeasonCorrectionDialog({
     <MoneyGoalDialog
       labelledBy={titleId}
       closeLabel="Cancel schedule correction"
-      initialFocusId={initialFocusId}
+      initialFocusId={initialDraft ? 'rhythm-season-delete-from-editor' : 'rhythm-season-name'}
       stopEscapePropagation
       dialogClassName="money-goal-dialog--season-correction"
-      phoneFullScreen={isAddingSeason}
       surfaceClassName="money-goal-dialog__surface--season-correction"
       onClose={onClose}
     >
       <section className="rhythm-season-correction" aria-labelledby={titleId}>
         <header className="rhythm-season-correction__header">
-          <h2 id={titleId} tabIndex={isAddingSeason ? -1 : undefined}>
-            {isAddingSeason ? 'Add a season' : season.kind === 'unknown' ? 'Set earlier schedule' : 'Edit season'}
-          </h2>
+          <h2 id={titleId}>{isAddingSeason ? 'Add a season' : season.kind === 'unknown' ? 'Set earlier schedule' : 'Edit season'}</h2>
           <p>{rhythm.title}</p>
         </header>
-        <div className="rhythm-season-correction__scroll">
         <section className="rhythm-season-correction__step" aria-labelledby={savedScheduleHeadingId}>
           <SeasonSectionHeading
             id={savedScheduleHeadingId}
@@ -764,7 +755,6 @@ export function RhythmSeasonCorrectionDialog({
         {!canDelete && seasonIndex >= 0 && deleteRestriction && (
           <p className="rhythm-season-correction__delete-restriction">{deleteRestriction}</p>
         )}
-        </div>
         <div className="rhythm-season-correction__action-bar">
           <button type="button" className="btn mini rhythm-season-correction__apply" onClick={confirm}>Apply</button>
           <button type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>

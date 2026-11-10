@@ -90,24 +90,14 @@ describe('Cardio preview presentation', () => {
     };
     renderCardio(data);
     await user.click(screen.getByRole('button', { name: 'Show Cardio Health scoring details' }));
-    const dialog = screen.getByRole('dialog', { name: 'Cardio Health details' });
     const details = screen.getByRole('region', { name: 'Cardio Health scoring details' });
-    const breakdown = within(details).getByRole('region', { name: 'Cardio Health scoring details score summary' });
-    expect(within(breakdown).getByRole('heading', { name: 'Consistency' })).toBeTruthy();
-    expect(within(breakdown).getByRole('heading', { name: 'On Track' })).toBeTruthy();
-    expect(within(details).getByText('Follow-through over time')).toBeTruthy();
-    expect(within(details).getByText('How caught up you are')).toBeTruthy();
-    expect(within(details).queryByText(/four most recently completed weeks/)).toBeNull();
-    expect(within(details).queryByText(/This week’s run and distance goal progress/)).toBeNull();
+    expect(within(details).getByText(/four most recently completed weeks/)).toBeTruthy();
+    expect(within(details).getByText(/This week’s run and distance goal progress/)).toBeTruthy();
     expect(within(details).getByText('75%')).toBeTruthy();
     expect(within(details).getByText('25%')).toBeTruthy();
     expect(within(details).queryByText(/training interval/i)).toBeNull();
-    await user.click(within(details).getByRole('button', { name: 'How this Cardio Foundation was scored' }));
+    await user.click(within(details).getByText('Details'));
     expect(within(details).getByText(/Monday–Sunday weeks with known targets/)).toBeTruthy();
-    await user.click(within(details).getByRole('button', { name: 'How this Cardio Foundation contributes' }));
-    await user.click(within(dialog).getByRole('button', { name: 'About Cardio scoring' }));
-    const scoringDialog = screen.getByRole('dialog', { name: 'Cardio scoring' });
-    expect(within(scoringDialog).getByText(/Cardio Health uses run logs and saved weekly goals/)).toBeTruthy();
   });
 
   it('saves and clears complete weekly goals while rejecting a partial pair', async () => {

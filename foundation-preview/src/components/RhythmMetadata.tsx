@@ -172,7 +172,23 @@ function RhythmStatus({
 
 function MetadataIcon({ kind }: { kind: 'recurrence' | 'time' | 'last-tended' }) {
   if (kind === 'recurrence') {
-    return <RhythmRepeatIcon />;
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path d="M3 12a9 9 0 0 1 15.36-6.36L21 8" />
+        <path d="M21 3v5h-5" />
+        <path d="M21 12a9 9 0 0 1-15.36 6.36L3 16" />
+        <path d="M8 16H3v5" />
+      </svg>
+    );
   }
   if (kind === 'time') {
     return (
@@ -186,27 +202,6 @@ function MetadataIcon({ kind }: { kind: 'recurrence' | 'time' | 'last-tended' })
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <rect x="3.5" y="5" width="17" height="16" rx="2" />
       <path d="M7.5 3v4M16.5 3v4M3.5 9h17M8 14l2.5 2.5L16 12" />
-    </svg>
-  );
-}
-
-export function RhythmRepeatIcon({ className }: { className?: string } = {}) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="M3 12a9 9 0 0 1 15.36-6.36L21 8" />
-      <path d="M21 3v5h-5" />
-      <path d="M21 12a9 9 0 0 1-15.36 6.36L3 16" />
-      <path d="M8 16H3v5" />
     </svg>
   );
 }

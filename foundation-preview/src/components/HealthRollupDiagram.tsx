@@ -3,11 +3,6 @@ import type { CategoryId } from '../domain/preview-data.ts';
 import { AreaIcon } from './AreaIcon.tsx';
 import { HealthWeightPanels } from './HealthWeightPanels.tsx';
 import { MarriageIcon } from './MarriageIcon.tsx';
-import type {
-  HealthContributionDiagram,
-  HealthContributionScoringInfo,
-  RhythmContributionSelection
-} from '../domain/rhythm-contribution.ts';
 
 export type HealthRollupItem = {
   id: string;
@@ -32,9 +27,7 @@ export type HealthRollupConfig = {
   groups: readonly HealthRollupGroup[];
   initialGroupId: string;
   initialItemId: string;
-  rhythmContribution?: RhythmContributionSelection;
-  healthContribution?: HealthContributionDiagram;
-  scoringInfo?: HealthContributionScoringInfo;
+  footer?: readonly string[];
 };
 
 export function createHealthFitnessRollup(
@@ -114,50 +107,11 @@ export function createHealthFitnessRollup(
       }
     ],
     initialGroupId,
-    initialItemId
-  };
-}
-
-export function createHealthFitnessHealthContribution({
-  overallHealthScore,
-  categoryHealthScore,
-  strengthHealthScore,
-  cardioHealthScore,
-  weightHealthScore
-}: {
-  overallHealthScore: number | null;
-  categoryHealthScore: number | null;
-  strengthHealthScore: number | null;
-  cardioHealthScore: number | null;
-  weightHealthScore: number | null;
-}): HealthContributionDiagram {
-  return {
-    heading: 'How this Category contributes',
-    highlightedGroup: 'categories',
-    highlightedItemId: 'health-fitness',
-    overallScore: overallHealthScore,
-    categories: [{
-      id: 'health-fitness',
-      label: 'Health & Fitness',
-      score: categoryHealthScore,
-      categoryIconId: 'health'
-    }],
-    foundations: [
-      { id: 'health-strength', label: 'Strength', score: strengthHealthScore, categoryLabel: 'Health & Fitness', foundationIconId: 'health-strength' },
-      { id: 'health-cardio', label: 'Cardio', score: cardioHealthScore, categoryLabel: 'Health & Fitness', foundationIconId: 'health-cardio' },
-      { id: 'health-weight', label: 'Weight', score: weightHealthScore, categoryLabel: 'Health & Fitness', foundationIconId: 'health-weight' }
-    ],
-    bottomGroupLabel: 'Rhythms & logs',
-    bottomItem: {
-      id: 'health-inputs',
-      label: 'Rhythms & logs',
-      score: null,
-      showScore: false
-    },
-    identity: {
-      name: 'Health & Fitness',
-      icon: { kind: 'category', id: 'health' }
-    }
+    initialItemId,
+    footer: [
+      'Strength, Cardio, and Weight contribute equally to available Consistency and On Track measures.',
+      '— means unavailable; 0 is a valid score.'
+    ]
   };
 }
 

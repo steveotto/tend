@@ -42,7 +42,6 @@ type HealthScoreMeasuresProps = {
   onTrackCaption: string;
   healthLabel?: string;
   showHealthMeter?: boolean;
-  showCaptions?: boolean;
   className?: string;
 };
 
@@ -54,7 +53,6 @@ type HealthScoreBreakdownProps = Omit<HealthScoreMeasuresProps, 'healthScore'> &
   ariaLabel?: string;
   headingAction?: ReactNode;
   showMeasures?: boolean;
-  showMeasureCaptions?: boolean;
   children?: ReactNode;
   onKeyDown?: KeyboardEventHandler<HTMLElement>;
 };
@@ -71,7 +69,6 @@ export function HealthScoreBreakdown({
   ariaLabel = 'Health score breakdown',
   headingAction,
   showMeasures = true,
-  showMeasureCaptions = false,
   children,
   onKeyDown,
   className = ''
@@ -99,7 +96,6 @@ export function HealthScoreBreakdown({
           healthScore={score}
           consistencyCaption={consistencyCaption}
           onTrackCaption={onTrackCaption}
-          showCaptions={showMeasureCaptions}
           healthLabel={healthLabel}
           showHealthMeter={false}
         />
@@ -113,11 +109,8 @@ export function HealthScoreMeasures({
   healthScore,
   consistency,
   onTrack,
-  consistencyCaption,
-  onTrackCaption,
   healthLabel = 'Health',
   showHealthMeter = true,
-  showCaptions = false,
   className = ''
 }: HealthScoreMeasuresProps) {
   return (
@@ -127,14 +120,10 @@ export function HealthScoreMeasures({
         <HealthScoreMeasure
           label="Consistency"
           metric={consistency}
-          caption={consistencyCaption}
-          showCaption={showCaptions}
         />
         <HealthScoreMeasure
           label="On Track"
           metric={onTrack}
-          caption={onTrackCaption}
-          showCaption={showCaptions}
         />
       </div>
     </div>
@@ -172,14 +161,10 @@ export function HealthScoreMeter({
 
 function HealthScoreMeasure({
   label,
-  metric,
-  caption,
-  showCaption
+  metric
 }: {
   label: string;
   metric: HealthScoreMetric;
-  caption: string;
-  showCaption: boolean;
 }) {
   const headingId = useId();
   const state = metric.state ?? (metric.score === null ? 'unavailable' : 'scored');
@@ -193,7 +178,6 @@ function HealthScoreMeasure({
         state={state}
         {...(metric.explanation ? { explanation: metric.explanation } : {})}
       />
-      {showCaption && <p className="health-score-measures__caption">{caption}</p>}
     </section>
   );
 }

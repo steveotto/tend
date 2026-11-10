@@ -41,7 +41,6 @@ function FriendshipsHarness({
   onGoToPeople = vi.fn(),
   rhythms = [],
   personDetails = [],
-  healthScores,
   onEditRhythm = vi.fn(),
   onRhythmHistory = vi.fn(),
   onTend = vi.fn(),
@@ -53,7 +52,6 @@ function FriendshipsHarness({
   onGoToPeople?: () => void;
   rhythms?: readonly RhythmPreview[];
   personDetails?: readonly PersonDetails[];
-  healthScores?: ReadonlyMap<PersonId, number | null>;
   onEditRhythm?: (rhythm: RhythmPreview, event: ReactMouseEvent<HTMLButtonElement>) => void;
   onRhythmHistory?: (id: string, event: ReactMouseEvent<HTMLButtonElement>) => void;
   onTend?: (id: string, event: ReactMouseEvent<HTMLButtonElement>) => void;
@@ -66,7 +64,6 @@ function FriendshipsHarness({
       data={data}
       peopleGroups={peopleGroups}
       personDetails={personDetails}
-      {...(healthScores ? { healthScores } : {})}
       today="2026-10-21"
       rhythms={rhythms}
       archivedRhythms={[]}
@@ -97,8 +94,7 @@ describe('Friendships view', () => {
       <PeopleCard
         person={{ ...syntheticPeople[0]!, displayName: 'Alexandria Brooks-Williams' }}
         classifications={[]}
-        birthday={{ dateLabel: 'Dec 2', countdownLabel: 'in 32d', age: 47 }}
-        connectionRecency={{ date: '2026-09-28', label: '3 wk ago' }}
+        birthday={{ dateLabel: 'December 2', countdownLabel: 'in 32d', age: 47 }}
         onSelect={onSelect}
       >
         <button type="button" onClick={vi.fn()}>Log a connection</button>
@@ -108,16 +104,9 @@ describe('Friendships view', () => {
     expect(navigation.querySelector('.people-card__menu')).toBeNull();
     expect(screen.queryByLabelText('More actions for Alexandria Brooks-Williams')).toBeNull();
     expect(within(navigation).getByText('Age 47').tagName).toBe('STRONG');
-    expect(within(navigation).getByText('Dec 2')).toBeTruthy();
-    expect(within(navigation).getByText('Alexandria')).toBeTruthy();
-    expect(within(navigation).queryByText('Alexandria Brooks-Williams')).toBeNull();
-    expect(within(navigation).queryByText('Score unavailable')).toBeNull();
-    expect(within(navigation).queryByText('No connections yet')).toBeNull();
+    expect(within(navigation).getByText('December 2')).toBeTruthy();
     expect(within(navigation).getByText('in 32d')).toBeTruthy();
-    expect(within(navigation).getByText('Connected')).toBeTruthy();
-    expect(within(navigation).queryByText('Last connected')).toBeNull();
-    expect(within(navigation).getByText('3 wk ago')).toBeTruthy();
-    expect(navigation.querySelector('.people-card__connection-icon')?.getAttribute('aria-hidden')).toBe('true');
+    expect(navigation.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
 
     await user.tab();
     expect(document.activeElement).toBe(navigation);
@@ -127,7 +116,7 @@ describe('Friendships view', () => {
     expect(onSelect).toHaveBeenCalledOnce();
   });
 
-  it('shows only the stable assigned relationship group beside connection detail', () => {
+  it('aligns multiple classifications beside recency without squeezing a long person name', () => {
     const person = {
       ...syntheticPeople[0]!,
       displayName: 'Alexandria Brooks-Williams'
@@ -140,118 +129,17 @@ describe('Friendships view', () => {
           { id: 'parenting', label: 'Parenting' },
           { id: 'friends', label: 'Friends' }
         ]}
-        score={0}
-        connectionRecency={{ date: '2026-09-28', label: '3 wk ago' }}
+        connectionRecency="Connected 3 wk ago"
         onSelect={vi.fn()}
       />
     );
     const identity = screen.getByRole('button', { name: 'Open profile for Alexandria Brooks-Williams' });
-    const connectionDetail = identity.querySelector<HTMLElement>('.people-card__connection-detail')!;
-    expect(within(connectionDetail).getByText('Connected')).toBeTruthy();
-    expect(within(connectionDetail).getByText('3 wk ago').getAttribute('datetime')).toBe('2026-09-28');
-    expect(connectionDetail.querySelector('.people-card__connection-icon')?.getAttribute('aria-hidden')).toBe('true');
-    expect(within(identity).getByText('Alexandria')).toBeTruthy();
-    const zeroScore = within(identity).getByRole('img', { name: 'Person Health 0' });
-    expect(zeroScore.textContent).toBe('0');
-    expect(zeroScore.classList.contains('red')).toBe(true);
-    expect(within(identity).queryByText('Score unavailable')).toBeNull();
-    expect(within(identity).queryByText('No connections yet')).toBeNull();
-    const relationshipGroup = within(identity).getByRole('group', {
-      name: 'Alexandria Brooks-Williams relationship group'
-    });
-    expect(relationshipGroup.textContent).toBe('Marriage');
-    expect(relationshipGroup.children).toHaveLength(1);
-    const metaRow = identity.querySelector('.people-card__meta-row');
-    expect(metaRow?.contains(relationshipGroup)).toBe(true);
-    expect(metaRow?.contains(connectionDetail)).toBe(true);
-    expect(connectionDetail.compareDocumentPosition(relationshipGroup) & Node.DOCUMENT_POSITION_FOLLOWING)
-      .toBeTruthy();
-    expect(within(connectionDetail).getByText('3 wk ago').previousElementSibling?.textContent).toBe('Connected');
-    expect(within(connectionDetail).getByText('3 wk ago').classList.contains('people-card__connection-time')).toBe(true);
-    expect(relationshipGroup.classList.contains('people-card__classifications')).toBe(true);
-  });
-
-  it('shows a quiet unavailable score and omits empty connection rows', () => {
-    render(
-      <PeopleCard
-        person={{ ...syntheticPeople[0]!, displayName: 'Alexandria Brooks-Williams' }}
-        classifications={[{ id: 'friends', label: 'Friends' }]}
-        score={null}
-        onSelect={vi.fn()}
-      />
-    );
-    const identity = screen.getByRole('button', { name: 'Open profile for Alexandria Brooks-Williams' });
-    expect(within(identity).queryByText('Score unavailable')).toBeNull();
-    expect(within(identity).queryByText('No connections yet')).toBeNull();
-    const unavailableScore = within(identity).getByRole('img', { name: 'Person Health unavailable' });
-    expect(unavailableScore.textContent).toBe('—');
-    expect(unavailableScore.classList.contains('neutral')).toBe(true);
-    expect(identity.querySelector('.people-card__score.category-health-badge')).toBeTruthy();
-    expect(identity.querySelector('.people-card__health')).toBeNull();
-    expect(identity.querySelector('.people-card__connection-detail')).toBeNull();
-    expect(identity.querySelector('.people-card__connection-block')).toBeNull();
-    const metaRow = identity.querySelector('.people-card__meta-row');
-    expect(metaRow?.querySelector('.people-card__classifications')).toBeTruthy();
-    expect(metaRow?.querySelector('.people-card__connection-detail')).toBeNull();
-  });
-
-  it('uses the latest valid, non-deleted connection date in People cards, ignoring edit timestamps', () => {
-    const onOpenPerson = vi.fn();
-    const friendships = {
-      ...createFriendshipData(),
-      connections: [
-        {
-          id: 'older',
-          type: 'text' as const,
-          date: '2025-01-01',
-          participantIds: ['sample-person-avery' as PersonId],
-          createdAt: '2025-02-27',
-          updatedAt: '2025-02-28'
-        },
-        {
-          id: 'edited-latest',
-          type: 'call' as const,
-          date: '2025-02-25',
-          participantIds: ['sample-person-avery' as PersonId],
-          createdAt: '2025-02-01',
-          updatedAt: '2025-02-28'
-        },
-        {
-          id: 'invalid-date',
-          type: 'text' as const,
-          date: '2025-99-99',
-          participantIds: ['sample-person-avery' as PersonId]
-        },
-        {
-          id: 'soft-deleted',
-          type: 'text' as const,
-          date: '2025-02-27',
-          participantIds: ['sample-person-avery' as PersonId],
-          deletedAt: '2025-02-28'
-        },
-        {
-          id: 'another-person',
-          type: 'text' as const,
-          date: '2025-02-27',
-          participantIds: ['sample-person-morgan' as PersonId]
-        }
-      ]
-    };
-    render(
-      <PeopleView
-        groups={createPersonPickerGroups()}
-        friendships={friendships}
-        today="2025-02-28"
-        onOpenPerson={onOpenPerson}
-      />
-    );
-
-    const avery = screen.getByRole('button', { name: 'Open profile for Avery Brooks' });
-    expect(within(avery).getByText('Connected')).toBeTruthy();
-    expect(within(avery).getByText('3 days ago').getAttribute('datetime')).toBe('2025-02-25');
-    const morgan = screen.getByRole('button', { name: 'Open profile for Morgan Reed' });
-    expect(within(morgan).getByText('Connected')).toBeTruthy();
-    expect(within(morgan).getByText('Yesterday').getAttribute('datetime')).toBe('2025-02-27');
+    const metadataRow = identity.querySelector<HTMLElement>('.people-card__meta-row')!;
+    expect(within(metadataRow).getByText('Connected 3 wk ago')).toBeTruthy();
+    expect(within(metadataRow).getByRole('group', {
+      name: 'Alexandria Brooks-Williams classifications'
+    }).textContent).toContain('MarriageParentingFriends');
+    expect(within(identity).getByText('Alexandria Brooks-Williams')).toBeTruthy();
   });
 
   it('renders only supported People details and filters by explicit classifications', async () => {
@@ -262,14 +150,10 @@ describe('Friendships view', () => {
         groups={createPersonPickerGroups()}
         friendships={createFriendshipData()}
         today="2025-02-28"
-        healthScores={new Map([
-          ['sample-person-avery', 35],
-          ['sample-person-morgan', 0]
-        ])}
         personDetails={[{
           personId: 'sample-person-avery',
           relationshipLabel: 'Sister',
-          birthday: { monthDay: '02-29', year: 74 }
+          birthday: { monthDay: '02-29' }
         }]}
         onOpenPerson={openPerson}
       />
@@ -277,14 +161,10 @@ describe('Friendships view', () => {
 
     expect(screen.getAllByRole('button', { name: /^Open profile for/ })).toHaveLength(3);
     const avery = screen.getByRole('button', { name: 'Open profile for Avery Brooks' });
-    const averyGroup = within(avery).getByRole('group', { name: 'Avery Brooks relationship group' });
-    expect(averyGroup.textContent).toBe('Marriage');
-    expect(averyGroup.children).toHaveLength(1);
-    expect(within(avery).getByRole('img', { name: 'Person Health 35' }).textContent).toBe('35');
-    expect(within(avery).queryByText('Score unavailable')).toBeNull();
-    expect(within(avery).queryByText('No connections yet')).toBeNull();
+    expect(within(avery).getByLabelText('Person score unavailable').textContent).toBe('—');
+    expect(within(avery).getByText('Score unavailable')).toBeTruthy();
     expect(within(avery).queryByText('Needs attention')).toBeNull();
-    expect(within(avery).getByText('Mar 1')).toBeTruthy();
+    expect(within(avery).getByText('March 1')).toBeTruthy();
     expect(within(avery).queryByText(/^Age/)).toBeNull();
     await user.click(avery);
     expect(openPerson).toHaveBeenCalledWith('sample-person-avery');
@@ -292,65 +172,21 @@ describe('Friendships view', () => {
     await user.click(screen.getByRole('button', { name: 'Marriage' }));
     expect(screen.getAllByRole('button', { name: /^Open profile for/ })).toHaveLength(2);
     expect(screen.queryByRole('button', { name: 'Open profile for Jordan Bell' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Open profile for Avery Brooks' })
-      .querySelector('.people-card__score')?.textContent).toBe('35');
-    expect(screen.getByRole('button', { name: 'Open profile for Morgan Reed' })
-      .querySelector('.people-card__score')?.textContent).toBe('0');
     await user.click(screen.getByRole('button', { name: 'All' }));
     expect(screen.getAllByRole('button', { name: /^Open profile for/ })).toHaveLength(3);
   });
 
-  it('renders the assigned group only when all relationship filter options are available', () => {
-    const person = { id: 'synthetic-person-amy', displayName: 'Amy Sample' };
-    const groups = createPersonPickerGroups().map(group => ({
-      ...group,
-      memberIds: group.id === 'marriage' ? [person.id] : []
-    }));
-    render(
-      <PeopleView
-        people={[person]}
-        groups={groups}
-        friendships={createFriendshipData()}
-        today="2026-10-21"
-        onOpenPerson={vi.fn()}
-      />
-    );
-    const card = screen.getByRole('button', { name: 'Open profile for Amy Sample' });
-    const relationshipGroup = within(card).getByRole('group', { name: 'Amy Sample relationship group' });
-    expect(relationshipGroup.textContent).toBe('Marriage');
-    expect(relationshipGroup.children).toHaveLength(1);
-  });
-
-  it('uses the assigned relationship group on Friendship cards regardless of linked Rhythm categories', async () => {
+  it('uses shared Person details on Friendship cards without changing classifications', async () => {
     const user = userEvent.setup();
     const groups = setPersonGroupMembership(
-      setPersonGroupMembership(createPersonPickerGroups(), 'marriage', 'sample-person-avery', false),
+      createPersonPickerGroups(),
       'friends',
       'sample-person-avery',
       true
     );
-    const linkedRhythm: RhythmPreview = {
-      id: 'synthetic-multi-category-rhythm',
-      title: 'Multi-category connection',
-      automation: 'manual',
-      status: 'Not confirmed',
-      categoryIds: ['faith', 'marriage', 'parenting', 'health', 'friendships'],
-      personIds: ['sample-person-avery']
-    };
     render(
       <FriendshipsHarness
         initialGroups={groups}
-        rhythms={[linkedRhythm]}
-        initialData={{
-          ...createFriendshipData(),
-          connections: [{
-            id: 'avery-recent',
-            type: 'call',
-            date: '2026-10-18',
-            participantIds: ['sample-person-avery']
-          }]
-        }}
-        healthScores={new Map([['sample-person-avery', 35]])}
         personDetails={[{
           personId: 'sample-person-avery',
           relationshipLabel: 'A lifelong friend',
@@ -362,19 +198,8 @@ describe('Friendships view', () => {
     const row = screen.getByRole('article').closest('.friendships-friend-row');
     expect(row).toBeTruthy();
     expect(within(row as HTMLElement).getByText('A lifelong friend')).toBeTruthy();
-    expect(within(row as HTMLElement).getByText('Oct 22')).toBeTruthy();
-    expect(within(row as HTMLElement).getByText('Avery')).toBeTruthy();
-    expect(within(row as HTMLElement).getByText('Connected')).toBeTruthy();
-    expect(within(row as HTMLElement).getByText('3 days ago').getAttribute('datetime')).toBe('2026-10-18');
-    expect(within(row as HTMLElement).queryByText('Avery Brooks')).toBeNull();
-    expect(within(row as HTMLElement).queryByText('Score unavailable')).toBeNull();
-    expect(within(row as HTMLElement).queryByText('No connections yet')).toBeNull();
-    expect(within(row as HTMLElement).getByRole('img', { name: 'Person Health 35' }).textContent).toBe('35');
-    const relationshipGroup = within(row as HTMLElement).getByRole('group', {
-      name: 'Avery Brooks relationship group'
-    });
-    expect(relationshipGroup.textContent).toBe('Friends');
-    expect(relationshipGroup.children).toHaveLength(1);
+    expect(within(row as HTMLElement).getByText('October 22')).toBeTruthy();
+    expect(within(row as HTMLElement).getByRole('group', { name: 'Avery Brooks classifications' })).toBeTruthy();
   });
 
   it('projects People friend categorization into Friends while preserving cadence and shared history', async () => {

@@ -182,7 +182,6 @@ describe('PreviewIdentityHost', () => {
       auth: {
         autoRefreshToken: true,
         detectSessionInUrl: true,
-        flowType: 'pkce',
         persistSession: true,
         storageKey: 'tend2:preview:auth-session',
         storage

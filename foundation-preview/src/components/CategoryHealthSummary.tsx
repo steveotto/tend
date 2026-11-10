@@ -7,7 +7,6 @@ import { HealthScoreDetailsDialog } from './HealthScoreDetailsDialog.tsx';
 import type { HealthScoreMetric } from './HealthScoreBreakdown.tsx';
 import { HealthScoreDetailsContent } from './HealthScoreDetailsContent.tsx';
 import type { HealthRollupConfig } from './HealthRollupDiagram.tsx';
-import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 
 type CategoryHealthSummaryProps = {
   title: string;
@@ -24,7 +23,6 @@ type CategoryHealthSummaryProps = {
   coverageLabel?: string;
   consistencyDescription?: string;
   onTrackDescription?: string;
-  scoringEvidence?: HealthAggregateEvidence;
   rollup: HealthRollupConfig;
 };
 
@@ -40,7 +38,6 @@ export function CategoryHealthSummary({
   coverageLabel,
   consistencyDescription,
   onTrackDescription,
-  scoringEvidence,
   rollup
 }: CategoryHealthSummaryProps) {
   const [expanded, setExpanded] = useState(false);
@@ -51,32 +48,6 @@ export function CategoryHealthSummary({
   const coverage = coverageLabel ?? (score.eligibleFoundationIds.length === 0
     ? `No scored ${itemTerm.plural} yet`
     : `${score.eligibleFoundationIds.length} of ${score.foundationIds.length} ${itemTerm.plural} scored`);
-  const scoringInfoGroup = rollup.healthContribution?.highlightedGroup === 'rhythm'
-    ? 'rhythm' as const
-    : 'foundations' as const;
-  const scoringTerm = `${itemTerm.singular.charAt(0).toUpperCase()}${itemTerm.singular.slice(1)}`;
-  const scoringParagraphs = [
-    explanation,
-    interpretationNote,
-    ...(describeRollup
-      ? [`Each eligible ${itemTerm.singular} counts equally. Both Consistency and On Track must be available to count.`]
-      : [consistencyDescription, onTrackDescription])
-  ].filter((paragraph): paragraph is string => Boolean(paragraph));
-  const detailsRollup: HealthRollupConfig = rollup.healthContribution
-    ? {
-        ...rollup,
-        healthContribution: {
-          ...rollup.healthContribution,
-          scoringInfo: {
-            groupId: scoringInfoGroup,
-            triggerLabel: `About ${scoringTerm} scoring`,
-            title: `${scoringTerm} scoring`,
-            coverage,
-            paragraphs: scoringParagraphs
-          }
-        }
-      }
-    : rollup;
   const consistencyMetric: HealthScoreMetric = {
     score: score.consistency,
     state: score.consistency === null ? 'unavailable' : 'scored',
@@ -141,18 +112,11 @@ export function CategoryHealthSummary({
                 ?? `The average Consistency score of eligible ${itemTerm.plural.toLowerCase()}.`}
               onTrackDescription={onTrackDescription
                 ?? `The average On Track score of eligible ${itemTerm.plural.toLowerCase()}.`}
-              rollup={detailsRollup}
-              scoringDisclosureTitle="How this Category was scored"
-              {...(scoringEvidence ? { scoringEvidence } : {})}
-              scoringExplanation={(
-                <>
-                  {explanation && <p>{explanation}</p>}
-                  {interpretationNote && <p>{interpretationNote}</p>}
-                </>
-              )}
-              initialContributionExpanded={false}
-              scoringDetails={(
-                <>
+              rollup={rollup}
+            >
+              <p>{coverage.endsWith('.') ? coverage : `${coverage}.`}</p>
+              {explanation && <p>{explanation}</p>}
+              {interpretationNote && <p>{interpretationNote}</p>}
               {unlinkedRhythms.length > 0 && (
                 <section className="category-health-summary__unlinked" aria-label="Rhythms missing required links">
                   <p>
@@ -177,9 +141,13 @@ export function CategoryHealthSummary({
                   )}
                 </section>
               )}
-                </>
+              {describeRollup && (
+                <p>
+                  Each eligible {itemTerm.singular} contributes equally to the category&apos;s average
+                  Consistency and On Track scores. Both scores must be available to count.
+                </p>
               )}
-            />
+            </HealthScoreDetailsContent>
           </div>
         </HealthScoreDetailsDialog>
       )}

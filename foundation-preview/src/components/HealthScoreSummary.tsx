@@ -1,6 +1,6 @@
 import { useId, useRef } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
-import { HealthScoreInfoButton, HealthScoreMeasures, HealthScoreMeter } from './HealthScoreBreakdown.tsx';
+import { HealthScoreInfoButton, HealthScoreMeasures } from './HealthScoreBreakdown.tsx';
 import { formatScore } from '../domain/score-display.ts';
 import { HealthScoreDetailsDialog } from './HealthScoreDetailsDialog.tsx';
 import { HealthScoreDetailsContent } from './HealthScoreDetailsContent.tsx';
@@ -14,14 +14,10 @@ type HealthScoreSummaryProps = {
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
   children: ReactNode;
-  summaryContent?: ReactNode;
   className?: string;
   ariaLabel?: string;
   infoLabel?: string;
   detailsLabel?: string;
-  showMeasures?: boolean;
-  showHealthMeter?: boolean;
-  headerStyle?: 'summary' | 'category';
   consistencyDetailCaption?: string;
   onTrackDetailCaption?: string;
   consistencyDescription?: string;
@@ -37,14 +33,10 @@ export function HealthScoreSummary({
   expanded,
   onExpandedChange,
   children,
-  summaryContent,
   className = '',
   ariaLabel,
   infoLabel = title,
   detailsLabel = `${title} scoring explanation`,
-  showMeasures = true,
-  showHealthMeter = false,
-  headerStyle = 'summary',
   consistencyDetailCaption = 'How regularly you show up.',
   onTrackDetailCaption = 'How caught up you are.',
   consistencyDescription,
@@ -67,67 +59,41 @@ export function HealthScoreSummary({
 
   return (
     <section
-      className={`${headerStyle === 'category'
-        ? 'health-score-breakdown rhythm-history-view__score-card category-health-summary'
-        : 'card category-health-card category-health-summary health-score-summary'} ${className}`.trim()}
+      className={`card category-health-card category-health-summary health-score-summary ${className}`.trim()}
       aria-label={ariaLabel}
       aria-labelledby={ariaLabel ? undefined : headingId}
       onKeyDown={handleKeyDown}
     >
-      {headerStyle === 'category' ? (
-        <header className="health-score-breakdown__header">
-          <h3 id={headingId}>{title}</h3>
-          <HealthSummaryValue
-            label={`${title} score`}
-            score={score}
-            className="person-profile-overall-score"
-            decorative={expanded}
-          />
-          <HealthScoreInfoButton
-            ref={toggleRef}
-            label={`Show ${infoLabel} scoring explanation`}
-            expanded={expanded}
-            controls={detailsId}
-            onClick={() => onExpandedChange(!expanded)}
-          />
-        </header>
-      ) : (
-        <div className="category-health-heading">
-          <div className="category-health-copy">
-            <div className="category-health-summary__title-row">
-              <h3 id={headingId}>{title}</h3>
-              <HealthScoreInfoButton
-                ref={toggleRef}
-                label={`Show ${infoLabel} scoring explanation`}
-                expanded={expanded}
-                controls={detailsId}
-                onClick={() => onExpandedChange(!expanded)}
-              />
-            </div>
+      <div className="category-health-heading">
+        <div className="category-health-copy">
+          <div className="category-health-summary__title-row">
+            <h3 id={headingId}>{title}</h3>
+            <HealthScoreInfoButton
+              ref={toggleRef}
+              label={`Show ${infoLabel} scoring explanation`}
+              expanded={expanded}
+              controls={detailsId}
+              onClick={() => onExpandedChange(!expanded)}
+            />
           </div>
-          <HealthSummaryValue
-            label={`${title} score`}
-            score={score}
-            className="category-health-score"
-            decorative={expanded}
-          />
         </div>
-      )}
-
-      {showMeasures ? (
-        <HealthScoreMeasures
-          healthScore={score}
-          healthLabel={title}
-          consistency={{ score: consistency, state: consistency === null ? 'unavailable' : 'scored' }}
-          onTrack={{ score: onTrack, state: onTrack === null ? 'unavailable' : 'scored' }}
-          consistencyCaption={consistencyDetailCaption}
-          onTrackCaption={onTrackDetailCaption}
-          showHealthMeter={showHealthMeter}
+        <HealthSummaryValue
+          label={`${title} score`}
+          score={score}
+          className="category-health-score"
+          decorative={expanded}
         />
-      ) : showHealthMeter ? (
-        <HealthScoreMeter score={score} label={`${title} progress`} />
-      ) : null}
-      {summaryContent}
+      </div>
+
+      <HealthScoreMeasures
+        healthScore={score}
+        healthLabel={title}
+        consistency={{ score: consistency, state: consistency === null ? 'unavailable' : 'scored' }}
+        onTrack={{ score: onTrack, state: onTrack === null ? 'unavailable' : 'scored' }}
+        consistencyCaption={consistencyDetailCaption}
+        onTrackCaption={onTrackDetailCaption}
+        showHealthMeter={false}
+      />
       {expanded && (
         <HealthScoreDetailsDialog title={`${title} details`} onClose={closeDetails}>
           <div id={detailsId} className="category-health-summary__details" role="region" aria-label={detailsLabel}>

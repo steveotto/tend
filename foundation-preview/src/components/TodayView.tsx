@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import {
   areas,
@@ -28,8 +28,6 @@ import { TendedRhythmList } from './TendedRhythmList.tsx';
 import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
 import { formatScore } from '../domain/score-display.ts';
 import { aggregateCategoryHealthScores } from '../domain/category-scoring.ts';
-import { StyledSelect } from './StyledSelect.tsx';
-import type { StyledSelectOption } from './StyledSelect.tsx';
 
 const planTypes: { id: TodayItemType; label: string }[] = [
   { id: 'scheduled', label: 'Scheduled' },
@@ -94,11 +92,12 @@ export function TodayView({
   onEditRhythm,
   onUndo,
 }: TodayViewProps) {
-  const restoreTimePickerFocus = useRef(false);
   const tendedRhythmIds = savedTendedRhythmIds
     ?? selectTendedRhythmDisplayIds(completedRhythms, satisfiedRhythmIds);
   const [planType, setPlanType] = useState<TodayItemType>('scheduled');
   const timeBlocks = useTimeBlockSettings();
+  const focusPickerRef = useRef<HTMLDetailsElement>(null);
+  const focusTriggerRef = useRef<HTMLElement>(null);
   const visibleRhythms = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     return query ? rhythms.filter(item => item.title.toLocaleLowerCase().includes(query)) : rhythms;
@@ -109,21 +108,6 @@ export function TodayView({
   );
   const planRhythms = planGroups.flatMap(group => group.rhythms);
   const currentLabel = todayFocusLabel(focus, evaluationInstant, timeBlocks);
-  const emptyPlanLabel = planType === 'scheduled'
-    ? focus === 'everything-today' ? 'today' : `in ${currentLabel}`
-    : `in ${planType === 'anytime' ? 'Anytime' : 'All-day'}`;
-  const selectedTimeRange = planType === 'scheduled' && focus !== 'everything-today'
-    ? todayFocusContext(focus, 'scheduled', evaluationInstant, timeBlocks)
-    : undefined;
-  useLayoutEffect(() => {
-    if (!restoreTimePickerFocus.current) return;
-    restoreTimePickerFocus.current = false;
-    document.getElementById('today-plan-time-select')?.focus();
-  }, [focus]);
-  function handleTimeFrameChange(nextFocus: TodayFocusId) {
-    restoreTimePickerFocus.current = true;
-    onFocusChange(nextFocus);
-  }
   const weatherTime = focus === 'now'
     ? null
     : focus === 'everything-today'
@@ -136,40 +120,6 @@ export function TodayView({
     const count = scheduledItemCount(timeFrame);
     return `${count} ${count === 1 ? 'item' : 'items'}`;
   };
-  const timeFrameOptions: readonly StyledSelectOption<TodayFocusId>[] = [
-    {
-      value: 'now',
-      label: 'Now',
-      description: `${todayFocusContext('now', 'scheduled', evaluationInstant, timeBlocks)} · ${itemCountLabel('now')}`,
-      group: 'View'
-    },
-    {
-      value: 'everything-today',
-      label: 'Everything today',
-      description: `Across every time block · ${itemCountLabel('everything-today')}`,
-      group: 'View'
-    },
-    ...timeBlocks.blocks.map(block => ({
-      value: block.id,
-      label: block.name,
-      description: `${todayFocusContext(block.id, 'scheduled', evaluationInstant, timeBlocks)} · ${itemCountLabel(block.id)}`,
-      group: 'Specific time'
-    }))
-  ];
-  const timeFramePicker = (
-    <StyledSelect
-      id="today-plan-time-select"
-      label="Filter scheduled Rhythms by time"
-      triggerAriaLabel={`Filter scheduled Rhythms by time, currently ${currentLabel}`}
-      containerClassName="today-plan__focus-picker"
-      triggerClassName="today-plan__focus-trigger"
-      sizeTriggerToOptions
-      popoverMinWidth={320}
-      options={timeFrameOptions}
-      value={focus}
-      onChange={handleTimeFrameChange}
-    />
-  );
   const overallHealth = aggregateCategoryHealthScores(
     areas.map(area => categoryHealthScores.get(area.id) ?? null)
   );
@@ -238,131 +188,122 @@ export function TodayView({
                   <AreaIcon id={area.id} variant="today-summary" />
                 </span>
                 <span className="ma-name">{area.label}</span>
-                <CategoryHealthBadge score={score} appearance="rounded" />
+                <CategoryHealthBadge score={score} />
               </button>
             );
           })}
         </div>
       </section>
 
-      <section className="today-plan-section" aria-label="Today's plan">
-        <TendedRhythmList
-          rhythms={planRhythms}
-          tendedRhythmIds={tendedRhythmIds}
-          satisfiedRhythmIds={satisfiedRhythmIds}
-          undoableRhythmIds={undoableRhythms}
-          showTended={showTended}
-          onShowTendedChange={onShowTendedChange}
-          showProgress
-          progressDisclosure
-          keepToggleWhenEmpty={visibleRhythms.length > 0}
-          renderControls={false}
-          onUndo={onUndo}
-          resetKey={`${planType}:${focus}:${search}:${planRhythms.length}`}
-          initializing={initializing}
-        >
-          {({ visibleRhythmIds, tendedRhythmIds: displayedTendedIds, controls, itemProps }) => {
+      <section aria-label="Today's plan">
+        <div className="card planblock current today-plan">
+          <div className="faith-practice-tabs home-plan-type-tabs" role="tablist" aria-label="Plan items">
+            {planTypes.map((type, index) => (
+              <button
+                key={type.id}
+                type="button"
+                role="tab"
+                id={`plan-tab-${type.id}`}
+                aria-controls="today-plan-items"
+                aria-selected={planType === type.id}
+                tabIndex={planType === type.id ? 0 : -1}
+                onClick={() => setPlanType(type.id)}
+                onKeyDown={event => handlePlanTabKeyDown(event, index)}
+              >
+                {type.label}
+              </button>
+            ))}
+          </div>
+          <TendedRhythmList
+            rhythms={planRhythms}
+            tendedRhythmIds={tendedRhythmIds}
+            satisfiedRhythmIds={satisfiedRhythmIds}
+            undoableRhythmIds={undoableRhythms}
+            showTended={showTended}
+            onShowTendedChange={onShowTendedChange}
+            showProgress
+            keepToggleWhenEmpty={visibleRhythms.length > 0}
+            onUndo={onUndo}
+            resetKey={`${planType}:${focus}:${search}`}
+            initializing={initializing}
+          >
+            {({ visibleRhythmIds, tendedRhythmIds: displayedTendedIds, itemProps }) => {
               const visiblePlanGroups = planGroups.flatMap(group => {
                 const rhythms = group.rhythms.filter(rhythm => visibleRhythmIds.has(rhythm.id));
                 return rhythms.length ? [{ ...group, rhythms }] : [];
               });
-              const everythingToday = planType === 'scheduled' && focus === 'everything-today';
-              const weather = planType === 'scheduled'
-                && weatherController.city
-                && weatherController.weather.status === 'ready'
-                && weatherTime !== undefined && (
-                  <TodayWeather
-                    report={weatherController.weather.report}
-                    localDate={localDate}
-                    time={weatherTime ?? null}
-                    containerClassName="today-plan__weather"
-                  />
-                );
               return (
                 <>
-                  <div className="today-plan__title-row">
-                    <h3 className="today-plan__heading">Today</h3>
-                    <div className="today-plan__title-progress">{controls}</div>
-                  </div>
-                  <div className="today-plan__controls">
-                    <div className="faith-practice-tabs home-plan-type-tabs" role="tablist" aria-label="Plan items">
-                      {planTypes.map((type, index) => (
-                        <button
-                          key={type.id}
-                          type="button"
-                          role="tab"
-                          id={`plan-tab-${type.id}`}
-                          aria-controls="today-plan-items"
-                          aria-selected={planType === type.id}
-                          tabIndex={planType === type.id ? 0 : -1}
-                          onClick={() => setPlanType(type.id)}
-                          onKeyDown={event => handlePlanTabKeyDown(event, index)}
+                  {planType === 'scheduled' && (
+                    <div className="today-plan__scheduled-controls">
+                      <details className="today-plan__focus-picker" ref={focusPickerRef}>
+                        <summary
+                          ref={focusTriggerRef}
+                          className="today-plan__focus-trigger"
+                          aria-label={`Choose a time frame, currently ${currentLabel}`}
                         >
-                          {type.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="today-plan__results">
-                    <div
-                      className="current-plan-items"
-                      id="today-plan-items"
-                      role="tabpanel"
-                      aria-labelledby={`plan-tab-${planType}`}
-                    >
-                {!everythingToday && (
-                  <div className="today-plan__view-heading-row">
-                    <div className="today-plan__left-column">
-                      <div className="today-plan__heading-range-row">
-                        <h4 className="today-plan__view-heading">
-                          {planType === 'scheduled' ? currentLabel : planType === 'anytime' ? 'Anytime' : 'All-day'}
-                        </h4>
-                        {selectedTimeRange && (
-                          <span className="today-plan__time-range">{selectedTimeRange}</span>
+                          <span>{currentLabel}</span>
+                          <span className="today-plan__chevron" aria-hidden="true">⌄</span>
+                        </summary>
+                        <div className="today-plan__focus-options" role="group" aria-label="Time frames">
+                          <div className="today-plan__focus-options-section">
+                            <span>View</span>
+                            {([
+                              ['now', 'Now', `${todayFocusContext('now', 'scheduled', evaluationInstant, timeBlocks)} · ${itemCountLabel('now')}`],
+                              ['everything-today', 'Everything today', `Across every time block · ${itemCountLabel('everything-today')}`]
+                            ] as const).map(([id, label, range]) => (
+                              <button
+                                key={id}
+                                type="button"
+                                aria-pressed={focus === id}
+                                onClick={() => {
+                                  onFocusChange(id);
+                                  if (focusPickerRef.current) focusPickerRef.current.open = false;
+                                  focusTriggerRef.current?.focus();
+                                }}
+                              >
+                                <span>{label}</span><small>{range}</small>
+                              </button>
+                            ))}
+                          </div>
+                          <div className="today-plan__focus-options-section">
+                            <span>Specific time</span>
+                            {timeBlocks.blocks.map(block => (
+                              <button
+                                key={block.id}
+                                type="button"
+                                aria-pressed={focus === block.id}
+                                onClick={() => {
+                                  onFocusChange(block.id);
+                                  if (focusPickerRef.current) focusPickerRef.current.open = false;
+                                  focusTriggerRef.current?.focus();
+                                }}
+                              >
+                                <span>{block.name}</span>
+                                <small>{todayFocusContext(block.id, 'scheduled', evaluationInstant, timeBlocks)} · {itemCountLabel(block.id)}</small>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </details>
+                      {weatherController.city
+                        && weatherController.weather.status === 'ready'
+                        && focus !== 'everything-today'
+                        && weatherTime !== undefined && (
+                          <TodayWeather
+                            report={weatherController.weather.report}
+                            localDate={localDate}
+                            time={weatherTime ?? null}
+                            containerClassName="today-plan__weather"
+                          />
                         )}
-                      </div>
                     </div>
-                    <div className="today-plan__header-actions">
-                      {weather}
-                      {planType === 'scheduled' && timeFramePicker}
-                    </div>
-                  </div>
-                )}
-                {everythingToday && !visiblePlanGroups.length && (
-                  <div className="today-plan__view-heading-row today-plan__view-heading-row--picker-only">
-                    <div className="today-plan__header-actions">{timeFramePicker}</div>
-                  </div>
-                )}
-                {visiblePlanGroups.length ? (
-                  <>
-                    {visiblePlanGroups.map((group, index) => {
-                      const groupTimeBlock = planType === 'scheduled'
-                        ? timeBlocks.blocks.find(block => block.id === group.id)
-                        : undefined;
-                      const groupTimeRange = groupTimeBlock
-                        ? todayFocusContext(groupTimeBlock.id, 'scheduled', evaluationInstant, timeBlocks)
-                        : undefined;
-                      return (
-                        <div
-                          className="current-plan-item-group"
-                          key={group.id}
-                          aria-label={group.title || `${planType === 'scheduled' ? currentLabel : planType} Rhythms`}
-                        >
-                          {group.title && (
-                            <div className={`current-plan-item-group-heading-row${
-                              everythingToday && index === 0 ? ' current-plan-item-group-heading-row--with-picker' : ''
-                            }`}>
-                              <div className="today-plan__heading-range-row">
-                                <h4 className="current-plan-item-group-title">{group.title}</h4>
-                                {groupTimeRange && (
-                                  <span className="today-plan__time-range">{groupTimeRange}</span>
-                                )}
-                              </div>
-                              {everythingToday && index === 0 && (
-                                <div className="today-plan__header-actions">{timeFramePicker}</div>
-                              )}
-                            </div>
-                          )}
+                  )}
+                  <div className="current-plan-items" id="today-plan-items" role="tabpanel" aria-labelledby={`plan-tab-${planType}`}>
+                    {visiblePlanGroups.length ? (
+                      visiblePlanGroups.map(group => (
+                        <div className="current-plan-item-group" key={group.id} aria-label={group.title || `${planType === 'scheduled' ? currentLabel : planType} Rhythms`}>
+                          {group.title && <h3 className="current-plan-item-group-title">{group.title}</h3>}
                           {group.rhythms.map(rhythm => (
                             <div key={rhythm.id} {...itemProps(rhythm.id)}>
                               <RhythmDetailsDialog
@@ -399,28 +340,26 @@ export function TodayView({
                             </div>
                           ))}
                         </div>
-                      );
-                    })}
-                  </>
-                ) : (
-                  <>
-                    {planRhythms.length > 0 ? (
+                      ))
+                    ) : planRhythms.length > 0 ? (
                       <div className="dashed-empty-state" role="status">
                         <p>You’ve tended everything here.</p>
                       </div>
                     ) : (
-                      <div className="today-plan__empty-rhythms" role="status">
-                        <p>No active Rhythms {emptyPlanLabel}.</p>
+                      <div className="dashed-empty-state" role="status">
+                        <p>{planType === 'anytime'
+                          ? 'No eligible Anytime rhythms.'
+                          : planType === 'all-day'
+                            ? 'No eligible All-day rhythms.'
+                            : `No active Rhythms in ${focus === 'everything-today' ? 'today’s plan' : currentLabel}.`}</p>
                       </div>
                     )}
-                  </>
-                )}
                   </div>
-                </div>
                 </>
               );
             }}
-        </TendedRhythmList>
+          </TendedRhythmList>
+        </div>
       </section>
 
       <section aria-labelledby="calendar-heading" className="today-calendar-section">

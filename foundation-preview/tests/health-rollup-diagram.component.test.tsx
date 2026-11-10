@@ -85,7 +85,7 @@ const config: HealthRollupConfig = {
 afterEach(cleanup);
 
 describe('Health scoring rollup diagram', () => {
-  it('uses Health & Fitness logs and Foundation measures', () => {
+  it('uses Health & Fitness logs, Foundations, and the concise approved footer', () => {
     const fitness = createHealthFitnessRollup('category', 'health-fitness');
     expect(fitness.groups.map(group => group.label)).toEqual(['Rhythms & logs', 'Foundations', 'Category']);
     expect(fitness.groups[0]?.items.map(item => item.label)).toEqual([
@@ -96,6 +96,10 @@ describe('Health scoring rollup diagram', () => {
     expect(fitness.groups[0]?.items[2]?.explanation).toContain('saved run logs');
     expect(fitness.groups[2]?.items[0]?.categoryIconId).toBe('health');
     expect(fitness.groups[1]?.items[0]?.foundationIconId).toBe('health-strength');
+    expect(fitness.footer).toEqual([
+      'Strength, Cardio, and Weight contribute equally to available Consistency and On Track measures.',
+      '— means unavailable; 0 is a valid score.'
+    ]);
   });
 
   it('shows one card per group, features the opening category, and browses with bounded arrows', async () => {

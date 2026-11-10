@@ -5,9 +5,7 @@ import {
   connectionsForPerson,
   createFriendshipData,
   deleteConnection,
-  formatConnectionRecency,
   friendConnectionStatus,
-  latestValidConnectionForPerson,
   selectFriendStatuses,
   migrateLegacyFriendshipDataV19,
   setFriendCadence,
@@ -39,35 +37,6 @@ function event(
 }
 
 describe('Friendships cadence and connection history', () => {
-  it('selects the latest valid active connection date and updates for edits and deletions', () => {
-    let data = createFriendshipData();
-    data = addOrUpdateConnection(data, event('older', '2026-10-10', [avery], {
-      createdAt: '2026-10-20',
-      updatedAt: '2026-10-21'
-    }));
-    data = addOrUpdateConnection(data, event('edited', '2026-10-18', [avery], {
-      createdAt: '2026-10-01',
-      updatedAt: '2026-10-21'
-    }));
-    data = addOrUpdateConnection(data, event('invalid-date', '2026-99-99', [avery]));
-    data = addOrUpdateConnection(data, event('soft-deleted', '2026-10-20', [avery], {
-      deletedAt: '2026-10-21'
-    }));
-    expect(latestValidConnectionForPerson(data, avery)?.id).toBe('edited');
-    expect(formatConnectionRecency(latestValidConnectionForPerson(data, avery)!.date, '2026-10-21'))
-      .toBe('3 days ago');
-    expect(formatConnectionRecency('2026-09-10', '2026-10-21')).toBe('1 mo ago');
-
-    data = addOrUpdateConnection(data, event('edited', '2026-10-05', [avery]));
-    expect(latestValidConnectionForPerson(data, avery)?.id).toBe('older');
-    data = deleteConnection(data, 'older');
-    expect(latestValidConnectionForPerson(data, avery)?.id).toBe('edited');
-    data = deleteConnection(data, 'edited');
-    expect(latestValidConnectionForPerson(data, avery)).toBeNull();
-    expect(formatConnectionRecency('2026-10-20', '2026-10-21')).toBe('Yesterday');
-    expect(formatConnectionRecency('not-a-date', '2026-10-21')).toBeNull();
-  });
-
   it('starts a new cadence from its explicit set date and applies an inclusive due-date boundary', () => {
     const data = setFriendCadence(createFriendshipData(), avery, 'weekly', '2026-03-01');
 

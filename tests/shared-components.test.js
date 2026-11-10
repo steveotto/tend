@@ -736,7 +736,7 @@ test("Home, Person, and category rhythm cards share one renderer and card struct
   assert.match(styles, /\.rhythm-card\{/);
   assert.match(styles, /\.rhythm-card__meta[^}]*var\(--tend-type-metadata\)/);
   assert.match(styles, /\.rhythm-card__tend[^}]*var\(--tend-type-button-label\)/);
-  assert.match(styles, /html\[data-mobile-text-size="larger"\]\s*\{\s*--app-text-scale:1\.25/);
+  assert.match(styles, /html\[data-mobile-text-size-level="larger"\]\s*\{\s*--tend-type-section-header/);
   assert.match(styles, /\.rhythm-card \.rhythm-card__badges \.prayer-person/);
   assert.match(styles, /\.rhythm-card \.rhythm-card__badges \.rhythm-area-badge/);
   assert.doesNotMatch(styles, /\.person-profile-page \.profile-rhythm-row/);
@@ -811,7 +811,7 @@ test("Home and Person Spark cards use one shared renderer and preserve card acti
   assert.match(styles, /\.home-dashboard \.spark-card \.plan-item-category-row \.rhythm-area-badge svg\{[\s\S]*?width:12px!important;[\s\S]*?height:12px!important/);
   assert.match(styles, /\.home-dashboard \.current-plan-items>\.rhythm-card\{margin-bottom:14px\}/);
   assert.doesNotMatch(styles, /\.person-profile-page \.profile-spark-row\.card/);
-  assert.match(styles, /\.person-profile-page \.profile-spark-completion-note\{margin:12px 0 0;color:var\(--ink-faint\);font-size:calc\(0\.75rem \* var\(--app-text-scale, 1\)\);line-height:1\.4;text-align:center\}/);
+  assert.match(styles, /\.person-profile-page \.profile-spark-completion-note\{margin:12px 0 0;color:var\(--ink-faint\);font-size:12px;line-height:1\.4;text-align:center\}/);
   assert.doesNotMatch(styles, /\.person-profile-page \.person-free-moment-card \.tend-type-title/);
 });
 
@@ -1056,8 +1056,8 @@ test("Person management tabs prioritize health categories with mobile item and s
 
 test("Person profile overview keeps health details accessible and scoped above Today", () => {
   assert.match(homeRhythmSource, /personAvatar\(p,76\)/);
-  assert.match(styles, /\.person-profile-page \.person-profile-header \.person-identity h3\{[^}]*font-size:calc\(var\(--tend-type-section-header\) \+ calc\(\.25rem \* var\(--app-text-scale, 1\)\)\)!important/);
-  assert.match(styles, /\.person-profile-page \.person-profile-header \.person-identity \.rel\{[^}]*font-size:calc\(var\(--tend-type-description\) \+ calc\(\.05rem \* var\(--app-text-scale, 1\)\)\)!important;font-weight:600/);
+  assert.match(styles, /\.person-profile-page \.person-profile-header \.person-identity h3\{[^}]*font-size:calc\(var\(--tend-type-section-header\) \+ \.25rem\)!important/);
+  assert.match(styles, /\.person-profile-page \.person-profile-header \.person-identity \.rel\{[^}]*font-size:calc\(var\(--tend-type-description\) \+ \.05rem\)!important;font-weight:600/);
   assert.match(styles, /html\[data-mobile-text-size-level="larger"\] \.person-profile-page\{--person-profile-avatar-size:108px\}/);
   assert.match(homeRhythmSource, /person-profile-options-list[\s\S]*?data-psettings="1"[\s\S]*?data-closeperson="1"/);
   assert.match(homeRhythmSource, /person-profile-badges/);
@@ -1080,7 +1080,7 @@ test("Person profile overview keeps health details accessible and scoped above T
   assert.match(styles, /\.person-profile-page \.person-health-summary-score\.yellow\{color:#985600\}/);
   assert.match(styles, /\.person-profile-page \.person-health-summary-score\.red\{color:#C33222\}/);
   assert.match(styles, /html\[data-mobile-text-size-level="larger"\] \.person-profile-page \.person-health-summary\{padding-right:4px;padding-left:4px\}/);
-  assert.match(styles, /html\[data-mobile-text-size-level="larger"\] \.person-profile-page \.person-health-summary-label\{letter-spacing:-\.03em\}/);
+  assert.match(styles, /html\[data-mobile-text-size-level="larger"\] \.person-profile-page \.person-health-summary-label\{font-size:14px;letter-spacing:-\.03em;white-space:nowrap\}/);
   assert.match(styles, /\.person-profile-page \.prayer-person\.person-badge-clickable\{[^}]*gap:\.5em;padding:\.33em \.83em \.33em \.33em;font-size:var\(--tend-type-person-badge\)!important/);
   assert.match(styles, /\.person-profile-page \.prayer-person\.person-badge-clickable \.avatar\{width:1\.6em!important;height:1\.6em!important/);
   assert.match(styles, /\.person-profile-page \.prayer-person\.person-badge-clickable,\s*\.person-free-moment \.prayer-person\.person-badge-clickable,\s*\.profile-tab-panel \.prayer-person\.person-badge-clickable\{[^}]*padding:\.33em \.83em \.33em \.33em;border:0;font-size:var\(--tend-type-person-badge\)!important;line-height:1\.2\}/);
@@ -1170,7 +1170,7 @@ test("Person Connections preview and both history views share ConnectionCard", (
   assert.match(connectionCard, /scheduleItem\("time"/);
   assert.match(connectionCard, /rhythm-card__meta-item rhythm-card__last/);
   assert.match(styles, /\.person-profile-page #profile-panel-connection\{padding:0;border:0;background:transparent;box-shadow:none\}/);
-  assert.match(styles, /\.person-profile-page #profile-panel-connection \.connection-profile-intro\{margin:0 0 10px;color:var\(--ink-faint\);font-size:calc\(0\.8125rem \* var\(--app-text-scale, 1\)\);line-height:1\.45\}/);
+  assert.match(styles, /\.person-profile-page #profile-panel-connection \.connection-profile-intro\{margin:0 0 10px;color:var\(--ink-faint\);font-size:13px;line-height:1\.45\}/);
   assert.match(styles, /\.person-profile-page #profile-panel-connection \.connection-profile-toolbar\{align-items:center;flex-direction:row;justify-content:space-between/);
   assert.match(styles, /\.person-profile-page #profile-panel-connection \.connection-history-chart-trigger\{[^}]*width:44px;height:44px;min-width:44px;min-height:44px/);
   assert.match(styles, /\.person-profile-page #profile-panel-connection \.connection-history-chart-trigger:focus-visible\{outline:2px solid var\(--forest\);outline-offset:2px\}/);
