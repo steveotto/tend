@@ -7,7 +7,6 @@ import type { WeightViewProps } from './WeightView.tsx';
 import { CardioView } from './CardioView.tsx';
 import { FlexibilityView } from './FlexibilityView.tsx';
 import type { FlexibilityViewProps } from './FlexibilityView.tsx';
-import { HealthScoreMeter } from './HealthScoreBreakdown.tsx';
 import { BackButton } from './BackButton.tsx';
 import type { CardioViewProps } from './CardioView.tsx';
 import { CategoryHealthSummary } from './CategoryHealthSummary.tsx';
@@ -24,7 +23,7 @@ import { RhythmSuggestionPicker } from './RhythmSuggestionPicker.tsx';
 import type { RhythmSuggestionPickerGroup } from './RhythmSuggestionPicker.tsx';
 import type { CategoryRhythmSuggestion, CategoryRhythmSuggestionCatalogue } from './MarriageView.tsx';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
-import { flexibilityRegions, isFlexibilityRegionId } from '../domain/flexibility.ts';
+import { isFlexibilityRegionId } from '../domain/flexibility.ts';
 import type { FlexibilityRegionId } from '../domain/flexibility.ts';
 import { selectFoundationScore } from '../domain/foundation-scoring.ts';
 import type { CategoryTabNavigationRequest, Destination } from './AppNavigation.tsx';
@@ -90,7 +89,6 @@ type HealthFitnessViewProps = {
   weightHealthScore: CategoryScoreSelection;
   cardioHealthScore: CategoryScoreSelection;
   flexibilityHealthScore: CategoryScoreSelection;
-  flexibilityTrackedCount: number;
   overallHealthScore?: number | null;
 };
 
@@ -197,7 +195,6 @@ export function HealthFitnessView({
   weightHealthScore,
   cardioHealthScore,
   flexibilityHealthScore,
-  flexibilityTrackedCount,
   overallHealthScore = null
 }: HealthFitnessViewProps) {
   const tendedRhythmIds = savedTendedRhythmIds
@@ -553,22 +550,6 @@ export function HealthFitnessView({
             score={healthScore}
             itemTerm={{ singular: 'measure', plural: 'measures' }}
             explanation="Health & Fitness Health averages available Strength, Cardio, Weight, and Flexibility measures; each measure uses its own eligible evidence."
-            summaryContent={(
-              <div className="health-fitness-flexibility-summary">
-                <div>
-                  <strong>Flexibility consistency</strong>
-                  <span>{flexibilityHealthScore.consistency === null
-                    ? '—'
-                    : `${Math.round(flexibilityHealthScore.consistency)}`}
-                  </span>
-                </div>
-                <HealthScoreMeter
-                  score={flexibilityHealthScore.consistency}
-                  label="Flexibility consistency"
-                />
-                <p>{flexibilityTrackedCount} of {flexibilityRegions.length} stretch regions tracked</p>
-              </div>
-            )}
             scoringEvidence={fitnessMeasureEvidence}
             describeRollup={false}
             coverageLabel={healthScore.consistency !== null && healthScore.onTrack !== null
@@ -795,6 +776,8 @@ export function HealthFitnessView({
             {renderFoundationHeading('health-flexibility')}
             <FlexibilityView
               {...flexibility}
+              overallHealthScore={overallHealthScore}
+              categoryHealthScore={healthScore.health}
               foundationNavigation
               pendingQuickLog={pendingFlexibilityLog ?? flexibility.pendingQuickLog ?? null}
               onQuickLogOpened={requestId => {

@@ -3160,7 +3160,6 @@ function PreviewWorkspace({
       weightHealthScore={weightCategoryScore}
       cardioHealthScore={cardioCategoryScore}
       flexibilityHealthScore={flexibilityCategoryScore}
-      flexibilityTrackedCount={flexibilityConsistency.trackedCount}
       overallHealthScore={overallHealthScore}
     />
   ) : null;

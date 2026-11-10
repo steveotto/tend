@@ -1,17 +1,19 @@
-import { useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { HealthMeasureAggregate } from '../domain/health-scoring.ts';
 import type { PersonPreview } from '../domain/preview-data.ts';
 import type { HealthRollupConfig } from './HealthRollupDiagram.tsx';
 import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
-import { formatHealthAverageEquation, formatScore } from '../domain/score-display.ts';
+import { formatScore } from '../domain/score-display.ts';
 import { scoreTone } from '../domain/score-tone.ts';
 import { CategoryHealthBadge } from './Cards.tsx';
-import { HealthScoreBreakdown } from './HealthScoreBreakdown.tsx';
+import { HealthScoreBreakdown, HealthScoreInfoButton, HealthScoreMeasures } from './HealthScoreBreakdown.tsx';
+import type { HealthScoreMetric } from './HealthScoreBreakdown.tsx';
 import { HealthScoreDetailsContent } from './HealthScoreDetailsContent.tsx';
 import { HealthInfoIdentityCard } from './HealthInfoIdentityCard.tsx';
 import { HealthScoringDetailsCard } from './HealthScoringDetailsCard.tsx';
 import { HealthScoreSummary } from './HealthScoreSummary.tsx';
+import { HealthScoreDetailsDialog, useHealthDetailsNestedDialog } from './HealthScoreDetailsDialog.tsx';
 
 export type PersonHealthComponentScore = {
   id?: 'rhythms' | 'connections' | 'prayer';
@@ -127,13 +129,26 @@ export function PersonHealthComponentScores({
   values,
   expandedArea,
   controlIds,
-  onSelectArea
+  onSelectArea,
+  expandedContent,
+  areaDetails
 }: {
   values: readonly PersonHealthComponentScore[];
   expandedArea?: 'rhythms' | 'connections' | 'prayer' | null;
   controlIds?: Readonly<Record<'rhythms' | 'connections' | 'prayer', string>>;
   onSelectArea?: (area: 'rhythms' | 'connections' | 'prayer') => void;
+  expandedContent?: Readonly<Record<'rhythms' | 'connections' | 'prayer', ReactNode>>;
+  areaDetails?: Readonly<Record<'rhythms' | 'connections' | 'prayer', {
+    title: string;
+    content: ReactNode;
+  }>>;
 }) {
+  const [dialogArea, setDialogArea] = useState<PersonHealthComponentScore['id'] | null>(null);
+  const scoreButtonRefs = useRef<Partial<Record<NonNullable<PersonHealthComponentScore['id']>, HTMLButtonElement | null>>>({});
+  const setParentDialogInert = useHealthDetailsNestedDialog();
+  const detailsId = useId();
+  const dialogAreaDetails = dialogArea ? areaDetails?.[dialogArea] : undefined;
+
   return (
     <div className="person-health-component-scores" role="group" aria-label="Health by area">
       {values.map(({ id, label, score }) => {
@@ -151,20 +166,38 @@ export function PersonHealthComponentScores({
             </span>
           </>
         );
-        if (id && onSelectArea && controlIds) {
+        if (id && (onSelectArea || areaDetails)) {
+          const selectableArea = id;
+          const expanded = onSelectArea
+            ? expandedArea === selectableArea
+            : dialogArea === selectableArea;
+          const controlledRegion = onSelectArea
+            ? controlIds?.[selectableArea]
+            : expanded ? `${detailsId}-${selectableArea}` : undefined;
           return (
             <button
               type="button"
+              ref={element => { scoreButtonRefs.current[selectableArea] = element; }}
               className={`person-health-component-score ${scoreTone(value)}`}
               aria-label={`${label} Health ${value === null ? 'unavailable' : formatScore(value)}`}
-              aria-controls={controlIds[id]}
-              aria-expanded={expandedArea === id}
+              {...(controlledRegion ? { 'aria-controls': controlledRegion } : {})}
+              aria-expanded={expanded}
+              {...(!onSelectArea && areaDetails ? { 'aria-haspopup': 'dialog' as const } : {})}
               key={id}
-              onClick={() => onSelectArea(id)}
+              onClick={() => {
+                if (onSelectArea) {
+                  onSelectArea(selectableArea);
+                } else if (areaDetails?.[selectableArea]) {
+                  setDialogArea(selectableArea);
+                  setParentDialogInert(true);
+                }
+              }}
             >
               {content}
               <span className="visually-hidden">
-                {expandedArea === id ? 'Health card open' : 'Health card closed'}
+                {expanded
+                  ? areaDetails && !onSelectArea ? 'Health details open' : 'Health measures expanded'
+                  : areaDetails && !onSelectArea ? 'Health details closed' : 'Health measures collapsed'}
               </span>
             </button>
           );
@@ -184,7 +217,103 @@ export function PersonHealthComponentScores({
           </div>
         );
       })}
+      {onSelectArea && controlIds && expandedContent && values.map(({ id }) => {
+        if (!id) return null;
+        return (
+          <div
+            key={`${id}-measures`}
+            id={controlIds[id]}
+            className="person-health-component-scores__expanded"
+            role="region"
+            hidden={expandedArea !== id}
+          >
+            {expandedArea === id ? expandedContent[id] : null}
+          </div>
+        );
+      })}
+      {dialogAreaDetails && dialogArea && (
+        <HealthScoreDetailsDialog
+          title={dialogAreaDetails.title}
+          onClose={() => {
+            setDialogArea(null);
+            setParentDialogInert(false);
+            requestAnimationFrame(() => scoreButtonRefs.current[dialogArea]?.focus({ preventScroll: true }));
+          }}
+        >
+          <div
+            id={`${detailsId}-${dialogArea}`}
+            className="category-health-summary__details"
+            role="region"
+            aria-label={dialogAreaDetails.title}
+          >
+            {dialogAreaDetails.content}
+          </div>
+        </HealthScoreDetailsDialog>
+      )}
     </div>
+  );
+}
+
+export function PersonHealthAreaMeasures({
+  label,
+  detailsLabel = label,
+  consistency,
+  onTrack,
+  detailsDialogTitle,
+  detailsContent
+}: {
+  label: string;
+  detailsLabel?: string;
+  consistency: HealthScoreMetric;
+  onTrack: HealthScoreMetric;
+  detailsDialogTitle: string;
+  detailsContent: ReactNode;
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const infoButtonRef = useRef<HTMLButtonElement>(null);
+  const setParentDialogInert = useHealthDetailsNestedDialog();
+  const titleId = useId();
+  const detailsId = useId();
+
+  return (
+    <section className="person-health-area-measures" aria-labelledby={titleId}>
+      <header className="person-health-area-measures__header">
+        <h4 id={titleId}>{label}</h4>
+        <HealthScoreInfoButton
+          ref={infoButtonRef}
+          label={`Show ${detailsLabel} Health details`}
+          expanded={detailsOpen}
+          controls={detailsId}
+          onClick={() => {
+            setDetailsOpen(true);
+            setParentDialogInert(true);
+          }}
+        />
+      </header>
+      <HealthScoreMeasures
+        healthScore={null}
+        consistency={consistency}
+        onTrack={onTrack}
+        consistencyCaption="Follow-through over time"
+        onTrackCaption="How caught up you are"
+        showHealthMeter={false}
+        showCaptions
+      />
+      {detailsOpen && (
+        <HealthScoreDetailsDialog
+          title={detailsDialogTitle}
+          onClose={() => {
+            setDetailsOpen(false);
+            setParentDialogInert(false);
+            requestAnimationFrame(() => infoButtonRef.current?.focus({ preventScroll: true }));
+          }}
+        >
+          <div id={detailsId} className="category-health-summary__details" role="region" aria-label={detailsDialogTitle}>
+            {detailsContent}
+          </div>
+        </HealthScoreDetailsDialog>
+      )}
+    </section>
   );
 }
 
@@ -194,33 +323,22 @@ export type PersonOverallHealthArea = {
   score: number | null;
 };
 
-export function formatPersonOverallHealthFormula(
-  areas: readonly PersonOverallHealthArea[],
-  overallScore: number | null
-): string | null {
-  const eligible = areas.filter(area => area.score !== null && Number.isFinite(area.score));
-  if (eligible.length === 0 || overallScore === null || !Number.isFinite(overallScore)) return null;
-
-  if (eligible.length === 1) {
-    const area = eligible[0]!;
-    return `${area.label} ${formatScore(area.score!)} → Overall ${formatScore(overallScore)}`;
-  }
-
-  const values = eligible.map(area => area.score!);
-  return formatHealthAverageEquation(values, overallScore, eligible.length, true);
-}
-
 export function PersonOverallHealthDetails({
   person,
   overallScore,
-  areas
+  areas,
+  areaDetails
 }: {
   person: PersonPreview;
   overallScore: number | null;
   areas: readonly PersonOverallHealthArea[];
+  areaDetails: Readonly<Record<PersonOverallHealthArea['id'], {
+    title: string;
+    content: ReactNode;
+  }>>;
 }) {
-  const formula = formatPersonOverallHealthFormula(areas, overallScore);
   const eligibleAreas = areas.filter(area => area.score !== null && Number.isFinite(area.score));
+  const noScoresAvailable = eligibleAreas.length === 0;
 
   return (
     <div className="health-score-details-content person-overall-health-details">
@@ -239,7 +357,7 @@ export function PersonOverallHealthDetails({
           onTrackCaption="How caught up you are"
           showMeasures={false}
         >
-          <PersonHealthComponentScores values={areas} />
+          <PersonHealthComponentScores values={areas} areaDetails={areaDetails} />
         </HealthScoreBreakdown>
       </section>
       <HealthScoringDetailsCard
@@ -248,27 +366,24 @@ export function PersonOverallHealthDetails({
         consistencyScore={null}
         onTrackScore={null}
         formulaContent={(
-          <section className="person-overall-health-formula" aria-label="Eligible area scores and formula">
-          <h4>Eligible area scores</h4>
-          {eligibleAreas.length > 0 ? (
-              <>
-                <ul>
-                  {eligibleAreas.map(area => (
-                    <li key={area.id}>
-                      <span>{area.label}</span>
-                      <strong>{formatScore(area.score!)}</strong>
-                    </li>
-                  ))}
-                </ul>
-                <p className="rhythm-health-scoring-card__formula rhythm-health-scoring-card__formula--total">
-                  {formula}
-                </p>
-              </>
-            ) : (
-              <p className="health-aggregate-evidence__empty">No areas have scored data yet.</p>
+          <section className="person-overall-health-formula" aria-label="Area Health scores">
+            <ul>
+              {areas.map(area => (
+                <li key={area.id}>
+                  <span>{area.label}</span>
+                  <strong>{formatScore(area.score)}</strong>
+                </li>
+              ))}
+            </ul>
+            <p className="rhythm-health-scoring-card__formula rhythm-health-scoring-card__formula--total person-overall-health-formula__result">
+              <span>Overall Health</span>
+              <strong>{formatScore(overallScore)}</strong>
+            </p>
+            {noScoresAvailable && (
+              <p className="health-aggregate-evidence__empty">No scores available yet.</p>
             )}
             <p className="person-overall-health-formula__note">
-              Available areas count equally. Unavailable areas are left out.
+              Available areas count equally.
             </p>
           </section>
         )}

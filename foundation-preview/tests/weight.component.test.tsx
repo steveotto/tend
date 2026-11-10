@@ -36,7 +36,7 @@ function renderWeight(
 }
 
 describe('Weight preview presentation', () => {
-  it('shows independent Weight Health measures and the shared explanation on its Foundation page', async () => {
+  it('keeps its Foundation summary compact and shows measures and explanations in Health details', async () => {
     const user = userEvent.setup();
     renderWeight(createWeightData(), '2026-10-22', {
       foundationIds: ['health-weight'],
@@ -49,11 +49,13 @@ describe('Weight preview presentation', () => {
     }, true);
 
     expect(screen.getByRole('meter', { name: 'Weight Health score' }).getAttribute('aria-valuenow')).toBe('70');
-    expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('80');
-    expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('40');
+    expect(screen.queryByRole('meter', { name: 'Consistency score' })).toBeNull();
+    expect(screen.queryByRole('meter', { name: 'On Track score' })).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Show Weight Health scoring details' }));
     const dialog = screen.getByRole('dialog', { name: 'Weight Health details' });
+    expect(within(dialog).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('80');
+    expect(within(dialog).getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('40');
     const scoringToggle = within(dialog).getByRole('button', { name: 'How this Weight Foundation was scored' });
     expect(scoringToggle.getAttribute('aria-expanded')).toBe('false');
     await user.click(scoringToggle);
@@ -68,7 +70,8 @@ describe('Weight preview presentation', () => {
     expect(within(scoringDialog).getByText(/Goal Progress score do not affect it/)).toBeTruthy();
   });
 
-  it('preserves a valid zero measure beside unavailable Weight Health values', () => {
+  it('preserves zero and unavailable states in Weight Health details', async () => {
+    const user = userEvent.setup();
     renderWeight(createWeightData(), '2026-10-22', {
       foundationIds: ['health-weight'],
       eligibleFoundationIds: [],
@@ -79,9 +82,15 @@ describe('Weight preview presentation', () => {
       health: null
     }, true);
 
-    expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('0');
-    expect(screen.getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
     expect(screen.getByRole('img', { name: 'Weight Health: Not enough data' })).toBeTruthy();
+    expect(screen.queryByRole('meter', { name: 'Consistency score' })).toBeNull();
+    expect(screen.queryByRole('img', { name: 'On Track: Score unavailable' })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Show Weight Health scoring details' }));
+    const dialog = screen.getByRole('dialog', { name: 'Weight Health details' });
+    expect(within(dialog).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('0');
+    expect(within(dialog).getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
+    expect(within(dialog).getByRole('img', { name: 'Weight Health: Not enough data' })).toBeTruthy();
   });
 
   it('distinguishes recorded measurements, goal path, expected marker, and latest evidence', () => {

@@ -106,13 +106,13 @@ describe('shared Category Health summary', () => {
     const root = screen.getByRole('region', { name: 'Marriage Health summary' });
     const header = root.querySelector('.health-score-breakdown__header')!;
     const bar = root.querySelector('.health-score-breakdown__header + .health-score-meter')!;
-    const divider = root.querySelector('.rhythm-history-view__score-summary-divider')!;
     const measures = root.querySelector('.health-score-measures')!;
     expect(screen.getByRole('heading', { name: 'Marriage Health' })).toBeTruthy();
     expect(root.querySelector('.health-score-breakdown__header button')).toBeTruthy();
     expect(header.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(bar.compareDocumentPosition(divider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(divider.compareDocumentPosition(measures) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(bar.compareDocumentPosition(measures) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(root.querySelector('.rhythm-history-view__score-summary-divider')).toBeNull();
+    expect(measures.querySelectorAll('.rhythm-score-circle')).toHaveLength(2);
     expect(screen.getByRole('meter', { name: 'Marriage Health score' }).getAttribute('aria-valuenow')).toBe('86.875');
     expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('83');
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('100');

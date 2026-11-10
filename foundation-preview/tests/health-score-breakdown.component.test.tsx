@@ -74,4 +74,27 @@ describe('shared Health score breakdown', () => {
     expect(screen.queryByText('Every eligible opportunity was completed.')).toBeNull();
     expect(screen.queryByText('The current week is complete.')).toBeNull();
   });
+
+  it('supports a compact shared Health card without reserving gauge space', () => {
+    const { container } = render(
+      <HealthScoreBreakdown
+        title="Connection Health"
+        score={72}
+        healthLabel="Connection Foundation Health"
+        consistency={{ score: 60 }}
+        onTrack={{ score: 90 }}
+        consistencyCaption="How often you show up."
+        onTrackCaption="How caught up you are."
+        headingAction={<button type="button">Info</button>}
+        showMeasures={false}
+      />
+    );
+
+    expect(screen.getByRole('heading', { name: 'Connection Health' })).toBeTruthy();
+    expect(screen.getByRole('meter', { name: 'Connection Foundation Health score' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Info' })).toBeTruthy();
+    expect(container.querySelector('.health-score-measures')).toBeNull();
+    expect(screen.queryByRole('meter', { name: 'Consistency score' })).toBeNull();
+    expect(screen.queryByRole('meter', { name: 'On Track score' })).toBeNull();
+  });
 });

@@ -1019,14 +1019,19 @@ describe('Tend Today preview', () => {
     expect(screen.getByRole('heading', { name: 'Sabbath' })).toBeTruthy();
     expect(screen.getByText(faithPractices.find(practice => practice.id === 'faith-sabbath')!.description)).toBeTruthy();
     const detailHeader = document.querySelector('.foundation-detail-header') as HTMLElement;
-    expect(within(detailHeader).getByRole('img', {
-      name: 'Sabbath Practice Health score unavailable'
-    }).textContent).toBe('—');
-    expect(within(detailHeader).getByRole('button', {
+    expect(within(detailHeader).queryByRole('img')).toBeNull();
+    const healthCard = screen.getByRole('region', { name: 'Sabbath Health summary' });
+    expect(within(healthCard).getByRole('img', {
+      name: 'Sabbath Practice Health: Not enough data'
+    })).toBeTruthy();
+    expect(within(healthCard).getByRole('button', {
       name: 'Show Sabbath Health scoring details'
     })).toBeTruthy();
+    expect(healthCard.querySelector('.health-score-measures')).toBeNull();
+    expect(within(healthCard).queryByRole('meter', { name: 'Consistency score' })).toBeNull();
+    expect(within(healthCard).queryByRole('meter', { name: 'On Track score' })).toBeNull();
     expect(document.querySelector('.marriage-foundation-detail__scores')).toBeNull();
-    const scoreInfo = within(detailHeader).getByRole('button', {
+    const scoreInfo = within(healthCard).getByRole('button', {
       name: 'Show Sabbath Health scoring details'
     });
     await user.click(scoreInfo);
@@ -3785,11 +3790,12 @@ describe('Tend Today preview', () => {
     });
     expect(unscoredPracticeCard.querySelector('.foundation-card__score')?.textContent).toBe('—');
     await user.click(screen.getByRole('button', { name: /Open Prayer practice details/ }));
-    const practiceHeader = document.querySelector('.foundation-detail-header') as HTMLElement;
-    expect(within(practiceHeader).getByRole('img', {
-      name: `Prayer Practice Health ${formatScore(Number(faithCategoryScore))} out of 100`
-    }).textContent).toBe(formatScore(Number(faithCategoryScore)));
-    await user.click(within(practiceHeader).getByRole('button', {
+    const practiceHealthCard = screen.getByRole('region', { name: 'Prayer Health summary' });
+    expect(within(practiceHealthCard).getByRole('meter', {
+      name: 'Prayer Practice Health score'
+    }).getAttribute('aria-valuetext')).toBe(`${formatScore(Number(faithCategoryScore))} out of 100`);
+    expect(practiceHealthCard.querySelector('.health-score-measures')).toBeNull();
+    await user.click(within(practiceHealthCard).getByRole('button', {
       name: 'Show Prayer Health scoring details'
     }));
     let practiceDetails = screen.getByRole('dialog', { name: 'Prayer Health details' });
@@ -3807,8 +3813,8 @@ describe('Tend Today preview', () => {
     const reloadedCategoryScore = screen.getByRole('meter', { name: 'Faith Health score' }).getAttribute('aria-valuenow');
     await user.click(screen.getByRole('tab', { name: 'Practices' }));
     await user.click(screen.getByRole('button', { name: /Open Prayer practice details/ }));
-    const reloadedPracticeHeader = document.querySelector('.foundation-detail-header') as HTMLElement;
-    await user.click(within(reloadedPracticeHeader).getByRole('button', {
+    const reloadedPracticeCard = screen.getByRole('region', { name: 'Prayer Health summary' });
+    await user.click(within(reloadedPracticeCard).getByRole('button', {
       name: 'Show Prayer Health scoring details'
     }));
     practiceDetails = screen.getByRole('dialog', { name: 'Prayer Health details' });
@@ -5277,10 +5283,15 @@ describe('Tend Today preview', () => {
     expect(screen.getByRole('heading', { name: 'Connection' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'All Foundations' })).toBeTruthy();
     const foundationHeader = document.querySelector('.foundation-detail-header') as HTMLElement;
-    expect(within(foundationHeader).getByRole('img', {
-      name: 'Connection Foundation Health score unavailable'
-    }).textContent).toBe('—');
-    expect(screen.queryByRole('heading', { name: 'Connection Health' })).toBeNull();
+    expect(within(foundationHeader).queryByRole('img')).toBeNull();
+    const foundationHealthCard = screen.getByRole('region', { name: 'Connection Health summary' });
+    expect(within(foundationHealthCard).getByRole('img', {
+      name: 'Connection Foundation Health: Not enough data'
+    })).toBeTruthy();
+    expect(foundationHealthCard.querySelector('.health-score-measures')).toBeNull();
+    expect(within(foundationHealthCard).queryByRole('meter', { name: 'Consistency score' })).toBeNull();
+    expect(within(foundationHealthCard).queryByRole('meter', { name: 'On Track score' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Connection Health' })).toBeTruthy();
     expect(document.querySelector('.marriage-foundation-detail__scores')).toBeNull();
     expect(screen.getByRole('heading', { name: 'Linked Rhythms · 0' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Add Rhythm' })).toBeTruthy();
@@ -5587,10 +5598,12 @@ describe('Tend Today preview', () => {
     await user.keyboard('{Enter}');
     expect(document.activeElement).toBe(document.querySelector('.marriage-foundation-detail'));
     const foundationHeader = document.querySelector('.foundation-detail-header') as HTMLElement;
-    expect(within(foundationHeader).getByRole('img', {
-      name: 'Connection Foundation Health score unavailable'
-    }).textContent).toBe('—');
-    const scoreInfo = within(foundationHeader).getByRole('button', {
+    expect(within(foundationHeader).queryByRole('img')).toBeNull();
+    const foundationHealthCard = screen.getByRole('region', { name: 'Connection Health summary' });
+    expect(within(foundationHealthCard).getByRole('img', {
+      name: 'Connection Foundation Health: Not enough data'
+    })).toBeTruthy();
+    const scoreInfo = within(foundationHealthCard).getByRole('button', {
       name: 'Show Connection Health scoring details'
     });
     expect(screen.getByRole('heading', { name: 'Linked Rhythms · 2', level: 3 })).toBeTruthy();
@@ -5600,6 +5613,7 @@ describe('Tend Today preview', () => {
     expect(detailParts.map(element => element.className)).toEqual([
       'tend-back-button',
       'foundation-detail-header',
+      'health-score-breakdown rhythm-history-view__score-card foundation-health-card',
       'marriage-foundation-support'
     ]);
     expect(detailParts[1]?.querySelector('.foundation-detail-header__copy p')?.textContent).toBeTruthy();
@@ -5767,9 +5781,9 @@ describe('Tend Today preview', () => {
     expect(screen.getByRole('heading', { name: 'Linked Rhythms · 0', level: 3 })).toBeTruthy();
     expect(screen.queryByRole('article', { name: longTitle })).toBeNull();
     const header = document.querySelector('.foundation-detail-header') as HTMLElement;
-    expect(within(header).getByRole('img', {
-      name: 'Connection Foundation Health score unavailable'
-    }).textContent).toBe('—');
+    expect(within(header).queryByRole('img')).toBeNull();
+    expect(screen.getByRole('region', { name: 'Connection Health summary' })
+      .querySelector('.health-score-breakdown__header > span')?.textContent).toBe('—');
     expect(document.querySelector('.marriage-foundation-detail__scores')).toBeNull();
   });
 
@@ -5853,12 +5867,13 @@ describe('Tend Today preview', () => {
 
     await user.click(connection);
     const foundationHeader = document.querySelector('.foundation-detail-header') as HTMLElement;
-    expect(within(foundationHeader).getByRole('img', {
-      name: 'Connection Foundation Health 85 out of 100'
-    }).textContent).toBe('85');
-    expect(screen.queryByRole('heading', { name: 'Connection Health' })).toBeNull();
+    expect(within(foundationHeader).queryByRole('img')).toBeNull();
+    const foundationHealthCard = screen.getByRole('region', { name: 'Connection Health summary' });
+    expect(foundationHealthCard.querySelector('.health-score-breakdown__header > span')?.textContent).toBe('85');
+    expect(screen.getByRole('heading', { name: 'Connection Health' })).toBeTruthy();
     expect(document.querySelector('.marriage-foundation-detail__scores')).toBeNull();
-    const showFoundationInfo = screen.getByRole('button', { name: 'Show Connection Health scoring details' });
+    const showFoundationInfo = within(foundationHealthCard)
+      .getByRole('button', { name: 'Show Connection Health scoring details' });
     expect(showFoundationInfo.getAttribute('aria-expanded')).toBe('false');
     await user.click(showFoundationInfo);
     const foundationDialog = screen.getByRole('dialog');
@@ -5923,10 +5938,11 @@ describe('Tend Today preview', () => {
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Foundation score fixture' })).toBeNull());
     const updatedHeader = document.querySelector('.foundation-detail-header') as HTMLElement;
-    expect(within(updatedHeader).getByRole('img', {
-      name: `Connection Foundation Health ${formatScore(82.5)} out of 100`
-    }).textContent).toBe(formatScore(82.5));
-    await user.click(within(updatedHeader).getByRole('button', {
+    expect(within(updatedHeader).queryByRole('img')).toBeNull();
+    const updatedConnectionSummary = screen.getByRole('region', { name: 'Connection Health summary' });
+    expect(updatedConnectionSummary.querySelector('.health-score-breakdown__header > span')?.textContent)
+      .toBe(formatScore(82.5));
+    await user.click(within(updatedConnectionSummary).getByRole('button', {
       name: 'Show Connection Health scoring details'
     }));
     const updatedDialog = screen.getByRole('dialog', { name: 'Connection Health details' });
@@ -5962,7 +5978,10 @@ describe('Tend Today preview', () => {
     await user.click(within(associationDialog).getByRole('checkbox', { name: /Foundation score fixture/ }));
     await user.click(within(associationDialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Linked Rhythms' })).toBeNull());
-    expect(screen.getByRole('meter', { name: 'Communication Foundation Health score' }).getAttribute('aria-valuenow'))
+    const updatedCommunicationSummary = screen.getByRole('region', { name: 'Communication Health summary' });
+    expect(within(updatedCommunicationSummary).getByRole('meter', {
+      name: 'Communication Foundation Health score'
+    }).getAttribute('aria-valuenow'))
       .toBe('82.5');
     await user.click(screen.getByRole('button', { name: 'All Foundations' }));
     expect(screen.getAllByText('1 linked Rhythm scored')).toHaveLength(2);
@@ -6167,9 +6186,9 @@ describe('Tend Today preview', () => {
     await user.click(cards[0]!);
     expect(await screen.findByText(/No Rhythms are linked to this ongoing Foundation yet/)).toBeTruthy();
     const header = document.querySelector('.foundation-detail-header') as HTMLElement;
-    expect(within(header).getByRole('img', {
-      name: 'Connection Foundation Health score unavailable'
-    }).textContent).toBe('—');
+    expect(within(header).queryByRole('img')).toBeNull();
+    expect(screen.getByRole('region', { name: 'Connection Health summary' })
+      .querySelector('.health-score-breakdown__header > span')?.textContent).toBe('—');
     expect(document.querySelector('.marriage-foundation-detail__scores')).toBeNull();
   });
 
@@ -6573,6 +6592,9 @@ describe('Tend Today preview', () => {
       .getByRole('button', { name: /Open Strength foundation details/ }));
     const strengthSummary = screen.getByRole('heading', { name: 'Strength Health' }).closest('.fitness-score-summary');
     if (!(strengthSummary instanceof HTMLElement)) throw new Error('Strength Health summary is missing.');
+    expect(strengthSummary.querySelector('.health-score-measures')).toBeNull();
+    expect(within(strengthSummary).queryByRole('meter', { name: 'Consistency score' })).toBeNull();
+    expect(within(strengthSummary).queryByRole('meter', { name: 'On Track score' })).toBeNull();
     await user.click(within(strengthSummary).getByRole('button', { name: 'Show Strength Health scoring details' }));
     dialog = screen.getByRole('dialog', { name: 'Strength Health details' });
     expect(within(dialog).getByRole('button', { name: 'How this Strength Foundation was scored' })
@@ -6981,7 +7003,7 @@ describe('Tend Today preview', () => {
     }
   });
 
-  it('counts tracked Flexibility regions from the shared region registry', async () => {
+  it('keeps the Health & Fitness overview to its shared score summary', async () => {
     const user = userEvent.setup();
     const todayDate = localDateString(new Date());
     const data = createSamplePreviewData();
@@ -6995,8 +7017,10 @@ describe('Tend Today preview', () => {
 
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
       .getByRole('button', { name: 'Health & Fitness' }));
-    expect(document.querySelector('.health-fitness-flexibility-summary p')?.textContent)
-      .toBe('1 of 10 stretch regions tracked');
+    const summary = screen.getByRole('region', { name: 'Health & Fitness Health summary' });
+    expect(within(summary).getByRole('heading', { name: 'Health & Fitness Health' })).toBeTruthy();
+    expect(within(summary).getByRole('group', { name: 'Consistency and On Track' })).toBeTruthy();
+    expect(within(summary).queryByText('1 of 10 stretch regions tracked')).toBeNull();
   });
 
   it('uses the Faith Foundation heading and shared Health card on Strength, Cardio, and Weight pages', async () => {
@@ -7095,10 +7119,8 @@ describe('Tend Today preview', () => {
       .toContain('foundation-health-card');
     expect(within(cardioHealthHeading.closest('.fitness-score-summary')!)
       .getByRole('img', { name: 'Cardio Health: Not enough data' })).toBeTruthy();
-    expect(within(cardioHealthHeading.closest('.fitness-score-summary')!)
-      .getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('50');
-    expect(within(cardioHealthHeading.closest('.fitness-score-summary')!)
-      .getByRole('img', { name: 'Consistency: Score unavailable' })).toBeTruthy();
+    expect(cardioHealthHeading.closest('.fitness-score-summary')?.querySelector('.health-score-measures'))
+      .toBeNull();
 
     const cardioInfo = within(cardioHealthHeading.closest('.fitness-score-summary')!)
       .getByRole('button', { name: 'Show Cardio Health scoring details' });
@@ -7349,10 +7371,8 @@ describe('Tend Today preview', () => {
     const strengthDetailScore = Number(
       screen.getByRole('meter', { name: 'Strength Health score' }).getAttribute('aria-valuenow')
     );
-    expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow'))
-      .toBe(categoryConsistency);
-    expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow'))
-      .toBe(categoryOnTrack);
+    expect(screen.getByRole('meter', { name: 'Strength Health score' })
+      .closest('.fitness-score-summary')?.querySelector('.health-score-measures')).toBeNull();
     expect(strengthCard.querySelector('.foundation-card__score')?.textContent)
       .toBe(String(Math.round(strengthDetailScore)));
     expect(strengthDetailScore).toBe(Number(categoryScore));
@@ -7530,10 +7550,8 @@ describe('Tend Today preview', () => {
     expect(screen.getByRole('region', { name: 'Weight Foundation' })).toBeTruthy();
     expect(screen.getByRole('meter', { name: 'Weight Health score' }).getAttribute('aria-valuenow'))
       .toBe('100');
-    expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow'))
-      .toBe('100');
-    expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow'))
-      .toBe('100');
+    expect(screen.getByRole('meter', { name: 'Weight Health score' })
+      .closest('.fitness-score-summary')?.querySelector('.health-score-measures')).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Weight goal settings' }));
     const goalDialog = screen.getByRole('dialog', { name: 'Weight goals' });

@@ -80,6 +80,9 @@ export function RhythmScheduleSummary({
   const detailedSchedule = schedule && presentation !== 'detailed'
     ? formatRhythmSchedule(schedule, 'detailed')
     : undefined;
+  const displayTimeLabel = presentation === 'card-footer' && timeLabel === 'Early morning'
+    ? 'Early am'
+    : timeLabel;
   return (
     <span className="rhythm-metadata-schedule-group">
       {scheduleText && (
@@ -99,10 +102,12 @@ export function RhythmScheduleSummary({
       {presentation === 'compact' && detailedSchedule && (
         <span id={fullScheduleId} className="visually-hidden">Full schedule: {detailedSchedule}</span>
       )}
-      {timeLabel && (
+      {displayTimeLabel && (
         <span>
           <MetadataIcon kind="time" />
-          <span aria-label={timeAccessibleLabel}>{timeLabel}</span>
+          <span aria-label={timeAccessibleLabel ?? (displayTimeLabel !== timeLabel ? timeLabel : undefined)}>
+            {displayTimeLabel}
+          </span>
         </span>
       )}
     </span>

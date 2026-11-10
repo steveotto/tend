@@ -138,6 +138,7 @@ export function WeightView({
           health={healthScore?.health ?? null}
           consistencyCaption="Scheduled Weight-linked weigh-in Rhythms."
           onTrackCaption="Whether weigh-ins due on those Rhythms are caught up."
+          showMeasures={false}
           overallHealthScore={overallHealthScore}
           categoryHealthScore={categoryHealthScore}
           linkedRhythmCount={rhythms.filter(rhythm => foundationRhythmIds(rhythm).includes('health-weight')).length}

@@ -36,7 +36,8 @@ import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { FoundationCard } from './Cards.tsx';
 import { FoundationDetailHeader } from './FoundationDetailHeader.tsx';
 import { BackButton } from './BackButton.tsx';
-import { HealthScoreInfoButton } from './HealthScoreBreakdown.tsx';
+import { HealthScoreBreakdown, HealthScoreInfoButton } from './HealthScoreBreakdown.tsx';
+import type { HealthScoreMetric } from './HealthScoreBreakdown.tsx';
 import { HealthScoreDetailsDialog } from './HealthScoreDetailsDialog.tsx';
 import { HealthScoreDetailsContent } from './HealthScoreDetailsContent.tsx';
 import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
@@ -937,6 +938,14 @@ function FoundationList({
     setScoreInfoExpanded(false);
     requestAnimationFrame(() => scoreInfoButtonRef.current?.focus());
   };
+  const foundationConsistency: HealthScoreMetric = {
+    score: selectedFoundationScore?.consistency ?? null,
+    state: selectedFoundationScore?.consistency == null ? 'unavailable' : 'scored'
+  };
+  const foundationOnTrack: HealthScoreMetric = {
+    score: selectedFoundationScore?.onTrack ?? null,
+    state: selectedFoundationScore?.onTrack == null ? 'unavailable' : 'scored'
+  };
 
   return (
     <section
@@ -999,9 +1008,19 @@ function FoundationList({
             <FoundationDetailHeader
               foundation={selectedFoundation}
               headingId={`${categoryToken}-foundation-detail-title`}
+            />
+            <HealthScoreBreakdown
+              className="rhythm-history-view__score-card foundation-health-card"
+              title={`${selectedFoundation.name} Health`}
               score={selectedFoundationScore?.health ?? null}
-              scoreLabel={`${selectedFoundation.name} ${foundationTerm.singular} Health`}
-              scoreAction={(
+              healthLabel={`${selectedFoundation.name} ${foundationTerm.singular} Health`}
+              ariaLabel={`${selectedFoundation.name} Health summary`}
+              consistency={foundationConsistency}
+              onTrack={foundationOnTrack}
+              consistencyCaption="How often you show up."
+              onTrackCaption="How caught up you are."
+              showMeasures={false}
+              headingAction={(
                 <HealthScoreInfoButton
                   ref={scoreInfoButtonRef}
                   label={`Show ${selectedFoundation.name} Health scoring details`}
