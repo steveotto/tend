@@ -306,9 +306,11 @@ export function CategoryHealthBadge({
   variant?: 'default' | 'neutral-labeled';
   appearance?: 'standard' | 'rounded';
 }) {
+  const formattedScore = formatScore(displayScore);
+  const unavailable = formattedScore === '—';
   return (
     <span
-      className={`ma-score${appearance === 'rounded' ? ' category-health-badge' : ''} ${scoreTone(score)}${className ? ` ${className}` : ''}`}
+      className={`ma-score${appearance === 'rounded' ? ' category-health-badge' : ''} ${scoreTone(score)}${unavailable ? ' ma-score--unavailable' : ''}${className ? ` ${className}` : ''}`}
       {...(accessibleLabel
         ? { role: 'img', 'aria-label': accessibleLabel }
         : { 'aria-hidden': true })}
@@ -317,10 +319,10 @@ export function CategoryHealthBadge({
         ? (
           <>
             <span className="ma-score__label">Health</span>
-            <span className="ma-score__value">{formatScore(displayScore)}</span>
+            <span className="ma-score__value">{formattedScore}</span>
           </>
         )
-        : <span className="ma-score__value">{formatScore(displayScore)}</span>}
+        : <span className="ma-score__value">{formattedScore}</span>}
     </span>
   );
 }

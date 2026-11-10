@@ -1549,21 +1549,30 @@ describe('shared preview components', () => {
     expect(container.querySelector('.preview-score-marker')).toBeNull();
   });
 
-  it('uses a color-coded rounded health badge for available scores and a neutral dash when unavailable', () => {
+  it('uses score colors for available values and the unavailable badge treatment only for a dash', () => {
     const { rerender, container } = render(<CategoryHealthBadge score={30} appearance="rounded" />);
     let badge = container.querySelector('.ma-score');
     expect(badge?.textContent).toBe('30');
     expect(badge?.classList.contains('red')).toBe(true);
     expect(badge?.classList.contains('category-health-badge')).toBe(true);
+    expect(badge?.classList.contains('ma-score--unavailable')).toBe(false);
 
     rerender(<CategoryHealthBadge score={36.25} appearance="rounded" />);
     badge = container.querySelector('.ma-score');
     expect(badge?.textContent).toBe('36');
+    expect(badge?.classList.contains('ma-score--unavailable')).toBe(false);
+
+    rerender(<CategoryHealthBadge score={0} appearance="rounded" />);
+    badge = container.querySelector('.ma-score');
+    expect(badge?.textContent).toBe('0');
+    expect(badge?.classList.contains('red')).toBe(true);
+    expect(badge?.classList.contains('ma-score--unavailable')).toBe(false);
 
     rerender(<CategoryHealthBadge score={null} appearance="rounded" />);
     badge = container.querySelector('.ma-score');
     expect(badge?.textContent).toBe('—');
     expect(badge?.classList.contains('neutral')).toBe(true);
+    expect(badge?.classList.contains('ma-score--unavailable')).toBe(true);
   });
 
   it('places Community 23 and unavailable Sabbath badges beside their titles and Info actions', () => {

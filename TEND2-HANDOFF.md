@@ -1,5 +1,11 @@
 # Tend 2 Foundation handoff
 
+## Shared unavailable Health badge (follow-up, local review)
+
+**Change:** `CategoryHealthBadge` adds a shared unavailable modifier only when its formatted value is the unavailable dash. That modifier scopes `--score-neutral` to the badge and uses the new `--score-neutral-badge: #858585` token with white text. Valid numeric values, including zero, retain their existing tone; progress bars, card backgrounds, category icons, and Rhythm’s background-free score/chart treatment are unchanged. Dimensions and interaction semantics are untouched.
+
+**Verification:** The component contract checks available scores, valid zero, and unavailable rendering; semantic typecheck passed; the component/domain suite passed **1,228/1,228 across 81 files**; the Pages build passed (**212 modules transformed**) with the existing >500 kB chunk advisory; and `git diff --check` passed. In the synthetic People preview, the dash rendered at **#858585** with white text while the red zero probe retained its score color; both measured **48×25px**, with identical padding, radius, and font size. This follow-up is included as a separate commit in the 1.5.3 candidate. Re-run the exact Pages build against the combined candidate before publication.
+
 ## Tend UI release 1.5.3 candidate (2026-11-10)
 
 **Scope:** Recover the completed shared Rhythm-card presentation from the existing 1.5 work: transparent, score-colored Chart/Score control at the title’s upper right; title and description wrapping; edit through the existing history flow with focus restoration; and unchanged shared associations, metadata/footer, and Tend/Log actions. Standard cards have no inline pencil; details summaries retain their separate edit-only variant. People first-name display, abbreviated/validated birthdays, Person Health scores, relationship grouping/Connected layout, and Person Overall Health styling are already present in the deployed base (`2c0091c` and `6c10d8b`) and are not recopied or changed here.
