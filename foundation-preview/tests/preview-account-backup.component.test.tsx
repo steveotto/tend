@@ -36,6 +36,7 @@ const accountB = 'b0000000-0000-4000-8000-000000000002';
 beforeEach(installMemoryStorage);
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   window.localStorage.clear();
 });
 
@@ -181,6 +182,39 @@ describe('manual Preview account backup and restore', () => {
     expect(screen.getByRole('button', { name: 'Back up to my account' }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button', { name: 'Restore from my account' }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByText('Signed-in account ending in 0002.')).toBeTruthy();
+  });
+
+  it('downloads the validated current account document through one read without changing either copy', async () => {
+    const user = userEvent.setup();
+    const backend = memoryBackend();
+    const accountData = fitnessData('Preserved cloud');
+    const record = accountBackupRecord(createPreviewEnvelope(accountData), 7);
+    backend.records.set(accountA, record);
+    const localData = fitnessData('Unchanged device');
+    const local = accountStorage(localData);
+    const api = backend.apiFor(accountA);
+    const read = vi.spyOn(api, 'read');
+    const save = vi.spyOn(api, 'save');
+    const createObjectURL = vi.fn((_blob: Blob) => 'blob:account-backup');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    renderControls(api, local.storage, localData, local.raw);
+    await screen.findByText(/Last backup: .*revision 7\./);
+    read.mockClear();
+    await user.click(screen.getByRole('button', { name: 'Download current account backup' }));
+
+    await screen.findByText('Downloaded account backup revision 7. No account data was changed.');
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    const blob = createObjectURL.mock.calls[0]?.[0];
+    expect(blob).toBeInstanceOf(Blob);
+    expect(JSON.parse(await (blob as Blob).text())).toEqual(record.document);
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalled();
+    expect(backend.records.get(accountA)).toEqual(record);
+    expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
   });
 
   it('backs up in one browser and restores Rhythms, settings and a linked workout exactly once in another', async () => {
@@ -464,7 +498,34 @@ describe('manual Preview account backup and restore', () => {
     expect(JSON.stringify(rpc.mock.calls)).not.toContain(accountA);
   });
 
-  it('classifies a stale atomic-save response for explicit review and retry', async () => {
+  it('shares an in-flight metadata read between sync and manual backup controls', async () => {
+    const row = accountBackupRecord(createPreviewEnvelope(fitnessData('Shared read')), 1);
+    let resolveRead!: (value: { data: unknown; error: unknown }) => void;
+    const maybeSingle = vi.fn(() => new Promise<{ data: unknown; error: unknown }>(resolve => {
+      resolveRead = resolve;
+    }));
+    const api = createPreviewAccountBackupApi({
+      from: vi.fn(() => ({ select: vi.fn(() => ({ maybeSingle })) })),
+      rpc: vi.fn()
+    });
+
+    const first = api.read();
+    const second = api.read();
+    expect(maybeSingle).toHaveBeenCalledTimes(1);
+    resolveRead({
+      data: {
+        document: row.document,
+        revision: row.revision,
+        schema_version: row.schemaVersion,
+        updated_at: row.updatedAt
+      },
+      error: null
+    });
+    await expect(first).resolves.toEqual(row);
+    await expect(second).resolves.toEqual(row);
+  });
+
+  it('classifies a stale atomic-save response for explicit review without retrying', async () => {
     const document = createPreviewEnvelope(fitnessData('Stale API'));
     const api = createPreviewAccountBackupApi({
       from: vi.fn(() => ({
@@ -481,6 +542,34 @@ describe('manual Preview account backup and restore', () => {
     await expect(api.save(document, 1)).rejects.toMatchObject({
       kind: 'stale'
     });
+  });
+
+  it('classifies only the exact P0001 stale message as a conflict', async () => {
+    const document = createPreviewEnvelope(fitnessData('P0001 stale'));
+    const rpc = vi.fn(async () => ({
+      data: null,
+      error: { code: 'P0001', message: 'Stale Preview backup revision' }
+    }));
+    const api = createPreviewAccountBackupApi({
+      from: vi.fn(),
+      rpc
+    });
+
+    await expect(api.save(document, 1)).rejects.toMatchObject({ kind: 'stale' });
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not classify unrelated P0001 errors as stale conflicts', async () => {
+    const document = createPreviewEnvelope(fitnessData('P0001 invalid'));
+    const api = createPreviewAccountBackupApi({
+      from: vi.fn(),
+      rpc: vi.fn(async () => ({
+        data: null,
+        error: { code: 'P0001', message: 'Invalid Preview backup document' }
+      }))
+    });
+
+    await expect(api.save(document, 1)).rejects.toMatchObject({ kind: 'request' });
   });
 
   it('compares JSONB-normalized envelopes without depending on object key order', () => {
@@ -515,9 +604,13 @@ describe('manual Preview account backup and restore', () => {
     expect(() => validation.validatePreviewAccountBackup(malformed, currentDate))
       .toThrow(/not supported/i);
 
+    const currentDocument = createPreviewEnvelope(createSamplePreviewData());
+    const oldData = { ...currentDocument.data };
+    Reflect.deleteProperty(oldData, 'flexibility');
     const oldDocument = {
-      ...createPreviewEnvelope(createSamplePreviewData()),
-      schemaVersion: 36 as const
+      format: currentDocument.format,
+      schemaVersion: 36 as const,
+      data: oldData
     };
     const migrated = validation.validatePreviewAccountBackup({
       document: oldDocument,

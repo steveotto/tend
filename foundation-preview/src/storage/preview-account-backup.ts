@@ -57,36 +57,48 @@ export type ValidatedPreviewAccountBackup = {
 export function createPreviewAccountBackupApi(
   client: PreviewAccountBackupSupabaseClient
 ): PreviewAccountBackupApi {
+  let inFlightRead: Promise<PreviewAccountBackupRecord | null> | null = null;
+  async function readFromClient(): Promise<PreviewAccountBackupRecord | null> {
+    const { data, error } = await client
+      .from('tend_preview_backups')
+      .select('document,revision,schema_version,updated_at')
+      .maybeSingle();
+    if (error !== null) {
+      throw new PreviewAccountBackupError(
+        'request',
+        'The account backup could not be read. Check the connection and that Preview storage is configured.'
+      );
+    }
+    if (data === null) return null;
+    if (!isRecord(data)
+      || !Number.isSafeInteger(data.revision)
+      || (data.revision as number) < 1
+      || !Number.isSafeInteger(data.schema_version)
+      || (data.schema_version as number) < 1
+      || (data.updated_at !== null && typeof data.updated_at !== 'string')) {
+      throw new PreviewAccountBackupError(
+        'invalid',
+        'The account backup record is incomplete or invalid. No data was changed.'
+      );
+    }
+    return {
+      document: data.document,
+      revision: data.revision as number,
+      schemaVersion: data.schema_version as number,
+      updatedAt: data.updated_at as string | null
+    };
+  }
+
   return {
-    async read() {
-      const { data, error } = await client
-        .from('tend_preview_backups')
-        .select('document,revision,schema_version,updated_at')
-        .maybeSingle();
-      if (error !== null) {
-        throw new PreviewAccountBackupError(
-          'request',
-          'The account backup could not be read. Check the connection and that Preview storage is configured.'
-        );
-      }
-      if (data === null) return null;
-      if (!isRecord(data)
-        || !Number.isSafeInteger(data.revision)
-        || (data.revision as number) < 1
-        || !Number.isSafeInteger(data.schema_version)
-        || (data.schema_version as number) < 1
-        || (data.updated_at !== null && typeof data.updated_at !== 'string')) {
-        throw new PreviewAccountBackupError(
-          'invalid',
-          'The account backup record is incomplete or invalid. No data was changed.'
-        );
-      }
-      return {
-        document: data.document,
-        revision: data.revision as number,
-        schemaVersion: data.schema_version as number,
-        updatedAt: data.updated_at as string | null
+    read() {
+      if (inFlightRead) return inFlightRead;
+      const request = readFromClient();
+      inFlightRead = request;
+      const release = () => {
+        if (inFlightRead === request) inFlightRead = null;
       };
+      void request.then(release, release);
+      return request;
     },
     async save(document, expectedRevision) {
       if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
@@ -101,7 +113,10 @@ export function createPreviewAccountBackupApi(
         p_schema_version: PREVIEW_SCHEMA_VERSION
       });
       if (error !== null) {
-        if (errorCode(error) === '40001') {
+        if (errorCode(error) === '40001'
+          || (errorCode(error) === 'P0001'
+            && isRecord(error)
+            && error.message === 'Stale Preview backup revision')) {
           throw new PreviewAccountBackupError(
             'stale',
             'The account backup changed after you reviewed it. No data was replaced; review the latest copy and try again.'

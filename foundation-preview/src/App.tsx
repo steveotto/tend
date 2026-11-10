@@ -28,7 +28,7 @@ import { RhythmCompletionDialog } from './components/RhythmCompletionDialog.tsx'
 import { FinanceGoalsView } from './components/FinanceGoalsView.tsx';
 import { PreviewDataControls } from './components/PreviewDataControls.tsx';
 import type { PreviewPersistenceStatus } from './components/PreviewDataControls.tsx';
-import { PreviewAccountBackupControls } from './components/PreviewAccountBackupControls.tsx';
+import { PreviewAccountSync } from './components/PreviewAccountSync.tsx';
 import { PreviewBackupImportControl } from './components/PreviewBackupImportControl.tsx';
 import type { PreviewAccountBackupApi } from './storage/preview-account-backup.ts';
 import { PersonProfileView } from './components/PersonProfileView.tsx';
@@ -78,6 +78,7 @@ import {
 import {
   createEmptyPreviewData,
   createSamplePreviewData,
+  isPreviewDataPristine,
   parsePreviewBackup
 } from './domain/preview-state.ts';
 import type { PreviewData } from './domain/preview-state.ts';
@@ -352,11 +353,13 @@ const defaultPreviewIdentity = import.meta.env.DEV
 
 export function App({
   identity = defaultPreviewIdentity,
+  authRefreshSequence = 0,
   onSignOut,
   accountBackupApi,
   isAccountBackupIdentityCurrent
 }: {
   identity?: PreviewIdentityState;
+  authRefreshSequence?: number;
   onSignOut?: () => void | Promise<void>;
   accountBackupApi?: PreviewAccountBackupApi;
   isAccountBackupIdentityCurrent?: () => boolean;
@@ -390,6 +393,7 @@ export function App({
     <PreviewWorkspace
       key={identityKey}
       identity={resolvedIdentity}
+      authRefreshSequence={authRefreshSequence}
       isIdentityCurrent={() => isIdentityCurrent(identityKey)}
       {...(isAccountBackupIdentityCurrent ? { isAccountBackupIdentityCurrent } : {})}
       {...(accountBackupApi ? { accountBackupApi } : {})}
@@ -409,12 +413,14 @@ function PreviewAccessState({ title, message }: { title: string; message: string
 
 function PreviewWorkspace({
   identity,
+  authRefreshSequence,
   isIdentityCurrent,
   isAccountBackupIdentityCurrent,
   accountBackupApi,
   onSignOut
 }: {
   identity: Extract<PreviewIdentityState, { kind: 'development' | 'authenticated' }>;
+  authRefreshSequence: number;
   isIdentityCurrent: () => boolean;
   isAccountBackupIdentityCurrent?: () => boolean;
   accountBackupApi?: PreviewAccountBackupApi;
@@ -435,6 +441,13 @@ function PreviewWorkspace({
   );
   const [healthFitnessVisited, setHealthFitnessVisited] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewData>(initialPreviewData);
+  const [freshInitialData, setFreshInitialData] = useState<PreviewData | null>(null);
+  const localIsPristine = useMemo(
+    () => isPreviewDataPristine(previewData, freshInitialData ?? initialPreviewData()),
+    [freshInitialData, previewData]
+  );
+  const [manualBackupLocked, setManualBackupLocked] = useState(false);
+  const [accountSyncTarget, setAccountSyncTarget] = useState<HTMLDivElement | null>(null);
   const [persistedSatisfiedRhythmIds, setPersistedSatisfiedRhythmIds] = useState<ReadonlySet<string>>(new Set());
   const [persistedCompletedRhythmIds, setPersistedCompletedRhythmIds] = useState<ReadonlySet<string>>(new Set());
   const configuredRhythmTimeOptions = rhythmTimeOptionsForBlocks(previewData.timeBlocks);
@@ -1276,6 +1289,7 @@ function PreviewWorkspace({
     const loaded = loadPreview(previewStorage, initialLoadDate);
     if (loaded.kind === 'loaded') {
       expectedRaw.current = loaded.raw;
+      setFreshInitialData(null);
       skipNextAutosave.current = true;
       setPreviewData(loaded.data);
       setPersistedSatisfiedRhythmIds(satisfiedRhythmIdsForData(loaded.data));
@@ -1285,6 +1299,7 @@ function PreviewWorkspace({
     } else if (loaded.kind === 'missing') {
       expectedRaw.current = null;
       const initialData = initialPreviewData();
+      setFreshInitialData(initialData);
       setPreviewData(initialData);
       setPersistedSatisfiedRhythmIds(new Set());
       setPersistedCompletedRhythmIds(new Set());
@@ -3152,7 +3167,40 @@ function PreviewWorkspace({
         onSearchToggle={toggleSearch}
         onTextSizeChange={() => setTextSize(size => size === 'small' ? 'medium' : size === 'medium' ? 'large' : 'small')}
       />
-      <div id="view" hidden={profilePersonId !== null}>
+        {identity.kind === 'authenticated' && (
+          <PreviewAccountSync
+            portalTarget={accountSyncTarget}
+            api={accountBackupApi ?? null}
+            accountId={identity.accountId}
+            authRefreshSequence={authRefreshSequence}
+            storage={previewStorage}
+            data={previewData}
+            localIsPristine={localIsPristine}
+            currentDate={currentDate}
+            localRaw={expectedRaw.current}
+            localRecoveryRaw={cloudRestoreRecoveryCopy}
+            localRecoveryError={cloudRestoreRecoveryError}
+            enabled={hydrated && autoSaveEnabled && persistenceStatus.kind === 'saved'}
+            autoSyncEnabled={import.meta.env.VITE_TEND_PREVIEW_AUTO_SYNC_ENABLED === 'true'}
+            visible={destination === 'more' && !moreSettingsOpen}
+            manualOperationLocked={manualBackupLocked}
+            isIdentityCurrent={() => isIdentityCurrent()
+              && (isAccountBackupIdentityCurrent?.() ?? true)}
+            onRestore={(data, expectedLocalRaw) => {
+              if (!isIdentityCurrent()) {
+                return 'Preview identity changed. No local data was replaced.';
+              }
+              if (expectedRaw.current !== expectedLocalRaw) {
+                return 'This browser’s preview changed after confirmation. No local data was replaced.';
+              }
+              const writeError = finishWrite(data, false, 'replace');
+              if (!writeError) refreshCloudRestoreRecoveryCopy();
+              return writeError;
+            }}
+            onManualOperationLockChange={setManualBackupLocked}
+          />
+        )}
+        <div id="view" hidden={profilePersonId !== null}>
         {!hydrated
           ? <p role="status">Loading saved preview data…</p>
           : destination === 'more'
@@ -3214,33 +3262,7 @@ function PreviewWorkspace({
                     recoveryError={importRecoveryError}
                   />
                 )}
-                {!moreSettingsOpen && identity.kind === 'authenticated' && (
-                  <PreviewAccountBackupControls
-                    api={accountBackupApi ?? null}
-                    accountId={identity.accountId}
-                    storage={previewStorage}
-                    data={previewData}
-                    currentDate={currentDate}
-                    localRaw={expectedRaw.current}
-                    localRecoveryRaw={cloudRestoreRecoveryCopy}
-                    localRecoveryError={cloudRestoreRecoveryError}
-                    enabled={hydrated && autoSaveEnabled && persistenceStatus.kind === 'saved'}
-                    isIdentityCurrent={() => isIdentityCurrent()
-                      && (isAccountBackupIdentityCurrent?.() ?? true)}
-                    onRestore={(data, expectedLocalRaw) => {
-                      if (!isIdentityCurrent()) {
-                        return 'Preview identity changed. No local data was replaced.';
-                      }
-                      if (expectedRaw.current !== expectedLocalRaw) {
-                        return 'This browser’s preview changed after confirmation. No local data was replaced.';
-                      }
-                      const writeError = finishWrite(data, false, 'replace');
-                      if (!writeError) refreshCloudRestoreRecoveryCopy();
-                      return writeError;
-                    }}
-                    onRecoveryChanged={setCloudRestoreRecoveryCopy}
-                  />
-                )}
+                {!moreSettingsOpen && <div className="preview-account-sync-slot" ref={setAccountSyncTarget} />}
                 {!moreSettingsOpen && (
                   <p className="settings-page__version">Version {APP_DISPLAY_VERSION}</p>
                 )}
@@ -3658,7 +3680,7 @@ function PreviewWorkspace({
       <footer className="preview-footer">
         <span>
           {import.meta.env.MODE === 'pages'
-            ? 'Preview data stays on this device for your account.'
+            ? 'Preview data saves on this device first; when signed in, changes sync to your account while connected.'
             : 'Synthetic preview data stays separate from Tend accounts.'}
         </span>
         {import.meta.env.MODE !== 'pages' && <a href="/preview.html">Component catalogue</a>}

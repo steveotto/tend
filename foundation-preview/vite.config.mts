@@ -44,7 +44,7 @@ function cloudflarePreviewPlugin(includeSupabaseClient: boolean): Plugin {
       if (!includeSupabaseClient) return html;
       return html.replace(
         '</head>',
-        '    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>\n  </head>'
+        '    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0"></script>\n  </head>'
       );
     }
   };

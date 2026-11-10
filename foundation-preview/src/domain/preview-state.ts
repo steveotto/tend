@@ -259,6 +259,10 @@ export function createEmptyPreviewData(): PreviewData {
   };
 }
 
+export function isPreviewDataPristine(data: PreviewData, initialData: PreviewData): boolean {
+  return JSON.stringify(data) === JSON.stringify(initialData);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

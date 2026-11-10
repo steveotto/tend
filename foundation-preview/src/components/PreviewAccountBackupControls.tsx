@@ -37,16 +37,25 @@ type PreviewAccountBackupControlsProps = {
   localRaw: string | null;
   localRecoveryRaw: string | null;
   localRecoveryError?: string | null;
+  autoSyncEnabled?: boolean;
   enabled: boolean;
+  syncBusy?: boolean;
+  verifiedAccountStatus?: VerifiedAccountStatus | null;
   isIdentityCurrent: () => boolean;
   onRestore: (data: PreviewData, expectedLocalRaw: string | null) => string | null;
   onRecoveryChanged: (raw: string | null) => void;
+  onExclusiveChange?: (locked: boolean) => void;
+  onOperationFinished?: () => void;
 };
 
-type AccountBackupStatus =
-  | { kind: 'checking' }
+export type VerifiedAccountStatus =
   | { kind: 'empty' }
-  | { kind: 'available'; revision: number; updatedAt: string | null }
+  | { kind: 'available'; revision: number; updatedAt: string | null };
+
+type AccountBackupStatus =
+  | { kind: 'not-checked' }
+  | { kind: 'checking' }
+  | VerifiedAccountStatus
   | { kind: 'unavailable'; message: string };
 
 function errorMessage(error: unknown): string {
@@ -89,10 +98,15 @@ export function PreviewAccountBackupControls({
   localRaw,
   localRecoveryRaw,
   localRecoveryError = null,
+  autoSyncEnabled = true,
   enabled,
+  syncBusy = false,
+  verifiedAccountStatus = null,
   isIdentityCurrent,
   onRestore,
-  onRecoveryChanged
+  onRecoveryChanged,
+  onExclusiveChange,
+  onOperationFinished
 }: PreviewAccountBackupControlsProps) {
   const [pending, setPending] = useState<PendingConfirmation | null>(null);
   const [busy, setBusy] = useState(false);
@@ -101,12 +115,23 @@ export function PreviewAccountBackupControls({
   const [backupStatus, setBackupStatus] = useState<AccountBackupStatus>(
     api === null
       ? { kind: 'unavailable', message: 'Account backup is unavailable in this Preview session.' }
-      : { kind: 'checking' }
+      : autoSyncEnabled
+        ? { kind: 'checking' }
+        : { kind: 'not-checked' }
   );
   const operationInProgress = useRef(false);
   const statusRequestId = useRef(0);
   const identityCurrentRef = useRef(isIdentityCurrent);
+  const exclusiveHeld = useRef(false);
   identityCurrentRef.current = isIdentityCurrent;
+  const exclusiveChangeRef = useRef(onExclusiveChange);
+  exclusiveChangeRef.current = onExclusiveChange;
+
+  function setExclusiveLocked(locked: boolean) {
+    if (exclusiveHeld.current === locked) return;
+    exclusiveHeld.current = locked;
+    exclusiveChangeRef.current?.(locked);
+  }
 
   const refreshBackupStatus = useCallback(async () => {
     const requestId = ++statusRequestId.current;
@@ -138,19 +163,44 @@ export function PreviewAccountBackupControls({
   }, [api, currentDate]);
 
   useEffect(() => {
+    if (!autoSyncEnabled) {
+      statusRequestId.current += 1;
+      setBackupStatus(api === null
+        ? { kind: 'unavailable', message: 'Account backup is unavailable in this Preview session.' }
+        : { kind: 'not-checked' });
+      return () => {
+        statusRequestId.current += 1;
+        if (exclusiveHeld.current) {
+          exclusiveHeld.current = false;
+          exclusiveChangeRef.current?.(false);
+        }
+      };
+    }
     void refreshBackupStatus();
     return () => {
       statusRequestId.current += 1;
+      if (exclusiveHeld.current) {
+        exclusiveHeld.current = false;
+        exclusiveChangeRef.current?.(false);
+      }
     };
-  }, [refreshBackupStatus]);
+  }, [refreshBackupStatus, autoSyncEnabled, api]);
+
+  useEffect(() => {
+    if (verifiedAccountStatus === null) return;
+    statusRequestId.current += 1;
+    setBackupStatus(verifiedAccountStatus);
+  }, [verifiedAccountStatus]);
 
   async function beginBackup() {
-    if (!enabled || !api || busy || operationInProgress.current || !isIdentityCurrent()) return;
+    if (!enabled || syncBusy || !api || busy || operationInProgress.current || !isIdentityCurrent()) return;
+    setExclusiveLocked(true);
     operationInProgress.current = true;
     statusRequestId.current += 1;
     setBusy(true);
     setMessage('');
     setError('');
+    let keepLockedForConfirmation = false;
     try {
       const document = createValidatedPreviewAccountDocument(data, currentDate);
       if (storage.getItem(PREVIEW_STORAGE_KEY) !== localRaw) {
@@ -191,6 +241,7 @@ export function PreviewAccountBackupControls({
         expectedRevision: cloud.revision,
         expectedLocalRaw: localRaw
       });
+      keepLockedForConfirmation = true;
     } catch (requestError) {
       if (requestError instanceof PreviewAccountBackupError && requestError.kind === 'stale') {
         setPending(null);
@@ -202,16 +253,22 @@ export function PreviewAccountBackupControls({
     } finally {
       operationInProgress.current = false;
       setBusy(false);
+      if (!keepLockedForConfirmation) {
+        setExclusiveLocked(false);
+        onOperationFinished?.();
+      }
     }
   }
 
   async function beginRestore() {
-    if (!enabled || !api || busy || operationInProgress.current || !isIdentityCurrent()) return;
+    if (!enabled || syncBusy || !api || busy || operationInProgress.current || !isIdentityCurrent()) return;
+    setExclusiveLocked(true);
     operationInProgress.current = true;
     statusRequestId.current += 1;
     setBusy(true);
     setMessage('');
     setError('');
+    let keepLockedForConfirmation = false;
     try {
       if (storage.getItem(PREVIEW_STORAGE_KEY) !== localRaw) {
         setError('This browser’s preview changed since it was saved. Save or reload the current preview before restoring.');
@@ -249,6 +306,7 @@ export function PreviewAccountBackupControls({
         expectedRevision: cloud.revision,
         expectedLocalRaw: localRaw
       });
+      keepLockedForConfirmation = true;
     } catch (requestError) {
       if (isIdentityCurrent()) {
         setBackupStatus({ kind: 'unavailable', message: errorMessage(requestError) });
@@ -257,11 +315,53 @@ export function PreviewAccountBackupControls({
     } finally {
       operationInProgress.current = false;
       setBusy(false);
+      if (!keepLockedForConfirmation) {
+        setExclusiveLocked(false);
+        onOperationFinished?.();
+      }
+    }
+  }
+
+  async function downloadAccountBackup() {
+    if (!enabled || syncBusy || !api || busy || operationInProgress.current || !isIdentityCurrent()) return;
+    setExclusiveLocked(true);
+    operationInProgress.current = true;
+    statusRequestId.current += 1;
+    setBusy(true);
+    setMessage('');
+    setError('');
+    try {
+      const record = await api.read();
+      if (!isIdentityCurrent()) return;
+      if (!record) {
+        setBackupStatus({ kind: 'empty' });
+        setMessage('No account backup was found. No data was changed.');
+        return;
+      }
+      const validated = validatePreviewAccountBackup(record, currentDate);
+      setBackupStatus({
+        kind: 'available',
+        revision: record.revision,
+        updatedAt: record.updatedAt
+      });
+      const downloadError = downloadRecovery(JSON.stringify(validated.envelope, null, 2));
+      if (downloadError) throw new Error(downloadError);
+      setMessage(`Downloaded account backup revision ${record.revision}. No account data was changed.`);
+    } catch (requestError) {
+      if (isIdentityCurrent()) {
+        setBackupStatus({ kind: 'unavailable', message: errorMessage(requestError) });
+      }
+      setError(errorMessage(requestError));
+    } finally {
+      operationInProgress.current = false;
+      setBusy(false);
+      setExclusiveLocked(false);
+      onOperationFinished?.();
     }
   }
 
   async function confirmPending() {
-    if (!pending || !api || busy || operationInProgress.current || !isIdentityCurrent()) return;
+    if (!pending || syncBusy || !api || busy || operationInProgress.current || !isIdentityCurrent()) return;
     operationInProgress.current = true;
     statusRequestId.current += 1;
     setBusy(true);
@@ -322,7 +422,16 @@ export function PreviewAccountBackupControls({
     } finally {
       operationInProgress.current = false;
       setBusy(false);
+      setExclusiveLocked(false);
+      onOperationFinished?.();
     }
+  }
+
+  function cancelPending() {
+    if (busy) return;
+    setPending(null);
+    setExclusiveLocked(false);
+    onOperationFinished?.();
   }
 
   const pendingBackup = pending?.kind === 'backup';
@@ -331,7 +440,11 @@ export function PreviewAccountBackupControls({
   return (
     <section className="settings-section preview-account-backup" aria-labelledby="preview-account-backup-title">
       <h3 id="preview-account-backup-title">Account backup</h3>
-      <p>Backups are manual. Changes on this browser are not sent to your account unless you choose Back up.</p>
+      <p>
+        {autoSyncEnabled
+          ? 'Changes save on this device first, then sync to your account when connected. You can also back up or restore manually.'
+          : 'Automatic sync is off. Account status is checked only when you choose a manual backup or restore.'}
+      </p>
       <p className="preview-account-backup__account">
         Signed-in account ending in {accountId.slice(-4)}.
       </p>
@@ -339,6 +452,7 @@ export function PreviewAccountBackupControls({
         className={backupStatus.kind === 'unavailable' ? 'preview-account-backup__error' : 'preview-account-backup__status'}
         role={backupStatus.kind === 'unavailable' && !error ? 'alert' : 'status'}
       >
+        {backupStatus.kind === 'not-checked' && 'Account status not checked.'}
         {backupStatus.kind === 'checking' && 'Checking account backup…'}
         {backupStatus.kind === 'empty' && 'No account backup yet.'}
         {backupStatus.kind === 'available'
@@ -349,10 +463,13 @@ export function PreviewAccountBackupControls({
         Transfers the versioned Preview data document, including Rhythms, associations, completion and activity logs, People, goals, and settings. Authentication and session data are never included.
       </p>
       <div className="preview-account-backup__actions">
-        <button type="button" className="btn mini" disabled={!enabled || !api || busy} onClick={() => void beginBackup()}>
+        <button type="button" className="btn mini ghost" disabled={!enabled || syncBusy || !api || busy} onClick={() => void downloadAccountBackup()}>
+          {busy ? 'Working…' : 'Download current account backup'}
+        </button>
+        <button type="button" className="btn mini" disabled={!enabled || syncBusy || !api || busy} onClick={() => void beginBackup()}>
           {busy ? 'Working…' : 'Back up to my account'}
         </button>
-        <button type="button" className="btn mini ghost" disabled={!enabled || !api || busy} onClick={() => void beginRestore()}>
+        <button type="button" className="btn mini ghost" disabled={!enabled || syncBusy || !api || busy} onClick={() => void beginRestore()}>
           Restore from my account
         </button>
       </div>
@@ -377,14 +494,14 @@ export function PreviewAccountBackupControls({
           title="Replace account backup?"
           intro={`These copies differ. This replaces account backup revision ${pending.expectedRevision} with the data currently saved in this browser. This browser’s data will not change.`}
           onClose={() => {
-            if (!busy) setPending(null);
+            cancelPending();
           }}
         >
           <div className="money-goal-dialog__actions">
-            <button type="button" className="btn mini" disabled={busy} onClick={() => void confirmPending()}>
+            <button type="button" className="btn mini" disabled={busy || syncBusy} onClick={() => void confirmPending()}>
               Replace account backup
             </button>
-            <button type="button" className="btn mini ghost" disabled={busy} onClick={() => setPending(null)}>
+            <button type="button" className="btn mini ghost" disabled={busy} onClick={cancelPending}>
               Cancel
             </button>
           </div>
@@ -395,14 +512,14 @@ export function PreviewAccountBackupControls({
           title="Restore account backup?"
           intro={`These copies differ. This replaces the data saved in this browser with account backup revision ${pending.expectedRevision}. The exact current browser data will be kept as a recovery copy before replacement.`}
           onClose={() => {
-            if (!busy) setPending(null);
+            cancelPending();
           }}
         >
           <div className="money-goal-dialog__actions">
-            <button type="button" className="btn mini" disabled={busy} onClick={() => void confirmPending()}>
+            <button type="button" className="btn mini" disabled={busy || syncBusy} onClick={() => void confirmPending()}>
               Replace this browser’s data
             </button>
-            <button type="button" className="btn mini ghost" disabled={busy} onClick={() => setPending(null)}>
+            <button type="button" className="btn mini ghost" disabled={busy} onClick={cancelPending}>
               Cancel
             </button>
           </div>

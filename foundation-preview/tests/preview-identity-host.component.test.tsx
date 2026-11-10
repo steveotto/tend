@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -135,6 +135,7 @@ function fakeAuth(
 afterEach(() => {
   cleanup();
   window.history.replaceState(null, '', '/');
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
@@ -230,6 +231,28 @@ describe('PreviewIdentityHost', () => {
 
     await screen.findByRole('button', { name: 'Sign out' });
     expect(screen.queryByRole('heading', { name: 'Sign in with Tend' })).toBeNull();
+  });
+
+  it('notifies account sync when the auth client refreshes a session token', async () => {
+    installMemoryStorage();
+    vi.stubEnv('VITE_TEND_PREVIEW_AUTO_SYNC_ENABLED', 'true');
+    const auth = fakeAuth(session, null, null, true);
+    render(
+      <PreviewIdentityHost
+        accessReady
+        supabaseUrl="https://project.supabase.co"
+        supabasePublishableKey="synthetic-public-key"
+        clientFactory={auth.clientFactory}
+      />
+    );
+
+    await screen.findByRole('button', { name: 'Sign out' });
+    await waitFor(() => expect(auth.from).toHaveBeenCalled());
+    const readsBeforeRefresh = auth.from.mock.calls.length;
+
+    act(() => auth.emitEvent('TOKEN_REFRESHED', session));
+
+    await waitFor(() => expect(auth.from.mock.calls.length).toBeGreaterThan(readsBeforeRefresh));
   });
 
   it('renders the authenticated Today workspace when the account has no saved data', async () => {

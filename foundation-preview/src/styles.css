@@ -21244,3 +21244,36 @@ button.person-health-component-score:focus-visible {
   width: calc(16px * var(--app-text-scale));
   height: calc(16px * var(--app-text-scale));
 }
+
+.preview-account-sync-slot {
+  display: contents;
+}
+
+.preview-account-sync__status {
+  margin: 8px 0;
+  font-weight: 700;
+}
+
+.preview-account-sync__conflict {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+  background: var(--tend-mist);
+}
+
+.preview-account-sync__conflict h4 {
+  margin: 0;
+  font-size: calc(1rem * var(--app-text-scale, 1));
+}
+
+.preview-account-sync__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.preview-account-sync__error {
+  color: var(--tend-danger, #a12e21);
+}

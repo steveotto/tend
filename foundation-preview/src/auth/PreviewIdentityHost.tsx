@@ -62,6 +62,7 @@ export function PreviewIdentityHost({
   clientFactory
 }: PreviewIdentityHostProps = {}) {
   const [identity, setIdentity] = useState<PreviewIdentityState>({ kind: 'pending' });
+  const [authRefreshSequence, setAuthRefreshSequence] = useState(0);
   const [client, setClient] = useState<PreviewAuthClient | null>(null);
   const [authMessage, setAuthMessage] = useState('');
   const [authScreen, setAuthScreen] = useState<PreviewAuthScreen>('sign-in');
@@ -122,6 +123,9 @@ export function PreviewIdentityHost({
           sessionGeneration.current += 1;
           activeUserId.current = userId;
           recoveryUserId.current = null;
+        }
+        if (event === 'TOKEN_REFRESHED' && session) {
+          setAuthRefreshSequence(sequence => sequence + 1);
         }
         if (event === 'PASSWORD_RECOVERY' && session) {
           recoveryUserId.current = userId;
@@ -344,6 +348,7 @@ export function PreviewIdentityHost({
     return (
       <App
         identity={identity}
+        authRefreshSequence={authRefreshSequence}
         onSignOut={signOut}
         isAccountBackupIdentityCurrent={() => activeUserId.current === identity.accountId
           && sessionGeneration.current === identity.sessionGeneration}

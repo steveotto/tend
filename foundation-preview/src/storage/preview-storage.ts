@@ -94,8 +94,10 @@ export {
 export const PREVIEW_CATEGORY_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:v32-category-recovery`;
 export const PREVIEW_CLOUD_RESTORE_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:cloud-restore-recovery`;
 export const PREVIEW_IMPORT_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:import-recovery`;
+export const PREVIEW_IMPORT_SYNC_GUARD_KEY = `${PREVIEW_STORAGE_KEY}:import-sync-guard`;
 export const PREVIEW_ACCOUNT_STORAGE_PREFIX = 'tend2:preview:account';
 const previewImportRecoveryFormat = 'tend.preview-import-recovery';
+const previewImportSyncGuardFormat = 'tend.preview-import-sync-guard';
 
 export type PreviewStorage = Pick<Storage, 'getItem' | 'setItem'> & Partial<Pick<Storage, 'removeItem'>>;
 export type PreviewStorageScope = {
@@ -127,6 +129,19 @@ export type CloudRestoreRecoveryResult =
 
 export type PreviewImportRecoveryReadResult =
   | { kind: 'loaded'; latestRaw: string | null; latestSourceRaw: string | null; archiveRaw: string | null }
+  | { kind: 'error'; message: string };
+
+export type PreviewImportSyncGuard =
+  | { kind: 'none' }
+  | { kind: 'pending'; importedRaw: string }
+  | { kind: 'resolved'; importedRaw: string };
+
+export type PreviewImportSyncGuardReadResult =
+  | { kind: 'loaded'; guard: PreviewImportSyncGuard }
+  | { kind: 'error'; message: string };
+
+export type PreviewImportSyncGuardResolveResult =
+  | { kind: 'resolved' }
   | { kind: 'error'; message: string };
 
 export type PreviewWriteOptions = {
@@ -192,6 +207,94 @@ function parseImportRecoveryArchive(raw: string): { copies: string[]; sources: s
     throw new Error('The saved import recovery archive is invalid and was not changed.');
   }
   return { copies: archive.copies, sources: archive.sources };
+}
+
+function serializeImportSyncGuard(guard: PreviewImportSyncGuard): string {
+  return JSON.stringify({
+    format: previewImportSyncGuardFormat,
+    schemaVersion: 1,
+    ...guard
+  });
+}
+
+function parseImportSyncGuard(raw: string): PreviewImportSyncGuard {
+  const parsed: unknown = JSON.parse(raw);
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('The saved import sync guard is invalid. Account sync was paused.');
+  }
+  const guard = parsed as Record<string, unknown>;
+  const expectedKeys = guard.kind === 'none'
+    ? ['format', 'schemaVersion', 'kind']
+    : ['format', 'schemaVersion', 'kind', 'importedRaw'];
+  if (guard.format !== previewImportSyncGuardFormat
+    || guard.schemaVersion !== 1
+    || !['none', 'pending', 'resolved'].includes(String(guard.kind))
+    || (guard.kind !== 'none' && typeof guard.importedRaw !== 'string')
+    || Object.keys(guard).some(key => !expectedKeys.includes(key))) {
+    throw new Error('The saved import sync guard is invalid. Account sync was paused.');
+  }
+  if (guard.kind === 'none') return { kind: 'none' };
+  return {
+    kind: guard.kind as 'pending' | 'resolved',
+    importedRaw: guard.importedRaw as string
+  };
+}
+
+export function loadPreviewImportSyncGuard(storage: PreviewStorage): PreviewImportSyncGuardReadResult {
+  try {
+    const raw = storage.getItem(PREVIEW_IMPORT_SYNC_GUARD_KEY);
+    return { kind: 'loaded', guard: raw === null ? { kind: 'none' } : parseImportSyncGuard(raw) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function resolvePreviewImportSyncGuard(
+  storage: PreviewStorage,
+  expectedImportedRaw: string
+): PreviewImportSyncGuardResolveResult {
+  try {
+    const loaded = loadPreviewImportSyncGuard(storage);
+    if (loaded.kind === 'error') return loaded;
+    if (loaded.guard.kind === 'resolved' && loaded.guard.importedRaw === expectedImportedRaw) {
+      return { kind: 'resolved' };
+    }
+    if (loaded.guard.kind !== 'pending' || loaded.guard.importedRaw !== expectedImportedRaw) {
+      return {
+        kind: 'error',
+        message: 'The imported preview changed before its sync choice was saved. Account sync remains paused.'
+      };
+    }
+    const serialized = serializeImportSyncGuard({ kind: 'resolved', importedRaw: expectedImportedRaw });
+    storage.setItem(PREVIEW_IMPORT_SYNC_GUARD_KEY, serialized);
+    if (storage.getItem(PREVIEW_IMPORT_SYNC_GUARD_KEY) !== serialized) {
+      return {
+        kind: 'error',
+        message: 'The imported preview sync choice could not be verified. Account sync remains paused.'
+      };
+    }
+    return { kind: 'resolved' };
+  } catch (error) {
+    return {
+      kind: 'error',
+      message: `The imported preview sync choice could not be saved: ${errorMessage(error)}`
+    };
+  }
+}
+
+function restoreImportMetadata(
+  storage: PreviewStorage,
+  key: string,
+  previousRaw: string | null,
+  emptyRaw: string
+): void {
+  if (previousRaw !== null) {
+    storage.setItem(key, previousRaw);
+  } else if (storage.removeItem) {
+    storage.removeItem(key);
+  } else {
+    storage.setItem(key, emptyRaw);
+  }
 }
 
 export function loadPreviewImportRecovery(storage: PreviewStorage): PreviewImportRecoveryReadResult {
@@ -587,6 +690,36 @@ export function writePreview(
           )
         };
       }
+      const previousGuard = loadPreviewImportSyncGuard(storage);
+      if (previousGuard.kind === 'error') {
+        return {
+          kind: 'error',
+          message: previousGuard.message,
+          diagnostic: diagnosticForWriteFailure(
+            storage,
+            expectedRaw,
+            options.currentDate,
+            operation,
+            'import-sync-guard-invalid',
+            'not-detected'
+          )
+        };
+      }
+      if (previousGuard.guard.kind === 'pending') {
+        return {
+          kind: 'error',
+          message: 'Choose how to handle the previous imported preview before importing another backup.',
+          diagnostic: diagnosticForWriteFailure(
+            storage,
+            expectedRaw,
+            options.currentDate,
+            operation,
+            'previous-import-sync-choice-pending',
+            'not-detected'
+          )
+        };
+      }
+      const previousGuardRaw = storage.getItem(PREVIEW_IMPORT_SYNC_GUARD_KEY);
       const previousArchiveRaw = storage.getItem(PREVIEW_IMPORT_RECOVERY_KEY);
       const archive = previousArchiveRaw === null
         ? { copies: [] as string[], sources: [] as string[] }
@@ -599,19 +732,27 @@ export function writePreview(
         copies: archive.copies,
         sources: archive.sources
       });
-      storage.setItem(PREVIEW_IMPORT_RECOVERY_KEY, nextArchiveRaw);
+      const nextGuardRaw = serializeImportSyncGuard({ kind: 'pending', importedRaw: raw });
+      const emptyArchiveRaw = JSON.stringify({
+        format: previewImportRecoveryFormat,
+        schemaVersion: 1,
+        copies: [],
+        sources: []
+      });
+      const emptyGuardRaw = serializeImportSyncGuard({ kind: 'none' });
+      try {
+        storage.setItem(PREVIEW_IMPORT_RECOVERY_KEY, nextArchiveRaw);
+        storage.setItem(PREVIEW_IMPORT_SYNC_GUARD_KEY, nextGuardRaw);
+      } catch (error) {
+        restoreImportMetadata(storage, PREVIEW_IMPORT_RECOVERY_KEY, previousArchiveRaw, emptyArchiveRaw);
+        restoreImportMetadata(storage, PREVIEW_IMPORT_SYNC_GUARD_KEY, previousGuardRaw, emptyGuardRaw);
+        throw error;
+      }
       if (storage.getItem(PREVIEW_IMPORT_RECOVERY_KEY) !== nextArchiveRaw
+        || storage.getItem(PREVIEW_IMPORT_SYNC_GUARD_KEY) !== nextGuardRaw
         || storage.getItem(PREVIEW_STORAGE_KEY) !== expectedRaw) {
-        if (previousArchiveRaw === null) {
-          if (storage.removeItem) storage.removeItem(PREVIEW_IMPORT_RECOVERY_KEY);
-          else storage.setItem(PREVIEW_IMPORT_RECOVERY_KEY, JSON.stringify({
-            format: previewImportRecoveryFormat,
-            schemaVersion: 1,
-            copies: [],
-            sources: []
-          }));
-        }
-        else storage.setItem(PREVIEW_IMPORT_RECOVERY_KEY, previousArchiveRaw);
+        restoreImportMetadata(storage, PREVIEW_IMPORT_RECOVERY_KEY, previousArchiveRaw, emptyArchiveRaw);
+        restoreImportMetadata(storage, PREVIEW_IMPORT_SYNC_GUARD_KEY, previousGuardRaw, emptyGuardRaw);
         return {
           kind: 'conflict',
           actualRaw: storage.getItem(PREVIEW_STORAGE_KEY)
@@ -620,16 +761,8 @@ export function writePreview(
       try {
         storage.setItem(PREVIEW_STORAGE_KEY, raw);
       } catch (error) {
-        if (previousArchiveRaw === null) {
-          if (storage.removeItem) storage.removeItem(PREVIEW_IMPORT_RECOVERY_KEY);
-          else storage.setItem(PREVIEW_IMPORT_RECOVERY_KEY, JSON.stringify({
-            format: previewImportRecoveryFormat,
-            schemaVersion: 1,
-            copies: [],
-            sources: []
-          }));
-        }
-        else storage.setItem(PREVIEW_IMPORT_RECOVERY_KEY, previousArchiveRaw);
+        restoreImportMetadata(storage, PREVIEW_IMPORT_RECOVERY_KEY, previousArchiveRaw, emptyArchiveRaw);
+        restoreImportMetadata(storage, PREVIEW_IMPORT_SYNC_GUARD_KEY, previousGuardRaw, emptyGuardRaw);
         throw error;
       }
     } else {

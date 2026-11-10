@@ -3366,7 +3366,7 @@ describe('preview backup controls', () => {
     expect(loadPreview(window.localStorage, new Date().toISOString().slice(0, 10)).kind).toBe('loaded');
   });
 
-  it('imports locally from More while account backup reads fail and never uploads the import', async () => {
+  it('imports locally from More without automatically reading or uploading account data when sync is off', async () => {
     const user = userEvent.setup();
     const identity = createAuthenticatedPreviewIdentity('11111111-1111-4111-8111-111111111111', 1);
     if (identity.kind !== 'authenticated') throw new Error('Test identity was not authenticated.');
@@ -3386,8 +3386,8 @@ describe('preview backup controls', () => {
       <App identity={identity} accountBackupApi={accountBackupApi} />
     );
     await user.click(screen.getByRole('button', { name: 'More, settings' }));
-    await waitFor(() => expect(accountBackupApi.read).toHaveBeenCalled());
     const more = screen.getByRole('main', { name: 'More' });
+    expect(accountBackupApi.read).not.toHaveBeenCalled();
     const importInput = within(more).getByLabelText('Import preview backup');
     await user.upload(importInput, new File([sourceRaw], 'synthetic-preview.json', { type: 'application/json' }));
     const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
