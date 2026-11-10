@@ -1,5 +1,13 @@
 # Tend 2 Foundation handoff
 
+## Whole-number Health display release 1.5.4 (isolated candidate)
+
+**Change:** Added a shared Health-value formatter that rounds displayed scores, percentages, weighted point contributions, averages, and formula results to whole numbers. Weighted values, Health calculations, stored values, eligibility, and scoring policies remain unchanged and retain their existing precision. Equations use `≈` whenever rounding makes displayed values approximate; they use `=` only when displayed integers exactly express the calculation. Zero remains `0`, unavailable/non-finite values remain `—`, and a fractional score is not rounded before calculating its contribution or final total. The Health disclosure, aggregate-evidence, Person Overall, and Rhythm consistency paths now share this display behavior. User-entered measurements such as Weight and Cardio distances are unchanged. This supersedes prior handoff language describing full-precision values in Health explanations; the underlying calculations remain precise, but displayed results are now rounded.
+
+**Coverage:** Formatter tests cover fractional values, rounding boundaries, exact and rounded weighted equations, averages, percentage ratios, zero, and unavailable values. Updated component tests assert whole-number output and approximation markers in shared Health, Person, Category, and Rhythm details. The shared formatter changes presentation only; ARIA meter values and calculation inputs retain their original precision.
+
+**Validation:** Focused Health formatter/component tests passed **156/156 across 5 files**. Semantic typecheck passed; reader tests **7/7**; full component suite **1,232/1,232 across 81 files**; legacy suite **176/176**; Pages production build passed (**212 modules transformed**) with the existing >500 kB chunk advisory; and `git diff --check` passed. The app display version is bumped from 1.5.3 to 1.5.4. This candidate is based on verified release commit `d0f03292`; its commit and production deployment status are recorded after publication.
+
 ## Shared unavailable Health badge (follow-up, local review)
 
 **Change:** `CategoryHealthBadge` adds a shared unavailable modifier only when its formatted value is the unavailable dash. That modifier scopes `--score-neutral` to the badge and uses the new `--score-neutral-badge: #858585` token with white text. Valid numeric values, including zero, retain their existing tone; progress bars, card backgrounds, category icons, and Rhythm’s background-free score/chart treatment are unchanged. Dimensions and interaction semantics are untouched.

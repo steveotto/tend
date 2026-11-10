@@ -4,7 +4,7 @@ import type { HealthMeasureAggregate } from '../domain/health-scoring.ts';
 import type { PersonPreview } from '../domain/preview-data.ts';
 import type { HealthRollupConfig } from './HealthRollupDiagram.tsx';
 import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
-import { formatScore } from '../domain/score-display.ts';
+import { formatHealthAverageEquation, formatScore } from '../domain/score-display.ts';
 import { scoreTone } from '../domain/score-tone.ts';
 import { CategoryHealthBadge } from './Cards.tsx';
 import { HealthScoreBreakdown } from './HealthScoreBreakdown.tsx';
@@ -203,19 +203,11 @@ export function formatPersonOverallHealthFormula(
 
   if (eligible.length === 1) {
     const area = eligible[0]!;
-    return `${area.label} ${formatFormulaScore(area.score!)} → Overall ${formatFormulaScore(overallScore)}`;
+    return `${area.label} ${formatScore(area.score!)} → Overall ${formatScore(overallScore)}`;
   }
 
-  const displayedScores = eligible.map(area => formatFormulaScore(area.score!));
-  const displayedMean = displayedScores.reduce((total, score) => total + Number(score), 0)
-    / displayedScores.length;
-  const displayedOverall = Number(formatFormulaScore(overallScore));
-  const operator = Math.abs(displayedMean - displayedOverall) < 1e-10 ? '=' : '≈';
-  return `(${displayedScores.join(' + ')}) ÷ ${displayedScores.length} ${operator} ${formatFormulaScore(overallScore)}`;
-}
-
-function formatFormulaScore(score: number): string {
-  return score.toFixed(1).replace(/\.0$/, '');
+  const values = eligible.map(area => area.score!);
+  return formatHealthAverageEquation(values, overallScore, eligible.length, true);
 }
 
 export function PersonOverallHealthDetails({
@@ -264,7 +256,7 @@ export function PersonOverallHealthDetails({
                   {eligibleAreas.map(area => (
                     <li key={area.id}>
                       <span>{area.label}</span>
-                      <strong>{formatFormulaScore(area.score!)}</strong>
+                      <strong>{formatScore(area.score!)}</strong>
                     </li>
                   ))}
                 </ul>
@@ -335,7 +327,6 @@ export function PersonHealthAreaDetails({
           healthScore={health.health}
           consistencyScore={supportsMeasures ? health.consistency : null}
           onTrackScore={supportsMeasures ? health.onTrack : null}
-          maxFractionDigits={1}
           {...(evidence ? { evidence } : {})}
           {...(supportsMeasures ? {} : {
             formulaContent: (

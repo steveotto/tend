@@ -16,7 +16,7 @@ import {
 } from '../domain/rhythm-score-presentation.ts';
 import { rhythmWeekdayName } from '../domain/rhythm-schedule.ts';
 import type { RhythmSchedule } from '../domain/rhythm-schedule.ts';
-import { formatScore } from '../domain/score-display.ts';
+import { formatHealthPercentResult, formatScore } from '../domain/score-display.ts';
 import { CategoryHealthBadge } from './Cards.tsx';
 import { HealthDetailsExpandableHeader } from './HealthDetailsExpandableHeader.tsx';
 import {
@@ -97,11 +97,11 @@ export function RhythmHealthScoringDetails({
           <p
             className="rhythm-health-scoring-card__formula rhythm-health-scoring-card__formula--total"
             aria-label={contributionsFormula
-              ? `${contributionsFormula[0]} plus ${contributionsFormula[1]} equals ${contributionsFormula[2]}`
+              ? `${contributionsFormula[0]} plus ${contributionsFormula[1]} ${contributionsFormula[3] === '≈' ? 'approximately equals' : 'equals'} ${contributionsFormula[2]}`
               : 'Health contribution total unavailable'}
           >
             {contributionsFormula
-              ? <><span>{contributionsFormula[0]} + {contributionsFormula[1]} = </span><strong>{contributionsFormula[2]}</strong></>
+              ? <><span>{contributionsFormula[0]} + {contributionsFormula[1]} {contributionsFormula[3]} </span><strong>{contributionsFormula[2]}</strong></>
               : '—'}
           </p>
           {unavailableExplanation && (
@@ -198,6 +198,12 @@ function ConsistencyEvidence({
   const measuredDays = evidence.limitedHistoryDays
     ?? calendarDaysInclusive(evidence.windowStartDate, evidence.windowEndDate);
   const formula = `${evidence.completedCount} ÷ ${evidence.eligibleDueCount} × 100`;
+  const result = formatHealthPercentResult(
+    evidence.eligibleDueCount > 0
+      ? evidence.completedCount / evidence.eligibleDueCount * 100
+      : 0,
+    metric.score
+  );
   return (
     <>
       <BreakdownRows rows={[
@@ -212,7 +218,7 @@ function ConsistencyEvidence({
         { label: 'Scheduled', value: String(evidence.eligibleDueCount) }
       ]} />
       <p className="rhythm-health-scoring-card__formula rhythm-health-scoring-card__formula--consistency">
-        <span>{formula} = <strong>{formatScore(metric.score)}%</strong></span>
+        <span>{formula} {result.operator} <strong>{result.value}%</strong></span>
       </p>
       <p className="rhythm-health-scoring-card__measurement">
         <strong>{consistencyFrequencyName(evidence.frequency)}</strong> frequency based on {measuredDays}{' '}

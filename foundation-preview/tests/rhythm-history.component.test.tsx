@@ -1895,16 +1895,16 @@ describe('shared Rhythm history', () => {
       panel.querySelector('.rhythm-history-view__health-weight-name')?.textContent,
       panel.querySelector('.rhythm-history-view__health-weight-formula')?.getAttribute('aria-label')
     ])).toEqual([
-      ['75%', 'Consistency', '75% times 79.3103448275862 equals 59.48275862068965 points'],
-      ['25%', 'On Track', '25% times 70 equals 17.5 points']
+      ['75%', 'Consistency', '75% times 79 approximately equals 59 points'],
+      ['25%', 'On Track', '25% times 70 approximately equals 18 points']
     ]);
     expect(healthCalculation.querySelector('.rhythm-history-view__health-weight-score')).toBeNull();
     expect(within(scoreDetails).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('79');
     expect(within(scoreDetails).getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('70');
     expect(healthCalculation.querySelectorAll('.rhythm-history-view__health-weight-panel svg[aria-hidden="true"]')).toHaveLength(2);
-    expect(healthCalculation.textContent).toContain('75% × 79.3103448276 = 59.4827586207 points');
-    expect(healthCalculation.textContent).toContain('25% × 70 = 17.5 points');
-    expect(healthCalculation.textContent).toContain('59.4827586207 + 17.5 = 76.9827586207');
+    expect(healthCalculation.textContent).toContain('75% × 79 ≈ 59 points');
+    expect(healthCalculation.textContent).toContain('25% × 70 ≈ 18 points');
+    expect(healthCalculation.textContent).toContain('59 + 18 ≈ 77');
     const summaryCard = dialog.querySelector('.health-info-summary-card') as HTMLElement;
     expect(summaryCard.querySelector('.health-info-calculation')).toBeNull();
     expect(summaryCard.querySelectorAll('.health-score-measures__item')).toHaveLength(2);
@@ -1924,7 +1924,7 @@ describe('shared Rhythm history', () => {
     expect(consistencyRows[0]?.querySelector('dd')?.textContent)
       .toMatch(/^[A-Z][a-z]{2} \d{1,2}–[A-Z][a-z]{2} \d{1,2}$/);
     const healthFormula = healthDetails.querySelector('.rhythm-health-scoring-card__formula')!;
-    expect(healthFormula.textContent?.replace(/\s+/g, '')).toBe('23÷29×100=79%');
+    expect(healthFormula.textContent?.replace(/\s+/g, '')).toBe('23÷29×100≈79%');
     expect(healthFormula.querySelector('strong')?.textContent).toBe('79%');
 
     expect(within(onTrackDetails).getByText(/Last tended/)).toBeTruthy();
@@ -2619,7 +2619,7 @@ describe('shared Rhythm history', () => {
     expect(measurement.textContent).toBe('Daily frequency based on 3 days of tracking.');
     expect(measurement.querySelector('strong')?.textContent).toBe('Daily');
     expect(details.querySelector('.rhythm-health-scoring-card__metric[aria-label="Consistency scoring evidence"] .rhythm-health-scoring-card__formula')?.textContent?.replace(/\s+/g, ''))
-      .toBe('2÷3×100=67%');
+      .toBe('2÷3×100≈67%');
   });
 
   it('orders history metadata and actual associations before schedule metadata', () => {

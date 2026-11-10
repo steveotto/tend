@@ -154,8 +154,10 @@ describe('shared Category Health summary', () => {
     expect(within(dialog).getByText('75%')).toBeTruthy();
     expect([...dialog.querySelectorAll('.rhythm-score-circle__value')].map(node => node.textContent))
       .toEqual(['70', '100']);
-    expect(within(dialog).getByLabelText('75% times 70 equals 52.5 points')).toBeTruthy();
+    expect(within(dialog).getByLabelText('75% times 70 approximately equals 53 points')).toBeTruthy();
     expect(within(dialog).getByLabelText('25% times 100 equals 25 points')).toBeTruthy();
+    expect(dialog.querySelector('.rhythm-health-scoring-card__formula--total')?.textContent)
+      .toContain('53 + 25 ≈ 78');
     expect(dialog.querySelector('.health-info-summary-card')).toBeTruthy();
     expect(dialog.querySelector('.health-info-contribution-card')).toBeTruthy();
     expect(within(details).queryByText('1 of 6 Foundations scored')).toBeNull();

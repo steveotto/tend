@@ -1,6 +1,9 @@
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
-import { formatScore } from '../domain/score-display.ts';
+import {
+  formatHealthAverageEquation,
+  formatScore
+} from '../domain/score-display.ts';
 import { HEALTH_CONSISTENCY_WEIGHT, HEALTH_ON_TRACK_WEIGHT } from '../domain/rhythm-history.ts';
 import { HealthDetailsExpandableHeader } from './HealthDetailsExpandableHeader.tsx';
 import { HealthWeightPanels, formatTruthfulWeightedSum } from './HealthWeightPanels.tsx';
@@ -59,8 +62,7 @@ export function HealthScoringDetailsCard({
   evidence,
   formulaContent,
   children,
-  initialExpanded = false,
-  maxFractionDigits
+  initialExpanded = false
 }: {
   title: string;
   healthScore: number | null;
@@ -70,7 +72,6 @@ export function HealthScoringDetailsCard({
   formulaContent?: ReactNode;
   children?: ReactNode;
   initialExpanded?: boolean;
-  maxFractionDigits?: number;
 }) {
   const headingId = useId();
   const contentId = useId();
@@ -80,8 +81,7 @@ export function HealthScoringDetailsCard({
     : formatTruthfulWeightedSum(
         consistencyScore * HEALTH_CONSISTENCY_WEIGHT,
         onTrackScore * HEALTH_ON_TRACK_WEIGHT,
-        healthScore,
-        maxFractionDigits
+        healthScore
       );
 
   return (
@@ -103,7 +103,6 @@ export function HealthScoringDetailsCard({
             <HealthWeightPanels
               consistencyScore={consistencyScore}
               onTrackScore={onTrackScore}
-              {...(maxFractionDigits === undefined ? {} : { maxFractionDigits })}
             />
             <p className="rhythm-health-scoring-card__formula rhythm-health-scoring-card__formula--total">
               {weightedValues
@@ -115,7 +114,6 @@ export function HealthScoringDetailsCard({
         {evidence && (
           <AggregateEvidence
             evidence={evidence}
-            {...(maxFractionDigits === undefined ? {} : { maxFractionDigits })}
           />
         )}
         {children}
@@ -124,12 +122,8 @@ export function HealthScoringDetailsCard({
   );
 }
 
-function AggregateEvidence({
-  evidence,
-  maxFractionDigits = 10
-}: {
+function AggregateEvidence({ evidence }: {
   evidence: HealthAggregateEvidence;
-  maxFractionDigits?: number;
 }) {
   const { rows, otherCount = 0 } = evidence;
   const personRhythmPresentation = evidence.presentation === 'person-rhythm';
@@ -254,7 +248,6 @@ function AggregateEvidence({
           measure="consistency"
           count={evidence.consistencyCount}
           average={evidence.consistencyAverage}
-          maxFractionDigits={maxFractionDigits}
           compact={personRhythmPresentation}
         />
         <AverageRow
@@ -263,7 +256,6 @@ function AggregateEvidence({
           measure="onTrack"
           count={evidence.onTrackCount}
           average={evidence.onTrackAverage}
-          maxFractionDigits={maxFractionDigits}
           compact={personRhythmPresentation}
         />
       </div>
@@ -314,7 +306,6 @@ function AverageRow({
   measure,
   count,
   average,
-  maxFractionDigits,
   compact
 }: {
   label: string;
@@ -322,38 +313,20 @@ function AverageRow({
   measure: 'consistency' | 'onTrack';
   count: number;
   average: number | null;
-  maxFractionDigits: number;
   compact: boolean;
 }) {
   const values = rows
     .map(row => row[measure])
     .filter((value): value is number => value !== null && Number.isFinite(value));
-  const formattedValues = values.map(value => formatExact(value, maxFractionDigits));
-  const formattedAverage = average === null ? null : formatExact(average, maxFractionDigits);
-  const displayedMean = formattedValues.length === 0
-    ? null
-    : formattedValues.reduce((total, value) => total + Number(value), 0) / formattedValues.length;
-  const operator = displayedMean !== null && formattedAverage !== null
-    && Math.abs(displayedMean - Number(formattedAverage)) < 1e-10
-    ? '='
-    : '≈';
-  const formula = average === null || count === 0
-    ? '—'
-    : values.length !== count || values.length > 2
-      ? `Σ ${count} eligible scores ÷ ${count} ${operator} ${formattedAverage}`
-      : `${formattedValues.join(' + ')} ÷ ${count} ${operator} ${formattedAverage}`;
+  const formula = formatHealthAverageEquation(values, average, count);
   return (
     <p>
       <span>{label}</span>
-      <strong>{compact ? (formattedAverage ?? '—') : formula}</strong>
+      <strong>{compact ? formatScore(average) : formula}</strong>
     </p>
   );
 }
 
 function displayEvidenceScore(score: number | null): string {
   return score === null || !Number.isFinite(score) ? '—' : formatScore(score);
-}
-
-function formatExact(value: number, maxFractionDigits = 10): string {
-  return value.toLocaleString('en-US', { maximumFractionDigits: maxFractionDigits });
 }

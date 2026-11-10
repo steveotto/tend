@@ -465,7 +465,7 @@ describe('shared person profile', () => {
     const overallScoring = within(overallDetails).getByRole('button', { name: 'How Overall Health was scored' });
     expect(overallScoring.getAttribute('aria-expanded')).toBe('false');
     await user.click(overallScoring);
-    expect(within(overallDetails).getByText('Rhythms 85.3 → Overall 85.3')).toBeTruthy();
+    expect(within(overallDetails).getByText('Rhythms 85 → Overall 85')).toBeTruthy();
     expect(within(overallDetails).getByText('Available areas count equally. Unavailable areas are left out.')).toBeTruthy();
     expect(document.activeElement).toBe(overallScoring);
     await user.click(within(overallDialog).getByRole('button', { name: 'Close Health details' }));
@@ -493,9 +493,9 @@ describe('shared person profile', () => {
     expect(rhythmContribution.getAttribute('aria-expanded')).toBe('false');
     expect(within(rhythmDialog).getByText('75%')).toBeTruthy();
     expect(within(rhythmDialog).getByText('25%')).toBeTruthy();
-    expect(within(rhythmDialog).getByLabelText('75% times 80.4 equals 60.3 points')).toBeTruthy();
+    expect(within(rhythmDialog).getByLabelText('75% times 80 approximately equals 60 points')).toBeTruthy();
     expect(rhythmDialog.querySelector('.rhythm-health-scoring-card__formula--total')?.textContent)
-      .toContain('60.3 + 25 = 85.3');
+      .toContain('60 + 25 ≈ 85');
     expect(rhythmDialog.textContent).not.toMatch(/\d+\.\d{2,}/);
     const rhythmEvidence = within(rhythmDialog).getByRole('region', { name: 'Scored Rhythms' });
     expect(within(rhythmEvidence).getByText('1 of 3')).toBeTruthy();
@@ -506,7 +506,8 @@ describe('shared person profile', () => {
     expect(within(rhythmEvidence).getByText('Active linked Rhythms with both scores available count equally.')).toBeTruthy();
     await user.click(eligibilityInfo);
     const rhythmAverages = rhythmEvidence.querySelector('.health-aggregate-evidence__averages');
-    expect(rhythmAverages?.textContent).toContain('Consistency average80.4');
+    expect(rhythmAverages?.textContent).toContain('Consistency average80');
+    expect(rhythmAverages?.textContent).not.toContain('80.4');
     expect(rhythmAverages?.textContent).toContain('On Track average100');
     const rhythmEvidenceRow = within(rhythmEvidence).getByRole('row', { name: /Avery and Morgan walk/ });
     expect(rhythmEvidenceRow.textContent).toContain('80');
@@ -606,12 +607,12 @@ describe('shared person profile', () => {
       { id: 'rhythms', label: 'Rhythms', score: 82 },
       { id: 'connections', label: 'Connections', score: 70 },
       { id: 'prayer', label: 'Prayer', score: 90 }
-    ], 80.6666666667)).toBe('(82 + 70 + 90) ÷ 3 ≈ 80.7');
+    ], 80.6666666667)).toBe('(82 + 70 + 90) ÷ 3 ≈ 81');
     expect(formatPersonOverallHealthFormula([
       { id: 'rhythms', label: 'Rhythms', score: 80.04 },
       { id: 'connections', label: 'Connections', score: 80.14 },
       { id: 'prayer', label: 'Prayer', score: null }
-    ], 80.09)).toBe('(80 + 80.1) ÷ 2 ≈ 80.1');
+    ], 80.09)).toBe('(80 + 80) ÷ 2 ≈ 80');
     expect(formatPersonOverallHealthFormula([
       { id: 'rhythms', label: 'Rhythms', score: 0 },
       { id: 'connections', label: 'Connections', score: null },
@@ -635,9 +636,9 @@ describe('shared person profile', () => {
     await user.click(within(profile).getByRole('button', { name: 'Show Rhythm Health scoring explanation' }));
     const dialog = screen.getByRole('dialog', { name: 'Avery’s Rhythm Health details' });
     await user.click(within(dialog).getByRole('button', { name: 'How Rhythm Health was scored' }));
-    expect(within(dialog).getByLabelText('75% times 14.3 approximately equals 10.7 points')).toBeTruthy();
+    expect(within(dialog).getByLabelText('75% times 14 approximately equals 11 points')).toBeTruthy();
     expect(dialog.querySelector('.rhythm-health-scoring-card__formula--total')?.textContent)
-      .toContain('10.7 + 0 = 10.7');
+      .toContain('11 + 0 ≈ 11');
     expect(dialog.textContent).not.toMatch(/\d+\.\d{2,}/);
   });
 
