@@ -42,7 +42,7 @@ import type {
 import { RhythmCard } from './Cards.tsx';
 import { RhythmSeasonCard } from './RhythmSeasonCard.tsx';
 import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
-import { HealthScoreBreakdown, HealthScoreInfoButton, HealthScoreMeasures } from './HealthScoreBreakdown.tsx';
+import { HealthScoreBreakdown, HealthScoreInfoButton } from './HealthScoreBreakdown.tsx';
 import { HealthScoreDetailsDialog } from './HealthScoreDetailsDialog.tsx';
 export { HealthScoreMeter } from './HealthScoreBreakdown.tsx';
 import { RhythmCompletionHistoryChart } from './RhythmCompletionHistoryChart.tsx';
@@ -633,8 +633,8 @@ export function RhythmHistoryView({
       )}
 
       <section className="rhythm-history-view__score-section rhythm-history-view__card" aria-label="Health, Consistency, and On Track scores">
-        <div className="rhythm-history-view__score-card">
           <HealthScoreBreakdown
+            className="rhythm-history-view__score-card"
             title="Health"
             score={score.healthScore}
             consistency={{
@@ -659,26 +659,8 @@ export function RhythmHistoryView({
                 onClick={() => setScoreDetailsExpanded(expanded => !expanded)}
               />
             )}
-            showMeasures={false}
-          />
-          <div className="rhythm-history-view__score-summary-divider" aria-hidden="true" />
-          <HealthScoreMeasures
-            healthScore={score.healthScore}
-            consistency={{
-              score: score.consistency.kind === 'scored' ? score.consistency.score : null,
-              state: score.consistency.kind,
-              ...(score.consistency.kind === 'unscored' ? { explanation: score.consistency.explanation } : {})
-            }}
-            onTrack={{
-              score: score.onTrack.kind === 'scored' ? score.onTrack.score : null,
-              state: score.onTrack.kind,
-              ...(score.onTrack.kind === 'unscored' ? { explanation: score.onTrack.explanation } : {})
-            }}
-            consistencyCaption={metricCopy.consistency.shortDescription}
-            onTrackCaption={metricCopy.onTrack.shortDescription}
-            showHealthMeter={false}
-            showCaptions
-          />
+            showMeasureCaptions={false}
+          >
           {scoreDetailsExpanded && (
             <HealthScoreDetailsDialog
               title="Rhythm Health details"
@@ -749,7 +731,7 @@ export function RhythmHistoryView({
               />
             </HealthScoreDetailsDialog>
           )}
-        </div>
+          </HealthScoreBreakdown>
         {scoreNotice && (
           <p className="rhythm-history-view__sample-notice" role="status">{scoreNotice}</p>
         )}

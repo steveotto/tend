@@ -1729,6 +1729,9 @@ describe('shared Rhythm history', () => {
       frequency: 'weekly',
       weekdays: [1, 2, 3, 4, 5]
     } satisfies RhythmSchedule, 'Weekdays', 'M · T · W · R · F', 'Afternoon'],
+    ['daily early morning', {
+      frequency: 'daily'
+    } satisfies RhythmSchedule, 'Daily', 'Daily', 'Early morning'],
     ['monthly', {
       frequency: 'monthly',
       pattern: { kind: 'dayOfMonth', day: 15 }
@@ -1762,7 +1765,11 @@ describe('shared Rhythm history', () => {
       .filter(item => !item.classList.contains('visually-hidden'))
       .map(item => item.querySelector('span')?.textContent ?? item.textContent);
     expect(formatRhythmSchedule(schedule, 'compact')).toBe(expected);
-    expect(visibleLabels).toEqual([visibleExpected, timeLabel]);
+    const visibleTimeLabel = timeLabel === 'Early morning' ? 'Early am' : timeLabel;
+    expect(visibleLabels).toEqual([visibleExpected, visibleTimeLabel]);
+    if (timeLabel === 'Early morning') {
+      expect(group.querySelector(':scope > span:last-child > span')?.getAttribute('aria-label')).toBe('Early morning');
+    }
     expect(summary.querySelectorAll('svg')).toHaveLength(3);
     expect(summary.textContent).toContain('Never');
     expect(summary.className).toContain('rhythm-metadata-footer');
@@ -1855,15 +1862,15 @@ describe('shared Rhythm history', () => {
     expect(screen.queryByText('75% Consistency · 25% On Track')).toBeNull();
     expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('79');
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('70');
-    expect(screen.getByText('Follow-through over time')).toBeTruthy();
-    expect(screen.getByText('How caught up you are')).toBeTruthy();
+    expect(screen.queryByText('Follow-through over time')).toBeNull();
+    expect(screen.queryByText('How caught up you are')).toBeNull();
     const consistency = screen.getByRole('region', { name: 'Consistency' });
     const onTrack = screen.getByRole('region', { name: 'On Track' });
     const info = screen.getByRole('button', { name: 'Show Consistency and On Track score details' });
     const detailsId = info.getAttribute('aria-controls')!;
     expect(document.querySelectorAll('.rhythm-history-view__score-card')).toHaveLength(1);
     expect(document.querySelectorAll('.health-score-measures__item')).toHaveLength(2);
-    expect(document.querySelectorAll('.rhythm-history-view__score-summary-divider')).toHaveLength(1);
+    expect(document.querySelectorAll('.rhythm-history-view__score-summary-divider')).toHaveLength(0);
     expect(document.querySelectorAll('.rhythm-history-view__score-card .rhythm-history-view__score-info')).toHaveLength(1);
     expect(info.getAttribute('aria-expanded')).toBe('false');
     expect(detailsId).toBeTruthy();

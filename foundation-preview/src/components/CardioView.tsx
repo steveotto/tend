@@ -82,6 +82,7 @@ export function CardioView({
       health={progress.health}
       consistencyCaption="Four completed weeks of run and distance goals."
       onTrackCaption="This week’s goal progress."
+      showMeasures={!foundationNavigation}
       overallHealthScore={overallHealthScore}
       categoryHealthScore={categoryHealthScore}
       linkedRhythmCount={0}

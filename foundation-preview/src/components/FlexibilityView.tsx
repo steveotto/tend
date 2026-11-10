@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
-import { HealthScoreBreakdown } from './HealthScoreBreakdown.tsx';
+import { FitnessScoreSummary } from './FitnessScoreSummary.tsx';
+import { HealthScoringDetailsCard } from './HealthScoringDetailsCard.tsx';
+import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
+import { createHealthFitnessRollup } from './HealthRollupDiagram.tsx';
 import { SegmentedTabs } from './SegmentedTabs.tsx';
 import type { SegmentedTab } from './SegmentedTabs.tsx';
 import { FitnessBodyMapLayout } from './FitnessBodyMap.tsx';
@@ -36,7 +39,7 @@ import type {
   FlexibilitySessionDraft,
   SavedFlexibilityRoutine
 } from '../domain/flexibility.ts';
-import { formatScore } from '../domain/score-display.ts';
+import { formatHealthAverageEquation, formatScore } from '../domain/score-display.ts';
 
 type DialogState = 'log' | 'settings' | 'guided' | null;
 type FlexibilityCollectionTab = 'recommended' | 'saved' | 'history';
@@ -110,6 +113,8 @@ export function FlexibilityView({
   data,
   today,
   onChange,
+  overallHealthScore = null,
+  categoryHealthScore = null,
   foundationNavigation = false,
   pendingQuickLog = null,
   onQuickLogOpened,
@@ -139,6 +144,47 @@ export function FlexibilityView({
   const [error, setError] = useState('');
   const scores = useMemo(() => selectFlexibilityRegionScores(data, today), [data, today]);
   const consistency = selectFlexibilityConsistency(scores);
+  const scoredRegionValues = scores.flatMap(region =>
+    region.score !== null && Number.isFinite(region.score) ? [region.score] : []
+  );
+  const flexibilityScoringEvidence: HealthAggregateEvidence = {
+    heading: 'Stretch-region consistency scores',
+    description: 'Tracked region scores contribute equally to Flexibility Health.',
+    itemLabel: 'Region',
+    rows: scores.map(region => ({
+      id: region.id,
+      label: region.name,
+      consistency: region.score,
+      onTrack: null
+    })),
+    consistencyAverage: consistency.score,
+    consistencyCount: consistency.trackedCount,
+    onTrackAverage: null,
+    onTrackCount: 0,
+    notes: ['Untracked regions are unavailable and excluded.'],
+    emptyState: 'No tracked stretch-region scores are available yet.',
+    showEmptyStateWhenNoAverages: true
+  };
+  const flexibilityFormula = (
+    <section className="rhythm-health-scoring-card__calculation health-scoring-details-card__calculation">
+      <h4>How Health is calculated</h4>
+      <p>Flexibility Health is the equal-weight average of tracked stretch-region Consistency scores.</p>
+      <p className="rhythm-health-scoring-card__formula rhythm-health-scoring-card__formula--total">
+        {formatHealthAverageEquation(scoredRegionValues, consistency.score, consistency.trackedCount, true)}
+      </p>
+      <p>On Track is unavailable for this measure.</p>
+    </section>
+  );
+  const flexibilityScoringCard = (
+    <HealthScoringDetailsCard
+      title="How Flexibility Health is scored"
+      healthScore={consistency.score}
+      consistencyScore={consistency.score}
+      onTrackScore={null}
+      evidence={flexibilityScoringEvidence}
+      formulaContent={flexibilityFormula}
+    />
+  );
   const suggestion = suggestNextFlexibilityStretch(scores);
   const recommendedSavedRoutines = suggestion.reasonRegionId === null
     ? []
@@ -378,24 +424,24 @@ export function FlexibilityView({
 
   return (
     <div className="category-page flexibility-view strength-page">
-      <section className={`fitness-score-summary rhythm-history-view__score-card flexibility-summary${foundationNavigation ? ' foundation-health-card' : ''}`}
-        aria-label="Flexibility Health summary">
-        <HealthScoreBreakdown
-          title="Flexibility Health"
-          score={consistency.score}
-          healthLabel="Flexibility consistency"
-          ariaLabel="Flexibility Health"
-          consistency={{ score: consistency.score }}
-          onTrack={{ score: null }}
-          consistencyCaption="Consistency with your stretch schedule."
-          onTrackCaption=""
-          showMeasures={false}
-        >
-          <div className="flexibility-summary__count">
-            <span>{consistency.trackedCount} of {flexibilityRegions.length} stretch regions tracked</span>
-          </div>
-        </HealthScoreBreakdown>
-      </section>
+      <FitnessScoreSummary
+        category="Flexibility"
+        healthTitle="Flexibility Health"
+        className={`rhythm-history-view__score-card flexibility-summary${foundationNavigation ? ' foundation-health-card' : ''}`}
+        consistency={consistency.score}
+        onTrack={null}
+        health={consistency.score}
+        showMeasures={!foundationNavigation}
+        consistencyCaption="Consistency with your stretch schedule."
+        onTrackCaption="On Track is unavailable for Flexibility."
+        overallHealthScore={overallHealthScore}
+        categoryHealthScore={categoryHealthScore}
+        summaryExplanation="Flexibility Health averages tracked stretch-region Consistency scores."
+        statusMessage={`${consistency.trackedCount} of ${flexibilityRegions.length} stretch regions tracked`}
+        scoringEvidence={flexibilityScoringEvidence}
+        scoringCard={flexibilityScoringCard}
+        rollup={createHealthFitnessRollup('foundations', 'flexibility')}
+      />
 
       <section className="card strength-card strength-map-card flexibility-map-card" aria-labelledby="flexibility-map-heading">
         <header className="strength-card-heading">

@@ -1,8 +1,8 @@
 import { useId, useRef, useState } from 'react';
-import type { MouseEvent, ReactNode } from 'react';
+import type { MouseEvent } from 'react';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
 import type { RhythmPreview } from '../domain/preview-data.ts';
-import { HealthScoreBreakdown, HealthScoreInfoButton, HealthScoreMeasures } from './HealthScoreBreakdown.tsx';
+import { HealthScoreBreakdown, HealthScoreInfoButton } from './HealthScoreBreakdown.tsx';
 import { HealthScoreDetailsDialog } from './HealthScoreDetailsDialog.tsx';
 import type { HealthScoreMetric } from './HealthScoreBreakdown.tsx';
 import { HealthScoreDetailsContent } from './HealthScoreDetailsContent.tsx';
@@ -25,7 +25,6 @@ type CategoryHealthSummaryProps = {
   consistencyDescription?: string;
   onTrackDescription?: string;
   scoringEvidence?: HealthAggregateEvidence;
-  summaryContent?: ReactNode;
   rollup: HealthRollupConfig;
 };
 
@@ -42,7 +41,6 @@ export function CategoryHealthSummary({
   consistencyDescription,
   onTrackDescription,
   scoringEvidence,
-  summaryContent,
   rollup
 }: CategoryHealthSummaryProps) {
   const [expanded, setExpanded] = useState(false);
@@ -103,7 +101,7 @@ export function CategoryHealthSummary({
       score={score.health}
       healthLabel={title}
       ariaLabel={`${title} summary`}
-      showMeasures={false}
+      showMeasures
       consistency={consistencyMetric}
       onTrack={onTrackMetric}
       consistencyCaption="How regularly you show up"
@@ -118,16 +116,6 @@ export function CategoryHealthSummary({
         />
       )}
     >
-      <div className="rhythm-history-view__score-summary-divider" aria-hidden="true" />
-      <HealthScoreMeasures
-        healthScore={score.health}
-        consistency={consistencyMetric}
-        onTrack={onTrackMetric}
-        consistencyCaption="How regularly you show up"
-        onTrackCaption="Whether your Rhythms are up to date"
-        showHealthMeter={false}
-      />
-      {summaryContent}
       {expanded && (
         <HealthScoreDetailsDialog title={`${title} details`} onClose={closeDetails}>
           <div id={detailsId} className="category-health-summary__details" role="region" aria-label={`${title} calculation details`}>

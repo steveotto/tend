@@ -10457,9 +10457,6 @@ html[data-mobile-text-size="larger"] .today-rhythm-details-dialog--inline .today
 
 .foundation-health-card {
   margin: 14px 0;
-  border: 1px solid var(--tend-line, var(--line));
-  border-radius: 14px;
-  background: var(--tend-surface, #fff);
 }
 
 .disclosure-chevron {
@@ -10640,13 +10637,6 @@ html[data-mobile-text-size="larger"] .today-rhythm-details-dialog--inline .today
 
   .today-rhythm-details-dialog:not(.today-rhythm-details-dialog--inline) .today-rhythm-details__footer {
     margin-top: 12px;
-  }
-
-  .rhythm-metadata-footer > .rhythm-metadata-last-tended {
-    flex: 0 0 100%;
-    width: 100%;
-    margin-left: 0;
-    justify-content: flex-end;
   }
 
   .today-rhythm-details-dialog:not(.today-rhythm-details-dialog--inline) .today-rhythm-details__back {
@@ -18557,6 +18547,47 @@ button.person-health-component-score:focus-visible {
   border-radius: 8px;
 }
 
+.person-health-component-scores__expanded {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 14px 0 2px;
+}
+
+.person-health-component-scores__expanded[hidden] {
+  display: none;
+}
+
+.person-health-area-measures {
+  min-width: 0;
+}
+
+.person-health-area-measures__header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.person-health-area-measures__header h4 {
+  min-width: 0;
+  margin: 0;
+  color: var(--tend-ink, var(--ink));
+  font-size: calc(1rem * var(--app-text-scale, 1));
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.person-health-area-measures__header .rhythm-history-view__score-info {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+}
+
+.person-health-area-measures .health-score-measures {
+  margin-top: 6px;
+}
+
 .person-overall-health-formula {
   display: grid;
   min-width: 0;
@@ -18589,6 +18620,19 @@ button.person-health-component-score:focus-visible {
 }
 
 .person-overall-health-formula li strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.person-overall-health-formula__result {
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--tend-ink, var(--ink));
+  font-weight: 600;
+  text-align: left;
+}
+
+.person-overall-health-formula__result strong {
+  font-size: calc(1rem * var(--app-text-scale, 1));
   font-variant-numeric: tabular-nums;
 }
 

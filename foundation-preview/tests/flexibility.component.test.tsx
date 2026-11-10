@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -112,17 +112,30 @@ describe('Flexibility foundation presentation', () => {
     expect(container.querySelectorAll('.flexibility-region')).toHaveLength(6);
   });
 
-  it('uses shared Health and card styling without adding unsupported measures', async () => {
+  it('uses the shared Health card, keeps unavailable On Track neutral, and opens Flexibility details', async () => {
     const user = userEvent.setup();
     const { container } = render(<StatefulFlexibility />);
 
     expect(container.querySelector('.flexibility-summary')?.classList.contains('rhythm-history-view__score-card')).toBe(true);
     expect(screen.getByRole('heading', { name: 'Flexibility Health' })).toBeTruthy();
-    expect(screen.getByText('0 of 10 stretch regions tracked')).toBeTruthy();
-    expect(container.querySelector('.flexibility-summary .health-score-measures')).toBeNull();
+    expect(container.querySelectorAll('.flexibility-summary .health-score-measures__item')).toHaveLength(2);
+    expect(screen.getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Show Flexibility Health scoring details' })).toBeTruthy();
     expect(container.querySelector('.flexibility-map-card')?.compareDocumentPosition(
       container.querySelector('.flexibility-routine-collection')!
     )).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    await user.click(screen.getByRole('button', { name: 'Show Flexibility Health scoring details' }));
+    const healthDialog = screen.getByRole('dialog', { name: 'Flexibility Health details' });
+    const scoringDisclosure = within(healthDialog).getByRole('button', { name: 'How Flexibility Health is scored' });
+    expect(scoringDisclosure.getAttribute('aria-expanded')).toBe('false');
+    await user.click(scoringDisclosure);
+    expect(within(healthDialog).getByText(/equal-weight average of tracked stretch-region Consistency scores/)).toBeTruthy();
+    expect(within(healthDialog).getByRole('region', { name: 'Stretch-region consistency scores' })).toBeTruthy();
+    expect(within(healthDialog).queryByText('75%')).toBeNull();
+    await user.click(within(healthDialog).getByRole('button', { name: 'Close Health details' }));
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show Flexibility Health scoring details' }));
+    });
     expect(screen.getByRole('heading', { name: 'Stretch routines' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Recommended stretches' })).toBeTruthy();
     expect(screen.getByText('Save a routine to get recommendations, or log a custom stretch.')).toBeTruthy();

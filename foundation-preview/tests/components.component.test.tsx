@@ -1575,7 +1575,7 @@ describe('shared preview components', () => {
     expect(badge?.classList.contains('ma-score--unavailable')).toBe(true);
   });
 
-  it('places Community 23 and unavailable Sabbath badges beside their titles and Info actions', () => {
+  it('keeps Foundation headers focused on their icon, title, and description', () => {
     const community = faithPractices.find(item => item.id === 'faith-community')!;
     const sabbath = faithPractices.find(item => item.id === 'faith-sabbath')!;
     const { container } = render(
@@ -1583,40 +1583,20 @@ describe('shared preview components', () => {
         <FoundationDetailHeader
           foundation={community}
           headingId="community-title"
-          score={23}
-          scoreLabel="Community Practice Health"
-          scoreAction={<button type="button" aria-label="Show Community Health details">Info</button>}
         />
         <FoundationDetailHeader
           foundation={sabbath}
           headingId="sabbath-title"
-          score={null}
-          scoreLabel="Sabbath Practice Health"
-          scoreAction={<button type="button" aria-label="Show Sabbath Health details">Info</button>}
         />
       </>
     );
 
     const [communityHeader, sabbathHeader] = container.querySelectorAll('.foundation-detail-header');
     expect(within(communityHeader as HTMLElement).getByRole('heading', { name: 'Community' })).toBeTruthy();
-    const communityBadge = within(communityHeader as HTMLElement).getByRole('img', {
-      name: 'Community Practice Health 23 out of 100'
-    });
-    expect(communityBadge.textContent).toBe('23');
-    expect(communityBadge.classList.contains('category-health-badge')).toBe(true);
-    expect(communityBadge.classList.contains('red')).toBe(true);
-    expect(within(communityHeader as HTMLElement).getByRole('button', {
-      name: 'Show Community Health details'
-    })).toBeTruthy();
-    expect(communityHeader?.querySelector('.foundation-detail-header__actions')?.children)
-      .toHaveLength(2);
-    expect(within(sabbathHeader as HTMLElement).getByRole('img', {
-      name: 'Sabbath Practice Health score unavailable'
-    }).textContent).toBe('—');
-    expect(sabbathHeader?.querySelector('.category-health-badge.neutral')).toBeTruthy();
-    expect(within(sabbathHeader as HTMLElement).getByRole('button', {
-      name: 'Show Sabbath Health details'
-    })).toBeTruthy();
+    expect(within(communityHeader as HTMLElement).getByText(community.description)).toBeTruthy();
+    expect(within(sabbathHeader as HTMLElement).getByText(sabbath.description)).toBeTruthy();
+    expect(container.querySelector('.foundation-detail-header__actions')).toBeNull();
+    expect(container.querySelector('.foundation-detail-header .category-health-badge')).toBeNull();
   });
 
   it('formats a fractional shared Score/Chart button to a whole number and keeps the full-precision tone', () => {

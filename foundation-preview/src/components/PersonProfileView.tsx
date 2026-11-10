@@ -46,9 +46,11 @@ import { BirthdayCakeIcon } from './BirthdayCakeIcon.tsx';
 import {
   PersonHealthComponentScores,
   PersonHealthSummary,
+  PersonHealthAreaMeasures,
   PersonHealthAreaDetails,
   PersonOverallHealthDetails
 } from './PersonHealthSummary.tsx';
+import type { HealthScoreMetric } from './HealthScoreBreakdown.tsx';
 import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 import { createPersonHealthRollup } from './HealthRollupDiagram.tsx';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
@@ -404,15 +406,9 @@ export function PersonProfileView({
   function selectTab(next: ProfileTab) {
     setTab(next);
     setNotesOpen(false);
-    setHealthCardDisclosure(previous => ({
-      personId,
-      area: previous.personId === personId && previous.area !== null ? next : null
-    }));
   }
 
   function toggleHealthCard(area: ProfileTab) {
-    setTab(area);
-    setNotesOpen(false);
     setHealthCardDisclosure(previous => ({
       personId,
       area: previous.personId === personId && previous.area === area ? null : area
@@ -483,33 +479,20 @@ export function PersonProfileView({
     });
   }
 
-  function renderAreaHealthSummary(area: ProfileTab) {
+  function renderAreaHealthMeasures(area: ProfileTab) {
     const config = personAreaHealth[area];
-    const title = `${config.label} Health`;
-    const totalCount = area === 'rhythms'
-      ? personRhythmHealth.activeRhythmIds.length
-      : area === 'connections'
-        ? connectionHistory.length
-        : personPrayerRecords.length;
+    const metric = (score: number | null): HealthScoreMetric => ({
+      score,
+      state: score === null || !config.supportsMeasures ? 'unavailable' : 'scored'
+    });
+    const areaLabel = area === 'connections' ? 'Connections' : profileTabs.find(item => item.id === area)!.label;
     return (
-      <PersonHealthSummary
-        key={`${personId}:${area}-health`}
-        title={title}
-        health={config.health}
-        itemTerm={config.label}
-        totalCount={totalCount}
-        eligibleCount={area === 'rhythms' ? personRhythmHealth.eligibleRhythmIds.length : 0}
-        excludedCount={area === 'rhythms' ? personRhythmHealth.excludedRhythmIds.length : 0}
-        unresolvedCount={area === 'rhythms' ? personRhythmHealth.unresolvedRhythmIds.length : 0}
-        archivedCount={area === 'rhythms' ? personRhythmHealth.archivedRhythmIds.length : 0}
-        coverageLabel={area === 'rhythms'
-          ? `${personRhythmHealth.eligibleRhythmIds.length} of ${personRhythmHealth.activeRhythmIds.length} active associated Rhythms scored.`
-          : `${config.label} Health scoring is unavailable in this preview.`}
-        showMeasures={config.supportsMeasures}
-        showMeasureCaptions={config.supportsMeasures}
-        showHealthMeter
-        detailsDialogTitle={`${personFirstName(person.displayName)}’s ${title} details`}
-        detailsLabel={`${person.displayName}’s ${title} details`}
+      <PersonHealthAreaMeasures
+        label={areaLabel}
+        detailsLabel={config.label}
+        consistency={metric(config.health.consistency)}
+        onTrack={metric(config.health.onTrack)}
+        detailsDialogTitle={`${personFirstName(person.displayName)}’s ${config.label} Health details`}
         detailsContent={healthDetailsFor(area)}
       />
     );
@@ -592,6 +575,20 @@ export function PersonProfileView({
                   person={person}
                   overallScore={overallHealth.health}
                   areas={componentScores}
+                  areaDetails={{
+                    rhythms: {
+                      title: `${personFirstName(person.displayName)}’s Rhythm Health details`,
+                      content: healthDetailsFor('rhythms')
+                    },
+                    connections: {
+                      title: `${personFirstName(person.displayName)}’s Connection Health details`,
+                      content: healthDetailsFor('connections')
+                    },
+                    prayer: {
+                      title: `${personFirstName(person.displayName)}’s Prayer Health details`,
+                      content: healthDetailsFor('prayer')
+                    }
+                  }}
                 />
               )}
               summaryContent={(
@@ -600,20 +597,15 @@ export function PersonProfileView({
                   expandedArea={openHealthCard}
                   controlIds={healthCardControlIds}
                   onSelectArea={toggleHealthCard}
+                  expandedContent={{
+                    rhythms: renderAreaHealthMeasures('rhythms'),
+                    connections: renderAreaHealthMeasures('connections'),
+                    prayer: renderAreaHealthMeasures('prayer')
+                  }}
                 />
               )}
             />
           </div>
-          {profileTabs.map(item => (
-            <div
-              key={item.id}
-              id={healthCardControlIds[item.id]}
-              className="person-profile__health-disclosure"
-              hidden={openHealthCard !== item.id}
-            >
-              {openHealthCard === item.id && renderAreaHealthSummary(item.id)}
-            </div>
-          ))}
           <div className="faith-view-nav marriage-view-nav person-profile__nav" role="tablist" aria-label={`${person.displayName} profile`}>
             {profileTabs.map((item, index) => (
               <button

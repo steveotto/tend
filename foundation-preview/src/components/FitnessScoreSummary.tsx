@@ -8,7 +8,7 @@ import type { HealthRollupConfig } from './HealthRollupDiagram.tsx';
 import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 
 type FitnessScoreSummaryProps = {
-  category: 'Strength' | 'Cardio' | 'Weight';
+  category: 'Strength' | 'Cardio' | 'Weight' | 'Flexibility';
   healthTitle?: string;
   consistency: number | null;
   onTrack: number | null;
@@ -20,6 +20,7 @@ type FitnessScoreSummaryProps = {
   summaryExplanation?: string;
   className?: string;
   compact?: boolean;
+  showMeasures?: boolean;
   showSetupAction?: boolean;
   onSetup?: (event: MouseEvent<HTMLButtonElement>) => void;
   evidenceDetails?: ReactNode;
@@ -29,6 +30,7 @@ type FitnessScoreSummaryProps = {
   linkedRhythmCount?: number;
   scoringEvidence?: HealthAggregateEvidence;
   scoringExplanation?: ReactNode;
+  scoringCard?: ReactNode;
 };
 
 const scoreExplanations = {
@@ -43,6 +45,10 @@ const scoreExplanations = {
   Weight: {
     consistency: 'How consistently you completed scheduled weigh-in Rhythms.',
     onTrack: 'Whether you are caught up with weigh-ins due on those Rhythms.'
+  },
+  Flexibility: {
+    consistency: 'The average consistency score across tracked stretch regions.',
+    onTrack: 'On Track is not calculated for Flexibility.'
   }
 } as const;
 
@@ -58,6 +64,7 @@ export function FitnessScoreSummary({
   statusMessage = null,
   summaryExplanation,
   className = '',
+  showMeasures = true,
   showSetupAction = true,
   onSetup,
   evidenceDetails,
@@ -66,7 +73,8 @@ export function FitnessScoreSummary({
   categoryHealthScore = null,
   linkedRhythmCount = 0,
   scoringEvidence,
-  scoringExplanation
+  scoringExplanation,
+  scoringCard
 }: FitnessScoreSummaryProps) {
   const [expanded, setExpanded] = useState(false);
   const detailsId = useId();
@@ -116,12 +124,18 @@ export function FitnessScoreSummary({
         categoryLabel: 'Health & Fitness',
         foundationIconId: `health-${category.toLowerCase()}`
       }],
-      bottomGroupLabel: category === 'Cardio' ? 'Run logs' : 'Linked Rhythms',
+      bottomGroupLabel: category === 'Cardio'
+        ? 'Run logs'
+        : category === 'Flexibility' ? 'Stretch history' : 'Linked Rhythms',
       bottomItem: {
-        id: category === 'Cardio' ? 'run-logs' : 'linked-rhythms',
+        id: category === 'Cardio'
+          ? 'run-logs'
+          : category === 'Flexibility' ? 'stretch-logs' : 'linked-rhythms',
         label: category === 'Cardio'
           ? 'Run logs'
-          : linkedRhythmCount > 0 ? 'Linked Rhythms' : 'No linked Rhythms',
+          : category === 'Flexibility'
+            ? 'Stretch history'
+            : linkedRhythmCount > 0 ? 'Linked Rhythms' : 'No linked Rhythms',
         score: null,
         showScore: false
       },
@@ -175,7 +189,7 @@ export function FitnessScoreSummary({
         consistencyCaption={consistencyCaption}
         onTrackCaption={onTrackCaption}
         headingAction={infoButton}
-        showMeasures
+        showMeasures={showMeasures}
       />
       {message && (
         <div className="fitness-score-summary__status" role="status">
@@ -210,7 +224,9 @@ export function FitnessScoreSummary({
               consistencyDescription={scoreExplanations[category].consistency}
               onTrackDescription={scoreExplanations[category].onTrack}
               rollup={contributionRollup}
-              scoringDisclosureTitle={`How this ${category} Foundation was scored`}
+              {...(scoringCard
+                ? { scoringCard }
+                : { scoringDisclosureTitle: `How this ${category} Foundation was scored` })}
               {...(scoringEvidence ? { scoringEvidence } : {})}
               initialContributionExpanded={false}
               scoringExplanation={(

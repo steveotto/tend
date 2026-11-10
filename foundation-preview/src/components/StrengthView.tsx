@@ -1027,6 +1027,7 @@ export function StrengthView({
         health={healthScore?.health ?? null}
         consistencyCaption="Consistency across eligible Strength-linked Rhythms."
         onTrackCaption="Whether eligible Strength-linked Rhythms are caught up."
+        showMeasures={!foundationNavigation}
         overallHealthScore={overallHealthScore}
         categoryHealthScore={categoryHealthScore}
         linkedRhythmCount={rhythms.filter(item => foundationRhythmIds(item.rhythm).includes('health-strength')).length}
