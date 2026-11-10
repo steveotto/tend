@@ -21,6 +21,44 @@ const categoryEvidence: HealthAggregateEvidence = {
   notes: ['Unscored Foundations are excluded from this average.']
 };
 
+const fitnessExplanations = [
+  { label: 'Strength', explanation: 'Averages active linked Strength Rhythms that have both Consistency and On Track scores.' },
+  { label: 'Cardio', explanation: 'Consistency averages eligible completed weeks in the four-week lookback with full tracking and trustworthy targets.' },
+  { label: 'Weight', explanation: 'Averages available scores from active linked Weight Rhythms separately for each measure.' },
+  { label: 'Flexibility', explanation: 'Consistency averages regions with valid stretch history; On Track is not scored.' }
+] as const;
+
+function fitnessEvidence(rows: HealthAggregateEvidence['rows']): HealthAggregateEvidence {
+  const consistencyScores = rows
+    .map(row => row.consistency)
+    .filter((score): score is number => score !== null);
+  const onTrackScores = rows
+    .map(row => row.onTrack)
+    .filter((score): score is number => score !== null);
+  const average = (scores: readonly number[]) => scores.length
+    ? scores.reduce((total, score) => total + score, 0) / scores.length
+    : null;
+  return {
+    heading: 'Health & Fitness measure scores',
+    description: 'Available scores are averaged separately.',
+    itemLabel: 'Measure',
+    rows,
+    consistencyAverage: average(consistencyScores),
+    consistencyCount: consistencyScores.length,
+    onTrackAverage: average(onTrackScores),
+    onTrackCount: onTrackScores.length,
+    averageLabels: {
+      consistency: 'Average Consistency',
+      onTrack: 'Average On Track'
+    },
+    notes: ['Unavailable scores are excluded.'],
+    emptyState: 'No scores available yet.',
+    showEmptyStateWhenNoAverages: true,
+    weightSummary: null,
+    areaExplanations: fitnessExplanations
+  };
+}
+
 describe('shared Health scoring details card', () => {
   afterEach(cleanup);
 
@@ -154,5 +192,123 @@ describe('shared Health scoring details card', () => {
     expect(screen.getByLabelText('25% times 81.234 equals 20.3085 points')).toBeTruthy();
     expect(screen.getByText('66.666 + 33.333 ÷ 2 = 49.9995')).toBeTruthy();
     expect(screen.getByText('100 + 100 ÷ 2 = 100')).toBeTruthy();
+  });
+
+  it('shows the concise all-unavailable Health & Fitness state without a combined count', async () => {
+    const user = userEvent.setup();
+    const rows = [
+      { id: 'strength', label: 'Strength', consistency: null, onTrack: null },
+      { id: 'cardio', label: 'Cardio', consistency: null, onTrack: null },
+      { id: 'weight', label: 'Weight', consistency: null, onTrack: null },
+      { id: 'flexibility', label: 'Flexibility', consistency: null, onTrack: null }
+    ] as const;
+    const { container } = render(
+      <HealthScoringDetailsCard
+        title="How this Category was scored"
+        healthScore={null}
+        consistencyScore={null}
+        onTrackScore={null}
+        evidence={fitnessEvidence(rows)}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'How this Category was scored' }));
+    const evidence = screen.getByRole('region', { name: 'Health & Fitness measure scores' });
+    expect(within(evidence).getByText('Available scores are averaged separately.')).toBeTruthy();
+    expect(within(evidence).getAllByRole('columnheader').map(header => header.textContent))
+      .toEqual(['Measure', 'Consistency', 'On Track']);
+    expect(within(evidence).getAllByRole('row')).toHaveLength(5);
+    for (const label of ['Strength', 'Cardio', 'Weight', 'Flexibility']) {
+      expect(within(evidence).getByRole('row', { name: `${label} — —` })).toBeTruthy();
+    }
+    expect(within(evidence).getByRole('status').textContent).toBe('No scores available yet.');
+    const averages = evidence.querySelectorAll('.health-aggregate-evidence__averages p');
+    expect(averages[0]?.textContent).toBe('Average Consistency—');
+    expect(averages[1]?.textContent).toBe('Average On Track—');
+    expect(within(evidence).getByText('Unavailable scores are excluded.')).toBeTruthy();
+    expect(within(evidence).queryByText(/of 4/)).toBeNull();
+    expect(container.querySelector('h4')?.textContent).toBe('How Health is calculated');
+    expect(container.querySelector('.rhythm-health-scoring-card__formula--total')?.textContent)
+      .toContain('One or both component scores are unavailable.');
+    expect(within(container).queryByText('Consistency counts three times as much as On Track.')).toBeNull();
+    expect(within(evidence).queryByText(/averages tracked stretch-region scores/i)).toBeNull();
+
+    const areaDisclosure = within(evidence).getByRole('button', { name: 'How each area is scored' });
+    expect(within(evidence).getByRole('heading', {
+      level: 5,
+      name: 'How each area is scored'
+    })).toBeTruthy();
+    expect(areaDisclosure.getAttribute('aria-expanded')).toBe('false');
+    const areaContent = document.getElementById(areaDisclosure.getAttribute('aria-controls')!);
+    expect(areaContent?.hasAttribute('hidden')).toBe(true);
+    areaDisclosure.focus();
+    await user.keyboard('{Enter}');
+    expect(areaDisclosure.getAttribute('aria-expanded')).toBe('true');
+    expect(areaContent?.hasAttribute('hidden')).toBe(false);
+    for (const { label } of fitnessExplanations) {
+      expect(within(areaContent!).getByText(`${label}:`)).toBeTruthy();
+    }
+  });
+
+  it('keeps partially available measures independent and preserves zero as a valid score', async () => {
+    const user = userEvent.setup();
+    const rows = [
+      { id: 'strength', label: 'Strength', consistency: 0, onTrack: null },
+      { id: 'cardio', label: 'Cardio', consistency: null, onTrack: 80 },
+      { id: 'weight', label: 'Weight', consistency: null, onTrack: null },
+      { id: 'flexibility', label: 'Flexibility', consistency: null, onTrack: null }
+    ] as const;
+    render(
+      <HealthScoringDetailsCard
+        title="How this Category was scored"
+        healthScore={null}
+        consistencyScore={0}
+        onTrackScore={80}
+        evidence={fitnessEvidence(rows)}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'How this Category was scored' }));
+    const evidence = screen.getByRole('region', { name: 'Health & Fitness measure scores' });
+    expect(within(evidence).getByRole('row', { name: 'Strength 0 —' })).toBeTruthy();
+    expect(within(evidence).getByRole('row', { name: 'Cardio — 80' })).toBeTruthy();
+    const averages = evidence.querySelectorAll('.health-aggregate-evidence__averages p');
+    expect(averages[0]?.textContent).toContain('Average Consistency0');
+    expect(averages[0]?.textContent).toContain('= 0');
+    expect(averages[1]?.textContent).toContain('Average On Track80');
+    expect(within(evidence).queryByText('No scores available yet.')).toBeNull();
+    expect(within(evidence).queryByText(/of 4/)).toBeNull();
+  });
+
+  it('shows all fully scored rows and averages with existing score formatting', async () => {
+    const user = userEvent.setup();
+    const rows = [
+      { id: 'strength', label: 'Strength', consistency: 81.6, onTrack: 76 },
+      { id: 'cardio', label: 'Cardio', consistency: 70, onTrack: 88 },
+      { id: 'weight', label: 'Weight', consistency: 92, onTrack: 64 },
+      { id: 'flexibility', label: 'Flexibility', consistency: 60, onTrack: null }
+    ] as const;
+    render(
+      <HealthScoringDetailsCard
+        title="How this Category was scored"
+        healthScore={null}
+        consistencyScore={75.9}
+        onTrackScore={76}
+        evidence={fitnessEvidence(rows)}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'How this Category was scored' }));
+    const evidence = screen.getByRole('region', { name: 'Health & Fitness measure scores' });
+    expect(within(evidence).getAllByRole('row')).toHaveLength(5);
+    expect(within(evidence).getByRole('row', { name: 'Strength 82 76' })).toBeTruthy();
+    expect(within(evidence).getByRole('row', { name: 'Cardio 70 88' })).toBeTruthy();
+    expect(within(evidence).getByRole('row', { name: 'Weight 92 64' })).toBeTruthy();
+    expect(within(evidence).getByRole('row', { name: 'Flexibility 60 —' })).toBeTruthy();
+    const averages = evidence.querySelectorAll('.health-aggregate-evidence__averages p');
+    expect(averages[0]?.textContent).toContain('= 75.9');
+    expect(averages[1]?.textContent).toContain('= 76');
+    expect(within(evidence).queryByText('No scores available yet.')).toBeNull();
+    expect(within(evidence).getByText('Unavailable scores are excluded.')).toBeTruthy();
   });
 });

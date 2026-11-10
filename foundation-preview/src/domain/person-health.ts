@@ -138,3 +138,13 @@ export function selectPersonHealth(
     ...aggregateHealthMeasures(measures)
   };
 }
+
+export function selectPersonOverallHealth(
+  rhythms: Pick<PersonRhythmHealthSelection, 'consistency' | 'onTrack'>
+): PersonHealthSelection {
+  return selectPersonHealth([
+    { id: 'rhythms', consistency: rhythms.consistency, onTrack: rhythms.onTrack },
+    { id: 'connection', consistency: null, onTrack: null, scoringStatus: 'unavailable' },
+    { id: 'prayer', consistency: null, onTrack: null, scoringStatus: 'unavailable' }
+  ]);
+}

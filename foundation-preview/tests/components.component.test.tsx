@@ -540,6 +540,7 @@ describe('shared preview components', () => {
     );
     const simpleCard = screen.getByRole('article', { name: rhythm.title });
     expect(within(simpleCard).getByRole('heading', { name: rhythm.title, level: 3 })).toBeTruthy();
+    expect(within(simpleCard).getByText('Automated at bank')).toBeTruthy();
     expect(within(simpleCard).queryByText(rhythm.description!)).toBeNull();
     expect(within(simpleCard).getByText('Not yet tended')).toBeTruthy();
     const detailsButton = within(simpleCard).getByRole('button', { name: 'Details for Monthly savings transfer' });

@@ -28,6 +28,7 @@ type HealthScoreSummaryProps = {
   onTrackDetailCaption?: string;
   consistencyDescription?: string;
   onTrackDescription?: string;
+  headerStyle?: 'summary' | 'category';
 };
 
 export function HealthScoreSummary({
@@ -52,7 +53,8 @@ export function HealthScoreSummary({
   consistencyDetailCaption = 'How regularly you show up.',
   onTrackDetailCaption = 'How caught up you are.',
   consistencyDescription,
-  onTrackDescription
+  onTrackDescription,
+  headerStyle = 'summary'
 }: HealthScoreSummaryProps) {
   const id = useId();
   const headingId = `${id}-heading`;
@@ -71,31 +73,52 @@ export function HealthScoreSummary({
 
   return (
     <section
-      className={`card category-health-card category-health-summary health-score-summary ${className}`.trim()}
+      className={`${headerStyle === 'category'
+        ? 'health-score-breakdown rhythm-history-view__score-card category-health-summary'
+        : 'card category-health-card category-health-summary health-score-summary'} ${className}`.trim()}
       aria-label={ariaLabel}
       aria-labelledby={ariaLabel ? undefined : headingId}
       onKeyDown={handleKeyDown}
     >
-      <div className="category-health-heading">
-        <div className="category-health-copy">
-          <div className="category-health-summary__title-row">
-            <h3 id={headingId}>{title}</h3>
-            <HealthScoreInfoButton
-              ref={toggleRef}
-              label={`Show ${infoLabel} scoring explanation`}
-              expanded={expanded}
-              controls={detailsId}
-              onClick={() => onExpandedChange(!expanded)}
-            />
+      {headerStyle === 'category' ? (
+        <header className="health-score-breakdown__header">
+          <h3 id={headingId}>{title}</h3>
+          <HealthSummaryValue
+            label={`${title} score`}
+            score={score}
+            className="person-profile-overall-score"
+            decorative={expanded}
+          />
+          <HealthScoreInfoButton
+            ref={toggleRef}
+            label={`Show ${infoLabel} scoring explanation`}
+            expanded={expanded}
+            controls={detailsId}
+            onClick={() => onExpandedChange(!expanded)}
+          />
+        </header>
+      ) : (
+        <div className="category-health-heading">
+          <div className="category-health-copy">
+            <div className="category-health-summary__title-row">
+              <h3 id={headingId}>{title}</h3>
+              <HealthScoreInfoButton
+                ref={toggleRef}
+                label={`Show ${infoLabel} scoring explanation`}
+                expanded={expanded}
+                controls={detailsId}
+                onClick={() => onExpandedChange(!expanded)}
+              />
+            </div>
           </div>
+          <HealthSummaryValue
+            label={`${title} score`}
+            score={score}
+            className="category-health-score"
+            decorative={expanded}
+          />
         </div>
-        <HealthSummaryValue
-          label={`${title} score`}
-          score={score}
-          className="category-health-score"
-          decorative={expanded}
-        />
-      </div>
+      )}
 
       {showMeasures ? (
         <HealthScoreMeasures

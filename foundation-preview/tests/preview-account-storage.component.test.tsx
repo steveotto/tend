@@ -227,7 +227,7 @@ describe('account-isolated Preview storage', () => {
     const { rerender } = render(<App identity={accountA} />);
     await screen.findByRole('button', { name: 'People' });
     await user.click(screen.getByRole('button', { name: 'People' }));
-    await screen.findByText('Account A');
+    await screen.findByText('Account', { selector: '.people-card__name' });
     await user.click(screen.getByRole('button', { name: 'Open profile for Account A' }));
     const profile = screen.getByRole('main', { name: 'Account A' });
     await user.click(within(profile).getByRole('button', { name: 'Person settings' }));
@@ -237,21 +237,21 @@ describe('account-isolated Preview storage', () => {
     expect(within(settings).getByRole('combobox', { name: 'Category: Friend' })).toBeTruthy();
 
     rerender(<App identity={{ ...accountB, sessionGeneration: 2 }} />);
-    expect(screen.queryByText('Account A')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open profile for Account A' })).toBeNull();
     expect(screen.queryByRole('dialog', { name: 'Person settings — Account A' })).toBeNull();
     expect(valuesForAccount(scopeA.storage)).toBe(savedAccountARaw);
     await screen.findByRole('button', { name: 'People' });
     await user.click(screen.getByRole('button', { name: 'People' }));
-    await screen.findByText('Account B');
+    await screen.findByRole('button', { name: 'Open profile for Account B' });
 
     rerender(<App identity={{ kind: 'signed-out' }} />);
-    expect(screen.queryByText('Account B')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open profile for Account B' })).toBeNull();
     expect(screen.getByText('No account Preview data was loaded.')).toBeTruthy();
 
     rerender(<App identity={{ ...accountA, sessionGeneration: 3 }} />);
     await screen.findByRole('button', { name: 'People' });
     await user.click(await screen.findByRole('button', { name: 'People' }));
-    await screen.findByText('Account A');
+    await screen.findByRole('button', { name: 'Open profile for Account A' });
   });
 
   it('does not load or claim the existing synthetic key when account identity is unavailable', async () => {

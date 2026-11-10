@@ -21,6 +21,11 @@ export type HealthScoringExcludedEvidenceRow = {
   reason: string;
 };
 
+export type HealthAreaScoringExplanation = {
+  label: string;
+  explanation: string;
+};
+
 export type HealthAggregateEvidence = {
   heading: string;
   description?: string;
@@ -35,6 +40,13 @@ export type HealthAggregateEvidence = {
   excludedRows?: readonly HealthScoringExcludedEvidenceRow[];
   notes?: readonly string[];
   emptyState?: string;
+  showEmptyStateWhenNoAverages?: boolean;
+  averageLabels?: {
+    consistency: string;
+    onTrack: string;
+  };
+  weightSummary?: string | null;
+  areaExplanations?: readonly HealthAreaScoringExplanation[];
   presentation?: 'person-rhythm';
   countLabel?: string;
 };
@@ -85,7 +97,9 @@ export function HealthScoringDetailsCard({
         {formulaContent ?? (
           <section className="rhythm-health-scoring-card__calculation health-scoring-details-card__calculation">
             <h4>How Health is calculated</h4>
-            <p>Consistency counts three times as much as On Track.</p>
+            {evidence?.weightSummary !== null && (
+              <p>{evidence?.weightSummary ?? 'Consistency counts three times as much as On Track.'}</p>
+            )}
             <HealthWeightPanels
               consistencyScore={consistencyScore}
               onTrackScore={onTrackScore}
@@ -120,6 +134,7 @@ function AggregateEvidence({
   const { rows, otherCount = 0 } = evidence;
   const personRhythmPresentation = evidence.presentation === 'person-rhythm';
   const excludedRows = evidence.excludedRows ?? [];
+  const noAveragesAvailable = evidence.consistencyAverage === null && evidence.onTrackAverage === null;
   return (
     <section
       className={`health-aggregate-evidence${personRhythmPresentation ? ' health-aggregate-evidence--person-rhythm' : ''}`}
@@ -201,6 +216,11 @@ function AggregateEvidence({
           {evidence.emptyState ?? `No eligible ${evidence.itemLabel.toLowerCase()} inputs are available.`}
         </p>
       )}
+      {evidence.showEmptyStateWhenNoAverages && noAveragesAvailable && rows.length > 0 && (
+        <p className="health-aggregate-evidence__empty" role="status">
+          {evidence.emptyState ?? 'No scores available yet.'}
+        </p>
+      )}
       {excludedRows.length > 0 && (personRhythmPresentation ? (
         <details className="health-aggregate-evidence__not-scored">
           <summary>Not scored ({excludedRows.length})</summary>
@@ -229,7 +249,7 @@ function AggregateEvidence({
       ))}
       <div className="health-aggregate-evidence__averages">
         <AverageRow
-          label="Consistency average"
+          label={evidence.averageLabels?.consistency ?? 'Consistency average'}
           rows={rows}
           measure="consistency"
           count={evidence.consistencyCount}
@@ -238,7 +258,7 @@ function AggregateEvidence({
           compact={personRhythmPresentation}
         />
         <AverageRow
-          label="On Track average"
+          label={evidence.averageLabels?.onTrack ?? 'On Track average'}
           rows={rows}
           measure="onTrack"
           count={evidence.onTrackCount}
@@ -253,6 +273,37 @@ function AggregateEvidence({
       {!personRhythmPresentation && evidence.notes?.map(note => (
         <p className="health-aggregate-evidence__note" key={note}>{note}</p>
       ))}
+      {evidence.areaExplanations && evidence.areaExplanations.length > 0 && (
+        <AreaScoringDisclosure explanations={evidence.areaExplanations} />
+      )}
+    </section>
+  );
+}
+
+function AreaScoringDisclosure({
+  explanations
+}: {
+  explanations: readonly HealthAreaScoringExplanation[];
+}) {
+  const headingId = useId();
+  const contentId = useId();
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <section className="health-scoring-details-card__area-scoring" aria-labelledby={headingId}>
+      <HealthDetailsExpandableHeader
+        id={headingId}
+        contentId={contentId}
+        title="How each area is scored"
+        expanded={expanded}
+        onToggle={() => setExpanded(value => !value)}
+        headingLevel="h5"
+      />
+      <div id={contentId} className="rhythm-health-scoring-card__content" hidden={!expanded}>
+        {explanations.map(({ label, explanation }) => (
+          <p key={label}><strong>{label}:</strong> {explanation}</p>
+        ))}
+      </div>
     </section>
   );
 }

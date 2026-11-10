@@ -199,6 +199,47 @@ export function connectionsForPerson(
     .sort(compareConnectionsNewestFirst);
 }
 
+export function latestValidConnection(
+  connections: readonly FriendshipConnection[]
+): FriendshipConnection | null {
+  return connections
+    .filter(connection => isValidDate(connection.date)
+      && connection.deleted !== true
+      && connection.isDeleted !== true
+      && connection.deletedAt == null
+      && connection.deleted_at == null)
+    .slice()
+    .sort(compareConnectionsNewestFirst)[0] ?? null;
+}
+
+export function latestValidConnectionForPerson(
+  data: FriendshipData,
+  personId: PersonId
+): FriendshipConnection | null {
+  return latestValidConnection(connectionsForPerson(data, personId));
+}
+
+export function formatConnectionRecency(date: string, today: string): string | null {
+  if (!isValidDate(date) || !isValidDate(today)) return null;
+  const [year, month, day] = date.split('-').map(Number);
+  const [todayYear, todayMonth, todayDay] = today.split('-').map(Number);
+  const timestamp = Date.UTC(year!, month! - 1, day!);
+  const current = Date.UTC(todayYear!, todayMonth! - 1, todayDay!);
+  const days = Math.floor((current - timestamp) / 86_400_000);
+  if (days < 0) {
+    return new Date(year!, month! - 1, day!, 12).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric'
+    });
+  }
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days} days ago`;
+  if (days < 35) return `${Math.floor(days / 7)} wk ago`;
+  if (days < 365) return `${Math.floor(days / 30)} mo ago`;
+  return `${Math.floor(days / 365)} yr ago`;
+}
+
 function compareConnectionsNewestFirst(a: FriendshipConnection, b: FriendshipConnection): number {
   return b.date.localeCompare(a.date)
     || (b.time ?? '').localeCompare(a.time ?? '')

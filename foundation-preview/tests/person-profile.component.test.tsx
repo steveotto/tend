@@ -337,8 +337,12 @@ describe('shared person profile', () => {
     expect(screen.getByLabelText('Birthday: Dec 2')).toBeTruthy();
     expect(screen.getByLabelText('Anniversary: Jun 12')).toBeTruthy();
     const overallHealth = screen.getByRole('region', { name: 'Overall Health summary' });
+    const overallHeader = overallHealth.querySelector('.health-score-breakdown__header');
+    expect(Array.from(overallHeader!.children).map(child => child.tagName)).toEqual(['H3', 'SPAN', 'BUTTON']);
     expect(within(overallHealth).getByRole('meter', { name: 'Overall Health score' })
       .getAttribute('aria-valuetext')).toBe('Score unavailable');
+    expect(overallHealth.classList.contains('health-score-breakdown')).toBe(true);
+    expect(overallHealth.classList.contains('health-score-summary')).toBe(false);
     expect(screen.getAllByText('—').length).toBeGreaterThan(1);
     expect(screen.getByRole('tab', { name: 'Prayer' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Notes (0)' })).toBeTruthy();

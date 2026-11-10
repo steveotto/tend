@@ -3,16 +3,20 @@ export function HealthDetailsExpandableHeader({
   contentId,
   title,
   expanded,
-  onToggle
+  onToggle,
+  headingLevel = 'h3'
 }: {
   id: string;
   contentId: string;
   title: string;
   expanded: boolean;
   onToggle: () => void;
+  headingLevel?: 'h3' | 'h4' | 'h5';
 }) {
+  const Heading = headingLevel;
+
   return (
-    <h3 id={id} className="health-details-expandable-header__heading">
+    <Heading id={id} className="health-details-expandable-header__heading">
       <button
         type="button"
         className="health-details-expandable-header"
@@ -25,6 +29,6 @@ export function HealthDetailsExpandableHeader({
           <path d={expanded ? 'm3 10 5-5 5 5' : 'm3 6 5 5 5-5'} />
         </svg>
       </button>
-    </h3>
+    </Heading>
   );
 }

@@ -54,7 +54,7 @@ import { createPersonHealthRollup } from './HealthRollupDiagram.tsx';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
 import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
 import { PersonPrayerPanel } from './PersonPrayerPanel.tsx';
-import { selectPersonHealth, selectPersonRhythmHealth } from '../domain/person-health.ts';
+import { selectPersonOverallHealth, selectPersonRhythmHealth } from '../domain/person-health.ts';
 import { personPrayerRequestsForPerson } from '../domain/person-prayers.ts';
 import { connectionCadenceOptions } from './PersonConnectionCadenceSelect.tsx';
 import type {
@@ -233,11 +233,7 @@ export function PersonProfileView({
     rhythmScores,
     archivedRhythmIds
   );
-  const overallHealth = selectPersonHealth([
-    { id: 'rhythms', consistency: personRhythmHealth.consistency, onTrack: personRhythmHealth.onTrack },
-    { id: 'connection', consistency: null, onTrack: null, scoringStatus: 'unavailable' },
-    { id: 'prayer', consistency: null, onTrack: null, scoringStatus: 'unavailable' }
-  ]);
+  const overallHealth = selectPersonOverallHealth(personRhythmHealth);
   const componentScores = [
     { id: 'rhythms', label: 'Rhythms', score: personRhythmHealth.health },
     { id: 'connections', label: 'Connections', score: null },
@@ -588,6 +584,7 @@ export function PersonProfileView({
               unscoredCount={overallHealth.unscoredComponentIds.length}
               showMeasures={false}
               showHealthMeter
+              headerStyle="category"
               detailsDialogTitle={`${personFirstName(person.displayName)}’s Overall Health details`}
               detailsLabel={`${person.displayName}’s Overall Health scoring explanation`}
               detailsContent={(

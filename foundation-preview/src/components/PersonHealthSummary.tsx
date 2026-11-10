@@ -38,6 +38,7 @@ type PersonHealthSummaryProps = {
   detailsContent?: ReactNode;
   detailsDialogTitle?: string;
   detailsLabel?: string;
+  headerStyle?: 'summary' | 'category';
 };
 
 export function PersonHealthSummary({
@@ -58,7 +59,8 @@ export function PersonHealthSummary({
   summaryContent,
   detailsContent,
   detailsDialogTitle,
-  detailsLabel
+  detailsLabel,
+  headerStyle = 'summary'
 }: PersonHealthSummaryProps) {
   const [expanded, setExpanded] = useState(false);
   const coverage = coverageLabel ?? (totalCount === 0
@@ -83,6 +85,7 @@ export function PersonHealthSummary({
       showMeasures={showMeasures}
       showMeasureCaptions={showMeasureCaptions}
       showHealthMeter={showHealthMeter}
+      headerStyle={headerStyle}
       summaryContent={summaryContent}
       {...(detailsContent === undefined ? {} : { detailsContent })}
       {...(detailsDialogTitle === undefined ? {} : { detailsDialogTitle })}

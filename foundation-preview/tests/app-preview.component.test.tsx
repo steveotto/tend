@@ -6525,9 +6525,9 @@ describe('Tend Today preview', () => {
     expect(within(measures).getByRole('row', { name: /Cardio/ })).toBeTruthy();
     expect(within(measures).getByRole('row', { name: /Weight/ })).toBeTruthy();
     expect(within(measures).getByRole('row', { name: /Flexibility/ })).toBeTruthy();
-    expect(within(measures).getByText(
-      '0 of 4 measures have Consistency scores; 0 of 4 have On Track scores.'
-    )).toBeTruthy();
+    expect(within(measures).getByRole('status').textContent).toBe('No scores available yet.');
+    expect(within(measures).getByText('Average Consistency')).toBeTruthy();
+    expect(within(measures).getByText('Average On Track')).toBeTruthy();
     await expandHealthDisclosure(user, dialog, 'How this Category contributes');
     expect(within(dialog).getByRole('heading', { name: 'How this Category contributes' })).toBeTruthy();
     expect(within(dialog).getByRole('group', { name: 'Category identity: Health & Fitness' })).toBeTruthy();
