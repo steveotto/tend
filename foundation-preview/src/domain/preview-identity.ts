@@ -5,7 +5,7 @@ export type PreviewIdentityState =
   | { kind: 'signed-out' }
   | { kind: 'error'; message: string }
   | { kind: 'development'; sessionGeneration: number }
-  | { kind: 'authenticated'; accountId: AccountId; sessionGeneration: number };
+  | { kind: 'authenticated'; accountId: AccountId; sessionGeneration: number; email?: string };
 
 export const DEVELOPMENT_PREVIEW_IDENTITY: PreviewIdentityState = Object.freeze({
   kind: 'development',
@@ -18,7 +18,8 @@ const accountIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 
 export function createAuthenticatedPreviewIdentity(
   accountId: string,
-  sessionGeneration: number
+  sessionGeneration: number,
+  email?: string | null
 ): PreviewIdentityState {
   if (!accountIdPattern.test(accountId) || !Number.isSafeInteger(sessionGeneration) || sessionGeneration < 0) {
     return {
@@ -29,7 +30,8 @@ export function createAuthenticatedPreviewIdentity(
   return {
     kind: 'authenticated',
     accountId: accountId.toLowerCase() as AccountId,
-    sessionGeneration
+    sessionGeneration,
+    ...(typeof email === 'string' && email.trim() ? { email: email.trim() } : {})
   };
 }
 
@@ -54,8 +56,13 @@ export function validatePreviewIdentity(value: unknown): PreviewIdentityState {
   }
   if (value.kind === 'authenticated'
     && typeof value.accountId === 'string'
-    && Number.isSafeInteger(value.sessionGeneration)) {
-    return createAuthenticatedPreviewIdentity(value.accountId, Number(value.sessionGeneration));
+    && Number.isSafeInteger(value.sessionGeneration)
+    && (value.email === undefined || typeof value.email === 'string')) {
+    return createAuthenticatedPreviewIdentity(
+      value.accountId,
+      Number(value.sessionGeneration),
+      value.email as string | undefined
+    );
   }
   return { kind: 'error', message: 'Preview identity is invalid.' };
 }

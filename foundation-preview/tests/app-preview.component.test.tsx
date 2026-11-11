@@ -6818,8 +6818,10 @@ describe('Tend Today preview', () => {
     await user.click(within(screen.getByRole('region', { name: 'Foundations' }))
       .getByRole('button', { name: /Open Strength foundation details/ }));
     await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Start workout' })).toBeTruthy());
-    await user.click(screen.getByRole('button', { name: 'Start workout' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Workout' })).toBeTruthy());
+    await user.click(screen.getByRole('button', { name: 'Workout' }));
+    const workoutChoice = await screen.findByRole('dialog', { name: 'Foundation workout' });
+    await user.click(within(workoutChoice).getByRole('button', { name: /Full workout/ }));
     const foundationSession = await screen.findByRole('dialog', { name: 'Foundation workout' });
     await user.click(within(foundationSession).getByRole('button', { name: 'Log set 1' }));
     await user.click(within(foundationSession).getByRole('button', { name: 'Finish & review' }));

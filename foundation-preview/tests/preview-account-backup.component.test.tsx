@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PreviewAccountBackupControls } from '../src/components/PreviewAccountBackupControls.tsx';
@@ -130,9 +130,10 @@ function renderControls(
   localRaw: string,
   onRestore?: (data: PreviewData, expectedRaw: string | null) => string | null,
   isIdentityCurrent: () => boolean = () => true,
-  accountId = accountA
+  accountId = accountA,
+  openAdvanced = true
 ) {
-  return render(
+  const view = render(
     <PreviewAccountBackupControls
       api={api}
       accountId={accountId}
@@ -157,10 +158,14 @@ function renderControls(
       onRecoveryChanged={() => {}}
     />
   );
+  if (openAdvanced) {
+    fireEvent.click(screen.getByRole('button', { name: /Advanced recovery/ }));
+  }
+  return view;
 }
 
 describe('manual Preview account backup and restore', () => {
-  it('shows the signed-in account and validated backup date/revision', async () => {
+  it('keeps technical account status collapsed inside advanced recovery', async () => {
     const backend = memoryBackend();
     const data = fitnessData('Status');
     const local = accountStorage(data);
@@ -168,8 +173,11 @@ describe('manual Preview account backup and restore', () => {
 
     renderControls(backend.apiFor(accountA), local.storage, data, local.raw);
 
-    expect(screen.getByText('Signed-in account ending in 0001.')).toBeTruthy();
-    expect(await screen.findByText(/Last backup: .*revision 3\./)).toBeTruthy();
+    const details = screen.getByText('Technical details').closest('details');
+    expect(details?.hasAttribute('open')).toBe(false);
+    fireEvent.click(screen.getByText('Technical details'));
+    expect(await screen.findByText(/Last updated .*revision 3\./)).toBeTruthy();
+    expect(screen.queryByText(/Signed-in account ending in/)).toBeNull();
   });
 
   it('clearly disables account operations when the authenticated backup API is unavailable', () => {
@@ -178,10 +186,10 @@ describe('manual Preview account backup and restore', () => {
 
     renderControls(null, local.storage, data, local.raw, undefined, () => true, accountB);
 
-    expect(screen.getByRole('alert').textContent).toMatch(/unavailable/i);
-    expect(screen.getByRole('button', { name: 'Back up to my account' }).hasAttribute('disabled')).toBe(true);
-    expect(screen.getByRole('button', { name: 'Restore from my account' }).hasAttribute('disabled')).toBe(true);
-    expect(screen.getByText('Signed-in account ending in 0002.')).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toMatch(/not configured/i);
+    expect(screen.getByRole('button', { name: /Save this device’s copy to account/ }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: /Replace this device’s data with account copy/ }).hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByText(/Signed-in account ending in/)).toBeNull();
   });
 
   it('downloads the validated current account document through one read without changing either copy', async () => {
@@ -201,11 +209,12 @@ describe('manual Preview account backup and restore', () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 
     renderControls(api, local.storage, localData, local.raw);
-    await screen.findByText(/Last backup: .*revision 7\./);
+    fireEvent.click(screen.getByText('Technical details'));
+    await screen.findByText(/Last updated .*revision 7\./);
     read.mockClear();
-    await user.click(screen.getByRole('button', { name: 'Download current account backup' }));
+    await user.click(screen.getByRole('button', { name: /Download account copy/ }));
 
-    await screen.findByText('Downloaded account backup revision 7. No account data was changed.');
+    await screen.findByText('The account copy was downloaded. No account data was changed.');
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     const blob = createObjectURL.mock.calls[0]?.[0];
     expect(blob).toBeInstanceOf(Blob);
@@ -224,8 +233,8 @@ describe('manual Preview account backup and restore', () => {
     const first = accountStorage(firstData);
 
     renderControls(backend.apiFor(accountA), first.storage, firstData, first.raw);
-    await user.click(screen.getByRole('button', { name: 'Back up to my account' }));
-    await screen.findByText('Backed up to your account (revision 1).');
+    await user.click(screen.getByRole('button', { name: /Save this device’s copy to account/ }));
+    await screen.findByText('This device’s data was saved to your account.');
     expect(backend.records.get(accountA)?.revision).toBe(1);
 
     cleanup();
@@ -233,18 +242,18 @@ describe('manual Preview account backup and restore', () => {
     const second = accountStorage(secondData);
     const exactOriginalLocalRaw = second.raw;
     renderControls(backend.apiFor(accountA), second.storage, secondData, second.raw);
-    await user.click(screen.getByRole('button', { name: 'Restore from my account' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Restore account backup?' });
-    expect(dialog.textContent).toContain('replaces the data saved in this browser');
+    await user.click(screen.getByRole('button', { name: /Replace this device’s data with account copy/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Replace this device’s data?' });
+    expect(dialog.textContent).toContain('replaces local data with the account copy');
 
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(second.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(exactOriginalLocalRaw);
     expect(backend.records.get(accountA)?.revision).toBe(1);
 
-    await user.click(screen.getByRole('button', { name: 'Restore from my account' }));
-    const confirmation = await screen.findByRole('dialog', { name: 'Restore account backup?' });
-    await user.click(within(confirmation).getByRole('button', { name: 'Replace this browser’s data' }));
-    await screen.findByText(/Restored your account backup/);
+    await user.click(screen.getByRole('button', { name: /Replace this device’s data with account copy/ }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Replace this device’s data?' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Replace this device’s data' }));
+    await screen.findByText(/The account copy replaced this device’s data/);
 
     expect(second.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(exactOriginalLocalRaw);
     const restored = loadPreview(second.storage, currentDate);
@@ -269,18 +278,18 @@ describe('manual Preview account backup and restore', () => {
     const local = accountStorage(nextData);
     renderControls(backend.apiFor(accountA), local.storage, nextData, local.raw);
 
-    await user.click(screen.getByRole('button', { name: 'Back up to my account' }));
-    const firstConfirmation = await screen.findByRole('dialog', { name: 'Replace account backup?' });
+    await user.click(screen.getByRole('button', { name: /Save this device’s copy to account/ }));
+    const firstConfirmation = await screen.findByRole('dialog', { name: 'Replace account copy?' });
     expect(firstConfirmation.textContent).toContain('These copies differ.');
     await user.click(within(firstConfirmation).getByRole('button', { name: 'Cancel' }));
     expect(backend.records.get(accountA)?.revision).toBe(1);
     expect(backend.records.get(accountA)?.document).toEqual(createPreviewEnvelope(previousData));
 
-    await user.click(screen.getByRole('button', { name: 'Back up to my account' }));
-    const secondConfirmation = await screen.findByRole('dialog', { name: 'Replace account backup?' });
-    await user.click(within(secondConfirmation).getByRole('button', { name: 'Replace account backup' }));
+    await user.click(screen.getByRole('button', { name: /Save this device’s copy to account/ }));
+    const secondConfirmation = await screen.findByRole('dialog', { name: 'Replace account copy?' });
+    await user.click(within(secondConfirmation).getByRole('button', { name: 'Replace account copy' }));
 
-    await screen.findByText('Updated your account backup (revision 2).');
+    await screen.findByText('The account copy was updated.');
     expect(backend.records.get(accountA)?.revision).toBe(2);
     expect(backend.records.get(accountA)?.document).toEqual(createPreviewEnvelope(nextData));
   });
@@ -294,22 +303,22 @@ describe('manual Preview account backup and restore', () => {
     const second = accountStorage(secondData);
 
     renderControls(backend.apiFor(accountA), first.storage, firstData, first.raw);
-    await user.click(screen.getByRole('button', { name: 'Back up to my account' }));
-    await screen.findByText('Backed up to your account (revision 1).');
+    await user.click(screen.getByRole('button', { name: /Save this device’s copy to account/ }));
+    await screen.findByText('This device’s data was saved to your account.');
     expect(await backend.apiFor(accountB).read()).toBeNull();
     cleanup();
 
     const changedLocalData = fitnessData('New local copy');
     const changedLocal = accountStorage(changedLocalData);
     renderControls(backend.apiFor(accountA), changedLocal.storage, changedLocalData, changedLocal.raw);
-    await user.click(screen.getByRole('button', { name: 'Back up to my account' }));
-    const confirmation = await screen.findByRole('dialog', { name: 'Replace account backup?' });
-    expect(confirmation.textContent).toContain('replaces account backup revision 1');
+    await user.click(screen.getByRole('button', { name: /Save this device’s copy to account/ }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Replace account copy?' });
+    expect(confirmation.textContent).toContain('replaces the account copy with this device’s saved data');
     backend.records.set(
       accountA,
       accountBackupRecord(createPreviewEnvelope(secondData), 2)
     );
-    await user.click(within(confirmation).getByRole('button', { name: 'Replace account backup' }));
+    await user.click(within(confirmation).getByRole('button', { name: 'Replace account copy' }));
 
     await screen.findByRole('alert');
     expect(backend.records.get(accountA)?.revision).toBe(2);
@@ -328,10 +337,10 @@ describe('manual Preview account backup and restore', () => {
     const local = accountStorage(localData);
 
     renderControls(backend.apiFor(accountA), local.storage, localData, local.raw);
-    await user.click(screen.getByRole('button', { name: 'Restore from my account' }));
-    const confirmation = await screen.findByRole('dialog', { name: 'Restore account backup?' });
+    await user.click(screen.getByRole('button', { name: /Replace this device’s data with account copy/ }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Replace this device’s data?' });
     backend.records.set(accountA, accountBackupRecord(createPreviewEnvelope(fitnessData('New remote')), 2));
-    await user.click(within(confirmation).getByRole('button', { name: 'Replace this browser’s data' }));
+    await user.click(within(confirmation).getByRole('button', { name: 'Replace this device’s data' }));
 
     await screen.findByRole('alert');
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
@@ -353,13 +362,14 @@ describe('manual Preview account backup and restore', () => {
     const local = accountStorage(localData);
 
     renderControls(api, local.storage, localData, local.raw, undefined, () => accountIsCurrent);
-    await user.click(screen.getByRole('button', { name: 'Restore from my account' }));
+    await user.click(screen.getByRole('button', { name: /Replace this device’s data with account copy/ }));
     accountIsCurrent = false;
     await act(async () => {
       resolveRead?.(accountBackupRecord(createPreviewEnvelope(remoteData), 1));
       await Promise.resolve();
     });
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Replace this device’s data?' })).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Advanced recovery' })).toBeTruthy();
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
     expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBeNull();
   });
@@ -380,14 +390,14 @@ describe('manual Preview account backup and restore', () => {
     };
 
     renderControls(backend.apiFor(accountA), failingStorage, localData, local.raw);
-    await user.click(screen.getByRole('button', { name: 'Restore from my account' }));
-    const confirmation = await screen.findByRole('dialog', { name: 'Restore account backup?' });
-    await user.click(within(confirmation).getByRole('button', { name: 'Replace this browser’s data' }));
+    await user.click(screen.getByRole('button', { name: /Replace this device’s data with account copy/ }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Replace this device’s data?' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Replace this device’s data' }));
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/could not be saved on this device/i);
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
     expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(local.raw);
-    expect(screen.queryByText(/Restored your account backup/)).toBeNull();
+    expect(screen.queryByText(/The account copy replaced this device’s data/)).toBeNull();
   });
 
   it('leaves both copies unchanged when reading the account fails', async () => {
@@ -402,7 +412,7 @@ describe('manual Preview account backup and restore', () => {
     };
 
     renderControls(api, local.storage, data, local.raw);
-    await user.click(screen.getByRole('button', { name: 'Restore from my account' }));
+    await user.click(screen.getByRole('button', { name: /Replace this device’s data with account copy/ }));
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/simulated network failure/i);
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
@@ -423,9 +433,9 @@ describe('manual Preview account backup and restore', () => {
     };
 
     renderControls(api, local.storage, localData, local.raw);
-    await user.click(screen.getByRole('button', { name: 'Back up to my account' }));
-    const confirmation = await screen.findByRole('dialog', { name: 'Replace account backup?' });
-    await user.click(within(confirmation).getByRole('button', { name: 'Replace account backup' }));
+    await user.click(screen.getByRole('button', { name: /Save this device’s copy to account/ }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Replace account copy?' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Replace account copy' }));
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/simulated interrupted save/i);
     expect(api.save).toHaveBeenCalledTimes(1);
@@ -449,9 +459,9 @@ describe('manual Preview account backup and restore', () => {
     };
 
     renderControls(api, local.storage, localData, local.raw, undefined, () => accountIsCurrent);
-    await user.click(screen.getByRole('button', { name: 'Back up to my account' }));
-    const confirmation = await screen.findByRole('dialog', { name: 'Replace account backup?' });
-    await user.click(within(confirmation).getByRole('button', { name: 'Replace account backup' }));
+    await user.click(screen.getByRole('button', { name: /Save this device’s copy to account/ }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Replace account copy?' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Replace account copy' }));
     accountIsCurrent = false;
     await act(async () => {
       resolveSave?.(2);

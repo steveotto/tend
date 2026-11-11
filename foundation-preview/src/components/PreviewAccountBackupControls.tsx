@@ -37,6 +37,10 @@ type PreviewAccountBackupControlsProps = {
   localRaw: string | null;
   localRecoveryRaw: string | null;
   localRecoveryError?: string | null;
+  cloudRecoveryRaw?: string | null;
+  cloudRecoveryError?: string | null;
+  deviceRecoveryRaw?: string | null;
+  deviceRecoveryError?: string | null;
   autoSyncEnabled?: boolean;
   enabled: boolean;
   syncBusy?: boolean;
@@ -72,12 +76,15 @@ function formatBackupDate(updatedAt: string | null): string {
   }).format(date);
 }
 
-function downloadRecovery(raw: string): string | null {
+function downloadRecovery(
+  raw: string,
+  filename = 'tend-preview-before-account-restore.json'
+): string | null {
   try {
     const url = URL.createObjectURL(new Blob([raw], { type: 'application/json' }));
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'tend-preview-before-account-restore.json';
+    link.download = filename;
     link.style.display = 'none';
     document.body.append(link);
     link.click();
@@ -89,6 +96,39 @@ function downloadRecovery(raw: string): string | null {
   }
 }
 
+type RecoveryActionRowProps = {
+  title: string;
+  description: string;
+  disabled?: boolean;
+  busy?: boolean;
+  onClick: () => void;
+};
+
+function RecoveryActionRow({
+  title,
+  description,
+  disabled = false,
+  busy = false,
+  onClick
+}: RecoveryActionRowProps) {
+  return (
+    <button
+      type="button"
+      className="preview-account-backup__row"
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <span className="preview-account-backup__row-copy">
+        <span className="preview-account-backup__row-title">{title}</span>
+        <span className="preview-account-backup__row-description">{description}</span>
+      </span>
+      <span className="preview-account-backup__row-action" aria-hidden="true">
+        {busy ? 'Working…' : '›'}
+      </span>
+    </button>
+  );
+}
+
 export function PreviewAccountBackupControls({
   api,
   accountId,
@@ -98,6 +138,10 @@ export function PreviewAccountBackupControls({
   localRaw,
   localRecoveryRaw,
   localRecoveryError = null,
+  cloudRecoveryRaw = null,
+  cloudRecoveryError = null,
+  deviceRecoveryRaw = null,
+  deviceRecoveryError = null,
   autoSyncEnabled = true,
   enabled,
   syncBusy = false,
@@ -109,7 +153,9 @@ export function PreviewAccountBackupControls({
   onOperationFinished
 }: PreviewAccountBackupControlsProps) {
   const [pending, setPending] = useState<PendingConfirmation | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [activeOperation, setActiveOperation] = useState<'backup' | 'restore' | 'download' | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [backupStatus, setBackupStatus] = useState<AccountBackupStatus>(
@@ -198,6 +244,7 @@ export function PreviewAccountBackupControls({
     operationInProgress.current = true;
     statusRequestId.current += 1;
     setBusy(true);
+    setActiveOperation('backup');
     setMessage('');
     setError('');
     let keepLockedForConfirmation = false;
@@ -215,9 +262,9 @@ export function PreviewAccountBackupControls({
           setError('This browser’s preview changed while the backup was being prepared. No account data was changed; try again.');
           return;
         }
-        const revision = await api.save(document, 0);
+        await api.save(document, 0);
         if (!isIdentityCurrent()) return;
-        setMessage(`Backed up to your account (revision ${revision}).`);
+        setMessage('This device’s data was saved to your account.');
         void refreshBackupStatus();
         return;
       }
@@ -232,7 +279,7 @@ export function PreviewAccountBackupControls({
           setError('This browser’s preview changed while the backup was being prepared. Review the current data and try again.');
           return;
         }
-        setMessage(`Your account backup already matches this browser (revision ${cloud.revision}).`);
+        setMessage('Your account copy already matches this device.');
         return;
       }
       setPending({
@@ -253,6 +300,7 @@ export function PreviewAccountBackupControls({
     } finally {
       operationInProgress.current = false;
       setBusy(false);
+      setActiveOperation(null);
       if (!keepLockedForConfirmation) {
         setExclusiveLocked(false);
         onOperationFinished?.();
@@ -266,6 +314,7 @@ export function PreviewAccountBackupControls({
     operationInProgress.current = true;
     statusRequestId.current += 1;
     setBusy(true);
+    setActiveOperation('restore');
     setMessage('');
     setError('');
     let keepLockedForConfirmation = false;
@@ -293,7 +342,7 @@ export function PreviewAccountBackupControls({
         return;
       }
       if (previewEnvelopesEqual(validated.envelope, localEnvelope)) {
-        setMessage(`This browser already matches your account backup (revision ${cloud.revision}).`);
+        setMessage('This device already matches the account copy.');
         return;
       }
       if (storage.getItem(PREVIEW_STORAGE_KEY) !== localRaw) {
@@ -315,6 +364,7 @@ export function PreviewAccountBackupControls({
     } finally {
       operationInProgress.current = false;
       setBusy(false);
+      setActiveOperation(null);
       if (!keepLockedForConfirmation) {
         setExclusiveLocked(false);
         onOperationFinished?.();
@@ -328,6 +378,7 @@ export function PreviewAccountBackupControls({
     operationInProgress.current = true;
     statusRequestId.current += 1;
     setBusy(true);
+    setActiveOperation('download');
     setMessage('');
     setError('');
     try {
@@ -346,7 +397,7 @@ export function PreviewAccountBackupControls({
       });
       const downloadError = downloadRecovery(JSON.stringify(validated.envelope, null, 2));
       if (downloadError) throw new Error(downloadError);
-      setMessage(`Downloaded account backup revision ${record.revision}. No account data was changed.`);
+      setMessage('The account copy was downloaded. No account data was changed.');
     } catch (requestError) {
       if (isIdentityCurrent()) {
         setBackupStatus({ kind: 'unavailable', message: errorMessage(requestError) });
@@ -355,6 +406,7 @@ export function PreviewAccountBackupControls({
     } finally {
       operationInProgress.current = false;
       setBusy(false);
+      setActiveOperation(null);
       setExclusiveLocked(false);
       onOperationFinished?.();
     }
@@ -365,6 +417,7 @@ export function PreviewAccountBackupControls({
     operationInProgress.current = true;
     statusRequestId.current += 1;
     setBusy(true);
+    setActiveOperation(pending.kind);
     setMessage('');
     setError('');
     try {
@@ -375,10 +428,10 @@ export function PreviewAccountBackupControls({
           setError('This browser’s preview changed after confirmation. No account data was replaced; back up again to review the latest copy.');
           return;
         }
-        const revision = await api.save(pending.document, pending.expectedRevision);
+        await api.save(pending.document, pending.expectedRevision);
         if (!isIdentityCurrent()) return;
         setPending(null);
-        setMessage(`Updated your account backup (revision ${revision}).`);
+        setMessage('The account copy was updated.');
         void refreshBackupStatus();
         return;
       }
@@ -412,7 +465,7 @@ export function PreviewAccountBackupControls({
       }
       onRecoveryChanged(pending.expectedLocalRaw);
       setPending(null);
-      setMessage(`Restored your account backup (revision ${latestCloud.revision}). Your previous browser data is available as a recovery copy.`);
+      setMessage('The account copy replaced this device’s data. The previous device copy is available as a recovery copy.');
     } catch (requestError) {
       setPending(null);
       if (isIdentityCurrent()) {
@@ -422,6 +475,7 @@ export function PreviewAccountBackupControls({
     } finally {
       operationInProgress.current = false;
       setBusy(false);
+      setActiveOperation(null);
       setExclusiveLocked(false);
       onOperationFinished?.();
     }
@@ -436,95 +490,168 @@ export function PreviewAccountBackupControls({
 
   const pendingBackup = pending?.kind === 'backup';
   const pendingRestore = pending?.kind === 'restore';
+  const accountActionDisabled = !enabled || syncBusy || !api || busy;
 
   return (
-    <section className="settings-section preview-account-backup" aria-labelledby="preview-account-backup-title">
-      <h3 id="preview-account-backup-title">Account backup</h3>
-      <p>
-        {autoSyncEnabled
-          ? 'Changes save on this device first, then sync to your account when connected. You can also back up or restore manually.'
-          : 'Automatic sync is off. Account status is checked only when you choose a manual backup or restore.'}
-      </p>
-      <p className="preview-account-backup__account">
-        Signed-in account ending in {accountId.slice(-4)}.
-      </p>
-      <p
-        className={backupStatus.kind === 'unavailable' ? 'preview-account-backup__error' : 'preview-account-backup__status'}
-        role={backupStatus.kind === 'unavailable' && !error ? 'alert' : 'status'}
+    <>
+      <button
+        type="button"
+        className="preview-account-backup__entry"
+        onClick={() => setAdvancedOpen(true)}
       >
-        {backupStatus.kind === 'not-checked' && 'Account status not checked.'}
-        {backupStatus.kind === 'checking' && 'Checking account backup…'}
-        {backupStatus.kind === 'empty' && 'No account backup yet.'}
-        {backupStatus.kind === 'available'
-          && `Last backup: ${formatBackupDate(backupStatus.updatedAt)} · revision ${backupStatus.revision}.`}
-        {backupStatus.kind === 'unavailable' && backupStatus.message}
-      </p>
-      <p>
-        Transfers the versioned Preview data document, including Rhythms, associations, completion and activity logs, People, goals, and settings. Authentication and session data are never included.
-      </p>
-      <div className="preview-account-backup__actions">
-        <button type="button" className="btn mini ghost" disabled={!enabled || syncBusy || !api || busy} onClick={() => void downloadAccountBackup()}>
-          {busy ? 'Working…' : 'Download current account backup'}
-        </button>
-        <button type="button" className="btn mini" disabled={!enabled || syncBusy || !api || busy} onClick={() => void beginBackup()}>
-          {busy ? 'Working…' : 'Back up to my account'}
-        </button>
-        <button type="button" className="btn mini ghost" disabled={!enabled || syncBusy || !api || busy} onClick={() => void beginRestore()}>
-          Restore from my account
-        </button>
-      </div>
-      {!enabled && <p className="preview-account-backup__note">Wait until this browser’s preview is saved before backing up or restoring.</p>}
-      {localRecoveryRaw !== null && (
-        <button
-          type="button"
-          className="btn mini ghost"
-          onClick={() => setMessage(
-            downloadRecovery(localRecoveryRaw)
-              ?? 'The exact local data from before the last account restore was downloaded.'
+        <span className="preview-account-backup__row-copy">
+          <span className="preview-account-backup__row-title">Advanced recovery</span>
+          <span className="preview-account-backup__row-description">Manual account backup and restore tools.</span>
+        </span>
+        <span className="preview-account-backup__row-action" aria-hidden="true">›</span>
+      </button>
+      {advancedOpen && (
+        <MoneyGoalDialog
+          title="Advanced recovery"
+          titleId="preview-account-backup-dialog-title"
+          labelledBy="preview-account-backup-dialog-title"
+          intro="Account-copy tools for this signed-in account. Replacing a copy is not a merge."
+          phoneFullScreen
+          dialogClassName="preview-account-backup-dialog"
+          onClose={() => {
+            if (pending && !busy) cancelPending();
+            setAdvancedOpen(false);
+          }}
+        >
+          <div className="preview-account-backup__dialog-content">
+            {!autoSyncEnabled && (
+              <p className="preview-account-backup__note">
+                Cross-device sync is off. These account actions run only when you choose them.
+              </p>
+            )}
+            {!api && (
+              <p className="preview-account-backup__error" role="alert">
+                Account recovery is not configured in this Preview.
+              </p>
+            )}
+            <div className="preview-account-backup__rows">
+              <RecoveryActionRow
+                title="Save this device’s copy to account"
+                description="Copy the data saved on this device to your account."
+                disabled={accountActionDisabled}
+                busy={activeOperation === 'backup'}
+                onClick={() => void beginBackup()}
+              />
+              <RecoveryActionRow
+                title="Replace this device’s data with account copy"
+                description="Replace local data with the account copy. This is not a merge."
+                disabled={accountActionDisabled}
+                busy={activeOperation === 'restore'}
+                onClick={() => void beginRestore()}
+              />
+              <RecoveryActionRow
+                title="Download account copy"
+                description="Download the current data stored in your account."
+                disabled={accountActionDisabled}
+                busy={activeOperation === 'download'}
+                onClick={() => void downloadAccountBackup()}
+              />
+            </div>
+            {!enabled && (
+              <p className="preview-account-backup__note">
+                Wait until this device’s changes are saved before using account recovery.
+              </p>
+            )}
+            {(localRecoveryRaw !== null || cloudRecoveryRaw !== null || deviceRecoveryRaw !== null) && (
+              <div className="preview-account-backup__rows preview-account-backup__recovery-files">
+                {localRecoveryRaw !== null && (
+                  <RecoveryActionRow
+                    title="Download pre-restore copy"
+                    description="Download the device data preserved before its last account restore."
+                    onClick={() => setMessage(
+                      downloadRecovery(localRecoveryRaw)
+                        ?? 'The pre-restore device copy was downloaded.'
+                    )}
+                  />
+                )}
+                {cloudRecoveryRaw !== null && (
+                  <RecoveryActionRow
+                    title="Download previous account copy"
+                    description="Download the account data preserved before replacing it."
+                    onClick={() => setMessage(
+                      downloadRecovery(cloudRecoveryRaw, 'tend-preview-before-account-sync.json')
+                        ?? 'The previous account copy was downloaded.'
+                    )}
+                  />
+                )}
+                {deviceRecoveryRaw !== null && (
+                  <RecoveryActionRow
+                    title="Download previous device copy"
+                    description="Download the device data preserved before restoring the account copy."
+                    onClick={() => setMessage(
+                      downloadRecovery(deviceRecoveryRaw, 'tend-preview-before-device-restore.json')
+                        ?? 'The previous device copy was downloaded.'
+                    )}
+                  />
+                )}
+              </div>
+            )}
+            {(localRecoveryError || cloudRecoveryError || deviceRecoveryError) && (
+              <p className="preview-account-backup__error" role="alert">
+                {localRecoveryError || cloudRecoveryError || deviceRecoveryError}
+              </p>
+            )}
+            {message && <p className="preview-account-backup__message" role="status">{message}</p>}
+            {error && <p className="preview-account-backup__error" role="alert">{error}</p>}
+            <details className="preview-account-backup__technical">
+              <summary>Technical details</summary>
+              <p
+                className={backupStatus.kind === 'unavailable' ? 'preview-account-backup__error' : 'preview-account-backup__status'}
+                role="status"
+              >
+                {backupStatus.kind === 'not-checked' && 'Account copy status has not been checked.'}
+                {backupStatus.kind === 'checking' && 'Checking account copy…'}
+                {backupStatus.kind === 'empty' && 'No account copy is available.'}
+                {backupStatus.kind === 'available'
+                  && `Last updated ${formatBackupDate(backupStatus.updatedAt)} · revision ${backupStatus.revision}.`}
+                {backupStatus.kind === 'unavailable' && backupStatus.message}
+              </p>
+              <p>Account identity: {accountId.slice(-4)}.</p>
+            </details>
+          </div>
+          {pendingBackup && (
+            <MoneyGoalDialog
+              title="Replace account copy?"
+              titleId="preview-account-backup-confirm-title"
+              labelledBy="preview-account-backup-confirm-title"
+              intro="These copies differ. This replaces the account copy with this device’s saved data; this device will not change."
+              onClose={cancelPending}
+            >
+              <div className="money-goal-dialog__actions">
+                <button type="button" className="btn mini" disabled={busy || syncBusy} onClick={() => void confirmPending()}>
+                  Replace account copy
+                </button>
+                <button type="button" className="btn mini ghost" disabled={busy} onClick={cancelPending}>
+                  Cancel
+                </button>
+              </div>
+            </MoneyGoalDialog>
           )}
-        >
-          Download local copy from before restore
-        </button>
-      )}
-      {localRecoveryError && <p className="preview-account-backup__error" role="alert">{localRecoveryError}</p>}
-      {message && <p className="preview-account-backup__message" role="status">{message}</p>}
-      {error && <p className="preview-account-backup__error" role="alert">{error}</p>}
-      {pendingBackup && (
-        <MoneyGoalDialog
-          title="Replace account backup?"
-          intro={`These copies differ. This replaces account backup revision ${pending.expectedRevision} with the data currently saved in this browser. This browser’s data will not change.`}
-          onClose={() => {
-            cancelPending();
-          }}
-        >
-          <div className="money-goal-dialog__actions">
-            <button type="button" className="btn mini" disabled={busy || syncBusy} onClick={() => void confirmPending()}>
-              Replace account backup
-            </button>
-            <button type="button" className="btn mini ghost" disabled={busy} onClick={cancelPending}>
-              Cancel
-            </button>
-          </div>
+          {pendingRestore && (
+            <MoneyGoalDialog
+              title="Replace this device’s data?"
+              titleId="preview-account-backup-confirm-title"
+              labelledBy="preview-account-backup-confirm-title"
+              intro="This replaces local data with the account copy; it does not merge them. The current device data is preserved as a recovery copy before replacement."
+              onClose={cancelPending}
+            >
+              <div className="money-goal-dialog__actions">
+                <button type="button" className="btn mini" disabled={busy || syncBusy} onClick={() => void confirmPending()}>
+                  Replace this device’s data
+                </button>
+                <button type="button" className="btn mini ghost" disabled={busy} onClick={cancelPending}>
+                  Cancel
+                </button>
+              </div>
+            </MoneyGoalDialog>
+          )}
         </MoneyGoalDialog>
       )}
-      {pendingRestore && (
-        <MoneyGoalDialog
-          title="Restore account backup?"
-          intro={`These copies differ. This replaces the data saved in this browser with account backup revision ${pending.expectedRevision}. The exact current browser data will be kept as a recovery copy before replacement.`}
-          onClose={() => {
-            cancelPending();
-          }}
-        >
-          <div className="money-goal-dialog__actions">
-            <button type="button" className="btn mini" disabled={busy || syncBusy} onClick={() => void confirmPending()}>
-              Replace this browser’s data
-            </button>
-            <button type="button" className="btn mini ghost" disabled={busy} onClick={cancelPending}>
-              Cancel
-            </button>
-          </div>
-        </MoneyGoalDialog>
-      )}
-    </section>
+    </>
   );
 }

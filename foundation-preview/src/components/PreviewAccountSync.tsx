@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { PreviewData, PreviewEnvelope } from '../domain/preview-state.ts';
 import {
@@ -50,6 +51,7 @@ type SyncConflict = {
 type SyncStatus =
   | { kind: 'checking' }
   | { kind: 'device' }
+  | { kind: 'pending' }
   | { kind: 'saving' }
   | { kind: 'account'; savedAt: string | null }
   | { kind: 'offline' }
@@ -57,9 +59,11 @@ type SyncStatus =
   | { kind: 'conflict' };
 
 type PreviewAccountSyncProps = {
+  children?: ReactNode;
   portalTarget: HTMLElement | null;
   api: PreviewAccountBackupApi | null;
   accountId: string;
+  email?: string;
   authRefreshSequence: number;
   storage: PreviewStorage;
   data: PreviewData;
@@ -69,6 +73,7 @@ type PreviewAccountSyncProps = {
   localRecoveryRaw: string | null;
   localRecoveryError: string | null;
   enabled: boolean;
+  localSaveConfirmed: boolean;
   autoSyncEnabled: boolean;
   visible: boolean;
   manualOperationLocked: boolean;
@@ -161,27 +166,12 @@ function formatTime(value: string | null): string | null {
     : null;
 }
 
-function downloadCloudRecovery(raw: string): string | null {
-  try {
-    const url = URL.createObjectURL(new Blob([raw], { type: 'application/json' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'tend-preview-before-account-sync.json';
-    link.style.display = 'none';
-    document.body.append(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
-    return null;
-  } catch (error) {
-    return messageFor(error);
-  }
-}
-
 export function PreviewAccountSync({
+  children,
   portalTarget,
   api,
   accountId,
+  email,
   authRefreshSequence,
   storage,
   data,
@@ -191,6 +181,7 @@ export function PreviewAccountSync({
   localRecoveryRaw,
   localRecoveryError,
   enabled,
+  localSaveConfirmed,
   autoSyncEnabled,
   visible,
   manualOperationLocked,
@@ -199,6 +190,7 @@ export function PreviewAccountSync({
   onManualOperationLockChange
 }: PreviewAccountSyncProps) {
   const [status, setStatus] = useState<SyncStatus>({ kind: 'checking' });
+  const statusRef = useRef(status);
   const [verifiedAccountStatus, setVerifiedAccountStatus] = useState<{
     accountId: string;
     status: VerifiedAccountStatus;
@@ -228,6 +220,9 @@ export function PreviewAccountSync({
   const previousManualOperationLocked = useRef(manualOperationLocked);
   const previousLocalInputs = useRef({ data, localRaw });
   const previousAuthRefreshSequence = useRef(authRefreshSequence);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
   latest.current = {
     api,
     accountId,
@@ -291,6 +286,17 @@ export function PreviewAccountSync({
       if (!current()) return;
       if (!navigator.onLine) setStatus({ kind: 'offline' });
       else setStatus({ kind: 'attention', message: messageFor(error) });
+    }
+
+    function hasPendingLocalChanges(): boolean | null {
+      if (metadata === null) return null;
+      const local = readLocalSnapshot(
+        latest.current.data,
+        latest.current.localRaw,
+        latest.current.currentDate
+      );
+      if (metadata.syncedEnvelope === null) return local.raw !== null;
+      return !previewEnvelopesEqual(local.envelope, metadata.syncedEnvelope);
     }
 
     function remember(
@@ -439,6 +445,7 @@ export function PreviewAccountSync({
       refreshRequested = false;
       clearLocalTimer();
       try {
+        setStatus({ kind: 'checking' });
         const cloud = await api.read();
         if (!current()) return;
         if (latest.current.manualOperationLocked) {
@@ -552,12 +559,25 @@ export function PreviewAccountSync({
     }
 
     function scheduleLocalSync(): void {
-      if (!current() || latest.current.manualOperationLocked || !navigator.onLine) return;
+      if (!current() || latest.current.manualOperationLocked) return;
       if (!started) {
         localChangedDuringStartup = true;
-        return;
+        if (navigator.onLine) return;
       }
       clearLocalTimer();
+      let hasPendingChanges: boolean | null;
+      try {
+        metadata ??= parseMetadata(storage, accountId, latest.current.currentDate);
+        hasPendingChanges = hasPendingLocalChanges();
+      } catch (error) {
+        setAttention(error);
+        return;
+      }
+      if (!navigator.onLine) {
+        if (hasPendingChanges) setStatus({ kind: 'offline' });
+        return;
+      }
+      if (hasPendingChanges) setStatus({ kind: 'pending' });
       localTimer = setTimeout(() => {
         localTimer = null;
         void reconcile();
@@ -566,7 +586,16 @@ export function PreviewAccountSync({
 
     async function refreshFromLifecycle(): Promise<void> {
       if (!navigator.onLine) {
-        if (current()) setStatus({ kind: 'offline' });
+        if (current() && ['pending', 'saving'].includes(statusRef.current.kind)) {
+          setStatus({ kind: 'offline' });
+        } else if (current()) {
+          try {
+            metadata ??= parseMetadata(storage, accountId, latest.current.currentDate);
+            if (hasPendingLocalChanges()) setStatus({ kind: 'offline' });
+          } catch (error) {
+            setAttention(error);
+          }
+        }
         return;
       }
       await reconcile();
@@ -582,7 +611,9 @@ export function PreviewAccountSync({
     }
     function onOffline() {
       clearLocalTimer();
-      if (current()) setStatus({ kind: 'offline' });
+      if (current() && ['pending', 'saving'].includes(statusRef.current.kind)) {
+        setStatus({ kind: 'offline' });
+      }
     }
     function onForeground() {
       if (document.visibilityState === 'visible') void refreshFromLifecycle();
@@ -815,111 +846,139 @@ export function PreviewAccountSync({
 
   if (!visible || !portalTarget) return null;
 
-  const statusText = !autoSyncEnabled
-    ? 'Automatic sync is off'
-    : status.kind === 'checking'
-    ? 'Saved on this device'
-    : status.kind === 'device'
-      ? 'Saved on this device'
-      : status.kind === 'saving'
-        ? 'Saving…'
-        : status.kind === 'account'
-          ? 'Saved to your account'
-          : status.kind === 'offline'
-            ? 'Offline · changes saved on this device'
-            : status.kind === 'attention'
-              ? 'Needs attention'
-              : 'Needs attention';
+  const statusText = !api
+    ? 'Sync is unavailable'
+    : !autoSyncEnabled
+      ? 'Sync is off'
+      : !localSaveConfirmed
+        ? 'Device save needs attention'
+        : status.kind === 'checking'
+          ? 'Checking sync…'
+          : status.kind === 'device' || status.kind === 'pending' || status.kind === 'offline'
+            ? 'Saved on this device'
+            : status.kind === 'saving'
+              ? 'Saving changes…'
+              : status.kind === 'account'
+                ? 'Everything is saved'
+                : status.kind === 'attention'
+                  ? 'Sync needs attention'
+                  : 'Resolve sync conflict';
   const formattedSavedAt = status.kind === 'account' ? formatTime(status.savedAt) : null;
+  const statusDescription = !api
+    ? 'Account sync is not configured in this Preview. Your device copy remains separate.'
+    : !autoSyncEnabled
+      ? localSaveConfirmed
+        ? 'Your changes are saved on this device. Cross-device sync is disabled.'
+        : 'Your latest changes are not confirmed saved on this device.'
+      : !localSaveConfirmed
+        ? 'Your latest changes are not confirmed saved on this device.'
+        : status.kind === 'checking'
+          ? 'Comparing this device with your account.'
+          : status.kind === 'device'
+            ? 'An account copy has not been confirmed for this device yet.'
+            : status.kind === 'pending'
+              ? 'Waiting to sync.'
+              : status.kind === 'offline'
+                ? 'Waiting for a connection to sync.'
+                : status.kind === 'saving'
+                  ? 'Uploading your saved changes to your account.'
+                  : status.kind === 'account'
+                    ? 'Your changes sync across your devices.'
+                    : status.kind === 'conflict'
+                      ? 'Your device and account copies differ. Choose which copy to keep.'
+                      : '';
 
   return createPortal((
     <>
       <section className="settings-section preview-account-sync" aria-labelledby="preview-account-sync-title">
-        <h3 id="preview-account-sync-title">
-          {autoSyncEnabled ? 'Account sync' : 'Automatic account sync'}
-        </h3>
-        <p className="preview-account-sync__status" role="status">{statusText}</p>
-        {!autoSyncEnabled && (
-          <p>Changes stay saved on this device. Use manual backup or restore below to transfer account data.</p>
-        )}
-        {status.kind === 'account' && formattedSavedAt && (
-          <p>Last saved to your account: {formattedSavedAt}.</p>
-        )}
-        {autoSyncEnabled && status.kind === 'checking' && <p>Checking your account for newer data…</p>}
-        {status.kind === 'attention' && <p className="preview-account-sync__error" role="alert">{status.message}</p>}
-        {syncMessage && <p role="status">{syncMessage}</p>}
+        <h3 id="preview-account-sync-title">Save &amp; sync</h3>
+        <div className={`preview-account-sync__status-row preview-account-sync__status-row--${status.kind}`}>
+          <span className="preview-account-sync__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M7.3 18.2h10.1a4.1 4.1 0 0 0 .4-8.2A6.2 6.2 0 0 0 6 8.5a4.9 4.9 0 0 0 1.3 9.7Z" />
+              {status.kind === 'account'
+                ? <path d="m9.2 13.1 2.1 2.1 4.2-4.4" />
+                : status.kind === 'attention' || status.kind === 'conflict'
+                  ? <path d="M12 9v4m0 2h.01" />
+                  : <path d="M12 8.5v4l2.4 1.4" />}
+            </svg>
+          </span>
+          <div className="preview-account-sync__status-copy">
+            <p className="preview-account-sync__status" role="status">{statusText}</p>
+            <p className="preview-account-sync__description">{statusDescription}</p>
+            {formattedSavedAt && (
+              <p className="preview-account-sync__saved-at">Last confirmed sync: {formattedSavedAt}</p>
+            )}
+            {email && <p className="preview-account-sync__email">{email}</p>}
+          </div>
+          {status.kind === 'attention' && api && autoSyncEnabled && localSaveConfirmed && (
+            <button
+              type="button"
+              className="btn mini ghost preview-account-sync__retry"
+              disabled={manualBusy || manualOperationLocked}
+              onClick={() => {
+                setStatus({ kind: 'checking' });
+                controlRef.current?.refresh();
+              }}
+            >
+              Try again
+            </button>
+          )}
+        </div>
+        {status.kind === 'attention' && api && <p className="preview-account-sync__error" role="alert">{status.message}</p>}
+        {syncMessage && <p className="preview-account-sync__message" role="status">{syncMessage}</p>}
         {conflict && (
           <div className="preview-account-sync__conflict" role="group" aria-labelledby="preview-account-sync-conflict-title">
-            <h4 id="preview-account-sync-conflict-title">This device and your account both have changes</h4>
+            <h4 id="preview-account-sync-conflict-title">This device and your account have different copies</h4>
             <p>
               Automatic sync paused. Choose one version to keep; the other is preserved as a recovery copy. Tend will not merge these changes.
             </p>
-            <p>
-              Account backup: revision {conflict.revision}
-              {formatTime(conflict.updatedAt) ? ` · ${formatTime(conflict.updatedAt)}` : ''}.
-            </p>
+            {formatTime(conflict.updatedAt) && <p>Account copy updated: {formatTime(conflict.updatedAt)}.</p>}
             <div className="preview-account-sync__actions">
               <button type="button" className="btn mini" disabled={manualBusy} onClick={() => void resolveConflict('device')}>
-                Keep this device’s changes
+                Keep this device’s copy
               </button>
               <button type="button" className="btn mini ghost" disabled={manualBusy} onClick={() => void resolveConflict('cloud')}>
-                Use the account version
+                Use the account copy
               </button>
             </div>
           </div>
         )}
-        {status.kind === 'offline' && <p>Edits are kept on this device and will be checked when you reconnect.</p>}
       </section>
-      <PreviewAccountBackupControls
-        api={api}
-        accountId={accountId}
-        storage={storage}
-        data={data}
-        currentDate={currentDate}
-        localRaw={localRaw}
-        localRecoveryRaw={localRecoveryRaw}
-        localRecoveryError={localRecoveryError}
-        autoSyncEnabled={autoSyncEnabled}
-        enabled={enabled && !manualBusy && (!autoSyncEnabled || (status.kind !== 'saving' && status.kind !== 'checking'))}
-        syncBusy={autoSyncEnabled && (status.kind === 'saving' || status.kind === 'checking')}
-        verifiedAccountStatus={verifiedAccountStatus?.accountId === accountId
-          ? verifiedAccountStatus.status
-          : null}
-        isIdentityCurrent={isIdentityCurrent}
-        onRestore={onRestore}
-        onRecoveryChanged={() => {}}
-        onExclusiveChange={locked => {
-          setManualBusy(locked);
-          onManualOperationLockChange(locked);
-        }}
-        onOperationFinished={() => controlRef.current?.refresh()}
-      />
-      {cloudRecoveryError && <p className="preview-account-sync__error" role="alert">{cloudRecoveryError}</p>}
-      {cloudRecoveryRaw !== null && (
-        <button
-          type="button"
-          className="btn mini ghost"
-          onClick={() => {
-            const error = downloadCloudRecovery(cloudRecoveryRaw);
-            setSyncMessage(error ?? 'The previous account version was downloaded as a recovery copy.');
-          }}
-        >
-          Download previous account version
-        </button>
-      )}
-      {deviceRecoveryError && <p className="preview-account-sync__error" role="alert">{deviceRecoveryError}</p>}
-      {deviceRecoveryRaw !== null && (
-        <button
-          type="button"
-          className="btn mini ghost"
-          onClick={() => {
-            const error = downloadCloudRecovery(deviceRecoveryRaw);
-            setSyncMessage(error ?? 'The previous device version was downloaded as a recovery copy.');
-          }}
-        >
-          Download previous device version
-        </button>
-      )}
+      <details className="settings-section preview-account-sync__recovery">
+        <summary>Backup &amp; recovery</summary>
+        <div className="preview-account-sync__recovery-content">
+          {children}
+          <PreviewAccountBackupControls
+            api={api}
+            accountId={accountId}
+            storage={storage}
+            data={data}
+            currentDate={currentDate}
+            localRaw={localRaw}
+            localRecoveryRaw={localRecoveryRaw}
+            localRecoveryError={localRecoveryError}
+            cloudRecoveryRaw={cloudRecoveryRaw}
+            cloudRecoveryError={cloudRecoveryError}
+            deviceRecoveryRaw={deviceRecoveryRaw}
+            deviceRecoveryError={deviceRecoveryError}
+            autoSyncEnabled={autoSyncEnabled}
+            enabled={enabled && !manualBusy && (!autoSyncEnabled || (status.kind !== 'saving' && status.kind !== 'checking'))}
+            syncBusy={autoSyncEnabled && (status.kind === 'saving' || status.kind === 'checking')}
+            verifiedAccountStatus={verifiedAccountStatus?.accountId === accountId
+              ? verifiedAccountStatus.status
+              : null}
+            isIdentityCurrent={isIdentityCurrent}
+            onRestore={onRestore}
+            onRecoveryChanged={() => {}}
+            onExclusiveChange={locked => {
+              setManualBusy(locked);
+              onManualOperationLockChange(locked);
+            }}
+            onOperationFinished={() => controlRef.current?.refresh()}
+          />
+        </div>
+      </details>
     </>
   ), portalTarget);
 }

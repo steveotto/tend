@@ -1,7 +1,10 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PreviewAccountSync } from '../src/components/PreviewAccountSync.tsx';
+import { PreviewBackupImportControl } from '../src/components/PreviewBackupImportControl.tsx';
+import type { PreviewPersistenceStatus } from '../src/components/PreviewDataControls.tsx';
 import {
   createEmptyPreviewData,
   createPreviewEnvelope,
@@ -115,15 +118,21 @@ function Browser({
   localIsPristine = false,
   autoSyncEnabled = true,
   authRefreshSequence = 0,
+  email,
+  localSaveConfirmed = true,
+  recoveryActions,
   isIdentityCurrent = () => true,
   onRestoreCall
 }: {
-  api: PreviewAccountBackupApi;
+  api: PreviewAccountBackupApi | null;
   storage: PreviewStorage;
   initialData?: PreviewData;
   localIsPristine?: boolean;
   autoSyncEnabled?: boolean;
   authRefreshSequence?: number;
+  email?: string;
+  localSaveConfirmed?: boolean;
+  recoveryActions?: ReactNode;
   isIdentityCurrent?: () => boolean;
   onRestoreCall?: () => void;
 }) {
@@ -179,6 +188,7 @@ function Browser({
         portalTarget={syncTarget}
         api={api}
         accountId={accountId}
+        {...(email ? { email } : {})}
         authRefreshSequence={authRefreshSequence}
         storage={storage}
         data={data}
@@ -187,14 +197,17 @@ function Browser({
         localRaw={raw}
         localRecoveryRaw={storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)}
         localRecoveryError={null}
-        enabled
+        enabled={localSaveConfirmed}
+        localSaveConfirmed={localSaveConfirmed}
         autoSyncEnabled={autoSyncEnabled}
         visible
         manualOperationLocked={manualLock}
         isIdentityCurrent={isIdentityCurrent}
         onRestore={restore}
         onManualOperationLockChange={setManualLock}
-      />
+      >
+        {recoveryActions}
+      </PreviewAccountSync>
     </>
   );
 }
@@ -216,6 +229,132 @@ async function waitForRevision(
 }
 
 describe('Preview account sync', () => {
+  it('keeps recovery collapsed and opens presentation-only sections without another account read', async () => {
+    const data = createSamplePreviewData();
+    const service = backend(cloudRecord(data));
+    const storage = makeStorage(data);
+    const persistenceStatus: PreviewPersistenceStatus = { kind: 'saved' };
+    const recoveryActions = (
+      <PreviewBackupImportControl
+        data={data}
+        status={persistenceStatus}
+        currentDate={currentDate}
+        onImport={() => null}
+        showExport
+        presentation="recovery"
+      />
+    );
+    const view = render(
+      <Browser api={service.api} storage={storage.storage} recoveryActions={recoveryActions} />
+    );
+
+    await screen.findByText('Everything is saved');
+    await waitFor(() => expect(service.readCalls).toBe(2));
+    const disclosure = screen.getByText('Backup & recovery').closest('details');
+    expect(disclosure?.hasAttribute('open')).toBe(false);
+    expect(within(disclosure as HTMLDetailsElement).getByRole('button', { name: /Export this device’s data/ })).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Backup & recovery'));
+    expect(screen.getByRole('button', { name: /Export this device’s data/ })).toBeTruthy();
+    expect(screen.getByLabelText('Import a backup file')).toBeTruthy();
+    expect(screen.getByText('Download a backup file.')).toBeTruthy();
+    expect(screen.getByText('Restore data from a file you saved.')).toBeTruthy();
+    const backupFile = new File(
+      [JSON.stringify(createPreviewEnvelope(data))],
+      'synthetic-preview.json',
+      { type: 'application/json' }
+    );
+    fireEvent.change(screen.getByLabelText('Import a backup file'), { target: { files: [backupFile] } });
+    const importDialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
+    expect(within(importDialog).getByText(/current local data is preserved as a recovery copy/)).toBeTruthy();
+    fireEvent.click(within(importDialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Replace preview data?' })).toBeNull());
+    const readsBeforeAdvanced = service.readCalls;
+
+    fireEvent.click(screen.getByRole('button', { name: /Advanced recovery/ }));
+    const advanced = screen.getByRole('dialog', { name: 'Advanced recovery' });
+    expect(screen.getByText('Technical details').closest('details')?.hasAttribute('open')).toBe(false);
+    expect(service.readCalls).toBe(readsBeforeAdvanced);
+    fireEvent(advanced, new Event('cancel', { cancelable: true }));
+    expect(screen.queryByRole('dialog', { name: 'Advanced recovery' })).toBeNull();
+    expect(service.readCalls).toBe(readsBeforeAdvanced);
+    view.unmount();
+  });
+
+  it('shows checking, saving, and confirmed account states without overstating local-only saves', async () => {
+    const data = createSamplePreviewData();
+    const service = backend(cloudRecord(data));
+    const storage = makeStorage(data);
+    const resolveReads: Array<(record: PreviewAccountBackupRecord | null) => void> = [];
+    const delayedReadApi: PreviewAccountBackupApi = {
+      read: () => new Promise(resolve => {
+        resolveReads.push(resolve);
+      }),
+      save: service.api.save
+    };
+    const view = render(
+      <Browser api={delayedReadApi} storage={storage.storage} email="synthetic@example.test" />
+    );
+    expect(screen.getByText('Checking sync…')).toBeTruthy();
+    await act(async () => {
+      for (const resolveRead of resolveReads) resolveRead(cloudRecord(data));
+    });
+    expect(await screen.findByText('Everything is saved')).toBeTruthy();
+    expect(screen.getByText(/^Last confirmed sync:/).textContent).toContain('Nov 6, 2026');
+    expect(screen.getByText('synthetic@example.test')).toBeTruthy();
+    const statusCard = view.container.querySelector('.preview-account-sync');
+    expect(statusCard?.textContent).not.toContain('revision');
+    expect(statusCard?.textContent).not.toContain(accountId.slice(-4));
+    view.unmount();
+
+    let resolveSave: ((revision: number) => void) | null = null;
+    const uploadingApi: PreviewAccountBackupApi = {
+      read: async () => null,
+      save: () => new Promise(resolve => {
+        resolveSave = resolve;
+      })
+    };
+    const uploadingStorage = makeStorage(data);
+    const uploadingView = render(
+      <Browser api={uploadingApi} storage={uploadingStorage.storage} />
+    );
+    expect(await screen.findByText('Saving changes…')).toBeTruthy();
+    await act(async () => resolveSave?.(1));
+    expect(await screen.findByText('Everything is saved')).toBeTruthy();
+    uploadingView.unmount();
+  });
+
+  it('offers a deliberate retry after a sync failure and reports missing configuration honestly', async () => {
+    const data = createSamplePreviewData();
+    const service = backend(cloudRecord(data));
+    const storage = makeStorage(data);
+    let allowRead = false;
+    let readCalls = 0;
+    const retryApi: PreviewAccountBackupApi = {
+      read: async () => {
+        readCalls += 1;
+        if (!allowRead) throw new Error('Synthetic sync failure.');
+        return service.record;
+      },
+      save: service.api.save
+    };
+    const view = render(<Browser api={retryApi} storage={storage.storage} />);
+    expect(await screen.findByText('Sync needs attention')).toBeTruthy();
+    allowRead = true;
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('Everything is saved')).toBeTruthy();
+    expect(readCalls).toBe(3);
+    view.unmount();
+
+    const noConfiguration = render(
+      <Browser api={null} storage={makeStorage(data).storage} localSaveConfirmed={false} />
+    );
+    expect(await screen.findByText('Sync is unavailable')).toBeTruthy();
+    expect(screen.queryByText('Everything is saved')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    noConfiguration.unmount();
+  });
+
   it('keeps automatic cloud reconciliation off while manual backup remains available', async () => {
     const localData = createSamplePreviewData();
     const cloudData = createSamplePreviewData();
@@ -231,25 +370,26 @@ describe('Preview account sync', () => {
       <Browser api={service.api} storage={storage.storage} autoSyncEnabled={false} />
     );
 
-    expect(await screen.findByText('Automatic sync is off')).toBeTruthy();
-    expect(screen.getByText('Account status not checked.')).toBeTruthy();
+    expect(await screen.findByText('Sync is off')).toBeTruthy();
     expect(service.readCalls).toBe(0);
     expect(service.saveCalls).toBe(0);
     expect(storage.values.get(PREVIEW_STORAGE_KEY)).toBe(localRaw);
-    expect(screen.getByRole('button', { name: 'Back up to my account' }).hasAttribute('disabled')).toBe(false);
-    expect(screen.getByRole('button', { name: 'Restore from my account' }).hasAttribute('disabled')).toBe(false);
-    expect(screen.getByText('Automatic sync is off. Account status is checked only when you choose a manual backup or restore.')).toBeTruthy();
+    fireEvent.click(screen.getByText('Backup & recovery'));
+    fireEvent.click(screen.getByRole('button', { name: /Advanced recovery/ }));
+    expect(screen.getByRole('button', { name: /Save this device’s copy to account/ }).hasAttribute('disabled')).toBe(false);
+    expect(screen.getByRole('button', { name: /Replace this device’s data with account copy/ }).hasAttribute('disabled')).toBe(false);
+    expect(screen.getByText('Cross-device sync is off. These account actions run only when you choose them.')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Back up to my account' }));
-    await screen.findByRole('heading', { name: 'Replace account backup?' });
+    fireEvent.click(screen.getByRole('button', { name: /Save this device’s copy to account/ }));
+    await screen.findByRole('heading', { name: 'Replace account copy?' });
     expect(service.readCalls).toBe(1);
     expect(service.saveCalls).toBe(0);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(service.record?.revision).toBe(4);
     expect(storage.values.get(PREVIEW_STORAGE_KEY)).toBe(localRaw);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Restore from my account' }));
-    await screen.findByRole('heading', { name: 'Restore account backup?' });
+    fireEvent.click(screen.getByRole('button', { name: /Replace this device’s data with account copy/ }));
+    await screen.findByRole('heading', { name: 'Replace this device’s data?' });
     expect(service.readCalls).toBe(2);
     expect(service.saveCalls).toBe(0);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -286,8 +426,8 @@ describe('Preview account sync', () => {
         error: null
       });
     });
-    await screen.findByText(/Last backup: .*revision 4\./);
-    await screen.findAllByText('Saved to your account');
+    await screen.findByText(/Last confirmed sync:/);
+    await screen.findByText('Everything is saved');
     await new Promise(resolve => setTimeout(resolve, 950));
 
     expect(maybeSingle).toHaveBeenCalledTimes(1);
@@ -345,14 +485,14 @@ describe('Preview account sync', () => {
     const view = render(<Browser api={api} storage={storage.storage} initialData={data} />);
 
     const readError = 'The account backup could not be read. Check the connection and that Preview storage is configured.';
-    expect(await screen.findAllByText(readError)).toHaveLength(2);
+    expect(await screen.findByText(readError)).toBeTruthy();
     expect(maybeSingle).toHaveBeenCalledTimes(1);
 
     await act(async () => window.dispatchEvent(new Event('online')));
 
-    expect(await screen.findByText(/Last backup: .*revision 15\./)).toBeTruthy();
+    expect(await screen.findByText(/Last confirmed sync:/)).toBeTruthy();
     expect(screen.queryByText(readError)).toBeNull();
-    expect(await screen.findByText('Saved to your account')).toBeTruthy();
+    expect(await screen.findByText('Everything is saved')).toBeTruthy();
     expect(maybeSingle).toHaveBeenCalledTimes(2);
     view.unmount();
   });
@@ -422,7 +562,7 @@ describe('Preview account sync', () => {
     await waitFor(() => expect(savedData?.people[0]?.displayName).toBe(marker));
     expect(readCalls).toBe(3);
     expect(savedRevision).toBe(16);
-    expect(await screen.findByText('Saved to your account')).toBeTruthy();
+    expect(await screen.findByText('Everything is saved')).toBeTruthy();
     expect(storage.values.get(PREVIEW_STORAGE_KEY)).toContain(marker);
     view.unmount();
   });
@@ -448,13 +588,13 @@ describe('Preview account sync', () => {
     const service = backend(cloudRecord(cloudData, 3));
     const view = render(<Browser api={service.api} storage={storage.storage} />);
 
-    await screen.findByRole('heading', { name: 'This device and your account both have changes' });
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
     await new Promise(resolve => setTimeout(resolve, 1000));
     expect(service.saveCalls).toBe(0);
     expect(service.record?.revision).toBe(3);
     expect(storage.values.get(PREVIEW_STORAGE_KEY)).toContain('Imported local data');
 
-    fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s changes' }));
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
     await waitForRevision(service, 4);
     expect((service.record?.document as { data: PreviewData }).data.people[0]?.displayName)
       .toBe('Imported local data');
@@ -508,7 +648,7 @@ describe('Preview account sync', () => {
     };
     const view = render(<Browser api={api} storage={storage.storage} />);
 
-    expect(await screen.findAllByText('Synthetic cloud unavailable')).toHaveLength(2);
+    expect(await screen.findByText('Synthetic cloud unavailable')).toBeTruthy();
     expect(api.save).not.toHaveBeenCalled();
     expect(storage.values.get(PREVIEW_STORAGE_KEY)).toBe(importedRaw);
     expect(loadPreviewImportSyncGuard(storage.storage)).toMatchObject({
@@ -544,7 +684,7 @@ describe('Preview account sync', () => {
     expect(service.record?.revision).toBe(4);
     expect(storage.values.get(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toContain('"data"');
     expect(storage.values.get(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toContain('"people":[]');
-    expect(screen.getAllByText('Saved to your account').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Everything is saved').length).toBeGreaterThan(0);
     view.unmount();
   });
 
@@ -577,7 +717,7 @@ describe('Preview account sync', () => {
       />
     );
 
-    await screen.findByRole('heading', { name: 'This device and your account both have changes' });
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
     expect(service.saveCalls).toBe(0);
     expect(service.record?.revision).toBe(4);
     expect(storage.values.get(PREVIEW_STORAGE_KEY)).toBe(localRaw);
@@ -591,7 +731,7 @@ describe('Preview account sync', () => {
     const destinationStorage = makeStorage();
     const source = render(<Browser api={service.api} storage={sourceStorage.storage} />);
     await waitForRevision(service, 1);
-    expect(screen.getAllByText('Saved to your account').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Everything is saved').length).toBeGreaterThan(0);
 
     const destination = render(
       <Browser api={service.api} storage={destinationStorage.storage} initialData={createEmptyPreviewData()} />
@@ -638,10 +778,10 @@ describe('Preview account sync', () => {
     };
     const storage = makeStorage(localData);
     const view = render(<Browser api={api} storage={storage.storage} />);
-    await screen.findAllByText('Saved to your account');
+    await screen.findAllByText('Everything is saved');
 
     fireEvent.click(view.getByRole('button', { name: 'Edit this device' }));
-    await screen.findByRole('heading', { name: 'This device and your account both have changes' });
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
 
     expect(staleWrites).toBe(1);
     expect(service.record?.revision).toBe(2);
@@ -667,15 +807,17 @@ describe('Preview account sync', () => {
     const service = backend(cloudRecord(accountData, 2));
     const storage = makeStorage(deviceData);
     const view = render(<Browser api={service.api} storage={storage.storage} />);
-    await screen.findByRole('heading', { name: 'This device and your account both have changes' });
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
 
-    fireEvent.click(view.getByRole('button', { name: 'Back up to my account' }));
-    await screen.findByRole('heading', { name: 'Replace account backup?' });
+    fireEvent.click(screen.getByText('Backup & recovery'));
+    fireEvent.click(screen.getByRole('button', { name: /Advanced recovery/ }));
+    fireEvent.click(view.getByRole('button', { name: /Save this device’s copy to account/ }));
+    await screen.findByRole('heading', { name: 'Replace account copy?' });
     expect(service.saveCalls).toBe(0);
     await act(async () => window.dispatchEvent(new Event('focus')));
     expect(service.saveCalls).toBe(0);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Replace account backup' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Replace account copy' }));
     await waitForRevision(service, 3);
     expect((service.record?.document as { data: PreviewData }).data.people[0]?.displayName)
       .toBe('Device version');
@@ -699,15 +841,17 @@ describe('Preview account sync', () => {
     const storage = makeStorage(deviceData);
     const deviceRaw = storage.values.get(PREVIEW_STORAGE_KEY);
     const view = render(<Browser api={service.api} storage={storage.storage} />);
-    await screen.findByRole('heading', { name: 'This device and your account both have changes' });
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
 
-    fireEvent.click(view.getByRole('button', { name: 'Restore from my account' }));
-    await screen.findByRole('heading', { name: 'Restore account backup?' });
+    fireEvent.click(screen.getByText('Backup & recovery'));
+    fireEvent.click(screen.getByRole('button', { name: /Advanced recovery/ }));
+    fireEvent.click(view.getByRole('button', { name: /Replace this device’s data with account copy/ }));
+    await screen.findByRole('heading', { name: 'Replace this device’s data?' });
     expect(storage.values.get(PREVIEW_STORAGE_KEY)).toBe(deviceRaw);
     await act(async () => window.dispatchEvent(new Event('focus')));
     expect(storage.values.get(PREVIEW_STORAGE_KEY)).toBe(deviceRaw);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Replace this browser’s data' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Replace this device’s data' }));
     await waitFor(() => expect(view.getByTestId('person-name').textContent).toBe('Account version'));
     expect(storage.values.get(PREVIEW_STORAGE_KEY)).not.toBe(deviceRaw);
     expect(storage.values.get(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(deviceRaw);
@@ -720,6 +864,7 @@ describe('Preview account sync', () => {
     const storage = makeStorage(createSamplePreviewData());
     const firstTab = render(<Browser api={service.api} storage={storage.storage} />);
     await waitForRevision(service, 1);
+    await screen.findByText('Everything is saved');
     firstTab.unmount();
 
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
@@ -730,6 +875,8 @@ describe('Preview account sync', () => {
     fireEvent.click(offlineTab.getByRole('button', { name: 'Edit this device' }));
     await waitFor(() => expect(storage.values.get(PREVIEW_STORAGE_KEY)).toContain('Device edit'));
     expect(service.record?.revision).toBe(1);
+    expect(await screen.findByText('Saved on this device')).toBeTruthy();
+    expect(screen.getByText('Waiting for a connection to sync.')).toBeTruthy();
     offlineTab.unmount();
 
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
@@ -765,7 +912,7 @@ describe('Preview account sync', () => {
     await act(async () => window.dispatchEvent(new Event('online')));
 
     const conflictChoice = await screen.findByRole('heading', {
-      name: 'This device and your account both have changes'
+      name: 'This device and your account have different copies'
     });
     expect(conflictChoice).toBeTruthy();
     const conflictA = deviceA.container.querySelector('.preview-account-sync__conflict');
@@ -779,7 +926,7 @@ describe('Preview account sync', () => {
       .toBe(initialCloudChoice);
     expect(conflictedStorage.values.get(PREVIEW_STORAGE_KEY)).toContain(localChoice);
 
-    fireEvent.click(within(conflictedContainer).getByRole('button', { name: 'Keep this device’s changes' }));
+    fireEvent.click(within(conflictedContainer).getByRole('button', { name: 'Keep this device’s copy' }));
     await waitForRevision(service, 3);
     expect((service.record?.document as { data: PreviewData }).data.people[0]?.displayName).toBe(localChoice);
     expect(conflictedStorage.values.get(`${PREVIEW_STORAGE_KEY}:account-sync-cloud-recovery`))
@@ -806,10 +953,10 @@ describe('Preview account sync', () => {
     await waitFor(() => expect(storage.values.get(PREVIEW_STORAGE_KEY)).toContain('Device edit'));
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
     await act(async () => window.dispatchEvent(new Event('online')));
-    await screen.findByRole('heading', { name: 'This device and your account both have changes' });
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
     const localRecovery = storage.values.get(PREVIEW_STORAGE_KEY);
 
-    fireEvent.click(within(view.container).getByRole('button', { name: 'Use the account version' }));
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Use the account copy' }));
     await waitFor(() => expect(view.container.querySelector('[data-testid="person-name"]')?.textContent)
       .toBe('Account edit'));
     expect(storage.values.get(`${PREVIEW_STORAGE_KEY}:account-sync-device-recovery`)).toBe(localRecovery);
@@ -833,16 +980,18 @@ describe('Preview account sync', () => {
     const localRecovery = storage.values.get(PREVIEW_STORAGE_KEY);
     const service = backend(cloudRecord(cloudData, 2));
     const view = render(<Browser api={service.api} storage={storage.storage} />);
-    await screen.findByRole('heading', { name: 'This device and your account both have changes' });
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
 
-    fireEvent.click(within(view.container).getByRole('button', { name: 'Use the account version' }));
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Use the account copy' }));
     await waitFor(() => expect(view.container.querySelector('[data-testid="person-name"]')?.textContent)
       .toBe('Account edit'));
     expect(storage.values.get(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(earlierRecovery);
     expect(storage.values.get(`${PREVIEW_STORAGE_KEY}:account-sync-device-recovery`))
       .toBe(localRecovery);
     expect(service.record?.revision).toBe(2);
-    expect(view.container.textContent).toContain('Download previous device version');
+    fireEvent.click(screen.getByText('Backup & recovery'));
+    fireEvent.click(screen.getByRole('button', { name: /Advanced recovery/ }));
+    expect(view.container.textContent).toContain('Download previous device copy');
     view.unmount();
   });
 
@@ -851,7 +1000,7 @@ describe('Preview account sync', () => {
     const service = backend(cloudRecord(initialData, 1));
     const storage = makeStorage(initialData);
     const view = render(<Browser api={service.api} storage={storage.storage} />);
-    await waitFor(() => expect(screen.getAllByText('Saved to your account').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText('Everything is saved').length).toBeGreaterThan(0));
 
     const earlierRecovery = JSON.stringify(createPreviewEnvelope(createEmptyPreviewData()));
     storage.values.set(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, earlierRecovery);
@@ -963,7 +1112,7 @@ describe('Preview account sync', () => {
     };
     const view = render(<Browser api={api} storage={storage.storage} />);
     await waitForRevision(base, 1);
-    await waitFor(() => expect(screen.getAllByText('Saved to your account').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText('Everything is saved').length).toBeGreaterThan(0));
     expect(base.saveCalls).toBe(1);
     view.unmount();
   });

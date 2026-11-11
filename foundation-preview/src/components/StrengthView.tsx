@@ -119,13 +119,25 @@ type FitnessDialog =
       suggestion?: StrengthWorkoutSuggestion;
       returnToSuggestions?: boolean;
     }
-  | { kind: 'log'; log?: StrengthWorkoutLog; templateId?: string; rhythm?: StrengthRhythm }
+  | { kind: 'workout-choice'; workout: StrengthSavedWorkout }
+  | {
+      kind: 'log';
+      log?: StrengthWorkoutLog;
+      templateId?: string;
+      rhythm?: StrengthRhythm;
+      quick?: boolean;
+      fallbackNote?: string;
+    }
   | { kind: 'history'; log: StrengthWorkoutLog }
   | { kind: 'mode'; setting: StrengthRhythm };
 
 type ExerciseEditorState = {
   exercise: StrengthWorkoutExercise;
 };
+
+type QuickLogEditor =
+  | { kind: 'date'; date: string; initialDate: string }
+  | { kind: 'muscles'; muscleIds: StrengthMuscleId[] };
 
 type PendingGuidedStart = {
   workout: StrengthSavedWorkout;
@@ -164,6 +176,7 @@ export function StrengthView({
   const [workoutsTab, setWorkoutsTab] = useState<WorkoutsTab>('recommended');
   const [visibleHistoryLimit, setVisibleHistoryLimit] = useState(10);
   const [historyAnnouncement, setHistoryAnnouncement] = useState('');
+  const [workoutActionMessage, setWorkoutActionMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [confirmingLogDelete, setConfirmingLogDelete] = useState(false);
   const [deleteLogError, setDeleteLogError] = useState('');
   const [bodyView, setBodyView] = useState<'front' | 'back'>('front');
@@ -176,6 +189,8 @@ export function StrengthView({
   const [settingsRestDayDrafts, setSettingsRestDayDrafts] = useState<Partial<Record<StrengthMuscleId, string>>>({});
   const [logTemplateSelection, setLogTemplateSelection] = useState('');
   const [logMuscleIds, setLogMuscleIds] = useState<StrengthMuscleId[]>([]);
+  const [logDate, setLogDate] = useState(evaluationDate);
+  const [quickLogEditor, setQuickLogEditor] = useState<QuickLogEditor | null>(null);
   const [workoutPeople, setWorkoutPeople] = useState<PersonId[]>([]);
   const [draftWorkoutMuscles, setDraftWorkoutMuscles] = useState<StrengthMuscleId[]>([]);
   const [draftExercises, setDraftExercises] = useState<StrengthWorkoutExercise[]>([]);
@@ -236,6 +251,9 @@ export function StrengthView({
   const isContextualLog = dialog?.kind === 'log' && Boolean(dialog.templateId);
   const contextualWorkoutName = contextualTemplate?.name
     ?? (dialog?.kind === 'log' && dialog.templateId ? 'Saved workout unavailable' : undefined);
+  const logIntro = dialog?.kind === 'log'
+    ? (dialog.quick ? dialog.fallbackNote : contextualWorkoutName)
+    : undefined;
 
   useEffect(() => {
     if (dialog) return;
@@ -338,6 +356,7 @@ export function StrengthView({
     setError('');
     setLogTemplateSelection(workoutId ?? '');
     setLogMuscleIds(configuredWorkout?.muscleIds ?? []);
+    setLogDate(evaluationDate);
     draftLogIdRef.current = `strength-log-${globalThis.crypto.randomUUID()}`;
     setDialog({
       kind: 'log',
@@ -495,6 +514,11 @@ export function StrengthView({
     }
   }
 
+  function closeQuickLogEditor() {
+    if (quickLogEditor?.kind === 'date') setLogDate(quickLogEditor.initialDate);
+    setQuickLogEditor(null);
+  }
+
   function cancelGuidedStart() {
     if (pendingGuidedStart) consumeRhythmRequest(pendingGuidedStart);
     setPendingGuidedStart(null);
@@ -514,24 +538,35 @@ export function StrengthView({
     }
   }
 
-  function startWorkoutFromButton(
-    workout: StrengthSavedWorkout,
-    event: MouseEvent<HTMLButtonElement>,
-    rhythm?: StrengthRhythm
-  ) {
+  function openWorkoutChoice(workout: StrengthSavedWorkout, event: MouseEvent<HTMLButtonElement>) {
     guidedSessionOpenerRef.current = event.currentTarget;
-    const request = { workout, ...(rhythm ? { rhythm } : {}) };
-    if (!data.guidedSessionDraft && workout.exercises?.some(exercise => exercise.loadMeaning === undefined)) {
-      openDialog({ kind: 'workout', workout }, event);
-      setError('Choose a load meaning for each exercise, then save the workout before starting.');
+    openDialog({ kind: 'workout-choice', workout }, event);
+  }
+
+  function chooseGuidedWorkout() {
+    if (dialog?.kind !== 'workout-choice') return;
+    const workout = dialog.workout;
+    const exercises = workout.exercises ?? [];
+    const hasGuidedPlan = exercises.length > 0
+      && exercises.every(exercise => exercise.sets.length > 0 && exercise.loadMeaning !== undefined);
+    if (!hasGuidedPlan) {
+      openDialog({
+        kind: 'log',
+        templateId: workout.id,
+        quick: true,
+        fallbackNote: 'This workout does not have a complete exercise plan, so this quick log records muscle groups only.'
+      });
       return;
     }
+    setDialog(null);
+    setGuidedSessionError('');
+    const request = { workout };
     if (data.guidedSessionDraft) {
       setPendingGuidedStart(request);
       setConfirmingGuidedStartDiscard(false);
-      return;
+    } else if (!startGuidedWorkout(request)) {
+      setPendingGuidedStart(request);
     }
-    if (!startGuidedWorkout(request)) setPendingGuidedStart(request);
   }
 
   function openDialog(
@@ -575,6 +610,8 @@ export function StrengthView({
         ?? data.savedWorkouts.find(workout => workout.id === next.templateId)?.muscleIds
         ?? [])]
       : []);
+    setLogDate(next.kind === 'log' ? next.log?.date ?? evaluationDate : evaluationDate);
+    setQuickLogEditor(null);
     draftWorkoutIdRef.current = next.kind === 'workout' ? next.workout?.id ?? null : null;
     setWorkoutPeople(next.kind === 'workout' ? [...(next.workout?.sharedWith ?? [])] : []);
     setDraftWorkoutMuscles(next.kind === 'workout'
@@ -647,6 +684,7 @@ export function StrengthView({
     setDraftSupersetGroups([]);
     setExerciseEditor(null);
     setPeoplePickerOpen(false);
+    setQuickLogEditor(null);
     setDialog(null);
     if (closesRhythmLog && rhythmLogRequestIdRef.current !== null) {
       rhythmLogRequestIdRef.current = null;
@@ -904,7 +942,9 @@ export function StrengthView({
         ...(existing.completionId ? { completionId: existing.completionId } : {})
       } : {}),
       id: existing?.id ?? draftLogIdRef.current,
-      date: String(form.get('date') ?? ''),
+      date: dialog?.kind === 'log' && dialog.quick
+        ? logDate
+        : String(form.get('date') ?? ''),
       muscleIds,
       ...(String(form.get('notes') ?? '').trim() ? { notes: String(form.get('notes')).trim() } : {}),
       ...(template
@@ -957,6 +997,22 @@ export function StrengthView({
     const saveError = onChange({ ...data, savedWorkouts: next });
     if (saveError) setError(saveError);
     else closeDialog();
+  }
+
+  function duplicateTemplate(workout: StrengthSavedWorkout) {
+    setWorkoutActionMessage(null);
+    const duplicate = cloneStrengthSavedWorkout(workout);
+    duplicate.id = `strength-workout-${globalThis.crypto.randomUUID()}`;
+    duplicate.name = `${workout.name.slice(0, 113).trimEnd()} (copy)`;
+    const result = createStrengthWorkout(data.savedWorkouts, duplicate);
+    if (!result.valid) {
+      setWorkoutActionMessage({ text: result.error, error: true });
+      return;
+    }
+    const saveError = onChange({ ...data, savedWorkouts: result.workouts });
+    setWorkoutActionMessage(saveError
+      ? { text: saveError, error: true }
+      : { text: `${duplicate.name} duplicated.`, error: false });
   }
 
   function removeLog(log: StrengthWorkoutLog) {
@@ -1186,22 +1242,26 @@ export function StrengthView({
               </div>
               {recommendations.length ? (
                 <div className="strength-recommendations">
-                  {recommendations.map(item => (
-                    <article key={item.id} className="strength-recommendation">
-                      <div>
-                        <h3>{item.name}</h3>
-                        <p>{item.reason}</p>
-                        <small>{item.muscles.map(muscle => muscle.name).join(' · ')}</small>
-                      </div>
-                      <button
-                        type="button"
-                        className="btn mini"
-                        onClick={event => openDialog({ kind: 'log', templateId: item.id }, event)}
-                      >
-                        Log workout
-                      </button>
-                    </article>
-                  ))}
+                  {recommendations.map(item => {
+                    const workout = data.savedWorkouts.find(candidate => candidate.id === item.id);
+                    return (
+                      <article key={item.id} className="strength-recommendation">
+                        <div>
+                          <h3>{item.name}</h3>
+                          <p>{item.reason}</p>
+                          <small>{item.muscles.map(muscle => muscle.name).join(' · ')}</small>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn mini"
+                          onClick={event => workout && openWorkoutChoice(workout, event)}
+                          disabled={!workout}
+                        >
+                          Workout
+                        </button>
+                      </article>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="strength-empty">
@@ -1225,9 +1285,18 @@ export function StrengthView({
               <header className="strength-card-heading">
                 <div>
                   <h3 id="saved-workouts-heading">Saved workouts</h3>
-                  <p>Workout templates are separate from recorded activity.</p>
+                  <p>Your reusable workouts.</p>
                 </div>
               </header>
+              <p className="strength-workout-hint">Tap Workout to choose how to record it.</p>
+              {workoutActionMessage && (
+                <p
+                  className={workoutActionMessage.error ? 'strength-form-error' : 'strength-history-status'}
+                  role={workoutActionMessage.error ? 'alert' : 'status'}
+                >
+                  {workoutActionMessage.text}
+                </p>
+              )}
               <div className="category-rhythm-entry-actions">
                 <button type="button" className="btn mini" onClick={event => openDialog({ kind: 'workout' }, event)}>
                   Create workout
@@ -1270,22 +1339,17 @@ export function StrengthView({
                             event.currentTarget.closest('details')?.removeAttribute('open');
                           }}>Edit workout</button>
                           <button type="button" onClick={event => {
+                            duplicateTemplate(workout);
+                            event.currentTarget.closest('details')?.removeAttribute('open');
+                          }}>Duplicate workout</button>
+                          <button type="button" onClick={event => {
                             removeTemplate(workout);
                             event.currentTarget.closest('details')?.removeAttribute('open');
                           }}>Delete workout</button>
                         </div>
                       </details>
                       <div className="strength-template__actions">
-                        {workout.exercises && workout.exercises.length > 0 && (
-                          <button type="button" className="btn mini" onClick={event => startWorkoutFromButton(workout, event)}>Start workout</button>
-                        )}
-                        <button type="button" className="btn mini ghost" onClick={event => openDialog({ kind: 'log', templateId: workout.id }, event)}>Log workout</button>
-                        {(!workout.exercises || workout.exercises.length === 0) && (
-                          <button type="button" className="btn mini ghost"
-                            onClick={event => openDialog({ kind: 'workout', workout }, event)}>
-                            Add exercises
-                          </button>
-                        )}
+                        <button type="button" className="btn mini" onClick={event => openWorkoutChoice(workout, event)}>Workout</button>
                       </div>
                     </article>
                   ))}
@@ -1800,19 +1864,67 @@ export function StrengthView({
           />
         </MoneyGoalDialog>
       )}
+      {dialog?.kind === 'workout-choice' && (
+        <MoneyGoalDialog
+          title={dialog.workout.name}
+          intro="How do you want to record this workout?"
+          labelledBy="strength-workout-choice-title"
+          titleId="strength-workout-choice-title"
+          closeLabel="Close workout choices"
+          dialogClassName="money-goal-dialog--strength-workout-choice"
+          bodyClassName="strength-dialog-body"
+          onClose={closeDialog}
+        >
+          <div className="strength-workout-choice">
+            <button type="button" className="strength-workout-choice__option strength-workout-choice__option--guided"
+              onClick={chooseGuidedWorkout}>
+              <span className="strength-workout-choice__icon strength-workout-choice__icon--guided" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M6.5 9v6M4 10v4M8.5 7.5v9M15.5 7.5v9M20 10v4M17.5 9v6M8.5 12h7" />
+                </svg>
+              </span>
+              <span className="strength-workout-choice__copy">
+                <strong>Full workout</strong>
+                <span>Full guided session with the timer. Log each set, rep, and weight as you go.</span>
+              </span>
+              <span className="strength-workout-choice__tag">Tracks details</span>
+            </button>
+            <button type="button" className="strength-workout-choice__option strength-workout-choice__option--quick"
+              onClick={() => openDialog({
+                kind: 'log',
+                templateId: dialog.workout.id,
+                quick: true
+              })}>
+              <span className="strength-workout-choice__icon strength-workout-choice__icon--quick" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="m5 12.5 4.5 4.5L19 7.5" />
+                </svg>
+              </span>
+              <span className="strength-workout-choice__copy">
+                <strong>Quick log</strong>
+                <span>Records the completion and muscle groups only. No set-by-set entry.</span>
+              </span>
+            </button>
+          </div>
+          <div className="money-goal-dialog__actions">
+            <button type="button" className="strength-workout-choice__cancel" onClick={closeDialog}>Cancel</button>
+          </div>
+        </MoneyGoalDialog>
+      )}
       {dialog?.kind === 'log' && (
         <MoneyGoalDialog
-          title={dialog.log ? 'Edit workout log' : 'Log workout'}
-          {...(contextualWorkoutName ? { intro: contextualWorkoutName } : {})}
+          title={dialog.quick ? contextualWorkoutName ?? 'Log workout' : dialog.log ? 'Edit workout log' : 'Log workout'}
+          {...(logIntro ? { intro: logIntro } : {})}
           labelledBy="strength-log-title"
           titleId="strength-log-title"
           closeLabel="Close workout log"
           bodyClassName="strength-dialog-body"
+          {...(dialog.quick ? { dialogClassName: 'money-goal-dialog--strength-quick-log' } : {})}
           phoneFullScreen={Boolean(dialog.rhythm)}
           onClose={closeDialog}
         >
           <form onSubmit={saveLog}>
-            {!isContextualLog && (
+            {!isContextualLog && !dialog.quick && (
               <label className="strength-form-field">Saved workout (optional)
                 <select
                   name="savedWorkoutId"
@@ -1831,19 +1943,63 @@ export function StrengthView({
                 </select>
               </label>
             )}
-            <label className="strength-form-field">Workout date<input name="date" type="date" max={evaluationDate} defaultValue={dialog.log?.date ?? evaluationDate} required /></label>
-            <StrengthMuscleSelection
-              selectedMuscleIds={logMuscleIds}
-              onToggle={muscleId => setLogMuscleIds(current =>
-                current.includes(muscleId)
-                  ? current.filter(selectedMuscleId => selectedMuscleId !== muscleId)
-                  : [...current, muscleId]
-              )}
-            />
-            <label className="strength-form-field">Notes<textarea name="notes" maxLength={1000} defaultValue={dialog.log?.notes ?? ''} /></label>
+            {dialog.quick ? (
+              <>
+                <input type="hidden" name="date" value={logDate} />
+                <div className="strength-quick-log__rows">
+                  <button
+                    type="button"
+                    className="strength-quick-log__row"
+                    aria-haspopup="dialog"
+                    onClick={() => setQuickLogEditor({
+                      kind: 'date',
+                      date: logDate,
+                      initialDate: logDate
+                    })}
+                  >
+                    <span className="strength-quick-log__row-copy">
+                      <strong>Date</strong>
+                      <span>{formatQuickLogDate(logDate, evaluationDate)}</span>
+                    </span>
+                    <span className="strength-quick-log__chevron" aria-hidden="true">›</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="strength-quick-log__row"
+                    aria-haspopup="dialog"
+                    onClick={() => setQuickLogEditor({ kind: 'muscles', muscleIds: [...logMuscleIds] })}
+                  >
+                    <span className="strength-quick-log__row-copy">
+                      <strong>Muscle groups</strong>
+                      <span>
+                        {strengthMuscles.filter(muscle => logMuscleIds.includes(muscle.id))
+                          .map(muscle => muscle.name).join(' · ') || 'Choose at least one group'}
+                      </span>
+                    </span>
+                    <span className="strength-quick-log__chevron" aria-hidden="true">›</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <label className="strength-form-field">Workout date<input name="date" type="date" max={evaluationDate} defaultValue={dialog.log?.date ?? evaluationDate} required /></label>
+                <StrengthMuscleSelection
+                  selectedMuscleIds={logMuscleIds}
+                  legendLabel="Muscles trained"
+                  onToggle={muscleId => setLogMuscleIds(current =>
+                    current.includes(muscleId)
+                      ? current.filter(selectedMuscleId => selectedMuscleId !== muscleId)
+                      : [...current, muscleId]
+                  )}
+                />
+              </>
+            )}
+            {!dialog.quick && (
+              <label className="strength-form-field">Notes<textarea name="notes" maxLength={1000} defaultValue={dialog.log?.notes ?? ''} /></label>
+            )}
             {error && <p className="strength-form-error" role="alert">{error}</p>}
             <div className="money-goal-dialog__actions">
-              {onStretchAfter && logMuscleIds.length > 0 && (
+              {!dialog.quick && onStretchAfter && logMuscleIds.length > 0 && (
                 <button
                   type="button"
                   className="btn mini ghost"
@@ -1855,10 +2011,105 @@ export function StrengthView({
                   Stretch after?
                 </button>
               )}
-              <button type="submit" className="btn mini">Save workout</button>
+              <button
+                type="submit"
+                className="btn mini"
+                disabled={Boolean(dialog.quick && logMuscleIds.length === 0)}
+              >
+                Save workout
+              </button>
               <button type="button" className="btn mini ghost" onClick={closeDialog}>Cancel</button>
             </div>
           </form>
+        </MoneyGoalDialog>
+      )}
+      {quickLogEditor?.kind === 'date' && (
+        <MoneyGoalDialog
+          title="Choose workout date"
+          labelledBy="strength-quick-log-date-title"
+          titleId="strength-quick-log-date-title"
+          closeLabel="Close date picker"
+          initialFocusId="strength-quick-log-date-input"
+          dialogClassName="money-goal-dialog--strength-quick-log-editor"
+          bodyClassName="strength-dialog-body"
+          onClose={closeQuickLogEditor}
+        >
+          <label className="strength-form-field" htmlFor="strength-quick-log-date-input">
+            Workout date
+            <input
+              id="strength-quick-log-date-input"
+              type="date"
+              min={data.trackingStartDate ?? '1900-01-01'}
+              max={evaluationDate}
+              value={quickLogEditor.date}
+              onChange={event => {
+                const date = event.currentTarget.value;
+                setQuickLogEditor(current => current?.kind === 'date'
+                  ? { ...current, date }
+                  : current);
+                if (date >= (data.trackingStartDate ?? '1900-01-01') && date <= evaluationDate) {
+                  setLogDate(date);
+                }
+              }}
+              required
+            />
+          </label>
+          <div className="money-goal-dialog__actions">
+            <button
+              type="button"
+              className="btn mini"
+              disabled={!quickLogEditor.date || quickLogEditor.date > evaluationDate
+                || quickLogEditor.date < (data.trackingStartDate ?? '1900-01-01')}
+              onClick={() => setQuickLogEditor(null)}
+            >
+              Done
+            </button>
+            <button type="button" className="btn mini ghost" onClick={closeQuickLogEditor}>Cancel</button>
+          </div>
+        </MoneyGoalDialog>
+      )}
+      {quickLogEditor?.kind === 'muscles' && (
+        <MoneyGoalDialog
+          title="Choose muscle groups"
+          labelledBy="strength-quick-log-muscles-title"
+          titleId="strength-quick-log-muscles-title"
+          closeLabel="Close muscle-group selection"
+          dialogClassName="money-goal-dialog--strength-quick-log-editor"
+          bodyClassName="strength-dialog-body"
+          onClose={() => setQuickLogEditor(null)}
+        >
+          <StrengthMuscleSelection
+            selectedMuscleIds={quickLogEditor.muscleIds}
+            legendLabel="Muscle groups"
+            hideLegend
+            onToggle={muscleId => setQuickLogEditor(current =>
+              current?.kind === 'muscles'
+                ? {
+                    ...current,
+                    muscleIds: current.muscleIds.includes(muscleId)
+                      ? current.muscleIds.filter(selected => selected !== muscleId)
+                      : [...current.muscleIds, muscleId]
+                  }
+                : current
+            )}
+          />
+          {quickLogEditor.muscleIds.length === 0 && (
+            <p className="strength-form-error" role="status">Select at least one muscle group to apply.</p>
+          )}
+          <div className="money-goal-dialog__actions">
+            <button
+              type="button"
+              className="btn mini"
+              disabled={quickLogEditor.muscleIds.length === 0}
+              onClick={() => {
+                setLogMuscleIds([...quickLogEditor.muscleIds]);
+                setQuickLogEditor(null);
+              }}
+            >
+              Apply
+            </button>
+            <button type="button" className="btn mini ghost" onClick={() => setQuickLogEditor(null)}>Cancel</button>
+          </div>
         </MoneyGoalDialog>
       )}
       {suggestionPickerOpen && (
@@ -2044,6 +2295,24 @@ function formatFitnessDate(value: string): string {
   return Number.isFinite(date.getTime())
     ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(date)
     : 'Date unavailable';
+}
+
+function formatQuickLogDate(value: string, today: string): string {
+  const date = new Date(`${value}T12:00:00`);
+  const todayDate = new Date(`${today}T12:00:00`);
+  if (!Number.isFinite(date.getTime()) || !Number.isFinite(todayDate.getTime())) return 'Date unavailable';
+  const [year, month, day] = value.split('-').map(Number);
+  const [todayYear, todayMonth, todayDay] = today.split('-').map(Number);
+  const daysAgo = (Date.UTC(todayYear!, todayMonth! - 1, todayDay!)
+    - Date.UTC(year!, month! - 1, day!)) / 86_400_000;
+  const label = new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric' }).format(date);
+  if (daysAgo === 0) return `Today, ${label}`;
+  if (daysAgo === 1) return `Yesterday, ${label}`;
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric'
+  }).format(date);
 }
 
 function strengthReadiness(score: StrengthMuscleScore): string {
