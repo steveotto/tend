@@ -60,6 +60,14 @@ export const rhythmTimes = ['Morning', 'Afternoon', 'Evening', 'Anytime'] as con
 export type RhythmCadence = (typeof rhythmCadences)[number];
 export type RhythmTime = (typeof rhythmTimes)[number];
 export type RhythmCategoryId = CategoryId;
+export type RhythmHealthLogCapability = 'weight' | 'cardio' | 'workout' | 'flexibility';
+
+const healthFoundationByCapability: Record<RhythmHealthLogCapability, string> = {
+  workout: 'health-strength',
+  cardio: 'health-cardio',
+  weight: 'health-weight',
+  flexibility: 'health-flexibility'
+};
 
 export type SavedRhythm = {
   id: string;
@@ -79,7 +87,7 @@ export type SavedRhythm = {
   primaryFoundationId?: string | null;
   secondaryFoundationIds?: string[];
   suggestionSourceId?: string;
-  healthLogCapability?: 'weight' | 'cardio' | 'workout' | null;
+  healthLogCapability?: RhythmHealthLogCapability | null;
   healthRunTarget?: HealthRunTarget | null;
 };
 
@@ -98,7 +106,7 @@ export type RhythmDraft = {
   seasonName?: string;
   primaryFoundationId?: string | null;
   secondaryFoundationIds?: string[];
-  healthLogCapability?: 'weight' | 'cardio' | 'workout' | null;
+  healthLogCapability?: RhythmHealthLogCapability | null;
   healthRunTarget?: HealthRunTarget | null;
   healthWorkoutMode?: 'recommended' | 'specific' | 'custom';
   healthWorkoutId?: string;
@@ -117,6 +125,33 @@ export function createRhythmDraft(categoryIds: readonly RhythmCategoryId[] = [])
     schedule: { frequency: 'daily' },
     scheduleEditing: true,
     personal: false
+  };
+}
+
+export function updateRhythmDraftFitnessActivity(
+  draft: RhythmDraft,
+  capability: RhythmHealthLogCapability
+): RhythmDraft {
+  const previousCapability = draft.healthLogCapability
+    ?? (draft.categoryIds.includes('health') ? 'workout' : undefined);
+  const previousFoundationId = previousCapability === undefined
+    ? undefined
+    : healthFoundationByCapability[previousCapability];
+  const nextFoundationId = healthFoundationByCapability[capability];
+  const foundationIds = [
+    ...(draft.primaryFoundationId ? [draft.primaryFoundationId] : []),
+    ...(draft.secondaryFoundationIds ?? [])
+  ];
+  const retainedFoundationIds = previousFoundationId && previousFoundationId !== nextFoundationId
+    ? foundationIds.filter(id => id !== previousFoundationId)
+    : foundationIds;
+  if (!retainedFoundationIds.includes(nextFoundationId)) retainedFoundationIds.push(nextFoundationId);
+
+  return {
+    ...draft,
+    healthLogCapability: capability,
+    primaryFoundationId: retainedFoundationIds[0] ?? null,
+    secondaryFoundationIds: retainedFoundationIds.slice(1)
   };
 }
 
@@ -241,7 +276,8 @@ export function validateSavedRhythmsV18(value: unknown): value is SavedRhythm[] 
 }
 
 export function validateSavedRhythmsV19(value: unknown): value is SavedRhythm[] {
-  if (!validateSavedRhythmsWithCapability(value, savedRhythmV19Keys, 'weight', 'cardio', 'workout')) return false;
+  if (!validateSavedRhythmsWithCapability(value, savedRhythmV19Keys,
+    'weight', 'cardio', 'workout', 'flexibility')) return false;
   return value.every(record => record.healthRunTarget === undefined || (
     record.healthLogCapability === 'cardio'
     && isRecord(record.healthRunTarget)
@@ -257,7 +293,7 @@ export function validateSavedRhythmsV19(value: unknown): value is SavedRhythm[] 
 function validateSavedRhythmsWithCapability(
   value: unknown,
   allowedKeys: readonly string[],
-  ...capabilities: Array<'weight' | 'cardio' | 'workout'>
+  ...capabilities: Array<RhythmHealthLogCapability>
 ): value is SavedRhythm[] {
   if (!validateSavedRhythmsWithKeys(value, allowedKeys, 'v12', true)) return false;
   if (!validateFoundationAssociations(value)) return false;
@@ -416,7 +452,8 @@ export function validateRhythmDraft(
   if (draft.healthLogCapability !== undefined && draft.healthLogCapability !== null
     && ((draft.healthLogCapability !== 'weight'
       && draft.healthLogCapability !== 'cardio'
-      && draft.healthLogCapability !== 'workout')
+      && draft.healthLogCapability !== 'workout'
+      && draft.healthLogCapability !== 'flexibility')
       || !draft.categoryIds.includes('health'))) {
     errors.categoryIds = 'Fitness logging capability requires the Health & Fitness category.';
   }

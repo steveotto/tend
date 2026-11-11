@@ -1,5 +1,5 @@
 import { forwardRef, useId } from 'react';
-import type { KeyboardEventHandler, ReactNode } from 'react';
+import type { CSSProperties, KeyboardEventHandler, ReactNode } from 'react';
 import { scoreTone } from '../domain/score-tone.ts';
 import { formatScore } from '../domain/score-display.ts';
 import { RhythmScoreCircle } from './RhythmScoreCircle.tsx';
@@ -9,6 +9,12 @@ export type HealthScoreMetric = {
   state?: 'scored' | 'unscored' | 'unavailable';
   explanation?: string;
 };
+
+export type HealthScoreSize = 'card' | 'detail';
+
+export const healthScoreValueStyle = {
+  '--health-score-value-size': 'clamp(20px, calc(1.5rem * var(--app-text-scale, 1)), 28px)'
+} as CSSProperties;
 
 export const HealthScoreInfoButton = forwardRef<HTMLButtonElement, {
   label: string;
@@ -42,6 +48,8 @@ type HealthScoreMeasuresProps = {
   onTrackCaption: string;
   healthLabel?: string;
   showHealthMeter?: boolean;
+  showCaptions?: boolean;
+  size?: HealthScoreSize;
   className?: string;
 };
 
@@ -53,6 +61,8 @@ type HealthScoreBreakdownProps = Omit<HealthScoreMeasuresProps, 'healthScore'> &
   ariaLabel?: string;
   headingAction?: ReactNode;
   showMeasures?: boolean;
+  showMeasureCaptions?: boolean;
+  size?: HealthScoreSize;
   children?: ReactNode;
   onKeyDown?: KeyboardEventHandler<HTMLElement>;
 };
@@ -69,6 +79,8 @@ export function HealthScoreBreakdown({
   ariaLabel = 'Health score breakdown',
   headingAction,
   showMeasures = true,
+  showMeasureCaptions = false,
+  size = 'detail',
   children,
   onKeyDown,
   className = ''
@@ -77,8 +89,9 @@ export function HealthScoreBreakdown({
 
   return (
     <section
-      className={`health-score-breakdown ${className}`.trim()}
+      className={`health-score-breakdown health-score-breakdown--${size} ${className}`.trim()}
       aria-label={ariaLabel}
+      style={healthScoreValueStyle}
       onKeyDown={onKeyDown}
     >
       <header className="health-score-breakdown__header">
@@ -96,8 +109,10 @@ export function HealthScoreBreakdown({
           healthScore={score}
           consistencyCaption={consistencyCaption}
           onTrackCaption={onTrackCaption}
+          showCaptions={showMeasureCaptions}
           healthLabel={healthLabel}
           showHealthMeter={false}
+          size={size}
         />
       )}
       {children}
@@ -109,21 +124,34 @@ export function HealthScoreMeasures({
   healthScore,
   consistency,
   onTrack,
+  consistencyCaption,
+  onTrackCaption,
   healthLabel = 'Health',
   showHealthMeter = true,
+  showCaptions = false,
+  size = 'detail',
   className = ''
 }: HealthScoreMeasuresProps) {
   return (
-    <div className={`health-score-measures ${className}`.trim()}>
+    <div
+      className={`health-score-measures health-score-measures--${size} ${className}`.trim()}
+      style={healthScoreValueStyle}
+    >
       {showHealthMeter && <HealthScoreMeter score={healthScore} label={healthLabel} />}
       <div className="health-score-measures__grid" role="group" aria-label="Consistency and On Track">
         <HealthScoreMeasure
           label="Consistency"
           metric={consistency}
+          caption={consistencyCaption}
+          showCaption={showCaptions}
+          size={size}
         />
         <HealthScoreMeasure
           label="On Track"
           metric={onTrack}
+          caption={onTrackCaption}
+          showCaption={showCaptions}
+          size={size}
         />
       </div>
     </div>
@@ -147,13 +175,13 @@ export function HealthScoreMeter({
       aria-label={available ? `${label} score` : `${label}: Not enough data`}
       aria-valuemin={available ? 0 : undefined}
       aria-valuemax={available ? 100 : undefined}
-      aria-valuenow={available ? score : undefined}
+      aria-valuenow={available ? Math.round(score) : undefined}
       aria-valuetext={available ? `${formatScore(score)} out of 100${illustrative ? ', illustrative blend' : ''}` : undefined}
     >
       <span
         className="health-score-meter__fill"
         aria-hidden="true"
-        style={{ width: `${available ? Math.max(0, Math.min(100, score)) : 0}%` }}
+        style={{ width: `${available ? Math.max(0, Math.min(100, Math.round(score))) : 0}%` }}
       />
     </div>
   );
@@ -161,10 +189,16 @@ export function HealthScoreMeter({
 
 function HealthScoreMeasure({
   label,
-  metric
+  metric,
+  caption,
+  showCaption,
+  size
 }: {
   label: string;
   metric: HealthScoreMetric;
+  caption: string;
+  showCaption: boolean;
+  size: HealthScoreSize;
 }) {
   const headingId = useId();
   const state = metric.state ?? (metric.score === null ? 'unavailable' : 'scored');
@@ -176,8 +210,10 @@ function HealthScoreMeasure({
         label={label}
         score={state === 'scored' ? metric.score : null}
         state={state}
+        size={size}
         {...(metric.explanation ? { explanation: metric.explanation } : {})}
       />
+      {showCaption && <p className="health-score-measures__caption">{caption}</p>}
     </section>
   );
 }

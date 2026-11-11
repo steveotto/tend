@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src https://fhujqvudflxdpcvonids.supabase.co; form-action 'none'; base-uri 'none'; object-src 'none'"
+  >
+  <title>One-time Supabase metadata check</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font: 16px/1.5 system-ui, sans-serif;
+      color: #17251e;
+      background: #f5f8f6;
+    }
+
+    body {
+      box-sizing: border-box;
+      width: min(100% - 32px, 620px);
+      margin: 32px auto;
+    }
+
+    main {
+      padding: 24px;
+      border: 1px solid #d6e0d9;
+      border-radius: 16px;
+      background: #fff;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 1.4rem;
+      line-height: 1.25;
+    }
+
+    p { margin: 8px 0 16px; }
+
+    label {
+      display: block;
+      margin: 14px 0 5px;
+      font-weight: 650;
+    }
+
+    input {
+      box-sizing: border-box;
+      width: 100%;
+      min-height: 44px;
+      padding: 9px 11px;
+      border: 1px solid #89978e;
+      border-radius: 8px;
+      font: inherit;
+    }
+
+    button {
+      min-height: 44px;
+      margin-top: 14px;
+      padding: 9px 14px;
+      border: 0;
+      border-radius: 8px;
+      background: #125c3b;
+      color: white;
+      font: inherit;
+      font-weight: 650;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      background: #89978e;
+      cursor: not-allowed;
+    }
+
+    button:focus-visible, input:focus-visible {
+      outline: none;
+    }
+
+    .notice {
+      padding: 12px;
+      border-radius: 8px;
+      background: #edf3ef;
+    }
+
+    .result {
+      margin-top: 18px;
+      padding: 14px;
+      border: 1px solid #d6e0d9;
+      border-radius: 8px;
+      overflow-wrap: anywhere;
+    }
+
+    .result[hidden], [hidden] { display: none; }
+    .result p:last-child { margin-bottom: 0; }
+    .muted { color: #536158; }
+    .error { color: #9c2f25; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>One-time Supabase metadata check</h1>
+    <p class="notice">
+      This isolated page targets only project <strong>fhujqvudflxdpcvonids</strong>.
+      It makes no requests until you press a button. It does not save credentials or
+      session data; close this page to clear its in-memory session.
+    </p>
+
+    <form id="sign-in-form">
+      <label for="public-key">Public client API key</label>
+      <input id="public-key" name="public-key" type="text" autocomplete="off" spellcheck="false" required>
+
+      <label for="email">Disposable account email</label>
+      <input id="email" name="email" type="email" autocomplete="username" required>
+
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+      <button id="sign-in" type="submit">Sign in</button>
+    </form>
+
+    <section id="signed-in" class="result" aria-live="polite" hidden>
+      <p>Signed in as <strong id="signed-in-email"></strong></p>
+      <button id="read-metadata" type="button" disabled>Read backup metadata once</button>
+      <div id="read-result" aria-live="polite"></div>
+    </section>
+
+    <p id="sign-in-result" class="result" role="status" hidden></p>
+  </main>
+
+  <script>
+    'use strict';
+
+    const PROJECT_ORIGIN = 'https://fhujqvudflxdpcvonids.supabase.co';
+    const REQUEST_DEADLINE_MS = 70_000;
+    const form = document.getElementById('sign-in-form');
+    const keyInput = document.getElementById('public-key');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const signInButton = document.getElementById('sign-in');
+    const signInResult = document.getElementById('sign-in-result');
+    const signedInSection = document.getElementById('signed-in');
+    const signedInEmail = document.getElementById('signed-in-email');
+    const readButton = document.getElementById('read-metadata');
+    const readResult = document.getElementById('read-result');
+
+    let activeSession = null;
+    let signInAttempted = false;
+    let metadataAttempted = false;
+
+    function safeHeader(headers, name) {
+      const value = headers.get(name);
+      return value && /^[A-Za-z0-9._:-]{1,128}$/.test(value) ? value : null;
+    }
+
+    function showRequestDetails(container, response, elapsedMs) {
+      const status = response ? `${response.status} ${response.statusText}`.trim() : 'No HTTP response';
+      const requestId = response
+        ? safeHeader(response.headers, 'sb-request-id') || safeHeader(response.headers, 'x-request-id')
+        : null;
+      const rayId = response ? safeHeader(response.headers, 'cf-ray') : null;
+      container.replaceChildren();
+
+      const details = document.createElement('p');
+      details.textContent = `Elapsed: ${elapsedMs} ms · HTTP: ${status}`;
+      container.append(details);
+
+      const ids = document.createElement('p');
+      ids.textContent = `Request ID: ${requestId || 'not exposed'} · Cloudflare Ray ID: ${rayId || 'not exposed'}`;
+      container.append(ids);
+    }
+
+    function safeErrorCode(payload) {
+      if (!payload || typeof payload !== 'object') return null;
+      const code = payload.code || payload.error_code || payload.error;
+      return typeof code === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(code) ? code : null;
+    }
+
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (signInAttempted || !form.reportValidity()) return;
+
+      const apiKey = keyInput.value.trim();
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+      if (!apiKey || !email || !password) return;
+
+      signInAttempted = true;
+      signInButton.disabled = true;
+      keyInput.disabled = true;
+      emailInput.disabled = true;
+      passwordInput.value = '';
+      passwordInput.disabled = true;
+      signInResult.hidden = false;
+      signInResult.textContent = 'Signing in once…';
+
+      const startedAt = performance.now();
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), REQUEST_DEADLINE_MS);
+      let response = null;
+      try {
+        response = await fetch(`${PROJECT_ORIGIN}/auth/v1/token?grant_type=password`, {
+          method: 'POST',
+          mode: 'cors',
+          credentials: 'omit',
+          cache: 'no-store',
+          redirect: 'error',
+          signal: controller.signal,
+          headers: {
+            apikey: apiKey,
+            'content-type': 'application/json'
+          },
+          body: JSON.stringify({ email, password })
+        });
+        const payload = await response.json();
+        const elapsedMs = Math.round(performance.now() - startedAt);
+        showRequestDetails(signInResult, response, elapsedMs);
+
+        if (!response.ok) {
+          const code = safeErrorCode(payload);
+          const message = document.createElement('p');
+          message.className = 'error';
+          message.textContent = `Sign-in failed${code ? ` (code: ${code})` : ''}. No retry was made.`;
+          signInResult.append(message);
+          return;
+        }
+
+        const user = payload && typeof payload === 'object' ? payload.user : null;
+        const accessToken = payload && typeof payload.access_token === 'string' ? payload.access_token : null;
+        const userId = user && typeof user.id === 'string' ? user.id : null;
+        const returnedEmail = user && typeof user.email === 'string' ? user.email : null;
+        if (!accessToken || !userId || !returnedEmail) {
+          signInResult.append(document.createTextNode(' Sign-in response did not contain the expected session fields.'));
+          return;
+        }
+
+        activeSession = { accessToken, userId, email: returnedEmail, apiKey };
+        signedInEmail.textContent = returnedEmail;
+        signedInSection.hidden = false;
+        readButton.disabled = false;
+        signInResult.append(document.createTextNode(' Sign-in succeeded.'));
+      } catch (error) {
+        const elapsedMs = Math.round(performance.now() - startedAt);
+        showRequestDetails(signInResult, response, elapsedMs);
+        const message = document.createElement('p');
+        message.className = 'error';
+        message.textContent = error && error.name === 'AbortError'
+          ? 'Sign-in reached its 70-second deadline. No retry was made.'
+          : 'Sign-in failed before a readable HTTP response (network or browser CORS error). No retry was made.';
+        signInResult.append(message);
+      } finally {
+        clearTimeout(timer);
+      }
+    });
+
+    readButton.addEventListener('click', async () => {
+      if (metadataAttempted || !activeSession) return;
+      metadataAttempted = true;
+      readButton.disabled = true;
+      readButton.textContent = 'Metadata read attempted';
+      readResult.replaceChildren();
+      const startedAt = performance.now();
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), REQUEST_DEADLINE_MS);
+      let response = null;
+
+      try {
+        const query = new URLSearchParams({
+          select: 'revision,schema_version,updated_at',
+          user_id: `eq.${activeSession.userId}`,
+          limit: '1'
+        });
+        response = await fetch(`${PROJECT_ORIGIN}/rest/v1/tend_preview_backups?${query}`, {
+          method: 'GET',
+          mode: 'cors',
+          credentials: 'omit',
+          cache: 'no-store',
+          redirect: 'error',
+          signal: controller.signal,
+          headers: {
+            apikey: activeSession.apiKey,
+            Authorization: `Bearer ${activeSession.accessToken}`,
+            Accept: 'application/json'
+          }
+        });
+
+        const elapsedMs = Math.round(performance.now() - startedAt);
+        showRequestDetails(readResult, response, elapsedMs);
+        const outcome = document.createElement('p');
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null);
+          const code = safeErrorCode(payload);
+          outcome.className = 'error';
+          outcome.textContent = `Metadata read failed${code ? ` (code: ${code})` : ''}. No retry was made.`;
+        } else {
+          const rows = await response.json();
+          if (!Array.isArray(rows) || rows.length > 1) {
+            outcome.className = 'error';
+            outcome.textContent = 'Metadata response shape was unexpected; no row content was displayed.';
+          } else {
+            outcome.textContent = `${rows.length} metadata row${rows.length === 1 ? '' : 's'} returned. Values and backup documents are not displayed.`;
+          }
+        }
+        readResult.append(outcome);
+      } catch (error) {
+        const elapsedMs = Math.round(performance.now() - startedAt);
+        showRequestDetails(readResult, response, elapsedMs);
+        const outcome = document.createElement('p');
+        outcome.className = 'error';
+        outcome.textContent = error && error.name === 'AbortError'
+          ? 'The metadata read reached its 70-second deadline. No retry was made.'
+          : 'The metadata read failed before a readable HTTP response (network or browser CORS error). No retry was made.';
+        readResult.append(outcome);
+      } finally {
+        clearTimeout(timer);
+      }
+    });
+  </script>
+</body>
+</html>

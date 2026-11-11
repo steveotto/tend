@@ -1,9 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
+import { calculateAnchoredPopoverPosition } from './AnchoredPopover.tsx';
 
 export type StyledSelectOption<Value extends string> = {
   value: Value;
   label: string;
+  description?: string;
   group?: string;
   disabled?: boolean;
 };
@@ -17,6 +19,12 @@ type StyledSelectProps<Value extends string> = {
   describedBy?: string | undefined;
   invalid?: boolean | undefined;
   disabled?: boolean | undefined;
+  containerClassName?: string | undefined;
+  triggerClassName?: string | undefined;
+  triggerAriaLabel?: string | undefined;
+  sizeTriggerToOptions?: boolean | undefined;
+  popoverMinWidth?: number | undefined;
+  matchTriggerWidth?: boolean | undefined;
   onChange: (value: Value) => void;
 };
 
@@ -36,6 +44,12 @@ export function StyledSelect<Value extends string>({
   describedBy,
   invalid = false,
   disabled = false,
+  containerClassName,
+  triggerClassName,
+  triggerAriaLabel,
+  sizeTriggerToOptions = false,
+  popoverMinWidth = 280,
+  matchTriggerWidth = false,
   onChange
 }: StyledSelectProps<Value>) {
   const generatedId = useId();
@@ -73,22 +87,57 @@ export function StyledSelect<Value extends string>({
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const viewportPadding = 12;
-    const width = Math.min(
-      Math.max(rect.width, Math.min(280, window.innerWidth - viewportPadding * 2)),
-      window.innerWidth - viewportPadding * 2
-    );
-    const left = Math.min(
-      Math.max(viewportPadding, rect.left),
-      window.innerWidth - width - viewportPadding
-    );
-    const roomBelow = window.innerHeight - rect.bottom - viewportPadding;
-    const roomAbove = rect.top - viewportPadding;
-    const placeAbove = roomBelow < Math.min(240, roomAbove) && roomAbove > roomBelow;
-    const maxHeight = Math.max(100, Math.min(280, placeAbove ? roomAbove : roomBelow));
+    let width: number;
+    let left: number;
+    let top: number;
+    let maxHeight: number;
+    if (matchTriggerWidth) {
+      const visualViewport = window.visualViewport;
+      const viewport = {
+        left: visualViewport?.offsetLeft ?? 0,
+        top: visualViewport?.offsetTop ?? 0,
+        width: visualViewport?.width || window.innerWidth || document.documentElement.clientWidth,
+        height: visualViewport?.height || window.innerHeight || document.documentElement.clientHeight
+      };
+      width = Math.min(rect.width, Math.max(0, viewport.width - viewportPadding * 2));
+      const estimatedHeight = Math.min(280, options.length * 46 + 14);
+      const popover = calculateAnchoredPopoverPosition(
+        rect,
+        {
+          left: rect.left,
+          top: rect.bottom,
+          right: rect.left + width,
+          bottom: rect.bottom + estimatedHeight,
+          width,
+          height: estimatedHeight
+        },
+        viewport,
+        viewportPadding,
+        6
+      );
+      left = popover.left;
+      top = popover.top;
+      maxHeight = Math.min(280, popover.maxHeight);
+    } else {
+      const minPopoverWidth = Math.min(popoverMinWidth, window.innerWidth - viewportPadding * 2);
+      width = Math.min(
+        Math.max(rect.width, minPopoverWidth),
+        window.innerWidth - viewportPadding * 2
+      );
+      left = Math.min(
+        Math.max(viewportPadding, rect.left),
+        window.innerWidth - width - viewportPadding
+      );
+      const roomBelow = window.innerHeight - rect.bottom - viewportPadding;
+      const roomAbove = rect.top - viewportPadding;
+      const placeAbove = roomBelow < Math.min(240, roomAbove) && roomAbove > roomBelow;
+      maxHeight = Math.max(100, Math.min(280, placeAbove ? roomAbove : roomBelow));
+      top = placeAbove ? Math.max(viewportPadding, rect.top - maxHeight - 6) : rect.bottom + 6;
+    }
     setPosition({
       position: 'fixed',
       left,
-      top: placeAbove ? Math.max(viewportPadding, rect.top - maxHeight - 6) : rect.bottom + 6,
+      top,
       width,
       maxHeight,
       zIndex: 10000
@@ -188,31 +237,49 @@ export function StyledSelect<Value extends string>({
     if (!open) return;
     optionRefs.current[activeIndex]?.focus();
     const reposition = () => updatePosition();
+    const visualViewport = window.visualViewport;
     const dismissOutside = (event: PointerEvent) => {
       if (!containerRef.current?.contains(event.target as Node)) closeMenu(false);
     };
     window.addEventListener('resize', reposition);
     window.addEventListener('scroll', reposition, true);
+    if (matchTriggerWidth) {
+      visualViewport?.addEventListener('resize', reposition);
+      visualViewport?.addEventListener('scroll', reposition);
+    }
     document.addEventListener('pointerdown', dismissOutside);
+    const observer = matchTriggerWidth && typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(reposition)
+      : null;
+    if (matchTriggerWidth && triggerRef.current) observer?.observe(triggerRef.current);
+    const popover = matchTriggerWidth ? document.getElementById(`${id}-listbox`) : null;
+    if (popover) observer?.observe(popover);
     return () => {
+      observer?.disconnect();
       window.removeEventListener('resize', reposition);
       window.removeEventListener('scroll', reposition, true);
+      if (matchTriggerWidth) {
+        visualViewport?.removeEventListener('resize', reposition);
+        visualViewport?.removeEventListener('scroll', reposition);
+      }
       document.removeEventListener('pointerdown', dismissOutside);
     };
-  }, [activeIndex, open]);
+  }, [activeIndex, id, matchTriggerWidth, open, options.length]);
 
   useEffect(() => () => window.clearTimeout(typeaheadTimerRef.current), []);
 
   return (
-    <div className="rhythm-select" ref={containerRef}>
+    <div className={['rhythm-select', containerClassName].filter(Boolean).join(' ')} ref={containerRef}>
       <button
         ref={triggerRef}
         id={id}
         type="button"
-        className="rhythm-select__trigger"
+        className={['rhythm-select__trigger', sizeTriggerToOptions && 'rhythm-select__trigger--size-to-options', triggerClassName]
+          .filter(Boolean)
+          .join(' ')}
         disabled={disabled}
         role="combobox"
-        aria-label={`${label}: ${selectedOption?.label ?? placeholder}`}
+        aria-label={triggerAriaLabel ?? `${label}: ${selectedOption?.label ?? placeholder}`}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={`${id}-listbox`}
@@ -249,6 +316,11 @@ export function StyledSelect<Value extends string>({
         }}
       >
         <span>{selectedOption?.label ?? placeholder}</span>
+        {sizeTriggerToOptions && (
+          <span className="rhythm-select__trigger-sizer" aria-hidden="true">
+            {options.map(option => <span key={option.value}>{option.label}</span>)}
+          </span>
+        )}
         <svg viewBox="0 0 20 20" aria-hidden="true">
           <path d="m5 7.5 5 5 5-5" />
         </svg>
@@ -259,7 +331,7 @@ export function StyledSelect<Value extends string>({
           className="rhythm-select__popover"
           role="listbox"
           aria-label={label}
-          style={position}
+          style={{ boxSizing: 'border-box', ...position }}
           onKeyDown={handleOptionKeyDown}
         >
           {optionGroups.map(group => {
@@ -275,7 +347,10 @@ export function StyledSelect<Value extends string>({
                 onFocus={() => setActiveIndex(index)}
                 onClick={() => selectOption(index)}
               >
-                <span>{option.label}</span>
+                <span className="rhythm-select__option-copy">
+                  <span>{option.label}</span>
+                  {option.description && <small>{option.description}</small>}
+                </span>
                 {value === option.value && (
                   <svg viewBox="0 0 20 20" aria-hidden="true">
                     <path d="m4 10 4 4 8-8" />

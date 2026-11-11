@@ -98,6 +98,10 @@ export function StrengthGuidedSessionDialog({
   const [workoutNotesDraft, setWorkoutNotesDraft] = useState('');
   const [customRestMinutes, setCustomRestMinutes] = useState('0');
   const [customRestSeconds, setCustomRestSeconds] = useState('0');
+  const [restDurationDraft, setRestDurationDraft] = useState<number | null>(null);
+  const [restDurationSource, setRestDurationSource] = useState<'preset' | 'custom'>('preset');
+  const [autoStartRestDraft, setAutoStartRestDraft] = useState(false);
+  const [soundDraftEnabled, setSoundDraftEnabled] = useState(false);
   const [error, setError] = useState('');
   const exercise = session.exercises[session.currentExerciseIndex]!;
   const setIndex = exercise.sets.findIndex(set => set.id === session.currentSetId);
@@ -112,6 +116,7 @@ export function StrengthGuidedSessionDialog({
   const timerExercise = session.exercises.find(item => item.id === timerExerciseId);
   const timerSetIndex = timerExercise?.sets.findIndex(item => item.id === timerSetId) ?? -1;
   const previous = selectPreviousStrengthSetValues(workouts, session, exercise.id, setIndex);
+  const previousWorkoutLoad = previousPerformedLoad(previous, exercise.id, setIndex);
   const lastSet = useMemo(() => session.exercises
     .flatMap(item => item.sets
       .filter(setItem => setItem.status === 'performed')
@@ -119,8 +124,10 @@ export function StrengthGuidedSessionDialog({
     .sort((left, right) => right.set.confirmedAt.localeCompare(left.set.confirmedAt))[0], [session.exercises]);
   const timeFields = localSessionDateTime(session);
   const currentInputKey = sessionInputKey(exercise.id, set.id);
-  const earlierLoad = earlierPerformedLoad(session, exercise.id, setIndex, exercise.loadMeaning, preferredWeightUnit);
-  const initialInput = () => createInput(set, previous, preferredWeightUnit, exercise.loadMeaning, earlierLoad);
+  const currentWorkoutLoad = latestPerformedLoad(session, exercise.id, exercise.loadMeaning, preferredWeightUnit);
+  const initialInput = () => createInput(
+    set, previous, preferredWeightUnit, exercise.loadMeaning, previousWorkoutLoad, currentWorkoutLoad
+  );
   const [input, setInput] = useState<SetInput>(initialInput);
   const restTimer: StrengthSessionRestTimer = session.restTimer
     ?? { status: 'idle', durationSeconds: exercise.restDurationSeconds };
@@ -134,6 +141,7 @@ export function StrengthGuidedSessionDialog({
   const [alertPlaying, setAlertPlaying] = useState(false);
   const [timerAnnouncement, setTimerAnnouncement] = useState('');
   const timerOptionsButtonRef = useRef<HTMLButtonElement>(null);
+  const timerOptionsWasOpenRef = useRef(false);
   const exerciseMenuButtonRef = useRef<HTMLButtonElement>(null);
   const notesButtonRef = useRef<HTMLButtonElement>(null);
   const setInputDraftsRef = useRef(new Map<string, SetInput>());
@@ -147,7 +155,7 @@ export function StrengthGuidedSessionDialog({
 
   useEffect(() => {
     setInput(setInputDraftsRef.current.get(currentInputKey)
-      ?? createInput(set, previous, preferredWeightUnit, exercise.loadMeaning, earlierLoad));
+      ?? createInput(set, previous, preferredWeightUnit, exercise.loadMeaning, previousWorkoutLoad, currentWorkoutLoad));
   }, [currentInputKey, session.currentExerciseIndex, session.currentSetId, exercise.loadMeaning]);
 
   useEffect(() => {
@@ -177,6 +185,15 @@ export function StrengthGuidedSessionDialog({
     }
   }, [restTimer.status, restTimer.durationSeconds, runningDeadline,
     restTimer.status === 'paused' ? restTimer.remainingMilliseconds : null]);
+
+  useEffect(() => {
+    if (timerOptionsOpen) {
+      timerOptionsWasOpenRef.current = true;
+    } else if (timerOptionsWasOpenRef.current) {
+      timerOptionsWasOpenRef.current = false;
+      timerOptionsButtonRef.current?.focus({ preventScroll: true });
+    }
+  }, [timerOptionsOpen]);
 
   useEffect(() => {
     const refresh = () => setExerciseElapsedMilliseconds(
@@ -340,58 +357,96 @@ export function StrengthGuidedSessionDialog({
     setAlertPlaying(false);
   }
 
-  function setRestDuration(seconds: number) {
-    const changed = setStrengthSessionRestDuration(session, seconds);
-    if (!changed.valid) setError(changed.error);
-    else {
-      const restarted = restTimer.status === 'running'
-        ? startStrengthSessionRestTimer(changed.session, new Date().toISOString())
-        : changed;
-      if (!restarted.valid) {
-        setError(restarted.error);
-        return;
-      }
-      alertableDeadlineRef.current = null;
-      expiryHandledRef.current = null;
-      setTimerAnnouncement('');
-      silenceRestAlert();
-      apply(restarted.session);
-    }
+  function chooseRestPreset(seconds: number) {
+    setRestDurationDraft(seconds);
+    setRestDurationSource('preset');
+    setCustomRestMinutes(String(Math.floor(seconds / 60)));
+    setCustomRestSeconds(String(seconds % 60));
   }
 
-  function applyCustomRestDuration(seconds: number) {
-    const preference = setStrengthGuidedSessionRestPreference(
-      session, exercise.id, seconds, superset?.id
+  function updateCustomRestDuration(minutes: string, seconds: string) {
+    setCustomRestMinutes(minutes);
+    setCustomRestSeconds(seconds);
+    setRestDurationSource('custom');
+    const parsedMinutes = Number(minutes);
+    const parsedSeconds = Number(seconds);
+    const total = parsedMinutes * 60 + parsedSeconds;
+    setRestDurationDraft(
+      minutes.trim() !== ''
+        && seconds.trim() !== ''
+        && Number.isInteger(parsedMinutes)
+        && parsedMinutes >= 0
+        && parsedMinutes <= 60
+        && Number.isInteger(parsedSeconds)
+        && parsedSeconds >= 0
+        && parsedSeconds <= 59
+        && total >= 1
+        && total <= 3600
+        ? total
+        : null
     );
-    if (!preference.valid) {
-      setError(preference.error);
+  }
+
+  async function applyRestSettings() {
+    if (restDurationDraft === null) {
+      setError('Enter a rest duration from 0:01 to 60:00.');
       return;
     }
-    const changed = setStrengthSessionRestDuration(preference.session, seconds);
-    if (!changed.valid) {
-      setError(changed.error);
+
+    const durationChanged = restDurationDraft !== restTimer.durationSeconds;
+    const autoStartChanged = autoStartRestDraft !== (session.autoStartRest === true);
+    const preferenceDuration = superset?.restDurationSeconds ?? exercise.restDurationSeconds;
+    const customPreferenceChanged = restDurationSource === 'custom'
+      && restDurationDraft !== preferenceDuration;
+    let nextSession = session;
+    if (durationChanged) {
+      const changed = setStrengthSessionRestDuration(nextSession, restDurationDraft);
+      if (!changed.valid) {
+        setError(changed.error);
+        return;
+      }
+      nextSession = changed.session;
+    }
+    if (autoStartChanged) {
+      const changed = setStrengthSessionAutoStartRest(nextSession, autoStartRestDraft);
+      if (!changed.valid) {
+        setError(changed.error);
+        return;
+      }
+      nextSession = changed.session;
+    }
+
+    if (customPreferenceChanged) {
+      const preference = setStrengthGuidedSessionRestPreference(
+        nextSession,
+        exercise.id,
+        restDurationDraft,
+        superset?.id
+      );
+      if (!preference.valid) {
+        setError(preference.error);
+        return;
+      }
+      const result = onApplyCustomRestDuration(
+        preference.session,
+        restDurationDraft,
+        exercise.id,
+        superset?.id
+      );
+      if (!result.applied) {
+        setError(result.message ?? 'The custom rest duration could not be saved.');
+        return;
+      }
+      setError('');
+      setTimerAnnouncement(result.message ?? '');
+    } else if ((durationChanged || autoStartChanged) && !apply(nextSession)) {
       return;
     }
-    const restarted = restTimer.status === 'running'
-      ? startStrengthSessionRestTimer(changed.session, new Date().toISOString())
-      : changed;
-    if (!restarted.valid) {
-      setError(restarted.error);
-      return;
+
+    if (soundDraftEnabled !== soundEnabled) {
+      if (soundDraftEnabled) await enableSound();
+      else disableSound();
     }
-    const result = onApplyCustomRestDuration(
-      restarted.session,
-      seconds,
-      exercise.id,
-      superset?.id
-    );
-    if (!result.applied) {
-      setError(result.message ?? 'The custom rest duration could not be saved.');
-      return;
-    }
-    afterRestTimerChange(restarted.session);
-    setError('');
-    setTimerAnnouncement(result.message ?? '');
     setTimerOptionsOpen(false);
   }
 
@@ -426,8 +481,14 @@ export function StrengthGuidedSessionDialog({
   }
 
   function openTimerOptions() {
-    setCustomRestMinutes(String(Math.floor(restTimer.durationSeconds / 60)));
-    setCustomRestSeconds(String(restTimer.durationSeconds % 60));
+    const seconds = restTimer.durationSeconds;
+    setCustomRestMinutes(String(Math.floor(seconds / 60)));
+    setCustomRestSeconds(String(seconds % 60));
+    setRestDurationDraft(seconds);
+    setRestDurationSource([60, 90, 120, 150, 180].includes(seconds) ? 'preset' : 'custom');
+    setAutoStartRestDraft(session.autoStartRest === true);
+    setSoundDraftEnabled(soundEnabled);
+    setError('');
     setTimerOptionsOpen(true);
   }
 
@@ -487,13 +548,16 @@ export function StrengthGuidedSessionDialog({
 
   function resetRestTimer() {
     const result = resetStrengthSessionRestTimer(session);
-    if (!result.valid) setError(result.error);
+    if (!result.valid) {
+      setError(result.error);
+      return false;
+    }
     else {
       alertableDeadlineRef.current = null;
       expiryHandledRef.current = null;
       setTimerAnnouncement('');
       silenceRestAlert();
-      apply(result.session);
+      return apply(result.session);
     }
   }
 
@@ -681,10 +745,20 @@ export function StrengthGuidedSessionDialog({
       const selectedPrevious = selectPreviousStrengthSetValues(
         workouts, nextSession, selectedExercise.id, selectedExercise.sets.indexOf(selectedSet)
       );
-      const carriedLoad = earlierPerformedLoad(nextSession, selectedExercise.id,
-        selectedExercise.sets.indexOf(selectedSet), selectedExercise.loadMeaning, preferredWeightUnit);
+      const selectedSetIndex = selectedExercise.sets.indexOf(selectedSet);
+      const selectedWorkoutLoad = previousPerformedLoad(selectedPrevious, selectedExercise.id, selectedSetIndex);
+      const selectedCurrentWorkoutLoad = latestPerformedLoad(
+        nextSession, selectedExercise.id, selectedExercise.loadMeaning, preferredWeightUnit
+      );
       setInput(setInputDraftsRef.current.get(selectedKey)
-        ?? createInput(selectedSet, selectedPrevious, preferredWeightUnit, selectedExercise.loadMeaning, carriedLoad));
+        ?? createInput(
+          selectedSet,
+          selectedPrevious,
+          preferredWeightUnit,
+          selectedExercise.loadMeaning,
+          selectedWorkoutLoad,
+          selectedCurrentWorkoutLoad
+        ));
       apply(nextSession);
     } else setError(result.error);
   }
@@ -738,6 +812,7 @@ export function StrengthGuidedSessionDialog({
         closeLabel="Pause and close workout"
         bodyClassName="strength-dialog-body strength-guided"
         dialogClassName="strength-guided-dialog"
+        phoneFullScreen
         onClose={onClose}
       >
       {reviewing ? (
@@ -907,6 +982,15 @@ export function StrengthGuidedSessionDialog({
                   </button>
                 </Fragment>
               ))}
+              <span className="strength-guided__set-connector" aria-hidden="true" />
+              <button
+                type="button"
+                className="strength-guided__set strength-guided__set--add"
+                aria-label="Add set"
+                onClick={addSet}
+              >
+                <span aria-hidden="true">+</span>
+              </button>
             </div>
           </section>
           <section className="strength-rest-timer" aria-label="Rest timer">
@@ -937,29 +1021,48 @@ export function StrengthGuidedSessionDialog({
                 ref={timerOptionsButtonRef}
                 type="button"
                 className="strength-rest-timer__options-trigger"
-                aria-label={`Rest duration ${formatRestClock(restTimer.durationSeconds * 1000)}; timer options`}
+                aria-label="Rest timer settings"
                 aria-haspopup="dialog"
                 aria-expanded={timerOptionsOpen}
                 onClick={openTimerOptions}
-              >Rest · {formatRestClock(restTimer.durationSeconds * 1000)} ⌄</button>
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+                  strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+                  <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" />
+                  <path d="m19.4 15 .1.1a1.8 1.8 0 1 1-2.5 2.5l-.1-.1a1.8 1.8 0 0 0-3 .8v.2a1.8 1.8 0 1 1-3.6 0v-.2a1.8 1.8 0 0 0-3-.8l-.1.1a1.8 1.8 0 1 1-2.5-2.5l.1-.1a1.8 1.8 0 0 0-.8-3H4a1.8 1.8 0 1 1 0-3.6h.2a1.8 1.8 0 0 0 .8-3l-.1-.1a1.8 1.8 0 1 1 2.5-2.5l.1.1a1.8 1.8 0 0 0 3-.8V2a1.8 1.8 0 1 1 3.6 0v.2a1.8 1.8 0 0 0 3 .8l.1-.1a1.8 1.8 0 1 1 2.5 2.5l-.1.1a1.8 1.8 0 0 0 .8 3h.2a1.8 1.8 0 1 1 0 3.6H20a1.8 1.8 0 0 0-.6 2.9Z" />
+                </svg>
+              </button>
             </div>
             <p className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
               {[timerAnnouncement, soundMessage].filter(Boolean).join(' ')}
             </p>
           </section>
           {timerOptionsOpen && (
-            <AnchoredPopover
+            <MoneyGoalDialog
+              title="Rest settings"
+              labelledBy="strength-rest-settings-title"
+              titleId="strength-rest-settings-title"
+              initialFocusId="strength-rest-settings-title"
+              closeLabel="Close Rest settings"
+              closeOnEscape
+              stopEscapePropagation
+              dismissOnBackdrop
+              portalToBody
               anchorRef={timerOptionsButtonRef}
-              label="Rest timer options"
-              className="strength-rest-timer__options"
+              dialogClassName="money-goal-dialog--strength-rest-settings"
+              bodyClassName="strength-rest-settings__content"
               onClose={() => setTimerOptionsOpen(false)}
             >
               <div className="strength-rest-duration-picker__presets" role="group" aria-label="Rest duration presets">
                 {[60, 90, 120, 150, 180].map(seconds => (
-                  <button type="button" key={seconds} className="btn mini ghost"
-                    aria-pressed={restTimer.durationSeconds === seconds}
-                    onClick={() => { setRestDuration(seconds); setTimerOptionsOpen(false); }}>
-                    {formatRestClock(seconds * 1000)}
+                  <button
+                    type="button"
+                    key={seconds}
+                    className="btn mini ghost"
+                    aria-pressed={restDurationDraft === seconds}
+                    onClick={() => chooseRestPreset(seconds)}
+                  >
+                    {formatRestPreset(seconds)}
                   </button>
                 ))}
               </div>
@@ -967,46 +1070,70 @@ export function StrengthGuidedSessionDialog({
                 <h3 id="strength-custom-rest-heading">Custom duration</h3>
                 <div className="strength-rest-duration-picker__custom-fields">
                   <label className="strength-form-field">Minutes
-                    <input type="number" inputMode="numeric" min="0" max="60" step="1"
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="0"
+                      max="60"
+                      step="1"
                       value={customRestMinutes}
-                      onChange={event => setCustomRestMinutes(event.currentTarget.value)} />
+                      onChange={event => updateCustomRestDuration(
+                        event.currentTarget.value, customRestSeconds
+                      )}
+                    />
                   </label>
                   <label className="strength-form-field">Seconds
-                    <input type="number" inputMode="numeric" min="0" max="59" step="1"
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="0"
+                      max="59"
+                      step="1"
                       value={customRestSeconds}
-                      onChange={event => setCustomRestSeconds(event.currentTarget.value)} />
+                      onChange={event => updateCustomRestDuration(
+                        customRestMinutes, event.currentTarget.value
+                      )}
+                    />
                   </label>
-                  <button type="button" className="btn mini"
-                    disabled={!Number.isInteger(Number(customRestMinutes))
-                      || Number(customRestMinutes) < 0 || Number(customRestMinutes) > 60
-                      || !Number.isInteger(Number(customRestSeconds))
-                      || Number(customRestSeconds) < 0 || Number(customRestSeconds) > 59
-                      || Number(customRestMinutes) * 60 + Number(customRestSeconds) < 1
-                      || Number(customRestMinutes) * 60 + Number(customRestSeconds) > 3600}
-                    onClick={() => applyCustomRestDuration(
-                      Number(customRestMinutes) * 60 + Number(customRestSeconds)
-                    )}>Apply</button>
                 </div>
               </section>
               <label className="strength-rest-timer__option">
-                <input type="checkbox" checked={soundEnabled}
-                  onChange={() => soundEnabled ? disableSound() : void enableSound()} />
+                <input
+                  type="checkbox"
+                  checked={soundDraftEnabled}
+                  onChange={event => setSoundDraftEnabled(event.currentTarget.checked)}
+                />
                 Sound
               </label>
               <label className="strength-rest-timer__option">
-                <input type="checkbox" checked={session.autoStartRest === true}
-                  onChange={event => {
-                    const result = setStrengthSessionAutoStartRest(session, event.currentTarget.checked);
-                    if (result.valid) apply(result.session);
-                    else setError(result.error);
-                  }} />
+                <input
+                  type="checkbox"
+                  checked={autoStartRestDraft}
+                  onChange={event => setAutoStartRestDraft(event.currentTarget.checked)}
+                />
                 Auto-start rest
               </label>
-              <button type="button" className="strength-guided__reset-timer" onClick={() => {
-                resetRestTimer();
-                setTimerOptionsOpen(false);
-              }}>Reset rest timer</button>
-            </AnchoredPopover>
+              <button
+                type="button"
+                className="strength-guided__reset-timer strength-rest-settings__reset"
+                onClick={() => {
+                  if (resetRestTimer()) setTimerOptionsOpen(false);
+                }}
+              >
+                Reset rest timer
+              </button>
+              {error && <p className="strength-form-error" role="alert">{error}</p>}
+              <div className="strength-rest-settings__actions">
+                <button
+                  type="button"
+                  className="btn mini strength-rest-settings__apply"
+                  disabled={restDurationDraft === null}
+                  onClick={() => void applyRestSettings()}
+                >
+                  Apply
+                </button>
+              </div>
+            </MoneyGoalDialog>
           )}
           <section className="strength-guided__entry" aria-label={`Set ${setIndex + 1} entry`}>
             <div className="strength-guided__performance-references">
@@ -1123,7 +1250,7 @@ export function StrengthGuidedSessionDialog({
                 </>
               )
             )}
-            {error && <p className="strength-form-error" role="alert">{error}</p>}
+            {error && !timerOptionsOpen && <p className="strength-form-error" role="alert">{error}</p>}
             <div className="strength-guided__actions">
               {set.status === 'pending' && (
                 <button type="button" className="btn mini strength-guided__confirm" onClick={confirmSet}>
@@ -1149,9 +1276,6 @@ export function StrengthGuidedSessionDialog({
                   </div>
                 )}
               </div>
-              {setIndex === exercise.sets.length - 1 && (
-                <button type="button" className="btn mini ghost strength-guided__add-set" onClick={addSet}>Add set</button>
-              )}
             </div>
           </section>
           <div className="strength-guided__footer">
@@ -1212,19 +1336,29 @@ function sessionInputKey(exerciseId: string, setId: string): string {
   return `${exerciseId}:${setId}`;
 }
 
-function earlierPerformedLoad(
+function previousPerformedLoad(
+  previous: ReturnType<typeof selectPreviousStrengthSetValues>,
+  exerciseId: string,
+  setIndex: number
+): StrengthLoad | undefined {
+  const previousSet = previous?.workout.exercises?.find(item => item.id === exerciseId)?.sets[setIndex];
+  return previousSet?.status === 'performed' && previousSet.actualLoad !== undefined
+    ? previous?.load
+    : undefined;
+}
+
+function latestPerformedLoad(
   session: StrengthGuidedSessionDraft,
   exerciseId: string,
-  beforeSetIndex: number,
   loadMeaning: StrengthLoadMeaning | undefined,
   preferredWeightUnit: 'lb' | 'kg'
 ): StrengthLoad | undefined {
   if (!loadMeaning || loadMeaning === 'bodyweight') return undefined;
   const exercise = session.exercises.find(item => item.id === exerciseId);
-  let load: StrengthLoad | undefined;
-  for (const item of exercise?.sets.slice(0, beforeSetIndex) ?? []) {
-    if (item.status === 'performed') load = item.actualLoad;
-  }
+  const latestSet = exercise?.sets
+    .filter(item => item.status === 'performed')
+    .sort((left, right) => (right.confirmedAt ?? '').localeCompare(left.confirmedAt ?? ''))[0];
+  const load = latestSet?.actualLoad;
   if (load?.kind !== 'external' || load.meaning !== loadMeaning) return undefined;
   const converted = convertStrengthLoad(load, preferredWeightUnit);
   return converted.kind === 'external' ? converted : undefined;
@@ -1245,11 +1379,12 @@ function createInput(
   previous: ReturnType<typeof selectPreviousStrengthSetValues>,
   preferredWeightUnit: 'lb' | 'kg' = 'lb',
   loadMeaning?: StrengthLoadMeaning,
-  earlierLoad?: StrengthLoad
+  previousLoad?: StrengthLoad,
+  currentWorkoutLoad?: StrengthLoad
 ): SetInput {
   const load = set.status === 'performed' ? set.actualLoad : undefined;
-  const carriedLoad = load === undefined ? earlierLoad : undefined;
-  const initialLoad = load ?? earlierLoad ?? previous?.load ?? set.targetLoad;
+  const carriedLoad = load === undefined ? previousLoad ?? currentWorkoutLoad : undefined;
+  const initialLoad = load ?? previousLoad ?? currentWorkoutLoad ?? set.targetLoad;
   const displayLoad = initialLoad?.kind === 'external'
     ? convertStrengthLoad(initialLoad, preferredWeightUnit)
     : initialLoad;
@@ -1366,6 +1501,12 @@ function formatRestClock(milliseconds: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function formatRestPreset(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${minutes}:${String(remainder).padStart(2, '0')}`;
 }
 
 function formatDuration(seconds: number): string {

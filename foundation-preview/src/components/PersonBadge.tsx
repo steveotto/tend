@@ -147,6 +147,6 @@ function personInitials(name: string): string {
   return name.trim().split(/\s+/).slice(0, 2).map(part => [...part][0] ?? '').join('').toLocaleUpperCase();
 }
 
-function personFirstName(name: string): string {
+export function personFirstName(name: string): string {
   return name.trim().split(/\s+/)[0] ?? '';
 }

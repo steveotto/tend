@@ -16,7 +16,7 @@ import { AreaIcon } from './AreaIcon.tsx';
 type RhythmCategoryBadgesProps = {
   rhythm: RhythmPreview;
   itemsOnly?: boolean;
-  presentation?: 'interactive' | 'static';
+  presentation?: 'interactive' | 'static' | 'edit-labeled';
   foundations?: readonly FoundationPreview[];
   onOpenCategory?: (categoryId: Destination, openerId: string) => void;
 };
@@ -26,7 +26,8 @@ type CategoryBadgeProps = {
   categoryId: RhythmCategoryId;
   tooltipLabel: string;
   accessibleLabel: string;
-  presentation: 'interactive' | 'static';
+  presentation: 'interactive' | 'static' | 'edit-labeled';
+  label: string;
   onOpenCategory?: RhythmCategoryBadgesProps['onOpenCategory'];
 };
 
@@ -35,6 +36,7 @@ function CategoryBadge({
   categoryId,
   tooltipLabel,
   accessibleLabel,
+  label,
   presentation,
   onOpenCategory
 }: CategoryBadgeProps) {
@@ -98,6 +100,9 @@ function CategoryBadge({
       <AreaIcon id={categoryId} />
     </span>
   );
+  const badgeLabel = presentation === 'edit-labeled'
+    ? <span className="rhythm-association-badge__name">{label}</span>
+    : null;
 
   if (presentation === 'static' || !onOpenCategory) {
     return (
@@ -108,6 +113,7 @@ function CategoryBadge({
         title={accessibleLabel}
       >
         {visual}
+        {badgeLabel}
       </span>
     );
   }
@@ -133,6 +139,7 @@ function CategoryBadge({
         onClick={openCategory}
       >
         {visual}
+        {badgeLabel}
       </button>
       {tooltipOpen && typeof document !== 'undefined' && createPortal(
         <span
@@ -190,6 +197,7 @@ export function RhythmCategoryBadges({
         categoryId={category.id as RhythmCategoryId}
         tooltipLabel={tooltipLabel}
         accessibleLabel={accessibleLabel}
+        label={category.label}
         presentation={presentation}
         onOpenCategory={onOpenCategory}
       />

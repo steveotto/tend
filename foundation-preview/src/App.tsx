@@ -15,6 +15,7 @@ import { foundationCategoryId, saveFoundationRhythmAssociations } from './domain
 import type { FoundationRhythmAssociationChange } from './domain/foundation-rhythm-associations.ts';
 import { selectFoundationRhythmScores } from './domain/foundation-scoring.ts';
 import {
+  aggregateCategoryHealthScores,
   selectCardioCategoryScore,
   selectCategoryHealthScore,
   selectHealthFitnessCategoryScore,
@@ -26,12 +27,17 @@ import { RhythmCompletionDialog } from './components/RhythmCompletionDialog.tsx'
 import { FinanceGoalsView } from './components/FinanceGoalsView.tsx';
 import { PreviewDataControls } from './components/PreviewDataControls.tsx';
 import type { PreviewPersistenceStatus } from './components/PreviewDataControls.tsx';
+import { PreviewAccountBackupControls } from './components/PreviewAccountBackupControls.tsx';
+import { PreviewBackupImportControl } from './components/PreviewBackupImportControl.tsx';
+import type { PreviewAccountBackupApi } from './storage/preview-account-backup.ts';
 import { PersonProfileView } from './components/PersonProfileView.tsx';
+import type { PersonProfileNavigationRequest, ProfileTab } from './components/PersonProfileView.tsx';
 import { PersonDetailsEditor } from './components/PersonDetailsEditor.tsx';
 import { PeopleView } from './components/PeopleView.tsx';
 import { RhythmEditor } from './components/RhythmEditor.tsx';
 import { TodayView } from './components/TodayView.tsx';
 import { TodayWeatherSettings } from './components/TodayWeatherSettings.tsx';
+import { CalendarSettings } from './components/CalendarSettings.tsx';
 import { TimeBlocksProvider } from './components/TimeBlocksContext.tsx';
 import { TimeBlocksSettings } from './components/TimeBlocksSettings.tsx';
 import { useTodayWeather } from './components/useTodayWeather.ts';
@@ -39,9 +45,12 @@ import type { TodayFocusId } from './domain/today-plan.ts';
 import { HealthFitnessView } from './components/HealthFitnessView.tsx';
 import { FriendshipsView } from './components/FriendshipsView.tsx';
 import { connectionCadences, setPersonConnectionCadence } from './domain/friendships.ts';
+import { selectGlobalSearchResults } from './domain/global-search.ts';
+import type { GlobalSearchResult } from './domain/global-search.ts';
 import { APP_DISPLAY_VERSION } from './domain/app-version.ts';
 import { resolvePersonCategory, resolvePersonCategoryGroups, setPersonCategory } from './domain/person-categories.ts';
 import {
+  areas,
   marriageRhythms,
   foundationCatalogue,
   faithRhythmSuggestionGroups,
@@ -52,6 +61,7 @@ import {
   parentingRhythmSuggestions,
   personById,
   peopleForRhythm,
+  SELF_PREVIEW_PERSON,
   todayRhythms,
   type CategoryRhythmSuggestionGroupDefinition,
   type CategoryRhythmSuggestionTemplate,
@@ -114,12 +124,23 @@ import { localDateInTimeZone } from './domain/rhythm-scoring.ts';
 import { hasRhythmOccurrenceForCompletion } from './domain/rhythm-occurrences.ts';
 import { selectSatisfiedRhythmIds, selectTendedRhythmDisplayIds } from './domain/category-rhythms.ts';
 import { prepareDatedRhythmCompletion } from './domain/rhythm-completion.ts';
+import {
+  selectPersonConnectionHealth,
+  selectPersonOverallHealth,
+  selectPersonRhythmHealth
+} from './domain/person-health.ts';
 import { validateStrengthData } from './domain/strength.ts';
+import type { CalendarSource } from './domain/calendar-sources.ts';
 import type { StrengthMode } from './domain/strength.ts';
 import {
   saveWeightDataCommand
 } from './domain/weight.ts';
 import { saveCardioDataCommand, selectCardioProgress } from './domain/cardio.ts';
+import {
+  selectFlexibilityConsistency,
+  selectFlexibilityRegionScores,
+  validateFlexibilityData
+} from './domain/flexibility.ts';
 import {
   activeTodayRhythms,
   applySavedRhythmOverrides,
@@ -195,6 +216,8 @@ import {
   loadV34RecoveryCopy,
   loadV35RecoveryCopy,
   loadV36RecoveryCopy,
+  loadCloudRestoreRecoveryCopy,
+  loadPreviewImportRecovery,
   loadPreview,
   writePreview
 } from './storage/preview-storage.ts';
@@ -322,7 +345,8 @@ function isFitnessLinkedCompletion(data: PreviewData, completionId: string | und
   const records: readonly unknown[] = [
     ...data.strength.workouts,
     ...data.weight.weighIns,
-    ...data.cardio.runs
+    ...data.cardio.runs,
+    ...(data.flexibility.guidedSessions ?? [])
   ];
   return records.some(record => typeof record === 'object'
     && record !== null
@@ -337,10 +361,14 @@ const defaultPreviewIdentity = import.meta.env.DEV
 
 export function App({
   identity = defaultPreviewIdentity,
-  onSignOut
+  onSignOut,
+  accountBackupApi,
+  isAccountBackupIdentityCurrent
 }: {
   identity?: PreviewIdentityState;
   onSignOut?: () => void | Promise<void>;
+  accountBackupApi?: PreviewAccountBackupApi;
+  isAccountBackupIdentityCurrent?: () => boolean;
 } = {}) {
   const resolvedIdentity = useMemo(() => validatePreviewIdentity(identity), [identity]);
   const identityKey = previewIdentityKey(resolvedIdentity);
@@ -372,6 +400,8 @@ export function App({
       key={identityKey}
       identity={resolvedIdentity}
       isIdentityCurrent={() => isIdentityCurrent(identityKey)}
+      {...(isAccountBackupIdentityCurrent ? { isAccountBackupIdentityCurrent } : {})}
+      {...(accountBackupApi ? { accountBackupApi } : {})}
       {...(onSignOut ? { onSignOut } : {})}
     />
   );
@@ -389,10 +419,14 @@ function PreviewAccessState({ title, message }: { title: string; message: string
 function PreviewWorkspace({
   identity,
   isIdentityCurrent,
+  isAccountBackupIdentityCurrent,
+  accountBackupApi,
   onSignOut
 }: {
   identity: Extract<PreviewIdentityState, { kind: 'development' | 'authenticated' }>;
   isIdentityCurrent: () => boolean;
+  isAccountBackupIdentityCurrent?: () => boolean;
+  accountBackupApi?: PreviewAccountBackupApi;
   onSignOut?: () => void | Promise<void>;
 }) {
   const scoringInstant = useScoringInstant();
@@ -419,6 +453,12 @@ function PreviewWorkspace({
   const [persistenceStatus, setPersistenceStatus] = useState<PreviewPersistenceStatus>({ kind: 'loading' });
   const [rawRecoveryCopy, setRawRecoveryCopy] = useState<string | null>(null);
   const [rawRecoveryError, setRawRecoveryError] = useState<string | null>(null);
+  const [cloudRestoreRecoveryCopy, setCloudRestoreRecoveryCopy] = useState<string | null>(null);
+  const [cloudRestoreRecoveryError, setCloudRestoreRecoveryError] = useState<string | null>(null);
+  const [importRecoveryRaw, setImportRecoveryRaw] = useState<string | null>(null);
+  const [importRecoverySourceRaw, setImportRecoverySourceRaw] = useState<string | null>(null);
+  const [importRecoveryArchiveRaw, setImportRecoveryArchiveRaw] = useState<string | null>(null);
+  const [importRecoveryError, setImportRecoveryError] = useState<string | null>(null);
   const [v1RecoveryCopy, setV1RecoveryCopy] = useState<string | null>(null);
   const [v1RecoveryError, setV1RecoveryError] = useState<string | null>(null);
   const [v2RecoveryCopy, setV2RecoveryCopy] = useState<string | null>(null);
@@ -497,6 +537,9 @@ function PreviewWorkspace({
   const morePageHeading = useRef<HTMLHeadingElement>(null);
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [profileNavigationRequest, setProfileNavigationRequest] =
+    useState<PersonProfileNavigationRequest | null>(null);
+  const profileNavigationSequence = useRef(0);
   const [textSize, setTextSize] = useState<TextSize>('small');
   const [foundationNavigationRequest, setFoundationNavigationRequest] = useState<{
     foundationId: string;
@@ -538,6 +581,12 @@ function PreviewWorkspace({
     rhythm?: (typeof todayRhythms)[number];
   } | null>(null);
   const cardioLogRequestSequence = useRef(0);
+  const [flexibilityLogRequest, setFlexibilityLogRequest] = useState<{
+    requestId: number;
+    opener: HTMLButtonElement;
+    rhythm: (typeof todayRhythms)[number];
+  } | null>(null);
+  const flexibilityLogRequestSequence = useRef(0);
   const [weightLogRequest, setWeightLogRequest] = useState<{
     requestId: number;
     opener: HTMLButtonElement;
@@ -574,6 +623,7 @@ function PreviewWorkspace({
     }
     const written = writePreview(previewStorage, data, expected, options);
     refreshRawRecoveryCopy();
+    if (options.operation === 'import') refreshImportRecoveryCopy();
     if (written.kind === 'saved') {
       setPersistedSatisfiedRhythmIds(satisfiedRhythmIdsForData(data));
       setPersistedCompletedRhythmIds(completedRhythmIdsForData(data));
@@ -712,10 +762,25 @@ function PreviewWorkspace({
     rhythmScoreResults,
     previewData.archivedRhythmIds
   );
+  const flexibilityRegionScores = selectFlexibilityRegionScores(
+    previewData.flexibility,
+    localDateString(scoringInstant)
+  );
+  const flexibilityConsistency = selectFlexibilityConsistency(flexibilityRegionScores);
+  const flexibilityCategoryScore = {
+    foundationIds: ['health-flexibility'],
+    eligibleFoundationIds: flexibilityConsistency.score === null ? [] : ['health-flexibility'],
+    excludedFoundationIds: [],
+    unresolvedFoundationIds: [],
+    consistency: flexibilityConsistency.score,
+    onTrack: null,
+    health: flexibilityConsistency.score
+  };
   const healthFitnessCategoryScore = selectHealthFitnessCategoryScore(
     cardioCategoryScore,
     weightCategoryScore,
-    strengthCategoryScore
+    strengthCategoryScore,
+    flexibilityCategoryScore
   );
   const categoryHealthScores = new Map<CategoryId, number | null>(
     [
@@ -731,12 +796,22 @@ function PreviewWorkspace({
       ['health', healthFitnessCategoryScore.health]
     ]
   );
+  const overallHealthScore = aggregateCategoryHealthScores(
+    areas.map(area => categoryHealthScores.get(area.id) ?? null)
+  ).health;
   const activeRhythm = [
     ...allTodayRhythms,
     ...resolvedMarriageRhythms
   ].find(rhythm => rhythm.id === activeRhythmId) ?? null;
   const peopleWithPhotos = peopleWithSavedPhotos(previewData.people, previewData.personDetails);
   const selectedProfilePerson = profilePersonId === null ? null : personById(peopleWithPhotos, profilePersonId) ?? null;
+  const searchResults = selectGlobalSearchResults(search, {
+    people: peopleWithPhotos,
+    rhythms: [...new Map([...allTodayRhythms, ...resolvedMarriageRhythms].map(rhythm => [rhythm.id, rhythm])).values()],
+    prayerRequests: previewData.prayerRequests,
+    personNotes: previewData.personNotes,
+    friendships: previewData.friendships
+  });
   const selectedDetailsEditorPerson = personDetailsEditorId === null
     ? null
     : personById(previewData.people, personDetailsEditorId) ?? null;
@@ -760,16 +835,45 @@ function PreviewWorkspace({
   const archivedProfileRhythmCandidates = [...new Map(
     [...archivedRhythms, ...archivedUserRhythms].map(rhythm => [rhythm.id, rhythm])
   ).values()];
+  const personRhythmCandidates = new Map(peopleWithPhotos.map(person => {
+    const active = profileRhythmCandidates.filter(rhythm =>
+      rhythm.personIds?.includes(person.id) && !previewData.archivedRhythmIds.includes(rhythm.id)
+    );
+    const archived = archivedProfileRhythmCandidates.filter(rhythm =>
+      rhythm.personIds?.includes(person.id)
+    );
+    return [person.id, { active, archived }] as const;
+  }));
+  const personOverallHealthScores = new Map([...personRhythmCandidates].map(([personId, candidates]) => {
+    const rhythmHealth = selectPersonRhythmHealth(
+      personId,
+      [...candidates.active, ...candidates.archived],
+      rhythmScoreResults,
+      new Set(candidates.archived.map(rhythm => rhythm.id))
+    );
+    const connectionHealth = selectPersonConnectionHealth(
+      personId,
+      previewData.friendships,
+      localDateInTimeZone(scoringInstant, localTimeZone),
+      localTimeZone
+    );
+    return [personId, selectPersonOverallHealth(
+      rhythmHealth,
+      connectionHealth.configured
+        ? [{
+            id: 'connection',
+            consistency: connectionHealth.consistency,
+            onTrack: connectionHealth.onTrack
+          }]
+        : []
+    ).health] as const;
+  }));
   const personActiveRhythms = profilePersonId === null
     ? []
-    : profileRhythmCandidates.filter(rhythm =>
-        rhythm.personIds?.includes(profilePersonId) && !previewData.archivedRhythmIds.includes(rhythm.id)
-      );
+    : personRhythmCandidates.get(profilePersonId)?.active ?? [];
   const personArchivedRhythms = profilePersonId === null
     ? []
-    : archivedProfileRhythmCandidates.filter(rhythm =>
-        rhythm.personIds?.includes(profilePersonId)
-      );
+    : personRhythmCandidates.get(profilePersonId)?.archived ?? [];
   const activeRhythmIsToday = activeRhythm !== null && editableTodayRhythms.some(rhythm => rhythm.id === activeRhythm.id);
   const activeRhythmIsArchived = activeRhythm !== null && previewData.archivedRhythmIds.includes(activeRhythm.id);
   const activeRhythmForDetails = activeRhythm;
@@ -821,6 +925,32 @@ function PreviewWorkspace({
     } else {
       setRawRecoveryCopy(null);
       setRawRecoveryError(result.message);
+    }
+  }
+
+  function refreshCloudRestoreRecoveryCopy() {
+    const result = loadCloudRestoreRecoveryCopy(previewStorage);
+    if (result.kind === 'loaded') {
+      setCloudRestoreRecoveryCopy(result.raw);
+      setCloudRestoreRecoveryError(null);
+    } else {
+      setCloudRestoreRecoveryCopy(null);
+      setCloudRestoreRecoveryError(result.message);
+    }
+  }
+
+  function refreshImportRecoveryCopy() {
+    const result = loadPreviewImportRecovery(previewStorage);
+    if (result.kind === 'loaded') {
+      setImportRecoveryRaw(result.latestRaw);
+      setImportRecoverySourceRaw(result.latestSourceRaw);
+      setImportRecoveryArchiveRaw(result.archiveRaw);
+      setImportRecoveryError(null);
+    } else {
+      setImportRecoveryRaw(null);
+      setImportRecoverySourceRaw(null);
+      setImportRecoveryArchiveRaw(null);
+      setImportRecoveryError(result.message);
     }
   }
 
@@ -1167,6 +1297,8 @@ function PreviewWorkspace({
 
   useEffect(() => {
     refreshRawRecoveryCopy();
+    refreshCloudRestoreRecoveryCopy();
+    refreshImportRecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
     refreshV3RecoveryCopy();
@@ -1363,7 +1495,18 @@ function PreviewWorkspace({
     document.body.classList.remove('mobile-search-open');
   }
 
-  function openPersonProfile(personId: PersonId) {
+  function openPersonProfileAt(
+    personId: PersonId,
+    tab: ProfileTab = 'rhythms',
+    targetPrayerRequestId?: string
+  ) {
+    profileNavigationSequence.current += 1;
+    setProfileNavigationRequest({
+      personId,
+      requestId: profileNavigationSequence.current,
+      tab,
+      ...(targetPrayerRequestId ? { targetPrayerRequestId } : {})
+    });
     if (profilePersonId === personId) return;
     if (profilePersonId === null) {
       profileOpener.current = document.activeElement instanceof HTMLElement
@@ -1380,6 +1523,28 @@ function PreviewWorkspace({
       window.location.href
     );
     setProfilePersonId(personId);
+  }
+
+  function openPersonProfile(personId: PersonId) {
+    openPersonProfileAt(personId);
+  }
+
+  function openSearchResult(result: GlobalSearchResult) {
+    if (result.kind === 'person') {
+      openPersonProfileAt(result.personId);
+    } else if (result.kind === 'rhythm') {
+      const rhythm = [...allTodayRhythms, ...resolvedMarriageRhythms]
+        .find(candidate => candidate.id === result.rhythmId);
+      if (rhythm) openRhythmEditor(undefined, rhythm);
+    } else if (result.kind === 'prayer') {
+      openPersonProfileAt(result.personId, 'prayer', result.requestId);
+    } else if (result.kind === 'prayer-note') {
+      openPersonProfileAt(result.personId, 'prayer', result.requestId);
+    } else if (result.kind === 'connection-note') {
+      openPersonProfileAt(result.personId, 'connections');
+    } else {
+      openPersonProfileAt(result.personId);
+    }
   }
 
   function openPersonDetailsEditor(personId: PersonId, event: MouseEvent<HTMLButtonElement>) {
@@ -1476,6 +1641,8 @@ function PreviewWorkspace({
       title: draft.title.trim(),
       ...(draft.details.trim() ? { details: draft.details } : {}),
       status: 'active',
+      schedule: draft.schedule,
+      timeOfDay: draft.timeOfDay,
       createdAt: now,
       updatedAt: now,
       prayerLogs: []
@@ -1521,15 +1688,24 @@ function PreviewWorkspace({
     return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer request');
   }
 
-  function prayForRequest(requestId: string, expectedUpdatedAt: string, actorId: PersonId): string | null {
+  function prayForRequest(
+    requestId: string,
+    expectedUpdatedAt: string,
+    actorId: PersonId,
+    prayedById = actorId
+  ): string | null {
     const now = new Date().toISOString();
     const result = recordPersonPrayer(
       previewData.prayerRequests,
       requestId,
       expectedUpdatedAt,
       actorId,
-      { id: `prayer-log-${globalThis.crypto.randomUUID()}`, prayedAt: now },
-      previewData.people.map(person => person.id)
+      {
+        id: `prayer-log-${globalThis.crypto.randomUUID()}`,
+        prayedAt: now,
+        actorId: prayedById
+      },
+      [...previewData.people.map(person => person.id), SELF_PREVIEW_PERSON.id]
     );
     if (!result.valid) return result.error;
     return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer log');
@@ -1667,6 +1843,16 @@ function PreviewWorkspace({
       || previewData.archivedRhythmIds.includes(id)) return;
     const rhythm = allTodayRhythms.find(item => item.id === id);
     if (rhythm?.categoryIds?.includes('health')) {
+      if (rhythm.healthLogCapability === 'flexibility') {
+        flexibilityLogRequestSequence.current += 1;
+        setFlexibilityLogRequest({
+          requestId: flexibilityLogRequestSequence.current,
+          opener: event.currentTarget,
+          rhythm
+        });
+        navigate('health', { categoryTabDefault: false });
+        return;
+      }
       if (rhythm.healthLogCapability === 'cardio') {
         cardioLogRequestSequence.current += 1;
         setCardioLogRequest({
@@ -1704,7 +1890,7 @@ function PreviewWorkspace({
   }
 
   function openRhythmEditor(
-    event: MouseEvent<HTMLButtonElement>,
+    event: MouseEvent<HTMLButtonElement> | undefined,
     rhythm?: (typeof todayRhythms)[number],
     options?: {
       id?: string;
@@ -1715,7 +1901,7 @@ function PreviewWorkspace({
       returnToSuggestions?: (saved: boolean) => void;
     }
   ) {
-    rhythmEditorOpener.current = event.currentTarget;
+    rhythmEditorOpener.current = event?.currentTarget ?? null;
     rhythmEditorReturnsToSuggestions.current = false;
     setRhythmEditor({
       id: options?.id ?? rhythm?.id ?? `user-rhythm-${globalThis.crypto.randomUUID()}`,
@@ -1930,6 +2116,13 @@ function PreviewWorkspace({
     }, 'time block settings');
   }
 
+  function saveCalendarSources(sources: CalendarSource[]): string | null {
+    return persistSeasonHistory({
+      ...previewData,
+      calendarSources: sources.map(source => ({ ...source }))
+    }, 'calendar settings');
+  }
+
   function saveStrengthData(strength: PreviewData['strength']): string | null {
     if (!validateStrengthData(strength, true, true, true, true, previewData.people.map(person => person.id))) {
       return 'Strength settings or workout records are invalid. No changes were saved.';
@@ -2087,6 +2280,79 @@ function PreviewWorkspace({
       cardio: result.cardio,
       ...result.completionState
     }, 'Cardio data');
+  }
+
+  function saveFlexibilityData(flexibility: PreviewData['flexibility']): string | null {
+    if (!validateFlexibilityData(flexibility, currentDate)) {
+      return 'Flexibility settings or stretch records are invalid. No changes were saved.';
+    }
+    let datedRhythmCompletions = [...previewData.datedRhythmCompletions];
+    let activeRhythmCompletions = [...previewData.activeRhythmCompletions];
+    let completedRhythmIds = [...previewData.completedRhythmIds];
+    let rhythmHistoryIds = [...previewData.rhythmHistoryIds];
+    const previousGuidedIds = new Set((previewData.flexibility.guidedSessions ?? []).map(session => session.id));
+    for (const session of flexibility.guidedSessions ?? []) {
+      if (previousGuidedIds.has(session.id) || !session.linkedRhythmId) continue;
+      const rhythm = allTodayRhythms.find(item => item.id === session.linkedRhythmId);
+      if (!rhythm || rhythm.healthLogCapability !== 'flexibility'
+        || !isEditableRhythmId(rhythm.id) || previewData.archivedRhythmIds.includes(rhythm.id)
+        || session.rhythmOccurrence !== session.date || !session.completionId) {
+        return 'The linked stretch Rhythm or its completion record is unavailable. No stretch changes were saved.';
+      }
+      const schedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
+      if (!schedule || !hasRhythmOccurrenceForCompletion(
+        schedule,
+        session.rhythmOccurrence,
+        rhythm.scoring?.trackingStartDate
+      )) {
+        return 'The stretch session date is not a scheduled occurrence for this Rhythm. No changes were saved.';
+      }
+      if (datedRhythmCompletions.some(item =>
+        item.id === session.completionId
+        || item.rhythmId === rhythm.id && item.effectiveDate === session.rhythmOccurrence)) {
+        return 'This stretch Rhythm occurrence already has a completion. No changes were saved.';
+      }
+      const timeParts = new Intl.DateTimeFormat('en-US', {
+        timeZone: session.timeZone,
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      }).formatToParts(new Date(session.startedAt));
+      const hour = Number(timeParts.find(part => part.type === 'hour')?.value);
+      const minute = Number(timeParts.find(part => part.type === 'minute')?.value);
+      const period = timeParts.find(part => part.type === 'dayPeriod')?.value.toUpperCase();
+      const completion = prepareDatedRhythmCompletion({
+        id: session.completionId,
+        rhythmId: rhythm.id,
+        effectiveDate: session.rhythmOccurrence,
+        hour,
+        minute,
+        period: period === 'PM' ? 'PM' : 'AM',
+        memory: '',
+        timeZone: session.timeZone
+      }, new Date());
+      if (!completion.valid) {
+        return completion.errors.time ?? completion.errors.effectiveDate
+          ?? 'The linked stretch completion time is invalid. No changes were saved.';
+      }
+      datedRhythmCompletions.push(completion.record);
+      if (!activeRhythmCompletions.some(item => item.completionId === session.completionId)) {
+        activeRhythmCompletions = [
+          ...activeRhythmCompletions.filter(item => item.rhythmId !== rhythm.id),
+          { rhythmId: rhythm.id, completionId: session.completionId }
+        ];
+        if (!completedRhythmIds.includes(rhythm.id)) completedRhythmIds.push(rhythm.id);
+      }
+      if (!rhythmHistoryIds.includes(rhythm.id)) rhythmHistoryIds.push(rhythm.id);
+    }
+    return persistSeasonHistory({
+      ...previewData,
+      flexibility,
+      datedRhythmCompletions,
+      activeRhythmCompletions,
+      completedRhythmIds,
+      rhythmHistoryIds
+    }, 'Flexibility data');
   }
 
   function saveFoundationAssociations(
@@ -2495,8 +2761,8 @@ function PreviewWorkspace({
   }
 
   function updateDatedCompletion(record: RhythmCompletionRecord): string | null {
-    if (previewData.strength.workouts.some(log => log.completionId === record.id)) {
-      return 'Edit this completion through its linked Strength workout log.';
+    if (isFitnessLinkedCompletion(previewData, record.id)) {
+      return 'Edit this completion through its linked Health & Fitness activity log.';
     }
     const existing = previewData.datedRhythmCompletions.find(item => item.id === record.id);
     if (!isEditableRhythmId(record.rhythmId)
@@ -2543,8 +2809,8 @@ function PreviewWorkspace({
   }
 
   function deleteDatedCompletionRecord(completionId: string): string | null {
-    if (previewData.strength.workouts.some(log => log.completionId === completionId)) {
-      return 'Delete this completion through its linked Strength workout log.';
+    if (isFitnessLinkedCompletion(previewData, completionId)) {
+      return 'Delete this completion through its linked Health & Fitness activity log.';
     }
     const record = previewData.datedRhythmCompletions.find(item => item.id === completionId);
     const seedRhythmId = todayRhythms.find(rhythm =>
@@ -2680,11 +2946,13 @@ function PreviewWorkspace({
   function finishWrite(
     resultData: PreviewData,
     allowUnrecoverableReplacement = false,
-    operation: 'save' | 'import' | 'reset' = 'save'
+    operation: 'save' | 'import' | 'reset' | 'replace' = 'save',
+    importSourceRaw?: string
   ): string | null {
     const written = writeCurrentPreview(resultData, expectedRaw.current, {
       allowUnrecoverableReplacement,
       currentDate,
+      ...(importSourceRaw === undefined ? {} : { importSourceRaw }),
       operation
     });
     refreshV29RecoveryCopy();
@@ -2886,6 +3154,24 @@ function PreviewWorkspace({
           });
         }
       }}
+      flexibility={{
+        data: previewData.flexibility,
+        today: currentDate,
+        onChange: saveFlexibilityData,
+        pendingQuickLog: flexibilityLogRequest ? {
+          requestId: flexibilityLogRequest.requestId,
+          regionIds: [],
+          linkedRhythmId: flexibilityLogRequest.rhythm.id,
+          rhythmOccurrence: currentDate,
+          rhythmTitle: flexibilityLogRequest.rhythm.title,
+          opener: flexibilityLogRequest.opener
+        } : null,
+        onQuickLogOpened: requestId => {
+          setFlexibilityLogRequest(current =>
+            current?.requestId === requestId ? null : current
+          );
+        }
+      }}
       rhythms={healthCategoryRhythms}
       archivedRhythms={archivedHealthRhythms}
       todayDate={currentDate}
@@ -2923,6 +3209,9 @@ function PreviewWorkspace({
       healthScore={healthFitnessCategoryScore}
       weightHealthScore={weightCategoryScore}
       cardioHealthScore={cardioCategoryScore}
+      flexibilityHealthScore={flexibilityCategoryScore}
+      flexibilityTrackedCount={flexibilityConsistency.trackedCount}
+      overallHealthScore={overallHealthScore}
     />
   ) : null;
 
@@ -2937,10 +3226,12 @@ function PreviewWorkspace({
         destination={destination}
         search={search}
         searchOpen={searchOpen}
+        searchResults={searchResults}
         textSize={textSize}
         onNavigate={navigate}
         onSearchChange={setSearch}
         onSearchClose={closeSearch}
+        onSearchResult={openSearchResult}
         onSearchToggle={toggleSearch}
         onTextSizeChange={() => setTextSize(size => size === 'small' ? 'medium' : size === 'medium' ? 'large' : 'small')}
       />
@@ -2969,6 +3260,13 @@ function PreviewWorkspace({
                         <h3 id="weather-settings-title">Weather</h3>
                         <TodayWeatherSettings controller={todayWeather} timeZone={weatherTimeZone} />
                       </section>
+                      <section className="settings-section" aria-labelledby="calendar-settings-title">
+                        <h3 id="calendar-settings-title">Calendar</h3>
+                        <CalendarSettings
+                          sources={previewData.calendarSources}
+                          onSave={saveCalendarSources}
+                        />
+                      </section>
                       <section className="settings-section" aria-labelledby="time-block-settings-title">
                         <h3 id="time-block-settings-title">Time blocks</h3>
                         <TimeBlocksSettings
@@ -2995,6 +3293,45 @@ function PreviewWorkspace({
                     </section>
                   )}
                 {!moreSettingsOpen && (
+                  <PreviewBackupImportControl
+                    data={previewData}
+                    status={persistenceStatus}
+                    currentDate={currentDate}
+                    onImport={(data, sourceRaw) => finishWrite(data, true, 'import', sourceRaw)}
+                    recoveryRaw={importRecoveryRaw}
+                    recoverySourceRaw={importRecoverySourceRaw}
+                    recoveryArchiveRaw={importRecoveryArchiveRaw}
+                    recoveryError={importRecoveryError}
+                  />
+                )}
+                {!moreSettingsOpen && identity.kind === 'authenticated' && (
+                  <PreviewAccountBackupControls
+                    api={accountBackupApi ?? null}
+                    accountId={identity.accountId}
+                    storage={previewStorage}
+                    data={previewData}
+                    currentDate={currentDate}
+                    localRaw={expectedRaw.current}
+                    localRecoveryRaw={cloudRestoreRecoveryCopy}
+                    localRecoveryError={cloudRestoreRecoveryError}
+                    enabled={hydrated && autoSaveEnabled && persistenceStatus.kind === 'saved'}
+                    isIdentityCurrent={() => isIdentityCurrent()
+                      && (isAccountBackupIdentityCurrent?.() ?? true)}
+                    onRestore={(data, expectedLocalRaw) => {
+                      if (!isIdentityCurrent()) {
+                        return 'Preview identity changed. No local data was replaced.';
+                      }
+                      if (expectedRaw.current !== expectedLocalRaw) {
+                        return 'This browser’s preview changed after confirmation. No local data was replaced.';
+                      }
+                      const writeError = finishWrite(data, false, 'replace');
+                      if (!writeError) refreshCloudRestoreRecoveryCopy();
+                      return writeError;
+                    }}
+                    onRecoveryChanged={setCloudRestoreRecoveryCopy}
+                  />
+                )}
+                {!moreSettingsOpen && (
                   <p className="settings-page__version">Version {APP_DISPLAY_VERSION}</p>
                 )}
               </main>
@@ -3002,7 +3339,11 @@ function PreviewWorkspace({
           : destination === 'today'
           ? (
             <TodayView
-              people={peopleWithPhotos}
+              people={[SELF_PREVIEW_PERSON, ...peopleWithPhotos]}
+              timeZone={localTimeZone}
+              peopleGroups={resolvedPeopleGroups}
+              prayerRequests={previewData.prayerRequests}
+              onPrayForRequest={prayForRequest}
               greeting={greeting}
               evaluationInstant={scoringInstant}
               localDate={currentDate}
@@ -3014,11 +3355,11 @@ function PreviewWorkspace({
               satisfiedRhythmIds={satisfiedRhythmIds}
               tendedRhythmIds={tendedRhythmIds}
               showTended={previewData.showTended}
+              calendarSources={previewData.calendarSources}
               onShowTendedChange={setShowTendedPreference}
               initializing={!hydrated}
               rhythms={editableTodayRhythms}
               rhythmScores={rhythmScoreResults}
-              search={search}
               categoryHealthScores={categoryHealthScores}
               foundations={foundationCatalogue}
               onNavigate={navigate}
@@ -3035,6 +3376,7 @@ function PreviewWorkspace({
               <MarriageView
                 people={peopleWithPhotos}
                 peopleGroups={resolvedPeopleGroups}
+                overallHealthScore={overallHealthScore}
                 todayDate={currentDate}
                 onAddRhythm={event => openRhythmEditor(event)}
                 onAddLinkedRhythm={(foundationId, event) => openRhythmEditor(event, undefined, {
@@ -3079,6 +3421,7 @@ function PreviewWorkspace({
             ? (
               <MarriageView
                 people={peopleWithPhotos}
+                overallHealthScore={overallHealthScore}
                 categoryConfig={{
                   categoryId: 'parenting',
                   label: 'Parenting',
@@ -3133,6 +3476,7 @@ function PreviewWorkspace({
             ? (
               <MarriageView
                 people={peopleWithPhotos}
+                overallHealthScore={overallHealthScore}
                 categoryConfig={{
                   categoryId: 'faith',
                   label: 'Faith',
@@ -3194,6 +3538,7 @@ function PreviewWorkspace({
                 people={peopleWithPhotos}
                 peopleGroups={resolvedPeopleGroups}
                 personDetails={previewData.personDetails}
+                healthScores={personOverallHealthScores}
                 today={localDateInTimeZone(new Date(), localTimeZone)}
                 rhythms={friendshipCategoryRhythms}
                 archivedRhythms={archivedFriendshipRhythms}
@@ -3235,6 +3580,7 @@ function PreviewWorkspace({
                 friendships={previewData.friendships}
                 today={currentDate}
                 personDetails={previewData.personDetails}
+                healthScores={personOverallHealthScores}
                 onOpenPerson={openPersonProfile}
                 onCreatePerson={createPerson}
               />
@@ -3245,14 +3591,17 @@ function PreviewWorkspace({
       {selectedProfilePerson && (
         <PersonProfileView
           personId={selectedProfilePerson.id}
+          navigationRequest={profileNavigationRequest}
           people={peopleWithPhotos}
+          timeOptions={configuredRhythmTimeOptions}
           returnLabel={destination === 'today' ? 'Today' : destinationLabels[destination]}
           peopleGroups={resolvedPeopleGroups}
           personDetails={previewData.personDetails}
           personNotes={previewData.personNotes}
           prayerRequests={previewData.prayerRequests}
           friendships={previewData.friendships}
-          today={localDateInTimeZone(new Date(), localTimeZone)}
+          today={localDateInTimeZone(scoringInstant, localTimeZone)}
+          timeZone={localTimeZone}
           rhythms={personActiveRhythms}
           archivedRhythms={personArchivedRhythms}
           foundations={foundationCatalogue}
@@ -3311,7 +3660,11 @@ function PreviewWorkspace({
         data={previewData}
         status={persistenceStatus}
         currentDate={currentDate}
-        onImport={data => finishWrite(data, true, 'import')}
+        importRecoveryRaw={importRecoveryRaw}
+        importRecoverySourceRaw={importRecoverySourceRaw}
+        importRecoveryArchiveRaw={importRecoveryArchiveRaw}
+        importRecoveryError={importRecoveryError}
+        onImport={(data, sourceRaw) => finishWrite(data, true, 'import', sourceRaw)}
         onReset={() => finishWrite(initialPreviewData(), true, 'reset')}
         onRetrySave={retrySave}
         onReloadExternal={reloadExternal}
@@ -3422,6 +3775,25 @@ function PreviewWorkspace({
         <RhythmDetailsDialog
           key={activeRhythm.id}
           rhythm={activeRhythmForDetails!}
+          {...(activeRhythm.healthLogCapability === 'workout'
+            ? {
+                healthWorkoutSetting: (() => {
+                  const setting = previewData.strength.rhythmModes.find(item =>
+                    item.rhythmId === activeRhythm.id
+                  );
+                  return {
+                    mode: setting?.mode ?? 'recommended',
+                    ...(setting?.mode === 'specific' && setting.workoutId
+                      ? {
+                          workoutName: previewData.strength.savedWorkouts.find(workout =>
+                            workout.id === setting.workoutId
+                          )?.name ?? 'Unavailable saved workout'
+                        }
+                      : {})
+                  };
+                })()
+              }
+            : {})}
           initialView={detailsInitialView}
           datedCompletions={[]}
           completionHistoryAvailable={
@@ -3458,6 +3830,10 @@ function PreviewWorkspace({
             : {})}
           people={peopleForRhythm(activeRhythm, peopleWithPhotos)}
           foundations={foundationCatalogue}
+          relatedRhythms={scoredRhythms}
+          rhythmScores={rhythmScoreResults}
+          categoryHealthScores={categoryHealthScores}
+          archivedRhythmIds={previewData.archivedRhythmIds}
           archived={activeRhythmIsArchived}
           onOpenFoundation={foundationId => {
             setActiveRhythmId(null);

@@ -1,11 +1,15 @@
 import { isValidPersonId } from './preview-data.ts';
 import type { PersonId } from './preview-data.ts';
+import { isRhythmTimeValue, validateRhythmSchedule } from './rhythm-schedule.ts';
+import type { RhythmSchedule, RhythmTimeValue } from './rhythm-schedule.ts';
+import { rhythmSchedulesEqual } from './rhythm-occurrences.ts';
 
 export type PrayerRequestStatus = 'active' | 'answered' | 'archived';
 
 export type PersonPrayerLog = {
   id: string;
   prayedAt: string;
+  actorId?: PersonId;
 };
 
 export type PersonPrayerRequest = {
@@ -15,6 +19,8 @@ export type PersonPrayerRequest = {
   title: string;
   details?: string;
   status: PrayerRequestStatus;
+  schedule?: RhythmSchedule;
+  timeOfDay?: RhythmTimeValue;
   createdAt: string;
   updatedAt: string;
   answeredAt?: string;
@@ -26,6 +32,8 @@ export type PersonPrayerRequestDraft = {
   title: string;
   details: string;
   sharedWith: PersonId[];
+  schedule: RhythmSchedule;
+  timeOfDay: RhythmTimeValue;
 };
 
 export type PersonPrayerCommandResult =
@@ -71,11 +79,13 @@ export function validatePersonPrayerRequestsCollection(
   for (const candidate of value) {
     if (!isRecord(candidate)
       || Object.keys(candidate).some(key => ![
-        'id', 'personId', 'sharedWith', 'title', 'details', 'status',
+        'id', 'personId', 'sharedWith', 'title', 'details', 'status', 'schedule', 'timeOfDay',
         'createdAt', 'updatedAt', 'answeredAt', 'archivedAt', 'prayerLogs'
       ].includes(key))) return false;
     const sharedWith = candidate.sharedWith === undefined ? [] : candidate.sharedWith;
     const logs = candidate.prayerLogs;
+    const hasSchedule = candidate.schedule !== undefined;
+    const hasTimeOfDay = candidate.timeOfDay !== undefined;
     if (!isValidId(candidate.id)
       || requestIds.has(candidate.id)
       || !isValidPersonId(candidate.personId)
@@ -91,6 +101,9 @@ export function validatePersonPrayerRequestsCollection(
       || candidate.details !== undefined
         && (typeof candidate.details !== 'string' || candidate.details.length > detailsMaxLength)
       || candidate.status !== 'active' && candidate.status !== 'answered' && candidate.status !== 'archived'
+      || hasSchedule !== hasTimeOfDay
+      || hasSchedule && !validateRhythmSchedule(candidate.schedule).valid
+      || hasTimeOfDay && !isRhythmTimeValue(candidate.timeOfDay)
       || !isCanonicalTimestamp(candidate.createdAt)
       || !isCanonicalTimestamp(candidate.updatedAt)
       || Date.parse(candidate.updatedAt) < Date.parse(candidate.createdAt)
@@ -103,8 +116,10 @@ export function validatePersonPrayerRequestsCollection(
 
     for (const log of logs) {
       if (!isRecord(log)
-        || Object.keys(log).some(key => !['id', 'prayedAt'].includes(key))
+        || Object.keys(log).some(key => !['id', 'prayedAt', 'actorId'].includes(key))
         || !isValidId(log.id)
+        || log.actorId !== undefined && (!isValidPersonId(log.actorId)
+          || knownPeople !== null && !knownPeople.has(log.actorId))
         || logIds.has(log.id)
         || !isCanonicalTimestamp(log.prayedAt)
         || Date.parse(log.prayedAt) < Date.parse(candidate.createdAt)) return false;
@@ -156,7 +171,9 @@ export function personPrayerRequestDraft(request?: PersonPrayerRequest): PersonP
   return {
     title: request?.title ?? '',
     details: request?.details ?? '',
-    sharedWith: [...(request?.sharedWith ?? [])]
+    sharedWith: [...(request?.sharedWith ?? [])],
+    schedule: request?.schedule ?? { frequency: 'daily' },
+    timeOfDay: request?.timeOfDay ?? 'anytime'
   };
 }
 
@@ -177,6 +194,11 @@ export function createPersonPrayerRequest(
   if (!isCanonicalTimestamp(input.createdAt) || input.createdAt !== input.updatedAt) {
     return { valid: false, error: 'The prayer request timestamp is invalid.' };
   }
+  const schedule = input.schedule ?? { frequency: 'daily' as const };
+  const timeOfDay = input.timeOfDay ?? 'anytime';
+  if (!validateRhythmSchedule(schedule).valid || !isRhythmTimeValue(timeOfDay)) {
+    return { valid: false, error: 'Choose a valid prayer frequency and time of day.' };
+  }
   const draftError = validateDraft(input.title, input.details ?? '', input.sharedWith ?? [], input.personId, personIds);
   if (draftError) return { valid: false, error: draftError };
   if (!Array.isArray(input.prayerLogs) || input.prayerLogs.length !== 0) {
@@ -187,6 +209,8 @@ export function createPersonPrayerRequest(
     requests: [...requests, {
       ...input,
       sharedWith: [...(input.sharedWith ?? [])],
+      schedule,
+      timeOfDay,
       prayerLogs: []
     }]
   };
@@ -215,13 +239,26 @@ export function updatePersonPrayerRequest(
   if (draftError) return { valid: false, error: draftError };
   const sharedWith = normalizeSharedWith(draft.sharedWith, existing.personId);
   if (!sharedWith) return { valid: false, error: 'Choose valid, unique people to share this request with.' };
+  if (!validateRhythmSchedule(draft.schedule).valid || !isRhythmTimeValue(draft.timeOfDay)) {
+    return { valid: false, error: 'Choose a valid prayer frequency and time of day.' };
+  }
   const details = draft.details.trim().length > 0 ? draft.details : undefined;
   const unchanged = existing.title === draft.title
     && (existing.details ?? '') === (details ?? '')
-    && sameIds(existing.sharedWith ?? [], sharedWith);
+    && sameIds(existing.sharedWith ?? [], sharedWith)
+    && existing.schedule !== undefined
+    && rhythmSchedulesEqual(existing.schedule, draft.schedule)
+    && existing.timeOfDay === draft.timeOfDay;
   const updatedRequests = requests.map(request => {
     if (request.id !== requestId) return request;
-    const next = { ...request, title: draft.title, sharedWith, updatedAt: unchanged ? request.updatedAt : updatedAt };
+    const next = {
+      ...request,
+      title: draft.title,
+      sharedWith,
+      schedule: draft.schedule,
+      timeOfDay: draft.timeOfDay,
+      updatedAt: unchanged ? request.updatedAt : updatedAt
+    };
     if (details === undefined) delete next.details;
     else next.details = details;
     return next;

@@ -53,8 +53,21 @@ type ScoringOccurrence = ScheduledOccurrenceState & {
   onceWeeklyPeriod: boolean;
 };
 
+type TargetPeriodRhythmSchedule = Extract<RhythmSchedule, { frequency: 'custom'; unit: 'days' }> & {
+  targetPeriod: {
+    targetCount: 1 | 2;
+    onTrack: 'pace' | 'since-last' | 'decay';
+  };
+};
+
+function isTargetPeriodRhythmSchedule(schedule: RhythmSchedule): schedule is TargetPeriodRhythmSchedule {
+  return schedule.frequency === 'custom'
+    && schedule.unit === 'days'
+    && schedule.targetPeriod !== undefined;
+}
+
 export type ConsistencyEvidence = {
-  frequency: Exclude<RhythmSchedule['frequency'], 'custom'>;
+  frequency: RhythmSchedule['frequency'];
   windowStartDate: string;
   windowEndDate: string;
   eligibleDueCount: number;
@@ -86,6 +99,7 @@ export type OnTrackZeroScoreSpan = {
   startDate: string;
   endDate: string;
   occurrenceCount: number;
+  recentOccurrenceDates: readonly string[];
 };
 
 export type OnTrackScheduleChange = {
@@ -96,7 +110,7 @@ export type OnTrackScheduleChange = {
 export type OnTrackEvidence = {
   lastQualifyingCompletionDate: string | null;
   missedOccurrenceCount: number;
-  pointsPerMissedOccurrence: 10;
+  pointsPerMissedOccurrence: number;
   deduction: number;
   occurrences: readonly OnTrackOccurrence[];
   repeatedZeroScoreSpans: readonly OnTrackZeroScoreSpan[];
@@ -186,6 +200,133 @@ function baseUnscored(
     consistency: reason,
     onTrack: reason,
     healthScore: null
+  };
+}
+
+function scoreTargetPeriodRhythm(
+  input: SelectRhythmScoreInput,
+  schedule: TargetPeriodRhythmSchedule,
+  trackingStartDate: string | null,
+  records: readonly RhythmCompletionRecord[]
+): RhythmScoreResult {
+  if (!trackingStartDate) {
+    return baseUnscored(input, unscored('ready-for-first-tend', 'Starts with your first Tend.'));
+  }
+
+  const eligibleRecords = records
+    .filter(record => record.effectiveDate >= trackingStartDate && record.effectiveDate <= input.asOfDate)
+    .slice()
+    .sort((left, right) => left.effectiveDate.localeCompare(right.effectiveDate)
+      || left.id.localeCompare(right.id));
+  if (eligibleRecords.length === 0) {
+    return baseUnscored(input, unscored('ready-for-first-tend', 'Starts with your first Tend.'));
+  }
+
+  const { targetCount, onTrack: onTrackPolicy } = schedule.targetPeriod;
+  const windowStartDate = addCalendarDays(input.asOfDate, -(schedule.interval - 1));
+  const windowRecords = eligibleRecords.filter(record => record.effectiveDate >= windowStartDate);
+  const completedCount = Math.min(windowRecords.length, targetCount);
+  const exactPercent = (completedCount / targetCount) * 100;
+  const consistency: ScoredConsistencyMetric = {
+    kind: 'scored',
+    score: exactPercent,
+    exactPercent,
+    evidence: {
+      frequency: 'custom',
+      windowStartDate,
+      windowEndDate: input.asOfDate,
+      eligibleDueCount: targetCount,
+      completedCount,
+      notCompletedCount: targetCount - completedCount,
+      limitedHistoryDays: trackingStartDate > windowStartDate
+        ? calendarDaysInclusive(trackingStartDate, input.asOfDate)
+        : null,
+      todayIncluded: true,
+      occurrences: Array.from({ length: targetCount }, (_, index) => {
+        const record = windowRecords[index];
+        return {
+          date: record?.effectiveDate ?? input.asOfDate,
+          status: record ? 'completed' : 'not-completed',
+          recordIds: record ? [record.id] : []
+        };
+      })
+    }
+  };
+
+  let onTrack: number;
+  let missedOccurrenceCount: number;
+  let onTrackOccurrenceDate = input.asOfDate;
+  const lastQualifyingCompletionDate = eligibleRecords.at(-1)!.effectiveDate;
+  let decayMissedDates: string[] = [];
+  if (onTrackPolicy === 'pace') {
+    const weekdayFromMonday = (new Date(`${input.asOfDate}T00:00:00Z`).getUTCDay() + 6) % 7;
+    const weekStartDate = addCalendarDays(input.asOfDate, -weekdayFromMonday);
+    const currentWeekCount = eligibleRecords.filter(record =>
+      record.effectiveDate >= weekStartDate && record.effectiveDate <= input.asOfDate
+    ).length;
+    const targetDueByToday = Math.floor(targetCount * weekdayFromMonday / 6);
+    missedOccurrenceCount = currentWeekCount >= targetDueByToday ? 0 : 1;
+    onTrack = missedOccurrenceCount === 0 ? 100 : 0;
+  } else if (onTrackPolicy === 'decay') {
+    const lastCompletionDate = eligibleRecords.at(-1)!.effectiveDate;
+    const completionDueIndex = Math.max(0, Math.ceil(
+      (calendarDaysInclusive(schedule.startDate, lastCompletionDate) - 1)
+        * targetCount / schedule.interval
+    ));
+    for (let index = completionDueIndex + 1; ; index += 1) {
+      const dueDate = addCalendarDays(
+        schedule.startDate,
+        Math.floor(index * schedule.interval / targetCount)
+      );
+      if (dueDate >= input.asOfDate) break;
+      decayMissedDates.push(dueDate);
+    }
+    missedOccurrenceCount = decayMissedDates.length;
+    onTrack = Math.max(0, 100 - missedOccurrenceCount * deductionPerMissedOccurrence);
+    onTrackOccurrenceDate = decayMissedDates.at(-1) ?? input.asOfDate;
+  } else {
+    const daysSinceLastConnection = calendarDaysInclusive(lastQualifyingCompletionDate, input.asOfDate) - 1;
+    missedOccurrenceCount = daysSinceLastConnection <= schedule.interval ? 0 : 1;
+    onTrack = missedOccurrenceCount === 0 ? 100 : 0;
+    onTrackOccurrenceDate = addCalendarDays(lastQualifyingCompletionDate, schedule.interval);
+  }
+
+  const onTrackMetric: ScoredOnTrackMetric = {
+    kind: 'scored',
+    score: onTrack,
+    evidence: {
+      lastQualifyingCompletionDate,
+      missedOccurrenceCount,
+      pointsPerMissedOccurrence: onTrackPolicy === 'decay' ? deductionPerMissedOccurrence : 100,
+      deduction: onTrackPolicy === 'decay'
+        ? Math.min(100, missedOccurrenceCount * deductionPerMissedOccurrence)
+        : missedOccurrenceCount === 0 ? 0 : 100,
+      occurrences: onTrackPolicy === 'decay'
+        ? [
+            ...decayMissedDates.map((dueDate, index): OnTrackOccurrence => ({
+              date: dueDate,
+              status: 'missed',
+              score: Math.max(0, 100 - (index + 1) * deductionPerMissedOccurrence)
+            })),
+            { date: input.asOfDate, status: 'today', score: onTrack }
+          ]
+        : [{
+            date: onTrackOccurrenceDate,
+            status: missedOccurrenceCount === 0 ? 'today' : 'missed',
+            score: onTrack
+          }],
+      repeatedZeroScoreSpans: [],
+      scheduleChanges: []
+    }
+  };
+  return {
+    kind: 'rhythm-score',
+    asOfDate: input.asOfDate,
+    timeZone: input.timeZone,
+    trackingStartDate,
+    consistency,
+    onTrack: onTrackMetric,
+    healthScore: calculateBlendedHealth(consistency.score, onTrackMetric.score)
   };
 }
 
@@ -430,6 +571,9 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
   if (trackingStartDate && trackingStartDate > input.asOfDate) {
     return baseUnscored(input, unscored('not-started', 'This Rhythm’s tracking date is in the future.'));
   }
+  if (isTargetPeriodRhythmSchedule(schedule)) {
+    return scoreTargetPeriodRhythm(input, schedule, trackingStartDate, datedRecords);
+  }
 
   const scheduleForDate = (date: string): RhythmSchedule | undefined => {
     if (!input.scoring) return trackingStartDate && date >= trackingStartDate ? schedule : undefined;
@@ -613,9 +757,11 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
         const repeatedZeroScoreSpans: OnTrackZeroScoreSpan[] = [];
         const scheduleChanges: OnTrackScheduleChange[] = [];
         const occurrences: OnTrackOccurrence[] = [];
+        const recentHistoryStartDate = addCalendarDays(input.asOfDate, -29);
         let zeroScoreSpanStart: string | null = null;
         let zeroScoreSpanEnd: string | null = null;
         let zeroScoreSpanCount = 0;
+        let zeroScoreSpanRecentDates: string[] = [];
         let missedOccurrenceCount = 0;
         let previousScore = 100;
         const flushZeroScoreSpan = () => {
@@ -623,12 +769,14 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
             repeatedZeroScoreSpans.push({
               startDate: zeroScoreSpanStart,
               endDate: zeroScoreSpanEnd,
-              occurrenceCount: zeroScoreSpanCount
+              occurrenceCount: zeroScoreSpanCount,
+              recentOccurrenceDates: zeroScoreSpanRecentDates
             });
           }
           zeroScoreSpanStart = null;
           zeroScoreSpanEnd = null;
           zeroScoreSpanCount = 0;
+          zeroScoreSpanRecentDates = [];
         };
         type TrackEvent =
           | { kind: 'occurrence'; date: string; occurrence: ScoringOccurrence; status: 'completed' | 'missed' }
@@ -702,6 +850,9 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
             zeroScoreSpanStart ??= occurrence.date;
             zeroScoreSpanEnd = occurrence.date;
             zeroScoreSpanCount += 1;
+            if (occurrence.date >= recentHistoryStartDate && occurrence.date <= input.asOfDate) {
+              zeroScoreSpanRecentDates.push(occurrence.date);
+            }
           } else {
             flushZeroScoreSpan();
             occurrences.push({

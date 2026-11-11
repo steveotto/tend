@@ -70,7 +70,7 @@ export function RhythmHealthScoringDetails({
     || contributions.onTrack === null
     || healthScore === null
     ? null
-    : formatTruthfulWeightedSum(contributions.consistency, contributions.onTrack, healthScore);
+    : formatTruthfulWeightedSum(contributions.consistency, contributions.onTrack, healthScore, 0);
 
   return (
     <section
@@ -97,11 +97,11 @@ export function RhythmHealthScoringDetails({
           <p
             className="rhythm-health-scoring-card__formula rhythm-health-scoring-card__formula--total"
             aria-label={contributionsFormula
-              ? `${contributionsFormula[0]} plus ${contributionsFormula[1]} equals ${contributionsFormula[2]}`
+              ? `${contributionsFormula[0]} plus ${contributionsFormula[1]} ${contributionsFormula[3] === '≈' ? 'approximately equals' : 'equals'} ${contributionsFormula[2]}`
               : 'Health contribution total unavailable'}
           >
             {contributionsFormula
-              ? <><span>{contributionsFormula[0]} + {contributionsFormula[1]} = </span><strong>{contributionsFormula[2]}</strong></>
+              ? <><span>{contributionsFormula[0]} + {contributionsFormula[1]} {contributionsFormula[3]} </span><strong>{contributionsFormula[2]}</strong></>
               : '—'}
           </p>
           {unavailableExplanation && (
@@ -235,6 +235,8 @@ function consistencyFrequencyName(frequency: ScoredConsistencyMetric['evidence']
       return 'Quarterly';
     case 'yearly':
       return 'Yearly';
+    case 'custom':
+      return 'Custom interval';
   }
 }
 

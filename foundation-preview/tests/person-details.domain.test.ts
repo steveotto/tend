@@ -86,6 +86,12 @@ describe('person details domain', () => {
       age: 25
     });
     expect(birthdaySummary({ monthDay: '10-31' }, '2026-10-31')).toEqual({ label: 'Birthday today' });
+    expect(birthdaySummary({ monthDay: '11-19', year: 74 }, '2026-11-09'))
+      .toEqual({ label: 'Birthday in 10 days' });
+    expect(birthdayCardSummary({ monthDay: '11-19', year: 74 }, '2026-11-09'))
+      .toEqual({ dateLabel: 'Nov 19', countdownLabel: 'in 10d' });
+    expect(birthdayCardSummary({ monthDay: '13-32' }, '2026-11-09')).toBeNull();
+    expect(birthdayCardSummary({ monthDay: '11-19' }, 'not-a-date')).toBeNull();
   });
 
   it('handles year rollover, leap-day boundaries, and the approved March 1 observance', () => {
@@ -173,12 +179,24 @@ describe('person details domain', () => {
     });
 
     expect(birthdayCardSummary({ monthDay: '12-02' }, '2026-10-31')).toMatchObject({
-      dateLabel: 'December 2',
+      dateLabel: 'Dec 2',
       countdownLabel: 'in 32d'
     });
     expect(birthdayCardSummary({ monthDay: '10-31' }, '2026-10-31')?.countdownLabel).toBe('today');
     expect(birthdayCardSummary({ monthDay: '11-01' }, '2026-10-31')?.countdownLabel).toBe('tomorrow');
     expect(birthdayCardSummary({ monthDay: '02-29' }, '2026-02-28')?.countdownLabel).toBe('tomorrow');
+  });
+
+  it('abbreviates birthday months consistently across the calendar', () => {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    months.forEach((month, index) => {
+      expect(birthdayCardSummary({
+        monthDay: `${String(index + 1).padStart(2, '0')}-02`
+      }, '2026-01-01')?.dateLabel).toBe(`${month} 2`);
+    });
   });
 
   it('validates explicit single-category replacement while preserving untouched multiple memberships', () => {

@@ -5,6 +5,7 @@ import { createDefaultTimeBlockSettings } from './time-blocks.ts';
 import type { RhythmTimeLabel, RhythmTimeValue, RhythmSchedule } from './rhythm-schedule.ts';
 import type { SavedRhythm } from './rhythm-editor.ts';
 import { createCardioData } from './cardio.ts';
+import { createFlexibilityData } from './flexibility.ts';
 import { createFriendshipData } from './friendships.ts';
 
 export const PROPOSED_PREVIEW_SCHEMA_VERSION = PREVIEW_SCHEMA_VERSION;
@@ -31,7 +32,7 @@ export type PreviewV4MigrationResult =
   | {
       valid: true;
       envelope: PreviewEnvelope;
-      sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37;
+      sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39;
     }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
@@ -114,6 +115,7 @@ export function migratePreviewToProposedV4(raw: string, currentDate: string): Pr
         strength: parsed.envelope.data.strength,
         weight: parsed.envelope.data.weight,
         cardio: createCardioData(),
+        flexibility: createFlexibilityData(),
         friendships: createFriendshipData(),
         people: parsed.envelope.data.people.map(person => ({ ...person })),
         peopleGroups: parsed.envelope.data.peopleGroups,

@@ -2,13 +2,20 @@ import type { HealthInfoIdentity } from '../domain/rhythm-contribution.ts';
 import { AreaIcon } from './AreaIcon.tsx';
 import { MarriageIcon } from './MarriageIcon.tsx';
 import { RhythmRepeatIcon } from './RhythmMetadata.tsx';
+import { PersonAvatar } from './PersonBadge.tsx';
 
 export function HealthInfoIdentityCard({ identity }: { identity: HealthInfoIdentity }) {
   const identityLabel = identity.icon.kind === 'rhythm'
     ? 'Rhythm'
     : identity.icon.kind === 'foundation'
       ? 'Foundation'
-      : 'Category';
+      : identity.icon.kind === 'connection'
+        ? 'Connections'
+        : identity.icon.kind === 'prayer'
+          ? 'Prayer'
+      : identity.icon.kind === 'person'
+        ? 'Person'
+        : 'Category';
 
   return (
     <section
@@ -25,6 +32,11 @@ export function HealthInfoIdentityCard({ identity }: { identity: HealthInfoIdent
         )}
         {identity.icon.kind === 'rhythm' && (
           <RhythmRepeatIcon className="rhythm-health-identity__repeat-icon" />
+        )}
+        {identity.icon.kind === 'connection' && <MarriageIcon group="foundations" id="connection" />}
+        {identity.icon.kind === 'prayer' && <MarriageIcon group="foundations" id="faith-prayer" />}
+        {identity.icon.kind === 'person' && identity.person && (
+          <PersonAvatar person={identity.person} />
         )}
       </span>
       <span className="rhythm-health-identity__copy">

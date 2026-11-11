@@ -5,26 +5,28 @@ export function RhythmScoreCircle({
   label,
   score,
   state,
-  explanation
+  explanation,
+  size = 'detail'
 }: {
   label: string;
   score: number | null;
   state: 'scored' | 'unscored' | 'unavailable';
   explanation?: string;
+  size?: 'card' | 'detail';
 }) {
   const available = state === 'scored' && score !== null;
   const displayScore = available ? formatScore(score) : null;
   const valueText = available
-    ? `${displayScore}%`
+    ? `${formatScore(score)} out of 100`
     : state === 'unscored'
       ? `Unscored because ${explanation ?? 'there are no eligible due occurrences'}`
       : 'Score unavailable';
   const circumference = 2 * Math.PI * 43;
-  const boundedPercent = available ? Math.max(0, Math.min(100, score)) : 0;
+  const boundedPercent = available ? Math.max(0, Math.min(100, Math.round(score))) : 0;
 
   return (
     <span
-      className={`rhythm-score-circle ${scoreTone(available ? score : null)} is-${state}`}
+      className={`rhythm-score-circle rhythm-score-circle--${size} ${scoreTone(available ? score : null)} is-${state}`}
       role={available ? 'meter' : 'img'}
       aria-label={available ? `${label} score` : `${label}: ${valueText}`}
       {...(available
@@ -50,7 +52,7 @@ export function RhythmScoreCircle({
           )}
         </svg>
         <span className="rhythm-score-circle__value" aria-hidden="true">
-          {displayScore === null ? '—' : `${displayScore}%`}
+          {displayScore ?? '—'}
         </span>
     </span>
   );

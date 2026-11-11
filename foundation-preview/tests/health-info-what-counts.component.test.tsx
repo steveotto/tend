@@ -214,7 +214,7 @@ describe('static Health Info content', () => {
     expect(within(dialog).queryByText('Linked Rhythms')).toBeNull();
   });
 
-  it('preserves full precision in weighted panel formulas', () => {
+  it('rounds weighted panel formulas to whole-number displays', () => {
     render(
       <HealthScoreDetailsContent
         title="Synthetic Health"
@@ -227,12 +227,12 @@ describe('static Health Info content', () => {
       />
     );
 
-    expect(screen.getByLabelText('75% times 72.666 equals 54.4995 points')).toBeTruthy();
-    expect(screen.getByLabelText('25% times 90.333 equals 22.58325 points')).toBeTruthy();
+    expect(screen.getByLabelText('75% times 73 approximately equals 54 points')).toBeTruthy();
+    expect(screen.getByLabelText('25% times 90 approximately equals 23 points')).toBeTruthy();
     expect(document.querySelectorAll('.rhythm-history-view__health-weight-formula strong')[0]?.textContent)
-      .toBe('54.4995 points');
+      .toBe('54 points');
     expect(document.querySelectorAll('.rhythm-history-view__health-weight-formula strong')[1]?.textContent)
-      .toBe('22.58325 points');
+      .toBe('23 points');
   });
 
   it('uses the authoritative Health & Fitness category and Foundation scores in its contribution flow', () => {

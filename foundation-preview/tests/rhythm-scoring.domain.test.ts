@@ -2121,4 +2121,90 @@ describe('daily occurrence scoring', () => {
       reasonCode: 'timezone-uncertain'
     });
   });
+
+  it('scores Twice weekly cadence from a rolling seven-day target and current-week pace', () => {
+    const schedule: RhythmSchedule = {
+      frequency: 'custom',
+      unit: 'days',
+      interval: 7,
+      startDate: '2026-10-19',
+      targetPeriod: { targetCount: 2, onTrack: 'pace' }
+    };
+    const complete = scored(input({
+      schedule,
+      scoring: undefined,
+      createdLocalDate: '2026-10-19',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-29',
+      records: [record('monday', '2026-10-26'), record('thursday', '2026-10-29')]
+    }));
+    expect(complete).toMatchObject({
+      consistency: { kind: 'scored', score: 100, evidence: { completedCount: 2, eligibleDueCount: 2 } },
+      onTrack: { kind: 'scored', score: 100, evidence: { missedOccurrenceCount: 0 } },
+      healthScore: 100
+    });
+
+    const eightDaysAgo = scored(input({
+      schedule,
+      scoring: undefined,
+      createdLocalDate: '2026-10-19',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-29',
+      records: [record('eight-days-ago', '2026-10-21')]
+    }));
+    expect(eightDaysAgo).toMatchObject({
+      consistency: { kind: 'scored', score: 0, evidence: { completedCount: 0, eligibleDueCount: 2 } },
+      onTrack: { kind: 'scored', score: 0, evidence: { missedOccurrenceCount: 1 } }
+    });
+  });
+
+  it('keeps Every 2 weeks On Track through the 14-day due date and excludes future records', () => {
+    const schedule: RhythmSchedule = {
+      frequency: 'custom',
+      unit: 'days',
+      interval: 14,
+      startDate: '2026-10-15',
+      targetPeriod: { targetCount: 1, onTrack: 'since-last' }
+    };
+    const dueDate = scored(input({
+      schedule,
+      scoring: undefined,
+      createdLocalDate: '2026-10-15',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-29',
+      records: [record('due-date', '2026-10-15')]
+    }));
+    expect(dueDate).toMatchObject({
+      consistency: { kind: 'scored', score: 0, evidence: { completedCount: 0 } },
+      onTrack: { kind: 'scored', score: 100, evidence: { missedOccurrenceCount: 0 } }
+    });
+
+    const afterDueDate = scored(input({
+      schedule,
+      scoring: undefined,
+      createdLocalDate: '2026-10-15',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-30',
+      records: [record('due-date', '2026-10-15')]
+    }));
+    expect(afterDueDate.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 0,
+      evidence: { missedOccurrenceCount: 1 }
+    });
+
+    const futureOnly = selectDailyRhythmScore(input({
+      schedule,
+      scoring: undefined,
+      createdLocalDate: '2026-10-15',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-29',
+      records: [record('tomorrow', '2026-10-30')]
+    }));
+    expect(futureOnly).toMatchObject({
+      kind: 'unscored',
+      reason: { reasonCode: 'ready-for-first-tend' },
+      healthScore: null
+    });
+  });
 });

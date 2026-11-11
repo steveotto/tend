@@ -1319,7 +1319,7 @@ describe('shared Rhythm history', () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(120_000);
       });
-      expectScores('41.25', '25', '90');
+      expectScores('41', '25', '90');
       expectChartToday('2026-10-24');
 
       act(() => {
@@ -1500,7 +1500,7 @@ describe('shared Rhythm history', () => {
     rerender(<RhythmScoreCircle label="Health" score={36.25} state="scored" />);
     const fractionalMeter = screen.getByRole('meter', { name: 'Health score' });
     expect(fractionalMeter.getAttribute('aria-valuenow')).toBe('36');
-    expect(fractionalMeter.getAttribute('aria-valuetext')).toBe('36.25 out of 100');
+    expect(fractionalMeter.getAttribute('aria-valuetext')).toBe('36 out of 100');
     expect(screen.getByText('36')).toBeTruthy();
 
     rerender(<RhythmScoreCircle label="Health" score={null} state="unscored" />);
@@ -1800,7 +1800,7 @@ describe('shared Rhythm history', () => {
 
     expect(screen.getAllByRole('meter')).toHaveLength(3);
     const healthMeter = screen.getByRole('meter', { name: 'Health score' });
-    expect(Number(healthMeter.getAttribute('aria-valuenow'))).toBeCloseTo(76.98);
+    expect(Number(healthMeter.getAttribute('aria-valuenow'))).toBe(77);
     expect(healthMeter.getAttribute('aria-valuetext')).toBe('77 out of 100');
     expect(screen.getByRole('heading', { name: 'Health' })).toBeTruthy();
     expect(screen.queryByText('75% Consistency · 25% On Track')).toBeNull();
@@ -1846,16 +1846,16 @@ describe('shared Rhythm history', () => {
       panel.querySelector('.rhythm-history-view__health-weight-name')?.textContent,
       panel.querySelector('.rhythm-history-view__health-weight-formula')?.getAttribute('aria-label')
     ])).toEqual([
-      ['75%', 'Consistency', '75% times 79.3103448275862 equals 59.48275862068965 points'],
-      ['25%', 'On Track', '25% times 70 equals 17.5 points']
+      ['75%', 'Consistency', '75% times 79 approximately equals 59 points'],
+      ['25%', 'On Track', '25% times 70 approximately equals 18 points']
     ]);
     expect(healthCalculation.querySelector('.rhythm-history-view__health-weight-score')).toBeNull();
     expect(within(scoreDetails).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('79');
     expect(within(scoreDetails).getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('70');
     expect(healthCalculation.querySelectorAll('.rhythm-history-view__health-weight-panel svg[aria-hidden="true"]')).toHaveLength(2);
-    expect(healthCalculation.textContent).toContain('75% × 79.3103448276 = 59.4827586207 points');
-    expect(healthCalculation.textContent).toContain('25% × 70 = 17.5 points');
-    expect(healthCalculation.textContent).toContain('59.4827586207 + 17.5 = 76.9827586207');
+    expect(healthCalculation.textContent).toContain('75% × 79 ≈ 59 points');
+    expect(healthCalculation.textContent).toContain('25% × 70 ≈ 18 points');
+    expect(healthCalculation.textContent).toContain('59 + 18 ≈ 77');
     const summaryCard = dialog.querySelector('.health-info-summary-card') as HTMLElement;
     expect(summaryCard.querySelector('.health-info-calculation')).toBeNull();
     expect(summaryCard.querySelectorAll('.health-score-measures__item')).toHaveLength(2);
@@ -2563,7 +2563,7 @@ describe('shared Rhythm history', () => {
 
     expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('67');
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('90');
-    expect(screen.getByRole('meter', { name: 'Health score' }).getAttribute('aria-valuenow')).toBe('72.5');
+    expect(screen.getByRole('meter', { name: 'Health score' }).getAttribute('aria-valuenow')).toBe('73');
     await user.click(screen.getByRole('button', { name: 'Show Consistency and On Track score details' }));
     const details = screen.getByRole('dialog', { name: 'Rhythm Health details' });
     const measurement = details.querySelector('.rhythm-health-scoring-card__measurement')!;

@@ -17,7 +17,11 @@ import {
   removeFoundationLinksForCategory
 } from '../domain/foundation-rhythm-associations.ts';
 import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
-import { rhythmDraftFrom, validateRhythmDraft } from '../domain/rhythm-editor.ts';
+import {
+  rhythmDraftFrom,
+  updateRhythmDraftFitnessActivity,
+  validateRhythmDraft
+} from '../domain/rhythm-editor.ts';
 import type { RhythmDraft, RhythmDraftErrors } from '../domain/rhythm-editor.ts';
 import { formatRhythmSchedule } from '../domain/rhythm-schedule.ts';
 import { rhythmTimeLabel } from '../domain/rhythm-schedule.ts';
@@ -59,7 +63,7 @@ function RhythmSectionHeading({
 }: {
   id: string;
   title: string;
-  icon: 'details' | 'timing' | 'connections';
+  icon: 'details' | 'timing' | 'connections' | 'activity';
 }) {
   return (
     <h3 id={id} className="rhythm-editor__section-heading">
@@ -69,6 +73,7 @@ function RhythmSectionHeading({
           {icon === 'details' && <><path d="m14.5 5.5 4 4" /><path d="M4 20l4.8-1 10.4-10.4a2.1 2.1 0 0 0-3-3L5.8 16 4 20Z" /></>}
           {icon === 'timing' && <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.2 2" /></>}
           {icon === 'connections' && <><path d="m9.5 14.5-1.2 1.2a3.7 3.7 0 0 1-5.2-5.2l3.1-3.1a3.7 3.7 0 0 1 5.2 0" /><path d="m14.5 9.5 1.2-1.2a3.7 3.7 0 0 1 5.2 5.2l-3.1 3.1a3.7 3.7 0 0 1-5.2 0" /><path d="m8.8 15.2 6.4-6.4" /></>}
+          {icon === 'activity' && <path d="M3 12h4l3-7 4 14 3-7h4" />}
         </svg>
       </span>
       <span className="rhythm-editor__section-title">{title}</span>
@@ -249,6 +254,26 @@ export function RhythmEditor({
       return next;
     });
   }
+
+  function updateFitnessActivity(value: 'workout' | 'cardio' | 'weight' | 'flexibility') {
+    const nextDraft = updateRhythmDraftFitnessActivity(draft, value);
+    if (value !== 'cardio') nextDraft.healthRunTarget = null;
+    const nextErrors = validateRhythmDraft(
+      nextDraft,
+      allFoundations,
+      people.map(person => person.id),
+      timeOptions
+    );
+    setDraft(nextDraft);
+    setErrors(previous => {
+      const next = { ...previous };
+      for (const field of ['categoryIds', 'foundationIds', 'healthRunTarget'] as const) {
+        delete next[field];
+        if (nextErrors[field]) next[field] = nextErrors[field];
+      }
+      return next;
+    });
+  }
   function openPicker(kind: AssociationKind) {
     pickerScrollTopRef.current = rhythmEditorScrollRegion()?.scrollTop ?? 0;
     pickerOriginRef.current = kind;
@@ -266,12 +291,17 @@ export function RhythmEditor({
     restoreFocusToPickerOpenerRef.current = true;
     if (apply) {
       if (activePicker === 'categories') {
-        const nextDraft = {
+        const categoryDraft = {
           ...draft,
           categoryIds: pickerSelection as RhythmDraft['categoryIds'],
           primaryFoundationId: pickerFoundationSelection[0] ?? null,
           secondaryFoundationIds: pickerFoundationSelection.slice(1)
         };
+        const nextDraft = !draft.categoryIds.includes('health')
+          && categoryDraft.categoryIds.includes('health')
+          && categoryDraft.healthLogCapability == null
+          ? updateRhythmDraftFitnessActivity(categoryDraft, 'workout')
+          : categoryDraft;
         const nextCategoryErrors = validateRhythmDraft(
           nextDraft,
           undefined,
@@ -778,7 +808,7 @@ export function RhythmEditor({
                 : {})}
             >
               {selectedCategories.length > 0 ? (
-                <span className="rhythm-editor__association-category-list">
+                <span className={`rhythm-editor__association-category-list${rhythm ? ' rhythm-editor__association-category-list--labeled' : ''}`}>
                   {selectedCategories.map(category => {
                     const group = selectedFoundationGroups.find(item => item.area.id === category.id);
                     const categoryRhythm = {
@@ -790,14 +820,20 @@ export function RhythmEditor({
                         key={category.id}
                         className="rhythm-editor__association-category-row"
                         role="group"
-                        aria-label={`${category.label} category${group ? ' and linked Foundations' : ''}`}
+                        aria-label={`${category.label} category${group
+                          ? ` and linked ${foundationTerminologyForCategory(category.id).plural}`
+                          : ''}`}
                       >
-                        <RhythmCategoryBadges rhythm={categoryRhythm} itemsOnly presentation="static" />
+                        <RhythmCategoryBadges
+                          rhythm={categoryRhythm}
+                          itemsOnly
+                          presentation={rhythm ? 'edit-labeled' : 'static'}
+                        />
                         {group && (
                           <RhythmFoundationBadges
                             rhythm={group.rhythm}
                             foundations={allFoundations}
-                            presentation="static"
+                            presentation={rhythm ? 'edit-labeled' : 'static'}
                             showAll
                           />
                         )}
@@ -824,27 +860,30 @@ export function RhythmEditor({
               </div>
             )}
           </div>
+          </section>
           {(draft.categoryIds.includes('health') || draft.healthLogCapability !== undefined) && (
             <section
-              className="rhythm-editor__fitness-activity"
-              role="group"
-              aria-label="Health & Fitness logging"
+              className="rhythm-editor__section rhythm-editor__fitness-activity"
+              aria-labelledby="rhythm-fitness-activity-heading"
             >
-              <RhythmSectionHeading id="rhythm-fitness-activity-heading" title="Fitness activity" icon="timing" />
+              <RhythmSectionHeading id="rhythm-fitness-activity-heading" title="Fitness activity" icon="activity" />
+              <div className="rhythm-editor__fitness-activity-fields" role="group" aria-label="Health & Fitness logging">
               <div className="goal-field">
                 <label>Activity</label>
                 <StyledSelect
                   label="Fitness activity"
                   value={draft.healthLogCapability ?? 'workout'}
+                  matchTriggerWidth
                   options={[
                     { value: 'workout', label: 'Workout' },
-                    { value: 'cardio', label: 'Run' },
-                    { value: 'weight', label: 'Weigh-in' }
+                    { value: 'cardio', label: 'Cardio' },
+                    { value: 'weight', label: 'Weigh-in' },
+                    { value: 'flexibility', label: 'Stretch routine' }
                   ]}
                   onChange={value => {
-                    if (value !== 'workout' && value !== 'cardio' && value !== 'weight') return;
-                    update('healthLogCapability', value);
-                    if (value !== 'cardio') update('healthRunTarget', null);
+                    if (value !== 'workout' && value !== 'cardio' && value !== 'weight'
+                      && value !== 'flexibility') return;
+                    updateFitnessActivity(value);
                   }}
                 />
               </div>
@@ -935,6 +974,7 @@ export function RhythmEditor({
                   </div>
                 </div>
               )}
+              </div>
             </section>
           )}
           {foundationLinksNeedingReview.length > 0 && (
@@ -942,7 +982,6 @@ export function RhythmEditor({
               Existing Foundation links that are unresolved or outside the selected categories are preserved. Review or remove them in Choose categories.
             </p>
           )}
-          </section>
         </section>
         <div className="rhythm-editor__association-errors">
           {fieldError('personIds')}

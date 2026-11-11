@@ -19,6 +19,7 @@ import faithScriptureIcon from '../assets/tend-approved-icons/foundations/faith-
 import healthStrengthIcon from '../assets/tend-approved-icons/foundations/health-strength.svg?url';
 import healthCardioIcon from '../assets/tend-approved-icons/foundations/health-cardio.svg?url';
 import healthWeightIcon from '../assets/tend-approved-icons/foundations/health-weight.svg?url';
+import healthFlexibilityIcon from '../assets/tend-approved-icons/foundations/health-flexibility.svg?url';
 import dailyConnectionIcon from '../../../assets/tend-marriage-icons/rhythms/daily-connection.svg?url';
 import dateNightIcon from '../../../assets/tend-marriage-icons/rhythms/date-night.svg?url';
 import dreamTogetherIcon from '../../../assets/tend-marriage-icons/rhythms/dream-together.svg?url';
@@ -53,7 +54,8 @@ const foundationIcons: Record<string, string> = {
   'faith-scripture': faithScriptureIcon,
   'health-strength': healthStrengthIcon,
   'health-cardio': healthCardioIcon,
-  'health-weight': healthWeightIcon
+  'health-weight': healthWeightIcon,
+  'health-flexibility': healthFlexibilityIcon
 };
 
 export function hasFoundationIcon(id: string): boolean {
@@ -71,6 +73,10 @@ const rhythmIcons: Record<string, string> = {
   'marriage-enrichment': marriageEnrichmentIcon,
   'week-away-together': weekAwayTogetherIcon
 };
+
+export function hasRhythmIcon(id: string): boolean {
+  return Object.prototype.hasOwnProperty.call(rhythmIcons, id);
+}
 
 type MarriageIconProps = {
   group: 'foundations' | 'rhythms';

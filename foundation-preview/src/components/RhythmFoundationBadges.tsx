@@ -12,7 +12,7 @@ import { hasFoundationIcon, MarriageIcon } from './MarriageIcon.tsx';
 type RhythmFoundationBadgesProps = {
   rhythm: RhythmPreview;
   foundations: readonly FoundationPreview[];
-  presentation?: 'interactive' | 'static';
+  presentation?: 'interactive' | 'static' | 'edit-labeled';
   showAll?: boolean;
   accessibleLabel?: string;
   onOpenFoundation?: (foundationId: string, openerId: string) => void;
@@ -187,6 +187,9 @@ export function RhythmFoundationBadges({
             {foundationIconOrInitials(foundation)}
           </span>
         );
+        const name = presentation === 'edit-labeled'
+          ? <span className="rhythm-association-badge__name">{foundation.name}</span>
+          : null;
         return interactive
           ? (
             <button
@@ -200,6 +203,7 @@ export function RhythmFoundationBadges({
               onClick={event => onOpenFoundation(foundation.id, event.currentTarget.id)}
             >
               {visual}
+              {name}
             </button>
           )
           : (
@@ -211,6 +215,7 @@ export function RhythmFoundationBadges({
               title={badgeLabel}
             >
               {visual}
+              {name}
             </span>
           );
       })}

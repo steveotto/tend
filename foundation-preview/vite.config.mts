@@ -53,6 +53,15 @@ function cloudflarePreviewPlugin(includeSupabaseClient: boolean): Plugin {
 function pagesRootEntryPlugin(): Plugin {
   return {
     name: 'cloudflare-preview-root-entry',
+    configureServer(server) {
+      server.middlewares.use((request, _response, next) => {
+        const requestUrl = new URL(request.url ?? '/', 'http://localhost');
+        if (requestUrl.pathname === '/') {
+          request.url = `/app-preview.html${requestUrl.search}`;
+        }
+        next();
+      });
+    },
     writeBundle(outputOptions) {
       const outputDirectory = path.resolve(outputOptions.dir ?? path.resolve(projectRoot, 'dist'));
       const appEntry = path.join(outputDirectory, 'app-preview.html');

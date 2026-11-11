@@ -48,6 +48,8 @@ function PrayerHarness({
             title: draft.title.trim(),
             ...(draft.details.trim() ? { details: draft.details } : {}),
             status: 'active',
+            schedule: draft.schedule,
+            timeOfDay: draft.timeOfDay,
             createdAt,
             updatedAt: createdAt,
             prayerLogs: []
@@ -98,6 +100,26 @@ function PrayerHarness({
 }
 
 describe('shared Person Prayer panel', () => {
+  it('offers the complete Classic time-of-day option list in order', async () => {
+    const user = userEvent.setup();
+    render(<PrayerHarness />);
+    await user.click(screen.getByRole('button', { name: 'Add prayer request' }));
+    const editor = screen.getByRole('dialog', { name: 'Add prayer request' });
+    await user.click(within(editor).getByRole('combobox', { name: /Time of day/ }));
+    expect(within(screen.getByRole('listbox')).getAllByRole('option').map(option => option.textContent))
+      .toEqual([
+        'Anytime',
+        'All day',
+        'Early morning',
+        'Morning',
+        'Lunch',
+        'Afternoon',
+        'Way home',
+        'Evening',
+        'Bedtime'
+      ]);
+  });
+
   it('creates a shared plain-text request, independently logs Prayed, and transitions without extra logs', async () => {
     const user = userEvent.setup();
     render(<PrayerHarness />);
@@ -108,6 +130,11 @@ describe('shared Person Prayer panel', () => {
     const editor = screen.getByRole('dialog', { name: 'Add prayer request' });
     await user.type(within(editor).getByRole('textbox', { name: 'Title' }), '<script>care</script>');
     await user.type(within(editor).getByRole('textbox', { name: 'Details (optional)' }), 'Keep this as plain text.');
+    await user.click(within(editor).getByRole('combobox', { name: /Frequency/ }));
+    await user.click(screen.getByRole('option', { name: 'Weekly' }));
+    await user.click(within(editor).getByRole('radio', { name: 'Monday' }));
+    await user.click(within(editor).getByRole('combobox', { name: /Time of day/ }));
+    await user.click(screen.getByRole('option', { name: 'Morning' }));
     await user.click(within(editor).getByRole('button', { name: 'Choose people' }));
     const picker = screen.getByRole('dialog', { name: 'Choose people to share this request with' });
     await user.click(within(picker).getByRole('button', { name: 'Morgan Reed' }));
@@ -120,7 +147,14 @@ describe('shared Person Prayer panel', () => {
     expect(within(card).getByText('Shared with Morgan Reed')).toBeTruthy();
     expect(document.activeElement).toBe(addButton);
     expect(JSON.parse(screen.getByTestId('requests').textContent ?? '[]')).toMatchObject([
-      { personId: owner, sharedWith: [shared], status: 'active', prayerLogs: [] }
+      {
+        personId: owner,
+        sharedWith: [shared],
+        status: 'active',
+        schedule: { frequency: 'weekly', weekdays: [1] },
+        timeOfDay: 'morning',
+        prayerLogs: []
+      }
     ]);
 
     await user.click(within(card).getByRole('button', { name: 'Prayed' }));

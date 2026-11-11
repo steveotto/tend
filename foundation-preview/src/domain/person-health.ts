@@ -1,11 +1,15 @@
 import { aggregateHealthMeasures } from './health-scoring.ts';
 import type { HealthMeasureAggregate, HealthMeasureValues } from './health-scoring.ts';
 import type { PersonId, RhythmPreview } from './preview-data.ts';
+import { connectionsForPerson } from './friendships.ts';
+import type { ConnectionCadence, FriendshipData } from './friendships.ts';
 import type {
   RhythmScoreResult,
   ScoredConsistencyMetric,
   ScoredOnTrackMetric
 } from './rhythm-scoring.ts';
+import { selectRhythmScore } from './rhythm-scoring.ts';
+import type { RhythmSchedule } from './rhythm-schedule.ts';
 
 export type PersonRhythmHealthSelection = HealthMeasureAggregate & {
   rhythmIds: readonly string[];
@@ -21,6 +25,12 @@ export type PersonHealthSelection = HealthMeasureAggregate & {
   eligibleComponentIds: readonly string[];
   excludedComponentIds: readonly string[];
   unscoredComponentIds: readonly string[];
+};
+
+export type PersonConnectionHealthSelection = HealthMeasureAggregate & {
+  configured: boolean;
+  connectionIds: readonly string[];
+  scoringResult: RhythmScoreResult | undefined;
 };
 
 type FullyScoredRhythm = Extract<RhythmScoreResult, { kind: 'rhythm-score' }> & {
@@ -90,6 +100,106 @@ export function selectPersonRhythmHealth(
   };
 }
 
+function connectionSchedule(cadence: ConnectionCadence, startDate: string): RhythmSchedule {
+  const [year, month, day] = startDate.split('-').map(Number);
+  const weekday = new Date(Date.UTC(year!, month! - 1, day!)).getUTCDay();
+  if (cadence === 'daily') {
+    return {
+      frequency: 'custom',
+      unit: 'days',
+      interval: 7,
+      startDate,
+      targetPeriod: { targetCount: 7, onTrack: 'decay' }
+    };
+  }
+  if (cadence === 'weekly') {
+    return { frequency: 'weekly', weekdays: [weekday as 0 | 1 | 2 | 3 | 4 | 5 | 6] };
+  }
+  if (cadence === 'monthly') {
+    return { frequency: 'monthly', pattern: { kind: 'dayOfMonth', day: day! } };
+  }
+  if (cadence === 'twice-weekly') {
+    return {
+      frequency: 'custom',
+      unit: 'days',
+      interval: 7,
+      startDate,
+      targetPeriod: { targetCount: 2, onTrack: 'decay' }
+    };
+  }
+  if (cadence === 'two-weeks') {
+    return {
+      frequency: 'custom',
+      unit: 'days',
+      interval: 14,
+      startDate,
+      targetPeriod: { targetCount: 1, onTrack: 'decay' }
+    };
+  }
+  return {
+    frequency: 'daily'
+  };
+}
+
+export function selectPersonConnectionHealth(
+  personId: PersonId,
+  friendships: FriendshipData,
+  asOfDate: string,
+  timeZone: string
+): PersonConnectionHealthSelection {
+  const cadence = friendships.cadenceSettings.find(setting => setting.personId === personId);
+  const connectionIds = connectionsForPerson(friendships, personId)
+    .filter(connection => connection.deleted !== true
+      && connection.isDeleted !== true
+      && connection.deletedAt == null
+      && connection.deleted_at == null)
+    .map(connection => connection.id);
+  if (!cadence) {
+    return {
+      configured: false,
+      connectionIds,
+      scoringResult: undefined,
+      consistency: null,
+      onTrack: null,
+      health: null
+    };
+  }
+
+  const schedule = connectionSchedule(cadence.cadence, cadence.setOn);
+  const records = connectionsForPerson(friendships, personId)
+    .filter(connection => connection.deleted !== true
+      && connection.isDeleted !== true
+      && connection.deletedAt == null
+      && connection.deleted_at == null)
+    .map(connection => ({
+      id: `connection:${connection.id}`,
+      rhythmId: `person-connection:${personId}`,
+      effectiveDate: connection.date
+    }));
+  const scoringResult = selectRhythmScore({
+    rhythmId: `person-connection:${personId}`,
+    schedule,
+    createdLocalDate: cadence.setOn,
+    createdTimeZone: timeZone,
+    records,
+    recordsAvailable: true,
+    asOfDate,
+    timeZone
+  });
+  const measures: HealthMeasureValues[] = isScoredMeasures(scoringResult)
+    ? [{
+        consistency: scoringResult.consistency.score,
+        onTrack: scoringResult.onTrack.score
+      }]
+    : [];
+  return {
+    configured: true,
+    connectionIds,
+    scoringResult,
+    ...aggregateHealthMeasures(measures)
+  };
+}
+
 export function selectPersonHealth(
   components: readonly {
     id: string;
@@ -137,4 +247,19 @@ export function selectPersonHealth(
     unscoredComponentIds,
     ...aggregateHealthMeasures(measures)
   };
+}
+
+export function selectPersonOverallHealth(
+  rhythms: Pick<PersonRhythmHealthSelection, 'consistency' | 'onTrack'>,
+  configuredComponents: readonly {
+    id: string;
+    consistency: number | null;
+    onTrack: number | null;
+    scoringStatus?: 'available' | 'unavailable';
+  }[] = []
+): PersonHealthSelection {
+  return selectPersonHealth([
+    { id: 'rhythms', consistency: rhythms.consistency, onTrack: rhythms.onTrack },
+    ...configuredComponents
+  ]);
 }

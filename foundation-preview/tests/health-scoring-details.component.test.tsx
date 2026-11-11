@@ -161,7 +161,7 @@ describe('shared Health scoring details card', () => {
     expect(screen.getByText('0 of 0 linked Rhythms scored.')).toBeTruthy();
   });
 
-  it('shows full-precision component products and aggregate averages', async () => {
+  it('rounds component products and aggregate averages to whole numbers', async () => {
     const user = userEvent.setup();
     const { container } = render(
       <HealthScoringDetailsCard
@@ -187,10 +187,10 @@ describe('shared Health scoring details card', () => {
     );
     await user.click(screen.getByRole('button', { name: 'How this Category was scored' }));
     expect(container.querySelector('.rhythm-health-scoring-card__formula--total')?.textContent)
-      .toBe('54.4995 + 20.3085 = 74.808');
-    expect(screen.getByLabelText('75% times 72.666 equals 54.4995 points')).toBeTruthy();
-    expect(screen.getByLabelText('25% times 81.234 equals 20.3085 points')).toBeTruthy();
-    expect(screen.getByText('66.666 + 33.333 ÷ 2 = 49.9995')).toBeTruthy();
+      .toBe('54 + 20 ≈ 75');
+    expect(screen.getByLabelText('75% times 73 approximately equals 54 points')).toBeTruthy();
+    expect(screen.getByLabelText('25% times 81 approximately equals 20 points')).toBeTruthy();
+    expect(screen.getByText('67 + 33 ÷ 2 ≈ 50')).toBeTruthy();
     expect(screen.getByText('100 + 100 ÷ 2 = 100')).toBeTruthy();
   });
 
@@ -280,7 +280,7 @@ describe('shared Health scoring details card', () => {
     expect(within(evidence).queryByText(/of 4/)).toBeNull();
   });
 
-  it('shows all fully scored rows and averages with existing score formatting', async () => {
+  it('shows whole-number fully scored rows and approximate averages', async () => {
     const user = userEvent.setup();
     const rows = [
       { id: 'strength', label: 'Strength', consistency: 81.6, onTrack: 76 },
@@ -306,7 +306,7 @@ describe('shared Health scoring details card', () => {
     expect(within(evidence).getByRole('row', { name: 'Weight 92 64' })).toBeTruthy();
     expect(within(evidence).getByRole('row', { name: 'Flexibility 60 —' })).toBeTruthy();
     const averages = evidence.querySelectorAll('.health-aggregate-evidence__averages p');
-    expect(averages[0]?.textContent).toContain('= 75.9');
+    expect(averages[0]?.textContent).toContain('≈ 76');
     expect(averages[1]?.textContent).toContain('= 76');
     expect(within(evidence).queryByText('No scores available yet.')).toBeNull();
     expect(within(evidence).getByText('Unavailable scores are excluded.')).toBeTruthy();

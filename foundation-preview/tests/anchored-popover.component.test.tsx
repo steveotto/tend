@@ -52,4 +52,26 @@ describe('anchored popover viewport placement', () => {
     expect(position.top).toBeGreaterThanOrEqual(462);
     expect(position.top + position.maxHeight).toBeLessThanOrEqual(738);
   });
+
+  it('pins mobile settings to the visible viewport bottom and constrains them above the keyboard', () => {
+    const position = calculateAnchoredPopoverPosition(
+      bounds(180, 640, 44, 44),
+      bounds(0, 0, 360, 560),
+      { left: 0, top: 0, width: 390, height: 844 },
+      12,
+      6,
+      true
+    );
+    expect(position).toEqual({ top: 284, left: 0, maxHeight: 832, maxWidth: 390 });
+
+    const keyboardOpen = calculateAnchoredPopoverPosition(
+      bounds(180, 420, 44, 44),
+      bounds(0, 0, 360, 560),
+      { left: 0, top: 440, width: 390, height: 320 },
+      12,
+      6,
+      true
+    );
+    expect(keyboardOpen).toEqual({ top: 452, left: 0, maxHeight: 308, maxWidth: 390 });
+  });
 });

@@ -294,17 +294,19 @@ export function CategoryHealthBadge({
   accessibleLabel,
   className,
   displayScore = score,
-  variant = 'default'
+  variant = 'default',
+  appearance = 'standard'
 }: {
   score: number | null;
   accessibleLabel?: string;
   className?: string;
   displayScore?: number | null;
   variant?: 'default' | 'neutral-labeled';
+  appearance?: 'standard' | 'rounded';
 }) {
   return (
     <span
-      className={`ma-score ${scoreTone(score)}${className ? ` ${className}` : ''}`}
+      className={`ma-score${appearance === 'rounded' ? ' category-health-badge' : ''} ${scoreTone(score)}${className ? ` ${className}` : ''}`}
       {...(accessibleLabel
         ? { role: 'img', 'aria-label': accessibleLabel }
         : { 'aria-hidden': true })}
@@ -316,7 +318,7 @@ export function CategoryHealthBadge({
             <span className="ma-score__value">{formatScore(displayScore)}</span>
           </>
         )
-        : formatScore(displayScore)}
+        : <span className="ma-score__value">{formatScore(displayScore)}</span>}
     </span>
   );
 }

@@ -60,7 +60,7 @@ export function HealthScoringDetailsCard({
   formulaContent,
   children,
   initialExpanded = false,
-  maxFractionDigits
+  maxFractionDigits = 0
 }: {
   title: string;
   healthScore: number | null;
@@ -126,7 +126,7 @@ export function HealthScoringDetailsCard({
 
 function AggregateEvidence({
   evidence,
-  maxFractionDigits = 10
+  maxFractionDigits = 0
 }: {
   evidence: HealthAggregateEvidence;
   maxFractionDigits?: number;
@@ -333,7 +333,11 @@ function AverageRow({
   const displayedMean = formattedValues.length === 0
     ? null
     : formattedValues.reduce((total, value) => total + Number(value), 0) / formattedValues.length;
-  const operator = displayedMean !== null && formattedAverage !== null
+  const approximate = values.some((value, index) =>
+    Math.abs(value - Number(formattedValues[index])) > 1e-10)
+    || (average !== null && formattedAverage !== null
+      && Math.abs(average - Number(formattedAverage)) > 1e-10);
+  const operator = !approximate && displayedMean !== null && formattedAverage !== null
     && Math.abs(displayedMean - Number(formattedAverage)) < 1e-10
     ? '='
     : '≈';

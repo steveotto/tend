@@ -58,6 +58,51 @@ describe('shared structured Rhythm editor', () => {
     expect(associationGroup.querySelectorAll('button button')).toHaveLength(0);
   });
 
+  it('shows labeled, grouped category and Foundation badges only in Edit Rhythm', () => {
+    const rhythm: RhythmPreview = {
+      ...todayRhythms[0]!,
+      categoryIds: ['faith', 'health', 'marriage'],
+      primaryFoundationId: 'faith-prayer',
+      secondaryFoundationIds: ['faith-sabbath', 'health-strength']
+    };
+    const editor = renderEditorForRhythm(rhythm);
+    const rows = [...editor.querySelectorAll<HTMLElement>('.rhythm-editor__association-category-row')];
+
+    expect(rows).toHaveLength(3);
+    const faith = rows.find(row => row.getAttribute('aria-label') === 'Faith category and linked Practices')!;
+    const health = rows.find(row => row.getAttribute('aria-label') === 'Health & Fitness category and linked Foundations')!;
+    const marriage = rows.find(row => row.getAttribute('aria-label') === 'Marriage category')!;
+    expect(editor.querySelector('.rhythm-editor__association-category-list--labeled')).toBeTruthy();
+    expect(within(faith).getByRole('img', { name: 'Faith' }).textContent).toContain('Faith');
+    expect(within(faith).getByText('Prayer')).toBeTruthy();
+    expect(within(faith).getByText('Sabbath')).toBeTruthy();
+    expect(within(health).getByText('Health & Fitness')).toBeTruthy();
+    expect(within(health).getByText('Strength')).toBeTruthy();
+    expect(within(marriage).getByText('Marriage')).toBeTruthy();
+    expect(marriage.querySelector('.rhythm-foundation-badges')).toBeNull();
+    expect(faith.querySelectorAll('.rhythm-foundation-badge')).toHaveLength(2);
+    expect(health.querySelectorAll('.rhythm-foundation-badge')).toHaveLength(1);
+
+    cleanup();
+    const addDraft = {
+      ...rhythmDraftFrom(todayRhythms[0]!, []),
+      categoryIds: ['faith'] as RhythmDraft['categoryIds'],
+      primaryFoundationId: 'faith-prayer',
+      secondaryFoundationIds: []
+    };
+    render(
+      <RhythmEditor
+        initialDraft={addDraft}
+        onSave={vi.fn(() => ({}))}
+        onClose={vi.fn()}
+      />
+    );
+    const addEditor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+    expect(addEditor.querySelectorAll('.rhythm-association-badge__name')).toHaveLength(0);
+    expect(addEditor.querySelector('.rhythm-editor__association-category-list--labeled')).toBeNull();
+    expect(within(addEditor).getByRole('img', { name: 'Faith' })).toBeTruthy();
+  });
+
   it('uses the same Details, Timing, and Connections sections and Save action for Add and Edit', () => {
     const sectionNames = ['Details', 'Timing', 'Connections'];
     const addEditor = renderEditor();
@@ -343,11 +388,12 @@ describe('shared structured Rhythm editor', () => {
     const onSave = vi.fn((_draft: RhythmDraft) => ({}));
     const editor = renderEditorForRhythm(rhythm, onSave);
     const loggingGroup = within(editor).getByRole('group', { name: 'Health & Fitness logging' });
-    expect(within(loggingGroup).getByRole('combobox', { name: 'Fitness activity: Run' })).toBeTruthy();
+    expect(within(loggingGroup).getByRole('combobox', { name: 'Fitness activity: Cardio' })).toBeTruthy();
     expect(within(loggingGroup).getByText('Target distance (optional)')).toBeTruthy();
     expect((within(loggingGroup).getByRole('spinbutton') as HTMLInputElement).value).toBe('10');
     expect(within(loggingGroup).getByRole('combobox', { name: 'Distance unit: Kilometers' })).toBeTruthy();
-    expect(loggingGroup.children).toHaveLength(3);
+    expect(loggingGroup.children).toHaveLength(2);
+    expect(loggingGroup.classList.contains('rhythm-editor__fitness-activity-fields')).toBe(true);
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     const picker = associationPicker('Choose categories');
     const cardioFoundation = within(picker).getByRole('button', { name: 'Cardio' });
@@ -355,7 +401,7 @@ describe('shared structured Rhythm editor', () => {
     await user.click(cardioFoundation);
     await user.click(within(picker).getByRole('button', { name: 'Weight' }));
     await user.click(within(picker).getByRole('button', { name: 'Apply' }));
-    expect(within(editor).getByRole('combobox', { name: 'Fitness activity: Run' })).toBeTruthy();
+    expect(within(editor).getByRole('combobox', { name: 'Fitness activity: Cardio' })).toBeTruthy();
     expect((within(loggingGroup).getByRole('spinbutton') as HTMLInputElement).value).toBe('10');
     expect(within(loggingGroup).getByRole('combobox', { name: 'Distance unit: Kilometers' })).toBeTruthy();
 
@@ -376,10 +422,170 @@ describe('shared structured Rhythm editor', () => {
       ...savedDraft
     });
     const reopenedLoggingGroup = within(reopened).getByRole('group', { name: 'Health & Fitness logging' });
-    expect(within(reopenedLoggingGroup).getByRole('combobox', { name: 'Fitness activity: Run' })).toBeTruthy();
+    expect(within(reopenedLoggingGroup).getByRole('combobox', { name: 'Fitness activity: Cardio' })).toBeTruthy();
     expect(within(reopenedLoggingGroup).getByText('Target distance (optional)')).toBeTruthy();
     expect((within(reopenedLoggingGroup).getByRole('spinbutton') as HTMLInputElement).value).toBe('10');
     expect(within(reopenedLoggingGroup).getByRole('combobox', { name: 'Distance unit: Kilometers' })).toBeTruthy();
+  });
+
+  it('anchors the Fitness Activity menu to the field and flips above near the viewport bottom', async () => {
+    const user = userEvent.setup();
+    const rhythm: RhythmPreview = {
+      ...todayRhythms[0]!,
+      id: 'existing-cardio-log-rhythm',
+      categoryIds: ['health'],
+      healthLogCapability: 'cardio'
+    };
+    const getBounds = HTMLElement.prototype.getBoundingClientRect;
+    let triggerTop = 50;
+    const getBoundsSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.getAttribute('role') === 'combobox'
+        && this.getAttribute('aria-label') === 'Fitness activity: Cardio') {
+        const top = triggerTop;
+        return {
+          x: 32,
+          y: top,
+          top,
+          left: 32,
+          right: 252,
+          bottom: top + 44,
+          width: 220,
+          height: 44,
+          toJSON: () => ({})
+        } as DOMRect;
+      }
+      return getBounds.call(this);
+    });
+
+    try {
+      const editor = renderEditorForRhythm(rhythm);
+      const trigger = within(editor).getByRole('combobox', { name: 'Fitness activity: Cardio' });
+      await user.click(trigger);
+      let listbox = screen.getByRole('listbox', { name: 'Fitness activity' });
+      expect(listbox.style.left).toBe('32px');
+      expect(listbox.style.top).toBe('100px');
+      expect(listbox.style.width).toBe('220px');
+      expect(within(listbox).getAllByRole('option').map(option => option.textContent?.trim()))
+        .toEqual(['Workout', 'Cardio', 'Weigh-in', 'Stretch routine']);
+      triggerTop = 650;
+      fireEvent.scroll(editor.querySelector('.rhythm-editor__scroll')!);
+      expect(listbox.style.left).toBe('32px');
+      expect(listbox.style.top).toBe('446px');
+      expect(listbox.style.width).toBe('220px');
+      expect(Number.parseFloat(getComputedStyle(listbox).top) + listbox.clientHeight)
+        .toBeLessThanOrEqual(window.innerHeight - 12);
+      await user.keyboard('{Escape}');
+    } finally {
+      getBoundsSpy.mockRestore();
+    }
+  });
+
+  it('updates Health & Fitness Foundation badges and saves the Foundation mapped to each Activity', async () => {
+    const user = userEvent.setup();
+    const activities = [
+      { option: 'Workout', capability: 'workout', foundationId: 'health-strength', badge: 'Health & Fitness: Strength' },
+      { option: 'Cardio', capability: 'cardio', foundationId: 'health-cardio', badge: 'Health & Fitness: Cardio' },
+      { option: 'Weigh-in', capability: 'weight', foundationId: 'health-weight', badge: 'Health & Fitness: Weight' },
+      { option: 'Stretch routine', capability: 'flexibility', foundationId: 'health-flexibility', badge: 'Health & Fitness: Flexibility' }
+    ] as const;
+
+    for (const [index, activity] of activities.entries()) {
+      cleanup();
+      const id = `user-rhythm-55555555-5555-4555-8555-55555555555${index}`;
+      let persistedRhythms: SavedRhythm[] = [];
+      const onSave = vi.fn((draft: RhythmDraft) => {
+        const result = saveRhythmDraft(persistedRhythms, draft, id, 'create');
+        if (result.savedRhythms) persistedRhythms = result.savedRhythms;
+        return result.errors;
+      });
+      const editor = renderEditor(onSave);
+      await user.type(within(editor).getByLabelText('Title'), `Log ${activity.option}`);
+      await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
+      const picker = associationPicker('Choose categories');
+      await user.click(within(picker).getByRole('button', { name: 'Health & Fitness' }));
+      await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+
+      if (activity.option !== 'Workout') {
+        await choose(user, 'Fitness activity', activity.option);
+      }
+
+      const categoryRow = within(editor).getByRole('button', { name: /^Choose categories, Health & Fitness/ });
+      expect(within(categoryRow).getAllByRole('img').map(image => image.getAttribute('aria-label')))
+        .toEqual(['Health & Fitness', activity.badge]);
+      expect(onSave).not.toHaveBeenCalled();
+      expect(within(editor).getByRole('heading', { name: 'Fitness activity', level: 3 })).toBeTruthy();
+      expect(within(editor).getByRole('group', { name: 'Health & Fitness logging' })
+        .classList.contains('rhythm-editor__fitness-activity-fields')).toBe(true);
+
+      await user.click(within(editor).getByRole('button', { name: 'Save' }));
+      expect(onSave.mock.results.at(-1)?.value).toEqual({});
+      expect(persistedRhythms[0]).toMatchObject({
+        categoryIds: ['health'],
+        primaryFoundationId: activity.foundationId,
+        secondaryFoundationIds: [],
+        healthLogCapability: activity.capability
+      });
+    }
+  });
+
+  it('preserves existing links on Edit until Activity changes, then replaces only the prior activity link', async () => {
+    const user = userEvent.setup();
+    const rhythm: RhythmPreview = {
+      ...todayRhythms[0]!,
+      id: 'existing-strength-log-rhythm',
+      categoryIds: ['health'],
+      primaryFoundationId: 'health-strength',
+      secondaryFoundationIds: ['health-weight'],
+      healthLogCapability: 'workout'
+    };
+    const onSave = vi.fn((_draft: RhythmDraft) => ({}));
+    const editor = renderEditorForRhythm(rhythm, onSave);
+    const categoryRow = within(editor).getByRole('button', { name: /^Choose categories, Health & Fitness/ });
+    const badges = () => within(categoryRow).getAllByRole('img').map(image => image.getAttribute('aria-label'));
+
+    expect(badges()).toEqual([
+      'Health & Fitness',
+      'Health & Fitness: Strength',
+      'Health & Fitness: Weight'
+    ]);
+    expect(within(editor).getByRole('heading', { name: 'Fitness activity', level: 3 })).toBeTruthy();
+    expect(onSave).not.toHaveBeenCalled();
+
+    await choose(user, 'Fitness activity', 'Cardio');
+    expect(badges()).toEqual([
+      'Health & Fitness',
+      'Health & Fitness: Cardio',
+      'Health & Fitness: Weight'
+    ]);
+    await choose(user, 'Fitness activity', 'Weigh-in');
+    expect(badges()).toEqual([
+      'Health & Fitness',
+      'Health & Fitness: Weight'
+    ]);
+
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    expect(onSave.mock.calls.at(-1)?.[0]).toMatchObject({
+      categoryIds: ['health'],
+      primaryFoundationId: 'health-weight',
+      secondaryFoundationIds: [],
+      healthLogCapability: 'weight'
+    });
+  });
+
+  it('does not save an Add Rhythm when the user cancels after changing Activity', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn((_draft: RhythmDraft) => ({}));
+    const editor = renderEditor(onSave);
+    await user.type(within(editor).getByLabelText('Title'), 'Canceled run');
+    await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
+    const picker = associationPicker('Choose categories');
+    await user.click(within(picker).getByRole('button', { name: 'Health & Fitness' }));
+    await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+    await choose(user, 'Fitness activity', 'Cardio');
+    const categoryRow = within(editor).getByRole('button', { name: /^Choose categories, Health & Fitness/ });
+    expect(within(categoryRow).getByRole('img', { name: 'Health & Fitness: Cardio' })).toBeTruthy();
+    await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
+    expect(onSave).not.toHaveBeenCalled();
   });
 
   it('opens the People picker from its full row with the keyboard and restores focus on Escape', async () => {

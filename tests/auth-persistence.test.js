@@ -11,6 +11,7 @@ const cloudSource = fs.readFileSync(path.join(root, "app-cloud.js"), "utf8");
 const authSource = fs.readFileSync(path.join(root, "app-auth.js"), "utf8");
 const coreSource = fs.readFileSync(path.join(root, "app-core.js"), "utf8");
 const migrationSource = fs.readFileSync(path.join(root, "supabase/migrations/202610160001_private_tend_accounts.sql"), "utf8");
+const staleRevisionMigrationSource = fs.readFileSync(path.join(root, "supabase/migrations/202611090001_stale_revision_exceptions_p0001.sql"), "utf8");
 
 function storage() {
   const values = new Map();
@@ -28,6 +29,8 @@ function cloudHarness() {
   let authUserId = "user-a";
   let holdNextRpc = false;
   let releaseHeldRpc;
+  let nextRpcError = null;
+  const rpcCalls = [];
   const client = {
     from(table) {
       return {
@@ -46,14 +49,20 @@ function cloudHarness() {
       };
     },
     async rpc(_name, args) {
+      rpcCalls.push({ name: _name, args });
       const owner = authUserId;
       if (holdNextRpc) {
         holdNextRpc = false;
         await new Promise(resolve => { releaseHeldRpc = resolve; });
       }
+      if (nextRpcError) {
+        const error = nextRpcError;
+        nextRpcError = null;
+        return { data: null, error };
+      }
       const row = rows.get(owner);
-      if (!row && args.p_expected_revision !== 0) return { data: null, error: { code: "40001", message: "Stale revision" } };
-      if (row && row.revision !== args.p_expected_revision) return { data: null, error: { code: "40001", message: "Stale revision" } };
+      if (!row && args.p_expected_revision !== 0) return { data: null, error: { code: "P0001", message: "Stale revision; reload or resolve the device draft" } };
+      if (row && row.revision !== args.p_expected_revision) return { data: null, error: { code: "P0001", message: "Stale revision; reload or resolve the device draft" } };
       const next = {
         state: JSON.parse(JSON.stringify(args.p_state)),
         schema_version: args.p_schema_version,
@@ -86,9 +95,11 @@ function cloudHarness() {
     localStorage,
     rows,
     events,
+    rpcCalls,
     setOnline(value) { window.navigator.onLine = value; },
     fire(name) { if (listeners[name]) listeners[name](); },
     setUser(id) { authUserId = id; },
+    setNextRpcError(error) { nextRpcError = error; },
     pauseNextRpc() { holdNextRpc = true; return () => releaseHeldRpc(); }
   };
 }
@@ -201,13 +212,28 @@ test("an atomic stale-revision failure preserves the device draft and the newer 
   });
   const localDraft = { people: [], marker: "unsynced-device-two" };
   harness.cloud.activate("user-a", localDraft, 1, true);
+  const callsBeforeStaleSave = harness.rpcCalls.length;
   await harness.cloud.flush();
+  assert.equal(harness.rpcCalls.length, callsBeforeStaleSave + 1);
   harness.cloud.queue({ people: [], marker: "edited-after-conflict" });
   const cache = harness.cloud.readCache("user-a");
   assert.equal(harness.cloud.getStatus(), "Needs attention");
   assert.equal(cache.conflict.draft.marker, "edited-after-conflict");
   assert.equal(cache.conflict.cloudState.marker, "from-device-one");
   assert.equal(harness.rows.get("user-a").state.marker, "from-device-one");
+});
+
+test("an unrelated P0001 error is not treated as a save conflict", async () => {
+  const harness = cloudHarness();
+  harness.setNextRpcError({ code: "P0001", message: "Invalid state document" });
+  harness.cloud.activate("user-a", { marker: "local draft" }, 0, true);
+
+  await harness.cloud.flush();
+
+  assert.equal(harness.cloud.getStatus(), "Needs attention");
+  assert.equal(harness.events.some(event => event.type === "tend-cloud-conflict"), false);
+  assert.equal(harness.rpcCalls.length, 1);
+  assert.equal(harness.rows.size, 0);
 });
 
 test("exports and cloud saves strip legacy sync secrets without changing ordinary fields", async () => {
@@ -422,7 +448,13 @@ test("migration grants and RLS policies enforce ownership and revision-checked w
   assert.match(migrationSource, /revoke all on table public\.tend_user_state from public, anon, authenticated/i);
   assert.match(migrationSource, /grant execute on function public\.tend_save_user_state\(jsonb, bigint, integer\) to authenticated/i);
   assert.match(migrationSource, /current_state\.revision = p_expected_revision/i);
-  assert.match(migrationSource, /errcode = '40001'/i);
+  assert.match(staleRevisionMigrationSource, /function public\.tend_save_user_state\(\s*p_state jsonb,\s*p_expected_revision bigint,\s*p_schema_version integer\s*\)/i);
+  assert.match(staleRevisionMigrationSource, /function public\.tend_save_preview_backup\(\s*p_document jsonb,\s*p_expected_revision bigint,\s*p_schema_version integer\s*\)/i);
+  assert.match(staleRevisionMigrationSource, /Stale revision; reload or resolve the device draft' using errcode = 'P0001'/i);
+  assert.match(staleRevisionMigrationSource, /Stale Preview backup revision' using errcode = 'P0001'/i);
+  assert.doesNotMatch(staleRevisionMigrationSource, /40001/);
+  assert.match(staleRevisionMigrationSource, /current_state\.revision = p_expected_revision/i);
+  assert.match(staleRevisionMigrationSource, /current_backup\.revision = p_expected_revision/i);
   const profileMigration = fs.readFileSync(path.join(root, "supabase/migrations/202610160002_profile_upsert.sql"), "utf8");
   assert.match(profileMigration, /on public\.tend_profiles for insert to authenticated/i);
   assert.match(profileMigration, /with check \(user_id = \(select auth\.uid\(\)\)\)/i);

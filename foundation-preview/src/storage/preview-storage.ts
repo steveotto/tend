@@ -92,7 +92,12 @@ export {
 };
 
 export const PREVIEW_CATEGORY_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:v32-category-recovery`;
+export const PREVIEW_CLOUD_RESTORE_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:cloud-restore-recovery`;
+export const PREVIEW_IMPORT_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:import-recovery`;
+export const PREVIEW_IMPORT_SYNC_GUARD_KEY = `${PREVIEW_STORAGE_KEY}:import-sync-guard`;
 export const PREVIEW_ACCOUNT_STORAGE_PREFIX = 'tend2:preview:account';
+const previewImportRecoveryFormat = 'tend.preview-import-recovery';
+const previewImportSyncGuardFormat = 'tend.preview-import-sync-guard';
 
 export type PreviewStorage = Pick<Storage, 'getItem' | 'setItem'>;
 export type PreviewStorageScope = {
@@ -116,9 +121,29 @@ export type RecoveryCopyReadResult =
   | { kind: 'loaded'; raw: string | null }
   | { kind: 'error'; message: string };
 
+export type CloudRestoreRecoveryResult =
+  | { kind: 'preserved' }
+  | { kind: 'not-needed' }
+  | { kind: 'conflict'; message: string }
+  | { kind: 'error'; message: string };
+
+export type PreviewImportRecoveryReadResult =
+  | { kind: 'loaded'; latestRaw: string | null; latestSourceRaw: string | null; archiveRaw: string | null }
+  | { kind: 'error'; message: string };
+
+export type PreviewImportSyncGuard =
+  | { kind: 'none' }
+  | { kind: 'pending'; importedRaw: string }
+  | { kind: 'resolved'; importedRaw: string | null };
+
+export type PreviewImportSyncGuardReadResult =
+  | { kind: 'loaded'; guard: PreviewImportSyncGuard }
+  | { kind: 'error'; message: string };
+
 export type PreviewWriteOptions = {
   allowUnrecoverableReplacement?: boolean;
   currentDate?: string;
+  importSourceRaw?: string;
   operation?: 'save' | 'import' | 'reset' | 'replace';
 };
 
@@ -159,6 +184,63 @@ export function createPreviewStorageScope(
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Browser storage is unavailable.';
+}
+
+function parseImportRecoveryArchive(raw: string): { copies: string[]; sources: string[] } {
+  const parsed: unknown = JSON.parse(raw);
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('The saved import recovery archive is invalid and was not changed.');
+  }
+  const archive = parsed as Record<string, unknown>;
+  if (archive.format !== previewImportRecoveryFormat
+    || archive.schemaVersion !== 1
+    || !Array.isArray(archive.copies)
+    || !archive.copies.every(copy => typeof copy === 'string')
+    || !Array.isArray(archive.sources)
+    || !archive.sources.every(source => typeof source === 'string')
+    || Object.keys(archive).some(key => !['format', 'schemaVersion', 'copies', 'sources'].includes(key))) {
+    throw new Error('The saved import recovery archive is invalid and was not changed.');
+  }
+  return { copies: archive.copies, sources: archive.sources };
+}
+
+function parsePreviewImportSyncGuard(raw: string): PreviewImportSyncGuard {
+  const parsed: unknown = JSON.parse(raw);
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('The saved import sync safeguard is invalid. No automatic account write was made.');
+  }
+  const guard = parsed as Record<string, unknown>;
+  if (guard.format !== previewImportSyncGuardFormat
+    || guard.schemaVersion !== 1
+    || (guard.state !== 'pending' && guard.state !== 'resolved')
+    || (guard.state === 'pending' && typeof guard.importedRaw !== 'string')
+    || (guard.state === 'resolved' && guard.importedRaw !== null && typeof guard.importedRaw !== 'string')
+    || Object.keys(guard).some(key => !['format', 'schemaVersion', 'state', 'importedRaw'].includes(key))) {
+    throw new Error('The saved import sync safeguard is invalid. No automatic account write was made.');
+  }
+  return guard.state === 'pending'
+    ? { kind: 'pending', importedRaw: guard.importedRaw as string }
+    : { kind: 'resolved', importedRaw: guard.importedRaw as string | null };
+}
+
+function serializePreviewImportSyncGuard(
+  state: 'pending' | 'resolved',
+  importedRaw: string | null
+): string {
+  return JSON.stringify({
+    format: previewImportSyncGuardFormat,
+    schemaVersion: 1,
+    state,
+    importedRaw
+  });
+}
+
+function restorePreviewImportSyncGuard(storage: PreviewStorage, previousRaw: string | null): void {
+  const raw = previousRaw ?? serializePreviewImportSyncGuard('resolved', null);
+  storage.setItem(PREVIEW_IMPORT_SYNC_GUARD_KEY, raw);
+  if (storage.getItem(PREVIEW_IMPORT_SYNC_GUARD_KEY) !== raw) {
+    throw new Error('The previous import sync safeguard could not be restored.');
+  }
 }
 
 type RawRecoveryResult =
@@ -266,6 +348,136 @@ export function loadRawRecoveryCopy(storage: PreviewStorage): RecoveryCopyReadRe
   }
 }
 
+export function loadCloudRestoreRecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadPreviewImportRecovery(storage: PreviewStorage): PreviewImportRecoveryReadResult {
+  try {
+    const archiveRaw = storage.getItem(PREVIEW_IMPORT_RECOVERY_KEY);
+    if (archiveRaw === null) {
+      return { kind: 'loaded', latestRaw: null, latestSourceRaw: null, archiveRaw: null };
+    }
+    const archive = parseImportRecoveryArchive(archiveRaw);
+    return {
+      kind: 'loaded',
+      latestRaw: archive.copies.length > 0 ? archive.copies[archive.copies.length - 1]! : null,
+      latestSourceRaw: archive.sources.length > 0 ? archive.sources[archive.sources.length - 1]! : null,
+      archiveRaw
+    };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadPreviewImportSyncGuard(storage: PreviewStorage): PreviewImportSyncGuardReadResult {
+  try {
+    const raw = storage.getItem(PREVIEW_IMPORT_SYNC_GUARD_KEY);
+    return {
+      kind: 'loaded',
+      guard: raw === null ? { kind: 'none' } : parsePreviewImportSyncGuard(raw)
+    };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function resolvePreviewImportSyncGuard(
+  storage: PreviewStorage,
+  importedRaw: string
+): { kind: 'resolved' } | { kind: 'error'; message: string } {
+  try {
+    const currentRaw = storage.getItem(PREVIEW_IMPORT_SYNC_GUARD_KEY);
+    if (currentRaw === null) return { kind: 'resolved' };
+    const guard = parsePreviewImportSyncGuard(currentRaw);
+    if (guard.kind !== 'pending' || guard.importedRaw !== importedRaw) {
+      return { kind: 'error', message: 'The import sync safeguard changed before the explicit choice was saved.' };
+    }
+    const resolvedRaw = serializePreviewImportSyncGuard('resolved', importedRaw);
+    storage.setItem(PREVIEW_IMPORT_SYNC_GUARD_KEY, resolvedRaw);
+    if (storage.getItem(PREVIEW_IMPORT_SYNC_GUARD_KEY) !== resolvedRaw) {
+      return { kind: 'error', message: 'The import sync safeguard could not be verified.' };
+    }
+    return { kind: 'resolved' };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+function preservePreviewBeforeImport(
+  storage: PreviewStorage,
+  expectedRaw: string | null,
+  sourceRaw: string | null
+): { kind: 'preserved'; archiveRaw: string } | { kind: 'conflict' } | { kind: 'error'; message: string } {
+  try {
+    if (storage.getItem(PREVIEW_STORAGE_KEY) !== expectedRaw) return { kind: 'conflict' };
+    const previousArchiveRaw = storage.getItem(PREVIEW_IMPORT_RECOVERY_KEY);
+    const archive = previousArchiveRaw === null
+      ? { copies: [], sources: [] }
+      : parseImportRecoveryArchive(previousArchiveRaw);
+    const archiveRaw = JSON.stringify({
+      format: previewImportRecoveryFormat,
+      schemaVersion: 1,
+      copies: expectedRaw === null ? archive.copies : [...archive.copies, expectedRaw],
+      sources: sourceRaw === null ? archive.sources : [...archive.sources, sourceRaw]
+    });
+    storage.setItem(PREVIEW_IMPORT_RECOVERY_KEY, archiveRaw);
+    if (storage.getItem(PREVIEW_IMPORT_RECOVERY_KEY) !== archiveRaw) {
+      return { kind: 'error', message: 'The pre-import recovery archive could not be verified.' };
+    }
+    if (storage.getItem(PREVIEW_STORAGE_KEY) !== expectedRaw) return { kind: 'conflict' };
+    return { kind: 'preserved', archiveRaw };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function preservePreviewBeforeCloudRestore(
+  storage: PreviewStorage,
+  expectedRaw: string | null
+): CloudRestoreRecoveryResult {
+  try {
+    if (storage.getItem(PREVIEW_STORAGE_KEY) !== expectedRaw) {
+      return {
+        kind: 'conflict',
+        message: 'This browser’s preview changed before it could be preserved. Nothing was restored.'
+      };
+    }
+    if (expectedRaw === null) return { kind: 'not-needed' };
+
+    const existing = storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY);
+    if (existing !== null && existing !== expectedRaw) {
+      return {
+        kind: 'conflict',
+        message: 'An earlier pre-restore recovery copy contains different data. Download or preserve that copy before trying another restore.'
+      };
+    }
+    if (existing === null) storage.setItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, expectedRaw);
+    if (storage.getItem(PREVIEW_STORAGE_KEY) !== expectedRaw) {
+      return {
+        kind: 'conflict',
+        message: 'This browser’s preview changed while its recovery copy was being made. Nothing was restored.'
+      };
+    }
+    if (storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY) !== expectedRaw) {
+      return {
+        kind: 'error',
+        message: 'The exact pre-restore recovery copy could not be verified. Nothing was restored.'
+      };
+    }
+    return { kind: 'preserved' };
+  } catch (error) {
+    return {
+      kind: 'error',
+      message: `The pre-restore recovery copy could not be saved: ${errorMessage(error)}`
+    };
+  }
+}
+
 export function writePreview(
   storage: PreviewStorage,
   data: PreviewData,
@@ -274,12 +486,33 @@ export function writePreview(
 ): PreviewWriteResult {
   const operation = options.operation ?? 'save';
   let rawRecoveryExpected: string | null = null;
+  let importGuardPreviousRaw: string | null = null;
+  let importGuardExpectedRaw: string | null = null;
   let activeSourceCompared = false;
   try {
     const actualRaw = storage.getItem(PREVIEW_STORAGE_KEY);
     if (actualRaw !== expectedRaw) return { kind: 'conflict', actualRaw };
     activeSourceCompared = true;
     const raw = JSON.stringify(createPreviewEnvelope(data));
+    if (operation === 'import' && options.importSourceRaw !== undefined) {
+      const source = options.currentDate
+        ? parsePreviewBackup(options.importSourceRaw, options.currentDate)
+        : { valid: false as const };
+      if (!source.valid || JSON.stringify(source.envelope.data) !== JSON.stringify(data)) {
+        return {
+          kind: 'error',
+          message: 'The selected backup could not be verified against the imported data. Nothing was imported.',
+          diagnostic: diagnosticForWriteFailure(
+            storage,
+            expectedRaw,
+            options.currentDate,
+            operation,
+            'import-source-validation-failed',
+            'not-detected'
+          )
+        };
+      }
+    }
 
     if (expectedRaw !== null) {
       const sourceVersion = proposedV4SourceVersionForRaw(expectedRaw);
@@ -454,9 +687,77 @@ export function writePreview(
         )
       };
     }
+    if (operation === 'import' && (expectedRaw !== null || options.importSourceRaw !== undefined)) {
+      const recovery = preservePreviewBeforeImport(storage, expectedRaw, options.importSourceRaw ?? null);
+      if (recovery.kind !== 'preserved') {
+        return {
+          kind: 'error',
+          message: recovery.kind === 'conflict'
+            ? 'Preview storage changed while its pre-import recovery copy was being made. Nothing was imported.'
+            : expectedRaw === null
+              ? 'The original selected backup could not be preserved, so nothing was imported.'
+              : 'The exact pre-import local data could not be preserved, so nothing was imported.',
+          diagnostic: diagnosticForWriteFailure(
+            storage,
+            expectedRaw,
+            options.currentDate,
+            operation,
+            recovery.kind === 'conflict' ? 'source-changed-during-import-recovery' : 'import-recovery-copy-failed',
+            recovery.kind === 'conflict' ? 'detected' : 'not-detected',
+            recovery.kind === 'error' ? recovery.message : undefined
+          )
+        };
+      }
+    }
+    if (operation === 'import') {
+      importGuardPreviousRaw = storage.getItem(PREVIEW_IMPORT_SYNC_GUARD_KEY);
+      if (importGuardPreviousRaw !== null) parsePreviewImportSyncGuard(importGuardPreviousRaw);
+      importGuardExpectedRaw = serializePreviewImportSyncGuard('pending', raw);
+      storage.setItem(PREVIEW_IMPORT_SYNC_GUARD_KEY, importGuardExpectedRaw);
+      if (storage.getItem(PREVIEW_IMPORT_SYNC_GUARD_KEY) !== importGuardExpectedRaw) {
+        return {
+          kind: 'error',
+          message: 'The import was not saved because its account-sync safeguard could not be verified.',
+          diagnostic: diagnosticForWriteFailure(
+            storage,
+            expectedRaw,
+            options.currentDate,
+            operation,
+            'import-sync-safeguard-failed',
+            'not-detected'
+          )
+        };
+      }
+      if (storage.getItem(PREVIEW_STORAGE_KEY) !== expectedRaw) {
+        restorePreviewImportSyncGuard(storage, importGuardPreviousRaw);
+        return { kind: 'conflict', actualRaw: storage.getItem(PREVIEW_STORAGE_KEY) };
+      }
+    }
     storage.setItem(PREVIEW_STORAGE_KEY, raw);
+    if (storage.getItem(PREVIEW_STORAGE_KEY) !== raw) {
+      if (importGuardExpectedRaw !== null) restorePreviewImportSyncGuard(storage, importGuardPreviousRaw);
+      return {
+        kind: 'error',
+        message: 'The preview could not be saved on this device. The import was not completed.',
+        diagnostic: diagnosticForWriteFailure(
+          storage,
+          expectedRaw,
+          options.currentDate,
+          operation,
+          'active-preview-write-failed',
+          'not-detected'
+        )
+      };
+    }
     return { kind: 'saved', raw };
   } catch (error) {
+    if (importGuardExpectedRaw !== null) {
+      try {
+        restorePreviewImportSyncGuard(storage, importGuardPreviousRaw);
+      } catch {
+        // Keep the unresolved safeguard in place if its prior value cannot be restored.
+      }
+    }
     return {
       kind: 'error',
       message: 'The preview could not be saved on this device. Your changes remain in this tab; retry before leaving.',

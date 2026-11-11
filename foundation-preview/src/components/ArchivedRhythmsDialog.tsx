@@ -6,6 +6,7 @@ import type { Destination } from './AppNavigation.tsx';
 import { peopleForRhythm } from '../domain/preview-data.ts';
 import { RhythmCard } from './Cards.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
+import { useScrollLock } from '../hooks/useScrollLock.ts';
 
 type ArchivedRhythmsDialogProps = {
   rhythms: readonly RhythmPreview[];
@@ -30,6 +31,7 @@ export function ArchivedRhythmsDialog({
   onRestore,
   onClose
 }: ArchivedRhythmsDialogProps) {
+  useScrollLock(true);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const emptyHeadingRef = useRef<HTMLHeadingElement>(null);

@@ -13,6 +13,7 @@ import {
 import { createStrengthData, createStrengthGuidedSession } from '../src/domain/strength.ts';
 import { createWeightData } from '../src/domain/weight.ts';
 import { createCardioData } from '../src/domain/cardio.ts';
+import { createFlexibilityData, selectFlexibilityRegionScores } from '../src/domain/flexibility.ts';
 import { createFriendshipData } from '../src/domain/friendships.ts';
 import { createPersonPickerGroups, createSamplePeople, setPersonGroupMembership } from '../src/domain/preview-data.ts';
 import { createDefaultTimeBlockSettings } from '../src/domain/time-blocks.ts';
@@ -48,10 +49,14 @@ import {
   loadV32RecoveryCopy,
   loadV33RecoveryCopy,
   loadV34RecoveryCopy,
+  loadPreviewImportRecovery,
+  loadPreviewImportSyncGuard,
   PREVIEW_V19_RECOVERY_KEY,
   PREVIEW_RAW_RECOVERY_KEY,
   PREVIEW_CATEGORY_RECOVERY_KEY,
   PREVIEW_STORAGE_KEY,
+  PREVIEW_IMPORT_RECOVERY_KEY,
+  PREVIEW_IMPORT_SYNC_GUARD_KEY,
   PREVIEW_V1_RECOVERY_KEY,
   PREVIEW_V2_RECOVERY_KEY,
   PREVIEW_V3_RECOVERY_KEY,
@@ -95,8 +100,8 @@ function render(ui: Parameters<typeof testingRender>[0]) {
   const trigger = result.container.querySelector('.today-plan__focus-trigger');
   if (trigger) {
     fireEvent.click(trigger);
-    const allDayOption = [...result.container.querySelectorAll('button')]
-      .find(button => button.textContent?.startsWith('Everything today'));
+    const allDayOption = [...result.container.querySelectorAll<HTMLElement>('[role="option"]')]
+      .find(option => option.textContent?.startsWith('Everything today'));
     if (allDayOption) fireEvent.click(allDayOption);
   }
   return result;
@@ -109,6 +114,8 @@ afterEach(() => {
   delete historyState.tendPersonProfileId;
   window.history.replaceState(historyState, '', window.location.href);
   window.localStorage.removeItem(PREVIEW_STORAGE_KEY);
+  window.localStorage.removeItem(PREVIEW_IMPORT_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_IMPORT_SYNC_GUARD_KEY);
   window.localStorage.removeItem(PREVIEW_RAW_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V1_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V2_RECOVERY_KEY);
@@ -400,7 +407,57 @@ function setDownloadMocks() {
 }
 
 describe('synthetic preview storage adapter and envelope', () => {
-  it('persists Show tended and Calendar sources in schema 37 and migrates schemas 34/35', () => {
+  it('migrates schema 37 Flexibility defaults and preserves schema 38 stretch data', () => {
+    const data = createSamplePreviewData();
+    data.flexibility.settings.intervals = { hamstrings: 5 };
+    data.flexibility.sessions = [{
+      id: 'stretch-history',
+      date: '2026-10-20',
+      regionIds: ['hamstrings']
+    }];
+    data.flexibility.draftSession = {
+      date: '2026-10-21',
+      regionIds: ['calves'],
+      minutes: '12',
+      notes: 'Saved draft'
+    };
+    const current = createPreviewEnvelope(data);
+    const schema37Data = { ...current.data } as Partial<typeof current.data>;
+    delete schema37Data.flexibility;
+    const migrated37 = validatePreviewEnvelope({
+      ...current,
+      schemaVersion: 37,
+      data: schema37Data
+    }, '2026-10-21');
+    expect(migrated37).toMatchObject({
+      valid: true,
+      sourceSchemaVersion: 37,
+      envelope: { data: { flexibility: createFlexibilityData() } }
+    });
+    expect(validatePreviewEnvelope({
+      ...current,
+      schemaVersion: 37
+    }, '2026-10-21').valid).toBe(false);
+
+    const restored38 = validatePreviewEnvelope({
+      ...current,
+      schemaVersion: 38
+    }, '2026-10-21');
+    expect(restored38).toMatchObject({
+      valid: true,
+      sourceSchemaVersion: 38,
+      envelope: { data: { flexibility: data.flexibility } }
+    });
+    if (restored38.valid) {
+      expect(selectFlexibilityRegionScores(restored38.envelope.data.flexibility, '2026-10-21'))
+        .toEqual(expect.arrayContaining([
+          expect.objectContaining({ id: 'hamstrings', intervalDays: 5, lastStretched: '2026-10-20' }),
+          expect.objectContaining({ id: 'abs', intervalDays: 3, lastStretched: null, score: null })
+        ]));
+    }
+  });
+
+  it('persists Show tended and Calendar sources in schema 38 and migrates schemas 34/35', () => {
     const data = createSamplePreviewData();
     const current = createPreviewEnvelope({ ...data, showTended: true });
     expect(current.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
@@ -1214,7 +1271,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     );
     const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
-    expect(onImport).toHaveBeenCalledWith(createPreviewEnvelope(data).data);
+    expect(onImport).toHaveBeenCalledWith(createPreviewEnvelope(data).data, backup);
   });
 
   it('offers exact v3 recovery bytes through the shared backup controls', async () => {
@@ -1355,6 +1412,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       strength: createStrengthData(),
       weight: createWeightData(),
       cardio: createCardioData(),
+      flexibility: createFlexibilityData(),
       friendships: createFriendshipData(),
       people: createSamplePeople(),
       peopleGroups: createPersonPickerGroups(),
@@ -1391,7 +1449,12 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(parsed.valid).toBe(true);
     if (parsed.valid) {
       expect(parsed.envelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
-      expect(parsed.envelope.data).toEqual({ ...data, savedRhythms: [], archivedRhythmIds: [] });
+      expect(parsed.envelope.data).toEqual({
+        ...data,
+        savedRhythms: [],
+        archivedRhythmIds: [],
+        flexibility: createFlexibilityData()
+      });
       expect(parsed.envelope.data.goals[0]!.checkIns).toEqual(data.goals[0]!.checkIns);
       expect(parsed.envelope.data.goals[0]!.correctionHistory).toEqual(data.goals[0]!.correctionHistory);
       expect(parsed.envelope.data.completedRhythmIds).toEqual(data.completedRhythmIds);
@@ -1416,6 +1479,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       strength: createStrengthData(),
       weight: createWeightData(),
       cardio: createCardioData(),
+      flexibility: createFlexibilityData(),
       friendships: createFriendshipData(),
       people: createSamplePeople(),
       peopleGroups: createPersonPickerGroups(),
@@ -2649,6 +2713,90 @@ async function openPreviewSettings(user: ReturnType<typeof userEvent.setup>): Pr
   await user.click(await screen.findByRole('button', { name: 'Settings' }));
 }
 
+describe('preview import persistence safeguards', () => {
+  it('preserves every exact pre-import local document and marks the import for explicit sync choice', () => {
+    const originalRaw = JSON.stringify(createPreviewEnvelope(sampleWithHistory()));
+    const imported = createSamplePreviewData();
+    imported.people[0] = { ...imported.people[0]!, displayName: 'Imported synthetic person' };
+    const sourceRaw = JSON.stringify(createPreviewEnvelope(imported), null, 2);
+    const fixture = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
+
+    const first = writePreview(fixture.storage, imported, originalRaw, {
+      currentDate: '2026-10-21',
+      importSourceRaw: sourceRaw,
+      operation: 'import'
+    });
+    expect(first.kind).toBe('saved');
+    if (first.kind !== 'saved') return;
+
+    const recovery = loadPreviewImportRecovery(fixture.storage);
+    expect(recovery).toMatchObject({
+      kind: 'loaded',
+      latestRaw: originalRaw,
+      latestSourceRaw: sourceRaw
+    });
+    const archive = JSON.parse(fixture.values.get(PREVIEW_IMPORT_RECOVERY_KEY)!) as {
+      format: string;
+      schemaVersion: number;
+      copies: string[];
+    };
+    expect(archive).toEqual({
+      format: 'tend.preview-import-recovery',
+      schemaVersion: 1,
+      copies: [originalRaw],
+      sources: [sourceRaw]
+    });
+    expect(loadPreviewImportSyncGuard(fixture.storage)).toMatchObject({
+      kind: 'loaded',
+      guard: { kind: 'pending', importedRaw: first.raw }
+    });
+
+    const secondData = createSamplePreviewData();
+    secondData.people[0] = { ...secondData.people[0]!, displayName: 'Second imported synthetic person' };
+    const second = writePreview(fixture.storage, secondData, first.raw, {
+      currentDate: '2026-10-21',
+      operation: 'import'
+    });
+    expect(second.kind).toBe('saved');
+    expect(loadPreviewImportRecovery(fixture.storage)).toMatchObject({
+      kind: 'loaded',
+      latestRaw: first.raw
+    });
+    expect(JSON.parse(fixture.values.get(PREVIEW_IMPORT_RECOVERY_KEY)!).copies).toEqual([
+      originalRaw,
+      first.raw
+    ]);
+    expect(JSON.parse(fixture.values.get(PREVIEW_IMPORT_RECOVERY_KEY)!).sources).toEqual([sourceRaw]);
+  });
+
+  it('leaves local data unchanged and restores the sync safeguard when the durable write fails', () => {
+    const originalRaw = JSON.stringify(createPreviewEnvelope(sampleWithHistory()));
+    const fixture = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
+    const storage = {
+      getItem: fixture.storage.getItem,
+      setItem: (key: string, value: string) => {
+        if (key === PREVIEW_STORAGE_KEY) throw new Error('Quota exceeded');
+        fixture.storage.setItem(key, value);
+      }
+    };
+
+    const result = writePreview(storage, createSamplePreviewData(), originalRaw, {
+      currentDate: '2026-10-21',
+      operation: 'import'
+    });
+    expect(result).toMatchObject({ kind: 'error' });
+    expect(fixture.values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    expect(loadPreviewImportSyncGuard(storage)).toMatchObject({
+      kind: 'loaded',
+      guard: { kind: 'resolved', importedRaw: null }
+    });
+    expect(loadPreviewImportRecovery(storage)).toMatchObject({
+      kind: 'loaded',
+      latestRaw: originalRaw
+    });
+  });
+});
+
 describe('preview backup controls', () => {
   it('exports the explicit envelope and imports the backup through confirmation', async () => {
     const user = userEvent.setup();
@@ -2682,7 +2830,7 @@ describe('preview backup controls', () => {
     );
     const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
-    expect(onImport).toHaveBeenCalledWith(data);
+    expect(onImport).toHaveBeenCalledWith(data, exportedText);
   });
 
   it('imports v2 backups as active and explains the missing archive state before replacement', async () => {
@@ -2723,7 +2871,7 @@ describe('preview backup controls', () => {
       ...legacyData,
       savedRhythms: legacyData.savedRhythms.map(rhythm => ({ ...rhythm, timeOfDay: 'evening' })),
       archivedRhythmIds: []
-    });
+    }, versionTwoRaw(legacyData));
   });
 
   it('imports only after validation and confirmation, and cancellation preserves current state', async () => {
@@ -3112,6 +3260,72 @@ describe('preview backup controls', () => {
       data: { goals: Array<{ title: string }> };
     };
     expect(saved.data.goals[0]!.title).toBe('<script>synthetic</script>');
+  });
+
+  it('exposes local import on More, preserves the prior copy, and reloads the imported document', async () => {
+    const user = userEvent.setup();
+    const imported = sampleWithHistory();
+    imported.goals[0]!.title = 'Imported More-page reserve';
+    const sourceRaw = JSON.stringify(createPreviewEnvelope(imported));
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    const originalRaw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
+    await user.click(screen.getByRole('button', { name: 'More, settings' }));
+    expect(await screen.findByRole('heading', { name: 'More' })).toBeTruthy();
+    const importInputs = screen.getAllByLabelText('Import preview backup');
+    expect(importInputs).toHaveLength(2);
+
+    await user.upload(
+      importInputs[0]!,
+      new File([sourceRaw], 'more-import.json', { type: 'application/json' })
+    );
+    const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
+    expect(await screen.findByText('Preview backup imported.')).toBeTruthy();
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).not.toBe(originalRaw);
+    expect(loadPreviewImportRecovery(window.localStorage)).toMatchObject({
+      kind: 'loaded',
+      latestRaw: originalRaw,
+      latestSourceRaw: sourceRaw
+    });
+
+    cleanup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    expect(loadPreview(browserPreviewStorage(), '2026-10-21')).toMatchObject({
+      kind: 'loaded',
+      data: { goals: expect.arrayContaining([expect.objectContaining({ title: 'Imported More-page reserve' })]) }
+    });
+  });
+
+  it('surfaces recovery-storage failure without replacing current local data', async () => {
+    const user = userEvent.setup();
+    const originalRaw = JSON.stringify(createPreviewEnvelope(sampleWithHistory()));
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, originalRaw);
+    const imported = createSamplePreviewData();
+    imported.goals[0]!.title = 'Must not be partially imported';
+    const sourceRaw = JSON.stringify(createPreviewEnvelope(imported));
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await openPreviewSettings(user);
+    const originalSetItem = MemoryStorage.prototype.setItem;
+    vi.spyOn(MemoryStorage.prototype, 'setItem').mockImplementation(function (this: MemoryStorage, key, value) {
+      if (key === PREVIEW_IMPORT_RECOVERY_KEY) throw new Error('Quota exceeded');
+      originalSetItem.call(this, key, value);
+    });
+
+    await user.upload(
+      screen.getByLabelText('Import preview backup'),
+      new File([sourceRaw], 'storage-failure.json', { type: 'application/json' })
+    );
+    const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
+
+    await waitFor(() => {
+      const alerts = screen.getAllByRole('alert');
+      expect(alerts.some(alert => /exact pre-import local data could not be preserved/i.test(alert.textContent ?? ''))).toBe(true);
+    });
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
   });
 
   it('requires an explicit decision for another tab and supports reload or replacement', async () => {

@@ -72,7 +72,8 @@ function scoredFaithFixture() {
 function fakeAuth(
   initialSession: PreviewSession | null = null,
   updateError: { message: string } | null = null,
-  resetError: { message: string } | null = null
+  resetError: { message: string } | null = null,
+  withBackupApi = false
 ) {
   let callback: ((event: string, value: PreviewSession | null) => void) | null = null;
   const resetPasswordForEmail = vi.fn(async () => ({ error: resetError }));
@@ -85,6 +86,12 @@ function fakeAuth(
     callback?.('SIGNED_OUT', null);
     return { error: null };
   });
+  const from = vi.fn(() => ({
+    select: vi.fn(() => ({
+      maybeSingle: vi.fn(async () => ({ data: null, error: null }))
+    }))
+  }));
+  const rpc = vi.fn(async () => ({ data: 1, error: null }));
   const client: PreviewAuthClient = {
     auth: {
       onAuthStateChange(nextCallback) {
@@ -96,7 +103,8 @@ function fakeAuth(
       resetPasswordForEmail,
       updateUser,
       signOut
-    }
+    },
+    ...(withBackupApi ? { from, rpc } : {})
   };
   const factoryOptions: Array<Parameters<PreviewSupabaseClientFactory>[2]> = [];
   const clientFactory: PreviewSupabaseClientFactory = vi.fn((_url, _key, options) => {
@@ -110,6 +118,8 @@ function fakeAuth(
     updateUser,
     signInWithPassword,
     signOut,
+    from,
+    rpc,
     emitSession: (value: PreviewSession | null) => callback?.('INITIAL_SESSION', value),
     emitEvent: (event: string, value: PreviewSession | null) => callback?.(event, value)
   };
@@ -182,6 +192,7 @@ describe('PreviewIdentityHost', () => {
       auth: {
         autoRefreshToken: true,
         detectSessionInUrl: true,
+        flowType: 'pkce',
         persistSession: true,
         storageKey: 'tend2:preview:auth-session',
         storage
@@ -231,6 +242,31 @@ describe('PreviewIdentityHost', () => {
     expect(screen.getByRole('region', { name: "Today's plan" })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Preview could not open' })).toBeNull();
     expect(storage.getItem('tend:supabase-auth')).toBe('classic-session-sentinel');
+  });
+
+  it('wires the authenticated Supabase client to manual backup actions under More', async () => {
+    installMemoryStorage();
+    const user = userEvent.setup();
+    const auth = fakeAuth(session, null, null, true);
+    render(
+      <PreviewIdentityHost
+        accessReady
+        supabaseUrl="https://project.supabase.co"
+        supabasePublishableKey="synthetic-public-key"
+        clientFactory={auth.clientFactory}
+      />
+    );
+
+    await screen.findByRole('region', { name: "Today's plan" });
+    await user.click(screen.getByRole('button', { name: 'More, settings' }));
+    await user.click(await screen.findByRole('button', { name: 'Back up to my account' }));
+    await screen.findByText('Backed up to your account (revision 1).');
+    expect(auth.from).toHaveBeenCalledWith('tend_preview_backups');
+    expect(auth.rpc).toHaveBeenCalledWith(
+      'tend_save_preview_backup',
+      expect.objectContaining({ p_expected_revision: 0, p_schema_version: PREVIEW_SCHEMA_VERSION })
+    );
+    expect(JSON.stringify(auth.rpc.mock.calls)).not.toContain(accountId);
   });
 
   it('renders scored synthetic category data and preserves it when the session is restored again', async () => {

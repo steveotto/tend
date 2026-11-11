@@ -113,7 +113,7 @@ describe('shared Category Health summary', () => {
     expect(header.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(bar.compareDocumentPosition(divider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(divider.compareDocumentPosition(measures) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByRole('meter', { name: 'Marriage Health score' }).getAttribute('aria-valuenow')).toBe('86.875');
+    expect(screen.getByRole('meter', { name: 'Marriage Health score' }).getAttribute('aria-valuenow')).toBe('87');
     expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('83');
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('100');
     expect(screen.queryByText('2 of 6 Foundations scored')).toBeNull();
@@ -154,7 +154,7 @@ describe('shared Category Health summary', () => {
     expect(within(dialog).getByText('75%')).toBeTruthy();
     expect([...dialog.querySelectorAll('.rhythm-score-circle__value')].map(node => node.textContent))
       .toEqual(['70', '100']);
-    expect(within(dialog).getByLabelText('75% times 70 equals 52.5 points')).toBeTruthy();
+    expect(within(dialog).getByLabelText('75% times 70 approximately equals 53 points')).toBeTruthy();
     expect(within(dialog).getByLabelText('25% times 100 equals 25 points')).toBeTruthy();
     expect(dialog.querySelector('.health-info-summary-card')).toBeTruthy();
     expect(dialog.querySelector('.health-info-contribution-card')).toBeTruthy();
@@ -165,7 +165,7 @@ describe('shared Category Health summary', () => {
     expect(within(dialog).getByText('— unavailable · 0 is a valid score')).toBeTruthy();
     const breakdown = within(details).getByRole('region', { name: 'Marriage Health calculation details score summary' });
     expect(within(breakdown).getByRole('heading', { name: 'Overall Health' })).toBeTruthy();
-    expect(within(breakdown).getByRole('meter', { name: 'Marriage Health score' }).getAttribute('aria-valuenow')).toBe('77.5');
+    expect(within(breakdown).getByRole('meter', { name: 'Marriage Health score' }).getAttribute('aria-valuenow')).toBe('78');
     expect(within(breakdown).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('70');
     expect(within(breakdown).getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('100');
     expect(breakdown.querySelector('.rhythm-history-view__health-weight-score')).toBeNull();

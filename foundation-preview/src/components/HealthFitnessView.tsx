@@ -5,6 +5,9 @@ import type { StrengthViewProps } from './StrengthView.tsx';
 import { WeightView } from './WeightView.tsx';
 import type { WeightViewProps } from './WeightView.tsx';
 import { CardioView } from './CardioView.tsx';
+import { FlexibilityView } from './FlexibilityView.tsx';
+import type { FlexibilityViewProps } from './FlexibilityView.tsx';
+import { HealthScoreMeter } from './HealthScoreBreakdown.tsx';
 import { BackButton } from './BackButton.tsx';
 import type { CardioViewProps } from './CardioView.tsx';
 import { CategoryHealthSummary } from './CategoryHealthSummary.tsx';
@@ -21,6 +24,9 @@ import { RhythmSuggestionPicker } from './RhythmSuggestionPicker.tsx';
 import type { RhythmSuggestionPickerGroup } from './RhythmSuggestionPicker.tsx';
 import type { CategoryRhythmSuggestion, CategoryRhythmSuggestionCatalogue } from './MarriageView.tsx';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
+import { flexibilityRegions, isFlexibilityRegionId } from '../domain/flexibility.ts';
+import type { FlexibilityRegionId } from '../domain/flexibility.ts';
+import { selectFoundationScore } from '../domain/foundation-scoring.ts';
 import type { CategoryTabNavigationRequest, Destination } from './AppNavigation.tsx';
 import { healthFoundationDefinitions, syntheticPeople } from '../domain/preview-data.ts';
 import type { FoundationPreview, PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
@@ -32,8 +38,9 @@ import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
 import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
-import { createHealthFitnessRollup } from './HealthRollupDiagram.tsx';
+import { createHealthFitnessHealthContribution, createHealthFitnessRollup } from './HealthRollupDiagram.tsx';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
+import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 
 type HealthFitnessTab = 'today' | 'rhythms' | 'progress';
 type ProgressTab = (typeof healthFoundationDefinitions)[number]['progressId'];
@@ -44,6 +51,7 @@ type HealthFitnessViewProps = {
   strength: StrengthViewProps;
   weight: WeightViewProps;
   cardio: CardioViewProps;
+  flexibility: FlexibilityViewProps;
   rhythms: readonly RhythmPreview[];
   archivedRhythms: readonly RhythmPreview[];
   todayDate: string;
@@ -81,6 +89,9 @@ type HealthFitnessViewProps = {
   healthScore: CategoryScoreSelection;
   weightHealthScore: CategoryScoreSelection;
   cardioHealthScore: CategoryScoreSelection;
+  flexibilityHealthScore: CategoryScoreSelection;
+  flexibilityTrackedCount: number;
+  overallHealthScore?: number | null;
 };
 
 const categoryTabs: readonly SegmentedTab<HealthFitnessTab>[] = [
@@ -96,12 +107,66 @@ const progressDetails = healthFoundationDefinitions.map(({ id: foundationId, pro
   description
 }));
 
+function linkedRhythmEvidence(
+  foundationId: string,
+  rhythms: readonly RhythmPreview[],
+  archivedRhythms: readonly RhythmPreview[],
+  rhythmScores: ReadonlyMap<string, RhythmScoreResult>
+): HealthAggregateEvidence {
+  const selection = selectFoundationScore(
+    foundationId,
+    rhythms,
+    rhythmScores,
+    archivedRhythms.map(rhythm => rhythm.id)
+  );
+  const rows = selection.eligibleRhythmIds.flatMap(id => {
+    const rhythm = rhythms.find(item => item.id === id);
+    const result = rhythmScores.get(id);
+    return rhythm && result?.kind === 'rhythm-score'
+      && result.consistency.kind === 'scored'
+      && result.onTrack.kind === 'scored'
+      ? [{
+          id,
+          label: rhythm.title,
+          consistency: result.consistency.score,
+          onTrack: result.onTrack.score
+        }]
+      : [];
+  });
+  return {
+    heading: 'Linked Rhythm scores',
+    description: 'Each eligible linked Rhythm counts equally.',
+    itemLabel: 'Rhythm',
+    rows,
+    otherCount: selection.activeLinkedRhythmIds.length - selection.eligibleRhythmIds.length,
+    consistencyAverage: selection.consistency,
+    consistencyCount: selection.eligibleRhythmIds.length,
+    onTrackAverage: selection.onTrack,
+    onTrackCount: selection.eligibleRhythmIds.length,
+    coverage: `${selection.eligibleRhythmIds.length} of ${selection.activeLinkedRhythmIds.length} linked Rhythms scored.`,
+    notes: [
+      'Uses each Rhythm’s own scoring window and season schedules.',
+      ...(selection.archivedRhythmIds.length > 0
+        ? [`${selection.archivedRhythmIds.length} archived linked Rhythms are excluded.`]
+        : []),
+      ...(selection.unresolvedRhythmIds.length > 0
+        ? [`${selection.unresolvedRhythmIds.length} linked Rhythm scores could not be resolved.`]
+        : []),
+      ...(selection.excludedRhythms.length > 0
+        ? ['Linked Rhythms without both scores are excluded from both averages.']
+        : [])
+    ],
+    emptyState: 'No eligible linked Rhythms have both scores available.'
+  };
+}
+
 export function HealthFitnessView({
   people = syntheticPeople,
   hidden = false,
   strength,
   weight,
   cardio,
+  flexibility,
   rhythms,
   archivedRhythms,
   todayDate,
@@ -130,7 +195,10 @@ export function HealthFitnessView({
   onOpenCategory,
   healthScore,
   weightHealthScore,
-  cardioHealthScore
+  cardioHealthScore,
+  flexibilityHealthScore,
+  flexibilityTrackedCount,
+  overallHealthScore = null
 }: HealthFitnessViewProps) {
   const tendedRhythmIds = savedTendedRhythmIds
     ?? selectTendedRhythmDisplayIds(completedRhythms, satisfiedRhythmIds);
@@ -138,6 +206,77 @@ export function HealthFitnessView({
   const [progressSelected, setProgressSelected] = useState<ProgressTab | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showArchivedRhythms, setShowArchivedRhythms] = useState(false);
+  const [pendingFlexibilityLog, setPendingFlexibilityLog] = useState<{
+    requestId: number;
+    regionIds: FlexibilityRegionId[];
+  } | null>(null);
+  const flexibilityLogRequestSequence = useRef(0);
+  const fitnessMeasureRows = [
+    {
+      id: 'strength',
+      label: 'Strength',
+      consistency: strength.healthScore?.consistency ?? null,
+      onTrack: strength.healthScore?.onTrack ?? null
+    },
+    {
+      id: 'cardio',
+      label: 'Cardio',
+      consistency: cardioHealthScore.consistency,
+      onTrack: cardioHealthScore.onTrack
+    },
+    {
+      id: 'weight',
+      label: 'Weight',
+      consistency: weightHealthScore.consistency,
+      onTrack: weightHealthScore.onTrack
+    },
+    {
+      id: 'flexibility',
+      label: 'Flexibility',
+      consistency: flexibilityHealthScore.consistency,
+      onTrack: null
+    }
+  ] satisfies HealthAggregateEvidence['rows'];
+  const fitnessMeasureEvidence: HealthAggregateEvidence = {
+    heading: 'Health & Fitness measure scores',
+    description: 'Available scores are averaged separately.',
+    itemLabel: 'Measure',
+    rows: fitnessMeasureRows,
+    consistencyAverage: healthScore.consistency,
+    consistencyCount: fitnessMeasureRows
+      .filter(row => row.consistency !== null && Number.isFinite(row.consistency)).length,
+    onTrackAverage: healthScore.onTrack,
+    onTrackCount: fitnessMeasureRows
+      .filter(row => row.onTrack !== null && Number.isFinite(row.onTrack)).length,
+    averageLabels: {
+      consistency: 'Average Consistency',
+      onTrack: 'Average On Track'
+    },
+    notes: ['Unavailable scores are excluded.'],
+    emptyState: 'No scores available yet.',
+    showEmptyStateWhenNoAverages: true,
+    weightSummary: null,
+    areaExplanations: [
+      {
+        label: 'Strength',
+        explanation: 'Averages active linked Strength Rhythms that have both Consistency and On Track scores.'
+      },
+      {
+        label: 'Cardio',
+        explanation: 'Consistency averages completed weeks in the four-week lookback with a tracking start and trustworthy targets. On Track is the lower of weekly run-count and mileage progress (max 100%).'
+      },
+      {
+        label: 'Weight',
+        explanation: 'Averages available scores from active linked Weight Rhythms separately for each measure.'
+      },
+      {
+        label: 'Flexibility',
+        explanation: 'Consistency averages regions with valid stretch history; each region loses 10 points per day overdue beyond its interval. On Track is not scored.'
+      }
+    ]
+  };
+  const strengthScoringEvidence = linkedRhythmEvidence('health-strength', rhythms, archivedRhythms, rhythmScores);
+  const weightScoringEvidence = linkedRhythmEvidence('health-weight', rhythms, archivedRhythms, rhythmScores);
   const suggestionsOpenerRef = useRef<HTMLButtonElement | null>(null);
   const wasSuggestionsOpenRef = useRef(false);
   const skipSuggestionsFocusRestoreRef = useRef(false);
@@ -146,7 +285,11 @@ export function HealthFitnessView({
   const progressOpenerRef = useRef<HTMLButtonElement | null>(null);
   const progressScrollPositionRef = useRef<number | null>(null);
   const restoreProgressOverviewRef = useRef(false);
-  const logReturnContextRef = useRef<{ tab: HealthFitnessTab; opener: HTMLButtonElement } | null>(null);
+  const logReturnContextRef = useRef<{
+    tab: HealthFitnessTab;
+    opener: HTMLButtonElement;
+    progress: ProgressTab | null;
+  } | null>(null);
   const restoreLogFocusRef = useRef<HTMLButtonElement | null>(null);
   const timeOptions = useRhythmTimeOptions();
   const foundationDetailOpen = selected === 'progress' && progressSelected !== null;
@@ -275,7 +418,7 @@ export function HealthFitnessView({
     if (!logReturnContextRef.current) {
       const opener = pending.opener
         ?? (document.activeElement instanceof HTMLButtonElement ? document.activeElement : null);
-      if (opener) logReturnContextRef.current = { tab: selected, opener };
+      if (opener) logReturnContextRef.current = { tab: selected, opener, progress: progressSelected };
     }
     setSelected('progress');
     setProgressSelected('strength');
@@ -285,7 +428,7 @@ export function HealthFitnessView({
     const pending = cardio.pendingLogRequest;
     if (!pending) return;
     if (!logReturnContextRef.current) {
-      logReturnContextRef.current = { tab: selected, opener: pending.opener };
+      logReturnContextRef.current = { tab: selected, opener: pending.opener, progress: progressSelected };
     }
     setSelected('progress');
     setProgressSelected('cardio');
@@ -295,20 +438,41 @@ export function HealthFitnessView({
     const pending = weight.pendingLogRequest;
     if (!pending) return;
     if (!logReturnContextRef.current) {
-      logReturnContextRef.current = { tab: selected, opener: pending.opener };
+      logReturnContextRef.current = { tab: selected, opener: pending.opener, progress: progressSelected };
     }
     setSelected('progress');
     setProgressSelected('weight');
   }, [weight.pendingLogRequest?.requestId]);
 
   useEffect(() => {
+    const pending = flexibility.pendingQuickLog;
+    if (!pending?.linkedRhythmId) return;
+    if (!logReturnContextRef.current && pending.opener) {
+      logReturnContextRef.current = {
+        tab: selected,
+        opener: pending.opener,
+        progress: progressSelected
+      };
+    }
+    setSelected('progress');
+    setProgressSelected('flexibility');
+  }, [flexibility.pendingQuickLog?.requestId]);
+
+  useEffect(() => {
     if (!restoreLogFocusRef.current) return;
-    restoreLogFocusRef.current.focus({ preventScroll: true });
+    const opener = restoreLogFocusRef.current;
+    if (opener.isConnected) {
+      opener.focus({ preventScroll: true });
+    } else {
+      document.querySelector<HTMLButtonElement>(
+        '.health-fitness-progress__detail:not([hidden]) > .tend-back-button'
+      )?.focus({ preventScroll: true });
+    }
     restoreLogFocusRef.current = null;
-  }, [selected]);
+  }, [selected, progressSelected]);
 
   function rememberLogContext(opener: HTMLButtonElement) {
-    logReturnContextRef.current = { tab: selected, opener };
+    logReturnContextRef.current = { tab: selected, opener, progress: progressSelected };
   }
 
   function restoreLogContext() {
@@ -317,17 +481,34 @@ export function HealthFitnessView({
     logReturnContextRef.current = null;
     restoreLogFocusRef.current = context.opener;
     setSelected(context.tab);
+    if (context.progress !== null) setProgressSelected(context.progress);
   }
 
   function openRhythmLog(id: string, event: MouseEvent<HTMLButtonElement>) {
     const capability = rhythms.find(rhythm => rhythm.id === id)?.healthLogCapability;
     const section: ProgressTab = capability === 'cardio'
       ? 'cardio'
-      : capability === 'weight' ? 'weight' : 'strength';
+      : capability === 'weight' ? 'weight'
+        : capability === 'flexibility' ? 'flexibility' : 'strength';
     rememberLogContext(event.currentTarget);
     setSelected('progress');
     setProgressSelected(section);
     onTendRhythm(id, event);
+  }
+
+  function openStretchAfter(
+    muscleIds: readonly string[],
+    event: MouseEvent<HTMLButtonElement>
+  ) {
+    const regionIds = muscleIds.filter(isFlexibilityRegionId);
+    flexibilityLogRequestSequence.current += 1;
+    rememberLogContext(event.currentTarget);
+    setPendingFlexibilityLog({
+      requestId: flexibilityLogRequestSequence.current,
+      regionIds
+    });
+    setSelected('progress');
+    setProgressSelected('flexibility');
   }
 
   function returnToProgressOverview() {
@@ -371,7 +552,24 @@ export function HealthFitnessView({
             title="Health & Fitness Health"
             score={healthScore}
             itemTerm={{ singular: 'measure', plural: 'measures' }}
-            explanation="Strength Health depends on eligible linked Rhythm completions; workouts do not automatically complete a Rhythm."
+            explanation="Health & Fitness Health averages available Strength, Cardio, Weight, and Flexibility measures; each measure uses its own eligible evidence."
+            summaryContent={(
+              <div className="health-fitness-flexibility-summary">
+                <div>
+                  <strong>Flexibility consistency</strong>
+                  <span>{flexibilityHealthScore.consistency === null
+                    ? '—'
+                    : `${Math.round(flexibilityHealthScore.consistency)}`}
+                  </span>
+                </div>
+                <HealthScoreMeter
+                  score={flexibilityHealthScore.consistency}
+                  label="Flexibility consistency"
+                />
+                <p>{flexibilityTrackedCount} of {flexibilityRegions.length} stretch regions tracked</p>
+              </div>
+            )}
+            scoringEvidence={fitnessMeasureEvidence}
             describeRollup={false}
             coverageLabel={healthScore.consistency !== null && healthScore.onTrack !== null
               ? 'Health & Fitness Consistency and On Track are both scored.'
@@ -380,9 +578,19 @@ export function HealthFitnessView({
                 : healthScore.onTrack !== null
                   ? 'Health & Fitness On Track is scored; Consistency is unavailable.'
                   : 'Health & Fitness Consistency and On Track are unavailable.'}
-            consistencyDescription="The equal-weight average of available Strength, Cardio, and Weight Consistency measures."
+            consistencyDescription="The equal-weight average of available Strength, Cardio, Weight, and Flexibility Consistency measures."
             onTrackDescription="The equal-weight average of available Strength, Cardio, and Weight On Track measures."
-            rollup={createHealthFitnessRollup('category', 'health-fitness')}
+            rollup={{
+              ...createHealthFitnessRollup('category', 'health-fitness'),
+              healthContribution: createHealthFitnessHealthContribution({
+                overallHealthScore,
+                categoryHealthScore: healthScore.health,
+                strengthHealthScore: strength.healthScore?.health ?? null,
+                cardioHealthScore: cardioHealthScore.health,
+                weightHealthScore: weightHealthScore.health,
+                flexibilityHealthScore: flexibilityHealthScore.health
+              })
+            }}
           />
 
           <SegmentedTabs
@@ -446,8 +654,12 @@ export function HealthFitnessView({
                                   completionActionLabel: 'Log',
                                   completionActionAccessibleLabel: rhythm.healthLogCapability === 'cardio'
                                     ? 'Log run'
-                                    : rhythm.healthLogCapability === 'weight' ? 'Log weigh-in' : 'Log workout',
-                                  completedActionLabel: rhythm.healthLogCapability === 'weight' ? 'Weighed in' : 'Logged'
+                                    : rhythm.healthLogCapability === 'weight' ? 'Log weigh-in'
+                                      : rhythm.healthLogCapability === 'flexibility'
+                                        ? 'Start stretch routine' : 'Log workout',
+                                  completedActionLabel: rhythm.healthLogCapability === 'weight'
+                                    ? 'Weighed in'
+                                    : rhythm.healthLogCapability === 'flexibility' ? 'Stretched' : 'Logged'
                                 }
                               : {})}
                             onClose={() => undefined}
@@ -496,8 +708,10 @@ export function HealthFitnessView({
           completionActionLabelFor={() => 'Log'}
           completionActionAccessibleLabelFor={rhythm => rhythm.healthLogCapability === 'cardio'
             ? 'Log run'
-            : rhythm.healthLogCapability === 'weight' ? 'Log weigh-in' : 'Log workout'}
-            completedActionLabelFor={rhythm => rhythm.healthLogCapability === 'weight' ? 'Weighed in' : 'Logged'}
+            : rhythm.healthLogCapability === 'weight' ? 'Log weigh-in'
+              : rhythm.healthLogCapability === 'flexibility' ? 'Start stretch routine' : 'Log workout'}
+          completedActionLabelFor={rhythm => rhythm.healthLogCapability === 'weight'
+            ? 'Weighed in' : rhythm.healthLogCapability === 'flexibility' ? 'Stretched' : 'Logged'}
         />
       </section>
 
@@ -517,7 +731,8 @@ export function HealthFitnessView({
                 const scores = {
                   strength: strength.healthScore,
                   cardio: cardioHealthScore,
-                  weight: weightHealthScore
+                  weight: weightHealthScore,
+                  flexibility: flexibilityHealthScore
                 };
                 return (
                   <FoundationCard
@@ -543,22 +758,51 @@ export function HealthFitnessView({
             {renderFoundationHeading('health-strength')}
             <StrengthView
               {...strength}
+              healthScoringEvidence={strengthScoringEvidence}
+              overallHealthScore={overallHealthScore}
+              categoryHealthScore={healthScore.health}
               foundationNavigation
               onRhythmLogClosed={restoreLogContext}
+              onStretchAfter={openStretchAfter}
             />
           </section>
           <section className="health-fitness-progress__detail tend-back-stack" aria-label="Cardio Foundation" hidden={progressSelected !== 'cardio'}>
             {renderProgressOverviewLink()}
             {renderFoundationHeading('health-cardio')}
-            <CardioView {...cardio} foundationNavigation onLogRequestClosed={restoreLogContext} />
+            <CardioView
+              {...cardio}
+              overallHealthScore={overallHealthScore}
+              categoryHealthScore={healthScore.health}
+              foundationNavigation
+              onLogRequestClosed={restoreLogContext}
+            />
           </section>
           <section className="health-fitness-progress__detail tend-back-stack" aria-label="Weight Foundation" hidden={progressSelected !== 'weight'}>
             {renderProgressOverviewLink()}
             {renderFoundationHeading('health-weight')}
             <WeightView
               {...weight}
+              healthScoringEvidence={weightScoringEvidence}
               healthScore={weightHealthScore}
+              overallHealthScore={overallHealthScore}
+              categoryHealthScore={healthScore.health}
               foundationNavigation
+              onLogRequestClosed={restoreLogContext}
+            />
+          </section>
+          <section className="health-fitness-progress__detail tend-back-stack" aria-label="Flexibility Foundation" hidden={progressSelected !== 'flexibility'}>
+            {renderProgressOverviewLink()}
+            {renderFoundationHeading('health-flexibility')}
+            <FlexibilityView
+              {...flexibility}
+              foundationNavigation
+              pendingQuickLog={pendingFlexibilityLog ?? flexibility.pendingQuickLog ?? null}
+              onQuickLogOpened={requestId => {
+                setPendingFlexibilityLog(current =>
+                  current?.requestId === requestId ? null : current
+                );
+                flexibility.onQuickLogOpened?.(requestId);
+              }}
               onLogRequestClosed={restoreLogContext}
             />
           </section>

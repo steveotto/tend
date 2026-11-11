@@ -3,6 +3,7 @@ import {
   activePrayerRequestCount,
   createPersonPrayerRequest,
   deletePersonPrayerRequest,
+  personPrayerRequestDraft,
   personPrayerRequestsForPerson,
   prayerRequestHistorySummary,
   recordPersonPrayer,
@@ -53,6 +54,14 @@ describe('person-linked Prayer requests', () => {
 
   it('validates stable owners, shared links, lifecycle timestamps, and timestamped logs', () => {
     expect(validatePersonPrayerRequestsCollection([request()], people)).toBe(true);
+    expect(validatePersonPrayerRequestsCollection([request({
+      schedule: { frequency: 'weekly', weekdays: [1, 4] },
+      timeOfDay: 'morning'
+    })], people)).toBe(true);
+    expect(validatePersonPrayerRequestsCollection([request({
+      schedule: { frequency: 'weekly', weekdays: [] },
+      timeOfDay: 'morning'
+    })], people)).toBe(false);
     expect(validatePersonPrayerRequestsCollection([request({ personId: 'missing-person' as typeof owner })], people))
       .toBe(false);
     expect(validatePersonPrayerRequestsCollection([request({ sharedWith: [owner] })], people)).toBe(false);
@@ -79,7 +88,13 @@ describe('person-linked Prayer requests', () => {
       'prayer-request-one',
       createdAt,
       owner,
-      { title: 'Updated request', details: '', sharedWith: [shared] },
+      {
+        title: 'Updated request',
+        details: '',
+        sharedWith: [shared],
+        schedule: { frequency: 'weekly', weekdays: [1] },
+        timeOfDay: 'evening'
+      },
       '2026-10-31T13:00:00.000Z',
       people
     );
@@ -88,6 +103,8 @@ describe('person-linked Prayer requests', () => {
     expect(edited.requests[0]).toMatchObject({
       title: 'Updated request',
       sharedWith: [shared],
+      schedule: { frequency: 'weekly', weekdays: [1] },
+      timeOfDay: 'evening',
       status: 'active',
       prayerLogs: []
     });
@@ -119,19 +136,34 @@ describe('person-linked Prayer requests', () => {
     if (reopened.valid) expect(reopened.requests[0]).toMatchObject({ status: 'active', prayerLogs: [] });
   });
 
+  it('round-trips schedule fields through the request draft', () => {
+    const scheduled = request({
+      schedule: { frequency: 'weekly', weekdays: [2, 5] },
+      timeOfDay: 'evening'
+    });
+    expect(personPrayerRequestDraft(scheduled)).toMatchObject({
+      schedule: scheduled.schedule,
+      timeOfDay: 'evening'
+    });
+    expect(personPrayerRequestDraft(request())).toMatchObject({
+      schedule: { frequency: 'daily' },
+      timeOfDay: 'anytime'
+    });
+  });
+
   it('records Prayed independently and restricts it to active requests', () => {
     const prayed = recordPersonPrayer(
       [request()],
       'prayer-request-one',
       createdAt,
       shared,
-      { id: 'prayer-log-one', prayedAt: '2026-10-31T13:00:00.000Z' },
-      people
+      { id: 'prayer-log-one', prayedAt: '2026-10-31T13:00:00.000Z', actorId: 'me' },
+      [...people, 'me']
     );
     expect(prayed.valid).toBe(true);
     if (!prayed.valid) return;
     expect(prayed.requests[0]?.prayerLogs).toEqual([
-      { id: 'prayer-log-one', prayedAt: '2026-10-31T13:00:00.000Z' }
+      { id: 'prayer-log-one', prayedAt: '2026-10-31T13:00:00.000Z', actorId: 'me' }
     ]);
     expect(prayerRequestHistorySummary(request({
       prayerLogs: [

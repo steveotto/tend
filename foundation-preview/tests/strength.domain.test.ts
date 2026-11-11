@@ -266,6 +266,27 @@ describe('Strength selector and command behavior', () => {
       expect(setStrengthSessionRestDuration(original, 3601).valid).toBe(false);
     });
 
+    it('changes the configured duration without restarting a running countdown', () => {
+      const started = startStrengthSessionRestTimer(session(), '2026-10-30T12:00:00.000Z');
+      expect(started.valid).toBe(true);
+      if (!started.valid) return;
+
+      const changed = setStrengthSessionRestDuration(started.session, 150);
+      expect(changed.valid).toBe(true);
+      if (!changed.valid) return;
+      expect(changed.session.restTimer).toEqual({
+        status: 'running',
+        durationSeconds: 150,
+        deadlineAt: '2026-10-30T12:03:00.000Z'
+      });
+
+      const completed = completeStrengthSessionRestTimer(changed.session, '2026-10-30T12:03:00.000Z');
+      expect(completed.valid).toBe(true);
+      if (completed.valid) {
+        expect(completed.session.restTimer).toEqual({ status: 'complete', durationSeconds: 150 });
+      }
+    });
+
     it('starts against an absolute deadline and completes only once without altering set performance', () => {
       const original = session();
       const started = startStrengthSessionRestTimer(original, '2026-10-30T12:00:00.000Z');

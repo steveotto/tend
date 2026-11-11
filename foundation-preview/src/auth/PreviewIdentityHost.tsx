@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { App } from '../App.tsx';
 import { createAuthenticatedPreviewIdentity } from '../domain/preview-identity.ts';
 import type { PreviewIdentityState } from '../domain/preview-identity.ts';
+import { createPreviewAccountBackupApi } from '../storage/preview-account-backup.ts';
+import type { PreviewAccountBackupSupabaseClient } from '../storage/preview-account-backup.ts';
 
 const classicUrl = 'https://steveotto.github.io/tend/';
 const authStorageKey = 'tend2:preview:auth-session';
@@ -21,6 +23,8 @@ export type PreviewAuthClient = {
     updateUser(attributes: { password: string }): Promise<AuthResult>;
     signOut(options: { scope: 'local' }): Promise<AuthResult>;
   };
+  from?: PreviewAccountBackupSupabaseClient['from'];
+  rpc?: PreviewAccountBackupSupabaseClient['rpc'];
 };
 
 export type PreviewSupabaseClientFactory = (
@@ -30,6 +34,7 @@ export type PreviewSupabaseClientFactory = (
     auth: {
       autoRefreshToken: true;
       detectSessionInUrl: true;
+      flowType: 'pkce';
       persistSession: true;
       storage: Storage;
       storageKey: typeof authStorageKey;
@@ -64,6 +69,13 @@ export function PreviewIdentityHost({
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isRequestingReset, setIsRequestingReset] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const accountBackupApi = useMemo(() => {
+    if (!client?.from || !client.rpc) return undefined;
+    return createPreviewAccountBackupApi({
+      from: client.from.bind(client),
+      rpc: client.rpc.bind(client)
+    });
+  }, [client]);
   const activeUserId = useRef<string | null>(null);
   const recoveryUserId = useRef<string | null>(null);
   const sessionGeneration = useRef(0);
@@ -95,6 +107,7 @@ export function PreviewIdentityHost({
         auth: {
           autoRefreshToken: true,
           detectSessionInUrl: true,
+          flowType: 'pkce',
           persistSession: true,
           storage: window.localStorage,
           storageKey: authStorageKey
@@ -328,7 +341,15 @@ export function PreviewIdentityHost({
     return <PreviewAccessNotice title="Checking Tend sign-in" message="No Preview account data has been opened." />;
   }
   if (identity.kind === 'authenticated') {
-    return <App identity={identity} onSignOut={signOut} />;
+    return (
+      <App
+        identity={identity}
+        onSignOut={signOut}
+        isAccountBackupIdentityCurrent={() => activeUserId.current === identity.accountId
+          && sessionGeneration.current === identity.sessionGeneration}
+        {...(accountBackupApi ? { accountBackupApi } : {})}
+      />
+    );
   }
   if (identity.kind === 'error') {
     return <PreviewAccessNotice title="Preview sign-in is unavailable" message={identity.message} />;

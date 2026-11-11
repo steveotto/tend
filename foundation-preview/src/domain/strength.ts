@@ -12,7 +12,7 @@ export const strengthMuscles = [
   { id: 'abs', name: 'Abs', group: 'Core', front: true, back: false },
   { id: 'quads', name: 'Quads', group: 'Lower body', front: true, back: false },
   { id: 'hamstrings', name: 'Hamstrings', group: 'Lower body', front: false, back: true },
-  { id: 'calves', name: 'Calves', group: 'Lower body', front: true, back: true }
+  { id: 'calves', name: 'Calves', group: 'Lower body', front: false, back: true }
 ] as const;
 
 export type StrengthMuscleId = (typeof strengthMuscles)[number]['id'];
@@ -1645,9 +1645,11 @@ export function setStrengthSessionRestDuration(
     valid: true,
     session: {
       ...session,
-      restTimer: session.restTimer?.status === 'paused'
-        ? { status: 'paused', durationSeconds, remainingMilliseconds: durationSeconds * 1000 }
-        : { status: 'idle', durationSeconds }
+      restTimer: session.restTimer?.status === 'running'
+        ? { ...session.restTimer, durationSeconds }
+        : session.restTimer?.status === 'paused'
+          ? { status: 'paused', durationSeconds, remainingMilliseconds: durationSeconds * 1000 }
+          : { status: 'idle', durationSeconds }
     }
   };
 }

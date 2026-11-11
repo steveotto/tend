@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { marriageRhythms } from '../src/domain/preview-data.ts';
+import { marriageRhythms, todayRhythms } from '../src/domain/preview-data.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
 import { addCalendarDays } from '../src/domain/rhythm-scoring.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -77,6 +77,25 @@ function rhythm(
 }
 
 describe('selecting equal-weight Foundation scores', () => {
+  it('keeps the synthetic Take a walk fixture unscored without a structured schedule or completion history', () => {
+    const rhythm = todayRhythms.find(item => item.id === 'sample-walk')!;
+    const score = selectFoundationRhythmScores(
+      [rhythm],
+      [],
+      new Set([rhythm.id]),
+      new Date('2026-10-23T12:00:00Z'),
+      'UTC'
+    ).get(rhythm.id);
+
+    expect(rhythm.completionHistory).toBeUndefined();
+    expect(rhythm.schedule).toBeUndefined();
+    expect(score).toMatchObject({
+      kind: 'unscored',
+      reason: { reasonCode: 'unsupported-schedule' },
+      onTrack: { kind: 'unscored' }
+    });
+  });
+
   it('reselects Rhythm scores when saved completion records or schedule change', () => {
     const asOfDate = '2026-10-27';
     const trackingStartDate = '2026-09-28';

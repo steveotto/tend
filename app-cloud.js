@@ -102,7 +102,12 @@ window.TendCloudPersistence = (function () {
     return !window.navigator || window.navigator.onLine !== false;
   }
   function isConflictError(error) {
-    return !!error && (error.code === "40001" || /revision conflict|stale revision/i.test(error.message || ""));
+    if (!error) return false;
+    if (error.code === "40001") return true;
+    if (error.code === "P0001") {
+      return error.message === "Stale revision; reload or resolve the device draft";
+    }
+    return /revision conflict|stale revision/i.test(error.message || "");
   }
   async function fetchUserState(userId) {
     if (!client) throw new Error("Supabase is not configured.");

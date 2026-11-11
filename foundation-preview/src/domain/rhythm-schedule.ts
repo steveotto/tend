@@ -51,7 +51,17 @@ export type RhythmSchedule =
   | ({ frequency: 'monthly'; pattern: RhythmPattern } & ScheduleDates)
   | ({ frequency: 'quarterly'; monthInQuarter: 1 | 2 | 3; pattern: RhythmPattern } & ScheduleDates)
   | ({ frequency: 'yearly'; month: RhythmMonth; pattern: RhythmPattern } & ScheduleDates)
-  | { frequency: 'custom'; unit: 'days'; interval: number; startDate: RhythmLocalDate; endDate?: RhythmLocalDate }
+  | {
+      frequency: 'custom';
+      unit: 'days';
+      interval: number;
+      startDate: RhythmLocalDate;
+      endDate?: RhythmLocalDate;
+      targetPeriod?: {
+        targetCount: 1 | 2 | 7;
+        onTrack: 'pace' | 'since-last' | 'decay';
+      };
+    }
   | { frequency: 'custom'; unit: 'weeks'; interval: number; weekdays: RhythmWeekday[]; startDate: RhythmLocalDate; endDate?: RhythmLocalDate }
   | { frequency: 'custom'; unit: 'months'; interval: number; pattern: RhythmPattern; startDate: RhythmLocalDate; endDate?: RhythmLocalDate }
   | { frequency: 'custom'; unit: 'years'; interval: number; month: RhythmMonth; pattern: RhythmPattern; startDate: RhythmLocalDate; endDate?: RhythmLocalDate };
@@ -191,6 +201,15 @@ function isValidOptionalEndDate(record: Record<string, unknown>): boolean {
   return true;
 }
 
+function isValidTargetPeriod(value: unknown, interval: number): boolean {
+  if (!isRecord(value) || !hasOnlyKeys(value, ['targetCount', 'onTrack'])) return false;
+  return interval === 7 && value.targetCount === 2 && value.onTrack === 'pace'
+    || interval === 14 && value.targetCount === 1 && value.onTrack === 'since-last'
+    || interval === 7 && value.targetCount === 2 && value.onTrack === 'decay'
+    || interval === 14 && value.targetCount === 1 && value.onTrack === 'decay'
+    || interval === 7 && value.targetCount === 7 && value.onTrack === 'decay';
+}
+
 export function isValidTimeZone(value: unknown): value is string {
   if (typeof value !== 'string' || value.trim().length === 0 || value.length > 100) return false;
   try {
@@ -238,7 +257,9 @@ function isRhythmSchedule(value: unknown, allowSingleDaySelectDays = true): valu
       && isValidDate(value.startDate)
       && isValidOptionalEndDate(value);
     if (commonValid && value.unit === 'days') {
-      valid = hasOnlyKeys(value, customKeys);
+      valid = hasOnlyKeys(value, [...customKeys, 'targetPeriod'])
+        && (value.targetPeriod === undefined
+          || typeof value.interval === 'number' && isValidTargetPeriod(value.targetPeriod, value.interval));
     } else if (commonValid && value.unit === 'weeks') {
       valid = hasOnlyKeys(value, [...customKeys, 'weekdays']) && isWeekdayList(value.weekdays);
     } else if (commonValid && value.unit === 'months') {
@@ -516,7 +537,11 @@ export function formatRhythmSchedule(
         break;
       case 'custom':
         if (schedule.unit === 'days') {
-          compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'day' : 'days'}`;
+          compact = schedule.targetPeriod?.onTrack === 'pace'
+            ? 'Twice weekly'
+            : schedule.targetPeriod?.onTrack === 'since-last'
+              ? 'Every 2 weeks'
+              : `Every ${schedule.interval} ${schedule.interval === 1 ? 'day' : 'days'}`;
         } else if (schedule.unit === 'weeks') {
           compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'week' : 'weeks'}`
             + (schedule.weekdays.length ? ` · ${schedule.weekdays
@@ -554,7 +579,11 @@ export function formatRhythmSchedule(
       break;
     case 'custom':
       if (schedule.unit === 'days') {
-        summary = `Every ${schedule.interval} ${schedule.interval === 1 ? 'day' : 'days'}`;
+        summary = schedule.targetPeriod?.onTrack === 'pace'
+          ? 'A target of 2 connections per week, with progress measured against the current week’s pace'
+          : schedule.targetPeriod?.onTrack === 'since-last'
+            ? 'A target of 1 connection in each trailing 14-day period'
+            : `Every ${schedule.interval} ${schedule.interval === 1 ? 'day' : 'days'}`;
       } else if (schedule.unit === 'weeks') {
         summary = `Every ${schedule.interval} ${schedule.interval === 1 ? 'week' : 'weeks'}`
           + (schedule.weekdays.length ? ` on ${weekdayListSummary(schedule.weekdays)}` : '');

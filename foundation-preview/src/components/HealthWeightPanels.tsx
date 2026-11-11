@@ -57,14 +57,18 @@ export function formatTruthfulWeightedSum(
   const displayedConsistency = formatAtPrecision(consistency, precision);
   const displayedOnTrack = formatAtPrecision(onTrack, precision);
   const displayedTotal = formatAtPrecision(total, precision);
-  const operator = Number(displayedConsistency) + Number(displayedOnTrack) === Number(displayedTotal)
+  const approximate = !isCloseToPrecision(consistency, Number(displayedConsistency))
+    || !isCloseToPrecision(onTrack, Number(displayedOnTrack))
+    || !isCloseToPrecision(total, Number(displayedTotal));
+  const operator = !approximate
+    && Number(displayedConsistency) + Number(displayedOnTrack) === Number(displayedTotal)
     ? '='
     : '≈';
   return [displayedConsistency, displayedOnTrack, displayedTotal, operator];
 }
 
 function formatAtPrecision(value: number, precision: number): string {
-  if (precision === 0) return String(value);
+  if (precision === 0) return String(Math.round(value));
   return value.toFixed(precision).replace(/0+$/, '').replace(/\.$/, '');
 }
 
@@ -102,7 +106,10 @@ function weightedProductFormula(
   const precision = Math.max(0, Math.min(maxFractionDigits, 10));
   const displayedScore = formatAtPrecision(score, precision);
   const displayedContribution = formatAtPrecision(contribution, precision);
-  const operator = Number(displayedScore) * weight === Number(displayedContribution)
+  const approximate = !isCloseToPrecision(score, Number(displayedScore))
+    || !isCloseToPrecision(contribution, Number(displayedContribution));
+  const operator = !approximate
+    && Number(displayedScore) * weight === Number(displayedContribution)
     ? '='
     : '≈';
   return { score: displayedScore, contribution: displayedContribution, operator };
@@ -111,7 +118,7 @@ function weightedProductFormula(
 export function HealthWeightPanels({
   consistencyScore,
   onTrackScore,
-  maxFractionDigits,
+  maxFractionDigits = 0,
   consistencyCaption,
   onTrackCaption,
   consistencyDescription,

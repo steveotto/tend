@@ -923,7 +923,7 @@ test("Fitness summary follows Faith health styling and section navigation has no
   const activePanel = vm.runInContext('fitnessPanelHTML("strength","Training content")', context);
   const inactivePanel = vm.runInContext('fitnessPanelHTML("cardio","Cardio content")', context);
   assert.match(fitnessAppSource, /tendCategoryPageHeaderHTML\("Health & Fitness","fitness-page-heading"\)/);
-  assert.match(summary, /Overall Health &amp; Fitness consistency/);
+  assert.match(summary, /Health &amp; Fitness Health/);
   assert.match(summary, /category-health-card fitness-summary-card/);
   assert.match(summary, /health-summary-breakdown/);
   assert.match(summary, /health-summary-score red/);
@@ -975,7 +975,7 @@ test("Fitness summary follows Faith health styling and section navigation has no
   assert.doesNotMatch(fitnessAppSource.match(/function fitnessStrengthPanel\(scores\)\{[\s\S]*?\n\}/)[0], /fitnessGoalsButtonHTML/);
   assert.doesNotMatch(fitnessAppSource.match(/function fitnessCardioPanel\(data,scores,today\)\{[\s\S]*?\n\}/)[0], /tabs\+fitnessGoalsButtonHTML/);
   assert.doesNotMatch(fitnessAppSource.match(/function fitnessWeightPanel\(data,scores,today\)\{[\s\S]*?\n\}/)[0], /tabs\+fitnessGoalsButtonHTML/);
-  assert.match(stylesSource, /\.fitness-strength-heading h2\{[^}]*font-size:var\(--tend-type-card-title,16px\)/);
+  assert.match(stylesSource, /\.fitness-strength-heading h2\{[^}]*font-size:var\(--tend-type-card-title,calc\(1rem \* var\(--app-text-scale, 1\)\)\)/);
   assert.match(fitnessAppSource, /function fitnessGoalsDialog\(data,section\)[\s\S]*if\(section==="strength"\)[\s\S]*else if\(section==="cardio"\)[\s\S]*title="Weight goals"/);
   assert.match(fitnessAppSource, /fitness-section-bottom-action[\s\S]*data-fitness-open="run"/);
   assert.match(fitnessAppSource, /fitness-section-bottom-action[\s\S]*data-fitness-open="weighin"/);

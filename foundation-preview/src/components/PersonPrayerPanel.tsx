@@ -13,20 +13,28 @@ import type {
 } from '../domain/person-prayers.ts';
 import { personById } from '../domain/preview-data.ts';
 import type { PersonId, PersonPickerGroup, PersonPreview } from '../domain/preview-data.ts';
+import { rhythmTimeLabel, rhythmTimeOptions } from '../domain/rhythm-schedule.ts';
+import type { RhythmTimeOption } from '../domain/rhythm-schedule.ts';
+import { prayerFrequencyLabel } from '../domain/prayer-session.ts';
 import { PeopleBadgeSelectionPicker } from './PeopleAssociationControls.tsx';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
+import { RhythmScheduleFields } from './RhythmScheduleFields.tsx';
+import { StyledSelect } from './StyledSelect.tsx';
 
 type EditorState = {
   request?: PersonPrayerRequest;
   draft: PersonPrayerRequestDraft;
   error: string;
+  scheduleError: string;
 };
 
 export function PersonPrayerPanel({
   personId,
   people,
   peopleGroups,
+  timeOptions = rhythmTimeOptions,
   requests,
+  targetRequestId,
   onCreate,
   onUpdate,
   onTransition,
@@ -36,7 +44,9 @@ export function PersonPrayerPanel({
   personId: PersonId;
   people: readonly PersonPreview[];
   peopleGroups: readonly PersonPickerGroup[];
+  timeOptions?: readonly RhythmTimeOption[];
   requests: readonly PersonPrayerRequest[];
+  targetRequestId?: string | null;
   onCreate: (personId: PersonId, draft: PersonPrayerRequestDraft) => string | null;
   onUpdate: (
     requestId: string,
@@ -72,6 +82,13 @@ export function PersonPrayerPanel({
   ];
 
   useEffect(() => {
+    if (!targetRequestId) return;
+    const target = document.getElementById(`person-prayer-request-${targetRequestId}`);
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView?.({ block: 'center' });
+  }, [targetRequestId, personId, requests]);
+
+  useEffect(() => {
     const isOpen = editor !== null || confirmRequest !== null;
     if (isOpen) {
       dialogWasOpen.current = true;
@@ -99,7 +116,12 @@ export function PersonPrayerPanel({
     returnTarget.current = event.currentTarget;
     setActionError('');
     setPickerOpen(false);
-    setEditor({ ...(request ? { request } : {}), draft: personPrayerRequestDraft(request), error: '' });
+    setEditor({
+      ...(request ? { request } : {}),
+      draft: personPrayerRequestDraft(request),
+      error: '',
+      scheduleError: ''
+    });
   }
 
   function updateDraft(patch: Partial<PersonPrayerRequestDraft>) {
@@ -109,6 +131,10 @@ export function PersonPrayerPanel({
   function saveEditor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editor) return;
+    if (editor.scheduleError) {
+      setEditor(current => current ? { ...current, error: editor.scheduleError } : current);
+      return;
+    }
     const result = editor.request
       ? onUpdate(editor.request.id, editor.request.updatedAt, personId, editor.draft)
       : onCreate(personId, editor.draft);
@@ -174,7 +200,13 @@ export function PersonPrayerPanel({
                 const shareNames = (request.sharedWith ?? []).map(id => personById(people, id).displayName);
                 const prayerHistory = prayerRequestHistorySummary(request);
                 return (
-                  <li className="person-prayer-card" key={request.id}>
+                  <li
+                    id={`person-prayer-request-${request.id}`}
+                    className="person-prayer-card"
+                    key={request.id}
+                    tabIndex={targetRequestId === request.id ? -1 : undefined}
+                    aria-current={targetRequestId === request.id ? 'true' : undefined}
+                  >
                     <div className="person-prayer-card__content">
                       <h5>{request.title}</h5>
                       {request.details && <p className="person-prayer-card__details">{request.details}</p>}
@@ -182,6 +214,10 @@ export function PersonPrayerPanel({
                       {shareNames.length > 0 && (
                         <p className="person-prayer-card__meta">Shared with {shareNames.join(', ')}</p>
                       )}
+                      <p className="person-prayer-card__meta">
+                        {prayerFrequencyLabel(request)}
+                        {' · '}{rhythmTimeLabel(request.timeOfDay ?? 'anytime', timeOptions)}
+                      </p>
                       <p className="person-prayer-card__meta">
                         Prayed {prayerHistory.count} {prayerHistory.count === 1 ? 'time' : 'times'}
                         {prayerHistory.lastPrayedAt && ` · Last prayed ${formatPrayerDate(prayerHistory.lastPrayedAt)}`}
@@ -294,6 +330,34 @@ export function PersonPrayerPanel({
                 onChange={event => updateDraft({ details: event.currentTarget.value })}
               />
             </label>
+            <RhythmScheduleFields
+              schedule={editor.draft.schedule}
+              error={editor.scheduleError || undefined}
+              onChange={schedule => {
+                if (!schedule) return;
+                setEditor(current => current ? {
+                  ...current,
+                  draft: { ...current.draft, schedule },
+                  scheduleError: '',
+                  error: ''
+                } : current);
+              }}
+              onDraftChange={draft => setEditor(current => current ? {
+                ...current,
+                scheduleError: draft.validationMessage ?? ''
+              } : current)}
+              requireExplicitChoices
+            >
+              <label className="goal-field">
+                Time of day
+                <StyledSelect
+                  label="Time of day"
+                  options={timeOptions.map(option => ({ value: option.value, label: option.label }))}
+                  value={editor.draft.timeOfDay}
+                  onChange={timeOfDay => updateDraft({ timeOfDay })}
+                />
+              </label>
+            </RhythmScheduleFields>
             <div className="person-prayer-form__sharing">
               <span>Shared with</span>
               <span>{editor.draft.sharedWith.length} {editor.draft.sharedWith.length === 1 ? 'person' : 'people'}</span>

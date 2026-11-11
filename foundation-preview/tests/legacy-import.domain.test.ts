@@ -100,6 +100,17 @@ describe('Classic Tend import dry run', () => {
     expect(invalidDate.report.invalid.length).toBeGreaterThan(0);
   });
 
+  it('does not infer a birthday date from a standalone legacy year', () => {
+    const source = JSON.stringify({
+      people: [{ id: 'person-one', name: 'Person One', birthday: '1951' }]
+    });
+    const result = analyzeLegacyTendImport(source, '2026-10-31');
+
+    expect(result.candidate).toBeNull();
+    expect(result.report.invalid).toContainEqual({ path: '/people/0/birthday', count: 1 });
+    expect(JSON.parse(result.recoveryPackage).sourceText).toBe(source);
+  });
+
   it('uses a deterministic collision-safe ID when an invalid source ID maps onto an existing ID', () => {
     const mapped = analyzeLegacyTendImport(JSON.stringify({
       people: [{ id: 'legacy person/one', name: 'Mapped Person' }]
