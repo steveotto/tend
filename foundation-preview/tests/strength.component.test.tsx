@@ -119,6 +119,12 @@ function renderStatefulStrength(initialData = createStrengthData()) {
   return { ...render(<StatefulStrength />), changes };
 }
 
+function startGuidedWorkoutFromChoice(button = screen.getByRole('button', { name: 'Workout' })) {
+  fireEvent.click(button);
+  const choice = screen.getByRole('dialog');
+  fireEvent.click(within(choice).getByRole('button', { name: /Full workout/ }));
+}
+
 function guidedReplacementData(): StrengthData {
   const data = createStrengthData();
   const currentWorkout: StrengthSavedWorkout = {
@@ -204,7 +210,7 @@ describe('Strength preview presentation', () => {
     expect(emptyActions.classList.contains('category-rhythm-entry-actions')).toBe(true);
     expect(within(savedWorkouts).getByText('No saved workouts yet. Create one to quickly log your usual muscle groups.'))
       .toBeTruthy();
-    expect(within(savedWorkouts).getByText('Workout templates are separate from recorded activity.')).toBeTruthy();
+    expect(within(savedWorkouts).getByText('Your reusable workouts.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Create workout' }));
     const creationDialog = screen.getByRole('dialog', { name: 'Add saved workout' });
     expect(creationDialog).toBeTruthy();
@@ -237,7 +243,7 @@ describe('Strength preview presentation', () => {
     const data = guidedReplacementData();
     const { onChange } = renderStrength(data);
     await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await user.click(screen.getByRole('button', { name: 'Start workout' }));
+    startGuidedWorkoutFromChoice();
 
     const dialog = screen.getByRole('dialog', { name: 'Workout in progress' });
     expect(within(dialog).getByText(/Current workout name is in progress/)).toBeTruthy();
@@ -254,7 +260,7 @@ describe('Strength preview presentation', () => {
     const currentDraft = data.guidedSessionDraft;
     const { onChange } = renderStrength(data);
     await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await user.click(screen.getByRole('button', { name: 'Start workout' }));
+    startGuidedWorkoutFromChoice();
 
     const dialog = screen.getByRole('dialog', { name: 'Workout in progress' });
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
@@ -270,7 +276,7 @@ describe('Strength preview presentation', () => {
     const currentDraft = data.guidedSessionDraft;
     const { onChange } = renderStrength(data);
     await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await user.click(screen.getByRole('button', { name: 'Start workout' }));
+    startGuidedWorkoutFromChoice();
 
     const dialog = screen.getByRole('dialog', { name: 'Workout in progress' });
     expect(within(dialog).queryByText('Next workout name')).toBeNull();
@@ -290,7 +296,7 @@ describe('Strength preview presentation', () => {
     const user = userEvent.setup();
     const success = renderStatefulStrength(guidedReplacementData());
     await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await user.click(screen.getByRole('button', { name: 'Start workout' }));
+    startGuidedWorkoutFromChoice();
     let dialog = screen.getByRole('dialog', { name: 'Workout in progress' });
     await user.click(within(dialog).getByRole('button', { name: 'Discard and start…' }));
     dialog = screen.getByRole('dialog', { name: 'Discard Current workout name?' });
@@ -305,7 +311,7 @@ describe('Strength preview presentation', () => {
     const currentDraft = failedData.guidedSessionDraft;
     const failed = renderStrength(failedData, 'recommended', 'synthetic persistence failure');
     await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await user.click(screen.getByRole('button', { name: 'Start workout' }));
+    startGuidedWorkoutFromChoice();
     dialog = screen.getByRole('dialog', { name: 'Workout in progress' });
     expect(within(dialog).queryByRole('alert')).toBeNull();
     await user.click(within(dialog).getByRole('button', { name: 'Discard and start…' }));
@@ -349,7 +355,7 @@ describe('Strength preview presentation', () => {
       sharedWith: []
     }];
     const user = userEvent.setup();
-    renderStrength(data);
+    const { onChange } = renderStrength(data);
     const panel = screen.getByRole('tabpanel', { name: 'Recommended' });
     const action = within(panel).getByRole('button', { name: 'Custom workout' });
     const results = panel.querySelector('.strength-recommendations')!;
@@ -365,10 +371,50 @@ describe('Strength preview presentation', () => {
     expect(within(card).getByRole('heading', { name: 'Upper body' })).toBeTruthy();
     expect(within(card).getByText(/Targets two muscle groups/)).toBeTruthy();
     expect(within(card).getByText('Chest · Back')).toBeTruthy();
-    await user.click(within(card).getByRole('button', { name: 'Log workout' }));
-    let dialog = screen.getByRole('dialog', { name: 'Log workout' });
-    expect(within(dialog).getByRole('checkbox', { name: 'Chest' })).toHaveProperty('checked', true);
-    expect(within(dialog).getByRole('checkbox', { name: 'Back' })).toHaveProperty('checked', true);
+    expect(within(card).getAllByRole('button', { name: 'Workout' })).toHaveLength(1);
+    expect(within(card).queryByRole('button', { name: /Start workout|Log workout/ })).toBeNull();
+    const recommendedCard = within(screen.getByRole('tabpanel', { name: 'Recommended' }))
+      .getByRole('heading', { name: 'Upper body' }).closest('article')!;
+    await user.click(within(recommendedCard).getByRole('button', { name: 'Workout' }));
+    let dialog = screen.getByRole('dialog', { name: 'Upper body' });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(within(dialog).getByText('How do you want to record this workout?')).toBeTruthy();
+    expect(dialog.querySelector('.strength-workout-choice__icon--guided[aria-hidden="true"] svg')).toBeTruthy();
+    expect(dialog.querySelector('.strength-workout-choice__icon--quick[aria-hidden="true"] svg')).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: /Full workout/ })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: /Quick log/ })).toBeTruthy();
+    expect(within(dialog).getByText('Full guided session with the timer. Log each set, rep, and weight as you go.')).toBeTruthy();
+    expect(within(dialog).getByText('Records the completion and muscle groups only. No set-by-set entry.')).toBeTruthy();
+    expect(dialog.querySelectorAll('.strength-workout-choice__tag')).toHaveLength(1);
+    expect(within(dialog).getByText('Tracks details')).toBeTruthy();
+    expect(within(dialog).queryByText('Quick', { selector: '.strength-workout-choice__tag' })).toBeNull();
+    expect(dialog.querySelector('.strength-workout-choice__cancel')).toBe(
+      within(dialog).getByRole('button', { name: 'Cancel' })
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(onChange).not.toHaveBeenCalled();
+    await user.click(within(recommendedCard).getByRole('button', { name: 'Workout' }));
+    dialog = screen.getByRole('dialog', { name: 'Upper body' });
+    await user.click(within(dialog).getByRole('button', { name: /Full workout/ }));
+    dialog = screen.getByRole('dialog', { name: 'Upper body' });
+    expect(within(dialog).getByText(/does not have a complete exercise plan/)).toBeTruthy();
+    expect(within(dialog).queryByLabelText('Notes')).toBeNull();
+    expect(within(dialog).queryByLabelText(/Set/)).toBeNull();
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(onChange).not.toHaveBeenCalled();
+    await user.click(within(recommendedCard).getByRole('button', { name: 'Workout' }));
+    dialog = screen.getByRole('dialog', { name: 'Upper body' });
+    await user.click(within(dialog).getByRole('button', { name: /Quick log/ }));
+    dialog = screen.getByRole('dialog', { name: 'Upper body' });
+    expect(within(dialog).getByRole('button', { name: /Date.*Today, October 22/ })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: /Muscle groups.*Chest · Back/ })).toBeTruthy();
+    expect(within(dialog).queryByRole('checkbox')).toBeNull();
+    expect(within(dialog).queryByLabelText('Notes')).toBeNull();
+    expect(within(dialog).queryByLabelText(/Set/)).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: 'Stretch after?' })).toBeNull();
+    expect(within(dialog).getAllByRole('button', { name: /Date|Muscle groups|Save workout|Cancel|Close workout log/ }))
+      .toHaveLength(5);
+    expect(onChange).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole('button', { name: 'Close workout log' }));
     await user.click(action);
     dialog = screen.getByRole('dialog', { name: 'Log workout' });
@@ -392,7 +438,7 @@ describe('Strength preview presentation', () => {
     expect(screen.queryByRole('dialog', { name: 'Log workout' })).toBeNull();
   });
 
-  it('keeps Saved Workout cards on full-width rows with overflow actions and an Add exercises route', async () => {
+  it('keeps Saved Workout cards on full-width rows with one Workout action and template management', async () => {
     const data = createStrengthData();
     data.savedWorkouts = [
       {
@@ -418,7 +464,7 @@ describe('Strength preview presentation', () => {
       }
     ];
     const user = userEvent.setup();
-    renderStrength(data);
+    const { onChange } = renderStrength(data);
     await user.click(screen.getByRole('tab', { name: 'Saved' }));
     const savedRegion = screen.getByRole('region', { name: 'Saved workouts' });
     const longCard = within(savedRegion)
@@ -429,18 +475,33 @@ describe('Strength preview presentation', () => {
     expect(within(longCard).getByText(strengthMuscleName('chest') + ' · Back · Biceps · Triceps · Shoulders · Abs · Quads · Hamstrings · Calves'))
       .toBeTruthy();
     expect(within(longCard).getByText('1 exercise · 3 planned sets')).toBeTruthy();
-    expect(within(longCard).getByRole('button', { name: 'Start workout' })).toBeTruthy();
-    expect(within(longCard).getByRole('button', { name: 'Log workout' })).toBeTruthy();
+    expect(within(longCard).getAllByRole('button', { name: 'Workout' })).toHaveLength(1);
+    expect(within(longCard).queryByRole('button', { name: /Start workout|Log workout/ })).toBeNull();
     expect(longCard.querySelector<HTMLDetailsElement>('.strength-template__menu')?.open).toBe(false);
     await user.click(longCard.querySelector('.strength-template__menu > summary')!);
     expect(within(longCard).getByRole('button', { name: 'Edit workout' })).toBeTruthy();
+    expect(within(longCard).getByRole('button', { name: 'Duplicate workout' })).toBeTruthy();
     expect(within(longCard).getByRole('button', { name: 'Delete workout' })).toBeTruthy();
+    expect([...longCard.querySelectorAll('.strength-template__menu-items button')]
+      .map(button => button.textContent?.trim()))
+      .toEqual(['Edit workout', 'Duplicate workout', 'Delete workout']);
+    await user.click(within(longCard).getByRole('button', { name: 'Duplicate workout' }));
+    expect(onChange).toHaveBeenCalledOnce();
+    expect(onChange.mock.calls[0]?.[0].savedWorkouts).toHaveLength(3);
+    expect(onChange.mock.calls[0]?.[0].savedWorkouts[2]?.name)
+      .toBe('A deliberately long saved workout title that wraps naturally (copy)');
+    expect(within(savedRegion).getByRole('status').textContent).toContain('duplicated.');
 
     const emptyCard = within(savedRegion).getByRole('heading', { name: 'Exercise-free template' }).closest('article')!;
-    await user.click(within(emptyCard).getByRole('button', { name: 'Add exercises' }));
-    const editor = screen.getByRole('dialog', { name: 'Edit saved workout' });
-    expect(within(editor).getByRole('button', { name: 'Add exercise' })).toBeTruthy();
-    await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
+    expect(within(emptyCard).getAllByRole('button', { name: 'Workout' })).toHaveLength(1);
+    await user.click(within(emptyCard).getByRole('button', { name: 'Workout' }));
+    const choices = screen.getByRole('dialog', { name: 'Exercise-free template' });
+    await user.click(within(choices).getByRole('button', { name: /Full workout/ }));
+    const fallback = screen.getByRole('dialog', { name: 'Exercise-free template' });
+    expect(within(fallback).getByText(/does not have a complete exercise plan/)).toBeTruthy();
+    expect(within(fallback).getByRole('button', { name: /Muscle groups.*Back · Biceps/ })).toBeTruthy();
+    expect(within(fallback).queryByLabelText(/Set/)).toBeNull();
+    await user.click(within(fallback).getByRole('button', { name: 'Cancel' }));
   });
 
   it('saves every suggestion with its editable load meaning and only declared supersets', async () => {
@@ -1028,7 +1089,9 @@ describe('Strength preview presentation', () => {
     expect(within(picker).getByRole('button', { name: 'Custom workout' })).toBeTruthy();
     await user.click(within(picker).getByRole('button', { name: 'Custom workout' }));
     const dialog = await screen.findByRole('dialog', { name: 'Log workout' });
-    expect(within(dialog).getByLabelText('Workout date')).toHaveProperty('value', '2026-10-22');
+    const workoutDate = within(dialog).getByLabelText('Workout date');
+    expect(workoutDate).toHaveProperty('value', '2026-10-22');
+    fireEvent.change(workoutDate, { target: { value: '2026-10-20' } });
     expect(within(dialog).getByLabelText('Saved workout (optional)')).toHaveProperty('value', '');
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(onChange).not.toHaveBeenCalled();
@@ -1068,37 +1131,121 @@ describe('Strength preview presentation', () => {
       muscleIds: ['chest', 'back', 'biceps', 'triceps', 'shoulders'],
       sharedWith: []
     }];
+    data.trackingStartDate = '2026-10-01';
     const { onChange } = renderStrength(data);
     await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await user.click(screen.getByRole('button', { name: 'Log workout' }));
-
-    const dialog = screen.getByRole('dialog', { name: 'Log workout' });
-    expect(within(dialog).getByText('Upper Body')).toBeTruthy();
+    const opener = screen.getByRole('button', { name: 'Workout' });
+    await user.click(opener);
+    const choices = screen.getByRole('dialog', { name: 'Upper Body' });
+    expect(within(choices).getByText('How do you want to record this workout?')).toBeTruthy();
+    expect(onChange).not.toHaveBeenCalled();
+    await user.click(within(choices).getByRole('button', { name: /Quick log/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Upper Body' });
     expect(within(dialog).queryByLabelText('Saved workout (optional)')).toBeNull();
-    for (const muscle of ['Chest', 'Back', 'Biceps', 'Triceps', 'Shoulders']) {
-      expect(within(dialog).getByRole('checkbox', { name: muscle })).toHaveProperty('checked', true);
-    }
+    expect(within(dialog).getByRole('button', { name: /Date.*Today, October 22/ })).toBeTruthy();
+    const dateRow = within(dialog).getByRole('button', { name: /Date/ });
+    await user.click(dateRow);
+    let editor = screen.getByRole('dialog', { name: 'Choose workout date' });
+    const workoutDate = within(editor).getByLabelText('Workout date');
+    expect(workoutDate).toHaveProperty('value', '2026-10-22');
+    expect(workoutDate).toHaveProperty('min', '2026-10-01');
+    expect(workoutDate).toHaveProperty('max', '2026-10-22');
+    fireEvent.change(workoutDate, { target: { value: '2026-10-23' } });
+    expect(within(editor).getByRole('button', { name: 'Done' })).toHaveProperty('disabled', true);
+    fireEvent.change(workoutDate, { target: { value: '2026-10-21' } });
+    expect(within(dialog).getByRole('button', { name: /Date.*Yesterday, October 21/ })).toBeTruthy();
+    await user.click(within(editor).getByRole('button', { name: 'Done' }));
+    expect(within(dialog).getByRole('button', { name: /Date.*Yesterday, October 21/ })).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: /Date/ }));
+    editor = screen.getByRole('dialog', { name: 'Choose workout date' });
+    fireEvent.change(within(editor).getByLabelText('Workout date'), { target: { value: '2026-10-20' } });
+    await user.click(within(editor).getByRole('button', { name: 'Done' }));
+    expect(within(dialog).getByRole('button', { name: /Date.*Tuesday, October 20/ })).toBeTruthy();
+    expect(onChange).not.toHaveBeenCalled();
 
-    await user.click(within(dialog).getByRole('checkbox', { name: 'Chest' }));
-    await user.click(within(dialog).getByText('Back'));
-    await user.click(within(dialog).getByText('Abs'));
-    const triceps = within(dialog).getByRole('checkbox', { name: 'Triceps' });
+    await user.click(within(dialog).getByRole('button', { name: /Muscle groups/ }));
+    editor = screen.getByRole('dialog', { name: 'Choose muscle groups' });
+    expect(within(editor).getByRole('group', { name: 'Muscle groups' })).toBeTruthy();
+    expect(within(dialog).queryByLabelText('Notes')).toBeNull();
+    expect(within(dialog).queryByLabelText(/Set/)).toBeNull();
+    for (const muscle of ['Chest', 'Back', 'Biceps', 'Triceps', 'Shoulders']) {
+      expect(within(editor).getByRole('checkbox', { name: muscle })).toHaveProperty('checked', true);
+    }
+    expect(within(editor).getAllByRole('checkbox')).toHaveLength(9);
+    for (const muscle of ['Chest', 'Back', 'Biceps', 'Triceps', 'Shoulders']) {
+      await user.click(within(editor).getByRole('checkbox', { name: muscle }));
+    }
+    expect(within(editor).getByRole('button', { name: 'Apply' })).toHaveProperty('disabled', true);
+    expect(within(editor).getByRole('status').textContent).toBe('Select at least one muscle group to apply.');
+    for (const muscle of ['Chest', 'Back', 'Biceps', 'Triceps', 'Shoulders']) {
+      await user.click(within(editor).getByRole('checkbox', { name: muscle }));
+    }
+    await user.click(within(editor).getByRole('checkbox', { name: 'Chest' }));
+    await user.click(within(editor).getByRole('checkbox', { name: 'Back' }));
+    await user.click(within(editor).getByRole('checkbox', { name: 'Abs' }));
+    const triceps = within(editor).getByRole('checkbox', { name: 'Triceps' });
     triceps.focus();
     await user.keyboard(' ');
-    await user.type(within(dialog).getByRole('textbox', { name: 'Notes' }), 'Actual session');
     expect(triceps).toHaveProperty('checked', false);
-    expect(within(dialog).getByRole('checkbox', { name: 'Abs' })).toHaveProperty('checked', true);
+    expect(within(editor).getByRole('checkbox', { name: 'Abs' })).toHaveProperty('checked', true);
+    expect(within(editor).getByRole('button', { name: 'Apply' })).toHaveProperty('disabled', false);
+    await user.click(within(editor).getByRole('button', { name: 'Apply' }));
+    expect(within(dialog).getByRole('button', { name: /Muscle groups.*Biceps · Shoulders · Abs/ })).toBeTruthy();
 
+    expect(onChange).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole('button', { name: 'Save workout' }));
     const saved = onChange.mock.calls[0]?.[0];
+    expect(onChange).toHaveBeenCalledOnce();
     expect(saved?.workouts[0]).toMatchObject({
       savedWorkoutId: 'saved-upper',
       workoutName: 'Upper Body',
       muscleIds: ['biceps', 'shoulders', 'abs'],
-      notes: 'Actual session'
+      date: '2026-10-20'
     });
+    expect(saved?.workouts[0]?.notes).toBeUndefined();
+    expect(saved?.workouts[0]?.exercises).toBeUndefined();
     expect(saved?.savedWorkouts[0]?.muscleIds).toEqual(['chest', 'back', 'biceps', 'triceps', 'shoulders']);
     expect(data.savedWorkouts[0]?.muscleIds).toEqual(['chest', 'back', 'biceps', 'triceps', 'shoulders']);
+  });
+
+  it('discards date and muscle-picker edits when either editor or Quick log is canceled', async () => {
+    const user = userEvent.setup();
+    const data = createStrengthData();
+    data.savedWorkouts = [{
+      id: 'saved-upper',
+      name: 'Upper Body',
+      muscleIds: ['chest', 'back'],
+      sharedWith: []
+    }];
+    const { onChange } = renderStrength(data);
+    await user.click(screen.getByRole('tab', { name: 'Saved' }));
+    const openQuickLog = async () => {
+      await user.click(screen.getByRole('button', { name: 'Workout' }));
+      await user.click(within(screen.getByRole('dialog', { name: 'Upper Body' }))
+        .getByRole('button', { name: /Quick log/ }));
+      return screen.getByRole('dialog', { name: 'Upper Body' });
+    };
+
+    let dialog = await openQuickLog();
+    await user.click(within(dialog).getByRole('button', { name: /Date/ }));
+    let editor = screen.getByRole('dialog', { name: 'Choose workout date' });
+    fireEvent.change(within(editor).getByLabelText('Workout date'), { target: { value: '2026-10-20' } });
+    await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
+    expect(within(dialog).getByRole('button', { name: /Date.*Today, October 22/ })).toBeTruthy();
+
+    await user.click(within(dialog).getByRole('button', { name: /Muscle groups/ }));
+    editor = screen.getByRole('dialog', { name: 'Choose muscle groups' });
+    await user.click(within(editor).getByRole('checkbox', { name: 'Chest' }));
+    await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
+    expect(within(dialog).getByRole('button', { name: /Muscle groups.*Chest · Back/ })).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(onChange).not.toHaveBeenCalled();
+
+    dialog = await openQuickLog();
+    expect(within(dialog).getByRole('button', { name: /Date.*Today, October 22/ })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: /Muscle groups.*Chest · Back/ })).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('keeps a specific Strength Rhythm linked when its workout selection is adjusted', async () => {
@@ -1445,14 +1592,20 @@ describe('Strength preview presentation', () => {
     }];
     const { onChange } = renderStrength(data, 'recommended', 'Preview storage failed.');
     await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    const opener = screen.getByRole('button', { name: 'Log workout' });
+    const opener = screen.getByRole('button', { name: 'Workout' });
     await user.click(opener);
-    let dialog = screen.getByRole('dialog', { name: 'Log workout' });
-    await user.click(within(dialog).getByRole('checkbox', { name: 'Chest' }));
+    const choices = screen.getByRole('dialog', { name: 'Upper Body' });
+    expect(onChange).not.toHaveBeenCalled();
+    await user.click(within(choices).getByRole('button', { name: /Quick log/ }));
+    let dialog = screen.getByRole('dialog', { name: 'Upper Body' });
+    await user.click(within(dialog).getByRole('button', { name: /Muscle groups/ }));
+    const editor = screen.getByRole('dialog', { name: 'Choose muscle groups' });
+    await user.click(within(editor).getByRole('checkbox', { name: 'Chest' }));
+    await user.click(within(editor).getByRole('button', { name: 'Apply' }));
     await user.click(within(dialog).getByRole('button', { name: 'Save workout' }));
-    dialog = screen.getByRole('dialog', { name: 'Log workout' });
+    dialog = screen.getByRole('dialog', { name: 'Upper Body' });
     expect(within(dialog).getByRole('alert').textContent).toBe('Preview storage failed.');
-    expect(within(dialog).getByRole('checkbox', { name: 'Chest' })).toHaveProperty('checked', false);
+    expect(within(dialog).getByRole('button', { name: /Muscle groups.*Back · Biceps · Triceps · Shoulders/ })).toBeTruthy();
     expect(onChange).toHaveBeenCalledOnce();
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(onChange).toHaveBeenCalledOnce();
@@ -1683,7 +1836,7 @@ describe('Strength preview presentation', () => {
 
     const savedRegion = screen.getByRole('region', { name: 'Saved workouts' });
     const savedCard = within(savedRegion).getByRole('heading', { name: 'Power Abs' }).closest('article')!;
-    await user.click(within(savedCard).getByRole('button', { name: 'Start workout' }));
+    startGuidedWorkoutFromChoice(within(savedCard).getByRole('button', { name: 'Workout' }));
     const session = screen.getByRole('dialog', { name: 'Power Abs' });
     expect(within(session).getByText('1 of 2')).toBeTruthy();
     expect(session.querySelector('.strength-guided__superset-context')?.textContent?.replace(/\s+/g, ' '))
@@ -1745,7 +1898,7 @@ describe('Strength preview presentation', () => {
     await user.click(screen.getByRole('button', { name: 'Close suggested workouts' }));
     const savedRegion = screen.getByRole('region', { name: 'Saved workouts' });
     const savedCard = within(savedRegion).getByRole('heading', { name: 'Plank' }).closest('article')!;
-    await user.click(within(savedCard).getByRole('button', { name: 'Start workout' }));
+    startGuidedWorkoutFromChoice(within(savedCard).getByRole('button', { name: 'Workout' }));
 
     let session = screen.getByRole('dialog', { name: 'Plank' });
     expect(within(session).getByText('Target · 03:00')).toBeTruthy();
@@ -1845,7 +1998,7 @@ describe('Strength preview presentation', () => {
 
     await user.click(screen.getByRole('button', { name: 'Close suggested workouts' }));
     const savedWorkout = screen.getByRole('heading', { name: 'Upper Body' }).closest('article')!;
-    expect(within(savedWorkout).getByRole('button', { name: 'Start workout' })).toBeTruthy();
+    expect(within(savedWorkout).getAllByRole('button', { name: 'Workout' })).toHaveLength(1);
     await user.click(screen.getByRole('button', { name: 'Suggestions' }));
     const savedSuggestionRow = within(screen.getByRole('dialog', { name: 'Suggested workouts' }))
       .getByRole('heading', { name: 'Upper Body' }).closest('article')!;
@@ -2272,8 +2425,8 @@ describe('Strength preview presentation', () => {
     }];
     const { changes } = renderStatefulStrength(data);
     await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    const startButton = screen.getByRole('button', { name: 'Start workout' });
-    await user.click(startButton);
+    const startButton = screen.getByRole('button', { name: 'Workout' });
+    startGuidedWorkoutFromChoice(startButton);
 
     let dialog = screen.getByRole('dialog', { name: 'Upper body' });
     expect(within(dialog).getByText(/Previous matching workout/)).toBeTruthy();
@@ -2417,7 +2570,7 @@ describe('Strength preview presentation', () => {
     data.savedWorkouts = [template];
     let { changes } = renderStatefulStrength(data);
     await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await user.click(screen.getByRole('button', { name: 'Start workout' }));
+    startGuidedWorkoutFromChoice();
     let dialog = screen.getByRole('dialog', { name: 'Extra set resume' });
     await user.click(within(dialog).getByRole('button', { name: 'Log set 1' }));
     expect(within(dialog).getByRole('button', { name: 'Add set' })).toBeTruthy();
@@ -2554,7 +2707,7 @@ describe('Strength preview presentation', () => {
     const user = userEvent.setup();
     let { changes } = renderStatefulStrength(data);
     await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await user.click(screen.getByRole('button', { name: 'Start workout' }));
+    startGuidedWorkoutFromChoice();
     let dialog = screen.getByRole('dialog', { name: 'Volume review' });
     const chooser = within(dialog).getByRole('button', { name: '1 of 1' });
     expect(chooser.classList.contains('strength-guided__exercise-menu-trigger')).toBe(true);
@@ -2632,8 +2785,8 @@ describe('Strength preview presentation', () => {
     }];
     const { changes } = renderStatefulStrength(data);
     await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    const startButton = screen.getByRole('button', { name: 'Start workout' });
-    await user.click(startButton);
+    const startButton = screen.getByRole('button', { name: 'Workout' });
+    startGuidedWorkoutFromChoice(startButton);
     let dialog = screen.getByRole('dialog', { name: 'Push-ups' });
     expect(within(dialog).queryByRole('spinbutton', { name: /Weight/ })).toBeNull();
     expect(within(dialog).getByRole('group', { name: 'Bodyweight load' })).toBeTruthy();
@@ -2793,7 +2946,9 @@ describe('Strength preview presentation', () => {
     }];
     const { changes } = renderStatefulStrength(data);
     await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await user.click(screen.getByRole('button', { name: 'Start workout' }));
+    const savedCard = screen.getByRole('heading', { name: 'Blank load' }).closest('article')!;
+    await user.click(savedCard.querySelector('.strength-template__menu > summary')!);
+    await user.click(within(savedCard).getByRole('button', { name: 'Edit workout' }));
     let editor = screen.getByRole('dialog', { name: 'Edit saved workout' });
     await user.click(within(editor).getByRole('button', { name: 'Edit Bench Press' }));
     let exerciseEditor = screen.getByRole('dialog', { name: 'Edit exercise' });
@@ -2802,7 +2957,7 @@ describe('Strength preview presentation', () => {
     await user.click(within(exerciseEditor).getByRole('button', { name: 'Done' }));
     await user.click(within(editor).getByRole('button', { name: 'Save workout' }));
 
-    await user.click(screen.getByRole('button', { name: 'Start workout' }));
+    startGuidedWorkoutFromChoice();
     const dialog = screen.getByRole('dialog', { name: 'Blank load' });
     const weight = within(dialog).getByRole('spinbutton', { name: 'Weight (lb)' }) as HTMLInputElement;
     expect(weight.value).toBe('');
@@ -2836,7 +2991,7 @@ describe('Strength preview presentation', () => {
     }];
     renderStrength(data, 'recommended', 'Preview storage changed in another tab.');
     await userEvent.setup().click(screen.getByRole('tab', { name: 'Saved' }));
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Start workout' }));
+    startGuidedWorkoutFromChoice();
     expect(screen.getByRole('alert').textContent).toContain('Preview storage changed');
     expect(screen.getByRole('dialog', { name: 'Start Bench?' })).toBeTruthy();
   });
@@ -2875,7 +3030,7 @@ describe('Strength preview presentation', () => {
     }];
     const { changes } = renderStatefulStrength(data);
     await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await user.click(screen.getByRole('button', { name: 'Start workout' }));
+    startGuidedWorkoutFromChoice();
     const dialog = screen.getByRole('dialog', { name: 'Rest defaults' });
     expect(dialog.classList.contains('dialog--phone-fullscreen')).toBe(true);
     const timer = within(dialog).getByRole('region', { name: 'Rest timer' });
@@ -2975,7 +3130,7 @@ describe('Strength preview presentation', () => {
     }];
     const { changes } = renderStatefulStrength(data);
     await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await user.click(screen.getByRole('button', { name: 'Start workout' }));
+    startGuidedWorkoutFromChoice();
     const workout = screen.getByRole('dialog', { name: 'Rest settings draft' });
     const timer = within(workout).getByRole('region', { name: 'Rest timer' });
     await user.click(within(workout).getByRole('button', { name: 'Log set 1' }));
@@ -3058,7 +3213,7 @@ describe('Strength preview presentation', () => {
     }];
     const { changes } = renderStatefulStrength(data);
     await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await user.click(screen.getByRole('button', { name: 'Start workout' }));
+    startGuidedWorkoutFromChoice();
     const dialog = screen.getByRole('dialog', { name: 'Sound toggles' });
     const timer = within(dialog).getByRole('region', { name: 'Rest timer' });
     await user.click(within(timer).getByRole('button', { name: 'Rest timer settings' }));
@@ -3108,7 +3263,7 @@ describe('Strength preview presentation', () => {
     }];
     const { changes } = renderStatefulStrength(data);
     await click(screen.getByRole('tab', { name: 'Saved' }));
-    await click(screen.getByRole('button', { name: 'Start workout' }));
+    startGuidedWorkoutFromChoice();
     let dialog = screen.getByRole('dialog', { name: 'Resume rest' });
     const timer = within(dialog).getByRole('region', { name: 'Rest timer' });
     await click(within(timer).getByRole('button', { name: 'Start rest timer' }));
@@ -3233,7 +3388,7 @@ describe('Strength preview presentation', () => {
     }];
     const { changes } = renderStatefulStrength(data);
     await click(screen.getByRole('tab', { name: 'Saved' }));
-    await click(screen.getByRole('button', { name: 'Start workout' }));
+    startGuidedWorkoutFromChoice();
     const dialog = screen.getByRole('dialog', { name: 'Sound rest' });
     const timer = within(dialog).getByRole('region', { name: 'Rest timer' });
     await click(within(timer).getByRole('button', { name: 'Rest timer settings' }));
@@ -3289,7 +3444,7 @@ describe('Strength preview presentation', () => {
     cleanup();
     const { changes: finishChanges } = renderStatefulStrength(data);
     await click(screen.getByRole('tab', { name: 'Saved' }));
-    await click(screen.getByRole('button', { name: 'Start workout' }));
+    startGuidedWorkoutFromChoice();
     const finishDialog = screen.getByRole('dialog', { name: 'Sound rest' });
     const finishTimer = within(finishDialog).getByRole('region', { name: 'Rest timer' });
     await click(within(finishTimer).getByRole('button', { name: 'Rest timer settings' }));
@@ -3374,7 +3529,7 @@ describe('Strength preview presentation', () => {
     }];
     renderStatefulStrength(data);
     await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await user.click(screen.getByRole('button', { name: 'Start workout' }));
+    startGuidedWorkoutFromChoice();
     const dialog = screen.getByRole('dialog', { name: 'Suspended audio' });
     const timer = within(dialog).getByRole('region', { name: 'Rest timer' });
     await user.click(within(timer).getByRole('button', { name: 'Rest timer settings' }));

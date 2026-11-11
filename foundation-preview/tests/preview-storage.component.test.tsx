@@ -3388,7 +3388,8 @@ describe('preview backup controls', () => {
     await user.click(screen.getByRole('button', { name: 'More, settings' }));
     const more = screen.getByRole('main', { name: 'More' });
     expect(accountBackupApi.read).not.toHaveBeenCalled();
-    const importInput = within(more).getByLabelText('Import preview backup');
+    await user.click(within(more).getByText('Backup & recovery'));
+    const importInput = within(more).getByLabelText('Import a backup file');
     await user.upload(importInput, new File([sourceRaw], 'synthetic-preview.json', { type: 'application/json' }));
     const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     expect(within(dialog).getByText(/replaces this account’s local Preview data/)).toBeTruthy();

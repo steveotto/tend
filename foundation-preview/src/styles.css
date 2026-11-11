@@ -12388,6 +12388,20 @@ html[data-mobile-text-size="larger"] .today-rhythm-details-dialog--inline .today
   color: #68716b;
 }
 
+.strength-guided__input-module > input {
+  min-height: clamp(
+    calc(58px * var(--app-text-scale, 1)),
+    calc(18vw * var(--app-text-scale, 1)),
+    calc(76px * var(--app-text-scale, 1))
+  );
+  font-size: clamp(
+    calc(2.15rem * var(--app-text-scale, 1)),
+    calc(16vw * var(--app-text-scale, 1)),
+    calc(4.2rem * var(--app-text-scale, 1))
+  );
+  font-weight: 800;
+}
+
 .numeric-control > input::-webkit-inner-spin-button,
 .numeric-control > input::-webkit-outer-spin-button,
 .strength-guided__input-module > input::-webkit-inner-spin-button,
@@ -12860,11 +12874,6 @@ html[data-mobile-text-size="larger"] .today-rhythm-details-dialog--inline .today
     border-radius: 13px;
   }
 
-  .strength-guided__input-module > input {
-    min-height: 50px;
-    font-size: clamp(calc(1.9rem * var(--app-text-scale, 1)), 8vw, calc(2.6rem * var(--app-text-scale, 1)));
-  }
-
   .strength-guided__steppers {
     margin: 0 -8px;
   }
@@ -13236,6 +13245,226 @@ html[data-mobile-text-size="larger"] .today-rhythm-details-dialog--inline .today
 
 .strength-workout-panel--recommended .strength-recommendations {
   margin-top: 4px;
+}
+
+.strength-workout-hint {
+  margin: 6px 0 0;
+  color: var(--tend-secondary);
+  font-size: calc(.875rem * var(--app-text-scale, 1));
+}
+
+.strength-workout-choice {
+  display: grid;
+  gap: 12px;
+}
+
+.money-goal-dialog--strength-workout-choice {
+  border: 1px solid #e2e5dd;
+  border-radius: 28px;
+  background: #fbfbf9;
+  color: #182219;
+  box-shadow: 0 12px 32px #10251d18;
+}
+
+.money-goal-dialog--strength-workout-choice > .money-goal-dialog__surface {
+  padding: 34px 22px 22px;
+}
+
+.money-goal-dialog--strength-workout-choice > .money-goal-dialog__surface::before {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  width: 38px;
+  height: 5px;
+  border-radius: 999px;
+  background: #d3d8ce;
+  content: "";
+  transform: translateX(-50%);
+}
+
+.money-goal-dialog--strength-workout-choice > .money-goal-dialog__surface > h2 {
+  padding-right: 42px;
+  color: #182219;
+  font-size: calc(1.375rem * var(--app-text-scale, 1));
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.money-goal-dialog--strength-workout-choice > .money-goal-dialog__surface > .money-goal-dialog__intro {
+  margin: 7px 42px 18px 0;
+  color: #6d7a70;
+  font-size: calc(.9375rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+}
+
+.strength-workout-choice__option {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) max-content;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 17px;
+  border: 1px solid #e2e5dd;
+  border-radius: 20px;
+  background: #fff;
+  color: #182219;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.strength-workout-choice__option--guided {
+  border: 1.5px solid #2e5c43;
+  box-shadow: 0 2px 8px #2e5c4312;
+}
+
+.strength-workout-choice__option:focus-visible,
+.strength-workout-choice__cancel:focus-visible {
+  outline: 3px solid #2e5c43;
+  outline-offset: 3px;
+}
+
+.strength-workout-choice__icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 13px;
+}
+
+.strength-workout-choice__icon--guided {
+  background: #e6efe8;
+  color: #2e5c43;
+}
+
+.strength-workout-choice__icon--quick {
+  background: #eef0ea;
+  color: #5c685f;
+}
+
+.strength-workout-choice__icon svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.strength-workout-choice__copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.strength-workout-choice__copy strong {
+  color: #182219;
+  font-size: calc(1rem * var(--app-text-scale, 1));
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.strength-workout-choice__copy > span {
+  color: #6d7a70;
+  font-size: calc(.8125rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.strength-workout-choice__tag {
+  flex: 0 0 auto;
+  align-self: center;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: #e6efe8;
+  color: #2e5c43;
+  font-size: calc(.75rem * var(--app-text-scale, 1));
+  font-weight: 650;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.strength-workout-choice__option--quick .strength-workout-choice__tag {
+  background: #eef0ea;
+  color: #5c685f;
+}
+
+.money-goal-dialog--strength-workout-choice .money-goal-dialog__actions {
+  margin-top: 16px;
+}
+
+.strength-workout-choice__cancel {
+  width: 100%;
+  min-height: 50px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 14px;
+  background: #eef0ea;
+  color: #3d4a42;
+  font: inherit;
+  font-size: calc(.9375rem * var(--app-text-scale, 1));
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.money-goal-dialog--strength-workout-choice,
+.money-goal-dialog--strength-quick-log,
+.money-goal-dialog--strength-quick-log-editor {
+  width: min(100% - 32px, 520px);
+}
+
+.strength-quick-log__rows {
+  display: grid;
+  gap: 9px;
+}
+
+.strength-quick-log__row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 68px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--tend-line);
+  border-radius: 14px;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.strength-quick-log__row:focus-visible {
+  outline: 3px solid var(--tend-focus, #287f63);
+  outline-offset: 2px;
+}
+
+.strength-quick-log__row-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.strength-quick-log__row-copy > strong {
+  font-weight: 700;
+}
+
+.strength-quick-log__row-copy > span {
+  color: var(--tend-secondary);
+  font-size: calc(.9rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.strength-quick-log__chevron {
+  flex: none;
+  color: var(--tend-secondary);
+  font-size: 1.5em;
+  line-height: 1;
 }
 
 .today-rhythm-details__activity-target {
@@ -16303,6 +16532,19 @@ dialog.money-goal-dialog:not(.money-goal-dialog--rhythm-editor):not(.dialog--pho
     font-size: max(calc(1rem * var(--app-text-scale, 1)), 1em);
   }
 
+  .tend-app-preview .strength-guided__input-module > input {
+    min-height: clamp(
+      calc(58px * var(--app-text-scale, 1)),
+      calc(18vw * var(--app-text-scale, 1)),
+      calc(76px * var(--app-text-scale, 1))
+    ) !important;
+    font-size: clamp(
+      calc(2.15rem * var(--app-text-scale, 1)),
+      calc(16vw * var(--app-text-scale, 1)),
+      calc(4.2rem * var(--app-text-scale, 1))
+    ) !important;
+  }
+
   dialog.dialog--phone-fullscreen {
     position: fixed;
     inset: 0;
@@ -16319,6 +16561,46 @@ dialog.money-goal-dialog:not(.money-goal-dialog--rhythm-editor):not(.dialog--pho
     border-radius: 0;
     overflow: hidden;
     box-shadow: none;
+  }
+
+  dialog.money-goal-dialog--strength-workout-choice,
+  dialog.money-goal-dialog--strength-quick-log,
+  dialog.money-goal-dialog--strength-quick-log-editor {
+    position: fixed !important;
+    inset: auto 0 0 !important;
+    width: 100vw !important;
+    min-width: 0;
+    max-width: 100vw !important;
+    max-height: min(82dvh, 720px) !important;
+    margin: 0 !important;
+    padding: 0;
+    border: 0;
+    border-radius: 22px 22px 0 0;
+    overflow: auto;
+  }
+
+  dialog.money-goal-dialog--strength-workout-choice {
+    border-radius: 28px 28px 0 0;
+  }
+
+  .money-goal-dialog--strength-workout-choice > .money-goal-dialog__surface {
+    padding:
+      34px
+      max(18px, env(safe-area-inset-right, 0px))
+      max(18px, env(safe-area-inset-bottom, 0px))
+      max(18px, env(safe-area-inset-left, 0px));
+    border-radius: 28px 28px 0 0;
+  }
+
+  .money-goal-dialog--strength-workout-choice > .money-goal-dialog__surface,
+  .money-goal-dialog--strength-quick-log > .money-goal-dialog__surface,
+  .money-goal-dialog--strength-quick-log-editor > .money-goal-dialog__surface {
+    border-radius: 22px 22px 0 0;
+    padding:
+      24px
+      max(18px, env(safe-area-inset-right, 0px))
+      max(18px, env(safe-area-inset-bottom, 0px))
+      max(18px, env(safe-area-inset-left, 0px));
   }
 
   dialog.dialog--phone-fullscreen::backdrop {
@@ -21317,8 +21599,84 @@ button.person-health-component-score:focus-visible {
 }
 
 .preview-account-sync__status {
-  margin: 8px 0;
+  margin: 0;
   font-weight: 700;
+}
+
+.preview-account-sync.settings-section {
+  padding: 16px;
+}
+
+.preview-account-sync h3 {
+  margin: 0 0 12px;
+}
+
+.preview-account-sync__status-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.preview-account-sync__icon {
+  display: grid;
+  flex: 0 0 calc(38px * var(--app-text-scale, 1));
+  width: calc(38px * var(--app-text-scale, 1));
+  height: calc(38px * var(--app-text-scale, 1));
+  place-items: center;
+  border-radius: 50%;
+  background: #edf5ef;
+  color: #39704d;
+}
+
+.preview-account-sync__icon svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.preview-account-sync__status-row--attention .preview-account-sync__icon,
+.preview-account-sync__status-row--conflict .preview-account-sync__icon {
+  background: #fff3e7;
+  color: #945813;
+}
+
+.preview-account-sync__status-row--offline .preview-account-sync__icon,
+.preview-account-sync__status-row--device .preview-account-sync__icon {
+  background: #f0f1ef;
+  color: #59615b;
+}
+
+.preview-account-sync__status-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.preview-account-sync__description,
+.preview-account-sync__saved-at,
+.preview-account-sync__email {
+  margin: 4px 0 0;
+  color: var(--ink-soft);
+  font-size: calc(0.875rem * var(--app-text-scale, 1));
+  overflow-wrap: anywhere;
+}
+
+.preview-account-sync__saved-at {
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+}
+
+.preview-account-sync__retry {
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.preview-account-sync__message {
+  margin: 12px 0 0;
+  color: var(--ink-soft);
 }
 
 .preview-account-sync__conflict {
@@ -21343,4 +21701,170 @@ button.person-health-component-score:focus-visible {
 
 .preview-account-sync__error {
   color: var(--tend-danger, #a12e21);
+}
+
+.settings-section.preview-account-sync__recovery {
+  overflow: hidden;
+  padding: 0;
+}
+
+.preview-account-sync__recovery > summary {
+  padding: 16px 18px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.preview-account-sync__recovery > summary:focus-visible {
+  outline: 3px solid var(--tend-focus, #39704d);
+  outline-offset: -3px;
+}
+
+.preview-account-sync__recovery-content {
+  display: grid;
+  gap: 14px;
+  padding: 0 16px 16px;
+}
+
+.preview-backup-import {
+  min-width: 0;
+  margin: 0;
+}
+
+.preview-backup-import__rows,
+.preview-account-backup__rows {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.preview-backup-import__row,
+.preview-account-backup__row,
+.preview-account-backup__entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+  background: var(--tend-surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.preview-backup-import__row:hover,
+.preview-account-backup__row:hover,
+.preview-account-backup__entry:hover {
+  background: var(--tend-mist);
+}
+
+.preview-backup-import__row:focus-visible,
+.preview-account-backup__row:focus-visible,
+.preview-account-backup__entry:focus-visible {
+  outline: 3px solid var(--tend-focus, #39704d);
+  outline-offset: 2px;
+}
+
+.preview-backup-import__row:disabled,
+.preview-account-backup__row:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.preview-backup-import__row-copy,
+.preview-account-backup__row-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.preview-backup-import__row-title,
+.preview-account-backup__row-title {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.preview-backup-import__row-description,
+.preview-account-backup__row-description {
+  color: var(--ink-soft);
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.preview-backup-import__row-action,
+.preview-account-backup__row-action {
+  flex: 0 0 auto;
+  color: var(--tend-green, #39704d);
+  font-size: calc(1.25rem * var(--app-text-scale, 1));
+}
+
+.preview-backup-import__file-row {
+  position: relative;
+}
+
+.preview-backup-import__file-row input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.preview-backup-import__file-row:focus-within {
+  outline: 3px solid var(--tend-focus, #39704d);
+  outline-offset: 2px;
+}
+
+.preview-account-backup__entry {
+  margin: 0;
+}
+
+.preview-account-backup-dialog {
+  max-width: min(620px, calc(100vw - 24px));
+}
+
+.preview-account-backup__dialog-content {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.preview-account-backup__recovery-files {
+  padding-top: 12px;
+  border-top: 1px solid var(--tend-line);
+}
+
+.preview-account-backup__technical {
+  padding-top: 12px;
+  border-top: 1px solid var(--tend-line);
+}
+
+.preview-account-backup__technical summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.preview-account-backup__technical summary:focus-visible {
+  outline: 3px solid var(--tend-focus, #39704d);
+  outline-offset: 3px;
+}
+
+.preview-account-backup__technical p {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 520px) {
+  .preview-account-sync__status-row {
+    flex-wrap: wrap;
+  }
+
+  .preview-account-sync__retry {
+    margin-left: calc(38px * var(--app-text-scale, 1) + 12px);
+  }
 }

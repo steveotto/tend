@@ -3187,6 +3187,7 @@ function PreviewWorkspace({
             portalTarget={accountSyncTarget}
             api={accountBackupApi ?? null}
             accountId={identity.accountId}
+            {...(identity.email ? { email: identity.email } : {})}
             authRefreshSequence={authRefreshSequence}
             storage={previewStorage}
             data={previewData}
@@ -3196,6 +3197,7 @@ function PreviewWorkspace({
             localRecoveryRaw={cloudRestoreRecoveryCopy}
             localRecoveryError={cloudRestoreRecoveryError}
             enabled={hydrated && autoSaveEnabled && persistenceStatus.kind === 'saved'}
+            localSaveConfirmed={persistenceStatus.kind === 'saved'}
             autoSyncEnabled={import.meta.env.VITE_TEND_PREVIEW_AUTO_SYNC_ENABLED === 'true'}
             visible={destination === 'more' && !moreSettingsOpen}
             manualOperationLocked={manualBackupLocked}
@@ -3213,7 +3215,20 @@ function PreviewWorkspace({
               return writeError;
             }}
             onManualOperationLockChange={setManualBackupLocked}
-          />
+          >
+            <PreviewBackupImportControl
+              data={previewData}
+              status={persistenceStatus}
+              currentDate={currentDate}
+              onImport={(data, sourceRaw) => finishWrite(data, true, 'import', sourceRaw)}
+              recoveryRaw={importRecoveryCopy}
+              recoverySourceRaw={importRecoverySourceCopy}
+              recoveryArchiveRaw={importRecoveryArchive}
+              recoveryError={importRecoveryError}
+              showExport
+              presentation="recovery"
+            />
+          </PreviewAccountSync>
         )}
         <div id="view" hidden={profilePersonId !== null}>
         {!hydrated
@@ -3265,18 +3280,6 @@ function PreviewWorkspace({
                       </button>
                     </section>
                   )}
-                {!moreSettingsOpen && identity.kind === 'authenticated' && (
-                  <PreviewBackupImportControl
-                    data={previewData}
-                    status={persistenceStatus}
-                    currentDate={currentDate}
-                    onImport={(data, sourceRaw) => finishWrite(data, true, 'import', sourceRaw)}
-                    recoveryRaw={importRecoveryCopy}
-                    recoverySourceRaw={importRecoverySourceCopy}
-                    recoveryArchiveRaw={importRecoveryArchive}
-                    recoveryError={importRecoveryError}
-                  />
-                )}
                 {!moreSettingsOpen && <div className="preview-account-sync-slot" ref={setAccountSyncTarget} />}
                 {!moreSettingsOpen && (
                   <p className="settings-page__version">Version {APP_DISPLAY_VERSION}</p>

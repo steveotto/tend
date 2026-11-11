@@ -9,7 +9,7 @@ import type { PreviewAccountBackupSupabaseClient } from '../storage/preview-acco
 const classicUrl = 'https://steveotto.github.io/tend/';
 const authStorageKey = 'tend2:preview:auth-session';
 
-export type PreviewSession = { user: { id: string } };
+export type PreviewSession = { user: { id: string; email?: string } };
 type AuthResult = { error: { message: string } | null };
 export type PreviewAuthClient = {
   auth: {
@@ -140,7 +140,11 @@ export function PreviewIdentityHost({
           setIdentity({ kind: 'signed-out' });
           return;
         }
-        setIdentity(createAuthenticatedPreviewIdentity(userId ?? '', sessionGeneration.current));
+        setIdentity(createAuthenticatedPreviewIdentity(
+          userId ?? '',
+          sessionGeneration.current,
+          session.user.email
+        ));
       });
       return () => {
         active = false;

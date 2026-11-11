@@ -21,7 +21,7 @@ import { PREVIEW_ACCOUNT_STORAGE_PREFIX } from '../src/storage/preview-storage.t
 import { installMemoryStorage } from './memory-storage.ts';
 
 const accountId = 'a0000000-0000-4000-8000-000000000001';
-const session: PreviewSession = { user: { id: accountId } };
+const session: PreviewSession = { user: { id: accountId, email: 'synthetic@example.test' } };
 const accountStorageKey = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountId}`;
 
 function expandAllTodayGroups() {
@@ -289,8 +289,11 @@ describe('PreviewIdentityHost', () => {
 
     await screen.findByRole('region', { name: "Today's plan" });
     await user.click(screen.getByRole('button', { name: 'More, settings' }));
-    await user.click(await screen.findByRole('button', { name: 'Back up to my account' }));
-    await screen.findByText('Backed up to your account (revision 1).');
+    expect(await screen.findByText('synthetic@example.test')).toBeTruthy();
+    await user.click(screen.getByText('Backup & recovery'));
+    await user.click(screen.getByRole('button', { name: /Advanced recovery/ }));
+    await user.click(screen.getByRole('button', { name: /Save this device’s copy to account/ }));
+    await screen.findByText('This device’s data was saved to your account.');
     expect(auth.from).toHaveBeenCalledWith('tend_preview_backups');
     expect(auth.rpc).toHaveBeenCalledWith(
       'tend_save_preview_backup',
