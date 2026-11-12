@@ -41,11 +41,12 @@ export const PREVIEW_V35_RECOVERY_KEY = 'tend2:synthetic-preview:v35-recovery';
 export const PREVIEW_V36_RECOVERY_KEY = 'tend2:synthetic-preview:v36-recovery';
 export const PREVIEW_V37_RECOVERY_KEY = 'tend2:synthetic-preview:v37-recovery';
 export const PREVIEW_V38_RECOVERY_KEY = 'tend2:synthetic-preview:v38-recovery';
+export const PREVIEW_V39_RECOVERY_KEY = 'tend2:synthetic-preview:v39-recovery';
 
 type RecoverablePreviewSchemaVersion =
   | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17
   | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36
-  | 37 | 38;
+  | 37 | 38 | 39;
 
 const recoveryKeys = {
   1: PREVIEW_V1_RECOVERY_KEY,
@@ -85,7 +86,8 @@ const recoveryKeys = {
   35: PREVIEW_V35_RECOVERY_KEY,
   36: PREVIEW_V36_RECOVERY_KEY,
   37: PREVIEW_V37_RECOVERY_KEY,
-  38: PREVIEW_V38_RECOVERY_KEY
+  38: PREVIEW_V38_RECOVERY_KEY,
+  39: PREVIEW_V39_RECOVERY_KEY
 } as const satisfies Record<RecoverablePreviewSchemaVersion, string>;
 
 export type ProposedRecoveryResult =

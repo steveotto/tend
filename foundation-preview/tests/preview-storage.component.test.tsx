@@ -52,6 +52,7 @@ import {
   loadV32RecoveryCopy,
   loadV33RecoveryCopy,
   loadV34RecoveryCopy,
+  loadV39RecoveryCopy,
   PREVIEW_V19_RECOVERY_KEY,
   PREVIEW_RAW_RECOVERY_KEY,
   PREVIEW_CATEGORY_RECOVERY_KEY,
@@ -85,6 +86,7 @@ import {
   PREVIEW_V32_RECOVERY_KEY,
   PREVIEW_V33_RECOVERY_KEY,
   PREVIEW_V34_RECOVERY_KEY,
+  PREVIEW_V39_RECOVERY_KEY,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -529,6 +531,63 @@ describe('synthetic preview storage adapter and envelope', () => {
       if (reloaded.kind === 'loaded') expect(reloaded.data.showTended).toBe(true);
     }
     cleanup();
+  });
+
+  it('writes a new schema-40 Rhythm over a stored schema-39 preview and preserves the exact source', () => {
+    const data = createSamplePreviewData();
+    const existingRhythm: PreviewData['savedRhythms'][number] = {
+      id: 'user-rhythm-11111111-1111-4111-8111-111111111111',
+      title: 'Existing weekly walk',
+      cadence: 'Weekly',
+      timeLabel: 'Evening',
+      timeOfDay: 'evening',
+      schedule: { frequency: 'weekly', weekdays: [0] },
+      personIds: ['sample-person-avery'],
+      categoryIds: ['marriage'],
+      primaryFoundationId: 'connection',
+      secondaryFoundationIds: []
+    };
+    const priorData = { ...data, savedRhythms: [existingRhythm] };
+    const raw = JSON.stringify({ ...createPreviewEnvelope(priorData), schemaVersion: 39 });
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-10-31');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+
+    const newRhythm: PreviewData['savedRhythms'][number] = {
+      id: 'user-rhythm-22222222-2222-4222-8222-222222222222',
+      title: 'New daily stretch',
+      cadence: 'Every day.',
+      timeLabel: 'Evening',
+      timeOfDay: 'evening',
+      schedule: { frequency: 'daily' },
+      personIds: [],
+      categoryIds: [],
+      createdLocalDate: '2026-10-31',
+      createdTimeZone: 'America/Los_Angeles',
+      createdLocalTime: '18:00',
+      createdDueTime: '18:00',
+      dailyBackfillAllowed: true,
+      primaryFoundationId: null,
+      secondaryFoundationIds: []
+    };
+    const result = writePreview(storage, {
+      ...loaded.data,
+      savedRhythms: [...loaded.data.savedRhythms, newRhythm]
+    }, loaded.raw, { currentDate: '2026-10-31' });
+
+    expect(result.kind).toBe('saved');
+    expect(values.get(PREVIEW_V39_RECOVERY_KEY)).toBe(raw);
+    expect(loadV39RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+    const savedRaw = values.get(PREVIEW_STORAGE_KEY);
+    expect(savedRaw).not.toBe(raw);
+    const saved = parsePreviewBackup(savedRaw ?? '', '2026-10-31');
+    expect(saved.valid).toBe(true);
+    if (saved.valid) {
+      expect(saved.sourceSchemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+      expect(saved.envelope.data.savedRhythms).toEqual([existingRhythm, newRhythm]);
+    }
   });
 
   it('migrates schema v28 without inventing Person details and preserves exact source recovery', () => {
