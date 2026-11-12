@@ -11,7 +11,7 @@ export default defineConfig({
       entry: path.resolve(projectRoot, '../src/scoring/browser.ts'),
       name: 'TendScoring',
       formats: ['iife'],
-      fileName: () => 'tend-scoring.js'
+      fileName: () => 'classic/tend-scoring.js'
     }
   }
 });
