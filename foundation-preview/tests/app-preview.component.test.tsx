@@ -4641,31 +4641,142 @@ describe('Tend Today preview', () => {
     ).valid).toBe(true);
   });
 
-  it('shows distinct compact empty states for Now, Flexible, and All today', async () => {
+  it('keeps global search independent from Today plan content', async () => {
     const user = userEvent.setup();
     testingRender(<App />);
 
     const panel = screen.getByRole('tabpanel');
-    const expectOneEmptyPlaceholder = (expectedText: string) => {
-      expect(within(panel).getByRole('status').textContent).toContain(expectedText);
-      expect(panel.querySelectorAll('.today-plan__empty-rhythms')).toHaveLength(1);
-      expect(panel.querySelector('.today-plan__empty-rhythms')?.textContent).toContain(expectedText);
-    };
+    const visibleArticles = () => [...panel.querySelectorAll('article')].map(article => article.textContent);
+    const beforeSearch = visibleArticles();
 
-    const search = screen.getByRole('searchbox', { name: 'Search sample Rhythms' });
+    const search = screen.getByRole('combobox', { name: 'Search Tend' });
     await user.type(search, 'no matching Rhythm');
-    expectOneEmptyPlaceholder('No active Rhythms right now.');
-    expect(within(panel).getByRole('button', { name: 'View all today' })).toBeTruthy();
+    expect(screen.getByRole('listbox', { name: 'Search results' }).textContent).toContain('No results found.');
+    expect(visibleArticles()).toEqual(beforeSearch);
 
     await user.click(screen.getByRole('tab', { name: 'Flexible' }));
-    expectOneEmptyPlaceholder('No flexible Rhythms due today.');
+    expect(screen.getByRole('tab', { name: 'Flexible' }).getAttribute('aria-selected')).toBe('true');
     await user.click(screen.getByRole('tab', { name: 'All today' }));
-    expectOneEmptyPlaceholder('No Rhythms due today.');
+    expect(screen.getByRole('tab', { name: 'All today' }).getAttribute('aria-selected')).toBe('true');
+    const allTodayArticles = visibleArticles();
 
     await user.clear(search);
-    expandAllTodayGroups(document.body);
-    expect(within(panel).getAllByRole('article').length).toBeGreaterThan(0);
-    expect(panel.querySelector('.today-plan__empty-rhythms')).toBeNull();
+    expect(visibleArticles()).toEqual(allTodayArticles);
+  });
+
+  it('searches globally and routes to a person or the matching prayer request', async () => {
+    const user = userEvent.setup();
+    const data = createSamplePreviewData();
+    const personId = data.people[0]!.id;
+    data.people = data.people.map(person =>
+      person.id === personId ? { ...person, displayName: 'Amy Sample' } : person
+    );
+    data.prayerRequests = [{
+      id: 'search-prayer-amy',
+      personId,
+      title: 'Garden request',
+      details: 'Pray for the garden project',
+      status: 'active',
+      createdAt: '2026-11-01T10:00:00.000Z',
+      updatedAt: '2026-11-01T10:00:00.000Z',
+      prayerLogs: []
+    }];
+    data.personNotes = [{
+      id: 'search-note-amy',
+      personId,
+      content: 'Ask about the garden project',
+      createdAt: '2026-11-01T10:00:00.000Z',
+      updatedAt: '2026-11-01T10:00:00.000Z'
+    }];
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+    render(<App />);
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'Focus' }));
+    const search = screen.getByRole('combobox', { name: 'Search Tend' });
+    await user.type(search, 'Amy');
+    const results = screen.getByRole('listbox', { name: 'Search results' });
+    expect(within(results).getByRole('group', { name: 'People' })).toBeTruthy();
+    expect(within(results).getByRole('group', { name: 'Rhythms' })).toBeTruthy();
+    expect(within(results).getByRole('group', { name: 'Prayers' })).toBeTruthy();
+    expect(within(results).getByRole('group', { name: 'Notes' })).toBeTruthy();
+    await user.click(within(results).getByRole('option', { name: /Amy Sample.*Person/ }));
+    expect(screen.getByRole('heading', { name: 'Amy Sample' })).toBeTruthy();
+
+    await user.type(search, 'Amy');
+    const prayerResults = screen.getByRole('listbox', { name: 'Search results' });
+    await user.click(within(prayerResults)
+      .getByRole('option', { name: /Garden request.*Amy Sample.*Prayer/ }));
+    expect(screen.getByRole('tab', { name: 'Prayer' }).getAttribute('aria-selected')).toBe('true');
+    await waitFor(() => {
+      expect(document.getElementById('person-prayer-request-search-prayer-amy')
+        ?.getAttribute('aria-current')).toBe('true');
+    });
+  });
+
+  it('opens mobile global search and routes a matching person note to its owner', async () => {
+    const user = userEvent.setup();
+    const data = createSamplePreviewData();
+    const personId = data.people[0]!.id;
+    data.people = data.people.map(person =>
+      person.id === personId ? { ...person, displayName: 'Amy Sample' } : person
+    );
+    data.personNotes = [{
+      id: 'search-note-mobile',
+      personId,
+      content: 'Remember the garden plan',
+      createdAt: '2026-11-01T10:00:00.000Z',
+      updatedAt: '2026-11-01T10:00:00.000Z'
+    }];
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Open search' }));
+    const search = screen.getByRole('combobox', { name: 'Search Tend' });
+    await user.type(search, 'garden plan');
+    const results = screen.getByRole('listbox', { name: 'Search results' });
+    await user.click(within(results)
+      .getByRole('option', { name: /Remember the garden plan.*Amy Sample.*Note/ }));
+
+    expect(screen.getByRole('heading', { name: 'Amy Sample' })).toBeTruthy();
+    expect(document.body.classList.contains('mobile-search-open')).toBe(false);
+  });
+
+  it('routes Rhythm results to the shared editor and connection notes to Connections', async () => {
+    const user = userEvent.setup();
+    const data = createSamplePreviewData();
+    const personId = data.people[0]!.id;
+    data.people = data.people.map(person =>
+      person.id === personId ? { ...person, displayName: 'Amy Sample' } : person
+    );
+    data.friendships.connections = [{
+      id: 'search-connection-note',
+      type: 'call',
+      date: '2026-11-01',
+      participantIds: [personId, data.people[1]!.id],
+      notes: 'Garden catchup conversation'
+    }];
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+    render(<App />);
+
+    const search = screen.getByRole('combobox', { name: 'Search Tend' });
+    await user.type(search, 'Pray together');
+    const rhythmResults = screen.getByRole('listbox', { name: 'Search results' });
+    await user.click(within(rhythmResults).getByRole('option', { name: /Pray together/ }));
+    const rhythmEditor = await screen.findByRole('dialog', { name: 'Edit Rhythm' });
+    expect(within(rhythmEditor).getByRole('heading', { name: 'Details' })).toBeTruthy();
+    expect(within(rhythmEditor).getByRole('heading', { name: 'Timing' })).toBeTruthy();
+    expect(within(rhythmEditor).getByRole('heading', { name: 'Connections' })).toBeTruthy();
+    expect(within(rhythmEditor).getByRole('button', { name: 'Save' })).toBeTruthy();
+    expect(within(rhythmEditor).getByRole('button', { name: 'Cancel' })).toBeTruthy();
+    await user.click(within(rhythmEditor).getByRole('button', { name: 'Cancel' }));
+
+    await user.type(search, 'catchup');
+    const noteResults = screen.getByRole('listbox', { name: 'Search results' });
+    await user.click(within(noteResults)
+      .getByRole('option', { name: /Garden catchup conversation/ }));
+    expect(screen.getByRole('heading', { name: 'Amy Sample' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Connections' }).getAttribute('aria-selected')).toBe('true');
   });
 
   it('moves focus and selection through plan tabs with arrows, Home, and End', async () => {
