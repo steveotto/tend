@@ -163,6 +163,8 @@ export type SelectRhythmScoreInput = {
   recordsAvailable: boolean;
   archived?: boolean;
   asOfDate: string;
+  asOfTime?: string;
+  dueTime?: string;
   timeZone: string;
 };
 
@@ -964,7 +966,10 @@ export function selectSharedEngineRhythmScore(input: SelectRhythmScoreInput): Rh
     ...(input.createdLocalDate ? { createdDate: input.createdLocalDate } : {}),
     ...(input.scoring ? { explicitStartDate: input.scoring.trackingStartDate } : {}),
     completionDates: records.map(record => record.effectiveDate),
-    asOfDate: input.asOfDate
+    asOfDate: input.asOfDate,
+    ...(input.asOfTime && input.dueTime
+      ? { asOfTime: input.asOfTime, dueTime: input.dueTime }
+      : {})
   });
   const consistency: ScoredConsistencyMetric | UnscoredMetric = engineResult.consistency.kind === 'scored'
     ? {

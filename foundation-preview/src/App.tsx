@@ -754,7 +754,8 @@ function PreviewWorkspace({
       ...archivedRhythms.map(rhythm => rhythm.id)
     ]),
     scoringInstant,
-    localTimeZone
+    localTimeZone,
+    previewData.timeBlocks
   );
   const categoryRhythms = {
     faith: faithCategoryRhythms,

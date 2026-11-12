@@ -7,7 +7,16 @@ import type {
   ScoredConsistencyMetric,
   ScoredOnTrackMetric
 } from './rhythm-scoring.ts';
-import { effectiveRhythmSchedule, isValidTimeZone } from './rhythm-schedule.ts';
+import {
+  effectiveRhythmSchedule,
+  isValidTimeZone,
+  rhythmTimeValueFromLabel
+} from './rhythm-schedule.ts';
+import {
+  DEFAULT_TIME_BLOCK_SETTINGS,
+  timeBlockIdFromRhythmValue
+} from './time-blocks.ts';
+import type { TimeBlockSettings } from './time-blocks.ts';
 
 export type FoundationScoreSelection = {
   foundationId: string;
@@ -30,7 +39,8 @@ export function selectFoundationRhythmScores(
   archivedRhythmIds: readonly string[],
   historyAvailableRhythmIds: ReadonlySet<string>,
   evaluationInstant: Date,
-  localTimeZone: string
+  localTimeZone: string,
+  timeBlockSettings: TimeBlockSettings = DEFAULT_TIME_BLOCK_SETTINGS
 ): ReadonlyMap<string, RhythmScoreResult> {
   const archived = new Set(archivedRhythmIds);
   return new Map(rhythms.map(rhythm => {
@@ -38,7 +48,23 @@ export function selectFoundationRhythmScores(
       ?? rhythm.createdTimeZone
       ?? localTimeZone;
     const dateTimeZone = isValidTimeZone(timeZone) ? timeZone : localTimeZone;
+    const asOfDate = localDateInTimeZone(evaluationInstant, dateTimeZone);
     const schedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
+    const activeTimeSegment = rhythm.scoring?.scheduleHistory
+      .filter(segment => segment.startDate <= asOfDate)
+      .at(-1);
+    const rhythmTimeValue = activeTimeSegment?.kind === 'unknown'
+      ? undefined
+      : activeTimeSegment?.kind === 'scheduled' && activeTimeSegment.timeOfDay !== undefined
+        ? activeTimeSegment.timeOfDay
+        : rhythm.timeOfDay ?? rhythmTimeValueFromLabel(rhythm.timeLabel ?? '');
+    const timeBlockId = rhythmTimeValue
+      ? timeBlockIdFromRhythmValue(rhythmTimeValue)
+      : undefined;
+    const dueTime = timeBlockSettings.blocks.find(block => block.id === timeBlockId)?.start;
+    const asOfTime = dueTime === undefined
+      ? undefined
+      : localTimeInTimeZone(evaluationInstant, dateTimeZone);
     const records = (rhythm.completionHistory ?? []).map(record => ({
       ...record,
       rhythmId: rhythm.id
@@ -56,11 +82,25 @@ export function selectFoundationRhythmScores(
         records,
         recordsAvailable: rhythm.completionHistory !== undefined || historyAvailableRhythmIds.has(rhythm.id),
         archived: archived.has(rhythm.id),
-        asOfDate: localDateInTimeZone(evaluationInstant, dateTimeZone),
+        asOfDate,
+        ...(asOfTime && dueTime ? { asOfTime, dueTime } : {}),
         timeZone
       })
     ] as const;
   }));
+}
+
+function localTimeInTimeZone(instant: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(instant);
+  const hour = parts.find(part => part.type === 'hour')?.value;
+  const minute = parts.find(part => part.type === 'minute')?.value;
+  if (!hour || !minute) throw new RangeError('Could not determine local scoring time.');
+  return `${hour}:${minute}`;
 }
 
 function isScoredConsistency(

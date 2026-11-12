@@ -183,6 +183,34 @@ describe('shared scoring engine Rhythm scores', () => {
     expect(firstDue.health).toBe(25);
   });
 
+  it('keeps a brand-new Rhythm unscored until its first assigned time block begins', () => {
+    const input = {
+      rhythmId: 'evening-rhythm',
+      schedule: { frequency: 'daily' } as const,
+      createdDate: '2026-11-12',
+      completionDates: [],
+      asOfDate: '2026-11-12',
+      dueTime: '18:00'
+    };
+    const beforeDue = scoreRhythm({ ...input, asOfTime: '17:59' });
+    const atDue = scoreRhythm({ ...input, asOfTime: '18:00' });
+
+    expect(beforeDue.consistency).toEqual({ kind: 'unscored', reason: 'not-due-yet' });
+    expect(beforeDue.onTrack).toEqual({ kind: 'unscored', reason: 'not-due-yet' });
+    expect(beforeDue.health).toBeNull();
+    expect(atDue.consistency).toEqual({ kind: 'scored', score: 0 });
+    expect(atDue.onTrack).toEqual({ kind: 'scored', score: 100 });
+    expect(atDue.health).toBe(25);
+
+    const established = scoreRhythm({
+      ...input,
+      createdDate: '2026-11-11',
+      asOfTime: '17:59'
+    });
+    expect(established.consistency).toEqual({ kind: 'scored', score: 0 });
+    expect(established.onTrack).toEqual({ kind: 'scored', score: 90 });
+  });
+
   it('uses a backdated completion as clock evidence earlier than creation', () => {
     const result = scoreRhythm({
       rhythmId: 'backdated',

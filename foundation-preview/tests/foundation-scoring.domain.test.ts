@@ -78,6 +78,44 @@ function rhythm(
 }
 
 describe('selecting equal-weight Foundation scores', () => {
+  it('keeps a new Evening Rhythm unscored until its local time block starts', () => {
+    const eveningRhythm: RhythmPreview = {
+      ...rhythm('new-evening-rhythm', 'flexibility'),
+      schedule: { frequency: 'daily' },
+      timeOfDay: 'evening',
+      createdLocalDate: '2026-10-23',
+      createdTimeZone: 'America/New_York',
+      completionHistory: []
+    };
+    const beforeEvening = selectFoundationRhythmScores(
+      [eveningRhythm],
+      [],
+      new Set(),
+      new Date('2026-10-23T20:07:00.000Z'),
+      'America/New_York'
+    ).get(eveningRhythm.id);
+    const atEvening = selectFoundationRhythmScores(
+      [eveningRhythm],
+      [],
+      new Set(),
+      new Date('2026-10-23T22:00:00.000Z'),
+      'America/New_York'
+    ).get(eveningRhythm.id);
+
+    expect(beforeEvening).toMatchObject({
+      kind: 'rhythm-score',
+      consistency: { kind: 'unscored' },
+      onTrack: { kind: 'unscored' },
+      healthScore: null
+    });
+    expect(atEvening).toMatchObject({
+      kind: 'rhythm-score',
+      consistency: { kind: 'scored', score: 0 },
+      onTrack: { kind: 'scored', score: 100 },
+      healthScore: 25
+    });
+  });
+
   it('keeps the synthetic Take a walk fixture unscored without a structured schedule or completion history', () => {
     const rhythm = todayRhythms.find(item => item.id === 'sample-walk')!;
     const score = selectFoundationRhythmScores(

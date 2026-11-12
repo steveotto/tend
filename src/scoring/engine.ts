@@ -41,6 +41,8 @@ export type RhythmScoreInput = {
   explicitStartDate?: string;
   completionDates: readonly string[];
   asOfDate: string;
+  asOfTime?: string;
+  dueTime?: string;
 };
 
 export type ScoreComponents = {
@@ -275,19 +277,21 @@ function getScoreClockStart(input: RhythmScoreInput): string | null {
 function consistencyWindow(
   schedule: RhythmSchedule,
   asOfDate: string,
-  scoreClockStartDate: string | null
+  scoreClockStartDate: string | null,
+  includeAsOfDate: boolean
 ): { startDate: string; endDate: string; dueOccurrences: DueOccurrence[] } {
   const start = subtractWindow(asOfDate, windowLength(schedule));
+  const dueThroughDate = includeAsOfDate ? asOfDate : addDays(asOfDate, -1);
   let startDate = scoreClockStartDate && scoreClockStartDate > start ? scoreClockStartDate : start;
-  let dueOccurrences = dueOccurrencesBetween(schedule, startDate, asOfDate);
+  let dueOccurrences = dueOccurrencesBetween(schedule, startDate, dueThroughDate);
 
   if (isCustom(schedule) && dueOccurrences.length < 2) {
     const searchStart = addDays(asOfDate, -MAX_SCHEDULE_SEARCH_DAYS);
-    const historicalOccurrences = dueOccurrencesBetween(schedule, searchStart, asOfDate);
+    const historicalOccurrences = dueOccurrencesBetween(schedule, searchStart, dueThroughDate);
     if (historicalOccurrences.length >= 2) {
       startDate = historicalOccurrences.at(-2)!.dueDate;
       if (scoreClockStartDate && startDate < scoreClockStartDate) startDate = scoreClockStartDate;
-      dueOccurrences = dueOccurrencesBetween(schedule, startDate, asOfDate);
+      dueOccurrences = dueOccurrencesBetween(schedule, startDate, dueThroughDate);
     }
   }
 
@@ -301,7 +305,7 @@ export function consistencyWindowForSchedule(
 ): ConsistencyWindow {
   assertDate(asOfDate);
   if (scoreClockStartDate !== null) assertDate(scoreClockStartDate);
-  const window = consistencyWindow(schedule, asOfDate, scoreClockStartDate);
+  const window = consistencyWindow(schedule, asOfDate, scoreClockStartDate, true);
   return {
     startDate: window.startDate,
     endDate: window.endDate,
@@ -334,6 +338,14 @@ function occurrenceCompleted(
 function validateInput(input: RhythmScoreInput): void {
   if (!input.rhythmId.trim()) throw new TypeError('A Rhythm ID is required.');
   assertDate(input.asOfDate);
+  if ((input.asOfTime === undefined) !== (input.dueTime === undefined)) {
+    throw new TypeError('Both the current local time and occurrence due time are required.');
+  }
+  for (const time of [input.asOfTime, input.dueTime]) {
+    if (time !== undefined && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) {
+      throw new RangeError(`Invalid local time: ${time}`);
+    }
+  }
   if (input.createdDate !== undefined) assertDate(input.createdDate);
   if (input.explicitStartDate !== undefined) assertDate(input.explicitStartDate);
   for (const date of input.completionDates) assertDate(date);
@@ -345,8 +357,14 @@ function validateInput(input: RhythmScoreInput): void {
 
 export function scoreRhythm(input: RhythmScoreInput): RhythmScore {
   validateInput(input);
+  const firstOccurrenceNotDue = input.asOfTime !== undefined
+    && input.asOfTime < input.dueTime!
+    && input.createdDate === input.asOfDate
+    && !input.completionDates.some(date => date <= input.asOfDate);
+  const includeAsOfDate = !firstOccurrenceNotDue;
+  const dueThroughDate = includeAsOfDate ? input.asOfDate : addDays(input.asOfDate, -1);
   const scoreClockStartDate = getScoreClockStart(input);
-  const window = consistencyWindow(input.schedule, input.asOfDate, scoreClockStartDate);
+  const window = consistencyWindow(input.schedule, input.asOfDate, scoreClockStartDate, includeAsOfDate);
   if (scoreClockStartDate === null) {
     const unscored: ScoreMetric = { kind: 'unscored', reason: 'missing-clock' };
     return {
@@ -374,14 +392,16 @@ export function scoreRhythm(input: RhythmScoreInput): RhythmScore {
     });
 
   const completedCount = scoredOccurrences.filter(occurrence => occurrence.completed).length;
+  const firstDueIsPending = firstOccurrenceNotDue
+    && dueOccurrencesBetween(input.schedule, input.asOfDate, input.asOfDate).length > 0;
   const consistency: ScoreMetric = scoredOccurrences.length === 0
-    ? { kind: 'unscored', reason: 'no-due-occurrences' }
+    ? { kind: 'unscored', reason: firstDueIsPending ? 'not-due-yet' : 'no-due-occurrences' }
     : { kind: 'scored', score: completedCount / scoredOccurrences.length * 100 };
 
   const onTrackDueOccurrences = dueOccurrencesBetween(
     input.schedule,
     scoreClockStartDate,
-    input.asOfDate
+    dueThroughDate
   )
     .filter(occurrence => occurrence.periodEndDate >= scoreClockStartDate)
     .map(occurrence => {
