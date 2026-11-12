@@ -81,4 +81,4 @@ The `FITNESS_MUSCLES` definition, the per-group `muscleIntervals` settings, per-
 
 ## Future candidates for the shared engine
 
-People/profile scoring (`personScore()` and its call sites) and the Connections cadence scorer are out of scope for this project. Leave them unchanged; consider them candidates for a future, deliberate migration to the shared engine.
+People/profile scoring and the Connections cadence scorer are out of scope for this project; consider them candidates for a future, deliberate migration to the shared engine. In Phase 3, preserve `personScore()`'s inputs, outputs, and weights exactly by extracting the recency logic it currently gets from `rhythmScore()` into a clearly person-only helper, such as `personRhythmRecencyScore()`. Add a regression test pinning current `personScore()` outputs before extraction. No in-scope scoring path may call that helper, and `rhythmScore()` is removed entirely.
