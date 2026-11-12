@@ -71,3 +71,7 @@ Flexibility scores come only from rhythms linked to the Flexibility foundation (
 ## Explicitly keep
 
 The `FITNESS_MUSCLES` definition, the per-group `muscleIntervals` settings, and the recommendation engine that uses them are NOT scoring code and must NOT be removed in Phase 3. They remain live as the diagnostic body map and the recommended-workout engine. Phase 3 removes only their role as scoring inputs; the "Recommended" workout cards, the Workout button (Full workout / Quick log), and the quick-log muscle-group capture all continue to work unchanged.
+
+## Future candidates for the shared engine
+
+People/profile scoring (`personScore()` and its call sites) and the Connections cadence scorer are out of scope for this project. Leave them unchanged; consider them candidates for a future, deliberate migration to the shared engine.
