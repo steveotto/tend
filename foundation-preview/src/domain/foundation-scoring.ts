@@ -1,9 +1,6 @@
+import { averageScores } from '../../../src/scoring/engine.ts';
 import type { RhythmPreview } from './preview-data.ts';
 import { foundationRhythmIds } from './foundation-rhythm-associations.ts';
-import {
-  HEALTH_CONSISTENCY_WEIGHT,
-  HEALTH_ON_TRACK_WEIGHT
-} from './rhythm-history.ts';
 import { localDateInTimeZone, selectRhythmScore } from './rhythm-scoring.ts';
 import type {
   RhythmScoreResult,
@@ -119,7 +116,8 @@ export function selectFoundationScore(
     });
   }
 
-  if (eligible.length === 0) {
+  const averages = averageScores(eligible);
+  if (averages.health === null) {
     return {
       foundationId,
       linkedRhythmIds,
@@ -134,9 +132,6 @@ export function selectFoundationScore(
     };
   }
 
-  const consistency = eligible.reduce((total, item) => total + item.consistency, 0) / eligible.length;
-  const onTrack = eligible.reduce((total, item) => total + item.onTrack, 0) / eligible.length;
-
   return {
     foundationId,
     linkedRhythmIds,
@@ -145,8 +140,8 @@ export function selectFoundationScore(
     archivedRhythmIds: archivedLinkedRhythmIds,
     unresolvedRhythmIds,
     excludedRhythms,
-    consistency,
-    onTrack,
-    health: consistency * HEALTH_CONSISTENCY_WEIGHT + onTrack * HEALTH_ON_TRACK_WEIGHT
+    consistency: averages.consistency,
+    onTrack: averages.onTrack,
+    health: averages.health
   };
 }

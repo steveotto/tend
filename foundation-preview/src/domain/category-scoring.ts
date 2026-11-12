@@ -1,7 +1,7 @@
+import { averageScores } from '../../../src/scoring/engine.ts';
 import type { FoundationPreview } from './preview-data.ts';
 import type { RhythmPreview } from './preview-data.ts';
 import type { FoundationScoreSelection } from './foundation-scoring.ts';
-import { aggregateHealthMeasures } from './health-scoring.ts';
 import { selectFoundationScore } from './foundation-scoring.ts';
 import type { CardioProgress } from './cardio.ts';
 import type { RhythmScoreResult } from './rhythm-scoring.ts';
@@ -75,7 +75,8 @@ export function selectCategoryScore(
     });
   }
 
-  if (eligible.length === 0) {
+  const averages = averageScores(eligible);
+  if (averages.health === null) {
     return {
       foundationIds,
       eligibleFoundationIds: [],
@@ -92,7 +93,9 @@ export function selectCategoryScore(
     eligibleFoundationIds: eligible.map(item => item.id),
     excludedFoundationIds,
     unresolvedFoundationIds,
-    ...aggregateHealthMeasures(eligible)
+    consistency: averages.consistency,
+    onTrack: averages.onTrack,
+    health: averages.health
   };
 }
 
