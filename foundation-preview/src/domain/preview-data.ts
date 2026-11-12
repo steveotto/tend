@@ -10,6 +10,7 @@ import type {
   RhythmScoringMetadata,
   RhythmTimeValue
 } from './rhythm-schedule.ts';
+import type { PrayerRequestPreview } from './prayer-session.ts';
 import { effectiveRhythmSchedule } from './rhythm-schedule.ts';
 import { selectNextScheduledOccurrence } from './rhythm-occurrences.ts';
 import { resolvePersonCategoryGroups } from './person-categories.ts';
@@ -579,6 +580,36 @@ export function personById(people: readonly PersonPreview[], id: PersonId): Pers
   if (!person) throw new Error(`Unresolved Person ID: ${id}`);
   return person;
 }
+
+export const syntheticPrayerRequests: PrayerRequestPreview[] = [
+  {
+    id: 'sample-prayer-request-family',
+    personId: 'sample-person-morgan',
+    sharedWith: ['sample-person-jordan'],
+    title: 'Patience during a busy week',
+    details: 'Make room for rest and kind conversations.',
+    status: 'active',
+    timeOfDay: 'anytime',
+    prayedCount: 1
+  },
+  {
+    id: 'sample-prayer-request-friend',
+    personId: 'sample-person-avery',
+    title: 'Encouragement for a friend',
+    details: 'Remember a friend facing a new season.',
+    status: 'active',
+    timeOfDay: 'afternoon',
+    prayedCount: 0
+  },
+  {
+    id: 'sample-prayer-request-answered',
+    personId: 'sample-person-jordan',
+    title: 'An answered request sample',
+    status: 'answered',
+    timeOfDay: 'morning',
+    prayedCount: 2
+  }
+];
 
 export type RhythmPreview = {
   id: string;

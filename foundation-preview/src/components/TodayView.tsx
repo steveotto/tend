@@ -8,6 +8,7 @@ import {
   type PersonPreview,
   type RhythmPreview
 } from '../domain/preview-data.ts';
+import type { PrayerRequestPreview } from '../domain/prayer-session.ts';
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
 import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
@@ -31,6 +32,7 @@ import { TodayTimeframeHeader } from './TodayTimeframeHeader.tsx';
 import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
 import { formatScore } from '../domain/score-display.ts';
 import { aggregateCategoryHealthScores } from '../domain/category-scoring.ts';
+import { TodayPrayerModule } from './TodayPrayerModule.tsx';
 
 const planTypes: { id: TodayViewId; label: string }[] = [
   { id: 'now', label: 'Now' },
@@ -60,6 +62,8 @@ type TodayViewProps = {
   initializing?: boolean;
   rhythms: readonly RhythmPreview[];
   rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
+  prayerRequests: readonly PrayerRequestPreview[];
+  onPrayForRequest: (requestId: string) => string | null;
   search: string;
   categoryHealthScores: ReadonlyMap<string, number | null>;
   onNavigate: (destination: Destination) => void;
@@ -89,6 +93,8 @@ export function TodayView({
   initializing = false,
   rhythms,
   rhythmScores,
+  prayerRequests,
+  onPrayForRequest,
   search,
   categoryHealthScores,
   foundations,
@@ -426,6 +432,11 @@ export function TodayView({
             }}
         </TendedRhythmList>
       </section>
+
+      <TodayPrayerModule
+        requests={prayerRequests}
+        onPray={onPrayForRequest}
+      />
 
       <section aria-labelledby="calendar-heading" className="today-calendar-section">
         <div className="sectiontitle"><h2 id="calendar-heading">On your calendar</h2></div>
