@@ -6670,6 +6670,28 @@ describe('Tend Today preview', () => {
     expect(screen.getByRole('region', { name: 'Overall health summary' })).toBeTruthy();
   });
 
+  it('saves the Appearance text-size preference and restores it after remounting', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openPreviewSettings(user);
+
+    const options = screen.getByRole('group', { name: 'Text size' });
+    for (const size of ['Medium', 'Small', 'Large'] as const) {
+      await user.click(within(options).getByRole('radio', { name: size }));
+      await waitFor(() => {
+        const saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? 'null');
+        expect(saved?.data?.textSize).toBe(size.toLowerCase());
+      });
+    }
+
+    cleanup();
+    render(<App />);
+    await openPreviewSettings(user);
+    expect((within(screen.getByRole('group', { name: 'Text size' }))
+      .getByRole('radio', { name: 'Large' }) as HTMLInputElement).checked).toBe(true);
+    await waitFor(() => expect(document.documentElement.dataset.mobileTextSizeLevel).toBe('larger'));
+  });
+
   it('shows the Health & Fitness category header and shared summary before the sub-tabs', async () => {
     const user = userEvent.setup();
     render(<App />);

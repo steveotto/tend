@@ -53,6 +53,7 @@ import {
   loadV32RecoveryCopy,
   loadV33RecoveryCopy,
   loadV34RecoveryCopy,
+  loadV40RecoveryCopy,
   loadV39RecoveryCopy,
   PREVIEW_V19_RECOVERY_KEY,
   PREVIEW_RAW_RECOVERY_KEY,
@@ -88,6 +89,7 @@ import {
   PREVIEW_V33_RECOVERY_KEY,
   PREVIEW_V34_RECOVERY_KEY,
   PREVIEW_V39_RECOVERY_KEY,
+  PREVIEW_V40_RECOVERY_KEY,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -664,6 +666,86 @@ describe('synthetic preview storage adapter and envelope', () => {
       expect(saved.sourceSchemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
       expect(saved.envelope.data.savedRhythms).toEqual([existingRhythm, newRhythm]);
     }
+  });
+
+  it('migrates schema v40 and preserves exact bytes before saving the text-size preference', () => {
+    const priorEnvelope = JSON.parse(JSON.stringify(createPreviewEnvelope(createSamplePreviewData()))) as {
+      format: string;
+      schemaVersion: number;
+      data: Record<string, unknown>;
+    };
+    priorEnvelope.schemaVersion = 40;
+    delete priorEnvelope.data.textSize;
+    const raw = ` \n${JSON.stringify(priorEnvelope)}\n`;
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-10-31');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.textSize).toBe('small');
+
+    const result = writePreview(storage, { ...loaded.data, textSize: 'large' }, loaded.raw, {
+      currentDate: '2026-10-31'
+    });
+    expect(result.kind).toBe('saved');
+    expect(values.get(PREVIEW_V40_RECOVERY_KEY)).toBe(raw);
+    expect(loadV40RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+
+    const saved = parsePreviewBackup(values.get(PREVIEW_STORAGE_KEY) ?? '', '2026-10-31');
+    expect(saved).toMatchObject({
+      valid: true,
+      sourceSchemaVersion: PREVIEW_SCHEMA_VERSION,
+      envelope: { data: { textSize: 'large' } }
+    });
+  });
+
+  it('retains the Appearance preference from the alternate schema v40 document', () => {
+    const branchEnvelope = {
+      ...createPreviewEnvelope(createSamplePreviewData()),
+      schemaVersion: 40,
+      data: { ...createSamplePreviewData(), textSize: 'large' }
+    };
+
+    const parsed = parsePreviewBackup(JSON.stringify(branchEnvelope), '2026-10-31');
+    expect(parsed.valid).toBe(true);
+    if (parsed.valid) {
+      expect(parsed.sourceSchemaVersion).toBe(40);
+      expect(parsed.envelope.data.textSize).toBe('large');
+    }
+  });
+
+  it('offers exact v40 recovery bytes through the shared preview data controls', async () => {
+    const user = userEvent.setup();
+    const raw = ' {"schemaVersion":40,"data":{"synthetic":"recovery"}} ';
+    const { createObjectURL } = setDownloadMocks();
+    render(
+      <PreviewDataControls
+        data={createSamplePreviewData()}
+        status={{ kind: 'saved' }}
+        currentDate="2026-10-31"
+        onImport={() => null}
+        onReset={() => null}
+        onRetrySave={() => {}}
+        onReloadExternal={() => null}
+        onReplaceExternal={() => null}
+        v40RecoveryCopy={raw}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Download original v40 recovery backup' }));
+    expect(await createObjectURL.mock.calls[0]![0].text()).toBe(raw);
+  });
+
+  it('rejects invalid text-size values in schema v41 documents', () => {
+    const malformed = {
+      ...createPreviewEnvelope(createSamplePreviewData()),
+      data: { ...createSamplePreviewData(), textSize: 'extra-large' }
+    };
+
+    expect(validatePreviewEnvelope(malformed, '2026-10-31')).toMatchObject({
+      valid: false,
+      kind: 'invalid'
+    });
   });
 
   it('migrates schema v28 without inventing Person details and preserves exact source recovery', () => {
@@ -1503,6 +1585,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       timeBlocks: createDefaultTimeBlockSettings(),
       showTended: false,
       todayView: 'now' as const,
+      textSize: 'small' as const,
       calendarSources: []
     };
     const raw = JSON.stringify(createPreviewEnvelope(empty));
@@ -1566,6 +1649,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       timeBlocks: createDefaultTimeBlockSettings(),
       showTended: false,
       todayView: 'now',
+      textSize: 'small',
       calendarSources: []
     });
   });
@@ -3501,7 +3585,7 @@ describe('preview backup controls', () => {
     expect(loadPreview(window.localStorage, new Date().toISOString().slice(0, 10)).kind).toBe('loaded');
   });
 
-  it('imports locally from More without automatically reading or uploading account data when sync is off', async () => {
+  it('imports locally from Settings without automatic account access when sync is off', async () => {
     const user = userEvent.setup();
     const { createObjectURL } = setDownloadMocks();
     const identity = createAuthenticatedPreviewIdentity('11111111-1111-4111-8111-111111111111', 1);
@@ -3522,10 +3606,10 @@ describe('preview backup controls', () => {
       <App identity={identity} accountBackupApi={accountBackupApi} />
     );
     await user.click(screen.getByRole('button', { name: 'More, settings' }));
-    const more = screen.getByRole('main', { name: 'More' });
+    await user.click(await screen.findByRole('button', { name: 'Settings' }));
     expect(accountBackupApi.read).not.toHaveBeenCalled();
-    await user.click(within(more).getByText('Backup & recovery'));
-    const importInput = within(more).getByLabelText('Import a backup file');
+    expect(await screen.findByRole('heading', { name: 'Preview data' })).toBeTruthy();
+    const importInput = screen.getByLabelText('Import preview backup');
     await user.upload(importInput, new File([sourceRaw], 'synthetic-preview.json', { type: 'application/json' }));
     const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     expect(within(dialog).getByText(/replaces this account’s local Preview data/)).toBeTruthy();

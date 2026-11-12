@@ -48,6 +48,7 @@ import {
   PREVIEW_V37_RECOVERY_KEY,
   PREVIEW_V38_RECOVERY_KEY,
   PREVIEW_V39_RECOVERY_KEY,
+  PREVIEW_V40_RECOVERY_KEY,
   preserveProposedV4SourceRecovery,
   proposedV4RecoveryKeyForRaw,
   proposedV4SourceVersionForRaw
@@ -94,7 +95,8 @@ export {
   PREVIEW_V36_RECOVERY_KEY,
   PREVIEW_V37_RECOVERY_KEY,
   PREVIEW_V38_RECOVERY_KEY,
-  PREVIEW_V39_RECOVERY_KEY
+  PREVIEW_V39_RECOVERY_KEY,
+  PREVIEW_V40_RECOVERY_KEY
 };
 
 export const PREVIEW_CATEGORY_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:v32-category-recovery`;
@@ -1094,6 +1096,14 @@ export function loadV36RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadRe
 export function loadV39RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
   try {
     return { kind: 'loaded', raw: storage.getItem(PREVIEW_V39_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV40RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V40_RECOVERY_KEY) };
   } catch (error) {
     return { kind: 'error', message: errorMessage(error) };
   }

@@ -92,7 +92,8 @@ import { migrateTodayViewSelection } from './today-plan.ts';
 import type { TodayViewId } from './today-plan.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 40;
+export const PREVIEW_SCHEMA_VERSION = 41;
+export type PreviewTextSize = 'small' | 'medium' | 'large';
 
 export type PreviewData = {
   goals: MoneyGoal[];
@@ -117,6 +118,7 @@ export type PreviewData = {
   timeBlocks: TimeBlockSettings;
   showTended: boolean;
   todayView: TodayViewId;
+  textSize: PreviewTextSize;
   calendarSources: CalendarSource[];
   [key: string]: unknown;
 };
@@ -149,7 +151,7 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40; resolvedPersonCategories: number }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41; resolvedPersonCategories: number }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
 const goalKeys = [
@@ -198,6 +200,7 @@ const dataKeysV37 = dataKeysV36;
 const dataKeysV38 = [...dataKeysV37, 'todayView', 'flexibility'];
 const dataKeysV39 = dataKeysV38;
 const dataKeysV40 = dataKeysV39;
+const dataKeysV41 = [...dataKeysV40, 'textSize'];
 const envelopeKeys = ['format', 'schemaVersion', 'data'];
 const supportedRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 const builtInRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
@@ -236,6 +239,7 @@ export function createSamplePreviewData(): PreviewData {
     timeBlocks: createDefaultTimeBlockSettings(),
     showTended: false,
     todayView: 'now',
+    textSize: 'small',
     calendarSources: []
   };
 }
@@ -269,6 +273,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function isPreviewTextSize(value: unknown): value is PreviewTextSize {
+  return value === 'small' || value === 'medium' || value === 'large';
+}
+
 function hasOnlyKeys(record: Record<string, unknown>, allowed: readonly string[]): boolean {
   return Object.keys(record).every(key => allowed.includes(key));
 }
@@ -293,6 +301,8 @@ function hasOnlyKeysWithCompatibleDefaults(
         || record[key] === 'scheduled' || record[key] === 'anytime' || record[key] === 'all-day'
         || record[key] === 'all day' || record[key] === 'everything-today'
         || isTimeBlockId(record[key]))
+    || key === 'textSize'
+      && (record[key] === 'small' || record[key] === 'medium' || record[key] === 'large')
     || key === 'flexibility'
       && isEmptyFlexibilityDefault(record[key]));
 }
@@ -544,6 +554,7 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
       },
       showTended: data.showTended,
       todayView: migrateTodayViewSelection(data.todayView),
+      textSize: data.textSize,
       calendarSources: data.calendarSources.map(source => ({ ...source }))
     }
   };
@@ -601,6 +612,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
       && value.schemaVersion !== 37
       && value.schemaVersion !== 38
       && value.schemaVersion !== 39
+      && value.schemaVersion !== 40
       && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
@@ -635,7 +647,8 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const isV29 = value.schemaVersion === 29;
   const isV30 = value.schemaVersion === 30;
   const isV31 = value.schemaVersion === 31;
-  const isV40 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV41 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV40 = value.schemaVersion === 40 || isV41;
   const isV39 = value.schemaVersion === 39 || isV40;
   const isV38 = value.schemaVersion === 38 || isV39;
   const isV37 = value.schemaVersion === 37 || isV38;
@@ -661,7 +674,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const hasCardio = isV18 || hasCurrentFriendshipsData;
   const allowedDataKeys = isV1 ? dataKeysV1 : isV2 ? dataKeysV2
     : isV3 || isV4 ? dataKeysV3
-      : isV40 ? dataKeysV40 : value.schemaVersion === 39 ? dataKeysV39 : isV38 ? dataKeysV38 : isV37 && value.schemaVersion === 37 ? dataKeysV37 : isV36 ? dataKeysV36 : value.schemaVersion === 35 ? dataKeysV35 : isV34 && value.schemaVersion === 34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
+      : isV41 ? dataKeysV41 : isV40 ? dataKeysV40 : value.schemaVersion === 39 ? dataKeysV39 : isV38 ? dataKeysV38 : isV37 && value.schemaVersion === 37 ? dataKeysV37 : isV36 ? dataKeysV36 : value.schemaVersion === 35 ? dataKeysV35 : isV34 && value.schemaVersion === 34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
         : isV11 || isV12 ? dataKeysV12 : isV10 ? dataKeysV10
       : isV8 || isV9 ? dataKeysV8 : isV7 ? dataKeysV7 : isV6 ? dataKeysV6 : dataKeysV5;
   if (!isRecord(value.data) || (!isV19 && !isV20 && !hasOnlyKeysWithCompatibleDefaults(value.data, allowedDataKeys))
@@ -691,6 +704,9 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   if (isV35 && typeof value.data.showTended !== 'boolean') {
     return { valid: false, kind: 'invalid', message: 'The Show tended preference must be a boolean.' };
   }
+  if (isV41 && !isPreviewTextSize(value.data.textSize)) {
+    return { valid: false, kind: 'invalid', message: 'The text-size preference must be small, medium, or large.' };
+  }
   const calendarSourcesResult = validateCalendarSources(isV36 ? value.data.calendarSources : []);
   if (!calendarSourcesResult.valid) {
     return { valid: false, kind: 'invalid', message: 'Calendar sources contain invalid links, names, or duplicate IDs.' };
@@ -704,7 +720,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const timeBlocks = timeBlockValidation.settings;
   const people: PersonPreview[] = isV32 ? value.data.people as PersonPreview[] : createSamplePeople();
   if (!isV1 && !((isV4 || isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18 || hasCurrentFriendshipsData)
-    ? isV40 ? validateSavedRhythmsV20(value.data.savedRhythms)
+    ? isV40 || isV41 ? validateSavedRhythmsV20(value.data.savedRhythms)
       : isV37 ? validateSavedRhythmsV19(value.data.savedRhythms)
       : isV18 || hasCurrentFriendshipsData ? validateSavedRhythmsV18(value.data.savedRhythms)
       : isV17 ? validateSavedRhythmsV17(value.data.savedRhythms)
@@ -1130,6 +1146,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     timeBlocks,
     showTended: isV35 ? value.data.showTended as boolean : false,
     todayView: migrateTodayViewSelection(value.data.todayView),
+    textSize: isPreviewTextSize(value.data.textSize) ? value.data.textSize : 'small',
     calendarSources: calendarSourcesResult.sources
   };
 

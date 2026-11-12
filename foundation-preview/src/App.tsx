@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useScoringInstant } from './components/useScoringInstant.ts';
 import type { MouseEvent } from 'react';
 import { AppNavigation } from './components/AppNavigation.tsx';
-import type { CategoryTabNavigationRequest, Destination, TextSize } from './components/AppNavigation.tsx';
+import type { CategoryTabNavigationRequest, Destination } from './components/AppNavigation.tsx';
 import {
   MarriageView,
   createMarriageSuggestionCatalogue,
@@ -30,7 +30,7 @@ import { FinanceGoalsView } from './components/FinanceGoalsView.tsx';
 import { PreviewDataControls } from './components/PreviewDataControls.tsx';
 import type { PreviewPersistenceStatus } from './components/PreviewDataControls.tsx';
 import { PreviewAccountSync } from './components/PreviewAccountSync.tsx';
-import { PreviewBackupImportControl } from './components/PreviewBackupImportControl.tsx';
+import { TextSizeSettings } from './components/TextSizeSettings.tsx';
 import type { PreviewAccountBackupApi } from './storage/preview-account-backup.ts';
 import { PersonProfileView } from './components/PersonProfileView.tsx';
 import type { PersonProfileNavigationRequest, ProfileTab } from './components/PersonProfileView.tsx';
@@ -88,7 +88,7 @@ import {
   isPreviewDataPristine,
   parsePreviewBackup
 } from './domain/preview-state.ts';
-import type { PreviewData } from './domain/preview-state.ts';
+import type { PreviewData, PreviewTextSize } from './domain/preview-state.ts';
 import {
   DEVELOPMENT_PREVIEW_IDENTITY,
   PREVIEW_AUTH_PENDING,
@@ -215,6 +215,7 @@ import {
   loadV34RecoveryCopy,
   loadV35RecoveryCopy,
   loadV36RecoveryCopy,
+  loadV40RecoveryCopy,
   loadCloudRestoreRecoveryCopy,
   loadPreviewImportRecovery,
   loadPreview,
@@ -546,13 +547,14 @@ function PreviewWorkspace({
   const [v35RecoveryError, setV35RecoveryError] = useState<string | null>(null);
   const [v36RecoveryCopy, setV36RecoveryCopy] = useState<string | null>(null);
   const [v36RecoveryError, setV36RecoveryError] = useState<string | null>(null);
+  const [v40RecoveryCopy, setV40RecoveryCopy] = useState<string | null>(null);
+  const [v40RecoveryError, setV40RecoveryError] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
   const morePageHeading = useRef<HTMLHeadingElement>(null);
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
-  const [textSize, setTextSize] = useState<TextSize>('small');
   const [foundationNavigationRequest, setFoundationNavigationRequest] = useState<{
     foundationId: string;
     requestId: number;
@@ -921,6 +923,7 @@ function PreviewWorkspace({
     satisfiedRhythmIds
   );
   const moneyGoals = previewData.goals;
+  const textSize = previewData.textSize;
 
   function refreshRawRecoveryCopy() {
     const result = loadRawRecoveryCopy(previewStorage);
@@ -1137,6 +1140,14 @@ function PreviewWorkspace({
     } else {
       setV36RecoveryCopy(null);
       setV36RecoveryError(v36.message);
+    }
+    const v40 = loadV40RecoveryCopy(previewStorage);
+    if (v40.kind === 'loaded') {
+      setV40RecoveryCopy(v40.raw);
+      setV40RecoveryError(null);
+    } else {
+      setV40RecoveryCopy(null);
+      setV40RecoveryError(v40.message);
     }
   }
 
@@ -2898,6 +2909,12 @@ function PreviewWorkspace({
       : { ...previous, todayView });
   }
 
+  function setTextSizePreference(textSize: PreviewTextSize) {
+    setPreviewData(previous => previous.textSize === textSize
+      ? previous
+      : { ...previous, textSize });
+  }
+
   function saveGoal(goal: MoneyGoal) {
     setPreviewData(previous => ({
       ...previous,
@@ -3248,7 +3265,7 @@ function PreviewWorkspace({
         onSearchClose={closeSearch}
         onSearchResult={openSearchResult}
         onSearchToggle={toggleSearch}
-        onTextSizeChange={() => setTextSize(size => size === 'small' ? 'medium' : size === 'medium' ? 'large' : 'small')}
+        onTextSizeChange={() => setTextSizePreference(textSize === 'small' ? 'medium' : textSize === 'medium' ? 'large' : 'small')}
       />
         {identity.kind === 'authenticated' && (
           <PreviewAccountSync
@@ -3267,7 +3284,7 @@ function PreviewWorkspace({
             enabled={hydrated && autoSaveEnabled && persistenceStatus.kind === 'saved'}
             localSaveConfirmed={persistenceStatus.kind === 'saved'}
             autoSyncEnabled={import.meta.env.VITE_TEND_PREVIEW_AUTO_SYNC_ENABLED === 'true'}
-            visible={destination === 'more' && !moreSettingsOpen}
+            visible={destination === 'more' && moreSettingsOpen}
             manualOperationLocked={manualBackupLocked}
             isIdentityCurrent={() => isIdentityCurrent()
               && (isAccountBackupIdentityCurrent?.() ?? true)}
@@ -3283,21 +3300,7 @@ function PreviewWorkspace({
               return writeError;
             }}
             onManualOperationLockChange={setManualBackupLocked}
-          >
-            <PreviewBackupImportControl
-              data={previewData}
-              status={persistenceStatus}
-              currentDate={currentDate}
-              currentRaw={expectedRaw.current}
-              onImport={(data, sourceRaw) => finishWrite(data, true, 'import', sourceRaw)}
-              recoveryRaw={importRecoveryCopy}
-              recoverySourceRaw={importRecoverySourceCopy}
-              recoveryArchiveRaw={importRecoveryArchive}
-              recoveryError={importRecoveryError}
-              showExport
-              presentation="recovery"
-            />
-          </PreviewAccountSync>
+          />
         )}
         <div id="view" hidden={profilePersonId !== null}>
         {!hydrated
@@ -3324,6 +3327,10 @@ function PreviewWorkspace({
                         <h3 id="weather-settings-title">Weather</h3>
                         <TodayWeatherSettings controller={todayWeather} timeZone={weatherTimeZone} />
                       </section>
+                      <section className="settings-section" aria-labelledby="appearance-settings-title">
+                        <h3 id="appearance-settings-title">Appearance</h3>
+                        <TextSizeSettings value={textSize} onChange={setTextSizePreference} />
+                      </section>
                       <section className="settings-section" aria-labelledby="time-block-settings-title">
                         <h3 id="time-block-settings-title">Time blocks</h3>
                         <TimeBlocksSettings
@@ -3332,8 +3339,13 @@ function PreviewWorkspace({
                           onSave={saveTimeBlockSettings}
                         />
                       </section>
+                      {identity.kind === 'authenticated' && (
+                        <section className="settings-section" aria-label="Account backup and sync">
+                          <div className="preview-account-sync-slot" ref={setAccountSyncTarget} />
+                        </section>
+                      )}
                       <section className="settings-section" aria-labelledby="preview-data-title">
-                      <h3 id="preview-data-title">Preview data</h3>
+                        <h3 id="preview-data-title">Preview data</h3>
                       </section>
                     </>
                   )
@@ -3349,7 +3361,6 @@ function PreviewWorkspace({
                       </button>
                     </section>
                   )}
-                {!moreSettingsOpen && <div className="preview-account-sync-slot" ref={setAccountSyncTarget} />}
                 {!moreSettingsOpen && (
                   <p className="settings-page__version">Version {APP_DISPLAY_VERSION}</p>
                 )}
@@ -3759,6 +3770,8 @@ function PreviewWorkspace({
         v35RecoveryError={v35RecoveryError}
         v36RecoveryCopy={v36RecoveryCopy}
         v36RecoveryError={v36RecoveryError}
+        v40RecoveryCopy={v40RecoveryCopy}
+        v40RecoveryError={v40RecoveryError}
       />
       {storageNeedsAttention && !isPreviewSettings && (
         <p className="preview-storage-alert" role="alert">

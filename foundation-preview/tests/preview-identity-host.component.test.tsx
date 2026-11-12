@@ -289,6 +289,7 @@ describe('PreviewIdentityHost', () => {
 
     await screen.findByRole('region', { name: "Today's plan" });
     await user.click(screen.getByRole('button', { name: 'More, settings' }));
+    await user.click(await screen.findByRole('button', { name: 'Settings' }));
     expect(await screen.findByText('synthetic@example.test')).toBeTruthy();
     await user.click(screen.getByText('Backup & recovery'));
     await user.click(screen.getByRole('button', { name: /Advanced recovery/ }));

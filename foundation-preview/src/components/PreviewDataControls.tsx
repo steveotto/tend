@@ -112,6 +112,8 @@ type PreviewDataControlsProps = {
   v35RecoveryError?: string | null;
   v36RecoveryCopy?: string | null;
   v36RecoveryError?: string | null;
+  v40RecoveryCopy?: string | null;
+  v40RecoveryError?: string | null;
 };
 
 export function PreviewDataControls({
@@ -202,7 +204,9 @@ export function PreviewDataControls({
   v35RecoveryCopy = null,
   v35RecoveryError = null,
   v36RecoveryCopy = null,
-  v36RecoveryError = null
+  v36RecoveryError = null,
+  v40RecoveryCopy = null,
+  v40RecoveryError = null
 }: PreviewDataControlsProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [legacyDryRun, setLegacyDryRun] = useState<LegacyImportDryRun | null>(null);
@@ -753,6 +757,16 @@ export function PreviewDataControls({
             Download original v36 recovery backup
           </button>
         )}
+        {v40RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v40-recovery.json',
+              v40RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v40 recovery backup downloaded.')}>
+            Download original v40 recovery backup
+          </button>
+        )}
         <label className="btn mini ghost preview-data-controls__file-button">
           Dry-run Classic Tend import
           <input
@@ -859,6 +873,7 @@ export function PreviewDataControls({
       {v34RecoveryError && <p className="preview-data-controls__help" role="alert">The original v34 recovery copy could not be read: {v34RecoveryError}</p>}
       {v35RecoveryError && <p className="preview-data-controls__help" role="alert">The original v35 recovery copy could not be read: {v35RecoveryError}</p>}
       {v36RecoveryError && <p className="preview-data-controls__help" role="alert">The original v36 recovery copy could not be read: {v36RecoveryError}</p>}
+      {v40RecoveryError && <p className="preview-data-controls__help" role="alert">The original v40 recovery copy could not be read: {v40RecoveryError}</p>}
       {rawRecoveryError && <p className="preview-data-controls__help" role="alert">The exact raw recovery copy could not be read: {rawRecoveryError}</p>}
       {message && <p className="preview-data-controls__message" role="status">{message}</p>}
       {pendingAction && (

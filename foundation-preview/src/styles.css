@@ -15212,6 +15212,68 @@ html[data-mobile-text-size="larger"] .today-rhythm-details-dialog--inline .today
   background: var(--tend-mist);
 }
 
+.settings-text-size {
+  min-width: 0;
+  margin: 12px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.settings-text-size legend {
+  padding: 0;
+  color: var(--tend-ink);
+  font-size: calc(0.9375rem * var(--app-text-scale, 1));
+  font-weight: 650;
+}
+
+.settings-text-size > p {
+  margin: 4px 0 0;
+  color: var(--ink-soft);
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+}
+
+.settings-text-size__options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.settings-text-size__option {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+  cursor: pointer;
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  font-weight: 600;
+}
+
+.settings-text-size__option--selected {
+  border-color: var(--tend-forest);
+  background: var(--tend-mist);
+}
+
+.settings-text-size__option input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--tend-forest);
+}
+
+.settings-text-size__option:focus-within {
+  outline: 2px solid var(--tend-forest);
+  outline-offset: 2px;
+}
+
 .settings-link:focus-visible,
 .settings-page__back:focus-visible {
   outline: 2px solid var(--tend-forest);
