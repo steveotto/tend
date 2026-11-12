@@ -3,20 +3,59 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FlexibilityView } from '../src/components/FlexibilityView.tsx';
+import type { CategoryScoreSelection } from '../src/domain/category-scoring.ts';
 import { createFlexibilityData, flexibilityRoutineSuggestions } from '../src/domain/flexibility.ts';
 import type { FlexibilityData, SavedFlexibilityRoutine } from '../src/domain/flexibility.ts';
+import type { HealthAggregateEvidence } from '../src/components/HealthScoringDetailsCard.tsx';
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
 
-function StatefulFlexibility({ initialData = createFlexibilityData() }: { initialData?: FlexibilityData }) {
+const unscoredHealthScore: CategoryScoreSelection = {
+  foundationIds: ['health-flexibility'],
+  eligibleFoundationIds: [],
+  excludedFoundationIds: [],
+  unresolvedFoundationIds: [],
+  consistency: null,
+  onTrack: null,
+  health: null
+};
+
+const unscoredEvidence: HealthAggregateEvidence = {
+  heading: 'Linked Rhythm scores',
+  description: 'Each eligible linked Rhythm counts equally.',
+  itemLabel: 'Rhythm',
+  rows: [],
+  consistencyAverage: null,
+  consistencyCount: 0,
+  onTrackAverage: null,
+  onTrackCount: 0,
+  coverage: '0 of 0 linked Rhythms scored.',
+  weightSummary: 'Consistency contributes 75% and On Track contributes 25%.',
+  emptyState: 'Link a stretch Rhythm to the Flexibility Foundation; scores appear after its first occurrence is due.'
+};
+
+function StatefulFlexibility({
+  initialData = createFlexibilityData(),
+  healthScore = unscoredHealthScore,
+  scoringEvidence = unscoredEvidence,
+  unlinkedStretchRhythmTitles = []
+}: {
+  initialData?: FlexibilityData;
+  healthScore?: CategoryScoreSelection;
+  scoringEvidence?: HealthAggregateEvidence;
+  unlinkedStretchRhythmTitles?: readonly string[];
+}) {
   const [data, setData] = useState<FlexibilityData>(initialData);
   return (
     <FlexibilityView
       data={data}
       today="2026-10-23"
+      healthScore={healthScore}
+      scoringEvidence={scoringEvidence}
+      unlinkedStretchRhythmTitles={unlinkedStretchRhythmTitles}
       onChange={next => {
         setData(next);
         return null;
@@ -44,10 +83,12 @@ describe('Flexibility foundation presentation', () => {
     expect(frontList.querySelector('[aria-label^="Calves"]')).toBeNull();
     expect(frontList.querySelector('[aria-label^="Back"]')).toBeNull();
     const chestRow = frontList.querySelector<HTMLButtonElement>('[aria-label^="Chest"]')!;
-    expect(chestRow.getAttribute('aria-label')).toContain('Consistency score: unavailable');
+    expect(chestRow.getAttribute('aria-label')).toContain('Not logged yet. Last stretched: No log yet.');
     expect(within(chestRow).getByRole('img', { name: 'Stretch status: Not logged yet.' })).toBeTruthy();
     expect(within(chestRow).getByText('No log yet')).toBeTruthy();
-    expect(within(chestRow).getByText('—')).toBeTruthy();
+    expect(within(chestRow).getByText('— · Every 3 days')).toBeTruthy();
+    expect(frontMap.querySelector('[data-region="chest"]')?.getAttribute('aria-label'))
+      .toContain('Every 3 days. Last stretched: No log yet.');
     expect(chestRow.querySelector('.flexibility-region__score')).toBeNull();
     const layout = container.querySelector('.strength-map-layout');
     expect(layout?.firstElementChild?.classList.contains('strength-map-wrap')).toBe(true);
@@ -61,7 +102,7 @@ describe('Flexibility foundation presentation', () => {
     expect(frontMap.querySelector('[data-region="abs"]')?.getAttribute('fill'))
       .toBe('var(--score-neutral)');
     expect(frontList.querySelector('[aria-label^="Abs"]')?.getAttribute('aria-label'))
-      .toContain('Consistency score: unavailable');
+      .toContain('Not logged yet.');
     expect(frontMap.querySelector('[data-region="hip-flexors"]')?.getAttribute('d'))
       .toContain('M75 188Q89 184');
     expect(frontMap.querySelector('[data-region="quads"]')?.getAttribute('d'))
@@ -105,33 +146,59 @@ describe('Flexibility foundation presentation', () => {
     expect(screen.getByRole('group', { name: 'Front Stretch schedule stretching map' })
       .querySelector('[data-region="shoulders"]')?.getAttribute('aria-pressed')).toBe('true');
     await user.click(screen.getByRole('button', { name: 'Back' }));
-    await user.click(screen.getByRole('button', { name: /Calves\. Consistency score: unavailable/ }));
+    await user.click(screen.getByRole('button', { name: /Calves\. Not logged yet\./ }));
     await user.click(screen.getByRole('button', { name: 'Front' }));
     expect(container.querySelector('.flexibility-region[aria-pressed="true"]')?.textContent)
       .toContain('Neck');
     expect(container.querySelectorAll('.flexibility-region')).toHaveLength(6);
   });
 
-  it('uses the shared Health card, keeps unavailable On Track neutral, and opens Flexibility details', async () => {
+  it('uses linked Rhythm scores, explains the 75/25 blend, and keeps region data diagnostic', async () => {
     const user = userEvent.setup();
-    const { container } = render(<StatefulFlexibility />);
+    const healthScore: CategoryScoreSelection = {
+      ...unscoredHealthScore,
+      eligibleFoundationIds: ['health-flexibility'],
+      consistency: 80,
+      onTrack: 60,
+      health: 75
+    };
+    const scoringEvidence: HealthAggregateEvidence = {
+      ...unscoredEvidence,
+      rows: [{ id: 'stretch-rhythm', label: 'Morning stretch', consistency: 80, onTrack: 60 }],
+      consistencyAverage: 80,
+      consistencyCount: 1,
+      onTrackAverage: 60,
+      onTrackCount: 1,
+      coverage: '1 of 1 linked Rhythms scored.'
+    };
+    const { container } = render(
+      <StatefulFlexibility
+        healthScore={healthScore}
+        scoringEvidence={scoringEvidence}
+        unlinkedStretchRhythmTitles={['Evening stretch']}
+      />
+    );
 
     expect(container.querySelector('.flexibility-summary')?.classList.contains('rhythm-history-view__score-card')).toBe(true);
     expect(screen.getByRole('heading', { name: 'Flexibility Health' })).toBeTruthy();
     expect(container.querySelectorAll('.flexibility-summary .health-score-measures__item')).toHaveLength(2);
-    expect(screen.getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
+    expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuetext'))
+      .toBe('60 out of 100');
+    expect(screen.getByText('These stretch Rhythms are not included in Flexibility Health because they are not linked to the Flexibility Foundation: Evening stretch. Link them in their Foundation associations to include their scores.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Show Flexibility Health scoring details' })).toBeTruthy();
     expect(container.querySelector('.flexibility-map-card')?.compareDocumentPosition(
       container.querySelector('.flexibility-routine-collection')!
     )).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     await user.click(screen.getByRole('button', { name: 'Show Flexibility Health scoring details' }));
     const healthDialog = screen.getByRole('dialog', { name: 'Flexibility Health details' });
-    const scoringDisclosure = within(healthDialog).getByRole('button', { name: 'How Flexibility Health is scored' });
+    const scoringDisclosure = within(healthDialog).getByRole('button', { name: 'How this Flexibility Foundation was scored' });
     expect(scoringDisclosure.getAttribute('aria-expanded')).toBe('false');
     await user.click(scoringDisclosure);
-    expect(within(healthDialog).getByText(/equal-weight average of tracked stretch-region Consistency scores/)).toBeTruthy();
-    expect(within(healthDialog).getByRole('region', { name: 'Stretch-region consistency scores' })).toBeTruthy();
-    expect(within(healthDialog).queryByText('75%')).toBeNull();
+    expect(within(healthDialog).getByText(/averages Consistency and On Track from active linked stretch Rhythms equally/)).toBeTruthy();
+    expect(within(healthDialog).getByRole('region', { name: 'Linked Rhythm scores' })).toBeTruthy();
+    expect(within(healthDialog).getByText('Morning stretch')).toBeTruthy();
+    expect(within(healthDialog).getByText('Consistency contributes 75% and On Track contributes 25%.')).toBeTruthy();
+    expect(within(healthDialog).getByText(/Evening stretch/)).toBeTruthy();
     await user.click(within(healthDialog).getByRole('button', { name: 'Close Health details' }));
     await waitFor(() => {
       expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show Flexibility Health scoring details' }));
@@ -155,18 +222,39 @@ describe('Flexibility foundation presentation', () => {
     expect(screen.getByRole('dialog', { name: 'Stretch intervals' })).toBeTruthy();
   });
 
-  it('uses Strength status squares for tracked, overdue, zero, and unavailable scores', async () => {
+  it('shows a not-yet-scored state and the first-due explanation for linked stretch Rhythms', async () => {
+    const user = userEvent.setup();
+    const scoringEvidence: HealthAggregateEvidence = {
+      ...unscoredEvidence,
+      coverage: '0 of 1 linked Rhythms scored.',
+      emptyState: 'Scores appear after an eligible linked Rhythm has its first due occurrence.'
+    };
+    render(<StatefulFlexibility scoringEvidence={scoringEvidence} />);
+
+    expect(screen.getByText('Flexibility Health is not yet scored. 0 of 1 linked Rhythms scored.'))
+      .toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Show Flexibility Health scoring details' }));
+    const dialog = screen.getByRole('dialog', { name: 'Flexibility Health details' });
+    await user.click(within(dialog).getByRole('button', {
+      name: 'How this Flexibility Foundation was scored'
+    }));
+    expect(within(dialog).getByText(
+      'Scores appear after an eligible linked Rhythm has its first due occurrence.'
+    )).toBeTruthy();
+  });
+
+  it('uses diagnostic status colors for current, due, overdue, and unlogged regions', async () => {
     const user = userEvent.setup();
     const data: FlexibilityData = {
       ...createFlexibilityData(),
       sessions: [
         { id: 'due-soon', date: '2026-10-20', regionIds: ['hamstrings'] },
-        { id: 'zero-score', date: '2026-10-11', regionIds: ['glutes'] }
+        { id: 'due-today', date: '2026-10-21', regionIds: ['neck'] },
+        { id: 'current', date: '2026-10-23', regionIds: ['shoulders'] },
+        { id: 'overdue', date: '2026-10-11', regionIds: ['glutes'] }
       ]
     };
-    const { container } = render(
-      <FlexibilityView data={data} today="2026-10-23" onChange={() => null} />
-    );
+    const { container } = render(<StatefulFlexibility initialData={data} />);
     await user.click(screen.getByRole('button', { name: 'Back' }));
 
     const hamstrings = [...container.querySelectorAll<HTMLButtonElement>('.flexibility-region')]
@@ -175,17 +263,27 @@ describe('Flexibility foundation presentation', () => {
       .find(row => row.getAttribute('aria-label')?.startsWith('Glutes'))!;
     const calves = [...container.querySelectorAll<HTMLButtonElement>('.flexibility-region')]
       .find(row => row.getAttribute('aria-label')?.startsWith('Calves'))!;
-    expect(hamstrings.getAttribute('aria-label')).toContain('Consistency score: 90');
+    const neck = [...container.querySelectorAll<HTMLButtonElement>('.flexibility-region')]
+      .find(row => row.getAttribute('aria-label')?.startsWith('Neck'))!;
+    const shoulders = [...container.querySelectorAll<HTMLButtonElement>('.flexibility-region')]
+      .find(row => row.getAttribute('aria-label')?.startsWith('Shoulders'))!;
+    expect(hamstrings.getAttribute('aria-label')).toContain('1 day overdue.');
     expect(hamstrings.querySelector('.strength-muscle-row__status')?.className)
-      .toContain('strength-muscle-row__status--due');
-    expect(glutes.getAttribute('aria-label')).toContain('Consistency score: 0');
+      .toContain('strength-muscle-row__status--overdue');
+    expect(glutes.getAttribute('aria-label')).toContain('10 days overdue.');
     expect(glutes.querySelector('.strength-muscle-row__status')?.className)
       .toContain('strength-muscle-row__status--overdue');
+    expect(neck.getAttribute('aria-label')).toContain('Due today.');
+    expect(neck.querySelector('.strength-muscle-row__status')?.className)
+      .toContain('strength-muscle-row__status--due');
+    expect(shoulders.getAttribute('aria-label')).toContain('Due in 3 days.');
+    expect(shoulders.querySelector('.strength-muscle-row__status')?.className)
+      .toContain('strength-muscle-row__status--current');
     expect(calves.querySelector('.strength-muscle-row__status')?.className)
       .toContain('strength-muscle-row__status--unavailable');
   });
 
-  it('saves, resumes, edits, and deletes stretch records with history-derived scores', async () => {
+  it('saves, resumes, edits, and deletes stretch records with updated diagnostic history', async () => {
     const user = userEvent.setup();
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { container } = render(<StatefulFlexibility />);
@@ -204,7 +302,7 @@ describe('Flexibility foundation presentation', () => {
     await user.click(screen.getByRole('button', { name: 'Back' }));
     const hamstrings = [...container.querySelectorAll<HTMLElement>('.flexibility-region')]
       .find(row => row.textContent?.includes('Hamstrings'))!;
-    expect(hamstrings.getAttribute('aria-label')).toContain('Consistency score: 100');
+    expect(hamstrings.getAttribute('aria-label')).toContain('Due in 2 days.');
     expect(within(hamstrings).getByRole('img', { name: 'Stretch status: Due in 2 days.' })).toBeTruthy();
 
     await user.click(screen.getByRole('tab', { name: 'History' }));
@@ -214,14 +312,14 @@ describe('Flexibility foundation presentation', () => {
     await user.click(within(editDialog).getByRole('button', { name: 'Save stretch' }));
     const updatedHamstrings = [...container.querySelectorAll<HTMLElement>('.flexibility-region')]
       .find(row => row.textContent?.includes('Hamstrings'))!;
-    expect(updatedHamstrings.getAttribute('aria-label')).toContain('Consistency score: 80');
+    expect(updatedHamstrings.getAttribute('aria-label')).toContain('2 days overdue.');
     expect(within(updatedHamstrings).getByRole('img', { name: 'Stretch status: 2 days overdue.' })).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: /^Delete$/ }));
     expect(confirm).toHaveBeenCalledOnce();
     const deletedHamstrings = [...container.querySelectorAll<HTMLElement>('.flexibility-region')]
       .find(row => row.textContent?.includes('Hamstrings'))!;
-    expect(deletedHamstrings.getAttribute('aria-label')).toContain('Consistency score: unavailable');
+    expect(deletedHamstrings.getAttribute('aria-label')).toContain('Not logged yet.');
     expect(within(deletedHamstrings).getByText('No log yet')).toBeTruthy();
   });
 
@@ -249,9 +347,9 @@ describe('Flexibility foundation presentation', () => {
     await user.click(within(dialog).getByRole('checkbox', { name: 'Abs' }));
     await user.click(within(dialog).getByRole('button', { name: 'Save stretch' }));
 
-    expect(screen.getByText('1 of 10 stretch regions tracked')).toBeTruthy();
+    expect(screen.getByText(/0 of 0 linked Rhythms scored\./)).toBeTruthy();
     const absRow = container.querySelector<HTMLButtonElement>('.flexibility-region[aria-label^="Abs"]');
-    expect(absRow?.getAttribute('aria-label')).toContain('Consistency score: 100');
+    expect(absRow?.getAttribute('aria-label')).toContain('Due in 3 days.');
 
     await user.click(screen.getByRole('tab', { name: 'History' }));
     await user.click(screen.getByRole('button', { name: /^Edit$/ }));
@@ -259,13 +357,13 @@ describe('Flexibility foundation presentation', () => {
     fireEvent.change(within(dialog).getByLabelText('Date'), { target: { value: '2026-10-19' } });
     await user.click(within(dialog).getByRole('button', { name: 'Save stretch' }));
     expect(container.querySelector('.flexibility-region[aria-label^="Abs"]')?.getAttribute('aria-label'))
-      .toContain('Consistency score: 90');
+      .toContain('1 day overdue.');
 
     await user.click(screen.getByRole('button', { name: /^Delete$/ }));
     expect(confirm).toHaveBeenCalledOnce();
-    expect(screen.getByText('0 of 10 stretch regions tracked')).toBeTruthy();
+    expect(screen.getByText(/0 of 0 linked Rhythms scored\./)).toBeTruthy();
     expect(container.querySelector('.flexibility-region[aria-label^="Abs"]')?.getAttribute('aria-label'))
-      .toContain('Consistency score: unavailable');
+      .toContain('Not logged yet.');
   });
 
   it('previews and edits a suggested routine before saving without creating activity', async () => {
@@ -293,7 +391,7 @@ describe('Flexibility foundation presentation', () => {
     expect(screen.getByRole('tab', { name: 'Saved' }).getAttribute('aria-selected')).toBe('true');
     await user.click(screen.getByRole('tab', { name: 'Saved' }));
     expect(screen.getByRole('heading', { name: 'Evening Stretch' })).toBeTruthy();
-    expect(screen.getByText('0 of 10 stretch regions tracked')).toBeTruthy();
+    expect(screen.getByText(/0 of 0 linked Rhythms scored\./)).toBeTruthy();
     expect(container.querySelector('.flexibility-history__list')).toBeNull();
     await user.click(screen.getByRole('button', { name: /^Edit$/ }));
     const savedEditor = screen.getByRole('dialog', { name: 'Edit routine' });
@@ -333,7 +431,7 @@ describe('Flexibility foundation presentation', () => {
     await user.click(within(editor).getByRole('button', { name: 'Save routine' }));
 
     expect(screen.getByRole('heading', { name: 'Morning routine' })).toBeTruthy();
-    expect(screen.getByText('0 of 10 stretch regions tracked')).toBeTruthy();
+    expect(screen.getByText(/0 of 0 linked Rhythms scored\./)).toBeTruthy();
     expect(container.querySelector('.flexibility-history__list')).toBeNull();
   });
 

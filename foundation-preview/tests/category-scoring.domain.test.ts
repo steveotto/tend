@@ -6,8 +6,10 @@ import {
   selectCardioCategoryScore,
   selectCategoryHealthScore,
   selectCategoryScore,
+  selectFoundationCategoryScore,
   selectHealthFitnessCategoryScore,
   selectStrengthCategoryScore,
+  selectUnlinkedFlexibilityRhythms,
   selectWeightCategoryScore
 } from '../src/domain/category-scoring.ts';
 import { createCardioData, selectCardioProgress } from '../src/domain/cardio.ts';
@@ -369,6 +371,7 @@ describe('selecting equal-weight Marriage Category scores', () => {
       onTrack: 80,
       health: 20
     });
+
     expect(completeRollup).toMatchObject({
       consistency: 160 / 3,
       onTrack: 80,
@@ -423,6 +426,52 @@ describe('selecting equal-weight Marriage Category scores', () => {
     });
   });
 
+  it('scores Flexibility from linked stretch Rhythms and identifies unlinked ones without changing links', () => {
+    const linked = weightRhythm('stretch-linked', {
+      healthLogCapability: 'flexibility',
+      primaryFoundationId: 'health-flexibility'
+    });
+    const linkedSecondarily = weightRhythm('stretch-secondary', {
+      healthLogCapability: 'flexibility',
+      primaryFoundationId: null,
+      secondaryFoundationIds: ['health-flexibility']
+    });
+    const unlinked = weightRhythm('stretch-unlinked', {
+      healthLogCapability: 'flexibility',
+      primaryFoundationId: null,
+      secondaryFoundationIds: []
+    });
+    const nonStretch = weightRhythm('weight-unlinked', {
+      primaryFoundationId: null
+    });
+    const scores = new Map([
+      [linked.id, scoredRhythm(80, 60)],
+      [linkedSecondarily.id, scoredRhythm(40, 100)],
+      [unlinked.id, scoredRhythm(0, 0)],
+      [nonStretch.id, scoredRhythm(100, 100)]
+    ]);
+
+    expect(selectFoundationCategoryScore(
+      'health-flexibility',
+      [linked, linkedSecondarily, unlinked, nonStretch],
+      scores,
+      []
+    )).toMatchObject({
+      eligibleFoundationIds: ['health-flexibility'],
+      consistency: 60,
+      onTrack: 80,
+      health: 65
+    });
+    expect(selectUnlinkedFlexibilityRhythms([
+      linked,
+      linkedSecondarily,
+      unlinked,
+      nonStretch
+    ])).toEqual([unlinked]);
+    expect(unlinked.primaryFoundationId).toBeNull();
+    expect(unlinked.secondaryFoundationIds).toEqual([]);
+  });
+
   it('averages available Category Health values without rounding intermediate scores', () => {
     const result = aggregateCategoryHealthScores([100, 13, 13, null, null, null]);
 
@@ -434,7 +483,7 @@ describe('selecting equal-weight Marriage Category scores', () => {
 
   });
 
-  it('includes Flexibility in the equal Consistency average without inventing On Track', () => {
+  it('includes Flexibility equally in both Health & Fitness measure averages', () => {
     const cardio = {
       foundationIds: ['health-cardio'],
       eligibleFoundationIds: ['health-cardio'],
@@ -459,15 +508,15 @@ describe('selecting equal-weight Marriage Category scores', () => {
       excludedFoundationIds: [],
       unresolvedFoundationIds: [],
       consistency: 100,
-      onTrack: null,
+      onTrack: 100,
       health: 100
     };
 
     expect(selectHealthFitnessCategoryScore(cardio, unavailable, unavailable, flexibility))
       .toMatchObject({
         consistency: 90,
-        onTrack: 40,
-        health: 77.5
+        onTrack: 70,
+        health: 85
       });
     expect(selectHealthFitnessCategoryScore({
       ...cardio,
@@ -477,11 +526,12 @@ describe('selecting equal-weight Marriage Category scores', () => {
     }, unavailable, unavailable, {
       ...flexibility,
       consistency: 0,
+      onTrack: 0,
       health: 0
     })).toMatchObject({
       consistency: 0,
-      onTrack: null,
-      health: null
+      onTrack: 0,
+      health: 0
     });
   });
 

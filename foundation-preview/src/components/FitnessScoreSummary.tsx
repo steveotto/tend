@@ -47,8 +47,8 @@ const scoreExplanations = {
     onTrack: 'Whether you are caught up with weigh-ins due on those Rhythms.'
   },
   Flexibility: {
-    consistency: 'The average consistency score across tracked stretch regions.',
-    onTrack: 'On Track is not calculated for Flexibility.'
+    consistency: 'The average Consistency score across active linked stretch Rhythms.',
+    onTrack: 'The average On Track score across active linked stretch Rhythms.'
   }
 } as const;
 
@@ -124,18 +124,12 @@ export function FitnessScoreSummary({
         categoryLabel: 'Health & Fitness',
         foundationIconId: `health-${category.toLowerCase()}`
       }],
-      bottomGroupLabel: category === 'Cardio'
-        ? 'Run logs'
-        : category === 'Flexibility' ? 'Stretch history' : 'Linked Rhythms',
+      bottomGroupLabel: category === 'Cardio' ? 'Run logs' : 'Linked Rhythms',
       bottomItem: {
-        id: category === 'Cardio'
-          ? 'run-logs'
-          : category === 'Flexibility' ? 'stretch-logs' : 'linked-rhythms',
+        id: category === 'Cardio' ? 'run-logs' : 'linked-rhythms',
         label: category === 'Cardio'
           ? 'Run logs'
-          : category === 'Flexibility'
-            ? 'Stretch history'
-            : linkedRhythmCount > 0 ? 'Linked Rhythms' : 'No linked Rhythms',
+          : linkedRhythmCount > 0 ? 'Linked Rhythms' : 'No linked Rhythms',
         score: null,
         showScore: false
       },

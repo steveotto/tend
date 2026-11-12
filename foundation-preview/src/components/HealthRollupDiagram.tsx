@@ -67,7 +67,7 @@ export function createHealthFitnessRollup(
       id: 'flexibility',
       label: 'Flexibility',
       foundationIconId: 'health-flexibility',
-      explanation: 'Flexibility averages tracked stretch-region consistency scores; unlogged regions are unavailable.',
+      explanation: 'Flexibility averages Consistency and On Track from active linked stretch Rhythms equally, then applies the 75/25 blend. Stretch-region history is diagnostic only.',
       relatedItemIds: { 'rhythms-logs': ['stretch-logs'], category: ['health-fitness'] }
     }
   ] satisfies readonly HealthRollupItem[];
@@ -104,10 +104,10 @@ export function createHealthFitnessRollup(
           {
             id: 'stretch-logs',
             label: 'Stretch sessions → Flexibility',
-            summary: 'Stretch history determines region consistency scores.',
+            summary: 'Stretch history is diagnostic; linked Rhythms determine Flexibility Health.',
             usesStandardWeights: false,
-            explanation: 'Each region uses its configured interval and most recent stretch date. Editing or deleting a session recalculates the affected region scores from history.',
-            relatedItemIds: { foundations: ['flexibility'], category: ['health-fitness'] }
+            explanation: 'Per-region intervals and last-stretched dates drive the body map and recommendations only; stretch sessions do not contribute to Health scores.',
+            relatedItemIds: { category: ['health-fitness'] }
           }
         ]
       },
@@ -123,7 +123,7 @@ export function createHealthFitnessRollup(
           id: 'health-fitness',
           label: 'Health & Fitness',
           categoryIconId: 'health',
-          explanation: 'Available Strength, Cardio, Weight, and Flexibility scores contribute equally to Consistency. On Track averages the available Strength, Cardio, and Weight scores.',
+          explanation: 'Available Strength, Cardio, Weight, and Flexibility scores contribute equally to Consistency and On Track, then the two averages are blended 75/25.',
           relatedItemIds: { foundations: foundationItems.map(item => item.id) }
         }]
       }

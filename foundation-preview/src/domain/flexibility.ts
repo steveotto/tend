@@ -1,7 +1,5 @@
 import { isValidDate } from './money-goals.ts';
 
-export const FLEXIBILITY_SCORING_POLICY_VERSION = 1;
-
 export const flexibilityRegions = [
   { id: 'hamstrings', name: 'Hamstrings', group: 'Posterior chain', defaultIntervalDays: 2 },
   { id: 'calves', name: 'Calves', group: 'Posterior chain', defaultIntervalDays: 3 },
@@ -114,7 +112,7 @@ export type FlexibilityData = {
   };
 };
 
-export type FlexibilityRegionScore = {
+export type FlexibilityRegionStatus = {
   id: FlexibilityRegionId;
   name: string;
   group: string;
@@ -122,7 +120,6 @@ export type FlexibilityRegionScore = {
   lastStretched: string | null;
   daysSince: number | null;
   daysUntilDue: number | null;
-  score: number | null;
   historyState: 'stretched' | 'never-stretched' | 'invalid';
   status: string;
 };
@@ -347,10 +344,10 @@ export function flexibilityDataIssues(data: FlexibilityData): string[] {
   return issues;
 }
 
-export function selectFlexibilityRegionScores(
+export function selectFlexibilityRegionStatuses(
   data: FlexibilityData,
   asOfDate: string
-): FlexibilityRegionScore[] {
+): FlexibilityRegionStatus[] {
   const sessions = [
     ...(Array.isArray(data?.sessions) ? data.sessions : []),
     ...(Array.isArray(data?.guidedSessions) ? data.guidedSessions
@@ -376,9 +373,6 @@ export function selectFlexibilityRegionScores(
     const intervalDays = intervals[region.id];
     const daysSince = lastStretched ? calendarDaysBetween(lastStretched, asOfDate) : null;
     const daysUntilDue = daysSince === null ? null : intervalDays - daysSince;
-    const score = daysSince === null
-      ? null
-      : Math.max(0, 100 - 10 * Math.max(0, daysSince - intervalDays));
     return {
       id: region.id,
       name: region.name,
@@ -387,7 +381,6 @@ export function selectFlexibilityRegionScores(
       lastStretched,
       daysSince,
       daysUntilDue,
-      score,
       historyState: invalidHistory
         ? 'invalid'
         : lastStretched ? 'stretched' : 'never-stretched',
@@ -890,31 +883,17 @@ function cloneGuidedDraft(session: FlexibilityGuidedSessionDraft): FlexibilityGu
   };
 }
 
-export function selectFlexibilityConsistency(scores: readonly FlexibilityRegionScore[]): {
-  score: number | null;
-  trackedCount: number;
-} {
-  const tracked = scores
-    .map(region => region.score)
-    .filter((score): score is number => score !== null && Number.isFinite(score));
-  return {
-    score: tracked.length ? tracked.reduce((sum, score) => sum + score, 0) / tracked.length : null,
-    trackedCount: tracked.length
-  };
-}
-
 export function suggestNextFlexibilityStretch(
-  scores: readonly FlexibilityRegionScore[]
+  regions: readonly FlexibilityRegionStatus[]
 ): FlexibilitySuggestion {
-  const scored = scores
-    .filter(region => region.score !== null && region.daysUntilDue !== null)
+  const due = regions
+    .filter(region => region.daysUntilDue !== null)
     .sort((left, right) =>
-      left.score! - right.score!
-      || left.daysUntilDue! - right.daysUntilDue!
+      left.daysUntilDue! - right.daysUntilDue!
       || flexibilityRegions.findIndex(region => region.id === left.id)
         - flexibilityRegions.findIndex(region => region.id === right.id)
     );
-  const next = scored[0];
+  const next = due[0];
   if (!next) {
     return {
       regionIds: [],
@@ -922,7 +901,7 @@ export function suggestNextFlexibilityStretch(
       reasonRegionId: null
     };
   }
-  const dueWithinGroup = scored.filter(region =>
+  const dueWithinGroup = due.filter(region =>
     region.group === next.group && region.daysUntilDue! <= 0
   );
   const recommended = next.daysUntilDue! <= 0 && dueWithinGroup.length

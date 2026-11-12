@@ -23,6 +23,7 @@ import { RhythmSuggestionPicker } from './RhythmSuggestionPicker.tsx';
 import type { RhythmSuggestionPickerGroup } from './RhythmSuggestionPicker.tsx';
 import type { CategoryRhythmSuggestion, CategoryRhythmSuggestionCatalogue } from './MarriageView.tsx';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
+import { selectUnlinkedFlexibilityRhythms } from '../domain/category-scoring.ts';
 import { isFlexibilityRegionId } from '../domain/flexibility.ts';
 import type { FlexibilityRegionId } from '../domain/flexibility.ts';
 import { selectFoundationScore } from '../domain/foundation-scoring.ts';
@@ -50,7 +51,10 @@ type HealthFitnessViewProps = {
   strength: StrengthViewProps;
   weight: WeightViewProps;
   cardio: CardioViewProps;
-  flexibility: FlexibilityViewProps;
+  flexibility: Omit<
+    FlexibilityViewProps,
+    'healthScore' | 'scoringEvidence' | 'unlinkedStretchRhythmTitles'
+  >;
   rhythms: readonly RhythmPreview[];
   archivedRhythms: readonly RhythmPreview[];
   todayDate: string;
@@ -144,6 +148,7 @@ function linkedRhythmEvidence(
     coverage: `${selection.eligibleRhythmIds.length} of ${selection.activeLinkedRhythmIds.length} linked Rhythms scored.`,
     notes: [
       'Uses each Rhythm’s own scoring window and season schedules.',
+      'Consistency contributes 75% and On Track contributes 25%.',
       ...(selection.archivedRhythmIds.length > 0
         ? [`${selection.archivedRhythmIds.length} archived linked Rhythms are excluded.`]
         : []),
@@ -154,7 +159,10 @@ function linkedRhythmEvidence(
         ? ['Linked Rhythms without both scores are excluded from both averages.']
         : [])
     ],
-    emptyState: 'No eligible linked Rhythms have both scores available.'
+    emptyState: selection.activeLinkedRhythmIds.length === 0
+      ? 'Link a Rhythm to this Foundation; scores appear after its first occurrence is due.'
+      : 'Scores appear after an eligible linked Rhythm has its first due occurrence.',
+    weightSummary: 'Consistency contributes 75% and On Track contributes 25%.'
   };
 }
 
@@ -208,6 +216,7 @@ export function HealthFitnessView({
     regionIds: FlexibilityRegionId[];
   } | null>(null);
   const flexibilityLogRequestSequence = useRef(0);
+  const archivedRhythmIds = new Set(archivedRhythms.map(rhythm => rhythm.id));
   const fitnessMeasureRows = [
     {
       id: 'strength',
@@ -231,7 +240,7 @@ export function HealthFitnessView({
       id: 'flexibility',
       label: 'Flexibility',
       consistency: flexibilityHealthScore.consistency,
-      onTrack: null
+      onTrack: flexibilityHealthScore.onTrack
     }
   ] satisfies HealthAggregateEvidence['rows'];
   const fitnessMeasureEvidence: HealthAggregateEvidence = {
@@ -268,12 +277,17 @@ export function HealthFitnessView({
       },
       {
         label: 'Flexibility',
-        explanation: 'Consistency averages regions with valid stretch history; each region loses 10 points per day overdue beyond its interval. On Track is not scored.'
+        explanation: 'Averages active linked stretch Rhythms equally for Consistency and On Track, then blends the averages 75/25. Region history is diagnostic only.'
       }
     ]
   };
   const strengthScoringEvidence = linkedRhythmEvidence('health-strength', rhythms, archivedRhythms, rhythmScores);
   const weightScoringEvidence = linkedRhythmEvidence('health-weight', rhythms, archivedRhythms, rhythmScores);
+  const flexibilityScoringEvidence = linkedRhythmEvidence('health-flexibility', rhythms, archivedRhythms, rhythmScores);
+  const unlinkedStretchRhythmTitles = selectUnlinkedFlexibilityRhythms([
+    ...rhythms,
+    ...archivedRhythms
+  ]).map(rhythm => `${rhythm.title}${archivedRhythmIds.has(rhythm.id) ? ' (archived)' : ''}`);
   const suggestionsOpenerRef = useRef<HTMLButtonElement | null>(null);
   const wasSuggestionsOpenRef = useRef(false);
   const skipSuggestionsFocusRestoreRef = useRef(false);
@@ -373,7 +387,6 @@ export function HealthFitnessView({
     onEditRhythm(rhythm, event, returnToPicker);
   }
 
-  const archivedRhythmIds = new Set(archivedRhythms.map(rhythm => rhythm.id));
   const suggestionPickerGroups: RhythmSuggestionPickerGroup[] = suggestionCatalogue.groups.map(group => ({
     id: group.id,
     title: group.title,
@@ -776,6 +789,9 @@ export function HealthFitnessView({
             {renderFoundationHeading('health-flexibility')}
             <FlexibilityView
               {...flexibility}
+              healthScore={flexibilityHealthScore}
+              scoringEvidence={flexibilityScoringEvidence}
+              unlinkedStretchRhythmTitles={unlinkedStretchRhythmTitles}
               overallHealthScore={overallHealthScore}
               categoryHealthScore={healthScore.health}
               foundationNavigation

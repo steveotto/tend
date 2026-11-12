@@ -19,6 +19,7 @@ import {
   aggregateCategoryHealthScores,
   selectCardioCategoryScore,
   selectCategoryHealthScore,
+  selectFoundationCategoryScore,
   selectHealthFitnessCategoryScore,
   selectStrengthCategoryScore,
   selectWeightCategoryScore
@@ -135,8 +136,6 @@ import {
 } from './domain/weight.ts';
 import { saveCardioDataCommand, selectCardioProgress } from './domain/cardio.ts';
 import {
-  selectFlexibilityConsistency,
-  selectFlexibilityRegionScores,
   validateFlexibilityData
 } from './domain/flexibility.ts';
 import {
@@ -775,20 +774,12 @@ function PreviewWorkspace({
     rhythmScoreResults,
     previewData.archivedRhythmIds
   );
-  const flexibilityRegionScores = selectFlexibilityRegionScores(
-    previewData.flexibility,
-    localDateString(scoringInstant)
+  const flexibilityCategoryScore = selectFoundationCategoryScore(
+    'health-flexibility',
+    healthCategoryRhythms,
+    rhythmScoreResults,
+    previewData.archivedRhythmIds
   );
-  const flexibilityConsistency = selectFlexibilityConsistency(flexibilityRegionScores);
-  const flexibilityCategoryScore = {
-    foundationIds: ['health-flexibility'],
-    eligibleFoundationIds: flexibilityConsistency.score === null ? [] : ['health-flexibility'],
-    excludedFoundationIds: [],
-    unresolvedFoundationIds: [],
-    consistency: flexibilityConsistency.score,
-    onTrack: null,
-    health: flexibilityConsistency.score
-  };
   const healthFitnessCategoryScore = selectHealthFitnessCategoryScore(
     cardioCategoryScore,
     weightCategoryScore,

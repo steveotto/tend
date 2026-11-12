@@ -194,6 +194,30 @@ export function selectStrengthCategoryScore(
   );
 }
 
+export function selectFoundationCategoryScore(
+  foundationId: string,
+  rhythms: readonly RhythmPreview[],
+  rhythmScores: ReadonlyMap<string, RhythmScoreResult>,
+  archivedRhythmIds: readonly string[]
+): CategoryScoreSelection {
+  return selectCategoryScore(
+    [{ id: foundationId }],
+    new Map([[
+      foundationId,
+      selectFoundationScore(foundationId, rhythms, rhythmScores, archivedRhythmIds)
+    ]])
+  );
+}
+
+export function selectUnlinkedFlexibilityRhythms(
+  rhythms: readonly RhythmPreview[]
+): readonly RhythmPreview[] {
+  return rhythms.filter(rhythm =>
+    rhythm.healthLogCapability === 'flexibility'
+    && !foundationRhythmIds(rhythm).includes('health-flexibility')
+  );
+}
+
 export function selectHealthFitnessCategoryScore(
   cardio: CategoryScoreSelection,
   weight: CategoryScoreSelection,
@@ -209,7 +233,8 @@ export function selectHealthFitnessCategoryScore(
   const onTrack = averageAvailableScores([
     cardio.onTrack,
     weight.onTrack,
-    strength.onTrack
+    strength.onTrack,
+    flexibility?.onTrack ?? null
   ]);
   const health = consistency === null || onTrack === null
     ? null

@@ -95,7 +95,8 @@ describe('Health scoring rollup diagram', () => {
       'Stretch sessions → Flexibility'
     ]);
     expect(fitness.groups[0]?.items[2]?.explanation).toContain('saved run logs');
-    expect(fitness.groups[0]?.items[3]?.explanation).toContain('most recent stretch date');
+    expect(fitness.groups[0]?.items[3]?.explanation).toContain('body map and recommendations only');
+    expect(fitness.groups[1]?.items[3]?.explanation).toContain('linked stretch Rhythms');
     expect(fitness.groups[2]?.items[0]?.categoryIconId).toBe('health');
     expect(fitness.groups[1]?.items[0]?.foundationIconId).toBe('health-strength');
   });

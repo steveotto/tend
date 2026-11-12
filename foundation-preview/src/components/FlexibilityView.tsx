@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { FitnessScoreSummary } from './FitnessScoreSummary.tsx';
-import { HealthScoringDetailsCard } from './HealthScoringDetailsCard.tsx';
 import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 import { createHealthFitnessRollup } from './HealthRollupDiagram.tsx';
 import { SegmentedTabs } from './SegmentedTabs.tsx';
@@ -26,20 +25,19 @@ import {
   saveFlexibilityDraft,
   saveFlexibilityRoutine,
   saveFlexibilitySession,
-  selectFlexibilityConsistency,
-  selectFlexibilityRegionScores,
+  selectFlexibilityRegionStatuses,
   suggestNextFlexibilityStretch
 } from '../domain/flexibility.ts';
 import type {
   FlexibilityData,
   FlexibilityGuidedSessionDraft,
   FlexibilityRegionId,
-  FlexibilityRegionScore,
+  FlexibilityRegionStatus,
   FlexibilitySession,
   FlexibilitySessionDraft,
   SavedFlexibilityRoutine
 } from '../domain/flexibility.ts';
-import { formatHealthAverageEquation, formatScore } from '../domain/score-display.ts';
+import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
 
 type DialogState = 'log' | 'settings' | 'guided' | null;
 type FlexibilityCollectionTab = 'recommended' | 'saved' | 'history';
@@ -53,6 +51,9 @@ export type FlexibilityViewProps = {
   data: FlexibilityData;
   today: string;
   onChange: (data: FlexibilityData) => string | null;
+  healthScore: CategoryScoreSelection;
+  scoringEvidence: HealthAggregateEvidence;
+  unlinkedStretchRhythmTitles: readonly string[];
   overallHealthScore?: number | null;
   categoryHealthScore?: number | null;
   foundationNavigation?: boolean;
@@ -87,23 +88,25 @@ const flexibilityBackRegions = new Set<FlexibilityRegionId>([
 ]);
 
 export function createFlexibilityBodyMapConfig(
-  scores: ReturnType<typeof selectFlexibilityRegionScores>
+  regions: ReturnType<typeof selectFlexibilityRegionStatuses>
 ): FitnessBodyMapConfigFor<FlexibilityRegionId> {
   return {
     title: 'Stretch schedule',
     eventType: 'flexibility',
     verb: 'stretching',
     regions: flexibilityBodyMapOrder.map(id => {
-      const region = scores.find(score => score.id === id)!;
+      const region = regions.find(item => item.id === id)!;
       return {
         id: region.id,
         name: region.name,
         group: region.group,
         front: flexibilityFrontRegions.has(region.id),
         back: flexibilityBackRegions.has(region.id),
-        score: region.score,
         status: region.status,
-        fill: flexibilityScoreFill(region.score)
+        fill: flexibilityScoreFill(region),
+        accessibilityLabel: `${region.status} ${flexibilityIntervalLabel(region)}. Last stretched: ${
+          flexibilityLastStretchedLabel(region)
+        }. ${flexibilityNextDueLabel(region)}.`
       };
     })
   };
@@ -113,6 +116,9 @@ export function FlexibilityView({
   data,
   today,
   onChange,
+  healthScore,
+  scoringEvidence,
+  unlinkedStretchRhythmTitles,
   overallHealthScore = null,
   categoryHealthScore = null,
   foundationNavigation = false,
@@ -142,55 +148,22 @@ export function FlexibilityView({
     ])) as Record<FlexibilityRegionId, string>
   );
   const [error, setError] = useState('');
-  const scores = useMemo(() => selectFlexibilityRegionScores(data, today), [data, today]);
-  const consistency = selectFlexibilityConsistency(scores);
-  const scoredRegionValues = scores.flatMap(region =>
-    region.score !== null && Number.isFinite(region.score) ? [region.score] : []
-  );
+  const regionStatuses = useMemo(() => selectFlexibilityRegionStatuses(data, today), [data, today]);
   const flexibilityScoringEvidence: HealthAggregateEvidence = {
-    heading: 'Stretch-region consistency scores',
-    description: 'Tracked region scores contribute equally to Flexibility Health.',
-    itemLabel: 'Region',
-    rows: scores.map(region => ({
-      id: region.id,
-      label: region.name,
-      consistency: region.score,
-      onTrack: null
-    })),
-    consistencyAverage: consistency.score,
-    consistencyCount: consistency.trackedCount,
-    onTrackAverage: null,
-    onTrackCount: 0,
-    notes: ['Untracked regions are unavailable and excluded.'],
-    emptyState: 'No tracked stretch-region scores are available yet.',
-    showEmptyStateWhenNoAverages: true
+    ...scoringEvidence,
+    notes: [
+      ...(scoringEvidence.notes ?? []),
+      ...(unlinkedStretchRhythmTitles.length > 0
+        ? [`Not included because they are not linked to the Flexibility Foundation: ${unlinkedStretchRhythmTitles.join(', ')}.`]
+        : [])
+    ]
   };
-  const flexibilityFormula = (
-    <section className="rhythm-health-scoring-card__calculation health-scoring-details-card__calculation">
-      <h4>How Health is calculated</h4>
-      <p>Flexibility Health is the equal-weight average of tracked stretch-region Consistency scores.</p>
-      <p className="rhythm-health-scoring-card__formula rhythm-health-scoring-card__formula--total">
-        {formatHealthAverageEquation(scoredRegionValues, consistency.score, consistency.trackedCount, true)}
-      </p>
-      <p>On Track is unavailable for this measure.</p>
-    </section>
-  );
-  const flexibilityScoringCard = (
-    <HealthScoringDetailsCard
-      title="How Flexibility Health is scored"
-      healthScore={consistency.score}
-      consistencyScore={consistency.score}
-      onTrackScore={null}
-      evidence={flexibilityScoringEvidence}
-      formulaContent={flexibilityFormula}
-    />
-  );
-  const suggestion = suggestNextFlexibilityStretch(scores);
+  const suggestion = suggestNextFlexibilityStretch(regionStatuses);
   const recommendedSavedRoutines = suggestion.reasonRegionId === null
     ? []
     : savedRoutines.filter(routine => routine.stretches.some(stretch =>
       stretch.regionIds.some(id => suggestion.regionIds.includes(id))));
-  const bodyMapConfig = createFlexibilityBodyMapConfig(scores);
+  const bodyMapConfig = createFlexibilityBodyMapConfig(regionStatuses);
   const groups = [...new Set(flexibilityRegions.map(region => region.group))];
   const visibleRegions = bodyMapConfig.regions.filter(region => region[view]);
   const sortedSessions = [...data.sessions].sort((left, right) =>
@@ -428,20 +401,30 @@ export function FlexibilityView({
         category="Flexibility"
         healthTitle="Flexibility Health"
         className={`rhythm-history-view__score-card flexibility-summary${foundationNavigation ? ' foundation-health-card' : ''}`}
-        consistency={consistency.score}
-        onTrack={null}
-        health={consistency.score}
+        consistency={healthScore.consistency}
+        onTrack={healthScore.onTrack}
+        health={healthScore.health}
         showMeasures={!foundationNavigation}
-        consistencyCaption="Consistency with your stretch schedule."
-        onTrackCaption="On Track is unavailable for Flexibility."
+        consistencyCaption="Average Consistency across active linked stretch Rhythms."
+        onTrackCaption="Average On Track across active linked stretch Rhythms."
         overallHealthScore={overallHealthScore}
         categoryHealthScore={categoryHealthScore}
-        summaryExplanation="Flexibility Health averages tracked stretch-region Consistency scores."
-        statusMessage={`${consistency.trackedCount} of ${flexibilityRegions.length} stretch regions tracked`}
+        summaryExplanation="Flexibility Health averages Consistency and On Track from active linked stretch Rhythms equally, then applies the 75/25 blend. Stretch-region history is diagnostic only."
+        statusMessage={`${healthScore.health === null ? 'Flexibility Health is not yet scored. ' : ''}${
+          scoringEvidence.coverage ?? 'No linked stretch Rhythms are available yet.'
+        }`}
         scoringEvidence={flexibilityScoringEvidence}
-        scoringCard={flexibilityScoringCard}
         rollup={createHealthFitnessRollup('foundations', 'flexibility')}
       />
+      {unlinkedStretchRhythmTitles.length > 0 && (
+        <div className="fitness-score-summary__status" role="status">
+          <p>
+            These stretch Rhythms are not included in Flexibility Health because they are not linked
+            to the Flexibility Foundation: {unlinkedStretchRhythmTitles.join(', ')}. Link them in
+            their Foundation associations to include their scores.
+          </p>
+        </div>
+      )}
 
       <section className="card strength-card strength-map-card flexibility-map-card" aria-labelledby="flexibility-map-heading">
         <header className="strength-card-heading">
@@ -470,10 +453,9 @@ export function FlexibilityView({
           listLabel="Stretch schedule status"
         >
           {visibleRegions.map(region => {
-            const score = scores.find(item => item.id === region.id)!;
-            const nextDueLabel = flexibilityNextDueLabel(score);
-            const lastStretchedLabel = flexibilityLastStretchedLabel(score);
-            const scoreLabel = score.score === null ? 'unavailable' : formatScore(score.score);
+            const regionStatus = regionStatuses.find(item => item.id === region.id)!;
+            const nextDueLabel = flexibilityNextDueLabel(regionStatus);
+            const lastStretchedLabel = flexibilityLastStretchedLabel(regionStatus);
             const nextDueDescription = nextDueLabel === '—'
               ? 'Next stretch unavailable.'
               : `${nextDueLabel}.`;
@@ -483,16 +465,16 @@ export function FlexibilityView({
                 type="button"
                 className="strength-muscle-row flexibility-region"
                 aria-pressed={selectedRegion === region.id}
-                aria-label={`${region.name}. Consistency score: ${scoreLabel}. ${score.status} Last stretched: ${lastStretchedLabel}. ${nextDueDescription}`}
+                aria-label={`${region.name}. ${regionStatus.status} Last stretched: ${lastStretchedLabel}. ${nextDueDescription}`}
                 onClick={() => setSelectedRegion(region.id)}
               >
                 <span className="strength-muscle-row__heading">
                   <strong>{region.name}</strong>
                   <span
-                    className={`strength-muscle-row__status strength-muscle-row__status--${flexibilityStatusTone(score.score)}`}
+                    className={`strength-muscle-row__status strength-muscle-row__status--${flexibilityStatusTone(regionStatus)}`}
                     role="img"
-                    aria-label={`Stretch status: ${score.status}`}
-                    title={`Stretch status: ${score.status}`}
+                    aria-label={`Stretch status: ${regionStatus.status}`}
+                    title={`Stretch status: ${regionStatus.status}`}
                   />
                 </span>
                 <span className="strength-muscle-row__timing">
@@ -500,14 +482,16 @@ export function FlexibilityView({
                     <RhythmCalendarIcon className="strength-muscle-row__calendar-icon" />
                     <span>{lastStretchedLabel}</span>
                   </span>
-                  <span className="strength-muscle-row__next-due">{nextDueLabel}</span>
+                  <span className="strength-muscle-row__next-due">
+                    {nextDueLabel} · {flexibilityIntervalLabel(regionStatus)}
+                  </span>
                 </span>
               </button>
             );
           })}
         </FitnessBodyMapLayout>
         <button type="button" className="btn mini ghost" onClick={() => openLog([selectedRegion])}>
-          Log {scores.find(region => region.id === selectedRegion)?.name}
+          Log {regionStatuses.find(region => region.id === selectedRegion)?.name}
         </button>
       </section>
 
@@ -856,8 +840,8 @@ export function FlexibilityView({
   );
 }
 
-function flexibilityScoreFill(score: number | null): string {
-  switch (flexibilityStatusTone(score)) {
+function flexibilityScoreFill(region: FlexibilityRegionStatus): string {
+  switch (flexibilityStatusTone(region)) {
     case 'current': return 'var(--score-green)';
     case 'due': return 'var(--score-yellow)';
     case 'overdue': return 'var(--score-red)';
@@ -865,23 +849,27 @@ function flexibilityScoreFill(score: number | null): string {
   }
 }
 
-function flexibilityStatusTone(score: number | null): 'current' | 'due' | 'overdue' | 'unavailable' {
-  if (score === null) return 'unavailable';
-  return score >= 100 ? 'current' : score >= 80 ? 'due' : 'overdue';
+function flexibilityStatusTone(region: FlexibilityRegionStatus): 'current' | 'due' | 'overdue' | 'unavailable' {
+  if (region.historyState === 'invalid' || region.daysUntilDue === null) return 'unavailable';
+  return region.daysUntilDue > 0 ? 'current' : region.daysUntilDue === 0 ? 'due' : 'overdue';
 }
 
-function flexibilityLastStretchedLabel(region: FlexibilityRegionScore): string {
+function flexibilityLastStretchedLabel(region: FlexibilityRegionStatus): string {
   if (region.historyState === 'invalid') return 'Unavailable';
   if (region.daysSince === null) return 'No log yet';
   if (region.daysSince === 0) return 'Today';
   return `${region.daysSince}d ago`;
 }
 
-function flexibilityNextDueLabel(region: FlexibilityRegionScore): string {
+function flexibilityNextDueLabel(region: FlexibilityRegionStatus): string {
   if (region.historyState === 'invalid' || region.daysUntilDue === null) return '—';
   if (region.daysUntilDue < 0) return `Overdue by ${Math.abs(region.daysUntilDue)}d`;
   if (region.daysUntilDue === 0) return 'Due today';
   return `Next stretch in ${region.daysUntilDue}d`;
+}
+
+function flexibilityIntervalLabel(region: FlexibilityRegionStatus): string {
+  return `Every ${region.intervalDays} day${region.intervalDays === 1 ? '' : 's'}`;
 }
 
 function formatRoutineDuration(routine: SavedFlexibilityRoutine): string {

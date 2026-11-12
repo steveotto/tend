@@ -18,8 +18,7 @@ import {
   saveFlexibilitySession,
   selectCompletedGuidedRegions,
   selectFlexibilityGuidedHold,
-  selectFlexibilityConsistency,
-  selectFlexibilityRegionScores,
+  selectFlexibilityRegionStatuses,
   startFlexibilityGuidedHold,
   suggestNextFlexibilityStretch,
   skipFlexibilityGuidedHold,
@@ -27,37 +26,26 @@ import {
 } from '../src/domain/flexibility.ts';
 import type { FlexibilitySession } from '../src/domain/flexibility.ts';
 
-describe('Flexibility scoring and records', () => {
-  it('uses the configured calendar-day interval and keeps unlogged regions unavailable', () => {
+describe('Flexibility diagnostic schedule and records', () => {
+  it('uses configured intervals to report last-stretched recency and due status', () => {
     const data = {
       ...createFlexibilityData(),
       sessions: [{ id: 'stretch-a', date: '2026-10-20', regionIds: ['hamstrings' as const] }]
     };
-    const scores = selectFlexibilityRegionScores(data, '2026-10-23');
+    const regionStatuses = selectFlexibilityRegionStatuses(data, '2026-10-23');
 
-    expect(scores.find(region => region.id === 'hamstrings')).toMatchObject({
+    expect(regionStatuses.find(region => region.id === 'hamstrings')).toMatchObject({
       intervalDays: 2,
       daysSince: 3,
-      score: 90
+      daysUntilDue: -1,
+      status: '1 day overdue.'
     });
-    expect(scores.find(region => region.id === 'calves')).toMatchObject({
-      score: null,
+    expect(regionStatuses.find(region => region.id === 'calves')).toMatchObject({
       lastStretched: null,
       daysSince: null,
+      daysUntilDue: null,
       historyState: 'never-stretched'
     });
-  });
-
-  it('averages only tracked regions and includes a real zero score', () => {
-    const data = {
-      ...createFlexibilityData(),
-      sessions: [{ id: 'stretch-a', date: '2026-10-01', regionIds: ['hamstrings' as const] }]
-    };
-    const result = selectFlexibilityConsistency(
-      selectFlexibilityRegionScores(data, '2026-10-13')
-    );
-
-    expect(result).toEqual({ score: 0, trackedCount: 1 });
   });
 
   it('recalculates the last-stretched date when a session is edited or deleted', () => {
@@ -77,20 +65,21 @@ describe('Flexibility scoring and records', () => {
     });
     expect(edited.valid).toBe(true);
     if (!edited.valid) return;
-    expect(selectFlexibilityRegionScores({ ...createFlexibilityData(), sessions: edited.sessions }, '2026-10-23')
+    expect(selectFlexibilityRegionStatuses({ ...createFlexibilityData(), sessions: edited.sessions }, '2026-10-23')
       .find(region => region.id === 'hamstrings')?.lastStretched).toBe('2026-10-21');
 
     const deleted = deleteFlexibilitySession(edited.sessions, 'stretch-b');
-    expect(selectFlexibilityRegionScores({ ...createFlexibilityData(), sessions: deleted.sessions }, '2026-10-23')
+    expect(selectFlexibilityRegionStatuses({ ...createFlexibilityData(), sessions: deleted.sessions }, '2026-10-23')
       .find(region => region.id === 'hamstrings')).toMatchObject({
         lastStretched: '2026-10-20',
-        score: 90
+        daysSince: 3,
+        daysUntilDue: -1
       });
   });
 
   it('provides grouped first-session and due-region recommendations', () => {
     const empty = suggestNextFlexibilityStretch(
-      selectFlexibilityRegionScores(createFlexibilityData(), '2026-10-23')
+      selectFlexibilityRegionStatuses(createFlexibilityData(), '2026-10-23')
     );
     expect(empty.text).toContain('Log your first stretch session');
 
@@ -99,7 +88,7 @@ describe('Flexibility scoring and records', () => {
       sessions: [{ id: 'stretch-a', date: '2026-10-20', regionIds: ['hamstrings' as const] }]
     };
     const suggestion = suggestNextFlexibilityStretch(
-      selectFlexibilityRegionScores(data, '2026-10-23')
+      selectFlexibilityRegionStatuses(data, '2026-10-23')
     );
     expect(suggestion.regionIds).toContain('hamstrings');
     expect(suggestion.text).toContain('Hamstrings are 1 day overdue');
@@ -118,23 +107,23 @@ describe('Flexibility scoring and records', () => {
     };
     expect(validateFlexibilityData(existingData, '2026-10-23')).toBe(true);
 
-    const scores = selectFlexibilityRegionScores(existingData, '2026-10-23');
-    expect(scores.find(region => region.id === 'hamstrings')).toMatchObject({
+    const regionStatuses = selectFlexibilityRegionStatuses(existingData, '2026-10-23');
+    expect(regionStatuses.find(region => region.id === 'hamstrings')).toMatchObject({
       intervalDays: 5,
       lastStretched: '2026-10-20',
-      score: 100
+      daysUntilDue: 2
     });
-    expect(scores.find(region => region.id === 'calves')?.intervalDays).toBe(4);
-    expect(scores.find(region => region.id === 'abs')).toMatchObject({
+    expect(regionStatuses.find(region => region.id === 'calves')?.intervalDays).toBe(4);
+    expect(regionStatuses.find(region => region.id === 'abs')).toMatchObject({
       intervalDays: 3,
       lastStretched: null,
-      score: null
+      daysUntilDue: null
     });
     expect(existingData.sessions[0]?.regionIds).toEqual(['hamstrings']);
     expect(existingData.draftSession.regionIds).toEqual(['calves']);
   });
 
-  it('supports Abs scoring, interval changes, recommendations, and history recalculation', () => {
+  it('supports Abs intervals, recommendations, and history recalculation', () => {
     const logged = saveFlexibilitySession([], {
       id: 'abs-stretch',
       date: '2026-10-19',
@@ -148,9 +137,9 @@ describe('Flexibility scoring and records', () => {
       settings: { intervals: { abs: 4 } },
       sessions: logged.sessions
     };
-    expect(selectFlexibilityRegionScores(data, '2026-10-23').find(region => region.id === 'abs'))
-      .toMatchObject({ intervalDays: 4, daysSince: 4, daysUntilDue: 0, score: 100 });
-    expect(suggestNextFlexibilityStretch(selectFlexibilityRegionScores(data, '2026-10-23')))
+    expect(selectFlexibilityRegionStatuses(data, '2026-10-23').find(region => region.id === 'abs'))
+      .toMatchObject({ intervalDays: 4, daysSince: 4, daysUntilDue: 0, status: 'Due today.' });
+    expect(suggestNextFlexibilityStretch(selectFlexibilityRegionStatuses(data, '2026-10-23')))
       .toMatchObject({ regionIds: ['abs'], reasonRegionId: 'abs' });
 
     const edited = saveFlexibilitySession(data.sessions, {
@@ -159,15 +148,15 @@ describe('Flexibility scoring and records', () => {
     });
     expect(edited.valid).toBe(true);
     if (!edited.valid) return;
-    expect(selectFlexibilityRegionScores({ ...data, sessions: edited.sessions }, '2026-10-23')
-      .find(region => region.id === 'abs')).toMatchObject({ daysSince: 5, score: 90 });
+    expect(selectFlexibilityRegionStatuses({ ...data, sessions: edited.sessions }, '2026-10-23')
+      .find(region => region.id === 'abs')).toMatchObject({ daysSince: 5, daysUntilDue: -1 });
 
     const deleted = deleteFlexibilitySession(edited.sessions, 'abs-stretch');
     expect(deleted.deleted).toBe(true);
-    expect(selectFlexibilityRegionScores({ ...data, sessions: deleted.sessions }, '2026-10-23')
+    expect(selectFlexibilityRegionStatuses({ ...data, sessions: deleted.sessions }, '2026-10-23')
       .find(region => region.id === 'abs')).toMatchObject({
         lastStretched: null,
-        score: null,
+        daysUntilDue: null,
         historyState: 'never-stretched'
       });
   });
@@ -340,8 +329,8 @@ describe('Flexibility scoring and records', () => {
       expect(finished.data.guidedSessions).toHaveLength(1);
       expect(finished.data.guidedSessionDraft).toBeUndefined();
       expect(finished.data.sessions).toHaveLength(1);
-      expect(selectFlexibilityRegionScores(finished.data, '2026-10-23')
-        .find(region => region.id === 'shoulders')?.score).toBe(100);
+      expect(selectFlexibilityRegionStatuses(finished.data, '2026-10-23')
+        .find(region => region.id === 'shoulders')?.lastStretched).toBe('2026-10-23');
       expect(finishFlexibilityGuidedSession(finished.data, allHoldsResolved)).toMatchObject({
         valid: false,
         error: 'This guided stretch session has already been saved.'

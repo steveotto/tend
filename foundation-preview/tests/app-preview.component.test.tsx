@@ -7222,7 +7222,7 @@ describe('Tend Today preview', () => {
     expect(strengthScoringToggle.getAttribute('aria-expanded')).toBe('false');
     await user.click(strengthScoringToggle);
     expect(within(strengthDialog).getByRole('region', { name: 'Linked Rhythm scores' })
-      .textContent).toContain('No eligible linked Rhythms');
+      .textContent).toContain('Link a Rhythm to this Foundation');
     await expandHealthDisclosure(user, strengthDialog, 'How this Strength Foundation contributes');
     await user.click(within(strengthDialog).getByRole('button', { name: 'About Strength scoring' }));
     const strengthScoring = screen.getByRole('dialog', { name: 'Strength scoring' });
@@ -7310,7 +7310,7 @@ describe('Tend Today preview', () => {
     expect(weightScoringToggle.getAttribute('aria-expanded')).toBe('false');
     await user.click(weightScoringToggle);
     expect(within(weightDialog).getByRole('region', { name: 'Linked Rhythm scores' })
-      .textContent).toContain('No eligible linked Rhythms');
+      .textContent).toContain('Link a Rhythm to this Foundation');
     await expandHealthDisclosure(user, weightDialog, 'How this Weight Foundation contributes');
     await user.click(within(weightDialog).getByRole('button', { name: 'About Weight scoring' }));
     const weightScoring = screen.getByRole('dialog', { name: 'Weight scoring' });

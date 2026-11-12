@@ -9,9 +9,10 @@ export type FitnessBodyMapRegion = {
   group: string;
   front: boolean;
   back: boolean;
-  score: number | null;
+  score?: number | null;
   status: string;
   fill: string;
+  accessibilityLabel?: string;
 };
 
 export type FitnessBodyMapConfig = {
@@ -117,9 +118,13 @@ export function FitnessBodyMap<RegionId extends string>({
               tabIndex={0}
               role="button"
               aria-pressed={selectedId === region.id}
-              aria-label={`${region.name}, ${config.eventType === 'strength' ? 'Health' : `${config.verb} consistency`} ${
-                region.score === null ? 'score unavailable' : `${formatScore(region.score)} out of 100`
-              }, ${region.status}`}
+              aria-label={`${region.name}, ${region.accessibilityLabel ?? (
+                region.score === undefined
+                  ? region.status
+                  : `${config.eventType === 'strength' ? 'Health' : `${config.verb} consistency`} ${
+                      region.score === null ? 'score unavailable' : `${formatScore(region.score)} out of 100`
+                    }, ${region.status}`
+              )}`}
               onClick={() => onSelect(region.id as RegionId)}
               onKeyDown={event => {
                 if (event.key === 'Enter' || event.key === ' ') {
