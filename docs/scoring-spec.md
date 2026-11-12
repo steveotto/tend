@@ -61,6 +61,13 @@ Flexibility scores come only from rhythms linked to the Flexibility foundation (
 - Foundation and category cards carry a scored-count caption: "2 of 3 rhythms scored."
 - The score-explainability card (Consistency/On Track breakdown, 75/25) is now truthful app-wide.
 
+## Strength and Flexibility
+
+- The React preview's Strength Foundation scoring is the reference wiring: score linked Rhythms, average eligible linked Rhythms equally, then blend the averaged Consistency and On Track scores 75/25. The shared engine absorbs this behavior; Strength must not keep a separate scoring implementation.
+- Strength Health details show one scoring explanation with the complete worked math and the linked-Rhythm breakdown. Do not duplicate the explanation or show a bars-only scoring explanation alongside the complete one.
+- Flexibility Health is scored only from Rhythms linked to the Flexibility Foundation, using the same linked-Rhythm average and 75/25 blend as Strength. There are no stretch Rhythms in the preview yet, so Flexibility remains "not yet scored" until one is linked through the existing user-facing Rhythm-to-Foundation linking path.
+- Flexibility region history, the body map, region list, and per-region stretch intervals are diagnostic only. They show last-stretched recency against each region's interval and continue to inform recommended routines; they do not feed Flexibility, Category, or Overall Health scores.
+
 ## Explicitly out (do not carry over)
 
 - Legacy evidence-based fitness scoring: strength decay from muscleIntervals, cardio lower-of-two-goals, weight trajectory scoring (this also retires the stale-weigh-in bug).
@@ -70,7 +77,7 @@ Flexibility scores come only from rhythms linked to the Flexibility foundation (
 
 ## Explicitly keep
 
-The `FITNESS_MUSCLES` definition, the per-group `muscleIntervals` settings, and the recommendation engine that uses them are NOT scoring code and must NOT be removed in Phase 3. They remain live as the diagnostic body map and the recommended-workout engine. Phase 3 removes only their role as scoring inputs; the "Recommended" workout cards, the Workout button (Full workout / Quick log), and the quick-log muscle-group capture all continue to work unchanged.
+The `FITNESS_MUSCLES` definition, the per-group `muscleIntervals` settings, per-region stretch intervals, and the recommendation engines that use them are NOT scoring code and must NOT be removed in Phase 3. They remain live as the diagnostic body maps and recommendation engines. Phase 3 removes only their role as scoring inputs; the "Recommended" workout cards, the Workout button (Full workout / Quick log), quick-log muscle-group capture, Flexibility Recommended/Saved/History routines, routine builder, session player, and region recommendations all continue to work unchanged.
 
 ## Future candidates for the shared engine
 
