@@ -232,6 +232,22 @@ describe('shared scoring engine Rhythm scores', () => {
     expect(floor.onTrack).toEqual({ kind: 'scored', score: 0 });
   });
 
+  it('counts consecutive misses from the score-clock start even outside the Consistency window', () => {
+    const result = scoreRhythm({
+      rhythmId: 'long-running-yearly',
+      schedule: { frequency: 'yearly', month: 12, pattern: patternOnDayOne },
+      createdDate: '2010-12-01',
+      completionDates: ['2010-12-01'],
+      asOfDate: '2026-12-02'
+    });
+
+    expect(result.consistencyWindow.startDate).toBe('2024-12-02');
+    expect(result.occurrences).toHaveLength(2);
+    expect(result.onTrackOccurrences).toHaveLength(17);
+    expect(result.onTrack).toEqual({ kind: 'scored', score: 0 });
+    expect(result.onTrackOccurrences.slice(-2).map(item => item.onTrack)).toEqual([0, 0]);
+  });
+
   it('accepts a once-weekly completion anywhere in its week but counts selected weekdays separately', () => {
     const onceWeekly: RhythmSchedule = { frequency: 'weekly', weekdays: [1] };
     const selectedDays: RhythmSchedule = {

@@ -1,7 +1,7 @@
 import { averageScores } from '../../../src/scoring/engine.ts';
 import type { RhythmPreview } from './preview-data.ts';
 import { foundationRhythmIds } from './foundation-rhythm-associations.ts';
-import { localDateInTimeZone, selectRhythmScore } from './rhythm-scoring.ts';
+import { localDateInTimeZone, selectSharedEngineRhythmScore } from './rhythm-scoring.ts';
 import type {
   RhythmScoreResult,
   ScoredConsistencyMetric,
@@ -45,7 +45,7 @@ export function selectFoundationRhythmScores(
     }));
     return [
       rhythm.id,
-      selectRhythmScore({
+      selectSharedEngineRhythmScore({
         rhythmId: rhythm.id,
         ...(rhythm.cadence ? { cadence: rhythm.cadence } : {}),
         ...(schedule ? { schedule } : {}),

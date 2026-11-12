@@ -241,6 +241,8 @@ function consistencyFrequencyName(frequency: ScoredConsistencyMetric['evidence']
       return 'Quarterly';
     case 'yearly':
       return 'Yearly';
+    case 'custom':
+      return 'Custom interval';
   }
 }
 

@@ -7730,7 +7730,8 @@ describe('Tend Today preview', () => {
           .toBe(false);
       }
     });
-    expect(screen.getByRole('img', { name: 'Weight Health: Not enough data' })).toBeTruthy();
+    expect(screen.getByRole('meter', { name: 'Weight Health score' }).getAttribute('aria-valuenow'))
+      .toBe('25');
   });
 
   it('links a Cardio run to one shared Rhythm completion, reloads it, and deletes only owned credit', async () => {

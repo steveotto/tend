@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { marriageRhythms, todayRhythms } from '../src/domain/preview-data.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
-import { addCalendarDays } from '../src/domain/rhythm-scoring.ts';
+import type { RhythmSchedule } from '../src/domain/rhythm-schedule.ts';
+import { addCalendarDays, selectRhythmScore } from '../src/domain/rhythm-scoring.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
 import {
   selectFoundationRhythmScores,
@@ -179,6 +180,116 @@ describe('selecting equal-weight Foundation scores', () => {
     if (changedSchedule?.kind !== 'rhythm-score') throw new Error('Expected the rescheduled Rhythm to be scored.');
     expect(changedSchedule.consistency).toMatchObject({ kind: 'scored' });
     expect(changedSchedule.consistency).not.toEqual(initial.consistency);
+  });
+
+  it('uses the 12-week shared-engine window for selected-weekday Rhythm scores', () => {
+    const rhythmId = 'selected-weekday-rhythm';
+    const asOfDate = '2026-10-27';
+    const startDate = '2026-08-05';
+    const schedule: RhythmSchedule = {
+      frequency: 'weekly',
+      weekdays: [1, 3, 5]
+    };
+    const completionHistory: { id: string; effectiveDate: string }[] = [];
+    for (let date = startDate; date <= asOfDate; date = addCalendarDays(date, 1)) {
+      if (new Date(`${date}T00:00:00.000Z`).getUTCDay() === 1) {
+        completionHistory.push({ id: `monday-${date}`, effectiveDate: date });
+      }
+    }
+    const rhythmWithHistory: RhythmPreview = {
+      ...rhythm(rhythmId, 'connection'),
+      schedule,
+      scoring: {
+        trackingStartDate: startDate,
+        timeZone: 'UTC',
+        scheduleHistory: [createRhythmSeason(rhythmId, startDate, schedule)]
+      },
+      createdLocalDate: startDate,
+      createdTimeZone: 'UTC',
+      completionHistory
+    };
+    const legacy = selectRhythmScore({
+      rhythmId,
+      schedule,
+      ...(rhythmWithHistory.scoring ? { scoring: rhythmWithHistory.scoring } : {}),
+      createdLocalDate: startDate,
+      createdTimeZone: 'UTC',
+      records: completionHistory.map(record => ({ ...record, rhythmId })),
+      recordsAvailable: true,
+      asOfDate,
+      timeZone: 'UTC'
+    });
+    const selected = selectFoundationRhythmScores(
+      [rhythmWithHistory],
+      [],
+      new Set(),
+      new Date(`${asOfDate}T12:00:00.000Z`),
+      'UTC'
+    ).get(rhythmId);
+
+    if (selected?.kind !== 'rhythm-score') {
+      throw new Error(selected?.kind === 'invalid' ? selected.reason : 'Expected the selected-weekday Rhythm to be scored.');
+    }
+    expect(selected.kind).toBe('rhythm-score');
+    expect(selected.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: {
+        frequency: 'weekly',
+        windowStartDate: '2026-08-05',
+        eligibleDueCount: 36,
+        completedCount: 12
+      }
+    });
+    if (selected.consistency.kind !== 'scored') throw new Error('Expected selected-weekday Consistency to be scored.');
+    expect(selected.consistency.score).toBeCloseTo(100 / 3);
+    expect(selected.onTrack).toMatchObject({ kind: 'scored', score: 100 });
+    expect(selected.healthScore).toBeCloseTo(50);
+    expect(legacy.kind).toBe('rhythm-score');
+    if (legacy.kind !== 'rhythm-score' || legacy.consistency.kind !== 'scored') {
+      throw new Error('Expected the prior scorer to produce a Rhythm score for comparison.');
+    }
+    expect(legacy.consistency.score).toBeCloseTo(500 / 13);
+    expect(legacy.healthScore).toBeCloseTo(500 / 13 * 0.75 + 25);
+  });
+
+  it('applies the lifetime missed-occurrence streak to Rhythm On Track scores', () => {
+    const rhythmId = 'old-yearly-rhythm';
+    const schedule: RhythmSchedule = {
+      frequency: 'yearly',
+      month: 12,
+      pattern: { kind: 'dayOfMonth', day: 1 }
+    };
+    const selected = selectFoundationRhythmScores(
+      [{
+        ...rhythm(rhythmId, 'connection'),
+        schedule,
+        scoring: {
+          trackingStartDate: '2010-12-01',
+          timeZone: 'UTC',
+          scheduleHistory: [createRhythmSeason(rhythmId, '2010-12-01', schedule)]
+        },
+        createdLocalDate: '2010-12-01',
+        createdTimeZone: 'UTC',
+        completionHistory: [{ id: 'first-completion', effectiveDate: '2010-12-01' }]
+      }],
+      [],
+      new Set(),
+      new Date('2026-12-02T12:00:00.000Z'),
+      'UTC'
+    ).get(rhythmId);
+
+    expect(selected?.kind).toBe('rhythm-score');
+    if (selected?.kind !== 'rhythm-score') throw new Error('Expected the yearly Rhythm to be scored.');
+    expect(selected.consistency).toMatchObject({ kind: 'scored', score: 0 });
+    expect(selected.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 0,
+      evidence: {
+        missedOccurrenceCount: 15,
+        lastQualifyingCompletionDate: '2010-12-01'
+      }
+    });
+    expect(selected.healthScore).toBe(0);
   });
 
   it('uses the single eligible Rhythm score directly', () => {

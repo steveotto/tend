@@ -13,6 +13,14 @@ export type RhythmScore = {
   rhythmId: string;
   scoreClockStartDate: string | null;
   consistencyWindow: { startDate: string; endDate: string };
+  onTrackOccurrences: readonly {
+    dueDate: string;
+    periodStartDate: string;
+    periodEndDate: string;
+    completed: boolean;
+    missed: boolean;
+    onTrack: number | null;
+  }[];
   occurrences: readonly {
     dueDate: string;
     periodStartDate: string;
@@ -308,15 +316,17 @@ function occurrenceCompleted(
 ): boolean {
   if (schedule.frequency === 'weekly' && schedule.weekdays.length === 1
     && schedule.weeklyMode !== 'select-days') {
-    return [...completionDates].some(date =>
-      date >= occurrence.periodStartDate && date <= occurrence.periodEndDate
-    );
+    for (const date of completionDates) {
+      if (date >= occurrence.periodStartDate && date <= occurrence.periodEndDate) return true;
+    }
+    return false;
   }
   if (schedule.frequency === 'monthly' || schedule.frequency === 'quarterly'
     || schedule.frequency === 'yearly') {
-    return [...completionDates].some(date =>
-      date >= occurrence.periodStartDate && date <= occurrence.periodEndDate
-    );
+    for (const date of completionDates) {
+      if (date >= occurrence.periodStartDate && date <= occurrence.periodEndDate) return true;
+    }
+    return false;
   }
   return completionDates.has(occurrence.dueDate);
 }
@@ -344,6 +354,7 @@ export function scoreRhythm(input: RhythmScoreInput): RhythmScore {
       rhythmId: input.rhythmId,
       scoreClockStartDate: null,
       consistencyWindow: { startDate: window.startDate, endDate: window.endDate },
+      onTrackOccurrences: [],
       occurrences: [],
       consistency: unscored,
       onTrack: unscored,
@@ -355,8 +366,11 @@ export function scoreRhythm(input: RhythmScoreInput): RhythmScore {
     .filter(occurrence => occurrence.periodEndDate >= scoreClockStartDate)
     .map(occurrence => {
       const completed = occurrenceCompleted(occurrence, input.schedule, completionDates);
-      const missed = !completed && occurrence.periodEndDate < input.asOfDate;
-      return { ...occurrence, completed, missed };
+      return {
+        ...occurrence,
+        completed,
+        missed: !completed && occurrence.periodEndDate < input.asOfDate
+      };
     });
 
   const completedCount = scoredOccurrences.filter(occurrence => occurrence.completed).length;
@@ -364,14 +378,30 @@ export function scoreRhythm(input: RhythmScoreInput): RhythmScore {
     ? { kind: 'unscored', reason: 'no-due-occurrences' }
     : { kind: 'scored', score: completedCount / scoredOccurrences.length * 100 };
 
+  const onTrackDueOccurrences = dueOccurrencesBetween(
+    input.schedule,
+    scoreClockStartDate,
+    input.asOfDate
+  )
+    .filter(occurrence => occurrence.periodEndDate >= scoreClockStartDate)
+    .map(occurrence => {
+      const completed = occurrenceCompleted(occurrence, input.schedule, completionDates);
+      return {
+        ...occurrence,
+        completed,
+        missed: !completed && occurrence.periodEndDate < input.asOfDate
+      };
+    });
   let onTrackValue = 100;
-  let hasOnTrackEvidence = scoredOccurrences.length > 0;
-  const occurrences = scoredOccurrences.map(occurrence => {
+  let hasOnTrackEvidence = false;
+  const onTrackOccurrences = onTrackDueOccurrences.map(occurrence => {
     if (occurrence.completed) {
       onTrackValue = 100;
       hasOnTrackEvidence = true;
     } else if (occurrence.missed) {
       onTrackValue = Math.max(0, onTrackValue - POINTS_PER_CONSECUTIVE_MISS);
+      hasOnTrackEvidence = true;
+    } else {
       hasOnTrackEvidence = true;
     }
     return {
@@ -379,6 +409,13 @@ export function scoreRhythm(input: RhythmScoreInput): RhythmScore {
       onTrack: hasOnTrackEvidence ? onTrackValue : null
     };
   });
+  const onTrackByDueDate = new Map(onTrackOccurrences.map(occurrence =>
+    [occurrence.dueDate, occurrence.onTrack] as const
+  ));
+  const occurrences = scoredOccurrences.map(occurrence => ({
+    ...occurrence,
+    onTrack: onTrackByDueDate.get(occurrence.dueDate) ?? null
+  }));
   const onTrack: ScoreMetric = hasOnTrackEvidence
     ? { kind: 'scored', score: onTrackValue }
     : { kind: 'unscored', reason: 'not-due-yet' };
@@ -391,6 +428,7 @@ export function scoreRhythm(input: RhythmScoreInput): RhythmScore {
     rhythmId: input.rhythmId,
     scoreClockStartDate,
     consistencyWindow: { startDate: window.startDate, endDate: window.endDate },
+    onTrackOccurrences,
     occurrences,
     consistency,
     onTrack,
