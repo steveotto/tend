@@ -631,6 +631,8 @@ export type RhythmPreview = {
   schedule?: RhythmSchedule;
   scoring?: RhythmScoringMetadata;
   createdLocalDate?: string;
+  createdLocalTime?: string;
+  createdDueTime?: string;
   createdTimeZone?: string;
   dailyBackfillAllowed?: boolean;
   timeOfDay?: RhythmTimeValue;

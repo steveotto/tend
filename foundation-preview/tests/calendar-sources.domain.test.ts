@@ -46,6 +46,62 @@ describe('calendar source contract', () => {
 });
 
 describe('calendar source backup schema', () => {
+  it('preserves known creation time-block boundaries and does not backfill schema 39 Rhythms', () => {
+    const data = createSamplePreviewData();
+    data.savedRhythms = [{
+      id: 'user-rhythm-10000000-0000-4000-8000-000000000001',
+      title: 'Synthetic evening stretch',
+      cadence: 'Daily',
+      timeLabel: 'Evening',
+      personIds: [],
+      categoryIds: ['health'],
+      timeOfDay: 'evening',
+      schedule: { frequency: 'daily' },
+      createdLocalDate: '2026-11-06',
+      createdLocalTime: '18:05',
+      createdDueTime: '18:00',
+      createdTimeZone: 'UTC'
+    }];
+    const currentEnvelope = createPreviewEnvelope(data);
+    const parsedCurrent = parsePreviewBackup(JSON.stringify(currentEnvelope), '2026-11-06');
+
+    expect(parsedCurrent).toMatchObject({
+      valid: true,
+      envelope: {
+        data: {
+          savedRhythms: [{
+            createdLocalDate: '2026-11-06',
+            createdLocalTime: '18:05',
+            createdDueTime: '18:00'
+          }]
+        }
+      }
+    });
+
+    const oldRhythm = { ...data.savedRhythms[0]! };
+    delete oldRhythm.createdLocalTime;
+    delete oldRhythm.createdDueTime;
+    const oldData = {
+      ...currentEnvelope.data,
+      savedRhythms: [oldRhythm]
+    };
+    const parsedOld = parsePreviewBackup(JSON.stringify({
+      ...currentEnvelope,
+      schemaVersion: 39,
+      data: oldData
+    }), '2026-11-06');
+
+    expect(parsedOld).toMatchObject({
+      valid: true,
+      sourceSchemaVersion: 39,
+      envelope: { data: { savedRhythms: [{ createdLocalDate: '2026-11-06' }] } }
+    });
+    if (parsedOld.valid) {
+      expect(parsedOld.envelope.data.savedRhythms[0]).not.toHaveProperty('createdLocalTime');
+      expect(parsedOld.envelope.data.savedRhythms[0]).not.toHaveProperty('createdDueTime');
+    }
+  });
+
   it('migrates schema 35 to 37 with empty sources while retaining existing collections', () => {
     const data = createSamplePreviewData();
     data.personNotes = [{

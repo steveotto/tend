@@ -34,7 +34,9 @@ For custom intervals, use the base unit's window: days use 30 days, weeks use 12
 
 A rhythm's scoring clock starts at its **first log entry** or at **creation**, whichever is earlier in effect:
 
-- A Rhythm created today with no completion history remains unscored until its assigned time block begins; at that point normal score-clock behavior applies; established Rhythms keep prior behavior. The score clock still begins at the first due occurrence, not the first completion - an abandoned Rhythm cannot hide unscored forever.
+- A newly created Rhythm with no completion history and a known creation time and assigned time-block start does not count an occurrence whose block began before creation. If its first scheduled occurrence's block has already begun when it is created, its score clock starts at the next scheduled occurrence. If it is created before that block begins, it remains unscored until the block starts, when normal score-clock behavior applies. This applies to the whole schedule, including multi-day weekly schedules.
+- Older Rhythms without both creation-time and assigned-block-start metadata keep their existing behavior. Do not infer, backfill, or guess a creation boundary for them.
+- The score clock still begins at the first eligible due occurrence, not the first completion - an abandoned Rhythm cannot hide unscored forever.
 - Backdated log entries count as normal evidence: the rhythm is scored exactly as if it had existed since the first logged date. Backdating is not a special mode; the engine just reads evidence.
 - Before the clock starts, nothing counts in either direction (no credit, no misses).
 

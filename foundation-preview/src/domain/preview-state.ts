@@ -30,7 +30,8 @@ import {
   validateSavedRhythmsV14,
   validateSavedRhythmsV17,
   validateSavedRhythmsV18,
-  validateSavedRhythmsV19
+  validateSavedRhythmsV19,
+  validateSavedRhythmsV20
 } from './rhythm-editor.ts';
 import { validateSavedRhythmsV10 } from './rhythm-editor.ts';
 import type { SavedRhythm } from './rhythm-editor.ts';
@@ -91,7 +92,7 @@ import { migrateTodayViewSelection } from './today-plan.ts';
 import type { TodayViewId } from './today-plan.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 39;
+export const PREVIEW_SCHEMA_VERSION = 40;
 
 export type PreviewData = {
   goals: MoneyGoal[];
@@ -148,7 +149,7 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39; resolvedPersonCategories: number }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40; resolvedPersonCategories: number }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
 const goalKeys = [
@@ -196,6 +197,7 @@ const dataKeysV36 = [...dataKeysV35, 'calendarSources'];
 const dataKeysV37 = dataKeysV36;
 const dataKeysV38 = [...dataKeysV37, 'todayView', 'flexibility'];
 const dataKeysV39 = dataKeysV38;
+const dataKeysV40 = dataKeysV39;
 const envelopeKeys = ['format', 'schemaVersion', 'data'];
 const supportedRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 const builtInRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
@@ -451,6 +453,10 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
           createdLocalDate: rhythm.createdLocalDate,
           createdTimeZone: rhythm.createdTimeZone
         }),
+        ...(rhythm.createdLocalTime === undefined ? {} : {
+          createdLocalTime: rhythm.createdLocalTime,
+          createdDueTime: rhythm.createdDueTime
+        }),
         ...(rhythm.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: rhythm.dailyBackfillAllowed })
       })),
       archivedRhythmIds: [...data.archivedRhythmIds],
@@ -594,6 +600,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
       && value.schemaVersion !== 36
       && value.schemaVersion !== 37
       && value.schemaVersion !== 38
+      && value.schemaVersion !== 39
       && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
@@ -628,7 +635,8 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const isV29 = value.schemaVersion === 29;
   const isV30 = value.schemaVersion === 30;
   const isV31 = value.schemaVersion === 31;
-  const isV39 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV40 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV39 = value.schemaVersion === 39 || isV40;
   const isV38 = value.schemaVersion === 38 || isV39;
   const isV37 = value.schemaVersion === 37 || isV38;
   const isV36 = value.schemaVersion === 36 || isV37;
@@ -653,7 +661,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const hasCardio = isV18 || hasCurrentFriendshipsData;
   const allowedDataKeys = isV1 ? dataKeysV1 : isV2 ? dataKeysV2
     : isV3 || isV4 ? dataKeysV3
-      : isV39 ? dataKeysV39 : isV38 ? dataKeysV38 : isV37 && value.schemaVersion === 37 ? dataKeysV37 : isV36 ? dataKeysV36 : value.schemaVersion === 35 ? dataKeysV35 : isV34 && value.schemaVersion === 34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
+      : isV40 ? dataKeysV40 : value.schemaVersion === 39 ? dataKeysV39 : isV38 ? dataKeysV38 : isV37 && value.schemaVersion === 37 ? dataKeysV37 : isV36 ? dataKeysV36 : value.schemaVersion === 35 ? dataKeysV35 : isV34 && value.schemaVersion === 34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
         : isV11 || isV12 ? dataKeysV12 : isV10 ? dataKeysV10
       : isV8 || isV9 ? dataKeysV8 : isV7 ? dataKeysV7 : isV6 ? dataKeysV6 : dataKeysV5;
   if (!isRecord(value.data) || (!isV19 && !isV20 && !hasOnlyKeysWithCompatibleDefaults(value.data, allowedDataKeys))
@@ -696,7 +704,8 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const timeBlocks = timeBlockValidation.settings;
   const people: PersonPreview[] = isV32 ? value.data.people as PersonPreview[] : createSamplePeople();
   if (!isV1 && !((isV4 || isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18 || hasCurrentFriendshipsData)
-    ? isV37 ? validateSavedRhythmsV19(value.data.savedRhythms)
+    ? isV40 ? validateSavedRhythmsV20(value.data.savedRhythms)
+      : isV37 ? validateSavedRhythmsV19(value.data.savedRhythms)
       : isV18 || hasCurrentFriendshipsData ? validateSavedRhythmsV18(value.data.savedRhythms)
       : isV17 ? validateSavedRhythmsV17(value.data.savedRhythms)
       : isV14 || isV15 || isV16 ? validateSavedRhythmsV14(value.data.savedRhythms)

@@ -1,6 +1,10 @@
 import { isValidDate } from './money-goals.ts';
 import type { RhythmCompletionRecord } from './rhythm-completion.ts';
-import { consistencyWindowForSchedule, scoreRhythm } from '../../../src/scoring/engine.ts';
+import {
+  consistencyWindowForSchedule,
+  scoreClockStartDateForSchedule,
+  scoreRhythm
+} from '../../../src/scoring/engine.ts';
 import type { RhythmScore as SharedRhythmScore } from '../../../src/scoring/engine.ts';
 import { HEALTH_CONSISTENCY_WEIGHT, HEALTH_ON_TRACK_WEIGHT, calculateBlendedHealth } from './rhythm-history.ts';
 import {
@@ -14,7 +18,7 @@ import {
   rhythmOccurrencePeriod,
   rhythmSchedulesEqual
 } from './rhythm-occurrences.ts';
-export { addCalendarDays, localDateInTimeZone } from './rhythm-occurrences.ts';
+export { addCalendarDays, localDateInTimeZone, localTimeInTimeZone } from './rhythm-occurrences.ts';
 import {
   effectiveRhythmSchedule,
   isValidTimeZone,
@@ -157,6 +161,8 @@ export type SelectRhythmScoreInput = {
   schedule?: RhythmSchedule;
   scoring?: RhythmScoringMetadata;
   createdLocalDate?: string;
+  createdLocalTime?: string;
+  createdDueTime?: string;
   createdTimeZone?: string;
   dailyBackfillAllowed?: boolean;
   records: readonly RhythmCompletionRecord[];
@@ -174,6 +180,7 @@ export type DailyRhythmScoreResult = RhythmScoreResult;
 export type SelectDailyRhythmScoreInput = SelectRhythmScoreInput;
 
 const deductionPerMissedOccurrence = 10 as const;
+const maximumCreationBoundarySearchDays = 366 * 100;
 
 function unscored(reasonCode: UnscoredReasonCode, explanation: string): UnscoredMetric {
   return { kind: 'unscored', reasonCode, explanation };
@@ -214,6 +221,47 @@ function previousDate(value: string): string {
   return addCalendarDays(value, -1);
 }
 
+function scoreClockStartDateForScheduleHistory(input: {
+  startDate: string | null;
+  createdDate?: string;
+  createdLocalTime?: string;
+  createdDueTime?: string;
+  completionDates: readonly string[];
+  scheduleForDate: (date: string) => RhythmSchedule | undefined;
+}): string | null {
+  const { createdDate, createdLocalTime, createdDueTime } = input;
+  if (input.startDate === null
+    || createdDate === undefined
+    || createdLocalTime === undefined
+    || createdDueTime === undefined
+    || createdLocalTime <= createdDueTime
+    || input.completionDates.some(date => date < createdDate)) {
+    return input.startDate;
+  }
+  const creationSchedule = input.scheduleForDate(createdDate);
+  if (!creationSchedule || isScheduledDate(creationSchedule, createdDate) !== true) return input.startDate;
+  for (let offset = 1; offset <= maximumCreationBoundarySearchDays; offset += 1) {
+    const date = addCalendarDays(createdDate, offset);
+    const schedule = input.scheduleForDate(date);
+    if (!schedule) return input.startDate;
+    if (isScheduledDate(schedule, date) === true) return date;
+  }
+  return null;
+}
+
+function firstDueDateInScheduleHistory(
+  startDate: string,
+  endDate: string,
+  scheduleForDate: (date: string) => RhythmSchedule | undefined
+): string | undefined {
+  for (let date = startDate; date <= endDate; date = addCalendarDays(date, 1)) {
+    const schedule = scheduleForDate(date);
+    if (!schedule) return undefined;
+    if (isScheduledDate(schedule, date) === true) return date;
+  }
+  return undefined;
+}
+
 function addCalendarMonths(value: string, amount: number): string {
   const { year, month, day } = dateParts(value);
   const monthIndex = year * 12 + month - 1 + amount;
@@ -252,6 +300,13 @@ function validateInput(input: SelectRhythmScoreInput): string | null {
     || input.createdLocalDate !== undefined
       && (!isValidDate(input.createdLocalDate) || !isValidTimeZone(input.createdTimeZone))) {
     return 'Rhythm creation date or time zone metadata is invalid.';
+  }
+  if ((input.createdLocalTime === undefined) !== (input.createdDueTime === undefined)
+    || input.createdLocalTime !== undefined
+      && (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(input.createdLocalTime)
+        || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(input.createdDueTime!))
+    || input.createdLocalTime !== undefined && input.createdLocalDate === undefined) {
+    return 'Rhythm creation time-block metadata is invalid.';
   }
   if (input.dailyBackfillAllowed !== undefined && typeof input.dailyBackfillAllowed !== 'boolean') {
     return 'Rhythm daily backfill metadata is invalid.';
@@ -309,6 +364,7 @@ function buildScoringOccurrences(input: {
   records: readonly RhythmCompletionRecord[];
   scheduleForDate: (date: string) => RhythmSchedule | undefined;
   segments: readonly RhythmScheduleHistorySegment[];
+  includeCurrentDueDate?: boolean;
 }): ScoringOccurrence[] {
   const occurrences: ScoringOccurrence[] = [];
   const assignedRecordIds = new Set<string>();
@@ -360,7 +416,8 @@ function buildScoringOccurrences(input: {
     }
     for (const record of matchedRecords) assignedRecordIds.add(record.id);
 
-    if (matchedRecords.length === 0
+    const includeCurrentDueDate = input.includeCurrentDueDate && date === input.asOfDate;
+    if (matchedRecords.length === 0 && !includeCurrentDueDate
       && (date > yesterday
         || isOnceWeeklyRhythmSchedule(schedule) && endDate >= input.asOfDate)) continue;
     const recordIds = matchedRecords.map(record => record.id);
@@ -429,15 +486,12 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
   const trackingCandidates = input.scoring
     ? [input.scoring.trackingStartDate, oldestCompletionDate]
     : [input.createdLocalDate, oldestCompletionDate];
-  const trackingStartDate = [
+  const sourceTrackingStartDate = [
     ...trackingCandidates
   ].filter((date): date is string => date !== undefined).sort()[0] ?? null;
-  if (trackingStartDate && trackingStartDate > input.asOfDate) {
-    return baseUnscored(input, unscored('not-started', 'This Rhythm’s tracking date is in the future.'));
-  }
 
   const scheduleForDate = (date: string): RhythmSchedule | undefined => {
-    if (!input.scoring) return trackingStartDate && date >= trackingStartDate ? schedule : undefined;
+    if (!input.scoring) return sourceTrackingStartDate && date >= sourceTrackingStartDate ? schedule : undefined;
     const historicalSegment = rhythmSeasonForDate(segments, date);
     const historicalSchedule = historicalSegment?.kind === 'scheduled' ? historicalSegment.schedule : undefined;
     if (historicalSchedule) return historicalSchedule;
@@ -448,11 +502,44 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
       && input.dailyBackfillAllowed !== false
       && (input.createdLocalDate === firstSegment.startDate
         || input.scoring.trackingStartDate < input.asOfDate)
-      && trackingStartDate !== null
-      && date >= trackingStartDate
+      && sourceTrackingStartDate !== null
+      && date >= sourceTrackingStartDate
       && date < firstSegment.startDate;
     return canUseUnchangedDailyScheduleBeforeHistory ? firstSegment.schedule : undefined;
   };
+  const trackingStartDate = scoreClockStartDateForScheduleHistory({
+    startDate: sourceTrackingStartDate,
+    ...(input.createdLocalDate === undefined ? {} : { createdDate: input.createdLocalDate }),
+    ...(input.createdLocalTime === undefined ? {} : { createdLocalTime: input.createdLocalTime }),
+    ...(input.createdDueTime === undefined ? {} : { createdDueTime: input.createdDueTime }),
+    completionDates: datedRecords.map(record => record.effectiveDate),
+    scheduleForDate
+  });
+  if (trackingStartDate && trackingStartDate > input.asOfDate) {
+    return baseUnscored(input, unscored('not-started', 'This Rhythm’s tracking date is in the future.'));
+  }
+  const creationBoundaryKnown = datedRecords.length === 0
+    && input.createdLocalTime !== undefined
+    && input.createdDueTime !== undefined;
+  const creationFirstDueDate = creationBoundaryKnown && trackingStartDate
+    ? firstDueDateInScheduleHistory(
+        trackingStartDate,
+        input.asOfDate,
+        scheduleForDate
+      )
+    : undefined;
+  const firstDueIsScorableToday = creationBoundaryKnown
+    && creationFirstDueDate === input.asOfDate
+    && input.asOfTime !== undefined
+    && input.dueTime !== undefined
+    && input.asOfTime >= input.dueTime;
+  if (creationBoundaryKnown
+    && creationFirstDueDate === input.asOfDate
+    && input.asOfTime !== undefined
+    && input.dueTime !== undefined
+    && input.asOfTime < input.dueTime) {
+    return baseUnscored(input, unscored('ready-for-first-tend', 'Starts when the first scheduled time block begins.'));
+  }
   const yesterday = previousDate(input.asOfDate);
   let consistency: ScoredConsistencyMetric | UnscoredMetric;
   if (!consistencyScheduleSupported(schedule)) {
@@ -463,6 +550,7 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
   } else if (!trackingStartDate) {
     consistency = unscored('ready-for-first-tend', 'Ready for your first Tend.');
   } else if (trackingStartDate === input.asOfDate
+    && !firstDueIsScorableToday
     && !datedRecords.some(record => record.effectiveDate === input.asOfDate
       && scheduleForDate(record.effectiveDate) !== undefined
       && isScheduledDate(scheduleForDate(record.effectiveDate)!, record.effectiveDate) === true)
@@ -497,8 +585,11 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
           && (recordSegment?.id ?? null) === (currentSegment?.id ?? null)
           && rhythmOccurrencePeriod(recordSchedule, record.effectiveDate).startDate === currentPeriod.startDate;
       });
-    const todayIncluded = schedule.frequency === 'daily' && completedToday;
-    const windowEndDate = todayIncluded || currentWeeklyPeriodIncluded ? input.asOfDate : yesterday;
+    const todayIncluded = schedule.frequency === 'daily' && completedToday
+      || firstDueIsScorableToday;
+    const windowEndDate = todayIncluded || currentWeeklyPeriodIncluded || firstDueIsScorableToday
+      ? input.asOfDate
+      : yesterday;
     if (windowStartDate > windowEndDate) {
       consistency = unscored(
         'no-eligible-occurrences',
@@ -522,7 +613,8 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
           asOfDate: input.asOfDate,
           records: datedRecords,
           scheduleForDate,
-          segments
+          segments,
+          ...(firstDueIsScorableToday ? { includeCurrentDueDate: true } : {})
         });
         const occurrences = scoringOccurrences.filter(occurrence => {
           if (occurrence.date !== input.asOfDate || !occurrence.recordIds.length) return true;
@@ -737,7 +829,9 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
           occurrences[occurrences.length - 1] = { date: input.asOfDate, status: 'completed', score };
         }
         const deduction = Math.min(100, missedOccurrenceCount * deductionPerMissedOccurrence);
-        onTrack = lastQualifyingCompletionDate === null && missedOccurrenceCount === 0
+        onTrack = lastQualifyingCompletionDate === null
+          && missedOccurrenceCount === 0
+          && !firstDueIsScorableToday
           ? unscored('ready-for-first-tend', 'Starts with your first Tend.')
           : {
               kind: 'scored',
@@ -943,7 +1037,27 @@ export function selectSharedEngineRhythmScore(input: SelectRhythmScoreInput): Rh
     input.createdLocalDate,
     ...records.map(record => record.effectiveDate)
   ].filter((date): date is string => date !== undefined).sort();
-  const scoreClockStartDate = clockDates[0] ?? input.scoring?.trackingStartDate ?? null;
+  const sourceScoreClockStartDate = clockDates[0] ?? input.scoring?.trackingStartDate ?? null;
+  let creationSchedule: RhythmSchedule | undefined;
+  if (input.createdLocalDate) {
+    if (input.scoring) {
+      const creationSeason = rhythmSeasonForDate(input.scoring.scheduleHistory, input.createdLocalDate);
+      if (creationSeason?.kind === 'scheduled') creationSchedule = creationSeason.schedule;
+    } else {
+      creationSchedule = schedule;
+    }
+  }
+  const scoreClockStartDate = creationSchedule
+    && (!input.scoring || input.scoring.scheduleHistory.length === 1)
+    ? scoreClockStartDateForSchedule({
+        schedule: creationSchedule,
+        startDate: sourceScoreClockStartDate,
+        ...(input.createdLocalDate === undefined ? {} : { createdDate: input.createdLocalDate }),
+        ...(input.createdLocalTime === undefined ? {} : { createdLocalTime: input.createdLocalTime }),
+        ...(input.createdDueTime === undefined ? {} : { createdDueTime: input.createdDueTime }),
+        completionDates: records.map(record => record.effectiveDate)
+      })
+    : sourceScoreClockStartDate;
   if (scoreClockStartDate && scoreClockStartDate > input.asOfDate) {
     return baseUnscored(input, unscored('not-started', 'This Rhythm’s tracking date is in the future.'));
   }
@@ -964,6 +1078,8 @@ export function selectSharedEngineRhythmScore(input: SelectRhythmScoreInput): Rh
     rhythmId: input.rhythmId,
     schedule,
     ...(input.createdLocalDate ? { createdDate: input.createdLocalDate } : {}),
+    ...(input.createdLocalTime ? { createdLocalTime: input.createdLocalTime } : {}),
+    ...(input.createdDueTime ? { createdDueTime: input.createdDueTime } : {}),
     ...(input.scoring ? { explicitStartDate: input.scoring.trackingStartDate } : {}),
     completionDates: records.map(record => record.effectiveDate),
     asOfDate: input.asOfDate,

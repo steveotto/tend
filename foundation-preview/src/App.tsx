@@ -124,7 +124,7 @@ import {
   rhythmCompletionStateForDate
 } from './domain/rhythm-completion.ts';
 import { resolveSeedCompletionRecords } from './domain/rhythm-history.ts';
-import { localDateInTimeZone } from './domain/rhythm-scoring.ts';
+import { localDateInTimeZone, localTimeInTimeZone } from './domain/rhythm-scoring.ts';
 import { hasRhythmOccurrenceForCompletion } from './domain/rhythm-occurrences.ts';
 import { selectSatisfiedRhythmIds, selectTendedRhythmDisplayIds } from './domain/category-rhythms.ts';
 import { prepareDatedRhythmCompletion } from './domain/rhythm-completion.ts';
@@ -165,11 +165,13 @@ import {
   effectiveRhythmSchedule,
   rhythmScheduleSummary,
   rhythmTimeLabel,
+  rhythmTimeValueFromLabel,
   type RhythmFrequencyRecommendation
 } from './domain/rhythm-schedule.ts';
 import {
   assignedTimeBlockIds,
   rhythmTimeOptionsForBlocks,
+  timeBlockIdFromRhythmValue,
   validateTimeBlockSettings
 } from './domain/time-blocks.ts';
 import { rhythmSchedulesEqual } from './domain/rhythm-occurrences.ts';
@@ -1972,14 +1974,28 @@ function PreviewWorkspace({
     const earliestDatedCompletionDate = rhythmEditor.rhythm?.completionHistory
       ?.map(record => record.effectiveDate)
       .sort()[0];
+    const creationInstant = new Date();
+    const creationTimeValue = rhythmTimeValueFromLabel(draft.timeLabel, configuredRhythmTimeOptions);
+    const creationTimeBlockId = creationTimeValue
+      ? timeBlockIdFromRhythmValue(creationTimeValue)
+      : undefined;
+    const creationDueTime = creationTimeBlockId
+      ? previewData.timeBlocks.blocks.find(block => block.id === creationTimeBlockId)?.start
+      : undefined;
     const result = saveRhythmDraft(
       previewData.savedRhythms,
       draft,
       rhythmEditor.id,
       rhythmEditor.rhythm ? 'edit' : 'create',
       {
-        currentDate: localDateInTimeZone(new Date(), scoringTimeZone),
+        currentDate: localDateInTimeZone(creationInstant, scoringTimeZone),
         deviceTimeZone: scoringTimeZone,
+        ...(!rhythmEditor.rhythm && creationDueTime
+          ? {
+              createdLocalTime: localTimeInTimeZone(creationInstant, scoringTimeZone),
+              createdDueTime: creationDueTime
+            }
+          : {}),
         hasDatedCompletionHistory,
         ...(rhythmEditor.rhythm?.createdLocalDate
           ? { effectiveStartDate: rhythmEditor.rhythm.createdLocalDate }

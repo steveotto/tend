@@ -330,14 +330,19 @@ describe('synthetic Rhythm editor domain', () => {
     expect(draft.originalScoring).toBeUndefined();
   });
 
-  it('stores creation-local-date and stable scoring timezone for a new structured Rhythm', () => {
+  it('stores a known creation time-block boundary for a new structured Rhythm', () => {
     const id = 'user-rhythm-22222222-2222-4222-8222-222222222222';
     const schedule = { frequency: 'weekly' as const, weekdays: [1, 3] as (1 | 3)[] };
     const result = saveRhythmDraft([], {
       ...validDraft,
       schedule,
       scheduleEditing: true
-    }, id, 'create', { currentDate: '2026-10-23', deviceTimeZone: 'UTC' });
+    }, id, 'create', {
+      currentDate: '2026-10-23',
+      deviceTimeZone: 'UTC',
+      createdLocalTime: '18:15',
+      createdDueTime: '18:00'
+    });
     expect(result.errors).toEqual({});
     expect(result.savedRhythms?.[0]?.scoring).toEqual({
       trackingStartDate: '2026-10-23',
@@ -356,6 +361,8 @@ describe('synthetic Rhythm editor domain', () => {
     expect(result.savedRhythms?.[0]).toMatchObject({
       createdLocalDate: '2026-10-23',
       createdTimeZone: 'UTC',
+      createdLocalTime: '18:15',
+      createdDueTime: '18:00',
       dailyBackfillAllowed: true
     });
   });

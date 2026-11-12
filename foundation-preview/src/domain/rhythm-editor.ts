@@ -82,6 +82,8 @@ export type SavedRhythm = {
   personal?: boolean;
   scoring?: RhythmScoringMetadata;
   createdLocalDate?: string;
+  createdLocalTime?: string;
+  createdDueTime?: string;
   createdTimeZone?: string;
   dailyBackfillAllowed?: boolean;
   primaryFoundationId?: string | null;
@@ -168,6 +170,7 @@ const savedRhythmV14Keys = [...savedRhythmV13Keys, 'suggestionSourceId'];
 const savedRhythmV17Keys = [...savedRhythmV14Keys, 'healthLogCapability'];
 const savedRhythmV18Keys = savedRhythmV17Keys;
 const savedRhythmV19Keys = [...savedRhythmV18Keys, 'healthRunTarget'];
+const savedRhythmV20Keys = [...savedRhythmV19Keys, 'createdLocalTime', 'createdDueTime'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -280,7 +283,18 @@ export function validateSavedRhythmsV18(value: unknown): value is SavedRhythm[] 
 }
 
 export function validateSavedRhythmsV19(value: unknown): value is SavedRhythm[] {
-  if (!validateSavedRhythmsWithCapability(value, savedRhythmV19Keys,
+  return validateSavedRhythmsWithHealthTarget(value, savedRhythmV19Keys);
+}
+
+export function validateSavedRhythmsV20(value: unknown): value is SavedRhythm[] {
+  return validateSavedRhythmsWithHealthTarget(value, savedRhythmV20Keys);
+}
+
+function validateSavedRhythmsWithHealthTarget(
+  value: unknown,
+  allowedKeys: readonly string[]
+): value is SavedRhythm[] {
+  if (!validateSavedRhythmsWithCapability(value, allowedKeys,
     'weight', 'cardio', 'workout', 'flexibility')) return false;
   return value.every(record => record.healthRunTarget === undefined || (
     record.healthLogCapability === 'cardio'
@@ -347,6 +361,13 @@ function validateSavedRhythmsWithKeys(
       || record.createdLocalDate !== undefined
         && (typeof record.createdLocalDate !== 'string' || !isValidDate(record.createdLocalDate)
           || !isValidTimeZone(record.createdTimeZone))) return false;
+    if ((record.createdLocalTime === undefined) !== (record.createdDueTime === undefined)
+      || record.createdLocalTime !== undefined
+        && (typeof record.createdLocalTime !== 'string'
+          || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(record.createdLocalTime)
+          || typeof record.createdDueTime !== 'string'
+          || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(record.createdDueTime))
+      || record.createdLocalTime !== undefined && record.createdLocalDate === undefined) return false;
     if (record.dailyBackfillAllowed !== undefined && typeof record.dailyBackfillAllowed !== 'boolean') return false;
     if (record.scoring !== undefined) {
       const validScoring = scoringVersion === 'v8'
@@ -510,6 +531,8 @@ export function saveRhythmDraft(
   scoringContext?: {
     currentDate: string;
     deviceTimeZone: string;
+    createdLocalTime?: string;
+    createdDueTime?: string;
     hasDatedCompletionHistory?: boolean;
     effectiveStartDate?: string;
     earliestDatedCompletionDate?: string;
@@ -554,6 +577,16 @@ export function saveRhythmDraft(
   for (const date of [scoringContext?.effectiveStartDate, scoringContext?.earliestDatedCompletionDate]) {
     if (date !== undefined && !isValidDate(date)) {
       errors.schedule = 'Earlier schedule history contains an invalid date.';
+      return { errors };
+    }
+    for (const time of [scoringContext?.createdLocalTime, scoringContext?.createdDueTime]) {
+      if (time !== undefined && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) {
+        errors.schedule = 'Rhythm creation time-block metadata is invalid.';
+        return { errors };
+      }
+    }
+    if ((scoringContext?.createdLocalTime === undefined) !== (scoringContext?.createdDueTime === undefined)) {
+      errors.schedule = 'Rhythm creation time-block metadata is incomplete.';
       return { errors };
     }
   }
@@ -738,12 +771,20 @@ export function saveRhythmDraft(
         ? {
             createdLocalDate: scoringContext.currentDate,
             createdTimeZone: scoringContext.deviceTimeZone,
+            ...(scoringContext.createdLocalTime !== undefined && scoringContext.createdDueTime !== undefined ? {
+              createdLocalTime: scoringContext.createdLocalTime,
+              createdDueTime: scoringContext.createdDueTime
+            } : {}),
             dailyBackfillAllowed: true
           }
         : {}
       : {
           createdLocalDate: existing.createdLocalDate,
           createdTimeZone: existing.createdTimeZone,
+          ...(existing.createdLocalTime === undefined ? {} : {
+            createdLocalTime: existing.createdLocalTime,
+            createdDueTime: existing.createdDueTime
+          }),
           ...(existing.dailyBackfillAllowed === undefined
             ? {}
             : { dailyBackfillAllowed: existing.dailyBackfillAllowed })
@@ -819,6 +860,10 @@ export function applySavedRhythmOverrides(
     ...(saved.createdLocalDate === undefined ? {} : {
       createdLocalDate: saved.createdLocalDate,
       createdTimeZone: saved.createdTimeZone
+    }),
+    ...(saved.createdLocalTime === undefined ? {} : {
+      createdLocalTime: saved.createdLocalTime,
+      createdDueTime: saved.createdDueTime
     }),
     ...(saved.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: saved.dailyBackfillAllowed }),
     ...(saved.personal === undefined ? {} : { personal: saved.personal }),

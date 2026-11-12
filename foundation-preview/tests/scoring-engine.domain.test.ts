@@ -211,6 +211,76 @@ describe('shared scoring engine Rhythm scores', () => {
     expect(established.onTrack).toEqual({ kind: 'scored', score: 90 });
   });
 
+  it('starts a known late-created Rhythm at its next selected weekday occurrence', () => {
+    const schedule: RhythmSchedule = {
+      frequency: 'weekly',
+      weekdays: [1, 3, 5]
+    };
+    const input = {
+      rhythmId: 'late-created-weekly',
+      schedule,
+      createdDate: '2026-11-11',
+      createdLocalTime: '18:01',
+      createdDueTime: '18:00',
+      completionDates: []
+    };
+    const createdAfterWednesdayBlock = scoreRhythm({
+      ...input,
+      asOfDate: '2026-11-11',
+      asOfTime: '18:01',
+      dueTime: '18:00'
+    });
+    const beforeFridayBlock = scoreRhythm({
+      ...input,
+      asOfDate: '2026-11-13',
+      asOfTime: '17:59',
+      dueTime: '18:00'
+    });
+    const atFridayBlock = scoreRhythm({
+      ...input,
+      asOfDate: '2026-11-13',
+      asOfTime: '18:00',
+      dueTime: '18:00'
+    });
+
+    expect(createdAfterWednesdayBlock.scoreClockStartDate).toBe('2026-11-13');
+    expect(createdAfterWednesdayBlock.health).toBeNull();
+    expect(beforeFridayBlock.consistency).toEqual({ kind: 'unscored', reason: 'not-due-yet' });
+    expect(beforeFridayBlock.onTrack).toEqual({ kind: 'unscored', reason: 'not-due-yet' });
+    expect(atFridayBlock.consistency).toEqual({ kind: 'scored', score: 0 });
+    expect(atFridayBlock.onTrack).toEqual({ kind: 'scored', score: 100 });
+    expect(atFridayBlock.health).toBe(25);
+  });
+
+  it('keeps known pre-block creation unscored until the assigned block and preserves missing-boundary behavior', () => {
+    const knownCreation = {
+      rhythmId: 'created-before-block',
+      schedule: { frequency: 'daily' } as const,
+      createdDate: asOfDate,
+      createdLocalTime: '17:59',
+      createdDueTime: '18:00',
+      completionDates: [],
+      asOfDate,
+      dueTime: '18:00'
+    };
+    const beforeBlock = scoreRhythm({ ...knownCreation, asOfTime: '17:59' });
+    const atBlock = scoreRhythm({ ...knownCreation, asOfTime: '18:00' });
+    const missingBoundary = scoreRhythm({
+      rhythmId: 'legacy-creation-boundary',
+      schedule: { frequency: 'daily' },
+      createdDate: asOfDate,
+      completionDates: [],
+      asOfDate,
+      asOfTime: '18:01',
+      dueTime: '18:00'
+    });
+
+    expect(beforeBlock.health).toBeNull();
+    expect(beforeBlock.consistency).toEqual({ kind: 'unscored', reason: 'not-due-yet' });
+    expect(atBlock.health).toBe(25);
+    expect(missingBoundary.health).toBe(25);
+  });
+
   it('uses a backdated completion as clock evidence earlier than creation', () => {
     const result = scoreRhythm({
       rhythmId: 'backdated',

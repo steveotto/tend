@@ -37,6 +37,20 @@ export function addCalendarDays(value: string, amount: number): string {
   ].join('-');
 }
 
+export function localTimeInTimeZone(value: Date, timeZone: string): string {
+  if (!Number.isFinite(value.getTime())) throw new RangeError('The scoring instant is invalid.');
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(value);
+  const hour = parts.find(part => part.type === 'hour')?.value;
+  const minute = parts.find(part => part.type === 'minute')?.value;
+  if (!hour || !minute) throw new RangeError('Could not determine local scoring time.');
+  return `${hour}:${minute}`;
+}
+
 export function dateParts(value: string): { year: number; month: number; day: number } {
   const [year, month, day] = value.split('-').map(Number);
   return { year: year!, month: month!, day: day! };

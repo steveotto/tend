@@ -2121,4 +2121,79 @@ describe('daily occurrence scoring', () => {
       reasonCode: 'timezone-uncertain'
     });
   });
+
+  it('applies the next-occurrence boundary through schedule-history fallback', () => {
+    const rhythmId = 'weekly-history-fallback';
+    const createdDate = '2026-11-11';
+    const initialSchedule: RhythmSchedule = {
+      frequency: 'weekly',
+      weekdays: [1, 3, 5]
+    };
+    const currentSchedule: RhythmSchedule = {
+      frequency: 'weekly',
+      weekdays: [1, 4, 5]
+    };
+    const scoreInput = {
+      rhythmId,
+      schedule: currentSchedule,
+      scoring: {
+        trackingStartDate: createdDate,
+        timeZone: 'UTC',
+        scheduleHistory: [
+          createRhythmSeason(rhythmId, createdDate, initialSchedule),
+          createRhythmSeason(rhythmId, '2026-11-12', currentSchedule)
+        ]
+      },
+      createdLocalDate: createdDate,
+      createdLocalTime: '18:01',
+      createdDueTime: '18:00',
+      createdTimeZone: 'UTC',
+      records: [],
+      recordsAvailable: true,
+      asOfDate: '2026-11-12',
+      timeZone: 'UTC',
+      dueTime: '18:00'
+    } satisfies SelectDailyRhythmScoreInput;
+    const beforeBlock = selectDailyRhythmScore({ ...scoreInput, asOfTime: '17:59' });
+    const atBlock = scored({ ...scoreInput, asOfTime: '18:00' });
+
+    expect(beforeBlock).toMatchObject({
+      kind: 'unscored',
+      reason: { reasonCode: 'ready-for-first-tend' },
+      consistency: { kind: 'unscored', reasonCode: 'ready-for-first-tend' },
+      onTrack: { kind: 'unscored', reasonCode: 'ready-for-first-tend' },
+      healthScore: null
+    });
+    expect(atBlock).toMatchObject({
+      trackingStartDate: '2026-11-12',
+      consistency: {
+        kind: 'scored',
+        score: 0,
+        evidence: { eligibleDueCount: 1, completedCount: 0, todayIncluded: true }
+      },
+      onTrack: { kind: 'scored', score: 100 },
+      healthScore: 25
+    });
+
+    const {
+      createdLocalTime: _createdLocalTime,
+      createdDueTime: _createdDueTime,
+      ...legacyInput
+    } = scoreInput;
+    void _createdLocalTime;
+    void _createdDueTime;
+    const rhythmWithoutCreationTime = selectDailyRhythmScore({
+      ...legacyInput,
+      schedule: initialSchedule,
+      asOfDate: createdDate,
+      asOfTime: '18:01'
+    });
+    expect(rhythmWithoutCreationTime).toMatchObject({
+      kind: 'rhythm-score',
+      trackingStartDate: createdDate,
+      consistency: { kind: 'unscored', reasonCode: 'ready-for-first-tend' },
+      onTrack: { kind: 'unscored', reasonCode: 'ready-for-first-tend' },
+      healthScore: null
+    });
+  });
 });

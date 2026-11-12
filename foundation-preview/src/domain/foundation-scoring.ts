@@ -1,7 +1,11 @@
 import { averageScores } from '../../../src/scoring/engine.ts';
 import type { RhythmPreview } from './preview-data.ts';
 import { foundationRhythmIds } from './foundation-rhythm-associations.ts';
-import { localDateInTimeZone, selectSharedEngineRhythmScore } from './rhythm-scoring.ts';
+import {
+  localDateInTimeZone,
+  localTimeInTimeZone,
+  selectSharedEngineRhythmScore
+} from './rhythm-scoring.ts';
 import type {
   RhythmScoreResult,
   ScoredConsistencyMetric,
@@ -77,6 +81,8 @@ export function selectFoundationRhythmScores(
         ...(schedule ? { schedule } : {}),
         ...(rhythm.scoring ? { scoring: rhythm.scoring } : {}),
         ...(rhythm.createdLocalDate ? { createdLocalDate: rhythm.createdLocalDate } : {}),
+        ...(rhythm.createdLocalTime ? { createdLocalTime: rhythm.createdLocalTime } : {}),
+        ...(rhythm.createdDueTime ? { createdDueTime: rhythm.createdDueTime } : {}),
         ...(rhythm.createdTimeZone ? { createdTimeZone: rhythm.createdTimeZone } : {}),
         ...(rhythm.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: rhythm.dailyBackfillAllowed }),
         records,
@@ -88,19 +94,6 @@ export function selectFoundationRhythmScores(
       })
     ] as const;
   }));
-}
-
-function localTimeInTimeZone(instant: Date, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone,
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23'
-  }).formatToParts(instant);
-  const hour = parts.find(part => part.type === 'hour')?.value;
-  const minute = parts.find(part => part.type === 'minute')?.value;
-  if (!hour || !minute) throw new RangeError('Could not determine local scoring time.');
-  return `${hour}:${minute}`;
 }
 
 function isScoredConsistency(

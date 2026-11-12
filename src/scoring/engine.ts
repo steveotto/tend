@@ -38,6 +38,8 @@ export type RhythmScoreInput = {
   rhythmId: string;
   schedule: RhythmSchedule;
   createdDate?: string;
+  createdLocalTime?: string;
+  createdDueTime?: string;
   explicitStartDate?: string;
   completionDates: readonly string[];
   asOfDate: string;
@@ -274,6 +276,36 @@ function getScoreClockStart(input: RhythmScoreInput): string | null {
   return input.explicitStartDate ?? null;
 }
 
+export function scoreClockStartDateForSchedule(input: {
+  schedule: RhythmSchedule;
+  startDate: string | null;
+  createdDate?: string;
+  createdLocalTime?: string;
+  createdDueTime?: string;
+  completionDates: readonly string[];
+}): string | null {
+  const { createdDate, createdLocalTime, createdDueTime } = input;
+  if (input.startDate === null
+    || createdDate === undefined
+    || createdLocalTime === undefined
+    || createdDueTime === undefined
+    || createdLocalTime <= createdDueTime
+    || input.completionDates.some(date => date < createdDate)
+    || dueOccurrencesBetween(input.schedule, createdDate, createdDate).length === 0) {
+    return input.startDate;
+  }
+  const nextSearchEnd = addDays(createdDate, MAX_SCHEDULE_SEARCH_DAYS);
+  return dueOccurrencesBetween(input.schedule, addDays(createdDate, 1), nextSearchEnd)[0]?.dueDate ?? null;
+}
+
+export function firstDueDateForSchedule(
+  schedule: RhythmSchedule,
+  startDate: string,
+  endDate: string
+): string | undefined {
+  return dueOccurrencesBetween(schedule, startDate, endDate)[0]?.dueDate;
+}
+
 function consistencyWindow(
   schedule: RhythmSchedule,
   asOfDate: string,
@@ -348,6 +380,17 @@ function validateInput(input: RhythmScoreInput): void {
   }
   if (input.createdDate !== undefined) assertDate(input.createdDate);
   if (input.explicitStartDate !== undefined) assertDate(input.explicitStartDate);
+  for (const time of [input.createdLocalTime, input.createdDueTime]) {
+    if (time !== undefined && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) {
+      throw new RangeError(`Invalid creation local time: ${time}`);
+    }
+  }
+  if ((input.createdLocalTime === undefined) !== (input.createdDueTime === undefined)) {
+    throw new TypeError('Both the creation local time and creation due time are required.');
+  }
+  if (input.createdLocalTime !== undefined && input.createdDate === undefined) {
+    throw new TypeError('Creation time-block metadata requires a creation date.');
+  }
   for (const date of input.completionDates) assertDate(date);
   if (!Number.isInteger(input.schedule.frequency === 'custom' ? input.schedule.interval : 1)
     || input.schedule.frequency === 'custom' && input.schedule.interval < 1) {
@@ -357,13 +400,29 @@ function validateInput(input: RhythmScoreInput): void {
 
 export function scoreRhythm(input: RhythmScoreInput): RhythmScore {
   validateInput(input);
+  const rawScoreClockStartDate = getScoreClockStart(input);
+  const scoreClockStartDate = scoreClockStartDateForSchedule({
+    schedule: input.schedule,
+    startDate: rawScoreClockStartDate,
+    ...(input.createdDate === undefined ? {} : { createdDate: input.createdDate }),
+    ...(input.createdLocalTime === undefined ? {} : { createdLocalTime: input.createdLocalTime }),
+    ...(input.createdDueTime === undefined ? {} : { createdDueTime: input.createdDueTime }),
+    completionDates: input.completionDates
+  });
+  const knownCreationBoundary = input.createdLocalTime !== undefined
+    && input.createdDueTime !== undefined
+    && input.completionDates.length === 0;
+  const firstDueDate = scoreClockStartDate === null
+    ? undefined
+    : firstDueDateForSchedule(input.schedule, scoreClockStartDate, input.asOfDate);
   const firstOccurrenceNotDue = input.asOfTime !== undefined
     && input.asOfTime < input.dueTime!
-    && input.createdDate === input.asOfDate
-    && !input.completionDates.some(date => date <= input.asOfDate);
+    && !input.completionDates.some(date => date <= input.asOfDate)
+    && (knownCreationBoundary
+      ? firstDueDate === input.asOfDate
+      : input.createdDate === input.asOfDate);
   const includeAsOfDate = !firstOccurrenceNotDue;
   const dueThroughDate = includeAsOfDate ? input.asOfDate : addDays(input.asOfDate, -1);
-  const scoreClockStartDate = getScoreClockStart(input);
   const window = consistencyWindow(input.schedule, input.asOfDate, scoreClockStartDate, includeAsOfDate);
   if (scoreClockStartDate === null) {
     const unscored: ScoreMetric = { kind: 'unscored', reason: 'missing-clock' };

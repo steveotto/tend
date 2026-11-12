@@ -10,7 +10,8 @@ import {
   createPreviewEnvelope,
   createSamplePreviewData,
   isPreviewDataPristine,
-  parsePreviewBackup
+  parsePreviewBackup,
+  PREVIEW_SCHEMA_VERSION
 } from '../src/domain/preview-state.ts';
 import type { PreviewData } from '../src/domain/preview-state.ts';
 import { prepareDatedRhythmCompletion } from '../src/domain/rhythm-completion.ts';
@@ -438,17 +439,18 @@ describe('Preview account sync', () => {
     const localData = createSamplePreviewData();
     const localRaw = JSON.stringify(createPreviewEnvelope(localData));
     const currentDocument = createPreviewEnvelope(localData);
+    const futureSchemaVersion = PREVIEW_SCHEMA_VERSION + 1;
     const futureDocument = {
       ...currentDocument,
-      schemaVersion: 40,
+      schemaVersion: futureSchemaVersion,
       data: {
         ...currentDocument.data,
-        futureV40Field: { retained: true }
+        futureField: { retained: true }
       }
     };
     const service = backend({
       document: futureDocument,
-      schemaVersion: 40,
+      schemaVersion: futureSchemaVersion,
       revision: 8,
       updatedAt: '2026-11-06T12:00:00.000Z'
     });
@@ -458,7 +460,7 @@ describe('Preview account sync', () => {
     await screen.findAllByText(/not supported/i);
     expect(service.saveCalls).toBe(0);
     expect(storage.values.get(PREVIEW_STORAGE_KEY)).toBe(localRaw);
-    expect((service.record?.document as typeof futureDocument).data.futureV40Field)
+    expect((service.record?.document as typeof futureDocument).data.futureField)
       .toEqual({ retained: true });
     view.unmount();
   });
