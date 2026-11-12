@@ -1,6 +1,6 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync } from 'node:fs';
 import path from 'node:path';
 import type { Plugin } from 'vite';
 
@@ -26,26 +26,55 @@ const legacyStylesPlugin: Plugin = {
   }
 };
 
-export default defineConfig({
-  plugins: [react(), legacyStylesPlugin],
-  server: {
-    fs: {
-      allow: [path.resolve(import.meta.dirname, '..')]
-    }
-  },
-  build: {
-    rollupOptions: {
-      input: {
-        app: path.resolve(projectRoot, 'app-preview.html'),
-        catalogue: path.resolve(projectRoot, 'preview.html'),
-        comparison: path.resolve(projectRoot, 'comparison.html'),
-        legacyReference: path.resolve(projectRoot, 'legacy-reference.html')
+function pagesRootEntryPlugin(): Plugin {
+  return {
+    name: 'cloudflare-preview-root-entry',
+    writeBundle(outputOptions) {
+      const outputDirectory = path.resolve(outputOptions.dir ?? path.resolve(projectRoot, 'dist'));
+      const appEntry = path.join(outputDirectory, 'app-preview.html');
+      const rootEntry = path.join(outputDirectory, 'index.html');
+      if (!existsSync(appEntry)) {
+        throw new Error('Pages build did not emit the Preview HTML entry.');
       }
+      if (existsSync(rootEntry)) {
+        throw new Error('Pages build unexpectedly emitted a root index.html entry.');
+      }
+      renameSync(appEntry, rootEntry);
     }
-  },
-  test: {
-    environment: 'jsdom',
-    include: ['tests/**/*.component.test.tsx', 'tests/**/*.domain.test.ts'],
-    restoreMocks: true
-  }
+  };
+}
+
+export default defineConfig(({ mode }) => {
+  const isPagesBuild = mode === 'pages';
+
+  return {
+    plugins: [
+      react(),
+      legacyStylesPlugin,
+      ...(isPagesBuild ? [pagesRootEntryPlugin()] : [])
+    ],
+    server: {
+      fs: {
+        allow: [path.resolve(projectRoot, '..')]
+      }
+    },
+    build: {
+      outDir: path.resolve(projectRoot, 'dist'),
+      rollupOptions: {
+        input: isPagesBuild
+          ? { index: path.resolve(projectRoot, 'app-preview.html') }
+          : {
+              app: path.resolve(projectRoot, 'app-preview.html'),
+              catalogue: path.resolve(projectRoot, 'preview.html'),
+              comparison: path.resolve(projectRoot, 'comparison.html'),
+              legacyReference: path.resolve(projectRoot, 'legacy-reference.html')
+            }
+      }
+    },
+    test: {
+      environment: 'jsdom',
+      include: ['tests/**/*.component.test.tsx', 'tests/**/*.domain.test.ts'],
+      restoreMocks: true
+    }
+  };
 });
