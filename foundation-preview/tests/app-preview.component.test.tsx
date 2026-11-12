@@ -125,6 +125,26 @@ function seasonDeletionFixture() {
 }
 
 describe('Tend Today preview', () => {
+  it('renders the synthetic Prayer action on Today without adding it to persisted preview data', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+
+    expect(screen.getByRole('heading', { name: 'Prayer' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Customize' }));
+    const selection = screen.getByRole('dialog', { name: 'Prayer selection' });
+    await user.click(within(selection).getByRole('button', { name: /Change timeframe/ }));
+    const timeframes = within(selection).getByRole('group', { name: 'Prayer timeframes' });
+    await user.click(within(timeframes).getByRole('button', { name: /All Day/ }));
+    await user.click(within(selection).getByRole('button', { name: 'Start prayer' }));
+    const session = screen.getByRole('dialog', { name: 'One request at a time' });
+    expect(within(session).getByRole('heading', { name: 'Patience during a busy week' })).toBeTruthy();
+    await user.click(within(session).getByRole('button', { name: 'Prayed' }));
+
+    const stored = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!);
+    expect(stored.data).not.toHaveProperty('prayerRequests');
+  });
+
   it('persists name-only Season corrections, clears names explicitly, and keeps boundaries and logs intact', async () => {
     const user = userEvent.setup();
     const fixture = seasonDeletionFixture();

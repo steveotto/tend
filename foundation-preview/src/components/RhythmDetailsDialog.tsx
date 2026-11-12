@@ -19,6 +19,7 @@ import type { RhythmSeasonEditDraft } from '../domain/rhythm-season-edit.ts';
 import type { RhythmSeasonDeletionUndo } from '../domain/rhythm-season-delete.ts';
 import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
 import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
+import { useScrollLock } from '../hooks/useScrollLock.ts';
 
 type RhythmDetailsDialogProps = {
   rhythm: RhythmPreview;
@@ -82,6 +83,7 @@ export function RhythmDetailsDialog({
   const [showHistory, setShowHistory] = useState(initialView === 'history');
   const [showCompletion, setShowCompletion] = useState(false);
   const titleId = headingId ?? (inline ? `today-rhythm-${rhythm.id}-title` : 'rhythm-details-title');
+  useScrollLock(!inline && !embedded);
   useEffect(() => {
     if (inline) return;
     if (embedded) {
