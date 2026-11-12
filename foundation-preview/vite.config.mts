@@ -1,6 +1,6 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
-import { existsSync, readFileSync, renameSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { Plugin } from 'vite';
 import { loadEnv } from 'vite';
@@ -50,20 +50,29 @@ function cloudflarePreviewPlugin(includeSupabaseClient: boolean): Plugin {
   };
 }
 
-function pagesRootEntryPlugin(): Plugin {
+function legacyShellPlugin(): Plugin {
   return {
-    name: 'cloudflare-preview-root-entry',
-    writeBundle(outputOptions) {
-      const outputDirectory = path.resolve(outputOptions.dir ?? path.resolve(projectRoot, 'dist'));
-      const appEntry = path.join(outputDirectory, 'app-preview.html');
-      const rootEntry = path.join(outputDirectory, 'index.html');
-      if (!existsSync(appEntry)) {
-        throw new Error('Pages build did not emit the Preview HTML entry.');
+    name: 'preserve-legacy-root-shell',
+    generateBundle(_outputOptions, bundle) {
+      const legacyHtml = readFileSync(path.resolve(projectRoot, '..', 'index.html'), 'utf8');
+      this.emitFile({
+        type: 'asset',
+        fileName: 'index.html',
+        source: legacyHtml
+      });
+
+      for (const [, reference] of legacyHtml.matchAll(/(?:src|href)="([^"]+)"/g)) {
+        const [referencePath] = reference!.split(/[?#]/, 1);
+        if (!referencePath || referencePath.startsWith('/') || /^[a-z][a-z\d+.-]*:/i.test(referencePath)) continue;
+        if (referencePath === 'tend.css' || referencePath === 'tend-scoring.js' || bundle[referencePath]) continue;
+        const sourcePath = path.resolve(projectRoot, '..', referencePath);
+        if (!existsSync(sourcePath)) throw new Error(`Legacy shell asset is missing: ${referencePath}`);
+        this.emitFile({
+          type: 'asset',
+          fileName: referencePath,
+          source: readFileSync(sourcePath)
+        });
       }
-      if (existsSync(rootEntry)) {
-        throw new Error('Pages build unexpectedly emitted a root index.html entry.');
-      }
-      renameSync(appEntry, rootEntry);
     }
   };
 }
@@ -85,7 +94,7 @@ export default defineConfig(({ mode }) => {
       react(),
       legacyStylesPlugin,
       ...(isPagesBuild
-        ? [cloudflarePreviewPlugin(includeSupabaseClient), pagesRootEntryPlugin()]
+        ? [cloudflarePreviewPlugin(includeSupabaseClient), legacyShellPlugin()]
         : [])
     ],
     server: {
@@ -97,7 +106,7 @@ export default defineConfig(({ mode }) => {
       outDir: path.resolve(projectRoot, 'dist'),
       rollupOptions: {
         input: isPagesBuild
-          ? { index: path.resolve(projectRoot, 'app-preview.html') }
+          ? { 'app-preview': path.resolve(projectRoot, 'app-preview.html') }
           : {
               app: path.resolve(projectRoot, 'app-preview.html'),
               catalogue: path.resolve(projectRoot, 'preview.html'),
