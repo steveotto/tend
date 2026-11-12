@@ -77,7 +77,7 @@ Flexibility scores come only from rhythms linked to the Flexibility foundation (
 
 ## Explicitly keep
 
-The `FITNESS_MUSCLES` definition, the per-group `muscleIntervals` settings, per-region stretch intervals, and the recommendation engines that use them are NOT scoring code and must NOT be removed in Phase 3. They remain live as the diagnostic body maps and recommendation engines. Phase 3 removes only their role as scoring inputs; the "Recommended" workout cards, the Workout button (Full workout / Quick log), quick-log muscle-group capture, Flexibility Recommended/Saved/History routines, routine builder, session player, and region recommendations all continue to work unchanged.
+The `FITNESS_MUSCLES` definition, the per-group `muscleIntervals` settings, the Flexibility region catalogue (Hamstrings, Calves, Glutes, Abs, Hip flexors, Quads, Chest, Shoulders, Back, Neck), per-region stretch intervals, and the recommendation engines that use them are NOT scoring code and must NOT be removed in Phase 3. They remain live as the diagnostic body maps and recommendation engines. Phase 3 removes only their role as scoring inputs; the "Recommended" workout cards, the Workout button (Full workout / Quick log), quick-log muscle-group capture, Flexibility Recommended/Saved/History routines, routine builder, session player, and region recommendations all continue to work unchanged.
 
 ## Future candidates for the shared engine
 
