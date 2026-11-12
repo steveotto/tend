@@ -63,7 +63,7 @@ body {
 }
 
 @media (max-width: 650px) {
-  body.mobile-search-open .utility-search-results--full-bleed {
+  body.mobile-search-open .utility-search-results.utility-search-results--full-bleed {
     position: fixed;
     top: calc(env(safe-area-inset-top) + 128px);
     right: 0;
