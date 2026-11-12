@@ -22,6 +22,7 @@ type PreviewBackupImportControlProps = {
   status: PreviewPersistenceStatus;
   currentDate: string;
   onImport: (data: PreviewData, sourceRaw?: string) => string | null;
+  currentRaw?: string | null;
   recoveryRaw?: string | null;
   recoverySourceRaw?: string | null;
   recoveryArchiveRaw?: string | null;
@@ -35,6 +36,7 @@ export function PreviewBackupImportControl({
   status,
   currentDate,
   onImport,
+  currentRaw = null,
   recoveryRaw = null,
   recoverySourceRaw = null,
   recoveryArchiveRaw = null,
@@ -107,6 +109,16 @@ export function PreviewBackupImportControl({
 
   function confirmImport() {
     if (!pending) return;
+    const recoveryRaw = currentRaw ?? JSON.stringify(createPreviewEnvelope(data), null, 2);
+    const recoveryError = downloadText(
+      'tend-preview-before-import-raw.json',
+      recoveryRaw,
+      'application/json'
+    );
+    if (recoveryError) {
+      setMessage({ text: `The current preview recovery could not be downloaded, so nothing was replaced. ${recoveryError}`, error: true });
+      return;
+    }
     const error = onImport(pending.data, pending.raw);
     if (error) {
       setMessage({ text: error, error: true });
@@ -261,7 +273,7 @@ export function PreviewBackupImportControl({
             <div><dt>Goals and check-ins</dt><dd>{pending.data.goals.length} / {pending.data.goals.reduce((count, goal) => count + goal.checkIns.length, 0)}</dd></div>
           </dl>
           <p className="preview-data-controls__help">
-            Supported People, Rhythm associations, completion and activity logs, settings, and other validated data will be imported. The current local data is preserved as a recovery copy before replacement. Schema {pending.sourceSchemaVersion} is validated and migrated where supported.
+            Supported People, Rhythm associations, completion and activity logs, settings, and other validated data will be imported. Before replacement, the current local data is preserved as an immutable recovery copy and its exact saved document is downloaded. Schema {pending.sourceSchemaVersion} is validated and migrated where supported.
           </p>
           {importedRhythmsMissingLinks.length > 0 && (
             <p className="preview-data-controls__help" role="status">

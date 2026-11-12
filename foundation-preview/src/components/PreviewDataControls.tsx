@@ -28,6 +28,7 @@ type PreviewDataControlsProps = {
   data: PreviewData;
   status: PreviewPersistenceStatus;
   currentDate: string;
+  currentRaw?: string | null;
   importRecoveryRaw?: string | null;
   importRecoverySourceRaw?: string | null;
   importRecoveryArchiveRaw?: string | null;
@@ -118,6 +119,7 @@ export function PreviewDataControls({
   data,
   status,
   currentDate,
+  currentRaw = null,
   importRecoveryRaw = null,
   importRecoverySourceRaw = null,
   importRecoveryArchiveRaw = null,
@@ -336,6 +338,7 @@ export function PreviewDataControls({
           data={data}
           status={status}
           currentDate={currentDate}
+          currentRaw={currentRaw}
           onImport={onImport}
           recoveryRaw={importRecoveryRaw}
           recoverySourceRaw={importRecoverySourceRaw}

@@ -3288,6 +3288,7 @@ function PreviewWorkspace({
               data={previewData}
               status={persistenceStatus}
               currentDate={currentDate}
+              currentRaw={expectedRaw.current}
               onImport={(data, sourceRaw) => finishWrite(data, true, 'import', sourceRaw)}
               recoveryRaw={importRecoveryCopy}
               recoverySourceRaw={importRecoverySourceCopy}
@@ -3674,6 +3675,7 @@ function PreviewWorkspace({
         data={previewData}
         status={persistenceStatus}
         currentDate={currentDate}
+        currentRaw={expectedRaw.current}
         importRecoveryRaw={importRecoveryCopy}
         importRecoverySourceRaw={importRecoverySourceCopy}
         importRecoveryArchiveRaw={importRecoveryArchive}

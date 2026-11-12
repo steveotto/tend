@@ -267,7 +267,7 @@ describe('Preview account sync', () => {
     );
     fireEvent.change(screen.getByLabelText('Import a backup file'), { target: { files: [backupFile] } });
     const importDialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
-    expect(within(importDialog).getByText(/current local data is preserved as a recovery copy/)).toBeTruthy();
+    expect(within(importDialog).getByText(/current local data is preserved as an immutable recovery copy and its exact saved document is downloaded/)).toBeTruthy();
     fireEvent.click(within(importDialog).getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Replace preview data?' })).toBeNull());
     const readsBeforeAdvanced = service.readCalls;

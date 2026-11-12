@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render as testingRender, screen, waitFor, within } 
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../src/App.tsx';
+import { PreviewBackupImportControl } from '../src/components/PreviewBackupImportControl.tsx';
 import { createAuthenticatedPreviewIdentity } from '../src/domain/preview-identity.ts';
 import type { PreviewAccountBackupApi } from '../src/storage/preview-account-backup.ts';
 import { PreviewDataControls } from '../src/components/PreviewDataControls.tsx';
@@ -405,6 +406,81 @@ function setDownloadMocks() {
 }
 
 describe('synthetic preview storage adapter and envelope', () => {
+  it('downloads the exact current raw document before applying a validated restore', async () => {
+    const user = userEvent.setup();
+    const currentRaw = ` \n${JSON.stringify(createPreviewEnvelope(createSamplePreviewData()))}\n`;
+    const importedData = createSamplePreviewData();
+    importedData.goals[0]!.title = 'Imported synthetic goal';
+    const sourceRaw = JSON.stringify(createPreviewEnvelope(importedData));
+    const { createObjectURL } = setDownloadMocks();
+    const operations: string[] = [];
+    const onImport = vi.fn(() => {
+      operations.push('write');
+      return null;
+    });
+
+    render(
+      <PreviewBackupImportControl
+        data={createSamplePreviewData()}
+        status={{ kind: 'saved' }}
+        currentDate="2026-10-21"
+        currentRaw={currentRaw}
+        onImport={onImport}
+      />
+    );
+    await user.upload(
+      screen.getByLabelText('Import preview backup'),
+      new File([sourceRaw], 'synthetic-preview.json', { type: 'application/json' })
+    );
+    const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
+    expect(within(dialog).getByText(/exact saved document is downloaded/)).toBeTruthy();
+
+    const originalCreateObjectURL = createObjectURL.getMockImplementation();
+    createObjectURL.mockImplementation(blob => {
+      operations.push('download');
+      return originalCreateObjectURL?.(blob) ?? 'blob:synthetic-preview';
+    });
+    await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
+
+    expect(operations).toEqual(['download', 'write']);
+    expect(await createObjectURL.mock.calls[0]![0].text()).toBe(currentRaw);
+    expect(onImport).toHaveBeenCalledWith(importedData, sourceRaw);
+    expect(await screen.findByText('Preview backup imported.')).toBeTruthy();
+  });
+
+  it('does not replace preview data when the automatic raw recovery download fails', async () => {
+    const user = userEvent.setup();
+    const importedData = createSamplePreviewData();
+    const sourceRaw = JSON.stringify(createPreviewEnvelope(importedData));
+    const onImport = vi.fn(() => null);
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => { throw new Error('Downloads are blocked.'); }),
+      revokeObjectURL: vi.fn()
+    });
+
+    render(
+      <PreviewBackupImportControl
+        data={createSamplePreviewData()}
+        status={{ kind: 'saved' }}
+        currentDate="2026-10-21"
+        currentRaw="exact stored raw source"
+        onImport={onImport}
+      />
+    );
+    await user.upload(
+      screen.getByLabelText('Import preview backup'),
+      new File([sourceRaw], 'synthetic-preview.json', { type: 'application/json' })
+    );
+    const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
+
+    expect(onImport).not.toHaveBeenCalled();
+    expect(await screen.findByText(
+      'The current preview recovery could not be downloaded, so nothing was replaced. Downloads are blocked.'
+    )).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Replace preview data?' })).toBeTruthy();
+  });
+
   it('persists Show tended and Calendar sources in schema 37 and migrates schemas 34/35', () => {
     const data = createSamplePreviewData();
     const current = createPreviewEnvelope({ ...data, showTended: true });
@@ -3427,11 +3503,12 @@ describe('preview backup controls', () => {
 
   it('imports locally from More without automatically reading or uploading account data when sync is off', async () => {
     const user = userEvent.setup();
+    const { createObjectURL } = setDownloadMocks();
     const identity = createAuthenticatedPreviewIdentity('11111111-1111-4111-8111-111111111111', 1);
     if (identity.kind !== 'authenticated') throw new Error('Test identity was not authenticated.');
     const storage = browserPreviewStorage(identity);
     const previous = createSamplePreviewData();
-    const previousRaw = JSON.stringify(createPreviewEnvelope(previous));
+    const previousRaw = JSON.stringify({ ...createPreviewEnvelope(previous), schemaVersion: 39 });
     storage.setItem(PREVIEW_STORAGE_KEY, previousRaw);
     const imported = createSamplePreviewData();
     imported.goals[0]!.title = 'Synthetic imported goal';
@@ -3452,6 +3529,8 @@ describe('preview backup controls', () => {
     await user.upload(importInput, new File([sourceRaw], 'synthetic-preview.json', { type: 'application/json' }));
     const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     expect(within(dialog).getByText(/replaces this account’s local Preview data/)).toBeTruthy();
+    const rawBeforeImport = storage.getItem(PREVIEW_STORAGE_KEY);
+    expect(rawBeforeImport).not.toBeNull();
     await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
 
     expect(await screen.findByText('Preview backup imported.')).toBeTruthy();
@@ -3464,6 +3543,8 @@ describe('preview backup controls', () => {
       latestRaw: previousRaw,
       latestSourceRaw: sourceRaw
     });
+    expect(await createObjectURL.mock.calls[0]![0].text()).toBe(rawBeforeImport);
+    expect(storage.getItem(PREVIEW_V39_RECOVERY_KEY)).toBe(previousRaw);
     expect(accountBackupApi.save).not.toHaveBeenCalled();
 
     app.unmount();
