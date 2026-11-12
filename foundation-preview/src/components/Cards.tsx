@@ -19,6 +19,7 @@ import { RhythmArchivedBadge } from './RhythmArchivedBadge.tsx';
 import { RhythmPersonalBadge } from './RhythmPersonalBadge.tsx';
 import { RhythmMetadata } from './RhythmMetadata.tsx';
 import { RhythmCompletionActions } from './RhythmCompletionActions.tsx';
+import { RhythmFoundationBadges } from './RhythmFoundationBadges.tsx';
 import { TimelineChart } from './TimelineChart.tsx';
 import { scoreTone } from '../domain/score-tone.ts';
 
@@ -308,6 +309,7 @@ type RhythmCardBaseProps = {
   rhythm: RhythmPreview;
   headingId?: string;
   people?: readonly PersonPreview[];
+  foundations?: readonly FoundationPreview[];
   onPersonSelect?: (personId: PersonId) => void;
 };
 
@@ -355,7 +357,7 @@ export function ScoreMeter({
 }
 
 export function RhythmCard(props: RhythmCardProps) {
-  const { rhythm, headingId, people, onPersonSelect } = props;
+  const { rhythm, headingId, people, foundations, onPersonSelect } = props;
   const externallyAutomated = rhythm.automation === 'external';
 
   if (props.variant === 'simple') {
@@ -365,6 +367,7 @@ export function RhythmCard(props: RhythmCardProps) {
         headingId={headingId ?? `rhythm-${rhythm.id}`}
         externallyAutomated={externallyAutomated}
         people={people}
+        foundations={foundations}
         onPersonSelect={onPersonSelect}
         completed={props.completed === true}
         archived={props.archived === true}
@@ -381,6 +384,7 @@ export function RhythmCard(props: RhythmCardProps) {
         headingId={headingId ?? `rhythm-${rhythm.id}`}
         externallyAutomated={externallyAutomated}
         people={people}
+        foundations={foundations}
         onPersonSelect={onPersonSelect}
         suggestion
         icon={props.icon}
@@ -400,6 +404,7 @@ export function RhythmCard(props: RhythmCardProps) {
         />
         <p className="rhythm-cadence">{rhythm.cadence} · {rhythm.status}</p>
         <RhythmPeople rhythm={rhythm} people={people} onPersonSelect={onPersonSelect} />
+        {foundations && <RhythmFoundationBadges rhythm={rhythm} foundations={foundations} />}
         {props.onDetails && <RhythmDetailsButton rhythm={rhythm} onDetails={props.onDetails} />}
       </div>
     </article>
@@ -411,6 +416,7 @@ function SimpleRhythmCard({
   headingId,
   externallyAutomated,
   people,
+  foundations,
   onPersonSelect,
   completed = false,
   archived = false,
@@ -424,6 +430,7 @@ function SimpleRhythmCard({
   headingId: string;
   externallyAutomated: boolean;
   people?: readonly PersonPreview[] | undefined;
+  foundations?: readonly FoundationPreview[] | undefined;
   onPersonSelect?: ((personId: PersonId) => void) | undefined;
   completed?: boolean;
   archived?: boolean;
@@ -451,6 +458,7 @@ function SimpleRhythmCard({
           archived={archived}
         />
         <RhythmPeople rhythm={rhythm} people={people} onPersonSelect={onPersonSelect} />
+        {foundations && <RhythmFoundationBadges rhythm={rhythm} foundations={foundations} />}
       </div>
       <div className="rhythm-card__actions">
         <RhythmDetailsButton rhythm={rhythm} onDetails={onDetails} />

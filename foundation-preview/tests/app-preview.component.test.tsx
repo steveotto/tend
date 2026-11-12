@@ -1906,7 +1906,7 @@ describe('Tend Today preview', () => {
     const saved = parsePreviewBackup(savedRaw!, localDateString(new Date()));
     expect(saved.valid).toBe(true);
     if (saved.valid) {
-      expect(saved.envelope.schemaVersion).toBe(12);
+      expect(saved.envelope.schemaVersion).toBe(13);
       expect(saved.envelope.data.savedRhythms).toHaveLength(1);
       expect(saved.envelope.data.savedRhythms[0]).toMatchObject({
         id: expect.stringMatching(/^user-rhythm-/),
@@ -2559,7 +2559,7 @@ describe('Tend Today preview', () => {
     expect(cards[0]?.getAttribute('aria-label')).toContain('score unavailable');
     expect(cards[0]?.querySelector('.foundation-card__score')?.textContent).toBe('—');
     await user.click(cards[0]!);
-    expect(await screen.findByText(/No sample Rhythms are assigned to this ongoing Foundation yet/)).toBeTruthy();
+    expect(await screen.findByText('No Rhythms are assigned to this ongoing Foundation yet.')).toBeTruthy();
     expect(screen.getByRole('meter', { name: 'Connection illustrative score' }).getAttribute('aria-valuetext')).toBe('Score unavailable');
   });
 
