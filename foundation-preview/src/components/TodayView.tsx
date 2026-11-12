@@ -6,6 +6,7 @@ import {
   todayAreaScore,
   todayOverallIllustrativeScore,
   type MarriageExampleId,
+  type FoundationPreview,
   type PersonId,
   type RhythmPreview
 } from '../domain/preview-data.ts';
@@ -34,6 +35,7 @@ type TodayViewProps = {
   archivedRhythms: readonly RhythmPreview[];
   search: string;
   marriageExampleId: MarriageExampleId;
+  foundations: readonly FoundationPreview[];
   onNavigate: (destination: Destination) => void;
   onMarriageExampleChange: (id: MarriageExampleId) => void;
   onPersonSelect: (personId: PersonId) => void;
@@ -54,6 +56,7 @@ export function TodayView({
   archivedRhythms,
   search,
   marriageExampleId,
+  foundations,
   onNavigate,
   onMarriageExampleChange,
   onPersonSelect,
@@ -214,6 +217,7 @@ export function TodayView({
                       inline
                       headingId={`today-rhythm-${rhythm.id}-title`}
                       people={peopleForRhythm(rhythm)}
+                      foundations={foundations}
                       onPersonSelect={onPersonSelect}
                       completed={completedRhythms.has(rhythm.id)}
                       onTend={event => onTend(rhythm.id, event)}
