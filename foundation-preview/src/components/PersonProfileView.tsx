@@ -65,7 +65,14 @@ import type {
   PrayerRequestTransition
 } from '../domain/person-prayers.ts';
 
-type ProfileTab = 'rhythms' | 'connections' | 'prayer';
+export type ProfileTab = 'rhythms' | 'connections' | 'prayer';
+
+export type PersonProfileNavigationRequest = {
+  personId: PersonId;
+  requestId: number;
+  tab: ProfileTab;
+  targetPrayerRequestId?: string;
+};
 
 const profileTabs: { id: ProfileTab; label: string }[] = [
   { id: 'rhythms', label: 'Rhythms' },
@@ -126,6 +133,7 @@ export function PersonProfileView({
   onConnectionChange,
   showAddRhythm = true,
   returnLabel = 'previous page',
+  navigationRequest,
   onClose
 }: {
   personId: PersonId;
@@ -179,6 +187,7 @@ export function PersonProfileView({
   onConnectionChange: (friendships: FriendshipData) => void;
   showAddRhythm?: boolean;
   returnLabel?: string;
+  navigationRequest?: PersonProfileNavigationRequest | null;
   onClose: () => void;
 }) {
   const tendedRhythmIds = savedTendedRhythmIds
@@ -187,11 +196,19 @@ export function PersonProfileView({
   const person = personWithSavedPhoto(personById(people, personId), personDetails ?? []);
   const componentId = useId();
   const [tab, setTab] = useState<ProfileTab>('rhythms');
+  const [targetPrayerRequestId, setTargetPrayerRequestId] = useState<string | null>(null);
   const [healthCardDisclosure, setHealthCardDisclosure] = useState<{
     personId: PersonId;
     area: ProfileTab | null;
   }>({ personId, area: null });
   const [notesOpen, setNotesOpen] = useState(false);
+
+  useEffect(() => {
+    if (!navigationRequest || navigationRequest.personId !== personId) return;
+    setTab(navigationRequest.tab);
+    setTargetPrayerRequestId(navigationRequest.targetPrayerRequestId ?? null);
+    setNotesOpen(false);
+  }, [navigationRequest, personId]);
   const [connectionEditor, setConnectionEditor] = useState<{
     record?: FriendshipConnection;
     type?: 'text' | 'call' | 'time-together';
@@ -747,6 +764,7 @@ export function PersonProfileView({
               people={people}
               peopleGroups={peopleGroups}
               requests={prayerRequests}
+              targetRequestId={targetPrayerRequestId}
               onCreate={(ownerId, draft) => onCreatePrayerRequest
                 ? onCreatePrayerRequest(ownerId, draft)
                 : 'Prayer requests are unavailable.'}

@@ -64,7 +64,6 @@ type TodayViewProps = {
   rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
   prayerRequests: readonly PrayerRequestPreview[];
   onPrayForRequest: (requestId: string) => string | null;
-  search: string;
   categoryHealthScores: ReadonlyMap<string, number | null>;
   onNavigate: (destination: Destination) => void;
   onPersonSelect: (personId: PersonId) => void;
@@ -95,7 +94,6 @@ export function TodayView({
   rhythmScores,
   prayerRequests,
   onPrayForRequest,
-  search,
   categoryHealthScores,
   foundations,
   onOpenFoundation,
@@ -112,13 +110,9 @@ export function TodayView({
   const [expandedSectionIds, setExpandedSectionIds] = useState<ReadonlySet<string>>(() => new Set());
   const hasInitializedAllToday = useRef(false);
   const sectionIdPrefix = useId();
-  const searchedRhythms = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase();
-    return query ? rhythms.filter(item => item.title.toLocaleLowerCase().includes(query)) : rhythms;
-  }, [rhythms, search]);
   const eligibleRhythms = useMemo(
-    () => searchedRhythms.filter(rhythm => isRhythmEligibleForToday(rhythm, localDate)),
-    [searchedRhythms, localDate]
+    () => rhythms.filter(rhythm => isRhythmEligibleForToday(rhythm, localDate)),
+    [rhythms, localDate]
   );
   const planSections = useMemo(
     () => selectTodayPlanSections(eligibleRhythms, view, evaluationInstant, timeBlocks),
@@ -225,7 +219,7 @@ export function TodayView({
           keepToggleWhenEmpty
           renderControls={false}
           onUndo={onUndo}
-          resetKey={`${search}:${planRhythms.map(rhythm => rhythm.id).join('\u001f')}`}
+          resetKey={planRhythms.map(rhythm => rhythm.id).join('\u001f')}
           initializing={initializing}
         >
           {({ visibleRhythmIds, tendedRhythmIds: displayedTendedIds, controls, itemProps }) => {

@@ -32,6 +32,7 @@ import { PreviewAccountSync } from './components/PreviewAccountSync.tsx';
 import { PreviewBackupImportControl } from './components/PreviewBackupImportControl.tsx';
 import type { PreviewAccountBackupApi } from './storage/preview-account-backup.ts';
 import { PersonProfileView } from './components/PersonProfileView.tsx';
+import type { PersonProfileNavigationRequest, ProfileTab } from './components/PersonProfileView.tsx';
 import { PersonDetailsEditor } from './components/PersonDetailsEditor.tsx';
 import { PeopleView } from './components/PeopleView.tsx';
 import { RhythmEditor } from './components/RhythmEditor.tsx';
@@ -44,6 +45,8 @@ import type { TodayViewId } from './domain/today-plan.ts';
 import { HealthFitnessView } from './components/HealthFitnessView.tsx';
 import { FriendshipsView } from './components/FriendshipsView.tsx';
 import { connectionCadences, setPersonConnectionCadence } from './domain/friendships.ts';
+import { selectGlobalSearchResults } from './domain/global-search.ts';
+import type { GlobalSearchResult } from './domain/global-search.ts';
 import { APP_DISPLAY_VERSION } from './domain/app-version.ts';
 import { resolvePersonCategory, resolvePersonCategoryGroups, setPersonCategory } from './domain/person-categories.ts';
 import {
@@ -560,6 +563,9 @@ function PreviewWorkspace({
   const categoryTabNavigationSequence = useRef(0);
   const activeRhythmReturnTab = useRef<'today' | MarriageTab>('today');
   const [profilePersonId, setProfilePersonId] = useState<PersonId | null>(null);
+  const [profileNavigationRequest, setProfileNavigationRequest] =
+    useState<PersonProfileNavigationRequest | null>(null);
+  const profileNavigationSequence = useRef(0);
   const profileReturnRhythmId = useRef<string | null>(null);
   const profileReturnScrollTop = useRef<number | null>(null);
   const profileReturnFocusRhythmId = useRef<string | null>(null);
@@ -812,6 +818,13 @@ function PreviewWorkspace({
   ].find(rhythm => rhythm.id === activeRhythmId) ?? null;
   const peopleWithPhotos = peopleWithSavedPhotos(previewData.people, previewData.personDetails);
   const selectedProfilePerson = profilePersonId === null ? null : personById(peopleWithPhotos, profilePersonId) ?? null;
+  const searchResults = selectGlobalSearchResults(search, {
+    people: peopleWithPhotos,
+    rhythms: [...new Map([...allTodayRhythms, ...resolvedMarriageRhythms].map(rhythm => [rhythm.id, rhythm])).values()],
+    prayerRequests: previewData.prayerRequests,
+    personNotes: previewData.personNotes,
+    friendships: previewData.friendships
+  });
   const selectedDetailsEditorPerson = personDetailsEditorId === null
     ? null
     : personById(previewData.people, personDetailsEditorId) ?? null;
@@ -1502,7 +1515,18 @@ function PreviewWorkspace({
     document.body.classList.remove('mobile-search-open');
   }
 
-  function openPersonProfile(personId: PersonId) {
+  function openPersonProfileAt(
+    personId: PersonId,
+    tab: ProfileTab = 'rhythms',
+    targetPrayerRequestId?: string
+  ) {
+    profileNavigationSequence.current += 1;
+    setProfileNavigationRequest({
+      personId,
+      requestId: profileNavigationSequence.current,
+      tab,
+      ...(targetPrayerRequestId ? { targetPrayerRequestId } : {})
+    });
     if (profilePersonId === personId) return;
     if (profilePersonId === null) {
       profileOpener.current = document.activeElement instanceof HTMLElement
@@ -1519,6 +1543,26 @@ function PreviewWorkspace({
       window.location.href
     );
     setProfilePersonId(personId);
+  }
+
+  function openPersonProfile(personId: PersonId) {
+    openPersonProfileAt(personId);
+  }
+
+  function openSearchResult(result: GlobalSearchResult) {
+    if (result.kind === 'person') {
+      openPersonProfileAt(result.personId);
+    } else if (result.kind === 'rhythm') {
+      const rhythm = [...allTodayRhythms, ...resolvedMarriageRhythms]
+        .find(candidate => candidate.id === result.rhythmId);
+      if (rhythm) openRhythmEditor(undefined, rhythm);
+    } else if (result.kind === 'prayer' || result.kind === 'prayer-note') {
+      openPersonProfileAt(result.personId, 'prayer', result.requestId);
+    } else if (result.kind === 'connection-note') {
+      openPersonProfileAt(result.personId, 'connections');
+    } else {
+      openPersonProfileAt(result.personId);
+    }
   }
 
   function openPersonDetailsEditor(personId: PersonId, event: MouseEvent<HTMLButtonElement>) {
@@ -1853,7 +1897,7 @@ function PreviewWorkspace({
   }
 
   function openRhythmEditor(
-    event: MouseEvent<HTMLButtonElement>,
+    event: MouseEvent<HTMLButtonElement> | undefined,
     rhythm?: (typeof todayRhythms)[number],
     options?: {
       id?: string;
@@ -1864,7 +1908,7 @@ function PreviewWorkspace({
       returnToSuggestions?: (saved: boolean) => void;
     }
   ) {
-    rhythmEditorOpener.current = event.currentTarget;
+    rhythmEditorOpener.current = event?.currentTarget ?? null;
     rhythmEditorReturnsToSuggestions.current = false;
     setRhythmEditor({
       id: options?.id ?? rhythm?.id ?? `user-rhythm-${globalThis.crypto.randomUUID()}`,
@@ -3189,10 +3233,12 @@ function PreviewWorkspace({
         destination={destination}
         search={search}
         searchOpen={searchOpen}
+        searchResults={searchResults}
         textSize={textSize}
         onNavigate={navigate}
         onSearchChange={setSearch}
         onSearchClose={closeSearch}
+        onSearchResult={openSearchResult}
         onSearchToggle={toggleSearch}
         onTextSizeChange={() => setTextSize(size => size === 'small' ? 'medium' : size === 'medium' ? 'large' : 'small')}
       />
@@ -3321,7 +3367,6 @@ function PreviewWorkspace({
               rhythmScores={rhythmScoreResults}
               prayerRequests={prayerRequests}
               onPrayForRequest={recordPrayer}
-              search={search}
               categoryHealthScores={categoryHealthScores}
               foundations={foundationCatalogue}
               onNavigate={navigate}
@@ -3559,6 +3604,7 @@ function PreviewWorkspace({
           personDetails={previewData.personDetails}
           personNotes={previewData.personNotes}
           prayerRequests={previewData.prayerRequests}
+          navigationRequest={profileNavigationRequest}
           friendships={previewData.friendships}
           today={localDateInTimeZone(new Date(), localTimeZone)}
           rhythms={personActiveRhythms}

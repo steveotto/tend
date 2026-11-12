@@ -27,6 +27,7 @@ export function PersonPrayerPanel({
   people,
   peopleGroups,
   requests,
+  targetRequestId,
   onCreate,
   onUpdate,
   onTransition,
@@ -37,6 +38,7 @@ export function PersonPrayerPanel({
   people: readonly PersonPreview[];
   peopleGroups: readonly PersonPickerGroup[];
   requests: readonly PersonPrayerRequest[];
+  targetRequestId?: string | null;
   onCreate: (personId: PersonId, draft: PersonPrayerRequestDraft) => string | null;
   onUpdate: (
     requestId: string,
@@ -70,6 +72,13 @@ export function PersonPrayerPanel({
     { status: 'answered' as const, label: 'Answered' },
     { status: 'archived' as const, label: 'Archived' }
   ];
+
+  useEffect(() => {
+    if (!targetRequestId) return;
+    const target = document.getElementById(`person-prayer-request-${targetRequestId}`);
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView?.({ block: 'center' });
+  }, [targetRequestId, personId, requests]);
 
   useEffect(() => {
     const isOpen = editor !== null || confirmRequest !== null;
@@ -174,7 +183,13 @@ export function PersonPrayerPanel({
                 const shareNames = (request.sharedWith ?? []).map(id => personById(people, id).displayName);
                 const prayerHistory = prayerRequestHistorySummary(request);
                 return (
-                  <li className="person-prayer-card" key={request.id}>
+                  <li
+                    id={`person-prayer-request-${request.id}`}
+                    className="person-prayer-card"
+                    key={request.id}
+                    tabIndex={targetRequestId === request.id ? -1 : undefined}
+                    aria-current={targetRequestId === request.id ? 'true' : undefined}
+                  >
                     <div className="person-prayer-card__content">
                       <h5>{request.title}</h5>
                       {request.details && <p className="person-prayer-card__details">{request.details}</p>}

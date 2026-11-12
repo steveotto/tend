@@ -74,7 +74,6 @@ function TodayHarness({
         prayerRequests={[]}
         onPrayForRequest={vi.fn(() => null)}
         categoryHealthScores={categoryHealthScores}
-        search=""
         onNavigate={vi.fn()}
         onPersonSelect={vi.fn()}
         foundations={foundationCatalogue}
