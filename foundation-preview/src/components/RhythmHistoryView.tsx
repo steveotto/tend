@@ -4,6 +4,7 @@ import type { MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { FoundationPreview, PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
 import { orderedCompletions, rhythmLastActivityLabel } from '../domain/preview-data.ts';
+import { useScrollLock } from '../hooks/useScrollLock.ts';
 import type { RhythmCompletion } from '../domain/preview-data.ts';
 import type { DatedRhythmCompletion, RhythmCompletionRecord } from '../domain/rhythm-completion.ts';
 import type {
@@ -289,6 +290,7 @@ export function RhythmHistoryView({
       : undefined;
   const [editingRecord, setEditingRecord] = useState<RhythmCompletionRecord | null>(null);
   const [loggingMoment, setLoggingMoment] = useState(false);
+  useScrollLock(loggingMoment);
   const [loggedMomentsExpanded, setLoggedMomentsExpanded] = useState(false);
   const [logAnnouncement, setLogAnnouncement] = useState('');
   const [scoreDetailsExpanded, setScoreDetailsExpanded] = useState(false);

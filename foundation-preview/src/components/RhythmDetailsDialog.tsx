@@ -28,6 +28,7 @@ import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 import { scoreTone } from '../domain/score-tone.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import type { StrengthMode } from '../domain/strength.ts';
+import { useScrollLock } from '../hooks/useScrollLock.ts';
 
 type RhythmDetailsDialogProps = {
   rhythm: RhythmPreview;
@@ -122,6 +123,7 @@ export function RhythmDetailsDialog({
   const [showHistory, setShowHistory] = useState(initialView === 'history');
   const [showCompletion, setShowCompletion] = useState(false);
   const titleId = headingId ?? (inline ? `today-rhythm-${rhythm.id}-title` : 'rhythm-details-title');
+  useScrollLock(!inline && !embedded);
   useEffect(() => {
     if (inline) return;
     if (embedded) {

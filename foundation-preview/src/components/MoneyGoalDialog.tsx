@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { RefObject } from 'react';
 import { calculateAnchoredPopoverPosition } from './AnchoredPopover.tsx';
+import { useScrollLock } from '../hooks/useScrollLock.ts';
 
 type MoneyGoalDialogProps = {
   eyebrow?: string;
@@ -54,6 +55,7 @@ export function MoneyGoalDialog({
   onClose
 }: MoneyGoalDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  useScrollLock(true);
 
   useLayoutEffect(() => {
     const dialogElement = dialogRef.current;

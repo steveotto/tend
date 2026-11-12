@@ -58,6 +58,7 @@ import {
   parentingRhythmSuggestions,
   personById,
   peopleForRhythm,
+  syntheticPrayerRequests,
   todayRhythms,
   type CategoryRhythmSuggestionGroupDefinition,
   type CategoryRhythmSuggestionTemplate,
@@ -67,6 +68,8 @@ import {
   type PersonPreview,
   type RhythmPreview
 } from './domain/preview-data.ts';
+import { recordPreviewPrayer } from './domain/prayer-session.ts';
+import type { PrayerRequestPreview } from './domain/prayer-session.ts';
 import {
   saveCheckIn,
   type CheckInDraft,
@@ -452,6 +455,10 @@ function PreviewWorkspace({
   const [persistedSatisfiedRhythmIds, setPersistedSatisfiedRhythmIds] = useState<ReadonlySet<string>>(new Set());
   const [persistedCompletedRhythmIds, setPersistedCompletedRhythmIds] = useState<ReadonlySet<string>>(new Set());
   const configuredRhythmTimeOptions = rhythmTimeOptionsForBlocks(previewData.timeBlocks);
+  const [prayerRequests, setPrayerRequests] = useState<PrayerRequestPreview[]>(() =>
+    syntheticPrayerRequests.map(request => request.sharedWith
+      ? { ...request, sharedWith: [...request.sharedWith] }
+      : { ...request }));
   const [hydrated, setHydrated] = useState(false);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
   const [persistenceStatus, setPersistenceStatus] = useState<PreviewPersistenceStatus>({ kind: 'loading' });
@@ -943,6 +950,13 @@ function PreviewWorkspace({
       setImportRecoveryArchive(null);
       setImportRecoveryError(result.message);
     }
+  }
+
+  function recordPrayer(requestId: string): string | null {
+    const result = recordPreviewPrayer(prayerRequests, requestId, new Date().toISOString());
+    if (!result.valid) return result.error;
+    setPrayerRequests(result.requests);
+    return null;
   }
 
   function refreshV1RecoveryCopy() {
@@ -3305,6 +3319,8 @@ function PreviewWorkspace({
               initializing={!hydrated}
               rhythms={editableTodayRhythms}
               rhythmScores={rhythmScoreResults}
+              prayerRequests={prayerRequests}
+              onPrayForRequest={recordPrayer}
               search={search}
               categoryHealthScores={categoryHealthScores}
               foundations={foundationCatalogue}

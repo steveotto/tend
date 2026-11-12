@@ -71,6 +71,8 @@ function TodayHarness({
         onShowTendedChange={setTendedVisible}
         rhythms={rhythms}
         rhythmScores={new Map()}
+        prayerRequests={[]}
+        onPrayForRequest={vi.fn(() => null)}
         categoryHealthScores={categoryHealthScores}
         search=""
         onNavigate={vi.fn()}
