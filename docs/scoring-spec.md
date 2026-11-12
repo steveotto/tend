@@ -26,6 +26,8 @@ Every rhythm gets two scores, computed from its logged occurrences:
 | Quarterly | 12 months |
 | Yearly | 24 months |
 
+For custom intervals, use the base unit's window: days use 30 days, weeks use 12 weeks, months use 6 months, and years use 24 months. If that window contains fewer than 2 due occurrences, extend it to the smallest length that contains at least 2 due occurrences, so Consistency always measures at least 2 chances.
+
 **On Track** = starts at 100, loses 10 per consecutive missed occurrence, floors at 0, resets to 100 on a qualifying completion. Misses are counted only from the rhythm's score-clock start (see below).
 
 ## Score-clock rule (new rhythms and backdating)
@@ -65,3 +67,7 @@ Flexibility scores come only from rhythms linked to the Flexibility foundation (
 - The generic recency-only `rhythmScore()` in app-core.js.
 - The Marriage frequency-weight scheme (5/3/1) and the 0.90 single-rhythm breadth factor.
 - The primary/supporting Foundation-link roles for scoring (per PR #57 decision: all links count equally).
+
+## Explicitly keep
+
+The `FITNESS_MUSCLES` definition, the per-group `muscleIntervals` settings, and the recommendation engine that uses them are NOT scoring code and must NOT be removed in Phase 3. They remain live as the diagnostic body map and the recommended-workout engine. Phase 3 removes only their role as scoring inputs; the "Recommended" workout cards, the Workout button (Full workout / Quick log), and the quick-log muscle-group capture all continue to work unchanged.
