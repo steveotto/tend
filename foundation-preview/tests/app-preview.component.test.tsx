@@ -4995,6 +4995,7 @@ describe('Tend Today preview', () => {
     const user = userEvent.setup();
     const weekday = (new Date().getDay() || 7) as 1 | 2 | 3 | 4 | 5 | 6 | 7;
     const weekdayName = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][weekday - 1]!;
+    const weekdayCardLabel = ['M', 'T', 'W', 'R', 'F', 'S', 'S'][weekday - 1]!;
     render(<App />);
     await saveCardCompletion(user, 'Pray together');
     await user.click(screen.getByRole('button', { name: /Show tended/ }));
@@ -5018,7 +5019,7 @@ describe('Tend Today preview', () => {
       .getByRole('button', { name: 'Apply' }));
     const updatedCard = getTodayRhythmArticle('Updated prayer rhythm');
     expect(updatedCard.querySelector('.rhythm-metadata-schedule-label')?.textContent)
-      .toBe(`Every ${weekdayName[0]}`);
+      .toBe(`Every ${weekdayCardLabel}`);
     editor = await openRhythmEditorFromScore(user, 'Updated prayer rhythm');
     const unsavedTitle = within(editor).getByLabelText('Title');
     await user.clear(unsavedTitle);
@@ -5115,7 +5116,7 @@ describe('Tend Today preview', () => {
       name: historyButtonName('View scores and history for Updated prayer rhythm')
     })).toBeTruthy();
     expect(archivedDetails.querySelector('.rhythm-metadata-schedule-label')?.textContent)
-      .toBe(`Every ${weekdayName[0]}`);
+      .toBe(`Every ${weekdayCardLabel}`);
     expect(archivedDetails.querySelector('.rhythm-metadata-schedule-group .visually-hidden')?.textContent)
       .toContain(weekdayName);
     expect(within(archivedDetails).queryByRole('button', { name: /^Edit / })).toBeNull();
@@ -5161,7 +5162,7 @@ describe('Tend Today preview', () => {
     expect(restoredCard).toBeTruthy();
     expect(within(screen.getByRole('article', { name: 'Updated prayer rhythm' })).queryByText('Archived', { exact: true })).toBeNull();
     expect(restoredCard.querySelector('.rhythm-metadata-schedule-label')?.textContent)
-      .toBe(`Every ${weekdayName[0]}`);
+      .toBe(`Every ${weekdayCardLabel}`);
     expect(restoredCard.querySelector('.rhythm-metadata-schedule-group .visually-hidden')?.textContent)
       .toContain(weekdayName);
     await waitFor(() => {
