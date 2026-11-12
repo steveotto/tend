@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useScrollLock } from '../hooks/useScrollLock.ts';
 import type { PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
 import { orderedCompletions } from '../domain/preview-data.ts';
 import type { RhythmCompletion } from '../domain/preview-data.ts';
@@ -207,6 +208,7 @@ export function RhythmHistoryView({
     && score.consistency.explanation === score.onTrack.explanation;
   const [editingRecord, setEditingRecord] = useState<RhythmCompletionRecord | null>(null);
   const [loggingMoment, setLoggingMoment] = useState(false);
+  useScrollLock(loggingMoment);
   const [loggedMomentsExpanded, setLoggedMomentsExpanded] = useState(false);
   const [logAnnouncement, setLogAnnouncement] = useState('');
   const [scoreDetailsExpanded, setScoreDetailsExpanded] = useState(false);

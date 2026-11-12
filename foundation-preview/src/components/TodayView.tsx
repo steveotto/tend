@@ -9,6 +9,7 @@ import {
   type PersonId,
   type RhythmPreview
 } from '../domain/preview-data.ts';
+import type { PrayerRequestPreview } from '../domain/prayer-session.ts';
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
 import { AreaIcon } from './AreaIcon.tsx';
 import { ArchivedRhythmsDialog } from './ArchivedRhythmsDialog.tsx';
@@ -16,6 +17,7 @@ import { CategoryHealthBadge, ScoreMeter } from './Cards.tsx';
 import { MarriageExampleSelector } from './MarriageExampleSelector.tsx';
 import type { Destination } from './AppNavigation.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
+import { TodayPrayerModule } from './TodayPrayerModule.tsx';
 
 type PlanType = 'scheduled' | 'anytime' | 'all-day';
 
@@ -32,6 +34,8 @@ type TodayViewProps = {
   undoableRhythms: ReadonlySet<string>;
   rhythms: readonly RhythmPreview[];
   archivedRhythms: readonly RhythmPreview[];
+  prayerRequests: readonly PrayerRequestPreview[];
+  onPrayForRequest: (requestId: string) => string | null;
   search: string;
   marriageExampleId: MarriageExampleId;
   onNavigate: (destination: Destination) => void;
@@ -52,6 +56,8 @@ export function TodayView({
   undoableRhythms,
   rhythms,
   archivedRhythms,
+  prayerRequests,
+  onPrayForRequest,
   search,
   marriageExampleId,
   onNavigate,
@@ -235,6 +241,11 @@ export function TodayView({
           </div>
         </div>
       </section>
+
+      <TodayPrayerModule
+        requests={prayerRequests}
+        onPray={onPrayForRequest}
+      />
 
       <section aria-labelledby="calendar-heading" className="today-calendar-section">
         <div className="sectiontitle"><h2 id="calendar-heading">On your calendar</h2></div>

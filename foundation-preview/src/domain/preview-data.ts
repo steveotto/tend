@@ -4,6 +4,7 @@ import type {
   RhythmAutomation
 } from '../../../src/domain/capabilities.ts';
 import type { MoneyGoal } from './money-goals.ts';
+import type { PrayerRequestPreview } from './prayer-session.ts';
 import type { RhythmSchedule, RhythmScoringMetadata, RhythmTimeValue } from './rhythm-schedule.ts';
 import { effectiveRhythmSchedule } from './rhythm-schedule.ts';
 import { selectNextScheduledOccurrence } from './rhythm-occurrences.ts';
@@ -51,6 +52,36 @@ export const syntheticPersonPickerGroups: readonly PersonPickerGroup[] = [
   { id: 'marriage', label: 'Marriage', memberIds: ['sample-person-avery', 'sample-person-morgan'] },
   { id: 'parenting', label: 'Parenting', memberIds: ['sample-person-morgan', 'sample-person-jordan'] },
   { id: 'friends', label: 'Friends', memberIds: ['sample-person-avery', 'sample-person-jordan'] }
+];
+
+export const syntheticPrayerRequests: PrayerRequestPreview[] = [
+  {
+    id: 'sample-prayer-request-family',
+    personId: 'sample-person-morgan',
+    sharedWith: ['sample-person-jordan'],
+    title: 'Patience during a busy week',
+    details: 'Make room for rest and kind conversations.',
+    status: 'active',
+    timeOfDay: 'anytime',
+    prayedCount: 1
+  },
+  {
+    id: 'sample-prayer-request-friend',
+    personId: 'sample-person-avery',
+    title: 'Encouragement for a friend',
+    details: 'Remember a friend facing a new season.',
+    status: 'active',
+    timeOfDay: 'afternoon',
+    prayedCount: 0
+  },
+  {
+    id: 'sample-prayer-request-answered',
+    personId: 'sample-person-jordan',
+    title: 'An answered request sample',
+    status: 'answered',
+    timeOfDay: 'morning',
+    prayedCount: 2
+  }
 ];
 
 export function personById(id: PersonId): PersonPreview {

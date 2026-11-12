@@ -39,6 +39,10 @@ a:focus-visible {
   outline-offset: 3px;
 }
 
+:where([tabindex="-1"]:focus:not(button):not(input):not(select):not(textarea):not(a):not([role="button"]):not([role="link"]):not([role="tab"]):not([role="option"]):not([role="checkbox"]):not([role="radio"]):not([role="menuitem"]):not([role="treeitem"])) {
+  outline: none;
+}
+
 .app-shell {
   width: min(100% - 32px, 1040px);
   margin: 0 auto;

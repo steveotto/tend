@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import type { PersonId, RhythmPreview } from '../domain/preview-data.ts';
 import { peopleForRhythm } from '../domain/preview-data.ts';
+import { useScrollLock } from '../hooks/useScrollLock.ts';
 import { RhythmCard } from './Cards.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 
@@ -21,6 +22,7 @@ export function ArchivedRhythmsDialog({
   onClose
 }: ArchivedRhythmsDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  useScrollLock(true);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const emptyHeadingRef = useRef<HTMLHeadingElement>(null);
   const restoreButtons = useRef(new Map<string, HTMLButtonElement>());

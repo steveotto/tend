@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { useScrollLock } from '../hooks/useScrollLock.ts';
 
 type MoneyGoalDialogProps = {
   title?: string;
@@ -27,6 +28,7 @@ export function MoneyGoalDialog({
   onClose
 }: MoneyGoalDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  useScrollLock(true);
 
   useEffect(() => {
     const dialog = dialogRef.current;

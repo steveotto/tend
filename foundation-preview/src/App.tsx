@@ -15,11 +15,14 @@ import {
   marriageRhythms,
   personById,
   peopleForRhythm,
+  syntheticPrayerRequests,
   todayRhythms,
   type MarriageExampleId,
   type PersonId,
   type RhythmPreview
 } from './domain/preview-data.ts';
+import { recordPreviewPrayer } from './domain/prayer-session.ts';
+import type { PrayerRequestPreview } from './domain/prayer-session.ts';
 import {
   saveCheckIn,
   type CheckInDraft,
@@ -103,6 +106,10 @@ function isDatedCompletionRecord(record: RhythmCompletionRecord): record is Date
 export function App() {
   const [destination, setDestination] = useState<Destination>('today');
   const [previewData, setPreviewData] = useState<PreviewData>(createSamplePreviewData);
+  const [prayerRequests, setPrayerRequests] = useState<PrayerRequestPreview[]>(() =>
+    syntheticPrayerRequests.map(request => request.sharedWith
+      ? { ...request, sharedWith: [...request.sharedWith] }
+      : { ...request }));
   const [hydrated, setHydrated] = useState(false);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
   const [persistenceStatus, setPersistenceStatus] = useState<PreviewPersistenceStatus>({ kind: 'loading' });
@@ -212,6 +219,13 @@ export function App() {
     [...completionStates].filter(([, state]) => state.undoable).map(([id]) => id)
   );
   const moneyGoals = previewData.goals;
+
+  function recordPrayer(requestId: string): string | null {
+    const result = recordPreviewPrayer(prayerRequests, requestId, new Date().toISOString());
+    if (!result.valid) return result.error;
+    setPrayerRequests(result.requests);
+    return null;
+  }
 
   function refreshV1RecoveryCopy() {
     const result = loadV1RecoveryCopy(browserPreviewStorage());
@@ -1120,6 +1134,8 @@ export function App() {
               undoableRhythms={undoableRhythms}
               rhythms={editableTodayRhythms}
               archivedRhythms={archivedRhythms}
+              prayerRequests={prayerRequests}
+              onPrayForRequest={recordPrayer}
               search={search}
               marriageExampleId={marriageExampleId}
               onNavigate={navigate}
