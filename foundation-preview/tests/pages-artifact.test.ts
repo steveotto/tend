@@ -15,19 +15,38 @@ function artifactPath(reference: string): string | null {
 }
 
 describe('Pages production artifact', () => {
-  it('serves the React app at the root without replacing it with the Classic shell', () => {
+  it('serves the React production entry and all referenced assets at the root', () => {
+    const sourceShell = readFileSync(path.resolve(previewDirectory, 'index.html'), 'utf8');
     const rootHtml = readFileSync(path.resolve(artifactDirectory, 'index.html'), 'utf8');
+    assert.match(sourceShell, /<title>Tend<\/title>/);
+    assert.doesNotMatch(sourceShell, /Today preview/);
+    assert.match(rootHtml, /<title>Tend<\/title>/);
+    assert.doesNotMatch(rootHtml, /Today preview|app-core\.js|tend-scoring\.js/);
     assert.match(rootHtml, /<div id="root"><\/div>/);
     assert.match(rootHtml, /<script type="module" crossorigin src="\/assets\/[^"]+\.js"><\/script>/);
-    assert.doesNotMatch(rootHtml, /app-core\.js|tend-scoring\.js/);
 
-    for (const match of rootHtml.matchAll(/(?:src|href)="([^"]+)"/g)) {
+    for (const match of rootHtml.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/g)) {
+      const localPath = artifactPath(match[1]!);
+      if (localPath !== null) assert.equal(statSync(localPath).isFile(), true, `${match[1]} should be emitted`);
+    }
+    for (const match of rootHtml.matchAll(/<link\b[^>]*\bhref="([^"]+)"[^>]*>/g)) {
       const localPath = artifactPath(match[1]!);
       if (localPath !== null) assert.equal(statSync(localPath).isFile(), true, `${match[1]} should be emitted`);
     }
   });
 
-  it('serves the Classic shell and its assets only under /classic/', () => {
+  it('keeps the React Preview available at /app-preview.html', () => {
+    const previewHtml = readFileSync(path.resolve(artifactDirectory, 'app-preview.html'), 'utf8');
+    assert.match(previewHtml, /<div id="root"><\/div>/);
+    assert.match(previewHtml, /<title>Tend · Today preview<\/title>/);
+    assert.match(previewHtml, /<script type="module" crossorigin src="\/assets\/[^"]+\.js"><\/script>/);
+    for (const match of previewHtml.matchAll(/(?:src|href)="([^"]+)"/g)) {
+      const localPath = artifactPath(match[1]!);
+      if (localPath !== null) assert.equal(statSync(localPath).isFile(), true, `${match[1]} should be emitted`);
+    }
+  });
+
+  it('serves the Classic fallback shell and its assets under /classic/', () => {
     const sourceShell = readFileSync(path.resolve(previewDirectory, '../index.html'), 'utf8');
     const classicDirectory = path.resolve(artifactDirectory, 'classic');
     const builtShell = readFileSync(path.resolve(classicDirectory, 'index.html'), 'utf8');
@@ -55,11 +74,10 @@ describe('Pages production artifact', () => {
     );
   });
 
-  it('exposes the shared scoring API from a classic browser script', () => {
-    const scoringScript = readFileSync(path.resolve(artifactDirectory, 'classic/tend-scoring.js'), 'utf8');
+  it('exposes the shared scoring API from the Classic fallback browser script', () => {
     const window: { TendScoring?: Record<string, unknown> } = {};
+    const scoringScript = readFileSync(path.resolve(artifactDirectory, 'classic/tend-scoring.js'), 'utf8');
     runInNewContext(scoringScript, { window });
-
     assert.equal(typeof window.TendScoring?.scoreRhythm, 'function');
     assert.equal(typeof window.TendScoring?.consistencyWindowForSchedule, 'function');
     assert.equal(typeof window.TendScoring?.blendScores, 'function');

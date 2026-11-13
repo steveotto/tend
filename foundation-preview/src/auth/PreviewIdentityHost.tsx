@@ -397,10 +397,15 @@ export function PreviewIdentityHost({
     );
   }
 
+  const isPagesMode = import.meta.env.MODE === 'pages';
+
   return (
     <PreviewAuthLayout
       title="Sign in with Tend"
-      description="Use your existing Tend email and password. Preview keeps a separate local copy on this device."
+      brandLabel={isPagesMode ? 'Tend' : 'Tend Preview'}
+      description={isPagesMode
+        ? 'Sign in with your Tend email and password to continue.'
+        : 'Use your existing Tend email and password. Preview keeps a separate local copy on this device.'}
     >
         <form
           className="preview-login__form"
@@ -438,16 +443,18 @@ type PreviewAuthScreen = 'sign-in' | 'request-reset' | 'recovery' | 'recovery-er
 function PreviewAuthLayout({
   title,
   description,
+  brandLabel = 'Tend Preview',
   children
 }: {
   title: string;
   description: string;
+  brandLabel?: string;
   children: ReactNode;
 }) {
   return (
     <main className="preview-login" aria-labelledby="preview-login-title">
       <section className="preview-login__card">
-        <p className="preview-login__eyebrow">Tend Preview</p>
+        <p className="preview-login__eyebrow">{brandLabel}</p>
         <h1 id="preview-login-title">{title}</h1>
         <p>{description}</p>
         {children}

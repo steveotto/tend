@@ -38,6 +38,6 @@ npm run build:preview
 
 `npm test` runs the lossless-reader tests, the component tests, and the existing JavaScript regression tests. The React views compose shared Rhythm, Goal, and Foundation cards; the catalogue demonstrates those components with Marriage and Finances examples. Finances examples are illustrative only; they do not finalize the category taxonomy.
 
-The Cloudflare Pages production build uses `npm run build:pages` from the `foundation-preview` root and emits its root entry to `dist/`. `npm run build:preview` retains the local multi-page app and component-catalogue build.
+The Cloudflare Pages production build uses `npm run build:pages` from the `foundation-preview` root and emits the React app at `/`, the React Today preview at `/app-preview.html`, and the Classic fallback at `/classic/` in `dist/`. `npm run build:preview` retains the local multi-page app and component-catalogue build.
 
 The legacy reader preserves original JSON text separately from parsed projections. It is read-only, does not invoke the legacy `ensureShape` migration, and is not a complete validator or a safe-to-publish export. Never read or write existing Tend state, account-cache, auth, calendar, or sync keys; add account data, secrets, a live Supabase connection, scoring formulas, or money movement. The synthetic preview storage adapter must remain confined to its versioned key and explicit validated envelope. Browser storage is local to the preview origin, may be cleared, and is not a backup substitute.

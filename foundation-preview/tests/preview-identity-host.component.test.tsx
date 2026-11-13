@@ -140,6 +140,45 @@ afterEach(() => {
 });
 
 describe('PreviewIdentityHost', () => {
+  it('uses production wording on the Pages sign-in screen', async () => {
+    vi.stubEnv('MODE', 'pages');
+    installMemoryStorage();
+    const auth = fakeAuth();
+    render(
+      <PreviewIdentityHost
+        accessReady
+        supabaseUrl="https://project.supabase.co"
+        supabasePublishableKey="synthetic-public-key"
+        clientFactory={auth.clientFactory}
+      />
+    );
+
+    await screen.findByRole('heading', { name: 'Sign in with Tend' });
+    expect(screen.getByText('Tend', { selector: '.preview-login__eyebrow' })).toBeTruthy();
+    expect(screen.getByText('Sign in with your Tend email and password to continue.')).toBeTruthy();
+    expect(screen.queryByText(/Preview|separate local copy/i)).toBeNull();
+  });
+
+  it('retains Preview wording on the local Preview sign-in screen', async () => {
+    vi.stubEnv('MODE', 'development');
+    installMemoryStorage();
+    const auth = fakeAuth();
+    render(
+      <PreviewIdentityHost
+        accessReady
+        supabaseUrl="https://project.supabase.co"
+        supabasePublishableKey="synthetic-public-key"
+        clientFactory={auth.clientFactory}
+      />
+    );
+
+    await screen.findByRole('heading', { name: 'Sign in with Tend' });
+    expect(screen.getByText('Tend Preview', { selector: '.preview-login__eyebrow' })).toBeTruthy();
+    expect(screen.getByText(
+      'Use your existing Tend email and password. Preview keeps a separate local copy on this device.'
+    )).toBeTruthy();
+  });
+
   it('does not initialize authentication or account data before access is enabled', () => {
     installMemoryStorage();
     const auth = fakeAuth();
