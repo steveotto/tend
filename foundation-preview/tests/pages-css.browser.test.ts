@@ -127,13 +127,20 @@ async function main() {
           const body = getComputedStyle(document.body);
           const heading = document.querySelector('.preview-login__card h1');
           const button = document.querySelector('.preview-login__form button');
-          if (!heading || !button) throw new Error('Sign-in view is missing expected elements.');
+          const classicLink = document.querySelector('.preview-login__classic a');
+          if (!heading || !button || !classicLink) {
+            throw new Error('Sign-in view is missing expected elements.');
+          }
           return {
             bodyBackground: body.backgroundColor,
             bodyFontFamily: body.fontFamily,
             bodyLineHeight: body.lineHeight,
             headingLetterSpacing: getComputedStyle(heading).letterSpacing,
-            buttonCursor: getComputedStyle(button).cursor
+            buttonCursor: getComputedStyle(button).cursor,
+            classicLinkColor: getComputedStyle(classicLink).color,
+            classicLinkWeight: getComputedStyle(classicLink).fontWeight,
+            classicLinkDecoration: getComputedStyle(classicLink).textDecorationLine,
+            classicLinkUnderlineOffset: getComputedStyle(classicLink).textUnderlineOffset
           };
         });
         assert.equal(styles.bodyBackground, 'rgb(247, 249, 247)');
@@ -141,6 +148,10 @@ async function main() {
         assert.notEqual(styles.bodyLineHeight, 'normal');
         assert.notEqual(styles.headingLetterSpacing, 'normal');
         assert.equal(styles.buttonCursor, 'pointer');
+        assert.equal(styles.classicLinkColor, 'rgb(36, 107, 82)');
+        assert.equal(styles.classicLinkWeight, '600');
+        assert.equal(styles.classicLinkDecoration, 'underline');
+        assert.equal(styles.classicLinkUnderlineOffset, '3px');
       } else {
         await page.locator('.home-dashboard').waitFor();
         await page.setViewportSize({ width: 375, height: 812 });
