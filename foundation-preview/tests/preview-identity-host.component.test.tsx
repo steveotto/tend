@@ -274,7 +274,8 @@ describe('PreviewIdentityHost', () => {
     expect(storage.getItem('tend:supabase-auth')).toBe('classic-session-sentinel');
   });
 
-  it('wires the authenticated Supabase client to manual backup actions under More', async () => {
+  it('keeps account backup available in Pages mode while hiding synthetic import controls', async () => {
+    vi.stubEnv('MODE', 'pages');
     installMemoryStorage();
     const user = userEvent.setup();
     const auth = fakeAuth(session, null, null, true);
@@ -291,6 +292,9 @@ describe('PreviewIdentityHost', () => {
     await user.click(screen.getByRole('button', { name: 'More, settings' }));
     await user.click(await screen.findByRole('button', { name: 'Settings' }));
     expect(await screen.findByText('synthetic@example.test')).toBeTruthy();
+    expect(screen.queryByLabelText('Import preview backup')).toBeNull();
+    expect(screen.queryByLabelText('Dry-run Classic Tend import')).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Component catalogue' })).toBeNull();
     await user.click(screen.getByText('Backup & recovery'));
     await user.click(screen.getByRole('button', { name: /Advanced recovery/ }));
     await user.click(screen.getByRole('button', { name: /Save this device’s copy to account/ }));

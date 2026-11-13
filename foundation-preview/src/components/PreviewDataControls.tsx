@@ -214,6 +214,7 @@ export function PreviewDataControls({
   const [legacyImportConfirmed, setLegacyImportConfirmed] = useState(false);
   const [legacyExclusionsConfirmed, setLegacyExclusionsConfirmed] = useState(false);
   const [message, setMessage] = useState('');
+  const showImportControls = import.meta.env.MODE !== 'pages';
   const activeRef = useRef(true);
   const readersRef = useRef(new Set<FileReader>());
   useEffect(() => {
@@ -338,17 +339,19 @@ export function PreviewDataControls({
       </div>
       <div className="preview-data-controls__actions">
         <button type="button" className="btn mini ghost" onClick={exportCurrent} disabled={status.kind === 'loading'}>Export preview backup</button>
-        <PreviewBackupImportControl
-          data={data}
-          status={status}
-          currentDate={currentDate}
-          currentRaw={currentRaw}
-          onImport={onImport}
-          recoveryRaw={importRecoveryRaw}
-          recoverySourceRaw={importRecoverySourceRaw}
-          recoveryArchiveRaw={importRecoveryArchiveRaw}
-          recoveryError={importRecoveryError}
-        />
+        {showImportControls && (
+          <PreviewBackupImportControl
+            data={data}
+            status={status}
+            currentDate={currentDate}
+            currentRaw={currentRaw}
+            onImport={onImport}
+            recoveryRaw={importRecoveryRaw}
+            recoverySourceRaw={importRecoverySourceRaw}
+            recoveryArchiveRaw={importRecoveryArchiveRaw}
+            recoveryError={importRecoveryError}
+          />
+        )}
         {v1RecoveryCopy !== null && (
           <button
             type="button"
@@ -767,16 +770,18 @@ export function PreviewDataControls({
             Download original v40 recovery backup
           </button>
         )}
-        <label className="btn mini ghost preview-data-controls__file-button">
-          Dry-run Classic Tend import
-          <input
-            type="file"
-            accept="application/json,.json"
-            aria-label="Dry-run Classic Tend import"
-            onChange={readLegacyImport}
-            disabled={status.kind === 'loading'}
-          />
-        </label>
+        {showImportControls && (
+          <label className="btn mini ghost preview-data-controls__file-button">
+            Dry-run Classic Tend import
+            <input
+              type="file"
+              accept="application/json,.json"
+              aria-label="Dry-run Classic Tend import"
+              onChange={readLegacyImport}
+              disabled={status.kind === 'loading'}
+            />
+          </label>
+        )}
         <button
           type="button"
           className="btn mini ghost"
@@ -896,7 +901,7 @@ export function PreviewDataControls({
           </div>
         </MoneyGoalDialog>
       )}
-      {legacyDryRun && (
+      {showImportControls && legacyDryRun && (
         <MoneyGoalDialog
           title="Review Classic Tend import"
           intro="This dry run converts only records with a supported, validated Preview representation. Unsupported source data remains in the exact-source recovery package; no preview data has changed."

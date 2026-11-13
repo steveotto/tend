@@ -546,6 +546,8 @@ describe('Tend Today preview', () => {
     expect(screen.getByRole('heading', { name: 'Preview data' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Export preview backup' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Reset sample data' })).toBeTruthy();
+    expect(screen.getByLabelText('Import preview backup')).toBeTruthy();
+    expect(screen.getByLabelText('Dry-run Classic Tend import')).toBeTruthy();
     expect(screen.getByText(/separate from your live Tend account/)).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: '‹ More' }));
