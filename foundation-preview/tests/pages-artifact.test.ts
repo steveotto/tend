@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { describe, it } from 'node:test';
@@ -69,6 +69,16 @@ describe('Pages production artifact', () => {
 
     const undefinedProperties = [...requiredReferences].filter((property) => !definitions.has(property)).sort();
     assert.deepEqual(undefinedProperties, [], 'all referenced CSS custom properties should be defined');
+  });
+
+  it('keeps React Pages entries independent from the Classic stylesheet', () => {
+    for (const entry of ['index.html', 'app-preview.html']) {
+      const html = readFileSync(path.resolve(artifactDirectory, entry), 'utf8');
+      assert.doesNotMatch(html, /(?:src|href)="[^"]*tend\.css(?:[?#][^"]*)?"/, `${entry} must not load tend.css`);
+    }
+
+    assert.equal(existsSync(path.resolve(artifactDirectory, 'tend.css')), false);
+    assert.equal(statSync(path.resolve(artifactDirectory, 'classic/tend.css')).isFile(), true);
   });
 
   it('keeps the React Preview available at /app-preview.html', () => {

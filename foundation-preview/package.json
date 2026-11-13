@@ -9,11 +9,12 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "typecheck": "tsc --noEmit",
-    "test": "npm run test:reader && npm run test:components && npm run test:legacy",
+    "test": "npm run test:reader && npm run test:components && npm run test:legacy && npm run test:browser-css",
     "test:reader": "node --experimental-strip-types --test ../tests/legacy-reader.test.ts",
     "test:components": "vitest run",
     "test:legacy": "node --test ../tests/*.test.js",
     "build": "vite build --mode pages && vite build --config vite.scoring.config.mts --mode pages",
+    "test:browser-css": "node --experimental-strip-types tests/pages-css.browser.test.ts",
     "build:pages": "npm run build",
     "build:preview": "vite build",
     "test:pages-artifact": "node --experimental-strip-types --test tests/pages-artifact.test.ts"
@@ -31,6 +32,7 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
     "jsdom": "29.0.0",
+    "playwright": "1.65.0",
     "postcss": "8.5.31",
     "typescript": "7.0.2",
     "vite": "8.3.5",
