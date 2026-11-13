@@ -3,6 +3,7 @@ import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { describe, it } from 'node:test';
+import postcss from 'postcss';
 
 const testsDirectory = import.meta.dirname;
 const previewDirectory = path.resolve(testsDirectory, '..');
@@ -12,6 +13,22 @@ function artifactPath(reference: string): string | null {
   if (/^[a-z][a-z\d+.-]*:/i.test(reference)) return null;
   const cleanReference = reference.split(/[?#]/, 1)[0]!;
   return path.resolve(artifactDirectory, cleanReference.replace(/^\/+/, ''));
+}
+
+function stylesheetCustomProperties(css: string): { definitions: Set<string>; requiredReferences: Set<string> } {
+  const definitions = new Set<string>();
+  const requiredReferences = new Set<string>();
+  const root = postcss.parse(css);
+
+  root.walkDecls((declaration) => {
+    if (declaration.prop.startsWith('--')) definitions.add(declaration.prop);
+    for (const match of declaration.value.matchAll(/var\(\s*(--[\w-]+)(\s*,|\s*\))/g)) {
+      if (match[2]!.includes(',')) continue;
+      requiredReferences.add(match[1]!);
+    }
+  });
+
+  return { definitions, requiredReferences };
 }
 
 describe('Pages production artifact', () => {
@@ -33,6 +50,25 @@ describe('Pages production artifact', () => {
       const localPath = artifactPath(match[1]!);
       if (localPath !== null) assert.equal(statSync(localPath).isFile(), true, `${match[1]} should be emitted`);
     }
+  });
+
+  it('defines every production stylesheet custom property that has no fallback', () => {
+    const rootHtml = readFileSync(path.resolve(artifactDirectory, 'index.html'), 'utf8');
+    const definitions = new Set<string>();
+    const requiredReferences = new Set<string>();
+
+    for (const match of rootHtml.matchAll(/<link\b[^>]*\brel="stylesheet"[^>]*\bhref="([^"]+)"/g)) {
+      const localPath = artifactPath(match[1]!);
+      if (localPath === null) continue;
+
+      const stylesheet = readFileSync(localPath, 'utf8');
+      const properties = stylesheetCustomProperties(stylesheet);
+      properties.definitions.forEach((property) => definitions.add(property));
+      properties.requiredReferences.forEach((property) => requiredReferences.add(property));
+    }
+
+    const undefinedProperties = [...requiredReferences].filter((property) => !definitions.has(property)).sort();
+    assert.deepEqual(undefinedProperties, [], 'all referenced CSS custom properties should be defined');
   });
 
   it('keeps the React Preview available at /app-preview.html', () => {
