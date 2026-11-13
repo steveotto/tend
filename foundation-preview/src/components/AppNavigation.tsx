@@ -1,18 +1,26 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
+import type { GlobalSearchResult, GlobalSearchSelection } from '../domain/global-search.ts';
 import { areas } from '../domain/preview-data.ts';
 import { AreaIcon } from './AreaIcon.tsx';
 
 export type Destination = 'today' | 'focus' | 'people' | 'more' | (typeof areas)[number]['id'];
 export type TextSize = 'small' | 'medium' | 'large';
+export type CategoryTabNavigationRequest = {
+  categoryId: Destination;
+  requestId: number;
+};
 
 type AppNavigationProps = {
   destination: Destination;
   search: string;
   searchOpen: boolean;
+  searchResults: GlobalSearchSelection;
   textSize: TextSize;
   onNavigate: (destination: Destination) => void;
   onSearchChange: (search: string) => void;
   onSearchClose: () => void;
+  onSearchResult: (result: GlobalSearchResult) => void;
   onSearchToggle: () => void;
   onTextSizeChange: () => void;
 };
@@ -21,18 +29,111 @@ export function AppNavigation({
   destination,
   search,
   searchOpen,
+  searchResults,
   textSize,
   onNavigate,
   onSearchChange,
   onSearchClose,
+  onSearchResult,
   onSearchToggle,
   onTextSizeChange
 }: AppNavigationProps) {
+  const [activeResultIndex, setActiveResultIndex] = useState(-1);
+  const [expandedState, setExpandedState] = useState<{
+    query: string;
+    groupIds: ReadonlySet<string>;
+  }>({ query: '', groupIds: new Set() });
+  const expandedGroups = expandedState.query === search ? expandedState.groupIds : new Set<string>();
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const mobileSearchToggleRef = useRef<HTMLButtonElement>(null);
+  const displayedGroups = searchResults.groups.map(group => ({
+    ...group,
+    displayedResults: expandedGroups.has(group.id) ? group.allResults : group.results
+  }));
+  const displayedResults = displayedGroups.flatMap(group => group.displayedResults);
+  const optionIds = displayedResults.map((_, index) => `tend-search-option-${index}`);
+  const hasQuery = search.trim().length > 0;
+  const statusText = !hasQuery
+    ? ''
+    : searchResults.isEmpty
+      ? 'No results found.'
+      : `${displayedResults.length} results shown across ${searchResults.groups.filter(group => group.totalCount > 0).length} groups.`;
+
+  useEffect(() => {
+    setActiveResultIndex(-1);
+  }, [search]);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    searchInputRef.current?.focus({ preventScroll: true });
+  }, [searchOpen]);
+
+  useEffect(() => {
+    if (!searchOpen && !hasQuery) return;
+    function dismissOutsideSearch(event: MouseEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)
+        || searchContainerRef.current?.contains(target)
+        || mobileSearchToggleRef.current?.contains(target)) return;
+      onSearchClose();
+    }
+
+    document.addEventListener('mousedown', dismissOutsideSearch);
+    return () => document.removeEventListener('mousedown', dismissOutsideSearch);
+  }, [hasQuery, onSearchClose, searchOpen]);
+
+  function activateResult(result: GlobalSearchResult) {
+    onSearchResult(result);
+    onSearchClose();
+  }
+
+  function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    const resultCount = displayedResults.length;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      onSearchClose();
+      return;
+    }
+    if (resultCount === 0) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveResultIndex(index => (index + 1) % resultCount);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveResultIndex(index => index <= 0 ? resultCount - 1 : index - 1);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      setActiveResultIndex(0);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      setActiveResultIndex(resultCount - 1);
+    } else if (event.key === 'Enter' && activeResultIndex >= 0) {
+      event.preventDefault();
+      const selectedResult = displayedResults[activeResultIndex];
+      if (selectedResult) activateResult(selectedResult);
+    }
+  }
+
+  function toggleGroupExpanded(groupId: string) {
+    setExpandedState(current => {
+      const next = new Set(current.query === search ? current.groupIds : []);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return { query: search, groupIds: next };
+    });
+    setActiveResultIndex(-1);
+  }
+
   return (
     <>
       <header className="apphead">
         <div className="brand">
-          <a href="/app-preview.html" aria-label="Tend Today" className="brand-home">
+          <a
+            href={import.meta.env.MODE === 'pages' ? '/' : '/app-preview.html'}
+            aria-label="Tend Today"
+            className="brand-home"
+          >
             <img src="/brand/tend-logo.png" alt="Tend" />
           </a>
           <div className="brand-copy">
@@ -41,12 +142,12 @@ export function AppNavigation({
         </div>
         <div className="mobile-head-actions" aria-label="Quick controls">
           <button
+            ref={mobileSearchToggleRef}
             type="button"
             className="mobile-head-button"
             aria-label={searchOpen ? 'Close search' : 'Open search'}
             aria-expanded={searchOpen}
             aria-controls="tendSearch"
-            disabled={destination !== 'today'}
             onClick={onSearchToggle}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg>
@@ -75,22 +176,94 @@ export function AppNavigation({
               <UtilityButton active={destination === 'people'} label="People" onClick={() => onNavigate('people')} icon={<PeopleIcon />} />
               <UtilityButton active={destination === 'more'} label="More" ariaLabel="More, settings" onClick={() => onNavigate('more')} icon={<MenuIcon />} />
             </div>
-            <label className="utility-search">
+            <div ref={searchContainerRef} className="utility-search">
               <span className="utility-search-icon" aria-hidden="true">⌕</span>
               <input
+                ref={searchInputRef}
                 id="tendSearch"
                 type="search"
                 placeholder="Search Tend..."
-                aria-label="Search sample Rhythms"
+                aria-label="Search Tend"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-haspopup="listbox"
+                aria-expanded={hasQuery}
+                aria-controls="tend-search-results"
+                aria-activedescendant={activeResultIndex >= 0 ? optionIds[activeResultIndex] : undefined}
                 value={search}
-                disabled={destination !== 'today'}
                 onChange={event => onSearchChange(event.currentTarget.value)}
-                onKeyDown={event => {
-                  if (event.key === 'Escape') onSearchClose();
-                }}
+                onKeyDown={handleSearchKeyDown}
               />
               {search && <button type="button" className="utility-search-clear" aria-label="Clear search" onClick={() => onSearchChange('')}>×</button>}
-            </label>
+              {hasQuery && (
+                <div
+                  id="tend-search-results"
+                  className={`utility-search-results${searchResults.isEmpty ? '' : ' utility-search-results--full-bleed'}`}
+                  role="listbox"
+                  aria-label="Search results"
+                >
+                  <p className="sr-only" aria-live="polite" aria-atomic="true">{statusText}</p>
+                  {searchResults.isEmpty ? (
+                    <p className="search-empty">No results found.</p>
+                  ) : displayedGroups.filter(group => group.totalCount > 0).map(group => (
+                    <section className="search-result-group" key={group.id} role="group" aria-label={group.label}>
+                      <h3
+                        aria-label={`${group.label} ${group.totalCount}`}
+                        style={{ fontSize: 'var(--tend-type-category-label)' }}
+                      >
+                        {group.label}
+                        <span style={{ fontSize: 'var(--tend-type-metadata)' }}>{group.totalCount}</span>
+                      </h3>
+                      {group.displayedResults.map(result => {
+                        const index = displayedResults.indexOf(result);
+                        return (
+                          <button
+                            id={optionIds[index]}
+                            key={result.key}
+                            type="button"
+                            className="search-result"
+                            role="option"
+                            aria-selected={activeResultIndex === index}
+                            onMouseMove={() => setActiveResultIndex(index)}
+                            onClick={() => activateResult(result)}
+                          >
+                            <span className="search-result-main">
+                              <strong style={{ fontSize: 'var(--tend-item-title-size)' }}>
+                                {highlightMatch(result.title, search)}
+                              </strong>
+                              <small style={{ fontSize: 'var(--tend-type-description)' }}>
+                                {highlightMatch(result.subtitle, search)}
+                              </small>
+                              {result.matchedContent && (
+                                <small
+                                  className="search-result-context"
+                                  style={{ fontSize: 'var(--tend-type-description)' }}
+                                >
+                                  {highlightMatch(result.matchedContent, search)}
+                                </small>
+                              )}
+                            </span>
+                            <span className="search-result-tag" style={{ fontSize: 'var(--tend-type-category-label)' }}>
+                              {result.tag}
+                            </span>
+                          </button>
+                        );
+                      })}
+                      {group.remainingCount > 0 && (
+                        <button
+                          type="button"
+                          className="search-result-more"
+                          aria-expanded={expandedGroups.has(group.id)}
+                          onClick={() => toggleGroupExpanded(group.id)}
+                        >
+                          {expandedGroups.has(group.id) ? 'Show less' : `+${group.remainingCount} more`}
+                        </button>
+                      )}
+                    </section>
+                  ))}
+                </div>
+              )}
+            </div>
           </nav>
         </div>
         <div className="nav-row nav-row-areas">
@@ -111,6 +284,18 @@ export function AppNavigation({
           </nav>
         </div>
       </div>
+    </>
+  );
+}
+
+function highlightMatch(text: string, query: string): ReactNode {
+  const index = text.toLocaleLowerCase().indexOf(query.trim().toLocaleLowerCase());
+  if (!query.trim() || index < 0) return text;
+  return (
+    <>
+      {text.slice(0, index)}
+      <mark>{text.slice(index, index + query.trim().length)}</mark>
+      {text.slice(index + query.trim().length)}
     </>
   );
 }

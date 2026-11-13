@@ -192,6 +192,35 @@ describe('pure structured Rhythm schedule domain', () => {
     }, 'compact')).toBe('Every 2 years · Oct First Thu');
   });
 
+  it('uses single-letter weekday abbreviations only for card-footer labels', () => {
+    expect(formatRhythmSchedule({
+      frequency: 'weekly',
+      weekdays: [1, 2, 3, 4]
+    }, 'card-footer')).toBe('M · T · W · R');
+    expect(formatRhythmSchedule({
+      frequency: 'weekly',
+      weekdays: [1, 2, 3, 4, 5, 6]
+    }, 'card-footer')).toBe('M · T · W · R · F · S');
+    expect(formatRhythmSchedule({
+      frequency: 'weekly',
+      weekdays: [6, 0]
+    }, 'card-footer')).toBe('Su · S');
+    expect(formatRhythmSchedule({
+      frequency: 'weekly',
+      weekdays: [0]
+    }, 'card-footer')).toBe('Every Su');
+    expect(formatRhythmSchedule({ frequency: 'daily' }, 'card-footer')).toBe('Daily');
+    expect(formatRhythmSchedule({
+      frequency: 'monthly',
+      pattern: { kind: 'ordinalWeekday', ordinal: 1, weekday: 4 }
+    }, 'card-footer')).toBe('Monthly · First R');
+
+    const weekendSchedule: RhythmSchedule = { frequency: 'weekly', weekdays: [6, 0] };
+    expect(formatRhythmSchedule(weekendSchedule, 'compact')).toBe('Weekends');
+    expect(formatRhythmSchedule(weekendSchedule, 'detailed'))
+      .toBe('Every week on Sunday and Saturday.');
+  });
+
   it('provides reference time choices through stable values and shared labels', () => {
     expect(rhythmTimeOptions.map(option => option.value)).toEqual([
       'anytime', 'all-day', 'early-morning', 'morning', 'lunch',

@@ -5,7 +5,8 @@ import {
   rhythmSeasonPaletteAssignments,
   rhythmSeasonPaletteForId,
   rhythmSeasonPaletteForOrdinal,
-  createRhythmSeason
+  createRhythmSeason,
+  createUnknownRhythmSeason
 } from '../src/domain/rhythm-seasons.ts';
 import { validateRhythmScoringMetadata } from '../src/domain/rhythm-schedule.ts';
 
@@ -47,7 +48,7 @@ describe('Rhythm Season schedule history', () => {
     expect(() => rhythmSeasonPaletteForOrdinal(1.5)).toThrow(RangeError);
   });
 
-  it('corrects legacy hash-assigned Seasons to their chronological colors', () => {
+  it('corrects legacy ID-hash colors and resolves neighboring collisions in chronological palette order', () => {
     const original = createRhythmSeason(
       'sample-connect',
       '2026-10-17',
@@ -66,6 +67,89 @@ describe('Rhythm Season schedule history', () => {
     expect(original.paletteToken).toBe('plum');
     expect(assignments.get(original.id)).toBe('fern');
     expect(assignments.get(current.id)).toBe('sage');
+
+    const collidingSeasons = [
+      createRhythmSeason('fixture', '2026-10-01', { frequency: 'daily' }, undefined, 'first', 'fern'),
+      createRhythmSeason('fixture', '2026-10-03', { frequency: 'daily' }, undefined, 'second', 'fern'),
+      createRhythmSeason('fixture', '2026-10-04', { frequency: 'daily' }, undefined, 'third', 'fern')
+    ];
+    const collisionAssignments = rhythmSeasonPaletteAssignments(collidingSeasons);
+    const reorderedAssignments = rhythmSeasonPaletteAssignments([...collidingSeasons].reverse());
+    const unknownSeparatedAssignments = rhythmSeasonPaletteAssignments([
+      collidingSeasons[0]!,
+      createUnknownRhythmSeason('fixture', '2026-10-02'),
+      collidingSeasons[1]!,
+      collidingSeasons[2]!
+    ]);
+    const appendedAssignments = rhythmSeasonPaletteAssignments([
+      ...collidingSeasons,
+      createRhythmSeason('fixture', '2026-10-05', { frequency: 'daily' }, undefined, 'fourth', 'fern')
+    ]);
+    expect(collisionAssignments.get('first')).toBe('fern');
+    expect(collisionAssignments.get('second')).toBe('sage');
+    expect(collisionAssignments.get('third')).toBe('sky');
+    expect(collisionAssignments.get('third')).not.toBe(collisionAssignments.get('second'));
+    expect([...collisionAssignments]).toEqual([...reorderedAssignments]);
+    expect([...collisionAssignments]).toEqual([...unknownSeparatedAssignments]);
+    expect([...collisionAssignments]).toEqual([...appendedAssignments].slice(0, 3));
+    const aliasIds = Array.from({ length: 100 }, (_, index) => `palette-alias-${index}`)
+      .filter(id => rhythmSeasonPaletteForId(id) === 'fern');
+    const aliasCollisionAssignments = rhythmSeasonPaletteAssignments([
+      createRhythmSeason('fixture', '2026-10-01', { frequency: 'daily' }, undefined, aliasIds[0], 'ocean'),
+      createRhythmSeason('fixture', '2026-10-02', { frequency: 'daily' }, undefined, aliasIds[1], 'clay')
+    ]);
+    expect(aliasCollisionAssignments.get(aliasIds[0]!)).toBe('ocean');
+    expect(aliasCollisionAssignments.get(aliasIds[1]!)).toBe('sage');
+  });
+
+  it('corrects a hash-assigned current Season after an explicit unknown-history interval', () => {
+    const rhythmId = 'sample-connect';
+    const unknownId = `season:${rhythmId}:2026-10-17:unknown`;
+    const currentId = `season:${rhythmId}:2026-10-26`;
+    const unknown = createUnknownRhythmSeason(rhythmId, '2026-10-17');
+    const current = createRhythmSeason(
+      rhythmId,
+      '2026-10-26',
+      { frequency: 'weekly', weekdays: [1, 3, 5] },
+      undefined,
+      currentId,
+      rhythmSeasonPaletteForId(currentId)
+    );
+    const assignments = rhythmSeasonPaletteAssignments([
+      { ...unknown, id: unknownId },
+      current
+    ]);
+
+    expect(current.paletteToken).toBe('plum');
+    expect(assignments.get(unknownId)).toBeUndefined();
+    expect(assignments.get(currentId)).toBe('fern');
+  });
+
+  it('resolves the saved same-day-boundary history using the approved palette order', () => {
+    const rhythmId = 'user-rhythm-b6dfbc84-dd52-48cb-8c7c-3d52b14f275f';
+    const firstId = `season:${rhythmId}:2026-10-05:unknown`;
+    const secondId = `season:${rhythmId}:2026-10-25`;
+    const assignments = rhythmSeasonPaletteAssignments([
+      createRhythmSeason(
+        rhythmId,
+        '2026-10-05',
+        { frequency: 'weekly', weekdays: [1, 3, 5] },
+        undefined,
+        firstId,
+        'fern'
+      ),
+      createRhythmSeason(
+        rhythmId,
+        '2026-10-25',
+        { frequency: 'weekly', weekdays: [1] },
+        undefined,
+        secondId,
+        'fern'
+      )
+    ]);
+
+    expect(assignments.get(firstId)).toBe('fern');
+    expect(assignments.get(secondId)).toBe('sage');
   });
 
   it('strictly validates season identity, ordered boundaries, optional text and schedule snapshots', () => {

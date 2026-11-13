@@ -37,6 +37,20 @@ export function addCalendarDays(value: string, amount: number): string {
   ].join('-');
 }
 
+export function localTimeInTimeZone(value: Date, timeZone: string): string {
+  if (!Number.isFinite(value.getTime())) throw new RangeError('The scoring instant is invalid.');
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(value);
+  const hour = parts.find(part => part.type === 'hour')?.value;
+  const minute = parts.find(part => part.type === 'minute')?.value;
+  if (!hour || !minute) throw new RangeError('Could not determine local scoring time.');
+  return `${hour}:${minute}`;
+}
+
 export function dateParts(value: string): { year: number; month: number; day: number } {
   const [year, month, day] = value.split('-').map(Number);
   return { year: year!, month: month!, day: day! };
@@ -93,6 +107,14 @@ export function isPeriodBasedRhythmSchedule(schedule: RhythmSchedule): boolean {
     || schedule.frequency === 'yearly'
     || schedule.frequency === 'weekly' && schedule.weekdays.length === 1
       && schedule.weeklyMode !== 'select-days';
+}
+
+export function isOnceWeeklyRhythmSchedule(
+  schedule: RhythmSchedule
+): schedule is Extract<RhythmSchedule, { frequency: 'weekly' }> {
+  return schedule.frequency === 'weekly'
+    && schedule.weekdays.length === 1
+    && schedule.weeklyMode !== 'select-days';
 }
 
 export function hasRhythmOccurrenceForCompletion(
@@ -208,9 +230,11 @@ export function selectNextScheduledOccurrence(input: {
   const segments = input.scoring?.scheduleHistory;
   if (input.scoring) {
     const latest = input.scoring.scheduleHistory.at(-1);
+    const active = rhythmSeasonForDate(input.scoring.scheduleHistory, input.asOfDate);
     if (!validateRhythmScoringMetadata(input.scoring) || !isValidTimeZone(input.scoring.timeZone)
-      || !latest || latest.kind !== 'scheduled' || !rhythmSchedulesEqual(latest.schedule, input.schedule)) {
-      return { kind: 'unavailable', reason: 'The saved schedule history is invalid or does not match the current schedule.' };
+      || !latest || latest.kind !== 'scheduled'
+      || active?.kind === 'scheduled' && !rhythmSchedulesEqual(active.schedule, input.schedule)) {
+      return { kind: 'unavailable', reason: 'The saved schedule history is invalid or does not match the schedule effective today.' };
     }
   }
 
@@ -219,13 +243,15 @@ export function selectNextScheduledOccurrence(input: {
     input.scoring?.trackingStartDate,
     input.trackingStartDate
   ].filter((date): date is string => date !== undefined).sort().at(-1)!;
-  const horizonDate = addCalendarDays(startDate, searchHorizonDays(input.schedule));
+  const horizonDays = segments
+    ? Math.max(searchHorizonDays(input.schedule), ...segments
+        .filter((segment): segment is Extract<RhythmScheduleHistorySegment, { kind: 'scheduled' }> => segment.kind === 'scheduled')
+        .map(segment => searchHorizonDays(segment.schedule)))
+    : searchHorizonDays(input.schedule);
+  const horizonDate = addCalendarDays(startDate, horizonDays);
   const searchEnd = horizonDate > '9999-12-31' ? '9999-12-31' : horizonDate;
-  const effectiveEnd = input.schedule.endDate && input.schedule.endDate < searchEnd
-    ? input.schedule.endDate
-    : searchEnd;
 
-  for (let date = startDate; date <= effectiveEnd; date = addCalendarDays(date, 1)) {
+  for (let date = startDate; date <= searchEnd; date = addCalendarDays(date, 1)) {
     const schedule = segments ? scheduleAt(segments, date) : input.schedule;
     if (!schedule) {
       return { kind: 'unavailable', reason: 'The schedule history does not cover the next occurrence period.' };

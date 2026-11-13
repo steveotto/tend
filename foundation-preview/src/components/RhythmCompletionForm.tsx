@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { localDateString } from '../domain/money-goals.ts';
 import {
@@ -16,6 +16,7 @@ import { TimeDial } from './TimeDial.tsx';
 const hours = Array.from({ length: 12 }, (_, index) => index + 1);
 const minutes = Array.from({ length: 60 }, (_, index) => index);
 const periods = ['AM', 'PM'] as const;
+const compactTimePickerBreakpoint = 400;
 
 function localDraftAt(date: Date): CompletionDraft {
   const hour = date.getHours();
@@ -57,10 +58,48 @@ export function RhythmCompletionForm({
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const dialsRef = useRef<HTMLDivElement>(null);
+  const preservePeriodFocus = useRef(false);
+  const [compactTimePicker, setCompactTimePicker] = useState(false);
 
   useEffect(() => {
     headingRef.current?.focus({ preventScroll: true });
   }, []);
+
+  useLayoutEffect(() => {
+    const dials = dialsRef.current;
+    if (dials === null) return;
+
+    const updateLayout = () => {
+      const width = dials.clientWidth || dials.getBoundingClientRect().width;
+      if (!width) return;
+      const nextCompact = width <= compactTimePickerBreakpoint;
+      if (nextCompact === compactTimePicker) return;
+      preservePeriodFocus.current = Boolean(dials.querySelector('.time-dial--period :focus'));
+      setCompactTimePicker(nextCompact);
+    };
+
+    const observer = typeof ResizeObserver === 'function'
+      ? new ResizeObserver(updateLayout)
+      : undefined;
+    observer?.observe(dials);
+    window.addEventListener('resize', updateLayout);
+    updateLayout();
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', updateLayout);
+    };
+  }, [compactTimePicker]);
+
+  useLayoutEffect(() => {
+    if (!preservePeriodFocus.current) return;
+    preservePeriodFocus.current = false;
+    const period = dialsRef.current?.querySelector('.time-dial--period');
+    const target = compactTimePicker
+      ? period?.querySelector<HTMLButtonElement>('.time-dial__period-option[aria-pressed="true"]')
+      : period?.querySelector<HTMLElement>('[role="spinbutton"]');
+    target?.focus({ preventScroll: true });
+  }, [compactTimePicker]);
 
   function change<K extends keyof CompletionDraft>(key: K, value: CompletionDraft[K]) {
     setDraft(current => ({ ...current, [key]: value }));
@@ -175,10 +214,38 @@ export function RhythmCompletionForm({
       {hasTime ? (
         <fieldset className="rhythm-completion-form__time">
           <legend>Time</legend>
-          <div className="rhythm-completion-form__dials">
-            <TimeDial label="Hour" values={hours} value={draft.hour} formatValue={String} onChange={value => change('hour', value)} />
-            <TimeDial label="Minute" values={minutes} value={draft.minute} formatValue={value => String(value).padStart(2, '0')} onChange={value => change('minute', value)} />
-            <TimeDial label="AM / PM" values={periods} value={draft.period} formatValue={value => value} onChange={value => change('period', value)} />
+          <div
+            ref={dialsRef}
+            className="rhythm-completion-form__dials"
+            data-layout={compactTimePicker ? 'narrow' : 'wide'}
+          >
+            <TimeDial
+              label="Hour"
+              values={hours}
+              value={draft.hour}
+              formatValue={String}
+              onChange={value => change('hour', value)}
+              className="time-dial--hour"
+            />
+            <TimeDial
+              label="Minute"
+              values={minutes}
+              value={draft.minute}
+              formatValue={value => String(value).padStart(2, '0')}
+              onChange={value => change('minute', value)}
+              shortcuts={[0, 15, 30, 45]}
+              shortcutAriaLabel={value => `Set minutes to ${String(value).padStart(2, '0')}`}
+              className="time-dial--minute"
+            />
+            <TimeDial
+              label="AM / PM"
+              values={periods}
+              value={draft.period}
+              formatValue={value => value}
+              onChange={value => change('period', value)}
+              compactToggle={compactTimePicker}
+              className="time-dial--period"
+            />
           </div>
           {errors.time && <p className="rhythm-completion-form__error" role="alert">{errors.time}</p>}
         </fieldset>

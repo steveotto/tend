@@ -22,9 +22,10 @@ export function RhythmMetadataIcon({ kind }: { kind: 'back' | 'history' | 'edit'
     );
   }
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M4 4v16h16" />
-      <path d="M8 16v-4M12 16V7M16 16V9M20 16v-3" />
+    <svg className="rhythm-metadata-icon--history" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="4" y="13" width="4" height="7" rx="1" />
+      <rect x="10" y="9" width="4" height="11" rx="1" />
+      <rect x="16" y="5" width="4" height="15" rx="1" />
     </svg>
   );
 }

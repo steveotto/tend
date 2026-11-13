@@ -13,8 +13,10 @@
     "test:reader": "node --experimental-strip-types --test ../tests/legacy-reader.test.ts",
     "test:components": "vitest run",
     "test:legacy": "node --test ../tests/*.test.js",
-    "build": "vite build",
-    "build:pages": "vite build --mode pages"
+    "build": "vite build --mode pages && vite build --config vite.scoring.config.mts --mode pages",
+    "build:pages": "npm run build",
+    "build:preview": "vite build",
+    "test:pages-artifact": "node --experimental-strip-types --test tests/pages-artifact.test.ts"
   },
   "dependencies": {
     "react": "19.3.1",

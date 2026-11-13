@@ -11,8 +11,8 @@ afterEach(cleanup);
 
 describe('shared badge selection picker', () => {
   it('toggles whole groups for none, partial, and all selections while preserving outside IDs', () => {
-    const marriage = syntheticPersonPickerGroups[0]!.memberIds;
-    const friends = syntheticPersonPickerGroups[2]!.memberIds;
+    const marriage = ['sample-person-avery', 'sample-person-morgan'] as PersonId[];
+    const friends = ['sample-person-avery', 'sample-person-jordan'] as PersonId[];
     const noSelection = toggleBadgeGroup<PersonId>([], marriage);
     expect(noSelection).toEqual(['sample-person-avery', 'sample-person-morgan']);
     expect(toggleBadgeGroup(noSelection, marriage)).toEqual([]);
@@ -32,6 +32,12 @@ describe('shared badge selection picker', () => {
 
   it('derives aria-pressed from all selected IDs and keeps individual people independently toggleable', async () => {
     const user = userEvent.setup();
+    const groups = [
+      { id: 'group-a', label: 'Group A', memberIds: ['sample-person-avery', 'sample-person-morgan'] },
+      { id: 'group-b', label: 'Group B', memberIds: ['sample-person-morgan', 'sample-person-jordan'] },
+      { id: 'group-c', label: 'Group C', memberIds: ['sample-person-avery', 'sample-person-jordan'] },
+      { id: 'empty', label: 'Empty', memberIds: [] }
+    ];
     function InteractivePicker() {
       const [selectedIds, setSelectedIds] = useState<PersonId[]>(['sample-person-avery']);
       return (
@@ -41,7 +47,7 @@ describe('shared badge selection picker', () => {
           selectedIds={selectedIds}
           getLabel={person => person.displayName}
           renderBadge={person => <PersonBadgeVisual person={person} />}
-          groups={[...syntheticPersonPickerGroups, { id: 'empty', label: 'Empty', memberIds: [] }]}
+          groups={groups}
           onToggle={id => setSelectedIds(current =>
             current.includes(id) ? current.filter(selected => selected !== id) : [...current, id]
           )}
@@ -54,15 +60,15 @@ describe('shared badge selection picker', () => {
 
     render(<InteractivePicker />);
     const picker = screen.getByRole('region', { name: 'Choose people' });
-    const marriage = within(picker).getByRole('button', { name: 'Select Marriage people' });
-    const parenting = within(picker).getByRole('button', { name: 'Select Parenting people' });
-    const friends = within(picker).getByRole('button', { name: 'Select Friends people' });
+    const marriage = within(picker).getByRole('button', { name: 'Select Group A people' });
+    const parenting = within(picker).getByRole('button', { name: 'Select Group B people' });
+    const friends = within(picker).getByRole('button', { name: 'Select Group C people' });
     const emptyGroup = within(picker).getByRole('button', { name: 'Select Empty people' });
 
     expect(marriage.dataset.selected).toBe('false');
     expect(marriage.getAttribute('aria-pressed')).toBe('false');
     expect(document.getElementById(marriage.getAttribute('aria-describedby')!)?.textContent)
-      .toContain('Activate to select all Marriage members.');
+      .toContain('Activate to select all Group A members.');
     expect(parenting.dataset.selected).toBe('false');
     expect(friends.dataset.selected).toBe('false');
     expect(emptyGroup.hasAttribute('disabled')).toBe(true);
@@ -75,7 +81,7 @@ describe('shared badge selection picker', () => {
     expect(marriage.dataset.selected).toBe('true');
     expect(marriage.getAttribute('aria-pressed')).toBe('true');
     expect(document.getElementById(marriage.getAttribute('aria-describedby')!)?.textContent)
-      .toBe('All Marriage members are selected. Activate to deselect all Marriage members.');
+      .toBe('All Group A members are selected. Activate to deselect all Group A members.');
     expect(parenting.dataset.selected).toBe('false');
     expect(friends.dataset.selected).toBe('false');
     await user.click(marriage);

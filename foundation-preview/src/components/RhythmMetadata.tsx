@@ -18,6 +18,7 @@ type RhythmMetadataProps =
     schedule?: RhythmSchedule | undefined;
     timeLabel?: string | undefined;
     lastTended: string;
+    className?: string | undefined;
     rhythmTitle?: string;
     completed?: boolean;
     onUndo?: (() => void) | undefined;
@@ -38,18 +39,18 @@ export function RhythmMetadata(props: RhythmMetadataProps) {
   }
 
   return (
-    <div className="rhythm-metadata-footer">
-      <span className="rhythm-metadata-schedule-group">
-        <RhythmScheduleSummary
-          cadence={props.cadence}
-          schedule={props.schedule}
-          timeLabel={props.timeLabel}
-        />
-      </span>
+    <div className={`rhythm-metadata-footer${props.className ? ` ${props.className}` : ''}`}>
+      <RhythmScheduleSummary
+        cadence={props.cadence}
+        schedule={props.schedule}
+        timeLabel={props.timeLabel}
+        presentation="card-footer"
+      />
       <RhythmStatus
         className="rhythm-metadata-last-tended"
         undoBeforeStatus
         status={props.lastTended}
+        statusAccessibleLabel={`Last tended: ${props.lastTended}`}
         rhythmTitle={props.rhythmTitle}
         completed={props.completed}
         onUndo={props.onUndo}
@@ -63,33 +64,53 @@ export function RhythmScheduleSummary({
   cadence,
   schedule,
   timeLabel,
+  timeAccessibleLabel,
   presentation = 'compact'
 }: {
   cadence?: string | undefined;
   schedule?: RhythmSchedule | undefined;
   timeLabel?: string | undefined;
-  presentation?: 'compact' | 'detailed';
+  timeAccessibleLabel?: string | undefined;
+  presentation?: 'compact' | 'card-footer' | 'detailed';
 }) {
   const fullScheduleId = useId();
   const scheduleText = schedule
     ? formatRhythmSchedule(schedule, presentation)
     : cadence;
-  const detailedSchedule = schedule && presentation === 'compact'
+  const detailedSchedule = schedule && presentation !== 'detailed'
     ? formatRhythmSchedule(schedule, 'detailed')
     : undefined;
+  const displayTimeLabel = presentation === 'card-footer' && timeLabel === 'Early morning'
+    ? 'Early am'
+    : timeLabel;
   return (
-    <>
+    <span className="rhythm-metadata-schedule-group">
       {scheduleText && (
-        <span aria-describedby={detailedSchedule ? fullScheduleId : undefined}>
+        <span aria-describedby={presentation === 'compact' && detailedSchedule ? fullScheduleId : undefined}>
           <MetadataIcon kind="recurrence" />
-          <span>{scheduleText}</span>
+          <span
+            className={presentation === 'card-footer' ? 'rhythm-metadata-schedule-label' : undefined}
+            aria-hidden={presentation === 'card-footer' ? true : undefined}
+          >
+            {scheduleText}
+          </span>
+          {presentation === 'card-footer' && detailedSchedule && (
+            <span className="visually-hidden">Full schedule: {detailedSchedule}</span>
+          )}
         </span>
       )}
-      {detailedSchedule && (
+      {presentation === 'compact' && detailedSchedule && (
         <span id={fullScheduleId} className="visually-hidden">Full schedule: {detailedSchedule}</span>
       )}
-      {timeLabel && <span><MetadataIcon kind="time" />{timeLabel}</span>}
-    </>
+      {displayTimeLabel && (
+        <span>
+          <MetadataIcon kind="time" />
+          <span aria-label={timeAccessibleLabel ?? (displayTimeLabel !== timeLabel ? timeLabel : undefined)}>
+            {displayTimeLabel}
+          </span>
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -100,7 +121,8 @@ function RhythmStatus({
   onUndo,
   tendButtonRef,
   className,
-  undoBeforeStatus = false
+  undoBeforeStatus = false,
+  statusAccessibleLabel
 }: {
   status: string;
   rhythmTitle?: string | undefined;
@@ -109,6 +131,7 @@ function RhythmStatus({
   tendButtonRef?: RefObject<HTMLButtonElement | null> | undefined;
   className?: string | undefined;
   undoBeforeStatus?: boolean;
+  statusAccessibleLabel?: string;
 }) {
   const undoRef = useRef<HTMLButtonElement>(null);
   const restoreTendFocus = useRef(false);
@@ -140,7 +163,7 @@ function RhythmStatus({
   const statusGroup = (
     <span className="rhythm-metadata-status-group">
       <MetadataIcon kind="last-tended" />
-      <span className="rhythm-metadata-status">{status}</span>
+      <span className="rhythm-metadata-status" aria-label={statusAccessibleLabel}>{status}</span>
     </span>
   );
 
@@ -164,23 +187,7 @@ function RhythmStatus({
 
 function MetadataIcon({ kind }: { kind: 'recurrence' | 'time' | 'last-tended' }) {
   if (kind === 'recurrence') {
-    return (
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <path d="M3 12a9 9 0 0 1 15.36-6.36L21 8" />
-        <path d="M21 3v5h-5" />
-        <path d="M21 12a9 9 0 0 1-15.36 6.36L3 16" />
-        <path d="M8 16H3v5" />
-      </svg>
-    );
+    return <RhythmRepeatIcon />;
   }
   if (kind === 'time') {
     return (
@@ -194,6 +201,27 @@ function MetadataIcon({ kind }: { kind: 'recurrence' | 'time' | 'last-tended' })
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <rect x="3.5" y="5" width="17" height="16" rx="2" />
       <path d="M7.5 3v4M16.5 3v4M3.5 9h17M8 14l2.5 2.5L16 12" />
+    </svg>
+  );
+}
+
+export function RhythmRepeatIcon({ className }: { className?: string } = {}) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M3 12a9 9 0 0 1 15.36-6.36L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-15.36 6.36L3 16" />
+      <path d="M8 16H3v5" />
     </svg>
   );
 }

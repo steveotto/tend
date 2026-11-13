@@ -1,5 +1,11 @@
 import { isValidDate } from './money-goals.ts';
 import type { RhythmCompletionRecord } from './rhythm-completion.ts';
+import {
+  consistencyWindowForSchedule,
+  scoreClockStartDateForSchedule,
+  scoreRhythm
+} from '../../../src/scoring/engine.ts';
+import type { RhythmScore as SharedRhythmScore } from '../../../src/scoring/engine.ts';
 import { HEALTH_CONSISTENCY_WEIGHT, HEALTH_ON_TRACK_WEIGHT, calculateBlendedHealth } from './rhythm-history.ts';
 import {
   addCalendarDays,
@@ -7,11 +13,12 @@ import {
   dateParts,
   daysInMonth,
   isPeriodBasedRhythmSchedule,
+  isOnceWeeklyRhythmSchedule,
   isScheduledDate,
   rhythmOccurrencePeriod,
   rhythmSchedulesEqual
 } from './rhythm-occurrences.ts';
-export { addCalendarDays, localDateInTimeZone } from './rhythm-occurrences.ts';
+export { addCalendarDays, localDateInTimeZone, localTimeInTimeZone } from './rhythm-occurrences.ts';
 import {
   effectiveRhythmSchedule,
   isValidTimeZone,
@@ -49,10 +56,11 @@ type ScoringOccurrence = ScheduledOccurrenceState & {
   eligibleEndDate: string;
   periodStartDate: string;
   periodBased: boolean;
+  onceWeeklyPeriod: boolean;
 };
 
 export type ConsistencyEvidence = {
-  frequency: Exclude<RhythmSchedule['frequency'], 'custom'>;
+  frequency: RhythmSchedule['frequency'];
   windowStartDate: string;
   windowEndDate: string;
   eligibleDueCount: number;
@@ -60,6 +68,7 @@ export type ConsistencyEvidence = {
   notCompletedCount: number;
   limitedHistoryDays: number | null;
   todayIncluded: boolean;
+  currentWeeklyPeriodIncluded?: boolean;
   occurrences: readonly ScheduledOccurrenceState[];
 };
 
@@ -83,6 +92,7 @@ export type OnTrackZeroScoreSpan = {
   startDate: string;
   endDate: string;
   occurrenceCount: number;
+  recentOccurrenceDates: readonly string[];
 };
 
 export type OnTrackScheduleChange = {
@@ -141,18 +151,26 @@ export type RhythmScoreResult =
   | UnscoredRhythmSelection
   | InvalidRhythmSelection;
 
+export function rhythmHealthScore(result: RhythmScoreResult | undefined): number | null {
+  return result?.kind === 'rhythm-score' ? result.healthScore : null;
+}
+
 export type SelectRhythmScoreInput = {
   rhythmId: string;
   cadence?: string;
   schedule?: RhythmSchedule;
   scoring?: RhythmScoringMetadata;
   createdLocalDate?: string;
+  createdLocalTime?: string;
+  createdDueTime?: string;
   createdTimeZone?: string;
   dailyBackfillAllowed?: boolean;
   records: readonly RhythmCompletionRecord[];
   recordsAvailable: boolean;
   archived?: boolean;
   asOfDate: string;
+  asOfTime?: string;
+  dueTime?: string;
   timeZone: string;
 };
 
@@ -162,6 +180,7 @@ export type DailyRhythmScoreResult = RhythmScoreResult;
 export type SelectDailyRhythmScoreInput = SelectRhythmScoreInput;
 
 const deductionPerMissedOccurrence = 10 as const;
+const maximumCreationBoundarySearchDays = 366 * 100;
 
 function unscored(reasonCode: UnscoredReasonCode, explanation: string): UnscoredMetric {
   return { kind: 'unscored', reasonCode, explanation };
@@ -202,6 +221,47 @@ function previousDate(value: string): string {
   return addCalendarDays(value, -1);
 }
 
+function scoreClockStartDateForScheduleHistory(input: {
+  startDate: string | null;
+  createdDate?: string;
+  createdLocalTime?: string;
+  createdDueTime?: string;
+  completionDates: readonly string[];
+  scheduleForDate: (date: string) => RhythmSchedule | undefined;
+}): string | null {
+  const { createdDate, createdLocalTime, createdDueTime } = input;
+  if (input.startDate === null
+    || createdDate === undefined
+    || createdLocalTime === undefined
+    || createdDueTime === undefined
+    || createdLocalTime <= createdDueTime
+    || input.completionDates.some(date => date < createdDate)) {
+    return input.startDate;
+  }
+  const creationSchedule = input.scheduleForDate(createdDate);
+  if (!creationSchedule || isScheduledDate(creationSchedule, createdDate) !== true) return input.startDate;
+  for (let offset = 1; offset <= maximumCreationBoundarySearchDays; offset += 1) {
+    const date = addCalendarDays(createdDate, offset);
+    const schedule = input.scheduleForDate(date);
+    if (!schedule) return input.startDate;
+    if (isScheduledDate(schedule, date) === true) return date;
+  }
+  return null;
+}
+
+function firstDueDateInScheduleHistory(
+  startDate: string,
+  endDate: string,
+  scheduleForDate: (date: string) => RhythmSchedule | undefined
+): string | undefined {
+  for (let date = startDate; date <= endDate; date = addCalendarDays(date, 1)) {
+    const schedule = scheduleForDate(date);
+    if (!schedule) return undefined;
+    if (isScheduledDate(schedule, date) === true) return date;
+  }
+  return undefined;
+}
+
 function addCalendarMonths(value: string, amount: number): string {
   const { year, month, day } = dateParts(value);
   const monthIndex = year * 12 + month - 1 + amount;
@@ -222,7 +282,8 @@ function consistencyScheduleSupported(
 
 function maximumWindowStart(schedule: Exclude<RhythmSchedule, { frequency: 'custom' }>, asOfDate: string): string {
   if (schedule.frequency === 'daily') return addCalendarDays(asOfDate, -29);
-  if (schedule.frequency === 'weekly' && schedule.weekdays.length > 1) {
+  if (schedule.frequency === 'weekly'
+    && (schedule.weeklyMode === 'select-days' || schedule.weekdays.length > 1)) {
     return addCalendarDays(asOfDate, -30);
   }
   if (schedule.frequency === 'weekly') return addCalendarDays(asOfDate, -84);
@@ -239,6 +300,13 @@ function validateInput(input: SelectRhythmScoreInput): string | null {
     || input.createdLocalDate !== undefined
       && (!isValidDate(input.createdLocalDate) || !isValidTimeZone(input.createdTimeZone))) {
     return 'Rhythm creation date or time zone metadata is invalid.';
+  }
+  if ((input.createdLocalTime === undefined) !== (input.createdDueTime === undefined)
+    || input.createdLocalTime !== undefined
+      && (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(input.createdLocalTime)
+        || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(input.createdDueTime!))
+    || input.createdLocalTime !== undefined && input.createdLocalDate === undefined) {
+    return 'Rhythm creation time-block metadata is invalid.';
   }
   if (input.dailyBackfillAllowed !== undefined && typeof input.dailyBackfillAllowed !== 'boolean') {
     return 'Rhythm daily backfill metadata is invalid.';
@@ -296,6 +364,7 @@ function buildScoringOccurrences(input: {
   records: readonly RhythmCompletionRecord[];
   scheduleForDate: (date: string) => RhythmSchedule | undefined;
   segments: readonly RhythmScheduleHistorySegment[];
+  includeCurrentDueDate?: boolean;
 }): ScoringOccurrence[] {
   const occurrences: ScoringOccurrence[] = [];
   const assignedRecordIds = new Set<string>();
@@ -347,7 +416,10 @@ function buildScoringOccurrences(input: {
     }
     for (const record of matchedRecords) assignedRecordIds.add(record.id);
 
-    if (date > yesterday && matchedRecords.length === 0) continue;
+    const includeCurrentDueDate = input.includeCurrentDueDate && date === input.asOfDate;
+    if (matchedRecords.length === 0 && !includeCurrentDueDate
+      && (date > yesterday
+        || isOnceWeeklyRhythmSchedule(schedule) && endDate >= input.asOfDate)) continue;
     const recordIds = matchedRecords.map(record => record.id);
     occurrences.push({
       date,
@@ -356,7 +428,8 @@ function buildScoringOccurrences(input: {
       completionDate: matchedRecords.map(record => record.effectiveDate).sort()[0] ?? null,
       eligibleEndDate: endDate,
       periodStartDate: startDate,
-      periodBased
+      periodBased,
+      onceWeeklyPeriod: isOnceWeeklyRhythmSchedule(schedule)
     });
   }
   return occurrences;
@@ -393,11 +466,15 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
       return invalid(input, 'Scoring metadata or schedule history is malformed.');
     }
     const latestSegment = scheduleHistory.at(-1);
+    const activeSegment = rhythmSeasonForDate(scheduleHistory, input.asOfDate);
     if (!latestSegment) {
       return invalid(input, 'Schedule history has no current segment.');
     }
-    if (latestSegment.kind !== 'scheduled' || !rhythmSchedulesEqual(latestSegment.schedule, schedule)) {
-      return invalid(input, 'The current schedule does not match the final saved schedule-history segment.');
+    if (latestSegment.kind !== 'scheduled') {
+      return invalid(input, 'The latest saved schedule-history segment must have a known schedule.');
+    }
+    if (activeSegment?.kind === 'scheduled' && !rhythmSchedulesEqual(activeSegment.schedule, schedule)) {
+      return invalid(input, 'The current schedule does not match the schedule effective today.');
     }
     segments = scheduleHistory;
   }
@@ -405,16 +482,16 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
   const datedRecords = input.records.filter(record => record.rhythmId === input.rhythmId
     && record.effectiveDate <= input.asOfDate);
   const oldestCompletionDate = datedRecords.map(record => record.effectiveDate).sort()[0];
-  const trackingStartDate = [
-    input.createdLocalDate,
-    oldestCompletionDate
+  // Explicit schedule history owns its tracking boundary; older logs still expose missing history.
+  const trackingCandidates = input.scoring
+    ? [input.scoring.trackingStartDate, oldestCompletionDate]
+    : [input.createdLocalDate, oldestCompletionDate];
+  const sourceTrackingStartDate = [
+    ...trackingCandidates
   ].filter((date): date is string => date !== undefined).sort()[0] ?? null;
-  if (trackingStartDate && trackingStartDate > input.asOfDate) {
-    return baseUnscored(input, unscored('not-started', 'This Rhythm’s tracking date is in the future.'));
-  }
 
   const scheduleForDate = (date: string): RhythmSchedule | undefined => {
-    if (!input.scoring) return trackingStartDate && date >= trackingStartDate ? schedule : undefined;
+    if (!input.scoring) return sourceTrackingStartDate && date >= sourceTrackingStartDate ? schedule : undefined;
     const historicalSegment = rhythmSeasonForDate(segments, date);
     const historicalSchedule = historicalSegment?.kind === 'scheduled' ? historicalSegment.schedule : undefined;
     if (historicalSchedule) return historicalSchedule;
@@ -425,11 +502,44 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
       && input.dailyBackfillAllowed !== false
       && (input.createdLocalDate === firstSegment.startDate
         || input.scoring.trackingStartDate < input.asOfDate)
-      && trackingStartDate !== null
-      && date >= trackingStartDate
+      && sourceTrackingStartDate !== null
+      && date >= sourceTrackingStartDate
       && date < firstSegment.startDate;
     return canUseUnchangedDailyScheduleBeforeHistory ? firstSegment.schedule : undefined;
   };
+  const trackingStartDate = scoreClockStartDateForScheduleHistory({
+    startDate: sourceTrackingStartDate,
+    ...(input.createdLocalDate === undefined ? {} : { createdDate: input.createdLocalDate }),
+    ...(input.createdLocalTime === undefined ? {} : { createdLocalTime: input.createdLocalTime }),
+    ...(input.createdDueTime === undefined ? {} : { createdDueTime: input.createdDueTime }),
+    completionDates: datedRecords.map(record => record.effectiveDate),
+    scheduleForDate
+  });
+  if (trackingStartDate && trackingStartDate > input.asOfDate) {
+    return baseUnscored(input, unscored('not-started', 'This Rhythm’s tracking date is in the future.'));
+  }
+  const creationBoundaryKnown = datedRecords.length === 0
+    && input.createdLocalTime !== undefined
+    && input.createdDueTime !== undefined;
+  const creationFirstDueDate = creationBoundaryKnown && trackingStartDate
+    ? firstDueDateInScheduleHistory(
+        trackingStartDate,
+        input.asOfDate,
+        scheduleForDate
+      )
+    : undefined;
+  const firstDueIsScorableToday = creationBoundaryKnown
+    && creationFirstDueDate === input.asOfDate
+    && input.asOfTime !== undefined
+    && input.dueTime !== undefined
+    && input.asOfTime >= input.dueTime;
+  if (creationBoundaryKnown
+    && creationFirstDueDate === input.asOfDate
+    && input.asOfTime !== undefined
+    && input.dueTime !== undefined
+    && input.asOfTime < input.dueTime) {
+    return baseUnscored(input, unscored('ready-for-first-tend', 'Starts when the first scheduled time block begins.'));
+  }
   const yesterday = previousDate(input.asOfDate);
   let consistency: ScoredConsistencyMetric | UnscoredMetric;
   if (!consistencyScheduleSupported(schedule)) {
@@ -440,6 +550,7 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
   } else if (!trackingStartDate) {
     consistency = unscored('ready-for-first-tend', 'Ready for your first Tend.');
   } else if (trackingStartDate === input.asOfDate
+    && !firstDueIsScorableToday
     && !datedRecords.some(record => record.effectiveDate === input.asOfDate
       && scheduleForDate(record.effectiveDate) !== undefined
       && isScheduledDate(scheduleForDate(record.effectiveDate)!, record.effectiveDate) === true)
@@ -456,8 +567,29 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
       && isScheduledDate(scheduleForDate(record.effectiveDate)!, record.effectiveDate) === true);
     const maxWindowStartDate = maximumWindowStart(schedule, input.asOfDate);
     const windowStartDate = trackingStartDate > maxWindowStartDate ? trackingStartDate : maxWindowStartDate;
-    const todayIncluded = schedule.frequency === 'daily' && completedToday;
-    const windowEndDate = todayIncluded ? input.asOfDate : yesterday;
+    const currentSchedule = scheduleForDate(input.asOfDate);
+    const currentPeriod = currentSchedule
+      ? rhythmOccurrencePeriod(currentSchedule, input.asOfDate)
+      : null;
+    const currentSegment = rhythmSeasonForDate(segments, input.asOfDate);
+    const currentWeeklyPeriodIncluded = currentSchedule !== undefined
+      && isOnceWeeklyRhythmSchedule(currentSchedule)
+      && currentPeriod !== null
+      && datedRecords.some(record => {
+        if (record.effectiveDate < currentPeriod.startDate
+          || record.effectiveDate > input.asOfDate) return false;
+        const recordSchedule = scheduleForDate(record.effectiveDate);
+        const recordSegment = rhythmSeasonForDate(segments, record.effectiveDate);
+        return recordSchedule !== undefined
+          && isOnceWeeklyRhythmSchedule(recordSchedule)
+          && (recordSegment?.id ?? null) === (currentSegment?.id ?? null)
+          && rhythmOccurrencePeriod(recordSchedule, record.effectiveDate).startDate === currentPeriod.startDate;
+      });
+    const todayIncluded = schedule.frequency === 'daily' && completedToday
+      || firstDueIsScorableToday;
+    const windowEndDate = todayIncluded || currentWeeklyPeriodIncluded || firstDueIsScorableToday
+      ? input.asOfDate
+      : yesterday;
     if (windowStartDate > windowEndDate) {
       consistency = unscored(
         'no-eligible-occurrences',
@@ -481,7 +613,8 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
           asOfDate: input.asOfDate,
           records: datedRecords,
           scheduleForDate,
-          segments
+          segments,
+          ...(firstDueIsScorableToday ? { includeCurrentDueDate: true } : {})
         });
         const occurrences = scoringOccurrences.filter(occurrence => {
           if (occurrence.date !== input.asOfDate || !occurrence.recordIds.length) return true;
@@ -511,6 +644,7 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
                   : calendarDaysInclusive(windowStartDate, windowEndDate)
                 : null,
               todayIncluded,
+              ...(currentWeeklyPeriodIncluded ? { currentWeeklyPeriodIncluded: true } : {}),
               occurrences: occurrences.map(occurrence => ({
                 date: occurrence.date,
                 status: occurrence.status,
@@ -576,9 +710,11 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
         const repeatedZeroScoreSpans: OnTrackZeroScoreSpan[] = [];
         const scheduleChanges: OnTrackScheduleChange[] = [];
         const occurrences: OnTrackOccurrence[] = [];
+        const recentHistoryStartDate = addCalendarDays(input.asOfDate, -29);
         let zeroScoreSpanStart: string | null = null;
         let zeroScoreSpanEnd: string | null = null;
         let zeroScoreSpanCount = 0;
+        let zeroScoreSpanRecentDates: string[] = [];
         let missedOccurrenceCount = 0;
         let previousScore = 100;
         const flushZeroScoreSpan = () => {
@@ -586,12 +722,14 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
             repeatedZeroScoreSpans.push({
               startDate: zeroScoreSpanStart,
               endDate: zeroScoreSpanEnd,
-              occurrenceCount: zeroScoreSpanCount
+              occurrenceCount: zeroScoreSpanCount,
+              recentOccurrenceDates: zeroScoreSpanRecentDates
             });
           }
           zeroScoreSpanStart = null;
           zeroScoreSpanEnd = null;
           zeroScoreSpanCount = 0;
+          zeroScoreSpanRecentDates = [];
         };
         type TrackEvent =
           | { kind: 'occurrence'; date: string; occurrence: ScoringOccurrence; status: 'completed' | 'missed' }
@@ -640,9 +778,12 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
             flushZeroScoreSpan();
             missedOccurrenceCount = 0;
             previousScore = 100;
-            if (occurrence.date !== input.asOfDate || occurrence.completionDate !== input.asOfDate) {
+            const shouldRecordCompletion = occurrence.onceWeeklyPeriod
+              ? occurrence.completionDate !== input.asOfDate
+              : occurrence.date !== input.asOfDate || occurrence.completionDate !== input.asOfDate;
+            if (shouldRecordCompletion) {
               occurrences.push({
-                date: occurrence.date,
+                date: occurrence.onceWeeklyPeriod ? occurrence.completionDate! : occurrence.date,
                 status: 'completed',
                 score: previousScore,
                 ...(occurrence.periodBased
@@ -662,6 +803,9 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
             zeroScoreSpanStart ??= occurrence.date;
             zeroScoreSpanEnd = occurrence.date;
             zeroScoreSpanCount += 1;
+            if (occurrence.date >= recentHistoryStartDate && occurrence.date <= input.asOfDate) {
+              zeroScoreSpanRecentDates.push(occurrence.date);
+            }
           } else {
             flushZeroScoreSpan();
             occurrences.push({
@@ -685,7 +829,9 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
           occurrences[occurrences.length - 1] = { date: input.asOfDate, status: 'completed', score };
         }
         const deduction = Math.min(100, missedOccurrenceCount * deductionPerMissedOccurrence);
-        onTrack = lastQualifyingCompletionDate === null && missedOccurrenceCount === 0
+        onTrack = lastQualifyingCompletionDate === null
+          && missedOccurrenceCount === 0
+          && !firstDueIsScorableToday
           ? unscored('ready-for-first-tend', 'Starts with your first Tend.')
           : {
               kind: 'scored',
@@ -716,6 +862,355 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
     onTrack,
     healthScore
   };
+}
+
+function sharedEngineUnscoredMetric(
+  reason: 'missing-clock' | 'not-due-yet' | 'no-due-occurrences'
+): UnscoredMetric {
+  if (reason === 'no-due-occurrences') {
+    return unscored('no-eligible-occurrences', 'No scheduled moments to measure yet.');
+  }
+  return unscored('ready-for-first-tend', 'Starts with your first Tend.');
+}
+
+function isPeriodBasedForEngine(schedule: RhythmSchedule): boolean {
+  return schedule.frequency === 'monthly'
+    || schedule.frequency === 'quarterly'
+    || schedule.frequency === 'yearly'
+    || schedule.frequency === 'weekly'
+      && schedule.weekdays.length === 1
+      && schedule.weeklyMode !== 'select-days';
+}
+
+function completionDatesForEngineOccurrence(
+  occurrence: SharedRhythmScore['occurrences'][number],
+  schedule: RhythmSchedule,
+  records: readonly RhythmCompletionRecord[]
+): readonly RhythmCompletionRecord[] {
+  if (!isPeriodBasedForEngine(schedule)) {
+    return records.filter(record => record.effectiveDate === occurrence.dueDate);
+  }
+  return records.filter(record =>
+    record.effectiveDate >= occurrence.periodStartDate
+      && record.effectiveDate <= occurrence.periodEndDate
+  );
+}
+
+function canPreserveEngineScheduleHistory(
+  input: SelectRhythmScoreInput,
+  schedule: RhythmSchedule,
+  scoreClockStartDate: string | null
+): boolean {
+  if (!input.scoring) return true;
+  const [segment, ...remaining] = input.scoring.scheduleHistory;
+  if (!segment || remaining.length > 0 || segment.kind !== 'scheduled'
+    || !rhythmSchedulesEqual(segment.schedule, schedule)) return false;
+  if (!scoreClockStartDate || scoreClockStartDate >= segment.startDate) return true;
+  const canBackfillDaily = schedule.frequency === 'daily'
+    && input.dailyBackfillAllowed !== false
+    && (input.createdLocalDate === segment.startDate
+      || input.scoring.trackingStartDate < input.asOfDate);
+  return canBackfillDaily;
+}
+
+function sharedEngineOnTrackMetric(
+  result: SharedRhythmScore,
+  schedule: RhythmSchedule,
+  records: readonly RhythmCompletionRecord[],
+  asOfDate: string
+): ScoredOnTrackMetric | UnscoredMetric {
+  if (result.onTrack.kind === 'unscored') {
+    return sharedEngineUnscoredMetric(result.onTrack.reason);
+  }
+  const onTrackScore = result.onTrack.score;
+  const events = result.onTrackOccurrences.map(occurrence => {
+    const completions = completionDatesForEngineOccurrence(occurrence, schedule, records);
+    return {
+      occurrence,
+      completionDate: completions.map(record => record.effectiveDate).sort().at(-1) ?? null
+    };
+  });
+  const lastQualifyingCompletionDate = events
+    .map(event => event.completionDate)
+    .filter((date): date is string => date !== null)
+    .sort()
+    .at(-1) ?? null;
+  let missedOccurrenceCount = 0;
+  for (const event of [...events].reverse()) {
+    if (event.occurrence.completed) break;
+    if (event.occurrence.missed) missedOccurrenceCount += 1;
+  }
+  const occurrences: OnTrackOccurrence[] = events
+    .filter(event => event.occurrence.completed || event.occurrence.missed)
+    .map(({ occurrence, completionDate }) => ({
+      date: occurrence.dueDate,
+      status: occurrence.completed ? 'completed' : 'missed',
+      score: occurrence.onTrack ?? onTrackScore,
+      ...(occurrence.completed && completionDate
+        ? {
+            completionDate,
+            ...(isPeriodBasedForEngine(schedule)
+              ? {
+                  periodStartDate: occurrence.periodStartDate,
+                  eligibleEndDate: occurrence.periodEndDate
+                }
+              : {})
+          }
+        : occurrence.missed && isPeriodBasedForEngine(schedule)
+          ? {
+              periodStartDate: occurrence.periodStartDate,
+              eligibleEndDate: occurrence.periodEndDate
+            }
+          : {})
+    }));
+  const completedToday = events.some(event =>
+    event.occurrence.completed && event.completionDate === asOfDate
+  );
+  occurrences.push({
+    date: asOfDate,
+    status: completedToday ? 'completed' : 'today',
+    score: onTrackScore
+  });
+
+  return {
+    kind: 'scored',
+    score: onTrackScore,
+    evidence: {
+      lastQualifyingCompletionDate,
+      missedOccurrenceCount,
+      pointsPerMissedOccurrence: deductionPerMissedOccurrence,
+      deduction: 100 - onTrackScore,
+      occurrences,
+      repeatedZeroScoreSpans: [],
+      scheduleChanges: []
+    }
+  };
+}
+
+export function selectSharedEngineRhythmScore(input: SelectRhythmScoreInput): RhythmScoreResult {
+  const invalidReason = validateInput(input);
+  if (invalidReason) return invalid(input, invalidReason);
+  if (input.archived) {
+    return baseUnscored(input, unscored('inactive', 'This Rhythm is inactive, so its score is not accruing.'));
+  }
+  const schedule = effectiveRhythmSchedule(input.schedule, input.cadence);
+  if (!schedule) {
+    return input.scoring
+      ? invalid(input, 'Scoring metadata exists without a current supported schedule.')
+      : baseUnscored(input, unscored(
+          'unsupported-schedule',
+          'Choose a schedule to calculate On Track. Descriptive cadence alone does not define due dates.'
+        ));
+  }
+  if (schedule.endDate !== undefined && schedule.endDate < input.asOfDate) {
+    return baseUnscored(input, unscored('inactive', 'This Rhythm has ended, so its score is not accruing.'));
+  }
+  if (!input.recordsAvailable) {
+    return baseUnscored(input, unscored(
+      'history-unavailable',
+      'Completion history is unavailable, so this Rhythm cannot be scored.'
+    ));
+  }
+  if (input.scoring) {
+    const { timeZone, scheduleHistory } = input.scoring;
+    if (!input.schedule || !validateRhythmScoringMetadata(input.scoring)
+      || !isValidTimeZone(timeZone) || input.timeZone !== timeZone
+      || scheduleHistory.length === 0
+      || scheduleHistory.find(segment => segment.kind === 'scheduled')?.startDate
+        !== input.scoring.trackingStartDate) {
+      return invalid(input, 'Scoring metadata or schedule history is malformed.');
+    }
+    const latestSegment = scheduleHistory.at(-1);
+    const activeSegment = rhythmSeasonForDate(scheduleHistory, input.asOfDate);
+    if (!latestSegment) return invalid(input, 'Schedule history has no current segment.');
+    if (latestSegment.kind !== 'scheduled') {
+      return invalid(input, 'The latest saved schedule-history segment must have a known schedule.');
+    }
+    if (activeSegment?.kind === 'scheduled' && !rhythmSchedulesEqual(activeSegment.schedule, schedule)) {
+      return invalid(input, 'The current schedule does not match the schedule effective today.');
+    }
+  }
+  const records = input.records.filter(record =>
+    record.rhythmId === input.rhythmId && record.effectiveDate <= input.asOfDate
+  );
+  const clockDates = [
+    input.createdLocalDate,
+    ...records.map(record => record.effectiveDate)
+  ].filter((date): date is string => date !== undefined).sort();
+  const sourceScoreClockStartDate = clockDates[0] ?? input.scoring?.trackingStartDate ?? null;
+  let creationSchedule: RhythmSchedule | undefined;
+  if (input.createdLocalDate) {
+    if (input.scoring) {
+      const creationSeason = rhythmSeasonForDate(input.scoring.scheduleHistory, input.createdLocalDate);
+      if (creationSeason?.kind === 'scheduled') creationSchedule = creationSeason.schedule;
+    } else {
+      creationSchedule = schedule;
+    }
+  }
+  const scoreClockStartDate = creationSchedule
+    && (!input.scoring || input.scoring.scheduleHistory.length === 1)
+    ? scoreClockStartDateForSchedule({
+        schedule: creationSchedule,
+        startDate: sourceScoreClockStartDate,
+        ...(input.createdLocalDate === undefined ? {} : { createdDate: input.createdLocalDate }),
+        ...(input.createdLocalTime === undefined ? {} : { createdLocalTime: input.createdLocalTime }),
+        ...(input.createdDueTime === undefined ? {} : { createdDueTime: input.createdDueTime }),
+        completionDates: records.map(record => record.effectiveDate)
+      })
+    : sourceScoreClockStartDate;
+  if (scoreClockStartDate && scoreClockStartDate > input.asOfDate) {
+    return baseUnscored(input, unscored('not-started', 'This Rhythm’s tracking date is in the future.'));
+  }
+  const scoringTimeZone = new Intl.DateTimeFormat('en-US', { timeZone: input.timeZone })
+    .resolvedOptions().timeZone;
+  const timezoneMismatch = !input.scoring && records.some(record => {
+    if (record.timeZone === undefined) return false;
+    if (!isValidTimeZone(record.timeZone)) return true;
+    return new Intl.DateTimeFormat('en-US', { timeZone: record.timeZone }).resolvedOptions().timeZone
+      !== scoringTimeZone;
+  });
+  if (timezoneMismatch) return selectRhythmScore(input);
+  if (!canPreserveEngineScheduleHistory(input, schedule, scoreClockStartDate)) {
+    return selectRhythmScore(input);
+  }
+
+  const engineResult = scoreRhythm({
+    rhythmId: input.rhythmId,
+    schedule,
+    ...(input.createdLocalDate ? { createdDate: input.createdLocalDate } : {}),
+    ...(input.createdLocalTime ? { createdLocalTime: input.createdLocalTime } : {}),
+    ...(input.createdDueTime ? { createdDueTime: input.createdDueTime } : {}),
+    ...(input.scoring ? { explicitStartDate: input.scoring.trackingStartDate } : {}),
+    completionDates: records.map(record => record.effectiveDate),
+    asOfDate: input.asOfDate,
+    ...(input.asOfTime && input.dueTime
+      ? { asOfTime: input.asOfTime, dueTime: input.dueTime }
+      : {})
+  });
+  const consistency: ScoredConsistencyMetric | UnscoredMetric = engineResult.consistency.kind === 'scored'
+    ? {
+        kind: 'scored',
+        score: engineResult.consistency.score,
+        exactPercent: engineResult.consistency.score,
+        evidence: {
+          frequency: schedule.frequency,
+          windowStartDate: engineResult.consistencyWindow.startDate,
+          windowEndDate: engineResult.consistencyWindow.endDate,
+          eligibleDueCount: engineResult.occurrences.length,
+          completedCount: engineResult.occurrences.filter(occurrence => occurrence.completed).length,
+          notCompletedCount: engineResult.occurrences.filter(occurrence => !occurrence.completed).length,
+          limitedHistoryDays: scoreClockStartDate !== null
+            && scoreClockStartDate > consistencyWindowForSchedule(schedule, input.asOfDate).startDate
+            ? calendarDaysInclusive(engineResult.consistencyWindow.startDate, input.asOfDate)
+            : null,
+          todayIncluded: engineResult.occurrences.some(occurrence => occurrence.dueDate === input.asOfDate),
+          occurrences: engineResult.occurrences.map(occurrence => ({
+            date: occurrence.dueDate,
+            status: occurrence.completed ? 'completed' : 'not-completed',
+            recordIds: completionDatesForEngineOccurrence(occurrence, schedule, records)
+              .map(record => record.id),
+            ...(isPeriodBasedForEngine(schedule)
+              ? {
+                  periodStartDate: occurrence.periodStartDate,
+                  eligibleEndDate: occurrence.periodEndDate
+                }
+              : {})
+          }))
+        }
+      }
+    : sharedEngineUnscoredMetric(engineResult.consistency.reason);
+  const onTrack = sharedEngineOnTrackMetric(engineResult, schedule, records, input.asOfDate);
+
+  return {
+    kind: 'rhythm-score',
+    asOfDate: input.asOfDate,
+    timeZone: input.scoring?.timeZone ?? input.createdTimeZone ?? input.timeZone,
+    trackingStartDate: engineResult.scoreClockStartDate,
+    consistency,
+    onTrack,
+    healthScore: engineResult.health
+  };
+}
+
+export function selectRhythmSeasonScore(
+  input: SelectRhythmScoreInput,
+  season: RhythmScheduleHistorySegment,
+  endDate?: string
+): RhythmScoreResult {
+  if (season.kind !== 'scheduled') {
+    return baseUnscored(input, unscored(
+      'unsupported-history',
+      'Season Health is unavailable because its schedule is unknown.'
+    ));
+  }
+  if (!input.scoring) {
+    return baseUnscored(input, unscored(
+      'unsupported-history',
+      'Season Health is unavailable because its schedule history is not recorded.'
+    ));
+  }
+  const historyIndex = input.scoring.scheduleHistory.findIndex(segment => segment.id === season.id);
+  const savedSeason = input.scoring.scheduleHistory[historyIndex];
+  if (!savedSeason || savedSeason.kind !== 'scheduled') {
+    return baseUnscored(input, unscored(
+      'unsupported-history',
+      'Season Health is unavailable because its schedule history is unresolved.'
+    ));
+  }
+  if (endDate !== undefined && !isValidDate(endDate)) {
+    return invalid(input, 'The Season scoring end date is invalid.');
+  }
+  const seasonEndDate = endDate && endDate < input.asOfDate ? endDate : input.asOfDate;
+  if (seasonEndDate < savedSeason.startDate) {
+    return baseUnscored(input, unscored(
+      'not-started',
+      'This Season has not started, so it does not have a score yet.'
+    ));
+  }
+  const evaluationDate = endDate !== undefined && savedSeason.schedule.endDate !== undefined
+    && savedSeason.schedule.endDate < seasonEndDate
+    ? savedSeason.schedule.endDate
+    : seasonEndDate;
+  const trackingStartDate = savedSeason.startDate > input.scoring.trackingStartDate
+    ? savedSeason.startDate
+    : input.scoring.trackingStartDate;
+  if (trackingStartDate > evaluationDate) {
+    return baseUnscored(input, unscored(
+      'not-started',
+      'This Season is outside the Rhythm’s established tracking dates.'
+    ));
+  }
+  const scopedSeason: RhythmScheduleHistorySegment = {
+    ...savedSeason,
+    startDate: trackingStartDate
+  };
+  const scopedHistory: RhythmScheduleHistorySegment[] = [scopedSeason];
+  if (evaluationDate < input.asOfDate) {
+    const afterSeasonDate = addCalendarDays(evaluationDate, 1);
+    if (!isValidDate(afterSeasonDate)) {
+      return invalid(input, 'The Season scoring end date cannot be represented as a following calendar date.');
+    }
+    scopedHistory.push({
+      ...scopedSeason,
+      id: `season-score-end:${savedSeason.id}:${evaluationDate}`,
+      startDate: afterSeasonDate
+    });
+  }
+  return selectRhythmScore({
+    ...input,
+    schedule: savedSeason.schedule,
+    scoring: {
+      ...input.scoring,
+      trackingStartDate,
+      scheduleHistory: scopedHistory
+    },
+    records: input.records.filter(record =>
+      record.rhythmId === input.rhythmId
+      && record.effectiveDate >= savedSeason.startDate
+      && record.effectiveDate <= evaluationDate
+    ),
+    asOfDate: evaluationDate
+  });
 }
 
 export const selectDailyRhythmScore = selectRhythmScore;

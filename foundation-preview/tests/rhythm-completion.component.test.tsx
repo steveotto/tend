@@ -107,6 +107,118 @@ describe('Rhythm completion controls', () => {
     expect(screen.getByLabelText(/Notes/)).toBeTruthy();
   });
 
+  it('shows minute shortcuts that stay synchronized with the wheel and preserve hour and period', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 29, 9, 7));
+    render(<RhythmCompletionForm rhythm={rhythm} onSave={() => null} onCancel={() => undefined} onSaved={() => undefined} />);
+
+    const minute = screen.getByRole('spinbutton', { name: 'Minute' });
+    const hour = screen.getByRole('spinbutton', { name: 'Hour' });
+    const period = screen.getByRole('spinbutton', { name: 'AM / PM' });
+    for (const value of ['00', '15', '30', '45']) {
+      const shortcut = screen.getByRole('button', { name: `Set minutes to ${value}` });
+      fireEvent.click(shortcut);
+      expect(minute.getAttribute('aria-valuetext')).toBe(value);
+      expect(shortcut.getAttribute('aria-pressed')).toBe('true');
+      expect(hour.getAttribute('aria-valuetext')).toBe('9');
+      expect(period.getAttribute('aria-valuetext')).toBe('AM');
+    }
+
+    fireEvent.keyDown(minute, { key: 'ArrowDown' });
+    expect(minute.getAttribute('aria-valuetext')).toBe('46');
+    expect(screen.getByRole('button', { name: 'Set minutes to 45' }).getAttribute('aria-pressed')).toBe('false');
+    expect(minute.querySelectorAll('.time-dial__value')).toHaveLength(60);
+  });
+
+  it('switches between wide dials and the narrow period toggle without losing draft or focus', async () => {
+    const onSave = vi.fn(() => null);
+    const onCancel = vi.fn();
+    const { container } = render(
+      <RhythmCompletionForm rhythm={rhythm} onSave={onSave} onCancel={onCancel} onSaved={() => undefined} />
+    );
+    await new Promise<void>(resolve => {
+      if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(() => resolve());
+      else window.setTimeout(resolve, 0);
+    });
+    const dials = container.querySelector<HTMLElement>('.rhythm-completion-form__dials')!;
+    let availableWidth = 401;
+    dials.getBoundingClientRect = () => ({ width: availableWidth } as DOMRect);
+    fireEvent(window, new Event('resize'));
+    expect(dials.dataset.layout).toBe('wide');
+
+    const hour = screen.getByRole('spinbutton', { name: 'Hour' });
+    const minute = screen.getByRole('spinbutton', { name: 'Minute' });
+    const period = screen.getByRole('spinbutton', { name: 'AM / PM' });
+    fireEvent.keyDown(hour, { key: 'End' });
+    fireEvent.click(screen.getByRole('button', { name: 'Set minutes to 00' }));
+    fireEvent.click(period.querySelectorAll('.time-dial__value')[1]!);
+    expect(hour.getAttribute('aria-valuetext')).toBe('12');
+    expect(minute.getAttribute('aria-valuetext')).toBe('00');
+    expect(period.getAttribute('aria-valuetext')).toBe('PM');
+
+    period.focus();
+    availableWidth = 400;
+    fireEvent(window, new Event('resize'));
+    expect(dials.dataset.layout).toBe('narrow');
+    expect(screen.queryByRole('spinbutton', { name: 'AM / PM' })).toBeNull();
+    const periodGroup = screen.getByRole('group', { name: 'AM / PM' });
+    const periodLabel = dials.querySelector('.time-dial--period .time-dial__label');
+    expect(periodLabel?.textContent).toBe('AM / PM');
+    expect(periodLabel?.getAttribute('aria-hidden')).toBe('true');
+    const pmToggle = screen.getByRole('button', { name: 'PM' });
+    expect(periodGroup.querySelectorAll('button')).toHaveLength(2);
+    expect(pmToggle.getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).toBe(pmToggle);
+    expect(screen.getByRole('button', { name: 'Set minutes to 00' }).getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'AM' }));
+    fireEvent.scroll(minute, { target: { scrollTop: 2 * 40 } });
+    expect(minute.getAttribute('aria-valuetext')).toBe('02');
+    expect(screen.getByRole('button', { name: 'Set minutes to 00' }).getAttribute('aria-pressed')).toBe('false');
+
+    minute.focus();
+    fireEvent.keyDown(minute, { key: 'ArrowDown' });
+    expect(minute.getAttribute('aria-valuetext')).toBe('03');
+    screen.getByRole('button', { name: 'AM' }).focus();
+    availableWidth = 401;
+    fireEvent(window, new Event('resize'));
+    expect(dials.dataset.layout).toBe('wide');
+    const restoredPeriod = screen.getByRole('spinbutton', { name: 'AM / PM' });
+    expect(restoredPeriod.getAttribute('aria-valuetext')).toBe('AM');
+    expect(document.activeElement).toBe(restoredPeriod);
+    expect(hour.getAttribute('aria-valuetext')).toBe('12');
+    expect(minute.getAttribute('aria-valuetext')).toBe('03');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onCancel).toHaveBeenCalledOnce();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('saves the chosen shortcut minute through the existing explicit completion flow', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 29, 15, 0));
+    const onSave = vi.fn<(record: RhythmCompletionRecord) => string | null>(() => null);
+    const onSaved = vi.fn();
+    render(<RhythmCompletionForm rhythm={rhythm} onSave={onSave} onCancel={() => undefined} onSaved={onSaved} />);
+
+    fireEvent.change(screen.getByLabelText('Date'), {
+      target: { value: '2026-10-28' }
+    });
+    fireEvent.click(screen.getByRole('spinbutton', { name: 'Hour' }));
+    fireEvent.keyDown(screen.getByRole('spinbutton', { name: 'Hour' }), { key: 'End' });
+    fireEvent.click(screen.getByRole('button', { name: 'Set minutes to 00' }));
+    fireEvent.click(screen.getByRole('spinbutton', { name: 'AM / PM' }));
+    fireEvent.keyDown(screen.getByRole('spinbutton', { name: 'AM / PM' }), { key: 'End' });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({
+      effectiveDate: '2026-10-28',
+      localTime: '12:00'
+    });
+    expect(onSaved).toHaveBeenCalledOnce();
+  });
+
   it('saves the visible AM/PM choice and reopens an existing PM note in sync for editing', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 9, 23, 8, 7));

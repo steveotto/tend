@@ -12,8 +12,10 @@ export const rhythmTimeOptions = [
   { value: 'bedtime', label: 'Bedtime' }
 ] as const;
 
-export type RhythmTimeValue = (typeof rhythmTimeOptions)[number]['value'];
-export type RhythmTimeLabel = (typeof rhythmTimeOptions)[number]['label'];
+export type CustomTimeBlockValue = `custom-time-block:${string}`;
+export type RhythmTimeValue = (typeof rhythmTimeOptions)[number]['value'] | CustomTimeBlockValue;
+export type RhythmTimeLabel = string;
+export type RhythmTimeOption = { value: RhythmTimeValue; label: string };
 export type RhythmLocalDate = string;
 export type RhythmWeekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export type RhythmMonth = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
@@ -53,6 +55,8 @@ export type RhythmSchedule =
   | { frequency: 'custom'; unit: 'weeks'; interval: number; weekdays: RhythmWeekday[]; startDate: RhythmLocalDate; endDate?: RhythmLocalDate }
   | { frequency: 'custom'; unit: 'months'; interval: number; pattern: RhythmPattern; startDate: RhythmLocalDate; endDate?: RhythmLocalDate }
   | { frequency: 'custom'; unit: 'years'; interval: number; month: RhythmMonth; pattern: RhythmPattern; startDate: RhythmLocalDate; endDate?: RhythmLocalDate };
+
+export type RhythmFrequencyRecommendation = 'daily' | 'weekly' | 'select-days' | 'every-two-weeks' | 'monthly' | 'quarterly' | 'yearly';
 
 export function effectiveRhythmSchedule(
   schedule: RhythmSchedule | undefined,
@@ -109,7 +113,7 @@ export type RhythmScheduleValidation =
 const timeValueByLabel = new Map<string, RhythmTimeValue>(
   rhythmTimeOptions.map(option => [option.label, option.value])
 );
-const labelByTimeValue: Record<RhythmTimeValue, RhythmTimeLabel> = {
+const labelByTimeValue: Record<(typeof rhythmTimeOptions)[number]['value'], RhythmTimeLabel> = {
   anytime: 'Anytime',
   'all-day': 'All day',
   'early-morning': 'Early morning',
@@ -280,7 +284,7 @@ export function validateRhythmScoringMetadata(
       || !rhythmSeasonPaletteTokens.includes(segment.paletteToken as RhythmSeasonPaletteToken)) return false;
     const knownSegment = segment.kind === 'scheduled'
       && validateRhythmSchedule(segment.schedule, allowSingleDaySelectDays).valid
-      && (segment.timeOfDay === undefined || rhythmTimeOptions.some(option => option.value === segment.timeOfDay))
+      && (segment.timeOfDay === undefined || isRhythmTimeValue(segment.timeOfDay))
       && segment.descriptiveCadence === undefined
       && (segment.contextCadence === undefined
         || typeof segment.contextCadence === 'string' && segment.contextCadence.length <= 160);
@@ -386,19 +390,34 @@ export function validateRhythmScoringMetadataV11(value: unknown): value is Rhyth
   return validateRhythmScoringMetadata(value, false);
 }
 
-export function rhythmTimeLabel(value: RhythmTimeValue): RhythmTimeLabel {
-  return labelByTimeValue[value];
+export function isRhythmTimeValue(value: unknown): value is RhythmTimeValue {
+  return typeof value === 'string'
+    && (rhythmTimeOptions.some(option => option.value === value)
+      || /^custom-time-block:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value));
 }
 
-export function rhythmTimeValueFromLabel(label: string): RhythmTimeValue | undefined {
-  return timeValueByLabel.get(label);
+export function rhythmTimeLabel(
+  value: RhythmTimeValue,
+  options: readonly RhythmTimeOption[] = rhythmTimeOptions
+): RhythmTimeLabel {
+  return options.find(option => option.value === value)?.label
+    ?? (value in labelByTimeValue
+      ? labelByTimeValue[value as keyof typeof labelByTimeValue]
+      : 'Time block unavailable');
+}
+
+export function rhythmTimeValueFromLabel(
+  label: string,
+  options: readonly RhythmTimeOption[] = rhythmTimeOptions
+): RhythmTimeValue | undefined {
+  return options.find(option => option.label === label)?.value ?? timeValueByLabel.get(label);
 }
 
 export function rhythmTimeValueFromLegacyLabel(label: string): RhythmTimeValue | undefined {
   return legacyTimeValues.get(label);
 }
 
-function weekdayName(weekday: RhythmWeekday): string {
+export function rhythmWeekdayName(weekday: RhythmWeekday): string {
   return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][weekday]!;
 }
 
@@ -422,7 +441,7 @@ function dayOrdinal(day: number): string {
 function patternDescription(pattern: RhythmPattern): string {
   return pattern.kind === 'dayOfMonth'
     ? pattern.day === 'last' ? 'last day' : `${dayOrdinal(pattern.day)} day`
-    : `${ordinalWord(pattern.ordinal)} ${weekdayName(pattern.weekday)}`;
+    : `${ordinalWord(pattern.ordinal)} ${rhythmWeekdayName(pattern.weekday)}`;
 }
 
 function naturalList(items: readonly string[]): string {
@@ -432,21 +451,24 @@ function naturalList(items: readonly string[]): string {
 }
 
 function weekdayListSummary(selected: readonly RhythmWeekday[]): string {
-  return naturalList([...selected].sort((left, right) => left - right).map(weekdayName));
+  return naturalList([...selected].sort((left, right) => left - right).map(rhythmWeekdayName));
 }
 
 function shortWeekdayName(weekday: RhythmWeekday): string {
   return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][weekday]!;
 }
 
-function compactPatternSummary(pattern: RhythmPattern): string {
+function compactPatternSummary(
+  pattern: RhythmPattern,
+  weekdayName: (weekday: RhythmWeekday) => string = shortWeekdayName
+): string {
   if (pattern.kind === 'dayOfMonth') {
     return pattern.day === 'last' ? 'Last day' : dayOrdinal(pattern.day);
   }
   const ordinal = pattern.ordinal === 'last'
     ? 'Last'
     : ['First', 'Second', 'Third', 'Fourth'][pattern.ordinal - 1]!;
-  return `${ordinal} ${shortWeekdayName(pattern.weekday)}`;
+  return `${ordinal} ${weekdayName(pattern.weekday)}`;
 }
 
 function compactWeekdaysSummary(selected: readonly RhythmWeekday[]): string {
@@ -456,6 +478,17 @@ function compactWeekdaysSummary(selected: readonly RhythmWeekday[]): string {
   if (sorted.join(',') === '0,6') return 'Weekends';
   if (sorted.length === 1) return `Every ${shortWeekdayName(sorted[0]!)}`;
   return sorted.map(shortWeekdayName).join(' · ');
+}
+
+function cardFooterWeekdayName(weekday: RhythmWeekday): string {
+  return ['Su', 'M', 'T', 'W', 'R', 'F', 'S'][weekday]!;
+}
+
+function cardFooterWeekdaysSummary(selected: readonly RhythmWeekday[]): string {
+  const sorted = [...selected].sort((left, right) => left - right);
+  if (sorted.length === 7) return 'Daily';
+  if (sorted.length === 1) return `Every ${cardFooterWeekdayName(sorted[0]!)}`;
+  return sorted.map(cardFooterWeekdayName).join(' · ');
 }
 
 function formatLocalDate(value: RhythmLocalDate): string {
@@ -469,9 +502,10 @@ function formatLocalDate(value: RhythmLocalDate): string {
 
 export function formatRhythmSchedule(
   schedule: RhythmSchedule,
-  mode: 'compact' | 'detailed' = 'detailed'
+  mode: 'compact' | 'card-footer' | 'detailed' = 'detailed'
 ): string {
-  if (mode === 'compact') {
+  if (mode !== 'detailed') {
+    const cardFooter = mode === 'card-footer';
     let compact: string;
     switch (schedule.frequency) {
       case 'daily':
@@ -479,11 +513,16 @@ export function formatRhythmSchedule(
         break;
       case 'weekly':
         compact = schedule.weeklyMode === 'select-days'
-          ? `Select days · ${schedule.weekdays.map(shortWeekdayName).join(' · ')}`
-          : compactWeekdaysSummary(schedule.weekdays);
+          ? `Select days · ${schedule.weekdays.map(cardFooter ? cardFooterWeekdayName : shortWeekdayName).join(' · ')}`
+          : cardFooter
+            ? cardFooterWeekdaysSummary(schedule.weekdays)
+            : compactWeekdaysSummary(schedule.weekdays);
         break;
       case 'monthly':
-        compact = `Monthly · ${compactPatternSummary(schedule.pattern)}`;
+        compact = `Monthly · ${compactPatternSummary(
+          schedule.pattern,
+          cardFooter ? cardFooterWeekdayName : shortWeekdayName
+        )}`;
         break;
       case 'quarterly':
         compact = 'Quarterly';
@@ -492,8 +531,8 @@ export function formatRhythmSchedule(
         compact = schedule.pattern.kind === 'dayOfMonth'
           ? `Yearly · ${monthName(schedule.month).slice(0, 3)} ${schedule.pattern.day === 'last' ? 'Last day' : schedule.pattern.day}`
           : `Yearly · ${schedule.pattern.ordinal === 'last'
-            ? `Last ${shortWeekdayName(schedule.pattern.weekday)}`
-            : `${dayOrdinal(schedule.pattern.ordinal)} ${shortWeekdayName(schedule.pattern.weekday)}`} · ${monthName(schedule.month).slice(0, 3)}`;
+            ? `Last ${(cardFooter ? cardFooterWeekdayName : shortWeekdayName)(schedule.pattern.weekday)}`
+            : `${dayOrdinal(schedule.pattern.ordinal)} ${(cardFooter ? cardFooterWeekdayName : shortWeekdayName)(schedule.pattern.weekday)}`} · ${monthName(schedule.month).slice(0, 3)}`;
         break;
       case 'custom':
         if (schedule.unit === 'days') {
@@ -501,11 +540,19 @@ export function formatRhythmSchedule(
         } else if (schedule.unit === 'weeks') {
           compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'week' : 'weeks'}`
             + (schedule.weekdays.length ? ` · ${schedule.weekdays
-              .slice().sort((left, right) => left - right).map(shortWeekdayName).join(' · ')}` : '');
+              .slice().sort((left, right) => left - right)
+              .map(cardFooter ? cardFooterWeekdayName : shortWeekdayName)
+              .join(' · ')}` : '');
         } else if (schedule.unit === 'months') {
-          compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'month' : 'months'} · ${compactPatternSummary(schedule.pattern)}`;
+          compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'month' : 'months'} · ${compactPatternSummary(
+            schedule.pattern,
+            cardFooter ? cardFooterWeekdayName : shortWeekdayName
+          )}`;
         } else {
-          compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'year' : 'years'} · ${monthName(schedule.month).slice(0, 3)} ${compactPatternSummary(schedule.pattern)}`;
+          compact = `Every ${schedule.interval} ${schedule.interval === 1 ? 'year' : 'years'} · ${monthName(schedule.month).slice(0, 3)} ${compactPatternSummary(
+            schedule.pattern,
+            cardFooter ? cardFooterWeekdayName : shortWeekdayName
+          )}`;
         }
         break;
     }

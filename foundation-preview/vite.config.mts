@@ -1,57 +1,118 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
-import { existsSync, readFileSync, renameSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { Plugin } from 'vite';
+import { loadEnv } from 'vite';
 
 const projectRoot = import.meta.dirname;
 const legacyStyles = path.resolve(projectRoot, '..', 'tend.css');
 
-const legacyStylesPlugin: Plugin = {
-  name: 'serve-tend-reference-styles',
-  configureServer(server) {
-    server.middlewares.use((request, response, next) => {
-      const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
-      if (pathname !== '/tend.css') return next();
-      response.setHeader('Content-Type', 'text/css; charset=utf-8');
-      response.end(readFileSync(legacyStyles));
-    });
-  },
-  generateBundle() {
-    this.emitFile({
-      type: 'asset',
-      fileName: 'tend.css',
-      source: readFileSync(legacyStyles)
-    });
-  }
-};
-
-function pagesRootEntryPlugin(): Plugin {
+function legacyStylesPlugin(isPagesBuild: boolean): Plugin {
   return {
-    name: 'cloudflare-preview-root-entry',
+    name: 'serve-tend-reference-styles',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html) {
+        if (isPagesBuild) return html;
+        if (html.includes('href="/tend.css"')) return html;
+        return html.replace(
+          '</head>',
+          '    <link rel="stylesheet" href="/tend.css" />\n  </head>'
+        );
+      }
+    },
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
+        if (pathname !== '/tend.css') return next();
+        response.setHeader('Content-Type', 'text/css; charset=utf-8');
+        response.end(readFileSync(legacyStyles));
+      });
+    },
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: isPagesBuild ? 'classic/tend.css' : 'tend.css',
+        source: readFileSync(legacyStyles)
+      });
+    }
+  };
+}
+
+function cloudflarePreviewPlugin(includeSupabaseClient: boolean): Plugin {
+  return {
+    name: 'cloudflare-preview-document',
+    transformIndexHtml(html) {
+      if (!includeSupabaseClient) return html;
+      return html.replace(
+        '</head>',
+        '    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0"></script>\n  </head>'
+      );
+    }
+  };
+}
+
+function reactRootEntryPlugin(): Plugin {
+  return {
+    name: 'emit-react-app-at-root',
     writeBundle(outputOptions) {
       const outputDirectory = path.resolve(outputOptions.dir ?? path.resolve(projectRoot, 'dist'));
-      const appEntry = path.join(outputDirectory, 'app-preview.html');
-      const rootEntry = path.join(outputDirectory, 'index.html');
-      if (!existsSync(appEntry)) {
-        throw new Error('Pages build did not emit the Preview HTML entry.');
+      const previewHtml = path.resolve(outputDirectory, 'app-preview.html');
+      if (!existsSync(previewHtml)) {
+        throw new Error('React app HTML is missing from the Pages artifact.');
       }
-      if (existsSync(rootEntry)) {
-        throw new Error('Pages build unexpectedly emitted a root index.html entry.');
+      writeFileSync(path.resolve(outputDirectory, 'index.html'), readFileSync(previewHtml));
+    }
+  };
+}
+
+function legacyShellPlugin(): Plugin {
+  return {
+    name: 'package-legacy-classic-shell',
+    generateBundle(_outputOptions, bundle) {
+      const legacyHtml = readFileSync(path.resolve(projectRoot, '..', 'index.html'), 'utf8');
+      this.emitFile({
+        type: 'asset',
+        fileName: 'classic/index.html',
+        source: legacyHtml
+      });
+
+      for (const [, reference] of legacyHtml.matchAll(/(?:src|href)="([^"]+)"/g)) {
+        const [referencePath] = reference!.split(/[?#]/, 1);
+        if (!referencePath || referencePath.startsWith('/') || /^[a-z][a-z\d+.-]*:/i.test(referencePath)) continue;
+        if (referencePath === 'tend.css' || referencePath === 'tend-scoring.js' || bundle[`classic/${referencePath}`]) continue;
+        const sourcePath = path.resolve(projectRoot, '..', referencePath);
+        if (!existsSync(sourcePath)) throw new Error(`Legacy shell asset is missing: ${referencePath}`);
+        this.emitFile({
+          type: 'asset',
+          fileName: `classic/${referencePath}`,
+          source: readFileSync(sourcePath)
+        });
       }
-      renameSync(appEntry, rootEntry);
     }
   };
 }
 
 export default defineConfig(({ mode }) => {
   const isPagesBuild = mode === 'pages';
+  const env = loadEnv(mode, projectRoot, 'VITE_');
+  const hasPublicAuthConfig = Boolean(
+    env.VITE_TEND_SUPABASE_URL?.trim()
+    && env.VITE_TEND_SUPABASE_PUBLISHABLE_KEY?.trim()
+  );
+  const includeSupabaseClient = isPagesBuild
+    && env.VITE_PREVIEW_ACCESS_READY === 'true'
+    && hasPublicAuthConfig;
 
   return {
+    base: '/',
     plugins: [
       react(),
-      legacyStylesPlugin,
-      ...(isPagesBuild ? [pagesRootEntryPlugin()] : [])
+      legacyStylesPlugin(isPagesBuild),
+      ...(isPagesBuild
+        ? [cloudflarePreviewPlugin(includeSupabaseClient), reactRootEntryPlugin(), legacyShellPlugin()]
+        : [])
     ],
     server: {
       fs: {
@@ -62,7 +123,7 @@ export default defineConfig(({ mode }) => {
       outDir: path.resolve(projectRoot, 'dist'),
       rollupOptions: {
         input: isPagesBuild
-          ? { index: path.resolve(projectRoot, 'app-preview.html') }
+          ? { 'app-preview': path.resolve(projectRoot, 'app-preview.html') }
           : {
               app: path.resolve(projectRoot, 'app-preview.html'),
               catalogue: path.resolve(projectRoot, 'preview.html'),
