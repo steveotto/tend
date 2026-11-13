@@ -140,7 +140,6 @@ export function TodayView({
   const overallHealthLabel = overallHealth.health === null
     ? 'Overall health: Not enough data'
     : `Overall health score ${formatScore(overallHealth.health)} out of 100`;
-
   function handlePlanTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let nextIndex: number;
     switch (event.key) {
