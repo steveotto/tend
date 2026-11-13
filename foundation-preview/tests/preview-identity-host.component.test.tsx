@@ -140,6 +140,45 @@ afterEach(() => {
 });
 
 describe('PreviewIdentityHost', () => {
+  it('uses production wording on the Pages sign-in screen', async () => {
+    vi.stubEnv('MODE', 'pages');
+    installMemoryStorage();
+    const auth = fakeAuth();
+    render(
+      <PreviewIdentityHost
+        accessReady
+        supabaseUrl="https://project.supabase.co"
+        supabasePublishableKey="synthetic-public-key"
+        clientFactory={auth.clientFactory}
+      />
+    );
+
+    await screen.findByRole('heading', { name: 'Sign in with Tend' });
+    expect(screen.getByText('Tend', { selector: '.preview-login__eyebrow' })).toBeTruthy();
+    expect(screen.getByText('Sign in with your Tend email and password to continue.')).toBeTruthy();
+    expect(screen.queryByText(/Preview|separate local copy/i)).toBeNull();
+  });
+
+  it('retains Preview wording on the local Preview sign-in screen', async () => {
+    vi.stubEnv('MODE', 'development');
+    installMemoryStorage();
+    const auth = fakeAuth();
+    render(
+      <PreviewIdentityHost
+        accessReady
+        supabaseUrl="https://project.supabase.co"
+        supabasePublishableKey="synthetic-public-key"
+        clientFactory={auth.clientFactory}
+      />
+    );
+
+    await screen.findByRole('heading', { name: 'Sign in with Tend' });
+    expect(screen.getByText('Tend Preview', { selector: '.preview-login__eyebrow' })).toBeTruthy();
+    expect(screen.getByText(
+      'Use your existing Tend email and password. Preview keeps a separate local copy on this device.'
+    )).toBeTruthy();
+  });
+
   it('does not initialize authentication or account data before access is enabled', () => {
     installMemoryStorage();
     const auth = fakeAuth();
@@ -274,7 +313,8 @@ describe('PreviewIdentityHost', () => {
     expect(storage.getItem('tend:supabase-auth')).toBe('classic-session-sentinel');
   });
 
-  it('wires the authenticated Supabase client to manual backup actions under More', async () => {
+  it('keeps account backup available in Pages mode while hiding synthetic import controls', async () => {
+    vi.stubEnv('MODE', 'pages');
     installMemoryStorage();
     const user = userEvent.setup();
     const auth = fakeAuth(session, null, null, true);
@@ -291,6 +331,9 @@ describe('PreviewIdentityHost', () => {
     await user.click(screen.getByRole('button', { name: 'More, settings' }));
     await user.click(await screen.findByRole('button', { name: 'Settings' }));
     expect(await screen.findByText('synthetic@example.test')).toBeTruthy();
+    expect(screen.queryByLabelText('Import preview backup')).toBeNull();
+    expect(screen.queryByLabelText('Dry-run Classic Tend import')).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Component catalogue' })).toBeNull();
     await user.click(screen.getByText('Backup & recovery'));
     await user.click(screen.getByRole('button', { name: /Advanced recovery/ }));
     await user.click(screen.getByRole('button', { name: /Save this device’s copy to account/ }));

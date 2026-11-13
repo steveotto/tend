@@ -1,6 +1,6 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { Plugin } from 'vite';
 import { loadEnv } from 'vite';
@@ -33,9 +33,16 @@ function legacyStylesPlugin(isPagesBuild: boolean): Plugin {
     generateBundle() {
       this.emitFile({
         type: 'asset',
-        fileName: isPagesBuild ? 'classic/tend.css' : 'tend.css',
+        fileName: 'tend.css',
         source: readFileSync(legacyStyles)
       });
+      if (isPagesBuild) {
+        this.emitFile({
+          type: 'asset',
+          fileName: 'classic/tend.css',
+          source: readFileSync(legacyStyles)
+        });
+      }
     }
   };
 }
@@ -53,23 +60,9 @@ function cloudflarePreviewPlugin(includeSupabaseClient: boolean): Plugin {
   };
 }
 
-function reactRootEntryPlugin(): Plugin {
-  return {
-    name: 'emit-react-app-at-root',
-    writeBundle(outputOptions) {
-      const outputDirectory = path.resolve(outputOptions.dir ?? path.resolve(projectRoot, 'dist'));
-      const previewHtml = path.resolve(outputDirectory, 'app-preview.html');
-      if (!existsSync(previewHtml)) {
-        throw new Error('React app HTML is missing from the Pages artifact.');
-      }
-      writeFileSync(path.resolve(outputDirectory, 'index.html'), readFileSync(previewHtml));
-    }
-  };
-}
-
 function legacyShellPlugin(): Plugin {
   return {
-    name: 'package-legacy-classic-shell',
+    name: 'package-production-and-classic-shells',
     generateBundle(_outputOptions, bundle) {
       const legacyHtml = readFileSync(path.resolve(projectRoot, '..', 'index.html'), 'utf8');
       this.emitFile({
@@ -84,10 +77,16 @@ function legacyShellPlugin(): Plugin {
         if (referencePath === 'tend.css' || referencePath === 'tend-scoring.js' || bundle[`classic/${referencePath}`]) continue;
         const sourcePath = path.resolve(projectRoot, '..', referencePath);
         if (!existsSync(sourcePath)) throw new Error(`Legacy shell asset is missing: ${referencePath}`);
+        const source = readFileSync(sourcePath);
+        this.emitFile({
+          type: 'asset',
+          fileName: referencePath,
+          source
+        });
         this.emitFile({
           type: 'asset',
           fileName: `classic/${referencePath}`,
-          source: readFileSync(sourcePath)
+          source
         });
       }
     }
@@ -111,7 +110,7 @@ export default defineConfig(({ mode }) => {
       react(),
       legacyStylesPlugin(isPagesBuild),
       ...(isPagesBuild
-        ? [cloudflarePreviewPlugin(includeSupabaseClient), reactRootEntryPlugin(), legacyShellPlugin()]
+        ? [cloudflarePreviewPlugin(includeSupabaseClient), legacyShellPlugin()]
         : [])
     ],
     server: {
@@ -123,7 +122,10 @@ export default defineConfig(({ mode }) => {
       outDir: path.resolve(projectRoot, 'dist'),
       rollupOptions: {
         input: isPagesBuild
-          ? { 'app-preview': path.resolve(projectRoot, 'app-preview.html') }
+          ? {
+              index: path.resolve(projectRoot, 'index.html'),
+              'app-preview': path.resolve(projectRoot, 'app-preview.html')
+            }
           : {
               app: path.resolve(projectRoot, 'app-preview.html'),
               catalogue: path.resolve(projectRoot, 'preview.html'),
