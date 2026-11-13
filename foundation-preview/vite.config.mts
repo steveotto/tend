@@ -11,17 +11,6 @@ const legacyStyles = path.resolve(projectRoot, '..', 'tend.css');
 function legacyStylesPlugin(isPagesBuild: boolean): Plugin {
   return {
     name: 'serve-tend-reference-styles',
-    transformIndexHtml: {
-      order: 'post',
-      handler(html) {
-        if (isPagesBuild) return html;
-        if (html.includes('href="/tend.css"')) return html;
-        return html.replace(
-          '</head>',
-          '    <link rel="stylesheet" href="/tend.css" />\n  </head>'
-        );
-      }
-    },
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
         const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
@@ -31,15 +20,16 @@ function legacyStylesPlugin(isPagesBuild: boolean): Plugin {
       });
     },
     generateBundle() {
-      this.emitFile({
-        type: 'asset',
-        fileName: 'tend.css',
-        source: readFileSync(legacyStyles)
-      });
       if (isPagesBuild) {
         this.emitFile({
           type: 'asset',
           fileName: 'classic/tend.css',
+          source: readFileSync(legacyStyles)
+        });
+      } else {
+        this.emitFile({
+          type: 'asset',
+          fileName: 'tend.css',
           source: readFileSync(legacyStyles)
         });
       }
