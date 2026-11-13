@@ -246,6 +246,26 @@ describe('Today time-frame interaction', () => {
     expect(within(plan).queryByRole('article', { name: 'Morning item' })).toBeNull();
   });
 
+  it('shows display-only group counts in Now and Flexible without adding collapse controls', async () => {
+    const user = userEvent.setup();
+    const rhythms = [
+      makeRhythm('morning-one', 'Morning one', 'morning'),
+      makeRhythm('morning-two', 'Morning two', 'morning'),
+      makeRhythm('anytime-item', 'Anytime item', 'anytime'),
+      makeRhythm('all-day-item', 'All-day item', 'all-day')
+    ];
+    renderToday({ rhythms, satisfiedRhythmIds: new Set(['morning-one']) });
+    const plan = todayPlan();
+    expect(within(plan).getByText('1 of 2', { selector: '.today-timeframe-header__progress' })).toBeTruthy();
+    expect(plan.querySelector('.today-timeframe-header__disclosure')).toBeNull();
+    expect(plan.querySelector('.today-plan__accordion-chevron')).toBeNull();
+
+    await user.click(within(planTabs(plan)).getByRole('tab', { name: 'Flexible' }));
+    expect(within(plan).getAllByText('0 of 1', { selector: '.today-timeframe-header__progress' })).toHaveLength(2);
+    expect(plan.querySelector('.today-plan__accordion-chevron')).toBeNull();
+    expect(plan.querySelector('.today-timeframe-header__disclosure')).toBeNull();
+  });
+
   it('offers the quiet View all today action when Now is empty and distinguishes hidden tended items', async () => {
     const user = userEvent.setup();
     const afternoon = makeRhythm('afternoon-item', 'Afternoon item', 'afternoon');
@@ -316,8 +336,10 @@ describe('Today time-frame interaction', () => {
     const morningPanel = document.getElementById(morning.getAttribute('aria-controls')!);
     expect(morningPanel?.getAttribute('aria-labelledby')).toBe(morning.id);
     expect(within(morning).getByText('Morning', { selector: '.today-plan__view-heading' })).toBeTruthy();
-    const morningProgress = within(morning).getByText('0 of 1 tended', { selector: '.today-plan__accordion-progress' });
+    const morningProgress = within(morning).getByText('0 of 1', { selector: '.today-timeframe-header__progress' });
     expect(morningProgress.parentElement?.classList.contains('today-timeframe-header__meta')).toBe(true);
+    expect(morningProgress.getAttribute('aria-hidden')).toBe('true');
+    expect(morningProgress.textContent).not.toContain('tended');
     expect(within(morning).getByText(/9:00am/, { selector: '.today-timeframe-header__range' })).toBeTruthy();
     expect(morning.textContent).not.toContain('Rhythm');
     expect(morning.getAttribute('aria-expanded')).toBe('true');
@@ -326,9 +348,15 @@ describe('Today time-frame interaction', () => {
     expect(within(anytime).getByText('On your schedule', { selector: '.today-timeframe-header__range' })).toBeTruthy();
     const allDay = within(plan).getByRole('button', { name: /^All-day/ });
     expect(within(allDay).getByText('Throughout the day', { selector: '.today-timeframe-header__range' })).toBeTruthy();
-    expect(within(anytime).getByText('0 of 1 tended', { selector: '.today-plan__accordion-progress' })).toBeTruthy();
+    expect(within(anytime).getByText('0 of 1', { selector: '.today-timeframe-header__progress' })).toBeTruthy();
+    expect(within(plan).getByRole('button', { name: /^Morning, .*0 of 1 tended$/ })).toBeTruthy();
     expect(within(plan).queryByRole('button', { name: /Expand all|Collapse all/ })).toBeNull();
 
+    morning.focus();
+    await user.keyboard('{Enter}');
+    expect(morning.getAttribute('aria-expanded')).toBe('false');
+    await user.keyboard(' ');
+    expect(morning.getAttribute('aria-expanded')).toBe('true');
     await user.click(lunch);
     await user.click(morning);
     expect(morning.getAttribute('aria-expanded')).toBe('false');
@@ -364,11 +392,11 @@ describe('Today time-frame interaction', () => {
 
     await user.click(within(planTabs(plan)).getByRole('tab', { name: 'All today' }));
     const morning = within(plan).getByRole('button', { name: /^Morning/ });
-    expect(morning.textContent).toContain('1 of 2 tended');
+    expect(morning.getAttribute('aria-label')).toContain('1 of 2 tended');
     expect(morning.getAttribute('aria-expanded')).toBe('true');
     await user.click(morning);
     expect(morning.getAttribute('aria-expanded')).toBe('false');
-    expect(morning.textContent).toContain('1 of 2 tended');
+    expect(morning.getAttribute('aria-label')).toContain('1 of 2 tended');
   });
 
   it('renders 20-plus Rhythms without losing group counts or progress', async () => {
@@ -380,8 +408,8 @@ describe('Today time-frame interaction', () => {
     await user.click(within(planTabs(plan)).getByRole('tab', { name: 'All today' }));
     const morning = within(plan).getByRole('button', { name: /^Morning, .*0 of 20 tended$/ });
     const lunch = within(plan).getByRole('button', { name: /^Lunch, .*0 of 4 tended$/ });
-    expect(within(morning).getByText('0 of 20 tended')).toBeTruthy();
-    expect(within(lunch).getByText('0 of 4 tended')).toBeTruthy();
+    expect(within(morning).getByText('0 of 20', { selector: '.today-timeframe-header__progress' })).toBeTruthy();
+    expect(within(lunch).getByText('0 of 4', { selector: '.today-timeframe-header__progress' })).toBeTruthy();
     expect(within(plan).getAllByRole('article')).toHaveLength(20);
     await user.click(lunch);
     expect(within(plan).getAllByRole('article')).toHaveLength(24);

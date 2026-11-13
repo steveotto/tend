@@ -180,7 +180,7 @@ async function main() {
         assert.equal(styles.headerDisplay, 'flex');
         assert.equal(styles.searchMinWidth, '180px');
         assert.notEqual(styles.cardBackground, 'rgba(0, 0, 0, 0)');
-        assert.equal(styles.sectionPadding, '12px');
+        assert.equal(styles.sectionPadding, '0px');
         assert.equal(styles.moduleDisplay, 'grid');
         assert.equal(styles.moduleColumns.trim().split(/\s+/).length, 1);
         assert.ok(styles.moduleWidth > 0);
@@ -601,6 +601,228 @@ async function main() {
         });
         await page.locator('.health-fitness-page [role="tablist"][aria-label="Health and Fitness"] [role="tab"][aria-selected="true"]')
           .evaluate(element => element.blur());
+
+        await page.locator('.utility-primary-button').filter({ hasText: 'Today' }).click();
+        await page.getByRole('tab', { name: 'Now', exact: true }).waitFor();
+        const timeframeSizeToggle = page.locator('.mobile-display-toggle');
+        for (const textSize of ['small', 'medium', 'large'] as const) {
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            if (await timeframeSizeToggle.getAttribute('data-text-size') === textSize) break;
+            await timeframeSizeToggle.click();
+          }
+          assert.equal(await timeframeSizeToggle.getAttribute('data-text-size'), textSize);
+          for (const viewportWidth of [375, 390, 430]) {
+            await page.setViewportSize({ width: viewportWidth, height: 844 });
+            for (const viewName of ['Now', 'Flexible', 'All today'] as const) {
+              const tab = page.getByRole('tab', { name: viewName, exact: true });
+              await tab.click();
+              if (viewName !== 'Now') {
+                await page.evaluate(targetView => {
+                  let surface = document.querySelector<HTMLElement>('#timeframe-browser-fixture');
+                  if (!surface) {
+                    surface = document.createElement('div');
+                    surface.id = 'timeframe-browser-fixture';
+                    surface.className = 'home-dashboard today-plan-section';
+                    document.body.append(surface);
+                  }
+                  Object.assign(surface.style, {
+                    position: 'fixed',
+                    top: '0',
+                    left: '0',
+                    width: `${window.innerWidth}px`,
+                    padding: '16px',
+                    opacity: '0',
+                    pointerEvents: 'none',
+                    zIndex: '-1'
+                  });
+                  surface.replaceChildren();
+                  const groupsContainer = document.createElement('div');
+                  const isAllToday = targetView === 'All today';
+                  groupsContainer.className = isAllToday
+                    ? 'today-plan__accordion-groups'
+                    : 'current-plan-items current-plan-items--flexible';
+                  surface.append(groupsContainer);
+                  const groupFixtures = [
+                    ['Anytime', 'On your schedule'],
+                    ['All-day', 'Throughout the day']
+                  ] as const;
+                  for (const [index, [titleText, rangeText]] of groupFixtures.entries()) {
+                    const group = document.createElement('section');
+                    group.className = isAllToday
+                      ? 'today-plan__accordion-group'
+                      : 'today-plan__flexible-group';
+                    const header = document.createElement('h4');
+                    header.className = 'today-timeframe-header';
+                    const content = document.createElement('span');
+                    content.className = 'today-timeframe-header__content';
+                    const titleRow = document.createElement('span');
+                    titleRow.className = 'today-timeframe-header__title-row';
+                    const title = document.createElement('span');
+                    title.className = 'today-plan__view-heading';
+                    title.textContent = titleText;
+                    const meta = document.createElement('span');
+                    meta.className = 'today-timeframe-header__meta';
+                    const progress = document.createElement('span');
+                    progress.className = 'today-timeframe-header__progress';
+                    progress.textContent = '0 of 1';
+                    if (isAllToday) progress.setAttribute('aria-hidden', 'true');
+                    meta.append(progress);
+                    if (isAllToday) {
+                      const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                      chevron.classList.add('today-plan__accordion-chevron');
+                      chevron.setAttribute('viewBox', '0 0 16 16');
+                      chevron.setAttribute('aria-hidden', 'true');
+                      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                      path.setAttribute('d', index === 0 ? 'm3 10 5-5 5 5' : 'm3 6 5 5 5-5');
+                      chevron.append(path);
+                      meta.append(chevron);
+                    }
+                    titleRow.append(title, meta);
+                    const range = document.createElement('span');
+                    range.className = 'today-timeframe-header__range';
+                    range.textContent = rangeText;
+                    content.append(titleRow, range);
+                    let accordionPanel: HTMLElement | null = null;
+                    if (isAllToday) {
+                      const disclosure = document.createElement('button');
+                      const disclosureId = `synthetic-timeframe-${index}-disclosure`;
+                      const panelId = `synthetic-timeframe-${index}-panel`;
+                      disclosure.type = 'button';
+                      disclosure.id = disclosureId;
+                      disclosure.className = 'today-timeframe-header__disclosure';
+                      disclosure.setAttribute('aria-label', `${titleText}, ${rangeText}, 0 of 1 tended`);
+                      disclosure.setAttribute('aria-expanded', index === 0 ? 'true' : 'false');
+                      disclosure.setAttribute('aria-controls', panelId);
+                      disclosure.append(content);
+                      header.append(disclosure);
+                      accordionPanel = document.createElement('div');
+                      accordionPanel.id = panelId;
+                      accordionPanel.className = 'today-plan__accordion-panel';
+                      accordionPanel.setAttribute('role', 'region');
+                      accordionPanel.setAttribute('aria-labelledby', disclosureId);
+                      if (index !== 0) accordionPanel.hidden = true;
+                      const panelContent = document.createElement('div');
+                      panelContent.className = 'today-plan__accordion-panel-content current-plan-item-group';
+                      accordionPanel.append(panelContent);
+                    } else {
+                      header.append(content);
+                    }
+                    const rhythmGroup = accordionPanel ?? document.createElement('div');
+                    rhythmGroup.classList.add('current-plan-item-group');
+                    group.append(header, rhythmGroup);
+                    groupsContainer.append(group);
+                  }
+                }, viewName);
+              }
+              const snapshot = await page.evaluate(targetView => {
+                const surface = targetView === 'Now'
+                  ? document.querySelector<HTMLElement>('.today-plan-section')
+                  : document.querySelector<HTMLElement>('#timeframe-browser-fixture');
+                const header = surface?.querySelector<HTMLElement>('.today-timeframe-header');
+                const title = header?.querySelector<HTMLElement>('.today-plan__view-heading');
+                const range = header?.querySelector<HTMLElement>('.today-timeframe-header__range');
+                const meta = header?.querySelector<HTMLElement>('.today-timeframe-header__meta');
+                const progress = header?.querySelector<HTMLElement>('.today-timeframe-header__progress');
+                const disclosure = header?.querySelector<HTMLButtonElement>('.today-timeframe-header__disclosure');
+                if (!header || !title || !range || !meta || !progress) {
+                  throw new Error(`Today ${targetView} timeframe header is incomplete: ${JSON.stringify({
+                    header: Boolean(header),
+                    title: Boolean(title),
+                    range: Boolean(range),
+                    meta: Boolean(meta),
+                    progress: Boolean(progress)
+                  })}`);
+                }
+                const titleStyle = getComputedStyle(title);
+                const rangeStyle = getComputedStyle(range);
+                const progressStyle = getComputedStyle(progress);
+                const titleRect = title.getBoundingClientRect();
+                const progressRect = progress.getBoundingClientRect();
+                const metaRect = meta.getBoundingClientRect();
+                const groupSelector = targetView === 'Flexible'
+                  ? '.today-plan__flexible-group'
+                  : '.today-plan__accordion-group';
+                const groups = [...(surface?.querySelectorAll<HTMLElement>(groupSelector) ?? [])];
+                return {
+                  headerBackground: getComputedStyle(header).backgroundColor,
+                  headerRadius: getComputedStyle(header).borderRadius,
+                  titleSize: Number.parseFloat(titleStyle.fontSize),
+                  titleWeight: titleStyle.fontWeight,
+                  rangeSize: Number.parseFloat(rangeStyle.fontSize),
+                  progressSize: Number.parseFloat(progressStyle.fontSize),
+                  progressBackground: progressStyle.backgroundColor,
+                  progressRadius: progressStyle.borderRadius,
+                  progressText: progress.textContent?.trim(),
+                  progressRightGap: metaRect.right - progressRect.right,
+                  titleRight: titleRect.right,
+                  progressLeft: progressRect.left,
+                  disclosure: Boolean(disclosure),
+                  chevron: Boolean(header.querySelector('.today-plan__accordion-chevron')),
+                  expanded: disclosure?.getAttribute('aria-expanded') ?? null,
+                  panelId: disclosure?.getAttribute('aria-controls') ?? null,
+                  groupDivider: groups[1] ? getComputedStyle(groups[1]).borderTopWidth : null,
+                  documentWidth: document.documentElement.scrollWidth,
+                  viewportWidth: window.innerWidth,
+                  scale: Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-text-scale'))
+                };
+              }, viewName);
+              const expectedTitleSize = 20 * snapshot.scale * 0.85;
+              const expectedRangeSize = 20 * snapshot.scale * 0.7;
+              const expectedProgressSize = 20 * snapshot.scale * 0.6;
+              assert.equal(snapshot.headerBackground, 'rgba(0, 0, 0, 0)', `${viewName} ${viewportWidth}px ${textSize}`);
+              assert.equal(snapshot.headerRadius, '0px', `${viewName} ${viewportWidth}px ${textSize}`);
+              assert.ok(Math.abs(snapshot.titleSize - expectedTitleSize) < 0.1);
+              assert.equal(snapshot.titleWeight, '600');
+              assert.ok(Math.abs(snapshot.rangeSize - expectedRangeSize) < 0.1);
+              assert.ok(Math.abs(snapshot.progressSize - expectedProgressSize) < 0.1);
+              assert.equal(snapshot.progressBackground, 'rgb(241, 242, 242)');
+              assert.equal(snapshot.progressRadius, '999px');
+              assert.match(snapshot.progressText ?? '', /^\d+ of \d+$/);
+              assert.ok(snapshot.progressRightGap >= 0 && snapshot.progressRightGap < 30);
+              assert.ok(snapshot.titleRight <= snapshot.progressLeft);
+              assert.equal(snapshot.documentWidth, snapshot.viewportWidth, `${viewName} ${viewportWidth}px ${textSize}`);
+              assert.equal(snapshot.disclosure, viewName === 'All today');
+              assert.equal(snapshot.chevron, viewName === 'All today');
+              if (viewName === 'All today') {
+                assert.ok(snapshot.panelId);
+                assert.ok(snapshot.expanded === 'true' || snapshot.expanded === 'false');
+              }
+              if (snapshot.groupDivider !== null) assert.equal(snapshot.groupDivider, '1px');
+
+              if (viewName === 'All today') {
+                const stressResult = await page.evaluate(() => {
+                  const header = document.querySelector<HTMLElement>('#timeframe-browser-fixture .today-timeframe-header');
+                  const title = header?.querySelector<HTMLElement>('.today-plan__view-heading');
+                  const progress = header?.querySelector<HTMLElement>('.today-timeframe-header__progress');
+                  if (!title || !progress) throw new Error('Cannot stress-test a missing timeframe title or progress pill.');
+                  const originalTitle = title.textContent;
+                  const originalProgress = progress.textContent;
+                  title.textContent = 'A deliberately long custom timeframe name for responsive layout verification';
+                  progress.textContent = '123 of 123';
+                  const titleRect = title.getBoundingClientRect();
+                  const progressRect = progress.getBoundingClientRect();
+                  const result = {
+                    documentWidth: document.documentElement.scrollWidth,
+                    viewportWidth: window.innerWidth,
+                    titleWidth: titleRect.width,
+                    titleRight: titleRect.right,
+                    progressLeft: progressRect.left
+                  };
+                  title.textContent = originalTitle;
+                  progress.textContent = originalProgress;
+                  return result;
+                });
+                assert.equal(stressResult.documentWidth, stressResult.viewportWidth);
+                assert.ok(stressResult.titleWidth > 0);
+                assert.ok(stressResult.titleRight <= stressResult.progressLeft);
+              }
+            }
+          }
+        }
+
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await page.getByRole('tab', { name: 'Now', exact: true }).click();
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 1280);
       }
 
       assert.deepEqual(classicCssRequests, [], 'React pages must not request tend.css.');

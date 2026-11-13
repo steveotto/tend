@@ -126,6 +126,13 @@ export function TodayView({
   const currentBlockRange = currentBlockId
     ? todayBlockRange(currentBlockId, timeBlocks)
     : todayFocusContext('now', 'scheduled', evaluationInstant, timeBlocks);
+  const timeframeProgress = (sectionRhythms: readonly RhythmPreview[]) => {
+    const tendedCount = sectionRhythms.filter(rhythm => tendedRhythmIds.has(rhythm.id)).length;
+    return {
+      text: `${tendedCount} of ${sectionRhythms.length}`,
+      accessibleLabel: `${tendedCount} of ${sectionRhythms.length} tended`
+    };
+  };
   useEffect(() => {
     if (view !== 'all-today' || initializing || hasInitializedAllToday.current) return;
     hasInitializedAllToday.current = true;
@@ -318,6 +325,7 @@ export function TodayView({
                           <TodayTimeframeHeader
                             title={currentBlock?.name ?? 'Now'}
                             timeRange={currentBlockRange}
+                            progress={timeframeProgress(planSections[0]?.rhythms ?? [])}
                             trailingContent={weather}
                           />
                           {renderHiddenStatus}
@@ -348,6 +356,7 @@ export function TodayView({
                                       headingId={`${sectionIdPrefix}-${section.id}-heading`}
                                       title={section.title}
                                       timeRange={timeframeSubtitle(section)}
+                                      progress={timeframeProgress(section.rhythms)}
                                     />
                                     <div className="current-plan-item-group">{renderRhythms(section.rhythms)}</div>
                                   </section>
@@ -369,10 +378,8 @@ export function TodayView({
                               <div className="today-plan__accordion-groups">
                                 {planSections.map(section => {
                                   const expanded = expandedSectionIds.has(section.id);
-                                  const tendedCount = section.rhythms.filter(rhythm => tendedRhythmIds.has(rhythm.id)).length;
                                   const panelId = `${sectionIdPrefix}-${section.id}-panel`;
                                   const headingId = `${sectionIdPrefix}-${section.id}-disclosure`;
-                                  const rhythmCount = section.rhythms.length;
                                   return (
                                     <section
                                       className="today-plan__accordion-group"
@@ -381,11 +388,11 @@ export function TodayView({
                                       <TodayTimeframeHeader
                                         title={section.title}
                                         timeRange={timeframeSubtitle(section)}
+                                        progress={timeframeProgress(section.rhythms)}
                                         disclosure={{
                                           id: headingId,
                                           panelId,
                                           expanded,
-                                          progress: `${tendedCount} of ${rhythmCount} tended`,
                                           onToggle: () => setExpandedSectionIds(current => {
                                             const next = new Set(current);
                                             if (next.has(section.id)) next.delete(section.id);

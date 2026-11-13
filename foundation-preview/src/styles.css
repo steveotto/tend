@@ -18383,19 +18383,17 @@ dialog.money-goal-dialog:not(.money-goal-dialog--rhythm-editor):not(.dialog--pho
   min-width: 0;
   margin: 0;
   color: var(--tend-ink, var(--ink));
-  font-size: calc(1.0625rem * var(--app-text-scale, 1));
-  font-weight: 700;
-  line-height: 1.3;
+  font-size: calc(var(--tend-type-today-heading) * 0.85);
+  font-weight: 600;
+  line-height: 1.25;
   overflow-wrap: anywhere;
 }
 
 .today-plan-section .today-timeframe-header {
-  display: flex;
-  width: 100%;
+  display: block;
   min-width: 0;
   margin: 0;
-  border-radius: 8px;
-  background: #F1F2F2;
+  background: transparent;
   color: var(--tend-ink, var(--ink));
 }
 
@@ -18403,27 +18401,27 @@ dialog.money-goal-dialog:not(.money-goal-dialog--rhythm-editor):not(.dialog--pho
   display: grid;
   width: 100%;
   min-width: 0;
-  gap: 4px;
-  padding: calc(8px * var(--app-text-scale, 1)) calc(12px * var(--app-text-scale, 1));
+  gap: 2px;
+  padding: 4px 0;
 }
 
 .today-plan-section .today-timeframe-header__title-row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 4px 12px;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 
 .today-plan-section .today-timeframe-header__title-row > .today-plan__view-heading {
   flex: 1 1 auto;
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 
 .today-plan-section .today-timeframe-header__range {
   color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  font-size: calc(var(--tend-type-today-heading) * 0.7);
   font-weight: 400;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -18434,10 +18432,10 @@ dialog.money-goal-dialog:not(.money-goal-dialog--rhythm-editor):not(.dialog--pho
   width: 100%;
   min-width: 0;
   min-height: 44px;
-  align-items: flex-start;
+  align-items: center;
   padding: 0;
   border: 0;
-  border-radius: inherit;
+  border-radius: 8px;
   background: transparent;
   color: inherit;
   font: inherit;
@@ -18458,7 +18456,7 @@ dialog.money-goal-dialog:not(.money-goal-dialog--rhythm-editor):not(.dialog--pho
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
   margin-left: auto;
   white-space: nowrap;
 }
@@ -18783,11 +18781,16 @@ html[data-mobile-text-size="larger"] .rhythm-editor__association-category-list--
 .today-plan-section .today-plan__flexible-group {
   display: grid;
   min-width: 0;
-  gap: 12px;
+  gap: 8px;
 }
 
 .today-plan-section .current-plan-items--flexible {
-  gap: 20px;
+  gap: 0;
+}
+
+.today-plan-section .today-plan__flexible-group + .today-plan__flexible-group {
+  padding-top: 12px;
+  border-top: 1px solid var(--tend-line);
 }
 
 .today-plan-section .today-plan__empty-action {
@@ -18817,17 +18820,28 @@ html[data-mobile-text-size="larger"] .rhythm-editor__association-category-list--
 .today-plan-section .today-plan__accordion-groups {
   display: grid;
   min-width: 0;
-  gap: 20px;
+  gap: 0;
 }
 
 .today-plan-section .today-plan__accordion-group {
   min-width: 0;
 }
 
-.today-plan-section .today-plan__accordion-progress {
+.today-plan-section .today-plan__accordion-group + .today-plan__accordion-group {
+  padding-top: 12px;
+  border-top: 1px solid var(--tend-line);
+}
+
+.today-plan-section .today-timeframe-header__progress {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #F1F2F2;
   color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.6875rem * var(--app-text-scale, 1));
-  font-weight: 400;
+  font-size: calc(var(--tend-type-today-heading) * 0.6);
+  font-weight: 500;
   line-height: 1.35;
 }
 
@@ -18847,7 +18861,7 @@ html[data-mobile-text-size="larger"] .rhythm-editor__association-category-list--
 }
 
 .today-plan-section .today-plan__accordion-panel:not([hidden]) .today-plan__accordion-panel-content {
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .today-plan-section .today-plan__accordion-panel[hidden] {
@@ -20078,24 +20092,31 @@ button.person-health-component-score:focus-visible {
   --tend-prayer-action: #80629a;
   --tend-prayer-active: #dccee8;
   box-sizing: border-box;
-  padding: 18px 20px;
-  border: 1px solid color-mix(in srgb, var(--tend-prayer-border) 58%, var(--tend-line));
-  border-radius: 20px;
-  background: color-mix(in srgb, var(--tend-prayer-surface) 48%, var(--tend-canvas));
+  margin-top: 28px;
+  padding: 0;
 }
 
 .home-dashboard .today-prayer-section > .sectiontitle {
-  margin-bottom: 8px;
+  margin: 0 0 12px;
+}
+
+.home-dashboard .today-prayer-section > .sectiontitle h2 {
+  margin: 0;
+  color: var(--tend-ink);
+  font-size: var(--tend-type-today-heading);
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .home-dashboard .today-prayer-section .prayer-entry-module {
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 12px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  box-sizing: border-box;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--tend-prayer-border) 58%, var(--tend-line));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--tend-prayer-surface) 48%, var(--tend-canvas));
   box-shadow: none;
 }
 
@@ -20152,8 +20173,7 @@ button.person-health-component-score:focus-visible {
 
 @media (max-width: 600px) {
   .home-dashboard .today-prayer-section {
-    padding: 12px;
-    border-radius: 18px;
+    padding: 0;
   }
 
   .home-dashboard .today-prayer-section .prayer-entry-module {
@@ -22860,4 +22880,20 @@ button.person-health-component-score:focus-visible {
   .preview-account-sync__retry {
     margin-left: calc(38px * var(--app-text-scale, 1) + 12px);
   }
+}
+
+.prayer-entry-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 1.5em;
+  height: 1.5em;
+  margin-left: 8px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 20%);
+  color: inherit;
+  font-size: .85em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }

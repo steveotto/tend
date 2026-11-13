@@ -192,8 +192,7 @@ export function TodayPrayerModule({
             <div className="prayer-entry-summary-line">
               <strong>
                 {selectedPeople.length} {selectedPeople.length === 1 ? 'person' : 'people'} selected
-                {' · '}{selectedTimeframeName}{' · '}
-                {activeRequests.length} {activeRequests.length === 1 ? 'request' : 'requests'}
+                {' · '}{selectedTimeframeName}
               </strong>
             </div>
             {activeRequests.length === 0 && (
@@ -218,7 +217,8 @@ export function TodayPrayerModule({
                 showingTimeframes: false
               })}
             >
-              <span>Focused Prayer · {activeRequests.length}</span>
+              <span>Focused Prayer</span>
+              <span className="prayer-entry-count" aria-hidden="true">{activeRequests.length}</span>
             </button>
           </div>
         </section>
