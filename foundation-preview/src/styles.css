@@ -6950,6 +6950,12 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   font-size: calc(0.875rem * var(--app-text-scale, 1));
 }
 
+.preview-login__classic a {
+  color: var(--tend-forest);
+  font-weight: 600;
+  text-underline-offset: 3px;
+}
+
 .preview-footer .preview-sign-out {
   padding: 0;
   border: 0;
