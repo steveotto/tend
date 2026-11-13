@@ -193,7 +193,6 @@ async function main() {
             toggleColor: 'rgb(32, 39, 35)',
             toggleFontSize: '16px',
             phoneFontSize: '13px',
-            phoneAreaFontSize: '12px',
             desktopFontSize: '14px',
             pressed: false
           },
@@ -203,7 +202,6 @@ async function main() {
             toggleColor: 'rgb(36, 107, 82)',
             toggleFontSize: '18px',
             phoneFontSize: '14.625px',
-            phoneAreaFontSize: '13.5px',
             desktopFontSize: '15.75px',
             pressed: true
           },
@@ -213,118 +211,140 @@ async function main() {
             toggleColor: 'rgb(255, 255, 255)',
             toggleFontSize: '20px',
             phoneFontSize: '16.25px',
-            phoneAreaFontSize: '15px',
             desktopFontSize: '17.5px',
             pressed: true
           }
         ] as const;
 
         for (const expected of expectedSizes) {
-          await page.setViewportSize({ width: 375, height: 812 });
-          await page.waitForTimeout(180);
-          const phoneStyles = await page.evaluate(() => {
-            const headerActions = document.querySelector<HTMLElement>('.mobile-head-actions');
-            const mobileSearch = document.querySelector<HTMLButtonElement>('.mobile-head-button:not(.mobile-display-toggle)');
-            const sizeToggle = document.querySelector<HTMLButtonElement>('.mobile-display-toggle');
-            const brandTagline = document.querySelector<HTMLElement>('.brand-tagline');
-            const currentTool = document.querySelector<HTMLButtonElement>('.utility-primary-button[aria-current="page"]');
-            const areaShortcut = document.querySelector<HTMLButtonElement>('.areanav button');
-            if (!headerActions || !mobileSearch || !sizeToggle || !brandTagline || !currentTool || !areaShortcut) {
-              throw new Error('Dashboard is missing a shell navigation or mobile header control.');
-            }
-            const searchStyle = getComputedStyle(mobileSearch);
-            const toggleStyle = getComputedStyle(sizeToggle);
-            const toolStyle = getComputedStyle(currentTool);
-            const areaStyle = getComputedStyle(areaShortcut);
-            return {
-              viewportWidth: document.documentElement.clientWidth,
-              documentWidth: document.documentElement.scrollWidth,
-              brandTagline: {
-                whiteSpace: getComputedStyle(brandTagline).whiteSpace,
-                height: brandTagline.getBoundingClientRect().height,
-                right: brandTagline.getBoundingClientRect().right,
-                clientWidth: brandTagline.clientWidth,
-                scrollWidth: brandTagline.scrollWidth
-              },
-              overflowingElements: [...document.querySelectorAll<HTMLElement>('*')]
-                .filter(element => !element.closest('.areanav') && element.getBoundingClientRect().right > document.documentElement.clientWidth + 1)
-                .slice(0, 8)
-                .map(element => ({
-                  tag: element.tagName,
-                  className: typeof element.className === 'string' ? element.className : '',
-                  right: element.getBoundingClientRect().right,
-                  width: element.getBoundingClientRect().width
-                })),
-              headerActionsDisplay: getComputedStyle(headerActions).display,
-              mobileSearch: {
-                width: searchStyle.width,
-                height: searchStyle.height,
-                borderStyle: searchStyle.borderStyle,
-                borderRadius: searchStyle.borderRadius,
-                background: searchStyle.backgroundColor
-              },
-              toggle: {
-                textSize: sizeToggle.dataset.textSize,
-                pressed: sizeToggle.getAttribute('aria-pressed'),
-                width: toggleStyle.width,
-                height: toggleStyle.height,
-                borderStyle: toggleStyle.borderStyle,
-                borderRadius: toggleStyle.borderRadius,
-                background: toggleStyle.backgroundColor,
-                color: toggleStyle.color,
-                fontSize: toggleStyle.fontSize
-              },
-              primary: {
-                display: toolStyle.display,
-                current: currentTool.getAttribute('aria-current'),
-                background: toolStyle.backgroundColor,
-                borderStyle: toolStyle.borderStyle,
-                borderRadius: toolStyle.borderRadius,
-                color: toolStyle.color,
-                fontSize: toolStyle.fontSize
-              },
-              area: {
-                display: areaStyle.display,
-                background: areaStyle.backgroundColor,
-                borderStyle: areaStyle.borderStyle,
-                borderRadius: areaStyle.borderRadius,
-                fontSize: areaStyle.fontSize
+          for (const viewportWidth of [375, 390, 430]) {
+            await page.setViewportSize({ width: viewportWidth, height: 844 });
+            await page.waitForTimeout(180);
+            const phoneStyles = await page.evaluate(() => {
+              const headerActions = document.querySelector<HTMLElement>('.mobile-head-actions');
+              const mobileSearch = document.querySelector<HTMLButtonElement>('.mobile-head-button:not(.mobile-display-toggle)');
+              const sizeToggle = document.querySelector<HTMLButtonElement>('.mobile-display-toggle');
+              const brandTagline = document.querySelector<HTMLElement>('.brand-tagline');
+              const stickyNav = document.querySelector<HTMLElement>('.sticky-nav');
+              const areaNavigation = document.querySelector<HTMLElement>('.nav-row-areas');
+              const utilitySearch = document.querySelector<HTMLElement>('.utility-search');
+              const menuGrid = document.querySelector<HTMLElement>('.home-dashboard .overall-card .menu-grid');
+              const firstMenuArea = document.querySelector<HTMLElement>('.home-dashboard .overall-card .menu-area');
+              const currentTool = document.querySelector<HTMLButtonElement>('.utility-primary-button[aria-current="page"]');
+              if (!headerActions || !mobileSearch || !sizeToggle || !brandTagline || !stickyNav
+                || !areaNavigation || !utilitySearch || !menuGrid || !firstMenuArea || !currentTool) {
+                throw new Error('Dashboard is missing an expected mobile shell or Health category element.');
               }
-            };
-          });
-          assert.equal(phoneStyles.viewportWidth, 375);
-          assert.equal(phoneStyles.documentWidth, 375, `Phone shell controls must not cause page-level horizontal overflow at ${expected.size}: ${JSON.stringify(phoneStyles.overflowingElements)}`);
-          assert.equal(phoneStyles.brandTagline.whiteSpace, 'nowrap');
-          assert.ok(phoneStyles.brandTagline.height < 25);
-          assert.equal(phoneStyles.brandTagline.scrollWidth, phoneStyles.brandTagline.clientWidth);
-          assert.ok(phoneStyles.brandTagline.right <= 375);
-          assert.equal(phoneStyles.headerActionsDisplay, 'flex');
-          assert.equal(phoneStyles.mobileSearch.width, '46px');
-          assert.equal(phoneStyles.mobileSearch.height, '46px');
-          assert.equal(phoneStyles.mobileSearch.borderStyle, 'solid');
-          assert.equal(phoneStyles.mobileSearch.borderRadius, '13px');
-          assert.equal(phoneStyles.mobileSearch.background, 'rgb(255, 255, 255)');
-          assert.equal(phoneStyles.toggle.textSize, expected.size);
-          assert.equal(phoneStyles.toggle.pressed, String(expected.pressed));
-          assert.equal(phoneStyles.toggle.width, '46px');
-          assert.equal(phoneStyles.toggle.height, '46px');
-          assert.equal(phoneStyles.toggle.borderStyle, 'solid');
-          assert.equal(phoneStyles.toggle.borderRadius, '13px');
-          assert.equal(phoneStyles.toggle.background, expected.toggleBackground);
-          assert.equal(phoneStyles.toggle.color, expected.toggleColor);
-          assert.equal(phoneStyles.toggle.fontSize, expected.toggleFontSize);
-          assert.equal(phoneStyles.primary.display, 'flex');
-          assert.equal(phoneStyles.primary.current, 'page');
-          assert.equal(phoneStyles.primary.background, 'rgb(229, 242, 235)');
-          assert.equal(phoneStyles.primary.borderStyle, 'solid');
-          assert.equal(phoneStyles.primary.borderRadius, '12px');
-          assert.equal(phoneStyles.primary.color, 'rgb(36, 107, 82)');
-          assert.equal(phoneStyles.primary.fontSize, expected.phoneFontSize);
-          assert.ok(phoneStyles.area.display.includes('flex'));
-          assert.equal(phoneStyles.area.background, 'rgba(0, 0, 0, 0)');
-          assert.equal(phoneStyles.area.borderStyle, 'solid');
-          assert.equal(phoneStyles.area.borderRadius, '10px');
-          assert.equal(phoneStyles.area.fontSize, expected.phoneAreaFontSize);
+              const searchStyle = getComputedStyle(mobileSearch);
+              const toggleStyle = getComputedStyle(sizeToggle);
+              const toolStyle = getComputedStyle(currentTool);
+              const gridStyle = getComputedStyle(menuGrid);
+              const gridRect = menuGrid.getBoundingClientRect();
+              const areaRect = firstMenuArea.getBoundingClientRect();
+              const navRect = stickyNav.getBoundingClientRect();
+              return {
+                viewportWidth: document.documentElement.clientWidth,
+                documentWidth: document.documentElement.scrollWidth,
+                brandTagline: {
+                  whiteSpace: getComputedStyle(brandTagline).whiteSpace,
+                  height: brandTagline.getBoundingClientRect().height,
+                  right: brandTagline.getBoundingClientRect().right,
+                  clientWidth: brandTagline.clientWidth,
+                  scrollWidth: brandTagline.scrollWidth
+                },
+                overflowingElements: [...document.querySelectorAll<HTMLElement>('*')]
+                  .filter(element => !element.closest('.areanav') && element.getBoundingClientRect().right > document.documentElement.clientWidth + 1)
+                  .slice(0, 8)
+                  .map(element => ({
+                    tag: element.tagName,
+                    className: typeof element.className === 'string' ? element.className : '',
+                    right: element.getBoundingClientRect().right,
+                    width: element.getBoundingClientRect().width
+                  })),
+                headerActionsDisplay: getComputedStyle(headerActions).display,
+                bottomNavigation: {
+                  position: getComputedStyle(stickyNav).position,
+                  top: navRect.top,
+                  bottom: navRect.bottom,
+                  paddingBottom: getComputedStyle(stickyNav).paddingBottom
+                },
+                areaNavigationDisplay: getComputedStyle(areaNavigation).display,
+                utilitySearchDisplay: getComputedStyle(utilitySearch).display,
+                mobileSearch: {
+                  width: searchStyle.width,
+                  height: searchStyle.height,
+                  borderStyle: searchStyle.borderStyle,
+                  borderRadius: searchStyle.borderRadius,
+                  background: searchStyle.backgroundColor
+                },
+                toggle: {
+                  textSize: sizeToggle.dataset.textSize,
+                  pressed: sizeToggle.getAttribute('aria-pressed'),
+                  width: toggleStyle.width,
+                  height: toggleStyle.height,
+                  borderStyle: toggleStyle.borderStyle,
+                  borderRadius: toggleStyle.borderRadius,
+                  background: toggleStyle.backgroundColor,
+                  color: toggleStyle.color,
+                  fontSize: toggleStyle.fontSize
+                },
+                primary: {
+                  display: toolStyle.display,
+                  current: currentTool.getAttribute('aria-current'),
+                  background: toolStyle.backgroundColor,
+                  borderStyle: toolStyle.borderStyle,
+                  borderRadius: toolStyle.borderRadius,
+                  color: toolStyle.color,
+                  fontSize: toolStyle.fontSize
+                },
+                categoryGrid: {
+                  display: gridStyle.display,
+                  columns: gridStyle.gridTemplateColumns.trim().split(/\s+/).length,
+                  width: gridRect.width,
+                  itemWidth: areaRect.width,
+                  itemCount: menuGrid.querySelectorAll('.menu-area').length
+                }
+              };
+            });
+            assert.equal(phoneStyles.viewportWidth, viewportWidth);
+            assert.equal(phoneStyles.documentWidth, viewportWidth, `Phone shell controls must not cause page-level horizontal overflow at ${viewportWidth}px / ${expected.size}: ${JSON.stringify(phoneStyles.overflowingElements)}`);
+            assert.equal(phoneStyles.brandTagline.whiteSpace, 'nowrap');
+            assert.ok(phoneStyles.brandTagline.height < 25);
+            assert.equal(phoneStyles.brandTagline.scrollWidth, phoneStyles.brandTagline.clientWidth);
+            assert.ok(phoneStyles.brandTagline.right <= viewportWidth);
+            assert.equal(phoneStyles.headerActionsDisplay, 'flex');
+            assert.equal(phoneStyles.bottomNavigation.position, 'fixed');
+            assert.equal(phoneStyles.bottomNavigation.bottom, 844);
+            assert.ok(Number.parseFloat(phoneStyles.bottomNavigation.paddingBottom) >= 7);
+            assert.equal(phoneStyles.areaNavigationDisplay, 'none');
+            assert.equal(phoneStyles.utilitySearchDisplay, 'none');
+            assert.equal(phoneStyles.mobileSearch.width, '46px');
+            assert.equal(phoneStyles.mobileSearch.height, '46px');
+            assert.equal(phoneStyles.mobileSearch.borderStyle, 'solid');
+            assert.equal(phoneStyles.mobileSearch.borderRadius, '13px');
+            assert.equal(phoneStyles.mobileSearch.background, 'rgb(255, 255, 255)');
+            assert.equal(phoneStyles.toggle.textSize, expected.size);
+            assert.equal(phoneStyles.toggle.pressed, String(expected.pressed));
+            assert.equal(phoneStyles.toggle.width, '46px');
+            assert.equal(phoneStyles.toggle.height, '46px');
+            assert.equal(phoneStyles.toggle.borderStyle, 'solid');
+            assert.equal(phoneStyles.toggle.borderRadius, '13px');
+            assert.equal(phoneStyles.toggle.background, expected.toggleBackground);
+            assert.equal(phoneStyles.toggle.color, expected.toggleColor);
+            assert.equal(phoneStyles.toggle.fontSize, expected.toggleFontSize);
+            assert.equal(phoneStyles.primary.display, 'flex');
+            assert.equal(phoneStyles.primary.current, 'page');
+            assert.equal(phoneStyles.primary.background, 'rgb(229, 242, 235)');
+            assert.equal(phoneStyles.primary.borderStyle, 'solid');
+            assert.equal(phoneStyles.primary.borderRadius, '12px');
+            assert.equal(phoneStyles.primary.color, 'rgb(36, 107, 82)');
+            assert.equal(phoneStyles.primary.fontSize, expected.phoneFontSize);
+            assert.equal(phoneStyles.categoryGrid.display, 'grid');
+            assert.equal(phoneStyles.categoryGrid.columns, 1, `Health categories must use a readable single column at ${viewportWidth}px / ${expected.size}.`);
+            assert.ok(phoneStyles.categoryGrid.itemCount > 0);
+            assert.ok(Math.abs(phoneStyles.categoryGrid.itemWidth - phoneStyles.categoryGrid.width) < 1,
+              `Health category items must fill the grid at ${viewportWidth}px / ${expected.size}.`);
+          }
 
           await page.setViewportSize({ width: 1280, height: 900 });
           const desktopStyles = await page.evaluate(() => {
@@ -408,12 +428,67 @@ async function main() {
         await page.keyboard.press('Enter');
         await page.locator('.mobile-head-button[aria-expanded="true"]').waitFor();
         await page.waitForTimeout(180);
-        const expandedSearchColor = await page.locator('.mobile-head-button[aria-expanded="true"]').evaluate(
-          element => getComputedStyle(element).color
-        );
-        assert.equal(expandedSearchColor, 'rgb(36, 107, 82)');
-        await page.locator('.mobile-head-button[aria-expanded="true"]').click();
+        const expandedSearch = await page.evaluate(() => {
+          const toggle = document.querySelector<HTMLElement>('.mobile-head-button[aria-expanded="true"]');
+          const search = document.querySelector<HTMLElement>('.utility-search');
+          if (!toggle || !search) throw new Error('Opened mobile search is missing its control or input.');
+          return {
+            color: getComputedStyle(toggle).color,
+            display: getComputedStyle(search).display,
+            position: getComputedStyle(search).position
+          };
+        });
+        assert.equal(expandedSearch.color, 'rgb(36, 107, 82)');
+        assert.equal(expandedSearch.display, 'flex');
+        assert.equal(expandedSearch.position, 'fixed');
+        await page.keyboard.press('Escape');
+        await page.locator('.mobile-head-button[aria-expanded="false"]').waitFor();
+        assert.equal(await page.locator('.utility-search').evaluate(element => getComputedStyle(element).display), 'none');
 
+        await page.locator('.brand-home').focus();
+        for (let attempt = 0; attempt < 4; attempt += 1) await page.keyboard.press('Tab');
+        const mobileNavFocus = await page.evaluate(() => {
+          const active = document.activeElement;
+          if (!(active instanceof HTMLButtonElement)) return null;
+          return {
+            label: active.innerText.replace('✦', '').trim(),
+            visibleFocus: active.matches(':focus-visible'),
+            outlineColor: getComputedStyle(active).outlineColor,
+            outlineWidth: getComputedStyle(active).outlineWidth
+          };
+        });
+        assert.deepEqual(mobileNavFocus, {
+          label: 'Focus',
+          visibleFocus: true,
+          outlineColor: 'rgb(36, 107, 82)',
+          outlineWidth: '2px'
+        });
+        await page.keyboard.press('Enter');
+        await page.waitForFunction(() => document.querySelector('.utility-primary-button[aria-current="page"]')?.textContent?.includes('Focus'));
+        await page.waitForFunction(() => {
+          const current = document.querySelector<HTMLElement>('.utility-primary-button[aria-current="page"]');
+          return current
+            && getComputedStyle(current).backgroundColor === 'rgb(229, 242, 235)'
+            && getComputedStyle(current).color === 'rgb(36, 107, 82)';
+        });
+        const selectedMobileTool = await page.locator('.utility-primary-button[aria-current="page"]').evaluate(element => {
+          const style = getComputedStyle(element);
+          return {
+            className: element.className,
+            background: style.backgroundColor,
+            color: style.color
+          };
+        });
+        assert.deepEqual(selectedMobileTool, {
+          className: 'utility-primary-button active',
+          background: 'rgb(229, 242, 235)',
+          color: 'rgb(36, 107, 82)'
+        });
+        await page.locator('.utility-primary-button').filter({ hasText: 'Today' }).focus();
+        await page.keyboard.press('Enter');
+        await page.waitForFunction(() => document.querySelector('.utility-primary-button[aria-current="page"]')?.textContent?.includes('Today'));
+
+        await page.setViewportSize({ width: 1280, height: 900 });
         await page.locator('.brand-home').focus();
         let areaFocused = false;
         for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -452,7 +527,6 @@ async function main() {
         assert.equal(selectedAreaStyles.borderColor, 'rgb(103, 197, 163)');
         assert.equal(selectedAreaStyles.color, 'rgb(36, 107, 82)');
 
-        await page.setViewportSize({ width: 1280, height: 900 });
         await page.locator('.brand-home').focus();
         await page.keyboard.press('Tab');
         const desktopKeyboardFocus = await page.evaluate(() => {
@@ -480,13 +554,60 @@ async function main() {
           element => getComputedStyle(element).backgroundColor
         );
         assert.equal(selectedToolBackground, 'rgb(229, 242, 235)');
+
+        await page.locator('.utility-primary-button').filter({ hasText: 'Today' }).click();
+        await page.locator('.home-dashboard .overall-card .menu-area')
+          .filter({ hasText: 'Health & Fitness' })
+          .click();
+        await page.getByRole('tablist', { name: 'Health and Fitness' }).waitFor();
+        await page.setViewportSize({ width: 390, height: 844 });
+        const categoryTabs = page.getByRole('tablist', { name: 'Health and Fitness' });
+        const categoryTabStyles = await categoryTabs.evaluate(element => {
+          const selected = element.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+          const inactive = element.querySelector<HTMLElement>('[role="tab"][aria-selected="false"]');
+          if (!selected || !inactive) throw new Error('Health category tabs are missing a selected or inactive tab.');
+          const selectedStyle = getComputedStyle(selected);
+          const inactiveStyle = getComputedStyle(inactive);
+          return {
+            display: getComputedStyle(element).display,
+            width: element.getBoundingClientRect().width,
+            borderRadius: getComputedStyle(element).borderRadius,
+            background: getComputedStyle(element).backgroundColor,
+            selectedLabel: selected.textContent?.trim(),
+            selectedBackground: selectedStyle.backgroundColor,
+            selectedBorderRadius: selectedStyle.borderRadius,
+            selectedColor: selectedStyle.color,
+            selectedHeight: selected.getBoundingClientRect().height,
+            inactiveBackground: inactiveStyle.backgroundColor,
+            inactiveColor: inactiveStyle.color
+          };
+        });
+        assert.equal(categoryTabStyles.display, 'grid');
+        assert.ok(categoryTabStyles.width > 0);
+        assert.equal(categoryTabStyles.borderRadius, '14px');
+        assert.equal(categoryTabStyles.background, 'rgb(247, 249, 247)');
+        assert.equal(categoryTabStyles.selectedLabel, 'Foundations');
+        assert.equal(categoryTabStyles.selectedBackground, 'rgb(255, 255, 255)');
+        assert.equal(categoryTabStyles.selectedBorderRadius, '10px');
+        assert.equal(categoryTabStyles.selectedColor, 'rgb(28, 88, 68)');
+        assert.ok(categoryTabStyles.selectedHeight >= 42);
+        assert.equal(categoryTabStyles.inactiveBackground, 'rgba(0, 0, 0, 0)');
+        assert.equal(categoryTabStyles.inactiveColor, 'rgb(94, 107, 99)');
+        await categoryTabs.getByRole('tab', { name: 'Foundations' }).focus();
+        await page.keyboard.press('ArrowRight');
+        await page.waitForFunction(() => {
+          const tab = document.querySelector<HTMLElement>('.health-fitness-page [role="tablist"][aria-label="Health and Fitness"] [role="tab"][aria-selected="true"]');
+          return tab?.textContent?.trim() === 'Today' && tab === document.activeElement;
+        });
+        await page.locator('.health-fitness-page [role="tablist"][aria-label="Health and Fitness"] [role="tab"][aria-selected="true"]')
+          .evaluate(element => element.blur());
       }
 
       assert.deepEqual(classicCssRequests, [], 'React pages must not request tend.css.');
       await context.close();
     }
 
-    console.log('Browser CSS contract passed: sign-in and mobile dashboard render without tend.css.');
+    console.log('Browser CSS contract passed: sign-in and dashboard layouts render without tend.css.');
   } finally {
     await browser?.close();
     if (previewServer?.pid && previewServer.exitCode === null && previewServer.signalCode === null) {
