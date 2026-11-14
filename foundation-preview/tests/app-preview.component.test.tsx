@@ -49,8 +49,10 @@ import {
 } from '../src/domain/preview-state.ts';
 import {
   PREVIEW_STORAGE_KEY,
+  PREVIEW_ACCOUNT_STORAGE_PREFIX,
   PREVIEW_V5_RECOVERY_KEY
 } from '../src/storage/preview-storage.ts';
+import { createAuthenticatedPreviewIdentity } from '../src/domain/preview-identity.ts';
 import { installMemoryStorage, type MemoryStorage } from './memory-storage.ts';
 import { historyButtonName } from './history-button-name.ts';
 
@@ -517,6 +519,104 @@ describe('Tend Today preview', () => {
     expect(await screen.findByRole('heading', { name: 'On your calendar' })).toBeTruthy();
     await waitFor(() => expect(calendarReads()).toHaveLength(1));
     expect(await screen.findByText('No events today.')).toBeTruthy();
+  });
+
+  it('lets an authenticated account manage Calendar settings through scoped storage and the production reader', async () => {
+    const user = userEvent.setup();
+    const accountId = 'c0000000-0000-4000-8000-000000000003';
+    const accountStorageKey = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountId}`;
+    const accountIdentity = createAuthenticatedPreviewIdentity(accountId, 1);
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ events: [], issueCount: 0 }),
+      { status: 200, headers: { 'content-type': 'application/json' } }
+    ));
+
+    const firstView = testingRender(<App identity={accountIdentity} />);
+    await openPreviewSettings(user);
+    expect(screen.getByText(/stored in this signed-in account’s saved data/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Add controlled test feed' })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Add calendar' }));
+    await user.type(screen.getByLabelText('Calendar name'), 'Account calendar');
+    await user.type(
+      screen.getByLabelText('Public iCloud calendar link'),
+      'https://p123-caldav.icloud.com/published/synthetic-account-test-token'
+    );
+    await user.click(screen.getByRole('button', { name: 'Save calendar' }));
+    expect(await screen.findByText('Account calendar')).toBeTruthy();
+    expect(screen.queryByDisplayValue('https://p123-caldav.icloud.com/published/synthetic-account-test-token')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Edit Account calendar' }));
+    await user.clear(screen.getByLabelText('Calendar name'));
+    await user.type(screen.getByLabelText('Calendar name'), 'Updated account calendar');
+    await user.clear(screen.getByLabelText('Public iCloud calendar link'));
+    await user.type(
+      screen.getByLabelText('Public iCloud calendar link'),
+      'https://p123-caldav.icloud.com/published/synthetic-account-test-token-updated'
+    );
+    await user.click(screen.getByRole('button', { name: 'Save calendar' }));
+    expect(await screen.findByText('Updated account calendar')).toBeTruthy();
+
+    const enabled = screen.getByRole('checkbox', { name: 'Use Updated account calendar' }) as HTMLInputElement;
+    await user.click(enabled);
+    const showOnToday = screen.getByRole('checkbox', { name: 'Show calendar on Today' }) as HTMLInputElement;
+    await user.click(showOnToday);
+    await waitFor(() => {
+      const saved = parsePreviewBackup(
+        window.localStorage.getItem(accountStorageKey) ?? '',
+        localDateString(new Date())
+      );
+      expect(saved.valid && saved.envelope.data.calendarSources[0]?.enabled).toBe(false);
+      expect(saved.valid && saved.envelope.data.showCalendarOnToday).toBe(false);
+    });
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBeNull();
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'Today' }));
+    expect(screen.queryByRole('heading', { name: 'On your calendar' })).toBeNull();
+    expect(fetchMock.mock.calls.filter(([input]) => String(input) === '/api/calendar/read')).toHaveLength(0);
+
+    firstView.unmount();
+    const otherAccountView = testingRender(<App
+      identity={createAuthenticatedPreviewIdentity('d0000000-0000-4000-8000-000000000004', 1)}
+    />);
+    await openPreviewSettings(user);
+    expect(screen.queryByText('Updated account calendar')).toBeNull();
+    expect((screen.getByRole('checkbox', { name: 'Show calendar on Today' }) as HTMLInputElement).checked).toBe(true);
+    otherAccountView.unmount();
+
+    testingRender(<App identity={createAuthenticatedPreviewIdentity(accountId, 2)} />);
+    await openPreviewSettings(user);
+    expect((screen.getByRole('checkbox', { name: 'Show calendar on Today' }) as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByRole('checkbox', { name: 'Use Updated account calendar' }) as HTMLInputElement).checked).toBe(false);
+
+    await user.click(screen.getByRole('checkbox', { name: 'Use Updated account calendar' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Show calendar on Today' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'Today' }));
+    expect(await screen.findByText('No events today.')).toBeTruthy();
+    const calendarRead = fetchMock.mock.calls.find(([input]) => String(input) === '/api/calendar/read');
+    expect(calendarRead).toBeTruthy();
+    const request = JSON.parse(String(calendarRead?.[1]?.body)) as {
+      source: { name: string; url: string; enabled?: boolean };
+    };
+    expect(request.source).toEqual({
+      id: expect.stringMatching(/^calendar-source-/),
+      name: 'Updated account calendar',
+      url: 'https://p123-caldav.icloud.com/published/synthetic-account-test-token-updated',
+      enabled: true
+    });
+
+    await openPreviewSettings(user);
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm removal of Updated account calendar' }));
+    await waitFor(() => {
+      const saved = parsePreviewBackup(
+        window.localStorage.getItem(accountStorageKey) ?? '',
+        localDateString(new Date())
+      );
+      expect(saved.valid && saved.envelope.data.calendarSources).toEqual([]);
+    });
   });
 
   it('saves editable time blocks without rendering the reusable time filter on Today', async () => {

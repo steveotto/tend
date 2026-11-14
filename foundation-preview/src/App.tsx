@@ -2147,9 +2147,6 @@ function PreviewWorkspace({
   }
 
   function saveCalendarSources(sources: CalendarSource[]): string | null {
-    if (identity.kind !== 'development') {
-      return 'Calendar source editing is available only in the isolated synthetic preview. No account data was changed.';
-    }
     const validation = validateCalendarSources(sources);
     if (!validation.valid) {
       return validation.errors[0] ?? 'Calendar settings are invalid. No changes were saved.';
@@ -3348,21 +3345,14 @@ function PreviewWorkspace({
                       </button>
                       <section className="settings-section" aria-labelledby="calendar-settings-title">
                         <h3 id="calendar-settings-title">Calendar</h3>
-                        {identity.kind === 'development'
-                          ? (
-                            <CalendarSourcesSettings
-                              sources={previewData.calendarSources}
-                              onSave={saveCalendarSources}
-                              showOnToday={previewData.showCalendarOnToday}
-                              onShowOnTodayChange={setShowCalendarOnTodayPreference}
-                              localReaderEnabled={identity.kind === 'development'}
-                            />
-                          )
-                          : (
-                            <p className="calendar-settings-account-limit">
-                              Calendar source editing is limited to the isolated synthetic preview. No account calendar settings or data are read or changed here.
-                            </p>
-                          )}
+                        <CalendarSourcesSettings
+                          sources={previewData.calendarSources}
+                          onSave={saveCalendarSources}
+                          showOnToday={previewData.showCalendarOnToday}
+                          onShowOnTodayChange={setShowCalendarOnTodayPreference}
+                          localReaderEnabled={identity.kind === 'development'}
+                          accountScoped={identity.kind === 'authenticated'}
+                        />
                       </section>
                       <section className="settings-section" aria-labelledby="weather-settings-title">
                         <h3 id="weather-settings-title">Weather</h3>
@@ -3415,7 +3405,7 @@ function PreviewWorkspace({
               evaluationInstant={scoringInstant}
               localDate={currentDate}
               localTimeZone={localTimeZone || 'UTC'}
-              calendarReaderEnabled={identity.kind === 'development'}
+              calendarReaderEnabled={identity.kind === 'development' || identity.kind === 'authenticated'}
               view={previewData.todayView}
               onViewChange={setTodayViewPreference}
               weatherController={todayWeather}

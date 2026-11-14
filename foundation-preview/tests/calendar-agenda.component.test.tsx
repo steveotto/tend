@@ -320,18 +320,18 @@ describe('upcoming calendar agenda', () => {
   });
 
   it.each([
-    ['reader-unavailable', 'The local calendar reader could not be reached.'],
+    ['reader-unavailable', 'The Calendar reader could not be reached.'],
     ['url-not-allowed', 'The saved link is not an allowed public iCloud feed URL.'],
     ['redirect-not-allowed', 'The feed redirected outside the allowed public iCloud host policy.'],
     ['url-target-not-public', 'The feed host resolved to a non-public network address and was blocked.'],
     ['dns-resolution-failed', 'The allowed feed host could not be resolved on this network.'],
-    ['upstream-timeout', 'The calendar server did not respond before the local reader timed out.'],
+    ['upstream-timeout', 'The calendar server did not respond before the reader timed out.'],
     ['upstream-tls-failed', 'A secure connection to the calendar server could not be established.'],
     ['upstream-network-failed', 'The calendar server could not be reached from this network.'],
     ['feed-http-rejected', 'The calendar server returned an unsuccessful HTTP response.'],
     ['feed-type-rejected', 'The calendar server response was not identified as a calendar feed.'],
-    ['feed-too-large', 'The calendar feed exceeded the local reader size limit.'],
-    ['redirect-limit', 'The feed exceeded the local redirect limit.'],
+    ['feed-too-large', 'The calendar feed exceeded the reader size limit.'],
+    ['redirect-limit', 'The feed exceeded the redirect limit.'],
     ['feed-retrieval-failed', 'The reader was reached, but the calendar feed could not be retrieved.'],
     ['feed-parse-failed', 'The feed was retrieved, but its calendar data could not be parsed.']
   ])('reports safe %s diagnostics', async (code, message) => {
@@ -353,7 +353,7 @@ describe('upcoming calendar agenda', () => {
     renderCalendar([{ id: 'home', name: 'Home', url: 'https://p.icloud.com/private' }]);
 
     expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
-    expect(screen.getByText('The local calendar reader could not be reached.')).toBeTruthy();
+    expect(screen.getByText('The Calendar reader could not be reached.')).toBeTruthy();
     expectNoCalendarSettingsShortcut();
   });
 
@@ -367,7 +367,7 @@ describe('upcoming calendar agenda', () => {
     renderCalendar([{ id: 'home', name: 'Home', url: 'https://p.icloud.com/private' }]);
 
     expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
-    expect(screen.getByText('The calendar feed exceeded the local reader size limit.')).toBeTruthy();
+    expect(screen.getByText('The calendar feed exceeded the reader size limit.')).toBeTruthy();
   });
 
   it('removes a source’s events from view when that source is disabled', async () => {
