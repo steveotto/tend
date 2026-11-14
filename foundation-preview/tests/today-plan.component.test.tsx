@@ -13,6 +13,7 @@ import type { RhythmPreview } from '../src/domain/preview-data.ts';
 import type { TodayFocusId, TodayViewId } from '../src/domain/today-plan.ts';
 import { todayFocusContext } from '../src/domain/today-plan.ts';
 import { areas } from '../src/domain/preview-data.ts';
+import type { CalendarSource } from '../src/domain/calendar-sources.ts';
 
 afterEach(cleanup);
 
@@ -41,7 +42,8 @@ function TodayHarness({
   rhythms = todayRhythms,
   evaluationInstant = defaultInstant,
   localDate = '2026-10-31',
-  initialView = 'now'
+  initialView = 'now',
+  calendarSources = []
 }: {
   satisfiedRhythmIds?: ReadonlySet<string>;
   showTended?: boolean;
@@ -51,6 +53,7 @@ function TodayHarness({
   evaluationInstant?: Date;
   localDate?: string;
   initialView?: TodayViewId;
+  calendarSources?: CalendarSource[];
 }) {
   const [view, setView] = useState<TodayViewId>(initialView);
   const [tendedVisible, setTendedVisible] = useState(showTended);
@@ -82,6 +85,7 @@ function TodayHarness({
         onTend={vi.fn()}
         onEditRhythm={vi.fn()}
         onUndo={vi.fn()}
+        calendarSources={calendarSources}
       />
     </TimeBlocksProvider>
   );
@@ -96,6 +100,7 @@ function renderToday(options: {
   evaluationInstant?: Date;
   localDate?: string;
   initialView?: TodayViewId;
+  calendarSources?: CalendarSource[];
 } = {}) {
   return render(<TodayHarness {...options} />);
 }
@@ -258,12 +263,13 @@ describe('Today time-frame interaction', () => {
     const plan = todayPlan();
     expect(within(plan).getByText('1 of 2', { selector: '.today-timeframe-header__progress' })).toBeTruthy();
     expect(plan.querySelector('.today-timeframe-header__disclosure')).toBeNull();
-    expect(plan.querySelector('.today-plan__accordion-toggle-icon')).toBeNull();
+    expect(plan.querySelector('.today-plan__agenda-marker')).toBeNull();
+    expect(plan.querySelector('.today-plan__agenda-rail')).toBeNull();
     expect(plan.querySelector('.today-plan__agenda-group--expanded')).toBeTruthy();
 
     await user.click(within(planTabs(plan)).getByRole('tab', { name: 'Flexible' }));
     expect(within(plan).getAllByText('0 of 1', { selector: '.today-timeframe-header__progress' })).toHaveLength(2);
-    expect(plan.querySelector('.today-plan__accordion-toggle-icon')).toBeNull();
+    expect(plan.querySelector('.today-plan__agenda-marker')).toBeNull();
     expect(plan.querySelector('.today-timeframe-header__disclosure')).toBeNull();
     expect(plan.querySelectorAll('.today-plan__agenda-group--expanded')).toHaveLength(2);
   });
@@ -346,8 +352,11 @@ describe('Today time-frame interaction', () => {
     expect(morning.textContent).not.toContain('Rhythm');
     expect(morning.getAttribute('aria-expanded')).toBe('true');
     expect(lunch.getAttribute('aria-expanded')).toBe('false');
-    expect(morning.querySelector('.today-plan__accordion-toggle-icon path')?.getAttribute('d')).toBe('M5 10h10');
-    expect(lunch.querySelector('.today-plan__accordion-toggle-icon path')?.getAttribute('d')).toBe('M5 10h10M10 5v10');
+    expect(morning.querySelector('.today-plan__agenda-marker path')?.getAttribute('d')).toBe('M6 10h8');
+    expect(lunch.querySelector('.today-plan__agenda-marker path')?.getAttribute('d')).toBe('M6 10h8M10 6v8');
+    expect(morning.querySelector('.today-plan__agenda-marker')?.getAttribute('aria-hidden')).toBe('true');
+    expect(morning.querySelector('.today-plan__agenda-marker')?.closest('button')).toBe(morning);
+    expect(morning.querySelector('button button')).toBeNull();
     expect(morning.closest('.today-timeframe-header')?.classList.contains('today-timeframe-header--collapsed')).toBe(false);
     expect(lunch.closest('.today-timeframe-header')?.classList.contains('today-timeframe-header--collapsed')).toBe(true);
     expect(anytime.getAttribute('aria-expanded')).toBe('false');
@@ -358,14 +367,24 @@ describe('Today time-frame interaction', () => {
     expect(within(plan).getByRole('button', { name: /^Morning, .*0 of 1 tended$/ })).toBeTruthy();
     expect(within(plan).queryByRole('button', { name: /Expand all|Collapse all/ })).toBeNull();
 
+    const morningMarker = morning.querySelector<SVGSVGElement>('.today-plan__agenda-marker');
+    expect(morningMarker).toBeTruthy();
+    await user.click(morningMarker!);
+    expect(morning.getAttribute('aria-expanded')).toBe('false');
+    expect(morning.querySelector('.today-plan__agenda-marker path')?.getAttribute('d')).toBe('M6 10h8M10 6v8');
+
+    await user.pointer({ target: morningMarker!, keys: '[TouchA]' });
+    expect(morning.getAttribute('aria-expanded')).toBe('true');
+    expect(morning.querySelector('.today-plan__agenda-marker path')?.getAttribute('d')).toBe('M6 10h8');
+
     morning.focus();
     await user.keyboard('{Enter}');
     expect(morning.getAttribute('aria-expanded')).toBe('false');
-    expect(morning.querySelector('.today-plan__accordion-toggle-icon path')?.getAttribute('d')).toBe('M5 10h10M10 5v10');
+    expect(morning.querySelector('.today-plan__agenda-marker path')?.getAttribute('d')).toBe('M6 10h8M10 6v8');
     expect(morning.closest('.today-timeframe-header')?.classList.contains('today-timeframe-header--collapsed')).toBe(true);
     await user.keyboard(' ');
     expect(morning.getAttribute('aria-expanded')).toBe('true');
-    expect(morning.querySelector('.today-plan__accordion-toggle-icon path')?.getAttribute('d')).toBe('M5 10h10');
+    expect(morning.querySelector('.today-plan__agenda-marker path')?.getAttribute('d')).toBe('M6 10h8');
     expect(morning.closest('.today-timeframe-header')?.classList.contains('today-timeframe-header--collapsed')).toBe(false);
     await user.click(lunch);
     await user.click(morning);
@@ -527,6 +546,20 @@ describe('Today time-frame interaction', () => {
     expect(within(plan).getByRole('status').textContent).toContain('No active Rhythms right now.');
     await user.click(within(planTabs(plan)).getByRole('tab', { name: 'All today' }));
     expect(plan.querySelectorAll('.today-timeframe-header__disclosure[aria-expanded="true"]')).toHaveLength(0);
+  });
+
+  it('shows the local-reader scope for configured calendar sources without a settings shortcut', () => {
+    renderToday({
+      calendarSources: [{
+        id: 'calendar-source-preview',
+        name: 'Synthetic work',
+        url: 'https://p123-caldav.icloud.com/published/synthetic-only'
+      }]
+    });
+
+    const calendarSection = document.querySelector<HTMLElement>('.today-calendar-section')!;
+    expect(calendarSection.textContent).toContain('Calendar reading is available only in the isolated local preview.');
+    expect(within(calendarSection).queryByRole('button', { name: /settings/i })).toBeNull();
   });
 
   it('retains the reusable time filter options and keyboard selection outside Today’s rendered layout', async () => {

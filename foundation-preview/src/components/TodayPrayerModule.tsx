@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode, SyntheticEvent } from 'react';
+import type { ReactNode } from 'react';
 import {
   syntheticPeople,
   syntheticPersonPickerGroups
@@ -16,7 +16,7 @@ import {
 } from '../domain/prayer-session.ts';
 import type { PrayerRequestPreview, PrayerSession, PrayerTimeframeId } from '../domain/prayer-session.ts';
 import { PersonBadgeVisual } from './PersonBadge.tsx';
-import { useScrollLock } from '../hooks/useScrollLock.ts';
+import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 
 type SelectionDraft = {
   people: PersonId[];
@@ -419,15 +419,18 @@ export function TodayPrayerModule({
         onDismiss={() => setSession(null)}
       >
         {session && (sessionComplete ? (
-          <section className="card faith-session-empty">
-            <h1 id="today-prayer-session-title" tabIndex={-1}>
-              {session.ended ? 'Prayer session ended' : 'Prayer time complete'}
-            </h1>
-            <p>You marked {session.prayedIds.length} {session.prayedIds.length === 1 ? 'request' : 'requests'} prayed.</p>
-            <div className="faith-session-actions">
-              <button type="button" className="btn faith-session-close" onClick={() => setSession(null)}>
-                Finish
-              </button>
+          <section className="faith-session-complete">
+            <span className="faith-eyebrow">PRAYER TIME</span>
+            <div className="faith-session-complete__card">
+              <h1 id="today-prayer-session-title" tabIndex={-1}>
+                {session.ended ? 'Prayer session ended' : 'Prayer time complete'}
+              </h1>
+              <p>You marked {session.prayedIds.length} {session.prayedIds.length === 1 ? 'request' : 'requests'} prayed.</p>
+              <div className="faith-session-actions">
+                <button type="button" className="btn faith-session-close" onClick={() => setSession(null)}>
+                  Finish
+                </button>
+              </div>
             </div>
           </section>
         ) : (
@@ -536,34 +539,17 @@ function PrayerDialog({
   onDismiss: () => void;
   children: ReactNode;
 }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  useScrollLock(open);
-  useLayoutEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (open && !dialog.open) {
-      if (typeof dialog.showModal === 'function') dialog.showModal();
-      else dialog.setAttribute('open', '');
-      document.getElementById(titleId)?.focus({ preventScroll: true });
-    } else if (!open && dialog.open) {
-      if (typeof dialog.close === 'function') dialog.close();
-      else dialog.removeAttribute('open');
-    }
-  }, [open, titleId]);
-
-  function cancel(event: SyntheticEvent<HTMLDialogElement>) {
-    event.preventDefault();
-    onDismiss();
-  }
-
+  if (!open) return null;
   return (
-    <dialog
-      ref={dialogRef}
-      className={className}
-      aria-labelledby={titleId}
-      onCancel={cancel}
+    <MoneyGoalDialog
+      dialogClassName={className}
+      labelledBy={titleId}
+      initialFocusId={titleId}
+      stopEscapePropagation
+      phoneFullScreen
+      onClose={onDismiss}
     >
       {children}
-    </dialog>
+    </MoneyGoalDialog>
   );
 }

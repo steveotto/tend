@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "calendar:reader": "node --experimental-strip-types local-calendar-reader.mjs",
     "typecheck": "tsc --noEmit",
     "test": "npm run test:reader && npm run test:components && npm run test:legacy && npm run test:browser-css",
     "test:reader": "node --experimental-strip-types --test ../tests/legacy-reader.test.ts",
@@ -20,6 +21,7 @@
     "test:pages-artifact": "node --experimental-strip-types --test tests/pages-artifact.test.ts"
   },
   "dependencies": {
+    "ical.js": "2.2.1",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
@@ -36,6 +38,7 @@
     "postcss": "8.5.31",
     "typescript": "7.0.2",
     "vite": "8.3.5",
-    "vitest": "4.1.12"
+    "vitest": "4.1.12",
+    "wrangler": "4.162.0"
   }
 }

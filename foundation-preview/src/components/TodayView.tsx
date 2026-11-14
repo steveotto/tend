@@ -34,6 +34,8 @@ import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
 import { formatScore } from '../domain/score-display.ts';
 import { aggregateCategoryHealthScores } from '../domain/category-scoring.ts';
 import { TodayPrayerModule } from './TodayPrayerModule.tsx';
+import type { CalendarSource } from '../domain/calendar-sources.ts';
+import { CalendarAgendaSection } from './CalendarAgendaSection.tsx';
 
 const planTypes: { id: TodayViewId; label: string }[] = [
   { id: 'now', label: 'Now' },
@@ -126,6 +128,10 @@ type TodayViewProps = {
   onTend: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   onEditRhythm: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
   onUndo: (id: string) => void;
+  calendarSources?: readonly CalendarSource[];
+  localTimeZone?: string;
+  calendarReaderEnabled?: boolean;
+  showCalendarOnToday?: boolean;
 };
 
 export function TodayView({
@@ -156,6 +162,10 @@ export function TodayView({
   onTend,
   onEditRhythm,
   onUndo,
+  calendarSources = [],
+  localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+  calendarReaderEnabled = false,
+  showCalendarOnToday = true,
 }: TodayViewProps) {
   const tendedRhythmIds = savedTendedRhythmIds
     ?? selectTendedRhythmDisplayIds(completedRhythms, satisfiedRhythmIds);
@@ -381,8 +391,7 @@ export function TodayView({
                       aria-labelledby={`plan-tab-${view}`}
                     >
                       {view === 'now' && (
-                        <TodayAgendaRail className="today-plan__agenda-rail today-plan__agenda-rail--now">
-                          <section className="today-plan__agenda-group today-plan__agenda-group--expanded">
+                        <section className="today-plan__agenda-group today-plan__agenda-group--expanded">
                             <TodayTimeframeHeader
                               title={currentBlock?.name ?? 'Now'}
                               timeRange={currentBlockRange}
@@ -401,8 +410,7 @@ export function TodayView({
                                   </button>
                                 </div>
                               )}
-                          </section>
-                        </TodayAgendaRail>
+                        </section>
                       )}
                       {view === 'flexible' && (
                         <>
@@ -507,13 +515,13 @@ export function TodayView({
         onPray={onPrayForRequest}
       />
 
-      <section aria-labelledby="calendar-heading" className="today-calendar-section">
-        <div className="sectiontitle"><h2 id="calendar-heading">On your calendar</h2></div>
-        <div className="card calendar-card">
-          <p className="empty">No calendars connected in this preview.</p>
-          <button type="button" className="btn mini ghost calendar-settings-button" onClick={() => onNavigate('more')}>Settings</button>
-        </div>
-      </section>
+      {showCalendarOnToday && (
+        <CalendarAgendaSection
+          sources={calendarSources}
+          timeZone={localTimeZone}
+          readerEnabled={calendarReaderEnabled}
+        />
+      )}
     </main>
   );
 }

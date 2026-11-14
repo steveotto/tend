@@ -106,6 +106,16 @@ export default defineConfig(({ mode }) => {
     server: {
       fs: {
         allow: [path.resolve(projectRoot, '..')]
+      },
+      proxy: {
+        '/api/calendar': {
+          target: 'http://127.0.0.1:8787',
+          changeOrigin: false
+        },
+        '/__test': {
+          target: 'http://127.0.0.1:8787',
+          changeOrigin: false
+        }
       }
     },
     build: {
