@@ -76,7 +76,7 @@ function isCalendarReadFailureCode(value: unknown): value is CalendarReadFailure
 function failureDescription(code: CalendarReadFailureCode): string {
   switch (code) {
     case 'reader-unavailable':
-      return 'The local calendar reader could not be reached.';
+      return 'The Calendar reader could not be reached.';
     case 'invalid-request':
       return 'The calendar request was rejected as invalid.';
     case 'url-not-allowed':
@@ -88,7 +88,7 @@ function failureDescription(code: CalendarReadFailureCode): string {
     case 'dns-resolution-failed':
       return 'The allowed feed host could not be resolved on this network.';
     case 'upstream-timeout':
-      return 'The calendar server did not respond before the local reader timed out.';
+      return 'The calendar server did not respond before the reader timed out.';
     case 'upstream-tls-failed':
       return 'A secure connection to the calendar server could not be established.';
     case 'upstream-network-failed':
@@ -98,9 +98,9 @@ function failureDescription(code: CalendarReadFailureCode): string {
     case 'feed-type-rejected':
       return 'The calendar server response was not identified as a calendar feed.';
     case 'feed-too-large':
-      return 'The calendar feed exceeded the local reader size limit.';
+      return 'The calendar feed exceeded the reader size limit.';
     case 'redirect-limit':
-      return 'The feed exceeded the local redirect limit.';
+      return 'The feed exceeded the redirect limit.';
     case 'feed-retrieval-failed':
       return 'The reader was reached, but the calendar feed could not be retrieved.';
     case 'feed-parse-failed':

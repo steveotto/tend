@@ -13,7 +13,8 @@ import {
   createPreviewAccountBackupApi,
   createValidatedPreviewAccountDocument,
   PreviewAccountBackupError,
-  previewEnvelopesEqual
+  previewEnvelopesEqual,
+  validatePreviewAccountBackup
 } from '../src/storage/preview-account-backup.ts';
 import type {
   PreviewAccountBackupApi,
@@ -590,6 +591,54 @@ describe('manual Preview account backup and restore', () => {
       data: Object.fromEntries(Object.entries(document.data).reverse()) as PreviewData
     };
     expect(previewEnvelopesEqual(document, reordered)).toBe(true);
+  });
+
+  it('preserves validated Calendar sources and visibility through the account backup document', () => {
+    const data = createSamplePreviewData();
+    data.calendarSources = [{
+      id: 'calendar-source-account-sync-test',
+      name: 'Synthetic account calendar',
+      url: 'https://p123-caldav.icloud.com/published/synthetic-account-sync-token',
+      enabled: false
+    }];
+    data.showCalendarOnToday = false;
+    const document = createValidatedPreviewAccountDocument(data, currentDate);
+    const restored = validatePreviewAccountBackup({
+      document,
+      schemaVersion: PREVIEW_SCHEMA_VERSION,
+      revision: 3,
+      updatedAt: '2026-11-04T12:00:00.000Z'
+    }, currentDate);
+
+    expect(restored.data.calendarSources).toEqual(data.calendarSources);
+    expect(restored.data.showCalendarOnToday).toBe(false);
+  });
+
+  it('migrates an older account backup with Calendar sources and defaults visibility to enabled', () => {
+    const data = createSamplePreviewData();
+    data.calendarSources = [{
+      id: 'calendar-source-legacy-account-test',
+      name: 'Legacy synthetic calendar',
+      url: 'https://p123-caldav.icloud.com/published/synthetic-legacy-account-token',
+      enabled: true
+    }];
+    const current = createPreviewEnvelope(data);
+    const priorData = { ...current.data };
+    Reflect.deleteProperty(priorData, 'showCalendarOnToday');
+    const restored = validatePreviewAccountBackup({
+      document: {
+        format: current.format,
+        schemaVersion: 41,
+        data: priorData
+      },
+      schemaVersion: 41,
+      revision: 2,
+      updatedAt: '2026-11-03T12:00:00.000Z'
+    }, currentDate);
+
+    expect(restored.sourceSchemaVersion).toBe(41);
+    expect(restored.data.calendarSources).toEqual(data.calendarSources);
+    expect(restored.data.showCalendarOnToday).toBe(true);
   });
 
   it('rejects auth or session fields instead of including them in the transferable document', () => {

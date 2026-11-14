@@ -30,13 +30,15 @@ export function CalendarSourcesSettings({
   onSave,
   showOnToday = true,
   onShowOnTodayChange = () => undefined,
-  localReaderEnabled = false
+  localReaderEnabled = false,
+  accountScoped = false
 }: {
   sources: readonly CalendarSource[];
   onSave: (sources: CalendarSource[]) => string | null;
   showOnToday?: boolean;
   onShowOnTodayChange?: (show: boolean) => void;
   localReaderEnabled?: boolean;
+  accountScoped?: boolean;
 }) {
   const [draft, setDraft] = useState<CalendarSourceDraft | null>(null);
   const [removalId, setRemovalId] = useState<string | null>(null);
@@ -151,9 +153,11 @@ export function CalendarSourcesSettings({
         In iCloud Calendar on icloud.com, open a calendar’s sharing settings, turn on Public Calendar, and copy its link. Private Apple Account sign-in and other providers are not supported.
       </p>
       <p className="calendar-sources-settings__privacy">
-        Public calendar links can grant access to the feed. Treat each link like a password. {localReaderEnabled
-          ? 'This local preview sends enabled links only to a reader on this device. Links and event details are not logged or uploaded.'
-          : 'This preview saves links only in its versioned synthetic data and does not fetch them.'}
+        Public calendar links can grant access to the feed. Treat each link like a password. {accountScoped
+          ? 'Links are stored in this signed-in account’s saved data and included in its existing sync. Only enabled sources are sent to the same-origin reader while Calendar is shown on Today.'
+          : localReaderEnabled
+            ? 'This local preview sends enabled links only to a reader on this device. Links and event details are not logged or uploaded.'
+            : 'This preview saves links only in its versioned synthetic data and does not fetch them.'}
       </p>
 
       {sources.length === 0
