@@ -16,6 +16,7 @@ afterEach(() => {
 function response(body: unknown, status = 200): Response {
   return {
     ok: status >= 200 && status < 300,
+    status,
     json: async () => body
   } as Response;
 }
@@ -321,6 +322,7 @@ describe('upcoming calendar agenda', () => {
 
   it.each([
     ['reader-unavailable', 'The Calendar reader could not be reached.'],
+    ['invalid-request', 'The calendar request was rejected as invalid.'],
     ['url-not-allowed', 'The saved link is not an allowed public iCloud feed URL.'],
     ['redirect-not-allowed', 'The feed redirected outside the allowed public iCloud host policy.'],
     ['url-target-not-public', 'The feed host resolved to a non-public network address and was blocked.'],
@@ -340,21 +342,72 @@ describe('upcoming calendar agenda', () => {
 
     expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
     expect(screen.getByText(message)).toBeTruthy();
+    expect(screen.getByText(`Code: ${code} · HTTP 422`)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
     expect(screen.queryByRole('group', { name: 'Calendar date range' })).toBeTruthy();
     expectNoCalendarSettingsShortcut();
     expectNoCalendarOuterCard();
   });
 
-  it('classifies a failed same-origin request as reader-unavailable', async () => {
+  it('classifies browser network failure without claiming the reader returned an HTTP response', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => {
       throw new TypeError('Network request failed');
     }));
     renderCalendar([{ id: 'home', name: 'Home', url: 'https://p.icloud.com/private' }]);
 
     expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
-    expect(screen.getByText('The Calendar reader could not be reached.')).toBeTruthy();
+    expect(screen.getByText('The browser could not connect to the Calendar reader.')).toBeTruthy();
+    expect(screen.getByText('Code: reader-network-failed')).toBeTruthy();
     expectNoCalendarSettingsShortcut();
+  });
+
+  it('reports the HTTP status when the reader returns a non-JSON error', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      '<html>upstream response</html>',
+      { status: 502, headers: { 'content-type': 'text/html' } }
+    )));
+    renderCalendar([{ id: 'home', name: 'Home', url: 'https://p.icloud.com/private' }]);
+
+    expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
+    expect(screen.getByText('The Calendar reader returned an invalid response.')).toBeTruthy();
+    expect(screen.getByText('Code: reader-response-invalid · HTTP 502')).toBeTruthy();
+    expect(screen.queryByText(/upstream response/)).toBeNull();
+  });
+
+  it('reports a generic reader HTTP failure separately from feed retrieval errors', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(
+      { error: 'safe generic error' },
+      503
+    )));
+    renderCalendar([{ id: 'home', name: 'Home', url: 'https://p.icloud.com/private' }]);
+
+    expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
+    expect(screen.getByText('The Calendar reader returned an unsuccessful response.')).toBeTruthy();
+    expect(screen.getByText('Code: reader-http-failed · HTTP 503')).toBeTruthy();
+  });
+
+  it('reports a malformed successful payload as a reader response error', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response({ events: 'not-a-list', issueCount: 0 })));
+    renderCalendar([{ id: 'home', name: 'Home', url: 'https://p.icloud.com/private' }]);
+
+    expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
+    expect(screen.getByText('The Calendar reader returned an invalid response.')).toBeTruthy();
+    expect(screen.getByText('Code: reader-response-invalid · HTTP 200')).toBeTruthy();
+  });
+
+  it('reports a browser-side request timeout with a code and no invented HTTP status', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true });
+    })));
+    renderCalendar([{ id: 'home', name: 'Home', url: 'https://p.icloud.com/private' }]);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+
+    expect(screen.getByText('The Calendar reader request timed out.')).toBeTruthy();
+    expect(screen.getByText('Code: reader-timeout')).toBeTruthy();
   });
 
   it('shows only safe byte-count metadata for an oversized feed', async () => {
