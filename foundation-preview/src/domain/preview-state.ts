@@ -5,7 +5,7 @@ import {
   validateGoalDraft
 } from './money-goals.ts';
 import type { MoneyGoal } from './money-goals.ts';
-import { goals as sampleGoals, todayRhythms } from './preview-data.ts';
+import { areas, goals as sampleGoals, todayRhythms } from './preview-data.ts';
 import {
   createSamplePeople,
   createPersonPickerGroups,
@@ -90,9 +90,14 @@ import { validateCalendarSources } from './calendar-sources.ts';
 import type { CalendarSource } from './calendar-sources.ts';
 import { migrateTodayViewSelection } from './today-plan.ts';
 import type { TodayViewId } from './today-plan.ts';
+import {
+  defaultCategoryPreferences,
+  isCategoryPreferences
+} from './category-availability.ts';
+import type { CategoryPreferences } from './category-availability.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 42;
+export const PREVIEW_SCHEMA_VERSION = 43;
 export type PreviewTextSize = 'small' | 'medium' | 'large';
 
 export type PreviewData = {
@@ -118,6 +123,7 @@ export type PreviewData = {
   timeBlocks: TimeBlockSettings;
   showTended: boolean;
   showCalendarOnToday: boolean;
+  categoryPreferences: CategoryPreferences;
   todayView: TodayViewId;
   textSize: PreviewTextSize;
   calendarSources: CalendarSource[];
@@ -152,7 +158,7 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42; resolvedPersonCategories: number }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43; resolvedPersonCategories: number }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
 const goalKeys = [
@@ -203,6 +209,7 @@ const dataKeysV39 = dataKeysV38;
 const dataKeysV40 = dataKeysV39;
 const dataKeysV41 = [...dataKeysV40, 'textSize'];
 const dataKeysV42 = [...dataKeysV41, 'showCalendarOnToday'];
+const dataKeysV43 = [...dataKeysV42, 'categoryPreferences'];
 const envelopeKeys = ['format', 'schemaVersion', 'data'];
 const supportedRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 const builtInRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
@@ -241,6 +248,7 @@ export function createSamplePreviewData(): PreviewData {
     timeBlocks: createDefaultTimeBlockSettings(),
     showTended: false,
     showCalendarOnToday: true,
+    categoryPreferences: { ...defaultCategoryPreferences },
     todayView: 'now',
     textSize: 'small',
     calendarSources: []
@@ -308,6 +316,9 @@ function hasOnlyKeysWithCompatibleDefaults(
       && (record[key] === 'small' || record[key] === 'medium' || record[key] === 'large')
     || key === 'showCalendarOnToday'
       && record[key] === true
+    || key === 'categoryPreferences'
+      && isCategoryPreferences(record[key])
+      && areas.every(area => (record[key] as CategoryPreferences)[area.id])
     || key === 'flexibility'
       && isEmptyFlexibilityDefault(record[key]));
 }
@@ -416,6 +427,7 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
     schemaVersion: PREVIEW_SCHEMA_VERSION,
     data: {
       ...data,
+      categoryPreferences: data.categoryPreferences ?? { ...defaultCategoryPreferences },
       goals: data.goals.map(goal => {
         const checkIns = goal.checkIns.map(checkIn => ({
           id: checkIn.id,
@@ -618,7 +630,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
       && value.schemaVersion !== 38
       && value.schemaVersion !== 39
       && value.schemaVersion !== 40
-      && value.schemaVersion !== 41
+      && value.schemaVersion !== 41 && value.schemaVersion !== 42
       && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
@@ -653,7 +665,8 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const isV29 = value.schemaVersion === 29;
   const isV30 = value.schemaVersion === 30;
   const isV31 = value.schemaVersion === 31;
-  const isV42 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV43 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV42 = value.schemaVersion === 42 || isV43;
   const isV41 = value.schemaVersion === 41 || isV42;
   const isV40 = value.schemaVersion === 40 || isV41;
   const isV39 = value.schemaVersion === 39 || isV40;
@@ -681,7 +694,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const hasCardio = isV18 || hasCurrentFriendshipsData;
   const allowedDataKeys = isV1 ? dataKeysV1 : isV2 ? dataKeysV2
     : isV3 || isV4 ? dataKeysV3
-      : isV42 ? dataKeysV42 : isV41 && value.schemaVersion === 41 ? dataKeysV41 : isV40 ? dataKeysV40 : value.schemaVersion === 39 ? dataKeysV39 : isV38 ? dataKeysV38 : isV37 && value.schemaVersion === 37 ? dataKeysV37 : isV36 ? dataKeysV36 : value.schemaVersion === 35 ? dataKeysV35 : isV34 && value.schemaVersion === 34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
+      : isV43 ? dataKeysV43 : isV42 && value.schemaVersion === 42 ? dataKeysV42 : isV41 && value.schemaVersion === 41 ? dataKeysV41 : isV40 ? dataKeysV40 : value.schemaVersion === 39 ? dataKeysV39 : isV38 ? dataKeysV38 : isV37 && value.schemaVersion === 37 ? dataKeysV37 : isV36 ? dataKeysV36 : value.schemaVersion === 35 ? dataKeysV35 : isV34 && value.schemaVersion === 34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
         : isV11 || isV12 ? dataKeysV12 : isV10 ? dataKeysV10
       : isV8 || isV9 ? dataKeysV8 : isV7 ? dataKeysV7 : isV6 ? dataKeysV6 : dataKeysV5;
   if (!isRecord(value.data) || (!isV19 && !isV20 && !hasOnlyKeysWithCompatibleDefaults(value.data, allowedDataKeys))
@@ -716,6 +729,9 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   }
   if (isV42 && typeof value.data.showCalendarOnToday !== 'boolean') {
     return { valid: false, kind: 'invalid', message: 'The Show calendar on Today preference must be a boolean.' };
+  }
+  if (isV43 && !isCategoryPreferences(value.data.categoryPreferences)) {
+    return { valid: false, kind: 'invalid', message: 'Category preferences must contain one enabled or disabled value for every category.' };
   }
   const calendarSourcesResult = validateCalendarSources(isV36 ? value.data.calendarSources : []);
   if (!calendarSourcesResult.valid) {
@@ -1156,6 +1172,9 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     timeBlocks,
     showTended: isV35 ? value.data.showTended as boolean : false,
     showCalendarOnToday: isV42 ? value.data.showCalendarOnToday as boolean : true,
+    categoryPreferences: isV43
+      ? value.data.categoryPreferences as CategoryPreferences
+      : { ...defaultCategoryPreferences },
     todayView: migrateTodayViewSelection(value.data.todayView),
     textSize: isPreviewTextSize(value.data.textSize) ? value.data.textSize : 'small',
     calendarSources: calendarSourcesResult.sources

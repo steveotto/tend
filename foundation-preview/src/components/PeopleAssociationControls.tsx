@@ -2,6 +2,7 @@ import type { RefObject } from 'react';
 import type { PersonId, PersonPickerGroup, PersonPreview } from '../domain/preview-data.ts';
 import { syntheticPersonPickerGroups } from '../domain/preview-data.ts';
 import { BadgeSelectionPicker } from './BadgeSelectionPicker.tsx';
+import { useAvailablePersonGroups } from './CategoryAvailabilityContext.tsx';
 import { PersonBadge, PersonBadgeVisual } from './PersonBadge.tsx';
 
 export function PeopleAssociationRow({
@@ -80,7 +81,7 @@ export function PeopleBadgeSelectionPicker({
 }) {
   const excluded = new Set(excludedIds);
   const availablePeople = people.filter(person => !excluded.has(person.id));
-  const availableGroups = groups.map(group => ({
+  const availableGroups = useAvailablePersonGroups(groups).map(group => ({
     ...group,
     memberIds: group.memberIds.filter(id => !excluded.has(id))
   }));

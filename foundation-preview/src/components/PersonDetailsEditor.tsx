@@ -23,6 +23,8 @@ import { PersonConnectionCadenceSelect } from './PersonConnectionCadenceSelect.t
 import { StyledSelect } from './StyledSelect.tsx';
 import type { StyledSelectOption } from './StyledSelect.tsx';
 import { compressPersonPhoto } from './person-photo.ts';
+import { useCategoryAvailability } from './CategoryAvailabilityContext.tsx';
+import { categoryIdForPersonGroup, isCategoryEnabled } from '../domain/category-availability.ts';
 
 const categoryOptions: readonly StyledSelectOption<string>[] = [
   { value: 'not-set', label: 'Not set' },
@@ -65,6 +67,7 @@ export function PersonDetailsEditor({
   onSave: (draft: PersonDetailsDraft) => string | null;
   onClose: () => void;
 }) {
+  const categoryPreferences = useCategoryAvailability();
   const [draft, setDraft] = useState(() => personDetailsDraft(details, cadence, categoryIds));
   const [errors, setErrors] = useState<PersonDetailsDraftErrors>({});
   const [saveError, setSaveError] = useState('');
@@ -75,6 +78,12 @@ export function PersonDetailsEditor({
   const categoryValue = (draft.categoryChanged
     ? draft.categoryIds[0]
     : resolvePersonCategory(draft.categoryIds)) ?? 'not-set';
+  const categoryIsAvailable = categoryValue === 'not-set'
+    || isCategoryEnabled(categoryPreferences, categoryIdForPersonGroup(categoryValue as PersonPickerGroupId));
+  const availableCategoryOptions = categoryOptions.filter(option =>
+    option.value === 'not-set'
+    || isCategoryEnabled(categoryPreferences, categoryIdForPersonGroup(option.value as PersonPickerGroupId))
+  );
   const currentCadence = connectionCadences.find(value => value === draft.connectionCadence) ?? null;
   const avatarPerson = {
     id: personId,
@@ -253,8 +262,8 @@ export function PersonDetailsEditor({
                 <StyledSelect
                   id={`person-details-category-${personId}`}
                   label="Category"
-                  options={categoryOptions}
-                  value={categoryValue}
+                  options={availableCategoryOptions}
+                  value={categoryIsAvailable ? categoryValue : 'not-set'}
                   onChange={changeCategory}
                   describedBy={errors.categoryIds ? 'person-details-error-categoryIds' : undefined}
                   invalid={Boolean(errors.categoryIds)}

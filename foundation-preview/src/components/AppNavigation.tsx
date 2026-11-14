@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import type { GlobalSearchResult, GlobalSearchSelection } from '../domain/global-search.ts';
 import { areas } from '../domain/preview-data.ts';
+import { useAvailableCategories } from './CategoryAvailabilityContext.tsx';
 import { AreaIcon } from './AreaIcon.tsx';
 
 export type Destination = 'today' | 'focus' | 'people' | 'more' | (typeof areas)[number]['id'];
@@ -39,6 +40,7 @@ export function AppNavigation({
   onTextSizeChange
 }: AppNavigationProps) {
   const [activeResultIndex, setActiveResultIndex] = useState(-1);
+  const availableCategories = useAvailableCategories();
   const [expandedState, setExpandedState] = useState<{
     query: string;
     groupIds: ReadonlySet<string>;
@@ -269,7 +271,7 @@ export function AppNavigation({
         <div className="nav-row nav-row-areas">
           <span className="nav-row-label">Areas</span>
           <nav className="areanav" aria-label="Areas">
-            {areas.map(area => (
+            {availableCategories.map(area => (
               <button
                 key={area.id}
                 type="button"

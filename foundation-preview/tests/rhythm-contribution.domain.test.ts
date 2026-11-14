@@ -4,6 +4,8 @@ import {
   type RhythmPreview
 } from '../src/domain/preview-data.ts';
 import { selectRhythmContribution } from '../src/domain/rhythm-contribution.ts';
+import { defaultCategoryPreferences } from '../src/domain/category-availability.ts';
+import { selectAvailableCategoryIds } from '../src/domain/category-availability.ts';
 import type { RhythmScoreSelection } from '../src/domain/rhythm-scoring.ts';
 
 const evidence = {
@@ -146,5 +148,36 @@ describe('Rhythm contribution selection', () => {
     }]);
     expect(contribution.categories).toEqual([]);
     expect(contribution.overallScore).toBeNull();
+  });
+
+  it('excludes disabled category contributions while keeping zero valid in the enabled denominator', () => {
+    const rhythm: RhythmPreview = {
+      id: 'walk',
+      title: 'Take a walk',
+      automation: 'manual',
+      status: 'Due today',
+      primaryFoundationId: 'faith-prayer',
+      secondaryFoundationIds: ['connection'],
+      categoryIds: ['faith', 'marriage']
+    };
+    const preferences = { ...defaultCategoryPreferences, faith: false, health: false };
+    const contribution = selectRhythmContribution({
+      rhythm,
+      foundations: foundationCatalogue,
+      relatedRhythms: [rhythm],
+      rhythmScores: new Map([[rhythm.id, scored(80, 60)]]),
+      archivedRhythmIds: [],
+      categoryHealthScores: new Map([
+        ['faith', 100],
+        ['marriage', 0],
+        ['health', 90]
+      ]),
+      rhythmHealthScore: 75,
+      availableCategoryIds: selectAvailableCategoryIds(preferences)
+    });
+
+    expect(contribution.categories.map(item => item.id)).toEqual(['marriage']);
+    expect(contribution.foundations.map(item => item.id)).toEqual(['connection']);
+    expect(contribution.overallScore).toBe(0);
   });
 });

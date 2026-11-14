@@ -45,6 +45,8 @@ import {
   foundationRequirementMessage,
   missingRequiredFoundationCategories
 } from './foundation-rhythm-associations.ts';
+import { isCategoryEnabled, selectCategoryAssociationsForValidation } from './category-availability.ts';
+import type { CategoryPreferences } from './category-availability.ts';
 import { isValidSuggestionSourceId } from './category-rhythms.ts';
 
 export const rhythmCadences = [
@@ -538,15 +540,42 @@ export function saveRhythmDraft(
     earliestDatedCompletionDate?: string;
   },
   foundations: readonly FoundationPreview[] = foundationCatalogue,
-  options: { suggestionSourceId?: string; timeOptions?: readonly RhythmTimeOption[] } = {},
+  options: {
+    suggestionSourceId?: string;
+    timeOptions?: readonly RhythmTimeOption[];
+    categoryPreferences?: CategoryPreferences;
+  } = {},
   knownPersonIds?: readonly PersonId[]
 ): { savedRhythms?: SavedRhythm[]; errors: RhythmDraftErrors } {
   const timeOptions = options.timeOptions ?? rhythmTimeOptions;
   const requiresSchedule = mode === 'create'
     || mode === 'edit' && draft.originalSchedule === undefined && draft.schedule === undefined;
-  const validationDraft = requiresSchedule && !draft.scheduleEditing
+  const scheduledDraft = requiresSchedule && !draft.scheduleEditing
     ? { ...draft, scheduleEditing: true }
     : draft;
+  const validationAssociations = options.categoryPreferences
+    ? selectCategoryAssociationsForValidation(
+        options.categoryPreferences,
+        scheduledDraft.categoryIds,
+        [
+          ...(scheduledDraft.primaryFoundationId ? [scheduledDraft.primaryFoundationId] : []),
+          ...(scheduledDraft.secondaryFoundationIds ?? [])
+        ],
+        foundations
+      )
+    : null;
+  const validationDraft: RhythmDraft = validationAssociations
+    ? {
+        ...scheduledDraft,
+        categoryIds: validationAssociations.categoryIds as CategoryId[],
+        primaryFoundationId: validationAssociations.foundationIds[0] ?? null,
+        secondaryFoundationIds: validationAssociations.foundationIds.slice(1)
+      }
+    : scheduledDraft;
+  if (options.categoryPreferences && !isCategoryEnabled(options.categoryPreferences, 'health')) {
+    delete validationDraft.healthLogCapability;
+    delete validationDraft.healthRunTarget;
+  }
   const errors = validateRhythmDraft(validationDraft, foundations, knownPersonIds, timeOptions);
   const hasSavedRecord = savedRhythms.some(rhythm => rhythm.id === id);
   if (mode === 'create') {

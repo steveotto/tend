@@ -7,6 +7,7 @@ import type { SavedRhythm } from './rhythm-editor.ts';
 import { createCardioData } from './cardio.ts';
 import { createFlexibilityData } from './flexibility.ts';
 import { createFriendshipData } from './friendships.ts';
+import { defaultCategoryPreferences } from './category-availability.ts';
 
 export const PROPOSED_PREVIEW_SCHEMA_VERSION = PREVIEW_SCHEMA_VERSION;
 
@@ -32,7 +33,7 @@ export type PreviewV4MigrationResult =
   | {
       valid: true;
       envelope: PreviewEnvelope;
-      sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42;
+      sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43;
     }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
@@ -61,6 +62,7 @@ export function migratePreviewToProposedV4(raw: string, currentDate: string): Pr
     || parsed.sourceSchemaVersion === 39
     || parsed.sourceSchemaVersion === 40
     || parsed.sourceSchemaVersion === 41
+    || parsed.sourceSchemaVersion === 42
     || parsed.sourceSchemaVersion === PREVIEW_SCHEMA_VERSION) {
     return { valid: true, envelope: parsed.envelope, sourceSchemaVersion: parsed.sourceSchemaVersion };
   }
@@ -131,6 +133,7 @@ export function migratePreviewToProposedV4(raw: string, currentDate: string): Pr
         timeBlocks: createDefaultTimeBlockSettings(),
         showTended: false,
         showCalendarOnToday: true,
+        categoryPreferences: { ...defaultCategoryPreferences },
         todayView: 'now',
         textSize: 'small',
         calendarSources: parsed.envelope.data.calendarSources

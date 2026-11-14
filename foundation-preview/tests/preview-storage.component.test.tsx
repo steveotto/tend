@@ -20,6 +20,7 @@ import { createFlexibilityData } from '../src/domain/flexibility.ts';
 import { createFriendshipData } from '../src/domain/friendships.ts';
 import { createPersonPickerGroups, createSamplePeople, setPersonGroupMembership } from '../src/domain/preview-data.ts';
 import { createDefaultTimeBlockSettings } from '../src/domain/time-blocks.ts';
+import { defaultCategoryPreferences } from '../src/domain/category-availability.ts';
 import type { StrengthSavedWorkout } from '../src/domain/strength.ts';
 import {
   browserPreviewStorage,
@@ -55,6 +56,7 @@ import {
   loadV34RecoveryCopy,
   loadV40RecoveryCopy,
   loadV41RecoveryCopy,
+  loadV42RecoveryCopy,
   loadV39RecoveryCopy,
   PREVIEW_V19_RECOVERY_KEY,
   PREVIEW_RAW_RECOVERY_KEY,
@@ -92,6 +94,7 @@ import {
   PREVIEW_V39_RECOVERY_KEY,
   PREVIEW_V40_RECOVERY_KEY,
   PREVIEW_V41_RECOVERY_KEY,
+  PREVIEW_V42_RECOVERY_KEY,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -723,6 +726,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     }, loaded.raw, {
       currentDate: '2026-10-31'
     });
+
     expect(result.kind).toBe('saved');
     expect(values.get(PREVIEW_V41_RECOVERY_KEY)).toBe(raw);
     expect(loadV41RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
@@ -730,6 +734,37 @@ describe('synthetic preview storage adapter and envelope', () => {
       valid: true,
       sourceSchemaVersion: PREVIEW_SCHEMA_VERSION,
       envelope: { data: { showCalendarOnToday: false } }
+    });
+
+  });
+
+  it('defaults categories for schema v42 and preserves its exact recovery copy before saving preferences', () => {
+    const priorData = createSamplePreviewData();
+    const priorEnvelope = {
+      ...createPreviewEnvelope(priorData),
+      schemaVersion: 42,
+      data: { ...priorData } as Record<string, unknown>
+    };
+    delete priorEnvelope.data.categoryPreferences;
+    const raw = ` \n${JSON.stringify(priorEnvelope)}\n`;
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-10-31');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.categoryPreferences).toEqual(defaultCategoryPreferences);
+
+    const categoryPreferences = { ...defaultCategoryPreferences, faith: false };
+    const result = writePreview(storage, { ...loaded.data, categoryPreferences }, loaded.raw, {
+      currentDate: '2026-10-31'
+    });
+    expect(result.kind).toBe('saved');
+    expect(values.get(PREVIEW_V42_RECOVERY_KEY)).toBe(raw);
+    expect(loadV42RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+    expect(parsePreviewBackup(values.get(PREVIEW_STORAGE_KEY) ?? '', '2026-10-31')).toMatchObject({
+      valid: true,
+      sourceSchemaVersion: PREVIEW_SCHEMA_VERSION,
+      envelope: { data: { categoryPreferences } }
     });
   });
 
@@ -1619,6 +1654,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       timeBlocks: createDefaultTimeBlockSettings(),
       showTended: false,
       showCalendarOnToday: true,
+      categoryPreferences: { ...defaultCategoryPreferences },
       todayView: 'now' as const,
       textSize: 'small' as const,
       calendarSources: []
@@ -1686,7 +1722,8 @@ describe('synthetic preview storage adapter and envelope', () => {
       todayView: 'now',
       textSize: 'small',
       calendarSources: [],
-      showCalendarOnToday: true
+      showCalendarOnToday: true,
+      categoryPreferences: defaultCategoryPreferences
     });
   });
 

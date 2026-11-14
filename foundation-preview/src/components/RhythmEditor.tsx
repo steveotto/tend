@@ -7,7 +7,7 @@ import {
   syntheticPeople,
   syntheticPersonPickerGroups
 } from '../domain/preview-data.ts';
-import type { FoundationPreview, PersonId, PersonPickerGroup, PersonPreview } from '../domain/preview-data.ts';
+import type { CategoryId, FoundationPreview, PersonId, PersonPickerGroup, PersonPreview } from '../domain/preview-data.ts';
 import type { RhythmPreview } from '../domain/preview-data.ts';
 import type { StrengthMode, StrengthSavedWorkout } from '../domain/strength.ts';
 import {
@@ -40,8 +40,33 @@ import { AreaIcon } from './AreaIcon.tsx';
 import { MarriageIcon } from './MarriageIcon.tsx';
 import { PeopleAssociationRow, PeopleBadgeSelectionPicker } from './PeopleAssociationControls.tsx';
 import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
+import { useCategoryAvailability } from './CategoryAvailabilityContext.tsx';
+import {
+  isCategoryEnabled,
+  selectAvailableCategories,
+  selectAvailableCategoryIds,
+  selectCategoryAssociationsForValidation
+} from '../domain/category-availability.ts';
 import { RhythmFoundationBadges } from './RhythmFoundationBadges.tsx';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
+
+function mergePickerSelection(
+  existingIds: readonly string[],
+  selectedIds: readonly string[],
+  isAvailable: (id: string) => boolean
+): string[] {
+  const selectedIdSet = new Set(selectedIds);
+  const remainingSelectedIds = new Set(selectedIds.filter(isAvailable));
+  const mergedIds = existingIds.flatMap(id => {
+    if (!isAvailable(id)) return selectedIdSet.has(id) ? [id] : [];
+    if (!remainingSelectedIds.delete(id)) return [];
+    return [id];
+  });
+  for (const id of selectedIds) {
+    if (isAvailable(id) && remainingSelectedIds.delete(id)) mergedIds.push(id);
+  }
+  return mergedIds;
+}
 
 function emptyDraft(): RhythmDraft {
   return {
@@ -166,6 +191,9 @@ export function RhythmEditor({
   onArchive,
   onClose
 }: RhythmEditorProps) {
+  const categoryPreferences = useCategoryAvailability();
+  const availableCategories = selectAvailableCategories(categoryPreferences);
+  const availableCategoryIds = selectAvailableCategoryIds(categoryPreferences);
   const timeOptions = useRhythmTimeOptions();
   const [draft, setDraft] = useState<RhythmDraft>(() => {
     const openingDraft = initialDraft
@@ -219,6 +247,31 @@ export function RhythmEditor({
   const wasConfirmingArchiveRef = useRef(false);
   const hasPreservedSeasonHistory = (rhythm?.scoring?.scheduleHistory.length ?? 0) > 1;
 
+  function validateDraftForAvailableCategories(candidate: RhythmDraft) {
+    const associations = selectCategoryAssociationsForValidation(
+      categoryPreferences,
+      candidate.categoryIds,
+      foundationRhythmIds(candidate),
+      foundationCatalogue
+    );
+    const validationDraft: RhythmDraft = {
+      ...candidate,
+      categoryIds: associations.categoryIds as CategoryId[],
+      primaryFoundationId: associations.foundationIds[0] ?? null,
+      secondaryFoundationIds: associations.foundationIds.slice(1)
+    };
+    if (!isCategoryEnabled(categoryPreferences, 'health')) {
+      delete validationDraft.healthLogCapability;
+      delete validationDraft.healthRunTarget;
+    }
+    return validateRhythmDraft(
+      validationDraft,
+      foundationCatalogue,
+      people.map(person => person.id),
+      timeOptions
+    );
+  }
+
   useLayoutEffect(() => {
     if (activePicker === null && restoreFocusToPickerOpenerRef.current) {
       const scrollRegion = rhythmEditorScrollRegion();
@@ -259,12 +312,7 @@ export function RhythmEditor({
   function updateFitnessActivity(value: 'workout' | 'cardio' | 'weight' | 'flexibility') {
     const nextDraft = updateRhythmDraftFitnessActivity(draft, value);
     if (value !== 'cardio') nextDraft.healthRunTarget = null;
-    const nextErrors = validateRhythmDraft(
-      nextDraft,
-      allFoundations,
-      people.map(person => person.id),
-      timeOptions
-    );
+    const nextErrors = validateDraftForAvailableCategories(nextDraft);
     setDraft(nextDraft);
     setErrors(previous => {
       const next = { ...previous };
@@ -292,23 +340,31 @@ export function RhythmEditor({
     restoreFocusToPickerOpenerRef.current = true;
     if (apply) {
       if (activePicker === 'categories') {
+        const categoryIds = mergePickerSelection(
+          draft.categoryIds,
+          pickerSelection,
+          id => availableCategoryIds.has(id as CategoryId)
+        );
+        const foundationIds = mergePickerSelection(
+          foundationRhythmIds(draft),
+          pickerFoundationSelection,
+          id => {
+            const ownerCategoryId = foundationCategoryId(id, allFoundations);
+            return ownerCategoryId !== undefined && availableCategoryIds.has(ownerCategoryId);
+          }
+        );
         const categoryDraft = {
           ...draft,
-          categoryIds: pickerSelection as RhythmDraft['categoryIds'],
-          primaryFoundationId: pickerFoundationSelection[0] ?? null,
-          secondaryFoundationIds: pickerFoundationSelection.slice(1)
+          categoryIds: categoryIds as RhythmDraft['categoryIds'],
+          primaryFoundationId: foundationIds[0] ?? null,
+          secondaryFoundationIds: foundationIds.slice(1)
         };
         const nextDraft = !draft.categoryIds.includes('health')
           && categoryDraft.categoryIds.includes('health')
           && categoryDraft.healthLogCapability == null
           ? updateRhythmDraftFitnessActivity(categoryDraft, 'workout')
           : categoryDraft;
-        const nextCategoryErrors = validateRhythmDraft(
-          nextDraft,
-          undefined,
-          people.map(person => person.id),
-          timeOptions
-        );
+        const nextCategoryErrors = validateDraftForAvailableCategories(nextDraft);
         setDraft(nextDraft);
         setErrors(previous => {
           if (!previous.categoryIds && !previous.foundationIds) return previous;
@@ -410,7 +466,7 @@ export function RhythmEditor({
       : draft.schedule !== undefined;
     if (rhythm && (hasDatedCompletionHistory || hasPreservedSeasonHistory)
       && scheduleChanged && draft.schedule) {
-      const nextErrors = validateRhythmDraft(draft, undefined, people.map(person => person.id), timeOptions);
+      const nextErrors = validateDraftForAvailableCategories(draft);
       if (draft.healthLogCapability === 'workout'
         && draft.healthWorkoutMode === 'specific'
         && !savedWorkouts.some(workout => workout.id === draft.healthWorkoutId)) {
@@ -520,7 +576,7 @@ export function RhythmEditor({
       : rhythm?.timeLabel ?? 'Anytime';
   const showScheduleTimeComparison = originalTimeLabel !== draft.timeLabel;
   const scheduleEffectiveDate = asOfDate ?? localDateString(new Date());
-  const selectedCategories = areas
+  const selectedCategories = availableCategories
     .filter(area => draft.categoryIds.includes(area.id));
   const selectedPeople = people
     .filter(person => draft.personIds.includes(person.id));
@@ -536,9 +592,15 @@ export function RhythmEditor({
     ...(draft.secondaryFoundationIds ?? [])
   ];
   const allFoundations = foundationCatalogue;
-  const missingRequiredCategories = missingRequiredFoundationCategories(
+  const validationAssociations = selectCategoryAssociationsForValidation(
+    categoryPreferences,
     draft.categoryIds,
     selectedFoundationIds,
+    allFoundations
+  );
+  const missingRequiredCategories = missingRequiredFoundationCategories(
+    validationAssociations.categoryIds,
+    validationAssociations.foundationIds,
     allFoundations
   );
   const categoryValidationField = errors.categoryIds ? 'categoryIds' : 'foundationIds';
@@ -559,7 +621,7 @@ export function RhythmEditor({
     primaryFoundationId: draft.primaryFoundationId ?? null,
     secondaryFoundationIds: draft.secondaryFoundationIds ?? []
   };
-  const selectedFoundationGroups = areas.map(area => {
+  const selectedFoundationGroups = availableCategories.map(area => {
     const categoryFoundations = allFoundations.filter(foundation =>
       foundationCategoryId(foundation.id, allFoundations) === area.id
         && selectedFoundationIds.includes(foundation.id)
@@ -1181,7 +1243,7 @@ export function RhythmEditor({
           <BadgeSelectionPicker
             title="Choose categories"
             description="Choose categories, then their Practices or Foundations."
-            items={areas}
+            items={availableCategories}
             selectedIds={pickerSelection}
             getLabel={area => area.label}
             renderBadge={renderCategoryBadge}

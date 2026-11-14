@@ -2,7 +2,6 @@ import { createPortal } from 'react-dom';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react';
 import {
-  areas,
   foundationCatalogue,
   foundationTerminologyForCategory,
   type FoundationPreview,
@@ -11,6 +10,7 @@ import {
 import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
 import type { RhythmCategoryId } from '../domain/rhythm-editor.ts';
 import type { Destination } from './AppNavigation.tsx';
+import { useAvailableCategories } from './CategoryAvailabilityContext.tsx';
 import { AreaIcon } from './AreaIcon.tsx';
 
 type RhythmCategoryBadgesProps = {
@@ -167,12 +167,13 @@ export function RhythmCategoryBadges({
   foundations = foundationCatalogue,
   onOpenCategory
 }: RhythmCategoryBadgesProps) {
+  const availableCategories = useAvailableCategories();
   const categoryIds = rhythm.categoryIds?.length
     ? rhythm.categoryIds
     : foundationRhythmIds(rhythm)
         .map(id => foundations.find(foundation => foundation.id === id)?.categoryId)
         .filter((id): id is RhythmCategoryId => Boolean(id));
-  const categories = areas.filter(area => categoryIds.includes(area.id as RhythmCategoryId));
+  const categories = availableCategories.filter(area => categoryIds.includes(area.id as RhythmCategoryId));
   const linkedFoundationIds = foundationRhythmIds(rhythm);
 
   if (categories.length === 0) return null;

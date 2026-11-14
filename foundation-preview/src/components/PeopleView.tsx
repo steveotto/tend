@@ -15,6 +15,8 @@ import {
 } from '../domain/person-details.ts';
 import type { PersonDetails } from '../domain/person-details.ts';
 import { PersonCreationDialog } from './PersonCreationDialog.tsx';
+import { useAvailablePersonGroups, useCategoryAvailability } from './CategoryAvailabilityContext.tsx';
+import { categoryIdForPersonGroup, isCategoryEnabled } from '../domain/category-availability.ts';
 
 const classificationFilters: readonly { id: PersonPickerGroupId | 'all'; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -43,14 +45,24 @@ export function PeopleView({
   onCreatePerson?: (person: PersonPreview, groupIds: readonly PersonPickerGroupId[]) => string | null;
 }) {
   const [selectedFilter, setSelectedFilter] = useState<PersonPickerGroupId | 'all'>('all');
+  const categoryPreferences = useCategoryAvailability();
+  const availableGroups = useAvailablePersonGroups(groups);
+  const availableFilters = classificationFilters.filter(filter =>
+    filter.id === 'all'
+    || isCategoryEnabled(categoryPreferences, categoryIdForPersonGroup(filter.id))
+  );
   const [addingPerson, setAddingPerson] = useState(false);
   const addPersonButton = useRef<HTMLButtonElement>(null);
   const wasAddingPerson = useRef(false);
   const visiblePeople = selectedFilter === 'all'
     ? people
     : people.filter(person =>
-        groups.some(group => group.id === selectedFilter && group.memberIds.includes(person.id))
+        availableGroups.some(group => group.id === selectedFilter && group.memberIds.includes(person.id))
       );
+
+  useEffect(() => {
+    if (!availableFilters.some(filter => filter.id === selectedFilter)) setSelectedFilter('all');
+  }, [availableFilters, selectedFilter]);
 
   useEffect(() => {
     if (addingPerson) {
@@ -79,7 +91,7 @@ export function PeopleView({
         )}
       </header>
       <div className="people-view__filters" role="group" aria-label="Filter People by classification">
-        {classificationFilters.map(filter => (
+        {availableFilters.map(filter => (
           <button
             key={filter.id}
             type="button"
@@ -104,7 +116,7 @@ export function PeopleView({
             const birthday = details?.birthday
               ? birthdayCardSummary(details.birthday, today) ?? undefined
               : undefined;
-            const personClassifications = groups.filter(group => group.memberIds.includes(person.id));
+            const personClassifications = availableGroups.filter(group => group.memberIds.includes(person.id));
             const tone = resolvePersonCategory(personClassifications.map(group => group.id)) ?? undefined;
             return (
               <PeopleCard
