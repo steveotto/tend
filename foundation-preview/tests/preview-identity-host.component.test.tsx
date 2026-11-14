@@ -406,6 +406,7 @@ describe('PreviewIdentityHost', () => {
     );
 
     await screen.findByRole('button', { name: 'Sign out' });
+    expect(storage.getItem(accountStorageKey)).toBe(originalRaw);
     await user.click(screen.getByRole('tab', { name: 'All today' }));
     expandAllTodayGroups();
     await screen.findByText('Synthetic daily prayer');

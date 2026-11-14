@@ -54,6 +54,7 @@ import {
   loadV33RecoveryCopy,
   loadV34RecoveryCopy,
   loadV40RecoveryCopy,
+  loadV41RecoveryCopy,
   loadV39RecoveryCopy,
   PREVIEW_V19_RECOVERY_KEY,
   PREVIEW_RAW_RECOVERY_KEY,
@@ -90,6 +91,7 @@ import {
   PREVIEW_V34_RECOVERY_KEY,
   PREVIEW_V39_RECOVERY_KEY,
   PREVIEW_V40_RECOVERY_KEY,
+  PREVIEW_V41_RECOVERY_KEY,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -699,7 +701,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     });
   });
 
-  it('defaults the Today calendar preference on while migrating schema v41', () => {
+  it('defaults the Today calendar preference and preserves schema v41 bytes before saving', () => {
     const priorData = createSamplePreviewData();
     const priorEnvelope = {
       ...createPreviewEnvelope(priorData),
@@ -707,20 +709,26 @@ describe('synthetic preview storage adapter and envelope', () => {
       data: { ...priorData } as Record<string, unknown>
     };
     delete priorEnvelope.data.showCalendarOnToday;
+    const raw = ` \n${JSON.stringify(priorEnvelope)}\n`;
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
 
-    const parsed = parsePreviewBackup(JSON.stringify(priorEnvelope), '2026-10-31');
-    expect(parsed.valid).toBe(true);
-    if (!parsed.valid) return;
-    expect(parsed.sourceSchemaVersion).toBe(41);
-    expect(parsed.envelope.data.showCalendarOnToday).toBe(true);
+    const loaded = loadPreview(storage, '2026-10-31');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.showCalendarOnToday).toBe(true);
 
-    const hidden = createPreviewEnvelope({
-      ...parsed.envelope.data,
+    const result = writePreview(storage, {
+      ...loaded.data,
       showCalendarOnToday: false
+    }, loaded.raw, {
+      currentDate: '2026-10-31'
     });
-    expect(hidden.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
-    expect(parsePreviewBackup(JSON.stringify(hidden), '2026-10-31')).toMatchObject({
+    expect(result.kind).toBe('saved');
+    expect(values.get(PREVIEW_V41_RECOVERY_KEY)).toBe(raw);
+    expect(loadV41RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+    expect(parsePreviewBackup(values.get(PREVIEW_STORAGE_KEY) ?? '', '2026-10-31')).toMatchObject({
       valid: true,
+      sourceSchemaVersion: PREVIEW_SCHEMA_VERSION,
       envelope: { data: { showCalendarOnToday: false } }
     });
   });
