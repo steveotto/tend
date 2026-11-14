@@ -5262,4 +5262,28 @@ The Cloudflare clean-clone failure was caused by `useCurrentInstant.ts` being im
 
 To avoid the same false-positive, checks were rerun from a temporary `git archive HEAD` snapshot of the correction commit, with only `foundation-preview/node_modules` linked from the canonical checkout. Semantic typecheck passed; reader tests **7/7**; component/domain tests **1,391/1,391 across 97 files** with two workers; legacy tests **176/176**; production browser CSS contract passed; Pages build passed; Pages artifact checks **8/8**. The production build reports only its existing large-chunk advisory. The snapshot was removed after validation.
 
-The correction has not yet been pushed: PR #80 still reports the earlier `ad0bacf` head and failed Cloudflare check, so the clean-clone fix has no GitHub or production verification yet. No merge or deployment is claimed.
+At validation time the correction had not yet been pushed: PR #80 still reported the earlier `ad0bacf` head and failed Cloudflare check, so the clean-clone fix then had no GitHub or production verification. It was subsequently pushed, passed the Cloudflare check, and merged as recorded below.
+
+## Initial Category and Calendar release attempt (2026-11-14)
+
+Approved release commit `ad0bacf6365ecb8a36496aac8fc9e150cbc9edad` was initially pushed to the existing `release/today-agenda-prayer-not-yet` branch and PR [#80](https://github.com/steveotto/tend/pull/80) targeting `main`. Before the dependency correction, the PR's Cloudflare Pages check had completed with **Build failed** for deployment `0871d894-0d99-4bcf-8ec7-32b8408bb1d2` (commit `ad0bacf`). GitHub reported no annotations or detailed build output. The failure was resolved and the PR was subsequently merged; see the production-release section below.
+
+All local release checks passed: typecheck; reader **7/7**; component/domain **1,398/1,398 across 97 files** with two Vitest workers; legacy **176/176**; production browser CSS; Pages build; Pages artifact **8/8**; staged and unstaged diff checks. The production build retains its non-fatal large-JavaScript-chunk advisory.
+
+Cloudflare’s dashboard returned “Rate Limit Exceeded” in this environment. Wrangler’s read-only deployment listing also could not authenticate because no `CLOUDFLARE_API_TOKEN` was configured; no token was requested or added. The build issue was later identified as the missing tracked `useCurrentInstant.ts` dependency, fixed in the correction commit, then verified and released. No personal calendar feed, account data, auth, or sync settings were accessed or changed.
+
+## Category release dependency correction (2026-11-14)
+
+The Cloudflare clean-clone failure was caused by `useCurrentInstant.ts` being imported by the committed `App.tsx` and `RhythmHistoryView.tsx` but absent from the initial release commit; the shared hook existed only as an untracked local file during the original workspace checks. Correction commit `26454d63c0ac816988cd18a59068b5b15fb5536c` adds that existing hook unchanged.
+
+To avoid the same false-positive, checks were rerun from a temporary `git archive HEAD` snapshot of the correction commit, with only `foundation-preview/node_modules` linked from the canonical checkout. Semantic typecheck passed; reader tests **7/7**; component/domain tests **1,391/1,391 across 97 files** with two workers; legacy tests **176/176**; production browser CSS contract passed; Pages build passed; Pages artifact checks **8/8**. The production build reports only its existing large-chunk advisory. The snapshot was removed after validation.
+
+At validation time the correction had not yet been pushed: PR #80 still reported the earlier `ad0bacf` head and failed Cloudflare check, so the clean-clone fix then had no GitHub or production verification. It was subsequently pushed, passed the Cloudflare check, and merged as recorded below.
+
+## Category and Calendar production release (2026-11-14)
+
+PR [#80](https://github.com/steveotto/tend/pull/80) merged as `10ba71dfe4c762a9e2cfa6dd4b3c0f6eccfc38c3`; the release branch head was `8555afc5eea17031866af0afe70e31e8b06072ea`. The Cloudflare Pages check passed for the exact merge commit with deployment identifier `56ec05cf-293a-44fb-b157-d23ac371755a` in project `tend-beta`. Separately, GitHub Pages workflow run `43643812326` succeeded for that SHA and created deployment record `7794256604`.
+
+Production `https://tendwhatmatters.com/` and `/app-preview` returned HTTP 200; `/app-preview.html` redirects with HTTP 308 to `/app-preview`. Both app entries served the same JavaScript and CSS assets successfully. The live CSS `/assets/main-CZiDv7KL.css` (SHA-256 `df36405441bf93c16145f42e0539739054eb73d2e211f77c7742984c44e4afaa`) exactly matched the clean build from merged `main`. The live JavaScript `/assets/main-DaV6CIki.js` (SHA-256 `cb71adb9628a7ef58cb328bc5af78c92c25d4fa29c83b7acb5409769a67f869a`) differed byte-for-byte from that local build (`main-BSHtRdn-.js`, SHA-256 `db5c6968bae2ff94bf90037bdd4fb7f4605b010a0d4caa83c29501ccc9874b62`), but the served bundle contains the category-settings explanation and Calendar markers.
+
+Committed-snapshot verification on the release candidate passed: semantic typecheck; reader **7/7**; component/domain **1,391/1,391 across 97 files**; legacy **176/176**; production browser CSS; Pages build; Pages artifact **8/8**. Automated presentation coverage includes 375/390/430px phone widths and Small/Medium/Large text. The live `/app-preview` browser presented a sign-in screen; no account was accessed, so authenticated production Settings and category behavior were not manually inspected. Synthetic behavior is covered by the local tests. The canonical synthetic preview remains open at `http://127.0.0.1:5303/app-preview.html`.
