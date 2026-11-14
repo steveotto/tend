@@ -304,7 +304,7 @@ async function main() {
               const placeholderTileStyle = getComputedStyle(placeholderTile);
               const longPlaceholder = placeholder.cloneNode(true) as HTMLElement;
               longPlaceholder.querySelector('.calendar-event__loading-label')!.textContent =
-                'Calendar events could not be loaded. The local calendar reader could not be reached. Retry.';
+                'Calendar events could not be loaded. The browser could not connect to the Calendar reader. Code: reader-network-failed. Retry.';
               calendarContent.append(longPlaceholder);
               const longPlaceholderHeight = longPlaceholder.getBoundingClientRect().height;
               const tileRect = placeholderTile.getBoundingClientRect();

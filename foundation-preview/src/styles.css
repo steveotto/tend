@@ -2436,6 +2436,13 @@ a:focus-visible {
     color: var(--ink-soft);
   }
 
+  .calendar-feed-diagnostic {
+    color: var(--ink-soft);
+    font-size: calc(.6875rem * var(--app-text-scale, 1));
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
   .calendar-updating {
     margin: 6px 0 0;
     color: var(--ink-soft);

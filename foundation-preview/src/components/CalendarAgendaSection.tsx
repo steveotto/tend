@@ -20,6 +20,7 @@ type CalendarReaderState = {
   failures: Array<{
     sourceName: string;
     code: CalendarReadFailureCode;
+    httpStatus?: number;
     upstreamStatus?: number;
     feedBytes?: number;
     limitBytes?: number;
@@ -29,6 +30,10 @@ type CalendarReaderState = {
 
 type CalendarReadFailureCode =
   | 'reader-unavailable'
+  | 'reader-network-failed'
+  | 'reader-timeout'
+  | 'reader-response-invalid'
+  | 'reader-http-failed'
   | 'invalid-request'
   | 'url-not-allowed'
   | 'redirect-not-allowed'
@@ -47,6 +52,7 @@ type CalendarReadFailureCode =
 class CalendarReadError extends Error {
   constructor(
     readonly code: CalendarReadFailureCode,
+    readonly httpStatus?: number,
     readonly upstreamStatus?: number,
     readonly feedBytes?: number,
     readonly limitBytes?: number
@@ -57,6 +63,10 @@ class CalendarReadError extends Error {
 
 function isCalendarReadFailureCode(value: unknown): value is CalendarReadFailureCode {
   return value === 'reader-unavailable'
+    || value === 'reader-network-failed'
+    || value === 'reader-timeout'
+    || value === 'reader-response-invalid'
+    || value === 'reader-http-failed'
     || value === 'invalid-request'
     || value === 'url-not-allowed'
     || value === 'redirect-not-allowed'
@@ -77,6 +87,14 @@ function failureDescription(code: CalendarReadFailureCode): string {
   switch (code) {
     case 'reader-unavailable':
       return 'The Calendar reader could not be reached.';
+    case 'reader-network-failed':
+      return 'The browser could not connect to the Calendar reader.';
+    case 'reader-timeout':
+      return 'The Calendar reader request timed out.';
+    case 'reader-response-invalid':
+      return 'The Calendar reader returned an invalid response.';
+    case 'reader-http-failed':
+      return 'The Calendar reader returned an unsuccessful response.';
     case 'invalid-request':
       return 'The calendar request was rejected as invalid.';
     case 'url-not-allowed':
@@ -129,68 +147,89 @@ async function loadSource(
   timeZone: string,
   signal: AbortSignal
 ): Promise<{ events: CalendarEvent[]; issueCount: number }> {
-  let response: Response;
+  const requestController = new AbortController();
+  let timedOut = false;
+  const abortForLifecycle = () => requestController.abort();
+  signal.addEventListener('abort', abortForLifecycle, { once: true });
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    requestController.abort();
+  }, 20_000);
   try {
-    response = await fetch('/api/calendar/read', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        source,
-        now,
-        rangeStart: range.start,
-        rangeEnd: range.end,
-        timeZone
-      }),
-      signal
-    });
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') throw error;
-    throw new CalendarReadError('reader-unavailable');
+    let response: Response;
+    try {
+      response = await fetch('/api/calendar/read', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          source,
+          now,
+          rangeStart: range.start,
+          rangeEnd: range.end,
+          timeZone
+        }),
+        signal: requestController.signal
+      });
+    } catch (error) {
+      if (signal.aborted) throw error;
+      throw new CalendarReadError(timedOut ? 'reader-timeout' : 'reader-network-failed');
+    }
+
+    let result: unknown;
+    try {
+      result = await response.json();
+    } catch {
+      if (signal.aborted) throw new DOMException('Calendar request was cancelled.', 'AbortError');
+      throw new CalendarReadError(
+        timedOut ? 'reader-timeout' : 'reader-response-invalid',
+        response.status
+      );
+    }
+    if (!response.ok) {
+      const code = result && typeof result === 'object' && 'code' in result && isCalendarReadFailureCode(result.code)
+        ? result.code
+        : 'reader-http-failed';
+      const upstreamStatus = result && typeof result === 'object' && 'upstreamStatus' in result
+        && typeof result.upstreamStatus === 'number'
+        && Number.isInteger(result.upstreamStatus)
+        && result.upstreamStatus >= 100
+        && result.upstreamStatus <= 599
+        ? result.upstreamStatus
+        : undefined;
+      const feedBytes = result && typeof result === 'object' && 'feedBytes' in result
+        && typeof result.feedBytes === 'number'
+        && Number.isSafeInteger(result.feedBytes)
+        && result.feedBytes >= 0
+        ? result.feedBytes
+        : undefined;
+      const limitBytes = result && typeof result === 'object' && 'limitBytes' in result
+        && typeof result.limitBytes === 'number'
+        && Number.isSafeInteger(result.limitBytes)
+        && result.limitBytes > 0
+        ? result.limitBytes
+        : undefined;
+      throw new CalendarReadError(code, response.status, upstreamStatus, feedBytes, limitBytes);
+    }
+    if (!result
+      || typeof result !== 'object'
+      || !('events' in result)
+      || !Array.isArray(result.events)
+      || !result.events.every(isCalendarEvent)
+      || !('issueCount' in result)
+      || typeof result.issueCount !== 'number'
+      || !Number.isSafeInteger(result.issueCount)
+      || result.issueCount < 0) {
+      throw new CalendarReadError('reader-response-invalid', response.status);
+    }
+    return { events: result.events, issueCount: result.issueCount };
+  } finally {
+    clearTimeout(timeoutId);
+    signal.removeEventListener('abort', abortForLifecycle);
   }
-  let result: unknown;
-  try {
-    result = await response.json();
-  } catch {
-    throw new CalendarReadError('reader-unavailable');
-  }
-  if (!response.ok) {
-    const code = result && typeof result === 'object' && 'code' in result && isCalendarReadFailureCode(result.code)
-      ? result.code
-      : 'feed-retrieval-failed';
-    const upstreamStatus = result && typeof result === 'object' && 'upstreamStatus' in result
-      && typeof result.upstreamStatus === 'number'
-      && Number.isInteger(result.upstreamStatus)
-      && result.upstreamStatus >= 100
-      && result.upstreamStatus <= 599
-      ? result.upstreamStatus
-      : undefined;
-    const feedBytes = result && typeof result === 'object' && 'feedBytes' in result
-      && typeof result.feedBytes === 'number'
-      && Number.isSafeInteger(result.feedBytes)
-      && result.feedBytes >= 0
-      ? result.feedBytes
-      : undefined;
-    const limitBytes = result && typeof result === 'object' && 'limitBytes' in result
-      && typeof result.limitBytes === 'number'
-      && Number.isSafeInteger(result.limitBytes)
-      && result.limitBytes > 0
-      ? result.limitBytes
-      : undefined;
-    throw new CalendarReadError(code, upstreamStatus, feedBytes, limitBytes);
-  }
-  if (!response.ok
-    || !result
-    || typeof result !== 'object'
-    || !('events' in result)
-    || !Array.isArray(result.events)
-    || !result.events.every(isCalendarEvent)
-    || !('issueCount' in result)
-    || typeof result.issueCount !== 'number'
-    || !Number.isSafeInteger(result.issueCount)
-    || result.issueCount < 0) {
-    throw new CalendarReadError('reader-unavailable');
-  }
-  return { events: result.events, issueCount: result.issueCount };
+}
+
+function failureDiagnostic(failure: Pick<CalendarReaderState['failures'][number], 'code' | 'httpStatus'>): string {
+  return `Code: ${failure.code}${failure.httpStatus === undefined ? '' : ` · HTTP ${failure.httpStatus}`}`;
 }
 
 export function CalendarAgendaSection({
@@ -244,6 +283,7 @@ export function CalendarAgendaSection({
           error: error instanceof CalendarReadError
             ? {
               code: error.code,
+              httpStatus: error.httpStatus,
               upstreamStatus: error.upstreamStatus,
               feedBytes: error.feedBytes,
               limitBytes: error.limitBytes
@@ -258,6 +298,7 @@ export function CalendarAgendaSection({
         .map(result => ({
           sourceName: result.source.name,
           code: result.error?.code ?? 'reader-unavailable',
+          ...(result.error?.httpStatus !== undefined ? { httpStatus: result.error.httpStatus } : {}),
           ...(result.error?.upstreamStatus ? { upstreamStatus: result.error.upstreamStatus } : {}),
           ...(result.error?.feedBytes !== undefined ? { feedBytes: result.error.feedBytes } : {}),
           ...(result.error?.limitBytes !== undefined ? { limitBytes: result.error.limitBytes } : {})
@@ -374,6 +415,11 @@ export function CalendarAgendaSection({
               {statusContent.description && (
                 <span className="calendar-event__date-time">{statusContent.description}</span>
               )}
+              {state.kind === 'error' && state.failures[0] && (
+                <span className="calendar-feed-diagnostic">
+                  {failureDiagnostic(state.failures[0])}
+                </span>
+              )}
               {state.kind === 'error' && (
                 <button
                   type="button"
@@ -409,6 +455,11 @@ export function CalendarAgendaSection({
             <p className="calendar-feed-failure calendar-feed-failure--partial">
               Some calendars could not be loaded.
             </p>
+            {state.failures[0] && (
+              <span className="calendar-feed-diagnostic">
+                {failureDiagnostic(state.failures[0])}
+              </span>
+            )}
             <button
               type="button"
               className="btn mini ghost calendar-retry-button"
