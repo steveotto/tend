@@ -24,6 +24,15 @@ describe('next scheduled occurrence selection', () => {
     expect(rhythmLastActivityLabel({ completionHistory: [] }, '2026-10-25')).toBe('Never');
   });
 
+  it('keeps future completions out of history until their effective date, then restores the date label', () => {
+    const rhythm = {
+      completionHistory: [{ id: 'later', effectiveDate: '2026-10-26' }]
+    };
+    expect(rhythmLastActivityLabel(rhythm, '2026-10-25')).toBe('Never');
+    expect(rhythmLastActivityLabel(rhythm, '2026-10-26')).toBe('Today');
+    expect(rhythmLastActivityLabel(rhythm, '2026-10-27')).toBe('Oct 26');
+  });
+
   it('uses the quarterly pattern to label the actual next date and today when due', () => {
     const quarterlySchedule: RhythmSchedule = {
       frequency: 'quarterly',

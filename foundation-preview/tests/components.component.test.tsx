@@ -21,6 +21,7 @@ import {
   financeFoundation,
   areas,
   goals,
+  rhythmLastActivityLabel,
   marriageExampleFixtures,
   marriageFoundation,
   marriageFoundations,
@@ -35,6 +36,34 @@ import {
 afterEach(cleanup);
 
 describe('shared preview components', () => {
+  it('shows no-history wording before and after the due window and preserves qualifying dates', () => {
+    const noHistory = { completionHistory: [] };
+    for (const asOfDate of ['2026-10-25', '2026-11-01']) {
+      render(
+        <RhythmMetadata
+          variant="footer"
+          lastTended={rhythmLastActivityLabel(noHistory, asOfDate)}
+        />
+      );
+      const status = document.querySelector('.rhythm-metadata-last-tended .rhythm-metadata-status')!;
+      expect(status.textContent).toBe('Not yet');
+      expect(status.getAttribute('aria-label')).toBe('Not tended yet');
+      cleanup();
+    }
+
+    render(
+      <RhythmMetadata
+        variant="footer"
+        lastTended={rhythmLastActivityLabel({
+          completionHistory: [{ id: 'qualifying-completion', effectiveDate: '2026-10-20' }]
+        }, '2026-10-25')}
+      />
+    );
+    const status = document.querySelector('.rhythm-metadata-last-tended .rhythm-metadata-status')!;
+    expect(status.textContent).toBe('Oct 20');
+    expect(status.getAttribute('aria-label')).toBe('Last tended: Oct 20');
+  });
+
   it('uses the same suggestion reuse view for another Category catalogue', async () => {
     const user = userEvent.setup();
     const onAdd = vi.fn((_event, returnToPicker) => returnToPicker(false));
@@ -581,9 +610,9 @@ describe('shared preview components', () => {
     expect(within(dialog).queryByRole('button', { name: /^Tend/ })).toBeNull();
     expect(within(dialog).queryByRole('button', { name: /^Undo/ })).toBeNull();
     expect(within(dialog).queryByRole('region', { name: /completion history/ })).toBeNull();
-    expect(within(dialog).getByText('Never')).toBeTruthy();
-    expect(within(dialog).getByText('Never').getAttribute('aria-label')).toBe('Last tended: Never');
-    expect(within(dialog).getByText('Never').previousElementSibling?.tagName.toLowerCase()).toBe('svg');
+    expect(within(dialog).getByText('Not yet')).toBeTruthy();
+    expect(within(dialog).getByText('Not yet').getAttribute('aria-label')).toBe('Not tended yet');
+    expect(within(dialog).getByText('Not yet').previousElementSibling?.tagName.toLowerCase()).toBe('svg');
     const footer = dialog.querySelector('.rhythm-metadata-footer')!;
     const scheduleGroup = footer.querySelector('.rhythm-metadata-schedule-group')!;
     const statusGroup = footer.querySelector('.rhythm-metadata-last-tended')!;
@@ -593,7 +622,7 @@ describe('shared preview components', () => {
     expect(scheduleGroup.querySelectorAll(':scope > span')).toHaveLength(2);
     expect(scheduleGroup.textContent).toContain('Daily');
     expect(scheduleGroup.textContent).toContain('Morning');
-    expect(statusGroup.textContent).toContain('Never');
+    expect(statusGroup.textContent).toContain('Not yet');
     expect(statusGroup.querySelector('.rhythm-metadata-status-group')?.children[0]?.tagName.toLowerCase())
       .toBe('svg');
   });
@@ -627,7 +656,7 @@ describe('shared preview components', () => {
       };
       const { rerender } = render(<RhythmDetailsDialog rhythm={quarterly} onClose={() => undefined} />);
       const footer = document.querySelector('.rhythm-metadata-footer') as HTMLElement;
-      expect(within(footer).getByText('Never')).toBeTruthy();
+      expect(within(footer).getByText('Not yet')).toBeTruthy();
       expect(within(footer).queryByText('Next due Jan 1')).toBeNull();
 
       const dailySchedule = { frequency: 'daily' as const };
@@ -644,7 +673,7 @@ describe('shared preview components', () => {
           onClose={() => undefined}
         />
       );
-      expect(within(document.querySelector('.rhythm-metadata-footer') as HTMLElement).getByText('Never')).toBeTruthy();
+      expect(within(document.querySelector('.rhythm-metadata-footer') as HTMLElement).getByText('Not yet')).toBeTruthy();
     } finally {
       vi.useRealTimers();
     }
@@ -667,7 +696,7 @@ describe('shared preview components', () => {
     const statusGroup = statusCluster.querySelector('.rhythm-metadata-status-group')!;
     expect(statusCluster.children[0]).toBe(undo);
     expect(statusCluster.children[1]).toBe(statusGroup);
-    expect(statusGroup.querySelector('.rhythm-metadata-status')?.textContent).toBe('Never');
+    expect(statusGroup.querySelector('.rhythm-metadata-status')?.textContent).toBe('Not yet');
   });
 
   it('uses a compact structured footer label with accessible full details and the shared refresh icon', async () => {

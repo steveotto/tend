@@ -1,5 +1,6 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
+import type { ReactNode } from 'react';
 import {
   areas,
   peopleForRhythm,
@@ -39,6 +40,58 @@ const planTypes: { id: TodayViewId; label: string }[] = [
   { id: 'flexible', label: 'Flexible' },
   { id: 'all-today', label: 'All today' }
 ];
+
+function TodayAgendaRail({ className, children }: { className: string; children: ReactNode }) {
+  const railRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const rail = railRef.current;
+    if (!rail) return;
+
+    const updateEndpoints = () => {
+      const railRect = rail.getBoundingClientRect();
+      const headers = [...rail.querySelectorAll<HTMLElement>(
+        ':scope > .today-plan__agenda-group > .today-timeframe-header'
+      )].filter(header => header.getClientRects().length > 0);
+      rail.dataset.hasRailLine = String(headers.length > 1);
+      if (headers.length < 2) {
+        rail.style.removeProperty('--today-agenda-rail-start');
+        rail.style.removeProperty('--today-agenda-rail-length');
+        return;
+      }
+
+      const firstRect = headers[0]!.getBoundingClientRect();
+      const lastRect = headers.at(-1)!.getBoundingClientRect();
+      const start = firstRect.top + firstRect.height / 2 - railRect.top;
+      const end = lastRect.top + lastRect.height / 2 - railRect.top;
+      rail.style.setProperty('--today-agenda-rail-start', `${start}px`);
+      rail.style.setProperty('--today-agenda-rail-length', `${Math.max(0, end - start)}px`);
+    };
+
+    updateEndpoints();
+    const resizeObserver = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(updateEndpoints);
+    resizeObserver?.observe(rail);
+    rail.querySelectorAll<HTMLElement>('.today-timeframe-header').forEach(header => resizeObserver?.observe(header));
+    const mutationObserver = typeof MutationObserver === 'undefined'
+      ? null
+      : new MutationObserver(updateEndpoints);
+    mutationObserver?.observe(rail, { childList: true, subtree: true });
+    window.addEventListener('resize', updateEndpoints);
+    return () => {
+      resizeObserver?.disconnect();
+      mutationObserver?.disconnect();
+      window.removeEventListener('resize', updateEndpoints);
+    };
+  }, [children]);
+
+  return (
+    <div ref={railRef} className={className} data-has-rail-line="false">
+      {children}
+    </div>
+  );
+}
 
 function timeframeSubtitle(section: TodayPlanSection): string | undefined {
   if (section.category === 'scheduled') return section.range;
@@ -108,7 +161,8 @@ export function TodayView({
     ?? selectTendedRhythmDisplayIds(completedRhythms, satisfiedRhythmIds);
   const timeBlocks = useTimeBlockSettings();
   const [expandedSectionIds, setExpandedSectionIds] = useState<ReadonlySet<string>>(() => new Set());
-  const hasInitializedAllToday = useRef(false);
+  const lastAutoExpandedContext = useRef<string | null>(null);
+  const manuallyToggledSectionIds = useRef(new Set<string>());
   const sectionIdPrefix = useId();
   const eligibleRhythms = useMemo(
     () => rhythms.filter(rhythm => isRhythmEligibleForToday(rhythm, localDate)),
@@ -126,14 +180,27 @@ export function TodayView({
   const currentBlockRange = currentBlockId
     ? todayBlockRange(currentBlockId, timeBlocks)
     : todayFocusContext('now', 'scheduled', evaluationInstant, timeBlocks);
+  const timeframeProgress = (sectionRhythms: readonly RhythmPreview[]) => {
+    const tendedCount = sectionRhythms.filter(rhythm => tendedRhythmIds.has(rhythm.id)).length;
+    return {
+      text: `${tendedCount} of ${sectionRhythms.length}`,
+      accessibleLabel: `${tendedCount} of ${sectionRhythms.length} tended`
+    };
+  };
   useEffect(() => {
-    if (view !== 'all-today' || initializing || hasInitializedAllToday.current) return;
-    hasInitializedAllToday.current = true;
+    if (view !== 'all-today' || initializing) return;
     const currentSection = planSections.find(section =>
       section.category === 'scheduled' && section.id === currentBlockId
     );
-    setExpandedSectionIds(currentSection ? new Set([currentSection.id]) : new Set());
-  }, [initializing, view, planSections, currentBlockId]);
+    const contextKey = `${localDate}:${currentBlockId ?? 'no-current-block'}:${currentSection ? 'visible' : 'empty'}`;
+    if (lastAutoExpandedContext.current === contextKey) return;
+    lastAutoExpandedContext.current = contextKey;
+    if (!currentSection || manuallyToggledSectionIds.current.has(currentSection.id)) return;
+    setExpandedSectionIds(current => {
+      if (current.has(currentSection.id)) return current;
+      return new Set([...current, currentSection.id]);
+    });
+  }, [initializing, view, localDate, planSections, currentBlockId]);
   const overallHealth = aggregateCategoryHealthScores(
     areas.map(area => categoryHealthScores.get(area.id) ?? null)
   );
@@ -314,44 +381,52 @@ export function TodayView({
                       aria-labelledby={`plan-tab-${view}`}
                     >
                       {view === 'now' && (
-                        <>
-                          <TodayTimeframeHeader
-                            title={currentBlock?.name ?? 'Now'}
-                            timeRange={currentBlockRange}
-                            trailingContent={weather}
-                          />
-                          {renderHiddenStatus}
-                          {planSections.length > 0
-                            ? <div className="current-plan-item-group">{renderRhythms(planSections[0]!.rhythms)}</div>
-                            : (
-                              <div className="today-plan__empty-rhythms" role="status">
-                                <p>{emptyMessage}</p>
-                                <button type="button" className="today-plan__empty-action" onClick={() => onViewChange('all-today')}>
-                                  View all today
-                                </button>
-                              </div>
-                            )}
-                        </>
+                        <TodayAgendaRail className="today-plan__agenda-rail today-plan__agenda-rail--now">
+                          <section className="today-plan__agenda-group today-plan__agenda-group--expanded">
+                            <TodayTimeframeHeader
+                              title={currentBlock?.name ?? 'Now'}
+                              timeRange={currentBlockRange}
+                              agendaState="expanded"
+                              progress={timeframeProgress(planSections[0]?.rhythms ?? [])}
+                              trailingContent={weather}
+                            />
+                            {renderHiddenStatus}
+                            {planSections.length > 0
+                              ? <div className="current-plan-item-group">{renderRhythms(planSections[0]!.rhythms)}</div>
+                              : (
+                                <div className="today-plan__empty-rhythms" role="status">
+                                  <p>{emptyMessage}</p>
+                                  <button type="button" className="today-plan__empty-action" onClick={() => onViewChange('all-today')}>
+                                    View all today
+                                  </button>
+                                </div>
+                              )}
+                          </section>
+                        </TodayAgendaRail>
                       )}
                       {view === 'flexible' && (
                         <>
                           {planSections.length > 0
                             ? (
                               <>
-                                {planSections.map(section => (
-                                  <section
-                                    className="today-plan__flexible-group"
-                                    key={section.id}
-                                    aria-labelledby={`${sectionIdPrefix}-${section.id}-heading`}
-                                  >
-                                    <TodayTimeframeHeader
-                                      headingId={`${sectionIdPrefix}-${section.id}-heading`}
-                                      title={section.title}
-                                      timeRange={timeframeSubtitle(section)}
-                                    />
-                                    <div className="current-plan-item-group">{renderRhythms(section.rhythms)}</div>
-                                  </section>
-                                ))}
+                                <TodayAgendaRail className="today-plan__agenda-rail today-plan__agenda-rail--flexible">
+                                  {planSections.map(section => (
+                                    <section
+                                      className="today-plan__agenda-group today-plan__agenda-group--expanded today-plan__flexible-group"
+                                      key={section.id}
+                                      aria-labelledby={`${sectionIdPrefix}-${section.id}-heading`}
+                                    >
+                                      <TodayTimeframeHeader
+                                        headingId={`${sectionIdPrefix}-${section.id}-heading`}
+                                        title={section.title}
+                                        timeRange={timeframeSubtitle(section)}
+                                        agendaState="expanded"
+                                        progress={timeframeProgress(section.rhythms)}
+                                      />
+                                      <div className="current-plan-item-group">{renderRhythms(section.rhythms)}</div>
+                                    </section>
+                                  ))}
+                                </TodayAgendaRail>
                                 {renderHiddenStatus}
                               </>
                             )
@@ -366,32 +441,33 @@ export function TodayView({
                         planSections.length
                           ? (
                             <>
-                              <div className="today-plan__accordion-groups">
+                              <TodayAgendaRail className="today-plan__accordion-groups today-plan__agenda-rail today-plan__agenda-rail--all-today">
                                 {planSections.map(section => {
                                   const expanded = expandedSectionIds.has(section.id);
-                                  const tendedCount = section.rhythms.filter(rhythm => tendedRhythmIds.has(rhythm.id)).length;
                                   const panelId = `${sectionIdPrefix}-${section.id}-panel`;
                                   const headingId = `${sectionIdPrefix}-${section.id}-disclosure`;
-                                  const rhythmCount = section.rhythms.length;
                                   return (
                                     <section
-                                      className="today-plan__accordion-group"
+                                      className={`today-plan__agenda-group today-plan__accordion-group${expanded ? ' today-plan__agenda-group--expanded' : ' today-plan__agenda-group--collapsed'}`}
                                       key={section.id}
                                     >
                                       <TodayTimeframeHeader
                                         title={section.title}
                                         timeRange={timeframeSubtitle(section)}
+                                        progress={timeframeProgress(section.rhythms)}
                                         disclosure={{
                                           id: headingId,
                                           panelId,
                                           expanded,
-                                          progress: `${tendedCount} of ${rhythmCount} tended`,
-                                          onToggle: () => setExpandedSectionIds(current => {
-                                            const next = new Set(current);
-                                            if (next.has(section.id)) next.delete(section.id);
-                                            else next.add(section.id);
-                                            return next;
-                                          })
+                                          onToggle: () => {
+                                            manuallyToggledSectionIds.current.add(section.id);
+                                            setExpandedSectionIds(current => {
+                                              const next = new Set(current);
+                                              if (next.has(section.id)) next.delete(section.id);
+                                              else next.add(section.id);
+                                              return next;
+                                            });
+                                          }
                                         }}
                                       />
                                       <div
@@ -408,7 +484,7 @@ export function TodayView({
                                     </section>
                                   );
                                 })}
-                              </div>
+                              </TodayAgendaRail>
                               {renderHiddenStatus}
                             </>
                           )

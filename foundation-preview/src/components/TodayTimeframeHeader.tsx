@@ -1,15 +1,21 @@
 import type { ReactNode } from 'react';
 
+type TodayTimeframeProgress = {
+  text: string;
+  accessibleLabel: string;
+};
+
 type TodayTimeframeHeaderProps = {
   title: string;
   timeRange?: string | undefined;
   headingId?: string;
+  agendaState?: 'expanded' | 'collapsed';
+  progress?: TodayTimeframeProgress;
   trailingContent?: ReactNode;
   disclosure?: {
     id: string;
     panelId: string;
     expanded: boolean;
-    progress: string;
     onToggle: () => void;
   };
 };
@@ -18,37 +24,51 @@ export function TodayTimeframeHeader({
   title,
   timeRange,
   headingId,
+  agendaState,
+  progress,
   trailingContent,
   disclosure
 }: TodayTimeframeHeaderProps) {
+  const expanded = disclosure?.expanded ?? agendaState === 'expanded';
   const content = (
     <span className="today-timeframe-header__content">
       <span className="today-timeframe-header__title-row">
         <span className="today-plan__view-heading">{title}</span>
-        {disclosure
-          ? (
-            <span className="today-timeframe-header__meta">
-              <span className="today-plan__accordion-progress">{disclosure.progress}</span>
-              <svg className="today-plan__accordion-chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                <path d={disclosure.expanded ? 'm3 10 5-5 5 5' : 'm3 6 5 5 5-5'} />
+        {(progress || trailingContent || disclosure) && (
+          <span className="today-timeframe-header__meta">
+            {trailingContent}
+            {progress && (
+              <span
+                className="today-timeframe-header__progress"
+                {...(disclosure ? { 'aria-hidden': true } : {})}
+              >
+                {progress.text}
+              </span>
+            )}
+            {disclosure && (
+              <svg className="today-plan__accordion-toggle-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                <path d={expanded ? 'M5 10h10' : 'M5 10h10M10 5v10'} />
               </svg>
-            </span>
-          )
-          : trailingContent}
+            )}
+          </span>
+        )}
       </span>
       {timeRange && <span className="today-timeframe-header__range">{timeRange}</span>}
     </span>
   );
 
   return (
-    <h4 id={headingId} className="today-timeframe-header">
+    <h4
+      id={headingId}
+      className={`today-timeframe-header today-timeframe-header--${expanded ? 'expanded' : 'collapsed'}`}
+    >
       {disclosure
         ? (
           <button
             type="button"
             id={disclosure.id}
             className="today-timeframe-header__disclosure"
-            aria-label={`${title}${timeRange ? `, ${timeRange}` : ''}, ${disclosure.progress}`}
+            aria-label={`${title}${timeRange ? `, ${timeRange}` : ''}${progress ? `, ${progress.accessibleLabel}` : ''}`}
             aria-expanded={disclosure.expanded}
             aria-controls={disclosure.panelId}
             onClick={disclosure.onToggle}

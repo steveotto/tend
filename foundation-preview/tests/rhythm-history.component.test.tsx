@@ -1771,7 +1771,7 @@ describe('shared Rhythm history', () => {
       expect(group.querySelector(':scope > span:last-child > span')?.getAttribute('aria-label')).toBe('Early morning');
     }
     expect(summary.querySelectorAll('svg')).toHaveLength(3);
-    expect(summary.textContent).toContain('Never');
+    expect(summary.textContent).toContain('Not yet');
     expect(summary.className).toContain('rhythm-metadata-footer');
     expect(group).toBeTruthy();
     const footerGroup = document.querySelector('.rhythm-metadata-footer:not(.rhythm-card__details-summary-footer) .rhythm-metadata-schedule-group')!;

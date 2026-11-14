@@ -20,6 +20,10 @@ describe('Today Prayer module', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'Prayer' })).toBeTruthy();
+    const module = screen.getByRole('region', { name: 'Focused Prayer' });
+    expect(within(module).queryByRole('heading', { name: 'Prayer' })).toBeNull();
+    expect(module.querySelector('.prayer-entry-summary')?.textContent).not.toContain('requests');
+    expect(module.querySelector('.prayer-entry-count')?.textContent).toBe('2');
     expect(screen.getByRole('button', { name: 'Start focused prayer for 2 requests' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Customize' }));
 
