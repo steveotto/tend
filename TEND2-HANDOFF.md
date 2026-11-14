@@ -5255,3 +5255,11 @@ This audit identified direct `areas` use at navigation, Home, category badges/as
 ## Calendar section heading
 
 The Today section heading now reads **Calendar** and keeps the existing `sectiontitle` layout, range controls, subtitle, and event cards. Its h2 reuses the established `today-plan__heading` typography treatment shared with Today/Prayer rather than introducing a Calendar-specific heading style. Component coverage verifies the accessible heading and section label; the browser CSS contract compares font family, size, weight, color, and line height with Prayer and checks non-overlap/wrapping at 375/390/430px and Small/Medium/Large text sizes.
+
+## Category release dependency correction (2026-11-14)
+
+The Cloudflare clean-clone failure was caused by `useCurrentInstant.ts` being imported by the committed `App.tsx` and `RhythmHistoryView.tsx` but absent from the initial release commit; the shared hook existed only as an untracked local file during the original workspace checks. Correction commit `26454d63c0ac816988cd18a59068b5b15fb5536c` adds that existing hook unchanged.
+
+To avoid the same false-positive, checks were rerun from a temporary `git archive HEAD` snapshot of the correction commit, with only `foundation-preview/node_modules` linked from the canonical checkout. Semantic typecheck passed; reader tests **7/7**; component/domain tests **1,391/1,391 across 97 files** with two workers; legacy tests **176/176**; production browser CSS contract passed; Pages build passed; Pages artifact checks **8/8**. The production build reports only its existing large-chunk advisory. The snapshot was removed after validation.
+
+The correction has not yet been pushed: PR #80 still reports the earlier `ad0bacf` head and failed Cloudflare check, so the clean-clone fix has no GitHub or production verification yet. No merge or deployment is claimed.
