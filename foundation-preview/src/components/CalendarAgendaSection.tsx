@@ -369,7 +369,7 @@ export function CalendarAgendaSection({
     <section className="today-calendar-section" aria-labelledby="calendar-heading">
       <div className="sectiontitle calendar-section-title">
         <div className="calendar-heading-row">
-          <h2 id="calendar-heading">On your calendar</h2>
+          <h2 id="calendar-heading" className="today-plan__heading">Calendar</h2>
           {showRangeControl && (
             <div className="calendar-range-control" role="group" aria-label="Calendar date range">
               {([

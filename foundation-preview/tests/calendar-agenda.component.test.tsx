@@ -60,6 +60,15 @@ function expectNoCalendarOuterCard() {
 }
 
 describe('upcoming calendar agenda', () => {
+  it('uses the shared Today and Prayer heading treatment for Calendar', () => {
+    renderCalendar([], false);
+
+    const heading = screen.getByRole('heading', { name: 'Calendar', level: 2 });
+    expect(heading.classList.contains('today-plan__heading')).toBe(true);
+    expect(heading.id).toBe('calendar-heading');
+    expect(heading.closest('section')?.getAttribute('aria-labelledby')).toBe('calendar-heading');
+  });
+
   it('renders the date tile, long title, secondary date detail, and relative label', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-11-30T23:30:00Z'));

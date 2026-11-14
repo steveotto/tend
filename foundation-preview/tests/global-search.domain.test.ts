@@ -5,6 +5,10 @@ import type { PersonNote } from '../src/domain/person-notes.ts';
 import type { PersonPrayerRequest } from '../src/domain/person-prayers.ts';
 import type { PersonPreview, RhythmPreview } from '../src/domain/preview-data.ts';
 import { selectGlobalSearchResults } from '../src/domain/global-search.ts';
+import {
+  defaultCategoryPreferences,
+  selectAvailableCategoryIds
+} from '../src/domain/category-availability.ts';
 
 const amy: PersonPreview = { id: 'person-amy', displayName: 'Amy Sample' };
 const sam: PersonPreview = { id: 'person-sam', displayName: 'Sam Example' };
@@ -107,6 +111,29 @@ describe('global search selector', () => {
     ]);
     expect(results.groups.find(group => group.id === 'notes')?.results[1])
       .toMatchObject({ kind: 'connection-note', personId: amy.id });
+  });
+
+  it('hides disabled category labels while keeping linked Rhythms searchable', () => {
+    const preferences = { ...defaultCategoryPreferences, faith: false };
+    const data = {
+      people: [],
+      rhythms: [{
+        ...rhythm('mixed-rhythm', 'Shared sample Rhythm'),
+        categoryIds: ['faith', 'marriage'] as const
+      }],
+      prayerRequests: [],
+      personNotes: [],
+      friendships: createFriendshipData(),
+      availableCategoryIds: selectAvailableCategoryIds(preferences)
+    };
+
+    expect(selectGlobalSearchResults('Faith', data).isEmpty).toBe(true);
+    expect(selectGlobalSearchResults('Marriage', data).groups
+      .find(group => group.id === 'rhythms')?.results[0])
+      .toMatchObject({ title: 'Shared sample Rhythm', tag: 'Marriage' });
+    expect(selectGlobalSearchResults('Shared sample', data).groups
+      .find(group => group.id === 'rhythms')?.results[0])
+      .toMatchObject({ title: 'Shared sample Rhythm', tag: 'Marriage' });
   });
 
   it('keeps stable group ordering, caps each group at six, and reports remaining counts', () => {

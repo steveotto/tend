@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { foundationCatalogue, todayRhythms } from '../src/domain/preview-data.ts';
+import { defaultCategoryPreferences } from '../src/domain/category-availability.ts';
 import {
   activeTodayRhythms,
   archiveRhythmId,
@@ -98,6 +99,26 @@ describe('synthetic Rhythm editor domain', () => {
       ...legacyDraft,
       primaryFoundationId: faithPractice.id
     }, legacy.id, 'edit').errors).toEqual({});
+
+    const linkedLegacy = { ...legacy, primaryFoundationId: faithPractice.id };
+    const linkedResolved = resolveTodayRhythms([linkedLegacy])
+      .find(rhythm => rhythm.id === linkedLegacy.id)!;
+    const linkedDraft = rhythmDraftFrom(linkedResolved, linkedLegacy.categoryIds);
+    const preferences = { ...defaultCategoryPreferences, faith: false };
+    const preserved = saveRhythmDraft(
+      [linkedLegacy],
+      { ...linkedDraft, title: 'Updated legacy Faith rhythm' },
+      linkedLegacy.id,
+      'edit',
+      undefined,
+      undefined,
+      { categoryPreferences: preferences }
+    );
+    expect(preserved.errors).toEqual({});
+    expect(preserved.savedRhythms?.[0]).toMatchObject({
+      categoryIds: ['faith'],
+      primaryFoundationId: faithPractice.id
+    });
   });
 
   it('validates title, description, cadence, time, and identity associations', () => {

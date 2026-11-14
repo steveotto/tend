@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useScoringInstant } from './components/useScoringInstant.ts';
+import { useCurrentInstant } from './components/useCurrentInstant.ts';
 import type { MouseEvent } from 'react';
 import { AppNavigation } from './components/AppNavigation.tsx';
 import type { CategoryTabNavigationRequest, Destination } from './components/AppNavigation.tsx';
@@ -40,6 +40,8 @@ import { RhythmEditor } from './components/RhythmEditor.tsx';
 import { TodayView } from './components/TodayView.tsx';
 import { TodayWeatherSettings } from './components/TodayWeatherSettings.tsx';
 import { CalendarSourcesSettings } from './components/CalendarSourcesSettings.tsx';
+import { CategorySettings } from './components/CategorySettings.tsx';
+import { CategoryAvailabilityProvider } from './components/CategoryAvailabilityContext.tsx';
 import { TimeBlocksProvider } from './components/TimeBlocksContext.tsx';
 import { TimeBlocksSettings } from './components/TimeBlocksSettings.tsx';
 import { useTodayWeather } from './components/useTodayWeather.ts';
@@ -52,7 +54,6 @@ import type { GlobalSearchResult } from './domain/global-search.ts';
 import { APP_DISPLAY_VERSION } from './domain/app-version.ts';
 import { resolvePersonCategory, resolvePersonCategoryGroups, setPersonCategory } from './domain/person-categories.ts';
 import {
-  areas,
   marriageRhythms,
   foundationCatalogue,
   faithRhythmSuggestionGroups,
@@ -92,6 +93,12 @@ import {
 import type { PreviewData, PreviewTextSize } from './domain/preview-state.ts';
 import { validateCalendarSources } from './domain/calendar-sources.ts';
 import type { CalendarSource } from './domain/calendar-sources.ts';
+import {
+  isCategoryEnabled,
+  selectAvailableCategories,
+  selectAvailableCategoryIds,
+  selectAvailablePersonGroups
+} from './domain/category-availability.ts';
 import {
   DEVELOPMENT_PREVIEW_IDENTITY,
   PREVIEW_AUTH_PENDING,
@@ -220,6 +227,7 @@ import {
   loadV36RecoveryCopy,
   loadV40RecoveryCopy,
   loadV41RecoveryCopy,
+  loadV42RecoveryCopy,
   loadCloudRestoreRecoveryCopy,
   loadPreviewImportRecovery,
   loadPreview,
@@ -439,7 +447,7 @@ function PreviewWorkspace({
   accountBackupApi?: PreviewAccountBackupApi;
   onSignOut?: () => void | Promise<void>;
 }) {
-  const scoringInstant = useScoringInstant();
+  const scoringInstant = useCurrentInstant();
   const previewStorage = useMemo(() => browserPreviewStorage(identity), [identity]);
   const initialPreviewData = () => identity.kind === 'development'
     && import.meta.env.DEV
@@ -554,6 +562,7 @@ function PreviewWorkspace({
   const [v40RecoveryCopy, setV40RecoveryCopy] = useState<string | null>(null);
   const [v40RecoveryError, setV40RecoveryError] = useState<string | null>(null);
   const [v41RecoveryCopy, setV41RecoveryCopy] = useState<string | null>(null);
+  const [v42RecoveryCopy, setV42RecoveryCopy] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -648,6 +657,8 @@ function PreviewWorkspace({
     refreshRawRecoveryCopy();
     const v41Recovery = loadV41RecoveryCopy(previewStorage);
     setV41RecoveryCopy(v41Recovery.kind === 'loaded' ? v41Recovery.raw : null);
+    const v42Recovery = loadV42RecoveryCopy(previewStorage);
+    setV42RecoveryCopy(v42Recovery.kind === 'loaded' ? v42Recovery.raw : null);
     if (written.kind === 'saved') {
       setPersistedSatisfiedRhythmIds(satisfiedRhythmIdsForData(data));
       setPersistedCompletedRhythmIds(completedRhythmIdsForData(data));
@@ -799,6 +810,8 @@ function PreviewWorkspace({
     strengthCategoryScore,
     flexibilityCategoryScore
   );
+  const availableCategories = selectAvailableCategories(previewData.categoryPreferences);
+  const availableCategoryIds = selectAvailableCategoryIds(previewData.categoryPreferences);
   const categoryHealthScores = new Map<CategoryId, number | null>(
     [
       ...(['faith', 'marriage', 'parenting'] as const).map(categoryId => [
@@ -814,7 +827,7 @@ function PreviewWorkspace({
     ]
   );
   const overallHealthScore = aggregateCategoryHealthScores(
-    areas.map(area => categoryHealthScores.get(area.id) ?? null)
+    availableCategories.map(area => categoryHealthScores.get(area.id) ?? null)
   ).health;
   const activeRhythm = [
     ...allTodayRhythms,
@@ -827,7 +840,8 @@ function PreviewWorkspace({
     rhythms: [...new Map([...allTodayRhythms, ...resolvedMarriageRhythms].map(rhythm => [rhythm.id, rhythm])).values()],
     prayerRequests: previewData.prayerRequests,
     personNotes: previewData.personNotes,
-    friendships: previewData.friendships
+    friendships: previewData.friendships,
+    availableCategoryIds
   });
   const selectedDetailsEditorPerson = personDetailsEditorId === null
     ? null
@@ -846,9 +860,13 @@ function PreviewWorkspace({
           .map(group => group.id)
       )].filter((category): category is PersonPickerGroupId => category !== null);
   const resolvedPeopleGroups = resolvePersonCategoryGroups(previewData.peopleGroups).groups;
+  const availablePeopleGroups = selectAvailablePersonGroups(
+    previewData.categoryPreferences,
+    resolvedPeopleGroups
+  );
   const selectedProfileCategory = selectedProfilePerson
     ? resolvePersonCategory(
-        resolvedPeopleGroups
+        availablePeopleGroups
           .filter(group => group.memberIds.includes(selectedProfilePerson.id))
           .map(group => group.id)
       )
@@ -1163,6 +1181,8 @@ function PreviewWorkspace({
     } else {
       setV41RecoveryCopy(null);
     }
+    const v42 = loadV42RecoveryCopy(previewStorage);
+    setV42RecoveryCopy(v42.kind === 'loaded' ? v42.raw : null);
   }
 
   function refreshV10RecoveryCopy() {
@@ -1508,6 +1528,12 @@ function PreviewWorkspace({
     next: Destination,
     { categoryTabDefault = true }: { categoryTabDefault?: boolean } = {}
   ) {
+    const safeDestination = isCategoryEnabled(previewData.categoryPreferences, next)
+      ? next
+      : next === 'faith' || next === 'marriage' || next === 'parenting'
+        || next === 'health' || next === 'finances' || next === 'friendships'
+        ? 'today'
+        : next;
     if (profilePersonId !== null) {
       const state = { ...(window.history.state ?? {}) };
       delete state[personProfileHistoryKey];
@@ -1519,17 +1545,18 @@ function PreviewWorkspace({
       setProfilePersonId(null);
     }
     if (categoryTabDefault
-      && (next === 'faith' || next === 'marriage' || next === 'parenting' || next === 'health')) {
+      && (safeDestination === 'faith' || safeDestination === 'marriage'
+        || safeDestination === 'parenting' || safeDestination === 'health')) {
       categoryTabNavigationSequence.current += 1;
       setCategoryTabNavigationRequest({
-        categoryId: next,
+        categoryId: safeDestination,
         requestId: categoryTabNavigationSequence.current
       });
     } else if (!categoryTabDefault) {
       setCategoryTabNavigationRequest(null);
     }
-    setDestination(next);
-    if (next === 'health') setHealthFitnessVisited(true);
+    setDestination(safeDestination);
+    if (safeDestination === 'health') setHealthFitnessVisited(true);
     setMoreSettingsOpen(false);
     setSearch('');
     setSearchOpen(false);
@@ -1833,6 +1860,10 @@ function PreviewWorkspace({
   function navigateToFoundation(foundationId: string, returnTab: 'today' | MarriageTab) {
     const categoryId = foundationCategoryId(foundationId);
     if (!categoryId) return;
+    if (!isCategoryEnabled(previewData.categoryPreferences, categoryId)) {
+      navigate('today');
+      return;
+    }
     foundationNavigationSequence.current += 1;
     setFoundationNavigationRequest({
       foundationId,
@@ -2034,7 +2065,8 @@ function PreviewWorkspace({
         ...(rhythmEditor.suggestionSourceId
           ? { suggestionSourceId: rhythmEditor.suggestionSourceId }
           : {}),
-        timeOptions: configuredRhythmTimeOptions
+        timeOptions: configuredRhythmTimeOptions,
+        categoryPreferences: previewData.categoryPreferences
       },
       previewData.people.map(person => person.id)
     );
@@ -2043,7 +2075,8 @@ function PreviewWorkspace({
     const nextData: PreviewData = {
       ...previewData,
       savedRhythms,
-      ...(draft.categoryIds.includes('health')
+      ...(isCategoryEnabled(previewData.categoryPreferences, 'health')
+        && draft.categoryIds.includes('health')
         && (draft.healthLogCapability === 'workout'
           || !rhythmEditor.rhythm)
         ? {
@@ -2481,7 +2514,7 @@ function PreviewWorkspace({
         'edit',
         undefined,
         undefined,
-        { timeOptions: configuredRhythmTimeOptions },
+        { timeOptions: configuredRhythmTimeOptions, categoryPreferences: previewData.categoryPreferences },
         previewData.people.map(person => person.id)
       );
       if (!saved.savedRhythms) return Object.values(saved.errors)[0] ?? 'This Rhythm could not be saved.';
@@ -2561,7 +2594,7 @@ function PreviewWorkspace({
         'edit',
         undefined,
         undefined,
-        { timeOptions: configuredRhythmTimeOptions },
+        { timeOptions: configuredRhythmTimeOptions, categoryPreferences: previewData.categoryPreferences },
         previewData.people.map(person => person.id)
       );
       if (!saved.savedRhythms) return Object.values(saved.errors)[0] ?? 'This Rhythm could not be saved.';
@@ -2936,6 +2969,18 @@ function PreviewWorkspace({
       : { ...previous, showCalendarOnToday });
   }
 
+  function setCategoryPreference(categoryId: keyof PreviewData['categoryPreferences'], enabled: boolean) {
+    setPreviewData(previous => previous.categoryPreferences[categoryId] === enabled
+      ? previous
+      : {
+        ...previous,
+        categoryPreferences: {
+          ...previous.categoryPreferences,
+          [categoryId]: enabled
+        }
+      });
+  }
+
   function setTodayViewPreference(todayView: TodayViewId) {
     setPreviewData(previous => previous.todayView === todayView
       ? previous
@@ -3285,6 +3330,7 @@ function PreviewWorkspace({
   }
 
   return (
+    <CategoryAvailabilityProvider preferences={previewData.categoryPreferences}>
     <TimeBlocksProvider settings={previewData.timeBlocks}>
     <div className="wrap tend-app-preview" data-text-size={textSize}>
       <AppNavigation
@@ -3356,6 +3402,13 @@ function PreviewWorkspace({
                       >
                         ‹ More
                       </button>
+                      <section className="settings-section" aria-labelledby="category-settings-title">
+                        <h3 id="category-settings-title">Categories</h3>
+                        <CategorySettings
+                          preferences={previewData.categoryPreferences}
+                          onChange={setCategoryPreference}
+                        />
+                      </section>
                       <section className="settings-section" aria-labelledby="calendar-settings-title">
                         <h3 id="calendar-settings-title">Calendar</h3>
                         <CalendarSourcesSettings
@@ -3436,6 +3489,10 @@ function PreviewWorkspace({
               categoryHealthScores={categoryHealthScores}
               foundations={foundationCatalogue}
               onNavigate={navigate}
+              onOpenSettings={() => {
+                navigate('more');
+                setMoreSettingsOpen(true);
+              }}
               onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
               onPersonSelect={openPersonProfile}
               onHistory={openRhythmHistory}
@@ -3821,6 +3878,7 @@ function PreviewWorkspace({
         v40RecoveryCopy={v40RecoveryCopy}
         v40RecoveryError={v40RecoveryError}
         v41RecoveryCopy={v41RecoveryCopy}
+        v42RecoveryCopy={v42RecoveryCopy}
       />
       {storageNeedsAttention && !isPreviewSettings && (
         <p className="preview-storage-alert" role="alert">
@@ -4002,6 +4060,7 @@ function PreviewWorkspace({
       )}
     </div>
     </TimeBlocksProvider>
+    </CategoryAvailabilityProvider>
   );
 }
 

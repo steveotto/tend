@@ -55,6 +55,7 @@ import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 import { createPersonHealthRollup } from './HealthRollupDiagram.tsx';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
 import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
+import { useAvailablePersonGroups } from './CategoryAvailabilityContext.tsx';
 import { PersonPrayerPanel } from './PersonPrayerPanel.tsx';
 import { selectPersonOverallHealth, selectPersonRhythmHealth } from '../domain/person-health.ts';
 import { personPrayerRequestsForPerson } from '../domain/person-prayers.ts';
@@ -231,7 +232,8 @@ export function PersonProfileView({
   };
   const connectionHistory = connectionsForPerson(friendships, personId);
   const personConnectionStatus = friendConnectionStatus(friendships, personId, today);
-  const classifications = peopleGroups.filter(group => group.memberIds.includes(personId));
+  const availablePeopleGroups = useAvailablePersonGroups(peopleGroups);
+  const classifications = availablePeopleGroups.filter(group => group.memberIds.includes(personId));
   const resolvedCategory = resolvePersonCategory(classifications.map(group => group.id));
   const categoryLabel = resolvedCategory === 'friends'
     ? 'Friend'

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { useScoringInstant } from './useScoringInstant.ts';
+import { useCurrentInstant } from './useCurrentInstant.ts';
 import type { MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { FoundationPreview, PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
@@ -55,6 +55,8 @@ import { HealthScoreDetailsContent } from './HealthScoreDetailsContent.tsx';
 import { RhythmHealthScoringDetails } from './RhythmHealthScoringDetails.tsx';
 import type { HealthRollupConfig } from './HealthRollupDiagram.tsx';
 import { selectRhythmContribution } from '../domain/rhythm-contribution.ts';
+import { useCategoryAvailability } from './CategoryAvailabilityContext.tsx';
+import { selectAvailableCategoryIds } from '../domain/category-availability.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import type { Destination } from './AppNavigation.tsx';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
@@ -137,7 +139,7 @@ export function RhythmHistoryView({
   const scoringTimeZone = rhythm.scoring?.timeZone
     ?? rhythm.createdTimeZone
     ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const scoringInstant = useScoringInstant();
+  const scoringInstant = useCurrentInstant();
   const asOfTimeZone = isValidTimeZone(scoringTimeZone)
     ? scoringTimeZone
     : Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -165,6 +167,8 @@ export function RhythmHistoryView({
     timeZone: scoringTimeZone
   } as const;
   const score = selectRhythmScore(scoringInput);
+  const categoryAvailability = useCategoryAvailability();
+  const availableCategoryIds = selectAvailableCategoryIds(categoryAvailability);
   const reliableCreatedLocalDate = rhythm.createdLocalDate
     && isValidDate(rhythm.createdLocalDate)
     && rhythm.createdLocalDate <= asOfDate
@@ -194,7 +198,8 @@ export function RhythmHistoryView({
       ? [...new Set([rhythm.id, ...(archivedRhythmIds ?? [])])]
       : archivedRhythmIds ?? [],
     categoryHealthScores: categoryHealthScores ?? new Map(),
-    rhythmHealthScore: score.healthScore
+    rhythmHealthScore: score.healthScore,
+    availableCategoryIds
   });
   const rhythmRollup: HealthRollupConfig = {
     groups: [],

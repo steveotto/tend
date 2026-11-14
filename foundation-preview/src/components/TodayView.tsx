@@ -2,7 +2,6 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 're
 import type { KeyboardEvent, MouseEvent } from 'react';
 import type { ReactNode } from 'react';
 import {
-  areas,
   peopleForRhythm,
   type FoundationPreview,
   type PersonId,
@@ -36,6 +35,7 @@ import { aggregateCategoryHealthScores } from '../domain/category-scoring.ts';
 import { TodayPrayerModule } from './TodayPrayerModule.tsx';
 import type { CalendarSource } from '../domain/calendar-sources.ts';
 import { CalendarAgendaSection } from './CalendarAgendaSection.tsx';
+import { useAvailableCategories } from './CategoryAvailabilityContext.tsx';
 
 const planTypes: { id: TodayViewId; label: string }[] = [
   { id: 'now', label: 'Now' },
@@ -121,6 +121,7 @@ type TodayViewProps = {
   onPrayForRequest: (requestId: string) => string | null;
   categoryHealthScores: ReadonlyMap<string, number | null>;
   onNavigate: (destination: Destination) => void;
+  onOpenSettings?: () => void;
   onPersonSelect: (personId: PersonId) => void;
   foundations: readonly FoundationPreview[];
   onOpenFoundation: (foundationId: string, openerId: string) => void;
@@ -157,6 +158,7 @@ export function TodayView({
   foundations,
   onOpenFoundation,
   onNavigate,
+  onOpenSettings = () => onNavigate('more'),
   onPersonSelect,
   onHistory,
   onTend,
@@ -169,6 +171,7 @@ export function TodayView({
 }: TodayViewProps) {
   const tendedRhythmIds = savedTendedRhythmIds
     ?? selectTendedRhythmDisplayIds(completedRhythms, satisfiedRhythmIds);
+  const availableCategories = useAvailableCategories();
   const timeBlocks = useTimeBlockSettings();
   const [expandedSectionIds, setExpandedSectionIds] = useState<ReadonlySet<string>>(() => new Set());
   const lastAutoExpandedContext = useRef<string | null>(null);
@@ -212,9 +215,11 @@ export function TodayView({
     });
   }, [initializing, view, localDate, planSections, currentBlockId]);
   const overallHealth = aggregateCategoryHealthScores(
-    areas.map(area => categoryHealthScores.get(area.id) ?? null)
+    availableCategories.map(area => categoryHealthScores.get(area.id) ?? null)
   );
-  const overallHealthLabel = overallHealth.health === null
+  const overallHealthLabel = availableCategories.length === 0
+    ? 'Overall Health unavailable'
+    : overallHealth.health === null
     ? 'Overall health: Not enough data'
     : `Overall health score ${formatScore(overallHealth.health)} out of 100`;
   function handlePlanTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
@@ -259,7 +264,16 @@ export function TodayView({
           markerPlacement="below"
         />
         <div className="menu-grid">
-          {areas.map(area => {
+          {availableCategories.length === 0
+            ? (
+              <div className="category-empty-state">
+                <p>All categories are turned off. Your saved data is still here.</p>
+                <button type="button" className="btn mini ghost" onClick={onOpenSettings}>
+                  Open Settings
+                </button>
+              </div>
+            )
+            : availableCategories.map(area => {
             const score = categoryHealthScores.get(area.id) ?? null;
             return (
               <button

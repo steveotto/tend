@@ -4,6 +4,8 @@ import type { PersonPickerGroupId, PersonPreview } from '../domain/preview-data.
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { StyledSelect } from './StyledSelect.tsx';
 import type { StyledSelectOption } from './StyledSelect.tsx';
+import { useCategoryAvailability } from './CategoryAvailabilityContext.tsx';
+import { categoryIdForPersonGroup, isCategoryEnabled } from '../domain/category-availability.ts';
 
 const categoryOptions: readonly StyledSelectOption<string>[] = [
   { value: 'not-set', label: 'Not set' },
@@ -21,9 +23,14 @@ export function PersonCreationDialog({
   onCreate: (person: PersonPreview, groupIds: readonly PersonPickerGroupId[]) => string | null;
   onClose: () => void;
 }) {
+  const categoryPreferences = useCategoryAvailability();
   const [name, setName] = useState('');
   const [category, setCategory] = useState('not-set');
   const [error, setError] = useState('');
+  const availableCategoryOptions = categoryOptions.filter(option =>
+    option.value === 'not-set'
+    || isCategoryEnabled(categoryPreferences, categoryIdForPersonGroup(option.value as PersonPickerGroupId))
+  );
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -83,7 +90,7 @@ export function PersonCreationDialog({
             <StyledSelect
               id="person-create-category"
               label="Category"
-              options={categoryOptions}
+              options={availableCategoryOptions}
               value={category}
               onChange={setCategory}
             />

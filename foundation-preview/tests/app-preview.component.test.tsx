@@ -483,7 +483,7 @@ describe('Tend Today preview', () => {
 
     const tools = screen.getByRole('navigation', { name: 'Tools and navigation' });
     await user.click(within(tools).getByRole('button', { name: 'Today' }));
-    expect(screen.queryByRole('heading', { name: 'On your calendar' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Calendar' })).toBeNull();
 
     await openPreviewSettings(user);
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
@@ -501,14 +501,14 @@ describe('Tend Today preview', () => {
     });
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
       .getByRole('button', { name: 'Today' }));
-    expect(screen.queryByRole('heading', { name: 'On your calendar' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Calendar' })).toBeNull();
     const calendarReads = () => fetchMock.mock.calls.filter(([input]) => String(input) === '/api/calendar/read');
     expect(calendarReads()).toHaveLength(0);
 
     unmount();
     testingRender(<App />);
     await screen.findByText('Preview data saved in this browser.');
-    expect(screen.queryByRole('heading', { name: 'On your calendar' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Calendar' })).toBeNull();
     await openPreviewSettings(user);
     const reloadedToggle = screen.getByRole('checkbox', { name: 'Show calendar on Today' }) as HTMLInputElement;
     expect(reloadedToggle.checked).toBe(false);
@@ -516,9 +516,81 @@ describe('Tend Today preview', () => {
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
       .getByRole('button', { name: 'Today' }));
 
-    expect(await screen.findByRole('heading', { name: 'On your calendar' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Calendar' })).toBeTruthy();
     await waitFor(() => expect(calendarReads()).toHaveLength(1));
     expect(await screen.findByText('No events today.')).toBeTruthy();
+  });
+
+  it('persists account-scoped category preferences and restores all categories for another account', async () => {
+    const user = userEvent.setup();
+    const accountId = 'c0000000-0000-4000-8000-000000000044';
+    const accountIdentity = createAuthenticatedPreviewIdentity(accountId, 1);
+    const { unmount } = testingRender(<App identity={accountIdentity} />);
+    await screen.findByRole('button', { name: 'More, settings' });
+    await openPreviewSettings(user);
+
+    const faithSwitch = screen.getByRole('switch', { name: 'Faith' }) as HTMLInputElement;
+    expect(faithSwitch.checked).toBe(true);
+    expect(screen.getAllByRole('switch')).toHaveLength(6);
+    await user.click(faithSwitch);
+    await waitFor(() => {
+      const saved = parsePreviewBackup(
+        window.localStorage.getItem(`${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountId}`) ?? '',
+        localDateString(new Date())
+      );
+      expect(saved.valid && saved.envelope.data.categoryPreferences.faith).toBe(false);
+    });
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'Today' }));
+    expect(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .queryByRole('button', { name: 'Faith' })).toBeNull();
+    expect(within(screen.getByRole('region', { name: 'Overall health summary' }))
+      .queryByRole('button', { name: /Faith/ })).toBeNull();
+
+    unmount();
+    testingRender(<App identity={accountIdentity} />);
+    await openPreviewSettings(user);
+    const restoredFaithSwitch = screen.getByRole('switch', { name: 'Faith' }) as HTMLInputElement;
+    expect(restoredFaithSwitch.checked).toBe(false);
+    await user.click(restoredFaithSwitch);
+    await waitFor(() => {
+      const saved = parsePreviewBackup(
+        window.localStorage.getItem(`${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountId}`) ?? '',
+        localDateString(new Date())
+      );
+      expect(saved.valid && saved.envelope.data.categoryPreferences.faith).toBe(true);
+    });
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'Today' }));
+    expect(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Faith' })).toBeTruthy();
+
+    cleanup();
+    const secondIdentity = createAuthenticatedPreviewIdentity('c0000000-0000-4000-8000-000000000045', 1);
+    testingRender(<App identity={secondIdentity} />);
+    await openPreviewSettings(user);
+    expect((screen.getByRole('switch', { name: 'Faith' }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('shows an unavailable Overall Health state and direct Settings action when every category is disabled', async () => {
+    const user = userEvent.setup();
+    testingRender(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await openPreviewSettings(user);
+    for (const name of ['Faith', 'Marriage', 'Parenting', 'Health & Fitness', 'Finances', 'Friendships']) {
+      await user.click(screen.getByRole('switch', { name }) as HTMLInputElement);
+    }
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'Today' }));
+    expect(screen.getByRole('meter', { name: 'Overall Health unavailable' })).toBeTruthy();
+    expect(screen.getByText('All categories are turned off. Your saved data is still here.')).toBeTruthy();
+    expect(within(screen.getByRole('navigation', { name: 'Areas' })).queryAllByRole('button')).toHaveLength(0);
+
+    await user.click(screen.getByRole('button', { name: 'Open Settings' }));
+    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeTruthy();
+    expect(screen.getAllByRole('switch')).toHaveLength(6);
   });
 
   it('lets an authenticated account manage Calendar settings through scoped storage and the production reader', async () => {
@@ -573,7 +645,7 @@ describe('Tend Today preview', () => {
 
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
       .getByRole('button', { name: 'Today' }));
-    expect(screen.queryByRole('heading', { name: 'On your calendar' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Calendar' })).toBeNull();
     expect(fetchMock.mock.calls.filter(([input]) => String(input) === '/api/calendar/read')).toHaveLength(0);
 
     firstView.unmount();

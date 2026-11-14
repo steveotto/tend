@@ -81,14 +81,18 @@ export function selectRhythmContribution(input: {
   archivedRhythmIds: readonly string[];
   categoryHealthScores: ReadonlyMap<string, number | null>;
   rhythmHealthScore: number | null;
+  availableCategoryIds?: ReadonlySet<CategoryId>;
 }): RhythmContributionSelection {
+  const isAvailable = (categoryId: string) => input.availableCategoryIds?.has(categoryId as CategoryId) ?? true;
   const foundationIds = foundationRhythmIds(input.rhythm);
   const foundationById = new Map(input.foundations.map(foundation => [foundation.id, foundation]));
   const linkedRhythms = [
     input.rhythm,
     ...input.relatedRhythms.filter(rhythm => rhythm.id !== input.rhythm.id)
   ];
-  const healthRhythms = linkedRhythms.filter(rhythm => rhythm.categoryIds?.includes('health'));
+  const healthRhythms = isAvailable('health')
+    ? linkedRhythms.filter(rhythm => rhythm.categoryIds?.includes('health'))
+    : [];
   const strengthScore = selectStrengthCategoryScore(
     healthRhythms,
     input.rhythmScores,
@@ -116,6 +120,7 @@ export function selectRhythmContribution(input: {
     }
 
     if (!rhythmScoredCategoryIds.has(foundation.categoryId)) continue;
+    if (!isAvailable(foundation.categoryId)) continue;
     let score: number | null;
     if (foundation.categoryId === 'health') {
       if (!input.rhythm.categoryIds?.includes('health')) continue;
@@ -153,7 +158,9 @@ export function selectRhythmContribution(input: {
     categoryIconId: id,
     score: input.categoryHealthScores.get(id) ?? null
   }));
-  const categoryScores = areas.map(area => input.categoryHealthScores.get(area.id) ?? null);
+  const categoryScores = areas
+    .filter(area => isAvailable(area.id))
+    .map(area => input.categoryHealthScores.get(area.id) ?? null);
 
   return {
     overallScore: aggregateCategoryHealthScores(categoryScores).health,

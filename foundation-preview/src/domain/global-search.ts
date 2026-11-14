@@ -1,5 +1,5 @@
 import { areas } from './preview-data.ts';
-import type { PersonId, PersonPreview, RhythmPreview } from './preview-data.ts';
+import type { CategoryId, PersonId, PersonPreview, RhythmPreview } from './preview-data.ts';
 import type { FriendshipData, FriendshipConnection } from './friendships.ts';
 import type { PersonNote } from './person-notes.ts';
 import type { PersonPrayerRequest } from './person-prayers.ts';
@@ -73,6 +73,7 @@ export type GlobalSearchData = {
   prayerRequests: readonly PersonPrayerRequest[];
   personNotes: readonly PersonNote[];
   friendships: FriendshipData;
+  availableCategoryIds?: ReadonlySet<CategoryId>;
 };
 
 const groupDefinitions: readonly { id: GlobalSearchGroupId; label: string }[] = [
@@ -163,6 +164,7 @@ export function selectGlobalSearchResults(
       .map(id => personName(peopleById, id))
       .filter((name): name is string => name !== undefined);
     const categoryLabels = (rhythm.categoryIds ?? []).flatMap(id => {
+      if (data.availableCategoryIds && !data.availableCategoryIds.has(id)) return [];
       const area = areas.find(candidate => candidate.id === id);
       return area ? [area.label] : [];
     });

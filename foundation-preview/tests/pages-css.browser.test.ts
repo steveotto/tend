@@ -236,6 +236,7 @@ async function main() {
               const calendarSection = document.querySelector<HTMLElement>('.today-calendar-section');
               const calendarHeadingRow = document.querySelector<HTMLElement>('.calendar-heading-row');
               const calendarHeading = document.querySelector<HTMLElement>('.calendar-heading-row h2');
+              const prayerHeading = document.querySelector<HTMLElement>('.today-prayer-section > .sectiontitle h2');
               let calendarRange = document.querySelector<HTMLElement>('.calendar-range-control');
               let calendarRangeLabel = document.querySelector<HTMLElement>('.calendar-range-label');
               const currentTool = document.querySelector<HTMLButtonElement>('.utility-primary-button[aria-current="page"]');
@@ -268,7 +269,8 @@ async function main() {
               }
               if (!headerActions || !mobileSearch || !sizeToggle || !brandTagline || !stickyNav
                 || !areaNavigation || !utilitySearch || !menuGrid || !firstMenuArea || !currentTool
-                || !calendarSection || !calendarHeadingRow || !calendarHeading || !calendarRange || !calendarRangeLabel) {
+                || !calendarSection || !calendarHeadingRow || !calendarHeading || !prayerHeading
+                || !calendarRange || !calendarRangeLabel) {
                 throw new Error('Dashboard is missing an expected mobile shell or Health category element.');
               }
               const searchStyle = getComputedStyle(mobileSearch);
@@ -279,6 +281,8 @@ async function main() {
               const areaRect = firstMenuArea.getBoundingClientRect();
               const navRect = stickyNav.getBoundingClientRect();
               const calendarHeadingRect = calendarHeading.getBoundingClientRect();
+              const calendarHeadingStyle = getComputedStyle(calendarHeading);
+              const prayerHeadingStyle = getComputedStyle(prayerHeading);
               const calendarRangeRect = calendarRange.getBoundingClientRect();
               const calendarButtons = [...calendarRange.querySelectorAll<HTMLButtonElement>('button')];
               const calendarIcons = calendarButtons.map(button => button.querySelector<SVGSVGElement>('svg'));
@@ -405,6 +409,18 @@ async function main() {
                   itemCount: menuGrid.querySelectorAll('.menu-area').length
                 },
                 calendarRange: {
+                  headingText: calendarHeading.textContent?.trim(),
+                  headingFontFamily: calendarHeadingStyle.fontFamily,
+                  headingFontSize: calendarHeadingStyle.fontSize,
+                  headingFontWeight: calendarHeadingStyle.fontWeight,
+                  headingColor: calendarHeadingStyle.color,
+                  headingLineHeight: calendarHeadingStyle.lineHeight,
+                  prayerHeadingFontFamily: prayerHeadingStyle.fontFamily,
+                  prayerHeadingFontSize: prayerHeadingStyle.fontSize,
+                  prayerHeadingFontWeight: prayerHeadingStyle.fontWeight,
+                  prayerHeadingColor: prayerHeadingStyle.color,
+                  prayerHeadingLineHeight: prayerHeadingStyle.lineHeight,
+                  headingSectionClass: calendarHeading.closest('.sectiontitle')?.className,
                   buttonNames: calendarButtons.map(button => button.getAttribute('aria-label')),
                   buttonTitles: calendarButtons.map(button => button.title),
                   buttonSizes: calendarButtons.map(button => {
@@ -477,6 +493,13 @@ async function main() {
               `Health category items must fill the grid at ${viewportWidth}px / ${expected.size}.`);
             assert.deepEqual(phoneStyles.calendarRange.buttonNames, ['Today', 'Week', 'Month']);
             assert.deepEqual(phoneStyles.calendarRange.buttonTitles, ['Today', 'Week', 'Month']);
+            assert.equal(phoneStyles.calendarRange.headingText, 'Calendar');
+            assert.equal(phoneStyles.calendarRange.headingSectionClass, 'sectiontitle calendar-section-title');
+            assert.equal(phoneStyles.calendarRange.headingFontFamily, phoneStyles.calendarRange.prayerHeadingFontFamily);
+            assert.equal(phoneStyles.calendarRange.headingFontSize, phoneStyles.calendarRange.prayerHeadingFontSize);
+            assert.equal(phoneStyles.calendarRange.headingFontWeight, phoneStyles.calendarRange.prayerHeadingFontWeight);
+            assert.equal(phoneStyles.calendarRange.headingColor, phoneStyles.calendarRange.prayerHeadingColor);
+            assert.equal(phoneStyles.calendarRange.headingLineHeight, phoneStyles.calendarRange.prayerHeadingLineHeight);
             assert.deepEqual(phoneStyles.calendarRange.buttonSizes.map(button => [button.width, button.height]), [
               [44, 44],
               [44, 44],
