@@ -219,6 +219,7 @@ import {
   loadV35RecoveryCopy,
   loadV36RecoveryCopy,
   loadV40RecoveryCopy,
+  loadV41RecoveryCopy,
   loadCloudRestoreRecoveryCopy,
   loadPreviewImportRecovery,
   loadPreview,
@@ -552,9 +553,11 @@ function PreviewWorkspace({
   const [v36RecoveryError, setV36RecoveryError] = useState<string | null>(null);
   const [v40RecoveryCopy, setV40RecoveryCopy] = useState<string | null>(null);
   const [v40RecoveryError, setV40RecoveryError] = useState<string | null>(null);
+  const [v41RecoveryCopy, setV41RecoveryCopy] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
+  const hydratedDataWithoutSave = useRef<PreviewData | null>(null);
   const morePageHeading = useRef<HTMLHeadingElement>(null);
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -643,6 +646,8 @@ function PreviewWorkspace({
     }
     const written = writePreview(previewStorage, data, expected, options);
     refreshRawRecoveryCopy();
+    const v41Recovery = loadV41RecoveryCopy(previewStorage);
+    setV41RecoveryCopy(v41Recovery.kind === 'loaded' ? v41Recovery.raw : null);
     if (written.kind === 'saved') {
       setPersistedSatisfiedRhythmIds(satisfiedRhythmIdsForData(data));
       setPersistedCompletedRhythmIds(completedRhythmIdsForData(data));
@@ -1152,6 +1157,12 @@ function PreviewWorkspace({
       setV40RecoveryCopy(null);
       setV40RecoveryError(v40.message);
     }
+    const v41 = loadV41RecoveryCopy(previewStorage);
+    if (v41.kind === 'loaded') {
+      setV41RecoveryCopy(v41.raw);
+    } else {
+      setV41RecoveryCopy(null);
+    }
   }
 
   function refreshV10RecoveryCopy() {
@@ -1341,7 +1352,7 @@ function PreviewWorkspace({
     if (loaded.kind === 'loaded') {
       expectedRaw.current = loaded.raw;
       setFreshInitialData(null);
-      skipNextAutosave.current = true;
+      hydratedDataWithoutSave.current = loaded.data;
       setPreviewData(loaded.data);
       setPersistedSatisfiedRhythmIds(satisfiedRhythmIdsForData(loaded.data));
       setPersistedCompletedRhythmIds(completedRhythmIdsForData(loaded.data));
@@ -1367,6 +1378,8 @@ function PreviewWorkspace({
 
   useEffect(() => {
     if (!hydrated || !autoSaveEnabled) return;
+    if (hydratedDataWithoutSave.current === previewData) return;
+    if (hydratedDataWithoutSave.current !== null) hydratedDataWithoutSave.current = null;
     if (skipNextAutosave.current) {
       skipNextAutosave.current = false;
       return;
@@ -3807,6 +3820,7 @@ function PreviewWorkspace({
         v36RecoveryError={v36RecoveryError}
         v40RecoveryCopy={v40RecoveryCopy}
         v40RecoveryError={v40RecoveryError}
+        v41RecoveryCopy={v41RecoveryCopy}
       />
       {storageNeedsAttention && !isPreviewSettings && (
         <p className="preview-storage-alert" role="alert">

@@ -60,6 +60,7 @@ export function migratePreviewToProposedV4(raw: string, currentDate: string): Pr
     || parsed.sourceSchemaVersion === 38
     || parsed.sourceSchemaVersion === 39
     || parsed.sourceSchemaVersion === 40
+    || parsed.sourceSchemaVersion === 41
     || parsed.sourceSchemaVersion === PREVIEW_SCHEMA_VERSION) {
     return { valid: true, envelope: parsed.envelope, sourceSchemaVersion: parsed.sourceSchemaVersion };
   }
