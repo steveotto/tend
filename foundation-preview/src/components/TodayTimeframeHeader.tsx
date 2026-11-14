@@ -45,11 +45,6 @@ export function TodayTimeframeHeader({
                 {progress.text}
               </span>
             )}
-            {disclosure && (
-              <svg className="today-plan__accordion-toggle-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                <path d={expanded ? 'M5 10h10' : 'M5 10h10M10 5v10'} />
-              </svg>
-            )}
           </span>
         )}
       </span>
@@ -73,6 +68,15 @@ export function TodayTimeframeHeader({
             aria-controls={disclosure.panelId}
             onClick={disclosure.onToggle}
           >
+            <svg
+              className={`today-plan__agenda-marker today-plan__agenda-marker--${expanded ? 'expanded' : 'collapsed'}`}
+              viewBox="0 0 20 20"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <circle cx="10" cy="10" r="9" />
+              <path d={expanded ? 'M6 10h8' : 'M6 10h8M10 6v8'} />
+            </svg>
             {content}
           </button>
         )

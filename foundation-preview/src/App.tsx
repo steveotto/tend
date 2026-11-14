@@ -39,6 +39,7 @@ import { PeopleView } from './components/PeopleView.tsx';
 import { RhythmEditor } from './components/RhythmEditor.tsx';
 import { TodayView } from './components/TodayView.tsx';
 import { TodayWeatherSettings } from './components/TodayWeatherSettings.tsx';
+import { CalendarSourcesSettings } from './components/CalendarSourcesSettings.tsx';
 import { TimeBlocksProvider } from './components/TimeBlocksContext.tsx';
 import { TimeBlocksSettings } from './components/TimeBlocksSettings.tsx';
 import { useTodayWeather } from './components/useTodayWeather.ts';
@@ -89,6 +90,8 @@ import {
   parsePreviewBackup
 } from './domain/preview-state.ts';
 import type { PreviewData, PreviewTextSize } from './domain/preview-state.ts';
+import { validateCalendarSources } from './domain/calendar-sources.ts';
+import type { CalendarSource } from './domain/calendar-sources.ts';
 import {
   DEVELOPMENT_PREVIEW_IDENTITY,
   PREVIEW_AUTH_PENDING,
@@ -2143,6 +2146,20 @@ function PreviewWorkspace({
     }, 'time block settings');
   }
 
+  function saveCalendarSources(sources: CalendarSource[]): string | null {
+    if (identity.kind !== 'development') {
+      return 'Calendar source editing is available only in the isolated synthetic preview. No account data was changed.';
+    }
+    const validation = validateCalendarSources(sources);
+    if (!validation.valid) {
+      return validation.errors[0] ?? 'Calendar settings are invalid. No changes were saved.';
+    }
+    return persistSeasonHistory({
+      ...previewData,
+      calendarSources: validation.sources
+    }, 'calendar settings');
+  }
+
   function saveStrengthData(strength: PreviewData['strength']): string | null {
     if (!validateStrengthData(strength, true, true, true, true, previewData.people.map(person => person.id))) {
       return 'Strength settings or workout records are invalid. No changes were saved.';
@@ -2903,6 +2920,12 @@ function PreviewWorkspace({
       : { ...previous, showTended });
   }
 
+  function setShowCalendarOnTodayPreference(showCalendarOnToday: boolean) {
+    setPreviewData(previous => previous.showCalendarOnToday === showCalendarOnToday
+      ? previous
+      : { ...previous, showCalendarOnToday });
+  }
+
   function setTodayViewPreference(todayView: TodayViewId) {
     setPreviewData(previous => previous.todayView === todayView
       ? previous
@@ -3323,6 +3346,24 @@ function PreviewWorkspace({
                       >
                         ‹ More
                       </button>
+                      <section className="settings-section" aria-labelledby="calendar-settings-title">
+                        <h3 id="calendar-settings-title">Calendar</h3>
+                        {identity.kind === 'development'
+                          ? (
+                            <CalendarSourcesSettings
+                              sources={previewData.calendarSources}
+                              onSave={saveCalendarSources}
+                              showOnToday={previewData.showCalendarOnToday}
+                              onShowOnTodayChange={setShowCalendarOnTodayPreference}
+                              localReaderEnabled={identity.kind === 'development'}
+                            />
+                          )
+                          : (
+                            <p className="calendar-settings-account-limit">
+                              Calendar source editing is limited to the isolated synthetic preview. No account calendar settings or data are read or changed here.
+                            </p>
+                          )}
+                      </section>
                       <section className="settings-section" aria-labelledby="weather-settings-title">
                         <h3 id="weather-settings-title">Weather</h3>
                         <TodayWeatherSettings controller={todayWeather} timeZone={weatherTimeZone} />
@@ -3373,6 +3414,8 @@ function PreviewWorkspace({
               greeting={greeting}
               evaluationInstant={scoringInstant}
               localDate={currentDate}
+              localTimeZone={localTimeZone || 'UTC'}
+              calendarReaderEnabled={identity.kind === 'development'}
               view={previewData.todayView}
               onViewChange={setTodayViewPreference}
               weatherController={todayWeather}
@@ -3396,6 +3439,8 @@ function PreviewWorkspace({
               onTend={openCompletion}
               onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
               onUndo={undoTend}
+              calendarSources={previewData.calendarSources}
+              showCalendarOnToday={previewData.showCalendarOnToday}
             />
           )
           : destination === 'marriage'

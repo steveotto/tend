@@ -87,7 +87,10 @@ async function main() {
     browser = await chromium.launch({ headless: true });
 
     for (const identity of ['signed-out', 'dashboard'] as const) {
-      const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+      const context = await browser.newContext({
+        viewport: { width: 1280, height: 900 },
+        hasTouch: identity === 'dashboard'
+      });
       await context.addInitScript((initialIdentity: string) => {
         const session = initialIdentity === 'dashboard'
           ? { user: { id: 'c0000000-0000-4000-8000-000000000003' } }
@@ -230,9 +233,42 @@ async function main() {
               const utilitySearch = document.querySelector<HTMLElement>('.utility-search');
               const menuGrid = document.querySelector<HTMLElement>('.home-dashboard .overall-card .menu-grid');
               const firstMenuArea = document.querySelector<HTMLElement>('.home-dashboard .overall-card .menu-area');
+              const calendarSection = document.querySelector<HTMLElement>('.today-calendar-section');
+              const calendarHeadingRow = document.querySelector<HTMLElement>('.calendar-heading-row');
+              const calendarHeading = document.querySelector<HTMLElement>('.calendar-heading-row h2');
+              let calendarRange = document.querySelector<HTMLElement>('.calendar-range-control');
+              let calendarRangeLabel = document.querySelector<HTMLElement>('.calendar-range-label');
               const currentTool = document.querySelector<HTMLButtonElement>('.utility-primary-button[aria-current="page"]');
+              if (!calendarRange && calendarHeadingRow) {
+                calendarRange = document.createElement('div');
+                calendarRange.className = 'calendar-range-control';
+                calendarRange.setAttribute('role', 'group');
+                calendarRange.setAttribute('aria-label', 'Synthetic Calendar date range');
+                for (const [label, dotMarkup] of [
+                  ['Today', '<circle class="calendar-range-icon__dot calendar-range-icon__dot--today" cx="12" cy="15.75" r="3"></circle>'],
+                  ['Week', [5.8, 7.87, 9.93, 12, 14.07, 16.13, 18.2].map(x => `<circle class="calendar-range-icon__dot" cx="${x}" cy="15.75" r="1.05"></circle>`).join('')],
+                  ['Month', [7.1, 10.37, 13.63, 16.9].flatMap(x => [13, 16.25, 19.5].map(y => `<circle class="calendar-range-icon__dot" cx="${x}" cy="${y}" r="1.05"></circle>`)).join('')]
+                ] as const) {
+                  const button = document.createElement('button');
+                  button.type = 'button';
+                  button.className = 'calendar-range-control__button';
+                  button.setAttribute('aria-label', label);
+                  button.setAttribute('aria-pressed', String(label === 'Today'));
+                  button.title = label;
+                  button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="16" rx="2.5"></rect><path d="M8 3.75v3.5M16 3.75v3.5M3.75 10.25h16.5"></path>${dotMarkup}</svg>`;
+                  calendarRange.append(button);
+                }
+                calendarHeadingRow.append(calendarRange);
+              }
+              if (!calendarRangeLabel && calendarSection) {
+                calendarRangeLabel = document.createElement('p');
+                calendarRangeLabel.className = 'calendar-range-label';
+                calendarRangeLabel.textContent = 'Synthetic week range';
+                calendarSection.querySelector('.calendar-section-title')?.append(calendarRangeLabel);
+              }
               if (!headerActions || !mobileSearch || !sizeToggle || !brandTagline || !stickyNav
-                || !areaNavigation || !utilitySearch || !menuGrid || !firstMenuArea || !currentTool) {
+                || !areaNavigation || !utilitySearch || !menuGrid || !firstMenuArea || !currentTool
+                || !calendarSection || !calendarHeadingRow || !calendarHeading || !calendarRange || !calendarRangeLabel) {
                 throw new Error('Dashboard is missing an expected mobile shell or Health category element.');
               }
               const searchStyle = getComputedStyle(mobileSearch);
@@ -242,6 +278,70 @@ async function main() {
               const gridRect = menuGrid.getBoundingClientRect();
               const areaRect = firstMenuArea.getBoundingClientRect();
               const navRect = stickyNav.getBoundingClientRect();
+              const calendarHeadingRect = calendarHeading.getBoundingClientRect();
+              const calendarRangeRect = calendarRange.getBoundingClientRect();
+              const calendarButtons = [...calendarRange.querySelectorAll<HTMLButtonElement>('button')];
+              const calendarIcons = calendarButtons.map(button => button.querySelector<SVGSVGElement>('svg'));
+              const calendarContent = document.querySelector<HTMLElement>('.calendar-agenda-content');
+              if (!calendarContent) throw new Error('Calendar content is missing.');
+              const placeholder = document.createElement('div');
+              placeholder.className = 'calendar-event calendar-event--status calendar-event--loading';
+              placeholder.setAttribute('role', 'status');
+              placeholder.setAttribute('aria-live', 'polite');
+              const placeholderTile = document.createElement('span');
+              placeholderTile.className = 'calendar-event__date-tile calendar-event__date-tile--status';
+              placeholderTile.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="16" rx="2.5"></rect><path d="M8 3.75v3.5M16 3.75v3.5M3.75 10.25h16.5"></path></svg>';
+              const placeholderDetails = document.createElement('span');
+              placeholderDetails.className = 'calendar-event__details';
+              const placeholderTitle = document.createElement('span');
+              placeholderTitle.className = 'calendar-event__loading-label';
+              placeholderTitle.textContent = 'Loading events…';
+              placeholderDetails.append(placeholderTitle);
+              placeholder.append(placeholderTile, placeholderDetails);
+              calendarContent.append(placeholder);
+              const placeholderRect = placeholder.getBoundingClientRect();
+              const placeholderStyle = getComputedStyle(placeholder);
+              const placeholderTileStyle = getComputedStyle(placeholderTile);
+              const longPlaceholder = placeholder.cloneNode(true) as HTMLElement;
+              longPlaceholder.querySelector('.calendar-event__loading-label')!.textContent =
+                'Calendar events could not be loaded. The local calendar reader could not be reached. Retry.';
+              calendarContent.append(longPlaceholder);
+              const longPlaceholderHeight = longPlaceholder.getBoundingClientRect().height;
+              const tileRect = placeholderTile.getBoundingClientRect();
+              const iconRect = placeholderTile.querySelector('svg')!.getBoundingClientRect();
+              const loadingLabelStyle = getComputedStyle(placeholderTitle);
+              const loadingLabelRect = placeholderTitle.getBoundingClientRect();
+              const placeholderMetrics = {
+                width: placeholderRect.width,
+                sectionWidth: calendarContent.getBoundingClientRect().width,
+                renderedHeight: placeholderRect.height,
+                minHeight: placeholderStyle.minHeight,
+                longTextHeight: longPlaceholderHeight,
+                overflow: placeholderStyle.overflow,
+                border: placeholderStyle.borderTopWidth,
+                radius: placeholderStyle.borderTopLeftRadius,
+                padding: placeholderStyle.padding,
+                tileWidth: placeholderTile.getBoundingClientRect().width,
+                tileHeight: tileRect.height,
+                tileGridRows: placeholderTileStyle.gridTemplateRows,
+                tileAlignSelf: placeholderTileStyle.alignSelf,
+                tileJustifySelf: placeholderTileStyle.justifySelf,
+                iconCenterOffsetX: iconRect.left + iconRect.width / 2 - (tileRect.left + tileRect.width / 2),
+                iconCenterOffsetY: iconRect.top + iconRect.height / 2 - (tileRect.top + tileRect.height / 2),
+                labelCenterOffsetY: loadingLabelRect.top + loadingLabelRect.height / 2 - (tileRect.top + tileRect.height / 2),
+                labelFontSize: loadingLabelStyle.fontSize,
+                labelFontWeight: loadingLabelStyle.fontWeight,
+                labelColor: loadingLabelStyle.color,
+                titleScrollHeight: placeholderTitle.scrollHeight,
+                titleClientHeight: placeholderTitle.clientHeight,
+                tileAlignment: placeholderStyle.gridTemplateAreas,
+                tileColor: placeholderTileStyle.color,
+                liveRole: placeholder.getAttribute('role'),
+                livePoliteness: placeholder.getAttribute('aria-live'),
+                textScale: Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-text-scale'))
+              };
+              placeholder.remove();
+              longPlaceholder.remove();
               return {
                 viewportWidth: document.documentElement.clientWidth,
                 documentWidth: document.documentElement.scrollWidth,
@@ -303,7 +403,38 @@ async function main() {
                   width: gridRect.width,
                   itemWidth: areaRect.width,
                   itemCount: menuGrid.querySelectorAll('.menu-area').length
-                }
+                },
+                calendarRange: {
+                  buttonNames: calendarButtons.map(button => button.getAttribute('aria-label')),
+                  buttonTitles: calendarButtons.map(button => button.title),
+                  buttonSizes: calendarButtons.map(button => {
+                    const rect = button.getBoundingClientRect();
+                    return { width: rect.width, height: rect.height, pressed: button.getAttribute('aria-pressed') };
+                  }),
+                  icons: calendarIcons.map((icon, index) => {
+                    if (!icon) return null;
+                    const rect = icon.getBoundingClientRect();
+                    return {
+                      viewBox: icon.getAttribute('viewBox'),
+                      width: rect.width,
+                      height: rect.height,
+                      stroke: getComputedStyle(icon).stroke,
+                      buttonColor: getComputedStyle(calendarButtons[index]!).color,
+                      strokeWidth: getComputedStyle(icon).strokeWidth,
+                      outline: [...icon.children].slice(0, 2).map(shape => shape.outerHTML),
+                      dotCount: icon.querySelectorAll('.calendar-range-icon__dot').length
+                    };
+                  }),
+                  right: calendarRangeRect.right,
+                  labelTop: calendarRangeLabel.getBoundingClientRect().top,
+                  rowBottom: calendarHeadingRow.getBoundingClientRect().bottom,
+                  headingOverlap: calendarHeadingRect.left < calendarRangeRect.right
+                    && calendarHeadingRect.right > calendarRangeRect.left
+                    && calendarHeadingRect.top < calendarRangeRect.bottom
+                    && calendarHeadingRect.bottom > calendarRangeRect.top,
+                  sectionRight: calendarSection.getBoundingClientRect().right
+                },
+                calendarPlaceholder: placeholderMetrics
               };
             });
             assert.equal(phoneStyles.viewportWidth, viewportWidth);
@@ -344,6 +475,65 @@ async function main() {
             assert.ok(phoneStyles.categoryGrid.itemCount > 0);
             assert.ok(Math.abs(phoneStyles.categoryGrid.itemWidth - phoneStyles.categoryGrid.width) < 1,
               `Health category items must fill the grid at ${viewportWidth}px / ${expected.size}.`);
+            assert.deepEqual(phoneStyles.calendarRange.buttonNames, ['Today', 'Week', 'Month']);
+            assert.deepEqual(phoneStyles.calendarRange.buttonTitles, ['Today', 'Week', 'Month']);
+            assert.deepEqual(phoneStyles.calendarRange.buttonSizes.map(button => [button.width, button.height]), [
+              [44, 44],
+              [44, 44],
+              [44, 44]
+            ], `Calendar range targets must remain at least 44px at ${viewportWidth}px / ${expected.size}.`);
+            assert.deepEqual(phoneStyles.calendarRange.icons.map(icon => icon && [
+              icon.viewBox,
+              icon.width,
+              icon.height,
+              icon.strokeWidth
+            ]), [
+              ['0 0 24 24', 22, 22, '1.8px'],
+              ['0 0 24 24', 22, 22, '1.8px'],
+              ['0 0 24 24', 22, 22, '1.8px']
+            ]);
+            phoneStyles.calendarRange.icons.forEach(icon => {
+              assert.equal(icon?.stroke, icon?.buttonColor,
+                `Calendar icon strokes must follow currentColor at ${viewportWidth}px / ${expected.size}.`);
+            });
+            assert.deepEqual(phoneStyles.calendarRange.icons.map(icon => icon?.outline), [
+              phoneStyles.calendarRange.icons[0]?.outline,
+              phoneStyles.calendarRange.icons[0]?.outline,
+              phoneStyles.calendarRange.icons[0]?.outline
+            ]);
+            assert.deepEqual(phoneStyles.calendarRange.icons.map(icon => icon?.dotCount), [1, 7, 12]);
+            assert.equal(phoneStyles.calendarRange.buttonSizes[0]?.pressed, 'true');
+            assert.ok(phoneStyles.calendarRange.right <= phoneStyles.calendarRange.sectionRight + 1,
+              `Calendar range controls must stay within the section at ${viewportWidth}px / ${expected.size}.`);
+            assert.equal(phoneStyles.calendarRange.headingOverlap, false,
+              `Calendar range controls must wrap rather than overlap the heading at ${viewportWidth}px / ${expected.size}.`);
+            assert.ok(phoneStyles.calendarRange.labelTop >= phoneStyles.calendarRange.rowBottom,
+              `Calendar range label must remain laid out at ${viewportWidth}px / ${expected.size}.`);
+            assert.equal(phoneStyles.calendarPlaceholder.width, phoneStyles.calendarPlaceholder.sectionWidth);
+            assert.equal(phoneStyles.calendarPlaceholder.minHeight, '66px');
+            assert.equal(phoneStyles.calendarPlaceholder.overflow, 'visible');
+            assert.equal(phoneStyles.calendarPlaceholder.border, '1px');
+            assert.equal(phoneStyles.calendarPlaceholder.radius, '12px');
+            assert.equal(phoneStyles.calendarPlaceholder.padding, '9px 10px');
+            assert.equal(phoneStyles.calendarPlaceholder.tileWidth, 44);
+            assert.equal(phoneStyles.calendarPlaceholder.tileHeight, 46);
+            assert.equal(phoneStyles.calendarPlaceholder.tileGridRows, '44px');
+            assert.equal(phoneStyles.calendarPlaceholder.tileAlignSelf, 'center');
+            assert.equal(phoneStyles.calendarPlaceholder.tileJustifySelf, 'center');
+            assert.equal(phoneStyles.calendarPlaceholder.tileAlignment, '"date details"');
+            assert.ok(Math.abs(phoneStyles.calendarPlaceholder.iconCenterOffsetX) < 0.5);
+            assert.ok(Math.abs(phoneStyles.calendarPlaceholder.iconCenterOffsetY) < 0.5);
+            assert.ok(Math.abs(phoneStyles.calendarPlaceholder.labelCenterOffsetY) < 0.5,
+              `Calendar status text must center with its icon tile at ${viewportWidth}px / ${expected.size}; offset was ${phoneStyles.calendarPlaceholder.labelCenterOffsetY}px.`);
+            assert.equal(phoneStyles.calendarPlaceholder.labelFontSize, `${14 * phoneStyles.calendarPlaceholder.textScale}px`);
+            assert.equal(phoneStyles.calendarPlaceholder.labelFontWeight, '400');
+            assert.equal(phoneStyles.calendarPlaceholder.labelColor, 'rgb(94, 107, 99)');
+            assert.equal(phoneStyles.calendarPlaceholder.liveRole, 'status');
+            assert.equal(phoneStyles.calendarPlaceholder.livePoliteness, 'polite');
+            assert.ok(phoneStyles.calendarPlaceholder.renderedHeight >= 66);
+            assert.ok(phoneStyles.calendarPlaceholder.longTextHeight > phoneStyles.calendarPlaceholder.renderedHeight,
+              `Calendar status cards must grow for wrapped text at ${viewportWidth}px / ${expected.size}.`);
+            assert.ok(phoneStyles.calendarPlaceholder.titleScrollHeight >= phoneStyles.calendarPlaceholder.titleClientHeight);
           }
 
           await page.setViewportSize({ width: 1280, height: 900 });
@@ -613,6 +803,209 @@ async function main() {
           assert.equal(await timeframeSizeToggle.getAttribute('data-text-size'), textSize);
           for (const viewportWidth of [375, 390, 430]) {
             await page.setViewportSize({ width: viewportWidth, height: 844 });
+            await page.getByRole('button', { name: /^Start focused prayer for/ }).focus();
+            await page.keyboard.press('Enter');
+            const prayerDialog = page.locator('dialog.faith-prayer-session');
+            await prayerDialog.waitFor();
+            const activePrayerLayout = await prayerDialog.evaluate(dialog => {
+              const surface = dialog.querySelector<HTMLElement>('.money-goal-dialog__surface');
+              const title = dialog.querySelector<HTMLElement>('.faith-session-heading h1');
+              const requestTitle = dialog.querySelector<HTMLElement>('.faith-session-card h2');
+              const description = dialog.querySelector<HTMLElement>('.faith-session-card > p');
+              const actions = [...dialog.querySelectorAll<HTMLButtonElement>('.faith-session-actions > button')];
+              if (!surface || !title || !requestTitle || !description || actions.length !== 3) {
+                throw new Error('Focused Prayer is missing the shared dialog surface, title, or actions.');
+              }
+              requestTitle.textContent = 'Synthetic request title for responsive text wrapping '.repeat(5);
+              description.textContent = 'Synthetic prayer description for responsive text wrapping '.repeat(14);
+              const badge = dialog.querySelector<HTMLElement>('.faith-session-person .person-badge-visual');
+              const track = dialog.querySelector<HTMLElement>('.faith-session-track');
+              const progressFill = track?.querySelector<HTMLElement>('span');
+              const prayed = dialog.querySelector<HTMLButtonElement>('.faith-session-prayed');
+              const secondary = actions[0];
+              const dialogRect = dialog.getBoundingClientRect();
+              const surfaceRect = surface.getBoundingClientRect();
+              return {
+                dialogWidth: dialogRect.width,
+                dialogHeight: dialogRect.height,
+                dialogBorder: getComputedStyle(dialog).borderTopWidth,
+                dialogRadius: getComputedStyle(dialog).borderTopLeftRadius,
+                dialogFont: getComputedStyle(dialog).fontSize,
+                labelledBy: dialog.getAttribute('aria-labelledby'),
+                titleId: title.id,
+                surfacePadding: getComputedStyle(surface).padding,
+                surfaceOverflow: getComputedStyle(surface).overflowY,
+                surfaceScrollHeight: surface.scrollHeight,
+                surfaceClientHeight: surface.clientHeight,
+                titleFontSize: getComputedStyle(title).fontSize,
+                requestTitleFontSize: getComputedStyle(requestTitle).fontSize,
+                descriptionFontSize: getComputedStyle(description).fontSize,
+                textScale: Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-text-scale')),
+                titleScrollWidth: title.scrollWidth,
+                titleClientWidth: title.clientWidth,
+                requestTitleScrollWidth: requestTitle.scrollWidth,
+                requestTitleClientWidth: requestTitle.clientWidth,
+                descriptionScrollWidth: description.scrollWidth,
+                descriptionClientWidth: description.clientWidth,
+                documentWidth: document.documentElement.scrollWidth,
+                eyebrowColor: getComputedStyle(dialog.querySelector('.faith-eyebrow')!).color,
+                badgeBorder: badge ? getComputedStyle(badge).borderTopColor : null,
+                progressTrack: track ? getComputedStyle(track).backgroundColor : null,
+                progressFill: progressFill ? getComputedStyle(progressFill).backgroundColor : null,
+                prayedBackground: prayed ? getComputedStyle(prayed).backgroundColor : null,
+                secondaryBorder: secondary ? getComputedStyle(secondary).borderTopColor : null,
+                secondaryColor: secondary ? getComputedStyle(secondary).color : null,
+                progressMax: dialog.querySelector('[role="progressbar"]')?.getAttribute('aria-valuemax'),
+                actionHeights: actions.map(button => button.getBoundingClientRect().height),
+                actionBounds: actions.map(button => {
+                  const rect = button.getBoundingClientRect();
+                  return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+                }),
+                surfaceBounds: {
+                  left: surfaceRect.left,
+                  right: surfaceRect.right,
+                  top: surfaceRect.top,
+                  bottom: surfaceRect.bottom
+                },
+                requestTitleText: requestTitle.textContent
+              };
+            });
+            assert.equal(activePrayerLayout.dialogWidth, viewportWidth);
+            assert.equal(activePrayerLayout.dialogHeight, 844);
+            assert.equal(activePrayerLayout.dialogBorder, '0px');
+            assert.equal(activePrayerLayout.dialogRadius, '0px');
+            assert.equal(activePrayerLayout.labelledBy, 'today-prayer-session-title');
+            assert.match(activePrayerLayout.surfacePadding, /18px/);
+            assert.equal(activePrayerLayout.surfaceOverflow, 'auto');
+            assert.ok(Math.abs(Number.parseFloat(activePrayerLayout.titleFontSize) - 19.2 * activePrayerLayout.textScale) < 0.1);
+            assert.ok(Math.abs(Number.parseFloat(activePrayerLayout.requestTitleFontSize) - 19.2 * activePrayerLayout.textScale) < 0.1);
+            assert.ok(Math.abs(Number.parseFloat(activePrayerLayout.descriptionFontSize) - 16.512 * activePrayerLayout.textScale) < 0.1);
+            assert.ok(activePrayerLayout.titleScrollWidth <= activePrayerLayout.titleClientWidth);
+            assert.ok(activePrayerLayout.requestTitleScrollWidth <= activePrayerLayout.requestTitleClientWidth);
+            assert.ok(activePrayerLayout.descriptionScrollWidth <= activePrayerLayout.descriptionClientWidth);
+            assert.ok(activePrayerLayout.documentWidth <= viewportWidth);
+            assert.equal(activePrayerLayout.eyebrowColor, 'rgb(112, 90, 141)');
+            assert.equal(activePrayerLayout.badgeBorder, 'rgb(210, 197, 223)');
+            assert.equal(activePrayerLayout.progressTrack, 'rgb(240, 234, 245)');
+            assert.equal(activePrayerLayout.progressFill, 'rgb(128, 98, 154)');
+            assert.equal(activePrayerLayout.prayedBackground, 'rgb(128, 98, 154)');
+            assert.equal(activePrayerLayout.secondaryBorder, 'rgb(210, 197, 223)');
+            assert.equal(activePrayerLayout.secondaryColor, 'rgb(112, 90, 141)');
+            assert.match(activePrayerLayout.progressMax ?? '', /^[1-9]\d*$/);
+            assert.ok(activePrayerLayout.actionHeights.every(height => height >= 44));
+            assert.ok(activePrayerLayout.actionBounds.every(bounds =>
+              bounds.left >= activePrayerLayout.surfaceBounds.left
+              && bounds.right <= activePrayerLayout.surfaceBounds.right
+            ));
+            assert.ok(activePrayerLayout.surfaceScrollHeight > activePrayerLayout.surfaceClientHeight);
+            await prayerDialog.locator('.faith-session-prayed').scrollIntoViewIfNeeded();
+            const reachableActionBounds = await prayerDialog.evaluate(dialog => {
+              const surface = dialog.querySelector<HTMLElement>('.money-goal-dialog__surface');
+              if (!surface) throw new Error('Focused Prayer dialog surface is missing.');
+              const surfaceBounds = surface.getBoundingClientRect();
+              return [...dialog.querySelectorAll<HTMLElement>('.faith-session-actions > button')].map(button => {
+                const bounds = button.getBoundingClientRect();
+                return bounds.top >= surfaceBounds.top && bounds.bottom <= surfaceBounds.bottom;
+              });
+            });
+            assert.ok(reachableActionBounds.every(Boolean));
+            assert.ok(activePrayerLayout.requestTitleText);
+            await prayerDialog.getByRole('button', { name: 'End session' }).focus();
+            await page.keyboard.press('Tab');
+            const skipFocus = await prayerDialog.evaluate(() => ({
+              name: document.activeElement?.textContent?.trim(),
+              focusVisible: document.activeElement instanceof HTMLElement && document.activeElement.matches(':focus-visible'),
+              outline: document.activeElement instanceof HTMLElement ? getComputedStyle(document.activeElement).outlineWidth : null
+            }));
+            assert.equal(skipFocus.name, 'Skip');
+            assert.equal(skipFocus.focusVisible, true);
+            assert.equal(skipFocus.outline, '3px');
+            await page.keyboard.press('Shift+Tab');
+            const endFocus = await prayerDialog.evaluate(() => ({
+              name: document.activeElement?.textContent?.trim(),
+              focusVisible: document.activeElement instanceof HTMLElement && document.activeElement.matches(':focus-visible'),
+              outline: document.activeElement instanceof HTMLElement ? getComputedStyle(document.activeElement).outlineWidth : null
+            }));
+            assert.equal(endFocus.name, 'End session');
+            assert.equal(endFocus.focusVisible, true);
+            assert.equal(endFocus.outline, '3px');
+            await prayerDialog.getByRole('button', { name: 'Back' }).evaluate(button => {
+              if (!(button instanceof HTMLButtonElement)) throw new Error('Back action is not a button.');
+              button.disabled = false;
+              button.focus();
+            });
+            const backFocus = await prayerDialog.evaluate(() => ({
+              name: document.activeElement?.textContent?.trim(),
+              focusVisible: document.activeElement instanceof HTMLElement && document.activeElement.matches(':focus-visible'),
+              outline: document.activeElement instanceof HTMLElement ? getComputedStyle(document.activeElement).outlineWidth : null
+            }));
+            assert.equal(backFocus.name, 'Back');
+            assert.equal(backFocus.outline, '3px');
+            await page.keyboard.press('Tab');
+            await page.keyboard.press('Tab');
+            const prayedFocus = await prayerDialog.evaluate(() => ({
+              name: document.activeElement?.textContent?.trim(),
+              focusVisible: document.activeElement instanceof HTMLElement && document.activeElement.matches(':focus-visible'),
+              outline: document.activeElement instanceof HTMLElement ? getComputedStyle(document.activeElement).outlineWidth : null
+            }));
+            assert.equal(prayedFocus.name, 'Prayed');
+            assert.equal(prayedFocus.focusVisible, true);
+            assert.equal(prayedFocus.outline, '3px');
+            await prayerDialog.getByRole('button', { name: 'End session' }).click();
+            await prayerDialog.getByRole('heading', { name: 'Prayer session ended' }).waitFor();
+            const headingFocus = await prayerDialog.evaluate(dialog => {
+              const title = dialog.querySelector<HTMLElement>('.faith-session-complete h1');
+              if (!title) throw new Error('Prayer completion title is missing.');
+              const style = getComputedStyle(title);
+              return {
+                focused: document.activeElement === title,
+                outlineStyle: style.outlineStyle,
+                boxShadow: style.boxShadow
+              };
+            });
+            assert.equal(headingFocus.focused, true);
+            assert.equal(headingFocus.outlineStyle, 'none');
+            assert.equal(headingFocus.boxShadow, 'none');
+            await page.keyboard.press('Tab');
+            const endedLayout = await prayerDialog.evaluate(dialog => {
+              const surface = dialog.querySelector<HTMLElement>('.money-goal-dialog__surface');
+              const title = dialog.querySelector<HTMLElement>('.faith-session-complete h1');
+              const finish = dialog.querySelector<HTMLButtonElement>('.faith-session-close');
+              if (!surface || !title || !finish) throw new Error('Ended Prayer screen is missing its title or Finish action.');
+              return {
+                border: getComputedStyle(dialog).borderTopWidth,
+                titleSize: getComputedStyle(title).fontSize,
+                finishHeight: finish.getBoundingClientRect().height,
+                finishBottom: finish.getBoundingClientRect().bottom,
+                surfaceBottom: surface.getBoundingClientRect().bottom,
+                cardBackground: getComputedStyle(dialog.querySelector('.faith-session-complete__card')!).backgroundColor,
+                finishBorder: getComputedStyle(finish).borderTopColor,
+                finishColor: getComputedStyle(finish).color,
+                finishFocused: document.activeElement === finish,
+                finishFocusVisible: finish.matches(':focus-visible'),
+                finishFocusStyle: getComputedStyle(finish).outlineStyle,
+                finishFocusWidth: getComputedStyle(finish).outlineWidth,
+                summary: dialog.querySelector('.faith-session-complete p')?.textContent?.trim()
+              };
+            });
+            assert.equal(endedLayout.border, '0px');
+            assert.ok(Math.abs(Number.parseFloat(endedLayout.titleSize) - 19.2 * activePrayerLayout.textScale) < 0.1);
+            assert.ok(endedLayout.finishHeight >= 44);
+            assert.ok(endedLayout.finishBottom <= endedLayout.surfaceBottom);
+            assert.equal(endedLayout.cardBackground, 'rgb(255, 255, 255)');
+            assert.equal(endedLayout.finishBorder, 'rgb(210, 197, 223)');
+            assert.equal(endedLayout.finishColor, 'rgb(112, 90, 141)');
+            assert.equal(endedLayout.finishFocused, true);
+            assert.equal(endedLayout.finishFocusVisible, true);
+            assert.equal(endedLayout.finishFocusStyle, 'solid');
+            assert.equal(endedLayout.finishFocusWidth, '3px');
+            assert.equal(endedLayout.summary, 'You marked 0 requests prayed.');
+            await prayerDialog.getByRole('button', { name: 'Finish' }).click();
+            await prayerDialog.waitFor({ state: 'detached' });
+            assert.equal(await page.evaluate(() => (
+              document.activeElement instanceof HTMLElement
+              && document.activeElement.matches('[data-prayer-session-start]')
+            )), true);
             for (const viewName of ['Now', 'Flexible', 'All today'] as const) {
               const tab = page.getByRole('tab', { name: viewName, exact: true });
               await tab.click();
@@ -703,16 +1096,6 @@ async function main() {
                     progress.textContent = '0 of 1';
                     if (isAllToday) progress.setAttribute('aria-hidden', 'true');
                     meta.append(progress);
-                    if (isAllToday) {
-                      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                      icon.classList.add('today-plan__accordion-toggle-icon');
-                      icon.setAttribute('viewBox', '0 0 20 20');
-                      icon.setAttribute('aria-hidden', 'true');
-                      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                      path.setAttribute('d', expanded ? 'M5 10h10' : 'M5 10h10M10 5v10');
-                      icon.append(path);
-                      meta.append(icon);
-                    }
                     titleRow.append(title, meta);
                     const range = document.createElement('span');
                     range.className = 'today-timeframe-header__range';
@@ -729,7 +1112,18 @@ async function main() {
                       disclosure.setAttribute('aria-label', `${titleText}, ${rangeText}, 0 of 1 tended`);
                       disclosure.setAttribute('aria-expanded', index === 0 ? 'true' : 'false');
                       disclosure.setAttribute('aria-controls', panelId);
-                      disclosure.append(content);
+                      const marker = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                      marker.classList.add('today-plan__agenda-marker', `today-plan__agenda-marker--${expanded ? 'expanded' : 'collapsed'}`);
+                      marker.setAttribute('viewBox', '0 0 20 20');
+                      marker.setAttribute('aria-hidden', 'true');
+                      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                      circle.setAttribute('cx', '10');
+                      circle.setAttribute('cy', '10');
+                      circle.setAttribute('r', '9');
+                      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                      path.setAttribute('d', expanded ? 'M6 10h8' : 'M6 10h8M10 6v8');
+                      marker.append(circle, path);
+                      disclosure.append(marker, content);
                       header.append(disclosure);
                       accordionPanel = document.createElement('div');
                       accordionPanel.id = panelId;
@@ -785,6 +1179,7 @@ async function main() {
                   && nowGroup
                   && !nowGroup.querySelector('.today-rhythm-details-dialog--inline .today-rhythm-details__header h3')
                 ) {
+                  nowGroup.querySelector('.today-plan__empty-rhythms')?.remove();
                   const card = document.createElement('article');
                   card.className = 'today-rhythm-details-dialog today-rhythm-details-dialog--inline browser-test-rhythm-card';
                   const cardHeader = document.createElement('header');
@@ -796,10 +1191,13 @@ async function main() {
                   titleGroup.append(rhythmTitle);
                   cardHeader.append(titleGroup);
                   card.append(cardHeader);
-                  (
-                    nowGroup.querySelector<HTMLElement>('.current-plan-item-group')
-                    ?? nowGroup
-                  ).append(card);
+                  let itemGroup = nowGroup.querySelector<HTMLElement>('.current-plan-item-group');
+                  if (!itemGroup) {
+                    itemGroup = document.createElement('div');
+                    itemGroup.className = 'current-plan-item-group';
+                    nowGroup.append(itemGroup);
+                  }
+                  itemGroup.append(card);
                 }
                 const header = surface?.querySelector<HTMLElement>('.today-plan__agenda-group .today-timeframe-header')
                 ?? surface?.querySelector<HTMLElement>('.today-timeframe-header');
@@ -809,14 +1207,19 @@ async function main() {
                 const progress = header?.querySelector<HTMLElement>('.today-timeframe-header__progress');
                 const disclosure = header?.querySelector<HTMLButtonElement>('.today-timeframe-header__disclosure');
                 const agendaRail = surface?.querySelector<HTMLElement>('.today-plan__agenda-rail');
+                const railLineStyle = agendaRail ? getComputedStyle(agendaRail, '::before') : null;
                 const tabs = surface?.querySelector<HTMLElement>('.home-plan-type-tabs');
                 const headerRect = header?.getBoundingClientRect();
                 const tabsRect = tabs?.getBoundingClientRect();
                 const agendaRailRect = agendaRail?.getBoundingClientRect();
                 const headerDotStyle = header ? getComputedStyle(header, '::before') : null;
-                const toggleIcon = header?.querySelector<HTMLElement>('.today-plan__accordion-toggle-icon');
-                const toggleIconStyle = toggleIcon ? getComputedStyle(toggleIcon) : null;
-                const toggleRect = toggleIcon?.getBoundingClientRect();
+                const marker = header?.querySelector<SVGSVGElement>('.today-plan__agenda-marker');
+                const markerCircle = marker?.querySelector('circle');
+                const markerPath = marker?.querySelector('path');
+                const markerCircleStyle = markerCircle ? getComputedStyle(markerCircle) : null;
+                const markerPathStyle = markerPath ? getComputedStyle(markerPath) : null;
+                const markerRect = marker?.getBoundingClientRect();
+                const disclosureRect = disclosure?.getBoundingClientRect();
                 if (!header || !title || !range || !meta || !progress) {
                   throw new Error(`Today ${targetView} timeframe header is incomplete: ${JSON.stringify({
                     header: Boolean(header),
@@ -875,7 +1278,7 @@ async function main() {
                 return {
                   headerBackground: getComputedStyle(header).backgroundColor,
                   headerRadius: getComputedStyle(header).borderRadius,
-                  headerDotColor: getComputedStyle(header, '::before').backgroundColor,
+                  headerDotColor: markerCircleStyle?.fill ?? getComputedStyle(header, '::before').backgroundColor,
                   railLineWidth: agendaRail ? getComputedStyle(agendaRail, '::before').width : null,
                   railLineCenter: agendaRailRect && agendaRail
                     ? agendaRailRect.left + Number.parseFloat(getComputedStyle(agendaRail, '::before').left)
@@ -883,11 +1286,13 @@ async function main() {
                   tabBarLeft: tabsRect?.left ?? null,
                   agendaContentInset: agendaRail ? Number.parseFloat(getComputedStyle(agendaRail).paddingInlineStart) : null,
                   headerLeft: headerRect?.left ?? null,
-                  headerDotCenter: headerRect && headerDotStyle
-                    ? headerRect.left
-                      + Number.parseFloat(headerDotStyle.left)
-                      + Number.parseFloat(headerDotStyle.width) / 2
-                    : null,
+                  headerDotCenter: markerRect
+                    ? markerRect.left + markerRect.width / 2
+                    : headerRect && agendaRail && headerDotStyle
+                      ? headerRect.left
+                        + Number.parseFloat(headerDotStyle.left)
+                        + Number.parseFloat(headerDotStyle.width) / 2
+                      : null,
                   titleSize: Number.parseFloat(titleStyle.fontSize),
                   titleWeight: titleStyle.fontWeight,
                   rangeSize: Number.parseFloat(rangeStyle.fontSize),
@@ -899,18 +1304,20 @@ async function main() {
                   titleRight: titleRect.right,
                   progressLeft: progressRect.left,
                   disclosure: Boolean(disclosure),
-                  toggleIcon: Boolean(header.querySelector('.today-plan__accordion-toggle-icon')),
-                  togglePath: header.querySelector('.today-plan__accordion-toggle-icon path')?.getAttribute('d') ?? null,
-                  toggleWidth: toggleRect?.width ?? null,
-                  toggleHeight: toggleRect?.height ?? null,
-                  togglePadding: toggleIconStyle?.padding ?? null,
-                  toggleColor: toggleIconStyle?.color ?? null,
-                  toggleStrokeWidth: toggleIconStyle?.strokeWidth ?? null,
+                  marker: Boolean(marker),
+                  togglePath: markerPath?.getAttribute('d') ?? null,
+                  toggleWidth: markerRect?.width ?? null,
+                  toggleHeight: markerRect?.height ?? null,
+                  toggleFill: markerCircleStyle?.fill ?? null,
+                  toggleStroke: markerPathStyle?.stroke ?? null,
+                  railLineColor: railLineStyle?.backgroundColor ?? null,
+                  toggleStrokeWidth: markerPathStyle?.strokeWidth ?? null,
                   titleColor: titleStyle.color,
-                  toggleBorderWidth: toggleIconStyle?.borderTopWidth ?? null,
-                  toggleRadius: toggleIconStyle?.borderRadius ?? null,
-                  toggleRightInset: headerRect && toggleRect ? headerRect.right - toggleRect.right : null,
                   disclosureHeight: disclosure?.getBoundingClientRect().height ?? null,
+                  disclosureLeft: disclosureRect?.left ?? null,
+                  disclosureRight: disclosureRect?.right ?? null,
+                  markerLeft: markerRect?.left ?? null,
+                  markerRight: markerRect?.right ?? null,
                   expanded: disclosure?.getAttribute('aria-expanded') ?? null,
                   panelId: disclosure?.getAttribute('aria-controls') ?? null,
                   groupDivider: groups[1] ? getComputedStyle(groups[1]).borderTopWidth : null,
@@ -927,6 +1334,10 @@ async function main() {
                   titleTextInset: contentStyle ? Number.parseFloat(contentStyle.paddingInlineStart) + Number.parseFloat(titleStyle.paddingInlineStart) : null,
                   rangeTextInset: contentStyle ? Number.parseFloat(contentStyle.paddingInlineStart) + Number.parseFloat(rangeStyle.paddingInlineStart) : null,
                   cardTitleLeft: cardTitleRect?.left ?? null,
+                  cardLeft: cardRect?.left ?? null,
+                  headerToCardGap: headerRect && cardRect
+                    ? cardRect.top - headerRect.bottom
+                    : null,
                   headerTitleTextLeft: titleRect.left + Number.parseFloat(titleStyle.paddingInlineStart),
                   headerRangeTextLeft: rangeRect.left + Number.parseFloat(rangeStyle.paddingInlineStart),
                   cardContentPadding: card
@@ -973,20 +1384,28 @@ async function main() {
               const expectedProgressSize = 20 * snapshot.scale * 0.6;
               assert.equal(snapshot.headerBackground, 'rgb(242, 243, 242)', `${viewName} ${viewportWidth}px ${textSize}`);
               assert.equal(snapshot.headerRadius, '10px', `${viewName} ${viewportWidth}px ${textSize}`);
-              assert.equal(
-                snapshot.headerDotColor,
-                snapshot.disclosure && snapshot.expanded === 'false'
-                  ? 'rgb(174, 182, 176)'
-                  : 'rgb(36, 107, 82)'
-              );
-              assert.equal(snapshot.railLineWidth, '1px');
               assert.notEqual(snapshot.tabBarLeft, null);
-              assert.ok(
-                Math.abs((snapshot.railLineCenter ?? 0) - (snapshot.tabBarLeft ?? 0) - (viewName === 'All today' ? 4 : 0)) < 0.5
-              );
-              assert.equal(snapshot.agendaContentInset, 20);
-              assert.equal(snapshot.headerLeft, (snapshot.tabBarLeft ?? 0) + 20);
-              assert.ok(Math.abs((snapshot.headerDotCenter ?? 0) - (snapshot.railLineCenter ?? 0)) < 0.5);
+              if (viewName === 'Now') {
+                assert.equal(snapshot.railLineWidth, null);
+                assert.equal(snapshot.agendaContentInset, null);
+                assert.equal(snapshot.headerDotCenter, null);
+                assert.equal(snapshot.marker, false);
+                assert.equal(snapshot.liveRailVisible, false);
+                assert.ok(Math.abs((snapshot.headerLeft ?? 0) - (snapshot.cardLeft ?? 0)) < 1,
+                  `Now must not retain an agenda rail gutter at ${viewportWidth}px / ${textSize}.`);
+              } else {
+                assert.equal(snapshot.railLineWidth, '1px');
+                assert.ok(
+                  Math.abs((snapshot.railLineCenter ?? 0) - (snapshot.tabBarLeft ?? 0) - (viewName === 'All today' ? 4 : 0)) < 0.5
+                );
+                assert.equal(snapshot.agendaContentInset, 20);
+                assert.equal(snapshot.headerLeft, (snapshot.tabBarLeft ?? 0) + 20);
+                assert.ok(Math.abs((snapshot.headerDotCenter ?? 0) - (snapshot.railLineCenter ?? 0)) < 0.5);
+              }
+              if (viewName === 'Flexible') {
+                assert.equal(snapshot.marker, false);
+                assert.equal(snapshot.headerDotColor, 'rgb(36, 107, 82)');
+              }
               assert.ok(Math.abs(snapshot.titleSize - expectedTitleSize) < 0.1);
               assert.equal(snapshot.titleWeight, '600');
               assert.ok(Math.abs(snapshot.rangeSize - expectedRangeSize) < 0.1);
@@ -1010,6 +1429,13 @@ async function main() {
               }
               assert.equal(snapshot.resultsPaddingTop, '28px');
               assert.equal(snapshot.documentWidth, snapshot.viewportWidth, `${viewName} ${viewportWidth}px ${textSize}`);
+              if (viewName !== 'All today') {
+                assert.equal(
+                  snapshot.headerToCardGap,
+                  12,
+                  `${viewName} ${viewportWidth}px ${textSize}: timeframe header to first Rhythm card gap`
+                );
+              }
               assert.equal(snapshot.liveRailVisible, snapshot.liveGroupCount > 1);
               if (snapshot.liveGroupCount > 1) {
                 assert.ok(Math.abs((snapshot.liveRailTop ?? 0) - (snapshot.liveFirstDotCenter ?? 0)) < 0.5);
@@ -1018,17 +1444,19 @@ async function main() {
                 ) < 0.5);
               }
               assert.equal(snapshot.disclosure, viewName === 'All today');
-              assert.equal(snapshot.toggleIcon, viewName === 'All today');
+              assert.equal(snapshot.marker, viewName === 'All today');
               if (viewName === 'All today') {
-                assert.equal(snapshot.togglePath, 'M5 10h10');
-              assert.ok((snapshot.disclosureHeight ?? 0) >= 44);
-              assert.equal(snapshot.toggleWidth, 24);
-              assert.equal(snapshot.toggleHeight, 24);
-              assert.equal(snapshot.togglePadding, '2px');
-              assert.equal(snapshot.toggleBorderWidth, '1px');
-              assert.equal(snapshot.toggleRadius, '50%');
-              assert.equal(snapshot.toggleColor, snapshot.titleColor);
-              assert.equal(snapshot.toggleStrokeWidth, '1.6px');
+                assert.equal(snapshot.togglePath, 'M6 10h8');
+                assert.ok((snapshot.disclosureHeight ?? 0) >= 44);
+                assert.equal(snapshot.toggleWidth, 20);
+                assert.equal(snapshot.toggleHeight, 20);
+                assert.equal(snapshot.toggleFill, 'rgb(36, 107, 82)');
+                assert.equal(snapshot.toggleStroke, 'rgb(255, 255, 255)');
+                assert.equal(snapshot.toggleStrokeWidth, '1.6px');
+                assert.equal(snapshot.railLineColor, 'rgb(220, 228, 222)');
+                assert.ok((snapshot.disclosureLeft ?? Infinity) <= (snapshot.markerLeft ?? -Infinity));
+                assert.ok((snapshot.disclosureRight ?? -Infinity) >= (snapshot.markerRight ?? Infinity));
+                assert.ok(Math.abs((snapshot.progressRightGap ?? 0)) < 0.5);
               }
               if (viewName === 'Now') assert.equal(snapshot.actualControlToHeader, 28);
               if (viewName === 'Flexible') assert.equal(snapshot.groupDivider, '0px');
@@ -1049,17 +1477,18 @@ async function main() {
 
               if (viewName === 'All today') {
                 const actualGroups = page.locator(
-                  '.today-plan-section .today-plan__agenda-rail--all-today > .today-plan__agenda-group'
+                  '.today-plan-section .today-plan__results .today-plan__agenda-rail--all-today > .today-plan__agenda-group'
                 );
                 const actualGroupCount = await actualGroups.count();
                 if (actualGroupCount > 1) {
-                const clickFinalDisclosure = () => page.evaluate(() => {
-                  const button = document.querySelector<HTMLElement>(
-                    '.today-plan-section .today-plan__agenda-rail--all-today > .today-plan__agenda-group:last-child .today-timeframe-header__disclosure'
-                  );
-                  if (!button) throw new Error('Cannot toggle the final live All today group.');
-                  button.click();
-                });
+                const finalDisclosure = page.locator(
+                  '.today-plan-section .today-plan__results .today-plan__agenda-rail--all-today > .today-plan__agenda-group:last-child .today-timeframe-header__disclosure'
+                );
+                const finalMarker = finalDisclosure.locator('.today-plan__agenda-marker');
+                const originalExpanded = await finalDisclosure.getAttribute('aria-expanded');
+                if (originalExpanded !== 'true' && originalExpanded !== 'false') {
+                  throw new Error('Cannot read the live All today group state.');
+                }
                   const assertActualRailEndpoints = async () => {
                     const endpoints = await page.evaluate(() => {
                       const rail = document.querySelector<HTMLElement>(
@@ -1088,9 +1517,34 @@ async function main() {
                     assert.ok(Math.abs(endpoints.lineBottom - endpoints.lastDot) < 0.5);
                   };
 
-                  await clickFinalDisclosure();
+                  await finalMarker.click();
+                  assert.equal(
+                    await finalDisclosure.getAttribute('aria-expanded'),
+                    originalExpanded === 'true' ? 'false' : 'true',
+                    'A mouse click on the visible circle should toggle exactly once.'
+                  );
                   await assertActualRailEndpoints();
-                  await clickFinalDisclosure();
+                  const markerBounds = await finalMarker.boundingBox();
+                  if (!markerBounds) throw new Error('Cannot measure the live All today circle touch target.');
+                  await page.touchscreen.tap(
+                    markerBounds.x + markerBounds.width / 2,
+                    markerBounds.y + markerBounds.height / 2
+                  );
+                  assert.equal(
+                    await finalDisclosure.getAttribute('aria-expanded'),
+                    originalExpanded,
+                    'A touch on the visible circle should toggle exactly once.'
+                  );
+                  await assertActualRailEndpoints();
+                  await finalDisclosure.focus();
+                  await page.keyboard.press('Space');
+                  assert.equal(
+                    await finalDisclosure.getAttribute('aria-expanded'),
+                    originalExpanded === 'true' ? 'false' : 'true',
+                    'Keyboard activation should toggle exactly once.'
+                  );
+                  await page.keyboard.press('Space');
+                  assert.equal(await finalDisclosure.getAttribute('aria-expanded'), originalExpanded);
                   await assertActualRailEndpoints();
                 }
 
@@ -1129,35 +1583,40 @@ async function main() {
                   firstGroup.classList.add('today-plan__agenda-group--collapsed');
                   firstHeader.classList.add('today-timeframe-header--collapsed');
                   firstHeader.classList.remove('today-timeframe-header--expanded');
-                  firstHeader.querySelector('.today-plan__accordion-toggle-icon path')?.setAttribute('d', 'M5 10h10M10 5v10');
+                  const marker = firstHeader.querySelector<SVGSVGElement>('.today-plan__agenda-marker');
+                  const markerPath = marker?.querySelector('path');
+                  marker?.classList.remove('today-plan__agenda-marker--expanded');
+                  marker?.classList.add('today-plan__agenda-marker--collapsed');
+                  markerPath?.setAttribute('d', 'M6 10h8M10 6v8');
                   firstDisclosure.setAttribute('aria-expanded', 'false');
                   firstPanel.hidden = true;
+                  const markerRect = marker?.getBoundingClientRect();
                   return {
                     divider: getComputedStyle(groups[1]!).borderTopWidth,
                     paddingTop: getComputedStyle(groups[1]!).paddingTop,
-                    dotColor: getComputedStyle(firstHeader, '::before').backgroundColor,
-                    iconPath: firstHeader.querySelector('.today-plan__accordion-toggle-icon path')?.getAttribute('d'),
-                    dotCenter: firstHeader.getBoundingClientRect().left
-                      + Number.parseFloat(getComputedStyle(firstHeader, '::before').left)
-                      + Number.parseFloat(getComputedStyle(firstHeader, '::before').width) / 2,
+                    dotColor: marker?.querySelector('circle') ? getComputedStyle(marker.querySelector('circle')!).fill : null,
+                    symbolColor: marker?.querySelector('path') ? getComputedStyle(marker.querySelector('path')!).stroke : null,
+                    railColor: getComputedStyle(groupsContainer, '::before').backgroundColor,
+                    iconPath: markerPath?.getAttribute('d'),
+                    dotCenter: markerRect ? markerRect.left + markerRect.width / 2 : null,
                     lineCenter: groupsContainer.getBoundingClientRect().left
                       + Number.parseFloat(getComputedStyle(groupsContainer, '::before').left),
                     headerContentInset: getComputedStyle(groupsContainer).paddingInlineStart,
-                    toggleRect: firstHeader.querySelector('.today-plan__accordion-toggle-icon')?.getBoundingClientRect().toJSON(),
-                    collapsedIconRightInset: firstHeader.getBoundingClientRect().right
-                      - (firstHeader.querySelector('.today-plan__accordion-toggle-icon')?.getBoundingClientRect().right ?? 0)
+                    toggleRect: markerRect?.toJSON()
                   };
                 });
                 assert.equal(collapsedResult.divider, '0px');
                 assert.equal(collapsedResult.paddingTop, '12px');
-                assert.equal(collapsedResult.dotColor, 'rgb(174, 182, 176)');
-                assert.equal(collapsedResult.iconPath, 'M5 10h10M10 5v10');
-                assert.ok(Math.abs(collapsedResult.dotCenter - collapsedResult.lineCenter) < 0.5);
+                assert.equal(collapsedResult.dotColor, 'rgb(36, 107, 82)');
+                assert.equal(collapsedResult.symbolColor, 'rgb(255, 255, 255)');
+                assert.equal(collapsedResult.railColor, 'rgb(220, 228, 222)');
+                assert.equal(collapsedResult.iconPath, 'M6 10h8M10 6v8');
+                assert.ok(collapsedResult.dotCenter !== null
+                  && Math.abs(collapsedResult.dotCenter - collapsedResult.lineCenter) < 0.5);
                 assert.ok(Math.abs(collapsedResult.lineCenter - ((snapshot.tabBarLeft ?? 0) + 4)) < 0.5);
                 assert.equal(collapsedResult.headerContentInset, '20px');
-                assert.equal(collapsedResult.toggleRect.width, 24);
-                assert.equal(collapsedResult.toggleRect.height, 24);
-                assert.ok(Math.abs(collapsedResult.collapsedIconRightInset - (snapshot.toggleRightInset ?? 0)) < 0.5);
+                assert.equal(collapsedResult.toggleRect.width, 20);
+                assert.equal(collapsedResult.toggleRect.height, 20);
 
                 const stressResult = await page.evaluate(() => {
                   const header = document.querySelector<HTMLElement>('#timeframe-browser-fixture .today-timeframe-header--collapsed');

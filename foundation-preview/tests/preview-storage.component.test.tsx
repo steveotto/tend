@@ -699,6 +699,32 @@ describe('synthetic preview storage adapter and envelope', () => {
     });
   });
 
+  it('defaults the Today calendar preference on while migrating schema v41', () => {
+    const priorData = createSamplePreviewData();
+    const priorEnvelope = {
+      ...createPreviewEnvelope(priorData),
+      schemaVersion: 41,
+      data: { ...priorData } as Record<string, unknown>
+    };
+    delete priorEnvelope.data.showCalendarOnToday;
+
+    const parsed = parsePreviewBackup(JSON.stringify(priorEnvelope), '2026-10-31');
+    expect(parsed.valid).toBe(true);
+    if (!parsed.valid) return;
+    expect(parsed.sourceSchemaVersion).toBe(41);
+    expect(parsed.envelope.data.showCalendarOnToday).toBe(true);
+
+    const hidden = createPreviewEnvelope({
+      ...parsed.envelope.data,
+      showCalendarOnToday: false
+    });
+    expect(hidden.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+    expect(parsePreviewBackup(JSON.stringify(hidden), '2026-10-31')).toMatchObject({
+      valid: true,
+      envelope: { data: { showCalendarOnToday: false } }
+    });
+  });
+
   it('retains the Appearance preference from the alternate schema v40 document', () => {
     const branchEnvelope = {
       ...createPreviewEnvelope(createSamplePreviewData()),
@@ -1584,6 +1610,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       prayerRequests: [],
       timeBlocks: createDefaultTimeBlockSettings(),
       showTended: false,
+      showCalendarOnToday: true,
       todayView: 'now' as const,
       textSize: 'small' as const,
       calendarSources: []
@@ -1650,7 +1677,8 @@ describe('synthetic preview storage adapter and envelope', () => {
       showTended: false,
       todayView: 'now',
       textSize: 'small',
-      calendarSources: []
+      calendarSources: [],
+      showCalendarOnToday: true
     });
   });
 

@@ -431,6 +431,94 @@ describe('Tend Today preview', () => {
     expect(document.querySelector('.today-plan__weather')).toBeNull();
   });
 
+  it('opens Calendar settings through More and stores sources only in the synthetic preview envelope', async () => {
+    const user = userEvent.setup();
+    testingRender(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+
+    await user.click(screen.getByRole('button', { name: 'More, settings' }));
+    await user.click(await screen.findByRole('button', { name: 'Settings' }));
+    const heading = await screen.findByRole('heading', { name: 'Calendar' });
+    expect(heading).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Add calendar' }));
+    await user.type(screen.getByLabelText('Calendar name'), 'Synthetic work');
+    const sourceUrl = 'https://p123-caldav.icloud.com/published/synthetic-only-token';
+    await user.type(screen.getByLabelText('Public iCloud calendar link'), sourceUrl);
+    await user.click(screen.getByRole('button', { name: 'Save calendar' }));
+
+    const saved = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    expect(saved.envelope.data.calendarSources).toEqual([{
+      id: expect.stringMatching(/^calendar-source-/),
+      name: 'Synthetic work',
+      url: sourceUrl,
+      enabled: true
+    }]);
+    expect(window.localStorage.getItem('tend:cal2')).toBeNull();
+  });
+
+  it('persists Calendar visibility and does not request events while hidden on Today', async () => {
+    const user = userEvent.setup();
+    const { unmount } = testingRender(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await openPreviewSettings(user);
+
+    const showOnToday = screen.getByRole('checkbox', { name: 'Show calendar on Today' }) as HTMLInputElement;
+    expect(showOnToday.checked).toBe(true);
+    await user.click(showOnToday);
+    await waitFor(() => {
+      const saved = parsePreviewBackup(
+        window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '',
+        localDateString(new Date())
+      );
+      expect(saved.valid && saved.envelope.data.showCalendarOnToday).toBe(false);
+    });
+
+    const tools = screen.getByRole('navigation', { name: 'Tools and navigation' });
+    await user.click(within(tools).getByRole('button', { name: 'Today' }));
+    expect(screen.queryByRole('heading', { name: 'On your calendar' })).toBeNull();
+
+    await openPreviewSettings(user);
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ events: [], issueCount: 0 }),
+      { status: 200, headers: { 'content-type': 'application/json' } }
+    ));
+    await user.click(screen.getByRole('button', { name: 'Add controlled test feed' }));
+    await waitFor(() => {
+      const saved = parsePreviewBackup(
+        window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '',
+        localDateString(new Date())
+      );
+      expect(saved.valid && saved.envelope.data.calendarSources).toHaveLength(1);
+      expect(saved.valid && saved.envelope.data.showCalendarOnToday).toBe(false);
+    });
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'Today' }));
+    expect(screen.queryByRole('heading', { name: 'On your calendar' })).toBeNull();
+    const calendarReads = () => fetchMock.mock.calls.filter(([input]) => String(input) === '/api/calendar/read');
+    expect(calendarReads()).toHaveLength(0);
+
+    unmount();
+    testingRender(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    expect(screen.queryByRole('heading', { name: 'On your calendar' })).toBeNull();
+    await openPreviewSettings(user);
+    const reloadedToggle = screen.getByRole('checkbox', { name: 'Show calendar on Today' }) as HTMLInputElement;
+    expect(reloadedToggle.checked).toBe(false);
+    await user.click(reloadedToggle);
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'Today' }));
+
+    expect(await screen.findByRole('heading', { name: 'On your calendar' })).toBeTruthy();
+    await waitFor(() => expect(calendarReads()).toHaveLength(1));
+    expect(await screen.findByText('No events today.')).toBeTruthy();
+  });
+
   it('saves editable time blocks without rendering the reusable time filter on Today', async () => {
     const user = userEvent.setup();
     const { unmount } = testingRender(<App />);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   calendarFeedUrlError,
+  selectEnabledCalendarSources,
   validateCalendarSources
 } from '../src/domain/calendar-sources.ts';
 import {
@@ -42,6 +43,20 @@ describe('calendar source contract', () => {
     expect(validateCalendarSources([source, source]).valid).toBe(false);
     expect(validateCalendarSources([{ ...source, name: ' ' }]).valid).toBe(false);
     expect(validateCalendarSources([{ ...source, name: 'x'.repeat(61) }]).valid).toBe(false);
+  });
+
+  it('keeps older sources enabled by default and preserves explicit enabled settings', () => {
+    const sources = [
+      { id: 'calendar-source-legacy', name: 'Legacy', url: 'https://p123-caldav.icloud.com/published/legacy' },
+      { id: 'calendar-source-disabled', name: 'Disabled', url: 'https://p123-caldav.icloud.com/published/disabled', enabled: false }
+    ];
+    const result = validateCalendarSources(sources);
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.sources).toEqual(sources);
+    expect(selectEnabledCalendarSources(result.sources).map(source => source.id)).toEqual([
+      'calendar-source-legacy'
+    ]);
   });
 });
 
@@ -132,12 +147,21 @@ describe('calendar source backup schema', () => {
     data.calendarSources = [{
       id: 'calendar-source-test-2',
       name: 'Personal',
-      url: 'https://p123-caldav.icloud.com/published/synthetic-token'
+      url: 'https://p123-caldav.icloud.com/published/synthetic-token',
+      enabled: false
+    }, {
+      id: 'calendar-source-test-3',
+      name: 'Work',
+      url: 'webcal://p123-caldav.icloud.com/published/legacy-source'
     }];
     const envelope = createPreviewEnvelope(data);
 
     expect(envelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
     expect(parsePreviewBackup(JSON.stringify(envelope), '2026-11-06')).toMatchObject({
+      valid: true,
+      envelope: { data: { calendarSources: data.calendarSources } }
+    });
+    expect(validatePreviewEnvelope(envelope, '2026-11-06')).toMatchObject({
       valid: true,
       envelope: { data: { calendarSources: data.calendarSources } }
     });
