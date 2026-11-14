@@ -707,7 +707,7 @@ describe('Friendships view', () => {
     expect(screen.getByRole('button', { name: 'Open synthetic profile for Morgan Reed' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Marriage/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'View scores and history for Monthly breakfast, Health 0 out of 100' }).textContent).toContain('0');
-    expect(screen.getByText('Never')).toBeTruthy();
+    expect(screen.getByText('Not yet')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Tend Monthly breakfast' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Add Rhythm' }));
     expect(addRhythm).toHaveBeenCalledOnce();

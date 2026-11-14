@@ -3295,7 +3295,7 @@ describe('Tend Today preview', () => {
     expect(within(todayCard).getByRole('button', { name: historyButtonName('View scores and history for Pray together') })).toBeTruthy();
     expect(within(todayCard).getByRole('button', { name: 'Tend Pray together' })).toBeTruthy();
     expect(within(todayCard).getByText('Take a quiet moment to pray together and begin the day connected.')).toBeTruthy();
-    expect(within(todayCard).getByText('Never')).toBeTruthy();
+    expect(within(todayCard).getByText('Not yet')).toBeTruthy();
     expect(within(todayCard).queryByRole('button', { name: 'Details for Pray together' })).toBeNull();
     expect(within(todayCard).queryByRole('button', { name: 'Close details' })).toBeNull();
     expect(within(todayCard).queryByRole('button', { name: /Back/ })).toBeNull();
@@ -4314,7 +4314,7 @@ describe('Tend Today preview', () => {
     expect(savedAfterDelete.valid && savedAfterDelete.envelope.data.datedRhythmCompletions).toEqual([]);
     expect(savedAfterDelete.valid && savedAfterDelete.envelope.data.activeRhythmCompletions).toEqual([]);
     expect(savedAfterDelete.valid && savedAfterDelete.envelope.data.completedRhythmIds).not.toContain('sample-pray-together');
-    expect(within(reloadedCard).getByText('Never')).toBeTruthy();
+    expect(within(reloadedCard).getByText('Not yet')).toBeTruthy();
     const detailsOpener = within(reloadedCard).getByRole('button', { name: historyButtonName('View scores and history for Pray together') });
     await user.click(within(reloadedHistory).getByRole('button', { name: 'Close details' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());

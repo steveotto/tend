@@ -631,28 +631,64 @@ async function main() {
                     left: '0',
                     width: `${window.innerWidth}px`,
                     padding: '16px',
+                    boxSizing: 'border-box',
                     opacity: '0',
                     pointerEvents: 'none',
                     zIndex: '-1'
                   });
                   surface.replaceChildren();
+                  const controls = document.createElement('div');
+                  controls.className = 'today-plan__controls';
+                  const tabs = document.createElement('div');
+                  tabs.className = 'faith-practice-tabs home-plan-type-tabs browser-test-timeframe-tabs';
+                  tabs.setAttribute('role', 'tablist');
+                  for (const label of ['Now', 'Flexible', 'All today']) {
+                    const tab = document.createElement('button');
+                    tab.type = 'button';
+                    tab.textContent = label;
+                    tabs.append(tab);
+                  }
+                  controls.append(tabs);
                   const groupsContainer = document.createElement('div');
                   const isAllToday = targetView === 'All today';
                   groupsContainer.className = isAllToday
-                    ? 'today-plan__accordion-groups'
-                    : 'current-plan-items current-plan-items--flexible';
-                  surface.append(groupsContainer);
+                    ? 'today-plan__accordion-groups today-plan__agenda-rail today-plan__agenda-rail--all-today'
+                    : 'today-plan__agenda-rail today-plan__agenda-rail--flexible';
+                  surface.append(controls, groupsContainer);
                   const groupFixtures = [
                     ['Anytime', 'On your schedule'],
                     ['All-day', 'Throughout the day']
                   ] as const;
+                  const makeRhythmCard = () => {
+                    const card = document.createElement('article');
+                    card.className = 'today-rhythm-details-dialog today-rhythm-details-dialog--inline browser-test-rhythm-card';
+                    card.style.height = '80px';
+                    const cardSurface = document.createElement('div');
+                    cardSurface.className = 'today-rhythm-details__surface';
+                    const cardHeader = document.createElement('header');
+                    cardHeader.className = 'today-rhythm-details__header';
+                    const titleGroup = document.createElement('div');
+                    titleGroup.className = 'today-rhythm-details__title-group';
+                    const titleCopy = document.createElement('div');
+                    titleCopy.className = 'today-rhythm-details__title-copy';
+                    const titleScoreRow = document.createElement('div');
+                    titleScoreRow.className = 'today-rhythm-details__title-score-row';
+                    const rhythmTitle = document.createElement('h3');
+                    rhythmTitle.textContent = 'Take a walk';
+                    titleScoreRow.append(rhythmTitle);
+                    titleCopy.append(titleScoreRow);
+                    titleGroup.append(titleCopy);
+                    cardHeader.append(titleGroup);
+                    cardSurface.append(cardHeader);
+                    card.append(cardSurface);
+                    return card;
+                  };
                   for (const [index, [titleText, rangeText]] of groupFixtures.entries()) {
                     const group = document.createElement('section');
-                    group.className = isAllToday
-                      ? 'today-plan__accordion-group'
-                      : 'today-plan__flexible-group';
+                    const expanded = !isAllToday || index === 0;
+                    group.className = `today-plan__agenda-group${isAllToday ? ' today-plan__accordion-group' : ' today-plan__flexible-group'} today-plan__agenda-group--${expanded ? 'expanded' : 'collapsed'}`;
                     const header = document.createElement('h4');
-                    header.className = 'today-timeframe-header';
+                    header.className = `today-timeframe-header today-timeframe-header--${expanded ? 'expanded' : 'collapsed'}`;
                     const content = document.createElement('span');
                     content.className = 'today-timeframe-header__content';
                     const titleRow = document.createElement('span');
@@ -668,14 +704,14 @@ async function main() {
                     if (isAllToday) progress.setAttribute('aria-hidden', 'true');
                     meta.append(progress);
                     if (isAllToday) {
-                      const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                      chevron.classList.add('today-plan__accordion-chevron');
-                      chevron.setAttribute('viewBox', '0 0 16 16');
-                      chevron.setAttribute('aria-hidden', 'true');
+                      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                      icon.classList.add('today-plan__accordion-toggle-icon');
+                      icon.setAttribute('viewBox', '0 0 20 20');
+                      icon.setAttribute('aria-hidden', 'true');
                       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                      path.setAttribute('d', index === 0 ? 'm3 10 5-5 5 5' : 'm3 6 5 5 5-5');
-                      chevron.append(path);
-                      meta.append(chevron);
+                      path.setAttribute('d', expanded ? 'M5 10h10' : 'M5 10h10M10 5v10');
+                      icon.append(path);
+                      meta.append(icon);
                     }
                     titleRow.append(title, meta);
                     const range = document.createElement('span');
@@ -703,27 +739,84 @@ async function main() {
                       if (index !== 0) accordionPanel.hidden = true;
                       const panelContent = document.createElement('div');
                       panelContent.className = 'today-plan__accordion-panel-content current-plan-item-group';
+                      panelContent.append(makeRhythmCard());
                       accordionPanel.append(panelContent);
                     } else {
                       header.append(content);
                     }
                     const rhythmGroup = accordionPanel ?? document.createElement('div');
                     rhythmGroup.classList.add('current-plan-item-group');
+                    if (!isAllToday) rhythmGroup.append(makeRhythmCard());
                     group.append(header, rhythmGroup);
                     groupsContainer.append(group);
                   }
                 }, viewName);
               }
               const snapshot = await page.evaluate(targetView => {
+                const liveSurface = document.querySelector<HTMLElement>('.today-plan-section');
+                const liveRail = liveSurface?.querySelector<HTMLElement>('.today-plan__agenda-rail');
+                const liveRailRect = liveRail?.getBoundingClientRect();
+                const liveRailStyle = liveRail ? getComputedStyle(liveRail, '::before') : null;
+                const liveGroups = liveRail
+                  ? [...liveRail.children].filter((child): child is HTMLElement =>
+                    child instanceof HTMLElement && child.classList.contains('today-plan__agenda-group')
+                  )
+                  : [];
+                const liveHeaders = liveGroups.map(group =>
+                  group.querySelector<HTMLElement>('.today-timeframe-header')
+                ).filter((item): item is HTMLElement => Boolean(item));
+                const liveRailTop = liveRailRect && liveRailStyle
+                  ? liveRailRect.top + Number.parseFloat(liveRailStyle.top)
+                  : null;
+                const liveFirstDotCenter = liveHeaders[0]
+                  ? liveHeaders[0].getBoundingClientRect().top + liveHeaders[0].getBoundingClientRect().height / 2
+                  : null;
+                const liveLastDotCenter = liveHeaders.at(-1)
+                  ? liveHeaders.at(-1)!.getBoundingClientRect().top + liveHeaders.at(-1)!.getBoundingClientRect().height / 2
+                  : null;
                 const surface = targetView === 'Now'
                   ? document.querySelector<HTMLElement>('.today-plan-section')
                   : document.querySelector<HTMLElement>('#timeframe-browser-fixture');
-                const header = surface?.querySelector<HTMLElement>('.today-timeframe-header');
+                const nowGroup = targetView === 'Now'
+                  ? surface?.querySelector<HTMLElement>('.today-plan__agenda-group')
+                  : null;
+                if (
+                  targetView === 'Now'
+                  && nowGroup
+                  && !nowGroup.querySelector('.today-rhythm-details-dialog--inline .today-rhythm-details__header h3')
+                ) {
+                  const card = document.createElement('article');
+                  card.className = 'today-rhythm-details-dialog today-rhythm-details-dialog--inline browser-test-rhythm-card';
+                  const cardHeader = document.createElement('header');
+                  cardHeader.className = 'today-rhythm-details__header';
+                  const titleGroup = document.createElement('div');
+                  titleGroup.className = 'today-rhythm-details__title-group';
+                  const rhythmTitle = document.createElement('h3');
+                  rhythmTitle.textContent = 'Take a walk';
+                  titleGroup.append(rhythmTitle);
+                  cardHeader.append(titleGroup);
+                  card.append(cardHeader);
+                  (
+                    nowGroup.querySelector<HTMLElement>('.current-plan-item-group')
+                    ?? nowGroup
+                  ).append(card);
+                }
+                const header = surface?.querySelector<HTMLElement>('.today-plan__agenda-group .today-timeframe-header')
+                ?? surface?.querySelector<HTMLElement>('.today-timeframe-header');
                 const title = header?.querySelector<HTMLElement>('.today-plan__view-heading');
                 const range = header?.querySelector<HTMLElement>('.today-timeframe-header__range');
                 const meta = header?.querySelector<HTMLElement>('.today-timeframe-header__meta');
                 const progress = header?.querySelector<HTMLElement>('.today-timeframe-header__progress');
                 const disclosure = header?.querySelector<HTMLButtonElement>('.today-timeframe-header__disclosure');
+                const agendaRail = surface?.querySelector<HTMLElement>('.today-plan__agenda-rail');
+                const tabs = surface?.querySelector<HTMLElement>('.home-plan-type-tabs');
+                const headerRect = header?.getBoundingClientRect();
+                const tabsRect = tabs?.getBoundingClientRect();
+                const agendaRailRect = agendaRail?.getBoundingClientRect();
+                const headerDotStyle = header ? getComputedStyle(header, '::before') : null;
+                const toggleIcon = header?.querySelector<HTMLElement>('.today-plan__accordion-toggle-icon');
+                const toggleIconStyle = toggleIcon ? getComputedStyle(toggleIcon) : null;
+                const toggleRect = toggleIcon?.getBoundingClientRect();
                 if (!header || !title || !range || !meta || !progress) {
                   throw new Error(`Today ${targetView} timeframe header is incomplete: ${JSON.stringify({
                     header: Boolean(header),
@@ -736,16 +829,65 @@ async function main() {
                 const titleStyle = getComputedStyle(title);
                 const rangeStyle = getComputedStyle(range);
                 const progressStyle = getComputedStyle(progress);
+                const content = header.querySelector<HTMLElement>('.today-timeframe-header__content');
+                const contentStyle = content ? getComputedStyle(content) : null;
                 const titleRect = title.getBoundingClientRect();
+                const rangeRect = range.getBoundingClientRect();
                 const progressRect = progress.getBoundingClientRect();
                 const metaRect = meta.getBoundingClientRect();
                 const groupSelector = targetView === 'Flexible'
                   ? '.today-plan__flexible-group'
                   : '.today-plan__accordion-group';
                 const groups = [...(surface?.querySelectorAll<HTMLElement>(groupSelector) ?? [])];
+                const results = document.querySelector<HTMLElement>('.today-plan__results');
+                const nextHeader = groups[1]?.querySelector<HTMLElement>('.today-timeframe-header');
+                const nextTitle = nextHeader?.querySelector<HTMLElement>('.today-plan__view-heading');
+                const nextRange = nextHeader?.querySelector<HTMLElement>('.today-timeframe-header__range');
+                const nextPanel = groups[0]?.querySelector<HTMLElement>('.today-plan__accordion-panel-content');
+                const rhythmCard = nextPanel?.querySelector<HTMLElement>('.browser-test-rhythm-card');
+                const firstGroupHeader = groups[0]?.querySelector<HTMLElement>('.today-timeframe-header');
+                const collapsedGroup = groups[1];
+                const collapsedHeader = collapsedGroup?.querySelector<HTMLElement>('.today-timeframe-header');
+                const collapsedTitle = collapsedHeader?.querySelector<HTMLElement>('.today-plan__view-heading');
+                const collapsedRange = collapsedHeader?.querySelector<HTMLElement>('.today-timeframe-header__range');
+                const collapsedPanel = collapsedGroup?.querySelector<HTMLElement>('.today-plan__accordion-panel');
+                const collapsedPanelWasHidden = collapsedPanel?.hidden ?? false;
+                if (collapsedPanel) collapsedPanel.hidden = false;
+                const collapsedCardTitle = collapsedGroup?.querySelector<HTMLElement>('.today-rhythm-details-dialog--inline .today-rhythm-details__header h3');
+                const collapsedCard = collapsedCardTitle?.closest<HTMLElement>('.today-rhythm-details-dialog--inline');
+                const collapsedTitleRect = collapsedTitle?.getBoundingClientRect();
+                const collapsedRangeRect = collapsedRange?.getBoundingClientRect();
+                const collapsedTitleStyle = collapsedTitle ? getComputedStyle(collapsedTitle) : null;
+                const collapsedRangeStyle = collapsedRange ? getComputedStyle(collapsedRange) : null;
+                const collapsedCardTitleRect = collapsedCardTitle?.getBoundingClientRect();
+                const collapsedCardRect = collapsedCard?.getBoundingClientRect();
+                if (collapsedPanel) collapsedPanel.hidden = collapsedPanelWasHidden;
+                const cardTitle = targetView === 'Now'
+                  ? surface?.querySelector<HTMLElement>('.today-plan__agenda-group .today-rhythm-details-dialog--inline .today-rhythm-details__header h3')
+                  : groups[0]?.querySelector<HTMLElement>('.today-rhythm-details-dialog--inline .today-rhythm-details__header h3');
+                const nextTitleRect = nextTitle?.getBoundingClientRect();
+                const nextRangeRect = nextRange?.getBoundingClientRect();
+                const cardTitleRect = cardTitle?.getBoundingClientRect();
+                const card = cardTitle?.closest<HTMLElement>('.today-rhythm-details-dialog--inline');
+                const cardRect = card?.getBoundingClientRect();
+                const actualControls = document.querySelector<HTMLElement>('.today-plan__controls');
+                const actualFirstHeader = results?.querySelector<HTMLElement>('.today-timeframe-header');
                 return {
                   headerBackground: getComputedStyle(header).backgroundColor,
                   headerRadius: getComputedStyle(header).borderRadius,
+                  headerDotColor: getComputedStyle(header, '::before').backgroundColor,
+                  railLineWidth: agendaRail ? getComputedStyle(agendaRail, '::before').width : null,
+                  railLineCenter: agendaRailRect && agendaRail
+                    ? agendaRailRect.left + Number.parseFloat(getComputedStyle(agendaRail, '::before').left)
+                    : null,
+                  tabBarLeft: tabsRect?.left ?? null,
+                  agendaContentInset: agendaRail ? Number.parseFloat(getComputedStyle(agendaRail).paddingInlineStart) : null,
+                  headerLeft: headerRect?.left ?? null,
+                  headerDotCenter: headerRect && headerDotStyle
+                    ? headerRect.left
+                      + Number.parseFloat(headerDotStyle.left)
+                      + Number.parseFloat(headerDotStyle.width) / 2
+                    : null,
                   titleSize: Number.parseFloat(titleStyle.fontSize),
                   titleWeight: titleStyle.fontWeight,
                   rangeSize: Number.parseFloat(rangeStyle.fontSize),
@@ -757,20 +899,94 @@ async function main() {
                   titleRight: titleRect.right,
                   progressLeft: progressRect.left,
                   disclosure: Boolean(disclosure),
-                  chevron: Boolean(header.querySelector('.today-plan__accordion-chevron')),
+                  toggleIcon: Boolean(header.querySelector('.today-plan__accordion-toggle-icon')),
+                  togglePath: header.querySelector('.today-plan__accordion-toggle-icon path')?.getAttribute('d') ?? null,
+                  toggleWidth: toggleRect?.width ?? null,
+                  toggleHeight: toggleRect?.height ?? null,
+                  togglePadding: toggleIconStyle?.padding ?? null,
+                  toggleColor: toggleIconStyle?.color ?? null,
+                  toggleStrokeWidth: toggleIconStyle?.strokeWidth ?? null,
+                  titleColor: titleStyle.color,
+                  toggleBorderWidth: toggleIconStyle?.borderTopWidth ?? null,
+                  toggleRadius: toggleIconStyle?.borderRadius ?? null,
+                  toggleRightInset: headerRect && toggleRect ? headerRect.right - toggleRect.right : null,
+                  disclosureHeight: disclosure?.getBoundingClientRect().height ?? null,
                   expanded: disclosure?.getAttribute('aria-expanded') ?? null,
                   panelId: disclosure?.getAttribute('aria-controls') ?? null,
                   groupDivider: groups[1] ? getComputedStyle(groups[1]).borderTopWidth : null,
+                  groupPaddingTop: groups[1] ? getComputedStyle(groups[1]).paddingTop : null,
+                  expandedCardGap: nextHeader && rhythmCard
+                    ? nextHeader.getBoundingClientRect().top - rhythmCard.getBoundingClientRect().bottom
+                    : null,
+                  expandedHeaderCardGap: firstGroupHeader && rhythmCard
+                    ? rhythmCard.getBoundingClientRect().top - firstGroupHeader.getBoundingClientRect().bottom
+                    : null,
+                  expandedRangeBelowTitle: rangeRect && titleRect
+                    ? rangeRect.top >= titleRect.bottom - 1
+                    : null,
+                  titleTextInset: contentStyle ? Number.parseFloat(contentStyle.paddingInlineStart) + Number.parseFloat(titleStyle.paddingInlineStart) : null,
+                  rangeTextInset: contentStyle ? Number.parseFloat(contentStyle.paddingInlineStart) + Number.parseFloat(rangeStyle.paddingInlineStart) : null,
+                  cardTitleLeft: cardTitleRect?.left ?? null,
+                  headerTitleTextLeft: titleRect.left + Number.parseFloat(titleStyle.paddingInlineStart),
+                  headerRangeTextLeft: rangeRect.left + Number.parseFloat(rangeStyle.paddingInlineStart),
+                  cardContentPadding: card
+                    ? Number.parseFloat(getComputedStyle(card).getPropertyValue('--rhythm-details-horizontal-padding'))
+                    : null,
+                  cardTextInset: cardRect && cardTitleRect ? cardTitleRect.left - cardRect.left : null,
+                  collapsedTitleTextLeft: collapsedTitleRect && collapsedTitleStyle
+                    ? collapsedTitleRect.left + Number.parseFloat(collapsedTitleStyle.paddingInlineStart)
+                    : null,
+                  collapsedCardTitleLeft: collapsedCardTitleRect?.left ?? null,
+                  collapsedRangeTextLeft: collapsedRangeRect && collapsedRangeStyle
+                    ? collapsedRangeRect.left + Number.parseFloat(collapsedRangeStyle.paddingInlineStart)
+                    : null,
+                  collapsedCardTextInset: collapsedCardRect && collapsedCardTitleRect
+                    ? collapsedCardTitleRect.left - collapsedCardRect.left
+                    : null,
+                  collapsedRangeBelowTitle: collapsedRangeRect && collapsedTitleRect
+                    ? collapsedRangeRect.top >= collapsedTitleRect.bottom - 1
+                    : null,
+                  collapsedTitleRangeSameLine: nextTitleRect && nextRangeRect
+                    ? Math.abs((nextTitleRect.top + nextTitleRect.bottom) / 2 - (nextRangeRect.top + nextRangeRect.bottom) / 2) < 2
+                    : null,
+                  resultsPaddingTop: results ? getComputedStyle(results).paddingTop : null,
+                  actualControlToHeader: actualControls && actualFirstHeader
+                    ? actualFirstHeader.getBoundingClientRect().top - actualControls.getBoundingClientRect().bottom
+                    : null,
                   documentWidth: document.documentElement.scrollWidth,
                   viewportWidth: window.innerWidth,
-                  scale: Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-text-scale'))
+                  scale: Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-text-scale')),
+                  liveGroupCount: liveGroups.length,
+                  liveRailDisplay: liveRailStyle?.display ?? null,
+                  liveRailVisible: Boolean(liveRail && liveRailStyle
+                    && liveRailStyle.display !== 'none'
+                    && Number.parseFloat(liveRailStyle.height) > 0),
+                  liveRailLeft: liveRailRect && liveRail ? liveRailRect.left + Number.parseFloat(getComputedStyle(liveRail, '::before').left) : null,
+                  liveRailTop,
+                  liveRailHeight: liveRailStyle ? Number.parseFloat(liveRailStyle.height) : null,
+                  liveFirstDotCenter,
+                  liveLastDotCenter
                 };
               }, viewName);
-              const expectedTitleSize = 20 * snapshot.scale * 0.85;
-              const expectedRangeSize = 20 * snapshot.scale * 0.7;
+              const expectedTitleSize = 20 * snapshot.scale * 0.65;
+              const expectedRangeSize = 20 * snapshot.scale * 0.6;
               const expectedProgressSize = 20 * snapshot.scale * 0.6;
-              assert.equal(snapshot.headerBackground, 'rgba(0, 0, 0, 0)', `${viewName} ${viewportWidth}px ${textSize}`);
-              assert.equal(snapshot.headerRadius, '0px', `${viewName} ${viewportWidth}px ${textSize}`);
+              assert.equal(snapshot.headerBackground, 'rgb(242, 243, 242)', `${viewName} ${viewportWidth}px ${textSize}`);
+              assert.equal(snapshot.headerRadius, '10px', `${viewName} ${viewportWidth}px ${textSize}`);
+              assert.equal(
+                snapshot.headerDotColor,
+                snapshot.disclosure && snapshot.expanded === 'false'
+                  ? 'rgb(174, 182, 176)'
+                  : 'rgb(36, 107, 82)'
+              );
+              assert.equal(snapshot.railLineWidth, '1px');
+              assert.notEqual(snapshot.tabBarLeft, null);
+              assert.ok(
+                Math.abs((snapshot.railLineCenter ?? 0) - (snapshot.tabBarLeft ?? 0) - (viewName === 'All today' ? 4 : 0)) < 0.5
+              );
+              assert.equal(snapshot.agendaContentInset, 20);
+              assert.equal(snapshot.headerLeft, (snapshot.tabBarLeft ?? 0) + 20);
+              assert.ok(Math.abs((snapshot.headerDotCenter ?? 0) - (snapshot.railLineCenter ?? 0)) < 0.5);
               assert.ok(Math.abs(snapshot.titleSize - expectedTitleSize) < 0.1);
               assert.equal(snapshot.titleWeight, '600');
               assert.ok(Math.abs(snapshot.rangeSize - expectedRangeSize) < 0.1);
@@ -778,43 +994,202 @@ async function main() {
               assert.equal(snapshot.progressBackground, 'rgb(241, 242, 242)');
               assert.equal(snapshot.progressRadius, '999px');
               assert.match(snapshot.progressText ?? '', /^\d+ of \d+$/);
-              assert.ok(snapshot.progressRightGap >= 0 && snapshot.progressRightGap < 30);
+              assert.ok(snapshot.progressRightGap >= 0 && snapshot.progressRightGap < 40);
               assert.ok(snapshot.titleRight <= snapshot.progressLeft);
+              assert.equal(snapshot.titleTextInset, snapshot.cardTextInset);
+              assert.equal(snapshot.rangeTextInset, snapshot.cardTextInset);
+              assert.ok(
+                Math.abs((snapshot.headerTitleTextLeft ?? 0) - (snapshot.cardTitleLeft ?? 0)) < 0.5,
+                `${viewName} ${viewportWidth}px ${textSize}: header title at ${snapshot.headerTitleTextLeft}px, Rhythm title at ${snapshot.cardTitleLeft}px`
+              );
+              if (snapshot.expandedRangeBelowTitle === true) {
+                assert.ok(
+                  Math.abs((snapshot.headerRangeTextLeft ?? 0) - (snapshot.cardTitleLeft ?? 0)) < 0.5,
+                  `${viewName} ${viewportWidth}px ${textSize}: header range at ${snapshot.headerRangeTextLeft}px, Rhythm title at ${snapshot.cardTitleLeft}px`
+                );
+              }
+              assert.equal(snapshot.resultsPaddingTop, '28px');
               assert.equal(snapshot.documentWidth, snapshot.viewportWidth, `${viewName} ${viewportWidth}px ${textSize}`);
+              assert.equal(snapshot.liveRailVisible, snapshot.liveGroupCount > 1);
+              if (snapshot.liveGroupCount > 1) {
+                assert.ok(Math.abs((snapshot.liveRailTop ?? 0) - (snapshot.liveFirstDotCenter ?? 0)) < 0.5);
+                assert.ok(Math.abs(
+                  (snapshot.liveRailTop ?? 0) + (snapshot.liveRailHeight ?? 0) - (snapshot.liveLastDotCenter ?? 0)
+                ) < 0.5);
+              }
               assert.equal(snapshot.disclosure, viewName === 'All today');
-              assert.equal(snapshot.chevron, viewName === 'All today');
+              assert.equal(snapshot.toggleIcon, viewName === 'All today');
+              if (viewName === 'All today') {
+                assert.equal(snapshot.togglePath, 'M5 10h10');
+              assert.ok((snapshot.disclosureHeight ?? 0) >= 44);
+              assert.equal(snapshot.toggleWidth, 24);
+              assert.equal(snapshot.toggleHeight, 24);
+              assert.equal(snapshot.togglePadding, '2px');
+              assert.equal(snapshot.toggleBorderWidth, '1px');
+              assert.equal(snapshot.toggleRadius, '50%');
+              assert.equal(snapshot.toggleColor, snapshot.titleColor);
+              assert.equal(snapshot.toggleStrokeWidth, '1.6px');
+              }
+              if (viewName === 'Now') assert.equal(snapshot.actualControlToHeader, 28);
+              if (viewName === 'Flexible') assert.equal(snapshot.groupDivider, '0px');
+              if (viewName !== 'Now') assert.equal(snapshot.groupPaddingTop, '24px');
               if (viewName === 'All today') {
                 assert.ok(snapshot.panelId);
                 assert.ok(snapshot.expanded === 'true' || snapshot.expanded === 'false');
+                assert.equal(snapshot.groupDivider, '0px');
+                assert.equal(snapshot.expandedCardGap, 24);
+                assert.equal(snapshot.expandedHeaderCardGap, 12);
+                assert.equal(snapshot.expandedRangeBelowTitle, true);
+                assert.equal(snapshot.collapsedTitleRangeSameLine, true);
+                assert.equal(snapshot.collapsedTitleTextLeft, snapshot.collapsedCardTitleLeft);
+                if (snapshot.collapsedRangeBelowTitle === true) {
+                  assert.equal(snapshot.collapsedRangeTextLeft, snapshot.collapsedCardTitleLeft);
+                }
               }
-              if (snapshot.groupDivider !== null) assert.equal(snapshot.groupDivider, '1px');
 
               if (viewName === 'All today') {
+                const actualGroups = page.locator(
+                  '.today-plan-section .today-plan__agenda-rail--all-today > .today-plan__agenda-group'
+                );
+                const actualGroupCount = await actualGroups.count();
+                if (actualGroupCount > 1) {
+                const clickFinalDisclosure = () => page.evaluate(() => {
+                  const button = document.querySelector<HTMLElement>(
+                    '.today-plan-section .today-plan__agenda-rail--all-today > .today-plan__agenda-group:last-child .today-timeframe-header__disclosure'
+                  );
+                  if (!button) throw new Error('Cannot toggle the final live All today group.');
+                  button.click();
+                });
+                  const assertActualRailEndpoints = async () => {
+                    const endpoints = await page.evaluate(() => {
+                      const rail = document.querySelector<HTMLElement>(
+                        '.today-plan-section .today-plan__agenda-rail--all-today'
+                      );
+                      if (!rail) throw new Error('Cannot find live All today agenda rail.');
+                      const groups = [...rail.children].filter((child): child is HTMLElement =>
+                        child instanceof HTMLElement && child.classList.contains('today-plan__agenda-group')
+                      );
+                      const headers = groups.map(group => group.querySelector<HTMLElement>('.today-timeframe-header'))
+                        .filter((header): header is HTMLElement => Boolean(header));
+                      const railStyle = getComputedStyle(rail, '::before');
+                      const railRect = rail.getBoundingClientRect();
+                      const first = headers[0]!.getBoundingClientRect();
+                      const last = headers.at(-1)!.getBoundingClientRect();
+                      return {
+                        lineVisible: railStyle.display !== 'none',
+                        lineTop: railRect.top + Number.parseFloat(railStyle.top),
+                        lineBottom: railRect.top + Number.parseFloat(railStyle.top) + Number.parseFloat(railStyle.height),
+                        firstDot: first.top + first.height / 2,
+                        lastDot: last.top + last.height / 2
+                      };
+                    });
+                    assert.equal(endpoints.lineVisible, true);
+                    assert.ok(Math.abs(endpoints.lineTop - endpoints.firstDot) < 0.5);
+                    assert.ok(Math.abs(endpoints.lineBottom - endpoints.lastDot) < 0.5);
+                  };
+
+                  await clickFinalDisclosure();
+                  await assertActualRailEndpoints();
+                  await clickFinalDisclosure();
+                  await assertActualRailEndpoints();
+                }
+
+                await page.keyboard.press('Tab');
+                const focusResult = await page.evaluate(() => {
+                  const disclosure = document.querySelector<HTMLElement>(
+                    '#timeframe-browser-fixture .today-timeframe-header__disclosure'
+                  );
+                  if (!disclosure) throw new Error('Cannot focus the timeframe disclosure.');
+                  disclosure.focus();
+                  const style = getComputedStyle(disclosure);
+                  return {
+                    focusedVisible: disclosure.matches(':focus-visible'),
+                    outlineStyle: style.outlineStyle,
+                    outlineWidth: style.outlineWidth
+                  };
+                });
+                assert.equal(focusResult.focusedVisible, true);
+                assert.equal(focusResult.outlineStyle, 'solid');
+                assert.equal(focusResult.outlineWidth, '3px');
+
+                const collapsedResult = await page.evaluate(() => {
+                  const groups = [...document.querySelectorAll<HTMLElement>('#timeframe-browser-fixture .today-plan__accordion-group')];
+                  const groupsContainer = document.querySelector<HTMLElement>(
+                    '#timeframe-browser-fixture .today-plan__agenda-rail'
+                  );
+                  const firstGroup = groups[0];
+                  const firstHeader = firstGroup?.querySelector<HTMLElement>('.today-timeframe-header');
+                  const firstDisclosure = firstGroup?.querySelector<HTMLButtonElement>('.today-timeframe-header__disclosure');
+                  const firstPanel = firstGroup?.querySelector<HTMLElement>('.today-plan__accordion-panel');
+                  if (!groupsContainer || !firstGroup || !firstHeader || !firstDisclosure || !firstPanel) {
+                    throw new Error('Cannot check collapsed timeframe group spacing.');
+                  }
+                  firstGroup.classList.add('today-plan__accordion-group--collapsed');
+                  firstGroup.classList.remove('today-plan__agenda-group--expanded');
+                  firstGroup.classList.add('today-plan__agenda-group--collapsed');
+                  firstHeader.classList.add('today-timeframe-header--collapsed');
+                  firstHeader.classList.remove('today-timeframe-header--expanded');
+                  firstHeader.querySelector('.today-plan__accordion-toggle-icon path')?.setAttribute('d', 'M5 10h10M10 5v10');
+                  firstDisclosure.setAttribute('aria-expanded', 'false');
+                  firstPanel.hidden = true;
+                  return {
+                    divider: getComputedStyle(groups[1]!).borderTopWidth,
+                    paddingTop: getComputedStyle(groups[1]!).paddingTop,
+                    dotColor: getComputedStyle(firstHeader, '::before').backgroundColor,
+                    iconPath: firstHeader.querySelector('.today-plan__accordion-toggle-icon path')?.getAttribute('d'),
+                    dotCenter: firstHeader.getBoundingClientRect().left
+                      + Number.parseFloat(getComputedStyle(firstHeader, '::before').left)
+                      + Number.parseFloat(getComputedStyle(firstHeader, '::before').width) / 2,
+                    lineCenter: groupsContainer.getBoundingClientRect().left
+                      + Number.parseFloat(getComputedStyle(groupsContainer, '::before').left),
+                    headerContentInset: getComputedStyle(groupsContainer).paddingInlineStart,
+                    toggleRect: firstHeader.querySelector('.today-plan__accordion-toggle-icon')?.getBoundingClientRect().toJSON(),
+                    collapsedIconRightInset: firstHeader.getBoundingClientRect().right
+                      - (firstHeader.querySelector('.today-plan__accordion-toggle-icon')?.getBoundingClientRect().right ?? 0)
+                  };
+                });
+                assert.equal(collapsedResult.divider, '0px');
+                assert.equal(collapsedResult.paddingTop, '12px');
+                assert.equal(collapsedResult.dotColor, 'rgb(174, 182, 176)');
+                assert.equal(collapsedResult.iconPath, 'M5 10h10M10 5v10');
+                assert.ok(Math.abs(collapsedResult.dotCenter - collapsedResult.lineCenter) < 0.5);
+                assert.ok(Math.abs(collapsedResult.lineCenter - ((snapshot.tabBarLeft ?? 0) + 4)) < 0.5);
+                assert.equal(collapsedResult.headerContentInset, '20px');
+                assert.equal(collapsedResult.toggleRect.width, 24);
+                assert.equal(collapsedResult.toggleRect.height, 24);
+                assert.ok(Math.abs(collapsedResult.collapsedIconRightInset - (snapshot.toggleRightInset ?? 0)) < 0.5);
+
                 const stressResult = await page.evaluate(() => {
-                  const header = document.querySelector<HTMLElement>('#timeframe-browser-fixture .today-timeframe-header');
+                  const header = document.querySelector<HTMLElement>('#timeframe-browser-fixture .today-timeframe-header--collapsed');
                   const title = header?.querySelector<HTMLElement>('.today-plan__view-heading');
                   const progress = header?.querySelector<HTMLElement>('.today-timeframe-header__progress');
-                  if (!title || !progress) throw new Error('Cannot stress-test a missing timeframe title or progress pill.');
+                  if (!header || !title || !progress) throw new Error('Cannot stress-test a missing timeframe title or progress pill.');
                   const originalTitle = title.textContent;
                   const originalProgress = progress.textContent;
+                  const range = header.querySelector<HTMLElement>('.today-timeframe-header__range');
+                  const originalRange = range?.textContent;
                   title.textContent = 'A deliberately long custom timeframe name for responsive layout verification';
                   progress.textContent = '123 of 123';
+                  if (range) range.textContent = 'A deliberately long schedule subtitle with extended hours for responsive layout verification';
                   const titleRect = title.getBoundingClientRect();
-                  const progressRect = progress.getBoundingClientRect();
+                  const rangeRect = range?.getBoundingClientRect();
+                  const headerRect = header.getBoundingClientRect();
                   const result = {
                     documentWidth: document.documentElement.scrollWidth,
                     viewportWidth: window.innerWidth,
                     titleWidth: titleRect.width,
-                    titleRight: titleRect.right,
-                    progressLeft: progressRect.left
+                    rangeBelowTitle: rangeRect ? rangeRect.top >= titleRect.bottom - 1 : false,
+                    rangeWithinHeader: rangeRect ? rangeRect.right <= headerRect.right - 10 : false
                   };
                   title.textContent = originalTitle;
                   progress.textContent = originalProgress;
+                  if (range && originalRange) range.textContent = originalRange;
                   return result;
                 });
                 assert.equal(stressResult.documentWidth, stressResult.viewportWidth);
                 assert.ok(stressResult.titleWidth > 0);
-                assert.ok(stressResult.titleRight <= stressResult.progressLeft);
+                assert.equal(stressResult.rangeBelowTitle, true);
+                assert.equal(stressResult.rangeWithinHeader, true);
               }
             }
           }

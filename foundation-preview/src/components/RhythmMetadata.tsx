@@ -38,6 +38,11 @@ export function RhythmMetadata(props: RhythmMetadataProps) {
     );
   }
 
+  const lastTended = props.lastTended === 'Never' ? 'Not yet' : props.lastTended;
+  const statusAccessibleLabel = props.lastTended === 'Never'
+    ? 'Not tended yet'
+    : `Last tended: ${lastTended}`;
+
   return (
     <div className={`rhythm-metadata-footer${props.className ? ` ${props.className}` : ''}`}>
       <RhythmScheduleSummary
@@ -49,8 +54,8 @@ export function RhythmMetadata(props: RhythmMetadataProps) {
       <RhythmStatus
         className="rhythm-metadata-last-tended"
         undoBeforeStatus
-        status={props.lastTended}
-        statusAccessibleLabel={`Last tended: ${props.lastTended}`}
+        status={lastTended}
+        statusAccessibleLabel={statusAccessibleLabel}
         rhythmTitle={props.rhythmTitle}
         completed={props.completed}
         onUndo={props.onUndo}

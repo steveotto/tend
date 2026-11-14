@@ -9,6 +9,7 @@ type TodayTimeframeHeaderProps = {
   title: string;
   timeRange?: string | undefined;
   headingId?: string;
+  agendaState?: 'expanded' | 'collapsed';
   progress?: TodayTimeframeProgress;
   trailingContent?: ReactNode;
   disclosure?: {
@@ -23,10 +24,12 @@ export function TodayTimeframeHeader({
   title,
   timeRange,
   headingId,
+  agendaState,
   progress,
   trailingContent,
   disclosure
 }: TodayTimeframeHeaderProps) {
+  const expanded = disclosure?.expanded ?? agendaState === 'expanded';
   const content = (
     <span className="today-timeframe-header__content">
       <span className="today-timeframe-header__title-row">
@@ -43,8 +46,8 @@ export function TodayTimeframeHeader({
               </span>
             )}
             {disclosure && (
-              <svg className="today-plan__accordion-chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                <path d={disclosure.expanded ? 'm3 10 5-5 5 5' : 'm3 6 5 5 5-5'} />
+              <svg className="today-plan__accordion-toggle-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                <path d={expanded ? 'M5 10h10' : 'M5 10h10M10 5v10'} />
               </svg>
             )}
           </span>
@@ -55,7 +58,10 @@ export function TodayTimeframeHeader({
   );
 
   return (
-    <h4 id={headingId} className="today-timeframe-header">
+    <h4
+      id={headingId}
+      className={`today-timeframe-header today-timeframe-header--${expanded ? 'expanded' : 'collapsed'}`}
+    >
       {disclosure
         ? (
           <button

@@ -258,12 +258,14 @@ describe('Today time-frame interaction', () => {
     const plan = todayPlan();
     expect(within(plan).getByText('1 of 2', { selector: '.today-timeframe-header__progress' })).toBeTruthy();
     expect(plan.querySelector('.today-timeframe-header__disclosure')).toBeNull();
-    expect(plan.querySelector('.today-plan__accordion-chevron')).toBeNull();
+    expect(plan.querySelector('.today-plan__accordion-toggle-icon')).toBeNull();
+    expect(plan.querySelector('.today-plan__agenda-group--expanded')).toBeTruthy();
 
     await user.click(within(planTabs(plan)).getByRole('tab', { name: 'Flexible' }));
     expect(within(plan).getAllByText('0 of 1', { selector: '.today-timeframe-header__progress' })).toHaveLength(2);
-    expect(plan.querySelector('.today-plan__accordion-chevron')).toBeNull();
+    expect(plan.querySelector('.today-plan__accordion-toggle-icon')).toBeNull();
     expect(plan.querySelector('.today-timeframe-header__disclosure')).toBeNull();
+    expect(plan.querySelectorAll('.today-plan__agenda-group--expanded')).toHaveLength(2);
   });
 
   it('offers the quiet View all today action when Now is empty and distinguishes hidden tended items', async () => {
@@ -344,6 +346,10 @@ describe('Today time-frame interaction', () => {
     expect(morning.textContent).not.toContain('Rhythm');
     expect(morning.getAttribute('aria-expanded')).toBe('true');
     expect(lunch.getAttribute('aria-expanded')).toBe('false');
+    expect(morning.querySelector('.today-plan__accordion-toggle-icon path')?.getAttribute('d')).toBe('M5 10h10');
+    expect(lunch.querySelector('.today-plan__accordion-toggle-icon path')?.getAttribute('d')).toBe('M5 10h10M10 5v10');
+    expect(morning.closest('.today-timeframe-header')?.classList.contains('today-timeframe-header--collapsed')).toBe(false);
+    expect(lunch.closest('.today-timeframe-header')?.classList.contains('today-timeframe-header--collapsed')).toBe(true);
     expect(anytime.getAttribute('aria-expanded')).toBe('false');
     expect(within(anytime).getByText('On your schedule', { selector: '.today-timeframe-header__range' })).toBeTruthy();
     const allDay = within(plan).getByRole('button', { name: /^All-day/ });
@@ -355,8 +361,12 @@ describe('Today time-frame interaction', () => {
     morning.focus();
     await user.keyboard('{Enter}');
     expect(morning.getAttribute('aria-expanded')).toBe('false');
+    expect(morning.querySelector('.today-plan__accordion-toggle-icon path')?.getAttribute('d')).toBe('M5 10h10M10 5v10');
+    expect(morning.closest('.today-timeframe-header')?.classList.contains('today-timeframe-header--collapsed')).toBe(true);
     await user.keyboard(' ');
     expect(morning.getAttribute('aria-expanded')).toBe('true');
+    expect(morning.querySelector('.today-plan__accordion-toggle-icon path')?.getAttribute('d')).toBe('M5 10h10');
+    expect(morning.closest('.today-timeframe-header')?.classList.contains('today-timeframe-header--collapsed')).toBe(false);
     await user.click(lunch);
     await user.click(morning);
     expect(morning.getAttribute('aria-expanded')).toBe('false');
@@ -371,6 +381,96 @@ describe('Today time-frame interaction', () => {
     expect(plan.querySelectorAll('.today-timeframe-header__disclosure[aria-expanded="true"]')).toHaveLength(2);
     rerender(<TodayHarness rhythms={rhythms} satisfiedRhythmIds={new Set()} />);
     expect(plan.querySelectorAll('.today-timeframe-header__disclosure[aria-expanded="true"]')).toHaveLength(2);
+  });
+
+  it('opens the current timeframe on entry and adds new defaults across time transitions without resetting choices', async () => {
+    const user = userEvent.setup();
+    const timeBlockSettings = {
+      ...defaultTimeBlocks,
+      blocks: defaultTimeBlocks.blocks.map(block => {
+        if (block.id === 'lunch') return { ...block, start: '12:00' };
+        if (block.id === 'afternoon') return { ...block, start: '13:00' };
+        if (block.id === 'evening') return { ...block, start: '17:00' };
+        return block;
+      })
+    };
+    const rhythms = [
+      makeRhythm('morning-item', 'Morning item', 'morning'),
+      makeRhythm('lunch-item', 'Lunch item', 'lunch'),
+      makeRhythm('afternoon-item', 'Afternoon item', 'afternoon'),
+      makeRhythm('anytime-item', 'Anytime item', 'anytime'),
+      makeRhythm('all-day-item', 'All-day item', 'all-day')
+    ];
+    const { rerender } = renderToday({
+      rhythms,
+      satisfiedRhythmIds: new Set(),
+      timeBlockSettings,
+      evaluationInstant: new Date(2026, 9, 31, 10, 0)
+    });
+    const plan = todayPlan();
+    await user.click(within(planTabs(plan)).getByRole('tab', { name: 'All today' }));
+    const group = (name: string) => within(plan).getByRole('button', { name: new RegExp(`^${name}`) });
+    const morning = group('Morning');
+    const lunch = group('Lunch');
+    const afternoon = group('Afternoon');
+    const anytime = group('Anytime');
+    const allDay = group('All-day');
+
+    expect(morning.getAttribute('aria-expanded')).toBe('true');
+    expect(lunch.getAttribute('aria-expanded')).toBe('false');
+    expect(afternoon.getAttribute('aria-expanded')).toBe('false');
+    expect(anytime.getAttribute('aria-expanded')).toBe('false');
+    expect(allDay.getAttribute('aria-expanded')).toBe('false');
+
+    await user.click(morning);
+    await user.click(anytime);
+    rerender(<TodayHarness
+      rhythms={rhythms}
+      satisfiedRhythmIds={new Set()}
+      timeBlockSettings={timeBlockSettings}
+      evaluationInstant={new Date(2026, 9, 31, 12, 30)}
+    />);
+    expect(morning.getAttribute('aria-expanded')).toBe('false');
+    expect(lunch.getAttribute('aria-expanded')).toBe('true');
+    expect(anytime.getAttribute('aria-expanded')).toBe('true');
+    expect(afternoon.getAttribute('aria-expanded')).toBe('false');
+
+    await user.click(lunch);
+    rerender(<TodayHarness
+      rhythms={rhythms}
+      satisfiedRhythmIds={new Set()}
+      timeBlockSettings={timeBlockSettings}
+      evaluationInstant={new Date(2026, 9, 31, 14, 0)}
+    />);
+    expect(lunch.getAttribute('aria-expanded')).toBe('false');
+    expect(afternoon.getAttribute('aria-expanded')).toBe('true');
+    expect(morning.getAttribute('aria-expanded')).toBe('false');
+    expect(anytime.getAttribute('aria-expanded')).toBe('true');
+
+    rerender(<TodayHarness
+      rhythms={rhythms}
+      satisfiedRhythmIds={new Set()}
+      timeBlockSettings={timeBlockSettings}
+      evaluationInstant={new Date(2026, 10, 1, 10, 0)}
+      localDate="2026-11-01"
+    />);
+    expect(morning.getAttribute('aria-expanded')).toBe('false');
+    expect(afternoon.getAttribute('aria-expanded')).toBe('true');
+    expect(anytime.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('omits empty timeframe groups and does not expand the first visible group when the current one is empty', () => {
+    const rhythms = [makeRhythm('morning-item', 'Morning item', 'morning')];
+    renderToday({
+      rhythms,
+      satisfiedRhythmIds: new Set(),
+      initialView: 'all-today',
+      evaluationInstant: new Date(2026, 9, 31, 12, 30)
+    });
+    const plan = todayPlan();
+    expect(within(plan).getByRole('button', { name: /^Morning/ }).getAttribute('aria-expanded')).toBe('false');
+    expect(within(plan).queryByRole('button', { name: /^Lunch/ })).toBeNull();
+    expect(plan.querySelectorAll('.today-timeframe-header__disclosure[aria-expanded="true"]')).toHaveLength(0);
   });
 
   it('shows collection counts before hiding tended Rhythms and keeps progress in collapsed summaries', async () => {
