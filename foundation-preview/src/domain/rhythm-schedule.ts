@@ -1,4 +1,6 @@
 import { isValidDate } from './money-goals.ts';
+import { rhythmSeasonForDate } from './rhythm-seasons.ts';
+import type { RhythmPreview } from './preview-data.ts';
 
 export const rhythmTimeOptions = [
   { value: 'anytime', label: 'Anytime' },
@@ -64,6 +66,18 @@ export function effectiveRhythmSchedule(
 ): RhythmSchedule | undefined {
   if (schedule) return schedule;
   return cadence === 'Daily' ? { frequency: 'daily' } : undefined;
+}
+
+export function rhythmScheduleForDate(
+  rhythm: Pick<RhythmPreview, 'schedule' | 'cadence' | 'scoring'>,
+  date: string
+): RhythmSchedule | undefined {
+  if (!isValidDate(date)) return undefined;
+  if (rhythm.scoring) {
+    const season = rhythmSeasonForDate(rhythm.scoring.scheduleHistory, date);
+    return season?.kind === 'scheduled' ? season.schedule : undefined;
+  }
+  return effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
 }
 
 export type RhythmScheduleSegment = {

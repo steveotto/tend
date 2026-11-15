@@ -1958,6 +1958,32 @@ export function updateStrengthGuidedSession(
     : { valid: false, error: 'The workout date or start time cannot be later than a confirmed set.' };
 }
 
+export function updateStrengthGuidedSessionRhythm(
+  session: StrengthGuidedSessionDraft,
+  rhythmId?: string,
+  completionId?: string
+): { valid: true; session: StrengthGuidedSessionDraft } | { valid: false; error: string } {
+  if (!validateStrengthGuidedSessionDraft(session)) {
+    return { valid: false, error: 'The guided workout session is invalid.' };
+  }
+  const next = { ...session };
+  if (rhythmId === undefined) {
+    delete next.rhythmId;
+    delete next.rhythmOccurrence;
+    delete next.completionId;
+  } else {
+    if (!isNonEmptyText(rhythmId, 160) || !isNonEmptyText(completionId, 160)) {
+      return { valid: false, error: 'Choose a valid workout Rhythm.' };
+    }
+    next.rhythmId = rhythmId;
+    next.rhythmOccurrence = session.date;
+    next.completionId = completionId;
+  }
+  return validateStrengthGuidedSessionDraft(next)
+    ? { valid: true, session: next }
+    : { valid: false, error: 'The guided workout session is invalid.' };
+}
+
 export function updateStrengthGuidedExerciseNotes(
   session: StrengthGuidedSessionDraft,
   exerciseId: string,

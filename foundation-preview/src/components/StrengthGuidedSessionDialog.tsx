@@ -1,9 +1,12 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import type { MouseEvent } from 'react';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { AnchoredPopover } from './AnchoredPopover.tsx';
 import { NumericControl } from './NumericControl.tsx';
 import { PersonBadge } from './PersonBadge.tsx';
 import { StrengthExerciseResults } from './StrengthExerciseResults.tsx';
+import { StrengthRhythmCompletionPicker } from './StrengthRhythmCompletionPicker.tsx';
+import { StrengthWorkoutOnlyConfirmationDialog } from './StrengthWorkoutOnlyConfirmationDialog.tsx';
 import {
   addStrengthSessionSet,
   confirmStrengthSessionSet,
@@ -31,7 +34,8 @@ import {
   startStrengthExerciseTimer,
   resetStrengthExerciseTimer,
   updateStrengthGuidedExerciseNotes,
-  updateStrengthGuidedSession
+  updateStrengthGuidedSession,
+  updateStrengthGuidedSessionRhythm
 } from '../domain/strength.ts';
 import type {
   StrengthGuidedSessionDraft,
@@ -42,11 +46,20 @@ import type {
   StrengthWorkoutLog
 } from '../domain/strength.ts';
 import { localDateTimeInZone } from '../domain/rhythm-completion.ts';
+import type { DatedRhythmCompletion } from '../domain/rhythm-completion.ts';
+import {
+  selectStrengthWorkoutRhythmOptions
+} from '../domain/strength-rhythm-linking.ts';
+import type { StrengthRhythmSetting } from '../domain/strength-rhythm-linking.ts';
 import { syntheticPeople } from '../domain/preview-data.ts';
-import type { PersonPreview } from '../domain/preview-data.ts';
+import type { PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
 
 type Props = {
   people?: readonly PersonPreview[];
+  rhythms: readonly StrengthRhythmSetting[];
+  archivedRhythms?: readonly RhythmPreview[];
+  datedRhythmCompletions: readonly DatedRhythmCompletion[];
+  onAddLinkedRhythm?: (foundationId: string, event: MouseEvent<HTMLButtonElement>) => void;
   session: StrengthGuidedSessionDraft;
   workouts: readonly StrengthWorkoutLog[];
   preferredWeightUnit?: 'lb' | 'kg';
@@ -78,6 +91,10 @@ const INVALID_LOAD_ERROR = 'Enter a valid load value, or leave it blank.';
 
 export function StrengthGuidedSessionDialog({
   people = syntheticPeople,
+  rhythms,
+  archivedRhythms = [],
+  datedRhythmCompletions,
+  onAddLinkedRhythm,
   session,
   workouts,
   preferredWeightUnit = 'lb',
@@ -100,9 +117,13 @@ export function StrengthGuidedSessionDialog({
   const [customRestSeconds, setCustomRestSeconds] = useState('0');
   const [restDurationDraft, setRestDurationDraft] = useState<number | null>(null);
   const [restDurationSource, setRestDurationSource] = useState<'preset' | 'custom'>('preset');
+  const [confirmingWorkoutOnly, setConfirmingWorkoutOnly] = useState(false);
   const [autoStartRestDraft, setAutoStartRestDraft] = useState(false);
   const [soundDraftEnabled, setSoundDraftEnabled] = useState(false);
   const [error, setError] = useState('');
+  const workoutRhythmSelectionRef = useRef<HTMLFieldSetElement | null>(null);
+  const finishingRef = useRef(false);
+  const acknowledgedUnlinkedSessionRef = useRef(false);
   const exercise = session.exercises[session.currentExerciseIndex]!;
   const setIndex = exercise.sets.findIndex(set => set.id === session.currentSetId);
   const set = exercise.sets[setIndex]!;
@@ -123,6 +144,14 @@ export function StrengthGuidedSessionDialog({
       .map(setItem => ({ exercise: item, set: setItem })))
     .sort((left, right) => right.set.confirmedAt.localeCompare(left.set.confirmedAt))[0], [session.exercises]);
   const timeFields = localSessionDateTime(session);
+  const rhythmOptions = useMemo(() => selectStrengthWorkoutRhythmOptions(
+    rhythms,
+    archivedRhythms,
+    datedRhythmCompletions,
+    session.date,
+    session.templateId,
+    session.rhythmId
+  ), [archivedRhythms, datedRhythmCompletions, rhythms, session.date, session.rhythmId, session.templateId]);
   const currentInputKey = sessionInputKey(exercise.id, set.id);
   const currentWorkoutLoad = latestPerformedLoad(session, exercise.id, exercise.loadMeaning, preferredWeightUnit);
   const initialInput = () => createInput(
@@ -263,8 +292,23 @@ export function StrengthGuidedSessionDialog({
   function apply(next: StrengthGuidedSessionDraft) {
     const saveError = onChange(next);
     setError(saveError ?? '');
-    if (!saveError) afterRestTimerChange(next);
+    if (!saveError) {
+      acknowledgedUnlinkedSessionRef.current = false;
+      afterRestTimerChange(next);
+    }
     return !saveError;
+  }
+
+  function selectWorkoutRhythm(rhythmId?: string) {
+    const completionId = rhythmId
+      ? session.completionId ?? `strength-completion-${globalThis.crypto.randomUUID()}`
+      : undefined;
+    const result = updateStrengthGuidedSessionRhythm(session, rhythmId, completionId);
+    if (!result.valid) {
+      setError(result.error);
+      return;
+    }
+    apply(result.session);
   }
 
   function playRestAlert() {
@@ -708,11 +752,25 @@ export function StrengthGuidedSessionDialog({
     }
   }
 
-  function finish() {
+  function finish(saveWorkoutOnly = false) {
+    if (finishingRef.current) return;
     if (!hasPerformedStrengthSessionSet(session)) {
       setError('Confirm at least one set before saving completed activity.');
       return;
     }
+    if (session.rhythmId) {
+      const option = rhythmOptions.find(item => item.rhythm.id === session.rhythmId);
+      if (!option?.eligible) {
+        setError(option?.reason ?? 'Choose an eligible workout Rhythm or select Workout only.');
+        return;
+      }
+    } else if (!saveWorkoutOnly && !acknowledgedUnlinkedSessionRef.current) {
+      setConfirmingWorkoutOnly(true);
+      setError('');
+      return;
+    }
+    if (saveWorkoutOnly) acknowledgedUnlinkedSessionRef.current = true;
+    finishingRef.current = true;
     const result = finishStrengthGuidedSession(
       session,
       `guided-workout-${session.id}`,
@@ -720,10 +778,16 @@ export function StrengthGuidedSessionDialog({
     );
     if (!result.valid) {
       setError(result.error);
+      finishingRef.current = false;
       return;
     }
     const saveError = onFinish(result.log);
-    if (saveError) setError(saveError);
+    if (saveError) {
+      setError(saveError);
+      finishingRef.current = false;
+    } else {
+      setConfirmingWorkoutOnly(false);
+    }
   }
 
   function selectSet(exerciseIndex: number, setId: string) {
@@ -859,10 +923,19 @@ export function StrengthGuidedSessionDialog({
               );
             })}
           </div>
+          <StrengthRhythmCompletionPicker
+            fieldsetRef={workoutRhythmSelectionRef}
+            options={rhythmOptions}
+            {...(session.rhythmId ? { selectedRhythmId: session.rhythmId } : {})}
+            onSelect={selectWorkoutRhythm}
+            {...(onAddLinkedRhythm ? {
+              onCreateRhythm: event => onAddLinkedRhythm('health-strength', event)
+            } : {})}
+          />
           {error && <p className="strength-form-error" role="alert">{error}</p>}
           <div className="money-goal-dialog__actions">
             <button type="button" className="btn mini ghost" onClick={() => { setReviewing(false); setError(''); }}>Return to workout</button>
-            <button type="button" className="btn mini" disabled={!hasPerformedStrengthSessionSet(session)} onClick={finish}>Finish & save</button>
+            <button type="button" className="btn mini" disabled={!hasPerformedStrengthSessionSet(session)} onClick={() => finish()}>Finish & save</button>
           </div>
         </div>
       ) : (
@@ -1300,6 +1373,17 @@ export function StrengthGuidedSessionDialog({
         </div>
       )}
       </MoneyGoalDialog>
+      {confirmingWorkoutOnly && (
+        <StrengthWorkoutOnlyConfirmationDialog
+          error={error}
+          onClose={() => setConfirmingWorkoutOnly(false)}
+          onChooseRhythm={() => {
+            setConfirmingWorkoutOnly(false);
+            requestAnimationFrame(() => workoutRhythmSelectionRef.current?.focus({ preventScroll: true }));
+          }}
+          onSaveWorkoutOnly={() => finish(true)}
+        />
+      )}
       {notesOpen && (
         <MoneyGoalDialog
           title="Workout notes"

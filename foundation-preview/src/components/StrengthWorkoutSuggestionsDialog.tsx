@@ -2,45 +2,45 @@ import { useState } from 'react';
 import type { MouseEvent } from 'react';
 import { strengthMuscleName, strengthWorkoutSuggestions } from '../domain/strength.ts';
 import type { StrengthSavedWorkout, StrengthWorkoutSuggestion } from '../domain/strength.ts';
-import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 
 type StrengthWorkoutSuggestionsDialogProps = {
   savedWorkouts: readonly StrengthSavedWorkout[];
-  focusSourceId?: string;
+  hasDraft?: boolean;
+  onCreate: (event: MouseEvent<HTMLButtonElement>) => void;
+  onContinueEditing?: () => void;
   onAdd: (suggestion: StrengthWorkoutSuggestion, event: MouseEvent<HTMLButtonElement>) => void;
   onEdit: (
     suggestion: StrengthWorkoutSuggestion,
     workout: StrengthSavedWorkout,
     event: MouseEvent<HTMLButtonElement>
   ) => void;
-  onClose: () => void;
 };
 
 export function StrengthWorkoutSuggestionsDialog({
   savedWorkouts,
-  focusSourceId,
+  hasDraft = false,
+  onCreate,
+  onContinueEditing,
   onAdd,
-  onEdit,
-  onClose
+  onEdit
 }: StrengthWorkoutSuggestionsDialogProps) {
   const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
 
   return (
-    <MoneyGoalDialog
-      title="Suggested workouts"
-      intro="Choose a starting point. Make it yours."
-      labelledBy="strength-workout-suggestions-title"
-      titleId="strength-workout-suggestions-title"
-      initialFocusId={focusSourceId
-        ? `strength-workout-suggestion-action-${focusSourceId}`
-        : 'strength-workout-suggestions-title'}
-      closeLabel="Close suggested workouts"
-      bodyClassName="strength-dialog-body"
-      dialogClassName="money-goal-dialog--strength-suggestions"
-      onClose={onClose}
-    >
-      <div className="strength-workout-suggestions">
-        <section className="strength-workout-suggestions__list" aria-label="Suggested workout templates">
+      <div className="strength-workout-suggestions" aria-labelledby="strength-workout-suggestions-title">
+        <section className="strength-workout-suggestions__create" aria-label="Create a workout">
+          <div>
+            <h3>Create your own</h3>
+            <p>Choose exercises, sets, and reps.</p>
+          </div>
+          <button type="button" className="btn mini ghost" onClick={onCreate}>Create</button>
+          {hasDraft && onContinueEditing && (
+            <button type="button" className="strength-workout-suggestions__continue" onClick={onContinueEditing}>
+              Continue editing
+            </button>
+          )}
+        </section>
+        <section className="strength-workout-suggestions__list" aria-label="Starter routines">
           {strengthWorkoutSuggestions.map(suggestion => {
             const linkedWorkouts = savedWorkouts.filter(workout =>
               workout.suggestionSourceId === suggestion.sourceId
@@ -67,6 +67,17 @@ export function StrengthWorkoutSuggestionsDialog({
                   </div>
                   <p>{suggestion.muscleIds.map(strengthMuscleName).join(' · ')}</p>
                   <p>{suggestion.exercises.length} exercises · {suggestion.exercises.reduce((total, exercise) => total + exercise.sets.length, 0)} planned sets{planMarkers.length ? ` · ${planMarkers.join(' · ')}` : ''}</p>
+                  <details className="strength-workout-suggestion__preview">
+                    <summary>Preview routine</summary>
+                    <ol>
+                      {suggestion.exercises.map(exercise => (
+                        <li key={exercise.name}>
+                          <strong>{exercise.name}</strong>
+                          <span>{exercise.equipment} · {exercise.sets.map(formatSuggestionSet).join(' / ')}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </details>
                   {expanded && (
                     <div
                       className="strength-workout-suggestion__choices"
@@ -99,7 +110,7 @@ export function StrengthWorkoutSuggestionsDialog({
                     className="btn mini"
                     onClick={event => onAdd(suggestion, event)}
                   >
-                    Add
+                    Customize
                   </button>
                 ) : (
                   <button
@@ -121,6 +132,14 @@ export function StrengthWorkoutSuggestionsDialog({
           })}
         </section>
       </div>
-    </MoneyGoalDialog>
   );
+}
+
+function formatSuggestionSet(set: StrengthWorkoutSuggestion['exercises'][number]['sets'][number]): string {
+  if ('targetDurationSeconds' in set) {
+    const minutes = Math.floor(set.targetDurationSeconds / 60);
+    const seconds = set.targetDurationSeconds % 60;
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+  }
+  return `${set.targetReps} reps`;
 }

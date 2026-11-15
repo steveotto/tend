@@ -4661,7 +4661,7 @@ a:focus-visible {
   }
 }
 
-.tend-app-preview .marriage-page {
+.tend-app-preview .category-page--segmented {
   display: grid;
   gap: 12px;
 }
@@ -12275,7 +12275,26 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
 
 .strength-page {
   display: grid;
-  gap: 12px;
+  gap: calc(var(--tend-space-unit, 8px) * 1.5);
+}
+
+.strength-section-panels {
+  display: grid;
+  gap: calc(var(--tend-space-unit, 8px) * 1.5);
+  min-width: 0;
+}
+
+.strength-section-panel {
+  min-width: 0;
+}
+
+.strength-section-panel--body {
+  display: grid;
+  gap: calc(var(--tend-space-unit, 8px) * 2);
+}
+
+.strength-section-panel > .strength-rhythms-panel {
+  padding-block: 0;
 }
 
 .health-fitness-progress > [role="tabpanel"] > .strength-page,
@@ -12324,7 +12343,7 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
 
 .strength-page .segmented-tabs--count-3 {
   display: grid;
-  grid-template-columns: 1.7fr 1fr 1.1fr;
+  grid-template-columns: 1fr 1.7fr 1.1fr;
   gap: 4px;
   width: min(100%, 420px);
   margin-inline: auto;
@@ -14186,6 +14205,8 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
 }
 
 .strength-workout-section {
+  display: grid;
+  gap: calc(var(--tend-space-unit, 8px) * 1.5);
   min-width: 0;
 }
 
@@ -14193,11 +14214,93 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   margin-top: 16px;
 }
 
-.strength-workout-section > .strength-card-heading h3 {
+.strength-workouts {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.strength-section-heading {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 0;
+}
+
+.strength-section-heading__title {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 140px;
+  gap: 4px;
+}
+
+.strength-section-heading__title-row {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.strength-section-heading h3 {
+  min-width: 0;
   margin: 0;
   color: var(--tend-ink);
-  font-size: calc(1rem * var(--app-text-scale, 1));
+  font: 600 calc(1rem * var(--app-text-scale, 1)) / 1.35 var(--tend-font-ui);
+  overflow-wrap: anywhere;
+}
+
+.strength-section-heading__secondary {
+  min-width: 0;
+  color: var(--tend-secondary);
+  font-size: calc(.8125rem * var(--app-text-scale, 1));
   line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.strength-section-heading__subtitle {
+  min-width: 0;
+  margin: 0;
+  color: var(--tend-secondary);
+  font-size: calc(.8125rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.strength-section-heading__actions {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: flex-start;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.strength-workouts__add {
+  flex: 0 0 auto;
+}
+
+.strength-history-page__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.strength-section-heading__actions .btn:focus-visible {
+  outline: 2px solid var(--tend-forest);
+  outline-offset: 3px;
+}
+
+.strength-map-card .strength-card-heading h3 {
+  margin: 0;
+  color: var(--tend-ink);
+  font: 600 calc(1rem * var(--app-text-scale, 1)) / 1.35 var(--tend-font-ui);
+  overflow-wrap: anywhere;
 }
 
 .strength-workout-section > .strength-card-heading p {
@@ -14484,16 +14587,6 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   border: 1px dashed var(--tend-line);
   border-radius: 12px;
   color: var(--tend-secondary);
-}
-
-.strength-workout-panel--recommended .strength-recommendations {
-  margin-top: 4px;
-}
-
-.strength-workout-hint {
-  margin: 6px 0 0;
-  color: var(--tend-secondary);
-  font-size: calc(.875rem * var(--app-text-scale, 1));
 }
 
 .strength-workout-choice {
@@ -14868,23 +14961,11 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   gap: 14px;
 }
 
-.strength-workouts__heading {
-  margin: 20px 0 10px;
-  align-items: center;
-}
-
-.strength-workouts__heading h2 {
-  margin: 0;
-  color: var(--tend-ink);
-  font-size: calc(1.15rem * var(--app-text-scale, 1));
-}
-
 .strength-legacy-status {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  margin: 4px 0 16px;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
   color: var(--tend-muted);
   font-size: calc(0.82rem * var(--app-text-scale, 1));
 }
@@ -15180,6 +15261,86 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
 .strength-muscle-selection__tile:focus-within {
   outline: 3px solid var(--tend-focus, #287f63);
   outline-offset: 2px;
+}
+
+.strength-rhythm-completion {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 4px 0 0;
+  padding: 10px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+}
+
+.strength-rhythm-completion legend {
+  padding: 0 5px;
+  color: var(--tend-secondary);
+  font-weight: 650;
+}
+
+.strength-rhythm-completion__options {
+  display: grid;
+  gap: 6px;
+}
+
+.strength-rhythm-completion__option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--tend-ink);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.strength-rhythm-completion__option:has(input:checked) {
+  border-color: var(--tend-forest);
+  background: var(--tend-mist);
+}
+
+.strength-rhythm-completion__option input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--tend-forest);
+}
+
+.strength-rhythm-completion__option input:focus-visible {
+  outline: 3px solid var(--tend-focus, #287f63);
+  outline-offset: 2px;
+}
+
+.strength-rhythm-completion__option input:disabled {
+  cursor: not-allowed;
+}
+
+.strength-rhythm-completion__copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.strength-rhythm-completion__copy small,
+.strength-rhythm-completion__empty {
+  color: var(--tend-secondary);
+  font-size: .88em;
+}
+
+.strength-rhythm-completion__empty {
+  margin: 0;
+}
+
+.strength-rhythm-completion__create {
+  justify-self: start;
+}
+
+.strength-workout-only-confirmation > .money-goal-dialog__surface > p {
+  margin: 0 0 16px;
 }
 
 .strength-form-error {
@@ -15560,10 +15721,66 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
 
 .strength-workout-suggestions__list {
   display: grid;
+  min-height: 0;
   max-height: min(62vh, 520px);
   gap: 9px;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+.strength-workout-suggestions__create {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid var(--tend-line);
+  border-radius: 13px;
+  background: var(--tend-surface);
+}
+
+.strength-workout-suggestions__create > div {
+  min-width: 0;
+}
+
+.strength-workout-suggestions__create h3 {
+  margin: 0;
+  color: var(--tend-ink);
+  font-size: calc(.9375rem * var(--app-text-scale, 1));
+  line-height: 1.35;
+}
+
+.strength-workout-suggestions__create p {
+  margin: 4px 0 0;
+  color: var(--tend-secondary);
+  font-size: calc(.8125rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.strength-workout-suggestions__create > .btn.ghost {
+  background: var(--tend-surface);
+}
+
+.strength-workout-suggestions__continue {
+  grid-column: 1 / -1;
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tend-forest);
+  cursor: pointer;
+  font-size: calc(.8125rem * var(--app-text-scale, 1));
+  font-weight: 600;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.strength-workout-suggestions__continue:focus-visible {
+  outline: 2px solid var(--tend-forest);
+  outline-offset: 3px;
 }
 
 .strength-workout-suggestion {
@@ -15603,6 +15820,41 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   font-size: calc(0.8125rem * var(--app-text-scale, 1));
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+
+.strength-workout-suggestion__preview {
+  margin-top: 8px;
+  color: var(--tend-secondary);
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+}
+
+.strength-workout-suggestion__preview summary {
+  width: fit-content;
+  color: var(--tend-forest);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.strength-workout-suggestion__preview ol {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.strength-workout-suggestion__preview li {
+  padding-left: 2px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.strength-workout-suggestion__preview li strong,
+.strength-workout-suggestion__preview li span {
+  display: block;
+}
+
+.strength-workout-suggestion__preview li strong {
+  color: var(--tend-ink);
 }
 
 .strength-workout-suggestion__added {
@@ -15648,23 +15900,52 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   font-size: calc(0.8125rem * var(--app-text-scale, 1));
 }
 
+.money-goal-dialog--strength-suggestions.dialog--phone-fullscreen {
+  width: 100vw;
+  max-height: none;
+}
+
+.money-goal-dialog--strength-suggestions.dialog--phone-fullscreen > .money-goal-dialog__surface {
+  display: flex;
+}
+
+.money-goal-dialog--strength-suggestions.dialog--phone-fullscreen .strength-dialog-body {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.money-goal-dialog--strength-suggestions.dialog--phone-fullscreen .strength-workout-suggestions {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.money-goal-dialog--strength-suggestions.dialog--phone-fullscreen .strength-workout-suggestions__list {
+  max-height: none;
+  flex: 1 1 auto;
+}
+
 @media (max-width: 520px) {
   .strength-card-heading {
     flex-wrap: wrap;
   }
 
-  .money-goal-dialog--strength-suggestions {
+  .money-goal-dialog--strength-suggestions:not(.dialog--phone-fullscreen) {
     width: calc(100vw - 20px);
     max-height: calc(100dvh - 20px);
   }
 
-  .money-goal-dialog--strength-suggestions .money-goal-dialog__surface {
+  .money-goal-dialog--strength-suggestions:not(.dialog--phone-fullscreen) .money-goal-dialog__surface {
     padding: 16px;
   }
 
-  .strength-workout-suggestions__list {
+  .money-goal-dialog--strength-suggestions:not(.dialog--phone-fullscreen) .strength-workout-suggestions__list {
     max-height: min(62dvh, 520px);
   }
+
 }
 
 .money-goal-dialog--strength-workout-editor,

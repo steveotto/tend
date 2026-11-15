@@ -136,6 +136,7 @@ import {
 import { resolveSeedCompletionRecords } from './domain/rhythm-history.ts';
 import { localDateInTimeZone, localTimeInTimeZone } from './domain/rhythm-scoring.ts';
 import { hasRhythmOccurrenceForCompletion } from './domain/rhythm-occurrences.ts';
+import { rhythmScheduleForDate } from './domain/rhythm-schedule.ts';
 import { selectSatisfiedRhythmIds, selectTendedRhythmDisplayIds } from './domain/category-rhythms.ts';
 import { prepareDatedRhythmCompletion } from './domain/rhythm-completion.ts';
 import { selectPersonOverallHealth, selectPersonRhythmHealth } from './domain/person-health.ts';
@@ -2242,7 +2243,8 @@ function PreviewWorkspace({
       if (!log.rhythmId) continue;
       const previous = previousLogs.get(log.id);
       const rhythm = allTodayRhythms.find(item => item.id === log.rhythmId);
-      if (!rhythm || !isEditableRhythmId(log.rhythmId)
+      if (!rhythm || rhythm.healthLogCapability !== 'workout'
+        || !rhythm.categoryIds?.includes('health') || !isEditableRhythmId(log.rhythmId)
         || previewData.archivedRhythmIds.includes(log.rhythmId)
         || log.rhythmOccurrence !== log.date || !log.completionId) {
         return 'The linked Strength Rhythm or its completion record is unavailable. No workout changes were saved.';
@@ -2257,7 +2259,7 @@ function PreviewWorkspace({
       }
       if (ownsCompletion && existingCompletion && previous?.rhythmId === log.rhythmId
         && previous.rhythmOccurrence === log.rhythmOccurrence && previous.date === log.date) continue;
-      const schedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
+      const schedule = rhythmScheduleForDate(rhythm, log.date);
       if (!schedule || !hasRhythmOccurrenceForCompletion(
         schedule,
         log.date,
@@ -3219,6 +3221,7 @@ function PreviewWorkspace({
           };
         }),
         archivedRhythms: archivedHealthRhythms,
+        datedRhythmCompletions: previewData.datedRhythmCompletions,
         evaluationDate: currentDate,
         onChange: saveStrengthData,
         pendingRhythmLog: pendingStrengthRhythmLog,
@@ -3306,6 +3309,14 @@ function PreviewWorkspace({
       onAddRhythm={event => openRhythmEditor(event, undefined, {
         initialDraft: createRhythmDraft(['health'])
       })}
+      onAddLinkedRhythm={(foundationId, event) => openRhythmEditor(event, undefined, {
+        initialDraft: {
+          ...createRhythmDraft(['health']),
+          primaryFoundationId: foundationId,
+          secondaryFoundationIds: []
+        }
+      })}
+      onSaveFoundationAssociations={saveFoundationAssociations}
       onAddSuggestion={openRhythmSuggestion}
       onEditRhythm={(rhythm, event, returnToSuggestions) => openRhythmEditor(event, rhythm, {
         ...(returnToSuggestions ? { returnToSuggestions } : {})
