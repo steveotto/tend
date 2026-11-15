@@ -29,6 +29,7 @@ type PreviewBackupImportControlProps = {
   recoveryError?: string | null;
   showExport?: boolean;
   presentation?: 'default' | 'recovery';
+  accountScoped?: boolean;
 };
 
 export function PreviewBackupImportControl({
@@ -42,7 +43,8 @@ export function PreviewBackupImportControl({
   recoveryArchiveRaw = null,
   recoveryError = null,
   showExport = false,
-  presentation = 'default'
+  presentation = 'default',
+  accountScoped = false
 }: PreviewBackupImportControlProps) {
   const [pending, setPending] = useState<PendingImport | null>(null);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
@@ -91,27 +93,33 @@ export function PreviewBackupImportControl({
 
   function exportCurrent() {
     const error = downloadText(
-      'tend-synthetic-preview-backup.json',
+      presentation === 'recovery' && accountScoped
+        ? 'tend-device-backup.json'
+        : 'tend-synthetic-preview-backup.json',
       JSON.stringify(createPreviewEnvelope(data), null, 2),
       'application/json'
     );
     setMessage(error
       ? { text: error, error: true }
-      : { text: presentation === 'recovery' ? 'This device’s data backup was downloaded.' : 'Preview backup downloaded.', error: false });
+      : { text: presentation === 'recovery' && accountScoped
+        ? 'Device backup saved to your downloads.'
+        : presentation === 'recovery'
+          ? 'Preview backup downloaded.'
+          : 'Preview backup downloaded.', error: false });
   }
 
   function downloadRecovery(raw: string, filename: string) {
     const error = downloadText(filename, raw, 'application/json');
     setMessage(error
       ? { text: error, error: true }
-      : { text: 'Pre-import local recovery downloaded.', error: false });
+      : { text: accountScoped ? 'Recovery copy saved to your downloads.' : 'Preview recovery copy downloaded.', error: false });
   }
 
   function confirmImport() {
     if (!pending) return;
     const recoveryRaw = currentRaw ?? JSON.stringify(createPreviewEnvelope(data), null, 2);
     const recoveryError = downloadText(
-      'tend-preview-before-import-raw.json',
+      accountScoped ? 'tend-device-before-import-raw.json' : 'tend-preview-before-import-raw.json',
       recoveryRaw,
       'application/json'
     );
@@ -125,7 +133,7 @@ export function PreviewBackupImportControl({
       return;
     }
     setPending(null);
-    setMessage({ text: 'Preview backup imported.', error: false });
+    setMessage({ text: accountScoped ? 'Backup imported on this device.' : 'Preview backup imported.', error: false });
   }
 
   const completionCount = pending
@@ -167,8 +175,10 @@ export function PreviewBackupImportControl({
                 disabled={status.kind === 'loading'}
               >
                 <span className="preview-backup-import__row-copy">
-                  <span className="preview-backup-import__row-title">Export this device’s data</span>
-                  <span className="preview-backup-import__row-description">Download a backup file.</span>
+                  <span className="preview-backup-import__row-title">Export backup</span>
+                  <span className="preview-backup-import__row-description">
+                    {accountScoped ? 'Save a file to this device.' : 'Save a preview backup file to this device.'}
+                  </span>
                 </span>
                 <span className="preview-backup-import__row-action" aria-hidden="true">↓</span>
               </button>
@@ -183,14 +193,14 @@ export function PreviewBackupImportControl({
           ? (
             <label className="preview-backup-import__row preview-backup-import__file-row">
               <span className="preview-backup-import__row-copy">
-                <span className="preview-backup-import__row-title">Import a backup file</span>
+                <span className="preview-backup-import__row-title">Import backup</span>
                 <span className="preview-backup-import__row-description">Restore data from a file you saved.</span>
               </span>
               <span className="preview-backup-import__row-action" aria-hidden="true">↑</span>
               <input
                 type="file"
                 accept="application/json,.json"
-                aria-label="Import a backup file"
+                aria-label="Import backup"
                 onChange={readImport}
                 disabled={status.kind === 'loading'}
               />
@@ -212,12 +222,12 @@ export function PreviewBackupImportControl({
           <button
             type="button"
             className={compactRecovery ? 'preview-backup-import__row' : 'btn mini ghost'}
-            onClick={() => downloadRecovery(recoverySourceRaw, 'tend-preview-original-import.json')}
+            onClick={() => downloadRecovery(recoverySourceRaw, accountScoped ? 'tend-original-backup.json' : 'tend-preview-original-import.json')}
           >
             {compactRecovery ? (
               <span className="preview-backup-import__row-copy">
-                <span className="preview-backup-import__row-title">Download original imported backup</span>
-                <span className="preview-backup-import__row-description">Download the source file from the last import.</span>
+                <span className="preview-backup-import__row-title">Original backup</span>
+                <span className="preview-backup-import__row-description">Download the preserved original file from the last import.</span>
               </span>
             ) : 'Download original imported backup'}
           </button>
@@ -226,11 +236,11 @@ export function PreviewBackupImportControl({
           <button
             type="button"
             className={compactRecovery ? 'preview-backup-import__row' : 'btn mini ghost'}
-            onClick={() => downloadRecovery(recoveryRaw, 'tend-preview-before-import.json')}
+            onClick={() => downloadRecovery(recoveryRaw, accountScoped ? 'tend-device-before-import.json' : 'tend-preview-before-import.json')}
           >
             {compactRecovery ? (
               <span className="preview-backup-import__row-copy">
-                <span className="preview-backup-import__row-title">Download pre-import device copy</span>
+                <span className="preview-backup-import__row-title">Pre-import device backup</span>
                 <span className="preview-backup-import__row-description">Recover data saved before the last import.</span>
               </span>
             ) : 'Download pre-import local data'}
@@ -240,11 +250,11 @@ export function PreviewBackupImportControl({
           <button
             type="button"
             className={compactRecovery ? 'preview-backup-import__row' : 'btn mini ghost'}
-            onClick={() => downloadRecovery(recoveryArchiveRaw, 'tend-preview-import-recovery-archive.json')}
+            onClick={() => downloadRecovery(recoveryArchiveRaw, accountScoped ? 'tend-import-recovery-archive.json' : 'tend-preview-import-recovery-archive.json')}
           >
             {compactRecovery ? (
               <span className="preview-backup-import__row-copy">
-                <span className="preview-backup-import__row-title">Download import recovery archive</span>
+                <span className="preview-backup-import__row-title">Import recovery archive</span>
                 <span className="preview-backup-import__row-description">Download a preserved recovery copy.</span>
               </span>
             ) : 'Download import recovery archive'}
@@ -260,10 +270,14 @@ export function PreviewBackupImportControl({
       {recoveryError && <p className="preview-data-controls__error" role="alert">{recoveryError}</p>}
       {pending && (
         <MoneyGoalDialog
-          title="Replace preview data?"
-          intro={pending.sourceSchemaVersion >= 3
-            ? 'This replaces this account’s local Preview data on this device. Your cloud backup is not changed.'
-            : 'This backup predates archive status, so its Rhythms will be restored as active. It replaces this account’s local Preview data on this device; the cloud backup is not changed.'}
+          title={accountScoped ? 'Replace data on this device?' : 'Replace preview data?'}
+          intro={accountScoped
+            ? pending.sourceSchemaVersion >= 3
+              ? 'This replaces the data saved on this device. Your account copy is not overwritten unless you confirm a separate account upload.'
+              : 'This backup predates archive status, so its Rhythms will be restored as active. It replaces the data saved on this device; your account copy is not overwritten unless you confirm a separate account upload.'
+            : pending.sourceSchemaVersion >= 3
+              ? 'This replaces the saved preview data on this device. It does not sync across devices.'
+              : 'This backup predates archive status, so its Rhythms will be restored as active. It replaces the saved preview data on this device and does not sync across devices.'}
           onClose={() => setPending(null)}
         >
           <dl className="legacy-import-report">
@@ -273,7 +287,7 @@ export function PreviewBackupImportControl({
             <div><dt>Goals and check-ins</dt><dd>{pending.data.goals.length} / {pending.data.goals.reduce((count, goal) => count + goal.checkIns.length, 0)}</dd></div>
           </dl>
           <p className="preview-data-controls__help">
-            Supported People, Rhythm associations, completion and activity logs, settings, and other validated data will be imported. Before replacement, the current local data is preserved as an immutable recovery copy and its exact saved document is downloaded. Schema {pending.sourceSchemaVersion} is validated and migrated where supported.
+            Supported People, Rhythm associations, completion and activity logs, settings, and other validated data will be imported. Before replacement, the current device data is preserved as an immutable recovery copy and its exact saved document is downloaded.
           </p>
           {importedRhythmsMissingLinks.length > 0 && (
             <p className="preview-data-controls__help" role="status">
@@ -285,7 +299,13 @@ export function PreviewBackupImportControl({
               Multiple category memberships were resolved for {pending.resolvedPersonCategories} {pending.resolvedPersonCategories === 1 ? 'person' : 'people'} using Marriage, then Parenting, then Friend priority. The selected backup file remains unchanged.
             </p>
           )}
-          <p className="preview-data-controls__help">Cancel leaves the current preview unchanged.</p>
+          <p className="preview-data-controls__help">
+            {accountScoped ? 'Cancel leaves the current device data unchanged.' : 'Cancel leaves the current preview unchanged.'}
+          </p>
+          <details className="preview-account-backup__technical">
+            <summary>Details</summary>
+            <p>Backup format version {pending.sourceSchemaVersion}; validated and migrated only where supported.</p>
+          </details>
           <div className="money-goal-dialog__actions">
             <button type="button" className="btn mini ghost" onClick={exportCurrent}>
               Download current preview backup

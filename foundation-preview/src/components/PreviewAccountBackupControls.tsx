@@ -500,14 +500,14 @@ export function PreviewAccountBackupControls({
         onClick={() => setAdvancedOpen(true)}
       >
         <span className="preview-account-backup__row-copy">
-          <span className="preview-account-backup__row-title">Advanced recovery</span>
-          <span className="preview-account-backup__row-description">Manual account backup and restore tools.</span>
+          <span className="preview-account-backup__row-title">Account recovery</span>
+          <span className="preview-account-backup__row-description">Manual account backup and restore.</span>
         </span>
         <span className="preview-account-backup__row-action" aria-hidden="true">›</span>
       </button>
       {advancedOpen && (
         <MoneyGoalDialog
-          title="Advanced recovery"
+          title="Account recovery"
           titleId="preview-account-backup-dialog-title"
           labelledBy="preview-account-backup-dialog-title"
           intro="Account-copy tools for this signed-in account. Replacing a copy is not a merge."

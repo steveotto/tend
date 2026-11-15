@@ -766,6 +766,93 @@ async function main() {
           assert.equal(desktopStyles.area.borderStyle, 'solid');
           assert.equal(desktopStyles.area.borderRadius, '10px');
 
+          await page.setViewportSize({ width: 375, height: 812 });
+          await page.getByRole('button', { name: 'More, settings' }).click();
+          await page.getByRole('button', { name: 'Settings', exact: true }).click();
+          await page.getByRole('button', { name: 'Time blocks' }).click();
+          const sleepLayout = await page.evaluate(() => {
+            const sleep = document.querySelector<HTMLElement>('.time-block-settings__sleep');
+            const input = sleep?.querySelector<HTMLInputElement>('input[type="time"]');
+            const explanation = sleep?.querySelector<HTMLElement>('.time-block-settings__sleep-range');
+            if (!sleep || !input || !explanation) {
+              throw new Error('Time block Settings is missing the Sleep boundary field or explanation.');
+            }
+            const inputRect = input.getBoundingClientRect();
+            const explanationRect = explanation.getBoundingClientRect();
+            return {
+              inputTop: inputRect.top,
+              inputBottom: inputRect.bottom,
+              explanationTop: explanationRect.top,
+              explanationBottom: explanationRect.bottom,
+              explanationLeft: explanationRect.left,
+              sleepRight: sleep.getBoundingClientRect().right,
+              documentWidth: document.documentElement.scrollWidth,
+              viewportWidth: document.documentElement.clientWidth
+            };
+          });
+          assert.ok(sleepLayout.explanationTop >= sleepLayout.inputBottom,
+            `Sleep explanation must stack below its field at ${expected.size} text size: ${JSON.stringify(sleepLayout)}.`);
+          assert.ok(sleepLayout.explanationLeft >= 0);
+          assert.ok(sleepLayout.explanationBottom > sleepLayout.explanationTop);
+          assert.ok(sleepLayout.sleepRight <= 375);
+          assert.equal(sleepLayout.documentWidth, sleepLayout.viewportWidth);
+          await page.getByRole('button', { name: '‹ Settings' }).click();
+          await page.getByRole('button', { name: 'Backup & recovery' }).click();
+          for (const viewportWidth of [375, 390, 430]) {
+            await page.setViewportSize({ width: viewportWidth, height: 812 });
+            const recoveryLayout = await page.evaluate(() => {
+              const rows = [...document.querySelectorAll<HTMLElement>('.preview-backup-import--recovery .preview-backup-import__row')];
+              if (rows.length !== 2) throw new Error('Synthetic Backup & recovery must show export and import actions.');
+              return {
+                documentWidth: document.documentElement.scrollWidth,
+                viewportWidth: document.documentElement.clientWidth,
+                rows: rows.map(row => {
+                  const rect = row.getBoundingClientRect();
+                  return { left: rect.left, right: rect.right, width: rect.width, height: rect.height };
+                })
+              };
+            });
+            assert.equal(recoveryLayout.documentWidth, viewportWidth,
+              `Backup & recovery must not overflow at ${viewportWidth}px / ${expected.size}.`);
+            assert.equal(recoveryLayout.viewportWidth, viewportWidth);
+            assert.ok(recoveryLayout.rows.every(row =>
+              row.left >= 0 && row.right <= viewportWidth && row.width > 0 && row.height > 0
+            ));
+          }
+          await page.getByRole('button', { name: '‹ Settings' }).click();
+          await page.getByRole('button', { name: 'Save & sync' }).click();
+          for (const viewportWidth of [375, 390, 430]) {
+            await page.setViewportSize({ width: viewportWidth, height: 812 });
+            const syncLayout = await page.evaluate(() => {
+              const section = [...document.querySelectorAll<HTMLElement>('.preview-data-controls, .preview-account-sync')]
+                .find(element => element.getClientRects().length > 0);
+              const notice = section?.querySelector<HTMLElement>(
+                '.preview-data-controls__notice, .preview-account-sync__status'
+              );
+              const rect = section?.getBoundingClientRect();
+              if (!section || !notice || !rect) throw new Error('Save & sync is missing its visible save status.');
+              return {
+                documentWidth: document.documentElement.scrollWidth,
+                viewportWidth: document.documentElement.clientWidth,
+                sectionLeft: rect.left,
+                sectionRight: rect.right,
+                noticeWidth: notice.getBoundingClientRect().width,
+                noticeHeight: notice.getBoundingClientRect().height,
+                nestedCards: section.querySelectorAll('.card').length
+              };
+            });
+            assert.equal(syncLayout.documentWidth, viewportWidth,
+              `Save & sync must not overflow at ${viewportWidth}px / ${expected.size}.`);
+            assert.equal(syncLayout.viewportWidth, viewportWidth);
+            assert.ok(syncLayout.sectionLeft >= 0 && syncLayout.sectionRight <= viewportWidth);
+            assert.ok(syncLayout.noticeWidth > 0 && syncLayout.noticeHeight > 0);
+            assert.equal(syncLayout.nestedCards, 0);
+          }
+          await page.getByRole('button', { name: '‹ Settings' }).click();
+          await page.getByRole('button', { name: '‹ More' }).click();
+          await page.getByRole('button', { name: 'Today', exact: true }).click();
+          await page.setViewportSize({ width: 1280, height: 900 });
+
           if (expected.size !== 'large') {
             await page.setViewportSize({ width: 375, height: 812 });
             await mobileSizeToggle.click();
@@ -1939,6 +2026,7 @@ async function main() {
         await page.setViewportSize({ width: 375, height: 844 });
         await page.getByRole('button', { name: 'More, settings' }).click();
         await page.getByRole('button', { name: /^Settings/ }).click();
+        await page.getByRole('button', { name: 'Categories', exact: true }).click();
         await page.getByRole('heading', { name: 'Categories' }).waitFor();
         const categorySizeToggle = page.locator('.mobile-display-toggle');
         for (const textSize of ['small', 'medium', 'large'] as const) {

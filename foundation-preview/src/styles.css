@@ -1335,9 +1335,8 @@ a:focus-visible {
 
 .time-block-settings__sleep {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: end;
-  gap: 8px 12px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -1352,6 +1351,7 @@ a:focus-visible {
 }
 
 .time-block-settings__sleep-range {
+  grid-column: 1 / -1;
   color: var(--ink-soft);
   font-size: calc(0.75rem * var(--app-text-scale, 1));
   overflow-wrap: anywhere;
@@ -16907,6 +16907,19 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   text-align: center;
 }
 
+.settings-page__directory {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-page__detail-slot {
+  display: contents;
+}
+
+.settings-page [hidden] {
+  display: none !important;
+}
+
 .settings-section {
   min-width: 0;
   padding: 18px;
@@ -24172,9 +24185,9 @@ button.person-health-component-score:focus-visible {
 
 .preview-account-sync__icon {
   display: grid;
-  flex: 0 0 calc(38px * var(--app-text-scale, 1));
-  width: calc(38px * var(--app-text-scale, 1));
-  height: calc(38px * var(--app-text-scale, 1));
+  flex: 0 0 calc(30px * var(--app-text-scale, 1));
+  width: calc(30px * var(--app-text-scale, 1));
+  height: calc(30px * var(--app-text-scale, 1));
   place-items: center;
   border-radius: 50%;
   background: #edf5ef;
@@ -24233,10 +24246,8 @@ button.person-health-component-score:focus-visible {
 
 .preview-account-sync__conflict {
   margin-top: 14px;
-  padding: 14px;
-  border: 1px solid var(--tend-line);
-  border-radius: 12px;
-  background: var(--tend-mist);
+  padding: 12px 0 0;
+  border-top: 1px solid var(--tend-line);
 }
 
 .preview-account-sync__conflict h4 {
@@ -24255,26 +24266,40 @@ button.person-health-component-score:focus-visible {
   color: var(--tend-danger, #a12e21);
 }
 
-.settings-section.preview-account-sync__recovery {
-  overflow: hidden;
-  padding: 0;
+.preview-account-sync__error p {
+  margin: 8px 0;
 }
 
-.preview-account-sync__recovery > summary {
-  padding: 16px 18px;
-  cursor: pointer;
-  font-weight: 700;
+.preview-account-sync__account {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 12px;
+  margin-top: 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--tend-line);
+  color: var(--ink-soft);
+  font-size: calc(0.875rem * var(--app-text-scale, 1));
 }
 
-.preview-account-sync__recovery > summary:focus-visible {
-  outline: 3px solid var(--tend-focus, #39704d);
-  outline-offset: -3px;
+.preview-account-sync__account span:last-child {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
-.preview-account-sync__recovery-content {
-  display: grid;
-  gap: 14px;
-  padding: 0 16px 16px;
+.preview-account-sync__recovery-link {
+  min-height: 44px;
+  padding-inline: 0;
+  border: 0;
+  border-top: 1px solid var(--tend-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.preview-account-sync__recovery-link:hover {
+  background: transparent;
+  color: var(--tend-forest);
 }
 
 .preview-backup-import {

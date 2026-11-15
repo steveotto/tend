@@ -30,6 +30,7 @@ import { FinanceGoalsView } from './components/FinanceGoalsView.tsx';
 import { PreviewDataControls } from './components/PreviewDataControls.tsx';
 import type { PreviewPersistenceStatus } from './components/PreviewDataControls.tsx';
 import { PreviewAccountSync } from './components/PreviewAccountSync.tsx';
+import { PreviewBackupImportControl } from './components/PreviewBackupImportControl.tsx';
 import { TextSizeSettings } from './components/TextSizeSettings.tsx';
 import type { PreviewAccountBackupApi } from './storage/preview-account-backup.ts';
 import { PersonProfileView } from './components/PersonProfileView.tsx';
@@ -433,6 +434,15 @@ function PreviewAccessState({ title, message }: { title: string; message: string
   );
 }
 
+type SettingsDetail =
+  | 'categories'
+  | 'appearance'
+  | 'time-blocks'
+  | 'calendar'
+  | 'weather'
+  | 'save-sync'
+  | 'backup-recovery';
+
 function PreviewWorkspace({
   identity,
   authRefreshSequence,
@@ -456,6 +466,8 @@ function PreviewWorkspace({
     : createEmptyPreviewData();
   const [destination, setDestination] = useState<Destination>('today');
   const [moreSettingsOpen, setMoreSettingsOpen] = useState(false);
+  const [settingsDetail, setSettingsDetail] = useState<SettingsDetail | null>(null);
+  const [settingsReturnTo, setSettingsReturnTo] = useState<SettingsDetail | null>(null);
   const weatherTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   const todayWeather = useTodayWeather(
     destination === 'today' || (destination === 'more' && moreSettingsOpen),
@@ -470,6 +482,7 @@ function PreviewWorkspace({
   );
   const [manualBackupLocked, setManualBackupLocked] = useState(false);
   const [accountSyncTarget, setAccountSyncTarget] = useState<HTMLDivElement | null>(null);
+  const [accountRecoveryTarget, setAccountRecoveryTarget] = useState<HTMLDivElement | null>(null);
   const [persistedSatisfiedRhythmIds, setPersistedSatisfiedRhythmIds] = useState<ReadonlySet<string>>(new Set());
   const [persistedCompletedRhythmIds, setPersistedCompletedRhythmIds] = useState<ReadonlySet<string>>(new Set());
   const configuredRhythmTimeOptions = rhythmTimeOptionsForBlocks(previewData.timeBlocks);
@@ -1462,7 +1475,7 @@ function PreviewWorkspace({
 
   useEffect(() => {
     if (destination === 'more') morePageHeading.current?.focus();
-  }, [destination, moreSettingsOpen]);
+  }, [destination, moreSettingsOpen, settingsDetail]);
 
   useEffect(() => {
     if (activeRhythmId) {
@@ -3202,6 +3215,21 @@ function PreviewWorkspace({
   const isPreviewSettings = destination === 'more' && moreSettingsOpen;
   const storageNeedsAttention = ['unavailable', 'error', 'corrupt', 'unsupported', 'conflict']
     .includes(persistenceStatus.kind);
+  const settingsGroups: { title: string; items: { detail: SettingsDetail; label: string }[] }[] = [
+    { title: 'Personalize', items: [
+      { detail: 'categories', label: 'Categories' },
+      { detail: 'appearance', label: 'Appearance' },
+      { detail: 'time-blocks', label: 'Time blocks' }
+    ] },
+    { title: 'Connections', items: [
+      { detail: 'calendar', label: 'Calendar' },
+      { detail: 'weather', label: 'Weather' }
+    ] },
+    { title: 'Your data', items: [
+      { detail: 'save-sync', label: 'Save & sync' },
+      { detail: 'backup-recovery', label: 'Backup & recovery' }
+    ] }
+  ];
 
   const healthFitnessView = hydrated && (healthFitnessVisited || destination === 'health') ? (
     <HealthFitnessView
@@ -3350,7 +3378,13 @@ function PreviewWorkspace({
         searchOpen={searchOpen}
         searchResults={searchResults}
         textSize={textSize}
-        onNavigate={navigate}
+        onNavigate={next => {
+          if (next !== 'more') {
+            setSettingsDetail(null);
+            setSettingsReturnTo(null);
+          }
+          navigate(next);
+        }}
         onSearchChange={setSearch}
         onSearchClose={closeSearch}
         onSearchResult={openSearchResult}
@@ -3360,6 +3394,7 @@ function PreviewWorkspace({
         {identity.kind === 'authenticated' && (
           <PreviewAccountSync
             portalTarget={accountSyncTarget}
+            recoveryPortalTarget={accountRecoveryTarget}
             api={accountBackupApi ?? null}
             accountId={identity.accountId}
             {...(identity.email ? { email: identity.email } : {})}
@@ -3373,8 +3408,24 @@ function PreviewWorkspace({
             localRecoveryError={cloudRestoreRecoveryError}
             enabled={hydrated && autoSaveEnabled && persistenceStatus.kind === 'saved'}
             localSaveConfirmed={persistenceStatus.kind === 'saved'}
+            localSaveStatus={persistenceStatus.kind}
+            localSaveError={
+              persistenceStatus.kind === 'unavailable'
+                || persistenceStatus.kind === 'error'
+                || persistenceStatus.kind === 'corrupt'
+                || persistenceStatus.kind === 'unsupported'
+                ? persistenceStatus.message
+                : persistenceStatus.kind === 'conflict'
+                  ? 'This browser’s saved data changed in another tab. Reload it or resolve the conflict before saving.'
+                  : null
+            }
+            onRetryLocalSave={retrySave}
             autoSyncEnabled={import.meta.env.VITE_TEND_PREVIEW_AUTO_SYNC_ENABLED === 'true'}
             visible={destination === 'more' && moreSettingsOpen}
+            onOpenRecovery={() => {
+              setSettingsReturnTo('save-sync');
+              setSettingsDetail('backup-recovery');
+            }}
             manualOperationLocked={manualBackupLocked}
             isIdentityCurrent={() => isIdentityCurrent()
               && (isAccountBackupIdentityCurrent?.() ?? true)}
@@ -3390,7 +3441,22 @@ function PreviewWorkspace({
               return writeError;
             }}
             onManualOperationLockChange={setManualBackupLocked}
-          />
+          >
+            <PreviewBackupImportControl
+              data={previewData}
+              status={persistenceStatus}
+              currentDate={currentDate}
+              currentRaw={expectedRaw.current}
+              recoveryRaw={importRecoveryCopy}
+              recoverySourceRaw={importRecoverySourceCopy}
+              recoveryArchiveRaw={importRecoveryArchive}
+              recoveryError={importRecoveryError}
+              onImport={(data, sourceRaw) => finishWrite(data, true, 'import', sourceRaw)}
+              showExport
+              presentation="recovery"
+              accountScoped
+            />
+          </PreviewAccountSync>
         )}
         <div id="view" hidden={profilePersonId !== null}>
         {!hydrated
@@ -3409,18 +3475,55 @@ function PreviewWorkspace({
                       <button
                         type="button"
                         className="btn mini ghost settings-page__back"
-                        onClick={() => setMoreSettingsOpen(false)}
+                        onClick={() => {
+                          if (settingsDetail) {
+                            setSettingsDetail(settingsReturnTo ?? null);
+                            setSettingsReturnTo(null);
+                          } else {
+                            setMoreSettingsOpen(false);
+                          }
+                        }}
                       >
-                        ‹ More
+                        {settingsDetail ? '‹ Settings' : '‹ More'}
                       </button>
-                      <section className="settings-section" aria-labelledby="category-settings-title">
+                      <div className="settings-page__directory" hidden={settingsDetail !== null}>
+                        {settingsGroups.map(group => (
+                          <section className="settings-section" key={group.title} aria-label={group.title}>
+                            <h3>{group.title}</h3>
+                            {group.items.map(item => (
+                              <button
+                                type="button"
+                                className="settings-link"
+                                key={item.detail}
+                                onClick={() => {
+                                  setSettingsReturnTo(null);
+                                  setSettingsDetail(item.detail);
+                                }}
+                              >
+                                <span>{item.label}</span>
+                                <span aria-hidden="true">›</span>
+                              </button>
+                            ))}
+                          </section>
+                        ))}
+                      </div>
+                      <section className="settings-section" aria-labelledby="category-settings-title" hidden={settingsDetail !== 'categories'}>
                         <h3 id="category-settings-title">Categories</h3>
-                        <CategorySettings
-                          preferences={previewData.categoryPreferences}
-                          onChange={setCategoryPreference}
+                        <CategorySettings preferences={previewData.categoryPreferences} onChange={setCategoryPreference} />
+                      </section>
+                      <section className="settings-section" aria-labelledby="appearance-settings-title" hidden={settingsDetail !== 'appearance'}>
+                        <h3 id="appearance-settings-title">Appearance</h3>
+                        <TextSizeSettings value={textSize} onChange={setTextSizePreference} />
+                      </section>
+                      <section className="settings-section" aria-labelledby="time-block-settings-title" hidden={settingsDetail !== 'time-blocks'}>
+                        <h3 id="time-block-settings-title">Time blocks</h3>
+                        <TimeBlocksSettings
+                          settings={previewData.timeBlocks}
+                          assignedBlockIds={assignedTimeBlockIds(previewData.savedRhythms)}
+                          onSave={saveTimeBlockSettings}
                         />
                       </section>
-                      <section className="settings-section" aria-labelledby="calendar-settings-title">
+                      <section className="settings-section" aria-labelledby="calendar-settings-title" hidden={settingsDetail !== 'calendar'}>
                         <h3 id="calendar-settings-title">Calendar</h3>
                         <CalendarSourcesSettings
                           sources={previewData.calendarSources}
@@ -3431,30 +3534,34 @@ function PreviewWorkspace({
                           accountScoped={identity.kind === 'authenticated'}
                         />
                       </section>
-                      <section className="settings-section" aria-labelledby="weather-settings-title">
+                      <section className="settings-section" aria-labelledby="weather-settings-title" hidden={settingsDetail !== 'weather'}>
                         <h3 id="weather-settings-title">Weather</h3>
                         <TodayWeatherSettings controller={todayWeather} timeZone={weatherTimeZone} />
                       </section>
-                      <section className="settings-section" aria-labelledby="appearance-settings-title">
-                        <h3 id="appearance-settings-title">Appearance</h3>
-                        <TextSizeSettings value={textSize} onChange={setTextSizePreference} />
-                      </section>
-                      <section className="settings-section" aria-labelledby="time-block-settings-title">
-                        <h3 id="time-block-settings-title">Time blocks</h3>
-                        <TimeBlocksSettings
-                          settings={previewData.timeBlocks}
-                          assignedBlockIds={assignedTimeBlockIds(previewData.savedRhythms)}
-                          onSave={saveTimeBlockSettings}
-                        />
-                      </section>
-                      {identity.kind === 'authenticated' && (
-                        <section className="settings-section" aria-label="Account backup and sync">
+                      <div className="settings-page__detail-slot" hidden={settingsDetail !== 'save-sync'}>
+                        {identity.kind === 'development' && <h3 className="settings-page__detail-heading">Save &amp; sync</h3>}
+                        {identity.kind === 'authenticated' && (
                           <div className="preview-account-sync-slot" ref={setAccountSyncTarget} />
-                        </section>
-                      )}
-                      <section className="settings-section" aria-labelledby="preview-data-title">
-                        <h3 id="preview-data-title">Preview data</h3>
-                      </section>
+                        )}
+                      </div>
+                      <div className="settings-page__detail-slot" hidden={settingsDetail !== 'backup-recovery'}>
+                        <h3 className="settings-page__detail-heading">Backup &amp; recovery</h3>
+                        {identity.kind === 'authenticated'
+                          ? <div className="preview-account-sync-slot" ref={setAccountRecoveryTarget} />
+                          : <PreviewBackupImportControl
+                              data={previewData}
+                              status={persistenceStatus}
+                              currentDate={currentDate}
+                              currentRaw={expectedRaw.current}
+                              recoveryRaw={importRecoveryCopy}
+                              recoverySourceRaw={importRecoverySourceCopy}
+                              recoveryArchiveRaw={importRecoveryArchive}
+                              recoveryError={importRecoveryError}
+                              onImport={(data, sourceRaw) => finishWrite(data, true, 'import', sourceRaw)}
+                              showExport
+                              presentation="recovery"
+                            />}
+                      </div>
                     </>
                   )
                   : (
@@ -3462,7 +3569,10 @@ function PreviewWorkspace({
                       <button
                         type="button"
                         className="settings-link"
-                        onClick={() => setMoreSettingsOpen(true)}
+                        onClick={() => {
+                          setSettingsDetail(null);
+                          setMoreSettingsOpen(true);
+                        }}
                       >
                         <span>Settings</span>
                         <span aria-hidden="true">›</span>
@@ -3502,6 +3612,7 @@ function PreviewWorkspace({
               onNavigate={navigate}
               onOpenSettings={() => {
                 navigate('more');
+                setSettingsDetail('categories');
                 setMoreSettingsOpen(true);
               }}
               onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
@@ -3730,6 +3841,65 @@ function PreviewWorkspace({
             )
           : <PlaceholderPage destination={destination} onToday={() => navigate('today')} />}
       </div>
+      {identity.kind === 'development' && (
+        <PreviewDataControls
+          hidden={!isPreviewSettings || settingsDetail !== 'save-sync' || profilePersonId !== null}
+          data={previewData}
+          status={persistenceStatus}
+          currentDate={currentDate}
+          currentRaw={expectedRaw.current}
+          importRecoveryRaw={importRecoveryCopy}
+          importRecoverySourceRaw={importRecoverySourceCopy}
+          importRecoveryArchiveRaw={importRecoveryArchive}
+          importRecoveryError={importRecoveryError}
+          onImport={(data, sourceRaw) => finishWrite(data, true, 'import', sourceRaw)}
+          onReset={() => finishWrite(initialPreviewData(), true, 'reset')}
+          onRetrySave={retrySave}
+          onReloadExternal={reloadExternal}
+          onReplaceExternal={replaceExternal}
+          rawRecoveryCopy={rawRecoveryCopy}
+          rawRecoveryError={rawRecoveryError}
+          v1RecoveryCopy={v1RecoveryCopy} v1RecoveryError={v1RecoveryError}
+          v2RecoveryCopy={v2RecoveryCopy} v2RecoveryError={v2RecoveryError}
+          v3RecoveryCopy={v3RecoveryCopy} v3RecoveryError={v3RecoveryError}
+          v4RecoveryCopy={v4RecoveryCopy} v4RecoveryError={v4RecoveryError}
+          v5RecoveryCopy={v5RecoveryCopy} v5RecoveryError={v5RecoveryError}
+          v6RecoveryCopy={v6RecoveryCopy} v6RecoveryError={v6RecoveryError}
+          v7RecoveryCopy={v7RecoveryCopy} v7RecoveryError={v7RecoveryError}
+          v8RecoveryCopy={v8RecoveryCopy} v8RecoveryError={v8RecoveryError}
+          v9RecoveryCopy={v9RecoveryCopy} v9RecoveryError={v9RecoveryError}
+          v10RecoveryCopy={v10RecoveryCopy} v10RecoveryError={v10RecoveryError}
+          v11RecoveryCopy={v11RecoveryCopy} v11RecoveryError={v11RecoveryError}
+          v12RecoveryCopy={v12RecoveryCopy} v12RecoveryError={v12RecoveryError}
+          v13RecoveryCopy={v13RecoveryCopy} v13RecoveryError={v13RecoveryError}
+          v14RecoveryCopy={v14RecoveryCopy} v14RecoveryError={v14RecoveryError}
+          v15RecoveryCopy={v15RecoveryCopy} v15RecoveryError={v15RecoveryError}
+          v16RecoveryCopy={v16RecoveryCopy} v16RecoveryError={v16RecoveryError}
+          v17RecoveryCopy={v17RecoveryCopy} v17RecoveryError={v17RecoveryError}
+          v18RecoveryCopy={v18RecoveryCopy} v18RecoveryError={v18RecoveryError}
+          v19RecoveryCopy={v19RecoveryCopy} v19RecoveryError={v19RecoveryError}
+          v20RecoveryCopy={v20RecoveryCopy} v20RecoveryError={v20RecoveryError}
+          v21RecoveryCopy={v21RecoveryCopy} v21RecoveryError={v21RecoveryError}
+          v22RecoveryCopy={v22RecoveryCopy} v22RecoveryError={v22RecoveryError}
+          v23RecoveryCopy={v23RecoveryCopy} v23RecoveryError={v23RecoveryError}
+          v24RecoveryCopy={v24RecoveryCopy} v24RecoveryError={v24RecoveryError}
+          v25RecoveryCopy={v25RecoveryCopy} v25RecoveryError={v25RecoveryError}
+          v26RecoveryCopy={v26RecoveryCopy} v26RecoveryError={v26RecoveryError}
+          v27RecoveryCopy={v27RecoveryCopy} v27RecoveryError={v27RecoveryError}
+          v28RecoveryCopy={v28RecoveryCopy} v28RecoveryError={v28RecoveryError}
+          v29RecoveryCopy={v29RecoveryCopy} v29RecoveryError={v29RecoveryError}
+          v30RecoveryCopy={v30RecoveryCopy} v30RecoveryError={v30RecoveryError}
+          v31RecoveryCopy={v31RecoveryCopy} v31RecoveryError={v31RecoveryError}
+          v32RecoveryCopy={v32RecoveryCopy} v32RecoveryError={v32RecoveryError}
+          v33RecoveryCopy={v33RecoveryCopy} v33RecoveryError={v33RecoveryError}
+          v34RecoveryCopy={v34RecoveryCopy} v34RecoveryError={v34RecoveryError}
+          v35RecoveryCopy={v35RecoveryCopy} v35RecoveryError={v35RecoveryError}
+          v36RecoveryCopy={v36RecoveryCopy} v36RecoveryError={v36RecoveryError}
+          v40RecoveryCopy={v40RecoveryCopy} v40RecoveryError={v40RecoveryError}
+          v41RecoveryCopy={v41RecoveryCopy}
+          v42RecoveryCopy={v42RecoveryCopy}
+        />
+      )}
       {healthFitnessView}
       {selectedProfilePerson && (
         <PersonProfileView
@@ -3797,107 +3967,13 @@ function PreviewWorkspace({
           onClose={closePersonDetailsEditor}
         />
       )}
-      <PreviewDataControls
-        hidden={!isPreviewSettings}
-        data={previewData}
-        status={persistenceStatus}
-        currentDate={currentDate}
-        currentRaw={expectedRaw.current}
-        importRecoveryRaw={importRecoveryCopy}
-        importRecoverySourceRaw={importRecoverySourceCopy}
-        importRecoveryArchiveRaw={importRecoveryArchive}
-        importRecoveryError={importRecoveryError}
-        onImport={(data, sourceRaw) => finishWrite(data, true, 'import', sourceRaw)}
-        onReset={() => finishWrite(initialPreviewData(), true, 'reset')}
-        onRetrySave={retrySave}
-        onReloadExternal={reloadExternal}
-        onReplaceExternal={replaceExternal}
-        rawRecoveryCopy={rawRecoveryCopy}
-        rawRecoveryError={rawRecoveryError}
-        v1RecoveryCopy={v1RecoveryCopy}
-        v1RecoveryError={v1RecoveryError}
-        v2RecoveryCopy={v2RecoveryCopy}
-        v2RecoveryError={v2RecoveryError}
-        v3RecoveryCopy={v3RecoveryCopy}
-        v3RecoveryError={v3RecoveryError}
-        v4RecoveryCopy={v4RecoveryCopy}
-        v4RecoveryError={v4RecoveryError}
-        v5RecoveryCopy={v5RecoveryCopy}
-        v5RecoveryError={v5RecoveryError}
-        v6RecoveryCopy={v6RecoveryCopy}
-        v6RecoveryError={v6RecoveryError}
-        v7RecoveryCopy={v7RecoveryCopy}
-        v7RecoveryError={v7RecoveryError}
-        v8RecoveryCopy={v8RecoveryCopy}
-        v8RecoveryError={v8RecoveryError}
-        v9RecoveryCopy={v9RecoveryCopy}
-        v9RecoveryError={v9RecoveryError}
-        v10RecoveryCopy={v10RecoveryCopy}
-        v10RecoveryError={v10RecoveryError}
-        v11RecoveryCopy={v11RecoveryCopy}
-        v11RecoveryError={v11RecoveryError}
-        v12RecoveryCopy={v12RecoveryCopy}
-        v12RecoveryError={v12RecoveryError}
-        v13RecoveryCopy={v13RecoveryCopy}
-        v13RecoveryError={v13RecoveryError}
-        v14RecoveryCopy={v14RecoveryCopy}
-        v14RecoveryError={v14RecoveryError}
-        v15RecoveryCopy={v15RecoveryCopy}
-        v15RecoveryError={v15RecoveryError}
-        v16RecoveryCopy={v16RecoveryCopy}
-        v16RecoveryError={v16RecoveryError}
-        v17RecoveryCopy={v17RecoveryCopy}
-        v17RecoveryError={v17RecoveryError}
-        v18RecoveryCopy={v18RecoveryCopy}
-        v18RecoveryError={v18RecoveryError}
-        v19RecoveryCopy={v19RecoveryCopy}
-        v19RecoveryError={v19RecoveryError}
-        v20RecoveryCopy={v20RecoveryCopy}
-        v20RecoveryError={v20RecoveryError}
-        v21RecoveryCopy={v21RecoveryCopy}
-        v21RecoveryError={v21RecoveryError}
-        v22RecoveryCopy={v22RecoveryCopy}
-        v22RecoveryError={v22RecoveryError}
-        v23RecoveryCopy={v23RecoveryCopy}
-        v23RecoveryError={v23RecoveryError}
-        v24RecoveryCopy={v24RecoveryCopy}
-        v24RecoveryError={v24RecoveryError}
-        v25RecoveryCopy={v25RecoveryCopy}
-        v25RecoveryError={v25RecoveryError}
-        v26RecoveryCopy={v26RecoveryCopy}
-        v26RecoveryError={v26RecoveryError}
-        v27RecoveryCopy={v27RecoveryCopy}
-        v27RecoveryError={v27RecoveryError}
-        v28RecoveryCopy={v28RecoveryCopy}
-        v28RecoveryError={v28RecoveryError}
-        v29RecoveryCopy={v29RecoveryCopy}
-        v29RecoveryError={v29RecoveryError}
-        v30RecoveryCopy={v30RecoveryCopy}
-        v30RecoveryError={v30RecoveryError}
-        v31RecoveryCopy={v31RecoveryCopy}
-        v31RecoveryError={v31RecoveryError}
-        v32RecoveryCopy={v32RecoveryCopy}
-        v32RecoveryError={v32RecoveryError}
-        v33RecoveryCopy={v33RecoveryCopy}
-        v33RecoveryError={v33RecoveryError}
-        v34RecoveryCopy={v34RecoveryCopy}
-        v34RecoveryError={v34RecoveryError}
-        v35RecoveryCopy={v35RecoveryCopy}
-        v35RecoveryError={v35RecoveryError}
-        v36RecoveryCopy={v36RecoveryCopy}
-        v36RecoveryError={v36RecoveryError}
-        v40RecoveryCopy={v40RecoveryCopy}
-        v40RecoveryError={v40RecoveryError}
-        v41RecoveryCopy={v41RecoveryCopy}
-        v42RecoveryCopy={v42RecoveryCopy}
-      />
       {storageNeedsAttention && !isPreviewSettings && (
         <p className="preview-storage-alert" role="alert">
           {persistenceStatus.kind === 'error'
-            ? 'Preview data was not saved on this device. Your changes remain in this tab; open More → Settings → Preview data to retry before leaving.'
+            ? 'Preview data was not saved on this device. Your changes remain in this tab; open More → Settings → Save & sync to retry before leaving.'
             : persistenceStatus.kind === 'conflict'
               ? 'Another tab changed the saved preview. Your current changes remain here until you choose how to resolve it.'
-              : 'Preview data needs attention. Open More → Settings → Preview data to review recovery and storage options.'}
+              : 'Preview data needs attention. Open More → Settings → Save & sync to review recovery and storage options.'}
         </p>
       )}
       <footer className="preview-footer">
