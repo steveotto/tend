@@ -13,10 +13,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function response(body: unknown, status = 200): Response {
+function response(body: unknown, status = 200, headers: HeadersInit = {}): Response {
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: new Headers(headers),
     json: async () => body
   } as Response;
 }
@@ -423,14 +424,33 @@ describe('upcoming calendar agenda', () => {
   it('classifies a non-JSON service failure by HTTP status without exposing its body', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(
       '<html>upstream response</html>',
-      { status: 503, headers: { 'content-type': 'text/html' } }
+      {
+        status: 503,
+        headers: {
+          'content-type': 'text/html',
+          'cf-ray': 'a5b065bcd9fadc42-EWR'
+        }
+      }
     )));
     renderCalendar([{ id: 'home', name: 'Home', url: 'https://p.icloud.com/private' }]);
 
     expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
     expect(screen.getByText('The Calendar reader returned an unsuccessful response.')).toBeTruthy();
-    expect(screen.getByText('Code: reader-http-failed · HTTP 503')).toBeTruthy();
+    expect(screen.getByText('Code: reader-http-failed · HTTP 503 · Ray ID: a5b065bcd9fadc42-EWR')).toBeTruthy();
     expect(screen.queryByText(/upstream response/)).toBeNull();
+  });
+
+  it('omits malformed Cloudflare ray identifiers from diagnostics', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(
+      { error: 'safe generic error' },
+      503,
+      { 'cf-ray': 'private-information' }
+    )));
+    renderCalendar([{ id: 'home', name: 'Home', url: 'https://p.icloud.com/private' }]);
+
+    expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
+    expect(screen.getByText('Code: reader-http-failed · HTTP 503')).toBeTruthy();
+    expect(screen.queryByText(/private-information/)).toBeNull();
   });
 
   it('keeps malformed successful responses classified as invalid reader responses', async () => {

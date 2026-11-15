@@ -25,6 +25,7 @@ type CalendarReaderState = {
     upstreamStatus?: number;
     feedBytes?: number;
     limitBytes?: number;
+    cloudflareRayId?: string;
   }>;
   issueCount: number;
 };
@@ -56,7 +57,8 @@ class CalendarReadError extends Error {
     readonly httpStatus?: number,
     readonly upstreamStatus?: number,
     readonly feedBytes?: number,
-    readonly limitBytes?: number
+    readonly limitBytes?: number,
+    readonly cloudflareRayId?: string
   ) {
     super(code);
   }
@@ -141,6 +143,13 @@ function isCalendarEvent(value: unknown): value is CalendarEvent {
     && typeof event.allDay === 'boolean';
 }
 
+function getCloudflareRayId(response: Response): string | undefined {
+  const rayId = response.headers.get('cf-ray');
+  return rayId && /^[0-9a-f]{16}(?:-[A-Z]{3})?$/.test(rayId)
+    ? rayId
+    : undefined;
+}
+
 async function loadSource(
   source: CalendarSource,
   now: number,
@@ -176,6 +185,7 @@ async function loadSource(
       throw new CalendarReadError(timedOut ? 'reader-timeout' : 'reader-network-failed');
     }
 
+    const cloudflareRayId = getCloudflareRayId(response);
     let result: unknown;
     try {
       result = await response.json();
@@ -187,7 +197,11 @@ async function loadSource(
           : response.ok
             ? 'reader-response-invalid'
             : 'reader-http-failed',
-        response.status
+        response.status,
+        undefined,
+        undefined,
+        undefined,
+        cloudflareRayId
       );
     }
     if (!response.ok) {
@@ -213,7 +227,14 @@ async function loadSource(
         && result.limitBytes > 0
         ? result.limitBytes
         : undefined;
-      throw new CalendarReadError(code, response.status, upstreamStatus, feedBytes, limitBytes);
+      throw new CalendarReadError(
+        code,
+        response.status,
+        upstreamStatus,
+        feedBytes,
+        limitBytes,
+        cloudflareRayId
+      );
     }
     if (!result
       || typeof result !== 'object'
@@ -224,7 +245,14 @@ async function loadSource(
       || typeof result.issueCount !== 'number'
       || !Number.isSafeInteger(result.issueCount)
       || result.issueCount < 0) {
-      throw new CalendarReadError('reader-response-invalid', response.status);
+      throw new CalendarReadError(
+        'reader-response-invalid',
+        response.status,
+        undefined,
+        undefined,
+        undefined,
+        cloudflareRayId
+      );
     }
     return { events: result.events, issueCount: result.issueCount };
   } finally {
@@ -233,8 +261,14 @@ async function loadSource(
   }
 }
 
-function failureDiagnostic(failure: Pick<CalendarReaderState['failures'][number], 'code' | 'httpStatus'>): string {
-  return `Code: ${failure.code}${failure.httpStatus === undefined ? '' : ` · HTTP ${failure.httpStatus}`}`;
+function failureDiagnostic(
+  failure: Pick<CalendarReaderState['failures'][number], 'code' | 'httpStatus' | 'cloudflareRayId'>
+): string {
+  return [
+    `Code: ${failure.code}`,
+    ...(failure.httpStatus === undefined ? [] : [`HTTP ${failure.httpStatus}`]),
+    ...(failure.cloudflareRayId ? [`Ray ID: ${failure.cloudflareRayId}`] : [])
+  ].join(' · ');
 }
 
 export function CalendarAgendaSection({
@@ -292,7 +326,8 @@ export function CalendarAgendaSection({
               httpStatus: error.httpStatus,
               upstreamStatus: error.upstreamStatus,
               feedBytes: error.feedBytes,
-              limitBytes: error.limitBytes
+              limitBytes: error.limitBytes,
+              cloudflareRayId: error.cloudflareRayId
             }
             : { code: 'reader-unavailable' as const }
         };
@@ -307,7 +342,8 @@ export function CalendarAgendaSection({
           ...(result.error?.httpStatus !== undefined ? { httpStatus: result.error.httpStatus } : {}),
           ...(result.error?.upstreamStatus ? { upstreamStatus: result.error.upstreamStatus } : {}),
           ...(result.error?.feedBytes !== undefined ? { feedBytes: result.error.feedBytes } : {}),
-          ...(result.error?.limitBytes !== undefined ? { limitBytes: result.error.limitBytes } : {})
+          ...(result.error?.limitBytes !== undefined ? { limitBytes: result.error.limitBytes } : {}),
+          ...(result.error?.cloudflareRayId ? { cloudflareRayId: result.error.cloudflareRayId } : {})
         }));
       const events = results.flatMap(result => result.result?.events ?? [])
         .sort((left, right) => left.startsAt - right.startsAt);
