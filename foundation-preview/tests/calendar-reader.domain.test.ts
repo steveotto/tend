@@ -198,6 +198,33 @@ describe('Cloudflare Pages Calendar reader', () => {
     expect(loggedText).not.toContain(source.url);
   });
 
+  it('distinguishes a serialized client error from a serialization failure', async () => {
+    const requestId = 'c3b19aa7-9e44-4c5f-9f7d-26770998f56a';
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const response = await onRequest({
+      request: request({}, { requestId, contentType: 'text/plain' })
+    });
+    const entries = log.mock.calls.map(([entry]) => JSON.parse(String(entry)) as {
+      requestId: string;
+      stage?: string;
+      outcome?: string;
+      status?: number;
+    });
+
+    expect(response.status).toBe(400);
+    expect(entries).toContainEqual(expect.objectContaining({
+      requestId,
+      stage: 'response_serialization',
+      outcome: 'completed'
+    }));
+    expect(entries).toContainEqual(expect.objectContaining({
+      requestId,
+      stage: 'request_complete',
+      outcome: 'http_failure',
+      status: 400
+    }));
+  });
+
   it('logs only the exception class for an upstream runtime error', async () => {
     const requestId = 'c3b19aa7-9e44-4c5f-9f7d-26770998f56a';
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
