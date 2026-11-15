@@ -26,6 +26,7 @@ type CalendarReaderState = {
     feedBytes?: number;
     limitBytes?: number;
     cloudflareRayId?: string;
+    requestId?: string;
   }>;
   issueCount: number;
 };
@@ -36,6 +37,7 @@ type CalendarReadFailureCode =
   | 'reader-timeout'
   | 'reader-response-invalid'
   | 'reader-http-failed'
+  | 'reader-internal-error'
   | 'invalid-request'
   | 'url-not-allowed'
   | 'redirect-not-allowed'
@@ -58,7 +60,8 @@ class CalendarReadError extends Error {
     readonly upstreamStatus?: number,
     readonly feedBytes?: number,
     readonly limitBytes?: number,
-    readonly cloudflareRayId?: string
+    readonly cloudflareRayId?: string,
+    readonly requestId?: string
   ) {
     super(code);
   }
@@ -70,6 +73,7 @@ function isCalendarReadFailureCode(value: unknown): value is CalendarReadFailure
     || value === 'reader-timeout'
     || value === 'reader-response-invalid'
     || value === 'reader-http-failed'
+    || value === 'reader-internal-error'
     || value === 'invalid-request'
     || value === 'url-not-allowed'
     || value === 'redirect-not-allowed'
@@ -98,6 +102,8 @@ function failureDescription(code: CalendarReadFailureCode): string {
       return 'The Calendar reader returned an invalid response.';
     case 'reader-http-failed':
       return 'The Calendar reader returned an unsuccessful response.';
+    case 'reader-internal-error':
+      return 'The Calendar reader encountered an internal error.';
     case 'invalid-request':
       return 'The calendar request was rejected as invalid.';
     case 'url-not-allowed':
@@ -150,6 +156,24 @@ function getCloudflareRayId(response: Response): string | undefined {
     : undefined;
 }
 
+function getCalendarRequestId(response: Response): string | undefined {
+  const requestId = response.headers.get('x-tend-calendar-request-id');
+  return requestId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)
+    ? requestId
+    : undefined;
+}
+
+function createCalendarRequestId(): string {
+  const crypto = globalThis.crypto;
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = [...bytes].map(value => value.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 async function loadSource(
   source: CalendarSource,
   now: number,
@@ -158,6 +182,7 @@ async function loadSource(
   signal: AbortSignal
 ): Promise<{ events: CalendarEvent[]; issueCount: number }> {
   const requestController = new AbortController();
+  const requestId = createCalendarRequestId();
   let timedOut = false;
   const abortForLifecycle = () => requestController.abort();
   signal.addEventListener('abort', abortForLifecycle, { once: true });
@@ -170,7 +195,10 @@ async function loadSource(
     try {
       response = await fetch('/api/calendar/read', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          'x-tend-calendar-request-id': requestId
+        },
         body: JSON.stringify({
           source,
           now,
@@ -182,10 +210,19 @@ async function loadSource(
       });
     } catch (error) {
       if (signal.aborted) throw error;
-      throw new CalendarReadError(timedOut ? 'reader-timeout' : 'reader-network-failed');
+      throw new CalendarReadError(
+        timedOut ? 'reader-timeout' : 'reader-network-failed',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        requestId
+      );
     }
 
     const cloudflareRayId = getCloudflareRayId(response);
+    const responseRequestId = getCalendarRequestId(response) ?? requestId;
     let result: unknown;
     try {
       result = await response.json();
@@ -201,7 +238,8 @@ async function loadSource(
         undefined,
         undefined,
         undefined,
-        cloudflareRayId
+        cloudflareRayId,
+        responseRequestId
       );
     }
     if (!response.ok) {
@@ -233,7 +271,8 @@ async function loadSource(
         upstreamStatus,
         feedBytes,
         limitBytes,
-        cloudflareRayId
+        cloudflareRayId,
+        responseRequestId
       );
     }
     if (!result
@@ -251,7 +290,8 @@ async function loadSource(
         undefined,
         undefined,
         undefined,
-        cloudflareRayId
+        cloudflareRayId,
+        responseRequestId
       );
     }
     return { events: result.events, issueCount: result.issueCount };
@@ -262,12 +302,13 @@ async function loadSource(
 }
 
 function failureDiagnostic(
-  failure: Pick<CalendarReaderState['failures'][number], 'code' | 'httpStatus' | 'cloudflareRayId'>
+  failure: Pick<CalendarReaderState['failures'][number], 'code' | 'httpStatus' | 'cloudflareRayId' | 'requestId'>
 ): string {
   return [
     `Code: ${failure.code}`,
     ...(failure.httpStatus === undefined ? [] : [`HTTP ${failure.httpStatus}`]),
-    ...(failure.cloudflareRayId ? [`Ray ID: ${failure.cloudflareRayId}`] : [])
+    ...(failure.cloudflareRayId ? [`Ray ID: ${failure.cloudflareRayId}`] : []),
+    ...(failure.requestId ? [`Request ID: ${failure.requestId}`] : [])
   ].join(' · ');
 }
 
@@ -327,7 +368,8 @@ export function CalendarAgendaSection({
               upstreamStatus: error.upstreamStatus,
               feedBytes: error.feedBytes,
               limitBytes: error.limitBytes,
-              cloudflareRayId: error.cloudflareRayId
+              cloudflareRayId: error.cloudflareRayId,
+              requestId: error.requestId
             }
             : { code: 'reader-unavailable' as const }
         };
@@ -343,7 +385,8 @@ export function CalendarAgendaSection({
           ...(result.error?.upstreamStatus ? { upstreamStatus: result.error.upstreamStatus } : {}),
           ...(result.error?.feedBytes !== undefined ? { feedBytes: result.error.feedBytes } : {}),
           ...(result.error?.limitBytes !== undefined ? { limitBytes: result.error.limitBytes } : {}),
-          ...(result.error?.cloudflareRayId ? { cloudflareRayId: result.error.cloudflareRayId } : {})
+          ...(result.error?.cloudflareRayId ? { cloudflareRayId: result.error.cloudflareRayId } : {}),
+          ...(result.error?.requestId ? { requestId: result.error.requestId } : {})
         }));
       const events = results.flatMap(result => result.result?.events ?? [])
         .sort((left, right) => left.startsAt - right.startsAt);
