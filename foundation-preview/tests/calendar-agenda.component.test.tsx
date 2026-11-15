@@ -420,17 +420,30 @@ describe('upcoming calendar agenda', () => {
     expectNoCalendarSettingsShortcut();
   });
 
-  it('reports the HTTP status when the reader returns a non-JSON error', async () => {
+  it('classifies a non-JSON service failure by HTTP status without exposing its body', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(
       '<html>upstream response</html>',
-      { status: 502, headers: { 'content-type': 'text/html' } }
+      { status: 503, headers: { 'content-type': 'text/html' } }
+    )));
+    renderCalendar([{ id: 'home', name: 'Home', url: 'https://p.icloud.com/private' }]);
+
+    expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
+    expect(screen.getByText('The Calendar reader returned an unsuccessful response.')).toBeTruthy();
+    expect(screen.getByText('Code: reader-http-failed · HTTP 503')).toBeTruthy();
+    expect(screen.queryByText(/upstream response/)).toBeNull();
+  });
+
+  it('keeps malformed successful responses classified as invalid reader responses', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      '<html>unexpected response</html>',
+      { status: 200, headers: { 'content-type': 'text/html' } }
     )));
     renderCalendar([{ id: 'home', name: 'Home', url: 'https://p.icloud.com/private' }]);
 
     expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
     expect(screen.getByText('The Calendar reader returned an invalid response.')).toBeTruthy();
-    expect(screen.getByText('Code: reader-response-invalid · HTTP 502')).toBeTruthy();
-    expect(screen.queryByText(/upstream response/)).toBeNull();
+    expect(screen.getByText('Code: reader-response-invalid · HTTP 200')).toBeTruthy();
+    expect(screen.queryByText(/unexpected response/)).toBeNull();
   });
 
   it('reports a generic reader HTTP failure separately from feed retrieval errors', async () => {

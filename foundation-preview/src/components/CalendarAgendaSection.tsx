@@ -182,7 +182,11 @@ async function loadSource(
     } catch {
       if (signal.aborted) throw new DOMException('Calendar request was cancelled.', 'AbortError');
       throw new CalendarReadError(
-        timedOut ? 'reader-timeout' : 'reader-response-invalid',
+        timedOut
+          ? 'reader-timeout'
+          : response.ok
+            ? 'reader-response-invalid'
+            : 'reader-http-failed',
         response.status
       );
     }
