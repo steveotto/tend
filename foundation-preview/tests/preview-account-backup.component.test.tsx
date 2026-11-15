@@ -132,7 +132,7 @@ function renderControls(
   onRestore?: (data: PreviewData, expectedRaw: string | null) => string | null,
   isIdentityCurrent: () => boolean = () => true,
   accountId = accountA,
-  openAdvanced = true
+  openRecovery = true
 ) {
   const view = render(
     <PreviewAccountBackupControls
@@ -159,14 +159,14 @@ function renderControls(
       onRecoveryChanged={() => {}}
     />
   );
-  if (openAdvanced) {
-    fireEvent.click(screen.getByRole('button', { name: /Advanced recovery/ }));
+  if (openRecovery) {
+    fireEvent.click(screen.getByRole('button', { name: /Account recovery/ }));
   }
   return view;
 }
 
 describe('manual Preview account backup and restore', () => {
-  it('keeps technical account status collapsed inside advanced recovery', async () => {
+  it('keeps technical account status collapsed inside account recovery', async () => {
     const backend = memoryBackend();
     const data = fitnessData('Status');
     const local = accountStorage(data);
@@ -370,7 +370,7 @@ describe('manual Preview account backup and restore', () => {
       await Promise.resolve();
     });
     expect(screen.queryByRole('dialog', { name: 'Replace this device’s data?' })).toBeNull();
-    expect(screen.getByRole('dialog', { name: 'Advanced recovery' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Account recovery' })).toBeTruthy();
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
     expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBeNull();
   });

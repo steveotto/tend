@@ -202,9 +202,21 @@ function cancelNativeDialog(dialog: HTMLElement): void {
   fireEvent(dialog, new Event('cancel', { cancelable: true }));
 }
 
-async function openPreviewSettings(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+async function openPreviewSettings(
+  user: ReturnType<typeof userEvent.setup>,
+  detail: 'categories' | 'appearance' | 'time-blocks' | 'calendar' | 'weather' | 'save-sync' | 'backup-recovery' = 'save-sync'
+): Promise<void> {
   await user.click(screen.getByRole('button', { name: 'More, settings' }));
   await user.click(await screen.findByRole('button', { name: 'Settings' }));
+  await user.click(await screen.findByRole('button', { name: ({
+    categories: 'Categories',
+    appearance: 'Appearance',
+    'time-blocks': 'Time blocks',
+    calendar: 'Calendar',
+    weather: 'Weather',
+    'save-sync': 'Save & sync',
+    'backup-recovery': 'Backup & recovery'
+  } as const)[detail] }));
 }
 
 function savedMarriageRhythm(
@@ -435,15 +447,40 @@ describe('Tend Today preview', () => {
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
       .getByRole('button', { name: 'More, settings' }));
     await user.click(screen.getByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: 'Weather' }));
     expect(screen.getByRole('heading', { name: 'Weather' })).toBeTruthy();
     expect(screen.getByText(/Source: Open-Meteo/)).toBeTruthy();
     expect(screen.getByText('Choose city')).toBeTruthy();
 
+    await user.click(screen.getByRole('button', { name: '‹ Settings' }));
     await user.click(screen.getByRole('button', { name: '‹ More' }));
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
       .getByRole('button', { name: 'Today' }));
     expect(screen.queryByText('Choose city')).toBeNull();
     expect(document.querySelector('.today-plan__weather')).toBeNull();
+  });
+
+  it('organizes Settings into detail screens and preserves an unsaved editor draft between them', async () => {
+    const user = userEvent.setup();
+    testingRender(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await user.click(screen.getByRole('button', { name: 'More, settings' }));
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+
+    expect(screen.getByRole('region', { name: 'Personalize' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Connections' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Your data' })).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Calendar' }));
+    await user.click(screen.getByRole('button', { name: 'Add calendar' }));
+    await user.type(screen.getByLabelText('Calendar name'), 'Draft calendar');
+    await user.click(screen.getByRole('button', { name: '‹ Settings' }));
+    await user.click(screen.getByRole('button', { name: 'Weather' }));
+    expect(screen.getByRole('heading', { name: 'Weather' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '‹ Settings' }));
+    await user.click(screen.getByRole('button', { name: 'Calendar' }));
+
+    expect((screen.getByLabelText('Calendar name') as HTMLInputElement).value).toBe('Draft calendar');
   });
 
   it('opens Calendar settings through More and stores sources only in the synthetic preview envelope', async () => {
@@ -453,6 +490,7 @@ describe('Tend Today preview', () => {
 
     await user.click(screen.getByRole('button', { name: 'More, settings' }));
     await user.click(await screen.findByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: 'Calendar' }));
     const heading = await screen.findByRole('heading', { name: 'Calendar' });
     expect(heading).toBeTruthy();
 
@@ -481,7 +519,7 @@ describe('Tend Today preview', () => {
     const user = userEvent.setup();
     const { unmount } = testingRender(<App />);
     await screen.findByText('Preview data saved in this browser.');
-    await openPreviewSettings(user);
+    await openPreviewSettings(user, 'calendar');
 
     const showOnToday = screen.getByRole('checkbox', { name: 'Show calendar on Today' }) as HTMLInputElement;
     expect(showOnToday.checked).toBe(true);
@@ -498,7 +536,7 @@ describe('Tend Today preview', () => {
     await user.click(within(tools).getByRole('button', { name: 'Today' }));
     expect(screen.queryByRole('heading', { name: 'Calendar' })).toBeNull();
 
-    await openPreviewSettings(user);
+    await openPreviewSettings(user, 'calendar');
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
       JSON.stringify({ events: [], issueCount: 0 }),
       { status: 200, headers: { 'content-type': 'application/json' } }
@@ -522,7 +560,7 @@ describe('Tend Today preview', () => {
     testingRender(<App />);
     await screen.findByText('Preview data saved in this browser.');
     expect(screen.queryByRole('heading', { name: 'Calendar' })).toBeNull();
-    await openPreviewSettings(user);
+    await openPreviewSettings(user, 'calendar');
     const reloadedToggle = screen.getByRole('checkbox', { name: 'Show calendar on Today' }) as HTMLInputElement;
     expect(reloadedToggle.checked).toBe(false);
     await user.click(reloadedToggle);
@@ -540,7 +578,7 @@ describe('Tend Today preview', () => {
     const accountIdentity = createAuthenticatedPreviewIdentity(accountId, 1);
     const { unmount } = testingRender(<App identity={accountIdentity} />);
     await screen.findByRole('button', { name: 'More, settings' });
-    await openPreviewSettings(user);
+    await openPreviewSettings(user, 'categories');
 
     const faithSwitch = screen.getByRole('switch', { name: 'Faith' }) as HTMLInputElement;
     expect(faithSwitch.checked).toBe(true);
@@ -563,7 +601,7 @@ describe('Tend Today preview', () => {
 
     unmount();
     testingRender(<App identity={accountIdentity} />);
-    await openPreviewSettings(user);
+    await openPreviewSettings(user, 'categories');
     const restoredFaithSwitch = screen.getByRole('switch', { name: 'Faith' }) as HTMLInputElement;
     expect(restoredFaithSwitch.checked).toBe(false);
     await user.click(restoredFaithSwitch);
@@ -582,7 +620,7 @@ describe('Tend Today preview', () => {
     cleanup();
     const secondIdentity = createAuthenticatedPreviewIdentity('c0000000-0000-4000-8000-000000000045', 1);
     testingRender(<App identity={secondIdentity} />);
-    await openPreviewSettings(user);
+    await openPreviewSettings(user, 'categories');
     expect((screen.getByRole('switch', { name: 'Faith' }) as HTMLInputElement).checked).toBe(true);
   });
 
@@ -590,7 +628,7 @@ describe('Tend Today preview', () => {
     const user = userEvent.setup();
     testingRender(<App />);
     await screen.findByText('Preview data saved in this browser.');
-    await openPreviewSettings(user);
+    await openPreviewSettings(user, 'categories');
     for (const name of ['Faith', 'Marriage', 'Parenting', 'Health & Fitness', 'Finances', 'Friendships']) {
       await user.click(screen.getByRole('switch', { name }) as HTMLInputElement);
     }
@@ -602,7 +640,7 @@ describe('Tend Today preview', () => {
     expect(within(screen.getByRole('navigation', { name: 'Areas' })).queryAllByRole('button')).toHaveLength(0);
 
     await user.click(screen.getByRole('button', { name: 'Open Settings' }));
-    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Categories' })).toBeTruthy();
     expect(screen.getAllByRole('switch')).toHaveLength(6);
   });
 
@@ -617,7 +655,7 @@ describe('Tend Today preview', () => {
     ));
 
     const firstView = testingRender(<App identity={accountIdentity} />);
-    await openPreviewSettings(user);
+    await openPreviewSettings(user, 'calendar');
     expect(screen.getByText(/stored in this signed-in account’s saved data/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Add controlled test feed' })).toBeNull();
 
@@ -665,13 +703,13 @@ describe('Tend Today preview', () => {
     const otherAccountView = testingRender(<App
       identity={createAuthenticatedPreviewIdentity('d0000000-0000-4000-8000-000000000004', 1)}
     />);
-    await openPreviewSettings(user);
+    await openPreviewSettings(user, 'calendar');
     expect(screen.queryByText('Updated account calendar')).toBeNull();
     expect((screen.getByRole('checkbox', { name: 'Show calendar on Today' }) as HTMLInputElement).checked).toBe(true);
     otherAccountView.unmount();
 
     testingRender(<App identity={createAuthenticatedPreviewIdentity(accountId, 2)} />);
-    await openPreviewSettings(user);
+    await openPreviewSettings(user, 'calendar');
     expect((screen.getByRole('checkbox', { name: 'Show calendar on Today' }) as HTMLInputElement).checked).toBe(false);
     expect((screen.getByRole('checkbox', { name: 'Use Updated account calendar' }) as HTMLInputElement).checked).toBe(false);
 
@@ -692,7 +730,7 @@ describe('Tend Today preview', () => {
       enabled: true
     });
 
-    await openPreviewSettings(user);
+    await openPreviewSettings(user, 'calendar');
     await user.click(screen.getByRole('button', { name: 'Remove' }));
     await user.click(screen.getByRole('button', { name: 'Confirm removal of Updated account calendar' }));
     await waitFor(() => {
@@ -708,7 +746,7 @@ describe('Tend Today preview', () => {
     const user = userEvent.setup();
     const { unmount } = testingRender(<App />);
     await screen.findByText('Preview data saved in this browser.');
-    await openPreviewSettings(user);
+    await openPreviewSettings(user, 'time-blocks');
 
     const settings = screen.getByRole('heading', { name: 'Time blocks' }).closest('section')!;
     const timeBlockList = settings.querySelector('.time-block-settings__list') as HTMLElement;
@@ -816,13 +854,16 @@ describe('Tend Today preview', () => {
     expect(screen.getByRole('button', { name: 'Settings' })).toBe(document.activeElement);
     await user.keyboard('{Enter}');
     expect(await screen.findByRole('heading', { name: 'Settings' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Preview data' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Save & sync' }));
+    expect(screen.getByRole('heading', { name: 'Save & sync' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Export preview backup' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Reset sample data' })).toBeTruthy();
     expect(screen.getByLabelText('Import preview backup')).toBeTruthy();
     expect(screen.getByLabelText('Dry-run Classic Tend import')).toBeTruthy();
     expect(screen.getByText(/separate from your live Tend account/)).toBeTruthy();
 
+    await user.click(screen.getByRole('button', { name: '‹ Settings' }));
+    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: '‹ More' }));
     expect(await screen.findByRole('heading', { name: 'More' })).toBeTruthy();
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'More' }));
@@ -3459,6 +3500,7 @@ describe('Tend Today preview', () => {
 
     await openPreviewSettings(user);
     expect(screen.getByRole('button', { name: 'Download raw recovery file' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '‹ Settings' }));
     await user.click(screen.getByRole('button', { name: '‹ More' }));
     await user.click(screen.getByRole('button', { name: 'Today' }));
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
@@ -6946,7 +6988,7 @@ describe('Tend Today preview', () => {
   it('saves the Appearance text-size preference and restores it after remounting', async () => {
     const user = userEvent.setup();
     render(<App />);
-    await openPreviewSettings(user);
+    await openPreviewSettings(user, 'appearance');
 
     const options = screen.getByRole('group', { name: 'Text size' });
     for (const size of ['Medium', 'Small', 'Large'] as const) {
@@ -6959,7 +7001,7 @@ describe('Tend Today preview', () => {
 
     cleanup();
     render(<App />);
-    await openPreviewSettings(user);
+    await openPreviewSettings(user, 'appearance');
     expect((within(screen.getByRole('group', { name: 'Text size' }))
       .getByRole('radio', { name: 'Large' }) as HTMLInputElement).checked).toBe(true);
     await waitFor(() => expect(document.documentElement.dataset.mobileTextSizeLevel).toBe('larger'));

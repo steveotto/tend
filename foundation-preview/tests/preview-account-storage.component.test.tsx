@@ -264,7 +264,7 @@ describe('account-isolated Preview storage', () => {
     expect(window.localStorage.length).toBe(1);
   });
 
-  it('exports, imports, and resets only the active account dataset', async () => {
+  it('exports and imports only the active account dataset without exposing sample reset tools', async () => {
     const scopeA = createPreviewStorageScope({
       getItem: key => window.localStorage.getItem(key),
       setItem: (key, value) => window.localStorage.setItem(key, value)
@@ -295,8 +295,9 @@ describe('account-isolated Preview storage', () => {
     render(<App identity={accountA} />);
     await screen.findByRole('button', { name: 'People' });
     await user.click(screen.getByRole('button', { name: 'More, settings' }));
-    await user.click(screen.getByRole('button', { name: 'Settings' }));
-    await user.click(screen.getByRole('button', { name: 'Export preview backup' }));
+    await user.click(screen.getByRole('button', { name: /^Settings$/ }));
+    await user.click(screen.getByRole('button', { name: 'Backup & recovery' }));
+    await user.click(screen.getByRole('button', { name: /Export backup/ }));
     expect(downloadBlobs).toHaveLength(1);
     const exported = parsePreviewBackup(await downloadBlobs[0]!.text(), '2026-11-01');
     expect(exported.valid).toBe(true);
@@ -304,21 +305,16 @@ describe('account-isolated Preview storage', () => {
 
     const importedData = createPreviewEnvelope(accountData('Imported A'));
     await user.upload(
-      screen.getByLabelText('Import preview backup'),
+      screen.getByLabelText('Import backup'),
       new File([JSON.stringify(importedData)], 'account-a-import.json', { type: 'application/json' })
     );
-    const importDialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
+    const importDialog = await screen.findByRole('dialog', { name: 'Replace data on this device?' });
     await user.click(within(importDialog).getByRole('button', { name: 'Replace with backup' }));
     await waitForScopedValue(scopeA.storage, 'Imported A');
     expect(scopeB.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(savedBRaw);
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe('unbound-data');
-
-    await user.click(screen.getByRole('button', { name: 'Reset sample data' }));
-    const resetDialog = await screen.findByRole('dialog', { name: 'Reset sample data?' });
-    await user.click(within(resetDialog).getByRole('button', { name: 'Reset sample data' }));
-    const reset = loadPreview(scopeA.storage, '2026-11-01');
-    expect(reset.kind).toBe('loaded');
-    if (reset.kind === 'loaded') expect(reset.data.people).toEqual([]);
+    expect(await screen.findByText('Backup imported on this device.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Reset sample data/ })).toBeNull();
     expect(scopeB.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(savedBRaw);
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe('unbound-data');
     vi.unstubAllGlobals();

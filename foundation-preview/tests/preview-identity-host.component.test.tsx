@@ -330,12 +330,16 @@ describe('PreviewIdentityHost', () => {
     await screen.findByRole('region', { name: "Today's plan" });
     await user.click(screen.getByRole('button', { name: 'More, settings' }));
     await user.click(await screen.findByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: 'Save & sync' }));
     expect(await screen.findByText('synthetic@example.test')).toBeTruthy();
     expect(screen.queryByLabelText('Import preview backup')).toBeNull();
     expect(screen.queryByLabelText('Dry-run Classic Tend import')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reset sample data' })).toBeNull();
+    expect(screen.queryByText(/does not sync across devices/)).toBeNull();
     expect(screen.queryByRole('link', { name: 'Component catalogue' })).toBeNull();
-    await user.click(screen.getByText('Backup & recovery'));
-    await user.click(screen.getByRole('button', { name: /Advanced recovery/ }));
+    await user.click(screen.getByRole('button', { name: /Backup & recovery/ }));
+    expect(screen.getByLabelText('Import backup')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /Account recovery/ }));
     await user.click(screen.getByRole('button', { name: /Save this device’s copy to account/ }));
     await screen.findByText('This device’s data was saved to your account.');
     expect(auth.from).toHaveBeenCalledWith('tend_preview_backups');

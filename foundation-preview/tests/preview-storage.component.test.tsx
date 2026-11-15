@@ -3076,7 +3076,8 @@ describe('synthetic preview storage adapter and envelope', () => {
 
 async function openPreviewSettings(user: ReturnType<typeof userEvent.setup>): Promise<void> {
   await user.click(screen.getByRole('button', { name: 'More, settings' }));
-  await user.click(await screen.findByRole('button', { name: 'Settings' }));
+  await user.click(await screen.findByRole('button', { name: /^Settings$/ }));
+  await user.click(await screen.findByRole('button', { name: /^Save & sync$/ }));
 }
 
 describe('preview backup controls', () => {
@@ -3711,18 +3712,19 @@ describe('preview backup controls', () => {
       <App identity={identity} accountBackupApi={accountBackupApi} />
     );
     await user.click(screen.getByRole('button', { name: 'More, settings' }));
-    await user.click(await screen.findByRole('button', { name: 'Settings' }));
+    await user.click(await screen.findByRole('button', { name: /^Settings$/ }));
+    await user.click(await screen.findByRole('button', { name: 'Backup & recovery' }));
     expect(accountBackupApi.read).not.toHaveBeenCalled();
-    expect(await screen.findByRole('heading', { name: 'Preview data' })).toBeTruthy();
-    const importInput = screen.getByLabelText('Import preview backup');
+    expect(await screen.findByRole('heading', { name: 'Backup & recovery' })).toBeTruthy();
+    const importInput = screen.getByLabelText('Import backup');
     await user.upload(importInput, new File([sourceRaw], 'synthetic-preview.json', { type: 'application/json' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
-    expect(within(dialog).getByText(/replaces this account’s local Preview data/)).toBeTruthy();
+    const dialog = await screen.findByRole('dialog', { name: 'Replace data on this device?' });
+    expect(within(dialog).getByText(/Your account copy is not overwritten unless you confirm a separate account upload/)).toBeTruthy();
     const rawBeforeImport = storage.getItem(PREVIEW_STORAGE_KEY);
     expect(rawBeforeImport).not.toBeNull();
     await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
 
-    expect(await screen.findByText('Preview backup imported.')).toBeTruthy();
+    expect(await screen.findByText('Backup imported on this device.')).toBeTruthy();
     expect(loadPreview(browserPreviewStorage(identity), '2026-10-21')).toMatchObject({
       kind: 'loaded',
       data: imported
