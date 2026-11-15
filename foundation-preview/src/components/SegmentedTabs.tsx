@@ -20,7 +20,7 @@ export function SegmentedTabs<TabId extends string>({
   selectedTabId: TabId;
   ariaLabel: string;
   onChange: (tabId: TabId) => void;
-  variant?: 'default' | 'compact' | 'navigation';
+  variant?: 'default' | 'compact' | 'navigation' | 'text';
   onTabRef?: (tabId: TabId, element: HTMLButtonElement | null) => void;
 }) {
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -40,7 +40,7 @@ export function SegmentedTabs<TabId extends string>({
 
   return (
     <div
-      className={`faith-view-nav marriage-view-nav segmented-tabs--count-${tabs.length}${variant === 'compact' ? ' segmented-tabs--compact' : ''}${variant === 'navigation' ? ' segmented-tabs--navigation' : ''}`}
+      className={`faith-view-nav marriage-view-nav segmented-tabs--count-${tabs.length}${variant === 'compact' ? ' segmented-tabs--compact' : ''}${variant === 'navigation' ? ' segmented-tabs--navigation' : ''}${variant === 'text' ? ' segmented-tabs--text' : ''}`}
       role="tablist"
       aria-label={ariaLabel}
     >

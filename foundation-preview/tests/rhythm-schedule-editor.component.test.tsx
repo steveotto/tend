@@ -34,6 +34,37 @@ function associationPicker(title: string) {
   return screen.getByRole('dialog', { name: new RegExp(`^${escapedTitle}$`, 'i') });
 }
 
+async function openCategory(user: ReturnType<typeof userEvent.setup>, picker: HTMLElement, category: string) {
+  const escapedCategory = category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  await user.click(within(picker).getByRole('button', { name: new RegExp(`^${escapedCategory}$`) }));
+  return associationPicker(category);
+}
+
+async function includeCategory(
+  user: ReturnType<typeof userEvent.setup>,
+  detail: HTMLElement,
+  category: string,
+  included = true
+) {
+  const action = `${included ? 'Add' : 'Remove'} ${category} category`;
+  const toggle = within(detail).getByRole('button', { name: action });
+  if ((toggle.getAttribute('aria-pressed') === 'true') !== included) await user.click(toggle);
+}
+
+async function returnToCategoryList(user: ReturnType<typeof userEvent.setup>, detail: HTMLElement) {
+  await user.click(within(detail).getByRole('button', { name: 'Categories' }));
+  return associationPicker('Choose categories');
+}
+
+async function applyCategoryPicker(user: ReturnType<typeof userEvent.setup>, picker: HTMLElement) {
+  let list = picker;
+  if (within(list).queryByRole('heading', { name: 'Choose categories' }) === null) {
+    await user.click(within(list).getByRole('button', { name: 'Done' }));
+    list = associationPicker('Choose categories');
+  }
+  await user.click(within(list).getByRole('button', { name: 'Done' }));
+}
+
 async function choose(user: ReturnType<typeof userEvent.setup>, label: string, option: string) {
   const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const trigger = screen.getByRole('combobox', { name: new RegExp(`^${escapedLabel}:`) });
@@ -43,6 +74,101 @@ async function choose(user: ReturnType<typeof userEvent.setup>, label: string, o
 }
 
 describe('shared structured Rhythm editor', () => {
+  it('uses one Category sheet for category and Practice/Foundations selection while preserving the Rhythm draft flow', async () => {
+    const user = userEvent.setup();
+    const faithPractice = foundationCatalogue.find(foundation =>
+      foundation.categoryId === 'faith'
+      && foundation.lifecycle === 'active'
+      && foundation.capabilities.rhythms
+    )!;
+    const marriageFoundations = foundationCatalogue.filter(foundation =>
+      foundation.categoryId === 'marriage'
+      && foundation.lifecycle === 'active'
+      && foundation.capabilities.rhythms
+    );
+    const connection = marriageFoundations.find(foundation => foundation.id === 'connection')!;
+    const secondMarriageFoundation = marriageFoundations.find(foundation => foundation.id !== 'connection')!;
+    const onSave = vi.fn((_draft: RhythmDraft) => ({}));
+    const editor = renderEditor(onSave);
+
+    await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
+    const picker = associationPicker('Choose categories');
+    expect(within(picker).getByText('Where does this Rhythm belong?')).toBeTruthy();
+    expect(within(picker).getByRole('group', { name: 'Available categories' })).toBeTruthy();
+    expect(picker.querySelectorAll('.rhythm-association-picker__category-row')).toHaveLength(6);
+
+    const faithRow = within(picker).getByRole('button', { name: 'Faith' });
+    faithRow.focus();
+    await user.keyboard('{Enter}');
+    const faithDetail = associationPicker('Faith');
+    expect(faithDetail).toBe(picker);
+    expect(document.activeElement).toBe(within(faithDetail).getByRole('heading', { name: 'Faith' }));
+    expect(within(faithDetail).getByRole('group', { name: 'Faith Practices' })).toBeTruthy();
+    await user.click(within(faithDetail).getByRole('button', { name: faithPractice.name }));
+    await user.click(within(faithDetail).getByRole('button', { name: 'Add Faith category' }));
+    expect(within(faithDetail).getByRole('button', { name: 'Remove Faith category' }).getAttribute('aria-pressed'))
+      .toBe('true');
+
+    await user.click(within(faithDetail).getByRole('button', { name: 'Categories' }));
+    expect(document.activeElement).toBe(within(picker).getByRole('button', { name: 'Faith' }));
+    expect(within(picker).getByText(faithPractice.name)).toBeTruthy();
+    expect(within(picker).getByText('1 category selected')).toBeTruthy();
+
+    await user.click(within(picker).getByRole('button', { name: 'Faith' }));
+    const faithDetailAgain = associationPicker('Faith');
+    const practiceOption = within(faithDetailAgain).getByRole('button', { name: faithPractice.name });
+    expect(practiceOption.getAttribute('aria-pressed')).toBe('true');
+    await user.click(practiceOption);
+    expect(within(faithDetailAgain).getByRole('button', { name: faithPractice.name }).getAttribute('aria-pressed'))
+      .toBe('false');
+    expect(within(faithDetailAgain).getByRole('button', { name: 'Remove Faith category' }).getAttribute('aria-pressed'))
+      .toBe('true');
+    await user.click(within(faithDetailAgain).getByRole('button', { name: faithPractice.name }));
+    await user.click(within(faithDetailAgain).getByRole('button', { name: 'Categories' }));
+
+    await user.click(within(picker).getByRole('button', { name: 'Marriage' }));
+    const marriageDetail = associationPicker('Marriage');
+    await user.click(within(marriageDetail).getByRole('button', { name: 'Add Marriage category' }));
+    await user.click(within(marriageDetail).getByRole('button', { name: connection.name }));
+    await user.click(within(marriageDetail).getByRole('button', { name: secondMarriageFoundation.name }));
+    expect(within(marriageDetail).getByRole('button', { name: connection.name }).getAttribute('aria-pressed'))
+      .toBe('true');
+    expect(within(marriageDetail).getByRole('button', { name: secondMarriageFoundation.name }).getAttribute('aria-pressed'))
+      .toBe('true');
+    await user.click(within(marriageDetail).getByRole('button', { name: 'Done' }));
+    expect(within(picker).getByText('2 categories selected')).toBeTruthy();
+    expect(within(picker).getByText(`${connection.name}, ${secondMarriageFoundation.name}`)).toBeTruthy();
+
+    await user.click(within(picker).getByRole('button', { name: 'Done' }));
+    expect(onSave).not.toHaveBeenCalled();
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({
+      categoryIds: ['faith', 'marriage'],
+      primaryFoundationId: faithPractice.id,
+      secondaryFoundationIds: [connection.id, secondMarriageFoundation.id]
+    });
+  });
+
+  it('cancels picker changes without applying them to the editor draft', async () => {
+    const user = userEvent.setup();
+    const faithPractice = foundationCatalogue.find(foundation => foundation.categoryId === 'faith')!;
+    const onSave = vi.fn((_draft: RhythmDraft) => ({}));
+    const editor = renderEditor(onSave);
+
+    await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
+    const picker = associationPicker('Choose categories');
+    await user.click(within(picker).getByRole('button', { name: 'Faith' }));
+    const faithDetail = associationPicker('Faith');
+    await user.click(within(faithDetail).getByRole('button', { name: 'Add Faith category' }));
+    await user.click(within(faithDetail).getByRole('button', { name: faithPractice.name }));
+    await user.click(within(faithDetail).getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Faith' })).toBeNull();
+    expect(within(editor).getByRole('button', { name: 'Choose categories' })).toBeTruthy();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
   it('saves and reopens an Add Rhythm People selection using imported stable IDs', async () => {
     const user = userEvent.setup();
     const people: PersonPreview[] = [
@@ -348,17 +474,18 @@ describe('shared structured Rhythm editor', () => {
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     const picker = associationPicker('Choose categories');
     expect(editor.hasAttribute('inert')).toBe(true);
-    expect(within(picker).getByText('Choose categories, then their Practices or Foundations.')).toBeTruthy();
+    expect(within(picker).getByText('Where does this Rhythm belong?')).toBeTruthy();
     expect(picker.classList.contains('dialog--phone-fullscreen')).toBe(true);
     expect(picker.classList.contains('money-goal-dialog--category-picker')).toBe(true);
     expect(within(picker).getByRole('button', { name: 'Close category picker' })).toBeTruthy();
-    expect(within(picker).getByRole('group', { name: 'Faith Practices, choose one or more' })).toBeTruthy();
-    expect(within(picker).getByRole('button', { name: 'Faith' }).getAttribute('aria-expanded')).toBe('true');
+    let detail = await openCategory(user, picker, 'Faith');
+    expect(within(detail).getByRole('group', { name: 'Faith Practices' })).toBeTruthy();
+    expect(within(detail).getByRole('button', { name: 'Remove Faith category' }).getAttribute('aria-pressed')).toBe('true');
     const practiceChoice = within(picker).getByRole('button', { name: practice.name });
     expect(practiceChoice.getAttribute('aria-pressed')).toBe('false');
     await user.click(practiceChoice);
     expect(practiceChoice.getAttribute('aria-pressed')).toBe('true');
-    await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+    await applyCategoryPicker(user, detail);
     expect(document.activeElement).toBe(within(editor).getByRole('button', { name: /Choose categories, Faith/ }));
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
     expect(onSave.mock.calls[1]?.[0].primaryFoundationId).toBe(practice.id);
@@ -378,20 +505,20 @@ describe('shared structured Rhythm editor', () => {
 
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     let picker = associationPicker('Choose categories');
-    await user.click(within(picker).getByRole('button', { name: 'Faith' }));
-    expect(within(picker).getByRole('group', { name: 'Faith Practices, choose one or more' })).toBeTruthy();
-    expect(within(picker).getByRole('button', { name: 'Faith' }).getAttribute('aria-expanded')).toBe('true');
+    let detail = await openCategory(user, picker, 'Faith');
+    expect(within(detail).getByRole('group', { name: 'Faith Practices' })).toBeTruthy();
     for (const practice of faithPractices.slice(0, 2)) {
-      await user.click(within(picker).getByRole('button', { name: practice.name }));
+      await user.click(within(detail).getByRole('button', { name: practice.name }));
     }
-    await user.click(within(picker).getByRole('button', { name: 'Marriage' }));
-    expect(within(picker).getByRole('button', { name: 'Marriage' }).getAttribute('aria-expanded')).toBe('true');
-    await user.click(within(picker).getByRole('button', { name: 'Connection' }));
-    const friendshipsCategory = within(picker).getByRole('button', { name: 'Friendships' });
-    await user.click(friendshipsCategory);
-    expect(friendshipsCategory.getAttribute('aria-pressed')).toBe('true');
-    expect(friendshipsCategory.getAttribute('aria-expanded')).toBe('false');
-    expect(within(picker).queryByRole('group', { name: /Friendships .*choose one or more/i })).toBeNull();
+    await includeCategory(user, detail, 'Faith');
+    picker = await returnToCategoryList(user, detail);
+    detail = await openCategory(user, picker, 'Marriage');
+    await user.click(within(detail).getByRole('button', { name: 'Connection' }));
+    await includeCategory(user, detail, 'Marriage');
+    picker = await returnToCategoryList(user, detail);
+    detail = await openCategory(user, picker, 'Friendships');
+    await includeCategory(user, detail, 'Friendships');
+    await returnToCategoryList(user, detail);
     expect(onSave).not.toHaveBeenCalled();
     await user.click(within(picker).getByRole('button', { name: 'Cancel' }));
     expect(within(editor).getByRole('button', { name: 'Choose categories' })).toBeTruthy();
@@ -400,14 +527,17 @@ describe('shared structured Rhythm editor', () => {
 
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     picker = associationPicker('Choose categories');
-    expect(within(picker).getByRole('button', { name: 'Faith' }).getAttribute('aria-pressed')).toBe('false');
-    await user.click(within(picker).getByRole('button', { name: 'Faith' }));
+    detail = await openCategory(user, picker, 'Faith');
     for (const practice of faithPractices.slice(0, 2)) {
-      await user.click(within(picker).getByRole('button', { name: practice.name }));
+      await user.click(within(detail).getByRole('button', { name: practice.name }));
     }
-    await user.click(within(picker).getByRole('button', { name: 'Marriage' }));
-    await user.click(within(picker).getByRole('button', { name: 'Connection' }));
-    await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+    await includeCategory(user, detail, 'Faith');
+    picker = await returnToCategoryList(user, detail);
+    detail = await openCategory(user, picker, 'Marriage');
+    await user.click(within(detail).getByRole('button', { name: 'Connection' }));
+    await includeCategory(user, detail, 'Marriage');
+    picker = await returnToCategoryList(user, detail);
+    await user.click(within(picker).getByRole('button', { name: 'Done' }));
     const categories = within(editor).getByRole('button', { name: /^Choose categories/ });
     expect(within(categories).getAllByRole('img').map(badge => badge.getAttribute('aria-label')))
       .toEqual([
@@ -419,11 +549,14 @@ describe('shared structured Rhythm editor', () => {
 
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     picker = associationPicker('Choose categories');
+    detail = await openCategory(user, picker, 'Faith');
     for (const practice of faithPractices.slice(0, 2)) {
-      expect(within(picker).getByRole('button', { name: practice.name }).getAttribute('aria-pressed')).toBe('true');
+      expect(within(detail).getByRole('button', { name: practice.name }).getAttribute('aria-pressed')).toBe('true');
     }
-    expect(within(picker).getByRole('button', { name: 'Connection' }).getAttribute('aria-pressed')).toBe('true');
-    await user.click(within(picker).getByRole('button', { name: 'Cancel' }));
+    picker = await returnToCategoryList(user, detail);
+    detail = await openCategory(user, picker, 'Marriage');
+    expect(within(detail).getByRole('button', { name: 'Connection' }).getAttribute('aria-pressed')).toBe('true');
+    await user.click(within(detail).getByRole('button', { name: 'Cancel' }));
 
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
     expect(onSave.mock.calls.at(-1)?.[0]).toMatchObject({
@@ -476,9 +609,9 @@ describe('shared structured Rhythm editor', () => {
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     let picker = associationPicker('Choose categories');
 
-    await user.click(within(picker).getByRole('button', { name: 'Health & Fitness' }));
+    let detail = await openCategory(user, picker, 'Health & Fitness');
     const group = within(picker).getByRole('group', {
-      name: 'Health & Fitness Foundations, choose one or more'
+      name: 'Health & Fitness Foundations'
     });
     const strength = within(group).getByRole('button', { name: 'Strength' });
     const cardio = within(group).getByRole('button', { name: 'Cardio' });
@@ -489,24 +622,25 @@ describe('shared structured Rhythm editor', () => {
 
     await user.click(strength);
     expect(strength.getAttribute('aria-pressed')).toBe('true');
-    await user.click(within(picker).getByRole('button', { name: 'Cancel' }));
+    await user.click(within(detail).getByRole('button', { name: 'Cancel' }));
     expect(within(editor).queryByRole('img', { name: 'Health & Fitness: Strength' })).toBeNull();
     expect(onSave).not.toHaveBeenCalled();
 
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     picker = associationPicker('Choose categories');
-    await user.click(within(picker).getByRole('button', { name: 'Health & Fitness' }));
+    detail = await openCategory(user, picker, 'Health & Fitness');
     const reopenedGroup = within(picker).getByRole('group', {
-      name: 'Health & Fitness Foundations, choose one or more'
+      name: 'Health & Fitness Foundations'
     });
     const selectedStrength = within(reopenedGroup).getByRole('button', { name: 'Strength' });
     const selectedCardio = within(reopenedGroup).getByRole('button', { name: 'Cardio' });
     await user.click(selectedStrength);
     await user.click(selectedCardio);
+    await includeCategory(user, detail, 'Health & Fitness');
     expect(selectedStrength.getAttribute('aria-pressed')).toBe('true');
     expect(selectedCardio.getAttribute('aria-pressed')).toBe('true');
     expect(within(reopenedGroup).getByRole('button', { name: 'Weight' }).getAttribute('aria-pressed')).toBe('false');
-    await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+    await applyCategoryPicker(user, detail);
 
     const categoryRow = within(editor).getByRole('button', { name: /^Choose categories, Health & Fitness/ });
     expect(within(categoryRow).getAllByRole('img').map(icon => icon.getAttribute('aria-label')))
@@ -534,9 +668,8 @@ describe('shared structured Rhythm editor', () => {
     const editEditor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
     await user.click(within(editEditor).getByRole('button', { name: /^Choose categories/ }));
     picker = associationPicker('Choose categories');
-    const restoredGroup = within(picker).getByRole('group', {
-      name: 'Health & Fitness Foundations, choose one or more'
-    });
+    const restoredDetail = await openCategory(user, picker, 'Health & Fitness');
+    const restoredGroup = within(restoredDetail).getByRole('group', { name: 'Health & Fitness Foundations' });
     expect(within(restoredGroup).getByRole('button', { name: 'Strength' }).getAttribute('aria-pressed')).toBe('true');
     expect(within(restoredGroup).getByRole('button', { name: 'Cardio' }).getAttribute('aria-pressed')).toBe('true');
   });
@@ -561,11 +694,12 @@ describe('shared structured Rhythm editor', () => {
     expect(loggingGroup.classList.contains('rhythm-editor__fitness-activity-fields')).toBe(true);
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     const picker = associationPicker('Choose categories');
-    const cardioFoundation = within(picker).getByRole('button', { name: 'Cardio' });
+    const detail = await openCategory(user, picker, 'Health & Fitness');
+    const cardioFoundation = within(detail).getByRole('button', { name: 'Cardio' });
     expect(cardioFoundation.getAttribute('aria-pressed')).toBe('false');
     await user.click(cardioFoundation);
-    await user.click(within(picker).getByRole('button', { name: 'Weight' }));
-    await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+    await user.click(within(detail).getByRole('button', { name: 'Weight' }));
+    await applyCategoryPicker(user, detail);
     expect(within(editor).getByRole('combobox', { name: 'Fitness activity: Cardio' })).toBeTruthy();
     expect((within(loggingGroup).getByRole('spinbutton') as HTMLInputElement).value).toBe('10');
     expect(within(loggingGroup).getByRole('combobox', { name: 'Distance unit: Kilometers' })).toBeTruthy();
@@ -667,8 +801,9 @@ describe('shared structured Rhythm editor', () => {
       await user.type(within(editor).getByLabelText('Title'), `Log ${activity.option}`);
       await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
       const picker = associationPicker('Choose categories');
-      await user.click(within(picker).getByRole('button', { name: 'Health & Fitness' }));
-      await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+      const detail = await openCategory(user, picker, 'Health & Fitness');
+      await includeCategory(user, detail, 'Health & Fitness');
+      await applyCategoryPicker(user, detail);
 
       if (activity.option !== 'Workout') {
         await choose(user, 'Fitness activity', activity.option);
@@ -744,8 +879,9 @@ describe('shared structured Rhythm editor', () => {
     await user.type(within(editor).getByLabelText('Title'), 'Canceled run');
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     const picker = associationPicker('Choose categories');
-    await user.click(within(picker).getByRole('button', { name: 'Health & Fitness' }));
-    await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+    const detail = await openCategory(user, picker, 'Health & Fitness');
+    await includeCategory(user, detail, 'Health & Fitness');
+    await applyCategoryPicker(user, detail);
     await choose(user, 'Fitness activity', 'Cardio');
     const categoryRow = within(editor).getByRole('button', { name: /^Choose categories, Health & Fitness/ });
     expect(within(categoryRow).getByRole('img', { name: 'Health & Fitness: Cardio' })).toBeTruthy();
@@ -775,6 +911,8 @@ describe('shared structured Rhythm editor', () => {
 
     await user.click(within(editor).getByRole('button', { name: /^Choose people/ }));
     let picker = associationPicker('Choose people');
+    expect(within(picker).getByRole('heading', { name: 'Unchanged parent draft', level: 2 })).toBeTruthy();
+    expect(within(picker).getByRole('heading', { name: 'Choose people', level: 3 })).toBeTruthy();
     expect(editor.isConnected).toBe(true);
     expect(editor.hasAttribute('inert')).toBe(true);
     expect(screen.getAllByRole('dialog')).toHaveLength(2);
@@ -802,6 +940,59 @@ describe('shared structured Rhythm editor', () => {
     expect(within(editor).getByRole('img', { name: 'Avery Brooks' })).toBeTruthy();
     expect(scrollRegion.scrollTop).toBe(137);
     expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('keeps the live Rhythm title above both picker headings through Add, Edit, and category drill-down', async () => {
+    const user = userEvent.setup();
+    const addEditor = renderEditor();
+    const addCategories = within(addEditor).getByRole('button', { name: /^Choose categories/ });
+    await user.click(addCategories);
+    let picker = associationPicker('Choose categories');
+    expect(within(picker).getByRole('heading', { name: 'New Rhythm', level: 2 })).toBeTruthy();
+    expect(within(picker).getByRole('heading', { name: 'Choose categories', level: 3 })).toBeTruthy();
+    await user.click(within(picker).getByRole('button', { name: 'Faith' }));
+    picker = associationPicker('Faith');
+    expect(within(picker).getByRole('heading', { name: 'New Rhythm', level: 2 })).toBeTruthy();
+    expect(within(picker).getByRole('heading', { name: 'Faith', level: 3 })).toBeTruthy();
+    await user.keyboard('{Escape}');
+    expect(document.activeElement).toBe(addCategories);
+    cleanup();
+
+    const rhythm: RhythmPreview = {
+      ...todayRhythms[0]!,
+      title: 'Daily connection.',
+      personIds: []
+    };
+    const editor = renderEditorForRhythm(rhythm);
+    const title = within(editor).getByLabelText('Title') as HTMLInputElement;
+    const unsavedTitle = 'A long unsaved Rhythm title that should wrap naturally on a phone';
+    await user.clear(title);
+    await user.type(title, unsavedTitle);
+
+    const categoriesButton = within(editor).getByRole('button', { name: /^Choose categories/ });
+    categoriesButton.focus();
+    await user.keyboard('{Enter}');
+    picker = associationPicker('Choose categories');
+    expect(within(picker).getByRole('heading', { name: unsavedTitle, level: 2 })).toBeTruthy();
+    expect(within(picker).getByRole('heading', { name: 'Choose categories', level: 3 })).toBeTruthy();
+    await user.click(within(picker).getByRole('button', { name: 'Faith' }));
+    picker = associationPicker('Faith');
+    expect(within(picker).getByRole('heading', { name: unsavedTitle, level: 2 })).toBeTruthy();
+    expect(within(picker).getByRole('heading', { name: 'Faith', level: 3 })).toBeTruthy();
+    await user.keyboard('{Escape}');
+    expect(document.activeElement).toBe(categoriesButton);
+
+    const peopleButton = within(editor).getByRole('button', { name: /^Choose people/ });
+    peopleButton.focus();
+    await user.keyboard('{Enter}');
+    picker = associationPicker('Choose people');
+    expect(picker.classList.contains('dialog--phone-fullscreen')).toBe(true);
+    expect(within(picker).getByRole('heading', { name: unsavedTitle, level: 2 })).toBeTruthy();
+    expect(within(picker).getByRole('heading', { name: 'Choose people', level: 3 })).toBeTruthy();
+    await user.click(within(picker).getByRole('button', { name: 'Avery Brooks' }));
+    await user.click(within(picker).getByRole('button', { name: 'Done' }));
+    expect(document.activeElement).toBe(within(editor).getByRole('button', { name: /^Choose people,/ }));
+    expect(within(editor).getByRole('img', { name: 'Avery Brooks' })).toBeTruthy();
   });
 
   it('keeps People and Categories as the only editor picker entry points', async () => {
@@ -1964,11 +2155,11 @@ describe('shared structured Rhythm editor', () => {
 
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     let picker = associationPicker('Choose categories');
-    const marriage = within(picker).getByRole('button', { name: 'Marriage' });
-    expect(marriage.getAttribute('aria-pressed')).toBe('false');
-    await user.click(marriage);
-    expect(marriage.getAttribute('aria-pressed')).toBe('true');
-    await user.click(within(picker).getByRole('button', { name: 'Cancel' }));
+    let detail = await openCategory(user, picker, 'Marriage');
+    await includeCategory(user, detail, 'Marriage');
+    expect(within(detail).getByRole('button', { name: 'Remove Marriage category' })
+      .getAttribute('aria-pressed')).toBe('true');
+    await user.click(within(detail).getByRole('button', { name: 'Cancel' }));
 
     expect(document.activeElement).toBe(within(editor).getByRole('button', { name: /^Choose categories/ }));
     expect(within(editor).queryByText(/^\d+ selected$/)).toBeNull();
@@ -1976,8 +2167,9 @@ describe('shared structured Rhythm editor', () => {
 
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     picker = associationPicker('Choose categories');
-    await user.click(within(picker).getByRole('button', { name: 'Marriage' }));
-    await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+    detail = await openCategory(user, picker, 'Marriage');
+    await includeCategory(user, detail, 'Marriage');
+    await applyCategoryPicker(user, detail);
     expect(document.activeElement).toBe(within(editor).getByRole('button', { name: /^Choose categories/ }));
     expect(within(editor).getByRole('button', { name: /^Choose categories/ })
       .querySelector('[aria-label="Marriage"]')).toBeTruthy();
@@ -2004,11 +2196,12 @@ describe('shared structured Rhythm editor', () => {
     expect(within(editor).getByRole('img', { name: 'Marriage: Communication' })).toBeTruthy();
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     const picker = associationPicker('Choose categories');
-    const connection = within(picker).getByRole('button', { name: 'Connection' });
-    const communication = within(picker).getByRole('button', { name: 'Communication' });
+    const detail = await openCategory(user, picker, 'Marriage');
+    const connection = within(detail).getByRole('button', { name: 'Connection' });
+    const communication = within(detail).getByRole('button', { name: 'Communication' });
     expect(connection.getAttribute('aria-pressed')).toBe('true');
     expect(communication.getAttribute('aria-pressed')).toBe('true');
-    const intimacy = within(picker).getByRole('button', { name: 'Intimacy' });
+    const intimacy = within(detail).getByRole('button', { name: 'Intimacy' });
     intimacy.focus();
     await user.keyboard('{Enter}');
     expect(intimacy.getAttribute('aria-pressed')).toBe('true');
@@ -2020,10 +2213,11 @@ describe('shared structured Rhythm editor', () => {
 
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     const secondPicker = associationPicker('Choose categories');
-    await user.click(within(secondPicker).getByRole('button', { name: 'Communication' }));
-    await user.click(within(secondPicker).getByRole('button', { name: 'Intimacy' }));
-    await user.click(within(secondPicker).getByRole('button', { name: 'Fun & Adventure' }));
-    await user.click(within(secondPicker).getByRole('button', { name: 'Apply' }));
+    const secondDetail = await openCategory(user, secondPicker, 'Marriage');
+    await user.click(within(secondDetail).getByRole('button', { name: 'Communication' }));
+    await user.click(within(secondDetail).getByRole('button', { name: 'Intimacy' }));
+    await user.click(within(secondDetail).getByRole('button', { name: 'Fun & Adventure' }));
+    await applyCategoryPicker(user, secondDetail);
     expect(document.activeElement).toBe(within(editor).getByRole('button', { name: /^Choose categories/ }));
     expect(within(editor).queryByRole('img', { name: 'Marriage: Communication' })).toBeNull();
     expect(within(editor).getByRole('img', { name: 'Marriage: Fun & Adventure' })).toBeTruthy();
@@ -2045,8 +2239,15 @@ describe('shared structured Rhythm editor', () => {
     const faith = within(picker).getByRole('button', { name: 'Faith' });
     faith.focus();
     await user.keyboard('{Enter}');
-    expect(faith.getAttribute('aria-pressed')).toBe('true');
-    await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+    const detail = associationPicker('Faith');
+    expect(document.activeElement).toBe(within(detail).getByRole('heading', { name: 'Faith' }));
+    const practice = foundationCatalogue.find(item => item.categoryId === 'faith'
+      && item.lifecycle === 'active' && item.capabilities.rhythms)!;
+    const option = within(detail).getByRole('button', { name: practice.name });
+    option.focus();
+    await user.keyboard('{Enter}');
+    await includeCategory(user, detail, 'Faith');
+    await applyCategoryPicker(user, detail);
     expect(document.activeElement).toBe(within(editor).getByRole('button', { name: /^Choose categories/ }));
     expect(within(editor).getByRole('img', { name: 'Faith' })).toBeTruthy();
 
@@ -2063,8 +2264,9 @@ describe('shared structured Rhythm editor', () => {
 
     await user.click(categories);
     let picker = associationPicker('Choose categories');
-    await user.click(within(picker).getByRole('button', { name: 'Faith' }));
-    await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+    let detail = await openCategory(user, picker, 'Faith');
+    await includeCategory(user, detail, 'Faith');
+    await applyCategoryPicker(user, detail);
     expect(categories.getAttribute('aria-invalid')).toBeNull();
 
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
@@ -2077,7 +2279,7 @@ describe('shared structured Rhythm editor', () => {
 
     await user.click(categories);
     picker = associationPicker('Choose categories');
-    await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+    await applyCategoryPicker(user, picker);
     expect(categories.getAttribute('aria-invalid')).toBe('true');
 
     const faithPractice = foundationCatalogue.find(foundation =>
@@ -2087,8 +2289,9 @@ describe('shared structured Rhythm editor', () => {
     )!;
     await user.click(categories);
     picker = associationPicker('Choose categories');
-    await user.click(within(picker).getByRole('button', { name: faithPractice.name }));
-    await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+    detail = await openCategory(user, picker, 'Faith');
+    await user.click(within(detail).getByRole('button', { name: faithPractice.name }));
+    await applyCategoryPicker(user, detail);
 
     expect(categories.getAttribute('aria-invalid')).toBeNull();
     expect(editor.querySelector('.rhythm-editor__category-field--invalid')).toBeNull();
@@ -2127,10 +2330,13 @@ describe('shared structured Rhythm editor', () => {
     )!;
     const healthFoundation = foundationCatalogue.find(foundation => foundation.id === 'health-strength')!;
     await user.click(categories);
-    const picker = associationPicker('Choose categories');
-    await user.click(within(picker).getByRole('button', { name: faithPractice.name }));
-    await user.click(within(picker).getByRole('button', { name: healthFoundation.name }));
-    await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+    let picker = associationPicker('Choose categories');
+    let detail = await openCategory(user, picker, 'Faith');
+    await user.click(within(detail).getByRole('button', { name: faithPractice.name }));
+    picker = await returnToCategoryList(user, detail);
+    detail = await openCategory(user, picker, 'Health & Fitness');
+    await user.click(within(detail).getByRole('button', { name: healthFoundation.name }));
+    await applyCategoryPicker(user, detail);
 
     expect(categories.getAttribute('aria-invalid')).toBeNull();
     expect(editor.querySelector('.rhythm-editor__category-field--invalid')).toBeNull();
@@ -2158,7 +2364,8 @@ describe('shared structured Rhythm editor', () => {
 
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     let picker = associationPicker('Choose categories');
-    await user.click(within(picker).getByRole('button', { name: 'Marriage' }));
+    let detail = await openCategory(user, picker, 'Marriage');
+    await user.click(within(detail).getByRole('button', { name: 'Remove Marriage category' }));
     picker = associationPicker('Remove Marriage?');
     expect(within(picker).getByText(
       'This also unlinks Connection. Your rhythm and logged moments stay saved.'
@@ -2167,18 +2374,18 @@ describe('shared structured Rhythm editor', () => {
     picker = associationPicker('Choose categories');
     const marriageOption = within(picker).getByRole('button', { name: 'Marriage' });
     expect(document.activeElement).toBe(marriageOption);
-    expect(marriageOption.getAttribute('aria-pressed')).toBe('true');
 
-    await user.click(marriageOption);
+    detail = await openCategory(user, picker, 'Marriage');
+    await user.click(within(detail).getByRole('button', { name: 'Remove Marriage category' }));
     picker = associationPicker('Remove Marriage?');
     await user.click(within(picker).getByRole('button', { name: 'Remove' }));
     picker = associationPicker('Choose categories');
     expect(document.activeElement).toBe(within(picker).getByRole('button', { name: 'Marriage' }));
-    expect(within(picker).getByRole('button', { name: 'Marriage' }).getAttribute('aria-pressed')).toBe('false');
     expect(within(editor).getByRole('img', { name: 'Marriage: Connection' })).toBeTruthy();
 
-    await user.click(within(picker).getByRole('button', { name: 'Marriage' }));
-    await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+    detail = await openCategory(user, picker, 'Marriage');
+    await includeCategory(user, detail, 'Marriage');
+    await applyCategoryPicker(user, detail);
     expect(within(editor).getByRole('img', { name: 'Marriage' })).toBeTruthy();
     expect(within(editor).queryByRole('img', { name: 'Marriage: Connection' })).toBeNull();
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
@@ -2206,7 +2413,8 @@ describe('shared structured Rhythm editor', () => {
 
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     let picker = associationPicker('Choose categories');
-    await user.click(within(picker).getByRole('button', { name: 'Marriage' }));
+    let detail = await openCategory(user, picker, 'Marriage');
+    await user.click(within(detail).getByRole('button', { name: 'Remove Marriage category' }));
     picker = associationPicker('Remove Marriage?');
     await user.click(within(picker).getByRole('button', { name: 'Remove' }));
     await user.click(within(associationPicker('Choose categories')).getByRole('button', { name: 'Cancel' }));
@@ -2239,7 +2447,7 @@ describe('shared structured Rhythm editor', () => {
     });
     expect(orphan.getAttribute('aria-pressed')).toBe('true');
     await user.click(orphan);
-    await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+    await applyCategoryPicker(user, picker);
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
 
     expect(onSave.mock.calls.at(-1)?.[0]).toMatchObject({
@@ -2273,7 +2481,7 @@ describe('shared structured Rhythm editor', () => {
     await user.click(within(picker).getByRole('button', {
       name: 'Remove existing Foundation link Unresolved Foundation reference: deleted-foundation'
     }));
-    await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+    await applyCategoryPicker(user, picker);
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
     expect(onSave.mock.calls.at(-1)?.[0]).toMatchObject({
       categoryIds: ['marriage'],
@@ -2298,13 +2506,14 @@ describe('shared structured Rhythm editor', () => {
 
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     let picker = associationPicker('Choose categories');
-    await user.click(within(picker).getByRole('button', { name: 'Marriage' }));
+    let detail = await openCategory(user, picker, 'Marriage');
+    await user.click(within(detail).getByRole('button', { name: 'Remove Marriage category' }));
     picker = associationPicker('Remove Marriage?');
     expect(within(picker).getByText(
       'This also unlinks Connection, Communication and Spiritual Growth. Your rhythm and logged moments stay saved.'
     )).toBeTruthy();
     await user.click(within(picker).getByRole('button', { name: 'Remove' }));
-    await user.click(within(associationPicker('Choose categories')).getByRole('button', { name: 'Apply' }));
+    await user.click(within(associationPicker('Choose categories')).getByRole('button', { name: 'Done' }));
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
 
     expect(onSave.mock.calls.at(-1)?.[0]).toMatchObject({
@@ -2330,9 +2539,11 @@ describe('shared structured Rhythm editor', () => {
 
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     const picker = associationPicker('Choose categories');
-    await user.click(within(picker).getByRole('button', { name: 'Faith' }));
+    const detail = await openCategory(user, picker, 'Faith');
+    await user.click(within(detail).getByRole('button', { name: 'Remove Faith category' }));
     expect(screen.queryByRole('dialog', { name: 'Remove Faith?' })).toBeNull();
-    await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+    await returnToCategoryList(user, detail);
+    await user.click(within(associationPicker('Choose categories')).getByRole('button', { name: 'Done' }));
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
     expect(onSave.mock.calls.at(-1)?.[0].categoryIds).toEqual([]);
   });
@@ -2352,12 +2563,14 @@ describe('shared structured Rhythm editor', () => {
 
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     let picker = associationPicker('Choose categories');
-    await user.click(within(picker).getByRole('button', { name: 'Marriage' }));
+    let detail = await openCategory(user, picker, 'Marriage');
+    await user.click(within(detail).getByRole('button', { name: 'Remove Marriage category' }));
     await user.keyboard('{Escape}');
     picker = associationPicker('Choose categories');
     const marriageOption = within(picker).getByRole('button', { name: 'Marriage' });
     expect(document.activeElement).toBe(marriageOption);
-    expect(marriageOption.getAttribute('aria-pressed')).toBe('true');
+    const marriageStatus = document.getElementById(marriageOption.getAttribute('aria-describedby') ?? '');
+    expect(marriageStatus?.textContent).toContain('valid Practice or Foundation');
     await user.keyboard('{Escape}');
 
     expect(document.activeElement).toBe(within(editor).getByRole('button', { name: /^Choose categories/ }));

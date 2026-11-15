@@ -87,7 +87,7 @@ describe('category availability component behavior', () => {
     expect(await screen.findByRole('heading', { name: 'Choose categories' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Faith' })).toBeNull();
     expect(screen.queryByRole('button', { name: practice.name })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Apply' }));
+    await user.click(screen.getByRole('button', { name: 'Done' }));
 
     const title = screen.getByLabelText('Title');
     await user.clear(title);

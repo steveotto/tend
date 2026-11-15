@@ -557,6 +557,162 @@ async function main() {
             assert.ok(phoneStyles.calendarPlaceholder.longTextHeight > phoneStyles.calendarPlaceholder.renderedHeight,
               `Calendar status cards must grow for wrapped text at ${viewportWidth}px / ${expected.size}.`);
             assert.ok(phoneStyles.calendarPlaceholder.titleScrollHeight >= phoneStyles.calendarPlaceholder.titleClientHeight);
+            const pastEventStyles = await page.evaluate(() => {
+              const content = document.querySelector<HTMLElement>('.today-calendar-section .calendar-agenda-content');
+              if (!content) throw new Error('Calendar agenda content is missing from the CSS fixture.');
+              const list = document.createElement('ol');
+              list.className = 'calendar-events';
+              const makeRow = (isPast: boolean) => {
+                const row = document.createElement('li');
+                row.className = `calendar-event${isPast ? ' calendar-event--past' : ''}`;
+                const date = document.createElement('time');
+                date.className = 'calendar-event__date-tile';
+                date.innerHTML = '<span class="calendar-event__month">NOV</span><span class="calendar-event__day">30</span>';
+                const details = document.createElement('span');
+                details.className = 'calendar-event__details';
+                details.innerHTML = '<strong>Synthetic event with naturally wrapping title</strong><span class="calendar-event__date-time">Mon, Nov 30 · 2:00 PM–3:00 PM</span>';
+                const relative = document.createElement('span');
+                relative.className = 'calendar-event__relative';
+                relative.textContent = 'Today';
+                row.append(date, details, relative);
+                return row;
+              };
+              const normal = makeRow(false);
+              const past = makeRow(true);
+              list.append(normal, past);
+              content.append(list);
+              const normalRect = normal.getBoundingClientRect();
+              const pastRect = past.getBoundingClientRect();
+              const normalMonth = normal.querySelector<HTMLElement>('.calendar-event__month')!;
+              const pastMonth = past.querySelector<HTMLElement>('.calendar-event__month')!;
+              const pastTitle = past.querySelector<HTMLElement>('.calendar-event__details strong')!;
+              const pastDate = past.querySelector<HTMLElement>('.calendar-event__date-time')!;
+              const result = {
+                normalBackground: getComputedStyle(normal).backgroundColor,
+                pastBackground: getComputedStyle(past).backgroundColor,
+                normalDateTileBackground: getComputedStyle(normal.querySelector<HTMLElement>('.calendar-event__date-tile')!).backgroundColor,
+                pastDateTileBackground: getComputedStyle(past.querySelector<HTMLElement>('.calendar-event__date-tile')!).backgroundColor,
+                normalMonthBackground: getComputedStyle(normalMonth).backgroundColor,
+                pastMonthBackground: getComputedStyle(pastMonth).backgroundColor,
+                pastMonthColor: getComputedStyle(pastMonth).color,
+                pastDayColor: getComputedStyle(past.querySelector<HTMLElement>('.calendar-event__day')!).color,
+                pastTitleColor: getComputedStyle(pastTitle).color,
+                pastDateColor: getComputedStyle(pastDate).color,
+                pastRelativeColor: getComputedStyle(past.querySelector<HTMLElement>('.calendar-event__relative')!).color,
+                pastPadding: getComputedStyle(past).padding,
+                pastRadius: getComputedStyle(past).borderTopLeftRadius,
+                pastOpacity: getComputedStyle(past).opacity,
+                pastDecoration: getComputedStyle(pastTitle).textDecorationLine,
+                normalWidth: normalRect.width,
+                pastWidth: pastRect.width,
+                normalHeight: normalRect.height,
+                pastHeight: pastRect.height,
+                viewportWidth: window.innerWidth
+              };
+              list.remove();
+              return result;
+            });
+            assert.equal(pastEventStyles.pastBackground, 'rgb(255, 255, 255)');
+            assert.equal(pastEventStyles.pastBackground, pastEventStyles.normalBackground);
+            assert.equal(pastEventStyles.pastDateTileBackground, pastEventStyles.normalDateTileBackground);
+            assert.notEqual(pastEventStyles.pastMonthBackground, pastEventStyles.normalMonthBackground);
+            assert.equal(pastEventStyles.pastMonthBackground, 'rgb(232, 234, 237)');
+            assert.equal(pastEventStyles.pastMonthColor, 'rgb(95, 99, 104)');
+            assert.equal(pastEventStyles.pastDayColor, 'rgb(98, 103, 107)');
+            assert.equal(pastEventStyles.pastTitleColor, 'rgb(98, 103, 107)');
+            assert.equal(pastEventStyles.pastDateColor, 'rgb(98, 103, 107)');
+            assert.equal(pastEventStyles.pastRelativeColor, 'rgb(98, 103, 107)');
+            assert.equal(pastEventStyles.pastPadding, '9px 10px');
+            assert.equal(pastEventStyles.pastRadius, '12px');
+            assert.equal(pastEventStyles.pastOpacity, '1');
+            assert.equal(pastEventStyles.pastTitleColor, pastEventStyles.pastDateColor);
+            assert.equal(pastEventStyles.pastTitleColor, pastEventStyles.pastRelativeColor);
+            assert.equal(pastEventStyles.pastDecoration, 'none');
+            assert.equal(pastEventStyles.pastWidth, pastEventStyles.normalWidth);
+            assert.equal(pastEventStyles.pastHeight, pastEventStyles.normalHeight);
+            assert.ok(pastEventStyles.pastWidth <= pastEventStyles.viewportWidth);
+
+            const peoplePickerStyles = await page.evaluate(() => {
+              const dialog = document.createElement('dialog');
+              dialog.className = 'money-goal-dialog money-goal-dialog--association-picker money-goal-dialog--people-picker dialog--phone-fullscreen';
+              dialog.open = true;
+              dialog.style.position = 'fixed';
+              dialog.style.inset = '0';
+              dialog.style.margin = '0';
+
+              const surface = document.createElement('div');
+              surface.className = 'money-goal-dialog__surface';
+              const rhythmTitle = document.createElement('h2');
+              rhythmTitle.textContent = 'A long unsaved Rhythm title that should wrap naturally on a phone';
+              surface.append(rhythmTitle);
+
+              const picker = document.createElement('section');
+              picker.className = 'rhythm-association-picker';
+              const heading = document.createElement('h3');
+              heading.textContent = 'Choose people';
+              picker.append(heading);
+              const groups = document.createElement('div');
+              groups.className = 'rhythm-association-picker__groups';
+              groups.textContent = 'People groups';
+              picker.append(groups);
+              const options = document.createElement('div');
+              options.className = 'rhythm-association-picker__options';
+              for (let index = 0; index < 24; index += 1) {
+                const option = document.createElement('button');
+                option.className = 'rhythm-association-picker__option';
+                option.textContent = `Synthetic person ${index + 1}`;
+                options.append(option);
+              }
+              picker.append(options);
+              const actions = document.createElement('div');
+              actions.className = 'money-goal-dialog__actions rhythm-association-picker__actions';
+              actions.innerHTML = '<button type="button">Done</button><button type="button">Cancel</button>';
+              picker.append(actions);
+              surface.append(picker);
+              dialog.append(surface);
+              document.body.append(dialog);
+
+              const dialogRect = dialog.getBoundingClientRect();
+              const titleStyle = getComputedStyle(rhythmTitle);
+              const optionsStyle = getComputedStyle(options);
+              const actionRect = actions.getBoundingClientRect();
+              const titleRect = rhythmTitle.getBoundingClientRect();
+              const headingRect = heading.getBoundingClientRect();
+              const result = {
+                width: dialogRect.width,
+                height: dialogRect.height,
+                viewportWidth: window.innerWidth,
+                viewportHeight: window.innerHeight,
+                surfacePadding: getComputedStyle(surface).padding,
+                titleWidth: titleRect.width,
+                titleScrollWidth: rhythmTitle.scrollWidth,
+                titleOverflowWrap: titleStyle.overflowWrap,
+                titleTop: titleRect.top,
+                headingTop: headingRect.top,
+                optionsOverflowY: optionsStyle.overflowY,
+                optionsHeight: options.clientHeight,
+                optionsScrollHeight: options.scrollHeight,
+                actionsTop: actionRect.top,
+                actionsBottom: actionRect.bottom,
+                dialogBottom: dialogRect.bottom
+              };
+              dialog.remove();
+              return result;
+            });
+            assert.equal(peoplePickerStyles.width, peoplePickerStyles.viewportWidth);
+            assert.equal(peoplePickerStyles.height, peoplePickerStyles.viewportHeight);
+            assert.match(peoplePickerStyles.surfacePadding, /18px/);
+            assert.match(peoplePickerStyles.surfacePadding, /12px/);
+            assert.equal(peoplePickerStyles.titleOverflowWrap, 'anywhere');
+            assert.ok(peoplePickerStyles.titleWidth > 0);
+            assert.ok(peoplePickerStyles.titleScrollWidth <= peoplePickerStyles.titleWidth);
+            assert.ok(peoplePickerStyles.headingTop > peoplePickerStyles.titleTop);
+            assert.equal(peoplePickerStyles.optionsOverflowY, 'auto');
+            assert.ok(peoplePickerStyles.optionsHeight > 0);
+            assert.ok(peoplePickerStyles.optionsScrollHeight > peoplePickerStyles.optionsHeight,
+              `People options must scroll independently at ${viewportWidth}px / ${expected.size}.`);
+            assert.ok(peoplePickerStyles.actionsTop > peoplePickerStyles.headingTop);
+            assert.ok(peoplePickerStyles.actionsBottom <= peoplePickerStyles.dialogBottom);
           }
 
           await page.setViewportSize({ width: 1280, height: 900 });
@@ -912,8 +1068,8 @@ async function main() {
             assert.equal(activePrayerLayout.progressTrack, 'rgb(240, 234, 245)');
             assert.equal(activePrayerLayout.progressFill, 'rgb(128, 98, 154)');
             assert.equal(activePrayerLayout.prayedBackground, 'rgb(128, 98, 154)');
-            assert.equal(activePrayerLayout.secondaryBorder, 'rgb(210, 197, 223)');
-            assert.equal(activePrayerLayout.secondaryColor, 'rgb(112, 90, 141)');
+            assert.equal(activePrayerLayout.secondaryBorder, 'rgb(222, 213, 231)');
+            assert.equal(activePrayerLayout.secondaryColor, 'rgb(143, 125, 161)');
             assert.match(activePrayerLayout.progressMax ?? '', /^[1-9]\d*$/);
             assert.ok(activePrayerLayout.actionHeights.every(height => height >= 44));
             assert.ok(activePrayerLayout.actionBounds.every(bounds =>
@@ -933,47 +1089,146 @@ async function main() {
             });
             assert.ok(reachableActionBounds.every(Boolean));
             assert.ok(activePrayerLayout.requestTitleText);
-            await prayerDialog.getByRole('button', { name: 'End session' }).focus();
-            await page.keyboard.press('Tab');
-            const skipFocus = await prayerDialog.evaluate(() => ({
-              name: document.activeElement?.textContent?.trim(),
-              focusVisible: document.activeElement instanceof HTMLElement && document.activeElement.matches(':focus-visible'),
-              outline: document.activeElement instanceof HTMLElement ? getComputedStyle(document.activeElement).outlineWidth : null
-            }));
-            assert.equal(skipFocus.name, 'Skip');
-            assert.equal(skipFocus.focusVisible, true);
-            assert.equal(skipFocus.outline, '3px');
-            await page.keyboard.press('Shift+Tab');
-            const endFocus = await prayerDialog.evaluate(() => ({
-              name: document.activeElement?.textContent?.trim(),
-              focusVisible: document.activeElement instanceof HTMLElement && document.activeElement.matches(':focus-visible'),
-              outline: document.activeElement instanceof HTMLElement ? getComputedStyle(document.activeElement).outlineWidth : null
-            }));
-            assert.equal(endFocus.name, 'End session');
-            assert.equal(endFocus.focusVisible, true);
-            assert.equal(endFocus.outline, '3px');
-            await prayerDialog.getByRole('button', { name: 'Back' }).evaluate(button => {
-              if (!(button instanceof HTMLButtonElement)) throw new Error('Back action is not a button.');
-              button.disabled = false;
-              button.focus();
+            const backButton = prayerDialog.getByRole('button', { name: 'Back' });
+            const skipButton = prayerDialog.getByRole('button', { name: 'Skip' });
+            const initialProgress = (await prayerDialog.locator('.faith-session-progress').textContent())?.trim();
+            const singleRequest = initialProgress === 'Request 1 of 1';
+            assert.equal(await backButton.isDisabled(), true);
+            assert.equal(await skipButton.isDisabled(), singleRequest);
+            const disabledBackPalette = await backButton.evaluate(button => {
+              const style = getComputedStyle(button);
+              return {
+                background: style.backgroundColor,
+                border: style.borderTopColor,
+                color: style.color
+              };
             });
-            const backFocus = await prayerDialog.evaluate(() => ({
-              name: document.activeElement?.textContent?.trim(),
-              focusVisible: document.activeElement instanceof HTMLElement && document.activeElement.matches(':focus-visible'),
-              outline: document.activeElement instanceof HTMLElement ? getComputedStyle(document.activeElement).outlineWidth : null
-            }));
-            assert.equal(backFocus.name, 'Back');
-            assert.equal(backFocus.outline, '3px');
-            await page.keyboard.press('Tab');
-            await page.keyboard.press('Tab');
-            const prayedFocus = await prayerDialog.evaluate(() => ({
-              name: document.activeElement?.textContent?.trim(),
-              focusVisible: document.activeElement instanceof HTMLElement && document.activeElement.matches(':focus-visible'),
-              outline: document.activeElement instanceof HTMLElement ? getComputedStyle(document.activeElement).outlineWidth : null
-            }));
-            assert.equal(prayedFocus.name, 'Prayed');
-            assert.equal(prayedFocus.focusVisible, true);
-            assert.equal(prayedFocus.outline, '3px');
+            assert.deepEqual(disabledBackPalette, {
+              background: 'rgb(250, 248, 252)',
+              border: 'rgb(222, 213, 231)',
+              color: 'rgb(143, 125, 161)'
+            });
+            await backButton.hover();
+            assert.equal(await backButton.evaluate(button => getComputedStyle(button).backgroundColor), 'rgb(250, 248, 252)');
+            await page.keyboard.press('ArrowLeft');
+            assert.equal((await prayerDialog.locator('.faith-session-progress').textContent())?.trim(), initialProgress);
+
+            if (singleRequest) {
+              assert.equal(initialProgress, 'Request 1 of 1');
+              assert.deepEqual(await skipButton.evaluate(button => {
+                const style = getComputedStyle(button);
+                return {
+                  background: style.backgroundColor,
+                  border: style.borderTopColor,
+                  color: style.color
+                };
+              }), disabledBackPalette);
+              await skipButton.hover();
+              assert.equal(await skipButton.evaluate(button => getComputedStyle(button).backgroundColor), 'rgb(250, 248, 252)');
+              const disabledSkipBounds = await skipButton.boundingBox();
+              if (!disabledSkipBounds) throw new Error('Cannot measure the disabled Prayer Skip button.');
+              await page.touchscreen.tap(
+                disabledSkipBounds.x + disabledSkipBounds.width / 2,
+                disabledSkipBounds.y + disabledSkipBounds.height / 2
+              );
+              await page.keyboard.press('ArrowRight');
+              assert.equal((await prayerDialog.locator('.faith-session-progress').textContent())?.trim(), initialProgress);
+
+              await prayerDialog.getByRole('button', { name: 'End session' }).focus();
+              await page.keyboard.press('Tab');
+              const prayedFocus = await prayerDialog.evaluate(() => ({
+                name: document.activeElement?.textContent?.trim(),
+                focusVisible: document.activeElement instanceof HTMLElement && document.activeElement.matches(':focus-visible'),
+                outline: document.activeElement instanceof HTMLElement ? getComputedStyle(document.activeElement).outlineWidth : null
+              }));
+              assert.equal(prayedFocus.name, 'Prayed');
+              assert.equal(prayedFocus.focusVisible, true);
+              assert.equal(prayedFocus.outline, '3px');
+              await page.keyboard.press('Shift+Tab');
+              assert.equal((await prayerDialog.evaluate(() => document.activeElement?.textContent?.trim())), 'End session');
+            } else {
+              assert.equal(initialProgress, 'Request 1 of 2');
+              assert.equal(await skipButton.isDisabled(), false);
+              await skipButton.click();
+              await prayerDialog.getByText('Request 2 of 2').waitFor();
+              assert.equal(await backButton.isDisabled(), false);
+              assert.equal(await skipButton.isDisabled(), true);
+              assert.deepEqual(await skipButton.evaluate(button => {
+                const style = getComputedStyle(button);
+                return {
+                  background: style.backgroundColor,
+                  border: style.borderTopColor,
+                  color: style.color
+                };
+              }), disabledBackPalette);
+              await skipButton.hover();
+              assert.equal(await skipButton.evaluate(button => getComputedStyle(button).backgroundColor), 'rgb(250, 248, 252)');
+              await page.keyboard.press('ArrowRight');
+              assert.ok(await prayerDialog.getByText('Request 2 of 2').isVisible());
+              await backButton.hover();
+              await page.waitForTimeout(180);
+              assert.equal(await backButton.evaluate(button => getComputedStyle(button).backgroundColor), 'rgb(230, 220, 238)');
+              const backBounds = await backButton.boundingBox();
+              if (!backBounds) throw new Error('Cannot measure the active Prayer Back button.');
+              await page.mouse.move(backBounds.x + backBounds.width / 2, backBounds.y + backBounds.height / 2);
+              await page.mouse.down();
+              await page.waitForTimeout(180);
+              assert.equal(await backButton.evaluate(button => getComputedStyle(button).backgroundColor), 'rgb(220, 206, 232)');
+              await page.mouse.up();
+
+              await prayerDialog.getByText('Request 1 of 2').waitFor();
+              assert.equal(await backButton.isDisabled(), true);
+              await skipButton.tap();
+              await prayerDialog.getByText('Request 2 of 2').waitFor();
+              await backButton.tap();
+              await prayerDialog.getByText('Request 1 of 2').waitFor();
+              await page.keyboard.press('ArrowLeft');
+              assert.ok(await prayerDialog.getByText('Request 1 of 2').isVisible());
+
+              await prayerDialog.getByRole('button', { name: 'End session' }).focus();
+              await page.keyboard.press('Tab');
+              const skipFocus = await prayerDialog.evaluate(() => ({
+                name: document.activeElement?.textContent?.trim(),
+                focusVisible: document.activeElement instanceof HTMLElement && document.activeElement.matches(':focus-visible'),
+                outline: document.activeElement instanceof HTMLElement ? getComputedStyle(document.activeElement).outlineWidth : null
+              }));
+              assert.equal(skipFocus.name, 'Skip');
+              assert.equal(skipFocus.focusVisible, true);
+              assert.equal(skipFocus.outline, '3px');
+              await page.keyboard.press('Shift+Tab');
+              const endFocus = await prayerDialog.evaluate(() => ({
+                name: document.activeElement?.textContent?.trim(),
+                focusVisible: document.activeElement instanceof HTMLElement && document.activeElement.matches(':focus-visible'),
+                outline: document.activeElement instanceof HTMLElement ? getComputedStyle(document.activeElement).outlineWidth : null
+              }));
+              assert.equal(endFocus.name, 'End session');
+              assert.equal(endFocus.focusVisible, true);
+              assert.equal(endFocus.outline, '3px');
+              await page.keyboard.press('ArrowRight');
+              await prayerDialog.getByText('Request 2 of 2').waitFor();
+              await prayerDialog.getByRole('button', { name: 'End session' }).focus();
+              await page.keyboard.press('Tab');
+              const backFocus = await prayerDialog.evaluate(() => ({
+                name: document.activeElement?.textContent?.trim(),
+                focusVisible: document.activeElement instanceof HTMLElement && document.activeElement.matches(':focus-visible'),
+                outline: document.activeElement instanceof HTMLElement ? getComputedStyle(document.activeElement).outlineWidth : null,
+                outlineColor: document.activeElement instanceof HTMLElement ? getComputedStyle(document.activeElement).outlineColor : null
+              }));
+              assert.equal(backFocus.name, 'Back');
+              assert.equal(backFocus.focusVisible, true);
+              assert.equal(backFocus.outline, '3px');
+              assert.equal(backFocus.outlineColor, 'rgb(112, 90, 141)');
+              await page.keyboard.press('Tab');
+              const prayedFocus = await prayerDialog.evaluate(() => ({
+                name: document.activeElement?.textContent?.trim(),
+                focusVisible: document.activeElement instanceof HTMLElement && document.activeElement.matches(':focus-visible'),
+                outline: document.activeElement instanceof HTMLElement ? getComputedStyle(document.activeElement).outlineWidth : null
+              }));
+              assert.equal(prayedFocus.name, 'Prayed');
+              assert.equal(prayedFocus.focusVisible, true);
+              assert.equal(prayedFocus.outline, '3px');
+            }
+
             await prayerDialog.getByRole('button', { name: 'End session' }).click();
             await prayerDialog.getByRole('heading', { name: 'Prayer session ended' }).waitFor();
             const headingFocus = await prayerDialog.evaluate(dialog => {
@@ -1680,6 +1935,550 @@ async function main() {
         await page.setViewportSize({ width: 1280, height: 900 });
         await page.getByRole('tab', { name: 'Now', exact: true }).click();
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 1280);
+
+        await page.setViewportSize({ width: 375, height: 844 });
+        await page.getByRole('button', { name: 'More, settings' }).click();
+        await page.getByRole('button', { name: /^Settings/ }).click();
+        await page.getByRole('heading', { name: 'Categories' }).waitFor();
+        const categorySizeToggle = page.locator('.mobile-display-toggle');
+        for (const textSize of ['small', 'medium', 'large'] as const) {
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            if (await categorySizeToggle.getAttribute('data-text-size') === textSize) break;
+            await categorySizeToggle.click();
+          }
+          assert.equal(await categorySizeToggle.getAttribute('data-text-size'), textSize);
+          for (const viewportWidth of [375, 390, 430]) {
+            await page.setViewportSize({ width: viewportWidth, height: 844 });
+            const categorySettingsLayout = await page.evaluate(() => {
+              const settings = document.querySelector<HTMLElement>('.category-settings');
+              const settingsSection = settings?.closest<HTMLElement>('.settings-section');
+              const list = settings?.querySelector<HTMLElement>('.category-settings__list');
+              const rows = [...(settings?.querySelectorAll<HTMLElement>('.category-settings__item') ?? [])];
+              if (!settings || !list || rows.length !== 6) {
+                throw new Error('Category Settings must show all six availability switches.');
+              }
+              const rowBounds = rows.map(row => {
+                const identity = row.querySelector<HTMLElement>('.category-settings__identity');
+                const toggle = row.querySelector<HTMLInputElement>('input[role="switch"]');
+                if (!identity || !toggle) throw new Error('A category row is missing its label or switch.');
+                const identityBounds = identity.getBoundingClientRect();
+                const toggleBounds = toggle.getBoundingClientRect();
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  right: rowRect.right,
+                  identityRight: identityBounds.right,
+                  toggleLeft: toggleBounds.left,
+                  toggleWidth: toggleBounds.width,
+                  toggleHeight: toggleBounds.height
+                };
+              });
+              const description = settings.querySelector<HTMLElement>(':scope > p');
+              return {
+                documentWidth: document.documentElement.scrollWidth,
+                viewportWidth: document.documentElement.clientWidth,
+                headingVisible: settingsSection?.querySelector('h3')?.textContent?.trim() === 'Categories',
+                descriptionFits: Boolean(description && description.scrollWidth <= description.clientWidth),
+                rowBounds
+              };
+            });
+            assert.equal(categorySettingsLayout.documentWidth, viewportWidth,
+              `Category Settings must not overflow at ${viewportWidth}px / ${textSize}.`);
+            assert.equal(categorySettingsLayout.viewportWidth, viewportWidth);
+            assert.equal(categorySettingsLayout.headingVisible, true);
+            assert.equal(categorySettingsLayout.descriptionFits, true);
+            assert.ok(categorySettingsLayout.rowBounds.every(row =>
+              row.right <= viewportWidth
+              && row.identityRight < row.toggleLeft
+              && row.toggleWidth === 44
+              && row.toggleHeight === 26
+            ), `Category labels and switches must remain separated at ${viewportWidth}px / ${textSize}.`);
+          }
+        }
+
+        await page.setViewportSize({ width: 375, height: 844 });
+        const areaNavigation = page.getByRole('navigation', { name: 'Areas' });
+        const measureCategorySpacing = async (categoryName: 'Parenting' | 'Health & Fitness') => {
+          await page.setViewportSize({ width: 1280, height: 900 });
+          await areaNavigation.getByRole('button', { name: categoryName, exact: true }).click();
+          await page.setViewportSize({ width: 375, height: 844 });
+          const measurements = [];
+          for (const textSize of ['small', 'medium', 'large'] as const) {
+            for (let attempt = 0; attempt < 3; attempt += 1) {
+              if (await categorySizeToggle.getAttribute('data-text-size') === textSize) break;
+              await categorySizeToggle.click();
+            }
+            assert.equal(await categorySizeToggle.getAttribute('data-text-size'), textSize);
+            const root = page.locator('main.category-page--segmented:not([hidden])');
+            await root.waitFor();
+            const tabs = root.locator(':scope > [role="tablist"]');
+            const tabMeasurements = [];
+            for (const tabName of ['Foundations', 'Today', 'Rhythms'] as const) {
+              await tabs.getByRole('tab', { name: tabName, exact: true }).click();
+              const measurement = await root.evaluate(element => {
+                const summary = element.querySelector<HTMLElement>('.category-health-summary');
+                const tablist = element.querySelector<HTMLElement>('[role="tablist"]');
+                const panel = element.querySelector<HTMLElement>('[role="tabpanel"]:not([hidden])');
+                const firstContent = panel?.firstElementChild as HTMLElement | null;
+                if (!summary || !tablist || !panel || !firstContent) {
+                  throw new Error('Segmented category page is missing its summary, tabs, or active panel content.');
+                }
+                const summaryRect = summary.getBoundingClientRect();
+                const tabsRect = tablist.getBoundingClientRect();
+                const panelRect = panel.getBoundingClientRect();
+                const firstRect = firstContent.getBoundingClientRect();
+                return {
+                  summaryToTabs: tabsRect.top - summaryRect.bottom,
+                  tabsToPanel: panelRect.top - tabsRect.bottom,
+                  tabsToFirstContent: firstRect.top - tabsRect.bottom,
+                  firstContentClass: firstContent.className,
+                  viewportWidth: document.documentElement.clientWidth
+                };
+              });
+              assert.equal(measurement.viewportWidth, 375);
+              assert.ok(Math.abs(measurement.summaryToTabs - 12) < 0.5,
+                `${categoryName} summary-to-tabs gap should be 12px at ${textSize}: ${JSON.stringify(measurement)}`);
+              assert.ok(Math.abs(measurement.tabsToFirstContent - 12) < 0.5,
+                `${categoryName} tabs-to-content gap should be 12px for ${tabName} at ${textSize}: ${JSON.stringify(measurement)}`);
+              tabMeasurements.push({ tabName, ...measurement });
+            }
+            measurements.push({ textSize, tabMeasurements });
+          }
+          return measurements;
+        };
+
+        const parentingSpacing = await measureCategorySpacing('Parenting');
+        const healthFitnessSpacing = await measureCategorySpacing('Health & Fitness');
+        for (let sizeIndex = 0; sizeIndex < parentingSpacing.length; sizeIndex += 1) {
+          const parentingSize = parentingSpacing[sizeIndex]!;
+          const healthSize = healthFitnessSpacing[sizeIndex]!;
+          assert.equal(healthSize.textSize, parentingSize.textSize);
+          for (let tabIndex = 0; tabIndex < parentingSize.tabMeasurements.length; tabIndex += 1) {
+            const parentingTab = parentingSize.tabMeasurements[tabIndex]!;
+            const healthTab = healthSize.tabMeasurements[tabIndex]!;
+            assert.equal(healthTab.tabName, parentingTab.tabName);
+            assert.ok(Math.abs(healthTab.summaryToTabs - parentingTab.summaryToTabs) < 0.5,
+              `Health & Fitness and Parenting summary gaps should match at ${parentingSize.textSize}.`);
+            assert.ok(Math.abs(healthTab.tabsToFirstContent - parentingTab.tabsToFirstContent) < 0.5,
+              `Health & Fitness and Parenting ${parentingTab.tabName} content gaps should match at ${parentingSize.textSize}.`);
+          }
+        }
+
+        await page.setViewportSize({ width: 1280, height: 900 });
+        const healthTabs = page.locator('.health-fitness-page [role="tablist"][aria-label="Health and Fitness"]');
+        await healthTabs.getByRole('tab', { name: 'Foundations', exact: true }).click();
+        await page.getByRole('button', { name: /Open Strength foundation details/ }).click();
+        const strengthTabs = page.getByRole('tablist', { name: 'Strength sections' });
+        const strengthSizeToggle = page.locator('.mobile-display-toggle');
+        const workoutsTab = strengthTabs.getByRole('tab', { name: 'Workouts' });
+        const bodyTab = strengthTabs.getByRole('tab', { name: 'Body' });
+        const rhythmsTab = strengthTabs.getByRole('tab', { name: 'Rhythms' });
+        const sectionTabOrder = await strengthTabs.getByRole('tab').allTextContents();
+        assert.deepEqual(sectionTabOrder.map(label => label.trim()), ['Body', 'Workouts', 'Rhythms']);
+        assert.equal(await workoutsTab.getAttribute('aria-selected'), 'true',
+          'Strength should default to Workouts.');
+        for (const textSize of ['small', 'medium', 'large'] as const) {
+          await page.setViewportSize({ width: 375, height: 844 });
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            if (await strengthSizeToggle.getAttribute('data-text-size') === textSize) break;
+            await strengthSizeToggle.click();
+          }
+          assert.equal(await strengthSizeToggle.getAttribute('data-text-size'), textSize);
+          await workoutsTab.click();
+          assert.equal(await page.getByRole('tablist', { name: 'Strength workouts' }).count(), 0);
+          assert.equal(await page.getByRole('heading', { name: 'For you' }).count(), 0);
+          assert.equal(await page.getByRole('heading', { name: 'My workouts' }).isVisible(), true);
+          assert.equal(await page.getByText('Your routines, ready when you are.', { exact: true }).isVisible(), true);
+          assert.equal(await page.getByRole('button', { name: 'Log workout' }).isVisible(), true);
+          assert.equal(await page.getByRole('heading', { name: 'History' }).isVisible(), true);
+          assert.equal(await page.getByText('Your completed workouts.', { exact: true }).isVisible(), true);
+          assert.equal(await page.getByText('No workouts recorded yet.', { exact: true }).isVisible(), true);
+          assert.equal(await page.getByRole('button', { name: 'View all' }).count(), 0);
+          assert.equal(await page.getByRole('heading', { name: 'Quick log' }).count(), 0);
+          for (const viewportWidth of [375, 390, 430]) {
+            await page.setViewportSize({ width: viewportWidth, height: 844 });
+            const firstHeadingPositions = [];
+            for (const [tab, selector, headingName] of [
+              [bodyTab, '#strength-panel-body > .strength-section-heading', 'Body overview'],
+              [workoutsTab, '#strength-panel-workouts .strength-section-heading', 'My workouts'],
+              [rhythmsTab, '#strength-panel-rhythms > .strength-rhythms-panel > .strength-section-heading', 'Linked Rhythms']
+            ] as const) {
+              await tab.click();
+              await page.getByRole('heading', { name: headingName }).waitFor();
+              const heading = page.locator(selector).first();
+              const position = await heading.evaluate(element => {
+                const rect = element.getBoundingClientRect();
+                const tabs = element.closest('.strength-page')?.querySelector<HTMLElement>(
+                  ':scope > [role="tablist"][aria-label="Strength sections"]'
+                );
+                if (!tabs) throw new Error('Strength section tabs are missing.');
+                const tabsRect = tabs.getBoundingClientRect();
+                const title = element.querySelector<HTMLElement>('.strength-section-heading__title-row');
+                const actions = element.querySelector<HTMLElement>('.strength-section-heading__actions');
+                const titleRect = title?.getBoundingClientRect();
+                const action = actions?.querySelector<HTMLElement>('.btn');
+                const actionRect = action?.getBoundingClientRect();
+                const actionSharesTitleRow = Boolean(titleRect && actionRect
+                  && actionRect.top < titleRect.bottom
+                  && actionRect.bottom > titleRect.top);
+                return {
+                  left: rect.left,
+                  offset: rect.top - tabsRect.bottom,
+                  height: rect.height,
+                  titleTop: titleRect ? titleRect.top - rect.top : null,
+                  actionTop: titleRect && actionRect ? actionRect.top - titleRect.top : null,
+                  actionSharesTitleRow,
+                  overlap: Boolean(titleRect && actionRect
+                    && titleRect.bottom > actionRect.top
+                    && actionRect.bottom > titleRect.top
+                    && titleRect.right > actionRect.left
+                    && actionRect.right > titleRect.left)
+                };
+              });
+              assert.ok(position.height >= 44,
+                `${headingName} heading row must retain a 44px minimum at ${viewportWidth}px / ${textSize} text.`);
+              assert.equal(position.overlap, false,
+                `${headingName} heading and action must not overlap at ${viewportWidth}px / ${textSize} text.`);
+              assert.equal(position.titleTop, 0,
+                `${headingName} title should begin at the top of its shared heading row.`);
+              if (position.actionSharesTitleRow) {
+                assert.equal(position.actionTop, 0,
+                  `${headingName} action should align with its title when sharing the row.`);
+              }
+              firstHeadingPositions.push(position);
+            }
+            const bodyHeadingPosition = firstHeadingPositions[0]!;
+            for (const position of firstHeadingPositions.slice(1)) {
+              assert.ok(Math.abs(position.left - bodyHeadingPosition.left) < 0.5,
+                `Strength section headings should align left at ${viewportWidth}px / ${textSize} text.`);
+              assert.ok(Math.abs(position.offset - bodyHeadingPosition.offset) < 0.5,
+                `Strength section headings should share a tab-panel offset at ${viewportWidth}px / ${textSize} text.`);
+            }
+            await workoutsTab.click();
+            const historyHeading = page.locator('#strength-panel-workouts .strength-history-page > .strength-section-heading');
+            const historyAction = await historyHeading.evaluate(element => {
+              const title = element.querySelector<HTMLElement>('.strength-section-heading__title-row');
+              const button = element.querySelector<HTMLElement>('.strength-section-heading__actions .btn');
+              if (!title || !button) throw new Error('History heading is missing its title or Log workout action.');
+              const titleRect = title.getBoundingClientRect();
+              const buttonRect = button.getBoundingClientRect();
+              return {
+                sharesRow: buttonRect.top < titleRect.bottom && buttonRect.bottom > titleRect.top,
+                topOffset: buttonRect.top - titleRect.top,
+                overlap: buttonRect.top < titleRect.bottom
+                  && buttonRect.bottom > titleRect.top
+                  && buttonRect.left < titleRect.right
+                  && buttonRect.right > titleRect.left
+              };
+            });
+            assert.equal(historyAction.overlap, false,
+              `History Log workout action must not overlap its heading at ${viewportWidth}px / ${textSize} text.`);
+            if (historyAction.sharesRow) {
+              assert.equal(historyAction.topOffset, 0,
+                `History Log workout should top-align with its heading at ${viewportWidth}px / ${textSize} text.`);
+            }
+          }
+          await page.setViewportSize({ width: 375, height: 844 });
+          await workoutsTab.click();
+          await page.getByRole('button', { name: 'Add workout' }).click();
+          const routines = page.getByRole('dialog', { name: 'Add workout' });
+          assert.equal((await routines.getAttribute('class'))?.includes('dialog--phone-fullscreen'), true);
+          assert.equal(await routines.getByRole('heading', { name: 'Create your own' }).isVisible(), true);
+          assert.equal(await routines.getByText('Choose exercises, sets, and reps.').isVisible(), true);
+          const createCardLayout = await routines.evaluate(dialog => {
+            const createCard = dialog.querySelector<HTMLElement>('.strength-workout-suggestions__create');
+            const copy = createCard?.querySelector<HTMLElement>(':scope > div');
+            const createButton = createCard?.querySelector<HTMLButtonElement>(':scope > .btn');
+            const starterButton = dialog.querySelector<HTMLButtonElement>('.strength-workout-suggestion > .btn');
+            if (!createCard || !copy || !createButton || !starterButton) {
+              throw new Error('Add workout browser is missing the Create action or starter customization action.');
+            }
+            const createStyle = getComputedStyle(createButton);
+            const starterStyle = getComputedStyle(starterButton);
+            const cardRect = createCard.getBoundingClientRect();
+            const copyRect = copy.getBoundingClientRect();
+            const buttonRect = createButton.getBoundingClientRect();
+            return {
+              columnCount: getComputedStyle(createCard).gridTemplateColumns.split(' ').length,
+              copyRight: copyRect.right,
+              buttonLeft: buttonRect.left,
+              buttonRight: buttonRect.right,
+              cardRight: cardRect.right,
+              cardPaddingRight: Number.parseFloat(getComputedStyle(createCard).paddingRight),
+              cardBackground: getComputedStyle(createCard).backgroundColor,
+              createBackground: createStyle.backgroundColor,
+              createBorder: createStyle.borderColor,
+              createColor: createStyle.color,
+              starterBorder: starterStyle.borderColor,
+              createMetrics: {
+                height: buttonRect.height,
+                fontFamily: createStyle.fontFamily,
+                fontSize: createStyle.fontSize,
+                fontWeight: createStyle.fontWeight,
+                lineHeight: createStyle.lineHeight,
+                padding: createStyle.padding,
+                borderRadius: createStyle.borderRadius
+              },
+              starterMetrics: {
+                height: starterButton.getBoundingClientRect().height,
+                fontFamily: starterStyle.fontFamily,
+                fontSize: starterStyle.fontSize,
+                fontWeight: starterStyle.fontWeight,
+                lineHeight: starterStyle.lineHeight,
+                padding: starterStyle.padding,
+                borderRadius: starterStyle.borderRadius
+              }
+            };
+          });
+          assert.deepEqual(createCardLayout.createMetrics, createCardLayout.starterMetrics,
+            `Create action should match starter Customize sizing and typography at ${textSize} text.`);
+          assert.equal(createCardLayout.columnCount, 2);
+          assert.ok(createCardLayout.buttonLeft > createCardLayout.copyRight,
+            `Create action should sit beside its copy at ${textSize} text.`);
+          assert.ok(createCardLayout.buttonRight <= createCardLayout.cardRight - createCardLayout.cardPaddingRight + 0.5,
+            `Create action should stay inside its card at ${textSize} text.`);
+          assert.equal(createCardLayout.createBackground, createCardLayout.cardBackground);
+          assert.equal(createCardLayout.createBorder, createCardLayout.starterBorder);
+          assert.equal(createCardLayout.createColor, createCardLayout.starterBorder);
+          await routines.locator('.strength-workout-suggestion__preview summary').first().click();
+          const routineLayout = await routines.evaluate(dialog => {
+          const surface = dialog.querySelector<HTMLElement>('.money-goal-dialog__surface');
+            const rect = dialog.getBoundingClientRect();
+            if (!surface) throw new Error('Routine browser is missing its shared dialog surface.');
+            return {
+              viewportWidth: document.documentElement.clientWidth,
+              documentWidth: document.documentElement.scrollWidth,
+              dialogLeft: rect.left,
+              dialogRight: rect.right,
+              surfaceWidth: surface.clientWidth,
+              surfaceScrollWidth: surface.scrollWidth,
+              previewVisible: Boolean(dialog.querySelector('.strength-workout-suggestion__preview[open]'))
+            };
+          });
+          assert.equal(routineLayout.documentWidth, routineLayout.viewportWidth,
+            `Strength routine browser must not overflow at ${textSize} text.`);
+          assert.ok(routineLayout.dialogLeft >= 0 && routineLayout.dialogRight <= routineLayout.viewportWidth);
+          assert.equal(routineLayout.surfaceScrollWidth, routineLayout.surfaceWidth,
+            `Strength routine content must fit at ${textSize} text.`);
+          assert.equal(routineLayout.previewVisible, true);
+          const customization = routines.getByRole('button', { name: 'Customize' }).first();
+          await customization.click();
+          const editor = page.getByRole('dialog', { name: 'Create workout' });
+          assert.equal(await page.getByRole('dialog').count(), 1);
+          assert.equal((await editor.getAttribute('class'))?.includes('dialog--phone-fullscreen'), true);
+          await editor.getByRole('button', { name: 'Back to Add workout' }).click();
+          assert.equal(await page.getByRole('dialog').count(), 1);
+          await page.getByRole('dialog', { name: 'Add workout' }).getByRole('button', { name: 'Close Add workout' }).click();
+          await workoutsTab.focus();
+          await page.keyboard.press('Home');
+          await page.waitForFunction(() => {
+            const tab = document.querySelector<HTMLElement>('.strength-page [role="tablist"][aria-label="Strength sections"] [role="tab"][aria-selected="true"]');
+            return tab?.textContent?.trim() === 'Body' && tab === document.activeElement;
+          });
+          await page.keyboard.press('End');
+          await page.waitForFunction(() => {
+            const tab = document.querySelector<HTMLElement>('.strength-page [role="tablist"][aria-label="Strength sections"] [role="tab"][aria-selected="true"]');
+            return tab?.textContent?.trim() === 'Rhythms' && tab === document.activeElement;
+          });
+          const rhythmPanel = page.getByRole('tabpanel', { name: 'Rhythms' });
+          await rhythmPanel.getByRole('heading', { name: /^Linked Rhythms/ }).waitFor();
+          await rhythmPanel.getByRole('button', { name: 'Add Rhythm' }).waitFor();
+          await rhythmPanel.getByRole('button', { name: 'Manage links' }).waitFor();
+          await page.keyboard.press('Home');
+          await page.waitForFunction(() => {
+            const tab = document.querySelector<HTMLElement>('.strength-page [role="tablist"][aria-label="Strength sections"] [role="tab"][aria-selected="true"]');
+            return tab?.textContent?.trim() === 'Body' && tab === document.activeElement;
+          });
+          await bodyTab.click();
+          await page.getByRole('heading', { name: 'Your body, at a glance' }).waitFor();
+          for (const viewportWidth of [375, 390, 430]) {
+            await page.setViewportSize({ width: viewportWidth, height: 844 });
+            const layout = await strengthTabs.evaluate(element => {
+              const strength = element.closest<HTMLElement>('.strength-page');
+              const score = strength?.querySelector<HTMLElement>(':scope > .fitness-score-summary');
+              const panel = strength?.querySelector<HTMLElement>('#strength-panel-body');
+              const map = panel?.querySelector<HTMLElement>('.strength-map-card');
+              const heading = map?.querySelector<HTMLElement>('.strength-card-heading');
+              const mapLayout = map?.querySelector<HTMLElement>('.strength-map-layout');
+              if (!strength || !score || !panel || !map || !heading || !mapLayout) {
+                throw new Error('Strength Body panel is missing its shared score, map card, heading, or map.');
+              }
+              const pageRect = strength.getBoundingClientRect();
+              const scoreRect = score.getBoundingClientRect();
+              const tabsRect = element.getBoundingClientRect();
+              const mapRect = map.getBoundingClientRect();
+              const mapLayoutRect = mapLayout.getBoundingClientRect();
+              return {
+                documentWidth: document.documentElement.scrollWidth,
+                viewportWidth: document.documentElement.clientWidth,
+                panelVisible: !panel.hidden,
+                scoreWidth: scoreRect.width,
+                tabsWidth: tabsRect.width,
+                mapLeft: mapRect.left,
+                mapRight: mapRect.right,
+                pageLeft: pageRect.left,
+                pageRight: pageRect.right,
+                headingFits: heading.scrollWidth <= heading.clientWidth,
+                mapFits: mapLayoutRect.left >= mapRect.left && mapLayoutRect.right <= mapRect.right
+              };
+            });
+            assert.equal(layout.viewportWidth, viewportWidth);
+            assert.equal(layout.documentWidth, viewportWidth,
+              `Strength must not overflow at ${viewportWidth}px / ${textSize} text.`);
+            assert.equal(layout.panelVisible, true);
+            assert.ok(layout.scoreWidth > 0 && layout.tabsWidth > 0);
+            assert.ok(layout.mapLeft >= layout.pageLeft && layout.mapRight <= layout.pageRight);
+            assert.equal(layout.headingFits, true,
+              `Strength Body heading must fit at ${viewportWidth}px / ${textSize} text.`);
+            assert.equal(layout.mapFits, true,
+              `Strength body map must fit at ${viewportWidth}px / ${textSize} text.`);
+          }
+        }
+
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await areaNavigation.getByRole('button', { name: 'Faith' }).click();
+        const faithTabs = page.getByRole('tablist', { name: 'Faith content' });
+        await faithTabs.getByRole('tab', { name: 'Rhythms' }).click();
+
+        for (const textSize of ['small', 'medium', 'large'] as const) {
+          await page.setViewportSize({ width: 375, height: 844 });
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            if (await categorySizeToggle.getAttribute('data-text-size') === textSize) break;
+            await categorySizeToggle.click();
+          }
+          assert.equal(await categorySizeToggle.getAttribute('data-text-size'), textSize);
+          await page.getByRole('button', { name: 'Add Rhythm' }).click();
+          const rhythmEditor = page.getByRole('dialog', { name: 'Add Rhythm' });
+          await rhythmEditor.getByRole('button', { name: /Choose categories/ }).click();
+          const categoryPicker = page.locator('.money-goal-dialog--category-picker');
+          await categoryPicker.waitFor();
+          const categoryRow = categoryPicker.locator('[data-picker-category-id]').first();
+
+          await categoryRow.focus();
+          await page.keyboard.press('Enter');
+          await categoryPicker.getByRole('heading', { name: 'Faith' }).waitFor();
+          assert.equal(await categoryPicker.locator('.rhythm-association-picker__category-detail').count(), 1);
+          const detailLayout = await categoryPicker.evaluate(dialog => {
+            const surface = dialog.querySelector<HTMLElement>('.money-goal-dialog__surface');
+            const options = [...dialog.querySelectorAll<HTMLElement>('.rhythm-association-picker__detail-option')];
+            if (!surface || options.length === 0) throw new Error('Category detail is missing its sheet or Foundation options.');
+            return {
+              dialogBounds: (() => {
+                const rect = dialog.getBoundingClientRect();
+                return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+              })(),
+              surfaceBounds: (() => {
+                const rect = surface.getBoundingClientRect();
+                return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+              })(),
+              optionHeights: options.map(option => option.getBoundingClientRect().height),
+              optionGroupLabel: dialog.querySelector('[role="group"]')?.getAttribute('aria-label'),
+              documentWidth: document.documentElement.scrollWidth,
+              viewportWidth: document.documentElement.clientWidth,
+              headingFocused: document.activeElement?.textContent?.trim() === 'Faith'
+            };
+          });
+          assert.deepEqual(detailLayout.dialogBounds, { left: 0, top: 0, width: 375, height: 844 });
+          assert.equal(detailLayout.surfaceBounds.width, 375);
+          assert.ok(detailLayout.surfaceBounds.height > 0);
+          assert.equal(detailLayout.documentWidth, detailLayout.viewportWidth);
+          assert.ok(detailLayout.optionHeights.every(height => height >= 44));
+          assert.equal(detailLayout.headingFocused, true);
+
+          const backButton = categoryPicker.locator('.rhythm-association-picker__back');
+          await backButton.focus();
+          await page.keyboard.press('Enter');
+          await categoryRow.waitFor();
+          assert.equal(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.pickerCategoryId),
+            await categoryRow.getAttribute('data-picker-category-id'));
+
+          await page.keyboard.press('Enter');
+          await categoryPicker.getByRole('heading', { name: 'Faith' }).waitFor();
+          const initialSheetBounds = await categoryPicker.locator('.money-goal-dialog__surface').evaluate(surface => {
+            const rect = surface.getBoundingClientRect();
+            return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+          });
+          const categoryToggle = categoryPicker.getByRole('button', { name: /^(Add|Remove) Faith category$/ });
+          if (await categoryToggle.getAttribute('aria-pressed') !== 'true') await categoryToggle.click();
+          const firstPractice = categoryPicker.locator('.rhythm-association-picker__detail-option').first();
+          const practiceLabel = await firstPractice.getAttribute('aria-label');
+          await firstPractice.click();
+          assert.equal(await firstPractice.getAttribute('aria-pressed'), 'true');
+          await categoryPicker.getByRole('button', { name: 'Done', exact: true }).click();
+          await categoryPicker.getByRole('heading', { name: 'Choose categories' }).waitFor();
+          const listState = await categoryPicker.evaluate(dialog => {
+            const surface = dialog.querySelector<HTMLElement>('.money-goal-dialog__surface');
+            const categoryList = dialog.querySelector<HTMLElement>('.rhythm-association-picker__category-list');
+            const rows = [...dialog.querySelectorAll<HTMLElement>('.rhythm-association-picker__category-row')];
+            const row = rows[0];
+            const summary = row?.querySelector<HTMLElement>('.rhythm-association-picker__category-summary');
+            const indicator = row?.querySelector<HTMLElement>('.rhythm-association-picker__selection-indicator');
+            if (!surface || !categoryList || !row || !summary || !indicator) {
+              throw new Error('Category list is missing its selected summary or validity indicator.');
+            }
+            const surfaceRect = surface.getBoundingClientRect();
+            return {
+              surfaceBounds: {
+                left: surfaceRect.left,
+                top: surfaceRect.top,
+                width: surfaceRect.width,
+                height: surfaceRect.height
+              },
+              categoryCount: rows.length,
+              rowHeight: row.getBoundingClientRect().height,
+              summaryText: summary.textContent?.trim(),
+              summaryTitle: summary.title,
+              indicatorText: indicator.textContent?.trim(),
+              oneCategoryPicker: document.querySelectorAll('.money-goal-dialog--category-picker').length,
+              oneCategoryList: document.querySelectorAll('.rhythm-association-picker__category-list').length,
+              documentWidth: document.documentElement.scrollWidth,
+              viewportWidth: document.documentElement.clientWidth
+            };
+          });
+          assert.deepEqual(listState.surfaceBounds, initialSheetBounds,
+            `Category list and detail must use the same sheet dimensions at ${textSize}.`);
+          assert.ok(listState.categoryCount > 0);
+          assert.ok(listState.rowHeight >= 44);
+          assert.ok(listState.summaryText?.length);
+          assert.equal(listState.summaryTitle, practiceLabel);
+          assert.equal(listState.indicatorText, '✓');
+          assert.equal(listState.oneCategoryPicker, 1);
+          assert.equal(listState.oneCategoryList, 1);
+
+          for (const viewportWidth of [375, 390, 430]) {
+            await page.setViewportSize({ width: viewportWidth, height: 844 });
+            const phoneLayout = await categoryPicker.evaluate(dialog => {
+              const rows = [...dialog.querySelectorAll<HTMLElement>('.rhythm-association-picker__category-row')];
+              const summary = dialog.querySelector<HTMLElement>('.rhythm-association-picker__category-summary');
+              const surface = dialog.querySelector<HTMLElement>('.money-goal-dialog__surface');
+              if (!surface || rows.length === 0 || !summary) {
+                throw new Error('Category picker is missing its list rows or selected summary.');
+              }
+              const surfaceRect = surface.getBoundingClientRect();
+              return {
+                viewportWidth: document.documentElement.clientWidth,
+                documentWidth: document.documentElement.scrollWidth,
+                surfaceLeft: surfaceRect.left,
+                surfaceRight: surfaceRect.right,
+                summaryWidth: summary.getBoundingClientRect().width,
+                summaryScrollWidth: summary.scrollWidth,
+                summaryClientWidth: summary.clientWidth,
+                rowRights: rows.map(row => row.getBoundingClientRect().right)
+              };
+            });
+            assert.equal(phoneLayout.documentWidth, viewportWidth,
+              `Category picker must not overflow at ${viewportWidth}px / ${textSize}.`);
+            assert.equal(phoneLayout.viewportWidth, viewportWidth);
+            assert.equal(phoneLayout.surfaceLeft, 0);
+            assert.equal(phoneLayout.surfaceRight, viewportWidth);
+            assert.ok(phoneLayout.rowRights.every(right => right <= viewportWidth));
+            assert.ok(phoneLayout.summaryWidth > 0);
+            assert.ok(phoneLayout.summaryScrollWidth >= phoneLayout.summaryClientWidth);
+          }
+
+          await categoryPicker.getByRole('button', { name: 'Cancel', exact: true }).click();
+          await rhythmEditor.getByRole('button', { name: 'Cancel', exact: true }).click();
+          await rhythmEditor.waitFor({ state: 'detached' });
+        }
       }
 
       assert.deepEqual(classicCssRequests, [], 'React pages must not request tend.css.');

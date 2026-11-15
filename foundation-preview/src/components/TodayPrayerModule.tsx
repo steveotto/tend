@@ -88,9 +88,14 @@ export function TodayPrayerModule({
         || target instanceof HTMLElement && /INPUT|TEXTAREA|SELECT/.test(target.tagName)) return;
       if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
         event.preventDefault();
-        setSession(current => current
-          ? movePrayerSession(current, event.key === 'ArrowRight' ? 1 : -1)
-          : current);
+        const direction = event.key === 'ArrowRight' ? 1 : -1;
+        setSession(current => {
+          if (!current) return current;
+          const nextIndex = current.index + direction;
+          return nextIndex < 0 || nextIndex >= current.requestIds.length
+            ? current
+            : movePrayerSession(current, direction);
+        });
         setSessionError('');
       } else if (event.key === 'Escape') {
         event.preventDefault();
@@ -493,7 +498,7 @@ export function TodayPrayerModule({
                 type="button"
                 className="btn ghost"
                 data-faith-session-back
-                disabled={session.index === 0}
+                disabled={session.index <= 0}
                 onClick={() => setSession(current => current ? movePrayerSession(current, -1) : current)}
               >
                 Back
@@ -502,6 +507,7 @@ export function TodayPrayerModule({
                 type="button"
                 className="btn ghost"
                 data-faith-session-skip
+                disabled={session.index >= session.requestIds.length - 1}
                 onClick={() => setSession(current => current ? movePrayerSession(current, 1) : current)}
               >
                 Skip

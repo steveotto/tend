@@ -678,47 +678,10 @@ export function RhythmEditor({
     && ((foundation.lifecycle === 'active' && foundation.capabilities.rhythms)
       || pickerFoundationSelection.includes(foundation.id))
   );
-  const categoryHasFoundationChoices = (categoryId: string) =>
-    allFoundations.some(foundation =>
-      foundationCategoryId(foundation.id, allFoundations) === categoryId
-      && foundation.lifecycle === 'active'
-      && foundation.capabilities.rhythms
-    );
   const foundationChoiceLabel = (foundation: FoundationPreview) =>
     foundation.lifecycle === 'active' && foundation.capabilities.rhythms
       ? foundation.name
       : `${foundation.name} (inactive; retained)`;
-  const foundationChoiceGroup = (category: typeof areas[number]) => {
-    if (!categoryHasFoundationChoices(category.id)) return null;
-    const term = foundationTerminologyForCategory(category.id);
-    const choices = foundationChoicesForCategory(category.id);
-    return (
-      <div className="rhythm-association-picker__category-foundations">
-        <p>Choose one or more {term.plural.toLowerCase()} for {category.label}.</p>
-        <div role="group" aria-label={`${category.label} ${term.plural}, choose one or more`}>
-          <div className="rhythm-association-picker__foundation-options">
-            {choices.map(foundation => {
-              const selected = pickerFoundationSelection.includes(foundation.id);
-              const label = foundationChoiceLabel(foundation);
-              return (
-                <button
-                  key={foundation.id}
-                  type="button"
-                  className="rhythm-association-picker__option"
-                  aria-label={label}
-                  aria-pressed={selected}
-                  data-selected={selected ? 'true' : 'false'}
-                  onClick={() => togglePickerItem(foundation.id)}
-                >
-                  <span className="rhythm-association-picker__badge">{renderFoundationBadge(foundation)}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    );
-  };
   const renderCategoryBadge = (area: typeof areas[number]) => (
     <>
       <span className="rhythm-association-picker__category-icon" aria-hidden="true"><AreaIcon id={area.id} /></span>
@@ -733,6 +696,31 @@ export function RhythmEditor({
       <span>{foundation.name}</span>
     </>
   );
+  const categoryNavigation = {
+    getSummary: (area: typeof areas[number]) => foundationChoicesForCategory(area.id)
+      .filter(foundation => pickerFoundationSelection.includes(foundation.id))
+      .map(foundationChoiceLabel),
+    hasValidSelection: (area: typeof areas[number]) =>
+      pickerSelection.includes(area.id)
+      && foundationChoicesForCategory(area.id).some(foundation =>
+        pickerFoundationSelection.includes(foundation.id)
+        && foundation.lifecycle === 'active'
+        && foundation.capabilities.rhythms
+      ),
+    getDetail: (area: typeof areas[number]) => {
+      const term = foundationTerminologyForCategory(area.id);
+      return {
+        description: `Choose one or more ${term.plural.toLowerCase()} for ${area.label}.`,
+        optionsLabel: `${area.label} ${term.plural}`,
+        options: foundationChoicesForCategory(area.id).map(foundation => ({
+          id: foundation.id,
+          label: foundationChoiceLabel(foundation),
+          content: renderFoundationBadge(foundation),
+          selected: pickerFoundationSelection.includes(foundation.id)
+        }))
+      };
+    }
+  };
   const timeOfDayField = (
     <div className="goal-field rhythm-schedule-fields__time">
       <label>Time of day</label>
@@ -1185,6 +1173,8 @@ export function RhythmEditor({
     {activePicker && (
       <MoneyGoalDialog
         {...(activePicker === 'categories' ? { closeLabel: 'Close category picker' } : {})}
+        title={draft.title.trim() || 'New Rhythm'}
+        titleId="rhythm-association-context-title"
         labelledBy={activePicker === 'categories' && pendingCategoryRemoval
           ? 'rhythm-category-removal-title'
           : 'rhythm-association-picker-title'}
@@ -1193,8 +1183,8 @@ export function RhythmEditor({
         )}
         stopEscapePropagation
         portalToBody
-        phoneFullScreen={activePicker === 'categories'}
-        dialogClassName={`money-goal-dialog--association-picker${activePicker === 'categories' ? ' money-goal-dialog--category-picker' : ''}`}
+        phoneFullScreen
+        dialogClassName={`money-goal-dialog--association-picker${activePicker === 'categories' ? ' money-goal-dialog--category-picker' : ' money-goal-dialog--people-picker'}`}
         onClose={() => closePicker(false)}
       >
         {activePicker === 'categories' && pendingCategoryRemoval ? (
@@ -1242,17 +1232,17 @@ export function RhythmEditor({
         ) : activePicker === 'categories' ? (
           <BadgeSelectionPicker
             title="Choose categories"
-            description="Choose categories, then their Practices or Foundations."
+            description="Where does this Rhythm belong?"
             items={availableCategories}
             selectedIds={pickerSelection}
             getLabel={area => area.label}
             renderBadge={renderCategoryBadge}
-            renderSelectedItemContent={foundationChoiceGroup}
+            navigation={categoryNavigation}
             unavailableSelectedItems={pickerFoundationLinksNeedingReview}
             unavailableGroupLabel="Existing Foundation links needing review"
             getUnavailableItemLabel={item => `Remove existing Foundation link ${item.label}`}
             unavailableItemType="Foundation"
-            doneLabel="Apply"
+            doneLabel="Done"
             focusItemId={categoryPickerFocusId}
             onToggle={togglePickerItem}
             onDone={() => closePicker(true)}

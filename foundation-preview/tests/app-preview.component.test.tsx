@@ -101,11 +101,24 @@ async function applyHealthFoundation(
 ): Promise<void> {
   const editor = screen.getByRole('dialog', { name: /^(Add|Edit) Rhythm$/ });
   await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
-  const picker = associationPicker('Choose categories');
-  const healthCategory = within(picker).getByRole('button', { name: 'Health & Fitness' });
-  if (healthCategory.getAttribute('aria-pressed') !== 'true') await user.click(healthCategory);
-  await user.click(within(picker).getByRole('button', { name: foundationName }));
-  await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+  await chooseCategoryFoundation(user, 'Health & Fitness', foundationName);
+}
+
+async function chooseCategoryFoundation(
+  user: ReturnType<typeof userEvent.setup>,
+  categoryName: string,
+  foundationName: string
+): Promise<void> {
+  const list = associationPicker('Choose categories');
+  await user.click(within(list).getByRole('button', { name: categoryName }));
+  const detail = associationPicker(categoryName);
+  const categoryToggle = detail.querySelector<HTMLButtonElement>('.rhythm-association-picker__category-toggle');
+  if (!categoryToggle) throw new Error(`Missing ${categoryName} category toggle.`);
+  if (categoryToggle.getAttribute('aria-pressed') !== 'true') await user.click(categoryToggle);
+  const foundation = within(detail).getByRole('button', { name: foundationName });
+  if (foundation.getAttribute('aria-pressed') !== 'true') await user.click(foundation);
+  await user.click(within(detail).getByRole('button', { name: 'Done' }));
+  await user.click(within(associationPicker('Choose categories')).getByRole('button', { name: 'Done' }));
 }
 
 beforeEach(() => {
@@ -1104,10 +1117,14 @@ describe('Tend Today preview', () => {
     await user.click(within(association).getByRole('button', { name: 'Done' }));
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     association = associationPicker('Choose categories');
+    await user.click(within(association).getByRole('button', { name: 'Parenting' }));
+    association = associationPicker('Parenting');
     const communication = within(association).getByRole('button', { name: 'Communication & Trust' });
     expect(communication.getAttribute('aria-pressed')).toBe('true');
     await user.click(communication);
-    await user.click(within(association).getByRole('button', { name: 'Apply' }));
+    await user.click(within(association).getByRole('button', { name: 'Done' }));
+    association = associationPicker('Choose categories');
+    await user.click(within(association).getByRole('button', { name: 'Done' }));
     await user.click(within(editor).getByRole('radio', { name: 'Wednesday' }));
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
 
@@ -1316,7 +1333,9 @@ describe('Tend Today preview', () => {
     expect(categoryControl.querySelector('[aria-label="Faith Practice: Sabbath"]')).toBeTruthy();
     await user.click(categoryControl);
     let picker = associationPicker('Choose categories');
-    expect(within(picker).getByRole('button', { name: 'Faith' }).getAttribute('aria-pressed')).toBe('true');
+    await user.click(within(picker).getByRole('button', { name: 'Faith' }));
+    picker = associationPicker('Faith');
+    expect(picker.querySelector('.rhythm-association-picker__category-toggle')?.getAttribute('aria-pressed')).toBe('true');
     expect(within(picker).getByRole('button', { name: 'Sabbath' }).getAttribute('aria-pressed')).toBe('true');
     await user.click(within(picker).getByRole('button', { name: 'Cancel' }));
 
@@ -1380,8 +1399,10 @@ describe('Tend Today preview', () => {
     const categoryControl = within(editor).getByRole('button', { name: /^Choose categories, Parenting/ });
     expect(within(categoryControl).getByRole('img', { name: 'Parenting: Connection & Belonging' })).toBeTruthy();
     await user.click(categoryControl);
-    const picker = associationPicker('Choose categories');
-    expect(within(picker).getByRole('button', { name: 'Parenting' }).getAttribute('aria-pressed')).toBe('true');
+    const categoryList = associationPicker('Choose categories');
+    await user.click(within(categoryList).getByRole('button', { name: 'Parenting' }));
+    const picker = associationPicker('Parenting');
+    expect(picker.querySelector('.rhythm-association-picker__category-toggle')?.getAttribute('aria-pressed')).toBe('true');
     expect(within(picker).getByRole('button', { name: 'Connection & Belonging' }).getAttribute('aria-pressed'))
       .toBe('true');
     await user.click(within(picker).getByRole('button', { name: 'Cancel' }));
@@ -1789,9 +1810,7 @@ describe('Tend Today preview', () => {
     await user.type(within(editor).getByLabelText('Title'), 'Morning prayer');
     await user.type(within(editor).getByLabelText('Description (optional)'), 'Make a quiet space to listen.');
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
-    const picker = associationPicker('Choose categories');
-    await user.click(within(picker).getByRole('button', { name: 'Prayer' }));
-    await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+    await chooseCategoryFoundation(user, 'Faith', 'Prayer');
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
 
     const saved = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
@@ -1901,13 +1920,15 @@ describe('Tend Today preview', () => {
     expect(screen.getAllByRole('article', { name: 'Pray together' })).toHaveLength(1);
     const editor = await openRhythmEditorFromScore(user, 'Pray together');
     await user.click(within(editor).getByRole('button', { name: 'Choose categories, Faith and Marriage' }));
-    const categoryPicker = associationPicker('Choose categories');
+    let categoryPicker = associationPicker('Choose categories');
     await user.click(within(categoryPicker).getByRole('button', { name: 'Faith' }));
+    categoryPicker = associationPicker('Faith');
+    await user.click(within(categoryPicker).getByRole('button', { name: 'Remove Faith category' }));
     const removal = associationPicker('Remove Faith?');
     expect(within(removal).getByText(/This also unlinks Prayer/)).toBeTruthy();
     await user.click(within(removal).getByRole('button', { name: 'Remove' }));
     await user.click(within(associationPicker('Choose categories'))
-      .getByRole('button', { name: 'Apply' }));
+      .getByRole('button', { name: 'Done' }));
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
 
     const saved = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
@@ -2021,9 +2042,7 @@ describe('Tend Today preview', () => {
     await user.type(within(editor).getByLabelText('Title'), 'Parenting reading time');
     await user.type(within(editor).getByLabelText('Description (optional)'), 'Read together when it fits.');
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
-    let foundationPicker = associationPicker('Choose categories');
-    await user.click(within(foundationPicker).getByRole('button', { name: 'Connection & Belonging' }));
-    await user.click(within(foundationPicker).getByRole('button', { name: 'Apply' }));
+    await chooseCategoryFoundation(user, 'Parenting', 'Connection & Belonging');
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
 
     await user.click(screen.getByRole('tab', { name: 'Today' }));
@@ -3320,10 +3339,7 @@ describe('Tend Today preview', () => {
     await user.click(within(editor).getByRole('combobox', { name: 'Time of day: Anytime' }));
     await user.click(within(editor).getByRole('option', { name: 'Morning' }));
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
-    let association = associationPicker('Choose categories');
-    await user.click(within(association).getByRole('button', { name: 'Marriage' }));
-    await user.click(within(association).getByRole('button', { name: 'Connection' }));
-    await user.click(within(association).getByRole('button', { name: 'Apply' }));
+    await chooseCategoryFoundation(user, 'Marriage', 'Connection');
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
     await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
 
@@ -4040,9 +4056,7 @@ describe('Tend Today preview', () => {
       .getByRole('button', { name: `Edit ${rhythm.title}` }));
     let editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
-    const picker = associationPicker('Choose categories');
-    await user.click(within(picker).getByRole('button', { name: 'Prayer' }));
-    await user.click(within(picker).getByRole('button', { name: 'Apply' }));
+    await chooseCategoryFoundation(user, 'Faith', 'Prayer');
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit Rhythm' })).toBeNull());
     await user.click(within(practiceScoring).getByRole('button', { name: 'Close scoring explanation' }));
@@ -5103,10 +5117,7 @@ describe('Tend Today preview', () => {
     expect(within(association).getByRole('button', { name: 'Morgan Reed' }).getAttribute('aria-pressed')).toBe('true');
     await user.click(within(association).getByRole('button', { name: 'Done' }));
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
-    association = associationPicker('Choose categories');
-    await user.click(within(association).getByRole('button', { name: 'Marriage' }));
-    await user.click(within(association).getByRole('button', { name: 'Connection' }));
-    await user.click(within(association).getByRole('button', { name: 'Apply' }));
+    await chooseCategoryFoundation(user, 'Marriage', 'Connection');
     expect(within(editor).getByRole('button', { name: /^Choose categories/ })).toBeTruthy();
     expect(within(editor).getByRole('button', { name: /^Choose people/ })).toBeTruthy();
     expect(within(editor).getByRole('region', { name: 'Associations' })).toBeTruthy();
@@ -5202,7 +5213,10 @@ describe('Tend Today preview', () => {
     await user.click(within(association).getByRole('button', { name: 'Cancel' }));
     await user.click(within(reloadedEditor).getByRole('button', { name: /^Choose categories/ }));
     association = associationPicker('Choose categories');
-    expect(within(association).getByRole('button', { name: 'Marriage' }).getAttribute('aria-pressed')).toBe('true');
+    await user.click(within(association).getByRole('button', { name: 'Marriage' }));
+    association = associationPicker('Marriage');
+    expect(association.querySelector('.rhythm-association-picker__category-toggle')?.getAttribute('aria-pressed'))
+      .toBe('true');
     await user.click(within(association).getByRole('button', { name: 'Cancel' }));
     await user.click(within(reloadedEditor).getByRole('button', { name: 'Cancel' }));
     await user.click(within(reloadedCard).getByRole('button', {
@@ -5266,10 +5280,7 @@ describe('Tend Today preview', () => {
     await user.clear(title);
     await user.type(title, 'Updated prayer rhythm');
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
-    const association = associationPicker('Choose categories');
-    await user.click(within(association).getByRole('button', { name: 'Marriage' }));
-    await user.click(within(association).getByRole('button', { name: 'Connection' }));
-    await user.click(within(association).getByRole('button', { name: 'Apply' }));
+    await chooseCategoryFoundation(user, 'Marriage', 'Connection');
     expect(within(editor).queryByRole('checkbox', { name: 'Personal' })).toBeNull();
     await user.click(within(editor).getByRole('button', { name: 'Change frequency, currently Daily' }));
     await user.click(within(editor).getByRole('combobox', { name: 'Frequency: Daily' }));

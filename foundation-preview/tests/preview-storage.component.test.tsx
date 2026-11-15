@@ -2931,6 +2931,38 @@ describe('synthetic preview storage adapter and envelope', () => {
     }), '2026-10-21').valid).toBe(false);
   });
 
+  it('rejects invalid and non-canonical timestamps in dated completion records', () => {
+    const createTimestampEnvelope = () => {
+      const data = createSamplePreviewData();
+      const completionId = 'timestamp-validation-completion';
+      data.completedRhythmIds = ['sample-pray-together'];
+      data.datedRhythmCompletions = [{
+        id: completionId,
+        rhythmId: 'sample-pray-together',
+        effectiveDate: '2026-10-20',
+        localTime: '12:00',
+        timeZone: 'UTC',
+        completedAt: '2026-10-20T12:00:00.000Z',
+        recordedAt: '2026-10-20T12:01:00.000Z'
+      }];
+      data.activeRhythmCompletions = [{ rhythmId: 'sample-pray-together', completionId }];
+      data.rhythmHistoryIds = ['sample-pray-together'];
+      return createPreviewEnvelope(data);
+    };
+
+    expect(validatePreviewEnvelope(createTimestampEnvelope(), '2026-10-21').valid).toBe(true);
+
+    for (const [field, value] of [
+      ['completedAt', '2026-02-30T12:00:00.000Z'],
+      ['completedAt', '2026-10-20T12:00:00+00:00'],
+      ['recordedAt', 'not-a-timestamp']
+    ] as const) {
+      const envelope = createTimestampEnvelope();
+      envelope.data.datedRhythmCompletions[0]![field] = value;
+      expect(validatePreviewEnvelope(envelope, '2026-10-21').valid).toBe(false);
+    }
+  });
+
   it('preserves corrupt stored bytes and reports blocked and quota-failed storage', () => {
     const corruptRaw = '{"broken":';
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: corruptRaw });

@@ -205,6 +205,21 @@ describe('calendar feed reader', () => {
     ]);
   });
 
+  it('preserves the parser default duration for a timed event without an end', () => {
+    const result = parseCalendarFeedForLocalDate(calendar([
+      'BEGIN:VEVENT',
+      'UID:missing-end',
+      'DTSTART:20261108T100000Z',
+      'SUMMARY:Missing end time',
+      'END:VEVENT'
+    ].join('\r\n')), source, '2026-11-08', 'UTC');
+
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0]?.endsAt).toBe(result.events[0]?.startsAt);
+  });
+
   it('expands recurrence from the requested instant and returns no more than three future occurrences', () => {
     const raw = calendar([
       'BEGIN:VEVENT',

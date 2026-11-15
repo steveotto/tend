@@ -6,6 +6,7 @@ import {
 } from '../domain/calendar-events.ts';
 import type { CalendarEvent, CalendarRange } from '../domain/calendar-events.ts';
 import type { CalendarSource } from '../domain/calendar-sources.ts';
+import { useCurrentInstant } from './useCurrentInstant.ts';
 import {
   CalendarOutlineIcon,
   CalendarMonthIcon,
@@ -249,6 +250,7 @@ export function CalendarAgendaSection({
     failures: [],
     issueCount: 0
   });
+  const now = useCurrentInstant().getTime();
   const enabledSources = useMemo(
     () => sources.filter(source => source.enabled !== false),
     [sources]
@@ -320,7 +322,6 @@ export function CalendarAgendaSection({
   const hasConfiguredSources = sources.length > 0;
   const hasEnabledSources = enabledSources.length > 0;
   const busy = readerEnabled && hasEnabledSources && (state.kind === 'idle' || state.kind === 'loading');
-  const now = Date.now();
   const selectedWindow = getCalendarRangeWindow(selectedRange, now, timeZone);
   const visibleEvents = useMemo(
     () => selectCalendarEventsForRange(state.events, selectedWindow),

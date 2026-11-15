@@ -48,6 +48,7 @@ import { SegmentedTabs } from './SegmentedTabs.tsx';
 import type { SegmentedTab } from './SegmentedTabs.tsx';
 import { ArchivedRhythmsDialog } from './ArchivedRhythmsDialog.tsx';
 import { FoundationRhythmAssociationDialog } from './FoundationRhythmAssociationDialog.tsx';
+import { FoundationRhythmGroup } from './FoundationRhythmGroup.tsx';
 import { MarriageIcon } from './MarriageIcon.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 import { CategoryRhythmCollection } from './CategoryRhythmCollection.tsx';
@@ -486,7 +487,7 @@ export function MarriageView({
   }));
   return (
     <main
-      className={`category-page category-page--with-header marriage-page${foundationDetailOpen ? ' marriage-page--foundation-detail' : ''}`}
+      className={`category-page category-page--with-header category-page--segmented marriage-page${foundationDetailOpen ? ' marriage-page--foundation-detail' : ''}`}
       aria-labelledby={foundationDetailOpen
         ? `${categoryToken}-foundation-detail-title`
         : `${categoryToken}-title`}
@@ -1302,73 +1303,4 @@ function foundationScoreEvidence(score: FoundationScoreSelection): string | unde
     return `${score.eligibleRhythmIds.length} of ${score.activeLinkedRhythmIds.length} linked Rhythms scored`;
   }
   return `${score.eligibleRhythmIds.length} linked Rhythm${score.eligibleRhythmIds.length === 1 ? '' : 's'} scored`;
-}
-
-function FoundationRhythmGroup({
-  people,
-  rhythms,
-  archivedRhythmIds,
-  headingId,
-  rhythmScores,
-  completedRhythms,
-  undoableRhythms,
-  onTend,
-  onUndo,
-  onEditRhythm,
-  onRhythmHistory,
-  onPersonSelect,
-  foundations,
-  categoryToken,
-  onOpenFoundation,
-  onOpenCategory
-}: {
-  people: readonly PersonPreview[];
-  rhythms: readonly RhythmPreview[];
-  archivedRhythmIds: readonly string[];
-  headingId: string;
-  rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
-  completedRhythms: ReadonlySet<string>;
-  undoableRhythms: ReadonlySet<string>;
-  onTend: MarriageViewProps['onTend'];
-  onUndo: MarriageViewProps['onUndo'];
-  onEditRhythm: MarriageViewProps['onEditRhythm'];
-  onRhythmHistory: MarriageViewProps['onRhythmHistory'];
-  onPersonSelect: MarriageViewProps['onPersonSelect'];
-  foundations: readonly FoundationPreview[];
-  categoryToken: string;
-  onOpenFoundation: (foundationId: string, openerId: string) => void;
-  onOpenCategory: MarriageViewProps['onOpenCategory'];
-}) {
-  return (
-    <section className="marriage-foundation-support-group" aria-labelledby={headingId}>
-      <div className="marriage-rhythm-list current-plan-item-group">
-        {rhythms.map(rhythm => (
-          <RhythmDetailsDialog
-            key={rhythm.id}
-            rhythm={rhythm}
-            inline
-            completed={completedRhythms.has(rhythm.id)}
-            people={peopleForRhythm(rhythm, people)}
-            foundations={foundations}
-            relatedRhythms={rhythms}
-            onPersonSelect={onPersonSelect}
-            onOpenFoundation={onOpenFoundation}
-            onOpenCategory={onOpenCategory}
-            archived={archivedRhythmIds.includes(rhythm.id)}
-            headingId={`${categoryToken}-detail-rhythm-${rhythm.id}`}
-            healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
-            onHistory={event => onRhythmHistory(rhythm.id, event)}
-            {...(!archivedRhythmIds.includes(rhythm.id) && isEditableRhythmId(rhythm.id)
-              ? {
-                  onTend: (event: MouseEvent<HTMLButtonElement>) => onTend(rhythm.id, event),
-                  onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event),
-                  ...(undoableRhythms.has(rhythm.id) ? { onUndo: () => onUndo(rhythm.id) } : {})
-                }
-              : {})}
-            onClose={() => undefined}
-          />
-        ))}
-      </div>
-    </section>
-  );
 }

@@ -3,7 +3,7 @@ import type { RhythmPreview } from './preview-data.ts';
 import { hasRhythmOccurrenceForCompletion } from './rhythm-occurrences.ts';
 import { isPeriodBasedRhythmSchedule, rhythmOccurrencePeriod } from './rhythm-occurrences.ts';
 import { blendFitnessHealth } from './fitness-scoring.ts';
-import { effectiveRhythmSchedule } from './rhythm-schedule.ts';
+import { rhythmScheduleForDate } from './rhythm-schedule.ts';
 import { rhythmSeasonForDate } from './rhythm-seasons.ts';
 import type { RhythmSchedule } from './rhythm-schedule.ts';
 import {
@@ -397,11 +397,7 @@ export function deleteCardioRun(data: CardioData, id: string): {
 }
 
 function cardioRhythmScheduleForDate(rhythm: RhythmPreview, date: string): RhythmSchedule | undefined {
-  if (rhythm.scoring) {
-    const season = rhythmSeasonForDate(rhythm.scoring.scheduleHistory, date);
-    return season?.kind === 'scheduled' ? season.schedule : undefined;
-  }
-  return effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
+  return rhythmScheduleForDate(rhythm, date);
 }
 
 export function cardioRhythmOccurrenceError(
