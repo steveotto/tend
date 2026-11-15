@@ -67,7 +67,7 @@ export async function onRequest(context: { request: Request }): Promise<Response
         }
       }
     });
-    finishStage(response.ok ? 'completed' : 'failed');
+    finishStage('completed');
     const headers = new Headers(response.headers);
     headers.set('x-tend-calendar-request-id', requestId);
     log({
