@@ -50,6 +50,7 @@ import {
   strengthMuscles,
   strengthWorkoutSuggestions,
   updateStrengthSavedWorkoutRestOverride,
+  updateStrengthGuidedSessionRhythm,
   validateStrengthData,
   validateStrengthGuidedSessionDraft,
   validateStrengthSettings
@@ -159,6 +160,24 @@ describe('Strength selector and command behavior', () => {
     expect(started.session.exercises[1]?.sets[0]?.targetLoad).toEqual({
       kind: 'external', meaning: 'per-dumbbell', value: 40, unit: 'lb'
     });
+    const rhythmLinked = updateStrengthGuidedSessionRhythm(
+      started.session,
+      'strength-rhythm',
+      'strength-completion-1'
+    );
+    expect(rhythmLinked.valid).toBe(true);
+    if (!rhythmLinked.valid) return;
+    expect(rhythmLinked.session).toMatchObject({
+      rhythmId: 'strength-rhythm',
+      rhythmOccurrence: started.session.date,
+      completionId: 'strength-completion-1'
+    });
+    const rhythmRemoved = updateStrengthGuidedSessionRhythm(rhythmLinked.session);
+    expect(rhythmRemoved.valid).toBe(true);
+    if (rhythmRemoved.valid) {
+      expect(rhythmRemoved.session.rhythmId).toBeUndefined();
+      expect(rhythmRemoved.session.completionId).toBeUndefined();
+    }
 
     const performed = confirmStrengthSessionSet(
       started.session, 'exercise-bench-stable', 'bench-set-1', 8,

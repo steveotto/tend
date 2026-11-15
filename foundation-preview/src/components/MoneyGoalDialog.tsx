@@ -113,6 +113,11 @@ export function MoneyGoalDialog({
         }
       }
 
+      if (phoneFullScreen && viewport.width <= 700) {
+        center(true);
+        return;
+      }
+
       if (constrained) {
         center(viewport.height <= 480);
         return;
@@ -159,7 +164,7 @@ export function MoneyGoalDialog({
       window.visualViewport?.removeEventListener('scroll', syncPosition);
       if (activeDialog.open && typeof activeDialog.close === 'function') activeDialog.close();
     };
-  }, [initialFocusId, anchorRef]);
+  }, [initialFocusId, anchorRef, phoneFullScreen]);
 
   const dialog = (
     <dialog

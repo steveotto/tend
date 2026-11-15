@@ -23,6 +23,7 @@ import { RhythmSuggestionPicker } from './RhythmSuggestionPicker.tsx';
 import type { RhythmSuggestionPickerGroup } from './RhythmSuggestionPicker.tsx';
 import type { CategoryRhythmSuggestion, CategoryRhythmSuggestionCatalogue } from './MarriageView.tsx';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
+import type { FoundationRhythmAssociationChange } from '../domain/foundation-rhythm-associations.ts';
 import { selectUnlinkedFlexibilityRhythms } from '../domain/category-scoring.ts';
 import { isFlexibilityRegionId } from '../domain/flexibility.ts';
 import type { FlexibilityRegionId } from '../domain/flexibility.ts';
@@ -72,6 +73,11 @@ type HealthFitnessViewProps = {
   foundationNavigationRequest?: { foundationId: string; requestId: number } | null;
   onFoundationNavigationHandled?: (requestId: number) => void;
   onAddRhythm: (event: MouseEvent<HTMLButtonElement>) => void;
+  onAddLinkedRhythm?: (foundationId: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onSaveFoundationAssociations?: (
+    foundationId: string,
+    changes: readonly FoundationRhythmAssociationChange[]
+  ) => string | null;
   onAddSuggestion?: (
     suggestion: CategoryRhythmSuggestion,
     event: MouseEvent<HTMLButtonElement>,
@@ -189,6 +195,8 @@ export function HealthFitnessView({
   foundationNavigationRequest = null,
   onFoundationNavigationHandled,
   onAddRhythm,
+  onAddLinkedRhythm,
+  onSaveFoundationAssociations,
   suggestionCatalogue,
   onAddSuggestion,
   onEditRhythm,
@@ -545,7 +553,7 @@ export function HealthFitnessView({
 
   return (
     <main
-      className={`category-page category-page--with-header health-fitness-page${foundationDetailOpen ? ' health-fitness-page--foundation-detail' : ''}`}
+      className={`category-page category-page--with-header category-page--segmented health-fitness-page${foundationDetailOpen ? ' health-fitness-page--foundation-detail' : ''}`}
       aria-labelledby={foundationDetailOpen ? undefined : 'health-fitness-title'}
       aria-label={foundationDetailOpen ? 'Health & Fitness Foundation' : undefined}
       hidden={hidden}
@@ -752,10 +760,23 @@ export function HealthFitnessView({
             {renderFoundationHeading('health-strength')}
             <StrengthView
               {...strength}
+              foundations={foundations}
+              rhythmScores={rhythmScores}
+              completedRhythms={completedRhythms}
+              undoableRhythms={undoableRhythms}
               healthScoringEvidence={strengthScoringEvidence}
               overallHealthScore={overallHealthScore}
               categoryHealthScore={healthScore.health}
               foundationNavigation
+              {...(onAddLinkedRhythm ? { onAddLinkedRhythm } : {})}
+              {...(onSaveFoundationAssociations ? { onSaveFoundationAssociations } : {})}
+              onRhythmHistory={(id, event) => onRhythmHistory(id, event, 'rhythms')}
+              onEditRhythm={(rhythm, event) => onEditRhythm(rhythm, event)}
+              onTend={openRhythmLog}
+              onUndo={onUndoRhythm}
+              onPersonSelect={onPersonSelect}
+              onOpenFoundation={(id, openerId) => onOpenFoundation(id, openerId, 'today')}
+              onOpenCategory={onOpenCategory}
               onRhythmLogClosed={restoreLogContext}
               onStretchAfter={openStretchAfter}
             />
