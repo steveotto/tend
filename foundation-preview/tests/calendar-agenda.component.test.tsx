@@ -54,6 +54,10 @@ function expectNoCalendarSettingsShortcut() {
   expect(screen.queryByRole('button', { name: /settings/i })).toBeNull();
 }
 
+function expectDiagnostic(prefix: string) {
+  expect(screen.getByText(content => content === prefix || content.startsWith(`${prefix} · Request ID: `))).toBeTruthy();
+}
+
 function expectNoCalendarOuterCard() {
   const section = document.querySelector('.today-calendar-section');
   expect(section?.querySelector('.calendar-agenda-content')).toBeTruthy();
@@ -402,7 +406,7 @@ describe('upcoming calendar agenda', () => {
 
     expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
     expect(screen.getByText(message)).toBeTruthy();
-    expect(screen.getByText(`Code: ${code} · HTTP 422`)).toBeTruthy();
+    expectDiagnostic(`Code: ${code} · HTTP 422`);
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
     expect(screen.queryByRole('group', { name: 'Calendar date range' })).toBeTruthy();
     expectNoCalendarSettingsShortcut();
@@ -417,7 +421,7 @@ describe('upcoming calendar agenda', () => {
 
     expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
     expect(screen.getByText('The browser could not connect to the Calendar reader.')).toBeTruthy();
-    expect(screen.getByText('Code: reader-network-failed')).toBeTruthy();
+    expectDiagnostic('Code: reader-network-failed');
     expectNoCalendarSettingsShortcut();
   });
 
@@ -436,8 +440,26 @@ describe('upcoming calendar agenda', () => {
 
     expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
     expect(screen.getByText('The Calendar reader returned an unsuccessful response.')).toBeTruthy();
-    expect(screen.getByText('Code: reader-http-failed · HTTP 503 · Ray ID: a5b065bcd9fadc42-EWR')).toBeTruthy();
+    expectDiagnostic('Code: reader-http-failed · HTTP 503 · Ray ID: a5b065bcd9fadc42-EWR');
     expect(screen.queryByText(/upstream response/)).toBeNull();
+  });
+
+  it('sends and displays the safe Calendar request correlation ID', async () => {
+    const requestId = 'c3b19aa7-9e44-4c5f-9f7d-26770998f56a';
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => response(
+      { error: 'safe generic error' },
+      503,
+      { 'x-tend-calendar-request-id': requestId }
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    renderCalendar([{ id: 'home', name: 'Home', url: 'https://p.icloud.com/private' }]);
+
+    expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(init.headers).get('x-tend-calendar-request-id')).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
+    expect(screen.getByText(`Code: reader-http-failed · HTTP 503 · Request ID: ${requestId}`)).toBeTruthy();
   });
 
   it('omits malformed Cloudflare ray identifiers from diagnostics', async () => {
@@ -449,7 +471,7 @@ describe('upcoming calendar agenda', () => {
     renderCalendar([{ id: 'home', name: 'Home', url: 'https://p.icloud.com/private' }]);
 
     expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
-    expect(screen.getByText('Code: reader-http-failed · HTTP 503')).toBeTruthy();
+    expectDiagnostic('Code: reader-http-failed · HTTP 503');
     expect(screen.queryByText(/private-information/)).toBeNull();
   });
 
@@ -462,7 +484,7 @@ describe('upcoming calendar agenda', () => {
 
     expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
     expect(screen.getByText('The Calendar reader returned an invalid response.')).toBeTruthy();
-    expect(screen.getByText('Code: reader-response-invalid · HTTP 200')).toBeTruthy();
+    expectDiagnostic('Code: reader-response-invalid · HTTP 200');
     expect(screen.queryByText(/unexpected response/)).toBeNull();
   });
 
@@ -475,7 +497,7 @@ describe('upcoming calendar agenda', () => {
 
     expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
     expect(screen.getByText('The Calendar reader returned an unsuccessful response.')).toBeTruthy();
-    expect(screen.getByText('Code: reader-http-failed · HTTP 503')).toBeTruthy();
+    expectDiagnostic('Code: reader-http-failed · HTTP 503');
   });
 
   it('reports a malformed successful payload as a reader response error', async () => {
@@ -484,7 +506,7 @@ describe('upcoming calendar agenda', () => {
 
     expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
     expect(screen.getByText('The Calendar reader returned an invalid response.')).toBeTruthy();
-    expect(screen.getByText('Code: reader-response-invalid · HTTP 200')).toBeTruthy();
+    expectDiagnostic('Code: reader-response-invalid · HTTP 200');
   });
 
   it('reports a browser-side request timeout with a code and no invented HTTP status', async () => {
@@ -499,7 +521,7 @@ describe('upcoming calendar agenda', () => {
     });
 
     expect(screen.getByText('The Calendar reader request timed out.')).toBeTruthy();
-    expect(screen.getByText('Code: reader-timeout')).toBeTruthy();
+    expectDiagnostic('Code: reader-timeout');
   });
 
   it('shows only safe byte-count metadata for an oversized feed', async () => {

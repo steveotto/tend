@@ -32,6 +32,13 @@ type FailureMetadata = {
   limitBytes?: number;
 };
 
+export type CalendarReaderStage =
+  | 'request_validation'
+  | 'request_body'
+  | 'upstream_fetch'
+  | 'feed_parse'
+  | 'response_serialization';
+
 class CalendarReaderError extends Error {
   constructor(
     readonly code: CalendarFailureCode,
@@ -44,7 +51,8 @@ class CalendarReaderError extends Error {
 function failureResponse(
   status: number,
   code: CalendarFailureCode,
-  metadata: FailureMetadata = {}
+  metadata: FailureMetadata = {},
+  respond: typeof jsonResponse = jsonResponse
 ): Response {
   const messages: Record<CalendarFailureCode, string> = {
     'invalid-request': 'Calendar request is invalid.',
@@ -62,7 +70,7 @@ function failureResponse(
     'feed-retrieval-failed': 'The calendar feed could not be retrieved.',
     'feed-parse-failed': 'The feed could not be parsed as a calendar.'
   };
-  return jsonResponse(status, {
+  return respond(status, {
     code,
     error: messages[code],
     ...(Number.isInteger(metadata.upstreamStatus) ? { upstreamStatus: metadata.upstreamStatus } : {}),
@@ -75,7 +83,13 @@ function failureResponse(
   });
 }
 
-function jsonResponse(status: number, value: unknown, additionalHeaders: HeadersInit = {}): Response {
+function jsonResponse(
+  status: number,
+  value: unknown,
+  additionalHeaders: HeadersInit = {},
+  onSerialize?: () => void
+): Response {
+  onSerialize?.();
   return new Response(JSON.stringify(value), {
     status,
     headers: {
@@ -173,7 +187,8 @@ function validRequestInput(value: unknown): value is {
 async function readFeed(
   rawUrl: string,
   fetchImpl: typeof fetch,
-  signal: AbortSignal
+  signal: AbortSignal,
+  onException?: (stage: CalendarReaderStage, error: unknown) => void
 ): Promise<string> {
   let url = parseFeedUrl(rawUrl);
   for (let redirect = 0; redirect <= maximumRedirects; redirect += 1) {
@@ -187,6 +202,7 @@ async function readFeed(
         signal
       });
     } catch (error) {
+      onException?.('upstream_fetch', error);
       if (signal.aborted || (error instanceof Error && error.name === 'TimeoutError')) {
         throw new CalendarReaderError('upstream-timeout');
       }
@@ -245,6 +261,7 @@ async function readFeed(
       }
     } catch (error) {
       if (error instanceof CalendarReaderError) throw error;
+      onException?.('upstream_fetch', error);
       if (signal.aborted || (error instanceof Error && error.name === 'TimeoutError')) {
         throw new CalendarReaderError('upstream-timeout');
       }
@@ -261,7 +278,8 @@ async function readFeed(
     }
     try {
       return new TextDecoder('utf-8', { fatal: true }).decode(body);
-    } catch {
+    } catch (error) {
+      onException?.('upstream_fetch', error);
       throw new CalendarReaderError('feed-parse-failed');
     }
   }
@@ -270,39 +288,65 @@ async function readFeed(
 
 export async function handleCalendarRead(
   request: Request,
-  options: { fetchImpl?: typeof fetch; timeoutMs?: number } = {}
+  options: {
+    fetchImpl?: typeof fetch;
+    timeoutMs?: number;
+    onStage?: (stage: CalendarReaderStage) => void;
+    onException?: (stage: CalendarReaderStage, error: unknown) => void;
+  } = {}
 ): Promise<Response> {
+  let stage: CalendarReaderStage = 'request_validation';
+  options.onStage?.(stage);
+  const respond = (
+    status: number,
+    value: unknown,
+    additionalHeaders: HeadersInit = {}
+  ) => jsonResponse(status, value, additionalHeaders, () => {
+    stage = 'response_serialization';
+    options.onStage?.(stage);
+  });
+  const fail = (
+    status: number,
+    code: CalendarFailureCode,
+    metadata: FailureMetadata = {}
+  ) => failureResponse(status, code, metadata, respond);
+
   if (request.method !== 'POST') {
-    return jsonResponse(405, { error: 'Method not allowed.' }, { allow: 'POST' });
+    return respond(405, { error: 'Method not allowed.' }, { allow: 'POST' });
   }
 
   const requestUrl = new URL(request.url);
   const origin = request.headers.get('origin');
   if (!origin) {
-    return jsonResponse(403, { code: 'invalid-request', error: 'Calendar request origin is not allowed.' });
+    return respond(403, { code: 'invalid-request', error: 'Calendar request origin is not allowed.' });
   }
   try {
     if (new URL(origin).origin !== requestUrl.origin) {
-      return jsonResponse(403, { code: 'invalid-request', error: 'Calendar request origin is not allowed.' });
+      return respond(403, { code: 'invalid-request', error: 'Calendar request origin is not allowed.' });
     }
   } catch {
-    return jsonResponse(403, { code: 'invalid-request', error: 'Calendar request origin is not allowed.' });
+    return respond(403, { code: 'invalid-request', error: 'Calendar request origin is not allowed.' });
   }
 
   const declaredRequestSize = Number(request.headers.get('content-length'));
   if (Number.isFinite(declaredRequestSize) && declaredRequestSize > maximumRequestBytes) {
-    return failureResponse(413, 'invalid-request', { limitBytes: maximumRequestBytes });
+    return fail(413, 'invalid-request', { limitBytes: maximumRequestBytes });
   }
   if (request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() !== 'application/json') {
-    return failureResponse(400, 'invalid-request');
+    return fail(400, 'invalid-request');
   }
 
   let input: unknown;
   try {
+    stage = 'request_body';
+    options.onStage?.(stage);
     input = JSON.parse(await readRequestBody(request));
   } catch (error) {
     const tooLarge = error instanceof CalendarReaderError && error.metadata.limitBytes === maximumRequestBytes;
-    return failureResponse(tooLarge ? 413 : 400, 'invalid-request', tooLarge
+    if (!(error instanceof SyntaxError) && !(error instanceof CalendarReaderError)) {
+      options.onException?.(stage, error);
+    }
+    return fail(tooLarge ? 413 : 400, 'invalid-request', tooLarge
       ? { limitBytes: maximumRequestBytes }
       : {});
   }
@@ -311,12 +355,12 @@ export async function handleCalendarRead(
     const rejectedUrl = source && typeof source.url === 'string'
       ? calendarFeedUrlError(source.url) !== null
       : false;
-    return failureResponse(rejectedUrl ? 422 : 400, rejectedUrl ? 'url-not-allowed' : 'invalid-request');
+    return fail(rejectedUrl ? 422 : 400, rejectedUrl ? 'url-not-allowed' : 'invalid-request');
   }
   try {
     new Intl.DateTimeFormat('en', { timeZone: input.timeZone }).format();
   } catch {
-    return failureResponse(400, 'invalid-request');
+    return fail(400, 'invalid-request');
   }
 
   const controller = new AbortController();
@@ -325,7 +369,16 @@ export async function handleCalendarRead(
     options.timeoutMs ?? requestTimeoutMs
   );
   try {
-    const raw = await readFeed(input.source.url, options.fetchImpl ?? fetch, controller.signal);
+    stage = 'upstream_fetch';
+    options.onStage?.(stage);
+    const raw = await readFeed(
+      input.source.url,
+      options.fetchImpl ?? fetch,
+      controller.signal,
+      options.onException
+    );
+    stage = 'feed_parse';
+    options.onStage?.(stage);
     const parsed = parseCalendarFeedForRange(
       raw,
       { id: input.source.id, name: input.source.name },
@@ -333,9 +386,10 @@ export async function handleCalendarRead(
       input.rangeEnd,
       input.timeZone
     );
-    if (!parsed.valid) return failureResponse(422, 'feed-parse-failed');
-    return jsonResponse(200, { events: parsed.events, issueCount: parsed.issues.length });
+    if (!parsed.valid) return fail(422, 'feed-parse-failed');
+    return respond(200, { events: parsed.events, issueCount: parsed.issues.length });
   } catch (error) {
+    if (!(error instanceof CalendarReaderError)) options.onException?.(stage, error);
     const readerError = error instanceof CalendarReaderError
       ? error
       : controller.signal.aborted
@@ -346,7 +400,7 @@ export async function handleCalendarRead(
       || readerError.code === 'url-target-not-public'
       ? 422
       : 502;
-    return failureResponse(status, readerError.code, readerError.metadata);
+    return fail(status, readerError.code, readerError.metadata);
   } finally {
     clearTimeout(timeout);
   }

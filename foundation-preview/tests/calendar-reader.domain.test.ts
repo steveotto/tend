@@ -24,13 +24,14 @@ const feed = [
 
 function request(
   body: unknown,
-  options: { origin?: string; method?: string; contentType?: string } = {}
+  options: { origin?: string; method?: string; contentType?: string; requestId?: string } = {}
 ): Request {
   const init: RequestInit = {
     method: options.method ?? 'POST',
     headers: {
       ...(options.origin ? { origin: options.origin } : { origin: 'https://tendwhatmatters.com' }),
-      'content-type': options.contentType ?? 'application/json'
+      'content-type': options.contentType ?? 'application/json',
+      ...(options.requestId ? { 'x-tend-calendar-request-id': options.requestId } : {})
     }
   };
   if (init.method !== 'GET') init.body = JSON.stringify(body);
@@ -55,6 +56,75 @@ function calendarResponse(body = feed, headers: HeadersInit = {}): Response {
 }
 
 describe('Cloudflare Pages Calendar reader', () => {
+  it('processes a larger synthetic feed within the configured feed-size bound', async () => {
+    const manyEvents = Array.from({ length: 1_000 }, (_, index) => [
+      'BEGIN:VEVENT',
+      `UID:synthetic-${index}`,
+      'DTSTART:20261114T130000Z',
+      'DTEND:20261114T140000Z',
+      `SUMMARY:Synthetic event ${index}`,
+      'END:VEVENT'
+    ].join('\r\n')).join('\r\n');
+    const largerFeed = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Tend//Synthetic Test//EN',
+      manyEvents,
+      'END:VCALENDAR',
+      ''
+    ].join('\r\n');
+    const fetchImpl = vi.fn<typeof fetch>(async () => calendarResponse(largerFeed));
+    const response = await handleCalendarRead(request(validBody()), { fetchImpl });
+    const result = await response.json() as {
+      events: Array<{ title: string }>;
+      issueCount: number;
+    };
+
+    expect(new TextEncoder().encode(largerFeed).byteLength).toBeLessThan(5 * 1_048_576);
+    expect(response.status).toBe(200);
+    expect(result.events).toHaveLength(1_000);
+    expect(result.issueCount).toBe(0);
+  });
+
+  it('parses recurrence and reports malformed entries as sanitized issues', async () => {
+    const mixedFeed = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Tend//Synthetic Test//EN',
+      'BEGIN:VEVENT',
+      'UID:daily-fixture',
+      'DTSTART:20261114T130000Z',
+      'DTEND:20261114T140000Z',
+      'RRULE:FREQ=DAILY;COUNT=4',
+      'SUMMARY:Synthetic recurring event',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:malformed-fixture',
+      'DTSTART:NOT-A-DATE',
+      'SUMMARY:Malformed secret entry',
+      'END:VEVENT',
+      'END:VCALENDAR',
+      ''
+    ].join('\r\n');
+    const fetchImpl = vi.fn<typeof fetch>(async () => calendarResponse(mixedFeed));
+    const response = await handleCalendarRead(request(validBody()), { fetchImpl });
+    const responseText = await response.clone().text();
+    const result = JSON.parse(responseText) as {
+      events: Array<{ title: string }>;
+      issueCount: number;
+    };
+
+    expect(response.status).toBe(200);
+    expect(result.events.map(event => event.title)).toEqual([
+      'Synthetic recurring event',
+      'Synthetic recurring event',
+      'Synthetic recurring event',
+      'Synthetic recurring event'
+    ]);
+    expect(result.issueCount).toBe(1);
+    expect(responseText).not.toContain('Malformed secret entry');
+  });
+
   it('parses a synthetic iCalendar feed and normalizes webcal to HTTPS', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => calendarResponse());
     const response = await handleCalendarRead(request(validBody()), { fetchImpl });
@@ -88,6 +158,84 @@ describe('Cloudflare Pages Calendar reader', () => {
 
     expect(response.status).toBe(405);
     expect(response.headers.get('allow')).toBe('POST');
+  });
+
+  it('correlates safe stage telemetry without logging feed or event content', async () => {
+    const requestId = 'c3b19aa7-9e44-4c5f-9f7d-26770998f56a';
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => calendarResponse()));
+    const response = await onRequest({
+      request: request(validBody(), { requestId })
+    });
+    const result = await response.json() as { events: unknown[]; issueCount: number };
+    const entries = log.mock.calls.map(([entry]) => JSON.parse(String(entry)) as {
+      requestId: string;
+      stage?: string;
+      outcome?: string;
+      elapsedMs?: number;
+      status?: number;
+    });
+
+    expect(response.headers.get('x-tend-calendar-request-id')).toBe(requestId);
+    expect(result.events).toHaveLength(1);
+    expect(entries.every(entry => entry.requestId === requestId)).toBe(true);
+    expect(entries.map(entry => entry.stage)).toEqual(expect.arrayContaining([
+      'request_validation',
+      'request_body',
+      'upstream_fetch',
+      'feed_parse',
+      'response_serialization',
+      'request_complete'
+    ]));
+    const elapsedValues = entries.flatMap(entry => entry.elapsedMs === undefined ? [] : [entry.elapsedMs]);
+    expect(elapsedValues.every(value => Number.isSafeInteger(value) && value >= 0)).toBe(true);
+    expect(entries.find(entry => entry.stage === 'request_complete')).toMatchObject({
+      outcome: 'ok',
+      status: 200
+    });
+    const loggedText = log.mock.calls.map(([entry]) => String(entry)).join('\n');
+    expect(loggedText).not.toContain('Synthetic event');
+    expect(loggedText).not.toContain(source.url);
+  });
+
+  it('logs only the exception class for an upstream runtime error', async () => {
+    const requestId = 'c3b19aa7-9e44-4c5f-9f7d-26770998f56a';
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new TypeError('private upstream response detail');
+    }));
+    const response = await onRequest({
+      request: request(validBody(), { requestId })
+    });
+    const entries = log.mock.calls.map(([entry]) => JSON.parse(String(entry)) as {
+      requestId: string;
+      stage?: string;
+      outcome?: string;
+      exceptionType?: string;
+    });
+    const exceptionEntry = entries.find(entry => entry.outcome === 'exception');
+    const loggedText = log.mock.calls.map(([entry]) => String(entry)).join('\n');
+
+    expect(response.status).toBe(502);
+    expect(exceptionEntry).toMatchObject({
+      requestId,
+      stage: 'upstream_fetch',
+      exceptionType: 'TypeError'
+    });
+    expect(loggedText).not.toContain('private upstream response detail');
+    expect(loggedText).not.toContain(source.url);
+  });
+
+  it('returns a server-generated correlation ID when the supplied ID is malformed', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const response = await onRequest({
+      request: request(null, { requestId: 'private-not-an-id', method: 'GET' })
+    });
+    const requestId = response.headers.get('x-tend-calendar-request-id');
+
+    expect(requestId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    expect(log.mock.calls.map(([entry]) => String(entry)).join('\n'))
+      .not.toContain('private-not-an-id');
   });
 
   it('rejects disallowed URLs without making an upstream request or echoing private text', async () => {

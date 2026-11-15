@@ -316,6 +316,31 @@ describe('calendar feed reader', () => {
     expect(cancelled.valid && cancelled.events).toEqual([]);
   });
 
+  it('stops recurrence expansion at the existing per-event processing bound', () => {
+    const raw = calendar([
+      'BEGIN:VEVENT',
+      'UID:bounded-daily',
+      'DTSTART:18000101T090000Z',
+      'DTEND:18000101T093000Z',
+      'RRULE:FREQ=DAILY',
+      'SUMMARY:Bounded synthetic recurrence',
+      'END:VEVENT'
+    ].join('\r\n'));
+
+    const result = parseCalendarFeedForRange(
+      raw,
+      source,
+      Date.parse('2026-11-14T00:00:00Z'),
+      Date.parse('2026-12-15T00:00:00Z'),
+      'UTC'
+    );
+
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.events).toEqual([]);
+    expect(result.issues).toEqual([{ eventNumber: 1, kind: 'expansion-limit' }]);
+  });
+
   it('uses the feed time zone across a daylight-saving transition and the viewer local-day boundary', () => {
     const raw = calendar([
       'BEGIN:VEVENT',
