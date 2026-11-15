@@ -65,8 +65,8 @@ describe('Calendar settings to local-reader flow', () => {
         .map(element => element.textContent);
       expect(eventTimes).toHaveLength(3);
       expect(eventTimes?.[0]).toMatch(/^[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{1,2} · All day$/);
-      expect(eventTimes?.[1]).toMatch(/^[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{1,2} · \d{1,2}:\d{2} [AP]M–\d{1,2}:\d{2} [AP]M$/);
-      expect(eventTimes?.[2]).toMatch(/^[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{1,2} · \d{1,2}:\d{2} [AP]M–\d{1,2}:\d{2} [AP]M$/);
+      expect(eventTimes?.[1]).toMatch(/^[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{1,2} · \d{1,2}:\d{2} [AP]M–(?:[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{1,2}, )?\d{1,2}:\d{2} [AP]M$/);
+      expect(eventTimes?.[2]).toMatch(/^[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{1,2} · \d{1,2}:\d{2} [AP]M–(?:[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{1,2}, )?\d{1,2}:\d{2} [AP]M$/);
     } finally {
       vi.unstubAllGlobals();
       await new Promise<void>((resolve, reject) => {

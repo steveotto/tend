@@ -295,7 +295,57 @@ describe('upcoming calendar agenda', () => {
     expectNoCalendarOuterCard();
   });
 
+  it('updates ended-today styling across ranges from the clock without rereading feeds', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    vi.setSystemTime(new Date('2026-11-30T14:29:30Z'));
+    const user = userEvent.setup();
+    const source = { id: 'calendar', name: 'Synthetic', url: 'https://p.icloud.com/a' };
+    const recentlyEnded = {
+      ...event('ended', 'Synthetic event ending soon', source.name, Date.parse('2026-11-30T14:00:00Z')),
+      endsAt: Date.parse('2026-11-30T14:30:00Z')
+    };
+    const endingLater = {
+      ...event('ongoing', 'Synthetic event still ongoing', source.name, Date.parse('2026-11-30T14:00:00Z')),
+      endsAt: Date.parse('2026-11-30T14:31:00Z')
+    };
+    const fetchMock = vi.fn().mockResolvedValue(response({
+      events: [recentlyEnded, endingLater],
+      issueCount: 0
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    renderCalendar([source]);
+
+    expect(await screen.findByText(recentlyEnded.title)).toBeTruthy();
+    const endedRow = screen.getByText(recentlyEnded.title).closest('.calendar-event');
+    const ongoingRow = screen.getByText(endingLater.title).closest('.calendar-event');
+    expect(endedRow).toBeTruthy();
+    expect(ongoingRow).toBeTruthy();
+    expect(endedRow?.classList.contains('calendar-event--past')).toBe(false);
+    expect(ongoingRow?.classList.contains('calendar-event--past')).toBe(false);
+
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(endedRow?.classList.contains('calendar-event--past')).toBe(true);
+    expect(ongoingRow?.classList.contains('calendar-event--past')).toBe(false);
+
+    await act(async () => {
+      vi.setSystemTime(new Date('2026-11-30T14:31:00Z'));
+      window.dispatchEvent(new Event('focus'));
+    });
+    expect(ongoingRow?.classList.contains('calendar-event--past')).toBe(true);
+
+    for (const range of ['Week', 'Month'] as const) {
+      await user.click(screen.getByRole('button', { name: range }));
+      const eventList = screen.getByRole('list', { name: `Calendar events for ${range.toLowerCase()}` });
+      expect(eventList.querySelectorAll('.calendar-event--past')).toHaveLength(2);
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps successful events when a source fails and retries only after user action', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    vi.setSystemTime(new Date('2026-11-30T12:00:00Z'));
     const user = userEvent.setup();
     const now = Date.now();
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {

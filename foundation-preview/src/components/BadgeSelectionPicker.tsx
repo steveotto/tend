@@ -1,7 +1,24 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 type IdentifiedItem = { id: string };
+
+export type BadgeSelectionDetailOption = {
+  id: string;
+  label: string;
+  content: ReactNode;
+  selected: boolean;
+};
+
+export type BadgeSelectionNavigation<Item> = {
+  getSummary: (item: Item) => readonly string[];
+  hasValidSelection: (item: Item) => boolean;
+  getDetail: (item: Item) => {
+    description: ReactNode;
+    optionsLabel: string;
+    options: readonly BadgeSelectionDetailOption[];
+  };
+};
 
 export type BadgeSelectionGroup<Id extends string = string> = {
   id: string;
@@ -36,6 +53,7 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
   focusItemId,
   description,
   renderSelectedItemContent,
+  navigation,
   onToggle,
   onToggleGroup,
   doneLabel = 'Done',
@@ -57,6 +75,7 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
   focusItemId?: string | null;
   description?: ReactNode;
   renderSelectedItemContent?: (item: Item) => ReactNode;
+  navigation?: BadgeSelectionNavigation<Item>;
   onToggle: (id: Item['id']) => void;
   onToggleGroup?: (ids: readonly Item['id'][]) => void;
   doneLabel?: string;
@@ -64,18 +83,128 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
   onCancel: () => void;
 }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const detailHeadingRef = useRef<HTMLHeadingElement>(null);
+  const categoryButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const returnFocusId = useRef<string | null>(null);
+  const focusedItemId = useRef<string | null>(null);
+  const [detailItemId, setDetailItemId] = useState<string | null>(null);
+  const hasNavigation = Boolean(navigation);
 
   useEffect(() => {
-    if (focusItemId) {
-      Array.from(document.querySelectorAll<HTMLButtonElement>('[data-picker-item-id]'))
-        .find(button => button.dataset.pickerItemId === focusItemId)
+    if (focusItemId && focusItemId !== focusedItemId.current) {
+      focusedItemId.current = focusItemId;
+      setDetailItemId(null);
+      Array.from(document.querySelectorAll<HTMLButtonElement>('[data-picker-category-id], [data-picker-item-id]'))
+        .find(button =>
+          button.dataset.pickerCategoryId === focusItemId
+          || button.dataset.pickerItemId === focusItemId
+        )
         ?.focus();
+      return;
+    }
+    if (!focusItemId) focusedItemId.current = null;
+    if (navigation && detailItemId) {
+      detailHeadingRef.current?.focus();
+    } else if (returnFocusId.current) {
+      categoryButtonRefs.current.get(returnFocusId.current)?.focus();
+      returnFocusId.current = null;
     } else {
       headingRef.current?.focus();
     }
-  }, [focusItemId]);
+  }, [detailItemId, focusItemId, hasNavigation]);
 
   const availableIds = new Set(items.map(item => item.id));
+  const detailItem = navigation
+    ? items.find(item => item.id === detailItemId)
+    : undefined;
+  const selectedCategoryCount = navigation
+    ? items.filter(item => selectedIds.includes(item.id)).length
+    : 0;
+  const selectedCategoryCountLabel = `${selectedCategoryCount} ${selectedCategoryCount === 1 ? 'category' : 'categories'} selected`;
+
+  if (navigation && detailItem) {
+    const detail = navigation.getDetail(detailItem);
+    const categorySelected = selectedIds.includes(detailItem.id);
+    const returnToList = () => {
+      returnFocusId.current = detailItem.id;
+      setDetailItemId(null);
+    };
+
+    return (
+      <section
+        className="rhythm-association-picker rhythm-association-picker__category-detail"
+        aria-labelledby="rhythm-association-picker-title"
+        onKeyDown={event => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            onCancel();
+          }
+        }}
+      >
+        <button
+          type="button"
+          className="rhythm-association-picker__back"
+          onClick={returnToList}
+        >
+          <span aria-hidden="true">‹</span>
+          Categories
+        </button>
+        <h3 id="rhythm-association-picker-title" ref={detailHeadingRef} tabIndex={-1}>
+          {getLabel(detailItem)}
+        </h3>
+        <p className="rhythm-association-picker__description">{detail.description}</p>
+        <button
+          type="button"
+          className="rhythm-association-picker__category-toggle"
+          aria-label={`${categorySelected ? 'Remove' : 'Add'} ${getLabel(detailItem)} category`}
+          aria-pressed={categorySelected}
+          data-selected={categorySelected ? 'true' : 'false'}
+          onClick={() => onToggle(detailItem.id)}
+        >
+          <span className="rhythm-association-picker__selection-indicator" aria-hidden="true">
+            {categorySelected ? '✓' : ''}
+          </span>
+          <span>{categorySelected ? 'Included in this Rhythm' : 'Include in this Rhythm'}</span>
+        </button>
+        <div
+          className="rhythm-association-picker__detail-options"
+          role="group"
+          aria-label={detail.optionsLabel}
+        >
+          {detail.options.length > 0 ? detail.options.map(option => {
+            const selected = option.selected;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                className="rhythm-association-picker__detail-option"
+                data-picker-item-id={option.id}
+                aria-label={option.label}
+                aria-pressed={selected}
+                data-selected={selected ? 'true' : 'false'}
+                onClick={() => onToggle(option.id)}
+              >
+                <span className="rhythm-association-picker__detail-option-content">
+                  {option.content}
+                </span>
+                <span className="rhythm-association-picker__selection-indicator" aria-hidden="true">
+                  {selected ? '✓' : ''}
+                </span>
+              </button>
+            );
+          }) : <p className="rhythm-association-picker__empty">{emptyMessage}</p>}
+        </div>
+        <div className="money-goal-dialog__actions rhythm-association-picker__actions">
+          <span className="rhythm-association-picker__selection-count" aria-live="polite">
+            {selectedCategoryCountLabel}
+          </span>
+          <button type="button" className="btn mini" onClick={returnToList}>Done</button>
+          <button type="button" className="btn mini ghost" onClick={onCancel}>Cancel</button>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section
@@ -159,9 +288,11 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
         </>
       ) : (
         <div
-          className={`rhythm-association-picker__options${renderSelectedItemContent ? ' rhythm-association-picker__options--expanded' : ''}`}
+          className={navigation
+            ? 'rhythm-association-picker__category-list'
+            : `rhythm-association-picker__options${renderSelectedItemContent ? ' rhythm-association-picker__options--expanded' : ''}`}
           role="group"
-          aria-label={title}
+          aria-label={navigation ? 'Available categories' : title}
         >
           {(groupBy
             ? [...new Set(items.map(groupBy))]
@@ -177,10 +308,66 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
                 aria-label={groupLabel}
               >
                 {groupLabel && <h4>{groupLabel}</h4>}
-                <div className="rhythm-association-picker__option-grid">
+                <div className={navigation
+                  ? 'rhythm-association-picker__category-rows'
+                  : 'rhythm-association-picker__option-grid'}>
                   {groupItems.map(item => {
                     const selected = selectedIds.includes(item.id);
                     const label = getLabel(item);
+                    if (navigation) {
+                      const summary = navigation.getSummary(item);
+                      const valid = navigation.hasValidSelection(item);
+                      const summaryText = summary.length > 0
+                        ? summary.join(', ')
+                        : selected ? 'Choose a Practice or Foundation' : '';
+                      const statusId = `rhythm-category-status-${item.id}`;
+                      return (
+                        <button
+                          key={item.id}
+                          ref={button => {
+                            if (button) categoryButtonRefs.current.set(item.id, button);
+                            else categoryButtonRefs.current.delete(item.id);
+                          }}
+                          type="button"
+                          className="rhythm-association-picker__category-row"
+                          data-picker-category-id={item.id}
+                          aria-label={label}
+                          aria-describedby={statusId}
+                          onClick={() => setDetailItemId(item.id)}
+                        >
+                          <span className="rhythm-association-picker__category-row-main">
+                            <span className="rhythm-association-picker__category-label">
+                              {renderBadge(item)}
+                            </span>
+                            {summaryText && (
+                              <span
+                                className="rhythm-association-picker__category-summary"
+                                title={summaryText}
+                              >
+                                {summaryText}
+                              </span>
+                            )}
+                          </span>
+                          <span className="rhythm-association-picker__category-row-status">
+                            {valid && (
+                              <span className="rhythm-association-picker__selection-indicator" aria-hidden="true">
+                                ✓
+                              </span>
+                            )}
+                            <span className="rhythm-association-picker__chevron" aria-hidden="true">›</span>
+                          </span>
+                          <span className="visually-hidden" id={statusId}>
+                            {`${valid
+                              ? 'This category has a valid Practice or Foundation selection.'
+                              : selected
+                                ? 'This selected category still needs a valid Practice or Foundation selection.'
+                                : 'Open to choose this category and its Practices or Foundations.'}${
+                                  summary.length > 0 ? ` Selected: ${summary.join(', ')}.` : ''
+                                }`}
+                          </span>
+                        </button>
+                      );
+                    }
                     const selectedContent = selected && renderSelectedItemContent
                       ? renderSelectedItemContent(item)
                       : null;
@@ -251,6 +438,11 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
         </div>
       )}
       <div className="money-goal-dialog__actions rhythm-association-picker__actions">
+        {navigation && (
+          <span className="rhythm-association-picker__selection-count" aria-live="polite">
+            {selectedCategoryCountLabel}
+          </span>
+        )}
         <button type="button" className="btn mini" onClick={onDone}>{doneLabel}</button>
         <button type="button" className="btn mini ghost" onClick={onCancel}>Cancel</button>
       </div>

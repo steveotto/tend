@@ -12,7 +12,7 @@ export function CalendarEventRow({
 }) {
   const presentation = formatCalendarEventPresentation(event, now, timeZone);
   return (
-    <li className="calendar-event">
+    <li className={`calendar-event${presentation.isPast ? ' calendar-event--past' : ''}`}>
       <time className="calendar-event__date-tile" dateTime={new Date(event.startsAt).toISOString()}>
         <span className="calendar-event__month">{presentation.month}</span>
         <span className="calendar-event__day">{presentation.day}</span>

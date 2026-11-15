@@ -97,6 +97,78 @@ describe('Today Prayer module', () => {
     expect(onPray).not.toHaveBeenCalled();
   });
 
+  it('disables Back and Skip at the first and last request without wrapping', async () => {
+    const user = userEvent.setup();
+    const onPray = vi.fn(() => null);
+    const firstRequest = syntheticPrayerRequests[0];
+    if (!firstRequest) throw new Error('Synthetic prayer fixture is missing its first request.');
+    const requests = [
+      ...syntheticPrayerRequests,
+      { ...firstRequest, id: 'sample-prayer-request-third' }
+    ];
+    render(
+      <TodayPrayerModule
+        requests={requests}
+        evaluationInstant={new Date('2026-11-11T13:30:00.000Z')}
+        timeZone="UTC"
+        onPray={onPray}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Start focused prayer for 3 requests' }));
+    const session = screen.getByRole('dialog', { name: 'One request at a time' });
+    const back = within(session).getByRole('button', { name: 'Back' });
+    const skip = within(session).getByRole('button', { name: 'Skip' });
+    expect(within(session).getByText('Request 1 of 3')).toBeTruthy();
+    expect((back as HTMLButtonElement).disabled).toBe(true);
+    expect((skip as HTMLButtonElement).disabled).toBe(false);
+
+    await user.keyboard('{ArrowLeft}');
+    expect(within(session).getByText('Request 1 of 3')).toBeTruthy();
+    await user.click(skip);
+    expect(within(session).getByText('Request 2 of 3')).toBeTruthy();
+    expect((back as HTMLButtonElement).disabled).toBe(false);
+    expect((skip as HTMLButtonElement).disabled).toBe(false);
+
+    await user.keyboard('{ArrowRight}');
+    expect(within(session).getByText('Request 3 of 3')).toBeTruthy();
+    expect((skip as HTMLButtonElement).disabled).toBe(true);
+    await user.keyboard('{ArrowRight}');
+    expect(within(session).getByText('Request 3 of 3')).toBeTruthy();
+    await user.click(skip);
+    expect(within(session).getByText('Request 3 of 3')).toBeTruthy();
+
+    await user.click(back);
+    expect(within(session).getByText('Request 2 of 3')).toBeTruthy();
+    await user.keyboard('{ArrowLeft}');
+    expect(within(session).getByText('Request 1 of 3')).toBeTruthy();
+    await user.keyboard('{ArrowLeft}');
+    expect(within(session).getByText('Request 1 of 3')).toBeTruthy();
+    expect((back as HTMLButtonElement).disabled).toBe(true);
+    expect(onPray).not.toHaveBeenCalled();
+  });
+
+  it('disables both navigation actions for a single-request session', async () => {
+    const user = userEvent.setup();
+    const onPray = vi.fn(() => null);
+    render(
+      <TodayPrayerModule
+        requests={syntheticPrayerRequests.slice(0, 1)}
+        evaluationInstant={new Date('2026-11-11T13:30:00.000Z')}
+        timeZone="UTC"
+        onPray={onPray}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Start focused prayer for 1 request' }));
+    const session = screen.getByRole('dialog', { name: 'One request at a time' });
+    expect((within(session).getByRole('button', { name: 'Back' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(session).getByRole('button', { name: 'Skip' }) as HTMLButtonElement).disabled).toBe(true);
+    await user.keyboard('{ArrowLeft}{ArrowRight}');
+    expect(within(session).getByText('Request 1 of 1')).toBeTruthy();
+    expect(onPray).not.toHaveBeenCalled();
+  });
+
   it('uses Escape to end the session without logging a prayer', async () => {
     const user = userEvent.setup();
     const onPray = vi.fn(() => null);

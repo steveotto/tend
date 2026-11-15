@@ -1,6 +1,6 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useScoringInstant } from '../src/components/useScoringInstant.ts';
+import { useCurrentInstant } from '../src/components/useCurrentInstant.ts';
 import { localDateString } from '../src/domain/money-goals.ts';
 
 afterEach(() => {
@@ -9,12 +9,12 @@ afterEach(() => {
 });
 
 describe('Today evaluation clock', () => {
-  it('uses the existing scoring clock through local midnight and foreground refresh', () => {
+  it('uses the shared current-time clock through local midnight and foreground refresh', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 9, 27, 23, 59, 30));
 
     function ClockDate() {
-      const instant = useScoringInstant();
+      const instant = useCurrentInstant();
       return <output>{localDateString(instant)}</output>;
     }
 

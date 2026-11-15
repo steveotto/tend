@@ -2486,6 +2486,23 @@ a:focus-visible {
     overflow-wrap: anywhere;
   }
 
+  .calendar-event--past {
+    background: var(--tend-surface);
+  }
+
+  .calendar-event--past .calendar-event__month {
+    background: #e8eaed;
+    color: #5f6368;
+  }
+
+  .calendar-event--past .calendar-event__date-tile,
+  .calendar-event--past .calendar-event__day,
+  .calendar-event--past .calendar-event__details strong,
+  .calendar-event--past .calendar-event__date-time,
+  .calendar-event--past .calendar-event__relative {
+    color: #62676b;
+  }
+
   .today-calendar-section .calendar-feed-failure,
   .today-calendar-section .calendar-feed-issue {
     margin: 0;
@@ -15690,8 +15707,247 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   padding: 20px;
 }
 
+.money-goal-dialog--association-picker .money-goal-dialog__surface > h2 {
+  min-width: 0;
+  margin: 0 0 10px;
+  overflow-wrap: anywhere;
+}
+
 .money-goal-dialog--association-picker .rhythm-association-picker__options {
   max-height: min(46vh, 360px);
+}
+
+.money-goal-dialog--category-picker .rhythm-association-picker__category-list {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+  max-height: min(58vh, 500px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px;
+}
+
+.money-goal-dialog--category-picker .rhythm-association-picker__category-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  min-height: 58px;
+  padding: 9px 12px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.money-goal-dialog--category-picker .rhythm-association-picker__category-row:hover {
+  background: color-mix(in srgb, var(--tend-mist) 40%, var(--tend-surface));
+}
+
+.money-goal-dialog--category-picker .rhythm-association-picker__category-row:focus-visible,
+.money-goal-dialog--category-picker .rhythm-association-picker__back:focus-visible,
+.money-goal-dialog--category-picker .rhythm-association-picker__category-toggle:focus-visible,
+.money-goal-dialog--category-picker .rhythm-association-picker__detail-option:focus-visible {
+  outline: 2px solid var(--tend-forest);
+  outline-offset: 2px;
+}
+
+.rhythm-association-picker__category-row-main {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.rhythm-association-picker__category-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  font: 600 calc(14px * var(--app-text-scale, 1))/1.3 var(--tend-font-ui);
+  overflow-wrap: anywhere;
+}
+
+.rhythm-association-picker__category-summary {
+  display: -webkit-box;
+  min-width: 0;
+  margin-left: 41px;
+  overflow: hidden;
+  color: var(--ink-muted);
+  font: 400 calc(11px * var(--app-text-scale, 1))/1.35 var(--tend-font-ui);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.rhythm-association-picker__category-row-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--tend-secondary);
+}
+
+.rhythm-association-picker__selection-indicator {
+  display: inline-grid;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  box-sizing: border-box;
+  border: 1px solid var(--tend-line);
+  border-radius: 50%;
+  background: var(--tend-surface);
+  color: var(--tend-forest);
+  font: 700 13px/1 var(--tend-font-ui);
+}
+
+.rhythm-association-picker__category-row-status .rhythm-association-picker__selection-indicator {
+  border-color: var(--tend-forest);
+  background: #e4f2eb;
+}
+
+.rhythm-association-picker__chevron {
+  color: var(--ink-muted);
+  font: 400 24px/1 var(--tend-font-ui);
+}
+
+.rhythm-association-picker__category-detail {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rhythm-association-picker__back {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 7px;
+  min-width: 44px;
+  min-height: 44px;
+  margin: -7px 0 -4px -8px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tend-forest);
+  font: 600 calc(13px * var(--app-text-scale, 1))/1.25 var(--tend-font-ui);
+  cursor: pointer;
+}
+
+.rhythm-association-picker__back:hover {
+  background: color-mix(in srgb, var(--tend-mist) 54%, transparent);
+}
+
+.rhythm-association-picker__back > span {
+  font-size: 22px;
+  line-height: .8;
+}
+
+.rhythm-association-picker__category-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 11px;
+  border: 1px solid var(--tend-line);
+  border-radius: 11px;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+  font: 550 calc(13px * var(--app-text-scale, 1))/1.3 var(--tend-font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.rhythm-association-picker__category-toggle[data-selected="true"] {
+  border-color: color-mix(in srgb, var(--tend-forest) 38%, var(--tend-line));
+  background: #f0f7f3;
+  color: var(--tend-forest);
+}
+
+.rhythm-association-picker__detail-options {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+  max-height: min(46vh, 360px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px;
+}
+
+.rhythm-association-picker__detail-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  min-height: 54px;
+  padding: 7px 11px;
+  border: 1px solid var(--tend-line);
+  border-radius: 11px;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.rhythm-association-picker__detail-option:hover,
+.rhythm-association-picker__category-toggle:hover {
+  background: color-mix(in srgb, var(--tend-mist) 42%, var(--tend-surface));
+}
+
+.rhythm-association-picker__detail-option[data-selected="true"] {
+  border-color: color-mix(in srgb, var(--tend-forest) 46%, var(--tend-line));
+  background: #eaf4ee;
+  color: var(--tend-forest);
+}
+
+.rhythm-association-picker__detail-option[data-selected="true"]:hover {
+  background: #eaf4ee;
+}
+
+.rhythm-association-picker__detail-option-content {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  font: 500 calc(13px * var(--app-text-scale, 1))/1.35 var(--tend-font-ui);
+  overflow-wrap: anywhere;
+}
+
+.rhythm-association-picker__detail-option-content .rhythm-association-picker__foundation-icon {
+  flex: 0 0 32px;
+}
+
+.rhythm-association-picker__detail-option[data-selected="true"] .rhythm-association-picker__selection-indicator,
+.rhythm-association-picker__category-toggle[data-selected="true"] .rhythm-association-picker__selection-indicator {
+  border-color: var(--tend-forest);
+  background: #e4f2eb;
+}
+
+.rhythm-association-picker__selection-count {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--ink-muted);
+  font: 400 calc(11px * var(--app-text-scale, 1))/1.35 var(--tend-font-ui);
+}
+
+@media (max-width: 380px) {
+  .money-goal-dialog--category-picker .rhythm-association-picker__category-row {
+    gap: 8px;
+    padding-inline: 9px;
+  }
+
+  .rhythm-association-picker__category-summary {
+    margin-left: 0;
+  }
 }
 
 @media (max-width: 520px) {
@@ -18282,6 +18538,36 @@ dialog.money-goal-dialog:not(.money-goal-dialog--rhythm-editor):not(.dialog--pho
     right: max(16px, env(safe-area-inset-right, 0px));
   }
 
+  .money-goal-dialog--association-picker.dialog--phone-fullscreen > .money-goal-dialog__surface {
+    min-height: 0;
+  }
+
+  .money-goal-dialog--association-picker.dialog--phone-fullscreen .rhythm-association-picker {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .money-goal-dialog--association-picker.dialog--phone-fullscreen .rhythm-association-picker > h3,
+  .money-goal-dialog--association-picker.dialog--phone-fullscreen .rhythm-association-picker__groups {
+    flex: 0 0 auto;
+  }
+
+  .money-goal-dialog--association-picker.dialog--phone-fullscreen .rhythm-association-picker__options {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    overscroll-behavior: contain;
+  }
+
+  .money-goal-dialog--association-picker.dialog--phone-fullscreen .rhythm-association-picker__actions {
+    flex: 0 0 auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--tend-line);
+  }
+
   .tend-app-preview .person-details-dialog.dialog--phone-fullscreen .money-goal-dialog__surface > h2 {
     padding-right: 52px;
     overflow-wrap: anywhere;
@@ -18722,6 +19008,13 @@ dialog.money-goal-dialog:not(.money-goal-dialog--rhythm-editor):not(.dialog--pho
     min-height: 0;
     max-height: none;
     overscroll-behavior: contain;
+  }
+
+  .money-goal-dialog--category-picker .rhythm-association-picker__category-list,
+  .money-goal-dialog--category-picker .rhythm-association-picker__detail-options {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
   }
 
   .money-goal-dialog--category-picker .rhythm-association-picker__actions {
@@ -24151,6 +24444,9 @@ button.person-health-component-score:focus-visible {
   --tend-prayer-text: #705a8d;
   --tend-prayer-action: #80629a;
   --tend-prayer-active: #dccee8;
+  --tend-prayer-disabled-bg: #faf8fc;
+  --tend-prayer-disabled-border: #ded5e7;
+  --tend-prayer-disabled-text: #8f7da1;
   box-sizing: border-box;
   width: min(960px, calc(100vw - 32px));
   max-width: min(960px, calc(100vw - 32px));
@@ -24329,6 +24625,31 @@ button.person-health-component-score:focus-visible {
 
 .faith-session-actions > .btn:hover:not(:disabled) {
   background: var(--tend-prayer-surface);
+}
+
+.faith-session-actions > [data-faith-session-back],
+.faith-session-actions > [data-faith-session-skip] {
+  background: var(--tend-prayer-surface);
+}
+
+.faith-session-actions > [data-faith-session-back]:hover:not(:disabled),
+.faith-session-actions > [data-faith-session-skip]:hover:not(:disabled) {
+  background: var(--tend-prayer-hover);
+}
+
+.faith-session-actions > [data-faith-session-back]:active:not(:disabled),
+.faith-session-actions > [data-faith-session-skip]:active:not(:disabled) {
+  border-color: var(--tend-prayer-text);
+  background: var(--tend-prayer-active);
+}
+
+.faith-prayer-session .faith-session-actions > button[data-faith-session-back]:disabled,
+.faith-prayer-session .faith-session-actions > button[data-faith-session-skip]:disabled {
+  border-color: var(--tend-prayer-disabled-border);
+  background: var(--tend-prayer-disabled-bg);
+  color: var(--tend-prayer-disabled-text);
+  cursor: not-allowed;
+  transition: none;
 }
 
 .faith-session-actions > .faith-session-prayed {

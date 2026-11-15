@@ -1,6 +1,6 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { useScoringInstant } from '../src/components/useScoringInstant.ts';
+import { useCurrentInstant } from '../src/components/useCurrentInstant.ts';
 
 afterEach(() => {
   cleanup();
@@ -11,7 +11,7 @@ it('refreshes across midnight and on return to the page, then cleans up its time
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-10-27T23:59:30Z'));
   function Clock() {
-    return <output aria-label="Evaluation instant">{useScoringInstant().toISOString()}</output>;
+    return <output aria-label="Evaluation instant">{useCurrentInstant().toISOString()}</output>;
   }
   const view = render(<Clock />);
   expect(screen.getByLabelText('Evaluation instant').textContent).toBe('2026-10-27T23:59:30.000Z');

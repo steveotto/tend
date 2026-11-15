@@ -2,7 +2,7 @@ import { isValidDate } from './money-goals.ts';
 import type { RhythmPreview } from './preview-data.ts';
 import { hasRhythmOccurrenceForCompletion } from './rhythm-occurrences.ts';
 import { isPeriodBasedRhythmSchedule, rhythmOccurrencePeriod } from './rhythm-occurrences.ts';
-import { effectiveRhythmSchedule } from './rhythm-schedule.ts';
+import { rhythmScheduleForDate } from './rhythm-schedule.ts';
 import { rhythmSeasonForDate } from './rhythm-seasons.ts';
 import type { RhythmSchedule } from './rhythm-schedule.ts';
 import {
@@ -394,12 +394,7 @@ export function weightRhythmScheduleForDate(
   rhythm: RhythmPreview | undefined,
   date: string
 ): RhythmSchedule | undefined {
-  if (!rhythm || !isValidDate(date)) return undefined;
-  if (rhythm.scoring) {
-    const season = rhythmSeasonForDate(rhythm.scoring.scheduleHistory, date);
-    return season?.kind === 'scheduled' ? season.schedule : undefined;
-  }
-  return effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
+  return rhythm ? rhythmScheduleForDate(rhythm, date) : undefined;
 }
 
 export type WeightCompletionState = {

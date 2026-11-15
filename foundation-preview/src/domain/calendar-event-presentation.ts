@@ -5,6 +5,7 @@ type CalendarEventPresentation = {
   day: string;
   dateTime: string;
   relativeDate: string;
+  isPast: boolean;
 };
 
 type LocalDateParts = { year: number; month: number; day: number };
@@ -61,7 +62,11 @@ export function formatCalendarEventPresentation(
   const start = new Date(event.startsAt);
   const startParts = localDateParts(event.startsAt, timeZone);
   const todayParts = localDateParts(now, timeZone);
+  const endParts = localDateParts(event.endsAt, timeZone);
   const daysFromToday = dateOrdinal(startParts) - dateOrdinal(todayParts);
+  const isPast = !event.allDay
+    && event.endsAt <= now
+    && dateOrdinal(endParts) === dateOrdinal(todayParts);
   const dateTime = event.allDay
     ? `${abbreviatedDate(event.startsAt, timeZone)} · All day`
     : `${abbreviatedDate(event.startsAt, timeZone)} · ${formattedTime(event.startsAt, timeZone)}${
@@ -78,6 +83,7 @@ export function formatCalendarEventPresentation(
       .toLocaleUpperCase('en-US'),
     day: String(startParts.day),
     dateTime,
-    relativeDate: relativeDateLabel(daysFromToday)
+    relativeDate: relativeDateLabel(daysFromToday),
+    isPast
   };
 }
