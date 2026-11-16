@@ -3196,6 +3196,50 @@ function PreviewWorkspace({
     return written.message;
   }
 
+  function finishTargetedRepair(resultData: PreviewData, expectedLocalRaw: string): string | null {
+    if (expectedRaw.current !== expectedLocalRaw) {
+      return 'This browser’s preview changed after confirmation. No local data was replaced.';
+    }
+    const written = writeCurrentPreview(resultData, expectedLocalRaw, {
+      allowTargetedRepair: true,
+      currentDate,
+      operation: 'repair'
+    });
+    refreshV29RecoveryCopy();
+    refreshV30RecoveryCopy();
+    refreshV1RecoveryCopy();
+    refreshV2RecoveryCopy();
+    refreshV3RecoveryCopy();
+    refreshV4RecoveryCopy();
+    refreshV5RecoveryCopy();
+    refreshV6RecoveryCopy();
+    refreshV7RecoveryCopy();
+    refreshV8RecoveryCopy();
+    refreshV9RecoveryCopy();
+    if (written.kind === 'saved') {
+      expectedRaw.current = written.raw;
+      externalRaw.current = null;
+      skipNextAutosave.current = true;
+      setPreviewData(resultData);
+      setAutoSaveEnabled(true);
+      setPersistenceStatus({ kind: 'saved' });
+      return null;
+    }
+    if (written.kind === 'conflict') {
+      externalRaw.current = written.actualRaw;
+      setAutoSaveEnabled(false);
+      setPersistenceStatus({ kind: 'conflict' });
+      return 'Preview storage changed in another tab. No data was replaced.';
+    }
+    setAutoSaveEnabled(false);
+    setPersistenceStatus({
+      kind: 'error',
+      message: written.message,
+      ...(written.diagnostic ? { diagnostic: written.diagnostic } : {})
+    });
+    return written.message;
+  }
+
   function reloadExternal(): string | null {
     const raw = externalRaw.current;
     if (raw === null) {
@@ -3522,6 +3566,17 @@ function PreviewWorkspace({
                 return 'This browser’s preview changed after confirmation. No local data was replaced.';
               }
               const writeError = finishWrite(data, false, 'replace');
+              if (!writeError) refreshCloudRestoreRecoveryCopy();
+              return writeError;
+            }}
+            onRepair={(data, expectedLocalRaw) => {
+              if (!isIdentityCurrent() || !(isAccountBackupIdentityCurrent?.() ?? true)) {
+                return 'Preview identity changed. No local data was replaced.';
+              }
+              if (expectedRaw.current !== expectedLocalRaw) {
+                return 'This browser’s preview changed after confirmation. No local data was replaced.';
+              }
+              const writeError = finishTargetedRepair(data, expectedLocalRaw);
               if (!writeError) refreshCloudRestoreRecoveryCopy();
               return writeError;
             }}

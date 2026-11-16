@@ -12,6 +12,7 @@ import {
 } from '../storage/preview-account-backup.ts';
 import type { PreviewAccountBackupApi } from '../storage/preview-account-backup.ts';
 import {
+  PREVIEW_CLOUD_RESTORE_RECOVERY_KEY,
   PREVIEW_STORAGE_KEY,
   preservePreviewBeforeCloudRestore
 } from '../storage/preview-storage.ts';
@@ -30,6 +31,12 @@ type PendingConfirmation =
       data: PreviewData;
       expectedRevision: number;
       expectedLocalRaw: string | null;
+    }
+  | {
+      kind: 'repair';
+      workoutId: string;
+      expectedAccountId: string;
+      expectedLocalRaw: string;
     };
 
 type PreviewAccountBackupControlsProps = {
@@ -49,8 +56,10 @@ type PreviewAccountBackupControlsProps = {
   enabled: boolean;
   syncBusy?: boolean;
   verifiedAccountStatus?: VerifiedAccountStatus | null;
+  syncStatus: PreviewAccountSyncState;
   isIdentityCurrent: () => boolean;
   onRestore: (data: PreviewData, expectedLocalRaw: string | null) => string | null;
+  onRepair: (data: PreviewData, expectedLocalRaw: string) => string | null;
   onRecoveryChanged: (raw: string | null) => void;
   onExclusiveChange?: (locked: boolean) => void;
   onOperationFinished?: () => void;
@@ -60,6 +69,16 @@ export type VerifiedAccountStatus =
   | { kind: 'empty' }
   | { kind: 'available'; revision: number; updatedAt: string | null };
 
+export type PreviewAccountSyncState =
+  | 'checking'
+  | 'device'
+  | 'pending'
+  | 'saving'
+  | 'account'
+  | 'offline'
+  | 'attention'
+  | 'conflict';
+
 type AccountBackupStatus =
   | { kind: 'not-checked' }
   | { kind: 'checking' }
@@ -67,10 +86,19 @@ type AccountBackupStatus =
   | { kind: 'unavailable'; message: string };
 
 type MissingCompletionInspection = {
+  workoutId: string;
   workoutName: string;
   date: string;
   matchingCompletionExists: boolean;
 };
+
+const repairWorkoutName = 'Lower Body';
+const repairWorkoutDate = '2026-10-19';
+
+function strengthWorkoutName(data: PreviewData, workout: PreviewData['strength']['workouts'][number]): string {
+  const savedWorkout = data.strength.savedWorkouts.find(item => item.id === workout.savedWorkoutId);
+  return workout.workoutName?.trim() || savedWorkout?.name || 'Unnamed workout';
+}
 
 function inspectSingleMissingCompletion(
   data: PreviewData,
@@ -88,13 +116,69 @@ function inspectSingleMissingCompletion(
   );
   if (targets.length !== 1) return null;
   const target = targets[0]!;
-  const savedWorkout = data.strength.savedWorkouts.find(item => item.id === target.savedWorkoutId);
   return {
-    workoutName: target.workoutName?.trim() || savedWorkout?.name || 'Unnamed workout',
+    workoutId: target.id,
+    workoutName: strengthWorkoutName(data, target),
     date: target.date,
     matchingCompletionExists: data.datedRhythmCompletions.some(completion =>
       completion.rhythmId === target.rhythmId && completion.effectiveDate === target.date
     )
+  };
+}
+
+function approvedRepairCandidate(
+  data: PreviewData,
+  diagnostic: PreviewValidationDiagnostic | undefined
+): MissingCompletionInspection | null {
+  const inspection = inspectSingleMissingCompletion(data, diagnostic);
+  if (!inspection || inspection.workoutName !== repairWorkoutName
+    || inspection.date !== repairWorkoutDate || inspection.matchingCompletionExists) return null;
+  const namedWorkouts = data.strength.workouts.filter(workout =>
+    workout.date === repairWorkoutDate && strengthWorkoutName(data, workout) === repairWorkoutName
+  );
+  if (namedWorkouts.length !== 1 || namedWorkouts[0]?.id !== inspection.workoutId) return null;
+  const target = namedWorkouts[0];
+  if (!target.rhythmId || target.rhythmOccurrence !== repairWorkoutDate
+    || !target.completionId
+    || data.datedRhythmCompletions.some(completion => completion.id === target.completionId)) return null;
+  return inspection;
+}
+
+function currentApprovedRepairCandidate(
+  data: PreviewData,
+  currentDate: string
+): MissingCompletionInspection | null {
+  try {
+    createValidatedPreviewAccountDocument(data, currentDate);
+    return null;
+  } catch (validationError) {
+    if (!(validationError instanceof PreviewAccountBackupError)
+      || validationError.diagnostic?.code !== 'preview.strength.completion-link.invalid') return null;
+    return approvedRepairCandidate(data, validationError.diagnostic);
+  }
+}
+
+function removeApprovedWorkoutAssociation(data: PreviewData, workoutId: string): PreviewData | null {
+  const matches = data.strength.workouts.filter(workout => workout.id === workoutId);
+  if (matches.length !== 1) return null;
+  return {
+    ...data,
+    strength: {
+      ...data.strength,
+      workouts: data.strength.workouts.map(workout => {
+        if (workout.id !== workoutId) return workout;
+        const {
+          rhythmId,
+          rhythmOccurrence,
+          completionId,
+          ...preservedWorkout
+        } = workout;
+        void rhythmId;
+        void rhythmOccurrence;
+        void completionId;
+        return preservedWorkout;
+      })
+    }
   };
 }
 
@@ -182,8 +266,10 @@ export function PreviewAccountBackupControls({
   enabled,
   syncBusy = false,
   verifiedAccountStatus = null,
+  syncStatus,
   isIdentityCurrent,
   onRestore,
+  onRepair,
   onRecoveryChanged,
   onExclusiveChange,
   onOperationFinished
@@ -191,11 +277,15 @@ export function PreviewAccountBackupControls({
   const [pending, setPending] = useState<PendingConfirmation | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [activeOperation, setActiveOperation] = useState<'backup' | 'restore' | 'download' | null>(null);
+  const [activeOperation, setActiveOperation] =
+    useState<'backup' | 'restore' | 'download' | 'repair' | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [missingCompletionInspection, setMissingCompletionInspection] =
     useState<MissingCompletionInspection | null>(null);
+  const [repairSyncOutcome, setRepairSyncOutcome] =
+    useState<'waiting' | 'confirmed' | 'offline' | 'attention' | 'conflict' | null>(null);
+  const [repairSyncPending, setRepairSyncPending] = useState(false);
   const [backupStatus, setBackupStatus] = useState<AccountBackupStatus>(
     api === null
       ? { kind: 'unavailable', message: 'Account backup is unavailable in this Preview session.' }
@@ -207,6 +297,8 @@ export function PreviewAccountBackupControls({
   const statusRequestId = useRef(0);
   const identityCurrentRef = useRef(isIdentityCurrent);
   const exclusiveHeld = useRef(false);
+  const repairSyncBaseline = useRef<PreviewAccountSyncState | null>(null);
+  const repairSyncObservedActivity = useRef(false);
   identityCurrentRef.current = isIdentityCurrent;
   const exclusiveChangeRef = useRef(onExclusiveChange);
   exclusiveChangeRef.current = onExclusiveChange;
@@ -217,10 +309,35 @@ export function PreviewAccountBackupControls({
     exclusiveChangeRef.current?.(locked);
   }
 
+  useEffect(() => {
+    if (!repairSyncPending) return;
+    if (syncStatus === 'checking' || syncStatus === 'pending' || syncStatus === 'saving') {
+      repairSyncObservedActivity.current = true;
+      return;
+    }
+    if (syncStatus === 'offline') {
+      if (repairSyncOutcome !== 'offline') setRepairSyncOutcome('offline');
+      return;
+    }
+    if (!repairSyncObservedActivity.current && syncStatus === repairSyncBaseline.current) return;
+    if (syncStatus === 'account') {
+      setRepairSyncOutcome('confirmed');
+      setRepairSyncPending(false);
+    } else if (syncStatus === 'conflict') {
+      setRepairSyncOutcome('conflict');
+      setRepairSyncPending(false);
+    } else if (syncStatus === 'attention') {
+      setRepairSyncOutcome('attention');
+      setRepairSyncPending(false);
+    }
+  }, [repairSyncOutcome, repairSyncPending, syncStatus]);
+
   function checkDeviceData() {
     setMessage('');
     setError('');
     setMissingCompletionInspection(null);
+    setRepairSyncOutcome(null);
+    setRepairSyncPending(false);
     try {
       createValidatedPreviewAccountDocument(data, currentDate);
       setMessage('This device’s data passed backup validation. No storage or account data was changed.');
@@ -233,6 +350,44 @@ export function PreviewAccountBackupControls({
         ? validationError.message
         : 'This device’s data could not be validated. No storage or account data was changed.');
     }
+  }
+
+  function beginRepair() {
+    setMessage('');
+    setError('');
+    if (!enabled || syncBusy || !autoSyncEnabled || !api || busy
+      || operationInProgress.current || !isIdentityCurrent() || !accountId.trim() || localRaw === null) {
+      setError('Repair is unavailable until this signed-in account and its saved device copy are ready.');
+      return;
+    }
+    if (syncStatus === 'conflict') {
+      setError('The device and account copies are in conflict. Resolve that conflict before repairing this workout.');
+      return;
+    }
+    try {
+      if (storage.getItem(PREVIEW_STORAGE_KEY) !== localRaw) {
+        setMissingCompletionInspection(null);
+        setError('The saved device data changed. Run Check data again; no repair was made.');
+        return;
+      }
+    } catch (storageError) {
+      setError(`The saved device data could not be checked. No repair was made. ${errorMessage(storageError)}`);
+      return;
+    }
+    const candidate = currentApprovedRepairCandidate(data, currentDate);
+    if (!candidate || candidate.workoutId !== missingCompletionInspection?.workoutId) {
+      setMissingCompletionInspection(null);
+      setError('The approved workout no longer matches the diagnostic. Run Check data again; no repair was made.');
+      return;
+    }
+    setExclusiveLocked(true);
+    statusRequestId.current += 1;
+    setPending({
+      kind: 'repair',
+      workoutId: candidate.workoutId,
+      expectedAccountId: accountId,
+      expectedLocalRaw: localRaw
+    });
   }
 
   const refreshBackupStatus = useCallback(async () => {
@@ -469,7 +624,17 @@ export function PreviewAccountBackupControls({
   }
 
   async function confirmPending() {
-    if (!pending || syncBusy || !api || busy || operationInProgress.current || !isIdentityCurrent()) return;
+    if (!pending) return;
+    if (!isIdentityCurrent()) {
+      if (pending.kind === 'repair') {
+        setPending(null);
+        setError('The signed-in account changed after confirmation. No repair was made.');
+        setExclusiveLocked(false);
+        onOperationFinished?.();
+      }
+      return;
+    }
+    if (syncBusy || !api || busy || operationInProgress.current) return;
     operationInProgress.current = true;
     statusRequestId.current += 1;
     setBusy(true);
@@ -477,6 +642,73 @@ export function PreviewAccountBackupControls({
     setMessage('');
     setError('');
     try {
+      if (pending.kind === 'repair') {
+        if (!autoSyncEnabled || syncStatus === 'conflict'
+          || pending.expectedAccountId !== accountId
+          || pending.expectedLocalRaw !== localRaw
+          || storage.getItem(PREVIEW_STORAGE_KEY) !== pending.expectedLocalRaw) {
+          setPending(null);
+          setError('The signed-in account or saved device data changed after confirmation. No repair was made.');
+          return;
+        }
+        const candidate = currentApprovedRepairCandidate(data, currentDate);
+        if (!candidate || candidate.workoutId !== pending.workoutId) {
+          setPending(null);
+          setMissingCompletionInspection(null);
+          setError('The approved workout no longer matches the diagnostic. No repair was made.');
+          return;
+        }
+        const recovery = preservePreviewBeforeCloudRestore(storage, pending.expectedLocalRaw);
+        if (recovery.kind !== 'preserved'
+          || storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY) !== pending.expectedLocalRaw) {
+          setPending(null);
+          setError(recovery.kind === 'preserved'
+            ? 'The exact recovery copy could not be verified. No repair was made.'
+            : recovery.kind === 'conflict' || recovery.kind === 'error'
+              ? recovery.message
+              : 'No recovery copy was created. No repair was made.');
+          return;
+        }
+        if (!isIdentityCurrent() || pending.expectedAccountId !== accountId
+          || storage.getItem(PREVIEW_STORAGE_KEY) !== pending.expectedLocalRaw
+          || pending.expectedLocalRaw !== localRaw) {
+          setPending(null);
+          setError('The account or saved device data changed while preserving recovery. No repair was made.');
+          return;
+        }
+        const repairedData = removeApprovedWorkoutAssociation(data, candidate.workoutId);
+        if (!repairedData) {
+          setPending(null);
+          setError('The approved workout is no longer unique. No repair was made.');
+          return;
+        }
+        createValidatedPreviewAccountDocument(repairedData, currentDate);
+        if (storage.getItem(PREVIEW_STORAGE_KEY) !== pending.expectedLocalRaw
+          || pending.expectedLocalRaw !== localRaw
+          || !isIdentityCurrent()
+          || pending.expectedAccountId !== accountId) {
+          setPending(null);
+          setError('The account or saved device data changed before saving. No repair was made.');
+          return;
+        }
+        repairSyncBaseline.current = syncStatus;
+        repairSyncObservedActivity.current = syncStatus === 'offline';
+        const writeError = onRepair(repairedData, pending.expectedLocalRaw);
+        if (writeError) {
+          repairSyncBaseline.current = null;
+          setPending(null);
+          setError(writeError);
+          return;
+        }
+        onRecoveryChanged(pending.expectedLocalRaw);
+        setPending(null);
+        setMissingCompletionInspection(null);
+        setRepairSyncOutcome(syncStatus === 'offline' ? 'offline' : 'waiting');
+        setRepairSyncPending(true);
+        setMessage('Local save: confirmed.');
+        return;
+      }
+
       if (pending.kind === 'backup') {
         if (storage.getItem(PREVIEW_STORAGE_KEY) !== pending.expectedLocalRaw
           || pending.expectedLocalRaw !== localRaw) {
@@ -546,7 +778,13 @@ export function PreviewAccountBackupControls({
 
   const pendingBackup = pending?.kind === 'backup';
   const pendingRestore = pending?.kind === 'restore';
+  const pendingRepair = pending?.kind === 'repair';
+  const repairCandidate = missingCompletionInspection
+    ? currentApprovedRepairCandidate(data, currentDate)
+    : null;
   const accountActionDisabled = !enabled || syncBusy || !api || busy;
+  const repairActionDisabled = accountActionDisabled || !autoSyncEnabled || syncStatus === 'conflict'
+    || !accountId.trim();
 
   return (
     <>
@@ -592,6 +830,16 @@ export function PreviewAccountBackupControls({
                 disabled={busy}
                 onClick={checkDeviceData}
               />
+              {repairCandidate
+                && repairCandidate.workoutId === missingCompletionInspection?.workoutId
+                && (
+                  <RecoveryActionRow
+                    title="Repair this workout’s broken Rhythm link"
+                    description="Keep the workout and remove only its broken Rhythm association."
+                    disabled={repairActionDisabled}
+                    onClick={beginRepair}
+                  />
+                )}
               <RecoveryActionRow
                 title="Save this device’s copy to account"
                 description="Copy the data saved on this device to your account."
@@ -659,6 +907,15 @@ export function PreviewAccountBackupControls({
               </p>
             )}
             {message && <p className="preview-account-backup__message" role="status">{message}</p>}
+            {repairSyncOutcome && (
+              <p className="preview-account-backup__status" role="status">
+                Account sync: {repairSyncOutcome === 'waiting' && 'waiting for confirmation.'}
+                {repairSyncOutcome === 'confirmed' && 'confirmed.'}
+                {repairSyncOutcome === 'offline' && 'not confirmed; the device is offline. Sync will retry when available.'}
+                {repairSyncOutcome === 'attention' && 'not confirmed; account sync needs attention.'}
+                {repairSyncOutcome === 'conflict' && 'not confirmed; the account and device copies conflict.'}
+              </p>
+            )}
             {error && <p className="preview-account-backup__error" role="alert">{error}</p>}
             {missingCompletionInspection && (
               <p className="preview-account-backup__status" role="status">
@@ -712,6 +969,24 @@ export function PreviewAccountBackupControls({
               <div className="money-goal-dialog__actions">
                 <button type="button" className="btn mini" disabled={busy || syncBusy} onClick={() => void confirmPending()}>
                   Replace this device’s data
+                </button>
+                <button type="button" className="btn mini ghost" disabled={busy} onClick={cancelPending}>
+                  Cancel
+                </button>
+              </div>
+            </MoneyGoalDialog>
+          )}
+          {pendingRepair && (
+            <MoneyGoalDialog
+              title="Repair this workout’s Rhythm link?"
+              titleId="preview-account-backup-confirm-title"
+              labelledBy="preview-account-backup-confirm-title"
+              intro={`The ${repairWorkoutName} workout from ${repairWorkoutDate} will stay intact in History. Only its broken Rhythm association (rhythmId, rhythmOccurrence, completionId) will be removed. The original saved data will be preserved byte-for-byte before writing, and normal sync may upload the repaired document to the signed-in account.`}
+              onClose={cancelPending}
+            >
+              <div className="money-goal-dialog__actions">
+                <button type="button" className="btn mini" disabled={busy || syncBusy} onClick={() => void confirmPending()}>
+                  Repair this workout
                 </button>
                 <button type="button" className="btn mini ghost" disabled={busy} onClick={cancelPending}>
                   Cancel

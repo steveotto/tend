@@ -24,7 +24,8 @@ import type {
 } from '../src/storage/preview-account-backup.ts';
 import {
   createPreviewAccountBackupApi,
-  PreviewAccountBackupError
+  PreviewAccountBackupError,
+  validatePreviewAccountBackup
 } from '../src/storage/preview-account-backup.ts';
 import {
   PREVIEW_CLOUD_RESTORE_RECOVERY_KEY,
@@ -183,6 +184,20 @@ function Browser({
     return result.kind === 'error' ? result.message : 'Local data changed.';
   }
 
+  function repair(next: PreviewData, expectedRaw: string): string | null {
+    const result = writePreview(storage, next, expectedRaw, {
+      allowTargetedRepair: true,
+      currentDate,
+      operation: 'repair'
+    });
+    if (result.kind === 'saved') {
+      setData(next);
+      setRaw(result.raw);
+      return null;
+    }
+    return result.kind === 'error' ? result.message : 'Local data changed.';
+  }
+
   return (
     <>
       <output data-testid="person-name">{data.people[0]?.displayName ?? 'No Person'}</output>
@@ -215,6 +230,7 @@ function Browser({
         manualOperationLocked={manualLock}
         isIdentityCurrent={isIdentityCurrent}
         onRestore={restore}
+        onRepair={repair}
         onManualOperationLockChange={setManualLock}
       >
         {recoveryActions}
@@ -230,6 +246,49 @@ function cloudRecord(data: PreviewData, revision = 1): PreviewAccountBackupRecor
     revision,
     updatedAt: '2026-11-06T12:00:00.000Z'
   };
+}
+
+function brokenLowerBodyWorkoutData(): PreviewData {
+  const date = '2026-10-19';
+  const rhythmId = 'user-rhythm-00000000-0000-4000-8000-000000000091';
+  const data = createSamplePreviewData();
+  const timeOfDay = rhythmTimeValueFromLabel('Anytime');
+  if (timeOfDay === undefined) throw new Error('Could not create synthetic Rhythm time fixture.');
+  data.savedRhythms = [{
+    id: rhythmId,
+    title: 'Synthetic Strength Rhythm',
+    description: 'Synthetic linked workout fixture',
+    cadence: 'Daily',
+    timeLabel: 'Anytime',
+    timeOfDay,
+    personIds: [],
+    categoryIds: ['health'],
+    schedule: { frequency: 'daily' },
+    personal: false,
+    createdLocalDate: date,
+    createdTimeZone: 'UTC',
+    primaryFoundationId: 'health-strength',
+    secondaryFoundationIds: [],
+    healthLogCapability: 'workout'
+  }];
+  data.rhythmHistoryIds = [rhythmId];
+  data.completedRhythmIds = [];
+  data.activeRhythmCompletions = [];
+  data.datedRhythmCompletions = [];
+  data.strength = {
+    ...data.strength,
+    workouts: [{
+      id: 'synthetic-lower-body',
+      date,
+      muscleIds: ['hamstrings'],
+      workoutName: 'Lower Body',
+      notes: 'Keep synthetic workout details.',
+      rhythmId,
+      rhythmOccurrence: date,
+      completionId: 'synthetic-missing-completion'
+    }]
+  };
+  return data;
 }
 
 async function waitForRevision(
@@ -1105,6 +1164,94 @@ describe('Preview account sync', () => {
     expect(service.saveCalls).toBe(1);
     destination.unmount();
     source.unmount();
+  });
+
+  it('reports the local repair separately and confirms normal account sync', async () => {
+    const invalidLocal = brokenLowerBodyWorkoutData();
+    const localStorage = makeStorage(invalidLocal);
+    const existingAccount = createSamplePreviewData();
+    const existingAccountRecord = cloudRecord(existingAccount, 4);
+    const service = backend(existingAccountRecord);
+    localStorage.values.set(`${PREVIEW_STORAGE_KEY}:account-sync-state`, JSON.stringify({
+      accountId,
+      revision: 4,
+      syncedEnvelope: existingAccountRecord.document,
+      syncedAt: existingAccountRecord.updatedAt
+    }));
+    const view = render(<Browser api={service.api} storage={localStorage.storage} initialData={invalidLocal} />);
+
+    await screen.findByText(/Needs attention|Could not validate/i);
+    fireEvent.click(screen.getByRole('button', { name: /Backup & recovery/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Account recovery/ }));
+    await screen.findByRole('dialog', { name: 'Account recovery' });
+    fireEvent.click(screen.getByRole('button', { name: /Check data/ }));
+    await screen.findByText(/Workout: Lower Body/);
+    fireEvent.click(screen.getByRole('button', { name: /Repair this workout’s broken Rhythm link/ }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Repair this workout’s Rhythm link?' });
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Repair this workout' }));
+
+    await screen.findByText(/Local save: confirmed/);
+    await screen.findByText(/Account sync: confirmed/);
+    await waitForRevision(service, 5);
+    expect(service.saveCalls).toBe(1);
+    expect(service.expectedRevisions).toEqual([4]);
+    const syncedRecord = service.record;
+    if (!syncedRecord) throw new Error('Synthetic repaired document was not synced.');
+    const syncedData = validatePreviewAccountBackup(syncedRecord, currentDate).data;
+    expect(syncedData.strength.workouts).toEqual([{
+      id: 'synthetic-lower-body',
+      date: '2026-10-19',
+      muscleIds: ['hamstrings'],
+      workoutName: 'Lower Body',
+      notes: 'Keep synthetic workout details.',
+      supersetGroups: []
+    }]);
+    expect(syncedData.datedRhythmCompletions).toEqual([]);
+    expect(localStorage.values.get(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY))
+      .toBe(JSON.stringify(createPreviewEnvelope(invalidLocal)));
+    view.unmount();
+  });
+
+  it('keeps local repair success separate when normal account sync needs attention', async () => {
+    const invalidLocal = brokenLowerBodyWorkoutData();
+    const localStorage = makeStorage(invalidLocal);
+    const existingAccountRecord = cloudRecord(createSamplePreviewData(), 4);
+    const service = backend(existingAccountRecord);
+    localStorage.values.set(`${PREVIEW_STORAGE_KEY}:account-sync-state`, JSON.stringify({
+      accountId,
+      revision: 4,
+      syncedEnvelope: existingAccountRecord.document,
+      syncedAt: existingAccountRecord.updatedAt
+    }));
+    let attemptedUploads = 0;
+    const api: PreviewAccountBackupApi = {
+      read: service.api.read,
+      save: async () => {
+        attemptedUploads += 1;
+        throw new Error('synthetic account write failure');
+      }
+    };
+    const view = render(<Browser api={api} storage={localStorage.storage} initialData={invalidLocal} />);
+
+    await screen.findByText(/Needs attention|Could not validate/i);
+    fireEvent.click(screen.getByRole('button', { name: /Backup & recovery/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Account recovery/ }));
+    await screen.findByRole('dialog', { name: 'Account recovery' });
+    fireEvent.click(screen.getByRole('button', { name: /Check data/ }));
+    await screen.findByText(/Workout: Lower Body/);
+    fireEvent.click(screen.getByRole('button', { name: /Repair this workout’s broken Rhythm link/ }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Repair this workout’s Rhythm link?' });
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Repair this workout' }));
+
+    await screen.findByText(/Local save: confirmed/);
+    await screen.findByText(/Account sync:.*account sync needs attention/);
+    const localRaw = localStorage.values.get(PREVIEW_STORAGE_KEY);
+    if (!localRaw) throw new Error('Synthetic local repair was not saved.');
+    const localParsed = parsePreviewBackup(localRaw, currentDate);
+    expect(localParsed.valid).toBe(true);
+    expect(service.record?.revision).toBe(4);
+    expect(attemptedUploads).toBeGreaterThan(0);
+    view.unmount();
   });
 
   it('recognizes a successful write whose response was lost without writing a duplicate revision', async () => {
