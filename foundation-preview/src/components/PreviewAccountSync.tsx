@@ -85,6 +85,7 @@ type PreviewAccountSyncProps = {
   manualOperationLocked: boolean;
   isIdentityCurrent: () => boolean;
   onRestore: (data: PreviewData, expectedLocalRaw: string | null) => string | null;
+  onRepair: (data: PreviewData, expectedLocalRaw: string) => string | null;
   onManualOperationLockChange: (locked: boolean) => void;
 };
 
@@ -198,6 +199,7 @@ export function PreviewAccountSync({
   manualOperationLocked,
   isIdentityCurrent,
   onRestore,
+  onRepair,
   onManualOperationLockChange
 }: PreviewAccountSyncProps) {
   const [status, setStatus] = useState<SyncStatus>({ kind: 'checking' });
@@ -1008,11 +1010,13 @@ export function PreviewAccountSync({
             autoSyncEnabled={autoSyncEnabled}
             enabled={enabled && !manualBusy && (!autoSyncEnabled || (status.kind !== 'saving' && status.kind !== 'checking'))}
             syncBusy={autoSyncEnabled && (status.kind === 'saving' || status.kind === 'checking')}
+            syncStatus={status.kind}
             verifiedAccountStatus={verifiedAccountStatus?.accountId === accountId
               ? verifiedAccountStatus.status
               : null}
             isIdentityCurrent={isIdentityCurrent}
             onRestore={onRestore}
+            onRepair={onRepair}
             onRecoveryChanged={() => {}}
             onExclusiveChange={locked => {
               setManualBusy(locked);

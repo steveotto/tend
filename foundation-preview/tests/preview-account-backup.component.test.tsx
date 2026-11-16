@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PreviewAccountBackupControls } from '../src/components/PreviewAccountBackupControls.tsx';
+import type { PreviewAccountSyncState } from '../src/components/PreviewAccountBackupControls.tsx';
 import {
   createPreviewEnvelope,
   createSamplePreviewData,
@@ -135,7 +136,9 @@ function renderControls(
   isIdentityCurrent: () => boolean = () => true,
   accountId = accountA,
   openRecovery = true,
-  autoSyncEnabled = true
+  autoSyncEnabled = true,
+  syncStatus: PreviewAccountSyncState = 'account',
+  onRepair?: (data: PreviewData, expectedRaw: string) => string | null
 ) {
   const view = render(
     <PreviewAccountBackupControls
@@ -148,11 +151,24 @@ function renderControls(
       localRecoveryRaw={storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)}
       enabled
       autoSyncEnabled={autoSyncEnabled}
+      syncStatus={syncStatus}
       isIdentityCurrent={isIdentityCurrent}
       onRestore={onRestore ?? ((nextData, expectedRaw) => {
         const result = writePreview(storage, nextData, expectedRaw, {
           currentDate,
           operation: 'replace'
+        });
+        return result.kind === 'saved'
+          ? null
+          : result.kind === 'error'
+            ? result.message
+            : 'Local preview changed.';
+      })}
+      onRepair={onRepair ?? ((nextData, expectedRaw) => {
+        const result = writePreview(storage, nextData, expectedRaw, {
+          allowTargetedRepair: true,
+          currentDate,
+          operation: 'repair'
         });
         return result.kind === 'saved'
           ? null
@@ -167,6 +183,26 @@ function renderControls(
     fireEvent.click(screen.getByRole('button', { name: /Account recovery/ }));
   }
   return view;
+}
+
+function missingCompletionData(): PreviewData {
+  const data = fitnessData('Broken completion link');
+  const workout = data.strength.workouts[0];
+  if (!workout) throw new Error('Synthetic preview fixture is missing its workout.');
+  const date = '2026-10-19';
+  data.strength.workouts = [{
+    ...workout,
+    id: 'strength-log-lower-body',
+    date,
+    workoutName: 'Lower Body',
+    notes: 'Preserve this synthetic workout note.',
+    startedAt: `${date}T10:00:00.000Z`,
+    finishedAt: `${date}T11:00:00.000Z`,
+    timeZone: 'UTC',
+    rhythmOccurrence: date,
+    completionId: 'missing-completion-reference'
+  }];
+  return data;
 }
 
 describe('manual Preview account backup and restore', () => {
@@ -311,6 +347,265 @@ describe('manual Preview account backup and restore', () => {
     expect(api.save).not.toHaveBeenCalled();
     expect(getItem).not.toHaveBeenCalled();
     expect(setItem).not.toHaveBeenCalled();
+  });
+
+  it('requires confirmation, preserves exact source bytes, and removes only the approved workout association', async () => {
+    const user = userEvent.setup();
+    const data = missingCompletionData();
+    const local = accountStorage(data);
+    const originalRaw = local.raw;
+    const originalEnvelope = JSON.parse(originalRaw) as PreviewEnvelope;
+    const originalWorkout = originalEnvelope.data.strength.workouts[0]!;
+    const originalCompletions = JSON.stringify(originalEnvelope.data.datedRhythmCompletions);
+    const api: PreviewAccountBackupApi = {
+      read: vi.fn(async () => null),
+      save: vi.fn(async () => 1)
+    };
+
+    renderControls(api, local.storage, data, local.raw);
+    await user.click(screen.getByRole('button', { name: /Check data/ }));
+    expect(await screen.findByText(/Workout: Lower Body/)).toBeTruthy();
+    const repairAction = await screen.findByRole('button', { name: /Repair this workout’s broken Rhythm link/ });
+    await user.click(repairAction);
+
+    const confirmation = await screen.findByRole('dialog', { name: 'Repair this workout’s Rhythm link?' });
+    expect(confirmation.textContent).toContain('will stay intact in History');
+    expect(confirmation.textContent).toContain('normal sync may upload the repaired document');
+    await user.click(within(confirmation).getByRole('button', { name: 'Cancel' }));
+
+    expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBeNull();
+    await user.click(repairAction);
+    const confirmed = await screen.findByRole('dialog', { name: 'Repair this workout’s Rhythm link?' });
+    await user.click(within(confirmed).getByRole('button', { name: 'Repair this workout' }));
+
+    expect(await screen.findByText(/Local save: confirmed/)).toBeTruthy();
+    expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(originalRaw);
+    const savedRaw = local.storage.getItem(PREVIEW_STORAGE_KEY);
+    expect(savedRaw).not.toBe(originalRaw);
+    const saved = parsePreviewBackup(savedRaw!, currentDate);
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    const savedEnvelope = JSON.parse(savedRaw!) as PreviewEnvelope;
+    const {
+      rhythmId,
+      rhythmOccurrence,
+      completionId,
+      ...expectedWorkout
+    } = originalWorkout;
+    void rhythmId;
+    void rhythmOccurrence;
+    void completionId;
+    expect(savedEnvelope.data.strength.workouts).toEqual([expectedWorkout]);
+    expect(savedEnvelope.data.datedRhythmCompletions).toEqual(originalEnvelope.data.datedRhythmCompletions);
+    expect(JSON.stringify(savedEnvelope.data.datedRhythmCompletions)).toBe(originalCompletions);
+    expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it('stops the targeted repair when another recovery copy already contains different bytes', async () => {
+    const user = userEvent.setup();
+    const data = missingCompletionData();
+    const local = accountStorage(data);
+    local.values.set(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, '{"preserve":"earlier copy"}');
+    const api: PreviewAccountBackupApi = {
+      read: vi.fn(async () => null),
+      save: vi.fn(async () => 1)
+    };
+
+    renderControls(api, local.storage, data, local.raw);
+    await user.click(screen.getByRole('button', { name: /Check data/ }));
+    await user.click(await screen.findByRole('button', { name: /Repair this workout’s broken Rhythm link/ }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Repair this workout’s Rhythm link?' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Repair this workout' }));
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/different data/i);
+    expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
+    expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe('{"preserve":"earlier copy"}');
+    expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it('stops the targeted repair if the exact recovery copy cannot be written', async () => {
+    const user = userEvent.setup();
+    const data = missingCompletionData();
+    const local = accountStorage(data);
+    const failingStorage: PreviewStorage = {
+      getItem: key => local.storage.getItem(key),
+      setItem: (key, value) => {
+        if (key === PREVIEW_CLOUD_RESTORE_RECOVERY_KEY) throw new Error('synthetic recovery write failure');
+        local.storage.setItem(key, value);
+      }
+    };
+    const api: PreviewAccountBackupApi = {
+      read: vi.fn(async () => null),
+      save: vi.fn(async () => 1)
+    };
+
+    renderControls(api, failingStorage, data, local.raw);
+    await user.click(screen.getByRole('button', { name: /Check data/ }));
+    await user.click(await screen.findByRole('button', { name: /Repair this workout’s broken Rhythm link/ }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Repair this workout’s Rhythm link?' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Repair this workout' }));
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/recovery copy could not be saved/i);
+    expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
+    expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBeNull();
+    expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it('stops without overwriting when the saved source changes after confirmation', async () => {
+    const user = userEvent.setup();
+    const data = missingCompletionData();
+    const local = accountStorage(data);
+    const changedRaw = '{"synthetic":"newer source"}';
+    const api: PreviewAccountBackupApi = {
+      read: vi.fn(async () => null),
+      save: vi.fn(async () => 1)
+    };
+
+    renderControls(api, local.storage, data, local.raw);
+    await user.click(screen.getByRole('button', { name: /Check data/ }));
+    await user.click(await screen.findByRole('button', { name: /Repair this workout’s broken Rhythm link/ }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Repair this workout’s Rhythm link?' });
+    local.values.set(PREVIEW_STORAGE_KEY, changedRaw);
+    await user.click(within(confirmation).getByRole('button', { name: 'Repair this workout' }));
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/saved device data changed/i);
+    expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(changedRaw);
+    expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBeNull();
+    expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it('stops without writing when the signed-in account changes after confirmation', async () => {
+    const user = userEvent.setup();
+    const data = missingCompletionData();
+    const local = accountStorage(data);
+    let accountIsCurrent = true;
+    const api: PreviewAccountBackupApi = {
+      read: vi.fn(async () => null),
+      save: vi.fn(async () => 1)
+    };
+
+    renderControls(api, local.storage, data, local.raw, undefined, () => accountIsCurrent);
+    await user.click(screen.getByRole('button', { name: /Check data/ }));
+    await user.click(await screen.findByRole('button', { name: /Repair this workout’s broken Rhythm link/ }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Repair this workout’s Rhythm link?' });
+    accountIsCurrent = false;
+    await user.click(within(confirmation).getByRole('button', { name: 'Repair this workout' }));
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/signed-in account changed/i);
+    expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
+    expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBeNull();
+    expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it('hides the repair action when the approved workout is ambiguous', async () => {
+    const user = userEvent.setup();
+    const data = missingCompletionData();
+    data.strength.workouts.push({
+      ...data.strength.workouts[0]!,
+      id: 'second-lower-body',
+      notes: 'Ambiguous synthetic record.'
+    });
+    const local = accountStorage(data);
+    const api: PreviewAccountBackupApi = {
+      read: vi.fn(async () => null),
+      save: vi.fn(async () => 1)
+    };
+
+    renderControls(api, local.storage, data, local.raw);
+    await user.click(screen.getByRole('button', { name: /Check data/ }));
+
+    expect(screen.queryByRole('button', { name: /Repair this workout’s broken Rhythm link/ })).toBeNull();
+    expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
+  });
+
+  it('storage permits repair only for the diagnosed validation failure with the exact source copy', () => {
+    const data = missingCompletionData();
+    const local = accountStorage(data);
+    const target = data.strength.workouts[0]!;
+    const {
+      rhythmId,
+      rhythmOccurrence,
+      completionId,
+      ...preservedWorkout
+    } = target;
+    void rhythmId;
+    void rhythmOccurrence;
+    void completionId;
+    const repairedData: PreviewData = {
+      ...data,
+      strength: {
+        ...data.strength,
+        workouts: [preservedWorkout]
+      }
+    };
+    expect(createValidatedPreviewAccountDocument(repairedData, currentDate)).toBeTruthy();
+
+    expect(writePreview(local.storage, repairedData, local.raw, {
+      allowTargetedRepair: true,
+      currentDate,
+      operation: 'repair'
+    })).toMatchObject({
+      kind: 'error',
+      diagnostic: { rejectedRule: 'targeted-repair-not-approved' }
+    });
+    expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
+
+    local.storage.setItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, '{"different":"bytes"}');
+    expect(writePreview(local.storage, repairedData, local.raw, {
+      allowTargetedRepair: true,
+      currentDate,
+      operation: 'repair'
+    })).toMatchObject({
+      kind: 'error',
+      diagnostic: { rejectedRule: 'targeted-repair-not-approved' }
+    });
+    expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
+    local.storage.setItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, local.raw);
+    expect(writePreview(local.storage, data, local.raw, {
+      allowTargetedRepair: true,
+      currentDate,
+      operation: 'repair'
+    })).toMatchObject({
+      kind: 'error',
+      diagnostic: { rejectedRule: 'targeted-repair-result-invalid' }
+    });
+    expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
+    expect(writePreview(local.storage, repairedData, local.raw, {
+      allowTargetedRepair: true,
+      currentDate,
+      operation: 'repair'
+    })).toMatchObject({ kind: 'saved' });
+    expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(local.raw);
+
+    const noOpLocal = accountStorage(data);
+    noOpLocal.storage.setItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, noOpLocal.raw);
+    const noOpStorage: PreviewStorage = {
+      getItem: key => noOpLocal.storage.getItem(key),
+      setItem: (key, value) => {
+        if (key !== PREVIEW_STORAGE_KEY) noOpLocal.storage.setItem(key, value);
+      }
+    };
+    expect(writePreview(noOpStorage, repairedData, noOpLocal.raw, {
+      allowTargetedRepair: true,
+      currentDate,
+      operation: 'repair'
+    })).toMatchObject({ kind: 'conflict', actualRaw: noOpLocal.raw });
+    expect(noOpLocal.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(noOpLocal.raw);
+
+    const invalidForAnotherReason = fitnessData('Wrong diagnosis');
+    invalidForAnotherReason.savedRhythms[0]!.timeOfDay =
+      'custom-time-block:22222222-2222-4222-8222-222222222222';
+    const otherFailure = accountStorage(invalidForAnotherReason);
+    otherFailure.storage.setItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, otherFailure.raw);
+    expect(writePreview(otherFailure.storage, createSamplePreviewData(), otherFailure.raw, {
+      allowTargetedRepair: true,
+      currentDate,
+      operation: 'repair'
+    })).toMatchObject({
+      kind: 'error',
+      diagnostic: { rejectedRule: 'targeted-repair-not-approved' }
+    });
   });
 
   it('reports relationship counts without exposing workout contents or identifiers', () => {

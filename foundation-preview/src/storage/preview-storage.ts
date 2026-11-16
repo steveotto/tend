@@ -158,9 +158,10 @@ export type PreviewImportSyncGuardResolveResult =
 
 export type PreviewWriteOptions = {
   allowUnrecoverableReplacement?: boolean;
+  allowTargetedRepair?: boolean;
   currentDate?: string;
   importSourceRaw?: string;
-  operation?: 'save' | 'import' | 'reset' | 'replace';
+  operation?: 'save' | 'import' | 'reset' | 'replace' | 'repair';
 };
 
 export type PreviewStorageDiagnostic = {
@@ -495,12 +496,81 @@ export function writePreview(
     const actualRaw = storage.getItem(PREVIEW_STORAGE_KEY);
     if (actualRaw !== expectedRaw) return { kind: 'conflict', actualRaw };
     activeSourceCompared = true;
+    if (operation === 'repair' && (expectedRaw === null || options.allowTargetedRepair !== true)) {
+      return {
+        kind: 'error',
+        message: 'A targeted repair requires an approved action and an exact saved source.',
+        diagnostic: diagnosticForWriteFailure(
+          storage,
+          expectedRaw,
+          options.currentDate,
+          operation,
+          'targeted-repair-not-approved',
+          'not-detected'
+        )
+      };
+    }
     const raw = JSON.stringify(createPreviewEnvelope(data));
+    if (operation === 'repair') {
+      const repaired = options.currentDate
+        ? parsePreviewBackup(raw, options.currentDate)
+        : { valid: false as const, message: 'A current date is required for repair validation.' };
+      if (!repaired.valid) {
+        return {
+          kind: 'error',
+          message: 'The repaired preview did not pass validation, so no changes were written.',
+          diagnostic: diagnosticForWriteFailure(
+            storage,
+            expectedRaw,
+            options.currentDate,
+            operation,
+            'targeted-repair-result-invalid',
+            'not-detected',
+            repaired.message
+          )
+        };
+      }
+    }
 
     if (expectedRaw !== null) {
       const sourceVersion = proposedV4SourceVersionForRaw(expectedRaw);
-      const source = options.currentDate ? parsePreviewBackup(expectedRaw, options.currentDate) : { valid: false as const };
-      if (!source.valid && !options.allowUnrecoverableReplacement) {
+      const source = options.currentDate
+        ? parsePreviewBackup(expectedRaw, options.currentDate)
+        : { valid: false as const, diagnostic: undefined };
+      const sourceDiagnostic = source.valid ? undefined : source.diagnostic;
+      const linkCounts = sourceDiagnostic?.strengthCompletionLinks;
+      const targetedRepair = operation === 'repair'
+        && options.allowTargetedRepair === true
+        && options.currentDate !== undefined
+        && source.valid === false
+        && sourceDiagnostic?.code === 'preview.strength.completion-link.invalid'
+        && sourceDiagnostic.path === 'data.strength.workouts[*].completionId'
+        && linkCounts?.invalid === 1
+        && linkCounts.missingCompletion === 1
+        && linkCounts.incompleteLink === 0
+        && linkCounts.missingRhythm === 0
+        && linkCounts.nonHealthRhythm === 0
+        && linkCounts.rhythmMismatch === 0
+        && linkCounts.dateMismatch === 0
+        && linkCounts.repeatedCompletion === 0
+        && linkCounts.archivedRhythm === 0
+        && storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY) === expectedRaw;
+      if (operation === 'repair' && !targetedRepair) {
+        return {
+          kind: 'error',
+          message: 'The targeted repair was not authorized by a verified validation failure and exact recovery copy.',
+          diagnostic: diagnosticForWriteFailure(
+            storage,
+            expectedRaw,
+            options.currentDate,
+            operation,
+            'targeted-repair-not-approved',
+            'not-detected'
+          )
+        };
+      }
+      const allowInvalidSource = options.allowUnrecoverableReplacement === true || targetedRepair;
+      if (!source.valid && !allowInvalidSource) {
         return {
           kind: 'error',
           message: sourceVersion === 9 || sourceVersion === 10 || sourceVersion === 11
@@ -516,7 +586,7 @@ export function writePreview(
           )
         };
       }
-      if (!source.valid && sourceVersion === null && options.allowUnrecoverableReplacement) {
+      if (!source.valid && sourceVersion === null && allowInvalidSource) {
         const recovery = preserveUnclassifiedSourceRecovery(storage, expectedRaw);
         if (recovery.kind !== 'preserved') {
           return {
@@ -639,7 +709,7 @@ export function writePreview(
         }
       } else if (sourceVersion === null
         && (!source.valid || source.sourceSchemaVersion !== PREVIEW_SCHEMA_VERSION)
-        && !options.allowUnrecoverableReplacement) {
+        && !allowInvalidSource) {
         return {
           kind: 'error',
           message: 'The saved preview could not be safely updated, so no changes were written. Download its raw recovery before explicitly replacing it.',
@@ -777,8 +847,22 @@ export function writePreview(
         restoreImportMetadata(storage, PREVIEW_IMPORT_SYNC_GUARD_KEY, previousGuardRaw, emptyGuardRaw);
         throw error;
       }
+      if (storage.getItem(PREVIEW_STORAGE_KEY) !== raw) {
+        restoreImportMetadata(storage, PREVIEW_IMPORT_RECOVERY_KEY, previousArchiveRaw, emptyArchiveRaw);
+        restoreImportMetadata(storage, PREVIEW_IMPORT_SYNC_GUARD_KEY, previousGuardRaw, emptyGuardRaw);
+        return {
+          kind: 'conflict',
+          actualRaw: storage.getItem(PREVIEW_STORAGE_KEY)
+        };
+      }
     } else {
       storage.setItem(PREVIEW_STORAGE_KEY, raw);
+      if (storage.getItem(PREVIEW_STORAGE_KEY) !== raw) {
+        return {
+          kind: 'conflict',
+          actualRaw: storage.getItem(PREVIEW_STORAGE_KEY)
+        };
+      }
     }
     return { kind: 'saved', raw };
   } catch (error) {
