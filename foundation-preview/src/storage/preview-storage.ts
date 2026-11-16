@@ -105,6 +105,7 @@ export {
 
 export const PREVIEW_CATEGORY_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:v32-category-recovery`;
 export const PREVIEW_CLOUD_RESTORE_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:cloud-restore-recovery`;
+export const PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:strength-repair-recovery`;
 export const PREVIEW_IMPORT_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:import-recovery`;
 export const PREVIEW_IMPORT_SYNC_GUARD_KEY = `${PREVIEW_STORAGE_KEY}:import-sync-guard`;
 export const PREVIEW_ACCOUNT_STORAGE_PREFIX = 'tend2:preview:account';
@@ -133,7 +134,7 @@ export type RecoveryCopyReadResult =
   | { kind: 'loaded'; raw: string | null }
   | { kind: 'error'; message: string };
 
-export type CloudRestoreRecoveryResult =
+export type PreviewRecoveryPreservationResult =
   | { kind: 'preserved' }
   | { kind: 'not-needed' }
   | { kind: 'conflict'; message: string }
@@ -375,10 +376,12 @@ function diagnosticForWriteFailure(
     ? parsePreviewBackup(sourceRaw, currentDate)
     : null;
   const mappedRecoveryKey = sourceRaw === null ? null : proposedV4RecoveryKeyForRaw(sourceRaw);
-  const recoveryKey = mappedRecoveryKey
-    ?? (sourceRaw === null
-      ? null
-      : validation?.valid ? null : PREVIEW_RAW_RECOVERY_KEY);
+  const recoveryKey = operation === 'repair'
+    ? PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY
+    : mappedRecoveryKey
+      ?? (sourceRaw === null
+        ? null
+        : validation?.valid ? null : PREVIEW_RAW_RECOVERY_KEY);
   let recoveryKeyLookup: PreviewStorageDiagnostic['recoveryKeyLookup'] = 'not-required';
   if (recoveryKey !== null && sourceRaw !== null) {
     try {
@@ -441,46 +444,81 @@ export function loadCloudRestoreRecoveryCopy(storage: PreviewStorage): RecoveryC
   }
 }
 
-export function preservePreviewBeforeCloudRestore(
+export function loadStrengthRepairRecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+type RecoveryPreservationMessages = {
+  sourceChangedBefore: string;
+  conflictingCopy: string;
+  sourceChangedDuring: string;
+  unverifiedCopy: string;
+  writeFailed: (message: string, writeAttempted: boolean) => string;
+};
+
+function preservePreviewInRecoverySlot(
   storage: PreviewStorage,
-  expectedRaw: string | null
-): CloudRestoreRecoveryResult {
+  expectedRaw: string | null,
+  recoveryKey: string,
+  messages: RecoveryPreservationMessages
+): PreviewRecoveryPreservationResult {
+  let writeAttempted = false;
   try {
     if (storage.getItem(PREVIEW_STORAGE_KEY) !== expectedRaw) {
-      return {
-        kind: 'conflict',
-        message: 'This browser’s preview changed before it could be preserved. Nothing was restored.'
-      };
+      return { kind: 'conflict', message: messages.sourceChangedBefore };
     }
     if (expectedRaw === null) return { kind: 'not-needed' };
 
-    const existing = storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY);
+    const existing = storage.getItem(recoveryKey);
     if (existing !== null && existing !== expectedRaw) {
-      return {
-        kind: 'conflict',
-        message: 'An earlier pre-restore recovery copy contains different data. Download or preserve that copy before trying another restore.'
-      };
+      return { kind: 'conflict', message: messages.conflictingCopy };
     }
-    if (existing === null) storage.setItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, expectedRaw);
+    if (existing === null) {
+      writeAttempted = true;
+      storage.setItem(recoveryKey, expectedRaw);
+    }
     if (storage.getItem(PREVIEW_STORAGE_KEY) !== expectedRaw) {
-      return {
-        kind: 'conflict',
-        message: 'This browser’s preview changed while its recovery copy was being made. Nothing was restored.'
-      };
+      return { kind: 'conflict', message: messages.sourceChangedDuring };
     }
-    if (storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY) !== expectedRaw) {
-      return {
-        kind: 'error',
-        message: 'The exact pre-restore recovery copy could not be verified. Nothing was restored.'
-      };
+    if (storage.getItem(recoveryKey) !== expectedRaw) {
+      return { kind: 'error', message: messages.unverifiedCopy };
     }
     return { kind: 'preserved' };
   } catch (error) {
-    return {
-      kind: 'error',
-      message: `The pre-restore recovery copy could not be saved: ${errorMessage(error)}`
-    };
+    return { kind: 'error', message: messages.writeFailed(errorMessage(error), writeAttempted) };
   }
+}
+
+export function preservePreviewBeforeCloudRestore(
+  storage: PreviewStorage,
+  expectedRaw: string | null
+): PreviewRecoveryPreservationResult {
+  return preservePreviewInRecoverySlot(storage, expectedRaw, PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, {
+    sourceChangedBefore: 'This browser’s preview changed before it could be preserved. Nothing was restored.',
+    conflictingCopy: 'An earlier pre-restore recovery copy contains different data. Download or preserve that copy before trying another restore.',
+    sourceChangedDuring: 'This browser’s preview changed while its recovery copy was being made. Nothing was restored.',
+    unverifiedCopy: 'The exact pre-restore recovery copy could not be verified. Nothing was restored.',
+    writeFailed: message => `The pre-restore recovery copy could not be saved: ${message}`
+  });
+}
+
+export function preservePreviewBeforeStrengthRepair(
+  storage: PreviewStorage,
+  expectedRaw: string | null
+): PreviewRecoveryPreservationResult {
+  return preservePreviewInRecoverySlot(storage, expectedRaw, PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY, {
+    sourceChangedBefore: 'The saved preview changed before its repair recovery copy could be made. No repair or recovery write was made.',
+    conflictingCopy: 'The repair-specific recovery archive already contains different data. It was left unchanged; no workout repair was written. Download or preserve that archive before retrying.',
+    sourceChangedDuring: 'The saved preview changed while its repair recovery copy was being made. The repair archive may now exist; no workout repair was written.',
+    unverifiedCopy: 'The repair recovery copy could not be verified. No workout repair was written; the archive may have been created and was not cleared.',
+    writeFailed: (message, writeAttempted) => writeAttempted
+      ? `The repair recovery copy could not be verified after a storage error. No workout repair was written; the archive may have been created and was not cleared. ${message}`
+      : `Repair recovery storage could not be read. No workout repair was written and no recovery copy was changed. ${message}`
+  });
 }
 
 export function writePreview(
@@ -492,6 +530,7 @@ export function writePreview(
   const operation = options.operation ?? 'save';
   let rawRecoveryExpected: string | null = null;
   let activeSourceCompared = false;
+  let repairRaw: string | null = null;
   try {
     const actualRaw = storage.getItem(PREVIEW_STORAGE_KEY);
     if (actualRaw !== expectedRaw) return { kind: 'conflict', actualRaw };
@@ -512,13 +551,14 @@ export function writePreview(
     }
     const raw = JSON.stringify(createPreviewEnvelope(data));
     if (operation === 'repair') {
+      repairRaw = raw;
       const repaired = options.currentDate
         ? parsePreviewBackup(raw, options.currentDate)
         : { valid: false as const, message: 'A current date is required for repair validation.' };
       if (!repaired.valid) {
         return {
           kind: 'error',
-          message: 'The repaired preview did not pass validation, so no changes were written.',
+          message: 'The repaired preview did not pass validation. The active preview was not written.',
           diagnostic: diagnosticForWriteFailure(
             storage,
             expectedRaw,
@@ -554,11 +594,11 @@ export function writePreview(
         && linkCounts.dateMismatch === 0
         && linkCounts.repeatedCompletion === 0
         && linkCounts.archivedRhythm === 0
-        && storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY) === expectedRaw;
+        && storage.getItem(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY) === expectedRaw;
       if (operation === 'repair' && !targetedRepair) {
         return {
           kind: 'error',
-          message: 'The targeted repair was not authorized by a verified validation failure and exact recovery copy.',
+          message: 'The active preview was not written because the diagnosed validation failure and exact repair archive could not be verified.',
           diagnostic: diagnosticForWriteFailure(
             storage,
             expectedRaw,
@@ -866,6 +906,40 @@ export function writePreview(
     }
     return { kind: 'saved', raw };
   } catch (error) {
+    if (operation === 'repair') {
+      try {
+        const actualRaw = storage.getItem(PREVIEW_STORAGE_KEY);
+        if (repairRaw !== null && actualRaw === repairRaw) return { kind: 'saved', raw: repairRaw };
+        if (actualRaw !== expectedRaw) return { kind: 'conflict', actualRaw };
+        return {
+          kind: 'error',
+          message: 'The workout repair was not written. The original remains the active preview and is preserved in the repair-specific recovery archive. Account sync was not started.',
+          diagnostic: diagnosticForWriteFailure(
+            storage,
+            expectedRaw,
+            options.currentDate,
+            operation,
+            'storage-operation-failed',
+            activeSourceCompared ? 'not-detected' : 'not-checked',
+            errorMessage(error)
+          )
+        };
+      } catch {
+        return {
+          kind: 'error',
+          message: 'The repair write outcome could not be verified. Account sync was not started; run Check data before any retry.',
+          diagnostic: diagnosticForWriteFailure(
+            storage,
+            expectedRaw,
+            options.currentDate,
+            operation,
+            'storage-operation-failed',
+            activeSourceCompared ? 'not-detected' : 'not-checked',
+            errorMessage(error)
+          )
+        };
+      }
+    }
     return {
       kind: 'error',
       message: 'The preview could not be saved on this device. Your changes remain in this tab; retry before leaving.',

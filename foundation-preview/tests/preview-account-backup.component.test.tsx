@@ -26,6 +26,7 @@ import type {
 import {
   loadPreview,
   PREVIEW_CLOUD_RESTORE_RECOVERY_KEY,
+  PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY,
   PREVIEW_STORAGE_KEY,
   preservePreviewBeforeCloudRestore,
   writePreview
@@ -380,7 +381,8 @@ describe('manual Preview account backup and restore', () => {
     await user.click(within(confirmed).getByRole('button', { name: 'Repair this workout' }));
 
     expect(await screen.findByText(/Local save: confirmed/)).toBeTruthy();
-    expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(originalRaw);
+    expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBeNull();
+    expect(local.storage.getItem(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY)).toBe(originalRaw);
     const savedRaw = local.storage.getItem(PREVIEW_STORAGE_KEY);
     expect(savedRaw).not.toBe(originalRaw);
     const saved = parsePreviewBackup(savedRaw!, currentDate);
@@ -402,11 +404,12 @@ describe('manual Preview account backup and restore', () => {
     expect(api.save).not.toHaveBeenCalled();
   });
 
-  it('stops the targeted repair when another recovery copy already contains different bytes', async () => {
+  it('uses a repair-specific archive and leaves an earlier pre-restore copy unchanged', async () => {
     const user = userEvent.setup();
     const data = missingCompletionData();
     const local = accountStorage(data);
-    local.values.set(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, '{"preserve":"earlier copy"}');
+    const earlierRecovery = '{"preserve":"earlier pre-restore copy"}';
+    local.values.set(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, earlierRecovery);
     const api: PreviewAccountBackupApi = {
       read: vi.fn(async () => null),
       save: vi.fn(async () => 1)
@@ -418,9 +421,106 @@ describe('manual Preview account backup and restore', () => {
     const confirmation = await screen.findByRole('dialog', { name: 'Repair this workout’s Rhythm link?' });
     await user.click(within(confirmation).getByRole('button', { name: 'Repair this workout' }));
 
-    expect((await screen.findByRole('alert')).textContent).toMatch(/different data/i);
+    expect(await screen.findByText(/Local save: confirmed/)).toBeTruthy();
+    expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).not.toBe(local.raw);
+    expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(earlierRecovery);
+    expect(local.storage.getItem(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY)).toBe(local.raw);
+    expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it('stops without writes when the repair-specific archive already contains different bytes', async () => {
+    const user = userEvent.setup();
+    const data = missingCompletionData();
+    const local = accountStorage(data);
+    const earlierRecovery = '{"preserve":"earlier pre-restore copy"}';
+    const existingRepairArchive = '{"preserve":"earlier repair source"}';
+    local.values.set(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, earlierRecovery);
+    local.values.set(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY, existingRepairArchive);
+    const onRepair = vi.fn(() => null);
+    const api: PreviewAccountBackupApi = {
+      read: vi.fn(async () => null),
+      save: vi.fn(async () => 1)
+    };
+
+    renderControls(
+      api,
+      local.storage,
+      data,
+      local.raw,
+      undefined,
+      () => true,
+      accountA,
+      true,
+      true,
+      'account',
+      onRepair
+    );
+    await user.click(screen.getByRole('button', { name: /Check data/ }));
+    await user.click(await screen.findByRole('button', { name: /Repair this workout’s broken Rhythm link/ }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Repair this workout’s Rhythm link?' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Repair this workout' }));
+
+    const error = await screen.findByRole('alert');
+    expect(error.textContent).toMatch(/repair-specific recovery archive already contains different data/i);
+    expect(error.textContent).toMatch(/no workout repair was written/i);
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
-    expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe('{"preserve":"earlier copy"}');
+    expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(earlierRecovery);
+    expect(local.storage.getItem(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY)).toBe(existingRepairArchive);
+    expect(onRepair).not.toHaveBeenCalled();
+    expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it('reports the preserved source and no confirmed repair when the active write fails', async () => {
+    const user = userEvent.setup();
+    const data = missingCompletionData();
+    const local = accountStorage(data);
+    const earlierRecovery = '{"preserve":"earlier pre-restore copy"}';
+    local.values.set(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, earlierRecovery);
+    const failingStorage: PreviewStorage = {
+      getItem: key => local.storage.getItem(key),
+      setItem: (key, value) => {
+        if (key === PREVIEW_STORAGE_KEY) throw new Error('synthetic active write failure');
+        local.storage.setItem(key, value);
+      }
+    };
+    const onRepair = (nextData: PreviewData, expectedRaw: string) => {
+      const result = writePreview(failingStorage, nextData, expectedRaw, {
+        allowTargetedRepair: true,
+        currentDate,
+        operation: 'repair'
+      });
+      return result.kind === 'error' ? result.message : 'Unexpected repair result.';
+    };
+    const api: PreviewAccountBackupApi = {
+      read: vi.fn(async () => null),
+      save: vi.fn(async () => 1)
+    };
+
+    renderControls(
+      api,
+      failingStorage,
+      data,
+      local.raw,
+      undefined,
+      () => true,
+      accountA,
+      true,
+      true,
+      'account',
+      onRepair
+    );
+    await user.click(screen.getByRole('button', { name: /Check data/ }));
+    await user.click(await screen.findByRole('button', { name: /Repair this workout’s broken Rhythm link/ }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Repair this workout’s Rhythm link?' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Repair this workout' }));
+
+    const error = await screen.findByRole('alert');
+    expect(error.textContent).toMatch(/repair save was not confirmed/i);
+    expect(error.textContent).toMatch(/exact source is preserved in the repair-specific archive/i);
+    expect(error.textContent).toMatch(/account sync was not started/i);
+    expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
+    expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(earlierRecovery);
+    expect(local.storage.getItem(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY)).toBe(local.raw);
     expect(api.save).not.toHaveBeenCalled();
   });
 
@@ -431,7 +531,7 @@ describe('manual Preview account backup and restore', () => {
     const failingStorage: PreviewStorage = {
       getItem: key => local.storage.getItem(key),
       setItem: (key, value) => {
-        if (key === PREVIEW_CLOUD_RESTORE_RECOVERY_KEY) throw new Error('synthetic recovery write failure');
+        if (key === PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY) throw new Error('synthetic recovery write failure');
         local.storage.setItem(key, value);
       }
     };
@@ -446,9 +546,11 @@ describe('manual Preview account backup and restore', () => {
     const confirmation = await screen.findByRole('dialog', { name: 'Repair this workout’s Rhythm link?' });
     await user.click(within(confirmation).getByRole('button', { name: 'Repair this workout' }));
 
-    expect((await screen.findByRole('alert')).textContent).toMatch(/recovery copy could not be saved/i);
+    expect((await screen.findByRole('alert')).textContent).toMatch(/repair recovery copy could not be verified/i);
+    expect(screen.getByRole('alert').textContent).toMatch(/no workout repair was written/i);
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
     expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBeNull();
+    expect(local.storage.getItem(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY)).toBeNull();
     expect(api.save).not.toHaveBeenCalled();
   });
 
@@ -472,6 +574,7 @@ describe('manual Preview account backup and restore', () => {
     expect((await screen.findByRole('alert')).textContent).toMatch(/saved device data changed/i);
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(changedRaw);
     expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBeNull();
+    expect(local.storage.getItem(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY)).toBeNull();
     expect(api.save).not.toHaveBeenCalled();
   });
 
@@ -495,6 +598,7 @@ describe('manual Preview account backup and restore', () => {
     expect((await screen.findByRole('alert')).textContent).toMatch(/signed-in account changed/i);
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
     expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBeNull();
+    expect(local.storage.getItem(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY)).toBeNull();
     expect(api.save).not.toHaveBeenCalled();
   });
 
@@ -551,7 +655,8 @@ describe('manual Preview account backup and restore', () => {
     });
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
 
-    local.storage.setItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, '{"different":"bytes"}');
+    const earlierRestoreCopy = '{"different":"restore bytes"}';
+    local.storage.setItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, earlierRestoreCopy);
     expect(writePreview(local.storage, repairedData, local.raw, {
       allowTargetedRepair: true,
       currentDate,
@@ -561,7 +666,8 @@ describe('manual Preview account backup and restore', () => {
       diagnostic: { rejectedRule: 'targeted-repair-not-approved' }
     });
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
-    local.storage.setItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, local.raw);
+    expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(earlierRestoreCopy);
+    local.storage.setItem(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY, local.raw);
     expect(writePreview(local.storage, data, local.raw, {
       allowTargetedRepair: true,
       currentDate,
@@ -576,10 +682,11 @@ describe('manual Preview account backup and restore', () => {
       currentDate,
       operation: 'repair'
     })).toMatchObject({ kind: 'saved' });
-    expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(local.raw);
+    expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(earlierRestoreCopy);
+    expect(local.storage.getItem(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY)).toBe(local.raw);
 
     const noOpLocal = accountStorage(data);
-    noOpLocal.storage.setItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, noOpLocal.raw);
+    noOpLocal.storage.setItem(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY, noOpLocal.raw);
     const noOpStorage: PreviewStorage = {
       getItem: key => noOpLocal.storage.getItem(key),
       setItem: (key, value) => {
@@ -597,7 +704,7 @@ describe('manual Preview account backup and restore', () => {
     invalidForAnotherReason.savedRhythms[0]!.timeOfDay =
       'custom-time-block:22222222-2222-4222-8222-222222222222';
     const otherFailure = accountStorage(invalidForAnotherReason);
-    otherFailure.storage.setItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, otherFailure.raw);
+    otherFailure.storage.setItem(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY, otherFailure.raw);
     expect(writePreview(otherFailure.storage, createSamplePreviewData(), otherFailure.raw, {
       allowTargetedRepair: true,
       currentDate,

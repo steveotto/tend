@@ -29,6 +29,7 @@ import {
 } from '../src/storage/preview-account-backup.ts';
 import {
   PREVIEW_CLOUD_RESTORE_RECOVERY_KEY,
+  PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY,
   PREVIEW_STORAGE_KEY,
   loadPreviewImportSyncGuard,
   writePreview
@@ -154,6 +155,9 @@ function Browser({
   const [syncTarget, setSyncTarget] = useState<HTMLDivElement | null>(null);
   const [recoveryTarget, setRecoveryTarget] = useState<HTMLDivElement | null>(null);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [repairRecoveryRaw, setRepairRecoveryRaw] = useState(
+    () => storage.getItem(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY)
+  );
 
   function editPerson(label: string) {
     const first = data.people[0];
@@ -219,6 +223,8 @@ function Browser({
         localRaw={raw}
         localRecoveryRaw={storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)}
         localRecoveryError={null}
+        repairRecoveryRaw={repairRecoveryRaw}
+        repairRecoveryError={null}
         enabled={localSaveConfirmed}
         localSaveConfirmed={localSaveConfirmed}
         localSaveStatus={localSaveStatus}
@@ -231,6 +237,7 @@ function Browser({
         isIdentityCurrent={isIdentityCurrent}
         onRestore={restore}
         onRepair={repair}
+        onRepairRecoveryChanged={() => setRepairRecoveryRaw(storage.getItem(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY))}
         onManualOperationLockChange={setManualLock}
       >
         {recoveryActions}
@@ -1169,6 +1176,21 @@ describe('Preview account sync', () => {
   it('reports the local repair separately and confirms normal account sync', async () => {
     const invalidLocal = brokenLowerBodyWorkoutData();
     const localStorage = makeStorage(invalidLocal);
+    let interruptAfterActiveWrite = true;
+    const interruptedStorage: PreviewStorage = {
+      getItem: key => localStorage.storage.getItem(key),
+      setItem: (key, value) => {
+        localStorage.storage.setItem(key, value);
+        if (key === PREVIEW_STORAGE_KEY && interruptAfterActiveWrite) {
+          interruptAfterActiveWrite = false;
+          throw new Error('synthetic post-write interruption');
+        }
+      }
+    };
+    const originalLocalRaw = localStorage.values.get(PREVIEW_STORAGE_KEY);
+    if (!originalLocalRaw) throw new Error('Synthetic invalid local source is missing.');
+    const earlierPreRestoreCopy = JSON.stringify(createPreviewEnvelope(createEmptyPreviewData()));
+    localStorage.values.set(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, earlierPreRestoreCopy);
     const existingAccount = createSamplePreviewData();
     const existingAccountRecord = cloudRecord(existingAccount, 4);
     const service = backend(existingAccountRecord);
@@ -1178,7 +1200,7 @@ describe('Preview account sync', () => {
       syncedEnvelope: existingAccountRecord.document,
       syncedAt: existingAccountRecord.updatedAt
     }));
-    const view = render(<Browser api={service.api} storage={localStorage.storage} initialData={invalidLocal} />);
+    const view = render(<Browser api={service.api} storage={interruptedStorage} initialData={invalidLocal} />);
 
     await screen.findByText(/Needs attention|Could not validate/i);
     fireEvent.click(screen.getByRole('button', { name: /Backup & recovery/ }));
@@ -1192,6 +1214,9 @@ describe('Preview account sync', () => {
 
     await screen.findByText(/Local save: confirmed/);
     await screen.findByText(/Account sync: confirmed/);
+    expect(interruptAfterActiveWrite).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: /Check data/ }));
+    await screen.findByText(/passed backup validation/);
     await waitForRevision(service, 5);
     expect(service.saveCalls).toBe(1);
     expect(service.expectedRevisions).toEqual([4]);
@@ -1207,8 +1232,10 @@ describe('Preview account sync', () => {
       supersetGroups: []
     }]);
     expect(syncedData.datedRhythmCompletions).toEqual([]);
-    expect(localStorage.values.get(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY))
-      .toBe(JSON.stringify(createPreviewEnvelope(invalidLocal)));
+    expect(localStorage.values.get(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(earlierPreRestoreCopy);
+    expect(localStorage.values.get(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY)).toBe(originalLocalRaw);
+    expect(localStorage.values.get(PREVIEW_STORAGE_KEY)).not.toBe(originalLocalRaw);
+    expect(screen.getByRole('button', { name: /Download workout-repair source copy/ })).toBeTruthy();
     view.unmount();
   });
 

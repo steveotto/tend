@@ -12,9 +12,9 @@ import {
 } from '../storage/preview-account-backup.ts';
 import type { PreviewAccountBackupApi } from '../storage/preview-account-backup.ts';
 import {
-  PREVIEW_CLOUD_RESTORE_RECOVERY_KEY,
   PREVIEW_STORAGE_KEY,
-  preservePreviewBeforeCloudRestore
+  preservePreviewBeforeCloudRestore,
+  preservePreviewBeforeStrengthRepair
 } from '../storage/preview-storage.ts';
 import type { PreviewStorage } from '../storage/preview-storage.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
@@ -48,6 +48,8 @@ type PreviewAccountBackupControlsProps = {
   localRaw: string | null;
   localRecoveryRaw: string | null;
   localRecoveryError?: string | null;
+  repairRecoveryRaw?: string | null;
+  repairRecoveryError?: string | null;
   cloudRecoveryRaw?: string | null;
   cloudRecoveryError?: string | null;
   deviceRecoveryRaw?: string | null;
@@ -60,6 +62,7 @@ type PreviewAccountBackupControlsProps = {
   isIdentityCurrent: () => boolean;
   onRestore: (data: PreviewData, expectedLocalRaw: string | null) => string | null;
   onRepair: (data: PreviewData, expectedLocalRaw: string) => string | null;
+  onRepairRecoveryChanged?: () => void;
   onRecoveryChanged: (raw: string | null) => void;
   onExclusiveChange?: (locked: boolean) => void;
   onOperationFinished?: () => void;
@@ -258,6 +261,8 @@ export function PreviewAccountBackupControls({
   localRaw,
   localRecoveryRaw,
   localRecoveryError = null,
+  repairRecoveryRaw = null,
+  repairRecoveryError = null,
   cloudRecoveryRaw = null,
   cloudRecoveryError = null,
   deviceRecoveryRaw = null,
@@ -270,6 +275,7 @@ export function PreviewAccountBackupControls({
   isIdentityCurrent,
   onRestore,
   onRepair,
+  onRepairRecoveryChanged,
   onRecoveryChanged,
   onExclusiveChange,
   onOperationFinished
@@ -658,15 +664,13 @@ export function PreviewAccountBackupControls({
           setError('The approved workout no longer matches the diagnostic. No repair was made.');
           return;
         }
-        const recovery = preservePreviewBeforeCloudRestore(storage, pending.expectedLocalRaw);
-        if (recovery.kind !== 'preserved'
-          || storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY) !== pending.expectedLocalRaw) {
+        const recovery = preservePreviewBeforeStrengthRepair(storage, pending.expectedLocalRaw);
+        onRepairRecoveryChanged?.();
+        if (recovery.kind !== 'preserved') {
           setPending(null);
-          setError(recovery.kind === 'preserved'
-            ? 'The exact recovery copy could not be verified. No repair was made.'
-            : recovery.kind === 'conflict' || recovery.kind === 'error'
-              ? recovery.message
-              : 'No recovery copy was created. No repair was made.');
+          setError(recovery.kind === 'conflict' || recovery.kind === 'error'
+            ? recovery.message
+            : 'No repair-specific recovery copy was created. No workout repair was written.');
           return;
         }
         if (!isIdentityCurrent() || pending.expectedAccountId !== accountId
@@ -682,7 +686,13 @@ export function PreviewAccountBackupControls({
           setError('The approved workout is no longer unique. No repair was made.');
           return;
         }
-        createValidatedPreviewAccountDocument(repairedData, currentDate);
+        try {
+          createValidatedPreviewAccountDocument(repairedData, currentDate);
+        } catch (validationError) {
+          setPending(null);
+          setError(`The repaired preview failed validation. No workout repair was written or synced. The exact source is preserved in the repair-specific archive. ${errorMessage(validationError)}`);
+          return;
+        }
         if (storage.getItem(PREVIEW_STORAGE_KEY) !== pending.expectedLocalRaw
           || pending.expectedLocalRaw !== localRaw
           || !isIdentityCurrent()
@@ -697,7 +707,7 @@ export function PreviewAccountBackupControls({
         if (writeError) {
           repairSyncBaseline.current = null;
           setPending(null);
-          setError(writeError);
+          setError(`The repair save was not confirmed. The exact source is preserved in the repair-specific archive; no account sync was started. ${writeError}`);
           return;
         }
         onRecoveryChanged(pending.expectedLocalRaw);
@@ -867,7 +877,7 @@ export function PreviewAccountBackupControls({
                 Wait until this device’s changes are saved before using account recovery.
               </p>
             )}
-            {(localRecoveryRaw !== null || cloudRecoveryRaw !== null || deviceRecoveryRaw !== null) && (
+            {(localRecoveryRaw !== null || repairRecoveryRaw !== null || cloudRecoveryRaw !== null || deviceRecoveryRaw !== null) && (
               <div className="preview-account-backup__rows preview-account-backup__recovery-files">
                 {localRecoveryRaw !== null && (
                   <RecoveryActionRow
@@ -876,6 +886,16 @@ export function PreviewAccountBackupControls({
                     onClick={() => setMessage(
                       downloadRecovery(localRecoveryRaw)
                         ?? 'The pre-restore device copy was downloaded.'
+                    )}
+                  />
+                )}
+                {repairRecoveryRaw !== null && (
+                  <RecoveryActionRow
+                    title="Download workout-repair source copy"
+                    description="Download the exact device data preserved before the targeted workout repair."
+                    onClick={() => setMessage(
+                      downloadRecovery(repairRecoveryRaw, 'tend-preview-before-workout-repair.json')
+                        ?? 'The workout-repair source copy was downloaded.'
                     )}
                   />
                 )}
@@ -901,9 +921,9 @@ export function PreviewAccountBackupControls({
                 )}
               </div>
             )}
-            {(localRecoveryError || cloudRecoveryError || deviceRecoveryError) && (
+            {(localRecoveryError || repairRecoveryError || cloudRecoveryError || deviceRecoveryError) && (
               <p className="preview-account-backup__error" role="alert">
-                {localRecoveryError || cloudRecoveryError || deviceRecoveryError}
+                {localRecoveryError || repairRecoveryError || cloudRecoveryError || deviceRecoveryError}
               </p>
             )}
             {message && <p className="preview-account-backup__message" role="status">{message}</p>}

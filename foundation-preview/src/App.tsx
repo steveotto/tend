@@ -237,6 +237,7 @@ import {
   loadV41RecoveryCopy,
   loadV42RecoveryCopy,
   loadCloudRestoreRecoveryCopy,
+  loadStrengthRepairRecoveryCopy,
   loadPreviewImportRecovery,
   loadPreview,
   writePreview
@@ -547,6 +548,8 @@ function PreviewWorkspace({
   const [rawRecoveryError, setRawRecoveryError] = useState<string | null>(null);
   const [cloudRestoreRecoveryCopy, setCloudRestoreRecoveryCopy] = useState<string | null>(null);
   const [cloudRestoreRecoveryError, setCloudRestoreRecoveryError] = useState<string | null>(null);
+  const [strengthRepairRecoveryCopy, setStrengthRepairRecoveryCopy] = useState<string | null>(null);
+  const [strengthRepairRecoveryError, setStrengthRepairRecoveryError] = useState<string | null>(null);
   const [importRecoveryCopy, setImportRecoveryCopy] = useState<string | null>(null);
   const [importRecoverySourceCopy, setImportRecoverySourceCopy] = useState<string | null>(null);
   const [importRecoveryArchive, setImportRecoveryArchive] = useState<string | null>(null);
@@ -1040,6 +1043,17 @@ function PreviewWorkspace({
     }
   }
 
+  function refreshStrengthRepairRecoveryCopy() {
+    const result = loadStrengthRepairRecoveryCopy(previewStorage);
+    if (result.kind === 'loaded') {
+      setStrengthRepairRecoveryCopy(result.raw);
+      setStrengthRepairRecoveryError(null);
+    } else {
+      setStrengthRepairRecoveryCopy(null);
+      setStrengthRepairRecoveryError(result.message);
+    }
+  }
+
   function refreshImportRecoveryCopy() {
     const result = loadPreviewImportRecovery(previewStorage);
     if (result.kind === 'loaded') {
@@ -1422,6 +1436,7 @@ function PreviewWorkspace({
   useEffect(() => {
     refreshRawRecoveryCopy();
     refreshCloudRestoreRecoveryCopy();
+    refreshStrengthRepairRecoveryCopy();
     refreshImportRecoveryCopy();
     refreshV1RecoveryCopy();
     refreshV2RecoveryCopy();
@@ -3534,6 +3549,9 @@ function PreviewWorkspace({
             localRaw={expectedRaw.current}
             localRecoveryRaw={cloudRestoreRecoveryCopy}
             localRecoveryError={cloudRestoreRecoveryError}
+            repairRecoveryRaw={strengthRepairRecoveryCopy}
+            repairRecoveryError={strengthRepairRecoveryError}
+            onRepairRecoveryChanged={refreshStrengthRepairRecoveryCopy}
             enabled={hydrated && autoSaveEnabled && persistenceStatus.kind === 'saved'}
             localSaveConfirmed={persistenceStatus.kind === 'saved'}
             localSaveStatus={persistenceStatus.kind}
@@ -3577,7 +3595,7 @@ function PreviewWorkspace({
                 return 'This browser’s preview changed after confirmation. No local data was replaced.';
               }
               const writeError = finishTargetedRepair(data, expectedLocalRaw);
-              if (!writeError) refreshCloudRestoreRecoveryCopy();
+              refreshStrengthRepairRecoveryCopy();
               return writeError;
             }}
             onManualOperationLockChange={setManualBackupLocked}
