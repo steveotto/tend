@@ -5643,7 +5643,7 @@ The shared Search surface in `AppNavigation` now uses an opaque, full-screen mob
 
 **Verification:** Semantic typecheck passed. Focused Search component/domain tests passed **13/13**; the full component/domain suite passed **1,487/1,487 across 100 files** with two workers; reader tests **7/7**; legacy tests **176/176**; production browser CSS contract passed with Classic `tend.css` blocked; Pages production and scoring builds passed (**238 app modules and 3 scoring modules**); Pages artifact tests passed **8/8**; `git diff --check` passed. The browser contract covers 375/390/430px widths, Small/Medium/Large text, populated/empty/long results, and short viewports. The default-worker component run hit test-harness timeouts under load; both slow cases passed in isolation and the full two-worker run passed. Production build retains the existing non-fatal >500 kB chunk advisory.
 
-**Review limits:** Browser checks use synthetic preview data and viewport emulation. They do not establish behavior on physical iOS keyboards, VoiceOver, or signed-in accounts. The canonical preview at `http://127.0.0.1:5303/app-preview.html` is open with synthetic Search results. The release candidate has not yet been published.
+**Review limits:** Browser checks use synthetic preview data and viewport emulation. They do not establish behavior on physical iOS keyboards, VoiceOver, or signed-in accounts. The canonical preview at `http://127.0.0.1:5303/app-preview.html` is open with synthetic Search results.
 
 ## Backup validation diagnostic
 
@@ -5653,4 +5653,8 @@ The reported message is emitted by `createValidatedPreviewAccountDocument()` whe
 
 The demonstrated defect is loss of diagnostics: the validator's reason was replaced with a generic backup message. The candidate now preserves a stable validation code and field path, including a privacy-safe path for an unrecognized data field, without exposing field values. Validation remains strict; unknown or unsupported data is still protected. Synthetic tests verify a validation failure makes no local write and no manual account read/upload. The actual field causing the user's validation failure has not been reproduced because personal data was neither accessed nor requested.
 
-**Safe recovery next step:** After the diagnostic release is verified in production, retry the normal backup once and share only its diagnostic code and path. Do not clear storage, restore, replace, or send the backup. No personal document, recovery bytes, account, private feed, or database was inspected or modified. Real signed-in local saving and account synchronization remain unverified.
+**Safe recovery next step:** Now that the diagnostic release is verified in production, retry the normal backup once and share only its diagnostic code and path. Do not clear storage, restore, replace, or send the backup. No personal document, recovery bytes, account, private feed, or database was inspected or modified. Real signed-in local saving and account synchronization remain unverified.
+
+## Release evidence
+
+PR [#95](https://github.com/steveotto/tend/pull/95) was merged to `main` as `ce80c05db7c0088479323b0a35afa5c4e97b3ce2`. The merged Pages build/deploy run **43897138012** and Cloudflare Pages check both succeeded; deployment `f8fd3411-9ca3-4a0e-ba47-81e2624d7c9e` completed successfully. Production serves the preview at `/app-preview` with `/assets/main-B-lUdmnM.js` and `/assets/main-Dze1cPm4.css`. The live JavaScript contains the new validation diagnostic markers, and the production CSS SHA-256 matches the locally verified production build. The preview and home endpoints return HTTP 200. This verifies publication, not real-account local saving or synchronization.
