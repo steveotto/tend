@@ -5699,7 +5699,7 @@ Synthetic component/storage tests cover successful repair, exact-source retentio
 
 **Verification for the read-only action and synthetic investigation:** semantic typecheck passed; component/domain suite **1496/1496 across 100 files**; reader tests **7/7**; legacy tests **176/176**; production browser CSS check passed; Pages build passed; artifact tests **8/8**; targeted workout-deletion integration test **1/1**. The build retains the existing non-blocking chunk-size advisory and `/tend.css` runtime-resolution notice. Publication evidence for the Check data action will be recorded after its scoped release.
 
-## Targeted repair archive collision correction (2026-11-18)
+## Targeted repair archive collision correction (2026-11-16)
 
 The user reported that the targeted repair stopped with the pre-restore recovery-copy warning and a fresh Check data still showed the same missing-completion relationship. The repair confirmation path was reusing `preservePreviewBeforeCloudRestore`; that helper correctly refuses to overwrite an existing pre-restore archive containing different bytes, so the repair did not reach the active preview write. This code-path diagnosis is covered synthetically; no personal storage or account was inspected.
 
@@ -5711,4 +5711,6 @@ Synthetic tests reproduce the existing-different-pre-restore-copy → targeted r
 
 **Verification:** semantic typecheck passed; reader tests **7/7**; component tests **1,508/1,508 across 100 files** (three workers); legacy tests **176/176**; production Pages build passed; Pages artifact tests **8/8**; production browser CSS contract passed; `git diff --check` passed. The build reports the existing non-fatal large-chunk advisory; the separate catalogue CSS build also reports the existing `/tend.css` runtime-resolution notice.
 
-**Release status:** this correction is not yet published. Record the PR, merge commit, deployment result, and public asset verification after the scoped release. Real-device local saving and account sync remain unverified; the agent did not sign in, inspect personal data, or perform account writes.
+**Production release:** PR [#102](https://github.com/steveotto/tend/pull/102) merged to `main` as `fb965ddfa8a23ffd415e2a14e69bc5fe3d13d85f`. The Cloudflare Pages check on that commit completed successfully; deployment `909f225d-b6ca-40c3-b459-88148b8e1df3` reported “Deploy successful.” Production `https://tendwhatmatters.com/` and `/app-preview.html` both returned HTTP 200 and reference `/assets/main-Cv87AWVE.js`; the fetched bundle contains the repair-specific key, archive download, and no-write protection messages. SHA-256: `6cdaade5b070d8a81f9989343c8e5e1b4e67c3db9d802882636c307878cdbe36`.
+
+**Verification limits:** no sign-in, personal document inspection, real-device local save, account upload, or account sync was performed. The successful persistence and sync path is demonstrated with synthetic tests only. The pre-existing unstaged `AGENTS.md` edit was preserved and excluded from the release.
