@@ -226,8 +226,9 @@ function validateSavedRhythmsWithIdPolicy(
     if (typeof record.title !== 'string' || record.title.trim().length === 0 || record.title.length > 80) return false;
     if (record.description !== undefined
       && (typeof record.description !== 'string' || record.description.length > 1000)) return false;
+    // Migration resolves display labels to stable IDs and reports unknown values precisely.
     if (!rhythmCadences.includes(record.cadence as RhythmCadence)
-      || !rhythmTimes.includes(record.timeLabel as RhythmTime)) return false;
+      || typeof record.timeLabel !== 'string' || record.timeLabel.trim().length === 0 || record.timeLabel.length > 80) return false;
     if (!isUniquePersonIds(record.personIds)
       || !isUniqueKnownValues<RhythmCategoryId>(record.categoryIds, categoryIds)) return false;
     ids.add(record.id);

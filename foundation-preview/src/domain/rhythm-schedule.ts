@@ -428,7 +428,7 @@ export function rhythmTimeValueFromLabel(
 }
 
 export function rhythmTimeValueFromLegacyLabel(label: string): RhythmTimeValue | undefined {
-  return legacyTimeValues.get(label);
+  return legacyTimeValues.get(label) ?? timeValueByLabel.get(label);
 }
 
 export function rhythmWeekdayName(weekday: RhythmWeekday): string {

@@ -51,6 +51,7 @@ import {
 import {
   PREVIEW_STORAGE_KEY,
   PREVIEW_ACCOUNT_STORAGE_PREFIX,
+  PREVIEW_V3_RECOVERY_KEY,
   PREVIEW_V5_RECOVERY_KEY
 } from '../src/storage/preview-storage.ts';
 import { createAuthenticatedPreviewIdentity } from '../src/domain/preview-identity.ts';
@@ -66,6 +67,27 @@ function render(ui: Parameters<typeof testingRender>[0]) {
     expandAllTodayGroups(result.container);
   }
   return result;
+}
+
+function legacyPreviewWithEarlyMorningTime(): string {
+  const envelope = createPreviewEnvelope(createSamplePreviewData());
+  return JSON.stringify({
+    format: envelope.format,
+    schemaVersion: 3,
+    data: {
+      goals: envelope.data.goals,
+      completedRhythmIds: [],
+      savedRhythms: [{
+        id: 'user-rhythm-11111111-1111-4111-8111-111111111111',
+        title: 'Early morning routine',
+        cadence: 'Daily',
+        timeLabel: 'Early morning',
+        personIds: [],
+        categoryIds: ['faith']
+      }],
+      archivedRhythmIds: []
+    }
+  });
 }
 
 function expandAllTodayGroups(container: ParentNode) {
@@ -530,6 +552,46 @@ describe('Tend Today preview', () => {
       enabled: true
     }]);
     expect(window.localStorage.getItem('tend:cal2')).toBeNull();
+  });
+
+  it('saves Calendar settings through the shared migration path for an Early morning legacy document', async () => {
+    const user = userEvent.setup();
+    const originalRaw = legacyPreviewWithEarlyMorningTime();
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, originalRaw);
+    const { unmount } = testingRender(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+
+    await openPreviewSettings(user, 'calendar');
+    await user.click(screen.getByRole('button', { name: 'Add calendar' }));
+    await user.type(screen.getByLabelText('Calendar name'), 'Recovered synthetic calendar');
+    await user.type(
+      screen.getByLabelText('Public iCloud calendar link'),
+      'https://p123-caldav.icloud.com/published/synthetic-migration-test-token'
+    );
+    await user.click(screen.getByRole('button', { name: 'Save calendar' }));
+    expect(await screen.findByText('Calendar added.')).toBeTruthy();
+
+    const savedRaw = window.localStorage.getItem(PREVIEW_STORAGE_KEY)!;
+    const saved = parsePreviewBackup(savedRaw, localDateString(new Date()));
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    expect(saved.sourceSchemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+    expect(saved.envelope.data.calendarSources).toMatchObject([{
+      name: 'Recovered synthetic calendar',
+      url: 'https://p123-caldav.icloud.com/published/synthetic-migration-test-token',
+      enabled: true
+    }]);
+    expect(saved.envelope.data.savedRhythms).toMatchObject([{
+      id: 'user-rhythm-11111111-1111-4111-8111-111111111111',
+      timeLabel: 'Early morning',
+      timeOfDay: 'early-morning'
+    }]);
+    expect(window.localStorage.getItem(PREVIEW_V3_RECOVERY_KEY)).toBe(originalRaw);
+
+    unmount();
+    testingRender(<App />);
+    await openPreviewSettings(user, 'calendar');
+    expect(screen.getByText('Recovered synthetic calendar')).toBeTruthy();
   });
 
   it('persists Calendar visibility and does not request events while hidden on Today', async () => {

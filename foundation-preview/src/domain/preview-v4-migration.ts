@@ -98,7 +98,7 @@ export function migratePreviewToProposedV4(raw: string, currentDate: string): Pr
       return {
         valid: false,
         kind: 'invalid',
-        message: `The existing time value "${rhythm.timeLabel}" has no supported v4 mapping.`
+        message: `The existing time value "${rhythm.timeLabel}" has no supported v4 mapping. Preserve the original recovery before resolving it; no changes were written.`
       };
     }
     savedRhythms.push({ ...rhythm, timeOfDay });

@@ -396,6 +396,135 @@ describe('v4 migration and recovery domain', () => {
     expect(result.envelope.data.savedRhythms[0]!.personal).toBeUndefined();
   });
 
+  it('migrates the historical Early morning label, preserves raw recovery, and supports repeated saves and backup import', () => {
+    const data = dataWithHistory();
+    data.savedRhythms[0]!.timeLabel = 'Early morning';
+    const raw = rawAtVersion(data, 3);
+    const { storage, values } = storageFixture(raw);
+
+    const loaded = loadPreview(storage, currentDate);
+    expect(loaded.kind).toBe('loaded');
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+    expect(values.has(PREVIEW_V3_RECOVERY_KEY)).toBe(false);
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.savedRhythms[0]).toMatchObject({
+      id: savedRhythmId,
+      timeLabel: 'Early morning',
+      timeOfDay: 'early-morning'
+    });
+
+    const firstSave = writePreview(storage, loaded.data, raw, { currentDate });
+    expect(firstSave.kind).toBe('saved');
+    if (firstSave.kind !== 'saved') return;
+    expect(values.get(PREVIEW_V3_RECOVERY_KEY)).toBe(raw);
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(firstSave.raw);
+
+    const reloaded = loadPreview(storage, currentDate);
+    expect(reloaded.kind).toBe('loaded');
+    if (reloaded.kind !== 'loaded') return;
+    expect(reloaded.data.savedRhythms[0]).toMatchObject({
+      timeLabel: 'Early morning',
+      timeOfDay: 'early-morning'
+    });
+    expect(reloaded.data.goals).toEqual(data.goals);
+    expect(reloaded.data.completedRhythmIds).toEqual(data.completedRhythmIds);
+    expect(reloaded.data.archivedRhythmIds).toEqual(data.archivedRhythmIds);
+
+    const secondSave = writePreview(storage, reloaded.data, firstSave.raw, { currentDate });
+    expect(secondSave.kind).toBe('saved');
+    if (secondSave.kind !== 'saved') return;
+    expect(values.get(PREVIEW_V3_RECOVERY_KEY)).toBe(raw);
+    expect(parsePreviewBackup(secondSave.raw, currentDate).valid).toBe(true);
+
+    const backup = parsePreviewBackup(raw, currentDate);
+    expect(backup.valid).toBe(true);
+    if (!backup.valid) return;
+    const importTargetRaw = JSON.stringify(createPreviewEnvelope(createSamplePreviewData()));
+    const importTarget = storageFixture(importTargetRaw);
+    const imported = writePreview(importTarget.storage, backup.envelope.data, importTargetRaw, {
+      currentDate,
+      operation: 'import',
+      importSourceRaw: raw
+    });
+    expect(imported.kind).toBe('saved');
+    if (imported.kind !== 'saved') return;
+    const importedAgain = loadPreview(importTarget.storage, currentDate);
+    expect(importedAgain.kind).toBe('loaded');
+    if (importedAgain.kind === 'loaded') {
+      expect(importedAgain.data.savedRhythms[0]).toMatchObject({
+        timeLabel: 'Early morning',
+        timeOfDay: 'early-morning'
+      });
+    }
+  });
+
+  it('keeps unknown legacy time labels blocked without changing the saved bytes', () => {
+    for (const label of ['Early am', 'early-morning']) {
+      const rawValue = JSON.parse(rawAtVersion(dataWithHistory(), 3)) as {
+        data: { savedRhythms: Array<{ timeLabel: string }> };
+      };
+      rawValue.data.savedRhythms[0]!.timeLabel = label;
+      const raw = JSON.stringify(rawValue);
+      const { storage, values } = storageFixture(raw);
+
+      expect(migratePreviewToProposedV4(raw, currentDate)).toMatchObject({
+        valid: false,
+        kind: 'invalid',
+        message: `The existing time value "${label}" has no supported v4 mapping. Preserve the original recovery before resolving it; no changes were written.`
+      });
+      expect(loadPreview(storage, currentDate)).toMatchObject({ kind: 'corrupt', raw });
+
+      const attemptedWrite = writePreview(storage, createSamplePreviewData(), raw, { currentDate });
+      expect(attemptedWrite.kind).toBe('error');
+      expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+      expect(values.has(PREVIEW_V3_RECOVERY_KEY)).toBe(false);
+    }
+  });
+
+  it('preserves current custom blocks, Seasons, goal links, logs, and settings through the preview reader', () => {
+    const data = dataWithHistory();
+    const rhythm = data.savedRhythms[0]!;
+    const customTimeBlockId = 'custom-time-block:11111111-1111-4111-8111-111111111111';
+    data.timeBlocks.blocks.splice(1, 0, {
+      id: customTimeBlockId,
+      name: 'Quiet time',
+      start: '07:00'
+    });
+    rhythm.timeOfDay = customTimeBlockId;
+    rhythm.schedule = { frequency: 'daily' };
+    rhythm.scoring = {
+      trackingStartDate: '2026-01-01',
+      timeZone: 'UTC',
+      scheduleHistory: [{
+        kind: 'scheduled',
+        id: 'season-early-morning',
+        startDate: '2026-01-01',
+        schedule: { frequency: 'daily' },
+        timeOfDay: customTimeBlockId,
+        paletteToken: 'fern'
+      }]
+    };
+    data.goals[0]!.supportingRhythmIds = [rhythm.id];
+    data.datedRhythmCompletions = [{
+      id: 'completion-v4-migration',
+      rhythmId: rhythm.id,
+      effectiveDate: currentDate,
+      localTime: '07:15',
+      timeZone: 'UTC',
+      completedAt: `${currentDate}T07:15:00.000Z`,
+      recordedAt: `${currentDate}T07:15:00.000Z`,
+      memory: 'synthetic history'
+    }];
+    data.rhythmHistoryIds = [rhythm.id];
+    const raw = JSON.stringify(createPreviewEnvelope(data));
+
+    const migrated = migratePreviewToProposedV4(raw, currentDate);
+    expect(migrated.valid).toBe(true);
+    if (!migrated.valid) return;
+    expect(migrated.sourceSchemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+    expect(migrated.envelope.data).toEqual(data);
+  });
+
   it('migrates v1 and v2 while preserving their supported data without inventing archive state', () => {
     const data = dataWithHistory();
     for (const version of [1, 2] as const) {
