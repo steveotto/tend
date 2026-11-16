@@ -1020,7 +1020,7 @@ async function main() {
             await page.setViewportSize({ width: viewportWidth, height: 812 });
             const recoveryLayout = await page.evaluate(() => {
               const rows = [...document.querySelectorAll<HTMLElement>('.preview-backup-import--recovery .preview-backup-import__row')];
-              if (rows.length !== 2) throw new Error('Synthetic Backup & recovery must show export and import actions.');
+              if (rows.length < 2) throw new Error('Synthetic Backup & recovery must show export and import actions.');
               return {
                 documentWidth: document.documentElement.scrollWidth,
                 viewportWidth: document.documentElement.clientWidth,

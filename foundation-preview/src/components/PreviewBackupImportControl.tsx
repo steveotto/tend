@@ -108,6 +108,18 @@ export function PreviewBackupImportControl({
           : 'Preview backup downloaded.', error: false });
   }
 
+  function downloadStoredSource() {
+    if (currentRaw === null) return;
+    const error = downloadText(
+      accountScoped ? 'tend-device-exact-saved-source.json' : 'tend-preview-exact-saved-source.json',
+      currentRaw,
+      'application/json'
+    );
+    setMessage(error
+      ? { text: error, error: true }
+      : { text: 'Exact saved source downloaded unchanged.', error: false });
+  }
+
   function downloadRecovery(raw: string, filename: string) {
     const error = downloadText(filename, raw, 'application/json');
     setMessage(error
@@ -175,9 +187,13 @@ export function PreviewBackupImportControl({
                 disabled={status.kind === 'loading'}
               >
                 <span className="preview-backup-import__row-copy">
-                  <span className="preview-backup-import__row-title">Export backup</span>
+                  <span className="preview-backup-import__row-title">
+                    {accountScoped ? 'Download current in-memory state' : 'Export backup'}
+                  </span>
                   <span className="preview-backup-import__row-description">
-                    {accountScoped ? 'Save a file to this device.' : 'Save a preview backup file to this device.'}
+                    {accountScoped
+                      ? 'Export what this tab currently holds without saving or reading the stored copy.'
+                      : 'Save a preview backup file to this device.'}
                   </span>
                 </span>
                 <span className="preview-backup-import__row-action" aria-hidden="true">↓</span>
@@ -218,6 +234,22 @@ export function PreviewBackupImportControl({
               />
             </label>
           )}
+        {compactRecovery && accountScoped && currentRaw !== null && (
+          <button
+            type="button"
+            className="preview-backup-import__row"
+            onClick={downloadStoredSource}
+            disabled={status.kind === 'loading' || status.kind === 'conflict'}
+          >
+            <span className="preview-backup-import__row-copy">
+              <span className="preview-backup-import__row-title">Download exact saved source</span>
+              <span className="preview-backup-import__row-description">
+                Download the stored document unchanged, even if validation fails.
+              </span>
+            </span>
+            <span className="preview-backup-import__row-action" aria-hidden="true">↓</span>
+          </button>
+        )}
         {recoverySourceRaw !== null && (
           <button
             type="button"
