@@ -179,6 +179,19 @@ export function PreviewAccountBackupControls({
     exclusiveChangeRef.current?.(locked);
   }
 
+  function checkDeviceData() {
+    setMessage('');
+    setError('');
+    try {
+      createValidatedPreviewAccountDocument(data, currentDate);
+      setMessage('This device’s data passed backup validation. No storage or account data was changed.');
+    } catch (validationError) {
+      setError(validationError instanceof PreviewAccountBackupError
+        ? validationError.message
+        : 'This device’s data could not be validated. No storage or account data was changed.');
+    }
+  }
+
   const refreshBackupStatus = useCallback(async () => {
     const requestId = ++statusRequestId.current;
     if (!api) {
@@ -530,6 +543,12 @@ export function PreviewAccountBackupControls({
               </p>
             )}
             <div className="preview-account-backup__rows">
+              <RecoveryActionRow
+                title="Check data"
+                description="Validate this device’s saved copy only. No account access or changes."
+                disabled={busy}
+                onClick={checkDeviceData}
+              />
               <RecoveryActionRow
                 title="Save this device’s copy to account"
                 description="Copy the data saved on this device to your account."

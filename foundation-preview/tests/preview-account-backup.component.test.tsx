@@ -220,6 +220,58 @@ describe('manual Preview account backup and restore', () => {
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
   });
 
+  it('checks valid local data without reading storage or accessing the account', async () => {
+    const user = userEvent.setup();
+    const data = fitnessData('Synthetic valid check');
+    const local = accountStorage(data);
+    const api: PreviewAccountBackupApi = {
+      read: vi.fn(async () => null),
+      save: vi.fn(async () => 1)
+    };
+
+    renderControls(api, local.storage, data, local.raw, undefined, () => true, accountA, true, false);
+    const getItem = vi.spyOn(local.storage, 'getItem');
+    const setItem = vi.spyOn(local.storage, 'setItem');
+    await user.click(screen.getByRole('button', { name: /Check data/ }));
+
+    expect((await screen.findByText(/passed backup validation/i)).textContent)
+      .toContain('No storage or account data was changed.');
+    expect(api.read).not.toHaveBeenCalled();
+    expect(api.save).not.toHaveBeenCalled();
+    expect(getItem).not.toHaveBeenCalled();
+    expect(setItem).not.toHaveBeenCalled();
+  });
+
+  it('shows the privacy-safe relationship diagnostic without reading or writing storage or account', async () => {
+    const user = userEvent.setup();
+    const data = fitnessData('Synthetic invalid check');
+    data.strength.workouts[0]!.completionId = 'synthetic-missing-completion';
+    const originalData = JSON.stringify(data);
+    const local = accountStorage(data);
+    const api: PreviewAccountBackupApi = {
+      read: vi.fn(async () => null),
+      save: vi.fn(async () => 1)
+    };
+
+    renderControls(api, local.storage, data, local.raw, undefined, () => true, accountA, true, false);
+    const getItem = vi.spyOn(local.storage, 'getItem');
+    const setItem = vi.spyOn(local.storage, 'setItem');
+    await user.click(screen.getByRole('button', { name: /Check data/ }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('preview.strength.completion-link.invalid');
+    expect(alert.textContent).toContain('data.strength.workouts[*].completionId');
+    expect(alert.textContent).toContain('1 total, 0 linked, 0 unlinked, 1 invalid');
+    expect(alert.textContent).toContain('missing completion 1');
+    expect(alert.textContent).not.toContain('Synthetic invalid check');
+    expect(alert.textContent).not.toContain('synthetic-missing-completion');
+    expect(JSON.stringify(data)).toBe(originalData);
+    expect(api.read).not.toHaveBeenCalled();
+    expect(api.save).not.toHaveBeenCalled();
+    expect(getItem).not.toHaveBeenCalled();
+    expect(setItem).not.toHaveBeenCalled();
+  });
+
   it('reports relationship counts without exposing workout contents or identifiers', () => {
     const data = fitnessData('Synthetic relationship diagnostic');
     data.strength.workouts.push(
@@ -351,6 +403,38 @@ describe('manual Preview account backup and restore', () => {
       muscleIds: ['back']
     });
     expect(migrated.envelope.data.datedRhythmCompletions[0]?.id).toBe(workout.completionId);
+  });
+
+  it('does not invent a missing Strength completion while migrating an older schema', () => {
+    const data = fitnessData('Synthetic missing completion migration');
+    data.datedRhythmCompletions = [];
+    data.activeRhythmCompletions = [];
+    const current = createPreviewEnvelope(data);
+    const priorData = { ...current.data };
+    for (const goal of priorData.goals) delete goal.supportingRhythmIds;
+    const raw = JSON.stringify({
+      ...current,
+      schemaVersion: 43,
+      data: priorData
+    });
+
+    const migrated = parsePreviewBackup(raw, currentDate);
+
+    expect(migrated).toMatchObject({
+      valid: false,
+      diagnostic: {
+        code: 'preview.strength.completion-link.invalid',
+        path: 'data.strength.workouts[*].completionId',
+        strengthCompletionLinks: {
+          workouts: 1,
+          linked: 0,
+          unlinked: 0,
+          invalid: 1,
+          missingCompletion: 1
+        }
+      }
+    });
+    expect(raw).toContain('"completionId":"workout-completion-synthetic-missing-completion-migration"');
   });
 
   it('saves, reloads, saves again, and serializes the same linked workout relationship', () => {
