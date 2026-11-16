@@ -8,6 +8,8 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { createEmptyPreviewData, createPreviewEnvelope } from '../src/domain/preview-state.ts';
+import { PREVIEW_ACCOUNT_STORAGE_PREFIX } from '../src/storage/preview-storage.ts';
 
 const previewDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const viteCli = path.resolve(previewDirectory, 'node_modules/vite/bin/vite.js');
@@ -3659,6 +3661,227 @@ async function main() {
           position: document.body.style.position,
           top: document.body.style.top
         })), originalBodyStyles);
+      }
+
+      if (identity === 'dashboard') {
+        const searchFixture = createEmptyPreviewData();
+        const searchPersonId = 'browser-search-person-avery';
+        searchFixture.people = [{ id: searchPersonId, displayName: 'Avery Synthetic Person' }];
+        searchFixture.savedRhythms = Array.from({ length: 12 }, (_, index) => ({
+          id: `user-rhythm-00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+          title: `Avery synthetic rhythm ${index + 1} with a deliberately long title for wrapping`,
+          description: 'Synthetic secondary metadata for the production Search layout check.',
+          cadence: 'Daily',
+          timeLabel: 'Anytime',
+          automation: 'manual' as const,
+          status: 'Not confirmed' as const,
+          personIds: [searchPersonId],
+          categoryIds: ['faith'] as const
+        }));
+        const searchAccountId = 'c0000000-0000-4000-8000-000000000003';
+        const searchStorageKey = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${searchAccountId}`;
+        await page.evaluate(({ key, value }) => window.localStorage.setItem(key, value), {
+          key: searchStorageKey,
+          value: JSON.stringify(createPreviewEnvelope(searchFixture))
+        });
+        await page.reload();
+        await page.locator('.mobile-head-button[aria-label="Open search"]').waitFor();
+
+        const searchToggle = page.locator('.mobile-head-button[aria-label="Open search"]');
+        for (const textSize of ['small', 'medium', 'large'] as const) {
+          await page.evaluate(size => {
+            document.documentElement.dataset.mobileTextSize = size === 'small'
+              ? 'normal'
+              : size === 'medium' ? 'large' : 'larger';
+            document.documentElement.dataset.mobileTextSizeLevel = size === 'large' ? 'larger' : size;
+          }, textSize);
+          for (const viewportWidth of [375, 390, 430]) {
+            await page.setViewportSize({ width: viewportWidth, height: 844 });
+            await searchToggle.click();
+            const dialog = page.getByRole('dialog', { name: 'Search Tend' });
+            const input = dialog.getByRole('combobox', { name: 'Search Tend' });
+            const close = dialog.getByRole('button', { name: 'Close search' });
+            await input.fill('Avery');
+            if (await dialog.getByRole('option').count() === 0) {
+              const debugState = await page.evaluate(key => ({
+                bodyText: document.body.innerText.slice(0, 1200),
+                storedFixture: window.localStorage.getItem(key) !== null,
+                resultText: document.querySelector('.utility-search-results')?.textContent ?? null
+              }), searchStorageKey);
+              throw new Error(`Synthetic Search fixture was not loaded: ${JSON.stringify(debugState)}`);
+            }
+            await dialog.getByRole('option').first().waitFor();
+
+            const populatedLayout = await dialog.evaluate(element => {
+              const toolbar = element.querySelector<HTMLElement>('.utility-search-toolbar');
+              const field = element.querySelector<HTMLElement>('.utility-search-field');
+              const closeButton = element.querySelector<HTMLElement>('.utility-search-close');
+              const results = element.querySelector<HTMLElement>('.utility-search-results');
+              const input = field?.querySelector<HTMLInputElement>('input');
+              const liveStatus = element.querySelector<HTMLElement>('.sr-only');
+              if (!toolbar || !field || !closeButton || !results || !input || !liveStatus) {
+                throw new Error('Search must render its toolbar and results region.');
+              }
+              const bounds = (node: HTMLElement) => {
+                const rect = node.getBoundingClientRect();
+                return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height };
+              };
+              return {
+                viewportWidth: document.documentElement.clientWidth,
+                viewportHeight: document.documentElement.clientHeight,
+                documentWidth: document.documentElement.scrollWidth,
+                position: getComputedStyle(element).position,
+                background: getComputedStyle(element).backgroundColor,
+                bodyOverflow: getComputedStyle(document.body).overflow,
+                fieldFontSize: getComputedStyle(input).fontSize,
+                searchAppearance: getComputedStyle(input).getPropertyValue('appearance'),
+                customClearCount: field.querySelectorAll('.utility-search-clear').length,
+                liveStatusPosition: getComputedStyle(liveStatus).position,
+                liveStatusWidth: getComputedStyle(liveStatus).width,
+                liveStatusHeight: getComputedStyle(liveStatus).height,
+                liveStatusOverflow: getComputedStyle(liveStatus).overflow,
+                resultOverflow: getComputedStyle(results).overflowY,
+                resultBackground: getComputedStyle(results).backgroundColor,
+                toolbar: bounds(toolbar),
+                field: bounds(field),
+                close: bounds(closeButton),
+                results: bounds(results),
+                classicCssLoaded: [...document.styleSheets].some(sheet => sheet.href?.endsWith('/tend.css'))
+              };
+            });
+            assert.equal(populatedLayout.viewportWidth, viewportWidth);
+            assert.equal(populatedLayout.documentWidth, viewportWidth,
+              `Search must not cause horizontal overflow at ${viewportWidth}px / ${textSize}.`);
+            assert.equal(populatedLayout.position, 'fixed');
+            assert.equal(populatedLayout.background, 'rgb(247, 249, 247)',
+              `Search must be an opaque surface at ${viewportWidth}px / ${textSize}.`);
+            assert.equal(populatedLayout.bodyOverflow, 'hidden');
+            assert.equal(populatedLayout.resultOverflow, 'auto');
+            assert.equal(populatedLayout.resultBackground, 'rgb(255, 255, 255)');
+            assert.equal(populatedLayout.searchAppearance, 'none');
+            assert.equal(populatedLayout.customClearCount, 1);
+            assert.equal(populatedLayout.liveStatusPosition, 'absolute');
+            assert.equal(populatedLayout.liveStatusWidth, '1px');
+            assert.equal(populatedLayout.liveStatusHeight, '1px');
+            assert.equal(populatedLayout.liveStatusOverflow, 'hidden');
+            assert.equal(populatedLayout.close.height >= 44, true);
+            assert.ok(populatedLayout.close.left >= populatedLayout.field.right);
+            assert.ok(populatedLayout.close.right <= viewportWidth);
+            assert.ok(populatedLayout.results.top >= populatedLayout.toolbar.bottom);
+            assert.ok(populatedLayout.results.bottom <= populatedLayout.viewportHeight);
+            assert.equal(populatedLayout.classicCssLoaded, false);
+
+            await input.fill('no-synthetic-search-match-9d321');
+            await dialog.locator('.search-empty').waitFor();
+            await input.fill('Avery');
+            await dialog.getByRole('option').first().waitFor();
+            await dialog.evaluate(element => {
+              const results = element.querySelector<HTMLElement>('.utility-search-results');
+              const group = results?.querySelector<HTMLElement>('.search-result-group');
+              const first = group?.querySelector<HTMLButtonElement>('.search-result');
+              if (!results || !group || !first) throw new Error('Search needs a synthetic result row.');
+              for (let index = 0; index < 12; index += 1) {
+                const row = first.cloneNode(true) as HTMLButtonElement;
+                row.id = `synthetic-search-result-${index}`;
+                const title = row.querySelector('strong');
+                const metadata = row.querySelector('small');
+                if (!title || !metadata) throw new Error('Synthetic search rows need title and metadata.');
+                title.textContent = `Synthetic result ${index + 1}: a deliberately long result title that should wrap without overlapping its metadata or category label.`;
+                metadata.textContent = 'Synthetic secondary metadata that remains distinct from the title and does not run into the category label.';
+                group.append(row);
+              }
+            });
+            const longResultsLayout = await dialog.locator('.utility-search-results').evaluate(results => {
+              const rows = [...results.querySelectorAll<HTMLElement>('.search-result')];
+              const last = rows[rows.length - 1];
+              if (!last) throw new Error('Long search results must include rows.');
+              results.scrollTop = results.scrollHeight;
+              const bounds = last.getBoundingClientRect();
+              const resultsBounds = results.getBoundingClientRect();
+              return {
+                scrollable: results.scrollHeight > results.clientHeight,
+                lastRowVisible: bounds.bottom <= resultsBounds.bottom + 1,
+                documentWidth: document.documentElement.scrollWidth,
+                viewportWidth: document.documentElement.clientWidth
+              };
+            });
+            assert.equal(longResultsLayout.scrollable, true,
+              `Long Search results must scroll within the panel at ${viewportWidth}px / ${textSize}.`);
+            assert.equal(longResultsLayout.lastRowVisible, true);
+            assert.equal(longResultsLayout.documentWidth, longResultsLayout.viewportWidth);
+
+            await close.click();
+            await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Open search');
+            assert.equal(await page.evaluate(() => document.body.classList.contains('mobile-search-open')), false);
+          }
+        }
+
+        for (const textSize of ['small', 'medium', 'large'] as const) {
+          await page.evaluate(size => {
+            document.documentElement.dataset.mobileTextSize = size === 'small'
+              ? 'normal'
+              : size === 'medium' ? 'large' : 'larger';
+            document.documentElement.dataset.mobileTextSizeLevel = size === 'large' ? 'larger' : size;
+          }, textSize);
+          await page.setViewportSize({ width: 375, height: 390 });
+          await searchToggle.click();
+          const dialog = page.getByRole('dialog', { name: 'Search Tend' });
+          const input = dialog.getByRole('combobox', { name: 'Search Tend' });
+          const close = dialog.getByRole('button', { name: 'Close search' });
+          await input.focus();
+          await page.keyboard.press('Tab');
+          assert.equal(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute('aria-label')),
+            'Close search', `Close must remain in the tab order in a keyboard-height viewport at ${textSize} text.`);
+          await page.keyboard.press('Tab');
+          assert.equal(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.id), 'tendSearch');
+          await input.fill('Avery');
+          await dialog.getByRole('option').first().waitFor();
+          await dialog.evaluate(element => {
+            const results = element.querySelector<HTMLElement>('.utility-search-results');
+            const group = results?.querySelector<HTMLElement>('.search-result-group');
+            const first = group?.querySelector<HTMLButtonElement>('.search-result');
+            if (!results || !group || !first) throw new Error('Search needs a synthetic result row.');
+            for (let index = 0; index < 12; index += 1) {
+              const row = first.cloneNode(true) as HTMLButtonElement;
+              row.id = `keyboard-search-result-${index}`;
+              const title = row.querySelector('strong');
+              if (!title) throw new Error('Synthetic search rows need a title.');
+              title.textContent = `Keyboard viewport result ${index + 1} with enough content to wrap onto multiple lines.`;
+              group.append(row);
+            }
+          });
+
+          const keyboardLayout = await dialog.evaluate(element => {
+            const toolbar = element.querySelector<HTMLElement>('.utility-search-toolbar');
+            const results = element.querySelector<HTMLElement>('.utility-search-results');
+            const closeButton = element.querySelector<HTMLElement>('.utility-search-close');
+            if (!toolbar || !results || !closeButton) throw new Error('Search controls must remain available.');
+            const toolbarBounds = toolbar.getBoundingClientRect();
+            const resultsBounds = results.getBoundingClientRect();
+            const closeBounds = closeButton.getBoundingClientRect();
+            return {
+              viewportHeight: document.documentElement.clientHeight,
+              dialogHeight: element.getBoundingClientRect().height,
+              resultsHeight: results.clientHeight,
+              resultsScrollable: results.scrollHeight > results.clientHeight,
+              resultsTop: resultsBounds.top,
+              resultsBottom: resultsBounds.bottom,
+              toolbarBottom: toolbarBounds.bottom,
+              closeBottom: closeBounds.bottom,
+              bodyOverflow: getComputedStyle(document.body).overflow
+            };
+          });
+          assert.equal(keyboardLayout.dialogHeight, 390);
+          assert.ok(keyboardLayout.resultsHeight > 0);
+          assert.ok(keyboardLayout.resultsTop >= keyboardLayout.toolbarBottom);
+          assert.ok(keyboardLayout.resultsBottom <= keyboardLayout.viewportHeight);
+          assert.ok(keyboardLayout.closeBottom <= keyboardLayout.viewportHeight);
+          assert.equal(keyboardLayout.resultsScrollable, true,
+            `Results must remain independently scrollable at keyboard height / ${textSize} text.`);
+          assert.equal(keyboardLayout.bodyOverflow, 'hidden');
+          await close.click();
+          await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Open search');
+        }
       }
 
       const profileContext = await browser.newContext({

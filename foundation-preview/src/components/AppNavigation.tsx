@@ -49,6 +49,8 @@ export function AppNavigation({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const mobileSearchToggleRef = useRef<HTMLButtonElement>(null);
+  const searchWasOpen = useRef(false);
+  const restoreSearchFocus = useRef(true);
   const displayedGroups = searchResults.groups.map(group => ({
     ...group,
     displayedResults: expandedGroups.has(group.id) ? group.allResults : group.results
@@ -67,9 +69,49 @@ export function AppNavigation({
   }, [search]);
 
   useEffect(() => {
-    if (!searchOpen) return;
-    searchInputRef.current?.focus({ preventScroll: true });
+    if (searchOpen) {
+      searchWasOpen.current = true;
+      searchInputRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    if (!searchWasOpen.current) return;
+    searchWasOpen.current = false;
+    if (restoreSearchFocus.current) mobileSearchToggleRef.current?.focus({ preventScroll: true });
+    restoreSearchFocus.current = true;
   }, [searchOpen]);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+
+    function containSearchFocus(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        onSearchClose();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const focusable = [...(searchContainerRef.current?.querySelectorAll<HTMLElement>(
+        'input:not([disabled]), button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+      ) ?? [])].filter(element => !element.hidden && element.getAttribute('aria-hidden') !== 'true');
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) {
+        event.preventDefault();
+        searchInputRef.current?.focus({ preventScroll: true });
+      } else if (event.shiftKey && (document.activeElement === first || !searchContainerRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !searchContainerRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener('keydown', containSearchFocus, true);
+    return () => document.removeEventListener('keydown', containSearchFocus, true);
+  }, [onSearchClose, searchOpen]);
 
   useEffect(() => {
     if (!searchOpen && !hasQuery) return;
@@ -86,6 +128,7 @@ export function AppNavigation({
   }, [hasQuery, onSearchClose, searchOpen]);
 
   function activateResult(result: GlobalSearchResult) {
+    restoreSearchFocus.current = false;
     onSearchResult(result);
     onSearchClose();
   }
@@ -147,9 +190,11 @@ export function AppNavigation({
             ref={mobileSearchToggleRef}
             type="button"
             className="mobile-head-button"
-            aria-label={searchOpen ? 'Close search' : 'Open search'}
+            aria-label="Open search"
+            aria-hidden={searchOpen}
+            tabIndex={searchOpen ? -1 : undefined}
             aria-expanded={searchOpen}
-            aria-controls="tendSearch"
+            aria-controls="tendSearchDialog"
             onClick={onSearchToggle}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg>
@@ -178,33 +223,49 @@ export function AppNavigation({
               <UtilityButton active={destination === 'people'} label="People" onClick={() => onNavigate('people')} icon={<PeopleIcon />} />
               <UtilityButton active={destination === 'more'} label="More" ariaLabel="More, settings" onClick={() => onNavigate('more')} icon={<MenuIcon />} />
             </div>
-            <div ref={searchContainerRef} className="utility-search">
-              <span className="utility-search-icon" aria-hidden="true">⌕</span>
-              <input
-                ref={searchInputRef}
-                id="tendSearch"
-                type="search"
-                placeholder="Search Tend..."
-                aria-label="Search Tend"
-                role="combobox"
-                aria-autocomplete="list"
-                aria-haspopup="listbox"
-                aria-expanded={hasQuery}
-                aria-controls="tend-search-results"
-                aria-activedescendant={activeResultIndex >= 0 ? optionIds[activeResultIndex] : undefined}
-                value={search}
-                onChange={event => onSearchChange(event.currentTarget.value)}
-                onKeyDown={handleSearchKeyDown}
-              />
-              {search && <button type="button" className="utility-search-clear" aria-label="Clear search" onClick={() => onSearchChange('')}>×</button>}
+            <div
+              ref={searchContainerRef}
+              id="tendSearchDialog"
+              className="utility-search"
+              role={searchOpen ? 'dialog' : undefined}
+              aria-modal={searchOpen ? true : undefined}
+              aria-label={searchOpen ? 'Search Tend' : undefined}
+            >
+              <div className="utility-search-toolbar">
+                <div className="utility-search-field">
+                  <span className="utility-search-icon" aria-hidden="true">⌕</span>
+                  <input
+                    ref={searchInputRef}
+                    id="tendSearch"
+                    type="search"
+                    placeholder="Search Tend..."
+                    aria-label="Search Tend"
+                    role="combobox"
+                    aria-autocomplete="list"
+                    aria-haspopup="listbox"
+                    aria-expanded={hasQuery}
+                    aria-controls="tend-search-results"
+                    aria-activedescendant={activeResultIndex >= 0 ? optionIds[activeResultIndex] : undefined}
+                    value={search}
+                    onChange={event => onSearchChange(event.currentTarget.value)}
+                    onKeyDown={handleSearchKeyDown}
+                  />
+                  {search && <button type="button" className="utility-search-clear" aria-label="Clear search" onClick={() => onSearchChange('')}>×</button>}
+                </div>
+                <button type="button" className="utility-search-close" aria-label="Close search" onClick={onSearchClose}>
+                  Close
+                </button>
+              </div>
+              {hasQuery && (
+                <p className="sr-only" aria-live="polite" aria-atomic="true">{statusText}</p>
+              )}
               {hasQuery && (
                 <div
                   id="tend-search-results"
-                  className={`utility-search-results${searchResults.isEmpty ? '' : ' utility-search-results--full-bleed'}`}
+                  className="utility-search-results"
                   role="listbox"
                   aria-label="Search results"
                 >
-                  <p className="sr-only" aria-live="polite" aria-atomic="true">{statusText}</p>
                   {searchResults.isEmpty ? (
                     <p className="search-empty">No results found.</p>
                   ) : displayedGroups.filter(group => group.totalCount > 0).map(group => (
