@@ -5,7 +5,8 @@ import { PreviewAccountBackupControls } from '../src/components/PreviewAccountBa
 import {
   createPreviewEnvelope,
   createSamplePreviewData,
-  PREVIEW_SCHEMA_VERSION
+  PREVIEW_SCHEMA_VERSION,
+  validatePreviewEnvelope
 } from '../src/domain/preview-state.ts';
 import type { PreviewData, PreviewEnvelope } from '../src/domain/preview-state.ts';
 import type { SavedRhythm } from '../src/domain/rhythm-editor.ts';
@@ -132,7 +133,8 @@ function renderControls(
   onRestore?: (data: PreviewData, expectedRaw: string | null) => string | null,
   isIdentityCurrent: () => boolean = () => true,
   accountId = accountA,
-  openRecovery = true
+  openRecovery = true,
+  autoSyncEnabled = true
 ) {
   const view = render(
     <PreviewAccountBackupControls
@@ -144,6 +146,7 @@ function renderControls(
       localRaw={localRaw}
       localRecoveryRaw={storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)}
       enabled
+      autoSyncEnabled={autoSyncEnabled}
       isIdentityCurrent={isIdentityCurrent}
       onRestore={onRestore ?? ((nextData, expectedRaw) => {
         const result = writePreview(storage, nextData, expectedRaw, {
@@ -191,6 +194,29 @@ describe('manual Preview account backup and restore', () => {
     expect(screen.getByRole('button', { name: /Save this device’s copy to account/ }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button', { name: /Replace this device’s data with account copy/ }).hasAttribute('disabled')).toBe(true);
     expect(screen.queryByText(/Signed-in account ending in/)).toBeNull();
+  });
+
+  it('shows a safe validation diagnostic before reading or uploading to the account', async () => {
+    const user = userEvent.setup();
+    const data = fitnessData('Synthetic backup validation');
+    data.savedRhythms[0]!.timeOfDay = 'custom-time-block:22222222-2222-4222-8222-222222222222';
+    const local = accountStorage(data);
+    const api: PreviewAccountBackupApi = {
+      read: vi.fn(async () => null),
+      save: vi.fn(async () => 1)
+    };
+
+    renderControls(api, local.storage, data, local.raw, undefined, () => true, accountA, true, false);
+    await user.click(screen.getByRole('button', { name: /Save this device’s copy to account/ }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('preview.rhythm-time-block.unconfigured');
+    expect(alert.textContent).toContain('data.savedRhythms[*].timeOfDay');
+    expect(alert.textContent).not.toContain('Synthetic backup validation');
+    expect(alert.textContent).not.toContain('custom-time-block:22222222');
+    expect(api.read).not.toHaveBeenCalled();
+    expect(api.save).not.toHaveBeenCalled();
+    expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
   });
 
   it('downloads the validated current account document through one read without changing either copy', async () => {
@@ -614,6 +640,36 @@ describe('manual Preview account backup and restore', () => {
     expect(restored.data.showCalendarOnToday).toBe(false);
   });
 
+  it('backs up migrated current-schema data with user-created People and their details', () => {
+    const data = createSamplePreviewData();
+    const personId = 'synthetic-person-backup-001';
+    data.people.push({ id: personId, displayName: 'Synthetic Contact' });
+    data.peopleGroups = data.peopleGroups.map(group => group.id === 'friends'
+      ? { ...group, memberIds: [...group.memberIds, personId] }
+      : group);
+    data.personDetails.push({ personId, relationshipLabel: 'Friend' });
+
+    const envelope = createPreviewEnvelope(data);
+    envelope.schemaVersion = PREVIEW_SCHEMA_VERSION;
+    const migrated = validatePreviewAccountBackup({
+      document: envelope,
+      schemaVersion: PREVIEW_SCHEMA_VERSION,
+      revision: 1,
+      updatedAt: null
+    }, currentDate);
+    const accountDocument = createValidatedPreviewAccountDocument(migrated.data, currentDate);
+    const restored = validatePreviewAccountBackup({
+      document: accountDocument,
+      schemaVersion: PREVIEW_SCHEMA_VERSION,
+      revision: 2,
+      updatedAt: null
+    }, currentDate);
+
+    expect(restored.data.people).toContainEqual({ id: personId, displayName: 'Synthetic Contact' });
+    expect(restored.data.personDetails).toContainEqual({ personId, relationshipLabel: 'Friend' });
+    expect(restored.data.peopleGroups.find(group => group.id === 'friends')?.memberIds).toContain(personId);
+  });
+
   it('migrates an older account backup with Calendar sources and defaults visibility to enabled', () => {
     const data = createSamplePreviewData();
     data.calendarSources = [{
@@ -650,6 +706,49 @@ describe('manual Preview account backup and restore', () => {
 
     expect(() => createValidatedPreviewAccountDocument(data, currentDate))
       .toThrow(/could not be validated/i);
+  });
+
+  it('reports a privacy-safe validation code and field path without echoing document values', () => {
+    const data = fitnessData('Synthetic diagnostic');
+    data.savedRhythms[0]!.timeOfDay = 'custom-time-block:22222222-2222-4222-8222-222222222222';
+    let validationError: unknown;
+    try {
+      createValidatedPreviewAccountDocument(data, currentDate);
+    } catch (error) {
+      validationError = error;
+    }
+
+    expect(validationError).toMatchObject({
+      kind: 'invalid',
+      diagnostic: {
+        code: 'preview.rhythm-time-block.unconfigured',
+        path: 'data.savedRhythms[*].timeOfDay or data.savedRhythms[*].scoring.scheduleHistory[*].timeOfDay'
+      }
+    });
+    expect(validationError).toBeInstanceOf(Error);
+    if (validationError instanceof Error) {
+      expect(validationError.message).toContain('Diagnostic: preview.rhythm-time-block.unconfigured');
+      expect(validationError.message).not.toContain('Synthetic diagnostic');
+      expect(validationError.message).not.toContain('custom-time-block:22222222');
+    }
+  });
+
+  it('identifies an unrecognized data field without exposing its value', () => {
+    const envelope = createPreviewEnvelope(fitnessData('Synthetic field diagnostic'));
+    const invalid = {
+      ...envelope,
+      data: { ...envelope.data, unexpectedField: 'private synthetic note' }
+    };
+
+    expect(validatePreviewEnvelope(invalid, currentDate)).toMatchObject({
+      valid: false,
+      diagnostic: {
+        code: 'preview.data.unrecognized-field',
+        path: 'data.unexpectedField'
+      }
+    });
+    expect(JSON.stringify(validatePreviewEnvelope(invalid, currentDate)))
+      .not.toContain('private synthetic note');
   });
 
   it('rejects malformed account documents and migrates an older supported envelope before restore', async () => {

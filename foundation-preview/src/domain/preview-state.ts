@@ -159,7 +159,17 @@ type PreviewEnvelopeV2 = {
 
 export type PreviewValidationResult =
   | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44; resolvedPersonCategories: number }
-  | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
+  | {
+      valid: false;
+      kind: 'invalid' | 'unsupported';
+      message: string;
+      diagnostic?: PreviewValidationDiagnostic;
+    };
+
+export type PreviewValidationDiagnostic = {
+  code: string;
+  path: string;
+};
 
 const goalKeysV43 = [
   'id', 'title', 'currency', 'direction', 'startingBalanceMinor', 'startDate',
@@ -294,11 +304,11 @@ function hasOnlyKeys(record: Record<string, unknown>, allowed: readonly string[]
   return Object.keys(record).every(key => allowed.includes(key));
 }
 
-function hasOnlyKeysWithCompatibleDefaults(
+function firstKeyWithoutCompatibleDefault(
   record: Record<string, unknown>,
   allowed: readonly string[]
-): boolean {
-  return Object.keys(record).every(key => allowed.includes(key)
+): string | undefined {
+  return Object.keys(record).find(key => !(allowed.includes(key)
     || key === 'prayerRequests'
       && Array.isArray(record[key])
       && record[key].length === 0
@@ -322,7 +332,7 @@ function hasOnlyKeysWithCompatibleDefaults(
       && isCategoryPreferences(record[key])
       && areas.every(area => (record[key] as CategoryPreferences)[area.id])
     || key === 'flexibility'
-      && isEmptyFlexibilityDefault(record[key]));
+      && isEmptyFlexibilityDefault(record[key])));
 }
 
 function isEmptyFlexibilityDefault(value: unknown): boolean {
@@ -608,7 +618,7 @@ function cloneRhythmScoring(scoring: RhythmScoringMetadata): RhythmScoringMetada
   };
 }
 
-export function validatePreviewEnvelope(value: unknown, currentDate: string): PreviewValidationResult {
+function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): PreviewValidationResult {
   if (!isValidDate(currentDate)) {
     return { valid: false, kind: 'invalid', message: 'The current date used to validate this preview is invalid.' };
   }
@@ -713,7 +723,24 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
       : isV44 ? dataKeysV44 : isV43 && value.schemaVersion === 43 ? dataKeysV43 : isV42 && value.schemaVersion === 42 ? dataKeysV42 : isV41 && value.schemaVersion === 41 ? dataKeysV41 : isV40 ? dataKeysV40 : value.schemaVersion === 39 ? dataKeysV39 : isV38 ? dataKeysV38 : isV37 && value.schemaVersion === 37 ? dataKeysV37 : isV36 ? dataKeysV36 : value.schemaVersion === 35 ? dataKeysV35 : isV34 && value.schemaVersion === 34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
         : isV11 || isV12 ? dataKeysV12 : isV10 ? dataKeysV10
       : isV8 || isV9 ? dataKeysV8 : isV7 ? dataKeysV7 : isV6 ? dataKeysV6 : dataKeysV5;
-  if (!isRecord(value.data) || (!isV19 && !isV20 && !hasOnlyKeysWithCompatibleDefaults(value.data, allowedDataKeys))
+  const incompatibleDataKey = isRecord(value.data) && !isV19 && !isV20
+    ? firstKeyWithoutCompatibleDefault(value.data, allowedDataKeys)
+    : undefined;
+  if (incompatibleDataKey !== undefined) {
+    const field = /^[a-z][A-Za-z0-9_]*$/.test(incompatibleDataKey)
+      ? incompatibleDataKey
+      : '<unknown-field>';
+    return {
+      valid: false,
+      kind: 'invalid',
+      message: 'Preview data must contain goals and completed Rhythm IDs.',
+      diagnostic: {
+        code: 'preview.data.unrecognized-field',
+        path: `data.${field}`
+      }
+    };
+  }
+  if (!isRecord(value.data)
     || !Array.isArray(value.data.goals) || !Array.isArray(value.data.completedRhythmIds)
     || ((isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || hasCurrentFriendshipsData)
       && (!Array.isArray(value.data.datedRhythmCompletions)
@@ -1208,12 +1235,89 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   };
 }
 
+const validationDiagnosticRules: Array<{
+  matches: (message: string) => boolean;
+  code: string;
+  path: string;
+}> = [
+  { matches: message => message.startsWith('The current date used'), code: 'preview.current-date.invalid', path: 'currentDate' },
+  { matches: message => message.startsWith('The backup envelope'), code: 'preview.envelope.invalid', path: '$' },
+  { matches: message => message.startsWith('Preview data must contain'), code: 'preview.data.required-fields', path: 'data' },
+  { matches: message => message === 'Rhythm history references must be a list.', code: 'preview.rhythm-history.invalid', path: 'data.rhythmHistoryIds' },
+  { matches: message => message.startsWith('Person details must be a list.'), code: 'preview.person-details.invalid', path: 'data.personDetails' },
+  { matches: message => message.startsWith('Person notes must be a list.'), code: 'preview.person-notes.invalid', path: 'data.personNotes' },
+  { matches: message => message.startsWith('People must contain'), code: 'preview.people.invalid', path: 'data.people' },
+  { matches: message => message.startsWith('Prayer requests contain invalid fields'), code: 'preview.prayer-requests.invalid', path: 'data.prayerRequests' },
+  { matches: message => message.startsWith('The Show tended preference'), code: 'preview.show-tended.invalid', path: 'data.showTended' },
+  { matches: message => message.startsWith('The text-size preference'), code: 'preview.text-size.invalid', path: 'data.textSize' },
+  { matches: message => message.startsWith('The Show calendar on Today preference'), code: 'preview.calendar-visibility.invalid', path: 'data.showCalendarOnToday' },
+  { matches: message => message.startsWith('Category preferences'), code: 'preview.category-preferences.invalid', path: 'data.categoryPreferences' },
+  { matches: message => message.startsWith('Calendar sources'), code: 'preview.calendar-sources.invalid', path: 'data.calendarSources' },
+  { matches: message => message.startsWith('Time block settings'), code: 'preview.time-blocks.invalid', path: 'data.timeBlocks' },
+  { matches: message => message.startsWith('Saved Rhythms'), code: 'preview.saved-rhythms.invalid', path: 'data.savedRhythms[*]' },
+  { matches: message => message.startsWith('The existing time value'), code: 'preview.rhythm-time-label.unmapped', path: 'data.savedRhythms[*].timeLabel' },
+  { matches: message => message.startsWith('Archived Rhythm references must be a list.'), code: 'preview.archived-rhythm-ids.invalid', path: 'data.archivedRhythmIds' },
+  { matches: message => message.startsWith('A goal, check-in, or correction'), code: 'preview.goals.invalid', path: 'data.goals[*]' },
+  { matches: message => message.startsWith('Completed Rhythm references'), code: 'preview.completed-rhythm-ids.invalid', path: 'data.completedRhythmIds' },
+  { matches: message => message.startsWith('Archived Rhythm references must be unique'), code: 'preview.archived-rhythm-ids.unresolved', path: 'data.archivedRhythmIds[*]' },
+  { matches: message => message.startsWith('A Rhythm schedule refers'), code: 'preview.rhythm-time-block.unconfigured', path: 'data.savedRhythms[*].timeOfDay or data.savedRhythms[*].scoring.scheduleHistory[*].timeOfDay' },
+  { matches: message => message.startsWith('A dated Rhythm completion has an invalid structure.'), code: 'preview.dated-completion.invalid', path: 'data.datedRhythmCompletions[*]' },
+  { matches: message => message.startsWith('A dated Rhythm completion contains'), code: 'preview.dated-completion.invalid-fields', path: 'data.datedRhythmCompletions[*]' },
+  { matches: message => message.startsWith('A dated Rhythm completion has an invalid local time'), code: 'preview.dated-completion.invalid-time', path: 'data.datedRhythmCompletions[*].timeZone' },
+  { matches: message => message.startsWith('A dated Rhythm completion has inconsistent'), code: 'preview.dated-completion.inconsistent-times', path: 'data.datedRhythmCompletions[*].completedAt' },
+  { matches: message => message.startsWith('Active completion references'), code: 'preview.active-completions.invalid', path: 'data.activeRhythmCompletions[*]' },
+  { matches: message => message.startsWith('An active completion must reference'), code: 'preview.active-completions.unmatched', path: 'data.activeRhythmCompletions[*].completionId' },
+  { matches: message => message.startsWith('A seeded completion override has an invalid structure.'), code: 'preview.completion-overrides.invalid', path: 'data.rhythmCompletionOverrides[*]' },
+  { matches: message => message.startsWith('A seeded completion override contains'), code: 'preview.completion-overrides.invalid-fields', path: 'data.rhythmCompletionOverrides[*]' },
+  { matches: message => message.startsWith('An unrecorded completion time'), code: 'preview.completion-overrides.invalid-time', path: 'data.rhythmCompletionOverrides[*].localTime' },
+  { matches: message => message.startsWith('A seeded completion override has invalid time metadata.'), code: 'preview.completion-overrides.invalid-time', path: 'data.rhythmCompletionOverrides[*].localTime' },
+  { matches: message => message.startsWith('A seeded completion override has an invalid local time'), code: 'preview.completion-overrides.invalid-timezone', path: 'data.rhythmCompletionOverrides[*].timeZone' },
+  { matches: message => message.startsWith('A seeded completion override has inconsistent'), code: 'preview.completion-overrides.inconsistent-times', path: 'data.rhythmCompletionOverrides[*].completedAt' },
+  { matches: message => message.startsWith('Removed seeded completion references'), code: 'preview.removed-completions.invalid', path: 'data.removedSeedCompletionIds[*]' },
+  { matches: message => message.startsWith('Rhythm history references must be unique'), code: 'preview.rhythm-history.unresolved', path: 'data.rhythmHistoryIds[*]' },
+  { matches: message => message.startsWith('Dated completion history must retain'), code: 'preview.rhythm-history.missing-marker', path: 'data.rhythmHistoryIds' },
+  { matches: message => message.startsWith('Strength settings, workouts, or workout history'), code: 'preview.strength.invalid', path: 'data.strength' },
+  { matches: message => message.startsWith('A linked Strength workout'), code: 'preview.strength.completion-link.invalid', path: 'data.strength.workouts[*].completionId' },
+  { matches: message => message.startsWith('Weight data'), code: 'preview.weight.invalid', path: 'data.weight' },
+  { matches: message => message.startsWith('Cardio data'), code: 'preview.cardio.invalid', path: 'data.cardio' },
+  { matches: message => message.startsWith('Flexibility settings'), code: 'preview.flexibility.invalid', path: 'data.flexibility' },
+  { matches: message => message.startsWith('Friendships contain'), code: 'preview.friendships.invalid', path: 'data.friendships' },
+  { matches: message => message.startsWith('People categories must contain unique'), code: 'preview.people-groups.invalid', path: 'data.peopleGroups' },
+  { matches: message => message.startsWith('People categories must contain one category'), code: 'preview.people-groups.incomplete', path: 'data.peopleGroups' },
+  { matches: message => message.startsWith('Person details contain'), code: 'preview.person-details.invalid-fields', path: 'data.personDetails[*]' },
+  { matches: message => message.startsWith('Person notes contain'), code: 'preview.person-notes.invalid-fields', path: 'data.personNotes[*]' },
+  { matches: message => message.startsWith('Prayer requests contain invalid fields, history, or unresolved'), code: 'preview.prayer-requests.unresolved', path: 'data.prayerRequests[*]' },
+  { matches: message => message.startsWith('A supported People link'), code: 'preview.person-reference.unresolved', path: 'data' }
+];
+
+function validationDiagnostic(message: string, kind: 'invalid' | 'unsupported'): PreviewValidationDiagnostic {
+  if (kind === 'unsupported') {
+    return { code: 'preview.schema.unsupported', path: 'schemaVersion' };
+  }
+  const rule = validationDiagnosticRules.find(candidate => candidate.matches(message));
+  return rule
+    ? { code: rule.code, path: rule.path }
+    : { code: 'preview.validation.failed', path: 'data' };
+}
+
+export function validatePreviewEnvelope(value: unknown, currentDate: string): PreviewValidationResult {
+  const result = validatePreviewEnvelopeInternal(value, currentDate);
+  return result.valid
+    ? result
+    : { ...result, diagnostic: result.diagnostic ?? validationDiagnostic(result.message, result.kind) };
+}
+
 export function parsePreviewBackup(text: string, currentDate: string): PreviewValidationResult {
   let value: unknown;
   try {
     value = JSON.parse(text);
   } catch {
-    return { valid: false, kind: 'invalid', message: 'The selected file is not valid JSON.' };
+    return {
+      valid: false,
+      kind: 'invalid',
+      message: 'The selected file is not valid JSON.',
+      diagnostic: { code: 'preview.json.invalid', path: '$' }
+    };
   }
   return validatePreviewEnvelope(value, currentDate);
 }

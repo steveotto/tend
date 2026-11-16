@@ -3,6 +3,7 @@ import { createPreviewEnvelope, createSamplePreviewData, parsePreviewBackup, PRE
 import type { PreviewData } from '../src/domain/preview-state.ts';
 import { migratePreviewToProposedV4, PROPOSED_PREVIEW_SCHEMA_VERSION } from '../src/domain/preview-v4-migration.ts';
 import { loadPreview, PREVIEW_STORAGE_KEY, writePreview } from '../src/storage/preview-storage.ts';
+import { createValidatedPreviewAccountDocument } from '../src/storage/preview-account-backup.ts';
 import {
   PREVIEW_V3_RECOVERY_KEY,
   PREVIEW_V37_RECOVERY_KEY,
@@ -449,6 +450,12 @@ describe('v4 migration and recovery domain', () => {
       if (secondSave.kind !== 'saved') return;
       expect(values.get(PREVIEW_V3_RECOVERY_KEY)).toBe(raw);
       expect(parsePreviewBackup(secondSave.raw, currentDate).valid).toBe(true);
+      const accountDocument = createValidatedPreviewAccountDocument(reloaded.data, currentDate);
+      expect(accountDocument.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+      expect(accountDocument.data.savedRhythms[0]).toMatchObject({
+        timeLabel,
+        timeOfDay
+      });
 
       const backup = parsePreviewBackup(raw, currentDate);
       expect(backup.valid).toBe(true);
@@ -470,6 +477,22 @@ describe('v4 migration and recovery domain', () => {
           timeOfDay
         });
       }
+    }
+  );
+
+  it.each(historicalTimeValues)(
+    'validates the backup document after loading schema v4 time label %s',
+    (timeLabel, timeOfDay) => {
+      const data = dataWithHistory();
+      data.savedRhythms[0]!.timeLabel = timeLabel;
+      const raw = rawAtVersion(data, 4);
+      const loaded = loadPreview(storageFixture(raw).storage, currentDate);
+      expect(loaded.kind).toBe('loaded');
+      if (loaded.kind !== 'loaded') return;
+
+      const accountDocument = createValidatedPreviewAccountDocument(loaded.data, currentDate);
+      expect(accountDocument.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+      expect(accountDocument.data.savedRhythms[0]).toMatchObject({ timeLabel, timeOfDay });
     }
   );
 
@@ -575,6 +598,15 @@ describe('v4 migration and recovery domain', () => {
     if (secondSave.kind !== 'saved') return;
     expect(values.get(PREVIEW_STORAGE_KEY)).toBe(secondSave.raw);
     expect(parsePreviewBackup(secondSave.raw, currentDate).valid).toBe(true);
+
+    const accountDocument = createValidatedPreviewAccountDocument(reloaded.data, currentDate);
+    expect(accountDocument.data.timeBlocks.blocks).toEqual(data.timeBlocks.blocks);
+    expect(accountDocument.data.savedRhythms[0]).toMatchObject({
+      timeOfDay: customTimeBlockId,
+      scoring: { scheduleHistory: [{ timeOfDay: customTimeBlockId }] }
+    });
+    expect(accountDocument.data.goals[0]!.supportingRhythmIds).toEqual([rhythm.id]);
+    expect(accountDocument.data.datedRhythmCompletions).toEqual(data.datedRhythmCompletions);
   });
 
   it('migrates v1 and v2 while preserving their supported data without inventing archive state', () => {

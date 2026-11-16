@@ -56,6 +56,19 @@ function SearchHarness({
 }) {
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+
+  function closeSearch() {
+    setQuery('');
+    setSearchOpen(false);
+    document.body.classList.remove('mobile-search-open');
+  }
+
+  function toggleSearch() {
+    const next = !searchOpen;
+    setSearchOpen(next);
+    document.body.classList.toggle('mobile-search-open', next);
+  }
+
   return (
     <AppNavigation
       destination="today"
@@ -65,12 +78,9 @@ function SearchHarness({
       textSize="small"
       onNavigate={() => undefined}
       onSearchChange={setQuery}
-      onSearchClose={() => {
-        setQuery('');
-        setSearchOpen(false);
-      }}
+      onSearchClose={closeSearch}
       onSearchResult={onResult}
-      onSearchToggle={() => setSearchOpen(open => !open)}
+      onSearchToggle={toggleSearch}
       onTextSizeChange={() => undefined}
     />
   );
@@ -98,7 +108,7 @@ describe('global search popover', () => {
     expect(option.querySelector('.search-result-tag')?.getAttribute('style'))
       .toContain('font-size: var(--tend-type-category-label)');
     expect(screen.getByRole('listbox', { name: 'Search results' }).className)
-      .toContain('utility-search-results--full-bleed');
+      .not.toContain('utility-search-results--full-bleed');
 
     await user.clear(input);
     await user.type(input, 'nothing matches');
@@ -163,9 +173,14 @@ describe('global search popover', () => {
     const user = userEvent.setup();
     const onResult = vi.fn();
     render(<SearchHarness onResult={onResult} />);
-    await user.click(screen.getByRole('button', { name: 'Open search' }));
+    const toggle = screen.getByRole('button', { name: 'Open search' });
+    await user.click(toggle);
     const input = screen.getByRole('combobox', { name: 'Search Tend' });
+    const dialog = screen.getByRole('dialog', { name: 'Search Tend' });
     expect(document.activeElement).toBe(input);
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(dialog.id).toBe('tendSearchDialog');
+    expect(toggle.getAttribute('aria-hidden')).toBe('true');
     await user.type(input, 'Family health');
     const results = screen.getByRole('listbox', { name: 'Search results' });
     await user.click(within(results).getByRole('option', { name: /Family health.*Amy Sample.*Prayer/ }));
@@ -176,7 +191,8 @@ describe('global search popover', () => {
       personId: 'amy'
     }));
     expect(screen.queryByRole('listbox')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Open search' }).getAttribute('aria-expanded')).toBe('false');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.body.classList.contains('mobile-search-open')).toBe(false);
   });
 
   it('closes and clears on an outside click', async () => {
@@ -214,5 +230,33 @@ describe('global search popover', () => {
 
     expect((input as HTMLInputElement).value).toBe('');
     expect(screen.queryByRole('listbox')).toBeNull();
+  });
+
+  it('contains keyboard focus and restores the opener when the mobile dialog closes', async () => {
+    const user = userEvent.setup();
+    render(<SearchHarness onResult={vi.fn()} />);
+    const toggle = screen.getByRole('button', { name: 'Open search' });
+    await user.click(toggle);
+    const input = screen.getByRole('combobox', { name: 'Search Tend' });
+    const close = screen.getByRole('button', { name: 'Close search' });
+
+    expect(document.activeElement).toBe(input);
+    expect(document.body.classList.contains('mobile-search-open')).toBe(true);
+
+    const backwardsTab = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
+    input.dispatchEvent(backwardsTab);
+    expect(backwardsTab.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(close);
+
+    const forwardsTab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    close.dispatchEvent(forwardsTab);
+    expect(forwardsTab.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(input);
+
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Search Tend' })).toBeNull();
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.body.classList.contains('mobile-search-open')).toBe(false);
+    expect(document.activeElement).toBe(toggle);
   });
 });

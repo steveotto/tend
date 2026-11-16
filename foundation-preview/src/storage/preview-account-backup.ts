@@ -3,7 +3,11 @@ import {
   parsePreviewBackup,
   PREVIEW_SCHEMA_VERSION
 } from '../domain/preview-state.ts';
-import type { PreviewData, PreviewEnvelope } from '../domain/preview-state.ts';
+import type {
+  PreviewData,
+  PreviewEnvelope,
+  PreviewValidationDiagnostic
+} from '../domain/preview-state.ts';
 
 export type PreviewAccountBackupRecord = {
   document: unknown;
@@ -41,7 +45,8 @@ export type PreviewAccountBackupSupabaseClient = {
 export class PreviewAccountBackupError extends Error {
   constructor(
     readonly kind: 'stale' | 'request' | 'invalid',
-    message: string
+    message: string,
+    readonly diagnostic?: PreviewValidationDiagnostic
   ) {
     super(message);
     this.name = 'PreviewAccountBackupError';
@@ -147,16 +152,28 @@ export function validatePreviewAccountBackup(
     ? record.document.schemaVersion
     : null;
   if (documentSchemaVersion !== record.schemaVersion) {
+    const diagnostic = {
+      code: 'preview.account-backup.schema-mismatch',
+      path: 'schemaVersion'
+    };
     throw new PreviewAccountBackupError(
       'invalid',
-      'The account backup schema does not match its stored version. No local data was changed.'
+      `The account backup schema does not match its stored version. Diagnostic: ${formatDiagnostic(diagnostic)}. No local data was changed.`,
+      diagnostic
     );
   }
   const parsed = parsePreviewBackup(JSON.stringify(record.document), currentDate);
   if (!parsed.valid) {
+    const diagnostic = parsed.diagnostic ?? {
+      code: 'preview.validation.failed',
+      path: 'document'
+    };
     throw new PreviewAccountBackupError(
       'invalid',
-      `The account backup could not be validated: ${parsed.message} No local data was changed.`
+      `${parsed.kind === 'unsupported'
+        ? 'The account backup schema is not supported.'
+        : 'The account backup could not be validated.'} Diagnostic: ${formatDiagnostic(diagnostic)}. No local data was changed.`,
+      diagnostic
     );
   }
   return {
@@ -173,9 +190,13 @@ export function createValidatedPreviewAccountDocument(
   const envelope = createPreviewEnvelope(data);
   const parsed = parsePreviewBackup(JSON.stringify(envelope), currentDate);
   if (!parsed.valid || parsed.sourceSchemaVersion !== PREVIEW_SCHEMA_VERSION) {
+    const diagnostic = !parsed.valid
+      ? parsed.diagnostic ?? { code: 'preview.validation.failed', path: 'document' }
+      : { code: 'preview.backup.schema-mismatch', path: 'schemaVersion' };
     throw new PreviewAccountBackupError(
       'invalid',
-      'This browser’s preview data could not be validated for backup. No account data was changed.'
+      `This browser’s preview data could not be validated for backup. Diagnostic: ${formatDiagnostic(diagnostic)}. No account data was changed.`,
+      diagnostic
     );
   }
   return parsed.envelope;
@@ -201,4 +222,8 @@ function stableJson(value: unknown): string {
 
 function errorCode(value: unknown): string | null {
   return isRecord(value) && typeof value.code === 'string' ? value.code : null;
+}
+
+function formatDiagnostic(diagnostic: PreviewValidationDiagnostic): string {
+  return `${diagnostic.code} at ${diagnostic.path}`;
 }
