@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CardioView } from '../src/components/CardioView.tsx';
-import { createCardioData } from '../src/domain/cardio.ts';
+import { createCardioData, saveCardioGoals } from '../src/domain/cardio.ts';
 import type { CardioData } from '../src/domain/cardio.ts';
 import { todayRhythms } from '../src/domain/preview-data.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
@@ -45,20 +45,143 @@ function cardioRhythm(): RhythmPreview {
 }
 
 describe('Cardio preview presentation', () => {
-  it('shows separate weekly run/mileage measures, score, today strip, and all historical runs', () => {
+  it('organizes the Foundation into keyboard-operable Progress, Activities, and Rhythms panels', async () => {
+    const user = userEvent.setup();
     const data: CardioData = {
+      ...saveCardioGoals(createCardioData(), {
+        weeklyRunTarget: 2,
+        weeklyMileTarget: 8
+      }, '2026-10-22', '2026-10-19'),
+      runs: [{ id: 'tab-run', date: '2026-10-22', distance: 3 }]
+    };
+    const onAddLinkedRhythm = vi.fn();
+    render(
+      <CardioView
+        data={data}
+        today="2026-10-22"
+        rhythms={[]}
+        archivedRhythmIds={new Set()}
+        datedRhythmCompletions={[]}
+        onChange={vi.fn(() => null)}
+        onAddLinkedRhythm={onAddLinkedRhythm}
+        foundationNavigation
+        foundationActive
+      />
+    );
+
+    const tabs = screen.getByRole('tablist', { name: 'Cardio Foundation sections' });
+    const progress = within(tabs).getByRole('tab', { name: 'Progress' });
+    const activities = within(tabs).getByRole('tab', { name: 'Activities' });
+    const rhythms = within(tabs).getByRole('tab', { name: 'Rhythms' });
+    expect(progress.getAttribute('aria-selected')).toBe('true');
+    expect(progress.getAttribute('tabindex')).toBe('0');
+    expect(activities.getAttribute('tabindex')).toBe('-1');
+    expect(screen.getByRole('tabpanel', { name: 'Progress' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Cardio tracking settings' })).toBeTruthy();
+
+    progress.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(activities.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(activities);
+    expect(screen.getByRole('tabpanel', { name: 'Activities' })).toBeTruthy();
+    expect(within(screen.getByRole('tabpanel', { name: 'Activities' })).getByText('Oct 22, 2026')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Log run' }));
+    expect(screen.getByRole('dialog', { name: 'Log run' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(activities.getAttribute('aria-selected')).toBe('true');
+
+    activities.focus();
+    await user.keyboard('{End}');
+    expect(rhythms.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('No Rhythms are linked to Cardio yet.')).toBeTruthy();
+    expect(document.querySelector('.strength-rhythms-empty')?.classList.contains('strength-rhythms-empty')).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Add Rhythm' }));
+    expect(onAddLinkedRhythm.mock.calls[0]?.[0]).toBe('health-cardio');
+
+    rhythms.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(progress.getAttribute('aria-selected')).toBe('true');
+    await user.keyboard('{End}');
+    await user.keyboard('{Home}');
+    expect(progress.getAttribute('aria-selected')).toBe('true');
+    expect(progress.getAttribute('tabindex')).toBe('0');
+    expect(rhythms.getAttribute('tabindex')).toBe('-1');
+  });
+
+  it('preserves active tab selection and routes explicit Rhythm logging to Activities', async () => {
+    const user = userEvent.setup();
+    const opener = document.createElement('button');
+    opener.dataset.testCardioOpener = 'true';
+    document.body.append(opener);
+    const props = {
+      data: createCardioData(),
+      today: '2026-10-22',
+      rhythms: [cardioRhythm()],
+      archivedRhythmIds: new Set<string>(),
+      datedRhythmCompletions: [],
+      onChange: vi.fn(() => null),
+      foundationNavigation: true,
+      foundationActive: true
+    } as const;
+    const view = render(<CardioView {...props} />);
+    const tabs = screen.getByRole('tablist', { name: 'Cardio Foundation sections' });
+    const activities = within(tabs).getByRole('tab', { name: 'Activities' });
+    await user.click(activities);
+    view.rerender(<CardioView {...props} />);
+    expect(activities.getAttribute('aria-selected')).toBe('true');
+
+    const onLogRequestClosed = vi.fn();
+    view.rerender(
+      <CardioView
+        {...props}
+        pendingLogRequest={{ requestId: 7, opener, rhythm: cardioRhythm() }}
+        onLogRequestClosed={onLogRequestClosed}
+      />
+    );
+    expect(screen.getByRole('tab', { name: 'Activities' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('dialog', { name: 'Log run' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onLogRequestClosed).toHaveBeenCalledOnce();
+  });
+
+  it('shows linked Cardio Rhythms and keeps association controls available', async () => {
+    const user = userEvent.setup();
+    const rhythm = { ...cardioRhythm(), primaryFoundationId: 'health-cardio' };
+    const onSaveFoundationAssociations = vi.fn(() => null);
+    render(
+      <CardioView
+        data={createCardioData()}
+        today="2026-10-22"
+        rhythms={[rhythm]}
+        archivedRhythmIds={new Set()}
+        datedRhythmCompletions={[]}
+        onChange={vi.fn(() => null)}
+        onSaveFoundationAssociations={onSaveFoundationAssociations}
+        foundationNavigation
+      />
+    );
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    expect(screen.getByText('Run rhythm')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Linked Rhythms · 1' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Manage links' }));
+    const associations = screen.getByRole('dialog', { name: 'Linked Rhythms' });
+    expect((within(associations).getByRole('checkbox', { name: /Run rhythm/ }) as HTMLInputElement).checked).toBe(true);
+    await user.click(associations.querySelector('.money-goal-dialog__close')!);
+    expect(onSaveFoundationAssociations).not.toHaveBeenCalled();
+  });
+
+  it('shows separate weekly run/mileage measures, score, today strip, and all historical runs', () => {
+    const data = saveCardioGoals({
       ...createCardioData(),
-      goals: { weeklyRunTarget: 2, weeklyMileTarget: 8 },
       runs: [
         { id: 'run-this-week', date: '2026-10-22', distance: 3 },
         { id: 'run-prior-week', date: '2026-10-16', distance: 5 }
       ]
-    };
+    }, { weeklyRunTarget: 2, weeklyMileTarget: 8 }, '2026-10-22', '2026-10-19');
     const { container } = renderCardio(data);
-    const controls = screen.getByRole('group', { name: 'Cardio goal and tracking controls' });
+    const controls = screen.getByRole('group', { name: 'Cardio tracking controls' });
     expect(within(controls).getByRole('button', { name: 'Cardio tracking settings' })).toBeTruthy();
-    expect(within(controls).getByRole('button', { name: 'Set up tracking' })).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: 'Set up tracking' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Set up tracking' })).toBeNull();
     expect(within(screen.getByRole('region', { name: 'Weekly cardio and run history' }))
       .getAllByRole('button', { name: 'Log run' })).toHaveLength(1);
     expect(screen.getByText('Runs this week')).toBeTruthy();
@@ -78,10 +201,15 @@ describe('Cardio preview presentation', () => {
     const user = userEvent.setup();
     renderCardio();
     expect(screen.getByText('Set up tracking to see your scores.')).toBeTruthy();
+    expect(screen.getByText(/Use Cardio tracking settings \(gear\)/)).toBeTruthy();
     expect(screen.queryByText(/Set both weekly run and mileage goals/)).toBeNull();
-    const controls = screen.getByRole('group', { name: 'Cardio goal and tracking controls' });
-    await user.click(within(controls).getByRole('button', { name: 'Set up tracking' }));
-    expect(screen.getByRole('dialog', { name: 'Cardio goals' })).toBeTruthy();
+    const controls = screen.getByRole('group', { name: 'Cardio tracking controls' });
+    await user.click(within(controls).getByRole('button', { name: 'Cardio tracking settings' }));
+    const settings = screen.getByRole('dialog', { name: 'Cardio goals' });
+    expect(settings.classList.contains('dialog--phone-fullscreen')).toBe(true);
+    expect(settings.querySelector('.fitness-goals-scroll')).toBeTruthy();
+    expect(within(settings).getByRole('button', { name: 'Save goals' })).toBeTruthy();
+    expect(within(settings).getByRole('button', { name: 'Cancel' })).toBeTruthy();
 
     cleanup();
     const data: CardioData = {
@@ -115,6 +243,7 @@ describe('Cardio preview presentation', () => {
     const { onChange } = renderCardio();
     await user.click(screen.getByRole('button', { name: 'Cardio tracking settings' }));
     const dialog = screen.getByRole('dialog', { name: 'Cardio goals' });
+    expect(dialog.classList.contains('dialog--phone-fullscreen')).toBe(true);
     await user.type(within(dialog).getByLabelText('Runs per week'), '2');
     await user.type(within(dialog).getByLabelText('Miles per week'), '8');
     await user.click(within(dialog).getByRole('button', { name: 'Save goals' }));

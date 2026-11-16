@@ -5,28 +5,32 @@ export function TodayWeather({
   report,
   localDate,
   time,
-  containerClassName
+  containerClassName,
+  compact = false
 }: {
   report?: TodayWeatherReport | null;
   localDate: string;
   time: string | null;
   containerClassName?: string;
+  compact?: boolean;
 }) {
   if (!report) return null;
   const observation = selectWeatherForTime(report, localDate, time);
   if (!observation) return null;
   const condition = weatherCondition(observation.code, observation.isDay);
   const roundedTemperature = Math.round(observation.temperature);
+  const accessibleDescription = `${time === null ? 'Current conditions' : 'Forecast'}: ${condition.description}, ${roundedTemperature} degrees`;
   const reading = (
     <span
-      className={`today-weather today-weather--${condition.theme}`}
+      className={`today-weather today-weather--${condition.theme}${compact ? ' today-weather--compact' : ''}`}
       role="img"
-      aria-label={`${time === null ? 'Current conditions' : 'Forecast'}: ${condition.description}, ${roundedTemperature} degrees`}
+      aria-label={accessibleDescription}
+      title={condition.description}
     >
       <WeatherIcon code={observation.code} isDay={observation.isDay} />
       <span className="today-weather__reading">
         <strong>{roundedTemperature}<sup>°</sup></strong>
-        <span>{condition.description}</span>
+        <span className={compact ? 'visually-hidden' : undefined}>{condition.description}</span>
       </span>
     </span>
   );

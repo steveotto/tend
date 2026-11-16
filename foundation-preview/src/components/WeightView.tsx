@@ -21,14 +21,33 @@ import {
 } from '../domain/weight.ts';
 import type { WeightData, WeightMeasurement, WeightUnit } from '../domain/weight.ts';
 import type { RhythmPreview } from '../domain/preview-data.ts';
+import {
+  foundationCatalogue,
+  syntheticPeople
+} from '../domain/preview-data.ts';
+import type {
+  FoundationPreview,
+  PersonId,
+  PersonPreview
+} from '../domain/preview-data.ts';
 import type { DatedRhythmCompletion } from '../domain/rhythm-completion.ts';
+import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { ScoreMeter } from './Cards.tsx';
 import { NumericControl } from './NumericControl.tsx';
 import { FitnessScoreSummary } from './FitnessScoreSummary.tsx';
 import { SettingsGearButton } from './SettingsGearButton.tsx';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
-import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
+import {
+  foundationRhythmIds,
+  type FoundationRhythmAssociationChange
+} from '../domain/foundation-rhythm-associations.ts';
+import type { Destination } from './AppNavigation.tsx';
+import { FoundationSectionHeading } from './FoundationSectionHeading.tsx';
+import { FoundationRhythmGroup } from './FoundationRhythmGroup.tsx';
+import { FoundationRhythmAssociationDialog } from './FoundationRhythmAssociationDialog.tsx';
+import { SegmentedTabs } from './SegmentedTabs.tsx';
+import type { SegmentedTab } from './SegmentedTabs.tsx';
 import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 
 export type WeightViewProps = {
@@ -46,10 +65,36 @@ export type WeightViewProps = {
   onLogRequestClosed?: () => void;
   onQuickLog?: (event: MouseEvent<HTMLButtonElement>) => void;
   foundationNavigation?: boolean;
+  foundationActive?: boolean;
+  people?: readonly PersonPreview[];
+  archivedRhythms?: readonly RhythmPreview[];
+  foundations?: readonly FoundationPreview[];
+  rhythmScores?: ReadonlyMap<string, RhythmScoreResult>;
+  completedRhythms?: ReadonlySet<string>;
+  undoableRhythms?: ReadonlySet<string>;
+  onAddLinkedRhythm?: (foundationId: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onSaveFoundationAssociations?: (
+    foundationId: string,
+    changes: readonly FoundationRhythmAssociationChange[]
+  ) => string | null;
+  onRhythmHistory?: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onEditRhythm?: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
+  onTend?: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onUndo?: (id: string) => void;
+  onPersonSelect?: (personId: PersonId) => void;
+  onOpenFoundation?: (foundationId: string, openerId: string) => void;
+  onOpenCategory?: (categoryId: Destination, openerId: string) => void;
   healthScoringEvidence?: HealthAggregateEvidence;
 };
 
 type DialogState = { kind: 'goals' } | { kind: 'weigh-in'; measurement?: WeightMeasurement; rhythm?: RhythmPreview };
+type WeightTab = 'progress' | 'measurements' | 'rhythms';
+
+const weightTabs = [
+  { id: 'progress', label: 'Progress', tabId: 'weight-tab-progress', panelId: 'weight-panel-progress' },
+  { id: 'measurements', label: 'Measurements', tabId: 'weight-tab-measurements', panelId: 'weight-panel-measurements' },
+  { id: 'rhythms', label: 'Rhythms', tabId: 'weight-tab-rhythms', panelId: 'weight-panel-rhythms' }
+] as const satisfies readonly SegmentedTab<WeightTab>[];
 
 export function WeightView({
   data,
@@ -65,15 +110,38 @@ export function WeightView({
   onLogRequestOpened,
   onLogRequestClosed,
   foundationNavigation = false,
+  foundationActive = false,
+  people = syntheticPeople,
+  archivedRhythms = [],
+  foundations = foundationCatalogue,
+  rhythmScores = new Map(),
+  completedRhythms = new Set(),
+  undoableRhythms = new Set(),
+  onAddLinkedRhythm,
+  onSaveFoundationAssociations,
+  onRhythmHistory,
+  onEditRhythm,
+  onTend,
+  onUndo,
+  onPersonSelect,
+  onOpenFoundation,
+  onOpenCategory,
   healthScoringEvidence
 }: WeightViewProps) {
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [actionError, setActionError] = useState('');
+  const [selectedTab, setSelectedTab] = useState<WeightTab>('progress');
+  const [associationDialogOpen, setAssociationDialogOpen] = useState(false);
   const openerRef = useRef<HTMLButtonElement | null>(null);
   const handledLogRequestRef = useRef<number | null>(null);
   const activeLogRequestRef = useRef<number | null>(null);
+  const wasFoundationActiveRef = useRef(false);
   const progress = selectWeightProgress(data, today);
   const measurements = validWeightMeasurements(data, today);
+  const trackingSetupRequired = !weightGoalSettings(data.goals) && measurements.records.length === 0;
+  const activeWeightRhythms = rhythms.filter(rhythm => foundationRhythmIds(rhythm).includes('health-weight'));
+  const archivedWeightRhythms = archivedRhythms.filter(rhythm => foundationRhythmIds(rhythm).includes('health-weight'));
+  const weightFoundation = foundations.find(foundation => foundation.id === 'health-weight');
   const issues = [
     ...weightDataIssues(data, today),
     ...weightLinkIssues(data, rhythms, archivedRhythmIds, today, datedRhythmCompletions)
@@ -83,10 +151,20 @@ export function WeightView({
   }, [dialog]);
 
   useEffect(() => {
+    if (!foundationNavigation) {
+      wasFoundationActiveRef.current = false;
+      return;
+    }
+    if (foundationActive && !wasFoundationActiveRef.current) setSelectedTab('progress');
+    wasFoundationActiveRef.current = foundationActive;
+  }, [foundationActive, foundationNavigation]);
+
+  useEffect(() => {
     if (!pendingLogRequest || handledLogRequestRef.current === pendingLogRequest.requestId) return;
     handledLogRequestRef.current = pendingLogRequest.requestId;
     activeLogRequestRef.current = pendingLogRequest.requestId;
     openerRef.current = pendingLogRequest.opener;
+    setSelectedTab('measurements');
     setDialog({ kind: 'weigh-in', ...(pendingLogRequest.rhythm ? { rhythm: pendingLogRequest.rhythm } : {}) });
     onLogRequestOpened?.(pendingLogRequest.requestId);
   }, [pendingLogRequest?.requestId]);
@@ -146,7 +224,40 @@ export function WeightView({
           summaryExplanation="Weight Health reflects scheduled weigh-in Rhythms. Recorded weight, distance from the goal path, and the separate Goal Progress score do not affect it."
         />
       )}
-      <section className="weight-progress">
+      {foundationNavigation && (
+        <SegmentedTabs
+          tabs={weightTabs}
+          selectedTabId={selectedTab}
+          ariaLabel="Weight Foundation sections"
+          onChange={setSelectedTab}
+        />
+      )}
+      <section
+        className={foundationNavigation ? 'strength-section-panels' : 'weight-progress'}
+        aria-label="Weight progress and measurement history"
+      >
+        <section
+          id="weight-panel-progress"
+          className="strength-section-panel"
+          {...(foundationNavigation && {
+            role: 'tabpanel' as const,
+            'aria-labelledby': 'weight-tab-progress'
+          })}
+          hidden={foundationNavigation && selectedTab !== 'progress'}
+        >
+          {foundationNavigation && (
+            <FoundationSectionHeading
+              title="Progress"
+              headingId="weight-progress-section-title"
+              subtitle="Your recorded weight and goal-path progress."
+              actions={
+                <SettingsGearButton
+                  label="Weight tracking settings"
+                  onClick={event => openDialog({ kind: 'goals' }, event)}
+                />
+              }
+            />
+          )}
           <section className="card weight-progress-card" aria-labelledby="weight-progress-heading">
             <header className="weight-card-heading">
               <div><h2 id="weight-progress-heading">Body weight progress</h2>
@@ -154,10 +265,12 @@ export function WeightView({
                   ? `Latest recorded measurement · ${formatDate(progress.latest.date)}`
                   : 'No valid weigh-in recorded yet.'}</p>
               </div>
-              <SettingsGearButton
-                label="Weight goal settings"
-                onClick={event => openDialog({ kind: 'goals' }, event)}
-              />
+              {!foundationNavigation && (
+                <SettingsGearButton
+                  label="Weight tracking settings"
+                  onClick={event => openDialog({ kind: 'goals' }, event)}
+                />
+              )}
             </header>
             {progress.latest && (
               <div className="weight-latest-record" aria-label="Latest recorded measurement">
@@ -191,25 +304,60 @@ export function WeightView({
             </div>
             <ScoreMeter label="Weight progress score, separate from category and Foundation scores"
               score={progress.score} />
-            <WeightChart
-              data={data}
-              today={today}
-              measurements={measurements.records}
-              expectedWeightKg={progress.expectedWeightKg}
-            />
+            {trackingSetupRequired ? (
+              <p className="weight-chart-empty" role="status">
+                Use Weight tracking settings (gear) to set a goal, or add a weigh-in to begin tracking progress.
+              </p>
+            ) : (
+              <WeightChart
+                data={data}
+                today={today}
+                measurements={measurements.records}
+                expectedWeightKg={progress.expectedWeightKg}
+              />
+            )}
             <details className="weight-calculation-info">
               <summary>How the estimate is calculated</summary>
               <p>The estimate follows a straight goal path between the dates you set. Progress compares that estimate with your latest valid recorded measurement. The score is unavailable without a complete goal and a valid measurement, and is reduced by five points per day behind, down to zero.</p>
             </details>
           </section>
+        </section>
+
+        <section
+          id="weight-panel-measurements"
+          className={foundationNavigation
+            ? 'strength-section-panel strength-workout-section'
+            : 'strength-section-panel'}
+          {...(foundationNavigation && {
+            role: 'tabpanel' as const,
+            'aria-labelledby': 'weight-tab-measurements'
+          })}
+          hidden={foundationNavigation && selectedTab !== 'measurements'}
+        >
+          {foundationNavigation && (
+            <FoundationSectionHeading
+              title="Measurements"
+              headingId="weight-measurements-heading"
+              subtitle="Your recorded weigh-ins."
+              actions={
+                <button type="button" className="btn mini ghost"
+                  onClick={event => openDialog({ kind: 'weigh-in' }, event)}>
+                  <span aria-hidden="true">+</span> Add weigh-in
+                </button>
+              }
+            />
+          )}
           <section className="card weight-history-card" aria-labelledby="weight-history-heading">
-            <header className="weight-card-heading">
-              <div><h2 id="weight-history-heading">Weigh-in history</h2>
-                <p>Measurements are stored independently from workout templates.</p>
-              </div>
-              <button type="button" className="btn mini"
-                onClick={event => openDialog({ kind: 'weigh-in' }, event)}>Add weigh-in</button>
-            </header>
+            {!foundationNavigation && (
+              <header className="weight-card-heading">
+                <div><h2 id="weight-history-heading">Weigh-in history</h2>
+                  <p>Measurements are stored independently from workout templates.</p>
+                </div>
+                <button type="button" className="btn mini"
+                  onClick={event => openDialog({ kind: 'weigh-in' }, event)}>Add weigh-in</button>
+              </header>
+            )}
+            {foundationNavigation && <h2 id="weight-history-heading" className="visually-hidden">Weigh-in history</h2>}
             {measurements.records.length === 0
               ? <p className="weight-empty">No valid weigh-ins to show.</p>
               : <ol className="weight-history-list">
@@ -231,7 +379,83 @@ export function WeightView({
               </ol>}
             {actionError && <p className="goal-field-error" role="alert">{actionError}</p>}
           </section>
+        </section>
+
+        {foundationNavigation && (
+          <section
+            id="weight-panel-rhythms"
+            className="strength-section-panel"
+            role="tabpanel"
+            aria-labelledby="weight-tab-rhythms"
+            hidden={selectedTab !== 'rhythms'}
+          >
+            <section className="marriage-foundation-support strength-rhythms-panel" aria-labelledby="weight-linked-rhythms-title">
+              <FoundationSectionHeading
+                title="Linked Rhythms"
+                headingId="weight-linked-rhythms-title"
+                accessibleName={`Linked Rhythms · ${activeWeightRhythms.length}`}
+                secondary={<span className="strength-linked-rhythms-count" aria-hidden="true">{activeWeightRhythms.length}</span>}
+                subtitle="Your routines for supporting weight tracking."
+                actions={
+                  <>
+                    {onSaveFoundationAssociations && (
+                      <button type="button" className="btn mini ghost" aria-haspopup="dialog"
+                        onClick={() => setAssociationDialogOpen(true)}>Manage links</button>
+                    )}
+                    {onAddLinkedRhythm && (
+                      <button type="button" className="btn mini"
+                        onClick={event => onAddLinkedRhythm('health-weight', event)}>Add Rhythm</button>
+                    )}
+                  </>
+                }
+              />
+              {activeWeightRhythms.length > 0 ? (
+                <FoundationRhythmGroup
+                  people={people}
+                  rhythms={activeWeightRhythms}
+                  archivedRhythmIds={archivedWeightRhythms.map(rhythm => rhythm.id)}
+                  headingId="weight-linked-rhythms-title"
+                  rhythmScores={rhythmScores}
+                  completedRhythms={completedRhythms}
+                  undoableRhythms={undoableRhythms}
+                  foundations={foundations}
+                  categoryToken="weight"
+                  {...(onTend ? { onTend } : {})}
+                  {...(onUndo ? { onUndo } : {})}
+                  {...(onEditRhythm ? { onEditRhythm } : {})}
+                  {...(onRhythmHistory ? { onRhythmHistory } : {})}
+                  {...(onPersonSelect ? { onPersonSelect } : {})}
+                  {...(onOpenFoundation ? { onOpenFoundation } : {})}
+                  {...(onOpenCategory ? { onOpenCategory } : {})}
+                  completionActionLabelFor={() => 'Log'}
+                  completionActionAccessibleLabelFor={rhythm =>
+                    rhythm.healthLogCapability === 'cardio' ? 'Log run'
+                      : rhythm.healthLogCapability === 'flexibility' ? 'Start stretch routine' : 'Log weigh-in'}
+                  completedActionLabelFor={rhythm =>
+                    rhythm.healthLogCapability === 'cardio' ? 'Logged'
+                      : rhythm.healthLogCapability === 'flexibility' ? 'Stretched' : 'Weighed in'}
+                />
+              ) : (
+                <div className="strength-rhythms-empty">
+                  <p>No Rhythms are linked to Weight yet.</p>
+                </div>
+              )}
+            </section>
+          </section>
+        )}
       </section>
+      {associationDialogOpen && weightFoundation && onSaveFoundationAssociations && (
+        <FoundationRhythmAssociationDialog
+          key={weightFoundation.id}
+          foundation={weightFoundation}
+          rhythms={[
+            ...rhythms.map(rhythm => ({ rhythm, archived: false })),
+            ...archivedRhythms.map(rhythm => ({ rhythm, archived: true }))
+          ]}
+          onSave={changes => onSaveFoundationAssociations(weightFoundation.id, changes)}
+          onClose={() => setAssociationDialogOpen(false)}
+        />
+      )}
       {issues.length > 0 && (
         <section className="weight-data-issues" role="status" aria-label="Weight data quality">
           <h2>Some Weight data needs review</h2>
@@ -312,80 +536,83 @@ function WeightGoalsDialog({
 
   return (
     <MoneyGoalDialog title="Weight goals" labelledBy="weight-goals-title" titleId="weight-goals-title"
-      initialFocusId="weight-goal-start" onClose={onClose} closeLabel="Close Weight goals">
-      <form className="weight-form" noValidate onSubmit={submit}>
-        {malformed && (
-          <p className="weight-form__notice" role="status">
-            Saved goal values are invalid and remain preserved until you replace or clear them.
-          </p>
-        )}
-        <label>Weight unit
-          <select value={unit} onChange={event => changeUnit(event.currentTarget.value as WeightUnit)}>
-            <option value="lb">Pounds (lb)</option>
-            <option value="kg">Kilograms (kg)</option>
-          </select>
-        </label>
-        <div className="weight-form__grid">
-          <NumericControl
-            id="weight-goal-start"
-            label={`Starting weight (${unit})`}
-            groupLabel="Starting weight"
-            value={startText}
-            min={0.1}
-            max={2000}
-            step="any"
-            invalid={Boolean(error)}
-            {...(error ? { describedBy: 'weight-goals-error' } : {})}
-            decreaseLabel={`Decrease starting weight by 1 ${unit}`}
-            increaseLabel={`Increase starting weight by 1 ${unit}`}
-            onChange={value => {
-              setStartText(value);
-              setStartKg(parseWeightInput(value, unit));
-            }}
-            onStep={direction => {
-              const next = stepWeightInput(startKg, unit, direction);
-              setStartKg(next);
-              setStartText(formatWeightInput(next, unit));
-            }}
-          />
-          <label>Starting date
-            <input type="date" value={startDate} onChange={event => setStartDate(event.currentTarget.value)} />
+      initialFocusId="weight-goal-start" onClose={onClose} closeLabel="Close Weight goals"
+      bodyClassName="fitness-goals-dialog-body" dialogClassName="money-goal-dialog--fitness-goals" phoneFullScreen>
+      <form className="weight-form fitness-goals-form" noValidate onSubmit={submit}>
+        <div className="fitness-goals-scroll">
+          {malformed && (
+            <p className="weight-form__notice" role="status">
+              Saved goal values are invalid and remain preserved until you replace or clear them.
+            </p>
+          )}
+          <label>Weight unit
+            <select value={unit} onChange={event => changeUnit(event.currentTarget.value as WeightUnit)}>
+              <option value="lb">Pounds (lb)</option>
+              <option value="kg">Kilograms (kg)</option>
+            </select>
           </label>
-          <NumericControl
-            id="weight-goal-target"
-            label={`Target weight (${unit})`}
-            groupLabel="Target weight"
-            value={targetText}
-            min={0.1}
-            max={2000}
-            step="any"
-            invalid={Boolean(error)}
-            {...(error ? { describedBy: 'weight-goals-error' } : {})}
-            decreaseLabel={`Decrease target weight by 1 ${unit}`}
-            increaseLabel={`Increase target weight by 1 ${unit}`}
-            onChange={value => {
-              setTargetText(value);
-              setTargetKg(parseWeightInput(value, unit));
-            }}
-            onStep={direction => {
-              const next = stepWeightInput(targetKg, unit, direction);
-              setTargetKg(next);
-              setTargetText(formatWeightInput(next, unit));
-            }}
-          />
-          <label>Goal date
-            <input type="date" value={goalDate} onChange={event => setGoalDate(event.currentTarget.value)} />
-          </label>
+          <div className="weight-form__grid">
+            <NumericControl
+              id="weight-goal-start"
+              label={`Starting weight (${unit})`}
+              groupLabel="Starting weight"
+              value={startText}
+              min={0.1}
+              max={2000}
+              step="any"
+              invalid={Boolean(error)}
+              {...(error ? { describedBy: 'weight-goals-error' } : {})}
+              decreaseLabel={`Decrease starting weight by 1 ${unit}`}
+              increaseLabel={`Increase starting weight by 1 ${unit}`}
+              onChange={value => {
+                setStartText(value);
+                setStartKg(parseWeightInput(value, unit));
+              }}
+              onStep={direction => {
+                const next = stepWeightInput(startKg, unit, direction);
+                setStartKg(next);
+                setStartText(formatWeightInput(next, unit));
+              }}
+            />
+            <label>Starting date
+              <input type="date" value={startDate} onChange={event => setStartDate(event.currentTarget.value)} />
+            </label>
+            <NumericControl
+              id="weight-goal-target"
+              label={`Target weight (${unit})`}
+              groupLabel="Target weight"
+              value={targetText}
+              min={0.1}
+              max={2000}
+              step="any"
+              invalid={Boolean(error)}
+              {...(error ? { describedBy: 'weight-goals-error' } : {})}
+              decreaseLabel={`Decrease target weight by 1 ${unit}`}
+              increaseLabel={`Increase target weight by 1 ${unit}`}
+              onChange={value => {
+                setTargetText(value);
+                setTargetKg(parseWeightInput(value, unit));
+              }}
+              onStep={direction => {
+                const next = stepWeightInput(targetKg, unit, direction);
+                setTargetKg(next);
+                setTargetText(formatWeightInput(next, unit));
+              }}
+            />
+            <label>Goal date
+              <input type="date" value={goalDate} onChange={event => setGoalDate(event.currentTarget.value)} />
+            </label>
+          </div>
+          {malformed && (
+            <button type="button" className="btn mini ghost" onClick={() => {
+              setStartKg(null); setStartText(''); setStartDate('');
+              setTargetKg(null); setTargetText(''); setGoalDate('');
+              setError('Invalid saved goal values will be cleared when you save.');
+            }}>Clear invalid saved goals</button>
+          )}
+          {error && <p id="weight-goals-error" className="goal-field-error" role="alert">{error}</p>}
         </div>
-        {malformed && (
-          <button type="button" className="btn mini ghost" onClick={() => {
-            setStartKg(null); setStartText(''); setStartDate('');
-            setTargetKg(null); setTargetText(''); setGoalDate('');
-            setError('Invalid saved goal values will be cleared when you save.');
-          }}>Clear invalid saved goals</button>
-        )}
-        {error && <p id="weight-goals-error" className="goal-field-error" role="alert">{error}</p>}
-        <div className="profile-editor-actions">
+        <div className="profile-editor-actions fitness-goals-actions">
           <button type="submit" className="btn mini">Save goals</button>
           <button type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>
         </div>

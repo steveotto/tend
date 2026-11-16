@@ -443,6 +443,49 @@ type SettingsDetail =
   | 'save-sync'
   | 'backup-recovery';
 
+type SettingsIconName = 'categories' | 'appearance' | 'time-blocks' | 'calendar' | 'weather' | 'backup-recovery' | 'settings';
+
+function SettingsDirectoryIcon({ name }: { name: SettingsIconName }) {
+  return (
+    <span className={`settings-link__icon settings-link__icon--${name}`} aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false">
+        {name === 'categories' && <>
+          <rect x="4" y="4" width="6" height="6" rx="1" />
+          <rect x="14" y="4" width="6" height="6" rx="1" />
+          <rect x="4" y="14" width="6" height="6" rx="1" />
+          <rect x="14" y="14" width="6" height="6" rx="1" />
+        </>}
+        {name === 'appearance' && <>
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
+        </>}
+        {name === 'time-blocks' && <>
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M12 7v5l3.5 2" />
+        </>}
+        {name === 'calendar' && <>
+          <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
+          <path d="M7.5 3v4m9-4v4M3.5 9h17" />
+        </>}
+        {name === 'weather' && <>
+          <path d="M7 18.5h10a4 4 0 0 0 .4-8A6 6 0 0 0 6 9.5a4.5 4.5 0 0 0 1 9Z" />
+          <path d="M6 3v2m-3 1.2 1.4 1.4m9.8-1.4-1.4 1.4" />
+        </>}
+        {name === 'backup-recovery' && <>
+          <path d="M3.5 7.5h7l2 2h8v9h-17z" />
+          <path d="M8 14.5a4 4 0 1 1 1.2 2.8m-1.2-5v2.5h2.5" />
+        </>}
+        {name === 'settings' && <>
+          <path d="M4 6h16M4 12h16M4 18h16" />
+          <circle cx="9" cy="6" r="1.5" />
+          <circle cx="15" cy="12" r="1.5" />
+          <circle cx="8" cy="18" r="1.5" />
+        </>}
+      </svg>
+    </span>
+  );
+}
+
 function PreviewWorkspace({
   identity,
   authRefreshSequence,
@@ -3215,19 +3258,23 @@ function PreviewWorkspace({
   const isPreviewSettings = destination === 'more' && moreSettingsOpen;
   const storageNeedsAttention = ['unavailable', 'error', 'corrupt', 'unsupported', 'conflict']
     .includes(persistenceStatus.kind);
-  const settingsGroups: { title: string; items: { detail: SettingsDetail; label: string }[] }[] = [
+  const settingsGroups: { title: string; items: {
+    detail: SettingsDetail;
+    label: string;
+    summary: string;
+    icon: SettingsIconName;
+  }[] }[] = [
     { title: 'Personalize', items: [
-      { detail: 'categories', label: 'Categories' },
-      { detail: 'appearance', label: 'Appearance' },
-      { detail: 'time-blocks', label: 'Time blocks' }
+      { detail: 'categories', label: 'Categories', summary: 'Choose what appears across Tend.', icon: 'categories' },
+      { detail: 'appearance', label: 'Appearance', summary: 'Set your preferred text size.', icon: 'appearance' },
+      { detail: 'time-blocks', label: 'Time blocks', summary: 'Set the times that shape your day.', icon: 'time-blocks' }
     ] },
     { title: 'Connections', items: [
-      { detail: 'calendar', label: 'Calendar' },
-      { detail: 'weather', label: 'Weather' }
+      { detail: 'calendar', label: 'Calendar', summary: 'Manage sources and Today visibility.', icon: 'calendar' },
+      { detail: 'weather', label: 'Weather', summary: 'Choose a location and forecast units.', icon: 'weather' }
     ] },
     { title: 'Your data', items: [
-      { detail: 'save-sync', label: 'Save & sync' },
-      { detail: 'backup-recovery', label: 'Backup & recovery' }
+      { detail: 'backup-recovery', label: 'Backup & recovery', summary: 'Export, import, and restore your data.', icon: 'backup-recovery' }
     ] }
   ];
 
@@ -3421,9 +3468,10 @@ function PreviewWorkspace({
             }
             onRetryLocalSave={retrySave}
             autoSyncEnabled={import.meta.env.VITE_TEND_PREVIEW_AUTO_SYNC_ENABLED === 'true'}
-            visible={destination === 'more' && moreSettingsOpen}
+            visible={destination === 'more'}
             onOpenRecovery={() => {
-              setSettingsReturnTo('save-sync');
+              setMoreSettingsOpen(true);
+              setSettingsReturnTo(null);
               setSettingsDetail('backup-recovery');
             }}
             manualOperationLocked={manualBackupLocked}
@@ -3469,6 +3517,69 @@ function PreviewWorkspace({
                     {moreSettingsOpen ? 'Settings' : 'More'}
                   </h2>
                 </header>
+                <div
+                  className="settings-page__more-sync-target"
+                  hidden={moreSettingsOpen}
+                  ref={identity.kind === 'authenticated' ? setAccountSyncTarget : undefined}
+                />
+                {!moreSettingsOpen && identity.kind === 'development' && (
+                  <section className="settings-section more-save-status" aria-labelledby="more-save-status-title">
+                    <h3 id="more-save-status-title">Save &amp; sync</h3>
+                    <div className={`preview-account-sync__status-row preview-account-sync__status-row--${persistenceStatus.kind}`}>
+                      <span className="preview-account-sync__icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false">
+                          <path d="M7.3 18.2h10.1a4.1 4.1 0 0 0 .4-8.2A6.2 6.2 0 0 0 6 8.5a4.9 4.9 0 0 0 1.3 9.7Z" />
+                          {persistenceStatus.kind === 'saved'
+                            ? <path d="m9.2 13.1 2.1 2.1 4.2-4.4" />
+                            : <path d="M12 8.5v4l2.4 1.4" />}
+                        </svg>
+                      </span>
+                      <div className="preview-account-sync__status-copy">
+                        <p className="preview-account-sync__status" role="status">
+                          {persistenceStatus.kind === 'saved'
+                            ? 'Saved on this device'
+                            : persistenceStatus.kind === 'saving' || persistenceStatus.kind === 'loading'
+                              ? 'Saving…'
+                              : 'Needs attention'}
+                        </p>
+                        <p className="preview-account-sync__description">
+                          {persistenceStatus.kind === 'saved'
+                            ? 'This synthetic preview is saved in this browser.'
+                            : persistenceStatus.kind === 'saving' || persistenceStatus.kind === 'loading'
+                              ? 'Checking and saving this browser copy.'
+                              : 'Your latest changes are not confirmed saved on this device.'}
+                        </p>
+                      </div>
+                      {persistenceStatus.kind === 'error' && (
+                        <button type="button" className="btn mini ghost preview-account-sync__retry" onClick={retrySave}>
+                          Try saving again
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="settings-link preview-account-sync__recovery-link"
+                      onClick={() => {
+                        setMoreSettingsOpen(true);
+                        setSettingsReturnTo(null);
+                        setSettingsDetail('backup-recovery');
+                      }}
+                    >
+                      <span>Backup &amp; recovery</span>
+                      <span aria-hidden="true">›</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="more-save-status__tools"
+                      onClick={() => {
+                        setSettingsDetail('save-sync');
+                        setMoreSettingsOpen(true);
+                      }}
+                    >
+                      Preview data tools
+                    </button>
+                  </section>
+                )}
                 {moreSettingsOpen
                   ? (
                     <>
@@ -3486,6 +3597,7 @@ function PreviewWorkspace({
                       >
                         {settingsDetail ? '‹ Settings' : '‹ More'}
                       </button>
+                      {settingsDetail === null && <p className="settings-page__tagline">Make Tend your own.</p>}
                       <div className="settings-page__directory" hidden={settingsDetail !== null}>
                         {settingsGroups.map(group => (
                           <section className="settings-section" key={group.title} aria-label={group.title}>
@@ -3495,13 +3607,19 @@ function PreviewWorkspace({
                                 type="button"
                                 className="settings-link"
                                 key={item.detail}
+                                aria-label={item.label}
+                                aria-describedby={`settings-summary-${item.detail}`}
                                 onClick={() => {
                                   setSettingsReturnTo(null);
                                   setSettingsDetail(item.detail);
                                 }}
                               >
-                                <span>{item.label}</span>
-                                <span aria-hidden="true">›</span>
+                                <SettingsDirectoryIcon name={item.icon} />
+                                <span className="settings-link__copy">
+                                  <span className="settings-link__title">{item.label}</span>
+                                  <span className="settings-link__summary" id={`settings-summary-${item.detail}`}>{item.summary}</span>
+                                </span>
+                                <span className="settings-link__chevron" aria-hidden="true">›</span>
                               </button>
                             ))}
                           </section>
@@ -3540,9 +3658,6 @@ function PreviewWorkspace({
                       </section>
                       <div className="settings-page__detail-slot" hidden={settingsDetail !== 'save-sync'}>
                         {identity.kind === 'development' && <h3 className="settings-page__detail-heading">Save &amp; sync</h3>}
-                        {identity.kind === 'authenticated' && (
-                          <div className="preview-account-sync-slot" ref={setAccountSyncTarget} />
-                        )}
                       </div>
                       <div className="settings-page__detail-slot" hidden={settingsDetail !== 'backup-recovery'}>
                         <h3 className="settings-page__detail-heading">Backup &amp; recovery</h3>
@@ -3565,17 +3680,23 @@ function PreviewWorkspace({
                     </>
                   )
                   : (
-                    <section className="settings-section" aria-label="More options">
+                    <section className="settings-section settings-page__more-options" aria-label="More options">
                       <button
                         type="button"
                         className="settings-link"
+                        aria-label="Settings"
+                        aria-describedby="settings-summary-more-settings"
                         onClick={() => {
                           setSettingsDetail(null);
                           setMoreSettingsOpen(true);
                         }}
                       >
-                        <span>Settings</span>
-                        <span aria-hidden="true">›</span>
+                        <SettingsDirectoryIcon name="settings" />
+                        <span className="settings-link__copy">
+                          <span className="settings-link__title">Settings</span>
+                          <span className="settings-link__summary" id="settings-summary-more-settings">Make Tend your own.</span>
+                        </span>
+                        <span className="settings-link__chevron" aria-hidden="true">›</span>
                       </button>
                     </section>
                   )}

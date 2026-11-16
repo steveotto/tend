@@ -19,11 +19,31 @@ import {
 } from '../domain/cardio.ts';
 import type { CardioData, CardioRun } from '../domain/cardio.ts';
 import type { RhythmPreview } from '../domain/preview-data.ts';
+import {
+  foundationCatalogue,
+  syntheticPeople
+} from '../domain/preview-data.ts';
+import type {
+  FoundationPreview,
+  PersonId,
+  PersonPreview
+} from '../domain/preview-data.ts';
 import type { DatedRhythmCompletion } from '../domain/rhythm-completion.ts';
+import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
+import {
+  foundationRhythmIds,
+  type FoundationRhythmAssociationChange
+} from '../domain/foundation-rhythm-associations.ts';
+import type { Destination } from './AppNavigation.tsx';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { NumericControl } from './NumericControl.tsx';
 import { FitnessScoreSummary } from './FitnessScoreSummary.tsx';
 import { SettingsGearButton } from './SettingsGearButton.tsx';
+import { FoundationSectionHeading } from './FoundationSectionHeading.tsx';
+import { FoundationRhythmGroup } from './FoundationRhythmGroup.tsx';
+import { FoundationRhythmAssociationDialog } from './FoundationRhythmAssociationDialog.tsx';
+import { SegmentedTabs } from './SegmentedTabs.tsx';
+import type { SegmentedTab } from './SegmentedTabs.tsx';
 
 export type CardioViewProps = {
   data: CardioData;
@@ -37,11 +57,37 @@ export type CardioViewProps = {
   onLogRequestClosed?: () => void;
   onQuickLog?: (event: MouseEvent<HTMLButtonElement>) => void;
   foundationNavigation?: boolean;
+  foundationActive?: boolean;
+  people?: readonly PersonPreview[];
+  archivedRhythms?: readonly RhythmPreview[];
+  foundations?: readonly FoundationPreview[];
+  rhythmScores?: ReadonlyMap<string, RhythmScoreResult>;
+  completedRhythms?: ReadonlySet<string>;
+  undoableRhythms?: ReadonlySet<string>;
+  onAddLinkedRhythm?: (foundationId: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onSaveFoundationAssociations?: (
+    foundationId: string,
+    changes: readonly FoundationRhythmAssociationChange[]
+  ) => string | null;
+  onRhythmHistory?: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onEditRhythm?: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
+  onTend?: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onUndo?: (id: string) => void;
+  onPersonSelect?: (personId: PersonId) => void;
+  onOpenFoundation?: (foundationId: string, openerId: string) => void;
+  onOpenCategory?: (categoryId: Destination, openerId: string) => void;
   overallHealthScore?: number | null;
   categoryHealthScore?: number | null;
 };
 
 type DialogState = { kind: 'goals' } | { kind: 'run'; run?: CardioRun; rhythm?: RhythmPreview };
+type CardioTab = 'progress' | 'activities' | 'rhythms';
+
+const cardioTabs = [
+  { id: 'progress', label: 'Progress', tabId: 'cardio-tab-progress', panelId: 'cardio-panel-progress' },
+  { id: 'activities', label: 'Activities', tabId: 'cardio-tab-activities', panelId: 'cardio-panel-activities' },
+  { id: 'rhythms', label: 'Rhythms', tabId: 'cardio-tab-rhythms', panelId: 'cardio-panel-rhythms' }
+] as const satisfies readonly SegmentedTab<CardioTab>[];
 
 export function CardioView({
   data,
@@ -54,16 +100,38 @@ export function CardioView({
   onLogRequestOpened,
   onLogRequestClosed,
   foundationNavigation = false,
+  foundationActive = false,
+  people = syntheticPeople,
+  archivedRhythms = [],
+  foundations = foundationCatalogue,
+  rhythmScores = new Map(),
+  completedRhythms = new Set(),
+  undoableRhythms = new Set(),
+  onAddLinkedRhythm,
+  onSaveFoundationAssociations,
+  onRhythmHistory,
+  onEditRhythm,
+  onTend,
+  onUndo,
+  onPersonSelect,
+  onOpenFoundation,
+  onOpenCategory,
   overallHealthScore = null,
   categoryHealthScore = null
 }: CardioViewProps) {
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [actionError, setActionError] = useState('');
+  const [selectedTab, setSelectedTab] = useState<CardioTab>('progress');
+  const [associationDialogOpen, setAssociationDialogOpen] = useState(false);
   const openerRef = useRef<HTMLButtonElement | null>(null);
   const handledLogRequestRef = useRef<number | null>(null);
   const activeLogRequestRef = useRef<number | null>(null);
+  const wasFoundationActiveRef = useRef(false);
   const progress = selectCardioProgress(data, today);
   const runs = validatedCardioRuns(data, today).records;
+  const activeCardioRhythms = rhythms.filter(rhythm => foundationRhythmIds(rhythm).includes('health-cardio'));
+  const archivedCardioRhythms = archivedRhythms.filter(rhythm => foundationRhythmIds(rhythm).includes('health-cardio'));
+  const cardioFoundation = foundations.find(foundation => foundation.id === 'health-cardio');
   const trackingSetupRequired = !data.trackingStartDate
     || !data.targetHistory?.length
     || progress.targetRuns === null
@@ -127,10 +195,20 @@ export function CardioView({
   }, [dialog]);
 
   useEffect(() => {
+    if (!foundationNavigation) {
+      wasFoundationActiveRef.current = false;
+      return;
+    }
+    if (foundationActive && !wasFoundationActiveRef.current) setSelectedTab('progress');
+    wasFoundationActiveRef.current = foundationActive;
+  }, [foundationActive, foundationNavigation]);
+
+  useEffect(() => {
     if (!pendingLogRequest || handledLogRequestRef.current === pendingLogRequest.requestId) return;
     handledLogRequestRef.current = pendingLogRequest.requestId;
     activeLogRequestRef.current = pendingLogRequest.requestId;
     openerRef.current = pendingLogRequest.opener;
+    setSelectedTab('activities');
     setDialog({ kind: 'run', ...(pendingLogRequest.rhythm ? { rhythm: pendingLogRequest.rhythm } : {}) });
     onLogRequestOpened?.(pendingLogRequest.requestId);
   }, [pendingLogRequest?.requestId]);
@@ -173,36 +251,69 @@ export function CardioView({
         </header>
       )}
       {foundationNavigation && healthSummary}
-      <section className="cardio-progress" aria-label="Weekly cardio and run history">
+      {foundationNavigation && (
+        <SegmentedTabs
+          tabs={cardioTabs}
+          selectedTabId={selectedTab}
+          ariaLabel="Cardio Foundation sections"
+          onChange={setSelectedTab}
+        />
+      )}
+      <section
+        className={foundationNavigation ? 'strength-section-panels' : 'cardio-progress'}
+        aria-label="Weekly cardio and run history"
+      >
+        <section
+          id="cardio-panel-progress"
+          className={foundationNavigation
+            ? 'strength-section-panel strength-workout-section'
+            : 'strength-section-panel'}
+          {...(foundationNavigation && {
+            role: 'tabpanel' as const,
+            'aria-labelledby': 'cardio-tab-progress'
+          })}
+          hidden={foundationNavigation && selectedTab !== 'progress'}
+        >
+          {foundationNavigation && (
+            <FoundationSectionHeading
+              title="Progress"
+              headingId="cardio-progress-section-title"
+              subtitle="Your weekly run and mileage goals."
+              actions={
+                <SettingsGearButton
+                  label="Cardio tracking settings"
+                  onClick={event => openDialog({ kind: 'goals' }, event)}
+                />
+              }
+            />
+          )}
           <section className="card cardio-progress-card" aria-labelledby="cardio-progress-title">
             <header className="cardio-card-heading">
               <div>
                 <h2 id="cardio-progress-title">Weekly cardio</h2>
                 <p>{formatDate(progress.weekStart)} – {formatDate(progress.weekEnd)} · Monday–Sunday</p>
               </div>
-              <div className="cardio-goal-controls" role="group" aria-label="Cardio goal and tracking controls">
-                {trackingSetupRequired && (
-                  <button type="button" className="btn mini ghost"
-                    onClick={event => openDialog({ kind: 'goals' }, event)}>Set up tracking</button>
-                )}
-                <SettingsGearButton
-                  label="Cardio tracking settings"
-                  onClick={event => openDialog({ kind: 'goals' }, event)}
-                />
-              </div>
-            </header>
-            {progress.targetRuns === null || progress.targetMiles === null ? (
-              null
-            ) : (
-              <>
-                <div className="cardio-measures">
-                  <CardioMeasure label="Runs this week" value={progress.runs} target={progress.targetRuns}
-                    percent={progress.runProgress ?? 0} remaining={`${progress.remainingRuns} remaining`} />
-                  <CardioMeasure label="Miles this week" value={progress.miles} target={progress.targetMiles}
-                    percent={progress.mileageProgress ?? 0}
-                    remaining={`${formatNumber(progress.remainingMiles ?? 0)} mi remaining`} />
+              {!foundationNavigation && (
+                <div className="cardio-goal-controls" role="group" aria-label="Cardio tracking controls">
+                  <SettingsGearButton
+                    label="Cardio tracking settings"
+                    onClick={event => openDialog({ kind: 'goals' }, event)}
+                  />
                 </div>
-              </>
+              )}
+            </header>
+            {trackingSetupRequired || progress.targetRuns === null || progress.targetMiles === null ? (
+              <p className="cardio-empty" role="status">
+                Use Cardio tracking settings (gear) to choose a start date and weekly run and mileage goals.
+              </p>
+            ) : (
+              <div className="cardio-measures">
+                <CardioMeasure label="Runs this week" value={progress.runs} target={progress.targetRuns}
+                  percent={progress.runProgress ?? 0} remaining={`${progress.remainingRuns} remaining`} />
+                <CardioMeasure label="Miles this week" value={progress.miles} target={progress.targetMiles}
+                  percent={progress.mileageProgress ?? 0}
+                  remaining={`${formatNumber(progress.remainingMiles ?? 0)} mi remaining`} />
+              </div>
             )}
             {!foundationNavigation && healthSummary}
             <div className="cardio-week-strip" role="group" aria-label="Run activity Monday through Sunday">
@@ -217,12 +328,41 @@ export function CardioView({
               ))}
             </div>
           </section>
+        </section>
+
+        <section
+          id="cardio-panel-activities"
+          className={foundationNavigation
+            ? 'strength-section-panel strength-workout-section'
+            : 'strength-section-panel'}
+          {...(foundationNavigation && {
+            role: 'tabpanel' as const,
+            'aria-labelledby': 'cardio-tab-activities'
+          })}
+          hidden={foundationNavigation && selectedTab !== 'activities'}
+        >
+          {foundationNavigation && (
+            <FoundationSectionHeading
+              title="Activities"
+              headingId="cardio-activities-heading"
+              subtitle="Your recorded runs."
+              actions={
+                <button type="button" className="btn mini ghost"
+                  onClick={event => openDialog({ kind: 'run' }, event)}>
+                  <span aria-hidden="true">+</span> Log run
+                </button>
+              }
+            />
+          )}
           <section className="card cardio-history-card" aria-labelledby="cardio-history-title">
-            <header className="cardio-card-heading">
-              <div><h2 id="cardio-history-title">Run history</h2><p>Runs are grouped by their activity date.</p></div>
-              <button type="button" className="btn mini"
-                onClick={event => openDialog({ kind: 'run' }, event)}>Log run</button>
-            </header>
+            {!foundationNavigation && (
+              <header className="cardio-card-heading">
+                <div><h2 id="cardio-history-title">Run history</h2><p>Runs are grouped by their activity date.</p></div>
+                <button type="button" className="btn mini"
+                  onClick={event => openDialog({ kind: 'run' }, event)}>Log run</button>
+              </header>
+            )}
+            {foundationNavigation && <h2 id="cardio-history-title" className="visually-hidden">Run history</h2>}
             {runs.length === 0 ? <p className="cardio-empty">No valid runs logged yet.</p> : (
               <ol className="cardio-history-list">
                 {[...runs].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)).map(run => (
@@ -245,7 +385,83 @@ export function CardioView({
             )}
             {actionError && <p className="goal-field-error" role="alert">{actionError}</p>}
           </section>
+        </section>
+
+        {foundationNavigation && (
+          <section
+            id="cardio-panel-rhythms"
+            className="strength-section-panel"
+            role="tabpanel"
+            aria-labelledby="cardio-tab-rhythms"
+            hidden={selectedTab !== 'rhythms'}
+          >
+            <section className="marriage-foundation-support strength-rhythms-panel" aria-labelledby="cardio-linked-rhythms-title">
+              <FoundationSectionHeading
+                title="Linked Rhythms"
+                headingId="cardio-linked-rhythms-title"
+                accessibleName={`Linked Rhythms · ${activeCardioRhythms.length}`}
+                secondary={<span className="strength-linked-rhythms-count" aria-hidden="true">{activeCardioRhythms.length}</span>}
+                subtitle="Your routines for building cardio."
+                actions={
+                  <>
+                    {onSaveFoundationAssociations && (
+                      <button type="button" className="btn mini ghost" aria-haspopup="dialog"
+                        onClick={() => setAssociationDialogOpen(true)}>Manage links</button>
+                    )}
+                    {onAddLinkedRhythm && (
+                      <button type="button" className="btn mini"
+                        onClick={event => onAddLinkedRhythm('health-cardio', event)}>Add Rhythm</button>
+                    )}
+                  </>
+                }
+              />
+              {activeCardioRhythms.length > 0 ? (
+                <FoundationRhythmGroup
+                  people={people}
+                  rhythms={activeCardioRhythms}
+                  archivedRhythmIds={archivedCardioRhythms.map(rhythm => rhythm.id)}
+                  headingId="cardio-linked-rhythms-title"
+                  rhythmScores={rhythmScores}
+                  completedRhythms={completedRhythms}
+                  undoableRhythms={undoableRhythms}
+                  foundations={foundations}
+                  categoryToken="cardio"
+                  {...(onTend ? { onTend } : {})}
+                  {...(onUndo ? { onUndo } : {})}
+                  {...(onEditRhythm ? { onEditRhythm } : {})}
+                  {...(onRhythmHistory ? { onRhythmHistory } : {})}
+                  {...(onPersonSelect ? { onPersonSelect } : {})}
+                  {...(onOpenFoundation ? { onOpenFoundation } : {})}
+                  {...(onOpenCategory ? { onOpenCategory } : {})}
+                  completionActionLabelFor={() => 'Log'}
+                  completionActionAccessibleLabelFor={rhythm =>
+                    rhythm.healthLogCapability === 'weight' ? 'Log weigh-in'
+                      : rhythm.healthLogCapability === 'flexibility' ? 'Start stretch routine' : 'Log run'}
+                  completedActionLabelFor={rhythm =>
+                    rhythm.healthLogCapability === 'weight' ? 'Weighed in'
+                      : rhythm.healthLogCapability === 'flexibility' ? 'Stretched' : 'Logged'}
+                />
+              ) : (
+                <div className="strength-rhythms-empty">
+                  <p>No Rhythms are linked to Cardio yet.</p>
+                </div>
+              )}
+            </section>
+          </section>
+        )}
       </section>
+      {associationDialogOpen && cardioFoundation && onSaveFoundationAssociations && (
+        <FoundationRhythmAssociationDialog
+          key={cardioFoundation.id}
+          foundation={cardioFoundation}
+          rhythms={[
+            ...rhythms.map(rhythm => ({ rhythm, archived: false })),
+            ...archivedRhythms.map(rhythm => ({ rhythm, archived: true }))
+          ]}
+          onSave={changes => onSaveFoundationAssociations(cardioFoundation.id, changes)}
+          onClose={() => setAssociationDialogOpen(false)}
+        />
+      )}
       {dialog?.kind === 'goals' && (
         <CardioGoalsDialog data={data} today={today} onSave={onChange} onClose={closeDialog} />
       )}
@@ -354,70 +570,73 @@ function CardioGoalsDialog({ data, today, onSave, onClose }: {
 
   return (
     <MoneyGoalDialog title="Cardio goals" labelledBy="cardio-goals-title" titleId="cardio-goals-title"
-      initialFocusId="cardio-goal-runs" onClose={onClose} closeLabel="Close Cardio goals">
-      <form className="cardio-form" noValidate onSubmit={submit}>
-        <p>Both weekly targets are needed to calculate Cardio progress. Leave both blank to clear them.</p>
-        {!data.trackingStartDate && (
-          <label className="cardio-tracking-start">Start Cardio tracking on
-            <input type="date" max={today} value={trackingStartDate}
-              onChange={event => setTrackingStartDate(event.currentTarget.value)} />
-          </label>
-        )}
-        <div className="cardio-goal-inputs">
-          <div className="cardio-goal-field">
-            <NumericControl
-              id="cardio-goal-runs"
-              label="Runs per week"
-              value={runs}
-              min={1}
-              max={21}
-              step={1}
-              inputMode="numeric"
-              invalid={Boolean(errors.runs)}
-              {...(errors.runs ? { describedBy: 'cardio-goal-runs-error' } : {})}
-              decreaseLabel="Decrease runs per week by 1"
-              increaseLabel="Increase runs per week by 1"
-              onChange={value => {
-                setRuns(value);
-                setErrors(current => ({ ...current, runs: null, form: null }));
-              }}
-              onStep={direction => setRuns(value => stepCardioGoalInput(value, direction, 'runs'))}
-            />
-            {errors.runs && <small id="cardio-goal-runs-error" className="numeric-control__error" role="alert">{errors.runs}</small>}
-          </div>
-          {data.trackingStartDate ? (
-            <p className="cardio-goal-effective-date">
-              Upcoming targets: {runTargetText(runs)} runs/week and {mileTargetText(miles)} miles/week,
-              effective Monday {formatLongDate(addDateDays(cardioWeekStart(today), 7))}. Current targets stay active through Sunday.
-            </p>
-          ) : (
-            <p className="cardio-goal-effective-date">
-              Tracking starts {formatLongDate(trackingStartDate)}. These goals affect this week’s progress immediately; this partial setup week is excluded from Consistency.
-            </p>
+      initialFocusId="cardio-goal-runs" onClose={onClose} closeLabel="Close Cardio goals"
+      bodyClassName="fitness-goals-dialog-body" dialogClassName="money-goal-dialog--fitness-goals" phoneFullScreen>
+      <form className="cardio-form fitness-goals-form" noValidate onSubmit={submit}>
+        <div className="fitness-goals-scroll">
+          <p>Both weekly targets are needed to calculate Cardio progress. Leave both blank to clear them.</p>
+          {!data.trackingStartDate && (
+            <label className="cardio-tracking-start">Start Cardio tracking on
+              <input type="date" max={today} value={trackingStartDate}
+                onChange={event => setTrackingStartDate(event.currentTarget.value)} />
+            </label>
           )}
-          <div className="cardio-goal-field">
-            <NumericControl
-              id="cardio-goal-miles"
-              label="Miles per week"
-              value={miles}
-              min={0.1}
-              max={1000}
-              step={0.1}
-              invalid={Boolean(errors.miles)}
-              {...(errors.miles ? { describedBy: 'cardio-goal-miles-error' } : {})}
-              decreaseLabel="Decrease miles per week by 0.1"
-              increaseLabel="Increase miles per week by 0.1"
-              onChange={value => {
-                setMiles(value);
-                setErrors(current => ({ ...current, miles: null, form: null }));
-              }}
-              onStep={direction => setMiles(value => stepCardioGoalInput(value, direction, 'miles'))}
-            />
-            {errors.miles && <small id="cardio-goal-miles-error" className="numeric-control__error" role="alert">{errors.miles}</small>}
+          <div className="cardio-goal-inputs">
+            <div className="cardio-goal-field">
+              <NumericControl
+                id="cardio-goal-runs"
+                label="Runs per week"
+                value={runs}
+                min={1}
+                max={21}
+                step={1}
+                inputMode="numeric"
+                invalid={Boolean(errors.runs)}
+                {...(errors.runs ? { describedBy: 'cardio-goal-runs-error' } : {})}
+                decreaseLabel="Decrease runs per week by 1"
+                increaseLabel="Increase runs per week by 1"
+                onChange={value => {
+                  setRuns(value);
+                  setErrors(current => ({ ...current, runs: null, form: null }));
+                }}
+                onStep={direction => setRuns(value => stepCardioGoalInput(value, direction, 'runs'))}
+              />
+              {errors.runs && <small id="cardio-goal-runs-error" className="numeric-control__error" role="alert">{errors.runs}</small>}
+            </div>
+            {data.trackingStartDate ? (
+              <p className="cardio-goal-effective-date">
+                Upcoming targets: {runTargetText(runs)} runs/week and {mileTargetText(miles)} miles/week,
+                effective Monday {formatLongDate(addDateDays(cardioWeekStart(today), 7))}. Current targets stay active through Sunday.
+              </p>
+            ) : (
+              <p className="cardio-goal-effective-date">
+                Tracking starts {formatLongDate(trackingStartDate)}. These goals affect this week’s progress immediately; this partial setup week is excluded from Consistency.
+              </p>
+            )}
+            <div className="cardio-goal-field">
+              <NumericControl
+                id="cardio-goal-miles"
+                label="Miles per week"
+                value={miles}
+                min={0.1}
+                max={1000}
+                step={0.1}
+                invalid={Boolean(errors.miles)}
+                {...(errors.miles ? { describedBy: 'cardio-goal-miles-error' } : {})}
+                decreaseLabel="Decrease miles per week by 0.1"
+                increaseLabel="Increase miles per week by 0.1"
+                onChange={value => {
+                  setMiles(value);
+                  setErrors(current => ({ ...current, miles: null, form: null }));
+                }}
+                onStep={direction => setMiles(value => stepCardioGoalInput(value, direction, 'miles'))}
+              />
+              {errors.miles && <small id="cardio-goal-miles-error" className="numeric-control__error" role="alert">{errors.miles}</small>}
+            </div>
           </div>
+          {errors.form && <p className="goal-field-error" role="alert">{errors.form}</p>}
         </div>
-        {errors.form && <p className="goal-field-error" role="alert">{errors.form}</p>}
-        <div className="profile-editor-actions">
+        <div className="profile-editor-actions fitness-goals-actions">
           <button type="submit" className="btn mini">Save goals</button>
           <button type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>
         </div>

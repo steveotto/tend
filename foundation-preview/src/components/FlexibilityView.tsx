@@ -1,17 +1,26 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { FormEvent, MouseEvent } from 'react';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { FitnessScoreSummary } from './FitnessScoreSummary.tsx';
 import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 import { createHealthFitnessRollup } from './HealthRollupDiagram.tsx';
 import { SegmentedTabs } from './SegmentedTabs.tsx';
 import type { SegmentedTab } from './SegmentedTabs.tsx';
+import { FoundationSectionHeading } from './FoundationSectionHeading.tsx';
+import { FoundationRoutineSummary } from './FoundationRoutineSummary.tsx';
+import { FoundationRhythmGroup } from './FoundationRhythmGroup.tsx';
+import { FoundationRhythmAssociationDialog } from './FoundationRhythmAssociationDialog.tsx';
 import { FitnessBodyMapLayout } from './FitnessBodyMap.tsx';
 import type { FitnessBodyMapConfigFor } from './FitnessBodyMap.tsx';
 import { FlexibilityGuidedSessionDialog } from './FlexibilityGuidedSessionDialog.tsx';
 import { FlexibilityRoutineEditorDialog } from './FlexibilityRoutineEditorDialog.tsx';
 import { RhythmCalendarIcon } from './RhythmCalendarIcon.tsx';
 import { SettingsGearButton } from './SettingsGearButton.tsx';
+import { StyledSelect } from './StyledSelect.tsx';
+import type { Destination } from './AppNavigation.tsx';
+import type { FoundationRhythmAssociationChange } from '../domain/foundation-rhythm-associations.ts';
+import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
+import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import {
   clearFlexibilityDraft,
   createFlexibilityGuidedSession,
@@ -38,14 +47,24 @@ import type {
   SavedFlexibilityRoutine
 } from '../domain/flexibility.ts';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
+import {
+  foundationCatalogue,
+  syntheticPeople
+} from '../domain/preview-data.ts';
+import type {
+  FoundationPreview,
+  PersonId,
+  PersonPreview,
+  RhythmPreview
+} from '../domain/preview-data.ts';
 
 type DialogState = 'log' | 'settings' | 'guided' | null;
-type FlexibilityCollectionTab = 'recommended' | 'saved' | 'history';
-const flexibilityCollectionTabs = [
-  { id: 'recommended', label: 'Recommended', tabId: 'flexibility-tab-recommended', panelId: 'flexibility-panel-recommended' },
-  { id: 'saved', label: 'Saved', tabId: 'flexibility-tab-saved', panelId: 'flexibility-panel-saved' },
-  { id: 'history', label: 'History', tabId: 'flexibility-tab-history', panelId: 'flexibility-panel-history' }
-] as const satisfies readonly SegmentedTab<FlexibilityCollectionTab>[];
+type FlexibilityTab = 'body' | 'routines' | 'rhythms';
+const flexibilityTabs = [
+  { id: 'body', label: 'Body', tabId: 'flexibility-tab-body', panelId: 'flexibility-panel-body' },
+  { id: 'routines', label: 'Routines', tabId: 'flexibility-tab-routines', panelId: 'flexibility-panel-routines' },
+  { id: 'rhythms', label: 'Rhythms', tabId: 'flexibility-tab-rhythms', panelId: 'flexibility-panel-rhythms' }
+] as const satisfies readonly SegmentedTab<FlexibilityTab>[];
 
 export type FlexibilityViewProps = {
   data: FlexibilityData;
@@ -57,6 +76,26 @@ export type FlexibilityViewProps = {
   overallHealthScore?: number | null;
   categoryHealthScore?: number | null;
   foundationNavigation?: boolean;
+  foundationActive?: boolean;
+  people?: readonly PersonPreview[];
+  rhythms?: readonly RhythmPreview[];
+  archivedRhythms?: readonly RhythmPreview[];
+  foundations?: readonly FoundationPreview[];
+  rhythmScores?: ReadonlyMap<string, RhythmScoreResult>;
+  completedRhythms?: ReadonlySet<string>;
+  undoableRhythms?: ReadonlySet<string>;
+  onAddLinkedRhythm?: (foundationId: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onSaveFoundationAssociations?: (
+    foundationId: string,
+    changes: readonly FoundationRhythmAssociationChange[]
+  ) => string | null;
+  onRhythmHistory?: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onEditRhythm?: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
+  onTend?: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onUndo?: (id: string) => void;
+  onPersonSelect?: (personId: PersonId) => void;
+  onOpenFoundation?: (foundationId: string, openerId: string) => void;
+  onOpenCategory?: (categoryId: Destination, openerId: string) => void;
   pendingQuickLog?: {
     requestId: number;
     regionIds: readonly FlexibilityRegionId[];
@@ -86,6 +125,28 @@ const flexibilityFrontRegions = new Set<FlexibilityRegionId>([
 const flexibilityBackRegions = new Set<FlexibilityRegionId>([
   'neck', 'shoulders', 'back', 'glutes', 'hamstrings', 'calves'
 ]);
+const flexibilityIntervalPresets = [1, 2, 3, 4, 5, 7, 10, 14, 21, 30, 45, 60, 90, 120, 180, 365];
+
+function intervalDraftFrom(data: FlexibilityData): Record<FlexibilityRegionId, string> {
+  return Object.fromEntries(flexibilityRegions.map(region => [
+    region.id,
+    String(data.settings.intervals[region.id] ?? region.defaultIntervalDays)
+  ])) as Record<FlexibilityRegionId, string>;
+}
+
+function customIntervalsFromDraft(
+  draft: Record<FlexibilityRegionId, string>
+): Record<FlexibilityRegionId, boolean> {
+  return Object.fromEntries(flexibilityRegions.map(region => [
+    region.id,
+    !flexibilityIntervalPresets.includes(Number(draft[region.id]))
+  ])) as Record<FlexibilityRegionId, boolean>;
+}
+
+function formatFlexibilityIntervalOption(value: string): string {
+  const days = Number(value);
+  return `Every ${value || '…'} day${days === 1 ? '' : 's'}`;
+}
 
 export function createFlexibilityBodyMapConfig(
   regions: ReturnType<typeof selectFlexibilityRegionStatuses>
@@ -119,18 +180,43 @@ export function FlexibilityView({
   healthScore,
   scoringEvidence,
   unlinkedStretchRhythmTitles,
+  people = syntheticPeople,
+  rhythms = [],
+  archivedRhythms = [],
+  foundations = foundationCatalogue,
+  rhythmScores = new Map(),
+  completedRhythms = new Set(),
+  undoableRhythms = new Set(),
   overallHealthScore = null,
   categoryHealthScore = null,
   foundationNavigation = false,
+  foundationActive = true,
+  onAddLinkedRhythm,
+  onSaveFoundationAssociations,
+  onRhythmHistory,
+  onEditRhythm,
+  onTend,
+  onUndo,
+  onPersonSelect,
+  onOpenFoundation,
+  onOpenCategory,
   pendingQuickLog = null,
   onQuickLogOpened,
   onLogRequestClosed
 }: FlexibilityViewProps) {
   const [dialog, setDialog] = useState<DialogState>(null);
-  const [collectionTab, setCollectionTab] = useState<FlexibilityCollectionTab>('recommended');
+  const [flexibilityTab, setFlexibilityTab] = useState<FlexibilityTab>(() =>
+    data.guidedSessionDraft || pendingQuickLog?.linkedRhythmId ? 'routines' : 'body'
+  );
+  const wasFoundationActiveRef = useRef(false);
+  const [showAllHistory, setShowAllHistory] = useState(false);
   const [routineEditor, setRoutineEditor] = useState<SavedFlexibilityRoutine | null>(null);
-  const [suggestionPickerOpen, setSuggestionPickerOpen] = useState(false);
+  const [routineEditorDraft, setRoutineEditorDraft] = useState<SavedFlexibilityRoutine | null>(null);
+  const [routineEditorFromLibrary, setRoutineEditorFromLibrary] = useState(false);
+  const [routineLibraryOpen, setRoutineLibraryOpen] = useState(false);
+  const [routineChoice, setRoutineChoice] = useState<SavedFlexibilityRoutine | null>(null);
   const [routineError, setRoutineError] = useState('');
+  const [associationDialogOpen, setAssociationDialogOpen] = useState(false);
   const [pendingRhythmStart, setPendingRhythmStart] = useState<{
     rhythmId: string;
     occurrence: string;
@@ -141,11 +227,9 @@ export function FlexibilityView({
   const [view, setView] = useState<'front' | 'back'>('front');
   const [selectedRegion, setSelectedRegion] = useState<FlexibilityRegionId>('shoulders');
   const [draft, setDraft] = useState<FlexibilitySessionDraft | null>(null);
-  const [intervalDraft, setIntervalDraft] = useState<Record<FlexibilityRegionId, string>>(() =>
-    Object.fromEntries(flexibilityRegions.map(region => [
-      region.id,
-      String(data.settings.intervals[region.id] ?? region.defaultIntervalDays)
-    ])) as Record<FlexibilityRegionId, string>
+  const [intervalDraft, setIntervalDraft] = useState(() => intervalDraftFrom(data));
+  const [customIntervals, setCustomIntervals] = useState(() =>
+    customIntervalsFromDraft(intervalDraftFrom(data))
   );
   const [error, setError] = useState('');
   const regionStatuses = useMemo(() => selectFlexibilityRegionStatuses(data, today), [data, today]);
@@ -159,10 +243,10 @@ export function FlexibilityView({
     ]
   };
   const suggestion = suggestNextFlexibilityStretch(regionStatuses);
-  const recommendedSavedRoutines = suggestion.reasonRegionId === null
+  const recommendedSavedRoutineIds = suggestion.reasonRegionId === null
     ? []
     : savedRoutines.filter(routine => routine.stretches.some(stretch =>
-      stretch.regionIds.some(id => suggestion.regionIds.includes(id))));
+      stretch.regionIds.some(id => suggestion.regionIds.includes(id)))).map(routine => routine.id);
   const bodyMapConfig = createFlexibilityBodyMapConfig(regionStatuses);
   const groups = [...new Set(flexibilityRegions.map(region => region.group))];
   const visibleRegions = bodyMapConfig.regions.filter(region => region[view]);
@@ -172,6 +256,44 @@ export function FlexibilityView({
   const sortedGuidedSessions = [...(data.guidedSessions ?? [])].sort((left, right) =>
     right.date.localeCompare(left.date) || right.startedAt.localeCompare(left.startedAt)
   );
+  const historyEntries = [
+    ...sortedSessions.map(session => ({ kind: 'manual' as const, date: session.date, id: session.id, session })),
+    ...sortedGuidedSessions.map(session => ({ kind: 'guided' as const, date: session.date, id: session.id, session }))
+  ].sort((left, right) =>
+    right.date.localeCompare(left.date)
+      || (right.kind === 'guided' ? right.session.startedAt : '')
+        .localeCompare(left.kind === 'guided' ? left.session.startedAt : '')
+      || right.id.localeCompare(left.id)
+  );
+  const visibleHistoryEntries = showAllHistory ? historyEntries : historyEntries.slice(0, 3);
+  const activeFlexibilityRhythms = rhythms.filter(rhythm =>
+    foundationRhythmIds(rhythm).includes('health-flexibility')
+  );
+  const archivedFlexibilityRhythms = archivedRhythms.filter(rhythm =>
+    foundationRhythmIds(rhythm).includes('health-flexibility')
+  );
+  const flexibilityFoundation = foundations.find(foundation => foundation.id === 'health-flexibility');
+  const selectedRegionStatus = regionStatuses.find(region => region.id === selectedRegion) ?? regionStatuses[0]!;
+
+  useEffect(() => {
+    if (!foundationNavigation) return;
+    if (!foundationActive) {
+      wasFoundationActiveRef.current = false;
+      return;
+    }
+    if (wasFoundationActiveRef.current) return;
+    wasFoundationActiveRef.current = true;
+    if (data.guidedSessionDraft || pendingQuickLog?.linkedRhythmId) {
+      setFlexibilityTab('routines');
+    } else {
+      setFlexibilityTab('body');
+    }
+  }, [
+    data.guidedSessionDraft,
+    foundationActive,
+    foundationNavigation,
+    pendingQuickLog?.linkedRhythmId
+  ]);
 
   function persist(next: FlexibilityData): boolean {
     const message = onChange(next);
@@ -241,6 +363,22 @@ export function FlexibilityView({
     onLogRequestClosed?.();
   }
 
+  function openIntervalSettings() {
+    const nextDraft = intervalDraftFrom(data);
+    setIntervalDraft(nextDraft);
+    setCustomIntervals(customIntervalsFromDraft(nextDraft));
+    setError('');
+    setDialog('settings');
+  }
+
+  function closeIntervalSettings() {
+    const currentDraft = intervalDraftFrom(data);
+    setIntervalDraft(currentDraft);
+    setCustomIntervals(customIntervalsFromDraft(currentDraft));
+    setError('');
+    setDialog(null);
+  }
+
   function saveSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const intervals = {} as Record<FlexibilityRegionId, number>;
@@ -253,6 +391,13 @@ export function FlexibilityView({
       intervals[region.id] = interval;
     }
     if (!persist({ ...data, settings: { intervals } })) return;
+    const savedDraft = Object.fromEntries(flexibilityRegions.map(region => [
+      region.id,
+      String(intervals[region.id])
+    ])) as Record<FlexibilityRegionId, string>;
+    setIntervalDraft(savedDraft);
+    setCustomIntervals(customIntervalsFromDraft(savedDraft));
+    setError('');
     setDialog(null);
   }
 
@@ -267,8 +412,25 @@ export function FlexibilityView({
     persist(next);
   }
 
-  function openRoutineEditor(routine: SavedFlexibilityRoutine) {
+  function openRoutineEditor(routine: SavedFlexibilityRoutine, fromLibrary = false) {
     setRoutineEditor(routine);
+    setRoutineEditorDraft(routine);
+    setRoutineEditorFromLibrary(fromLibrary);
+    setRoutineLibraryOpen(false);
+    setRoutineError('');
+  }
+
+  function closeRoutineEditor(returnToLibrary = routineEditorFromLibrary) {
+    setRoutineEditor(null);
+    setRoutineEditorFromLibrary(false);
+    if (returnToLibrary) setRoutineLibraryOpen(true);
+  }
+
+  function continueRoutineDraft() {
+    if (!routineEditorDraft) return;
+    setRoutineEditor(routineEditorDraft);
+    setRoutineEditorFromLibrary(true);
+    setRoutineLibraryOpen(false);
     setRoutineError('');
   }
 
@@ -279,7 +441,7 @@ export function FlexibilityView({
       stretches: [],
       preparationSeconds: 5,
       timerDirection: 'down'
-    });
+    }, true);
   }
 
   function saveRoutine(routine: SavedFlexibilityRoutine) {
@@ -293,7 +455,11 @@ export function FlexibilityView({
     }
     if (persist(migrateFlexibilityData({ ...data, savedRoutines: result.routines }))) {
       setRoutineEditor(null);
-      setCollectionTab('saved');
+      setRoutineEditorDraft(null);
+      setRoutineEditorFromLibrary(false);
+      setRoutineLibraryOpen(false);
+      setFlexibilityTab('routines');
+      setRoutineError('');
     }
   }
 
@@ -325,9 +491,16 @@ export function FlexibilityView({
     }
     if (persist(migrateFlexibilityData({ ...data, guidedSessionDraft: result.session }))) {
       setRoutineError('');
+      setRoutineChoice(null);
       setDialog('guided');
       setPendingRhythmStart(null);
     }
+  }
+
+  function quickLogRoutine(routine: SavedFlexibilityRoutine) {
+    const regionIds = [...new Set(routine.stretches.flatMap(stretch => stretch.regionIds))];
+    setRoutineChoice(null);
+    openLog(regionIds);
   }
 
   function updateGuidedSession(
@@ -387,7 +560,7 @@ export function FlexibilityView({
         title: pendingQuickLog.rhythmTitle ?? 'Linked stretch Rhythm'
       });
       setLinkedRoutineId(savedRoutines[0]?.id ?? '');
-      setCollectionTab('saved');
+      setFlexibilityTab('routines');
       onQuickLogOpened?.(pendingQuickLog.requestId);
       return;
     }
@@ -426,184 +599,171 @@ export function FlexibilityView({
         </div>
       )}
 
-      <section className="card strength-card strength-map-card flexibility-map-card" aria-labelledby="flexibility-map-heading">
-        <header className="strength-card-heading">
+      {data.guidedSessionDraft && dialog !== 'guided' && (
+        <aside className="strength-guided-banner flexibility-guided-banner" aria-label="Stretch session in progress">
           <div>
-            <h2 id="flexibility-map-heading">Stretch schedule</h2>
-            <p>Choose a region to see its stretch status.</p>
+            <strong>{data.guidedSessionDraft.routineName} is in progress</strong>
+            <span>Your stretch holds are saved in this preview draft.</span>
           </div>
-          <SettingsGearButton
-            label="Stretch interval settings"
-            onClick={() => setDialog('settings')}
-          />
-        </header>
-        <div className="strength-map-toolbar" role="group" aria-label="Body map view">
-          {(['front', 'back'] as const).map(nextView => (
-            <button key={nextView} type="button" aria-pressed={view === nextView}
-              onClick={() => chooseBodyView(nextView)}>
-              {nextView === 'front' ? 'Front' : 'Back'}
-            </button>
-          ))}
-        </div>
-        <FitnessBodyMapLayout
-          config={bodyMapConfig}
-          view={view}
-          selectedId={selectedRegion}
-          onSelect={setSelectedRegion}
-          listLabel="Stretch schedule status"
-        >
-          {visibleRegions.map(region => {
-            const regionStatus = regionStatuses.find(item => item.id === region.id)!;
-            const nextDueLabel = flexibilityNextDueLabel(regionStatus);
-            const lastStretchedLabel = flexibilityLastStretchedLabel(regionStatus);
-            const nextDueDescription = nextDueLabel === '—'
-              ? 'Next stretch unavailable.'
-              : `${nextDueLabel}.`;
-            return (
-              <button
-                key={region.id}
-                type="button"
-                className="strength-muscle-row flexibility-region"
-                aria-pressed={selectedRegion === region.id}
-                aria-label={`${region.name}. ${regionStatus.status} Last stretched: ${lastStretchedLabel}. ${nextDueDescription}`}
-                onClick={() => setSelectedRegion(region.id)}
-              >
-                <span className="strength-muscle-row__heading">
-                  <strong>{region.name}</strong>
-                  <span
-                    className={`strength-muscle-row__status strength-muscle-row__status--${flexibilityStatusTone(regionStatus)}`}
-                    role="img"
-                    aria-label={`Stretch status: ${regionStatus.status}`}
-                    title={`Stretch status: ${regionStatus.status}`}
-                  />
-                </span>
-                <span className="strength-muscle-row__timing">
-                  <span className="strength-muscle-row__last-workout">
-                    <RhythmCalendarIcon className="strength-muscle-row__calendar-icon" />
-                    <span>{lastStretchedLabel}</span>
-                  </span>
-                  <span className="strength-muscle-row__next-due">
-                    {nextDueLabel} · {flexibilityIntervalLabel(regionStatus)}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </FitnessBodyMapLayout>
-        <button type="button" className="btn mini ghost" onClick={() => openLog([selectedRegion])}>
-          Log {regionStatuses.find(region => region.id === selectedRegion)?.name}
-        </button>
-      </section>
+          <button type="button" className="btn mini" onClick={() => setDialog('guided')}>
+            Resume session
+          </button>
+        </aside>
+      )}
 
-      <section className="strength-workouts flexibility-routine-collection" aria-labelledby="flexibility-routines-heading">
-        <header className="strength-card-heading strength-workouts__heading">
-          <h2 id="flexibility-routines-heading">Stretch routines</h2>
-        </header>
-        <SegmentedTabs
-          tabs={flexibilityCollectionTabs}
-          selectedTabId={collectionTab}
-          ariaLabel="Stretch routines"
-          onChange={setCollectionTab}
-        />
+      <SegmentedTabs
+        tabs={flexibilityTabs}
+        selectedTabId={flexibilityTab}
+        ariaLabel="Flexibility sections"
+        onChange={setFlexibilityTab}
+      />
+      <div className="strength-section-panels">
         <section
-          id="flexibility-panel-recommended"
-          className="strength-workout-panel strength-workout-panel--recommended"
+          id="flexibility-panel-body"
+          className="strength-section-panel strength-section-panel--body"
           role="tabpanel"
-          aria-labelledby="flexibility-tab-recommended"
-          hidden={collectionTab !== 'recommended'}
+          aria-labelledby="flexibility-tab-body"
+          hidden={flexibilityTab !== 'body'}
         >
-          {collectionTab === 'recommended' && (
-            <section className="strength-workout-section" aria-labelledby="flexibility-recommended-heading">
-              <header className="strength-card-heading">
-                <div>
-                  <h3 id="flexibility-recommended-heading">Recommended stretches</h3>
-                  <p>Suggestions based on your recent stretching.</p>
-                </div>
-              </header>
-              <div className="category-rhythm-entry-actions flexibility-routine-collection__actions">
-                <button type="button" className="btn mini" onClick={() => openLog()}>
-                  Custom stretch
-                </button>
+          <FoundationSectionHeading
+            title="Body overview"
+            subtitle="Stretch region status is separate from Flexibility Health."
+          />
+          {suggestion.reasonRegionId !== null && recommendedSavedRoutineIds.length === 0 && (
+            <article className="strength-recommendation flexibility-next-stretch">
+              <div>
+                <h3>Next stretch</h3>
+                <p>{suggestion.text}</p>
               </div>
-              {recommendedSavedRoutines.length ? (
-                <div className="strength-recommendations">
-                  {recommendedSavedRoutines.map(routine => (
-                    <article key={routine.id} className="strength-recommendation">
-                      <div>
-                        <h3>{routine.name}</h3>
-                        <p>Includes {suggestion.regionIds
-                          .filter(id => routine.stretches.some(stretch => stretch.regionIds.includes(id)))
-                          .map(id => flexibilityRegions.find(region => region.id === id)?.name ?? id)
-                          .join(', ')}, which are due for a stretch.</p>
-                        <small>About {formatRoutineDuration(routine)}</small>
-                      </div>
-                      <button type="button" className="btn mini" onClick={() => startRoutine(routine)}>Start stretch</button>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <>
-                  {suggestion.reasonRegionId !== null && (
-                    <div className="strength-recommendations">
-                      <article className="strength-recommendation">
-                        <div>
-                          <h3>Next stretch</h3>
-                          <p>{suggestion.text}</p>
-                        </div>
-                        <button type="button" className="btn mini"
-                          onClick={() => openLog(suggestion.regionIds)}>Log suggested regions</button>
-                      </article>
-                    </div>
-                  )}
-                  {savedRoutines.length === 0 && (
-                    <p className="strength-empty">
-                      Save a routine to get recommendations, or log a custom stretch.
-                    </p>
-                  )}
-                </>
-              )}
-            </section>
+              <button type="button" className="btn mini" onClick={() => openLog(suggestion.regionIds)}>
+                Log suggested regions
+              </button>
+            </article>
           )}
-        </section>
-        <section
-          id="flexibility-panel-saved"
-          className="strength-workout-panel"
-          role="tabpanel"
-          aria-labelledby="flexibility-tab-saved"
-          hidden={collectionTab !== 'saved'}
-        >
-          {collectionTab === 'saved' && (
-            <section className="strength-workout-section" aria-labelledby="flexibility-saved-routines-heading">
-              <header className="strength-card-heading">
-                <div>
-                  <h3 id="flexibility-saved-routines-heading">Saved routines</h3>
-                  <p>Stretch templates are separate from recorded activity.</p>
-                </div>
-              </header>
-              <div className="category-rhythm-entry-actions flexibility-routine-collection__actions">
-                <button type="button" className="btn mini" onClick={createRoutine}>Create routine</button>
-                <button type="button" className="btn mini ghost" onClick={() => setSuggestionPickerOpen(true)}>
-                  Suggestions
-                </button>
+          <section className="card strength-card strength-map-card flexibility-map-card" aria-labelledby="flexibility-map-heading">
+            <header className="strength-card-heading">
+              <div>
+                <h3 id="flexibility-map-heading">Your body, at a glance</h3>
+                <p>Choose a region to see its stretch status.</p>
               </div>
-              {(data.guidedSessionDraft || data.draftSession) && (
-                <div className="category-rhythm-entry-actions flexibility-routine-resume">
-                  {data.guidedSessionDraft && (
-                    <button type="button" className="btn mini ghost" onClick={() => setDialog('guided')}>
-                      Resume stretch session
-                    </button>
-                  )}
-                  {data.draftSession && (
-                    <button type="button" className="btn mini ghost" onClick={() => openLog()}>
-                      Resume manual stretch log
-                    </button>
-                  )}
+              <SettingsGearButton
+                label="Stretch interval settings"
+                onClick={openIntervalSettings}
+              />
+            </header>
+            <div className="strength-map-toolbar" role="group" aria-label="Body map view">
+              {(['front', 'back'] as const).map(nextView => (
+                <button key={nextView} type="button" aria-pressed={view === nextView}
+                  onClick={() => chooseBodyView(nextView)}>
+                  {nextView === 'front' ? 'Front' : 'Back'}
+                </button>
+              ))}
+            </div>
+            <FitnessBodyMapLayout
+              config={bodyMapConfig}
+              view={view}
+              selectedId={selectedRegion}
+              onSelect={setSelectedRegion}
+              listLabel="Stretch schedule status"
+            >
+              {visibleRegions.map(region => {
+                const regionStatus = regionStatuses.find(item => item.id === region.id)!;
+                const nextDueLabel = flexibilityNextDueLabel(regionStatus);
+                const lastStretchedLabel = flexibilityLastStretchedLabel(regionStatus);
+                const nextDueDescription = nextDueLabel === '—'
+                  ? 'Next stretch unavailable.'
+                  : `${nextDueLabel}.`;
+                return (
+                  <button
+                    key={region.id}
+                    type="button"
+                    className="strength-muscle-row flexibility-region"
+                    aria-pressed={selectedRegion === region.id}
+                    aria-label={`${region.name}. ${regionStatus.status} Last stretched: ${lastStretchedLabel}. ${nextDueDescription}`}
+                    onClick={() => setSelectedRegion(region.id)}
+                  >
+                    <span className="strength-muscle-row__heading">
+                      <strong>{region.name}</strong>
+                      <span
+                        className={`strength-muscle-row__status strength-muscle-row__status--${flexibilityStatusTone(regionStatus)}`}
+                        role="img"
+                        aria-label={`Stretch status: ${regionStatus.status}`}
+                        title={`Stretch status: ${regionStatus.status}`}
+                      />
+                    </span>
+                    <span className="strength-muscle-row__timing">
+                      <span className="strength-muscle-row__last-workout">
+                        <RhythmCalendarIcon className="strength-muscle-row__calendar-icon" />
+                        <span>{lastStretchedLabel}</span>
+                      </span>
+                      <span className="strength-muscle-row__next-due">
+                        {nextDueLabel} · {flexibilityIntervalLabel(regionStatus)}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </FitnessBodyMapLayout>
+            <div className="strength-muscle-detail" aria-live="polite">
+              <h3 className="strength-muscle-detail__title">{selectedRegionStatus.name} details</h3>
+              <dl className="strength-muscle-facts">
+                <div>
+                  <dt>Stretch interval</dt>
+                  <dd>{flexibilityIntervalLabel(selectedRegionStatus)}</dd>
+                </div>
+                <div>
+                  <dt>Last stretched</dt>
+                  <dd>{flexibilityLastStretchedLabel(selectedRegionStatus)}</dd>
+                </div>
+                <div>
+                  <dt>Next due</dt>
+                  <dd>{flexibilityNextDueLabel(selectedRegionStatus)}</dd>
+                </div>
+              </dl>
+            </div>
+            <button type="button" className="btn mini ghost" onClick={() => openLog([selectedRegion])}>
+              Log {selectedRegionStatus.name}
+            </button>
+          </section>
+        </section>
+
+        <section
+          id="flexibility-panel-routines"
+          className="strength-section-panel"
+          role="tabpanel"
+          aria-labelledby="flexibility-tab-routines"
+          hidden={flexibilityTab !== 'routines'}
+        >
+          <div className="strength-workouts flexibility-routine-collection">
+            <section className="strength-workout-section" aria-labelledby="flexibility-routines-heading">
+              <FoundationSectionHeading
+                title="My routines"
+                headingId="flexibility-routines-heading"
+                subtitle="Your stretches, ready when you are."
+                actions={<button
+                  type="button"
+                  className="btn mini ghost strength-workouts__add"
+                  aria-label="Add routine"
+                  onClick={() => {
+                    setFlexibilityTab('routines');
+                    setRoutineLibraryOpen(true);
+                  }}
+                >
+                  <span aria-hidden="true">+</span> Add
+                </button>}
+              />
+              {routineError && <p className="flexibility-error" role="alert">{routineError}</p>}
+              {data.draftSession && (
+                <div className="flexibility-routine-resume">
+                  <button type="button" className="btn mini ghost" onClick={() => openLog()}>
+                    Resume manual stretch log
+                  </button>
                 </div>
               )}
               {pendingRhythmStart && (
                 <div className="flexibility-linked-rhythm" role="group"
                   aria-label={`Start linked Rhythm ${pendingRhythmStart.title}`}>
-                  <p>Choose a saved routine to complete “{pendingRhythmStart.title}”. The Rhythm stays incomplete until you finish the session.</p>
+                  <p>Choose a saved routine to complete “{pendingRhythmStart.title}”. The Rhythm stays incomplete until you finish the guided session.</p>
                   {savedRoutines.length ? (
                     <>
                       <label>Saved routine
@@ -626,76 +786,179 @@ export function FlexibilityView({
                 </div>
               )}
               {savedRoutines.length ? (
-                <div className="flexibility-routine-list">
+                <div className="strength-template-list">
                   {savedRoutines.map(routine => (
-                    <article key={routine.id} className="strength-recommendation flexibility-routine-card">
-                      <div>
-                        <h3>{routine.name}</h3>
-                        <p>{routine.stretches.map(stretch => stretch.name).join(' · ')}</p>
-                        <small>About {formatRoutineDuration(routine)}</small>
-                      </div>
-                      <div className="flexibility-routine-card__actions">
-                        <button type="button" className="btn mini" onClick={() => startRoutine(routine)}>Start</button>
-                        <button type="button" className="btn mini ghost" onClick={() => openRoutineEditor(routine)}>Edit</button>
-                        <button type="button" className="btn mini ghost" onClick={() => removeRoutine(routine)}>Delete</button>
+                    <article key={routine.id} className="strength-template flexibility-routine-card">
+                      <FoundationRoutineSummary
+                        className="strength-template__content"
+                        title={routine.name}
+                        description={routineTargetNames(routine)}
+                        metadata={`${routine.stretches.length} ${
+                          routine.stretches.length === 1 ? 'stretch' : 'stretches'
+                        } · About ${formatRoutineDuration(routine)}`}
+                        metadataClassName="strength-template__exercise-summary"
+                      >
+                        {recommendedSavedRoutineIds.includes(routine.id) && (
+                          <span className="flexibility-routine-card__hint">
+                            Suggested for regions due to stretch
+                          </span>
+                        )}
+                      </FoundationRoutineSummary>
+                      <details className="strength-template__menu">
+                        <summary aria-label={`Actions for ${routine.name}`}>⋯</summary>
+                        <div className="strength-template__menu-items">
+                          <button type="button" onClick={event => {
+                            openRoutineEditor(routine);
+                            event.currentTarget.closest('details')?.removeAttribute('open');
+                          }}>Edit routine</button>
+                          <button type="button" onClick={event => {
+                            removeRoutine(routine);
+                            event.currentTarget.closest('details')?.removeAttribute('open');
+                          }}>Delete routine</button>
+                        </div>
+                      </details>
+                      <div className="strength-template__actions">
+                        <button type="button" className="btn mini" onClick={() => setRoutineChoice(routine)}>
+                          Stretch
+                        </button>
                       </div>
                     </article>
                   ))}
                 </div>
-              ) : <p className="strength-empty">No saved routines yet. Create one or choose a suggestion.</p>}
+              ) : (
+                <p className="strength-empty">No routines saved yet. Add a suggested routine or create your own.</p>
+              )}
             </section>
-          )}
-        </section>
-        <section
-          id="flexibility-panel-history"
-          className="strength-workout-panel"
-          role="tabpanel"
-          aria-labelledby="flexibility-tab-history"
-          hidden={collectionTab !== 'history'}
-        >
-          {collectionTab === 'history' && (
-            <section className="strength-workout-section flexibility-history" aria-labelledby="flexibility-history-heading">
-              <header className="strength-card-heading">
-                <div>
-                  <h3 id="flexibility-history-heading">Stretch history</h3>
-                  <p>Review your past stretches and the regions you stretched.</p>
-                </div>
-              </header>
-              {sortedSessions.length + sortedGuidedSessions.length ? (
-                <ul className="flexibility-history__list">
-                  {sortedGuidedSessions.map(session => (
-                    <li key={session.id} className="strength-recommendation">
-                      <div>
-                        <strong>{session.date} · {session.routineName}</strong>
-                        <span>{session.holds.filter(hold => hold.status === 'completed').length} holds completed · {
-                          session.holds.filter(hold => hold.status === 'skipped').length
-                        } skipped</span>
-                        <span>{[...new Set(session.holds.filter(hold => hold.status === 'completed')
-                          .flatMap(hold => hold.regionIds))]
-                          .map(id => flexibilityRegions.find(region => region.id === id)?.name ?? id).join(', ')}</span>
-                      </div>
-                    </li>
-                  ))}
-                  {sortedSessions.map(session => (
-                    <li key={session.id} className="strength-recommendation">
-                      <div>
-                        <strong>{session.date} · Manual stretch</strong>
-                        <span>{session.regionIds.map(id => flexibilityRegions.find(region => region.id === id)?.name ?? id).join(', ')}</span>
-                        {session.minutes !== undefined && <span>{session.minutes} min</span>}
-                      </div>
-                      <div className="flexibility-history__actions">
-                        <button type="button" className="btn mini ghost" onClick={() => openLog([], session)}>Edit</button>
-                        <button type="button" className="btn mini ghost" onClick={() => deleteSession(session)}>Delete</button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+
+            <section className="strength-workout-section strength-history-page flexibility-history"
+              aria-labelledby="flexibility-history-heading">
+              <FoundationSectionHeading
+                title="History"
+                headingId="flexibility-history-heading"
+                subtitle="Your completed stretches."
+                actions={<button
+                  type="button"
+                  className="btn mini ghost"
+                  aria-label="Log stretch"
+                  onClick={() => openLog()}
+                >
+                  <span aria-hidden="true">+</span> Log stretch
+                </button>}
+              />
+              {historyEntries.length ? (
+                <>
+                  <ul className="flexibility-history__list">
+                    {visibleHistoryEntries.map(entry => (
+                      <li key={`${entry.kind}-${entry.id}`} className="strength-recommendation">
+                        {entry.kind === 'guided' ? (
+                          <div>
+                            <strong>{entry.date} · {entry.session.routineName}</strong>
+                            <span>{entry.session.holds.filter(hold => hold.status === 'completed').length} holds completed · {
+                              entry.session.holds.filter(hold => hold.status === 'skipped').length
+                            } skipped</span>
+                            <span>{[...new Set(entry.session.holds.filter(hold => hold.status === 'completed')
+                              .flatMap(hold => hold.regionIds))]
+                              .map(id => flexibilityRegions.find(region => region.id === id)?.name ?? id).join(', ')}</span>
+                          </div>
+                        ) : (
+                          <>
+                            <div>
+                              <strong>{entry.date} · Manual stretch</strong>
+                              <span>{entry.session.regionIds.map(id =>
+                                flexibilityRegions.find(region => region.id === id)?.name ?? id
+                              ).join(', ')}</span>
+                              {entry.session.minutes !== undefined && <span>{entry.session.minutes} min</span>}
+                            </div>
+                            <div className="flexibility-history__actions">
+                              <button type="button" className="btn mini ghost"
+                                onClick={() => openLog([], entry.session)}>Edit</button>
+                              <button type="button" className="btn mini ghost"
+                                onClick={() => deleteSession(entry.session)}>Delete</button>
+                            </div>
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  {historyEntries.length > 3 && (
+                    <div className="strength-history-page__actions">
+                      <button type="button" className="btn mini ghost"
+                        onClick={() => setShowAllHistory(value => !value)}>
+                        {showAllHistory ? 'Show recent' : 'View all'}
+                      </button>
+                    </div>
+                  )}
+                </>
               ) : <p className="strength-empty">No stretches logged yet.</p>}
             </section>
-          )}
+          </div>
         </section>
-        {routineError && <p className="flexibility-error" role="alert">{routineError}</p>}
-      </section>
+
+        <section
+          id="flexibility-panel-rhythms"
+          className="strength-section-panel"
+          role="tabpanel"
+          aria-labelledby="flexibility-tab-rhythms"
+          hidden={flexibilityTab !== 'rhythms'}
+        >
+          <section className="marriage-foundation-support strength-rhythms-panel"
+            aria-labelledby="flexibility-linked-rhythms-title">
+            <FoundationSectionHeading
+              title="Linked Rhythms"
+              headingId="flexibility-linked-rhythms-title"
+              accessibleName={`Linked Rhythms · ${activeFlexibilityRhythms.length}`}
+              secondary={<span className="strength-linked-rhythms-count" aria-hidden="true">
+                {activeFlexibilityRhythms.length}
+              </span>}
+              subtitle="Your routines for building flexibility."
+              actions={
+                <>
+                  {onSaveFoundationAssociations && (
+                    <button type="button" className="btn mini ghost" aria-haspopup="dialog"
+                      onClick={() => setAssociationDialogOpen(true)}>
+                      Manage links
+                    </button>
+                  )}
+                  {onAddLinkedRhythm && (
+                    <button type="button" className="btn mini"
+                      onClick={event => onAddLinkedRhythm('health-flexibility', event)}>
+                      Add Rhythm
+                    </button>
+                  )}
+                </>
+              }
+            />
+            {activeFlexibilityRhythms.length > 0 && (
+              <FoundationRhythmGroup
+                people={people}
+                rhythms={activeFlexibilityRhythms}
+                archivedRhythmIds={archivedFlexibilityRhythms.map(rhythm => rhythm.id)}
+                headingId="flexibility-linked-rhythms-title"
+                rhythmScores={rhythmScores}
+                completedRhythms={completedRhythms}
+                undoableRhythms={undoableRhythms}
+                foundations={foundations}
+                categoryToken="flexibility"
+                {...(onTend ? { onTend } : {})}
+                {...(onUndo ? { onUndo } : {})}
+                {...(onEditRhythm ? { onEditRhythm } : {})}
+                {...(onRhythmHistory ? { onRhythmHistory } : {})}
+                {...(onPersonSelect ? { onPersonSelect } : {})}
+                {...(onOpenFoundation ? { onOpenFoundation } : {})}
+                {...(onOpenCategory ? { onOpenCategory } : {})}
+                completionActionLabelFor={() => 'Log'}
+                completionActionAccessibleLabelFor={() => 'Start stretch routine'}
+                completedActionLabelFor={() => 'Stretched'}
+              />
+            )}
+            {activeFlexibilityRhythms.length === 0 && (
+              <div className="strength-rhythms-empty">
+                <p>No Rhythms are linked to Flexibility yet.</p>
+              </div>
+            )}
+          </section>
+        </section>
+      </div>
 
       {error && <p className="flexibility-error" role="alert">{error}</p>}
 
@@ -703,37 +966,125 @@ export function FlexibilityView({
         <FlexibilityRoutineEditorDialog
           routine={routineEditor}
           onSave={saveRoutine}
-          onClose={() => setRoutineEditor(null)}
+          onClose={() => closeRoutineEditor()}
+          onDraftChange={setRoutineEditorDraft}
+          errorMessage={routineError}
+          {...(routineEditorFromLibrary ? { onBack: () => closeRoutineEditor(true) } : {})}
         />
       )}
-      {suggestionPickerOpen && (
+      {routineLibraryOpen && (
         <MoneyGoalDialog
-          title="Suggested stretch routines"
-          closeLabel="Close suggested stretch routines"
+          title="Add routine"
+          labelledBy="flexibility-routine-library-title"
+          titleId="flexibility-routine-library-title"
+          closeLabel="Close Add routine"
           closeOnEscape
           dismissOnBackdrop
           portalToBody
           phoneFullScreen
-          onClose={() => setSuggestionPickerOpen(false)}
+          bodyClassName="strength-dialog-body"
+          dialogClassName="money-goal-dialog--strength-suggestions"
+          onClose={() => setRoutineLibraryOpen(false)}
         >
-          <div className="flexibility-routine-list">
-            {flexibilityRoutineSuggestions.map(routine => (
-              <article key={routine.id} className="strength-recommendation flexibility-routine-card">
-                <div>
-                  <h3>{routine.name}</h3>
-                  <p>{routine.stretches.map(stretch => stretch.name).join(' · ')}</p>
-                  <small>About {formatRoutineDuration(routine)}</small>
-                </div>
-                <button type="button" className="btn mini ghost"
-                  aria-label={`Preview and edit ${routine.name}`}
-                  onClick={() => {
-                    setSuggestionPickerOpen(false);
-                    openRoutineEditor(routine);
-                  }}>Preview &amp; edit</button>
-              </article>
-            ))}
+          <div className="strength-workout-suggestions flexibility-routine-library">
+            <section className="strength-workout-suggestions__create" aria-label="Create a routine">
+              <FoundationRoutineSummary
+                className="strength-workout-suggestions__content"
+                title="Create your own"
+                description="Build a stretch routine with your preferred holds and target regions."
+              />
+              <button type="button" className="btn mini ghost" onClick={createRoutine}>Create</button>
+              {routineEditorDraft && (
+                <button type="button" className="strength-workout-suggestions__continue"
+                  onClick={continueRoutineDraft}>
+                  Continue editing
+                </button>
+              )}
+            </section>
+            <section className="strength-workout-suggestions__list" aria-label="Suggested stretch routines">
+              {flexibilityRoutineSuggestions.map(routine => (
+                <article className="strength-workout-suggestion" key={routine.id}>
+                  <FoundationRoutineSummary
+                    className="strength-workout-suggestion__content"
+                    title={routine.name}
+                    description={routineTargetNames(routine)}
+                    metadata={`${routine.stretches.length} ${
+                      routine.stretches.length === 1 ? 'stretch' : 'stretches'
+                    } · About ${formatRoutineDuration(routine)}`}
+                  >
+                    <details className="strength-workout-suggestion__preview">
+                      <summary>Preview routine</summary>
+                      <ol>
+                        {routine.stretches.map(stretch => (
+                          <li key={stretch.id}>
+                            <strong>{stretch.name}</strong>
+                            <span>{stretch.holdSeconds} sec · {
+                              stretch.sideMode === 'both' ? 'Both sides' : 'Left and right'
+                            } · {stretch.regionIds.map(regionId =>
+                              flexibilityRegions.find(region => region.id === regionId)?.name ?? regionId
+                            ).join(', ')}</span>
+                            {stretch.instructions && <span>{stretch.instructions}</span>}
+                          </li>
+                        ))}
+                      </ol>
+                    </details>
+                  </FoundationRoutineSummary>
+                  <button type="button" className="btn mini"
+                    onClick={() => openRoutineEditor(routine, true)}>
+                    Customize
+                  </button>
+                </article>
+              ))}
+            </section>
           </div>
         </MoneyGoalDialog>
+      )}
+      {routineChoice && (
+        <MoneyGoalDialog
+          title={routineChoice.name}
+          intro="How do you want to stretch today?"
+          labelledBy="flexibility-routine-choice-title"
+          titleId="flexibility-routine-choice-title"
+          closeLabel="Close stretch choices"
+          onClose={() => setRoutineChoice(null)}
+        >
+          <div className="strength-workout-choice flexibility-routine-choice">
+            <button type="button"
+              className="strength-workout-choice__option strength-workout-choice__option--guided"
+              onClick={() => startRoutine(routineChoice)}>
+              <span className="strength-workout-choice__icon flexibility-routine-choice__icon" aria-hidden="true">◷</span>
+              <span className="strength-workout-choice__copy">
+                <strong>Guided session</strong>
+                <span>Time each stretch and track each side.</span>
+              </span>
+            </button>
+            <button type="button"
+              className="strength-workout-choice__option strength-workout-choice__option--quick"
+              onClick={() => quickLogRoutine(routineChoice)}>
+              <span className="strength-workout-choice__icon flexibility-routine-choice__icon" aria-hidden="true">✓</span>
+              <span className="strength-workout-choice__copy">
+                <strong>Quick log</strong>
+                <span>Record the regions you stretched.</span>
+              </span>
+            </button>
+          </div>
+          {routineError && <p className="flexibility-error" role="alert">{routineError}</p>}
+          <div className="money-goal-dialog__actions">
+            <button type="button" className="btn mini ghost" onClick={() => setRoutineChoice(null)}>Cancel</button>
+          </div>
+        </MoneyGoalDialog>
+      )}
+      {associationDialogOpen && flexibilityFoundation && onSaveFoundationAssociations && (
+        <FoundationRhythmAssociationDialog
+          key={flexibilityFoundation.id}
+          foundation={flexibilityFoundation}
+          rhythms={[
+            ...rhythms.map(rhythm => ({ rhythm, archived: false })),
+            ...archivedRhythms.map(rhythm => ({ rhythm, archived: true }))
+          ]}
+          onSave={changes => onSaveFoundationAssociations(flexibilityFoundation.id, changes)}
+          onClose={() => setAssociationDialogOpen(false)}
+        />
       )}
       {dialog === 'guided' && data.guidedSessionDraft && (
         <FlexibilityGuidedSessionDialog
@@ -806,7 +1157,10 @@ export function FlexibilityView({
           closeOnEscape
           dismissOnBackdrop
           portalToBody
-          onClose={() => setDialog(null)}
+          phoneFullScreen
+          bodyClassName="flexibility-settings-dialog__body"
+          dialogClassName="flexibility-settings-dialog"
+          onClose={closeIntervalSettings}
         >
           <form className="flexibility-settings" onSubmit={saveSettings}>
             <p>Set how many days can pass between sessions for each region.</p>
@@ -814,23 +1168,61 @@ export function FlexibilityView({
               <fieldset key={group}>
                 <legend>{group}</legend>
                 {flexibilityRegions.filter(region => region.group === group).map(region => (
-                  <label key={region.id}>
+                  <div key={region.id} className="flexibility-settings__row">
                     <span>{region.name}</span>
-                    <input type="number" min="1" max="365" step="1" inputMode="numeric"
-                      aria-label={`${region.name} interval in days`}
-                      value={intervalDraft[region.id]}
-                      onChange={event => setIntervalDraft(current => ({
-                        ...current,
-                        [region.id]: event.target.value
-                      }))} />
-                    <span>days</span>
-                  </label>
+                    <div className="flexibility-settings__field">
+                      <StyledSelect
+                        label={`${region.name} stretch interval`}
+                        triggerAriaLabel={`${region.name} stretch interval`}
+                        value={customIntervals[region.id] ? 'custom' : intervalDraft[region.id]}
+                        options={[
+                          ...flexibilityIntervalPresets.map(days => ({
+                            value: String(days),
+                            label: formatFlexibilityIntervalOption(String(days))
+                          })),
+                          {
+                            value: 'custom',
+                            label: customIntervals[region.id]
+                              ? `Custom · ${formatFlexibilityIntervalOption(intervalDraft[region.id])}`
+                              : 'Custom…',
+                            description: 'Enter a whole number from 1 to 365 days.'
+                          }
+                        ]}
+                        containerClassName="flexibility-settings__select"
+                        triggerClassName="flexibility-settings__select-trigger"
+                        matchTriggerWidth
+                        popoverMinWidth={160}
+                        onChange={value => {
+                          if (value === 'custom') {
+                            setCustomIntervals(current => ({ ...current, [region.id]: true }));
+                            return;
+                          }
+                          setIntervalDraft(current => ({ ...current, [region.id]: value }));
+                          setCustomIntervals(current => ({ ...current, [region.id]: false }));
+                        }}
+                      />
+                      {customIntervals[region.id] && (
+                        <input
+                          className="flexibility-settings__custom-input"
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          aria-label={`${region.name} custom interval in days`}
+                          value={intervalDraft[region.id]}
+                          onChange={event => setIntervalDraft(current => ({
+                            ...current,
+                            [region.id]: event.target.value
+                          }))}
+                        />
+                      )}
+                    </div>
+                  </div>
                 ))}
               </fieldset>
             ))}
             {error && <p className="flexibility-error" role="alert">{error}</p>}
-            <div className="flexibility-form__actions">
-              <button type="button" className="btn mini ghost" onClick={() => setDialog(null)}>Cancel</button>
+            <div className="flexibility-form__actions flexibility-settings__actions">
+              <button type="button" className="btn mini ghost" onClick={closeIntervalSettings}>Cancel</button>
               <button type="submit" className="btn primary">Save intervals</button>
             </div>
           </form>
@@ -870,6 +1262,12 @@ function flexibilityNextDueLabel(region: FlexibilityRegionStatus): string {
 
 function flexibilityIntervalLabel(region: FlexibilityRegionStatus): string {
   return `Every ${region.intervalDays} day${region.intervalDays === 1 ? '' : 's'}`;
+}
+
+function routineTargetNames(routine: SavedFlexibilityRoutine): string {
+  const regionIds = [...new Set(routine.stretches.flatMap(stretch => stretch.regionIds))];
+  return regionIds.map(id => flexibilityRegions.find(region => region.id === id)?.name ?? id)
+    .join(' · ') || 'Target regions unavailable';
 }
 
 function formatRoutineDuration(routine: SavedFlexibilityRoutine): string {

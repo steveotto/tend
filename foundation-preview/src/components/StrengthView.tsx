@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { FormEvent, MouseEvent, MutableRefObject, ReactNode } from 'react';
+import type { FormEvent, MouseEvent, MutableRefObject } from 'react';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { PersonBadge } from './PersonBadge.tsx';
 import { toggleBadgeGroup } from './BadgeSelectionPicker.tsx';
@@ -14,6 +14,8 @@ import { StrengthGuidedSessionDialog } from './StrengthGuidedSessionDialog.tsx';
 import { StrengthRhythmCompletionPicker } from './StrengthRhythmCompletionPicker.tsx';
 import { StrengthWorkoutOnlyConfirmationDialog } from './StrengthWorkoutOnlyConfirmationDialog.tsx';
 import { FitnessScoreSummary } from './FitnessScoreSummary.tsx';
+import { FoundationRoutineSummary } from './FoundationRoutineSummary.tsx';
+import { FoundationSectionHeading } from './FoundationSectionHeading.tsx';
 import { FoundationRhythmAssociationDialog } from './FoundationRhythmAssociationDialog.tsx';
 import { FoundationRhythmGroup } from './FoundationRhythmGroup.tsx';
 import { createStrengthBodyMapConfig, FitnessBodyMapLayout } from './FitnessBodyMap.tsx';
@@ -129,6 +131,7 @@ export type StrengthViewProps = {
   onRhythmModeRequestOpened?: (requestId: number) => void;
   onRhythmModeRequestClosed?: () => void;
   foundationNavigation?: boolean;
+  foundationActive?: boolean;
   healthScoringEvidence?: HealthAggregateEvidence;
   onStretchAfter?: (
     muscleIds: readonly StrengthMuscleId[],
@@ -137,37 +140,6 @@ export type StrengthViewProps = {
 };
 
 type StrengthTab = 'workouts' | 'body' | 'rhythms';
-
-type StrengthSectionHeadingProps = {
-  title: string;
-  headingId?: string;
-  accessibleName?: string;
-  secondary?: ReactNode;
-  subtitle?: string;
-  actions?: ReactNode;
-};
-
-function StrengthSectionHeading({
-  title,
-  headingId,
-  accessibleName,
-  secondary,
-  subtitle,
-  actions
-}: StrengthSectionHeadingProps) {
-  return (
-    <header className="strength-section-heading">
-      <div className="strength-section-heading__title">
-        <div className="strength-section-heading__title-row">
-          <h3 id={headingId} aria-label={accessibleName}>{title}</h3>
-          {secondary && <span className="strength-section-heading__secondary">{secondary}</span>}
-        </div>
-        {subtitle && <p className="strength-section-heading__subtitle">{subtitle}</p>}
-      </div>
-      {actions && <div className="strength-section-heading__actions">{actions}</div>}
-    </header>
-  );
-}
 
 type FitnessDialog =
   | { kind: 'goals' }
@@ -244,10 +216,18 @@ export function StrengthView({
   onRhythmModeRequestOpened,
   onRhythmModeRequestClosed,
   foundationNavigation = false,
+  foundationActive = true,
   healthScoringEvidence,
   onStretchAfter
 }: StrengthViewProps) {
-  const [strengthTab, setStrengthTab] = useState<StrengthTab>('workouts');
+  const [strengthTab, setStrengthTab] = useState<StrengthTab>(() =>
+    data.guidedSessionDraft || pendingRhythmLog || quickStartRequest
+      ? 'workouts'
+      : pendingRhythmModeRequest
+        ? 'rhythms'
+        : foundationNavigation ? 'body' : 'workouts'
+  );
+  const wasFoundationActiveRef = useRef(false);
   const [associationDialogOpen, setAssociationDialogOpen] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [historyAnnouncement, setHistoryAnnouncement] = useState('');
@@ -363,6 +343,26 @@ export function StrengthView({
     : undefined;
 
   useEffect(() => {
+    if (!foundationNavigation) return;
+    if (!foundationActive) {
+      wasFoundationActiveRef.current = false;
+      return;
+    }
+    if (wasFoundationActiveRef.current) return;
+    wasFoundationActiveRef.current = true;
+    if (!data.guidedSessionDraft && !pendingRhythmLog && !quickStartRequest && !pendingRhythmModeRequest) {
+      setStrengthTab('body');
+    }
+  }, [
+    data.guidedSessionDraft,
+    foundationActive,
+    foundationNavigation,
+    pendingRhythmLog?.requestId,
+    pendingRhythmModeRequest?.requestId,
+    quickStartRequest?.requestId
+  ]);
+
+  useEffect(() => {
     if (dialog) return;
     const focusAfterDelete = focusAfterHistoryDeleteRef.current;
     if (focusAfterDelete) {
@@ -414,6 +414,7 @@ export function StrengthView({
     rhythmLogRequestIdRef.current = pendingRhythmLog.requestId;
     const rhythmEntry = rhythms.find(item => item.rhythm.id === pendingRhythmLog.rhythm.id);
     if (!rhythmEntry) return;
+    setStrengthTab('workouts');
     openerRef.current = pendingRhythmLog.opener
       ?? [...document.querySelectorAll<HTMLElement>('[data-strength-rhythm]')]
       .find(element => element.dataset.strengthRhythm === rhythmEntry.rhythm.id)
@@ -475,6 +476,7 @@ export function StrengthView({
   useEffect(() => {
     if (!quickStartRequest || handledQuickStartRequestRef.current === quickStartRequest.requestId) return;
     handledQuickStartRequestRef.current = quickStartRequest.requestId;
+    setStrengthTab('workouts');
     quickStartRequestIdRef.current = data.guidedSessionDraft ? quickStartRequest.requestId : null;
     openerRef.current = quickStartRequest.opener;
     guidedSessionOpenerRef.current = quickStartRequest.opener;
@@ -489,6 +491,7 @@ export function StrengthView({
       || handledRhythmModeRequestRef.current === pendingRhythmModeRequest.requestId) return;
     handledRhythmModeRequestRef.current = pendingRhythmModeRequest.requestId;
     rhythmModeRequestIdRef.current = pendingRhythmModeRequest.requestId;
+    setStrengthTab('rhythms');
     openerRef.current = pendingRhythmModeRequest.opener;
     setError('');
     setDialog({ kind: 'mode', setting: pendingRhythmModeRequest.setting });
@@ -1308,9 +1311,9 @@ export function StrengthView({
           aria-labelledby="strength-tab-body"
           hidden={strengthTab !== 'body'}
         >
-          <StrengthSectionHeading
+          <FoundationSectionHeading
             title="Body overview"
-            secondary={
+            subtitle={
               <span
                 className="strength-legacy-status"
                 role="meter"
@@ -1419,7 +1422,7 @@ export function StrengthView({
         >
         <section className="strength-workouts">
           <section className="strength-workout-section" aria-labelledby="saved-workouts-heading">
-              <StrengthSectionHeading
+              <FoundationSectionHeading
                 title="My workouts"
                 headingId="saved-workouts-heading"
                 subtitle="Your routines, ready when you are."
@@ -1445,20 +1448,24 @@ export function StrengthView({
               <div className="strength-template-list">
                 {data.savedWorkouts.map(workout => (
                   <article key={workout.id} className="strength-template">
-                    <div className="strength-template__content">
-                      <h3>{workout.name}</h3>
-                      <p>{workout.muscleIds.map(id => muscleName(id)).join(' · ') || 'Muscle selection unavailable'}</p>
-                      {workout.exercises && workout.exercises.length > 0 && (
-                        <p className="strength-template__exercise-summary">
-                          {workout.exercises.length} {workout.exercises.length === 1 ? 'exercise' : 'exercises'} · {workout.exercises.reduce((total, exercise) => total + exercise.sets.length, 0)} planned sets
-                        </p>
-                      )}
+                    <FoundationRoutineSummary
+                      className="strength-template__content"
+                      title={workout.name}
+                      description={workout.muscleIds.map(id => muscleName(id)).join(' · ')
+                        || 'Muscle selection unavailable'}
+                      {...(workout.exercises && workout.exercises.length > 0 ? {
+                        metadata: `${workout.exercises.length} ${
+                          workout.exercises.length === 1 ? 'exercise' : 'exercises'
+                        } · ${workout.exercises.reduce((total, exercise) => total + exercise.sets.length, 0)} planned sets`,
+                        metadataClassName: 'strength-template__exercise-summary'
+                      } : {})}
+                    >
                       {workout.sharedWith.length > 0 && (
                         <div className="strength-template__people" role="group" aria-label={`People associated with ${workout.name}`}>
                           {workout.sharedWith.map(id => <PersonBadge key={id} person={personById(people, id)} presentation="static" />)}
                         </div>
                       )}
-                    </div>
+                    </FoundationRoutineSummary>
                     <details className="strength-template__menu">
                       <summary aria-label={`Actions for ${workout.name}`}>⋯</summary>
                       <div className="strength-template__menu-items">
@@ -1485,7 +1492,7 @@ export function StrengthView({
             ) : <p className="strength-empty">No workouts saved yet.</p>}
           </section>
           <section className="strength-workout-section strength-history-page" aria-labelledby="strength-history-heading">
-            <StrengthSectionHeading
+            <FoundationSectionHeading
               title="History"
               headingId="strength-history-heading"
               subtitle="Your completed workouts."
@@ -1538,22 +1545,14 @@ export function StrengthView({
         hidden={strengthTab !== 'rhythms'}
       >
         <section className="marriage-foundation-support strength-rhythms-panel" aria-labelledby="strength-linked-rhythms-title">
-          <StrengthSectionHeading
+          <FoundationSectionHeading
             title="Linked Rhythms"
             headingId="strength-linked-rhythms-title"
             accessibleName={`Linked Rhythms · ${activeStrengthRhythms.length}`}
-            secondary={<span aria-hidden="true">{activeStrengthRhythms.length}</span>}
+            secondary={<span className="strength-linked-rhythms-count" aria-hidden="true">{activeStrengthRhythms.length}</span>}
+            subtitle="Your routines for building strength."
             actions={
               <>
-              {onAddLinkedRhythm && (
-                <button
-                  type="button"
-                  className="btn mini"
-                  onClick={event => onAddLinkedRhythm('health-strength', event)}
-                >
-                  Add Rhythm
-                </button>
-              )}
               {onSaveFoundationAssociations && (
                 <button
                   type="button"
@@ -1562,6 +1561,15 @@ export function StrengthView({
                   onClick={() => setAssociationDialogOpen(true)}
                 >
                   Manage links
+                </button>
+              )}
+              {onAddLinkedRhythm && (
+                <button
+                  type="button"
+                  className="btn mini"
+                  onClick={event => onAddLinkedRhythm('health-strength', event)}
+                >
+                  Add Rhythm
                 </button>
               )}
               </>
@@ -1603,7 +1611,9 @@ export function StrengthView({
             />
           )}
           {activeStrengthRhythms.length === 0 && (
-            <p>No Rhythms are linked to Strength yet.</p>
+            <div className="strength-rhythms-empty">
+              <p>No Rhythms are linked to Strength yet.</p>
+            </div>
           )}
         </section>
       </section>

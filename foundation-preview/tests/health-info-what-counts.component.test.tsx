@@ -203,6 +203,7 @@ describe('static Health Info content', () => {
 
     await user.click(screen.getByRole('button', { name: 'Show Cardio Health scoring details' }));
     const dialog = screen.getByRole('dialog', { name: 'Cardio Health details' });
+    expect(dialog.classList.contains('dialog--phone-fullscreen')).toBe(true);
     expect(within(dialog).getByRole('group', { name: 'Foundation identity: Cardio, Health & Fitness' })).toBeTruthy();
     expect(within(dialog).getByRole('heading', { name: 'How this Cardio Foundation contributes' })).toBeTruthy();
     await user.click(within(dialog).getByRole('button', { name: 'How this Cardio Foundation was scored' }));
